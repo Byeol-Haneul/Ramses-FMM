@@ -13,15 +13,11 @@ subroutine synchro_fine(ilevel)
   ! the force. Otherwise, use coarse level force and coarse level CIC.
   !--------------------------------------------------------------------
   integer::igrid,jgrid,ipart,jpart
-  integer::ig,ip,npart1,isink,info
+  integer::ig,ip,npart1,info
   integer,dimension(1:nvector),save::ind_grid,ind_part,ind_grid_part
 
   if(numbtot(1,ilevel)==0)return
   if(verbose)write(*,111)ilevel
-
-  if(sink)then
-     fsink_new=0.
-  endif
 
   ! Synchronize velocity using CIC
   ig=0
@@ -56,23 +52,7 @@ subroutine synchro_fine(ilevel)
   end do
   ! End loop over grids
   if(ip>0)call sync(ind_grid,ind_part,ind_grid_part,ig,ip,ilevel)
-  
-  !sink cloud particles are used to average the grav. acceleration
-  if(sink)then
-     if(nsink>0)then
-#ifndef WITHOUTMPI
-        call MPI_ALLREDUCE(fsink_new,fsink_all,nsinkmax*ndim,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-#else
-        fsink_all=fsink_new
-#endif
-     endif
-     do isink=1,nsink
-        if (.not. direct_force_sink(isink))then 
-           fsink_partial(isink,1:ndim,ilevel)=fsink_all(isink,1:ndim)
-        end if
-     end do
-  endif
-  
+    
 111 format('   Entering synchro_fine for level ',I2)
 
 end subroutine synchro_fine
@@ -92,7 +72,7 @@ subroutine sync(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
   !
   !
   logical::error
-  integer::i,j,ind,idim,nx_loc,isink
+  integer::i,j,ind,idim,nx_loc
   real(dp)::dx,length,scale,r2
   ! Grid-based arrays
   real(dp),dimension(1:nvector,1:ndim),save::x0
@@ -351,20 +331,6 @@ subroutine sync(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
      end do
   end do
 
-  ! For sink particle only, store contribution to the sink force
-  if(sink)then
-     do idim=1,ndim
-        do j=1,np
-           isink=-idp(ind_part(j))
-           if(isink>0) then 
-              if(.not. direct_force_sink(isink))then
-                 fsink_new(isink,idim)=fsink_new(isink,idim)+ff(j,idim)
-              endif
-           endif
-        end do
-     end do
-  end if
-
   ! Compute individual time steps
   do j=1,np
      if(levelp(ind_part(j))>=ilevel)then
@@ -396,18 +362,5 @@ subroutine sync(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
         vp(ind_part(j),idim)=new_vp(j,idim)
      end do
   end do
-
-  ! For sink particle only, overwrite cloud particle velocity with sink velocity
-  if(sink)then
-     do idim=1,ndim
-        do j=1,np
-           isink=-idp(ind_part(j))
-           if(isink>0)then
-              ! Remember that vsink is half time step older than other particles
-              vp(ind_part(j),idim)=vsink(isink,idim)
-           endif
-        end do
-     end do
-  end if
 
 end subroutine sync

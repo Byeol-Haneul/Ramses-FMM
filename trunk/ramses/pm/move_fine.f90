@@ -77,7 +77,7 @@ subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
   ! This routine is called by move_fine.
   !------------------------------------------------------------
   logical::error
-  integer::i,j,ind,idim,nx_loc,isink
+  integer::i,j,ind,idim,nx_loc
   real(dp)::dx,length,dx_loc,scale,vol_loc,r2
   ! Grid-based arrays
   integer ,dimension(1:nvector),save::father_cell
@@ -366,19 +366,6 @@ subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
         end do
      endif
   end do
-
-  ! For sink cloud particle only
-  if(sink)then
-     ! Overwrite cloud particle velocity with sink velocity
-     do idim=1,ndim
-        do j=1,np
-           isink=-idp(ind_part(j))
-           if(isink>0)then
-              new_vp(j,idim)=vsnew(isink,idim,ilevel)
-           end if
-        end do
-     end do
-  end if
 
   ! Store velocity
   do idim=1,ndim

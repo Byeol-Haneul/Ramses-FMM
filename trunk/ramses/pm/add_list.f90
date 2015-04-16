@@ -62,16 +62,6 @@ subroutine add_free(ind_part,np)
      idp(ind_part(j))=0
      levelp(ind_part(j))=0
   end do
-  if(star.or.sink)then
-     do j=1,np
-        tp(ind_part(j))=0.0
-     end do
-     if(metal)then
-        do j=1,np
-           zp(ind_part(j))=0.0
-        end do
-     end if
-  end if
 
   do j=1,np
      if(numbp_free>0)then
@@ -125,20 +115,6 @@ subroutine add_free_cond(ind_part,ok,np)
         levelp(ind_part(j))=0
      endif
   end do
-  if(star.or.sink)then
-     do j=1,np
-        if(ok(j))then
-           tp(ind_part(j))=0.0
-        endif
-     end do
-     if(metal)then
-        do j=1,np
-           if(ok(j))then
-              zp(ind_part(j))=0.0
-           endif
-        end do
-     end if
-  end if
 
   do j=1,np
      if(ok(j))then

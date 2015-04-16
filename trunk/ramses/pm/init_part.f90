@@ -1,11 +1,6 @@
 subroutine init_part
   use amr_commons
   use pm_commons
-  use clfind_commons
-
-#ifdef RT
-  use rt_parameters,only: convert_birth_times
-#endif
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -16,7 +11,7 @@ subroutine init_part
   !------------------------------------------------------------
   integer::npart2,ndim2,ncpu2
   integer::ipart,jpart,ipart_old,ilevel,idim
-  integer::i,igrid,ncache,ngrid,iskip,isink
+  integer::i,igrid,ncache,ngrid,iskip,nsink
   integer::ind,ix,iy,iz,ilun,info,icpu,nx_loc
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
   integer::buf_count,indglob,npart_new
@@ -50,7 +45,7 @@ subroutine init_part
   integer,dimension(ncpu)::sendbuf,recvbuf
 #endif
 
-  logical::error,keep_part,eof,jumped,ic_sink=.false.,read_pos=.false.,ok
+  logical::error,keep_part,eof,jumped,read_pos=.false.,ok
   character(LEN=80)::filename,filename_x
   character(LEN=80)::fileloc
   character(LEN=20)::filetype_loc
@@ -75,14 +70,6 @@ subroutine init_part
   allocate(ptcl_phi(npartmax))
 #endif
   xp=0.0; vp=0.0; mp=0.0; levelp=0; idp=0
-  if(star.or.sink)then
-     allocate(tp(npartmax))
-     tp=0.0
-     if(metal)then
-        allocate(zp(npartmax))
-        zp=0.0
-     end if
-  end if
 
   !--------------------
   ! Read part.tmp file
@@ -137,25 +124,6 @@ subroutine init_part
      read(ilun)isp
      levelp(1:npart2)=isp
      deallocate(isp)
-     if(star.or.sink)then
-        ! Read birth epoch
-        allocate(xdp(1:npart2))
-        read(ilun)xdp
-        tp(1:npart2)=xdp
-#ifdef RT
-        if(convert_birth_times) then
-           do i = 1, npart2 ! Convert birth time to proper for RT postpr.
-              call getProperTime(tp(i),tp(i))
-           enddo
-        endif
-#endif
-        if(metal)then
-           ! Read metallicity
-           read(ilun)xdp
-           zp(1:npart2)=xdp
-        end if
-        deallocate(xdp)
-     end if
      close(ilun)
      if(debug)write(*,*)'part.tmp read for processor ',myid
      npart=npart2     
@@ -614,16 +582,6 @@ subroutine init_part
            levelp(ipart)=levelmin
         end do
 
-        ! Compute particle initial age and metallicity
-        if(star.or.sink)then
-           do ipart=1,npart
-              tp(ipart)=0d0
-              if(metal)then
-                 zp(ipart)=0d0
-              end if
-           end do
-        end if
-
         ! Compute particle initial identity
         npart_cpu=0; npart_all=0
         npart_cpu(myid)=npart
@@ -744,8 +702,6 @@ subroutine init_part
 
      end select
   end if
-
-  if(sink)call init_sink
 
 end subroutine init_part
 #define TIME_START(cs) call SYSTEM_CLOCK(COUNT=cs)

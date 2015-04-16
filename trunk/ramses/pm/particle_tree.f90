@@ -72,14 +72,6 @@ subroutine init_tree
         if(xp(ipart,idim)/scale+skip_loc(idim)>=xbound(idim)) &
              & xp(ipart,idim)=xp(ipart,idim)-(xbound(idim)-skip_loc(idim))*scale
      end do
-     if(sink)then
-        do ipart=1,nsink
-           if(xsink(ipart,idim)/scale+skip_loc(idim)<0.0d0) &
-                & xsink(ipart,idim)=xsink(ipart,idim)+(xbound(idim)-skip_loc(idim))*scale
-           if(xsink(ipart,idim)/scale+skip_loc(idim)>=xbound(idim)) &
-                & xsink(ipart,idim)=xsink(ipart,idim)-(xbound(idim)-skip_loc(idim))*scale
-        end do
-     endif
   end do
  
   !----------------------------------
@@ -137,16 +129,6 @@ subroutine init_tree
      ! Add particle to level 1 linked list
      call add_list(ind_part,ind_grid,ok,npart1)
   end do
-
-  ! destroy and recreate cloud particles to account for changes in sink
-  ! radius, newly added sinks, etc
-  do ilevel=levelmin-1,1,-1
-     call merge_tree_fine(ilevel)
-  end do
-
-  call kill_entire_cloud(1)
-
-  call create_cloud_from_sink
 
   ! Sort particles down to levelmin
   do ilevel=1,levelmin-1
@@ -235,18 +217,6 @@ subroutine make_tree_fine(ilevel)
      if(ip>0)call check_tree(ind_grid,ind_part,ind_grid_part,ig,ip,ilevel)
   end do
   ! End loop over cpus
-
-  ! Periodic boundaries
-  if(sink)then
-     do idim=1,ndim
-        do ipart=1,nsink
-           if(xsink(ipart,idim)/scale+skip_loc(idim)<0.0d0) &
-                & xsink(ipart,idim)=xsink(ipart,idim)+(xbound(idim)-skip_loc(idim))*scale
-           if(xsink(ipart,idim)/scale+skip_loc(idim)>=xbound(idim)) &
-                & xsink(ipart,idim)=xsink(ipart,idim)-(xbound(idim)-skip_loc(idim))*scale
-        end do
-     end do
-  endif
 
 111 format('   Entering make_tree_fine for level ',I2)
 
@@ -664,13 +634,6 @@ subroutine virtual_tree_fine(ilevel)
 
   ! Calculate how many particle properties are being transferred
   particle_data_width = twondim+1
-  if(star.or.sink) then
-     if(metal) then
-        particle_data_width=twondim+3
-     else
-        particle_data_width=twondim+2
-     endif
-  endif
 
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   particle_data_width=particle_data_width+1
@@ -877,21 +840,6 @@ subroutine fill_comm(ind_part,ind_com,ind_list,np,ilevel,icpu)
   current_property = current_property+1
 #endif
   
-  ! Gather particle birth epoch
-  if(star.or.sink)then
-     do i=1,np
-        reception(icpu,ilevel)%up(ind_com(i),current_property)=tp(ind_part(i))
-     end do
-     if(metal)then
-        do i=1,np
-           reception(icpu,ilevel)%up(ind_com(i),current_property+1)=zp(ind_part(i))
-        end do
-     end if
-  end if
-
-  ! following line is not strictly necessary, but in case one adds extra data later
-  current_property = current_property + 2 
-  
   ! Remove particles from parent linked list
   call remove_list(ind_part,ind_list,ok,np)
   call add_free(ind_part,np)
@@ -952,22 +900,6 @@ subroutine empty_comm(ind_com,np,ilevel,icpu)
   end do
   current_property = current_property+1
 #endif
-
-  ! Scatter particle birth eopch
-  if(star.or.sink)then
-     do i=1,np
-        tp(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property)
-     end do
-     if(metal)then
-        do i=1,np
-           zp(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property+1)
-        end do
-     end if
-  end if
-
-  ! As with the gather routine, we leave this in case extra properties are
-  ! added later:
-  current_property = current_property+2
 
 end subroutine empty_comm
 !################################################################

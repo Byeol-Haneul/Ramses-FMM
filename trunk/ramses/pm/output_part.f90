@@ -4,7 +4,7 @@ subroutine backup_part(filename)
   implicit none
   character(LEN=80)::filename
 
-  integer::i,idim,ilun,ipart
+  integer::i,idim,nsink=0,ilun,ipart
   character(LEN=80)::fileloc
   character(LEN=5)::nchar
   real(dp),allocatable,dimension(:)::xdp
@@ -100,30 +100,6 @@ subroutine backup_part(filename)
   deallocate(xdp)
 #endif
 
-  ! Write birth epoch
-  if(star.or.sink)then
-     allocate(xdp(1:npart))
-     ipart=0
-     do i=1,npartmax
-        if(levelp(i)>0)then
-           ipart=ipart+1
-           xdp(ipart)=tp(i)
-        end if
-     end do
-     write(ilun)xdp
-     ! Write metallicity
-     if(metal)then
-        ipart=0
-        do i=1,npartmax
-           if(levelp(i)>0)then
-              ipart=ipart+1
-              xdp(ipart)=zp(i)
-           end if
-        end do
-        write(ilun)xdp
-     end if
-     deallocate(xdp)
-  end if
   close(ilun)
 
 end subroutine backup_part
