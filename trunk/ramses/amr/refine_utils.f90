@@ -561,12 +561,6 @@ subroutine make_grid_fine(ind_grid,ind_cell,ind,ilevel,nn,ibound,boundary_region
   use amr_commons
   use hydro_commons
   use poisson_commons, ONLY:f, phi,phi_old
-#ifdef RT
-  use rt_hydro_commons
-#endif
-#ifdef ATON
-  use radiation_commons, ONLY:Erad
-#endif
   implicit none
   integer::nn,ind,ilevel,ibound
   logical::boundary_region
@@ -590,18 +584,8 @@ subroutine make_grid_fine(ind_grid,ind_cell,ind,ilevel,nn,ibound,boundary_region
 
   real(dp)::dx,dx_loc,scale
   real(dp),dimension(1:3)::xc,skip_loc
-#ifdef SOLVERmhd
-  real(dp),dimension(1:nvector,0:twondim  ,1:nvar+3),save::u1
-  real(dp),dimension(1:nvector,1:twotondim,1:nvar+3),save::u2
-  integer ,dimension(1:nvector,0:twondim),save::ind1
-#else
   real(dp),dimension(1:nvector,0:twondim  ,1:nvar),save::u1
   real(dp),dimension(1:nvector,1:twotondim,1:nvar),save::u2
-#endif
-#ifdef RT
-  real(dp),dimension(1:nvector,0:twondim  ,1:nrtvar),save::urt1
-  real(dp),dimension(1:nvector,1:twotondim,1:nrtvar),save::urt2
-#endif  
   real(dp),dimension(1:nvector,0:twondim  ,1:ndim),save::g1=0.0
   real(dp),dimension(1:nvector,1:twotondim,1:ndim),save::g2=0.0
 
@@ -768,76 +752,24 @@ subroutine make_grid_fine(ind_grid,ind_cell,ind,ilevel,nn,ibound,boundary_region
      if(hydro)then
         do j=0,twondim
            ! Gather hydro variables
-#ifdef SOLVERmhd
-           do ivar=1,nvar+3
-#else
               do ivar=1,nvar
-#endif
                  do i=1,nn
                     u1(i,j,ivar)=uold(ind_fathers(i,j),ivar)
                  end do
-#ifdef SOLVERmhd
-              end do
-#else
            end do
-#endif
-#ifdef SOLVERmhd
-           ! Gather son index
-           do i=1,nn
-              ind1(i,j)=son(ind_fathers(i,j))
-           end do
-#endif
         end do
         ! Interpolate
-#ifdef SOLVERmhd
-        call interpol_hydro(u1,ind1,u2,nn)
-#else
         call interpol_hydro(u1,u2,nn)
-#endif
         ! Scatter to children cells
         do j=1,twotondim
            iskip=ncoarse+(j-1)*ngridmax
-#ifdef SOLVERmhd
-           do ivar=1,nvar+3
-#else
               do ivar=1,nvar
-#endif
                  do i=1,nn
                     uold(iskip+ind_grid_son(i),ivar)=u2(i,j,ivar)
                  end do
-#ifdef SOLVERmhd
-              end do
-#else
-           end do
-#endif
-        enddo
-     end if
-#ifdef RT
-     !============================
-     ! Interpolate RT variables
-     !============================
-     if(rt)then
-        do j=0,twondim
-           ! Gather hydro variables
-           do ivar=1,nrtvar
-              do i=1,nn
-                 urt1(i,j,ivar)=rtuold(ind_fathers(i,j),ivar)
-              end do
-           end do
-        end do
-        ! Interpolate
-        call rt_interpol_hydro(urt1,urt2,nn)
-        ! Scatter to children cells
-        do j=1,twotondim
-           iskip=ncoarse+(j-1)*ngridmax
-           do ivar=1,nrtvar
-              do i=1,nn
-                 rtuold(iskip+ind_grid_son(i),ivar)=urt2(i,j,ivar)
-              end do
            end do
         enddo
      end if
-#endif
      !==============================
      ! Interpolate gravity variables
      !==============================
@@ -856,19 +788,6 @@ subroutine make_grid_fine(ind_grid,ind_cell,ind,ilevel,nn,ibound,boundary_region
            end do
         end do
      end if
-     !===========================
-     ! Interpolate ATON variables
-     !===========================
-#ifdef ATON
-     if(aton)then
-        do j=1,twotondim
-           iskip=ncoarse+(j-1)*ngridmax
-           do i=1,nn
-              Erad(iskip+ind_grid_son(i))=Erad(ind_fathers(i,0))
-           end do
-        enddo
-     end if
-#endif
   endif
 
 end subroutine make_grid_fine
@@ -881,13 +800,6 @@ subroutine kill_grid(ind_cell,ilevel,nn,ibound,boundary_region)
   use pm_commons
   use hydro_commons
   use poisson_commons
-#ifdef RT
-  use rt_hydro_commons
-  use rt_parameters
-#endif
-#ifdef ATON
-  use radiation_commons, ONLY:Erad
-#endif
   implicit none
   integer::nn,ilevel,ibound
   logical::boundary_region
@@ -899,21 +811,6 @@ subroutine kill_grid(ind_cell,ilevel,nn,ibound,boundary_region)
   integer::igrid,iskip,icpu
   integer::i,j,idim,ind,ivar
   integer,dimension(1:nvector),save::ind_grid_son,ind_cell_son
-#ifdef RT
-  real(dp),dimension(nIons)::xion
-#endif
-
-#ifdef RT
-  if(upload_equilibrium_x) then                                       
-     ! Enforce equilibrium on ionization states when merging, to      
-     ! prevent unnatural values (e.g when merging hot and cold cells).
-     do i=1,nn                                                        
-        call calc_equilibrium_xion(uold(ind_cell(i),1:nvar) &
-             , rtuold(ind_cell(i),1:nrtvar), xion)    
-        uold(ind_cell(i),iIons:iIons+nIons-1)=xion*uold(ind_cell(i),1)
-     enddo                                                            
-  endif                                                               
-#endif
 
   ! Gather son grids
   do i=1,nn
@@ -1024,39 +921,13 @@ subroutine kill_grid(ind_cell,ilevel,nn,ibound,boundary_region)
      end if
      ! Hydro variables
      if(hydro)then
-#ifdef SOLVERmhd
-        do ivar=1,nvar+3
-#else
         do ivar=1,nvar
-#endif
            do i=1,nn
               uold(ind_cell_son(i),ivar)=0.0D0
               unew(ind_cell_son(i),ivar)=0.0D0
            end do
-#ifdef SOLVERmhd
-        end do
-#else
-        end do
-#endif
-     end if
-#ifdef RT
-     ! RT variables
-     if(rt)then
-        do ivar=1,nrtvar
-           do i=1,nn
-              rtuold(ind_cell_son(i),ivar)=0.0D0
-              rtunew(ind_cell_son(i),ivar)=0.0D0
-           end do
         end do
      end if
-#endif
-#ifdef ATON
-     if(aton)then
-        do i=1,nn
-           Erad(ind_cell_son(i))=0.0D0
-        end do
-     end if
-#endif
   end do
 
   ! Put son grids at the tail of the free memory linked list

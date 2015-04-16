@@ -33,7 +33,6 @@ end subroutine authorize_coarse
 !################################################################
 subroutine authorize_fine(ilevel)
   use amr_commons
-  use bisection
   implicit none
   integer::ilevel
   ! -------------------------------------------------------------------
@@ -140,64 +139,27 @@ subroutine authorize_fine(ilevel)
               flag2(ind_cell(i))=0
            end do
 
-           if (ordering /= 'bisection') then
-              ! Compute minimum and maximum ordering key
-              call cmp_minmaxorder(xx,order_min,order_max,dx_loc,ngrid)
-              ! Determine if cell is authorized
-              do isub=1,overload
-                 do i=1,ngrid
-                    if(    order_max(i)>bound_key(myid-1+(isub-1)*ncpu).and.&
-                         & order_min(i)<bound_key(myid  +(isub-1)*ncpu) )then
-                       flag2(ind_cell(i))=1
-                    endif
-                 end do
+           ! Compute minimum and maximum ordering key
+           call cmp_minmaxorder(xx,order_min,order_max,dx_loc,ngrid)
+           ! Determine if cell is authorized
+           do isub=1,overload
+              do i=1,ngrid
+                 if(    order_max(i)>bound_key(myid-1+(isub-1)*ncpu).and.&
+                      & order_min(i)<bound_key(myid  +(isub-1)*ncpu) )then
+                    flag2(ind_cell(i))=1
+                 endif
               end do
-           else ! recursive bisection method                                                          
-               do i=1,ngrid
-                  ! Test if cell overlaps the cpu                                                     
-                  test=.true.
-                  xmin=xx(i,:)-0.5*dx_loc
-                  xmax=xx(i,:)+0.5*dx_loc
-                  do idim=1,ndim
-                     ! This needs to be a >=, not a >, to precisely match the                         
-                     ! ordering/=case for refinement flagging                                         
-                     test=test .and. (bisec_cpubox_max(myid,idim).ge.xmin(idim) &
-                                          .and. bisec_cpubox_min(myid,idim).le.xmax(idim))
-                  end do
-                  if(test) flag2(ind_cell(i))=1
-               end do
-           endif
+           end do
 
            ! For load balancing operations
            if(balance)then
-              if(ordering/='bisection') then
-                 do isub=1,overload
-                    do i=1,ngrid
-                       if(    order_max(i)>bound_key2(myid-1+(isub-1)*ncpu).and.&
-                            & order_min(i)<bound_key2(myid  +(isub-1)*ncpu) )then
-                          flag2(ind_cell(i))=1
-                       endif
-                    end do
-                 end do
-              else
+              do isub=1,overload
                  do i=1,ngrid
-                    ! Test if cell overlaps the cpu with new cpu map                                  
-                    test=.true.
-                    xmin=xx(i,:)-0.5*dx_loc
-                    xmax=xx(i,:)+0.5*dx_loc
-                    do idim=1,ndim
-                       ! This needs to be a >=, not a >, to precisely match the                       
-                       ! ordering/=case for refinement flagging                                       
-                       test=test .and. (bisec_cpubox_max2(myid,idim).ge.xmin(idim) &
-                            .and. bisec_cpubox_min2(myid,idim).le.xmax(idim))
-                    end do
-                    if(test) flag2(ind_cell(i))=1
+                    if(    order_max(i)>bound_key2(myid-1+(isub-1)*ncpu).and.&
+                         & order_min(i)<bound_key2(myid  +(isub-1)*ncpu) )then
+                       flag2(ind_cell(i))=1
+                    endif
                  end do
-              end if
-              do i=1,ngrid
-                 if(cpu_map2(father(ind_grid(i)))==myid)then
-                    flag2(ind_cell(i))=1
-                 endif
               end do
            end if
         end do

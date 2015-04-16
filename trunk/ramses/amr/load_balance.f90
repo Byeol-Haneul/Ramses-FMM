@@ -6,11 +6,7 @@ subroutine load_balance
   use amr_commons
   use pm_commons
   use hydro_commons, ONLY: nvar, uold
-#ifdef RT
-  use rt_hydro_commons, ONLY: nrtvar, rtuold
-#endif
   use poisson_commons, ONLY: phi, f
-  use bisection
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h' 
@@ -71,31 +67,13 @@ subroutine load_balance
   !--------------------------------------
   do ilevel=nlevelmax,1,-1
      if(hydro)then
-#ifdef SOLVERmhd
-        do ivar=1,nvar+3
-#else
         do ivar=1,nvar
-#endif
            call make_virtual_fine_dp(uold(1,ivar),ilevel)
-#ifdef SOLVERmhd
         end do
-#else
-        end do
-#endif
         if(simple_boundary)then
            call make_boundary_hydro(ilevel)
         end if
      end if
-#ifdef RT
-     if(rt)then
-        do ivar=1,nrtvar
-           call make_virtual_fine_dp(rtuold(1,ivar),ilevel)
-        end do
-        if(simple_boundary)then
-           call rt_make_boundary_hydro(ilevel)
-        end if
-     endif
-#endif
      if(poisson)then
         call make_virtual_fine_dp(phi(1),ilevel)
         do idim=1,ndim
@@ -193,12 +171,7 @@ subroutine load_balance
   !--------------------------------------
   ! Set old cpu map to new cpu map
   !--------------------------------------
-  if(ordering/='bisection') then
-     bound_key=bound_key2
-  else
-     bisec_cpubox_min=bisec_cpubox_min2
-     bisec_cpubox_max=bisec_cpubox_max2
-  end if
+  bound_key=bound_key2
 
   nxny=nx*ny
   do iz=kcoarse_min,kcoarse_max
@@ -267,7 +240,6 @@ end subroutine load_balance
 subroutine cmp_new_cpu_map
   use amr_commons
   use pm_commons
-  use bisection
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -319,8 +291,6 @@ subroutine cmp_new_cpu_map
   endif
 
   if(verbose) print *,"Entering cmp_new_cpu_map"
-
-  if(ordering/='bisection') then      ! begin if not bisection
 
   !----------------------------------------
   ! Compute cell ordering and cost
@@ -511,11 +481,6 @@ subroutine cmp_new_cpu_map
   bound_key2(0)      =order_all_min
   bound_key2(ndomain)=order_all_max
 
-  else     ! doing bisection
-     ! update the bisection                                                                             
-     call build_bisection(update=.true.)
-  end if   ! end if not bisection
-
   !----------------------------------------
   ! Compute new cpu map
   !----------------------------------------
@@ -534,20 +499,14 @@ subroutine cmp_new_cpu_map
 #endif
      cpu_map2(ind)=ncpu ! default value                                                               
 
-     if(ordering/='bisection') then
-        call cmp_ordering(xx,order_max,ncell_loc)
-        cpu_map2(ind)=ncpu ! default value
-        do idom=1,ndomain
-           if( order_max(1).ge.bound_key2(idom-1).and. &
-                & order_max(1).lt.bound_key2(idom))then
-              cpu_map2(ind)=mod(idom-1,ncpu)+1
-           endif
-        end do
-     else
-        xx_tmp(1,:) = xx(1,:)
-        call cmp_bisection_cpumap(xx_tmp,c_tmp,1)
-        cpu_map2(ind) = c_tmp(1)
-     end if
+     call cmp_ordering(xx,order_max,ncell_loc)
+     cpu_map2(ind)=ncpu ! default value
+     do idom=1,ndomain
+        if( order_max(1).ge.bound_key2(idom-1).and. &
+             & order_max(1).lt.bound_key2(idom))then
+           cpu_map2(ind)=mod(idom-1,ncpu)+1
+        endif
+     end do
   end do
   end do
   end do
@@ -586,25 +545,17 @@ subroutine cmp_new_cpu_map
                  xx(i,idim)=(xg(ind_grid(i),idim)+xc(ind,idim))*scale
               end do
            end do
-           if(ordering/='bisection') then                                                                     
-              if(ngrid>0)call cmp_ordering(xx,order_max,ngrid)
-              do i=1,ngrid
-                 cpu_map2(ind_cell(i))=ncpu ! default value
-                 do idom=1,ndomain
-                    if( order_max(i).ge.bound_key2(idom-1).and. &
-                         & order_max(i).lt.bound_key2(idom))then
-                       cpu_map2(ind_cell(i))=mod(idom-1,ncpu)+1
-                    endif
-                 end do
+
+           if(ngrid>0)call cmp_ordering(xx,order_max,ngrid)
+           do i=1,ngrid
+              cpu_map2(ind_cell(i))=ncpu ! default value
+              do idom=1,ndomain
+                 if( order_max(i).ge.bound_key2(idom-1).and. &
+                      & order_max(i).lt.bound_key2(idom))then
+                    cpu_map2(ind_cell(i))=mod(idom-1,ncpu)+1
+                 endif
               end do
-           else
-              do i=1,ngrid
-                 ! compute cpu_map2 using bisection                                                      
-                 xx_tmp(1,:) = xx(i,:)
-                 call cmp_bisection_cpumap(xx_tmp,c_tmp,1)
-                 cpu_map2(ind_cell(i)) = c_tmp(1)
-              end do
-           endif
+           end do
         end do
         ! End loop over cells
      end do
@@ -626,7 +577,6 @@ end subroutine cmp_new_cpu_map
 subroutine cmp_cpumap(x,c,nn)
   use amr_parameters
   use amr_commons
-  use bisection
   implicit none
   integer ::nn
   integer ,dimension(1:nvector)::c
@@ -635,24 +585,20 @@ subroutine cmp_cpumap(x,c,nn)
   integer::i,idom
   real(qdp),dimension(1:nvector),save::order
 
-  if(ordering /= 'bisection') then
-     call cmp_ordering(x,order,nn)
-     do i=1,nn
-        c(i)=ndomain ! default value
-        do idom=1,ndomain
-           if(    order(i).ge.bound_key(idom-1).and. &
-                & order(i).lt.bound_key(idom  ))then
-              c(i)=idom
-           endif
-        end do
+  call cmp_ordering(x,order,nn)
+  do i=1,nn
+     c(i)=ndomain ! default value
+     do idom=1,ndomain
+        if(    order(i).ge.bound_key(idom-1).and. &
+             & order(i).lt.bound_key(idom  ))then
+           c(i)=idom
+        endif
      end do
-     do i=1,nn
-        c(i)=MOD(c(i)-1,ncpu)+1
-!        c(i)=c(i)-((c(i)-1)/ncpu)*ncpu
-     end do
-  else
-     call cmp_bisection_cpumap(x,c,nn)
-  end if
+  end do
+  do i=1,nn
+     c(i)=MOD(c(i)-1,ncpu)+1
+     !        c(i)=c(i)-((c(i)-1)/ncpu)*ncpu
+  end do
 
 end subroutine cmp_cpumap
 !#########################################################################
@@ -662,7 +608,6 @@ end subroutine cmp_cpumap
 subroutine cmp_dommap(x,c,nn)
   use amr_parameters
   use amr_commons
-  use bisection
   implicit none
   integer ::nn
   integer ,dimension(1:nvector)::c
@@ -945,9 +890,6 @@ subroutine defrag
   use pm_commons
   use poisson_commons
   use hydro_commons
-#ifdef RT
-  use rt_hydro_commons
-#endif
   implicit none
 
   integer::ncache,ngrid2,igridmax,i,igrid,ibound,ilevel
@@ -1269,11 +1211,7 @@ subroutine defrag
 
   if(hydro)then
 
-#ifdef SOLVERmhd
-  do ivar=1,nvar+3
-#else
   do ivar=1,nvar
-#endif
   do ind=1,twotondim
   iskip2=ncoarse+(ind-1)*ngridmax
   ngrid2=0
@@ -1307,43 +1245,6 @@ subroutine defrag
 
   end if
 
-#ifdef RT
-  if(rt)then
-
-  do ivar=1,nrtvar
-  do ind=1,twotondim
-  iskip2=ncoarse+(ind-1)*ngridmax
-  ngrid2=0
-  do igrid=1,igridmax
-     hilbert_key(igrid)=0.0D0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              hilbert_key(ngrid2+i)=real(rtuold(iskip2+igrid,ivar),kind=qdp)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     rtuold(iskip2+igrid,ivar)=real(hilbert_key(igrid),kind=8)
-  end do
-  end do
-  end do
-
-  end if
-#endif
 
   if(poisson)then
 

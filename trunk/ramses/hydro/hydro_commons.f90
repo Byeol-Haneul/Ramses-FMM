@@ -6,6 +6,16 @@ module hydro_commons
   real(dp)::mass_tot=0.0D0,mass_tot_0=0.0D0
   real(dp)::ana_xmi,ana_xma,ana_ymi,ana_yma,ana_zmi,ana_zma
   integer::nbins
+  real(kind=8),parameter ::twopi   = 6.2831853d0
+  real(kind=8),parameter ::hplanck = 6.6262000d-27
+  real(kind=8),parameter ::eV      = 1.6022000d-12
+  real(kind=8),parameter ::kB      = 1.3806200d-16
+  real(kind=8),parameter ::clight  = 2.9979250d+10
+  real(kind=8),parameter ::Gyr     = 3.1536000d+16
+  real(kind=8)           ::X       = 0.76
+  real(kind=8)           ::Y       = 0.24
+  real(kind=8),parameter ::rhoc    = 1.8800000d-29
+  real(kind=8),parameter ::mH      = 1.6600000d-24
 end module hydro_commons
 
 module const

@@ -15,12 +15,8 @@ subroutine output_frame()
   integer,parameter::tag=100
 
   character(len=5) :: istep_str
-  character(len=100) :: moviedir, moviecmd, infofile, sinkfile
-#ifdef SOLVERmhd
-  character(len=100),dimension(0:NVAR+4) :: moviefiles
-#else
+  character(len=100) :: moviedir, moviecmd, infofile
   character(len=100),dimension(0:NVAR) :: moviefiles
-#endif
   
   integer::icell,ncache,iskip,ngrid,nlevelmax_frame
   integer::ilun,nx_loc,ipout,npout,npart_out,ind,ix,iy,iz
@@ -103,25 +99,12 @@ subroutine output_frame()
   moviefiles(5) = trim(moviedir)//'pres_'//trim(istep_str)//'.map'
 #endif
 #if NVAR>5
-#ifdef SOLVERmhd
-  do ll=6,NVAR+3
-#else
   do ll=6,NVAR
-#endif
     write(dummy,'(I3.1)') ll
     moviefiles(ll) = trim(moviedir)//'var'//trim(adjustl(dummy))//'_'//trim(istep_str)//'.map'
  end do
 #endif
-#ifdef SOLVERmhd
-  moviefiles(NVAR+4) = trim(moviedir)//'pmag_'//trim(istep_str)//'.map'
-#endif
 
-  ! sink filename
-  if(sink)then
-    sinkfile = trim(moviedir)//'sink_'//trim(istep_str)//'.txt'
-    if(myid==1.and.proj_ind==1) call output_sink_csv(sinkfile)
-  endif
-  
   if(levelmax_frame==0)then
      nlevelmax_frame=nlevelmax
   else if (levelmax_frame.gt.nlevelmax)then
@@ -189,11 +172,7 @@ subroutine output_frame()
   zright_frame=zcen+delz/2.
   
   ! Allocate image
-#ifdef SOLVERmhd
-  allocate(data_frame(1:nw_frame,1:nh_frame,0:NVAR+4))
-#else
   allocate(data_frame(1:nw_frame,1:nh_frame,0:NVAR))
-#endif
   allocate(dens(1:nw_frame,1:nh_frame))
   allocate(vol(1:nw_frame,1:nh_frame))
   data_frame=0d0
@@ -330,11 +309,7 @@ subroutine output_frame()
                        vol(ii,jj)=vol(ii,jj)+dvol
                        
                        data_frame(ii,jj,1)=data_frame(ii,jj,1)+dvol*uold(ind_cell(i),1)**2
-#ifdef SOLVERmhd
-                       do kk=2,NVAR+3
-#else                       
                        do kk=2,NVAR
-#endif
                          if(movie_vars(kk).eq.1) data_frame(ii,jj,kk)=data_frame(ii,jj,kk)+dvol*uold(ind_cell(i),kk)
                        end do
 
@@ -349,14 +324,6 @@ subroutine output_frame()
 
                          data_frame(ii,jj,0)=data_frame(ii,jj,0)+dvol*uold(ind_cell(i),1)*temp !mass weighted temperature
                        end if
-
-#ifdef SOLVERmhd
-                       if (movie_vars(NVAR+4).eq.1)then
-                               data_frame(ii,jj,NVAR+4)=data_frame(ii,jj,NVAR+4)+ dvol*0.125*(&
-                                   uold(ind_cell(i),6)**2 + uold(ind_cell(i),7)**2 + uold(ind_cell(i),8)**2 &
-                                   + uold(ind_cell(i),NVAR+1)**2 + uold(ind_cell(i),NVAR+2)**2 + uold(ind_cell(i),NVAR+3)**2)
-                       end if
-#endif
 
                     end do
                  end do
@@ -383,13 +350,8 @@ subroutine output_frame()
 !     end do
 !  end do
 #ifndef WITHOUTMPI
-#ifdef SOLVERmhd
-  allocate(data_frame_all(1:nw_frame,1:nh_frame,0:NVAR+4))
-  call MPI_ALLREDUCE(data_frame,data_frame_all,nw_frame*nh_frame*(NVAR+4+1),MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-#else
   allocate(data_frame_all(1:nw_frame,1:nh_frame,0:NVAR))
   call MPI_ALLREDUCE(data_frame,data_frame_all,nw_frame*nh_frame*(NVAR+1),MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
   allocate(dens_all(1:nw_frame,1:nh_frame))
   call MPI_ALLREDUCE(dens,dens_all,nw_frame*nh_frame,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
   allocate(vol_all(1:nw_frame,1:nh_frame))
@@ -405,14 +367,8 @@ subroutine output_frame()
   do ii=1,nw_frame
     do jj=1,nh_frame
       do kk=0,NVAR
-#ifdef SOLVERmhd
-        if(kk==6.or.kk==7.or.kk==8) cycle
-#endif
         if(movie_vars(kk).eq.1) data_frame(ii,jj,kk)=data_frame(ii,jj,kk)/dens(ii,jj)
       end do
-#ifdef SOLVERmhd
-      if(movie_vars(NVAR+4).eq.1) data_frame(ii,jj,NVAR+4)=data_frame(ii,jj,NVAR+4)/vol(ii,jj)
-#endif
     end do
   end do
   deallocate(dens)
@@ -422,11 +378,7 @@ subroutine output_frame()
      ilun=10
      allocate(data_single(1:nw_frame,1:nh_frame))
      ! Output mass weighted density
-#ifdef SOLVERmhd
-     do kk=0, NVAR+4
-#else
      do kk=0, NVAR
-#endif
        if (movie_vars(kk).eq.1)then
          open(ilun,file=TRIM(moviefiles(kk)),form='unformatted')
          data_single=data_frame(:,:,kk)

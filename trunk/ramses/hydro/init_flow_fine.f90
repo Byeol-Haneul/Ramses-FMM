@@ -28,7 +28,6 @@ end subroutine init_flow
 subroutine init_flow_fine(ilevel)
   use amr_commons
   use hydro_commons
-  use cooling_module
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -228,11 +227,6 @@ subroutine init_flow_fine(ilevel)
            if(myid==1)write(*,*)'Initialize corresponding variable to default value'
            if(ncache>0)then
               init_array=0d0
-              ! Default value for metals
-              if(cosmo.and.ivar==imetal.and.metal)init_array=z_ave*0.02 ! from solar units
-              ! Default value for ionization fraction
-              if(cosmo)xval=sqrt(omega_m)/(h0/100.*omega_b) ! From the book of Peebles p. 173
-              if(cosmo.and.ivar==ixion.and.aton)init_array=1.2d-5*xval
            endif
         endif
 
@@ -241,7 +235,7 @@ subroutine init_flow_fine(ilevel)
         ! For cosmo runs, rescale initial conditions to code units
         if(cosmo)then
            ! Compute approximate average temperature in K
-           if(.not. cooling)T2_start=1.356d-2/aexp**2
+           T2_start=1.356d-2/aexp**2
            if(ivar==1)init_array=(1.0+dfact(ilevel)*init_array)*omega_b/omega_m
            if(ivar==2)init_array=dfact(ilevel)*vfact(1)*dx_loc/dxini(ilevel)*init_array/vfact(ilevel)
            if(ivar==3)init_array=dfact(ilevel)*vfact(1)*dx_loc/dxini(ilevel)*init_array/vfact(ilevel)

@@ -2,10 +2,6 @@ subroutine init_time
   use amr_commons
   use hydro_commons
   use pm_commons
-  use cooling_module
-#ifdef RT
-  use rt_cooling_module
-#endif
   implicit none
   integer::i,Nmodel
   real(kind=8)::T2_sim  
@@ -57,59 +53,6 @@ subroutine init_time
   else                                                                     
      texp=t                                                                
   end if                                                                   
-
-  ! Initialize cooling model
-  if(cooling.and..not.(neq_chem.or.rt))then
-     if(myid==1)write(*,*)'Computing cooling model'
-     Nmodel=-1
-     if(.not. haardt_madau)then
-        Nmodel=2
-     endif
-     if(cosmo)then
-        ! Reonization redshift has to be later than starting redshift
-        z_reion=min(1./(1.1*aexp_ini)-1.,z_reion)
-        call set_model(Nmodel,dble(J21*1d-21),-1.0d0,dble(a_spec),-1.0d0,dble(z_reion), &
-             & -1,2, &
-             & dble(h0/100.),dble(omega_b),dble(omega_m),dble(omega_l), &
-             & dble(aexp_ini),T2_sim)
-        T2_start=T2_sim
-        if(nrestart==0)then
-           if(myid==1)write(*,*)'Starting with T/mu (K) = ',T2_start
-        end if
-     else
-        call set_model(Nmodel,dble(J21*1d-21),-1.0d0,dble(a_spec),-1.0d0,dble(z_reion), &
-             & -1,2, &
-             & dble(70./100.),dble(0.04),dble(0.3),dble(0.7), &
-             & dble(1.0),T2_sim)
-     endif
-  end if
-
-#ifdef RT
-  if(neq_chem.or.rt) then
-     if(myid==1)write(*,*)'Computing thermochemistry model'
-     Nmodel=-1
-     if(.not. haardt_madau)then
-        Nmodel=2
-     endif
-     if(cosmo)then
-        ! Reonization redshift has to be later than starting redshift
-        z_reion=min(1./(1.1*aexp_ini)-1.,z_reion)
-        call rt_set_model(Nmodel,dble(J21*1d-21),-1.0d0,dble(a_spec),-1.0d0,dble(z_reion), &
-             & -1,2, &
-             & dble(h0/100.),dble(omega_b),dble(omega_m),dble(omega_l), &
-             & dble(aexp_ini),T2_sim)
-        T2_start=T2_sim
-        if(nrestart==0)then
-           if(myid==1)write(*,*)'Starting with T/mu (K) = ',T2_start
-        end if
-     else
-        call rt_set_model(Nmodel,dble(J21*1d-21),-1.0d0,dble(a_spec),-1.0d0,dble(z_reion), &
-             & -1,2, &
-             & dble(70./100.),dble(0.04),dble(0.3),dble(0.7), &
-             & dble(1.0),T2_sim)
-     endif
-  end if
-#endif
 
 end subroutine init_time
 
@@ -417,25 +360,6 @@ contains
     
     return
   end function d1a
-  !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-!!$  function ad1(d1)
-!!$    implicit none
-!!$    real(dp)::ad1
-!!$    real(dp)::a,d1,da
-!!$    integer::niter
-!!$    ! Inverts the relation d1(a) given by function d1a(a) using 
-!!$    ! Newton-Raphson.
-!!$    if (d1.eq.0.0) stop 'ad1 undefined for d1=0!'
-!!$    ! Initial guess for Newton-Raphson iteration, good for Omega near 1.
-!!$    a=1.e-7
-!!$    niter=0
-!!$10  niter=niter+1
-!!$    da=(d1/d1a(a)-1.d0)/fpeebl(a)*a
-!!$    a=a+da
-!!$    if (abs(da).gt.1.0e-8.and.niter.lt.10) go to 10
-!!$    ad1=a
-!!$    return
-!!$  end function ad1
   !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
   function fpeebl(a)
     implicit none

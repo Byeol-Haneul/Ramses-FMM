@@ -278,7 +278,6 @@ end subroutine ensure_ref_rules
 subroutine userflag_fine(ilevel)
   use amr_commons
   use hydro_commons
-  use cooling_module
   implicit none
   integer::ilevel
   ! -------------------------------------------------------------------
@@ -320,45 +319,6 @@ subroutine userflag_fine(ilevel)
   if(ndim>2)skip_loc(3)=dble(kcoarse_min)
   scale=boxlen/dble(nx_loc)
   dx_loc=dx*scale
-
-  ! Do we prevent the whole level from refining ?
-  prevent_refine=.false.
-  
-  ! Prevent from refining too much relative to available star mass res.      
-  ! This translates into a constant physical res., except at very high z.    
-  if(star)then
-     ! Finest cell size                                                      
-     dx_min=(0.5D0**nlevelmax)*scale
-     vol_min=dx_min**ndim
-     ! Typical ISM mass density from H/cc to code units                      
-     nISM = n_star
-     nCOM = del_star*omega_b*rhoc*(h0/100.)**2/aexp**3*X/mH
-     nISM = MAX(nCOM,nISM)
-     d0   = nISM/scale_nH
-     ! Star particle mass                                                    
-     mstar=n_star/(scale_nH*aexp**3)*vol_min
-     ! Test is designed so that nlevelmax is activated at aexp \simeq 0.8
-     if(d0*(dx_loc/2.0)**ndim.lt.mstar/2d0)prevent_refine=.true.
-  endif
-  
-  ! Prevent from refining too much relative to available sink mass res.      
-  ! This translates into a constant physical res., except at very high z.    
-  if(sink .and. cosmo)then
-     ! Finest cell size                                                      
-     dx_min=(0.5D0**nlevelmax)*scale
-     vol_min=dx_min**ndim
-     ! Typical ISM mass density from H/cc to code units
-     nISM = n_sink
-     nCOM = del_star*omega_b*rhoc*(h0/100.)**2/aexp**3*X/mH
-     nISM = MAX(nCOM,nISM)
-     d0   = nISM/scale_nH
-     ! Sink particle mass                                                    
-     msnk=n_sink/(scale_nH*aexp**3)*vol_min
-     ! Test is designed so that nlevelmax is activated at aexp \simeq 0.8    
-     if(d0*(dx_loc/2.0)**ndim.lt.msnk/2d0)prevent_refine=.true.
-  endif
-  
-  if(prevent_refine)return
 
   ! Set position of cell centers relative to grid center
   do ind=1,twotondim
@@ -435,11 +395,6 @@ subroutine userflag_fine(ilevel)
 
   ! Do the same for hydro solver
   if(hydro)call hydro_flag(ilevel)
-
-#ifdef RT
-  ! Do the same for RT solver
-  if(rt)call rt_hydro_flag(ilevel)
-#endif
 
   ! Update boundaries
   call make_virtual_fine_int(flag1(1),ilevel)

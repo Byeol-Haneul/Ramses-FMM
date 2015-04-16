@@ -1,9 +1,6 @@
 subroutine hydro_flag(ilevel)
   use amr_commons
   use hydro_commons
-#ifdef RT
-  use rt_parameters
-#endif
   implicit none
   integer::ilevel
   ! -------------------------------------------------------------------
@@ -48,24 +45,10 @@ subroutine hydro_flag(ilevel)
      if(ndim>2)xc(ind,3)=(dble(iz)-0.5D0)*dx
   end do
 
-  if(    .not. neq_chem  .and.&
-       & err_grad_d==-1.0.and.&
+  if(    err_grad_d==-1.0.and.&
        & err_grad_p==-1.0.and.&
        & err_grad_u==-1.0.and.&
        & jeans_refine(ilevel)==-1.0 )return
-
-#ifdef RT 
-  if( aexp .lt. rt_refine_aexp) return    
-  if(    neq_chem        .and.          &
-       & err_grad_d==-1.0.and.          &
-       & err_grad_p==-1.0.and.          &
-       & err_grad_u==-1.0.and.          &
-       & jeans_refine(ilevel)==-1.0.and.&
-       & rt_err_grad_xHII==-1.0 .and.   & 
-       & rt_err_grad_xHI==-1.0          & 
-  & ) &
-      return
-#endif
 
   ! Loop over active grids
   ncache=active(ilevel)%ngrid
@@ -169,7 +152,6 @@ subroutine jeans_length_refine(ind_cell,ok,ncell,ilevel)
   use pm_commons
   use hydro_commons
   use poisson_commons
-  use cooling_module, ONLY: twopi
   implicit none
   integer::ncell,ilevel
   integer,dimension(1:nvector)::ind_cell

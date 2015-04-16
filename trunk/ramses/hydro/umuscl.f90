@@ -69,28 +69,15 @@ subroutine unsplit(uin,gravin,flux,tmp,dx,dy,dz,dt,ngrid)
   call uslope(qin,dq,dx,dt,ngrid)
 
   ! Compute 3D traced-states in all three directions
-  if(scheme=='muscl')then
 #if NDIM==1
-     call trace1d(qin,dq,qm,qp,dx      ,dt,ngrid)
+  call trace1d(qin,dq,qm,qp,dx      ,dt,ngrid)
 #endif
 #if NDIM==2
-     call trace2d(qin,dq,qm,qp,dx,dy   ,dt,ngrid)
+  call trace2d(qin,dq,qm,qp,dx,dy   ,dt,ngrid)
 #endif
 #if NDIM==3
-     call trace3d(qin,dq,qm,qp,dx,dy,dz,dt,ngrid)
+  call trace3d(qin,dq,qm,qp,dx,dy,dz,dt,ngrid)
 #endif
-  endif
-  if(scheme=='plmde')then
-#if NDIM==1
-     call tracex  (qin,dq,cin,qm,qp,dx      ,dt,ngrid)
-#endif
-#if NDIM==2
-     call tracexy (qin,dq,cin,qm,qp,dx,dy   ,dt,ngrid)
-#endif
-#if NDIM==3
-     call tracexyz(qin,dq,cin,qm,qp,dx,dy,dz,dt,ngrid)
-#endif
-  endif
 
   ! Solve for 1D flux in X direction
   call cmpflxm(qm,iu1+1,iu2+1,ju1  ,ju2  ,ku1  ,ku2  , &
@@ -163,8 +150,8 @@ subroutine unsplit(uin,gravin,flux,tmp,dx,dy,dz,dt,ngrid)
 #endif
 
   if(difmag>0.0)then
-    call cmpdivu(qin,divu,dx,dy,dz,ngrid)
-    call consup(uin,flux,divu,dt,ngrid)
+     call cmpdivu(qin,divu,dx,dy,dz,ngrid)
+     call consup(uin,flux,divu,dt,ngrid)
   endif
 
 end subroutine unsplit
@@ -769,11 +756,7 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
            end do
 #endif          
            ! Solve Riemann problem
-           if(riemann.eq.'acoustic')then
-              call riemann_acoustic(qleft,qright,fgdnv,ngrid)
-           else if (riemann.eq.'exact')then
-              call riemann_approx  (qleft,qright,fgdnv,ngrid)
-           else if (riemann.eq.'llf')then
+           if(riemann.eq.'llf')then
               call riemann_llf     (qleft,qright,fgdnv,ngrid)
            else if (riemann.eq.'hllc')then
               call riemann_hllc    (qleft,qright,fgdnv,ngrid)

@@ -1,7 +1,6 @@
 module pm_commons
   use amr_parameters
   use pm_parameters
-  use random
   ! Sink particle related arrays
   real(dp),allocatable,dimension(:)::msink,c2sink,oksink_new,oksink_all
   real(dp),allocatable,dimension(:)::tsink,tsink_new,tsink_all

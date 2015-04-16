@@ -22,16 +22,15 @@ subroutine read_params
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
-  namelist/run_params/clumpfind,cosmo,pic,sink,lightcone,poisson,hydro,rt,verbose,debug &
+  namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap,ordering &
-       & ,bisec_tol,static,geom,overload,cost_weighting,aton
+       & ,static,geom,overload,cost_weighting
   namelist/output_params/noutput,foutput,fbackup,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
        & ,cg_levelmin,cic_levelmax
-  namelist/lightcone_params/thetay_cone,thetaz_cone,zmax_cone
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
        & ,deltax_frame,deltay_frame,deltaz_frame,movie &
@@ -65,22 +64,12 @@ subroutine read_params
   write(*,*)' '
   write(*,'(" Working with nproc = ",I4," for ndim = ",I1)')ncpu,ndim
   ! Check nvar is not too small
-#ifdef SOLVERhydro
   write(*,'(" Using solver = hydro with nvar = ",I2)')nvar
   if(nvar<ndim+2)then
      write(*,*)'You should have: nvar>=ndim+2'
      write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
      call clean_stop
   endif
-#endif
-#ifdef SOLVERmhd
-  write(*,'(" Using solver = mhd with nvar = ",I2)')nvar
-  if(nvar<8)then
-     write(*,*)'You should have: nvar>=8'
-     write(*,'(" Please recompile with -DNVAR=8")')
-     call clean_stop
-  endif
-#endif
 
   ! Write information about git version
   call write_gitinfo
@@ -118,9 +107,6 @@ subroutine read_params
   read(1,NML=output_params)
   rewind(1)
   read(1,NML=amr_params)
-  rewind(1)
-  read(1,NML=lightcone_params,END=83)
-83 continue
   rewind(1)
   read(1,NML=movie_params,END=82)
 82 continue
@@ -203,23 +189,7 @@ subroutine read_params
      npartmax=nparttot/int(ncpu,kind=8)
   endif
   if(myid>1)verbose=.false.
-  if(sink.and.(.not.pic))then
-     pic=.true.
-  endif
-  if(clumpfind.and.(.not.pic))then
-     pic=.true.
-  endif
-  !if(pic.and.(.not.poisson))then
-  !   poisson=.true.
-  !endif
-
   call read_hydro_params(nml_ok)
-#ifdef RT
-  call rt_read_hydro_params(nml_ok)
-#endif
-  if (sink)call read_sink_params
-  if (clumpfind .or. sink)call read_clumpfind_params
-
 
   close(1)
 

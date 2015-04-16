@@ -2,7 +2,6 @@ subroutine update_time(ilevel)
   use amr_commons
   use pm_commons
   use hydro_commons
-  use cooling_module
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -71,14 +70,11 @@ subroutine update_time(ilevel)
            !----------------------------------------------
            ! Output mass and energy conservation to screen
            !----------------------------------------------
-           if(cooling.or.pressure_fix)then
+           if(pressure_fix)then
               write(*,778)nstep_coarse,econs,epot_tot,ekin_tot,eint_tot
            else
               write(*,777)nstep_coarse,mcons,econs,epot_tot,ekin_tot
            end if
-#ifdef SOLVERmhd
-           write(*,'(" emag=",ES9.2)') emag_tot
-#endif
            if(pic)then
               write(*,888)nstep,t,dt,aexp,&
                    & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1)),&

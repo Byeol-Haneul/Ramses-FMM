@@ -3,10 +3,6 @@ subroutine adaptive_loop
   use hydro_commons
   use pm_commons
   use poisson_commons
-  use cooling_module
-#ifdef RT
-  use rt_hydro_commons
-#endif
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -22,17 +18,8 @@ subroutine adaptive_loop
   call init_amr                      ! Initialize AMR variables
   call init_time                     ! Initialize time variables
   if(hydro)call init_hydro           ! Initialize hydro variables
-#ifdef RT
-  if(rt.or.neq_chem) &
-       call rt_init_hydro            ! Initialize radiation variables
-#endif
   if(poisson)call init_poisson       ! Initialize poisson variables
-#ifdef ATON
-  if(aton)call init_radiation        ! Initialize radiation variables
-#endif
   if(nrestart==0)call init_refine    ! Build initial AMR grid
-  if(cooling.and..not.neq_chem) &
-       call set_table(dble(aexp))    ! Initialize cooling look up table
   if(pic)call init_part              ! Initialize particle variables
   if(pic)call init_tree              ! Initialize particle tree
   if(nrestart==0)call init_refine_2  ! Build initial AMR grid again
@@ -65,9 +52,6 @@ subroutine adaptive_loop
      ekin_tot=0.0D0  ! Reset total kinetic energy
      mass_tot=0.0D0  ! Reset total mass
      eint_tot=0.0D0  ! Reset total internal energy
-#ifdef SOLVERmhd
-     emag_tot=0.0D0  ! Reset total magnetic energy
-#endif
 
      ! Make new refinements
      if(levelmin.lt.nlevelmax .and..not.static)then
@@ -76,27 +60,11 @@ subroutine adaptive_loop
            call build_comm(ilevel)
            call make_virtual_fine_int(cpu_map(1),ilevel)
            if(hydro)then
-#ifdef SOLVERmhd
-              do ivar=1,nvar+3
-#else
               do ivar=1,nvar
-#endif
                  call make_virtual_fine_dp(uold(1,ivar),ilevel)
-#ifdef SOLVERmhd
               end do
-#else
-              end do
-#endif
               if(simple_boundary)call make_boundary_hydro(ilevel)
            endif
-#ifdef RT
-           if(rt)then
-              do ivar=1,nrtvar
-                 call make_virtual_fine_dp(rtuold(1,ivar),ilevel)
-              end do
-              if(simple_boundary)call rt_make_boundary_hydro(ilevel)
-           endif
-#endif
            if(poisson)then
               call make_virtual_fine_dp(phi(1),ilevel)
               do idim=1,ndim
@@ -115,29 +83,11 @@ subroutine adaptive_loop
            ! Hydro book-keeping
            if(hydro)then
               call upload_fine(ilevel)
-#ifdef SOLVERmhd
-              do ivar=1,nvar+3
-#else
               do ivar=1,nvar
-#endif
                  call make_virtual_fine_dp(uold(1,ivar),ilevel)
-#ifdef SOLVERmhd
               end do
-#else
-              end do
-#endif
               if(simple_boundary)call make_boundary_hydro(ilevel)
            end if
-#ifdef RT
-           ! Radiation book-keeping
-           if(rt)then
-              call rt_upload_fine(ilevel)
-              do ivar=1,nrtvar
-                 call make_virtual_fine_dp(rtuold(1,ivar),ilevel)
-              end do
-              if(simple_boundary)call rt_make_boundary_hydro(ilevel)
-           end if
-#endif
            ! Gravity book-keeping
            if(poisson)then
               call make_virtual_fine_dp(phi(1),ilevel)

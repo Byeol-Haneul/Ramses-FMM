@@ -6,7 +6,6 @@ subroutine dump_all
   use amr_commons
   use pm_commons
   use hydro_commons
-  use cooling_module
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -48,16 +47,6 @@ subroutine dump_all
         call output_makefile(filename)
         filename=TRIM(filedir)//'patches.txt'
         call output_patch(filename)
-        if(cooling)then
-           filename=TRIM(filedir)//'cooling_'//TRIM(nchar)//'.out'
-           call output_cool(filename)
-        end if
-        if(sink)then
-           filename=TRIM(filedir)//'sink_'//TRIM(nchar)//'.info'
-           call output_sink(filename)
-           filename=TRIM(filedir)//'sink_'//TRIM(nchar)//'.csv'
-           call output_sink_csv(filename)
-        endif
         ! Copy namelist file to output directory
         filename=TRIM(filedir)//'namelist.txt'
         OPEN(UNIT=10, FILE=namelist_file, ACCESS='DIRECT', STATUS='OLD', &
@@ -89,32 +78,14 @@ subroutine dump_all
         filename=TRIM(filedir)//'hydro_'//TRIM(nchar)//'.out'
         call backup_hydro(filename)
      end if
-#ifdef RT
-     if(rt.or.neq_chem)then
-        filename=TRIM(filedir)//'rt_'//TRIM(nchar)//'.out'
-        call rt_backup_hydro(filename)
-     endif
-#endif
      if(pic)then
         filename=TRIM(filedir)//'part_'//TRIM(nchar)//'.out'
         call backup_part(filename)
-        if(sink)then
-           filename=TRIM(filedir)//'sink_'//TRIM(nchar)//'.out'
-           call backup_sink(filename)
-        end if
      end if
      if(poisson)then
         filename=TRIM(filedir)//'grav_'//TRIM(nchar)//'.out'
         call backup_poisson(filename)
      end if
-#ifdef ATON
-     if(aton)then
-        filename=TRIM(filedir)//'rad_'//TRIM(nchar)//'.out'
-        call backup_radiation(filename)
-        filename=TRIM(filedir)//'radgpu_'//TRIM(nchar)//'.out'
-        call store_radiation(filename)
-     end if
-#endif
      if (gadget_output) then
         filename=TRIM(filedir)//'gsnapshot_'//TRIM(nchar)
         call savegadget(filename)
@@ -203,15 +174,7 @@ subroutine backup_amr(filename)
   write(ilun)headf,tailf,numbf,used_mem,used_mem_tot
   ! Write cpu boundaries
   write(ilun)ordering
-  if(ordering=='bisection') then
-     write(ilun)bisec_wall(1:nbinodes)
-     write(ilun)bisec_next(1:nbinodes,1:2)
-     write(ilun)bisec_indx(1:nbinodes)
-     write(ilun)bisec_cpubox_min(1:ncpu,1:ndim)
-     write(ilun)bisec_cpubox_max(1:ncpu,1:ndim)
-  else
-     write(ilun)bound_key(0:ndomain)
-  endif
+  write(ilun)bound_key(0:ndomain)
 
   ! Write coarse level
   write(ilun)son(1:ncoarse)
@@ -356,19 +319,10 @@ subroutine output_info(filename)
   
   ! Write ordering information
   write(ilun,'("ordering type=",A80)')ordering
-  if(ordering=='bisection') then
-     do icpu=1,ncpu
-        ! write 2*ndim floats for cpu bound box                                                         
-        write(ilun,'(E23.15)')bisec_cpubox_min(icpu,:),bisec_cpubox_max(icpu,:)
-        ! write 1 float for cpu load                                                                    
-        write(ilun,'(E23.15)')dble(bisec_cpu_load(icpu))
-     end do
-  else
-     write(ilun,'("   DOMAIN   ind_min                 ind_max")')
-     do idom=1,ndomain
-        write(ilun,'(I8,1X,E23.15,1X,E23.15)')idom,bound_key(idom-1),bound_key(idom)
-     end do
-  endif
+  write(ilun,'("   DOMAIN   ind_min                 ind_max")')
+  do idom=1,ndomain
+     write(ilun,'(I8,1X,E23.15,1X,E23.15)')idom,bound_key(idom-1),bound_key(idom)
+  end do
 
   close(ilun)
 
@@ -417,12 +371,6 @@ subroutine output_header(filename)
      ! Write header information
      write(ilun,*)'Total number of particles'
      write(ilun,*)npart_tot
-     write(ilun,*)'Total number of dark matter particles'
-     write(ilun,*)npart_tot-nstar_tot
-     write(ilun,*)'Total number of star particles'
-     write(ilun,*)nstar_tot
-     write(ilun,*)'Total number of sink particles'
-     write(ilun,*)nsink
 
      ! Keep track of what particle fields are present
      write(ilun,*)'Particle fields'
@@ -430,12 +378,6 @@ subroutine output_header(filename)
 #ifdef OUTPUT_PARTICLE_POTENTIAL
      write(ilun,'(a)',advance='no')'phi '
 #endif
-     if(star.or.sink) then
-        write(ilun,'(a)',advance='no')'tform '
-        if(metal) then
-           write(ilun,'(a)',advance='no')'metal '
-        endif
-     endif
      close(ilun)
 
   endif

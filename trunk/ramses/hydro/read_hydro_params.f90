@@ -38,12 +38,6 @@ subroutine read_hydro_params(nml_ok)
        & ,ibound_min,ibound_max,jbound_min,jbound_max &
        & ,kbound_min,kbound_max &
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
-  namelist/physics_params/cooling,haardt_madau,metal,isothermal &
-       & ,m_star,t_star,n_star,T2_star,g_star,del_star,eps_star,jeans_ncells &
-       & ,eta_sn,yield,rbubble,f_ek,ndebris,f_w,mass_gmc,kappa_IR &
-       & ,J21,a_spec,z_ave,z_reion,ind_rsink,delayed_cooling &
-       & ,self_shielding,smbh,agn &
-       & ,units_density,units_time,units_length,neq_chem,ir_feedback,ir_eff,t_diss
 
   ! Read namelist file
   rewind(1)
@@ -65,32 +59,6 @@ subroutine read_hydro_params(nml_ok)
     call clean_stop
   end if
   rewind(1)
-  read(1,NML=physics_params,END=105)
-105 continue
-#ifdef ATON
-  if(aton)call read_radiation_params(1)
-#endif
-
-  !--------------------------------------------------
-  ! Check for star formation
-  !--------------------------------------------------
-  if(t_star>0)then
-     star=.true.
-     pic=.true.
-  else if(eps_star>0)then
-     t_star=0.1635449*(n_star/0.1)**(-0.5)/eps_star
-     star=.true.
-     pic=.true.
-  endif
-
-  !--------------------------------------------------
-  ! Check for metal
-  !--------------------------------------------------
-  if(metal.and.nvar<(ndim+3))then
-     if(myid==1)write(*,*)'Error: metals need nvar >= ndim+3'
-     if(myid==1)write(*,*)'Modify hydro_parameters.f90 and recompile'
-     nml_ok=.false.
-  endif
 
   !--------------------------------------------------
   ! Check for non-thermal energies
@@ -102,15 +70,6 @@ subroutine read_hydro_params(nml_ok)
      nml_ok=.false.
   endif
 #endif
-
-  !--------------------------------------------------
-  ! Check ind_rsink
-  !--------------------------------------------------
-  if(ind_rsink<=0.0d0)then
-     if(myid==1)write(*,*)'Error in the namelist'
-     if(myid==1)write(*,*)'Check ind_rsink'
-     nml_ok=.false.
-  end if
 
   !-------------------------------------------------
   ! This section deals with hydro boundary conditions
@@ -263,18 +222,6 @@ subroutine read_hydro_params(nml_ok)
   do i=1,levelmin-1
      jeans_refine(i)=-1.0
   end do
-
-  !-----------------------------------
-  ! Sort out passive variable indices
-  !-----------------------------------
-  imetal=nener+ndim+3
-  idelay=imetal
-  if(metal)idelay=imetal+1
-  ixion=idelay
-  if(delayed_cooling)ixion=idelay+1
-  ichem=ixion
-  if(aton)ichem=ixion+1
-  ! Last variable is ichem
 
 end subroutine read_hydro_params
 
