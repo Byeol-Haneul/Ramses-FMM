@@ -1,6 +1,6 @@
 subroutine init_amr
   use amr_commons
-  use hydro_commons
+  use hydro_commons, only:mass_tot_0,mass_sph
   use pm_commons  
   use poisson_commons
   implicit none

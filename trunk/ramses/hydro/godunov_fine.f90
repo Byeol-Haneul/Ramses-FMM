@@ -165,7 +165,7 @@ subroutine set_uold(ilevel)
            e_prim=enew(ind_cell)
            ! Note: here divu=-div.u*dt
            div=abs(divu(ind_cell))*dx/dtnew(ilevel)
-           e_trunc=beta_fix*d*max(div,3.0*hexp*dx)**2
+!           e_trunc=beta_fix*d*max(div,3.0*hexp*dx)**2
            if(e_cons<e_trunc)then
               uold(ind_cell,ndim+2)=e_prim+e_kin
            end if

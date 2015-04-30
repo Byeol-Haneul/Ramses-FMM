@@ -125,10 +125,6 @@ subroutine force_fine(ilevel,icount)
      end do
      ! End loop over grids
      
-     if (sink)then
-        call f_gas_sink(ilevel)
-     end if
-     
   ! Update boundaries
      do idim=1,ndim
         call make_virtual_fine_dp(f(1,idim),ilevel)

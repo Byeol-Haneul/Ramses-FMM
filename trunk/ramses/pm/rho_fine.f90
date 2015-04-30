@@ -527,7 +527,7 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
            phi(indp(j,ind))=phi(indp(j,ind))+vol2(j)
         end if
      end do
-  
+  end do
 end subroutine cic_amr
 !###########################################################
 !###########################################################

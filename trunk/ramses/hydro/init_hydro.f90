@@ -45,7 +45,7 @@ subroutine init_hydro
      read(ilun)nlevelmax2
      read(ilun)nboundary2
      read(ilun)gamma2
-     if(.not.(neq_chem.or.rt) .and. nvar2.ne.nvar)then
+     if(nvar2.ne.nvar)then
         write(*,*)'File hydro.tmp is not compatible'
         write(*,*)'Found   =',nvar2
         write(*,*)'Expected=',nvar

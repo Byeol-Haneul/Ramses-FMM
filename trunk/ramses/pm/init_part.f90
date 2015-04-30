@@ -88,11 +88,11 @@ subroutine init_part
      read(ilun)ncpu2
      read(ilun)ndim2
      read(ilun)npart2
-     read(ilun)localseed
-     read(ilun)nstar_tot
-     read(ilun)mstar_tot
-     read(ilun)mstar_lost
-     read(ilun)nsink     
+!     read(ilun)localseed
+!     read(ilun)nstar_tot
+!     read(ilun)mstar_tot
+!     read(ilun)mstar_lost
+!     read(ilun)nsink     
      if(ncpu2.ne.ncpu.or.ndim2.ne.ndim.or.npart2.gt.npartmax)then
         write(*,*)'File part.tmp not compatible'
         write(*,*)'Found   =',ncpu2,ndim2,npart2

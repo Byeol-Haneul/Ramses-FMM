@@ -25,11 +25,11 @@ subroutine backup_part(filename)
   write(ilun)ncpu
   write(ilun)ndim
   write(ilun)npart
-  write(ilun)localseed
-  write(ilun)nstar_tot   
-  write(ilun)mstar_tot   
-  write(ilun)mstar_lost
-  write(ilun)nsink
+!  write(ilun)localseed
+!  write(ilun)nstar_tot   
+!  write(ilun)mstar_tot   
+!  write(ilun)mstar_lost
+!  write(ilun)nsink
   ! Write position
   allocate(xdp(1:npart))
   do idim=1,ndim
