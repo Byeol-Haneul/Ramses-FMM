@@ -3,7 +3,7 @@ subroutine backup_part(filename)
   use pm_commons
   implicit none
   character(LEN=80)::filename
-
+  integer::dummyint=0
   integer::i,idim,nsink=0,ilun,ipart
   character(LEN=80)::fileloc
   character(LEN=5)::nchar
@@ -25,11 +25,11 @@ subroutine backup_part(filename)
   write(ilun)ncpu
   write(ilun)ndim
   write(ilun)npart
-!  write(ilun)localseed
-!  write(ilun)nstar_tot   
-!  write(ilun)mstar_tot   
-!  write(ilun)mstar_lost
-!  write(ilun)nsink
+  write(ilun)dummyint
+  write(ilun)dummyint
+  write(ilun)dummyint
+  write(ilun)dummyint
+  write(ilun)dummyint
   ! Write position
   allocate(xdp(1:npart))
   do idim=1,ndim

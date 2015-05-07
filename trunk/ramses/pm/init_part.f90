@@ -9,6 +9,7 @@ subroutine init_part
   ! Allocate particle-based arrays.
   ! Read particles positions and velocities from grafic files
   !------------------------------------------------------------
+  integer::dummyint
   integer::npart2,ndim2,ncpu2
   integer::ipart,jpart,ipart_old,ilevel,idim
   integer::i,igrid,ncache,ngrid,iskip,nsink
@@ -88,11 +89,11 @@ subroutine init_part
      read(ilun)ncpu2
      read(ilun)ndim2
      read(ilun)npart2
-!     read(ilun)localseed
-!     read(ilun)nstar_tot
-!     read(ilun)mstar_tot
-!     read(ilun)mstar_lost
-!     read(ilun)nsink     
+     read(ilun)dummyint
+     read(ilun)dummyint
+     read(ilun)dummyint
+     read(ilun)dummyint
+     read(ilun)dummyint
      if(ncpu2.ne.ncpu.or.ndim2.ne.ndim.or.npart2.gt.npartmax)then
         write(*,*)'File part.tmp not compatible'
         write(*,*)'Found   =',ncpu2,ndim2,npart2
