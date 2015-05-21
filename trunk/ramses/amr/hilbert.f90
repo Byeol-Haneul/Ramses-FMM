@@ -99,7 +99,7 @@ end subroutine hilbert2d
 !================================================================
 !================================================================
 !================================================================
-subroutine hilbert3d(x,y,z,order,bit_length,npoint)
+subroutine hilbert3d_orig(x,y,z,order,bit_length,npoint)
   use amr_parameters, ONLY: qdp
   implicit none
 
@@ -188,9 +188,522 @@ subroutine hilbert3d(x,y,z,order,bit_length,npoint)
 
   end do
 
-end subroutine hilbert3d
+end subroutine hilbert3d_orig
 !================================================================
 !================================================================
 !================================================================
 !================================================================
+subroutine hilbert3d_andreas(x,y,z,order,bit_length,npoint)
+  use amr_parameters, ONLY: qdp,nvector
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  integer     ,INTENT(IN)                     ::bit_length,npoint
+  integer     ,INTENT(IN) ,dimension(1:nvector)::x,y,z
+  real(qdp),INTENT(OUT),dimension(1:nvector)::order
 
+  integer(kind=4),parameter,dimension(0:95)::state_diagram0=(/1, 2, 3, 2, 4, 5, 3, 5,&
+                            &   2, 6, 0, 7, 8, 8, 0, 7,&
+                            &   0, 9,10, 9, 1, 1,11,11,&
+                            &   6, 0, 6,11, 9, 0, 9, 8,&
+                            &  11,11, 0, 7, 5, 9, 0, 7,&
+                            &   4, 4, 8, 8, 0, 6,10, 6,&
+                            &   5, 7, 5, 3, 1, 1,11,11,&
+                            &   6, 1, 6,10, 9, 4, 9,10,&
+                            &  10, 3, 1, 1,10, 3, 5, 9,&
+                            &   4, 4, 8, 8, 2, 7, 2, 3,&
+                            &   7, 2,11, 2, 7, 5, 8, 5,&
+                            &  10, 3, 2, 6,10, 3, 4, 4 /)
+  integer(kind=8),parameter,dimension(0:95)::state_diagram1=(/0, 1, 3, 2, 7, 6, 4, 5,&
+                            &   0, 7, 1, 6, 3, 4, 2, 5,&
+                            &   0, 3, 7, 4, 1, 2, 6, 5,&
+                            &   2, 3, 1, 0, 5, 4, 6, 7,&
+                            &   4, 3, 5, 2, 7, 0, 6, 1,&
+                            &   6, 5, 1, 2, 7, 4, 0, 3,&
+                            &   4, 7, 3, 0, 5, 6, 2, 1,&
+                            &   6, 7, 5, 4, 1, 0, 2, 3,&
+                            &   2, 5, 3, 4, 1, 6, 0, 7,&
+                            &   2, 1, 5, 6, 3, 0, 4, 7,&
+                            &   4, 5, 7, 6, 3, 2, 0, 1,&
+                            &   6, 1, 7, 0, 5, 2, 4, 3 /)
+
+  ! state diagrams:  state_diagram0(current cube/digit,  input orientation/state) gives new orientation/state
+  !                  state_diagram1(current cube/digit,  input orientation/state) gives new cube/orientation
+
+
+
+  integer::i,ip,info
+  integer(kind=8)::testint
+  integer(kind=8),dimension(1:nvector)::hkey
+  integer(kind=4),dimension(1:nvector)::cstate,nstate,hdigit,sdigit,ind
+  integer(kind=4),parameter::zero=0
+  integer(kind=4),parameter::one=1
+  integer(kind=4),parameter::two=2
+  integer(kind=4),parameter::four=4
+  integer(kind=4),parameter::eight=8
+  integer(kind=8),parameter::longeight=8
+
+
+  if(bit_length>bit_size(bit_length))then
+     write(*,*)'Maximum bit length=',bit_size(bit_length)
+     write(*,*)'stop in hilbert3d'
+     call clean_stop
+  endif
+
+
+#ifdef QUADHILBERT
+        call MPI_ABORT(MPI_COMM_WORLD,1,info)
+#endif
+
+  ! build Hilbert ordering using state diagram
+  cstate=0
+  hkey=0
+  do i=bit_length-1,0,-1
+     do ip=1,npoint
+        hkey(ip)=hkey(ip)*longeight
+     end do
+
+     sdigit=0
+     do ip=1,npoint
+        if(btest(x(ip),i))sdigit(ip)=sdigit(ip)+four
+        if(btest(y(ip),i))sdigit(ip)=sdigit(ip)+two
+        if(btest(z(ip),i))sdigit(ip)=sdigit(ip)+one
+     end do
+
+     do ip=1,npoint
+        ind(ip)=cstate(ip)*eight+sdigit(ip)
+     end do
+
+     do ip=1,npoint
+        nstate(ip)=state_diagram0(ind(ip))
+     end do
+
+     do ip=1,npoint
+        hkey(ip)=hkey(ip)+state_diagram1(ind(ip))
+     end do
+
+     do ip=1,npoint
+        cstate(ip)=nstate(ip)
+     end do
+  enddo
+  
+  do ip=1,npoint
+     order(ip)=real(hkey(ip),kind=8)             
+  end do
+
+end subroutine hilbert3d_andreas
+!================================================================
+!================================================================
+!================================================================
+!================================================================
+subroutine hilbert3d_nonvec(x,y,z,order,bit_length,npoint)
+  use amr_parameters, ONLY: qdp,nvector
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  integer     ,INTENT(IN)                     ::bit_length,npoint
+  integer     ,INTENT(IN) ,dimension(1:nvector)::x,y,z
+  real(qdp),INTENT(OUT),dimension(1:nvector)::order
+
+  integer(kind=4),parameter,dimension(0:95)::state_diagram0=(/1, 2, 3, 2, 4, 5, 3, 5,&
+                            &   2, 6, 0, 7, 8, 8, 0, 7,&
+                            &   0, 9,10, 9, 1, 1,11,11,&
+                            &   6, 0, 6,11, 9, 0, 9, 8,&
+                            &  11,11, 0, 7, 5, 9, 0, 7,&
+                            &   4, 4, 8, 8, 0, 6,10, 6,&
+                            &   5, 7, 5, 3, 1, 1,11,11,&
+                            &   6, 1, 6,10, 9, 4, 9,10,&
+                            &  10, 3, 1, 1,10, 3, 5, 9,&
+                            &   4, 4, 8, 8, 2, 7, 2, 3,&
+                            &   7, 2,11, 2, 7, 5, 8, 5,&
+                            &  10, 3, 2, 6,10, 3, 4, 4 /)
+  integer(kind=8),parameter,dimension(0:95)::state_diagram1=(/0, 1, 3, 2, 7, 6, 4, 5,&
+                            &   0, 7, 1, 6, 3, 4, 2, 5,&
+                            &   0, 3, 7, 4, 1, 2, 6, 5,&
+                            &   2, 3, 1, 0, 5, 4, 6, 7,&
+                            &   4, 3, 5, 2, 7, 0, 6, 1,&
+                            &   6, 5, 1, 2, 7, 4, 0, 3,&
+                            &   4, 7, 3, 0, 5, 6, 2, 1,&
+                            &   6, 7, 5, 4, 1, 0, 2, 3,&
+                            &   2, 5, 3, 4, 1, 6, 0, 7,&
+                            &   2, 1, 5, 6, 3, 0, 4, 7,&
+                            &   4, 5, 7, 6, 3, 2, 0, 1,&
+                            &   6, 1, 7, 0, 5, 2, 4, 3 /)
+
+  ! state diagrams:  state_diagram0(current cube/digit,  input orientation/state) gives new orientation/state
+  !                  state_diagram1(current cube/digit,  input orientation/state) gives new cube/orientation
+
+
+  integer(kind=4),parameter::zero=0
+  integer(kind=4),parameter::one=1
+  integer(kind=4),parameter::two=2
+  integer(kind=4),parameter::four=4
+  integer(kind=4),parameter::eight=8
+  integer(kind=8),parameter::longeight=8
+  integer(kind=4)::i,ip,xx,yy,zz,info
+  integer(kind=8)::hkey
+  integer(kind=4)::cstate,nstate,sdigit,hdigit,ind
+  if(bit_length>bit_size(bit_length))then
+     write(*,*)'Maximum bit length=',bit_size(bit_length)
+     write(*,*)'stop in hilbert3d'
+     call clean_stop
+  endif
+
+  
+  
+#ifdef QUADHILBERT
+#ifndef WITHOUTMPI
+        call MPI_ABORT(MPI_COMM_WORLD,1,info)
+#else
+        stop
+#endif
+#endif
+  
+  
+  do ip=1,npoint  
+     ! build Hilbert ordering using state diagram
+     xx=x(ip); yy=y(ip); zz=z(ip)
+     cstate=0
+     hkey=0
+     do i=bit_length-1,0,-1
+        hkey=hkey*longeight
+        sdigit=zero
+        if(btest(xx,i))sdigit=sdigit+four
+        if(btest(yy,i))sdigit=sdigit+two
+        if(btest(zz,i))sdigit=sdigit+one
+        ind=cstate*eight+sdigit
+        nstate=state_diagram0(ind)
+        hkey=hkey+state_diagram1(ind)
+        cstate=nstate        
+     enddo
+     order(ip)=real(hkey,kind=8)             
+  end do
+  
+end subroutine hilbert3d_nonvec
+!================================================================
+!================================================================
+!================================================================
+!================================================================
+subroutine hilbert3d_multiint(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
+  use amr_parameters, ONLY: qdp,nvector
+  implicit none
+
+  integer     ,INTENT(IN)                     ::bit_length,npoint
+  integer     ,INTENT(IN) ,dimension(1:nvector)::x,y,z
+!  real(qdp),INTENT(OUT),dimension(1:nvector)::order
+  integer(kind=8),INTENT(OUT),dimension(1:nvector)::hkey2,hkey1,hkey0
+
+  integer(kind=4),parameter,dimension(0:95)::next_state_diagram=(/&
+                            &   1, 2, 3, 2, 4, 5, 3, 5,&
+                            &   2, 6, 0, 7, 8, 8, 0, 7,&
+                            &   0, 9,10, 9, 1, 1,11,11,&
+                            &   6, 0, 6,11, 9, 0, 9, 8,&
+                            &  11,11, 0, 7, 5, 9, 0, 7,&
+                            &   4, 4, 8, 8, 0, 6,10, 6,&
+                            &   5, 7, 5, 3, 1, 1,11,11,&
+                            &   6, 1, 6,10, 9, 4, 9,10,&
+                            &  10, 3, 1, 1,10, 3, 5, 9,&
+                            &   4, 4, 8, 8, 2, 7, 2, 3,&
+                            &   7, 2,11, 2, 7, 5, 8, 5,&
+                            &  10, 3, 2, 6,10, 3, 4, 4 /)
+  integer(kind=8),parameter,dimension(0:95)::three_digit_diagram=(/&
+                            &   0, 1, 3, 2, 7, 6, 4, 5,&
+                            &   0, 7, 1, 6, 3, 4, 2, 5,&
+                            &   0, 3, 7, 4, 1, 2, 6, 5,&
+                            &   2, 3, 1, 0, 5, 4, 6, 7,&
+                            &   4, 3, 5, 2, 7, 0, 6, 1,&
+                            &   6, 5, 1, 2, 7, 4, 0, 3,&
+                            &   4, 7, 3, 0, 5, 6, 2, 1,&
+                            &   6, 7, 5, 4, 1, 0, 2, 3,&
+                            &   2, 5, 3, 4, 1, 6, 0, 7,&
+                            &   2, 1, 5, 6, 3, 0, 4, 7,&
+                            &   4, 5, 7, 6, 3, 2, 0, 1,&
+                            &   6, 1, 7, 0, 5, 2, 4, 3 /)
+
+  ! state diagrams:  state_diagram0(current cube/digit,  input orientation/state) gives new orientation/state
+  !                  state_diagram1(current cube/digit,  input orientation/state) gives new cube/orientation
+
+
+
+  integer::i,ip
+!#ifdef HILBERT>1
+!#ifdef QUADHILBERT 
+!  integer(kind=8),dimension(1:nvector)::hkey2
+!#endif
+! #ifdef HILBERT>2
+!   integer(kind=8),dimension(1:nvector)::hkey2
+! #endif
+  integer(kind=4),dimension(1:nvector)::cstate,nstate,hdigit,sdigit,ind
+  integer(kind=4),parameter::zero=0
+  integer(kind=4),parameter::one=1
+  integer(kind=4),parameter::two=2
+  integer(kind=4),parameter::four=4
+  integer(kind=4),parameter::eight=8
+  integer(kind=8),parameter::longeight=8
+
+
+  ! build Hilbert ordering using state diagram
+  cstate=0
+  hkey0=0; hkey1=0; hkey2=0
+!#ifdef HILBERT>1
+!#ifdef QUADHILBERT
+!  hkey1=0
+!#endif
+! #ifdef HILBERT>2
+!   hkey1=0
+! #endif
+
+  do i=bit_length-1,0,-1
+
+     if (bit_length>42)then
+        do ip=1,npoint
+           hkey2(ip)=ISHFT(hkey2(ip),3)
+        end do
+        do ip=1,npoint
+           hkey2(ip)=hkey2(ip)+ISHFT(hkey1(ip),-60)
+        end do
+     end if
+
+     if (bit_length>21)then
+        do ip=1,npoint
+           hkey1(ip)=ISHFT(hkey1(ip),4)
+           hkey1(ip)=ISHFT(hkey1(ip),-1)
+        end do
+        do ip=1,npoint
+           hkey1(ip)=hkey1(ip)+ISHFT(hkey0(ip),-60)
+        end do
+     end if
+
+     do ip=1,npoint
+        hkey0(ip)=ISHFT(hkey0(ip),4)
+        hkey0(ip)=ISHFT(hkey0(ip),-1)
+     end do
+
+     sdigit=0
+     do ip=1,npoint
+        if(btest(x(ip),i))sdigit(ip)=sdigit(ip)+four
+        if(btest(y(ip),i))sdigit(ip)=sdigit(ip)+two
+        if(btest(z(ip),i))sdigit(ip)=sdigit(ip)+one
+     end do
+
+     do ip=1,npoint
+        ind(ip)=cstate(ip)*eight+sdigit(ip)
+     end do
+
+     do ip=1,npoint
+        nstate(ip)=next_state_diagram(ind(ip))
+     end do
+
+     do ip=1,npoint
+        hkey0(ip)=hkey0(ip)+three_digit_diagram(ind(ip))
+     end do
+
+     do ip=1,npoint
+        cstate(ip)=nstate(ip)
+     end do
+  enddo
+  
+! #ifdef QUADHILBERT
+!   do ip=1,npoint
+!      order(ip)=real(hkey0(ip),kind=16)+real(hkey1(ip),kind=16)*real(2,kind=16)**63
+!   end do
+! #else
+!   do ip=1,npoint
+!      order(ip)=real(hkey0(ip),kind=8)             
+!   end do  
+! #endif
+
+end subroutine hilbert3d_multiint
+!================================================================
+!================================================================
+!================================================================
+!================================================================
+subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
+  use amr_parameters, ONLY: qdp,nvector
+  implicit none
+
+  integer     ,INTENT(IN)                     ::bit_length,npoint
+  integer     ,INTENT(OUT) ,dimension(1:nvector)::x,y,z
+  integer(kind=8),dimension(1:nvector)::hkey2,hkey1,hkey0
+
+
+  
+  integer(kind=4),parameter,dimension(0:95)::x_digit_diagram=(/&
+       & 0,  0,  0,  0,  1,  1,  1,  1,&  
+       & 0,  0,  1,  1,  1,  1,  0,  0,&  
+       & 0,  1,  1,  0,  0,  1,  1,  0,&  
+       & 0,  0,  0,  0,  1,  1,  1,  1,&  
+       & 1,  1,  0,  0,  0,  0,  1,  1,&  
+       & 1,  0,  0,  1,  1,  0,  0,  1,&  
+       & 0,  1,  1,  0,  0,  1,  1,  0,&  
+       & 1,  1,  1,  1,  0,  0,  0,  0,&  
+       & 1,  1,  0,  0,  0,  0,  1,  1,&  
+       & 1,  0,  0,  1,  1,  0,  0,  1,&  
+       & 1,  1,  1,  1,  0,  0,  0,  0,&  
+       & 0,  0,  1,  1,  1,  1,  0,  0/)  
+  
+  integer(kind=4),parameter,dimension(0:95)::y_digit_diagram=(/&
+       & 0,  0,  1,  1,  1,  1,  0,  0,&  
+       & 0,  1,  1,  0,  0,  1,  1,  0,&  
+       & 0,  0,  0,  0,  1,  1,  1,  1,&  
+       & 1,  1,  0,  0,  0,  0,  1,  1,&  
+       & 0,  1,  1,  0,  0,  1,  1,  0,&  
+       & 1,  1,  1,  1,  0,  0,  0,  0,&  
+       & 1,  1,  1,  1,  0,  0,  0,  0,&  
+       & 0,  0,  1,  1,  1,  1,  0,  0,&  
+       & 1,  0,  0,  1,  1,  0,  0,  1,&  
+       & 0,  0,  0,  0,  1,  1,  1,  1,&  
+       & 1,  1,  0,  0,  0,  0,  1,  1,&  
+       & 1,  0,  0,  1,  1,  0,  0,  1/)  
+  
+  integer(kind=4),parameter,dimension(0:95)::z_digit_diagram=(/&
+       & 0,  1,  1,  0,  0,  1,  1,  0,&  
+       & 0,  0,  0,  0,  1,  1,  1,  1,&  
+       & 0,  0,  1,  1,  1,  1,  0,  0,&  
+       & 1,  0,  0,  1,  1,  0,  0,  1,&  
+       & 1,  1,  1,  1,  0,  0,  0,  0,&  
+       & 0,  0,  1,  1,  1,  1,  0,  0,&  
+       & 1,  1,  0,  0,  0,  0,  1,  1,&  
+       & 1,  0,  0,  1,  1,  0,  0,  1,&  
+       & 0,  0,  0,  0,  1,  1,  1,  1,&  
+       & 1,  1,  0,  0,  0,  0,  1,  1,&  
+       & 0,  1,  1,  0,  0,  1,  1,  0,&  
+       & 1,  1,  1,  1,  0,  0,  0,  0/)  
+
+  integer(kind=4),parameter,dimension(0:95)::next_state_diagram=(/&
+       & 1,   2,   2,   3,   3,   5,   5,   4,&  
+       & 2,   0,   0,   8,   8,   7,   7,   6,&  
+       & 0,   1,   1,   9,   9,  11,  11,  10,&  
+       &11,   6,   6,   0,   0,   9,   9,   8,&  
+       & 9,   7,   7,  11,  11,   0,   0,   5,&  
+       &10,   8,   8,   6,   6,   4,   4,   0,&  
+       & 3,  11,  11,   5,   5,   1,   1,   7,&  
+       & 4,   9,   9,  10,  10,   6,   6,   1,&  
+       & 5,  10,  10,   1,   1,   3,   3,   9,&  
+       & 7,   4,   4,   2,   2,   8,   8,   3,&  
+       & 8,   5,   5,   7,   7,   2,   2,  11,&  
+       & 6,   3,   3,   4,   4,  10,  10,   2/)  
+
+
+
+
+  integer::i,ip,leading_zeroes
+  integer(kind=4),dimension(1:nvector)::cstate,nstate,hdigit,ind
+  integer(kind=8),dimension(1:nvector)::sdigit
+  integer(kind=4),parameter::zero=0
+  integer(kind=4),parameter::one=1
+  integer(kind=4),parameter::two=2
+  integer(kind=4),parameter::four=4
+  integer(kind=4),parameter::eight=8
+  integer(kind=8),parameter::longeight=8
+
+  ! compute the leading zeroes in the integer key
+  leading_zeroes=mod(3*(63-bit_length),63)
+  
+  ! shift by leading_zeroes bits to the left
+  do ip=1,npoint
+     hkey2(ip)=ISHFT(hkey2(ip),leading_zeroes)
+  end do
+  do ip=1,npoint
+     hkey2(ip)=hkey2(ip)+ISHFT(hkey1(ip),leading_zeroes-63)
+  end do
+  do ip=1,npoint
+     hkey1(ip)=ISHFT(hkey1(ip),leading_zeroes+1)
+     hkey1(ip)=ISHFT(hkey1(ip),-1)
+  end do
+  do ip=1,npoint
+     hkey1(ip)=hkey1(ip)+ISHFT(hkey0(ip),leading_zeroes-63)
+  end do  
+  do ip=1,npoint
+     hkey0(ip)=ISHFT(hkey0(ip),leading_zeroes+1)
+     hkey0(ip)=ISHFT(hkey0(ip),-1)
+  end do
+
+  
+
+
+  ! build the cartesian key using the state diagrams
+  cstate=0
+  x=0; y=0; z=0
+  do i=bit_length-1,0,-1     
+     ! leftshift the cartesian keys by one position
+     do ip=1,npoint
+        x(ip)=ISHFT(x(ip),1)
+        y(ip)=ISHFT(y(ip),1)
+        z(ip)=ISHFT(z(ip),1)
+     end do
+     
+     ! compute index for state diagrams from the 3 leading bits in the 
+     ! relevant key integer
+     if (bit_length>42)then
+        do ip=1,npoint
+           sdigit(ip)=ISHFT(hkey2(ip),-60)
+        end do
+     else if(bit_length>21)then
+        do ip=1,npoint
+           sdigit(ip)=ISHFT(hkey1(ip),-60)
+        end do
+     else
+        do ip=1,npoint
+           sdigit(ip)=ISHFT(hkey0(ip),-60)
+        end do
+     end if
+     
+     do ip=1,npoint
+        ind(ip)=cstate(ip)*eight+sdigit(ip)
+     end do
+
+     ! save next state
+     do ip=1,npoint
+        nstate(ip)=next_state_diagram(ind(ip))
+     end do
+     
+     ! add one integer key digit each
+     do ip=1,npoint
+        x(ip)=x(ip)+x_digit_diagram(ind(ip))
+     end do
+     do ip=1,npoint
+        y(ip)=y(ip)+y_digit_diagram(ind(ip))
+     end do
+     do ip=1,npoint
+        z(ip)=z(ip)+z_digit_diagram(ind(ip))
+     end do
+
+     do ip=1,npoint
+        cstate(ip)=nstate(ip)
+     end do
+
+
+     ! shift the key by 3 bits to the left
+     if (bit_length>42)then
+        do ip=1,npoint
+           hkey2(ip)=ISHFT(hkey2(ip),4)
+           hkey2(ip)=ISHFT(hkey2(ip),-1)
+        end do
+        do ip=1,npoint
+           hkey2(ip)=hkey2(ip)+ISHFT(hkey1(ip),-60)
+        end do
+     end if
+
+     if (bit_length>21)then
+        do ip=1,npoint
+           hkey1(ip)=ISHFT(hkey1(ip),4)
+           hkey1(ip)=ISHFT(hkey1(ip),-1)
+        end do
+        do ip=1,npoint
+           hkey1(ip)=hkey1(ip)+ISHFT(hkey0(ip),-60)
+        end do
+     end if
+
+
+     do ip=1,npoint
+        hkey0(ip)=ISHFT(hkey0(ip),4)
+        hkey0(ip)=ISHFT(hkey0(ip),-1)
+     end do
+     
+  
+  enddo
+  
+end subroutine hilbert3d_multiint_reverse

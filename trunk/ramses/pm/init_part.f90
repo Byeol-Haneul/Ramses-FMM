@@ -1,4 +1,4 @@
-subroutine init_part
+subroutine init_part_andreas
   use amr_commons
   use pm_commons
   implicit none
@@ -67,6 +67,7 @@ subroutine init_part
   allocate(prevp (npartmax))
   allocate(levelp(npartmax))
   allocate(idp   (npartmax))
+  allocate(big_hkey(npartmax,0:2))
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(ptcl_phi(npartmax))
 #endif
@@ -136,476 +137,476 @@ subroutine init_part
 
      select case (filetype_loc)
 
-     case ('grafic')
+!      case ('grafic')
 
-        !----------------------------------------------------
-        ! Reading initial conditions GRAFIC2 multigrid arrays  
-        !----------------------------------------------------
-        ipart=0
-        ! Loop over initial condition levels
-        do ilevel=levelmin,nlevelmax
+!         !----------------------------------------------------
+!         ! Reading initial conditions GRAFIC2 multigrid arrays  
+!         !----------------------------------------------------
+!         ipart=0
+!         ! Loop over initial condition levels
+!         do ilevel=levelmin,nlevelmax
            
-           if(initfile(ilevel)==' ')cycle
+!            if(initfile(ilevel)==' ')cycle
            
-           ! Mesh size at level ilevel in coarse cell units
-           dx=0.5D0**ilevel
+!            ! Mesh size at level ilevel in coarse cell units
+!            dx=0.5D0**ilevel
            
-           ! Set position of cell centers relative to grid center
-           do ind=1,twotondim
-              iz=(ind-1)/4
-              iy=(ind-1-4*iz)/2
-              ix=(ind-1-2*iy-4*iz)
-              if(ndim>0)xc(ind,1)=(dble(ix)-0.5D0)*dx
-              if(ndim>1)xc(ind,2)=(dble(iy)-0.5D0)*dx
-              if(ndim>2)xc(ind,3)=(dble(iz)-0.5D0)*dx
-           end do
+!            ! Set position of cell centers relative to grid center
+!            do ind=1,twotondim
+!               iz=(ind-1)/4
+!               iy=(ind-1-4*iz)/2
+!               ix=(ind-1-2*iy-4*iz)
+!               if(ndim>0)xc(ind,1)=(dble(ix)-0.5D0)*dx
+!               if(ndim>1)xc(ind,2)=(dble(iy)-0.5D0)*dx
+!               if(ndim>2)xc(ind,3)=(dble(iz)-0.5D0)*dx
+!            end do
            
-           !--------------------------------------------------------------
-           ! First step: compute level boundaries and particle positions
-           !--------------------------------------------------------------
-           i1_min=n1(ilevel)+1; i1_max=0
-           i2_min=n2(ilevel)+1; i2_max=0
-           i3_min=n3(ilevel)+1; i3_max=0
-           ipart_old=ipart
+!            !--------------------------------------------------------------
+!            ! First step: compute level boundaries and particle positions
+!            !--------------------------------------------------------------
+!            i1_min=n1(ilevel)+1; i1_max=0
+!            i2_min=n2(ilevel)+1; i2_max=0
+!            i3_min=n3(ilevel)+1; i3_max=0
+!            ipart_old=ipart
            
-           ! Loop over grids by vector sweeps
-           ncache=active(ilevel)%ngrid
-           do igrid=1,ncache,nvector
-              ngrid=MIN(nvector,ncache-igrid+1)
-              do i=1,ngrid
-                 ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
-              end do
+!            ! Loop over grids by vector sweeps
+!            ncache=active(ilevel)%ngrid
+!            do igrid=1,ncache,nvector
+!               ngrid=MIN(nvector,ncache-igrid+1)
+!               do i=1,ngrid
+!                  ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
+!               end do
               
-              ! Loop over cells
-              do ind=1,twotondim
-                 iskip=ncoarse+(ind-1)*ngridmax
-                 do i=1,ngrid
-                    ind_cell(i)=iskip+ind_grid(i)
-                 end do
-                 do i=1,ngrid
-                    xx1=xg(ind_grid(i),1)+xc(ind,1)
-                    xx1=(xx1*(dxini(ilevel)/dx)-xoff1(ilevel))/dxini(ilevel)
-                    xx2=xg(ind_grid(i),2)+xc(ind,2)
-                    xx2=(xx2*(dxini(ilevel)/dx)-xoff2(ilevel))/dxini(ilevel)
-                    xx3=xg(ind_grid(i),3)+xc(ind,3)
-                    xx3=(xx3*(dxini(ilevel)/dx)-xoff3(ilevel))/dxini(ilevel)
-                    i1_min=MIN(i1_min,int(xx1)+1)
-                    i1_max=MAX(i1_max,int(xx1)+1)
-                    i2_min=MIN(i2_min,int(xx2)+1)
-                    i2_max=MAX(i2_max,int(xx2)+1)
-                    i3_min=MIN(i3_min,int(xx3)+1)
-                    i3_max=MAX(i3_max,int(xx3)+1)
-                    keep_part=son(ind_cell(i))==0
-                    if(keep_part)then
-                       ipart=ipart+1
-                       if(ipart>npartmax)then
-                          write(*,*)'Maximum number of particles incorrect'
-                          write(*,*)'npartmax should be greater than',ipart
-                          call clean_stop
-                       endif
-                       if(ndim>0)xp(ipart,1)=xg(ind_grid(i),1)+xc(ind,1)
-                       if(ndim>1)xp(ipart,2)=xg(ind_grid(i),2)+xc(ind,2)
-                       if(ndim>2)xp(ipart,3)=xg(ind_grid(i),3)+xc(ind,3)
-                       mp(ipart)=0.5d0**(3*ilevel)*(1.0d0-omega_b/omega_m)
-                    end if
-                 end do
-              end do
-              ! End loop over cells
-           end do
-           ! End loop over grids
+!               ! Loop over cells
+!               do ind=1,twotondim
+!                  iskip=ncoarse+(ind-1)*ngridmax
+!                  do i=1,ngrid
+!                     ind_cell(i)=iskip+ind_grid(i)
+!                  end do
+!                  do i=1,ngrid
+!                     xx1=xg(ind_grid(i),1)+xc(ind,1)
+!                     xx1=(xx1*(dxini(ilevel)/dx)-xoff1(ilevel))/dxini(ilevel)
+!                     xx2=xg(ind_grid(i),2)+xc(ind,2)
+!                     xx2=(xx2*(dxini(ilevel)/dx)-xoff2(ilevel))/dxini(ilevel)
+!                     xx3=xg(ind_grid(i),3)+xc(ind,3)
+!                     xx3=(xx3*(dxini(ilevel)/dx)-xoff3(ilevel))/dxini(ilevel)
+!                     i1_min=MIN(i1_min,int(xx1)+1)
+!                     i1_max=MAX(i1_max,int(xx1)+1)
+!                     i2_min=MIN(i2_min,int(xx2)+1)
+!                     i2_max=MAX(i2_max,int(xx2)+1)
+!                     i3_min=MIN(i3_min,int(xx3)+1)
+!                     i3_max=MAX(i3_max,int(xx3)+1)
+!                     keep_part=son(ind_cell(i))==0
+!                     if(keep_part)then
+!                        ipart=ipart+1
+!                        if(ipart>npartmax)then
+!                           write(*,*)'Maximum number of particles incorrect'
+!                           write(*,*)'npartmax should be greater than',ipart
+!                           call clean_stop
+!                        endif
+!                        if(ndim>0)xp(ipart,1)=xg(ind_grid(i),1)+xc(ind,1)
+!                        if(ndim>1)xp(ipart,2)=xg(ind_grid(i),2)+xc(ind,2)
+!                        if(ndim>2)xp(ipart,3)=xg(ind_grid(i),3)+xc(ind,3)
+!                        mp(ipart)=0.5d0**(3*ilevel)*(1.0d0-omega_b/omega_m)
+!                     end if
+!                  end do
+!               end do
+!               ! End loop over cells
+!            end do
+!            ! End loop over grids
            
-           ! Check that all grids are within initial condition region
-           error=.false.
-           if(active(ilevel)%ngrid>0)then
-              if(i1_min<1.or.i1_max>n1(ilevel))error=.true.
-              if(i2_min<1.or.i2_max>n2(ilevel))error=.true.
-              if(i3_min<1.or.i3_max>n3(ilevel))error=.true.
-           end if
-           if(error) then
-              write(*,*)'Some grid are outside initial conditions sub-volume'
-              write(*,*)'for ilevel=',ilevel
-              write(*,*)i1_min,i1_max
-              write(*,*)i2_min,i2_max
-              write(*,*)i3_min,i3_max
-              write(*,*)n1(ilevel),n2(ilevel),n3(ilevel)
-              call clean_stop
-           end if
-           if(debug)then
-              write(*,*)myid,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
-           endif
+!            ! Check that all grids are within initial condition region
+!            error=.false.
+!            if(active(ilevel)%ngrid>0)then
+!               if(i1_min<1.or.i1_max>n1(ilevel))error=.true.
+!               if(i2_min<1.or.i2_max>n2(ilevel))error=.true.
+!               if(i3_min<1.or.i3_max>n3(ilevel))error=.true.
+!            end if
+!            if(error) then
+!               write(*,*)'Some grid are outside initial conditions sub-volume'
+!               write(*,*)'for ilevel=',ilevel
+!               write(*,*)i1_min,i1_max
+!               write(*,*)i2_min,i2_max
+!               write(*,*)i3_min,i3_max
+!               write(*,*)n1(ilevel),n2(ilevel),n3(ilevel)
+!               call clean_stop
+!            end if
+!            if(debug)then
+!               write(*,*)myid,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
+!            endif
            
-           !---------------------------------------------------------------------
-           ! Second step: read initial condition file and set particle velocities
-           !---------------------------------------------------------------------
-           ! Allocate initial conditions array
-           if(active(ilevel)%ngrid>0)then
-              allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
-              allocate(init_array_x(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
-              init_array=0d0
-              init_array_x=0d0
-           end if
-           allocate(init_plane(1:n1(ilevel),1:n2(ilevel)))
-           allocate(init_plane_x(1:n1(ilevel),1:n2(ilevel)))
+!            !---------------------------------------------------------------------
+!            ! Second step: read initial condition file and set particle velocities
+!            !---------------------------------------------------------------------
+!            ! Allocate initial conditions array
+!            if(active(ilevel)%ngrid>0)then
+!               allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
+!               allocate(init_array_x(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
+!               init_array=0d0
+!               init_array_x=0d0
+!            end if
+!            allocate(init_plane(1:n1(ilevel),1:n2(ilevel)))
+!            allocate(init_plane_x(1:n1(ilevel),1:n2(ilevel)))
            
-           ! Loop over input variables
-           do idim=1,ndim
+!            ! Loop over input variables
+!            do idim=1,ndim
               
-              ! Read dark matter initial displacement field
-              if(multiple)then
-                 call title(myid,nchar)
-                 if(idim==1)filename=TRIM(initfile(ilevel))//'/dir_velcx/ic_velcx.'//TRIM(nchar)
-                 if(idim==2)filename=TRIM(initfile(ilevel))//'/dir_velcy/ic_velcy.'//TRIM(nchar)
-                 if(idim==3)filename=TRIM(initfile(ilevel))//'/dir_velcz/ic_velcz.'//TRIM(nchar)
-              else
-                 if(idim==1)filename=TRIM(initfile(ilevel))//'/ic_velcx'
-                 if(idim==2)filename=TRIM(initfile(ilevel))//'/ic_velcy'
-                 if(idim==3)filename=TRIM(initfile(ilevel))//'/ic_velcz'
+!               ! Read dark matter initial displacement field
+!               if(multiple)then
+!                  call title(myid,nchar)
+!                  if(idim==1)filename=TRIM(initfile(ilevel))//'/dir_velcx/ic_velcx.'//TRIM(nchar)
+!                  if(idim==2)filename=TRIM(initfile(ilevel))//'/dir_velcy/ic_velcy.'//TRIM(nchar)
+!                  if(idim==3)filename=TRIM(initfile(ilevel))//'/dir_velcz/ic_velcz.'//TRIM(nchar)
+!               else
+!                  if(idim==1)filename=TRIM(initfile(ilevel))//'/ic_velcx'
+!                  if(idim==2)filename=TRIM(initfile(ilevel))//'/ic_velcy'
+!                  if(idim==3)filename=TRIM(initfile(ilevel))//'/ic_velcz'
 
-                 if(idim==1)filename_x=TRIM(initfile(ilevel))//'/ic_poscx'
-                 if(idim==2)filename_x=TRIM(initfile(ilevel))//'/ic_poscy'
-                 if(idim==3)filename_x=TRIM(initfile(ilevel))//'/ic_poscz'
+!                  if(idim==1)filename_x=TRIM(initfile(ilevel))//'/ic_poscx'
+!                  if(idim==2)filename_x=TRIM(initfile(ilevel))//'/ic_poscy'
+!                  if(idim==3)filename_x=TRIM(initfile(ilevel))//'/ic_poscz'
 
-                 INQUIRE(file=filename_x,exist=ok)
-                 if(.not.ok)then
-                    read_pos = .false.
-                 else
-                    read_pos = .true.
-                    if(myid==1)write(*,*)'Reading file '//TRIM(filename_x)
-                 end if
+!                  INQUIRE(file=filename_x,exist=ok)
+!                  if(.not.ok)then
+!                     read_pos = .false.
+!                  else
+!                     read_pos = .true.
+!                     if(myid==1)write(*,*)'Reading file '//TRIM(filename_x)
+!                  end if
 
-              endif
+!               endif
 
-              if(myid==1)write(*,*)'Reading file '//TRIM(filename)
+!               if(myid==1)write(*,*)'Reading file '//TRIM(filename)
                                
-              if(multiple)then
-                 ilun=myid+10
-                 open(ilun,file=filename,form='unformatted')
-                 rewind ilun
-                 read(ilun) ! skip first line
-                 do i3=1,n3(ilevel)
-                    read(ilun)((init_plane(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
-                    if(active(ilevel)%ngrid>0)then
-                       if(i3.ge.i3_min.and.i3.le.i3_max)then
-                          init_array(i1_min:i1_max,i2_min:i2_max,i3) = &
-                               & init_plane(i1_min:i1_max,i2_min:i2_max)
-                       end if
-                    endif
-                 end do
-                 close(ilun)
-              else
-                 if(myid==1)then
-                    open(10,file=filename,form='unformatted')
-                    rewind 10
-                    read(10) ! skip first line
-                 end if
-                 do i3=1,n3(ilevel)
-                    if(myid==1)then
-                       if(debug.and.mod(i3,10)==0)write(*,*)'Reading plane ',i3
-                       read(10)((init_plane(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
-                    else
-                       init_plane=0.0
-                    endif
-                    buf_count=n1(ilevel)*n2(ilevel)
-#ifndef WITHOUTMPI
-                    call MPI_BCAST(init_plane,buf_count,MPI_REAL,0,MPI_COMM_WORLD,info)
-#endif
+!               if(multiple)then
+!                  ilun=myid+10
+!                  open(ilun,file=filename,form='unformatted')
+!                  rewind ilun
+!                  read(ilun) ! skip first line
+!                  do i3=1,n3(ilevel)
+!                     read(ilun)((init_plane(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
+!                     if(active(ilevel)%ngrid>0)then
+!                        if(i3.ge.i3_min.and.i3.le.i3_max)then
+!                           init_array(i1_min:i1_max,i2_min:i2_max,i3) = &
+!                                & init_plane(i1_min:i1_max,i2_min:i2_max)
+!                        end if
+!                     endif
+!                  end do
+!                  close(ilun)
+!               else
+!                  if(myid==1)then
+!                     open(10,file=filename,form='unformatted')
+!                     rewind 10
+!                     read(10) ! skip first line
+!                  end if
+!                  do i3=1,n3(ilevel)
+!                     if(myid==1)then
+!                        if(debug.and.mod(i3,10)==0)write(*,*)'Reading plane ',i3
+!                        read(10)((init_plane(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
+!                     else
+!                        init_plane=0.0
+!                     endif
+!                     buf_count=n1(ilevel)*n2(ilevel)
+! #ifndef WITHOUTMPI
+!                     call MPI_BCAST(init_plane,buf_count,MPI_REAL,0,MPI_COMM_WORLD,info)
+! #endif
                     
-                    if(active(ilevel)%ngrid>0)then
-                       if(i3.ge.i3_min.and.i3.le.i3_max)then
-                          init_array(i1_min:i1_max,i2_min:i2_max,i3) = &
-                               & init_plane(i1_min:i1_max,i2_min:i2_max)
-                       end if
-                    endif
-                 end do
-                 if(myid==1)close(10)
+!                     if(active(ilevel)%ngrid>0)then
+!                        if(i3.ge.i3_min.and.i3.le.i3_max)then
+!                           init_array(i1_min:i1_max,i2_min:i2_max,i3) = &
+!                                & init_plane(i1_min:i1_max,i2_min:i2_max)
+!                        end if
+!                     endif
+!                  end do
+!                  if(myid==1)close(10)
 
-                 if(read_pos) then
-                    if(myid==1)then
-                       open(10,file=filename_x,form='unformatted')
-                       rewind 10
-                       read(10) ! skip first line
-                    end if
-                    do i3=1,n3(ilevel)
-                       if(myid==1)then
-                          if(debug.and.mod(i3,10)==0)write(*,*)'Reading plane ',i3
-                          read(10)((init_plane_x(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
-                       else
-                          init_plane_x=0.0
-                       endif
-                       buf_count=n1(ilevel)*n2(ilevel)
-#ifndef WITHOUTMPI
-                       call MPI_BCAST(init_plane_x,buf_count,MPI_REAL,0,MPI_COMM_WORLD,info)
-#endif
-                       if(active(ilevel)%ngrid>0)then
-                          if(i3.ge.i3_min.and.i3.le.i3_max)then
-                             init_array_x(i1_min:i1_max,i2_min:i2_max,i3) = &
-                                  & init_plane_x(i1_min:i1_max,i2_min:i2_max)
-                          end if
-                       endif
-                    end do
-                    if(myid==1)close(10)
-                 end if
+!                  if(read_pos) then
+!                     if(myid==1)then
+!                        open(10,file=filename_x,form='unformatted')
+!                        rewind 10
+!                        read(10) ! skip first line
+!                     end if
+!                     do i3=1,n3(ilevel)
+!                        if(myid==1)then
+!                           if(debug.and.mod(i3,10)==0)write(*,*)'Reading plane ',i3
+!                           read(10)((init_plane_x(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
+!                        else
+!                           init_plane_x=0.0
+!                        endif
+!                        buf_count=n1(ilevel)*n2(ilevel)
+! #ifndef WITHOUTMPI
+!                        call MPI_BCAST(init_plane_x,buf_count,MPI_REAL,0,MPI_COMM_WORLD,info)
+! #endif
+!                        if(active(ilevel)%ngrid>0)then
+!                           if(i3.ge.i3_min.and.i3.le.i3_max)then
+!                              init_array_x(i1_min:i1_max,i2_min:i2_max,i3) = &
+!                                   & init_plane_x(i1_min:i1_max,i2_min:i2_max)
+!                           end if
+!                        endif
+!                     end do
+!                     if(myid==1)close(10)
+!                  end if
 
-              endif
+!               endif
               
-              if(active(ilevel)%ngrid>0)then
-                 ! Rescale initial displacement field to code units
-                 init_array=dfact(ilevel)*dx/dxini(ilevel)*init_array/vfact(ilevel)
-                 if(read_pos)then
-                    init_array_x = init_array_x/boxlen_ini
-                 endif
-                 ! Loop over grids by vector sweeps
-                 ipart=ipart_old
-                 ncache=active(ilevel)%ngrid
-                 do igrid=1,ncache,nvector
-                    ngrid=MIN(nvector,ncache-igrid+1)
-                    do i=1,ngrid
-                       ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
-                    end do
+!               if(active(ilevel)%ngrid>0)then
+!                  ! Rescale initial displacement field to code units
+!                  init_array=dfact(ilevel)*dx/dxini(ilevel)*init_array/vfact(ilevel)
+!                  if(read_pos)then
+!                     init_array_x = init_array_x/boxlen_ini
+!                  endif
+!                  ! Loop over grids by vector sweeps
+!                  ipart=ipart_old
+!                  ncache=active(ilevel)%ngrid
+!                  do igrid=1,ncache,nvector
+!                     ngrid=MIN(nvector,ncache-igrid+1)
+!                     do i=1,ngrid
+!                        ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
+!                     end do
                     
-                    ! Loop over cells
-                    do ind=1,twotondim
-                       iskip=ncoarse+(ind-1)*ngridmax
-                       do i=1,ngrid
-                          ind_cell(i)=iskip+ind_grid(i)
-                       end do
-                       do i=1,ngrid
-                          xx1=xg(ind_grid(i),1)+xc(ind,1)
-                          xx1=(xx1*(dxini(ilevel)/dx)-xoff1(ilevel))/dxini(ilevel)
-                          xx2=xg(ind_grid(i),2)+xc(ind,2)
-                          xx2=(xx2*(dxini(ilevel)/dx)-xoff2(ilevel))/dxini(ilevel)
-                          xx3=xg(ind_grid(i),3)+xc(ind,3)
-                          xx3=(xx3*(dxini(ilevel)/dx)-xoff3(ilevel))/dxini(ilevel)
-                          i1=int(xx1)+1
-                          i1=int(xx1)+1
-                          i2=int(xx2)+1
-                          i2=int(xx2)+1
-                          i3=int(xx3)+1
-                          i3=int(xx3)+1
-                          keep_part=son(ind_cell(i))==0
-                          if(keep_part)then
-                             ipart=ipart+1
-                             vp(ipart,idim)=init_array(i1,i2,i3)
-                             if(.not. read_pos)then
-                                dispmax=max(dispmax,abs(init_array(i1,i2,i3)/dx))
-                             else
-                                xp(ipart,idim)=xg(ind_grid(i),idim)+xc(ind,idim)+init_array_x(i1,i2,i3)
-                                dispmax=max(dispmax,abs(init_array_x(i1,i2,i3)/dx))
-                             endif
-                          end if
-                       end do
-                    end do
-                    ! End loop over cells
-                 end do
-                 ! End loop over grids
-              endif
+!                     ! Loop over cells
+!                     do ind=1,twotondim
+!                        iskip=ncoarse+(ind-1)*ngridmax
+!                        do i=1,ngrid
+!                           ind_cell(i)=iskip+ind_grid(i)
+!                        end do
+!                        do i=1,ngrid
+!                           xx1=xg(ind_grid(i),1)+xc(ind,1)
+!                           xx1=(xx1*(dxini(ilevel)/dx)-xoff1(ilevel))/dxini(ilevel)
+!                           xx2=xg(ind_grid(i),2)+xc(ind,2)
+!                           xx2=(xx2*(dxini(ilevel)/dx)-xoff2(ilevel))/dxini(ilevel)
+!                           xx3=xg(ind_grid(i),3)+xc(ind,3)
+!                           xx3=(xx3*(dxini(ilevel)/dx)-xoff3(ilevel))/dxini(ilevel)
+!                           i1=int(xx1)+1
+!                           i1=int(xx1)+1
+!                           i2=int(xx2)+1
+!                           i2=int(xx2)+1
+!                           i3=int(xx3)+1
+!                           i3=int(xx3)+1
+!                           keep_part=son(ind_cell(i))==0
+!                           if(keep_part)then
+!                              ipart=ipart+1
+!                              vp(ipart,idim)=init_array(i1,i2,i3)
+!                              if(.not. read_pos)then
+!                                 dispmax=max(dispmax,abs(init_array(i1,i2,i3)/dx))
+!                              else
+!                                 xp(ipart,idim)=xg(ind_grid(i),idim)+xc(ind,idim)+init_array_x(i1,i2,i3)
+!                                 dispmax=max(dispmax,abs(init_array_x(i1,i2,i3)/dx))
+!                              endif
+!                           end if
+!                        end do
+!                     end do
+!                     ! End loop over cells
+!                  end do
+!                  ! End loop over grids
+!               endif
 
-           end do
-           ! End loop over input variables
+!            end do
+!            ! End loop over input variables
            
-           ! Deallocate initial conditions array
-           if(active(ilevel)%ngrid>0)then
-              deallocate(init_array,init_array_x)
-           end if
-           deallocate(init_plane,init_plane_x)
+!            ! Deallocate initial conditions array
+!            if(active(ilevel)%ngrid>0)then
+!               deallocate(init_array,init_array_x)
+!            end if
+!            deallocate(init_plane,init_plane_x)
            
-           if(debug)write(*,*)'npart=',ipart,'/',npartmax,' for PE=',myid
+!            if(debug)write(*,*)'npart=',ipart,'/',npartmax,' for PE=',myid
            
-        end do
-        ! End loop over levels
+!         end do
+!         ! End loop over levels
         
-        ! Initial particle number
-        npart=ipart
+!         ! Initial particle number
+!         npart=ipart
         
-        ! Move particle according to Zeldovich approximation
-        if(.not. read_pos)then
-           xp(1:npart,1:ndim)=xp(1:npart,1:ndim)+vp(1:npart,1:ndim)
-        endif
+!         ! Move particle according to Zeldovich approximation
+!         if(.not. read_pos)then
+!            xp(1:npart,1:ndim)=xp(1:npart,1:ndim)+vp(1:npart,1:ndim)
+!         endif
 
-        ! Scale displacement to velocity
-        vp(1:npart,1:ndim)=vfact(1)*vp(1:npart,1:ndim)
+!         ! Scale displacement to velocity
+!         vp(1:npart,1:ndim)=vfact(1)*vp(1:npart,1:ndim)
         
-        ! Periodic box
-        do ipart=1,npart
-#if NDIM>0
-           if(xp(ipart,1)<  0.0d0  )xp(ipart,1)=xp(ipart,1)+dble(nx)
-           if(xp(ipart,1)>=dble(nx))xp(ipart,1)=xp(ipart,1)-dble(nx)
-#endif
-#if NDIM>1
-           if(xp(ipart,2)<  0.0d0  )xp(ipart,2)=xp(ipart,2)+dble(ny)
-           if(xp(ipart,2)>=dble(ny))xp(ipart,2)=xp(ipart,2)-dble(ny)
-#endif
-#if NDIM>2
-           if(xp(ipart,3)<  0.0d0  )xp(ipart,3)=xp(ipart,3)+dble(nz)
-           if(xp(ipart,3)>=dble(nz))xp(ipart,3)=xp(ipart,3)-dble(nz)
-#endif
-        end do
+!         ! Periodic box
+!         do ipart=1,npart
+! #if NDIM>0
+!            if(xp(ipart,1)<  0.0d0  )xp(ipart,1)=xp(ipart,1)+dble(nx)
+!            if(xp(ipart,1)>=dble(nx))xp(ipart,1)=xp(ipart,1)-dble(nx)
+! #endif
+! #if NDIM>1
+!            if(xp(ipart,2)<  0.0d0  )xp(ipart,2)=xp(ipart,2)+dble(ny)
+!            if(xp(ipart,2)>=dble(ny))xp(ipart,2)=xp(ipart,2)-dble(ny)
+! #endif
+! #if NDIM>2
+!            if(xp(ipart,3)<  0.0d0  )xp(ipart,3)=xp(ipart,3)+dble(nz)
+!            if(xp(ipart,3)>=dble(nz))xp(ipart,3)=xp(ipart,3)-dble(nz)
+! #endif
+!         end do
         
-#ifndef WITHOUTMPI        
-        ! Compute particle Hilbert ordering
-        sendbuf=0
-        do ipart=1,npart
-           xx(1,1:3)=xp(ipart,1:3)
-           xx_dp(1,1:3)=xx(1,1:3)
-           call cmp_cpumap(xx_dp,cc,1)
-           if(cc(1).ne.myid)sendbuf(cc(1))=sendbuf(cc(1))+1
-        end do
+! #ifndef WITHOUTMPI        
+!         ! Compute particle Hilbert ordering
+!         sendbuf=0
+!         do ipart=1,npart
+!            xx(1,1:3)=xp(ipart,1:3)
+!            xx_dp(1,1:3)=xx(1,1:3)
+!            call cmp_cpumap(xx_dp,cc,1)
+!            if(cc(1).ne.myid)sendbuf(cc(1))=sendbuf(cc(1))+1
+!         end do
            
-        ! Allocate communication buffer in emission
-        do icpu=1,ncpu
-           ncache=sendbuf(icpu)
-           if(ncache>0)then
-              allocate(emission(icpu,1)%up(1:ncache,1:twondim+1))
-           end if
-        end do
+!         ! Allocate communication buffer in emission
+!         do icpu=1,ncpu
+!            ncache=sendbuf(icpu)
+!            if(ncache>0)then
+!               allocate(emission(icpu,1)%up(1:ncache,1:twondim+1))
+!            end if
+!         end do
 
-        ! Fill communicators
-        jpart=0
-        sendbuf=0
-        do ipart=1,npart
-           xx(1,1:3)=xp(ipart,1:3)
-           xx_dp(1,1:3)=xx(1,1:3)
-           call cmp_cpumap(xx_dp,cc,1)
-           if(cc(1).ne.myid)then
-              icpu=cc(1)
-              sendbuf(icpu)=sendbuf(icpu)+1
-              ibuf=sendbuf(icpu)
-              emission(icpu,1)%up(ibuf,1)=xp(ipart,1)
-              emission(icpu,1)%up(ibuf,2)=xp(ipart,2)
-              emission(icpu,1)%up(ibuf,3)=xp(ipart,3)
-              emission(icpu,1)%up(ibuf,4)=vp(ipart,1)
-              emission(icpu,1)%up(ibuf,5)=vp(ipart,2)
-              emission(icpu,1)%up(ibuf,6)=vp(ipart,3)
-              emission(icpu,1)%up(ibuf,7)=mp(ipart)
-           else
-              jpart=jpart+1
-              xp(jpart,1:3)=xp(ipart,1:3)
-              vp(jpart,1:3)=vp(ipart,1:3)
-              mp(jpart)    =mp(ipart)
-           endif
-        end do
+!         ! Fill communicators
+!         jpart=0
+!         sendbuf=0
+!         do ipart=1,npart
+!            xx(1,1:3)=xp(ipart,1:3)
+!            xx_dp(1,1:3)=xx(1,1:3)
+!            call cmp_cpumap(xx_dp,cc,1)
+!            if(cc(1).ne.myid)then
+!               icpu=cc(1)
+!               sendbuf(icpu)=sendbuf(icpu)+1
+!               ibuf=sendbuf(icpu)
+!               emission(icpu,1)%up(ibuf,1)=xp(ipart,1)
+!               emission(icpu,1)%up(ibuf,2)=xp(ipart,2)
+!               emission(icpu,1)%up(ibuf,3)=xp(ipart,3)
+!               emission(icpu,1)%up(ibuf,4)=vp(ipart,1)
+!               emission(icpu,1)%up(ibuf,5)=vp(ipart,2)
+!               emission(icpu,1)%up(ibuf,6)=vp(ipart,3)
+!               emission(icpu,1)%up(ibuf,7)=mp(ipart)
+!            else
+!               jpart=jpart+1
+!               xp(jpart,1:3)=xp(ipart,1:3)
+!               vp(jpart,1:3)=vp(ipart,1:3)
+!               mp(jpart)    =mp(ipart)
+!            endif
+!         end do
         
-        ! Communicate virtual particle number to parent cpu
-        call MPI_ALLTOALL(sendbuf,1,MPI_INTEGER,recvbuf,1,MPI_INTEGER,MPI_COMM_WORLD,info)
+!         ! Communicate virtual particle number to parent cpu
+!         call MPI_ALLTOALL(sendbuf,1,MPI_INTEGER,recvbuf,1,MPI_INTEGER,MPI_COMM_WORLD,info)
 
-        ! Compute total number of newly created particles
-        npart_new=0
-        do icpu=1,ncpu
-           npart_new=npart_new+recvbuf(icpu)
-        end do
+!         ! Compute total number of newly created particles
+!         npart_new=0
+!         do icpu=1,ncpu
+!            npart_new=npart_new+recvbuf(icpu)
+!         end do
 
-        if(jpart+npart_new.gt.npartmax)then
-           write(*,*)'No more free memory for particles'
-           write(*,*)'Increase npartmax'
-           write(*,*)myid
-           write(*,*)jpart,npart_new
-           write(*,*)bound_key
-           call MPI_ABORT(MPI_COMM_WORLD,1,info)
-        end if
+!         if(jpart+npart_new.gt.npartmax)then
+!            write(*,*)'No more free memory for particles'
+!            write(*,*)'Increase npartmax'
+!            write(*,*)myid
+!            write(*,*)jpart,npart_new
+!            write(*,*)bound_key
+!            call MPI_ABORT(MPI_COMM_WORLD,1,info)
+!         end if
 
-        ! Allocate communication buffer in reception
-        do icpu=1,ncpu
-           ncache=recvbuf(icpu)
-           if(ncache>0)then
-              allocate(reception(icpu,1)%up(1:ncache,1:twondim+1))
-           end if
-        end do
+!         ! Allocate communication buffer in reception
+!         do icpu=1,ncpu
+!            ncache=recvbuf(icpu)
+!            if(ncache>0)then
+!               allocate(reception(icpu,1)%up(1:ncache,1:twondim+1))
+!            end if
+!         end do
 
-        ! Receive particles
-        countrecv=0
-        do icpu=1,ncpu
-           ncache=recvbuf(icpu)
-           if(ncache>0)then
-              buf_count=ncache*(twondim+1)
-              countrecv=countrecv+1
-              call MPI_IRECV(reception(icpu,1)%up,buf_count, &
-                   & MPI_DOUBLE_PRECISION,icpu-1,&
-                   & tagu,MPI_COMM_WORLD,reqrecv(countrecv),info)
-           end if
-        end do
+!         ! Receive particles
+!         countrecv=0
+!         do icpu=1,ncpu
+!            ncache=recvbuf(icpu)
+!            if(ncache>0)then
+!               buf_count=ncache*(twondim+1)
+!               countrecv=countrecv+1
+!               call MPI_IRECV(reception(icpu,1)%up,buf_count, &
+!                    & MPI_DOUBLE_PRECISION,icpu-1,&
+!                    & tagu,MPI_COMM_WORLD,reqrecv(countrecv),info)
+!            end if
+!         end do
         
-        ! Send particles
-        countsend=0
-        do icpu=1,ncpu
-           ncache=sendbuf(icpu)
-           if(ncache>0)then
-              buf_count=ncache*(twondim+1)
-              countsend=countsend+1
-              call MPI_ISEND(emission(icpu,1)%up,buf_count, &
-                   & MPI_DOUBLE_PRECISION,icpu-1,&
-                   & tagu,MPI_COMM_WORLD,reqsend(countsend),info)
-           end if
-        end do
+!         ! Send particles
+!         countsend=0
+!         do icpu=1,ncpu
+!            ncache=sendbuf(icpu)
+!            if(ncache>0)then
+!               buf_count=ncache*(twondim+1)
+!               countsend=countsend+1
+!               call MPI_ISEND(emission(icpu,1)%up,buf_count, &
+!                    & MPI_DOUBLE_PRECISION,icpu-1,&
+!                    & tagu,MPI_COMM_WORLD,reqsend(countsend),info)
+!            end if
+!         end do
         
-        ! Wait for full completion of receives
-        call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+!         ! Wait for full completion of receives
+!         call MPI_WAITALL(countrecv,reqrecv,statuses,info)
         
-        ! Wait for full completion of sends
-        call MPI_WAITALL(countsend,reqsend,statuses,info)
+!         ! Wait for full completion of sends
+!         call MPI_WAITALL(countsend,reqsend,statuses,info)
 
-        ! Create new particles
-        do icpu=1,ncpu
-           do ibuf=1,recvbuf(icpu)
-              jpart=jpart+1
-              xp(jpart,1)=reception(icpu,1)%up(ibuf,1)
-              xp(jpart,2)=reception(icpu,1)%up(ibuf,2)
-              xp(jpart,3)=reception(icpu,1)%up(ibuf,3)
-              vp(jpart,1)=reception(icpu,1)%up(ibuf,4)
-              vp(jpart,2)=reception(icpu,1)%up(ibuf,5)
-              vp(jpart,3)=reception(icpu,1)%up(ibuf,6)
-              mp(jpart)  =reception(icpu,1)%up(ibuf,7)
-           end do
-        end do
+!         ! Create new particles
+!         do icpu=1,ncpu
+!            do ibuf=1,recvbuf(icpu)
+!               jpart=jpart+1
+!               xp(jpart,1)=reception(icpu,1)%up(ibuf,1)
+!               xp(jpart,2)=reception(icpu,1)%up(ibuf,2)
+!               xp(jpart,3)=reception(icpu,1)%up(ibuf,3)
+!               vp(jpart,1)=reception(icpu,1)%up(ibuf,4)
+!               vp(jpart,2)=reception(icpu,1)%up(ibuf,5)
+!               vp(jpart,3)=reception(icpu,1)%up(ibuf,6)
+!               mp(jpart)  =reception(icpu,1)%up(ibuf,7)
+!            end do
+!         end do
         
-        ! Erase old particles
-        do ipart=jpart+1,npart
-           xp(ipart,1)=0d0
-           xp(ipart,2)=0d0
-           xp(ipart,3)=0d0
-           vp(ipart,1)=0d0
-           vp(ipart,2)=0d0
-           vp(ipart,3)=0d0
-           mp(ipart)  =0d0
-        end do
-        npart=jpart
+!         ! Erase old particles
+!         do ipart=jpart+1,npart
+!            xp(ipart,1)=0d0
+!            xp(ipart,2)=0d0
+!            xp(ipart,3)=0d0
+!            vp(ipart,1)=0d0
+!            vp(ipart,2)=0d0
+!            vp(ipart,3)=0d0
+!            mp(ipart)  =0d0
+!         end do
+!         npart=jpart
 
-        ! Deallocate communicators
-        do icpu=1,ncpu
-           if(sendbuf(icpu)>0)deallocate(emission(icpu,1)%up)
-           if(recvbuf(icpu)>0)deallocate(reception(icpu,1)%up)
-        end do
+!         ! Deallocate communicators
+!         do icpu=1,ncpu
+!            if(sendbuf(icpu)>0)deallocate(emission(icpu,1)%up)
+!            if(recvbuf(icpu)>0)deallocate(reception(icpu,1)%up)
+!         end do
 
-        write(*,*)'npart=',ipart,'/',npartmax,' for PE=',myid
-#endif
+!         write(*,*)'npart=',ipart,'/',npartmax,' for PE=',myid
+! #endif
 
-        ! Compute particle initial level
-        do ipart=1,npart
-           levelp(ipart)=levelmin
-        end do
+!         ! Compute particle initial level
+!         do ipart=1,npart
+!            levelp(ipart)=levelmin
+!         end do
 
-        ! Compute particle initial identity
-        npart_cpu=0; npart_all=0
-        npart_cpu(myid)=npart
-#ifndef WITHOUTMPI
-#ifndef LONGINT
-        call MPI_ALLREDUCE(npart_cpu,npart_all,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#else
-        call MPI_ALLREDUCE(npart_cpu,npart_all,ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
-        npart_cpu(1)=npart_all(1)
-#endif
-        do icpu=2,ncpu
-           npart_cpu(icpu)=npart_cpu(icpu-1)+npart_all(icpu)
-        end do
-        if(myid==1)then
-           do ipart=1,npart
-              idp(ipart)=ipart
-           end do
-        else
-           do ipart=1,npart
-              idp(ipart)=npart_cpu(myid-1)+ipart
-           end do
-        end if
+!         ! Compute particle initial identity
+!         npart_cpu=0; npart_all=0
+!         npart_cpu(myid)=npart
+! #ifndef WITHOUTMPI
+! #ifndef LONGINT
+!         call MPI_ALLREDUCE(npart_cpu,npart_all,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+! #else
+!         call MPI_ALLREDUCE(npart_cpu,npart_all,ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+! #endif
+!         npart_cpu(1)=npart_all(1)
+! #endif
+!         do icpu=2,ncpu
+!            npart_cpu(icpu)=npart_cpu(icpu-1)+npart_all(icpu)
+!         end do
+!         if(myid==1)then
+!            do ipart=1,npart
+!               idp(ipart)=ipart
+!            end do
+!         else
+!            do ipart=1,npart
+!               idp(ipart)=npart_cpu(myid-1)+ipart
+!            end do
+!         end if
 
      case ('ascii')
 
@@ -613,70 +614,53 @@ subroutine init_part
         ipart=0
 
         if(TRIM(initfile(levelmin)).NE.' ')then
-
-        filename=TRIM(initfile(levelmin))//'/ic_part'
-        if(myid==1)then
+           
+           filename=TRIM(initfile(levelmin))//'/ic_part'
            open(10,file=filename,form='formatted')
            indglob=0
-        end if
-        eof=.false.
 
-        do while (.not.eof)
-           xx=0.0
-           if(myid==1)then
-              jpart=0
-              do i=1,nvector
-                 read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1
-                 jpart=jpart+1
-                 indglob=indglob+1
-                 xx(i,1)=xx1+boxlen/2.0
-                 xx(i,2)=xx2+boxlen/2.0
-                 xx(i,3)=xx3+boxlen/2.0
-                 vv(i,1)=vv1
-                 vv(i,2)=vv2
-                 vv(i,3)=vv3
-                 mm(i  )=mm1
-                 ii(i  )=indglob
-              end do
-100           continue
-              if(jpart<nvector)eof=.true.
-           endif
-           buf_count=nvector*3
-#ifndef WITHOUTMPI
-           call MPI_BCAST(xx,buf_count,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,info)
-           call MPI_BCAST(vv,buf_count,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,info)
-           call MPI_BCAST(mm,nvector  ,MPI_DOUBLE_PRECISION,0,MPI_COMM_WORLD,info)
-           call MPI_BCAST(ii,nvector  ,MPI_INTEGER         ,0,MPI_COMM_WORLD,info)
-           call MPI_BCAST(eof,1       ,MPI_LOGICAL         ,0,MPI_COMM_WORLD,info)
-           call MPI_BCAST(jpart,1     ,MPI_INTEGER         ,0,MPI_COMM_WORLD,info)
-           call cmp_cpumap(xx,cc,jpart)
-#endif
+           !figure out starting indices for domains
+           jpart=0
+           do while (1==1)
+              read(10,*,end=101)xx1,xx2,xx3,vv1,vv2,vv3,mm1
+              jpart=jpart+1
+           end do
+101        continue
 
-           do i=1,jpart
-#ifndef WITHOUTMPI
-              if(cc(i)==myid)then
-#endif
-                 ipart=ipart+1
-                 if(ipart>npartmax)then
+           do icpu=1,ncpu+1
+              start_ind(icpu)=1+((icpu-1)*jpart)/ncpu
+           end do
+
+           rewind(10)
+
+           jpart=0
+           jpart_loc=0
+           do 
+              read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1
+              jpart=jpart+1
+              indglob=indglob+1
+              if(jpart >= start_ind(myid) .and. jpart < start_ind(myid+1))then
+                 jpart_loc=jpart_loc+1
+                 if(jpart_loc>npartmax)then
                     write(*,*)'Maximum number of particles incorrect'
-                    write(*,*)'npartmax should be greater than',ipart
+                    write(*,*)'npartmax should be greater than',start_ind(2)
                     call clean_stop
                  endif
-                 xp(ipart,1:3)=xx(i,1:3)
-                 vp(ipart,1:3)=vv(i,1:3)
-                 mp(ipart)    =mm(i)
-                 levelp(ipart)=levelmin
-                 idp(ipart)   =ii(i)
-#ifndef WITHOUTMPI
-              endif
-#endif
-           enddo
-
-        end do
-        if(myid==1)close(10)
+                 xp(jpart_loc,1)=xx1+boxlen/2.0
+                 xp(jpart_loc,2)=xx2+boxlen/2.0
+                 xp(jpart_loc,3)=xx3+boxlen/2.0
+                 vp(jpart_loc,1)=vv1
+                 vp(jpart_loc,2)=vv2
+                 vp(jpart_loc,3)=vv3
+                 mp(jpart_loc  )=mm1
+                 idp(jpart_loc )=indglob
+              end if
+           end do
+100        continue
+           close(10)
 
         end if
-        npart=ipart
+        npart=jpart_loc
 
         ! Compute total number of particle
         npart_cpu=0; npart_all=0
@@ -694,8 +678,10 @@ subroutine init_part
         end do
         if(debug)write(*,*)'npart=',npart,'/',npart_cpu(ncpu)
 
-     case ('gadget')
-        call load_gadget
+
+        ! don't support gadget for now...
+        !     case ('gadget')
+        !     call load_gadget
 
      case DEFAULT
         write(*,*) 'Unsupported format file ' // filetype
@@ -704,7 +690,9 @@ subroutine init_part
      end select
   end if
 
-end subroutine init_part
+end subroutine init_part_andreas
+
+
 #define TIME_START(cs) call SYSTEM_CLOCK(COUNT=cs)
 #define TIME_END(ce) call SYSTEM_CLOCK(COUNT=ce)
 #define TIME_SPENT(cs,ce,cr) REAL((ce-cs)/cr)

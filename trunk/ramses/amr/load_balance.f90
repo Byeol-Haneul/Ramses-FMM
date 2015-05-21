@@ -18,6 +18,7 @@ subroutine load_balance
   integer::idim,ivar,icpu,jcpu,kcpu
   integer::nxny,ix,iy,iz,iskip
   integer,dimension(nlevelmax,3)::comm_buffin,comm_buffout
+!  external hilbert3d_c
 
   if(ncpu==1)return
 
@@ -721,7 +722,7 @@ subroutine cmp_ordering(x,order,nn)
      else if(ndim==2)then
         call hilbert2d(ix,iy,order,bit_length,nn)
      else if (ndim==3)then
-        call hilbert3d(ix,iy,iz,order,bit_length,nn)
+        call hilbert3d_orig(ix,iy,iz,order,bit_length,nn)
      end if
 
   end if
@@ -869,7 +870,7 @@ subroutine cmp_minmaxorder(x,order_min,order_max,dx,nn)
      else if(ndim==2)then
         call hilbert2d(ix,iy,order_min,bit_length,nn)
      else if (ndim==3)then
-        call hilbert3d(ix,iy,iz,order_min,bit_length,nn)
+        call hilbert3d_orig(ix,iy,iz,order_min,bit_length,nn)
      end if
 
      dkey=(real(bscale,kind=qdp)/real(bscaleloc,kind=qdp))**ndim
@@ -1359,6 +1360,100 @@ subroutine defrag
   ngrid_current=ngrid2
  
 end subroutine defrag
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
+  use amr_parameters
+  use amr_commons
+  implicit none
+  integer ::nn
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  real(dp),dimension(1:nvector,1:ndim)::x
+!  real(qdp),dimension(1:nvector)::order
+  integer(kind=8),dimension(1:nvector)::hkey2,hkey1,hkey0
+  !--------------------------------------------------------
+  ! This routine computes the index key of the input cell
+  ! according to its position in space and for the chosen
+  ! ordering. Position x are in user units.
+  !-----------------------------------------------------
+  integer,dimension(1:nvector),save::ix,iy,iz
+  integer::i,ncode,bit_length,nx_loc
+  integer::temp,info
+  real(kind=8)::scale,bscale,xx,yy,zz,xc,yc,zc
+
+  nx_loc=icoarse_max-icoarse_min+1
+  scale=boxlen/dble(nx_loc)
+
+
+  ! Hilbert curve domain decomposition
+  bscale=2**(nlevelmax+1)
+  ncode=nx_loc*int(bscale)
+  bscale=bscale/scale
+  
+  temp=ncode
+  do bit_length=1,32
+     ncode=ncode/2
+     if(ncode<=1) exit
+  end do
+  if(bit_length==32) then
+     write(*,*)'Error in cmp_minmaxorder'
+#ifndef WITHOUTMPI
+     call MPI_ABORT(MPI_COMM_WORLD,1,info)
+#else
+     stop
+#endif
+  end if
+  
+  do i=1,nn
+     ix(i)=int(x(i,1)*bscale)
+#if NDIM>1           
+     iy(i)=int(x(i,2)*bscale)
+#endif
+#if NDIM>2
+     iz(i)=int(x(i,3)*bscale)
+#endif
+  end do
+  
+  call hilbert3d_multiint(ix,iy,iz,hkey2,hkey1,hkey0,bit_length,nn)
+
+end subroutine cmp_ordering_int
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine cmp_cpumap_keys(hkey0,hkey1,hkey2,c,nn)
+  use amr_parameters
+  use amr_commons
+  implicit none
+  integer ::nn
+  integer ,dimension(1:nvector)::c
+  integer(kind=8),dimension(1:nvector)::hkey0,hkey1,hkey2
+  
+  integer,save::i,idom
+
+  do i=1,nn
+     c(i)=ndomain ! default value
+     do idom=1,ndomain
+        if(    order(i).ge.bound_key(idom-1).and. &
+             & order(i).lt.bound_key(idom  ))then
+           c(i)=idom
+        endif
+     end do
+  end do
+  do i=1,nn
+     c(i)=MOD(c(i)-1,ncpu)+1
+     !        c(i)=c(i)-((c(i)-1)/ncpu)*ncpu
+  end do
+
+end subroutine cmp_cpumap_keys
 !#########################################################################
 !#########################################################################
 !#########################################################################

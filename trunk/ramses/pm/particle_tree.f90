@@ -906,3 +906,97 @@ end subroutine empty_comm
 !################################################################
 !################################################################
 !################################################################
+subroutine memory_sort_level(ind_com,np,ilevel,icpu)
+  use pm_commons
+  use amr_commons
+
+  ! sort all the particles in memory according to their level
+
+  implicit none
+  integer::np,icpu,ilevel
+  integer,dimension(1:nvector)::ind_com
+  
+  integer::i,idim,igrid
+  integer,dimension(1:nvector),save::ind_list,ind_part
+  logical,dimension(1:nvector),save::ok=.true.
+  integer::current_property
+
+  ! Compute parent grid index
+  do i=1,np
+     igrid=emission(icpu,ilevel)%fp(ind_com(i),1)
+     ind_list(i)=emission(icpu,ilevel)%igrid(igrid)
+  end do
+
+  ! Add particle to parent linked list
+  call remove_free(ind_part,np)
+  call add_list(ind_part,ind_list,ok,np)
+
+  ! Scatter particle level and identity
+  do i=1,np
+     levelp(ind_part(i))=emission(icpu,ilevel)%fp(ind_com(i),2)
+     idp   (ind_part(i))=emission(icpu,ilevel)%fp(ind_com(i),3)
+  end do
+
+  ! Scatter particle position and velocity
+  do idim=1,ndim
+  do i=1,np
+     xp(ind_part(i),idim)=emission(icpu,ilevel)%up(ind_com(i),idim     )
+     vp(ind_part(i),idim)=emission(icpu,ilevel)%up(ind_com(i),idim+ndim)
+  end do
+  end do
+
+  current_property = twondim+1
+
+  ! Scatter particle mass
+  do i=1,np
+     mp(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property)
+  end do
+  current_property = current_property+1
+
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  ! Scatter particle phi
+  do i=1,np
+     ptcl_phi(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property)
+  end do
+  current_property = current_property+1
+#endif
+
+end subroutine memory_sort_level
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+
+subroutine get_particle_levels
+
+end subroutine get_particle_levels
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine build_particle_communicator
+  
+  integer()
+
+  ! Loop over particles by vector sweeps
+  ! to find CPUs hosting the particle position
+  
+  do ipart=1,npart,nvector
+     np=MIN(nvector,npart-ipart+1)
+     xx(1:np)=xp(ipart:ipart,np)
+     call cmp_ordering_int(x,hkey2,hkey1,hkey0,np)
+     ! just for now, replace!!
+     call cpm_cpumap(xx,cc,np)
+     do i=1,np
+        send_counts(cc(i))=send_counts(cc(i))+1
+     end do
+  end do
+
+
+
+
+end subroutine build_particle_communicator
+!################################################################
+!################################################################
+!################################################################
+!################################################################

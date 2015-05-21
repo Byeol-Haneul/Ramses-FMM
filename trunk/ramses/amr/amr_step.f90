@@ -13,9 +13,10 @@ recursive subroutine amr_step(ilevel,icount)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  integer::i,idim,ivar
+  integer::i,idim,ivar,info
   logical::ok_defrag
   logical,save::first_step=.true.
+  real(dp)::told,tnew,dthilbert,dtrho
 
   if(numbtot(1,ilevel)==0)return
 
@@ -121,9 +122,32 @@ recursive subroutine amr_step(ilevel,icount)
   if(poisson)then
      !save old potential for time-extrapolation at level boundaries
      call save_phi_old(ilevel)
-     call rho_fine(ilevel,icount)
-  endif
 
+#ifndef WITHOUTMPI
+     told=MPI_WTIME(info)
+#endif
+
+     call rho_fine(ilevel,icount)     
+
+#ifndef WITHOUTMPI
+     tnew=MPI_WTIME(info)
+     dtrho=tnew-told
+     told=tnew
+#endif
+
+     if(pic)call hilbert_allparts(ilevel)
+
+#ifndef WITHOUTMPI
+     tnew=MPI_WTIME(info)
+     dthilbert=tnew-told
+     told=tnew
+#endif
+
+     if (dthilbert>0. .and. dtrho > 0.)then
+        print*,'dt(hilbert+sort)/dt(rho): ',dthilbert/dtrho,myid,ilevel
+     end if
+  endif
+  stop
   !-------------------------------------------
   ! Sort particles between ilevel and ilevel+1
   !-------------------------------------------
