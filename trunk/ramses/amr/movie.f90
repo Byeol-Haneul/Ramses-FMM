@@ -28,7 +28,8 @@ subroutine output_frame()
   real(dp)::xleft_frame,xright_frame,yleft_frame,yright_frame,zleft_frame,zright_frame
   real(dp)::xleft,xright,yleft,yright,zleft,zright
   real(dp)::xxleft,xxright,yyleft,yyright,zzleft,zzright
-  real(dp)::dx_frame,dy_frame,dx,dx_loc
+  real(dp)::xpf,ypf,zpf
+  real(dp)::dx_frame,dy_frame,dx,dx_loc,dx_min
   real(dp)::dx_cell,dy_cell,dz_cell,dvol
   real(kind=8)::cell_value
   integer ,dimension(1:nvector)::ind_grid,ind_cell
@@ -41,17 +42,17 @@ subroutine output_frame()
   real(kind=4),dimension(:,:),allocatable::data_single
   real(kind=8) :: z1,z2,om0in,omLin,hubin,Lbox
   real(kind=8) :: observer(3),thetay,thetaz,theta,phi,temp,ekk
-  integer::igrid,jgrid,ipart,jpart,idim,icpu,ilevel
-  integer::i,ig,ip,npart1
+  integer::igrid,jgrid,ipart,jpart,idim,icpu,ilevel,next_part
+  integer::i,j,ig,ip,npart1
   integer::nalloc1,nalloc2
   integer::proj_ind,l,nh_temp,nw_temp
   real(kind=4)::ratio
 
-  integer,dimension(1:nvector),save::ind_part
+  integer,dimension(1:nvector),save::ind_part,ind_grid_part
   logical::opened
 
   character(len=1)::temp_string
-
+   
   nh_temp = nh_frame
   nw_temp = nw_frame
 
@@ -198,6 +199,7 @@ subroutine output_frame()
      end do
   
      dx_loc=dx*scale
+     dx_min=0.5D0**nlevelmax*scale
      ncache=active(ilevel)%ngrid
 
      ! Loop over grids by vector sweeps
@@ -305,7 +307,7 @@ subroutine output_frame()
 #if NDIM>2                 
                        dvol=dvol*dz_cell
 #endif
-                       dens(ii,jj)=dens(ii,jj)+dvol*uold(ind_cell(i),1)
+                       dens(ii,jj)=dens(ii,jj)+dvol*max(uold(ind_cell(i),1),smallr)
                        vol(ii,jj)=vol(ii,jj)+dvol
                        
                        data_frame(ii,jj,1)=data_frame(ii,jj,1)+dvol*uold(ind_cell(i),1)**2
@@ -317,12 +319,12 @@ subroutine output_frame()
                          !Get temperature
                          ekk=0.0d0
                          do idim=1,3
-                            ekk=ekk+0.5*uold(ind_cell(i),idim+1)**2/uold(ind_cell(i),1)
+                            ekk=ekk+0.5*uold(ind_cell(i),idim+1)**2/max(uold(ind_cell(i),1),smallr)
                          enddo
                          temp=(gamma-1.0)*(uold(ind_cell(i),5)-ekk) !pressure
-                         temp=temp/uold(ind_cell(i),1)*scale_T2 !temperature in K
+                         temp=max(temp/max(uold(ind_cell(i),1),smallr),smallc**2)*scale_T2 !temperature in K
 
-                         data_frame(ii,jj,0)=data_frame(ii,jj,0)+dvol*uold(ind_cell(i),1)*temp !mass weighted temperature
+                         data_frame(ii,jj,0)=data_frame(ii,jj,0)+dvol*max(uold(ind_cell(i),1),smallr)*temp !mass weighted temperature
                        end if
 
                     end do
@@ -335,9 +337,60 @@ subroutine output_frame()
 
      end do
      ! End loop over grids
-
   end do
   ! End loop over levels
+
+  ! Loop over particles
+  do j=1,npartmax
+#if NDIM>2                 
+     if(proj_axis(proj_ind:proj_ind).eq.'x')then
+       xpf  = xp(j,2)
+       ypf  = xp(j,3)
+     elseif(proj_axis(proj_ind:proj_ind).eq.'y')then
+       xpf  = xp(j,1)
+       ypf  = xp(j,3)
+     else
+       xpf  = xp(j,1)
+       ypf  = xp(j,2)
+     endif
+     
+     if(proj_axis(proj_ind:proj_ind).eq.'x')then
+       zpf  = xp(j,1)
+     elseif(proj_axis(proj_ind:proj_ind).eq.'y')then
+       zpf  = xp(j,2)
+     else
+       zpf  = xp(j,3)
+     endif
+     if(    xpf.lt.xleft_frame.or.xpf.ge.xright_frame.or.&
+          & ypf.lt.yleft_frame.or.ypf.ge.yright_frame.or.&
+          & zpf.lt.zleft_frame.or.zpf.ge.zright_frame)cycle
+#else
+     xpf  = xp(j,1)
+     ypf  = xp(j,2)
+     
+     if(    xpf.lt.xleft_frame.or.xpf.ge.xright_frame.or.&
+          & ypf.lt.yleft_frame.or.ypf.ge.yright_frame)cycle
+#endif
+     ! Compute map indices for the cell
+     ii = min(int((xpf-xleft_frame)/dx_frame)+1,nw_frame)
+     jj = min(int((ypf-yleft_frame)/dy_frame)+1,nh_frame)
+     
+     ! Fill up map with projected mass
+#ifdef SOLVERmhd
+     if(tp(j).eq.0.) then
+        data_frame(ii,jj,NVAR+5)=data_frame(ii,jj,NVAR+5)+mp(j)
+     else
+        data_frame(ii,jj,NVAR+6)=data_frame(ii,jj,NVAR+6)+mp(j)
+     endif
+#else
+     if(tp(j).eq.0.) then
+        data_frame(ii,jj,NVAR+1)=data_frame(ii,jj,NVAR+1)+mp(j)
+     else
+        data_frame(ii,jj,NVAR+2)=data_frame(ii,jj,NVAR+2)+mp(j)
+     endif
+#endif
+  end do
+  ! End loop over particles
 
   ! Convert into mass weighted
 !  do ii=1,nw_frame
