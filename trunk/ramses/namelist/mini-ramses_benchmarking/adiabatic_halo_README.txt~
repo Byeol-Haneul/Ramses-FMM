@@ -1,0 +1,18 @@
+Representative RAMSES tescase that can be used to experiment with mini-ramses. 
+
+Ingredients:
+- self gravity
+- adiabatic hydro
+- dark matter particles
+
+Compile with the following settings:
+NVECTOR = 16
+NDIM = 3
+NPRE = 8
+NVAR = 6
+NENER = 0
+SOLVER = hydro
+
+The initial condition files can be downloaded as a tarball from:
+
+http://www.ics.uzh.ch/~ableuler/mini-ramses_ICs/adiabatic_halo/ICs.tar
