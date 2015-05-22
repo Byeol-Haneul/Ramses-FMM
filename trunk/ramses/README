@@ -1,4 +1,14 @@
-RAMSES version 3.10
+mini-ramses version 1.0
+
+mini-ramses is a development platform for the RAMSES code. It is a stripped-down 
+version of the main code base created in order to facilitate the development of 
+major updates of RAMSES' core routines. 
+
+mini-ramses is available at
+https://bitbucket.org/ableuler/mini-ramses
+
+================================================================================
+About RAMSES:
 
 Copyright Romain Teyssier and CEA from 1997 to 2007
 
@@ -19,6 +29,7 @@ A new high resolution code called RAMSES", 2002, A&A, 385, 337
 
 The code is available for download and documentation in
 https://bitbucket.org/rteyssie/ramses
+================================================================================
 
 You can quickly test your installation by executing:
 $ cd bin
@@ -26,6 +37,15 @@ $ make
 $ cd ..
 $ bin/ramses1d namelist/tube1d.nml
 
+You can run the adiabatic halo benchmark test with MPI on 8 processors:
+(We are assuming that you are using the gfortran compiler and have an MPI 
+library installed)
+
+$ wget http://www.ics.uzh.ch/~ableuler/mini-ramses_ICs/adiabatic_halo/ICs.tar
+$ tar -xvf ICs.tar
+$ cd bin
+$ make -f ../namelist/mini-ramses_benchmarking/Makefile.adiabatic_halo
+$ cd ..
+$ mpirun -np 8 bin/ramses3d namelist/mini-ramses_benchmarking/adiabatic_halo.nml
+
 Enjoy !
-
-
