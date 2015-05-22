@@ -383,11 +383,11 @@ subroutine output_frame()
         data_frame(ii,jj,NVAR+6)=data_frame(ii,jj,NVAR+6)+mp(j)
      endif
 #else
-     if(tp(j).eq.0.) then
-        data_frame(ii,jj,NVAR+1)=data_frame(ii,jj,NVAR+1)+mp(j)
-     else
-        data_frame(ii,jj,NVAR+2)=data_frame(ii,jj,NVAR+2)+mp(j)
-     endif
+!     if(tp(j).eq.0.) then
+!        data_frame(ii,jj,NVAR+1)=data_frame(ii,jj,NVAR+1)+mp(j)
+!     else
+     data_frame(ii,jj,NVAR+2)=data_frame(ii,jj,NVAR+2)+mp(j)
+!     endif
 #endif
   end do
   ! End loop over particles
