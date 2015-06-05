@@ -81,6 +81,8 @@ subroutine dump_all
      if(pic)then
         filename=TRIM(filedir)//'part_'//TRIM(nchar)//'.out'
         call backup_part(filename)
+        filename=TRIM(filedir)//'part_andreas_'//TRIM(nchar)//'.out'
+        call backup_part_andreas(filename)
      end if
      if(poisson)then
         filename=TRIM(filedir)//'grav_'//TRIM(nchar)//'.out'

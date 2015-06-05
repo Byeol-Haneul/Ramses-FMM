@@ -1020,6 +1020,7 @@ end subroutine cic_cell
 subroutine hilbert_allparts(ilevel)
   use pm_commons
   use amr_commons
+  use sort, only: quick_sort_keys, qsort_parts_in_mem
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -1055,32 +1056,95 @@ subroutine hilbert_allparts(ilevel)
               xtest(ip,1:ndim)=xp(ipart,1:ndim)
               if(ip==nvector)then
                  call cmp_ordering_int(xtest,hkey2,hkey1,hkey0,ip)
-                 big_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
-                 big_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
-                 big_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
+                 part_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
+                 part_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
+                 part_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
                  ntot=ntot+ip
                  ip=0
               end if
               ipart=nextp(ipart)  ! Go to next particle
            end do
         endif
-        igrid=next(igrid)   ! Go to next grid                                                                      
+        igrid=next(igrid)   ! Go to next grid
      end do
      if(ip>0)then 
         call cmp_ordering_int(xtest,hkey2,hkey1,hkey0,ip)
-        big_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
-        big_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
-        big_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
+        part_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
+        part_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
+        part_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
         ntot=ntot+ip
      end if
   end do
+
+  print*,'ntot:',ntot,npart_andreas,myid
+
+!  call qsort_parts_in_mem(ntot,1)
 
   allocate(order(1:ntot))
   call quick_sort_keys(order, ntot)
   
 !  do i=1,ntot
-!     write(*,'(A8,I5,I10,3(I20))'),"myid: ",myid,i,order(i),big_hkey(i,1),big_hkey(i,0)
+!     write(*,'(A8,I5,I10,3(I20))'),"myid: ",myid,i,order(i),part_hkey(i,1),part_hkey(i,0)
 !  end do
   deallocate(order)
 
 end subroutine hilbert_allparts
+
+
+
+subroutine hilbert_allparts_andreas(ilevel)
+  use pm_commons
+  use amr_commons
+  use sort, only: qsort_parts_in_mem
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+
+
+  integer::ilevel
+  integer::igrid,jgrid,i,ngrid,ncache,jpart
+  integer::ip,npart1,icpu,info
+  integer,dimension(1:nvector)::ind_grid
+  integer,dimension(1:nlevelmax)::npts
+!  real(qdp),dimension(1:nvector)::order
+  real(dp),dimension(1:nvector,1:ndim)::xtest
+  integer(kind=8),dimension(1:nvector)::hkey0,hkey1,hkey2
+  integer::ntot
+  integer,allocatable,dimension(:)::order
+
+
+  ntot=0
+  ip=0
+  do while(levelp_andreas(ip+1)==ilevel .and. ntot<npart_andreas)
+     ip=ip+1
+     ntot=ntot+1
+     xtest(ip,1:ndim)=xp_andreas(ip,1:ndim)
+     if(ip==nvector)then
+        call cmp_ordering_int(xtest,hkey2,hkey1,hkey0,ip)
+        part_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
+        part_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
+        part_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
+        ip=0
+     end if
+  end do
+  if(ip>0)then 
+     call cmp_ordering_int(xtest,hkey2,hkey1,hkey0,ip)
+     part_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
+     part_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
+     part_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
+  end if
+
+  print*,'ntot:',ntot,npart_andreas,myid
+
+  call qsort_parts_in_mem(ntot,1)
+
+!   allocate(order(1:ntot))
+!   call quick_sort_keys(order, ntot)
+  
+! !  do i=1,ntot
+! !     write(*,'(A8,I5,I10,3(I20))'),"myid: ",myid,i,order(i),part_hkey(i,1),part_hkey(i,0)
+! !  end do
+!   deallocate(order)
+
+end subroutine hilbert_allparts_andreas

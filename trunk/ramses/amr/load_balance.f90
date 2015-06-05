@@ -241,6 +241,7 @@ end subroutine load_balance
 subroutine cmp_new_cpu_map
   use amr_commons
   use pm_commons
+  use sort
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -1384,7 +1385,7 @@ subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
   ! according to its position in space and for the chosen
   ! ordering. Position x are in user units.
   !-----------------------------------------------------
-  integer,dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer::i,ncode,bit_length,nx_loc
   integer::temp,info
   real(kind=8)::scale,bscale,xx,yy,zz,xc,yc,zc
@@ -1413,12 +1414,12 @@ subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
   end if
   
   do i=1,nn
-     ix(i)=int(x(i,1)*bscale)
+     ix(i)=int(x(i,1)*bscale,kind=8)
 #if NDIM>1           
-     iy(i)=int(x(i,2)*bscale)
+     iy(i)=int(x(i,2)*bscale,kind=8)
 #endif
 #if NDIM>2
-     iz(i)=int(x(i,3)*bscale)
+     iz(i)=int(x(i,3)*bscale,kind=8)
 #endif
   end do
   
@@ -1429,31 +1430,31 @@ end subroutine cmp_ordering_int
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine cmp_cpumap_keys(hkey0,hkey1,hkey2,c,nn)
-  use amr_parameters
-  use amr_commons
-  implicit none
-  integer ::nn
-  integer ,dimension(1:nvector)::c
-  integer(kind=8),dimension(1:nvector)::hkey0,hkey1,hkey2
+! subroutine cmp_cpumap_keys(hkey0,hkey1,hkey2,c,nn)
+!   use amr_parameters
+!   use amr_commons
+!   implicit none
+!   integer ::nn
+!   integer ,dimension(1:nvector)::c
+!   integer(kind=8),dimension(1:nvector)::hkey0,hkey1,hkey2
   
-  integer,save::i,idom
+!   integer,save::i,idom
 
-  do i=1,nn
-     c(i)=ndomain ! default value
-     do idom=1,ndomain
-        if(    order(i).ge.bound_key(idom-1).and. &
-             & order(i).lt.bound_key(idom  ))then
-           c(i)=idom
-        endif
-     end do
-  end do
-  do i=1,nn
-     c(i)=MOD(c(i)-1,ncpu)+1
-     !        c(i)=c(i)-((c(i)-1)/ncpu)*ncpu
-  end do
+!   do i=1,nn
+!      c(i)=ndomain ! default value
+!      do idom=1,ndomain
+!         if(    order(i).ge.bound_key(idom-1).and. &
+!              & order(i).lt.bound_key(idom  ))then
+!            c(i)=idom
+!         endif
+!      end do
+!   end do
+!   do i=1,nn
+!      c(i)=MOD(c(i)-1,ncpu)+1
+!      !        c(i)=c(i)-((c(i)-1)/ncpu)*ncpu
+!   end do
 
-end subroutine cmp_cpumap_keys
+! end subroutine cmp_cpumap_keys
 !#########################################################################
 !#########################################################################
 !#########################################################################

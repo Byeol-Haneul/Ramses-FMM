@@ -582,9 +582,9 @@ subroutine merge_tree_fine(ilevel)
      ! End loop over grids
   end do
   ! End loop over cpus
-
+  
 111 format('   Entering merge_tree_fine for level ',I2)
-
+  
 end subroutine merge_tree_fine
 !################################################################
 !################################################################
@@ -906,97 +906,517 @@ end subroutine empty_comm
 !################################################################
 !################################################################
 !################################################################
-subroutine memory_sort_level(ind_com,np,ilevel,icpu)
+! subroutine memory_sort_level(ind_com,np,ilevel,icpu)
+!   use pm_commons
+!   use amr_commons
+
+!   ! sort all the particles in memory according to their level
+
+!   implicit none
+!   integer::np,icpu,ilevel
+!   integer,dimension(1:nvector)::ind_com
+  
+!   integer::i,idim,igrid
+!   integer,dimension(1:nvector),save::ind_list,ind_part
+!   logical,dimension(1:nvector),save::ok=.true.
+!   integer::current_property
+
+!   ! Compute parent grid index
+!   do i=1,np
+!      igrid=emission(icpu,ilevel)%fp(ind_com(i),1)
+!      ind_list(i)=emission(icpu,ilevel)%igrid(igrid)
+!   end do
+
+!   ! Add particle to parent linked list
+!   call remove_free(ind_part,np)
+!   call add_list(ind_part,ind_list,ok,np)
+
+!   ! Scatter particle level and identity
+!   do i=1,np
+!      levelp(ind_part(i))=emission(icpu,ilevel)%fp(ind_com(i),2)
+!      idp   (ind_part(i))=emission(icpu,ilevel)%fp(ind_com(i),3)
+!   end do
+
+!   ! Scatter particle position and velocity
+!   do idim=1,ndim
+!   do i=1,np
+!      xp(ind_part(i),idim)=emission(icpu,ilevel)%up(ind_com(i),idim     )
+!      vp(ind_part(i),idim)=emission(icpu,ilevel)%up(ind_com(i),idim+ndim)
+!   end do
+!   end do
+
+!   current_property = twondim+1
+
+!   ! Scatter particle mass
+!   do i=1,np
+!      mp(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property)
+!   end do
+!   current_property = current_property+1
+
+! #ifdef OUTPUT_PARTICLE_POTENTIAL
+!   ! Scatter particle phi
+!   do i=1,np
+!      ptcl_phi(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property)
+!   end do
+!   current_property = current_property+1
+! #endif
+
+! end subroutine memory_sort_level
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+
+! subroutine get_particle_levels
+
+! end subroutine get_particle_levels
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+subroutine build_particle_communicator
+  use amr_commons,   only:ncpu, myid, bound_key
+  use pm_commons
+  use pm_parameters, only:npartmax
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  
+  ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
+  integer,dimension(1:ncpu,1:ncpu)::npart_alltoall, npart_alltoall_tot
+  integer::receive_cpu, ipart, i, info, icpu
+  
+  npart_alltoall=0
+  receive_cpu=1
+
+  do ipart=1,npart_andreas
+     do while (part_hkey(ipart,0) > int(bound_key(receive_cpu),kind=8)) 
+        receive_cpu=receive_cpu+1
+     end do
+     npart_alltoall(myid,receive_cpu)=npart_alltoall(myid,receive_cpu)+1
+  end do
+  npart_alltoall(myid,myid)=0
+  call MPI_ALLREDUCE(npart_alltoall,npart_alltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  npart_alltoall=npart_alltoall_tot
+  
+  if(.not. allocated(part_send_cnt))then
+     allocate(part_send_cnt(1:ncpu),part_send_oft(1:ncpu))
+     allocate(part_recv_cnt(1:ncpu),part_recv_oft(1:ncpu))
+  endif
+  part_send_cnt=0; part_send_oft=0; part_send_tot=0
+  part_recv_cnt=0; part_recv_oft=0; part_recv_tot=0
+  do icpu=1,ncpu
+     part_send_cnt(icpu)=npart_alltoall(myid,icpu)
+     part_recv_cnt(icpu)=npart_alltoall(icpu,myid)
+     part_send_tot=part_send_tot+part_send_cnt(icpu)
+     part_recv_tot=part_recv_tot+part_recv_cnt(icpu)
+     if(icpu<ncpu)then
+        part_send_oft(icpu+1)=part_send_oft(icpu)+npart_alltoall(myid,icpu)
+        part_recv_oft(icpu+1)=part_recv_oft(icpu)+npart_alltoall(icpu,myid)
+     endif
+  end do
+
+  !maybe allocate in effective communication routine
+
+  if(allocated(receive_keys))then
+     deallocate(receive_keys)
+  endif
+  if(allocated(send_keys))then
+     deallocate(send_keys)
+  endif
+  allocate(receive_keys(1:part_recv_tot,0:2))
+  allocate(send_keys(1:part_send_tot,0:2))
+ 
+  
+  
+end subroutine build_particle_communicator
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+subroutine build_histogram_communicator
+  use amr_commons,   only:ncpu, myid, bound_key
+  use pm_commons
+  use pm_parameters, only:npartmax
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  
+  
+  !----------------------------------------------------------------------------
+  ! This routine sets up the communication structure for histogrammed particle
+  ! quantities. The bins are assumed to be sorted by hilbert key
+  !----------------------------------------------------------------------------
+
+  ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
+  integer,dimension(1:ncpu,1:ncpu)::nbin_alltoall, nbin_alltoall_tot
+  integer::receive_cpu, ibin, i, info, icpu
+ 
+  nbins_alltoall=0
+  receive_cpu=1
+
+  do ibin=1,nbins
+     do while (particle_histogram_key(ibin,0) > int(bound_key(receive_cpu),kind=8)) 
+        receive_cpu=receive_cpu+1
+     end do
+     nbin_alltoall(myid,receive_cpu)=nbin_alltoall(myid,receive_cpu)+1
+  end do
+  nbin_alltoall(myid,myid)=0
+  call MPI_ALLREDUCE(nbin_alltoall,nbin_alltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  nbin_alltoall=nbin_alltoall_tot
+  
+  if(.not. allocated(bin_send_cnt))then
+     allocate(bin_send_cnt(1:ncpu),bin_send_oft(1:ncpu))
+     allocate(bin_recv_cnt(1:ncpu),bin_recv_oft(1:ncpu))
+  endif
+  bin_send_cnt=0; bin_send_oft=0; bin_send_tot=0
+  bin_recv_cnt=0; bin_recv_oft=0; bin_recv_tot=0
+  do icpu=1,ncpu
+     bin_send_cnt(icpu)=nbin_alltoall(myid,icpu)
+     bin_recv_cnt(icpu)=nbin_alltoall(icpu,myid)
+     bin_send_tot=bin_send_tot+bin_send_cnt(icpu)
+     bin_recv_tot=bin_recv_tot+bin_recv_cnt(icpu)
+     if(icpu<ncpu)then
+        bin_send_oft(icpu+1)=bin_send_oft(icpu)+nbin_alltoall(myid,icpu)
+        bin_recv_oft(icpu+1)=bin_recv_oft(icpu)+nbin_alltoall(icpu,myid)
+     endif
+  end do
+
+  !maybe allocate in effective communication routine
+
+  if(allocated(recv_bin_keys))then
+     deallocate(recv_bin_keys)
+     deallocate(recv_bin_mass)
+     deallocate(send_bin_keys)
+     deallocate(send_bin_mass)
+  endif
+  allocate(send_bin_keys(1:bin_recv_tot,0:2))
+  allocate(send_bin_mass(1:bin_send_tot))
+  allocate(recv_bin_keys(1:bin_recv_tot,0:2))
+  allocate(recv_bin_mass(1:bin_recv_tot))
+
+ 
+  
+  
+end subroutine build_histogram_communicator
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+subroutine send_histogram
+  use amr_commons,   only:ncpu, myid, bound_key
+  use pm_commons
+  use pm_parameters, only:npartmax
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  
+  
+  !----------------------------------------------------------------------------
+  ! This routine sets up the communication structure for histogrammed particle
+  ! quantities. The bins are assumed to be sorted by hilbert key
+  !----------------------------------------------------------------------------
+
+  ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
+  integer,dimension(1:ncpu,1:ncpu)::nbin_alltoall, nbin_alltoall_tot
+  integer::receive_cpu, ibin, i, info, icpu
+ 
+  nbins_alltoall=0
+  receive_cpu=1
+
+  do ibin=1,nbins
+     do while (particle_histogram_key(ibin,0) > int(bound_key(receive_cpu),kind=8)) 
+        receive_cpu=receive_cpu+1
+     end do
+     nbin_alltoall(myid,receive_cpu)=nbin_alltoall(myid,receive_cpu)+1
+  end do
+  nbin_alltoall(myid,myid)=0
+  call MPI_ALLREDUCE(nbin_alltoall,nbin_alltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  nbin_alltoall=nbin_alltoall_tot
+  
+  if(.not. allocated(bin_send_cnt))then
+     allocate(bin_send_cnt(1:ncpu),bin_send_oft(1:ncpu))
+     allocate(bin_recv_cnt(1:ncpu),bin_recv_oft(1:ncpu))
+  endif
+  bin_send_cnt=0; bin_send_oft=0; bin_send_tot=0
+  bin_recv_cnt=0; bin_recv_oft=0; bin_recv_tot=0
+  do icpu=1,ncpu
+     bin_send_cnt(icpu)=nbin_alltoall(myid,icpu)
+     bin_recv_cnt(icpu)=nbin_alltoall(icpu,myid)
+     bin_send_tot=bin_send_tot+bin_send_cnt(icpu)
+     bin_recv_tot=bin_recv_tot+bin_recv_cnt(icpu)
+     if(icpu<ncpu)then
+        bin_send_oft(icpu+1)=bin_send_oft(icpu)+nbin_alltoall(myid,icpu)
+        bin_recv_oft(icpu+1)=bin_recv_oft(icpu)+nbin_alltoall(icpu,myid)
+     endif
+  end do
+
+  !maybe allocate in effective communication routine
+
+  if(allocated(recv_bin_keys))then
+     deallocate(recv_bin_keys)
+     deallocate(recv_bin_mass)
+     deallocate(send_bin_keys)
+     deallocate(send_bin_mass)
+  endif
+  allocate(send_bin_keys(1:bin_recv_tot,0:2))
+  allocate(send_bin_mass(1:bin_send_tot))
+  allocate(recv_bin_keys(1:bin_recv_tot,0:2))
+  allocate(recv_bin_mass(1:bin_recv_tot))
+
+ 
+  
+  
+end subroutine send_histograms
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+! subroutine part_to_cell_i8(part_array,sortind)
+!   use pm_parameters, only: npartmax
+!   implicit none
+! #ifndef WITHOUTMPI
+!   include 'mpif.h'
+! #endif
+  
+!   integer(kind=8),dimension(1:npartmax)::part_array, sortind
+  
+!   ! Communication routine that sends a particle-based quantity
+!   ! to the MPI domain that owns the respective cell
+  
+  
+  
+  
+
+! #ifndef WITHOUTMPI
+!   do j=1,part_recv_tot
+!      ipart=part_recv_buf(j)-ipart_start(myid)
+!      int_part_recv_buf(j)=xx(ipart)
+!   end do
+!   call MPI_ALLTOALLV(int8_part_recv_buf,part_recv_cnt,part_recv_oft,MPI_INTEGER, &
+!        &             int8_part_send_buf,part_send_cnt,part_send_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  
+  
+!   deallocate(int8_part_send_buf,int8_part_recv_buf)
+! #endif
+  
+! end subroutine part_to_cell_i8
+
+
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+!subroutine part_to_cell_dp
+  
+
+!  implicit none
+  
+
+!end subroutine part_to_cell_dp
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+
+! !################################################################
+! !################################################################
+! !################################################################
+! !################################################################
+!subroutine get_cell_index_from_hilbert(cell_index,hkey0,hkey1,hkey2,np,ilevel)
+!   use amr_commons
+!   ! assuming the last 3 digits are in cartesian order
+!   do i=1,np
+!      grid_index=hash_get(hkey0(i))
+!      ind=mod(hkey0(i),8)
+!      iskip=ncoarse+(ind-1)*ngridmax
+!      cell_index(i)=iskip+ind_grid
+!   end do
+! end subroutine get_cell_index
+
+subroutine get_cell_index_from_hilbertkey(cell_index,cell_levl,hilbert_key2,hilbert_key1,hilbert_key0,np,ilevel)
+  use amr_commons, only:nlevelmax, nvector
+  integer::bit_length,np,ilevel
+  integer(kind=8),dimension(1:nvector)::x,y,z
+  integer(kind=8),dimension(1:nvector)::hilbert_key2,hilbert_key1,hilbert_key0
+  integer,dimension(1:nvector)::cell_levl, cell_index
+
+
+  bit_length=nlevelmax+1
+  call hilbert3d_multiint_reverse(x,y,z,hilbert_key2,hilbert_key1,hilbert_key0,bit_length,np)
+
+  call get_cell_index_from_cartesian(cell_index,cell_levl,x,y,z,ilevel,np,bit_length)
+  
+end subroutine get_cell_index_from_hilbertkey
+
+
+subroutine get_cell_index_from_cartesian(cell_index,cell_levl,xx,yy,zz,ilevel,n,bit_length)
+  use amr_commons
+  implicit none
+
+  integer::n,ilevel,bit_length
+  integer,dimension(1:nvector)::cell_index,cell_levl
+  integer(kind=8),dimension(1:nvector)::xx,yy,zz
+  !----------------------------------------------------------------------------
+  !----------------------------------------------------------------------------
+  integer::i,j,ind,iskip,igrid,ind_cell,igrid0
+  integer(kind=8)::ii,jj,kk
+
+  if ((nx.eq.1).and.(ny.eq.1).and.(nz.eq.1)) then
+  else if ((nx.eq.3).and.(ny.eq.3).and.(nz.eq.3)) then
+  else
+     write(*,*)"nx=ny=nz != 1,3 is not supported."
+     stop
+  end if
+
+  if (bit_length>21)then
+     print*, 'bit length too big for now'
+  end if
+  
+  ind_cell=0
+  igrid0=son(1+icoarse_min+jcoarse_min*nx+kcoarse_min*nx*ny)
+  do i=1,n
+     igrid=igrid0
+     do j=1,ilevel 
+        ii=ISHFT(xx(i),-bit_length+j)
+        jj=ISHFT(yy(i),-bit_length+j)
+        kk=ISHFT(zz(i),-bit_length+j)
+        ii=mod(ii,2)
+        jj=mod(jj,2)
+        kk=mod(kk,2)
+        ind=1+ii+2*jj+4*kk
+        iskip=ncoarse+(ind-1)*ngridmax
+        ind_cell=iskip+igrid
+        igrid=son(ind_cell)
+        if(igrid==0.or.j==ilevel)exit
+     end do
+     cell_index(i)=ind_cell
+     cell_levl(i)=j
+  end do
+end subroutine get_cell_index_from_cartesian
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine get_cell_index(cell_index,cell_levl,xpart,ilevel,n)
+  use amr_commons
+  implicit none
+
+  integer::n,ilevel
+  integer,dimension(1:nvector)::cell_index,cell_levl
+  real(dp),dimension(1:nvector,1:3)::xpart
+
+  !----------------------------------------------------------------------------
+  ! This routine returns the index and level of the cell, (at maximum level
+  ! ilevel), in which the input the position specified by xpart lies
+  !----------------------------------------------------------------------------
+
+  real(dp)::xx,yy,zz
+  integer::i,j,ii,jj,kk,ind,iskip,igrid,ind_cell,igrid0
+
+  if ((nx.eq.1).and.(ny.eq.1).and.(nz.eq.1)) then
+  else if ((nx.eq.3).and.(ny.eq.3).and.(nz.eq.3)) then
+  else
+     write(*,*)"nx=ny=nz != 1,3 is not supported."
+     call clean_stop
+  end if
+
+  ind_cell=0
+  igrid0=son(1+icoarse_min+jcoarse_min*nx+kcoarse_min*nx*ny)
+  do i=1,n
+     xx = xpart(i,1)/boxlen + (nx-1)/2.0
+     yy = xpart(i,2)/boxlen + (ny-1)/2.0
+     zz = xpart(i,3)/boxlen + (nz-1)/2.0
+
+     if(xx<0.)xx=xx+dble(nx)
+     if(xx>dble(nx))xx=xx-dble(nx)
+     if(yy<0.)yy=yy+dble(ny)
+     if(yy>dble(ny))yy=yy-dble(ny)
+     if(zz<0.)zz=zz+dble(nz)
+     if(zz>dble(nz))zz=zz-dble(nz)
+
+     igrid=igrid0
+     do j=1,ilevel 
+        ii=1; jj=1; kk=1
+        if(xx<xg(igrid,1))ii=0
+        if(yy<xg(igrid,2))jj=0
+        if(zz<xg(igrid,3))kk=0
+        ind=1+ii+2*jj+4*kk
+        iskip=ncoarse+(ind-1)*ngridmax
+        ind_cell=iskip+igrid
+        igrid=son(ind_cell)
+        if(igrid==0.or.j==ilevel)exit
+     end do
+     cell_index(i)=ind_cell
+     cell_levl(i)=j
+  end do
+end subroutine get_cell_index
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine compute_particle_histogram(start_index,end_index)
   use pm_commons
   use amr_commons
-
-  ! sort all the particles in memory according to their level
-
+  use sort, only:gt_3keys
   implicit none
-  integer::np,icpu,ilevel
-  integer,dimension(1:nvector)::ind_com
+
+  integer:: start_index, end_index
+
+  !----------------------------------------------------------------------------
+  ! This routine computes particle histograms. It assumes that particles are 
+  ! sorted in memory by hilbert key.  
+  !----------------------------------------------------------------------------
+
+  integer,save::ibin,ipart
+
+
+  ! if there is nothing to do...
+  if (start_index > end_index)return
   
-  integer::i,idim,igrid
-  integer,dimension(1:nvector),save::ind_list,ind_part
-  logical,dimension(1:nvector),save::ok=.true.
-  integer::current_property
-
-  ! Compute parent grid index
-  do i=1,np
-     igrid=emission(icpu,ilevel)%fp(ind_com(i),1)
-     ind_list(i)=emission(icpu,ilevel)%igrid(igrid)
+  ! Count the number of bins
+  nbins=1
+  do ipart=start_index+1,end_index     
+     if (gt_3keys(part_hkey(ipart,0:2), part_hkey(ipart-1,0:2)))then
+        nbins=nbins+1
+     end if
   end do
-
-  ! Add particle to parent linked list
-  call remove_free(ind_part,np)
-  call add_list(ind_part,ind_list,ok,np)
-
-  ! Scatter particle level and identity
-  do i=1,np
-     levelp(ind_part(i))=emission(icpu,ilevel)%fp(ind_com(i),2)
-     idp   (ind_part(i))=emission(icpu,ilevel)%fp(ind_com(i),3)
-  end do
-
-  ! Scatter particle position and velocity
-  do idim=1,ndim
-  do i=1,np
-     xp(ind_part(i),idim)=emission(icpu,ilevel)%up(ind_com(i),idim     )
-     vp(ind_part(i),idim)=emission(icpu,ilevel)%up(ind_com(i),idim+ndim)
-  end do
-  end do
-
-  current_property = twondim+1
-
-  ! Scatter particle mass
-  do i=1,np
-     mp(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property)
-  end do
-  current_property = current_property+1
-
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-  ! Scatter particle phi
-  do i=1,np
-     ptcl_phi(ind_part(i))=emission(icpu,ilevel)%up(ind_com(i),current_property)
-  end do
-  current_property = current_property+1
-#endif
-
-end subroutine memory_sort_level
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-
-subroutine get_particle_levels
-
-end subroutine get_particle_levels
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine build_particle_communicator
   
-  integer()
-
-  ! Loop over particles by vector sweeps
-  ! to find CPUs hosting the particle position
+  ! allocate histograms if necessary
+  if(size(bin_mass) < nbins)then
+     deallocate(bin_keys)
+     deallocate(bin_mass)
+  end if
+  if (.not. allocated(bin_mass))then
+     allocate(bin_keys(nbins,0:2))
+     allocate(bin_mass(nbins))
+  end if
+  bin_mass=0.d0
   
-  do ipart=1,npart,nvector
-     np=MIN(nvector,npart-ipart+1)
-     xx(1:np)=xp(ipart:ipart,np)
-     call cmp_ordering_int(x,hkey2,hkey1,hkey0,np)
-     ! just for now, replace!!
-     call cpm_cpumap(xx,cc,np)
-     do i=1,np
-        send_counts(cc(i))=send_counts(cc(i))+1
-     end do
+
+  ! label every bin by a key and sum up the particle mass per bin
+
+  ! first bin
+  ibin=1
+  bin_keys(1,0:2)=part_hkey(start_index,0:2)  
+  bin_mass(1)=mp(start_index)
+
+  ! all other bins
+  do ipart=start_index+1,end_index     
+     if (gt_3keys(part_hkey(ipart,0:2), part_hkey(ipart-1,0:2)))then
+        ibin=ibin+1
+        bin_keys(ibin,0:2)=part_hkey(ipart,0:2)
+     end if
+     ! NGP mass assignement --> replace by CIC by using weights instead of mp
+     bin_mass(ibin)=bin_mass(ibin)+mp_andreas(ipart)
   end do
 
 
 
 
-end subroutine build_particle_communicator
-!################################################################
-!################################################################
-!################################################################
-!################################################################
+end subroutine compute_particle_histogram

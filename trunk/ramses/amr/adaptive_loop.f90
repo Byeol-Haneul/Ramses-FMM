@@ -21,6 +21,7 @@ subroutine adaptive_loop
   if(poisson)call init_poisson       ! Initialize poisson variables
   if(nrestart==0)call init_refine    ! Build initial AMR grid
   if(pic)call init_part              ! Initialize particle variables
+  if(pic)call init_part_andreas      ! Initialize Andreas particle variables
   if(pic)call init_tree              ! Initialize particle tree
   if(nrestart==0)call init_refine_2  ! Build initial AMR grid again
 

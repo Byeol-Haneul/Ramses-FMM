@@ -3,17 +3,23 @@ module pm_commons
   use pm_parameters
 
   ! Particles related arrays
-  real(dp),allocatable,dimension(:,:)::xp       ! Positions
-  real(dp),allocatable,dimension(:,:)::vp       ! Velocities
-  real(dp),allocatable,dimension(:)  ::mp       ! Masses
-  integer(kind=8),allocatable,dimension(:,:)::big_hkey
+  real(dp),allocatable,dimension(:,:)       ::xp, xp_andreas       ! Positions
+  real(dp),allocatable,dimension(:,:)       ::vp, vp_andreas       ! Velocities
+  real(dp),allocatable,dimension(:)         ::mp, mp_andreas       ! Masses
+  integer(kind=8),allocatable,dimension(:)  ::part_ref_mask        ! mask for refinement
+  integer(kind=8),allocatable,dimension(:,:)::part_hkey
+  ! Particle histogram related variables and arrays
+  integer(kind=8),allocatable,dimension(:,:)::bin_keys,particle_histogram_keys
+  real(dp),allocatable,dimension(:)         ::bin_mass,particle_histogram_mass
+  integer                                   ::nbins
+
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   real(dp),allocatable,dimension(:)  ::ptcl_phi ! Potential of particle added by AP for output purposes 
 #endif
   integer ,allocatable,dimension(:)  ::nextp    ! Next particle in list
   integer ,allocatable,dimension(:)  ::prevp    ! Previous particle in list
-  integer ,allocatable,dimension(:)  ::levelp   ! Current level of particle
-  integer(i8b),allocatable,dimension(:)::idp    ! Identity of particle
+  integer ,allocatable,dimension(:)  ::levelp,levelp_andreas   ! Current level of particle
+  integer(i8b),allocatable,dimension(:)::idp,idp_andreas    ! Identity of particle
 
   ! Tree related arrays
   integer ,allocatable,dimension(:)  ::headp    ! Head particle in grid
@@ -23,4 +29,19 @@ module pm_commons
   ! Global particle linked lists
   integer::headp_free,tailp_free,numbp_free=0,numbp_free_tot=0
 
+  ! Particle communicator arrays
+  integer,allocatable,dimension(:)::part_send_cnt,part_send_oft
+  integer,allocatable,dimension(:)::part_recv_cnt,part_recv_oft
+  integer::part_recv_tot,part_send_tot
+  integer(kind=8),allocatable,dimension(:,:)::receive_keys, send_keys
+  real(dp),allocatable,dimension(:)::dp_part_send_buf,dp_part_recv_buf
+  ! Particle histogram communicator arrays
+  integer,allocatable,dimension(:)::bin_send_cnt,bin_send_oft
+  integer,allocatable,dimension(:)::bin_recv_cnt,bin_recv_oft
+  integer::bin_recv_tot,bin_send_tot
+
+
+
+
+  
 end module pm_commons

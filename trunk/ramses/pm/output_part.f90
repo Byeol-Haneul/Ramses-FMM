@@ -104,3 +104,110 @@ subroutine backup_part(filename)
 
 end subroutine backup_part
 
+subroutine backup_part_andreas(filename)
+  use amr_commons
+  use pm_commons
+  implicit none
+  character(LEN=80)::filename
+  integer::dummyint=0
+  integer::i,idim,nsink=0,ilun,ipart
+  character(LEN=80)::fileloc
+  character(LEN=5)::nchar
+  real(dp),allocatable,dimension(:)::xdp
+  integer,allocatable,dimension(:)::ii
+  integer(i8b),allocatable,dimension(:)::ii8
+  integer,allocatable,dimension(:)::ll
+  logical,allocatable,dimension(:)::nb
+  
+  if(verbose)write(*,*)'Entering backup_part'
+  
+  ilun=2*ncpu+myid+10
+
+  call title(myid,nchar)
+  fileloc=TRIM(filename)//TRIM(nchar)
+  open(unit=ilun,file=TRIM(fileloc),form='unformatted')
+  rewind(ilun)
+  ! Write header
+  write(ilun)ncpu
+  write(ilun)ndim
+  write(ilun)npart_andreas
+  write(ilun)dummyint
+  write(ilun)dummyint
+  write(ilun)dummyint
+  write(ilun)dummyint
+  write(ilun)dummyint
+  ! Write position
+  allocate(xdp(1:npart_andreas))
+  do idim=1,ndim
+     ipart=0
+     do i=1,npartmax
+        if(levelp_andreas(i)>0)then
+           ipart=ipart+1
+           xdp(ipart)=xp_andreas(i,idim)
+         end if
+     end do
+     write(ilun)xdp
+  end do
+  ! Write velocity
+  do idim=1,ndim
+     ipart=0
+     do i=1,npartmax
+        if(levelp_andreas(i)>0)then
+           ipart=ipart+1
+           xdp(ipart)=vp_andreas(i,idim)
+        end if
+     end do
+     write(ilun)xdp
+  end do
+  ! Write mass
+  ipart=0
+  do i=1,npartmax
+     if(levelp_andreas(i)>0)then
+        ipart=ipart+1
+        xdp(ipart)=mp_andreas(i)
+     end if
+  end do
+  write(ilun)xdp
+  deallocate(xdp)
+  ! Write identity
+  allocate(ii8(1:npart_andreas))
+  ipart=0
+  do i=1,npartmax
+     if(levelp_andreas(i)>0)then
+        ipart=ipart+1
+        ii8(ipart)=idp_andreas(i)
+     end if
+  end do
+  write(ilun)ii8
+  deallocate(ii8)
+  ! Write level
+  allocate(ll(1:npart_andreas))
+  ipart=0
+  do i=1,npartmax
+     if(levelp_andreas(i)>0)then
+        ipart=ipart+1
+        ll(ipart)=levelp_andreas(i)
+     end if
+  end do
+  write(ilun)ll
+  deallocate(ll)
+
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  call stop
+  ! Write potential (added by AP)
+  allocate(xdp(1:npart))
+  ipart=0
+  do i=1, npartmax
+     if(levelp(i)>0) then
+        ipart=ipart+1
+        xdp(ipart)=ptcl_phi(i)
+     end if
+  end do
+  write(ilun)xdp
+  deallocate(xdp)
+#endif
+
+  close(ilun)
+
+end subroutine backup_part_andreas
+

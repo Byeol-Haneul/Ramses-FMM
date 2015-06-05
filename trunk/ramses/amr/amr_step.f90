@@ -123,31 +123,31 @@ recursive subroutine amr_step(ilevel,icount)
      !save old potential for time-extrapolation at level boundaries
      call save_phi_old(ilevel)
 
-#ifndef WITHOUTMPI
-     told=MPI_WTIME(info)
-#endif
+! #ifndef WITHOUTMPI
+!      told=MPI_WTIME(info)
+! #endif
 
      call rho_fine(ilevel,icount)     
 
-#ifndef WITHOUTMPI
-     tnew=MPI_WTIME(info)
-     dtrho=tnew-told
-     told=tnew
-#endif
+! #ifndef WITHOUTMPI
+!      tnew=MPI_WTIME(info)
+!      dtrho=tnew-told
+!      told=tnew
+! #endif
 
-     if(pic)call hilbert_allparts(ilevel)
+!      if(pic)call hilbert_allparts(ilevel)
 
-#ifndef WITHOUTMPI
-     tnew=MPI_WTIME(info)
-     dthilbert=tnew-told
-     told=tnew
-#endif
+! #ifndef WITHOUTMPI
+!      tnew=MPI_WTIME(info)
+!      dthilbert=tnew-told
+!      told=tnew
+! #endif
 
-     if (dthilbert>0. .and. dtrho > 0.)then
-        print*,'dt(hilbert+sort)/dt(rho): ',dthilbert/dtrho,myid,ilevel
-     end if
+!      if (dthilbert>0. .and. dtrho > 0.)then
+!         print*,'dt(hilbert+sort)/dt(rho): ',dthilbert/dtrho,myid,ilevel
+!      end if
   endif
-  stop
+!  stop
   !-------------------------------------------
   ! Sort particles between ilevel and ilevel+1
   !-------------------------------------------

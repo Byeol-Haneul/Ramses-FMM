@@ -391,7 +391,7 @@ subroutine hilbert3d_multiint(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
   implicit none
 
   integer     ,INTENT(IN)                     ::bit_length,npoint
-  integer     ,INTENT(IN) ,dimension(1:nvector)::x,y,z
+  integer(kind=8),INTENT(IN) ,dimension(1:nvector)::x,y,z
 !  real(qdp),INTENT(OUT),dimension(1:nvector)::order
   integer(kind=8),INTENT(OUT),dimension(1:nvector)::hkey2,hkey1,hkey0
 
@@ -521,11 +521,11 @@ end subroutine hilbert3d_multiint
 !================================================================
 !================================================================
 subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
-  use amr_parameters, ONLY: qdp,nvector
+  use amr_parameters, ONLY: nvector
   implicit none
 
   integer     ,INTENT(IN)                     ::bit_length,npoint
-  integer     ,INTENT(OUT) ,dimension(1:nvector)::x,y,z
+  integer(kind=8),INTENT(OUT) ,dimension(1:nvector)::x,y,z
   integer(kind=8),dimension(1:nvector)::hkey2,hkey1,hkey0
 
 

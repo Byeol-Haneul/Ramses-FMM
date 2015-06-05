@@ -3,6 +3,7 @@ subroutine write_screen
   use hydro_commons
   use pm_commons
   use poisson_commons
+  use sort
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -14,7 +15,8 @@ subroutine write_screen
   real(dp)::dx,scale,smallp,ddd,ppp
 
   integer     ,dimension(:),allocatable::ind_grid,ind_cell,ind_sort,ll,ll_all
-  real(kind=8),dimension(:),allocatable::rr,et,ei,dd,uu,mm,gg,dtot
+  real(qdp),dimension(:),allocatable::rr
+  real(kind=8),dimension(:),allocatable::et,ei,dd,uu,mm,gg,dtot
   real(kind=8),dimension(:),allocatable::rr_all,et_all,ei_all
   real(kind=8),dimension(:),allocatable::dd_all,uu_all,mm_all,gg_all,dtot_all
 #if NENER>0
