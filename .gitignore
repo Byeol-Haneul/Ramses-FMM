@@ -1,0 +1,27 @@
+# ignore everything in bin except "official" Makefiles
+trunk/ramses/bin/*
+!trunk/ramses/bin/Makefile
+!trunk/ramses/bin/Makefile.rt
+
+# ignore utils executables
+trunk/ramses/utils/f90/*
+!trunk/ramses/utils/f90/*.f90
+
+# ignore all but the official "patches"
+trunk/ramses/patch/*
+!trunk/ramses/patch/insta
+!trunk/ramses/patch/test_suite
+!trunk/ramses/patch/rt
+!trunk/ramses/patch/phantom
+!trunk/ramses/patch/hydro
+!trunk/ramses/patch/challenge
+
+
+# some more to ignore
+*~
+*.pyc
+
+
+# Andreas stuff to ignore
+trunk/ramses/utils/py/lib
+trunk/ramses/patch/rt/*andreas_rt_pressure
