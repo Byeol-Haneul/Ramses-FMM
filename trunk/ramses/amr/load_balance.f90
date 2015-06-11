@@ -275,6 +275,7 @@ subroutine cmp_new_cpu_map
 
   real(dp),dimension(1:1,1:ndim),save :: xx_tmp
   integer,dimension(1:1),save :: c_tmp
+  integer, save :: idomain, ilev
 
   ! Local constants
   nxny=nx*ny
@@ -482,6 +483,22 @@ subroutine cmp_new_cpu_map
 #endif
   bound_key2(0)      =order_all_min
   bound_key2(ndomain)=order_all_max
+
+
+
+  do idomain=1,ndomain - 1
+     bound_key_level(idomain,ilev) = nint(bound_key2(idomain) / 8.)
+  end do
+  bound_key_level(0,ilev) = floor(bound_key2(0) / 8.)
+  bound_key_level(ndomain,ilev) = ceiling(bound_key2(ndomain) / 8.)
+  
+  do ilev=nlevelmax-1, levelmin, - 1
+     do idomain=1,ndomain - 1
+        bound_key_level(idomain,ilev) = nint(bound_key_level(0, ilev +1) / 8.)
+     end do
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
+  end do
 
   !----------------------------------------
   ! Compute new cpu map
@@ -1422,7 +1439,7 @@ subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
      iz(i)=int(x(i,3)*bscale,kind=8)
 #endif
   end do
-  
+
   call hilbert3d_multiint(ix,iy,iz,hkey2,hkey1,hkey0,bit_length,nn)
 
 end subroutine cmp_ordering_int

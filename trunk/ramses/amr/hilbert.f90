@@ -707,3 +707,183 @@ subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
   enddo
   
 end subroutine hilbert3d_multiint_reverse
+
+
+
+
+
+
+
+!================================================================
+!================================================================
+!================================================================
+!================================================================
+subroutine hilbert3d_for_particle(offset, np, &
+                                  initial_level, final_level)
+
+  use amr_parameters, only: nvector, boxlen, dp
+  use amr_commons,    only: myid
+  use pm_commons,     only: part_hkey, current_state, xp_andreas
+  implicit none
+
+  integer, intent(in) :: initial_level, final_level
+  integer, intent(in) :: offset, np
+
+  ! Description:
+  ! This subroutine computes 3D hilbert keys for particles 
+  ! It assumes that the particles are stored as contiguous 
+  ! arrays in memory and that positions, 3-integer hilbert keys
+  ! and next_state are allocated as particle-based quantities.
+  
+  ! Iputs: 
+  ! - Starting offset in particle arrays and number of particles
+  !   to process (np)
+  ! - Level of already computed hilbert key 
+  ! - Desired level of hilbert key on exit
+ 
+  ! Example: 
+  ! call hilbert3d_for_particle(0, npart_levelmin, nlevelmax-1, nlevelmax) 
+  ! will compute the last 3 bits of the hilbert key for the
+  ! levelmin particles (resulting in a total of 3 * nlevelmax bits)
+  
+  
+  ! State diagrams (lookup tables for hilbert key computation)
+
+  integer(kind=8),parameter,dimension(0:95)::three_digit_diagram=(/&
+                            &   0, 1, 3, 2, 7, 6, 4, 5,&
+                            &   0, 7, 1, 6, 3, 4, 2, 5,&
+                            &   0, 3, 7, 4, 1, 2, 6, 5,&
+                            &   2, 3, 1, 0, 5, 4, 6, 7,&
+                            &   4, 3, 5, 2, 7, 0, 6, 1,&
+                            &   6, 5, 1, 2, 7, 4, 0, 3,&
+                            &   4, 7, 3, 0, 5, 6, 2, 1,&
+                            &   6, 7, 5, 4, 1, 0, 2, 3,&
+                            &   2, 5, 3, 4, 1, 6, 0, 7,&
+                            &   2, 1, 5, 6, 3, 0, 4, 7,&
+                            &   4, 5, 7, 6, 3, 2, 0, 1,&
+                            &   6, 1, 7, 0, 5, 2, 4, 3 /)
+
+  integer(kind=4),parameter,dimension(0:95)::next_state_diagram=(/&
+                            &   1, 2, 3, 2, 4, 5, 3, 5,&
+                            &   2, 6, 0, 7, 8, 8, 0, 7,&
+                            &   0, 9,10, 9, 1, 1,11,11,&
+                            &   6, 0, 6,11, 9, 0, 9, 8,&
+                            &  11,11, 0, 7, 5, 9, 0, 7,&
+                            &   4, 4, 8, 8, 0, 6,10, 6,&
+                            &   5, 7, 5, 3, 1, 1,11,11,&
+                            &   6, 1, 6,10, 9, 4, 9,10,&
+                            &  10, 3, 1, 1,10, 3, 5, 9,&
+                            &   4, 4, 8, 8, 2, 7, 2, 3,&
+                            &   7, 2,11, 2, 7, 5, 8, 5,&
+                            &  10, 3, 2, 6,10, 3, 4, 4 /)
+
+  ! Usage of state diagrams: 
+
+  ! - cartesian index: position of a cell inside 
+  !   its oct in cartesian order (0 to 7)
+
+  ! - current state: integer encoding the "orientation" 
+  !   of the hilbert curve inside the oct
+
+  ! - three_digit_diagram(cartesion index + current state * 8)  
+  !   hilbert index of the cell given by cartesion index
+
+  ! - next_state_diagram(cartesian index + current state * 8)  
+  !   orientation of curve inside the cell given by cartesian index
+
+
+
+  ! Local variables
+
+  integer :: ibit, ip, ind_part
+  integer :: sweep_size, sweep_offset, nsweep, isweep 
+  integer(kind=4), dimension(1:nvector) :: nstate, sdigit, ind
+  integer(kind=8), dimension(1:nvector) :: ix, iy, iz
+  integer(kind=4), parameter :: one=1
+  integer(kind=4), parameter :: two=2
+  integer(kind=4), parameter :: four=4
+  integer(kind=4), parameter :: eight=8
+  integer(kind=8), parameter :: longeight=8
+  real(dp) :: ckey_factor
+
+  ! compute particle position to cartesian key factor
+  ckey_factor = 2**final_level / dble(boxlen)
+
+  ! loop particles in nvector sweeps
+  nsweep = ceiling( 1.*np / nvector)
+
+  do isweep = 1, nsweep
+     sweep_offset = (isweep-1)*nvector
+     sweep_size = min(nvector, np-sweep_offset)
+     sweep_offset = sweep_offset + offset
+
+     ! if starting from scratch, reset hilbert keys
+     if (initial_level == 0) then
+        part_hkey     (1+sweep_offset : sweep_size+sweep_offset, 0) = 0
+        part_hkey     (1+sweep_offset : sweep_size+sweep_offset, 1) = 0 
+        part_hkey     (1+sweep_offset : sweep_size+sweep_offset, 2) = 0         
+        current_state (1+sweep_offset : sweep_size+sweep_offset   ) = 0
+     end if
+
+     ! compute cartesian keys
+     do ip = 1, sweep_size 
+        ix(ip) = int(xp_andreas(ip+sweep_offset,1)*ckey_factor, kind=8)
+        iy(ip) = int(xp_andreas(ip+sweep_offset,2)*ckey_factor, kind=8)
+        iz(ip) = int(xp_andreas(ip+sweep_offset,3)*ckey_factor, kind=8)
+     end do
+     
+     ! loop over levels --> counter ibit determines which 
+     ! bit of the cartesian key is processed into hilber key digits
+     do ibit=final_level-initial_level-1,0,-1
+
+        if (final_level>42)then
+           do ind_part = 1+sweep_offset, sweep_size+sweep_offset
+              part_hkey(ind_part,2) = ISHFT(part_hkey(ind_part,2), 3)
+           end do
+           do ind_part = 1+sweep_offset, sweep_size+sweep_offset
+              part_hkey(ind_part,2) = part_hkey(ind_part,2) + ISHFT(part_hkey(ind_part,1), -60)
+           end do
+        end if
+
+        if (final_level>21)then
+           do ind_part = 1+sweep_offset, sweep_size+sweep_offset
+              part_hkey(ind_part,1) = ISHFT(part_hkey(ind_part,1),  4)
+              part_hkey(ind_part,1) = ISHFT(part_hkey(ind_part,1), -1)
+           end do
+           do ind_part = 1+sweep_offset, sweep_size+sweep_offset
+              part_hkey(ind_part,1) = part_hkey(ind_part, 1) + ISHFT( part_hkey(ind_part, 0), -60)
+           end do
+        end if
+
+        do ind_part = 1+sweep_offset, sweep_size+sweep_offset
+           part_hkey(ind_part, 0) = ISHFT( part_hkey(ind_part, 0),  4)
+           part_hkey(ind_part, 0) = ISHFT( part_hkey(ind_part, 0), -1)
+        end do
+
+        sdigit = 0
+        do ip = 1, sweep_size
+           if(btest(ix(ip),ibit)) sdigit(ip) = sdigit(ip) + four
+           if(btest(iy(ip),ibit)) sdigit(ip) = sdigit(ip) + two
+           if(btest(iz(ip),ibit)) sdigit(ip) = sdigit(ip) + one
+        end do
+
+        do ip=1,sweep_size
+           ind(ip) = current_state(ip+sweep_offset)*eight + sdigit(ip)
+        end do
+
+        do ip=1,sweep_size
+           nstate(ip) = next_state_diagram(ind(ip))
+        end do
+
+        do ip=1,sweep_size
+           part_hkey(sweep_offset+ip,0) = part_hkey(sweep_offset+ip,0) + three_digit_diagram(ind(ip))
+        end do
+
+        do ip=1,sweep_size
+           current_state(sweep_offset+ip) = nstate(ip)
+        end do
+
+     end do ! end loop over levels        
+  end do ! end sweeps
+
+end subroutine hilbert3d_for_particle

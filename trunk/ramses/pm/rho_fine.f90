@@ -1092,7 +1092,7 @@ end subroutine hilbert_allparts
 
 
 
-subroutine hilbert_allparts_andreas(ilevel)
+subroutine hilbert_allparts_andreas
   use pm_commons
   use amr_commons
   use sort, only: qsort_parts_in_mem
@@ -1116,15 +1116,15 @@ subroutine hilbert_allparts_andreas(ilevel)
 
   ntot=0
   ip=0
-  do while(levelp_andreas(ip+1)==ilevel .and. ntot<npart_andreas)
+  do while(ntot+ip<npart_andreas)
      ip=ip+1
-     ntot=ntot+1
-     xtest(ip,1:ndim)=xp_andreas(ip,1:ndim)
+     xtest(ip,1:ndim)=xp_andreas(ntot+ip,1:ndim)
      if(ip==nvector)then
         call cmp_ordering_int(xtest,hkey2,hkey1,hkey0,ip)
         part_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
         part_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
         part_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
+        ntot=ntot+ip
         ip=0
      end if
   end do
@@ -1133,11 +1133,12 @@ subroutine hilbert_allparts_andreas(ilevel)
      part_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
      part_hkey(ntot+1:ntot+ip,1)=hkey1(1:ip)
      part_hkey(ntot+1:ntot+ip,0)=hkey0(1:ip)
+     ntot=ntot+ip
   end if
 
   print*,'ntot:',ntot,npart_andreas,myid
 
-  call qsort_parts_in_mem(ntot,1)
+!  call qsort_parts_in_mem(ntot,1)
 
 !   allocate(order(1:ntot))
 !   call quick_sort_keys(order, ntot)

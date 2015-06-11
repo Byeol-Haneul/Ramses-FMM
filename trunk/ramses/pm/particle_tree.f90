@@ -1031,19 +1031,19 @@ subroutine build_particle_communicator
   
   
 end subroutine build_particle_communicator
-! !################################################################
-! !################################################################
-! !################################################################
-! !################################################################
-subroutine build_histogram_communicator
-  use amr_commons,   only:ncpu, myid, bound_key
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine build_histogram_communicator(ilevel)
+  use amr_commons,   only:ncpu, myid, bound_key_level
   use pm_commons
   use pm_parameters, only:npartmax
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  
+  integer, intent(in) :: ilevel
   
   !----------------------------------------------------------------------------
   ! This routine sets up the communication structure for histogrammed particle
@@ -1054,11 +1054,15 @@ subroutine build_histogram_communicator
   integer,dimension(1:ncpu,1:ncpu)::nbin_alltoall, nbin_alltoall_tot
   integer::receive_cpu, ibin, i, info, icpu
  
-  nbins_alltoall=0
+  nbin_alltoall=0
   receive_cpu=1
 
+  if (nlevelmax>20)then 
+     print*, 'problem here with prcision'
+  end if
+
   do ibin=1,nbins
-     do while (particle_histogram_key(ibin,0) > int(bound_key(receive_cpu),kind=8)) 
+     do while (bin_keys(ibin,0) > bound_key_level(receive_cpu, ilevel)) 
         receive_cpu=receive_cpu+1
      end do
      nbin_alltoall(myid,receive_cpu)=nbin_alltoall(myid,receive_cpu)+1
@@ -1105,72 +1109,72 @@ end subroutine build_histogram_communicator
 ! !################################################################
 ! !################################################################
 ! !################################################################
-subroutine send_histogram
-  use amr_commons,   only:ncpu, myid, bound_key
-  use pm_commons
-  use pm_parameters, only:npartmax
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
+! subroutine send_histogram
+!   use amr_commons,   only:ncpu, myid, bound_key
+!   use pm_commons
+!   use pm_parameters, only:npartmax
+!   implicit none
+! #ifndef WITHOUTMPI
+!   include 'mpif.h'
+! #endif
   
   
-  !----------------------------------------------------------------------------
-  ! This routine sets up the communication structure for histogrammed particle
-  ! quantities. The bins are assumed to be sorted by hilbert key
-  !----------------------------------------------------------------------------
+!   !----------------------------------------------------------------------------
+!   ! This routine sets up the communication structure for histogrammed particle
+!   ! quantities. The bins are assumed to be sorted by hilbert key
+!   !----------------------------------------------------------------------------
 
-  ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
-  integer,dimension(1:ncpu,1:ncpu)::nbin_alltoall, nbin_alltoall_tot
-  integer::receive_cpu, ibin, i, info, icpu
+!   ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
+!   integer,dimension(1:ncpu,1:ncpu)::nbin_alltoall, nbin_alltoall_tot
+!   integer::receive_cpu, ibin, i, info, icpu
  
-  nbins_alltoall=0
-  receive_cpu=1
+!   nbin_alltoall=0
+!   receive_cpu=1
 
-  do ibin=1,nbins
-     do while (particle_histogram_key(ibin,0) > int(bound_key(receive_cpu),kind=8)) 
-        receive_cpu=receive_cpu+1
-     end do
-     nbin_alltoall(myid,receive_cpu)=nbin_alltoall(myid,receive_cpu)+1
-  end do
-  nbin_alltoall(myid,myid)=0
-  call MPI_ALLREDUCE(nbin_alltoall,nbin_alltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  nbin_alltoall=nbin_alltoall_tot
+!   do ibin=1,nbins
+!      do while (particle_histogram_key(ibin,0) > int(bound_key(receive_cpu),kind=8)) 
+!         receive_cpu=receive_cpu+1
+!      end do
+!      nbin_alltoall(myid,receive_cpu)=nbin_alltoall(myid,receive_cpu)+1
+!   end do
+!   nbin_alltoall(myid,myid)=0
+!   call MPI_ALLREDUCE(nbin_alltoall,nbin_alltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+!   nbin_alltoall=nbin_alltoall_tot
   
-  if(.not. allocated(bin_send_cnt))then
-     allocate(bin_send_cnt(1:ncpu),bin_send_oft(1:ncpu))
-     allocate(bin_recv_cnt(1:ncpu),bin_recv_oft(1:ncpu))
-  endif
-  bin_send_cnt=0; bin_send_oft=0; bin_send_tot=0
-  bin_recv_cnt=0; bin_recv_oft=0; bin_recv_tot=0
-  do icpu=1,ncpu
-     bin_send_cnt(icpu)=nbin_alltoall(myid,icpu)
-     bin_recv_cnt(icpu)=nbin_alltoall(icpu,myid)
-     bin_send_tot=bin_send_tot+bin_send_cnt(icpu)
-     bin_recv_tot=bin_recv_tot+bin_recv_cnt(icpu)
-     if(icpu<ncpu)then
-        bin_send_oft(icpu+1)=bin_send_oft(icpu)+nbin_alltoall(myid,icpu)
-        bin_recv_oft(icpu+1)=bin_recv_oft(icpu)+nbin_alltoall(icpu,myid)
-     endif
-  end do
+!   if(.not. allocated(bin_send_cnt))then
+!      allocate(bin_send_cnt(1:ncpu),bin_send_oft(1:ncpu))
+!      allocate(bin_recv_cnt(1:ncpu),bin_recv_oft(1:ncpu))
+!   endif
+!   bin_send_cnt=0; bin_send_oft=0; bin_send_tot=0
+!   bin_recv_cnt=0; bin_recv_oft=0; bin_recv_tot=0
+!   do icpu=1,ncpu
+!      bin_send_cnt(icpu)=nbin_alltoall(myid,icpu)
+!      bin_recv_cnt(icpu)=nbin_alltoall(icpu,myid)
+!      bin_send_tot=bin_send_tot+bin_send_cnt(icpu)
+!      bin_recv_tot=bin_recv_tot+bin_recv_cnt(icpu)
+!      if(icpu<ncpu)then
+!         bin_send_oft(icpu+1)=bin_send_oft(icpu)+nbin_alltoall(myid,icpu)
+!         bin_recv_oft(icpu+1)=bin_recv_oft(icpu)+nbin_alltoall(icpu,myid)
+!      endif
+!   end do
 
-  !maybe allocate in effective communication routine
+!   !maybe allocate in effective communication routine
 
-  if(allocated(recv_bin_keys))then
-     deallocate(recv_bin_keys)
-     deallocate(recv_bin_mass)
-     deallocate(send_bin_keys)
-     deallocate(send_bin_mass)
-  endif
-  allocate(send_bin_keys(1:bin_recv_tot,0:2))
-  allocate(send_bin_mass(1:bin_send_tot))
-  allocate(recv_bin_keys(1:bin_recv_tot,0:2))
-  allocate(recv_bin_mass(1:bin_recv_tot))
+!   if(allocated(recv_bin_keys))then
+!      deallocate(recv_bin_keys)
+!      deallocate(recv_bin_mass)
+!      deallocate(send_bin_keys)
+!      deallocate(send_bin_mass)
+!   endif
+!   allocate(send_bin_keys(1:bin_recv_tot,0:2))
+!   allocate(send_bin_mass(1:bin_send_tot))
+!   allocate(recv_bin_keys(1:bin_recv_tot,0:2))
+!   allocate(recv_bin_mass(1:bin_recv_tot))
 
  
   
   
-end subroutine send_histograms
+! end subroutine send_histograms
 ! !################################################################
 ! !################################################################
 ! !################################################################
@@ -1360,28 +1364,27 @@ end subroutine get_cell_index
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine compute_particle_histogram(start_index,end_index)
-  use pm_commons
-  use amr_commons
-  use sort, only:gt_3keys
+subroutine compute_particle_histogram(offset, np)
+  use pm_commons 
+!  use amr_commons, only: 
+  use sort,        only: gt_3keys
   implicit none
-
-  integer:: start_index, end_index
+  integer, intent(in) :: offset, np
 
   !----------------------------------------------------------------------------
   ! This routine computes particle histograms. It assumes that particles are 
   ! sorted in memory by hilbert key.  
   !----------------------------------------------------------------------------
 
-  integer,save::ibin,ipart
+  integer, save :: ibin, ipart
 
 
   ! if there is nothing to do...
-  if (start_index > end_index)return
+  if (.not. np > 0)return
   
   ! Count the number of bins
   nbins=1
-  do ipart=start_index+1,end_index     
+  do ipart = offset + 2, offset + np
      if (gt_3keys(part_hkey(ipart,0:2), part_hkey(ipart-1,0:2)))then
         nbins=nbins+1
      end if
@@ -1391,29 +1394,34 @@ subroutine compute_particle_histogram(start_index,end_index)
   if(size(bin_mass) < nbins)then
      deallocate(bin_keys)
      deallocate(bin_mass)
+     deallocate(bin_count)
   end if
   if (.not. allocated(bin_mass))then
      allocate(bin_keys(nbins,0:2))
      allocate(bin_mass(nbins))
+     allocate(bin_count(nbins))
   end if
   bin_mass=0.d0
+  bin_count=0
   
 
-  ! label every bin by a key and sum up the particle mass per bin
+  ! label every bin with a key and sum up the particles/mass per bin
 
-  ! first bin
+  ! first particle
   ibin=1
-  bin_keys(1,0:2)=part_hkey(start_index,0:2)  
-  bin_mass(1)=mp(start_index)
+  bin_keys(1,0:2)=part_hkey(offset+1,0:2)  
+  bin_mass(1)=mp(offset+1)
+  bin_count(1)=1
 
   ! all other bins
-  do ipart=start_index+1,end_index     
+  do ipart=offset+2, offset+np
      if (gt_3keys(part_hkey(ipart,0:2), part_hkey(ipart-1,0:2)))then
         ibin=ibin+1
         bin_keys(ibin,0:2)=part_hkey(ipart,0:2)
      end if
      ! NGP mass assignement --> replace by CIC by using weights instead of mp
      bin_mass(ibin)=bin_mass(ibin)+mp_andreas(ipart)
+     bin_count(ibin)=bin_count(ibin)+1
   end do
 
 

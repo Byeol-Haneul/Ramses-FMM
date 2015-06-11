@@ -59,6 +59,7 @@ subroutine init_amr
   ndomain=ncpu*overload
   allocate(bound_key (0:ndomain))
   allocate(bound_key2(0:ndomain))
+  allocate(bound_key_level(0:ndomain,levelmin:nlevelmax))
   
   ! Compute minimum and maximum ordering key
   dx_loc=scale
