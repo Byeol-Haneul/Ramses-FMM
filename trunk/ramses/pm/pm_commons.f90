@@ -9,7 +9,9 @@ module pm_commons
   integer(kind=8),allocatable,dimension(:)  ::part_ref_mask        ! mask for refinement
   integer(kind=8),allocatable,dimension(:,:)::part_hkey
   integer(kind=4),allocatable,dimension(:)  ::current_state
-  integer(kind=4),allocatable,dimension(:)  ::particle_permutation1, particle_permutation2
+  integer(kind=4),allocatable,dimension(:)  ::sorted_particle_index
+  integer(kind=4),allocatable,dimension(:)  ::sort_index
+  integer(kind=4),allocatable,dimension(:)  ::part_ind_permutation, part_ind_permutation2
   ! Particle histogram related variables and arrays
   integer(kind=8),allocatable,dimension(:,:)::bin_keys,particle_histogram_keys
   real(dp),allocatable,dimension(:)         ::bin_mass,particle_histogram_mass
@@ -44,19 +46,6 @@ module pm_commons
   integer(kind=8),allocatable,dimension(:,:)::recv_bin_keys, send_bin_keys
   real(dp),allocatable,dimension(:)::recv_bin_mass, send_bin_mass
   integer::bin_recv_tot,bin_send_tot
-
-  ! Use pointers for big arrays that need to be sorted
-  ! This allows for only one extra array per variable type
-
-  real(dp), allocatable, target, dimension(:,:) :: large_dp_array1()
-  real(dp), allocatable, target, dimension(:,:) :: large_dp_array2()
-  real(dp), allocatable, target, dimension(:,:) :: large_dp_array3()
-  real(dp), allocatable, target, dimension(:,:) :: large_dp_array4()
-  real(dp), allocatable, target, dimension(:,:) :: large_dp_array5()
-  real(dp), allocatable, target, dimension(:,:) :: large_dp_array6()
-  real(dp), allocatable, target, dimension(:,:) :: large_dp_array7()
-
-  integer(kind=8), allocatable, target, dimension(:,:) :: part_hkey
 
 
 

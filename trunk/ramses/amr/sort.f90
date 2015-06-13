@@ -204,100 +204,98 @@ module sort
   !########################################################################
   !########################################################################
   !########################################################################
-  SUBROUTINE quick_sort_keys(order, n)
+!   SUBROUTINE quick_sort_keys(order, n)
 
-    ! Quick sort routine from:
-    ! Brainerd, W.S., Goldberg, C.H. & Adams, J.C. (1990) "Programmer's Guide to
-    ! Fortran 90", McGraw-Hill  ISBN 0-07-000248-7, pages 149-150.
-    ! Modified by Alan Miller to include an associated integer array which gives
-    ! the positions of the elements in the original order.
+!     ! Quick sort routine from:
+!     ! Brainerd, W.S., Goldberg, C.H. & Adams, J.C. (1990) "Programmer's Guide to
+!     ! Fortran 90", McGraw-Hill  ISBN 0-07-000248-7, pages 149-150.
+!     ! Modified by Alan Miller to include an associated integer array which gives
+!     ! the positions of the elements in the original order.
 
-    USE pm_parameters, only:npartmax
-    USE pm_commons, only:part_hkey
-    IMPLICIT NONE
-    INTEGER :: n
-    INTEGER, DIMENSION (1:n), INTENT(OUT)  :: order
+!     USE pm_parameters, only:npartmax
+!     USE pm_commons, only:part_hkey
+!     IMPLICIT NONE
+!     INTEGER :: n
+!     INTEGER, DIMENSION (1:n), INTENT(OUT)  :: order
 
-    ! Local variable
-    INTEGER :: i
+!     ! Local variable
+!     INTEGER :: i
 
-    DO i = 1, n
-       order(i) = i
-    END DO
+!     DO i = 1, n
+!        order(i) = i
+!     END DO
 
-    CALL quick_sort_1_keys(1, n)
+!     CALL quick_sort_1_keys(1, n)
 
-  CONTAINS
+!   CONTAINS
 
-    RECURSIVE SUBROUTINE quick_sort_1_keys(left_end, right_end)
+!     RECURSIVE SUBROUTINE quick_sort_1_keys(left_end, right_end)
 
-      INTEGER, INTENT(IN) :: left_end, right_end
-      !     Local variables
-      INTEGER             :: i, j, itemp
-      INTEGER(kind=8),DIMENSION(0:2):: reference, temp
-      INTEGER, PARAMETER  :: max_simple_sort_size = 6
+!       INTEGER, INTENT(IN) :: left_end, right_end
+!       !     Local variables
+!       INTEGER             :: i, j, itemp
+!       INTEGER(kind=8),DIMENSION(0:2):: reference, temp
+!       INTEGER, PARAMETER  :: max_simple_sort_size = 6
 
-      IF (right_end < left_end + max_simple_sort_size) THEN
-         ! Use interchange sort for small lists
-         CALL interchange_sort_keys(left_end, right_end)       
-      ELSE
-         ! Use partition ("quick") sort
-         reference(0:2) = part_hkey((left_end + right_end)/2,0:2)
-         i = left_end - 1; j = right_end + 1
+!       IF (right_end < left_end + max_simple_sort_size) THEN
+!          ! Use interchange sort for small lists
+!          CALL interchange_sort_keys(left_end, right_end)       
+!       ELSE
+!          ! Use partition ("quick") sort
+!          reference(0:2) = part_hkey((left_end + right_end)/2,0:2)
+!          i = left_end - 1; j = right_end + 1
 
-         DO
-            ! Scan list from left end until element >= reference is found
-            DO
-               i = i + 1
-               IF (ge_3keys(part_hkey(i,0:2),reference(0:2))) EXIT
-            END DO
-            ! Scan list from right end until element <= reference is found
-            DO
-               j = j - 1
-               IF (ge_3keys(reference(0:2),part_hkey(j,0:2))) EXIT
-            END DO
-
-
-            IF (i < j) THEN
-               ! Swap two out-of-order elements
-               temp = part_hkey(i,0:2); part_hkey(i,0:2) = part_hkey(j,0:2); part_hkey(j,0:2) = temp
-               itemp = order(i); order(i) = order(j); order(j) = itemp
-            ELSE IF (i == j) THEN
-               i = i + 1
-               EXIT
-            ELSE
-               EXIT
-            END IF
-         END DO
-
-         IF (left_end < j) CALL quick_sort_1_keys(left_end, j)
-         IF (i < right_end) CALL quick_sort_1_keys(i, right_end)
-      END IF
-
-    END SUBROUTINE quick_sort_1_keys
+!          DO
+!             ! Scan list from left end until element >= reference is found
+!             DO
+!                i = i + 1
+!                IF (ge_3keys(part_hkey(i,0:2),reference(0:2))) EXIT
+!             END DO
+!             ! Scan list from right end until element <= reference is found
+!             DO
+!                j = j - 1
+!                IF (ge_3keys(reference(0:2),part_hkey(j,0:2))) EXIT
+!             END DO
 
 
-    SUBROUTINE interchange_sort_keys(left_end, right_end)
+!             IF (i < j) THEN
+!                ! Swap two out-of-order elements
+!                temp = part_hkey(i,0:2); part_hkey(i,0:2) = part_hkey(j,0:2); part_hkey(j,0:2) = temp
+!                itemp = order(i); order(i) = order(j); order(j) = itemp
+!             ELSE IF (i == j) THEN
+!                i = i + 1
+!                EXIT
+!             ELSE
+!                EXIT
+!             END IF
+!          END DO
 
-      use amr_parameters, ONLY: qdp
-      INTEGER, INTENT(IN) :: left_end, right_end
-      !     Local variables
-      INTEGER             :: i, j, itemp
-      INTEGER(kind=8),DIMENSION(0:2):: temp
+!          IF (left_end < j) CALL quick_sort_1_keys(left_end, j)
+!          IF (i < right_end) CALL quick_sort_1_keys(i, right_end)
+!       END IF
 
-      DO i = left_end, right_end - 1
-         DO j = i+1, right_end
-            IF (gt_3keys(part_hkey(i,0:2),part_hkey(j,0:2))) THEN
-               temp(0:2) = part_hkey(i,0:2); part_hkey(i,0:2) = part_hkey(j,0:2); part_hkey(j,0:2) = temp(0:2)
-               itemp = order(i); order(i) = order(j); order(j) = itemp
-            END IF
-         END DO
-      END DO
-
-    END SUBROUTINE interchange_sort_keys
-  END SUBROUTINE quick_sort_keys
+!     END SUBROUTINE quick_sort_1_keys
 
 
+!     SUBROUTINE interchange_sort_keys(left_end, right_end)
+
+!       use amr_parameters, ONLY: qdp
+!       INTEGER, INTENT(IN) :: left_end, right_end
+!       !     Local variables
+!       INTEGER             :: i, j, itemp
+!       INTEGER(kind=8),DIMENSION(0:2):: temp
+
+!       DO i = left_end, right_end - 1
+!          DO j = i+1, right_end
+!             IF (gt_3keys(part_hkey(i,0:2),part_hkey(j,0:2))) THEN
+!                temp(0:2) = part_hkey(i,0:2); part_hkey(i,0:2) = part_hkey(j,0:2); part_hkey(j,0:2) = temp(0:2)
+!                itemp = order(i); order(i) = order(j); order(j) = itemp
+!             END IF
+!          END DO
+!       END DO
+
+!     END SUBROUTINE interchange_sort_keys
+!   END SUBROUTINE quick_sort_keys
 
 
 
@@ -305,188 +303,193 @@ module sort
 
 
 
-  SUBROUTINE qsort_parts_in_mem(n,start_ind)
-    ! sort n particles beginning from start_ind
-    ! in memory according to hilbert_keys
 
-    USE pm_parameters, only:npartmax
-    USE pm_commons, only:part_hkey
-    IMPLICIT NONE
-    INTEGER :: n, start_ind
 
-    print*, 'debug routine! (or do not use it at all)'
-    stop
+!   SUBROUTINE qsort_parts_in_mem(n,start_ind)
+!     ! sort n particles beginning from start_ind
+!     ! in memory according to hilbert_keys
+
+!     USE pm_parameters, only:npartmax
+!     USE pm_commons, only:part_hkey
+!     IMPLICIT NONE
+!     INTEGER :: n, start_ind
+
+!     print*, 'debug routine! (or do not use it at all)'
+!     stop
     
 
-    CALL qsort_parts_1(start_ind, start_ind + n - 1)
+!     CALL qsort_parts_1(start_ind, start_ind + n - 1)
 
-  CONTAINS
+!   CONTAINS
 
-    RECURSIVE SUBROUTINE qsort_parts_1(left_end, right_end)
-      USE amr_parameters, only:dp
-      INTEGER, INTENT(IN) :: left_end, right_end
-      !     Local variables
-      INTEGER             :: i, j
-      INTEGER(kind=8),DIMENSION(0:2):: reference
-      INTEGER, PARAMETER  :: max_simple_sort_size = 6
+!     RECURSIVE SUBROUTINE qsort_parts_1(left_end, right_end)
+!       USE amr_parameters, only:dp
+!       INTEGER, INTENT(IN) :: left_end, right_end
+!       !     Local variables
+!       INTEGER             :: i, j
+!       INTEGER(kind=8),DIMENSION(0:2):: reference
+!       INTEGER, PARAMETER  :: max_simple_sort_size = 6
 
-      IF (right_end < left_end + max_simple_sort_size) THEN
-         ! Use interchange sort for small lists
-         CALL memsort_interchange(left_end, right_end)       
-      ELSE
-         ! Use partition ("quick") sort
-         reference(0:2) = part_hkey((left_end + right_end)/2,0:2)
-         i = left_end - 1; j = right_end + 1
+!       IF (right_end < left_end + max_simple_sort_size) THEN
+!          ! Use interchange sort for small lists
+!          CALL memsort_interchange(left_end, right_end)       
+!       ELSE
+!          ! Use partition ("quick") sort
+!          reference(0:2) = part_hkey((left_end + right_end)/2,0:2)
+!          i = left_end - 1; j = right_end + 1
 
-         DO
-            ! Scan list from left end until element >= reference is found
-            DO
-               i = i + 1
-               IF (ge_3keys(part_hkey(i,0:2),reference(0:2))) EXIT
-            END DO
-            ! Scan list from right end until element <= reference is found
-            DO
-               j = j - 1
-               IF (ge_3keys(reference(0:2),part_hkey(j,0:2))) EXIT
-            END DO
+!          DO
+!             ! Scan list from left end until element >= reference is found
+!             DO
+!                i = i + 1
+!                IF (ge_3keys(part_hkey(i,0:2),reference(0:2))) EXIT
+!             END DO
+!             ! Scan list from right end until element <= reference is found
+!             DO
+!                j = j - 1
+!                IF (ge_3keys(reference(0:2),part_hkey(j,0:2))) EXIT
+!             END DO
 
-            IF (i < j) THEN
-               call swap_2parts_in_mem(i,j)
+!             IF (i < j) THEN
+!                call swap_2parts_in_mem(i,j)
 
-            ELSE IF (i == j) THEN
-               i = i + 1
-               EXIT
-            ELSE
-               EXIT
-            END IF
-         END DO
+!             ELSE IF (i == j) THEN
+!                i = i + 1
+!                EXIT
+!             ELSE
+!                EXIT
+!             END IF
+!          END DO
 
-         IF (left_end < j) CALL qsort_parts_1(left_end, j)
-         IF (i < right_end) CALL qsort_parts_1(i, right_end)
-      END IF
+!          IF (left_end < j) CALL qsort_parts_1(left_end, j)
+!          IF (i < right_end) CALL qsort_parts_1(i, right_end)
+!       END IF
 
-    END SUBROUTINE qsort_parts_1
-
-
-    SUBROUTINE memsort_interchange(left_end, right_end)
-
-      use amr_parameters, ONLY: qdp
-      INTEGER, INTENT(IN) :: left_end, right_end
-      !     Local variables
-      INTEGER             :: i, j
-
-      DO i = left_end, right_end - 1
-         DO j = i+1, right_end
-            IF (gt_3keys(part_hkey(i,0:2),part_hkey(j,0:2))) THEN
-               call swap_2parts_in_mem(i,j)
-            END IF
-         END DO
-      END DO
-    END SUBROUTINE memsort_interchange
-
-  END SUBROUTINE qsort_parts_in_mem
+!     END SUBROUTINE qsort_parts_1
 
 
-  subroutine swap_2parts_in_mem(i,j)
-    use amr_parameters, only:i8b
-    use pm_commons
+!     SUBROUTINE memsort_interchange(left_end, right_end)
 
-    integer, intent(in) :: i, j
+!       use amr_parameters, ONLY: qdp
+!       INTEGER, INTENT(IN) :: left_end, right_end
+!       !     Local variables
+!       INTEGER             :: i, j
+
+!       DO i = left_end, right_end - 1
+!          DO j = i+1, right_end
+!             IF (gt_3keys(part_hkey(i,0:2),part_hkey(j,0:2))) THEN
+!                call swap_2parts_in_mem(i,j)
+!             END IF
+!          END DO
+!       END DO
+!     END SUBROUTINE memsort_interchange
+
+!   END SUBROUTINE qsort_parts_in_mem
+
+
+!   subroutine swap_2parts_in_mem(i,j)
+!     use amr_parameters, only:i8b
+!     use pm_commons
+
+!     integer, intent(in) :: i, j
     
-    ! temporary storage for one element
-    integer(kind=8), save :: i8_temp
-    integer(kind=4), save :: i4_temp
-    integer(i8b),    save :: i8b_temp
-    real(dp),        save :: dp_temp
+!     ! temporary storage for one element
+!     integer(kind=8), save :: i8_temp
+!     integer(kind=4), save :: i4_temp
+!     integer(i8b),    save :: i8b_temp
+!     real(dp),        save :: dp_temp
     
-    ! hilbert keys
-    i8_temp = part_hkey(i,0); part_hkey(i,0) = part_hkey(j,0); part_hkey(j,0) = i8_temp
-    i8_temp = part_hkey(i,1); part_hkey(i,1) = part_hkey(j,1); part_hkey(j,1) = i8_temp
-    i8_temp = part_hkey(i,2); part_hkey(i,2) = part_hkey(j,2); part_hkey(j,2) = i8_temp
-    ! current_state of hilbert state diagram
-    i4_temp = current_state(i); current_state(i) = current_state(j); current_state(j) = i4_temp
-    ! position
-    dp_temp = xp_andreas(i,1); xp_andreas(i,1) = xp_andreas(j,1); xp_andreas(j,1) = dp_temp
-    dp_temp = xp_andreas(i,2); xp_andreas(i,2) = xp_andreas(j,2); xp_andreas(j,2) = dp_temp
-    dp_temp = xp_andreas(i,3); xp_andreas(i,3) = xp_andreas(j,3); xp_andreas(j,3) = dp_temp
-    ! velocity
-    dp_temp = vp_andreas(i,1); vp_andreas(i,1) = vp_andreas(j,1); vp_andreas(j,1) = dp_temp
-    dp_temp = vp_andreas(i,2); vp_andreas(i,2) = vp_andreas(j,2); vp_andreas(j,2) = dp_temp
-    dp_temp = vp_andreas(i,3); vp_andreas(i,3) = vp_andreas(j,3); vp_andreas(j,3) = dp_temp
-    ! mass
-    dp_temp = mp_andreas(i); mp_andreas(i) = mp_andreas(j); mp_andreas(j) = dp_temp
-    ! level
-    i4_temp = levelp_andreas(i); levelp_andreas(i) = levelp_andreas(j); levelp_andreas(j) = i4_temp
-    ! particle index
-    i8b_temp = idp_andreas(i); idp_andreas(i) = idp_andreas(j); idp_andreas(j) = i8b_temp
+!     ! hilbert keys
+!     i8_temp = part_hkey(i,0); part_hkey(i,0) = part_hkey(j,0); part_hkey(j,0) = i8_temp
+!     i8_temp = part_hkey(i,1); part_hkey(i,1) = part_hkey(j,1); part_hkey(j,1) = i8_temp
+!     i8_temp = part_hkey(i,2); part_hkey(i,2) = part_hkey(j,2); part_hkey(j,2) = i8_temp
+!     ! current_state of hilbert state diagram
+!     i4_temp = current_state(i); current_state(i) = current_state(j); current_state(j) = i4_temp
+!     ! position
+!     dp_temp = xp_andreas(i,1); xp_andreas(i,1) = xp_andreas(j,1); xp_andreas(j,1) = dp_temp
+!     dp_temp = xp_andreas(i,2); xp_andreas(i,2) = xp_andreas(j,2); xp_andreas(j,2) = dp_temp
+!     dp_temp = xp_andreas(i,3); xp_andreas(i,3) = xp_andreas(j,3); xp_andreas(j,3) = dp_temp
+!     ! velocity
+!     dp_temp = vp_andreas(i,1); vp_andreas(i,1) = vp_andreas(j,1); vp_andreas(j,1) = dp_temp
+!     dp_temp = vp_andreas(i,2); vp_andreas(i,2) = vp_andreas(j,2); vp_andreas(j,2) = dp_temp
+!     dp_temp = vp_andreas(i,3); vp_andreas(i,3) = vp_andreas(j,3); vp_andreas(j,3) = dp_temp
+!     ! mass
+!     dp_temp = mp_andreas(i); mp_andreas(i) = mp_andreas(j); mp_andreas(j) = dp_temp
+!     ! level
+!     i4_temp = levelp_andreas(i); levelp_andreas(i) = levelp_andreas(j); levelp_andreas(j) = i4_temp
+!     ! particle index
+!     i8b_temp = idp_andreas(i); idp_andreas(i) = idp_andreas(j); idp_andreas(j) = i8b_temp
     
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-    print*, 'add particle potential here'
-    stop
-#endif
+! #ifdef OUTPUT_PARTICLE_POTENTIAL
+!     print*, 'add particle potential here'
+!     stop
+! #endif
     
-  end SUBROUTINE swap_2parts_in_mem
+!   end SUBROUTINE swap_2parts_in_mem
 
 
 
   
   
-  function ge_2keys(key_a,key_b)
-    integer(kind=8),dimension(0:2)::key_a,key_b
+  function ge_2keys(key_a, key_b)
+    implicit none
+    integer(kind=8), intent(in), dimension (0:1):: key_a, key_b
     logical::ge_2keys
     ! Function to test wether a >= b for a and b two-integer hilbert keys 
-    if(key_a(1) > key_b(1))then
-       ge_2keys=.true.
-    elseif(key_a(1) < key_b(1))then
-       ge_2keys=.false.
-    elseif(key_a(0) > key_b(0))then
-       ge_2keys=.true.
-    elseif(key_a(0) < key_b(0))then
-       ge_2keys=.false.
+    if     (key_a(1) > key_b(1)) then
+       ge_2keys  =  .true.
+    elseif (key_a(1) < key_b(1)) then
+       ge_2keys = .false.
+    elseif (key_a(0) > key_b(0)) then
+       ge_2keys = .true.
+    elseif (key_a(0) < key_b(0)) then
+       ge_2keys = .false.
     else
-       ge_2keys=.true.
+       ge_2keys = .true.
     end if
   end function ge_2keys
 
-  function ge_3keys(key_a,key_b)
-    integer(kind=8),dimension(0:2)::key_a,key_b
+  function ge_3keys(key_a, key_b)
+    implicit none
+    integer(kind=8), intent(in), dimension (0:2):: key_a, key_b
     logical::ge_3keys
     ! Function to test wether a >= b for a and b three-integer hilbert keys 
-    if(key_a(2) > key_b(2))then
-       ge_3keys=.true.
-    elseif(key_a(2) < key_b(2))then
-       ge_3keys=.false.
-    elseif(key_a(1) > key_b(1))then
-       ge_3keys=.true.
-    elseif(key_a(1) < key_b(1))then
-       ge_3keys=.false.
-    elseif(key_a(0) > key_b(0))then
-       ge_3keys=.true.
-    elseif(key_a(0) < key_b(0))then
-       ge_3keys=.false.
+    if     (key_a(2) > key_b(2)) then
+       ge_3keys = .true.
+    elseif (key_a(2) < key_b(2)) then
+       ge_3keys = .false.
+    elseif (key_a(1) > key_b(1)) then
+       ge_3keys = .true.
+    elseif (key_a(1) < key_b(1)) then
+       ge_3keys = .false.
+    elseif (key_a(0) > key_b(0)) then
+       ge_3keys = .true.
+    elseif (key_a(0) < key_b(0)) then
+       ge_3keys = .false.
     else
-       ge_3keys=.true.
+       ge_3keys = .true.
     end if
   end function ge_3keys
 
-  function gt_3keys(key_a,key_b)
-    integer(kind=8),dimension(0:2)::key_a,key_b
+  function gt_3keys(key_a, key_b)
+    implicit none
+    integer(kind=8), intent(in), dimension (0:2):: key_a, key_b
     logical::gt_3keys
     ! Function to test wether a > b for a and b three-integer hilbert keys 
-    if(key_a(2) > key_b(2))then
-       gt_3keys=.true.
-    elseif(key_a(2) < key_b(2))then
-       gt_3keys=.false.
-    elseif(key_a(1) > key_b(1))then
-       gt_3keys=.true.
-    elseif(key_a(1) < key_b(1))then
-       gt_3keys=.false.
-    elseif(key_a(0) > key_b(0))then
-       gt_3keys=.true.
-    elseif(key_a(0) < key_b(0))then
-       gt_3keys=.false.
+    if     (key_a(2) > key_b(2)) then
+       gt_3keys = .true.
+    elseif (key_a(2) < key_b(2)) then
+       gt_3keys = .false.
+    elseif (key_a(1) > key_b(1)) then
+       gt_3keys = .true.
+    elseif (key_a(1) < key_b(1)) then
+       gt_3keys = .false.
+    elseif (key_a(0) > key_b(0)) then
+       gt_3keys = .true.
+    elseif (key_a(0) < key_b(0)) then
+       gt_3keys = .false.
     else
-       gt_3keys=.false.
+       gt_3keys = .false.
     end if
   end function gt_3keys
 
@@ -518,24 +521,24 @@ module sort
     
     
     recursive subroutine  msd_counting_sort_3digits(offset, np, ilevel, key_level)
-      use pm_commons,  only: part_hkey, particle_permutation1
+      use pm_commons,  only: part_hkey, part_ind_permutation
       integer, intent(in) :: offset, np, ilevel, key_level
       integer, save :: ind
-      integer, save :: ipart, inext, ip, ibucket
-      integer, save :: ibit1, ibit2, ibit4
-      integer, save :: ikey1, ikey2, ikey4
+      integer, save :: ipart, inext, ip
+      integer(kind=8), save ::ibucket
+      integer, save :: ibit1, ikey
       integer, save :: dummy_arg1, dummy_arg2
-      
+
       bucket_count(0:7, ilevel)=0
 
-      call get_bits_and_keys(ibit1, ibit2, ibit4, ikey1, ikey2, ikey4, key_level, ilevel)
+      ! get bit and key to read from 
+      ibit1 = (key_level-ilevel)*3       
+      ikey = ibit1/63
+      ibit1 = mod(ibit1,63)
 
       ! Count particles per bucket
       do ipart = offset+1, offset+np
-         ibucket = 0
-         if (btest(part_hkey(ipart,ikey1),ibit1)) ibucket = ibucket + 1
-         if (btest(part_hkey(ipart,ikey2),ibit2)) ibucket = ibucket + 2
-         if (btest(part_hkey(ipart,ikey4),ibit4)) ibucket = ibucket + 4
+         ibucket=ibits(part_hkey(ipart, ikey),ibit1,3)
          bucket_count(ibucket, ilevel) = bucket_count(ibucket, ilevel) + 1
       end do
 
@@ -549,16 +552,13 @@ module sort
       ! Update permutation
       bucket_count( 0:7, ilevel) = 0
       do ipart = offset+1, offset+np
-         ibucket = 0
-         if (btest(part_hkey(ipart,ikey1),ibit1)) ibucket = ibucket + 1
-         if (btest(part_hkey(ipart,ikey2),ibit2)) ibucket = ibucket + 2
-         if (btest(part_hkey(ipart,ikey4),ibit4)) ibucket = ibucket + 4
+         ibucket=ibits(part_hkey(ipart, ikey),ibit1,3)
          bucket_count(ibucket, ilevel) = bucket_count(ibucket, ilevel) + 1
          ind=bucket_offset(ibucket, ilevel) + bucket_count(ibucket, ilevel)
-         particle_permutation1(ind) = ipart
+         part_ind_permutation(ind) = ipart
       end do
       
-      call apply_particle_permutation(offset, np)
+      call apply_particle_permutation(offset, np, key_level)
       
       if (ilevel < final_level) then
          ibucket = 0
@@ -583,7 +583,7 @@ module sort
 
 
   subroutine lsd_radix_sort_particles(offset, np, final_level, key_level)
-    use pm_commons,  only: part_hkey, particle_permutation1, particle_permutation2
+    use pm_commons,  only: part_ind_permutation
     implicit none
     integer, intent(in) :: offset, np, final_level, key_level
     integer, save :: ilevel, ip
@@ -597,38 +597,37 @@ module sort
     end if
 
     do ip = offset+1, offset+np
-       particle_permutation1(ip) = ip
+       part_ind_permutation(ip) = ip
     end do
 
-!    print*, part_hkey(particle_permutation1(1:np),0)
     do ilevel=final_level,1,-1
        call lsd_counting_sort_3digits(offset, np, ilevel, key_level)
     end do
-    
-    call apply_particle_permutation(offset,np)
+
+    call apply_particle_permutation(offset,np, key_level)
 
 
   contains
     
     
     subroutine  lsd_counting_sort_3digits(offset, np, ilevel, key_level)      
-      use pm_commons, only:  particle_permutation1, particle_permutation2
+      use pm_commons, only: part_ind_permutation, part_ind_permutation2, part_hkey
       integer :: offset, np, ilevel, key_level
-      integer, save :: ipart, ip, ibucket
-      integer, save :: ibit1, ibit2, ibit4
-      integer, save :: ikey1, ikey2, ikey4
+      integer, save :: ipart, ip
+      integer(kind=8), save :: ibucket
+      integer, save :: ibit1, ikey
       integer, dimension(0:7), save :: bucket_offset, bucket_count
-
+      
       bucket_count(0:7)=0
       
-      call get_bits_and_keys(ibit1, ibit2, ibit4, ikey1, ikey2, ikey4, key_level, ilevel)
-
+      ! get bit and key to read from 
+      ibit1 = (key_level-ilevel)*3       
+      ikey = ibit1/63
+      ibit1 = mod(ibit1,63)
+      
       ! Count particles per bucket
       do ipart = offset+1, offset+np
-         ibucket = 0
-         if (btest(part_hkey(ipart,ikey1),ibit1)) ibucket = ibucket + 1
-         if (btest(part_hkey(ipart,ikey2),ibit2)) ibucket = ibucket + 2
-         if (btest(part_hkey(ipart,ikey4),ibit4)) ibucket = ibucket + 4
+         ibucket=ibits(part_hkey(ipart, ikey),ibit1,3)
          bucket_count(ibucket) = bucket_count(ibucket) + 1
       end do
       
@@ -639,69 +638,107 @@ module sort
                                 + bucket_count(ibucket-1)
       end do
 
-      ! Rearrange particles in index array
+      ! Build up index permutation that will sort array
       do ip = offset+1, offset+np
-         ipart = particle_permutation1(ip)
-         ibucket = 0
-         if (btest(part_hkey(ipart,ikey1),ibit1)) ibucket = ibucket + 1
-         if (btest(part_hkey(ipart,ikey2),ibit2)) ibucket = ibucket + 2
-         if (btest(part_hkey(ipart,ikey4),ibit4)) ibucket = ibucket + 4
+         ipart = part_ind_permutation(ip)
+         ibucket=ibits(part_hkey(ipart, ikey),ibit1,3)
          bucket_offset(ibucket) = bucket_offset(ibucket) + 1
-         particle_permutation2(bucket_offset(ibucket))=ipart
+         part_ind_permutation2(bucket_offset(ibucket))=ipart
       end do
-      particle_permutation1(offset+1 : offset+np) = particle_permutation2(offset+1 : offset+np)
+      part_ind_permutation(offset+1 : offset+np) = part_ind_permutation2(offset+1 : offset+np)
       
     end subroutine  lsd_counting_sort_3digits
 
   end subroutine lsd_radix_sort_particles
   
+  subroutine apply_particle_permutation(offset, np, key_level)
+    use amr_commons,    only: dp, ndim
+    use pm_commons
+    implicit none
+    integer, intent(in)                          :: offset, np, key_level
+    integer, save                                :: ipart, ikey, nkey, idim
 
-  subroutine apply_particle_permutation(offset, np)
-    use pm_commons, only: particle_permutation1, particle_permutation2 
-    integer, intent(in) :: offset, np
-    integer, save :: ipart, iswap, swap_value
-    
-    ! Apply the permutation stored in particle_permutation1
-    
-    ! Invert permutation
+    real(dp), allocatable, dimension(:)          :: extra_storage_dp
+    integer(kind=8), allocatable, dimension(:)   :: extra_storage_i8
+
+
+    ! The permutation sigma built during the sort sorts the index array I such that
+    ! key(sigma(i)) is sorted. We thus have to invert sigma and apply
+    ! this to the key array to get (sigma^-1(key))(i) sorted in memory
+
     do ipart = offset + 1, offset + np
-       particle_permutation2(particle_permutation1(ipart))=ipart
+       part_ind_permutation2( part_ind_permutation(ipart) ) = ipart
     end do
 
-    do ipart = offset + 1, offset + np
-       ! Apply one permutation cycle by swapping element ipart
-       ! until it is in the right position
-       iswap = particle_permutation2(ipart)
-       do while (iswap .ne. ipart)            
-          call swap_2parts_in_mem(ipart, iswap)
-          if (ipart > 500000 .or. ipart < 1)print *, 'alert'
-          if (iswap > 500000 .or. iswap < 1)print *, 'alert'
-          !            print *, ipart, iswap
-          swap_value = particle_permutation2(iswap)
-          particle_permutation2(iswap) = particle_permutation2(ipart)
-          particle_permutation2(ipart) = swap_value
-          iswap = particle_permutation2(ipart)
+    ! Apply the permutation stored in particle_permutation
+
+    ! Rearrange float arrays
+    allocate(extra_storage_dp(offset + 1 : offset + np))
+
+    do idim = 1, ndim       
+       do ipart = offset + 1, offset + np
+          extra_storage_dp(part_ind_permutation2(ipart)) = xp_andreas(ipart, idim) 
        end do
+       xp_andreas(offset + 1 : offset + np, idim) = extra_storage_dp(offset + 1 : offset + np)
     end do
+
+    do idim = 1, ndim       
+       do ipart = offset + 1, offset + np
+          extra_storage_dp(part_ind_permutation2(ipart)) = vp_andreas(ipart, idim) 
+       end do
+       vp_andreas(offset + 1 : offset + np, idim) = extra_storage_dp(offset + 1 : offset + np)
+    end do
+
+    do ipart = offset + 1, offset + np
+       extra_storage_dp(part_ind_permutation2(ipart)) = mp_andreas(ipart) 
+    end do
+    mp_andreas(offset + 1 : offset + np) = extra_storage_dp(offset + 1 : offset + np)
+
+    deallocate(extra_storage_dp)
+
+    ! Rearrange long integer arrays
+    allocate(extra_storage_i8(offset+1 : offset + np))
+
+    nkey = 0
+    if (key_level > 21) nkey = nkey + 1
+    if (key_level > 42) nkey = nkey + 1
+
+    do ikey = 0, nkey  
+       do ipart = offset + 1, offset + np
+          extra_storage_i8(part_ind_permutation2(ipart)) = part_hkey(ipart, ikey) 
+       end do
+       part_hkey(offset + 1 : offset + np, ikey) = extra_storage_i8(offset + 1 : offset + np)
+    end do
+    
+#ifdef LONGINT
+    do ipart = offset + 1, offset + np
+       extra_storage_i8(part_ind_permutation2(ipart)) = idp_andreas(ipart)
+    end do
+    idp_andreas(offset + 1 : offset + np) = extra_storage_i8(offset + 1 : offset + np)
+#endif
+
+    
+    deallocate(extra_storage_i8)
+    ! Rearrange short integer arrays
+    ! use permanent permutation array as tmp storage space
+    
+#ifndef LONGINT
+    do ipart = offset + 1, offset + np
+       part_ind_permutation(part_ind_permutation2(ipart)) = idp_andreas(ipart)
+    end do
+    idp_andreas(offset + 1 : offset + np) = part_ind_permutation(offset + 1 : offset + np)
+#endif
+
+    do ipart = offset + 1, offset + np
+       part_ind_permutation(part_ind_permutation2(ipart)) = levelp_andreas(ipart)
+    end do
+    levelp_andreas(offset + 1 : offset + np) = part_ind_permutation(offset + 1 : offset + np)
+    
+    do ipart = offset + 1, offset + np
+       part_ind_permutation(part_ind_permutation2(ipart)) = current_state(ipart)
+    end do
+    current_state(offset + 1 : offset + np) = part_ind_permutation(offset + 1 : offset + np)
+
   end subroutine apply_particle_permutation
-
-  subroutine get_bits_and_keys(ibit1, ibit2, ibit4, ikey1, ikey2, ikey4, key_level, ilevel)
-    integer, intent(in) :: key_level, ilevel
-    integer, intent(inout) :: ibit1, ibit2, ibit4
-    integer, intent(inout) :: ikey1, ikey2, ikey4
-
-    ! Compute the bits to read and the key-integer to read from 
-    ibit1 = (key_level-ilevel)*3 
-    ibit2 = (key_level-ilevel)*3 + 1
-    ibit4 = (key_level-ilevel)*3 + 2 
-    
-    ikey1 = ibit1/63
-    ikey2 = ibit2/63
-    ikey4 = ibit4/63
-    
-    ibit1 = mod(ibit1,63)
-    ibit2 = mod(ibit2,63)
-    ibit4 = mod(ibit4,63)
-  end subroutine get_bits_and_keys
   
   end module sort

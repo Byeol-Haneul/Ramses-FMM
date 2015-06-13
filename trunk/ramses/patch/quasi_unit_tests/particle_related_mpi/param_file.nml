@@ -1,0 +1,58 @@
+&RUN_PARAMS
+hydro=.false.
+poisson=.true.
+pic=.true.
+ncontrol=1
+nsubcycle=1,1,1,1,1,2
+nremap=10
+nrestart=1
+/
+
+&AMR_PARAMS
+levelmin=6
+levelmax=8
+ngridtot=5000000
+nparttot=10000000
+boxlen=60.0
+/
+
+&INIT_PARAMS
+filetype='ascii'
+initfile(1)='/zbox/data/teyssier/halo/ic/'
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.20
+tend=10.0
+/
+
+
+!nboundary = 6
+!bound_type= 2, 2, 2, 2, 2, 2
+!ibound_min=-1,+1,-1,-1,-1,-1
+!ibound_max=-1,+1,+1,+1,+1,+1
+!jbound_min= 0, 0,-1,+1,-1,-1
+!jbound_max= 0, 0,-1,+1,+1,+1
+!kbound_min= 0, 0, 0, 0,-1,+1
+!kbound_max= 0, 0, 0, 0,-1,+1
+&BOUNDARY_PARAMS
+/
+
+&POISSON_PARAMS
+gravity_type=0
+gravity_params=35.,10.,0.04,0.15
+epsilon=1d-4
+/
+
+
+&PHYSICS_PARAMS
+cooling=.false.
+/
+
+&REFINE_PARAMS
+interpol_var=1
+interpol_type=0
+mass_sph=2d-6
+m_refine=10*8.0
+/
+

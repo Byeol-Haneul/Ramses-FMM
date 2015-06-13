@@ -25,6 +25,7 @@ subroutine init_amr
   character(LEN=80)::fileloc
   character(LEN=5)::nchar
   real(dp),allocatable,dimension(:)::bxmin,bxmax
+  integer:: idomain, ilev
 
   if(verbose.and.myid==1)write(*,*)'Entering init_amr'
 
@@ -313,6 +314,33 @@ subroutine init_amr
         call clean_stop
      endif
      read(ilun)bound_key(0:ndomain)
+
+     ! ugly to do this here, but ok for the moment :-)
+
+
+  do idomain=1,ndomain - 1
+     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
+  end do
+  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
+  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  
+
+  if (myid==1)print*, bound_key_level(0:ncpu,nlevelmax)
+  do ilev=nlevelmax-1, levelmin, - 1
+     if (myid==1)print*, bound_key_level(0:ncpu,ilev)
+     do idomain=1,ndomain - 1
+        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
+     end do
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
+  end do
+  
+
+
+
+
+
+
      ! Read coarse level
      read(ilun)son(1:ncoarse)
      read(ilun)flag1(1:ncoarse)

@@ -18,6 +18,7 @@ subroutine load_balance
   integer::idim,ivar,icpu,jcpu,kcpu
   integer::nxny,ix,iy,iz,iskip
   integer,dimension(nlevelmax,3)::comm_buffin,comm_buffout
+  integer :: idomain, ilev
 !  external hilbert3d_c
 
   if(ncpu==1)return
@@ -173,6 +174,22 @@ subroutine load_balance
   ! Set old cpu map to new cpu map
   !--------------------------------------
   bound_key=bound_key2
+
+  do idomain=1,ndomain - 1
+     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
+  end do
+  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
+  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  
+  do ilev=nlevelmax-1, levelmin, - 1
+     do idomain=1,ndomain - 1
+        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
+     end do
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
+  end do
+  
+
 
   nxny=nx*ny
   do iz=kcoarse_min,kcoarse_max
@@ -483,22 +500,6 @@ subroutine cmp_new_cpu_map
 #endif
   bound_key2(0)      =order_all_min
   bound_key2(ndomain)=order_all_max
-
-
-
-  do idomain=1,ndomain - 1
-     bound_key_level(idomain,ilev) = nint(bound_key2(idomain) / 8.)
-  end do
-  bound_key_level(0,ilev) = floor(bound_key2(0) / 8.)
-  bound_key_level(ndomain,ilev) = ceiling(bound_key2(ndomain) / 8.)
-  
-  do ilev=nlevelmax-1, levelmin, - 1
-     do idomain=1,ndomain - 1
-        bound_key_level(idomain,ilev) = nint(bound_key_level(0, ilev +1) / 8.)
-     end do
-     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
-     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
-  end do
 
   !----------------------------------------
   ! Compute new cpu map

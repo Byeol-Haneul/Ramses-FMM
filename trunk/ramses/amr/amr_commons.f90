@@ -81,7 +81,7 @@ module amr_commons
   ! Hilbert key
   real(qdp),allocatable,dimension(:)::hilbert_key
   real(qdp),allocatable,dimension(:)::bound_key,bound_key2
-  real(qdp),allocatable,dimension(:,:)::bound_key_level
+  integer(kind=8),allocatable,dimension(:,:)::bound_key_level
   real(qdp)                         ::order_all_min,order_all_max
 
   ! Communication structure

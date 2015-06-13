@@ -782,8 +782,8 @@ subroutine init_part_andreas
   allocate(current_state(npartmax))
   allocate(sorted_particle_index(npartmax))
   allocate(sort_index(npartmax))
-  allocate(particle_permutation1(npartmax))
-  allocate(particle_permutation2(npartmax))
+  allocate(part_ind_permutation(npartmax))
+  allocate(part_ind_permutation2(npartmax))
   allocate(bin_mass(1:2))
   allocate(bin_count(1:2))
   allocate(bin_keys(1:2,0:2))
@@ -791,7 +791,6 @@ subroutine init_part_andreas
   stop
   allocate(ptcl_phi(npartmax))
 #endif
-  xp_andreas=0.0; vp_andreas=0.0; mp_andreas=0.0; levelp_andreas=0; idp_andreas=0
 
   !--------------------
   ! Read part.tmp file
