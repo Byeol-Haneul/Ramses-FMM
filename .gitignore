@@ -15,6 +15,7 @@ trunk/ramses/patch/*
 !trunk/ramses/patch/phantom
 !trunk/ramses/patch/hydro
 !trunk/ramses/patch/challenge
+!trunk/ramses/patch/quasi_unit_tests
 
 
 # some more to ignore
