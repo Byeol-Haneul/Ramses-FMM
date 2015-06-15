@@ -46,7 +46,7 @@ module pm_commons
   integer(kind=8),allocatable,dimension(:,:)::recv_bin_keys, send_bin_keys
   real(dp),allocatable,dimension(:)::recv_bin_mass, send_bin_mass
   integer::bin_recv_tot,bin_send_tot
-
+  integer :: mybins, mybins_offset
 
 
 

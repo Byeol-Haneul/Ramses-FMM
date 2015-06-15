@@ -357,21 +357,14 @@ subroutine check_histo(test_ok)
 
 
 
-  do i=1,4
-     if(myid ==i)print*,myid,': ',size(send_bin_keys)
-     if(myid ==i)print*,myid,': ',size(recv_bin_keys)
-     if(myid ==i)print*,myid,': ', bin_send_cnt
-     if(myid ==i)print*,myid,': ', bin_send_oft
-     if(myid ==i)print*,myid,': ', bin_recv_cnt
-     if(myid ==i)print*,myid,': ', bin_recv_oft
-     if(myid ==i)print *, '=========================='
-     call MPI_BARRIER(MPI_COMM_WORLD,info)
-  end do
-
   told=MPI_WTIME(info)
   call build_histogram_communicator(levelmin)
   call send_histogram_bins(levelmin)
   print*, 'comm: ', MPI_WTIME(info)-told
+
+
+
+
   call MPI_BARRIER(MPI_COMM_WORLD,info)
 
 end subroutine check_histo

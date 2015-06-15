@@ -4,15 +4,15 @@ poisson=.true.
 pic=.true.
 ncontrol=1
 nsubcycle=1,1,1,1,1,2
-nremap=10
+nremap=1
 nrestart=1
 /
 
 &AMR_PARAMS
 levelmin=6
 levelmax=8
-ngridtot=5000000
-nparttot=10000000
+ngridtot=20000000
+nparttot=40000000
 boxlen=60.0
 /
 

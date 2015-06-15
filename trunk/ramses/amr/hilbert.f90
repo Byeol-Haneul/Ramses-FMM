@@ -520,14 +520,15 @@ end subroutine hilbert3d_multiint
 !================================================================
 !================================================================
 !================================================================
-subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
-  use amr_parameters, ONLY: nvector
+subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,key_level,npoint)
+  use amr_parameters, only: nvector
+  use amr_commons,    only: myid
   implicit none
 
-  integer     ,INTENT(IN)                     ::bit_length,npoint
-  integer(kind=8),INTENT(OUT) ,dimension(1:nvector)::x,y,z
-  integer(kind=8),dimension(1:nvector)::hkey2,hkey1,hkey0
-
+  integer     ,INTENT(IN)                     ::key_level, npoint
+  integer(kind=8),INTENT(inout) ,dimension(1:nvector)::x,y,z
+  integer(kind=8),dimension(1:nvector), target, intent(in)::hkey0, hkey1, hkey2
+  integer(kind=8), pointer :: use_key(:)
 
   
   integer(kind=4),parameter,dimension(0:95)::x_digit_diagram=(/&
@@ -589,7 +590,7 @@ subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
 
 
 
-  integer::i,ip,leading_zeroes
+  integer::i,ip, ibit1, ikey, ilevel
   integer(kind=4),dimension(1:nvector)::cstate,nstate,hdigit,ind
   integer(kind=8),dimension(1:nvector)::sdigit
   integer(kind=4),parameter::zero=0
@@ -599,35 +600,24 @@ subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
   integer(kind=4),parameter::eight=8
   integer(kind=8),parameter::longeight=8
 
-  ! compute the leading zeroes in the integer key
-  leading_zeroes=mod(3*(63-bit_length),63)
-  
-  ! shift by leading_zeroes bits to the left
-  do ip=1,npoint
-     hkey2(ip)=ISHFT(hkey2(ip),leading_zeroes)
-  end do
-  do ip=1,npoint
-     hkey2(ip)=hkey2(ip)+ISHFT(hkey1(ip),leading_zeroes-63)
-  end do
-  do ip=1,npoint
-     hkey1(ip)=ISHFT(hkey1(ip),leading_zeroes+1)
-     hkey1(ip)=ISHFT(hkey1(ip),-1)
-  end do
-  do ip=1,npoint
-     hkey1(ip)=hkey1(ip)+ISHFT(hkey0(ip),leading_zeroes-63)
-  end do  
-  do ip=1,npoint
-     hkey0(ip)=ISHFT(hkey0(ip),leading_zeroes+1)
-     hkey0(ip)=ISHFT(hkey0(ip),-1)
-  end do
 
-  
-
-
-  ! build the cartesian key using the state diagrams
+     
+  ! Build the cartesian key using the state diagrams
   cstate=0
   x=0; y=0; z=0
-  do i=bit_length-1,0,-1     
+
+  do ilevel=1,key_level
+     ibit1 = (key_level-ilevel)*3
+     ikey = ibit1/63
+
+     ! use a pointer here to define which of the three integer keys 
+     ! must be accessed.
+     if (ikey==0) use_key => hkey0
+     if (ikey==1) use_key => hkey1
+     if (ikey==2) use_key => hkey2
+
+     ibit1 = mod(ibit1,63)
+
      ! leftshift the cartesian keys by one position
      do ip=1,npoint
         x(ip)=ISHFT(x(ip),1)
@@ -635,22 +625,12 @@ subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
         z(ip)=ISHFT(z(ip),1)
      end do
      
-     ! compute index for state diagrams from the 3 leading bits in the 
-     ! relevant key integer
-     if (bit_length>42)then
-        do ip=1,npoint
-           sdigit(ip)=ISHFT(hkey2(ip),-60)
-        end do
-     else if(bit_length>21)then
-        do ip=1,npoint
-           sdigit(ip)=ISHFT(hkey1(ip),-60)
-        end do
-     else
-        do ip=1,npoint
-           sdigit(ip)=ISHFT(hkey0(ip),-60)
-        end do
-     end if
-     
+     ! read the next three bits from the hilbert key
+     do ip=1,npoint
+        sdigit=ibits(use_key(ip),ibit1,3)
+     end do
+
+     ! Compute lookup index in (flat) state diagrams
      do ip=1,npoint
         ind(ip)=cstate(ip)*eight+sdigit(ip)
      end do
@@ -674,36 +654,6 @@ subroutine hilbert3d_multiint_reverse(x,y,z,hkey2,hkey1,hkey0,bit_length,npoint)
      do ip=1,npoint
         cstate(ip)=nstate(ip)
      end do
-
-
-     ! shift the key by 3 bits to the left
-     if (bit_length>42)then
-        do ip=1,npoint
-           hkey2(ip)=ISHFT(hkey2(ip),4)
-           hkey2(ip)=ISHFT(hkey2(ip),-1)
-        end do
-        do ip=1,npoint
-           hkey2(ip)=hkey2(ip)+ISHFT(hkey1(ip),-60)
-        end do
-     end if
-
-     if (bit_length>21)then
-        do ip=1,npoint
-           hkey1(ip)=ISHFT(hkey1(ip),4)
-           hkey1(ip)=ISHFT(hkey1(ip),-1)
-        end do
-        do ip=1,npoint
-           hkey1(ip)=hkey1(ip)+ISHFT(hkey0(ip),-60)
-        end do
-     end if
-
-
-     do ip=1,npoint
-        hkey0(ip)=ISHFT(hkey0(ip),4)
-        hkey0(ip)=ISHFT(hkey0(ip),-1)
-     end do
-     
-  
   enddo
   
 end subroutine hilbert3d_multiint_reverse
