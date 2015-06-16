@@ -40,9 +40,9 @@ contains
     htable%prime         = prime(bit_length + 1)
     htable%size          = htable%prime / 4 + htable%prime
     htable%nfree         = htable%prime
-    allocate(htable%value       (1 : htable%size))
-    allocate(htable%key         (1 : htable%size))
-    allocate(htable%next_bucket (1 : htable%size))
+    allocate(htable%value      (1:htable%size))
+    allocate(htable%key        (1:htable%size))
+    allocate(htable%next_bucket(1:htable%size))
     htable%next_bucket   = -1
 
     ! Build linked list of free slots in the chaning part of the array
@@ -96,6 +96,7 @@ contains
        end if
 
        ! Have reached end of chain, val not present yet -> add
+       htable%next_bucket(bucket) = htable%head_free
        bucket = htable%head_free
        htable%next_bucket(bucket) = 0
        htable%value      (bucket) = val

@@ -175,22 +175,6 @@ subroutine load_balance
   !--------------------------------------
   bound_key=bound_key2
 
-  do idomain=1,ndomain - 1
-     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
-  end do
-  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
-  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
-  
-  do ilev=nlevelmax-1, levelmin, - 1
-     do idomain=1,ndomain - 1
-        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
-     end do
-     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
-     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
-  end do
-  
-
-
   nxny=nx*ny
   do iz=kcoarse_min,kcoarse_max
   do iy=jcoarse_min,jcoarse_max
@@ -655,6 +639,7 @@ end subroutine cmp_dommap
 subroutine cmp_ordering(x,order,nn)
   use amr_parameters
   use amr_commons
+  use hilbert
   implicit none
   integer ::nn
 #ifndef WITHOUTMPI
@@ -754,6 +739,7 @@ end subroutine cmp_ordering
 subroutine cmp_minmaxorder(x,order_min,order_max,dx,nn)
   use amr_parameters
   use amr_commons
+  use hilbert
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -1390,6 +1376,7 @@ end subroutine defrag
 subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
   use amr_parameters
   use amr_commons
+  use hilbert, only: hilbert3d
   implicit none
   integer ::nn
 #ifndef WITHOUTMPI
@@ -1403,6 +1390,7 @@ subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
   ! according to its position in space and for the chosen
   ! ordering. Position x are in user units.
   !-----------------------------------------------------
+  integer(kind=4),dimension(1:nvector)::cstate
   integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer::i,ncode,bit_length,nx_loc
   integer::temp,info
@@ -1441,7 +1429,7 @@ subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
 #endif
   end do
 
-  call hilbert3d_multiint(ix,iy,iz,hkey2,hkey1,hkey0,bit_length,nn)
+  call hilbert3d(ix,iy,iz,hkey2,hkey1,hkey0,cstate,0,bit_length,nn)
 
 end subroutine cmp_ordering_int
 !#########################################################################

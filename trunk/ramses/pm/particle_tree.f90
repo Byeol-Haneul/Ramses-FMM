@@ -1073,10 +1073,6 @@ subroutine build_histogram_communicator(ilevel)
   bin_send_cnt=0; bin_send_oft=0; bin_send_tot=0
   bin_recv_cnt=0; bin_recv_oft=0; bin_recv_tot=0
 
-
-
-
-
   receive_cpu=1; mybins = 0
   do ibin=1,nbins
      do while (bin_keys(ibin,0) > bound_key_level(receive_cpu, ilevel) ) 
@@ -1137,20 +1133,22 @@ end subroutine build_histogram_communicator
 !################################################################
 !################################################################
 !################################################################
-subroutine send_histogram_bins(ilevel)
-  use amr_commons,   only:ncpu, myid, bound_key_level, son
+subroutine send_histogram_bins(offset, np, ilevel)
+  use amr_commons,   only: ncpu, myid, bound_key_level, son
   use pm_commons
-  use pm_parameters, only:npartmax
+  use pm_parameters, only: npartmax
+  use sort,          only: gt_3keys
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  integer, intent(in) :: ilevel
-  integer :: ipos, i, info, ibin, receive_cpu, np
+  integer, intent(in) :: ilevel, offset, np
+  integer :: ipos, i, info, ibin, receive_cpu, nb, ipart
   integer :: request
   integer :: status(MPI_STATUS_SIZE)
   real(dp) :: told
-  integer :: unrefined_pos, refined_pos
+  integer  :: unrefined_pos, refined_pos
+  logical :: unrefined
 
   integer, allocatable, dimension(:) :: bin_index, bin_level
   integer, allocatable, dimension(:) :: recv_bin_index, recv_bin_level
@@ -1158,10 +1156,8 @@ subroutine send_histogram_bins(ilevel)
 
 
   allocate(bin_index(1:nbins))
-  allocate(recv_bin_index(1:bin_recv_tot))
-
-
   allocate(bin_level(1:nbins))
+  allocate(recv_bin_index(1:bin_recv_tot))
   allocate(recv_bin_level(1:bin_recv_tot))
   allocate(send_bin_level(1:bin_send_tot))
 
@@ -1183,13 +1179,11 @@ subroutine send_histogram_bins(ilevel)
        &             recv_bin_keys(1:bin_recv_tot,0),bin_recv_cnt,bin_recv_oft,MPI_INTEGER8,MPI_COMM_WORLD,request,info)
 
 
-
-
   ! Probe domestic cells for refinement 
   do ibin = mybins_offset, mybins_offset + mybins -1, nvector
-     np = min(mybins_offset + mybins - ibin, nvector) 
-     call get_cell_index_from_hilbertkey(bin_index(ibin + 1 : ibin + np ), bin_level(ibin + 1 : ibin + np ), &
-          bin_keys(ibin + 1: ibin + np,2), bin_keys(ibin + 1: ibin + np,1), bin_keys(ibin + 1: ibin + np,0), np, ilevel)
+     nb = min(mybins_offset + mybins - ibin, nvector) 
+     call get_cell_index_from_hilbertkey(bin_index(ibin + 1 : ibin + nb), bin_level(ibin + 1 : ibin + nb), &
+          bin_keys(ibin + 1: ibin + nb,2), bin_keys(ibin + 1: ibin + nb,1), bin_keys(ibin + 1: ibin + nb,0), nb, ilevel)
   end do
   bin_level=0
 
@@ -1205,9 +1199,9 @@ subroutine send_histogram_bins(ilevel)
 
   ! Probe foreign cells for refinement
   do ibin = 0, bin_recv_tot - 1 , nvector
-     np = min(bin_recv_tot - ibin, nvector) 
-     call get_cell_index_from_hilbertkey(recv_bin_index(ibin + 1 : ibin + np ), recv_bin_level(ibin + 1 : ibin + np ), &
-          recv_bin_keys(ibin + 1: ibin + np,2), recv_bin_keys(ibin + 1: ibin + np,1), recv_bin_keys(ibin + 1: ibin + np,0), np, ilevel)
+     nb = min(bin_recv_tot - ibin, nvector) 
+     call get_cell_index_from_hilbertkey(recv_bin_index(ibin + 1 : ibin + nb), recv_bin_level(ibin + 1 : ibin + nb), &
+          recv_bin_keys(ibin + 1: ibin + nb,2), recv_bin_keys(ibin + 1: ibin + nb,1), recv_bin_keys(ibin + 1: ibin + nb,0), nb, ilevel)
   end do
 
   recv_bin_level=0
@@ -1238,11 +1232,12 @@ subroutine send_histogram_bins(ilevel)
   end do
   
 
-  ! Reshuffle particles
-  ibin = 1
-  refined = (bin_level(ibin) == 1)  
+  ! Find starting indices for refined / unrefined particles
+  unrefined_pos = offset
   refined_pos = offset
-  ! all other bins
+
+  ibin = 1
+  unrefined = (bin_level(ibin) == 0)  
   do ipart = offset + 1, offset + np
      if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
         ibin=ibin+1
@@ -1251,18 +1246,17 @@ subroutine send_histogram_bins(ilevel)
      if (unrefined) refined_pos = refined_pos + 1
   end do
 
-  unrefined_pos = offset
   do ipart = offset + 1, offset + np
      if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
         ibin=ibin+1
-        refined = (bin_level(ibin) == 1)
+        unrefined = (bin_level(ibin) == 1)
      end if
      if (unrefined) then
         unrefined_pos = unrefined_pos + 1
-        particle_permutation(ipart) = unrefined_pos
+        part_ind_permutation(ipart) = unrefined_pos
      else
         refined_pos = refined_pos + 1
-        particle_permutation(ipart) = refined_pos
+        part_ind_permutation(ipart) = refined_pos
      end if
   end do
 
@@ -1341,7 +1335,8 @@ end subroutine send_histogram_bins
 ! end subroutine get_cell_index
 
 subroutine get_cell_index_from_hilbertkey(cell_index,cell_levl,hilbert_key2,hilbert_key1,hilbert_key0,np,ilevel)
-  use amr_commons, only:nlevelmax, nvector, myid
+  use amr_commons, only: nlevelmax, nvector, myid
+  use hilbert,     only: hilbert3d_reverse
   implicit none
   integer, intent(in)::np,ilevel
   integer(kind=8),dimension(1:nvector)::x,y,z
@@ -1351,7 +1346,7 @@ subroutine get_cell_index_from_hilbertkey(cell_index,cell_levl,hilbert_key2,hilb
 
   bit_length=ilevel
 
-  call hilbert3d_multiint_reverse(x,y,z,hilbert_key2,hilbert_key1,hilbert_key0,bit_length,np)
+  call hilbert3d_reverse(x,y,z,hilbert_key2,hilbert_key1,hilbert_key0,bit_length,np)
 
   call get_cell_index_from_cartesian(cell_index,cell_levl,x,y,z,ilevel,np,bit_length)
   
@@ -1524,8 +1519,5 @@ subroutine compute_particle_histogram(offset, np)
      bin_mass(ibin)=bin_mass(ibin)+mp_andreas(ipart)
      bin_count(ibin)=bin_count(ibin)+1
   end do
-
-
-
 
 end subroutine compute_particle_histogram

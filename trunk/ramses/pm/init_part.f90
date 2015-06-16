@@ -780,8 +780,6 @@ subroutine init_part_andreas
   allocate(part_ref_mask (npartmax))
   allocate(part_hkey(npartmax,0:2))
   allocate(current_state(npartmax))
-  allocate(sorted_particle_index(npartmax))
-  allocate(sort_index(npartmax))
   allocate(part_ind_permutation(npartmax))
   allocate(part_ind_permutation2(npartmax))
   allocate(bin_mass(1:2))

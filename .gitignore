@@ -1,6 +1,7 @@
 # ignore everything in bin except "official" Makefiles
 trunk/ramses/bin/*
 !trunk/ramses/bin/Makefile
+!trunk/ramses/bin/Makefile_unit_tests
 !trunk/ramses/bin/Makefile.rt
 
 # ignore utils executables
@@ -16,6 +17,7 @@ trunk/ramses/patch/*
 !trunk/ramses/patch/hydro
 !trunk/ramses/patch/challenge
 !trunk/ramses/patch/quasi_unit_tests
+!trunk/ramses/patch/unit_tests
 
 
 # some more to ignore

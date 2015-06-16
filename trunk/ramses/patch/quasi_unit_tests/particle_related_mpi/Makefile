@@ -57,7 +57,7 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 
 # --- MPI, ifort syntax ------------------------------
 F90 = mpif90
-FFLAGS = -cpp -g -traceback -traceback -fpe0 -ftrapuv -check bounds  -O3 $(DEFINES) -DNOSYSTEM
+FFLAGS = -cpp -g -traceback -fpe0 -ftrapuv -check bounds -01  $(DEFINES) -DNOSYSTEM
 
 # --- MPI, ifort syntax, additional checks -----------
 #F90 = mpif90
@@ -90,11 +90,11 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 # All objects
 MODOBJ = amr_parameters.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
          poisson_commons.o hydro_parameters.o hydro_commons.o gadgetreadfile.o write_makefile.o \
-	 write_patch.o write_gitinfo.o sort.o
+	 write_patch.o write_gitinfo.o sort.o hash.o hilbert.o
 
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o amr_step.o update_time.o \
          output_amr.o flag_utils.o physical_boundaries.o virtual_boundaries.o refine_utils.o nbors_utils.o \
-         hilbert.o load_balance.o title.o units.o movie.o
+         load_balance.o title.o units.o movie.o
 # Particle-Mesh objects
 PMOBJ = init_part.o output_part.o rho_fine.o synchro_fine.o move_fine.o newdt_fine.o particle_tree.o \
         add_list.o remove_list.o
