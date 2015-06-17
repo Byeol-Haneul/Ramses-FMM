@@ -785,6 +785,7 @@ subroutine init_part_andreas
   allocate(bin_mass(1:2))
   allocate(bin_count(1:2))
   allocate(bin_keys(1:2,0:2))
+  allocate(part_level_offset(levelmin:nlevelmax))
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   stop
   allocate(ptcl_phi(npartmax))
@@ -845,8 +846,11 @@ subroutine init_part_andreas
      deallocate(isp)
      close(ilun)
      if(debug)write(*,*)'part.tmp read for processor ',myid
-     npart_andreas=npart2     
+     npart_andreas=npart2
 
+     ! put all particles to levelmin
+     part_level_offset = npart_andreas
+     part_level_offset(levelmin) = 0
   else     
 
      filetype_loc=filetype
@@ -912,6 +916,10 @@ subroutine init_part_andreas
 
         end if
         npart_andreas=jpart_loc
+
+        ! put all particles to levelmin
+        part_level_offset = npart_andreas
+        part_level_offset(levelmin) = 0
 
         ! Compute total number of particle
         npart_cpu=0; npart_all=0

@@ -19,6 +19,7 @@ subroutine amr_step(ilevel,icount,test_ok)
   logical,save::first_step=.true.
   real(dp)::told,tnew,dthilbert,dtrho
 
+  integer :: idomain, ilev
   test_ok=.true.
 
   if(numbtot(1,ilevel)==0)return
@@ -137,14 +138,42 @@ subroutine amr_step(ilevel,icount,test_ok)
 
   call kill_tree_fine(ilevel)
 
+
+
+  do idomain=1,ndomain - 1
+     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
+  end do
+  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
+  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  
+  do ilev=nlevelmax-1, levelmin, - 1
+     do idomain=1,ndomain - 1
+        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
+     end do
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
+  end do
+  
+
+
   call MPI_BARRIER(MPI_COMM_WORLD,info)
   if (myid==1)print*, 'starting tests now', npart_andreas
 
   ! HERE, the grid should be fully built. Do wild test things here...
 !  call check_refined_test(test_ok)
-  call check_new_hilbert(test_ok)
-  call check_histo(test_ok)
- 
+!  call check_new_hilbert(test_ok)
+  
+  do ilev=levelmin, nlevelmax
+     told=MPI_WTIME(info)
+     call sort_particles(ilev)
+     print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
+     told=MPI_WTIME(info)
+     call rho_fine(ilev,icount) 
+     call kill_tree_fine(ilev)
+     call virtual_tree_fine(ilev)
+     print*, 'ilevel rho, kill, virt: ', ilev, MPI_WTIME(info)-told
+
+  end do
 
 end subroutine amr_step
 
@@ -275,7 +304,7 @@ end subroutine amr_step
 subroutine check_new_hilbert(test_ok)
   use pm_commons
   use amr_commons
-  use sort, only:msd_radix_sort_particles, lsd_radix_sort_particles
+  use sort, only: msd_radix_sort_particles, lsd_radix_sort_particles
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -321,7 +350,7 @@ subroutine check_new_hilbert(test_ok)
 
 end subroutine check_new_hilbert
 
-subroutine check_histo(test_ok)
+subroutine sort_particles(ilevel)
   use pm_commons
   use amr_commons
   use sort, only:msd_radix_sort_particles, lsd_radix_sort_particles
@@ -330,61 +359,48 @@ subroutine check_histo(test_ok)
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+  integer, intent(in) :: ilevel
 
   logical::test_ok
   integer::i, info, nkeys, key_offset,j,dint
   real(dp)::told
   integer ::  offset, np, ipart
-  integer :: idomain, ilev
-  print*, 'entering'
-
-
-  told=MPI_WTIME(info)
-  call hilbert3d_for_particle(0, npart_andreas, 0, levelmin)
-  print*, 'new hilbert: ',MPI_WTIME(info)-told
-
-
-  told=MPI_WTIME(info)
-  call lsd_radix_sort_particles(0, npart_andreas, levelmin, levelmin)
-  print*, 'lsd sort: ', MPI_WTIME(info)-told
-
-  told=MPI_WTIME(info)
-  call compute_particle_histogram(0, npart_andreas)
-  print*, 'histo: ', MPI_WTIME(info)-told
-
-  print*,myid, nbins, sum(bin_count(1:nbins))
-  print*,myid,  npart_andreas
-  call MPI_BARRIER(MPI_COMM_WORLD,info)
-
-
-
-  do idomain=1,ndomain - 1
-     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
-  end do
-  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
-  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
   
-  do ilev=nlevelmax-1, levelmin, - 1
-     do idomain=1,ndomain - 1
-        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
-     end do
-     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
-     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
-  end do
-  
+  offset = part_level_offset(ilevel)
+  if (ilevel < nlevelmax - 1)then
+     np = part_level_offset(ilevel+2) - part_level_offset(ilevel)  
+  else
+     np = npart_andreas - part_level_offset(ilevel)
+  end if
+
+  if (ilevel == levelmin)then
+     told=MPI_WTIME(info)
+     call hilbert3d_for_particle(offset, npart_andreas-offset, 0, levelmin)
 
 
+     told=MPI_WTIME(info)
+     call lsd_radix_sort_particles(offset, np, levelmin, levelmin)
 
+
+  else
+
+     told=MPI_WTIME(info)
+     call hilbert3d_for_particle(offset, npart_andreas-offset, ilevel-1, ilevel)
+
+
+     told=MPI_WTIME(info)
+     call msd_radix_sort_particles(offset, np, ilevel-1, ilevel, ilevel)
+
+  end if
+
+
+  told=MPI_WTIME(info)
+  call compute_particle_histogram(offset, np)
 
 
   told=MPI_WTIME(info)
   call build_histogram_communicator(levelmin)
-  call send_histogram_bins(0, npart_andreas, levelmin)
-  print*, 'comm: ', MPI_WTIME(info)-told
+  call send_histogram_bins(offset, np, levelmin)
 
 
-
-
-  call MPI_BARRIER(MPI_COMM_WORLD,info)
-
-end subroutine check_histo
+end subroutine sort_particles

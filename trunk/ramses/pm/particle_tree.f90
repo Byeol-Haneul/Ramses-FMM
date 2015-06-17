@@ -1050,11 +1050,7 @@ subroutine build_histogram_communicator(ilevel)
   ! quantities. The bins are assumed to be sorted by hilbert key
   !----------------------------------------------------------------------------
 
-  ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
-  
-  integer, dimension(1:ncpu) :: dummy_send_buf, dummy_recv_buf
-  integer, dimension(1:ncpu) :: dummy_send_off, dummy_recv_off
-  integer::receive_cpu, ibin, i, info, icpu, idest, isource, status
+    integer::receive_cpu, ibin, i, info, icpu, idest, isource, status
   integer::countrecv, countsend
 
   integer,dimension(MPI_STATUS_SIZE,2*ncpu)::statuses
@@ -1101,10 +1097,7 @@ subroutine build_histogram_communicator(ilevel)
      end if
   end do
 
-  ! Wait for full completion of receives
   call MPI_WAITALL(ncpu-1,reqrecv,statuses,info)
-
-  ! Wait for full completion of sends
   call MPI_WAITALL(ncpu-1,reqsend,statuses,info)
 
   do icpu=1,ncpu-1
@@ -1137,7 +1130,7 @@ subroutine send_histogram_bins(offset, np, ilevel)
   use amr_commons,   only: ncpu, myid, bound_key_level, son
   use pm_commons
   use pm_parameters, only: npartmax
-  use sort,          only: gt_3keys
+  use sort,          only: gt_3keys, apply_particle_permutation
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -1190,7 +1183,9 @@ subroutine send_histogram_bins(offset, np, ilevel)
   ! Mark bins corresponding to refined cells
   bin_level=0
   do ibin = mybins_offset + 1, mybins_offset + mybins
-     if (son(bin_index(ibin))>0) bin_level = 1
+     if (son(bin_index(ibin))>0)then
+        bin_level(ibin) = 1
+     end if
   end do
 
 
@@ -1246,9 +1241,11 @@ subroutine send_histogram_bins(offset, np, ilevel)
      if (unrefined) refined_pos = refined_pos + 1
   end do
 
+  part_level_offset(ilevel) = refined_pos
+
   do ipart = offset + 1, offset + np
      if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
-        ibin=ibin+1
+        ibin = ibin + 1
         unrefined = (bin_level(ibin) == 1)
      end if
      if (unrefined) then
@@ -1260,9 +1257,7 @@ subroutine send_histogram_bins(offset, np, ilevel)
      end if
   end do
 
-
-
-
+  call apply_particle_permutation(offset, np, ilevel)
 
   deallocate(bin_level, bin_index)
   deallocate(recv_bin_level, recv_bin_index)
