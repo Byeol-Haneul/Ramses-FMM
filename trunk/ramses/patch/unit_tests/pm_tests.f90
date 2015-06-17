@@ -23,8 +23,8 @@ subroutine sort_particle_tests(all_ok)
   use amr_commons
   use amr_parameters
   use pm_commons
-  use hilbert,       only: hilbert3d_for_particle
-  use sort,          only: lsd_radix_sort_particles, gt_3keys
+  use hilbert,       only: hilbert_for_particle
+  use sort,          only: lsd_radix_sort_particles, gt_3keys, gt_2keys
   implicit none
 
   ! A simple test which transforms integer coordinates into a 3 integer hilbert key
@@ -34,59 +34,80 @@ subroutine sort_particle_tests(all_ok)
   integer, parameter :: offs=317
   integer::ilevel,i
   logical::all_ok
-  real(dp),dimension(1:size, 1:3)::xfloat
+  real(dp),dimension(1:size, 1:ndim)::xfloat
 
 
   ! a little bit of init_part
-  allocate(xp_andreas    (size,3))
-  allocate(vp_andreas    (size,3))
+  allocate(xp_andreas    (size,ndim))
+  allocate(vp_andreas    (size,ndim))
   vp_andreas=0.
   allocate(mp_andreas    (size))
   mp_andreas=1
   allocate(levelp_andreas(size))
   levelp_andreas=1
   allocate(idp_andreas   (size))
-  allocate(part_hkey(size,0:2))
+  allocate(part_hkey(size,0:ndim-1))
   allocate(current_state(size))
   allocate(part_ind_permutation(size))
   allocate(part_ind_permutation2(size))
   allocate(bin_mass(1:2))
   allocate(bin_count(1:2))
-  allocate(bin_keys(1:2,0:2))
+  allocate(bin_keys(1:2,0:ndim-1))
   boxlen=1
 
+#if NDIM > 1
+#if NDIM == 2
+  do ilevel=1,62
+#endif
+#if NDIM == 3
   do ilevel=1,63
-
+#endif 
+ 
      call random_number(xfloat)
-     xp_andreas(1:size,1:3)=xfloat(1:size,1:3)
+     xp_andreas(1:size,1:ndim)=xfloat(1:size,1:ndim)
 
-     call hilbert3d_for_particle(0, size,0,ilevel)
+     call hilbert_for_particle(0, size,0,ilevel)
      call lsd_radix_sort_particles(0, size, ilevel, ilevel)
 
      do i=1,size-1
+#if NDIM == 2
+        if (gt_2keys(part_hkey(i,0:1),part_hkey(i+1,0:1)))then
+#endif
+#if NDIM == 3
         if (gt_3keys(part_hkey(i,0:2),part_hkey(i+1,0:2)))then
+#endif
            write(*,*)'particle sort test FAILED for level', ilevel, ilevel
            all_ok=.false.
         end if
      end do
   end do
   
+#if NDIM == 2
+  do ilevel=1,62
+#endif
+#if NDIM == 3
   do ilevel=1,63
+#endif 
 
      call random_number(xfloat)
-     xp_andreas(1:size,1:3)=xfloat(1:size,1:3)
+     xp_andreas(1:size,1:ndim)=xfloat(1:size,1:ndim)
 
-     call hilbert3d_for_particle(offs, size-offs,0,ilevel)
+     call hilbert_for_particle(offs, size-offs,0,ilevel)
      call lsd_radix_sort_particles(offs, size-offs, ilevel, ilevel)
 
      do i=offs+1,size-1
+#if NDIM == 2
+        if (gt_2keys(part_hkey(i,0:1),part_hkey(i+1,0:1)))then
+#endif
+#if NDIM == 3
         if (gt_3keys(part_hkey(i,0:2),part_hkey(i+1,0:2)))then
+#endif
            write(*,*)'particle sort test FAILED for level', ilevel, ilevel
-           write(*,*)part_hkey(i,0:2), i
-           write(*,*)part_hkey(i+1,0:2), i
            all_ok=.false.
         end if
      end do
   end do
   
+#endif
+
 end subroutine sort_particle_tests

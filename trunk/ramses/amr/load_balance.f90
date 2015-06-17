@@ -724,7 +724,7 @@ subroutine cmp_ordering(x,order,nn)
      if(ndim==1)then
         call hilbert1d(ix,order,nn)
      else if(ndim==2)then
-        call hilbert2d(ix,iy,order,bit_length,nn)
+        call hilbert2d_orig(ix,iy,order,bit_length,nn)
      else if (ndim==3)then
         call hilbert3d_orig(ix,iy,iz,order,bit_length,nn)
      end if
@@ -873,7 +873,7 @@ subroutine cmp_minmaxorder(x,order_min,order_max,dx,nn)
      if(ndim==1)then
         call hilbert1d(ix,order_min,nn)
      else if(ndim==2)then
-        call hilbert2d(ix,iy,order_min,bit_length,nn)
+        call hilbert2d_orig(ix,iy,order_min,bit_length,nn)
      else if (ndim==3)then
         call hilbert3d_orig(ix,iy,iz,order_min,bit_length,nn)
      end if

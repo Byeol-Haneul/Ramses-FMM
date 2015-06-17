@@ -12,7 +12,8 @@ module sort
   ! composite hilbert key comparison functions
   ! function ge_2keys(key_a, key_b)
   ! function ge_3keys(key_a, key_b)
-  ! function ge_2keys(key_a, key_b)
+  ! function gt_2keys(key_a, key_b)
+  ! function gt_3keys(key_a, key_b)
 
   ! radix sorts:
   ! recursive msd radix sort
@@ -309,6 +310,24 @@ contains
     end if
   end function ge_3keys
 
+  function gt_2keys(key_a, key_b)
+    implicit none
+    integer(kind=8), intent(in), dimension (0:1):: key_a, key_b
+    logical::gt_2keys
+    ! Function to test wether a >= b for a and b two-integer hilbert keys 
+    if     (key_a(1) > key_b(1)) then
+       gt_2keys  =  .true.
+    elseif (key_a(1) < key_b(1)) then
+       gt_2keys = .false.
+    elseif (key_a(0) > key_b(0)) then
+       gt_2keys = .true.
+    elseif (key_a(0) < key_b(0)) then
+       gt_2keys = .false.
+    else
+       gt_2keys = .false.
+    end if
+  end function gt_2keys
+
   function gt_3keys(key_a, key_b)
     implicit none
     integer(kind=8), intent(in), dimension (0:2):: key_a, key_b
@@ -339,10 +358,10 @@ contains
     implicit none
     integer, intent(in) :: offset, np, initial_level, final_level, key_level
 
-    ! -> Probalby not necessary to have implement msd_radix sort at all...
+    ! -> Probalby not necessary to implement msd_radix sort at all...
     ! for sorting down to levelmin, lsd_radix is more efficient. After that, only one 
     ! additional level will be sorted at the time. In this case, simply call lsd_radix sort
-    ! on shorter sequences of paritcles...
+    ! on shorter sequences (of equal coarse level hilbert keys) for level 1 ...
 
     ! use a level-dependent bucket_offset because allocation at each recursion is slow
     integer, dimension(0:7, 1:final_level) :: bucket_offset, bucket_count
@@ -421,7 +440,8 @@ contains
   !########################################################################
 
   subroutine lsd_radix_sort_particles(offset, np, final_level, key_level)
-    use pm_commons,  only: part_ind_permutation, part_ind_permutation2, part_hkey
+    use pm_commons,     only: part_ind_permutation, part_ind_permutation2, part_hkey
+    use amr_parameters, only: ndim
     implicit none
     integer, intent(in) :: offset, np, final_level, key_level
 
@@ -429,6 +449,11 @@ contains
     ! array (specified by offset and np) by ascending hilbert keys
 
     integer, save       :: ilevel, ip
+    
+    if (ndim ==1)then
+       print*, 'no 1D particle sorting case yet'
+       stop
+    end if
 
     if (final_level > key_level) then
        write(*,*)'you are trying to sort the hilbert keys to a too high level'
@@ -440,9 +465,16 @@ contains
     end do
 
     do ilevel=final_level,1,-1
-       call lsd_counting_sort_3digits(np, ilevel, key_level, &
+#if NDIM == 3
+       call lsd_counting_sort_onelevel(np, ilevel, key_level, &
             part_ind_permutation(offset+1:offset+np), part_ind_permutation2(offset+1:offset+np), &
             part_hkey(offset+1:offset+np, 2), part_hkey(offset+1:offset+np, 1), part_hkey(offset+1:offset+np, 0))
+#endif 
+#if NDIM == 2
+       call lsd_counting_sort_onelevel(np, ilevel, key_level, &
+            part_ind_permutation(offset+1:offset+np), part_ind_permutation2(offset+1:offset+np), &
+            part_hkey(offset+1:offset+np, 1), part_hkey(offset+1:offset+np, 0))
+#endif
     end do
 
     do ip = 1, np
@@ -456,42 +488,79 @@ contains
   !########################################################################
   !########################################################################
   !########################################################################
-
-  subroutine lsd_counting_sort_3digits(np, ilevel, key_level, sigma1, sigma2, hkey2, hkey1, hkey0)      
+#if NDIM == 3
+  subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey2, hkey1, hkey0)      
     implicit none
-    integer,                          intent(in)         :: np, ilevel, key_level
     integer(kind=8), dimension(1:np), intent(in), target :: hkey2, hkey1, hkey0
+#endif
+
+#if NDIM == 2
+  subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey1, hkey0)      
+    implicit none
+    integer(kind=8), dimension(1:np), intent(in), target :: hkey1, hkey0
+#endif
+
+#if NDIM == 1
+  subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey0)
+    implicit none
+    integer(kind=8), dimension(1:np), intent(in), target :: hkey0
+#endif
+
+    integer,                          intent(in)         :: np, ilevel, key_level
     integer,         dimension(1:np), intent(inout)      :: sigma1, sigma2
 
     ! Update the given permuations sigma1, sigma2 such that sigma1  will 
     ! sort the 3 bits belonging to level ilevel of the input hilbert keys.
+    ! For the 2D version, only two bits (corresponding to one level of refinement
+    ! are read at the time.
 
     integer(kind=8),      pointer :: use_key(:)
     integer,                 save :: ipart, ip, ibit1, ikey
     integer(kind=8),         save :: ibucket
+
+#if NDIM==3
     integer, dimension(0:7), save :: bucket_offset, bucket_count
-    
+    integer, parameter :: nbucket = 7
+    integer, parameter :: nbits_read = 3
+
     ! get bit and key to read from 
     ibit1 = (key_level-ilevel)*3       
     ikey = ibit1/63
     ibit1 = mod(ibit1,63)
 
+    ! a bit ugly, but move this line here as 
+    ! hkey2 does not exist in 2d version of the routine
+    if (ikey==2) use_key => hkey2
+
+#endif
+
+#if NDIM==2
+    integer, dimension(0:3), save :: bucket_offset, bucket_count
+    integer, parameter :: nbucket = 3
+    integer, parameter :: nbits_read = 2
+ 
+    ! get bit and key to read from 
+    ibit1 = (key_level-ilevel)*2       
+    ikey = ibit1/62
+    ibit1 = mod(ibit1,62)
+#endif
+
     ! use a pointer here to define which of the three integer keys                          
     ! must be accessed.                                                                     
     if (ikey==0) use_key => hkey0
     if (ikey==1) use_key => hkey1
-    if (ikey==2) use_key => hkey2
+
 
     ! Count particles per bucket
-    bucket_count(0:7)=0
+    bucket_count=0
     do ipart = 1, np
-       ibucket=ibits(use_key(ipart),ibit1,3)
+       ibucket=ibits(use_key(ipart),ibit1,nbits_read)
        bucket_count(ibucket) = bucket_count(ibucket) + 1
     end do
 
     ! "Prefix sum"
     bucket_offset(0) = 0
-    do ibucket = 1, 7
+    do ibucket = 1, nbucket
        bucket_offset(ibucket) = bucket_offset(ibucket-1) &
             + bucket_count(ibucket-1)
     end do
@@ -499,14 +568,13 @@ contains
     ! Build up index permutation that will sort array
     do ip = 1, np
        ipart = sigma1(ip)
-       ibucket=ibits(use_key(ipart),ibit1,3)
+       ibucket=ibits(use_key(ipart),ibit1,nbits_read)
        bucket_offset(ibucket) = bucket_offset(ibucket) + 1
        sigma2(bucket_offset(ibucket))=ipart
     end do
     sigma1(1:np) = sigma2(1:np)
     
-  end subroutine  lsd_counting_sort_3digits
-
+  end subroutine  lsd_counting_sort_onelevel
   !########################################################################
   !########################################################################
   !########################################################################
@@ -560,8 +628,13 @@ contains
     allocate(extra_storage_i8(offset+1 : offset + np))
 
     nkey = 0
+#if NDIM==3
     if (key_level > 21) nkey = nkey + 1
     if (key_level > 42) nkey = nkey + 1
+#endif
+#if NDIM==2
+    if (key_level > 31) nkey = nkey + 1
+#endif
 
     do ikey = 0, nkey  
        do ipart = offset + 1, offset + np

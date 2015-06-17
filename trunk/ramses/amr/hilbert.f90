@@ -9,6 +9,10 @@ module hilbert
   integer(kind=4),parameter::eight=8
   integer(kind=8),parameter::longeight=8
   
+  ! State diagrams taken from:
+  ! J K Lawder, Using State Diagrams for Hilbert Curve Mappings
+  ! http://www.dcs.bbk.ac.uk/TriStarp/pubs/JL2_00.pdf
+
   ! Usage of state diagrams: 
   
   ! - cartesian index: position of a cell inside 
@@ -38,7 +42,7 @@ module hilbert
        &   4, 5, 7, 6, 3, 2, 0, 1,&
        &   6, 1, 7, 0, 5, 2, 4, 3 /)
 
-  integer(kind=4),parameter,dimension(0:95)::next_state_diagram=(/&
+  integer(kind=4),parameter,dimension(0:95)::next_state_diagram3d=(/&
        &   1, 2, 3, 2, 4, 5, 3, 5,&
        &   2, 6, 0, 7, 8, 8, 0, 7,&
        &   0, 9,10, 9, 1, 1,11,11,&
@@ -95,7 +99,7 @@ module hilbert
        & 1,  1,  1,  1,  0,  0,  0,  0/)  
   
   ! Next state diagram for reverse (hilbert to cartesian key) conversion
-  integer(kind=4),parameter,dimension(0:95)::next_state_diagram_reverse=(/&
+  integer(kind=4),parameter,dimension(0:95)::next_state_diagram_reverse3d=(/&
        & 1,   2,   2,   3,   3,   5,   5,   4,&  
        & 2,   0,   0,   8,   8,   7,   7,   6,&  
        & 0,   1,   1,   9,   9,  11,  11,  10,&  
@@ -109,6 +113,36 @@ module hilbert
        & 8,   5,   5,   7,   7,   2,   2,  11,&  
        & 6,   3,   3,   4,   4,  10,  10,   2/)  
   
+  ! State diagrams for 2D case
+  integer(kind=4),parameter,dimension(0:15)::next_state_diagram2d=(/&
+       & 1, 0, 2, 0, &
+       & 0, 3, 1, 1, &
+       & 2, 2, 0, 3, &
+       & 3, 1, 3, 2/)
+  
+  integer(kind=8),parameter,dimension(0:15)::two_digit_diagram=(/&
+       & 0, 1, 3, 2, &
+       & 0, 3, 1, 2, &
+       & 2, 1, 3, 0, &
+       & 2, 3, 1, 0/)
+
+  integer(kind=4),parameter,dimension(0:15)::next_state_diagram_reverse2d=(/&
+       & 1, 0, 0, 2, &
+       & 0, 1, 1, 3, &
+       & 3, 2, 2, 0, &
+       & 2, 3, 3, 1/)
+
+  integer(kind=4),parameter,dimension(0:15)::x_digit_diagram2d=(/&
+       & 0, 0, 1, 1, &
+       & 0, 1 ,1, 0, &
+       & 1, 0, 0, 1, &
+       & 1, 1, 0, 0/)
+
+  integer(kind=4),parameter,dimension(0:15)::y_digit_diagram2d=(/&
+       & 0, 1, 1, 0, &
+       & 0, 0 ,1, 1, &
+       & 1, 1, 0, 0, &
+       & 1, 0, 0, 1/)
   
 contains
   
@@ -138,7 +172,7 @@ contains
   !================================================================
   !================================================================
   !================================================================
-  subroutine hilbert2d(x,y,order,bit_length,npoint)
+  subroutine hilbert2d_orig(x,y,order,bit_length,npoint)
 
     use amr_parameters, ONLY: qdp
     implicit none
@@ -208,7 +242,7 @@ contains
 
     end do
 
-  end subroutine hilbert2d
+  end subroutine hilbert2d_orig
   !================================================================
   !================================================================
   !================================================================
@@ -354,7 +388,7 @@ contains
 !        end do
 
 !        do ip=1,npoint
-!           nstate(ip)=next_state_diagram(ind(ip))
+!           nstate(ip)=next_state_diagram3d(ind(ip))
 !        end do
 
 !        do ip=1,npoint
@@ -417,7 +451,7 @@ contains
 !           if(btest(yy,i))sdigit=sdigit+two
 !           if(btest(zz,i))sdigit=sdigit+one
 !           ind=cstate*eight+sdigit
-!           nstate=next_state_diagram(ind)
+!           nstate=next_state_diagram3d(ind)
 !           hkey=hkey+three_digit_diagram(ind)
 !           cstate=nstate        
 !        enddo
@@ -425,6 +459,144 @@ contains
 !     end do
 
 !   end subroutine hilbert3d_nonvec
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+  subroutine hilbert2d(ix, iy, hkey1, hkey0, cstate, &
+       initial_level, final_level, npoint)
+    use amr_parameters, only: qdp, nvector
+    implicit none
+    integer        , intent(in)                          :: initial_level, final_level, npoint
+    integer(kind=8), intent(in),    dimension(1:nvector) :: ix, iy
+    integer(kind=4), intent(inout), dimension(1:nvector) :: cstate
+    integer(kind=8), intent(inout), dimension(1:nvector) :: hkey1, hkey0
+    
+    ! Compute nvector 2-integer hilbert keys from the cartesian keys ix, iy
+    
+    ! Local vars
+    integer :: ibit, ip
+    integer(kind=4),dimension(1:nvector) :: nstate, sdigit, ind
+    
+    ! if no keys present yet
+    if (initial_level==0) then
+       cstate(1:npoint)=0
+       hkey0(1:npoint)=0; hkey1(1:npoint)=0
+    end if
+
+    do ibit=final_level-initial_level-1,0,-1
+
+       ! Use only 62 out of the 64 bits for 2d case 
+       ! (no unsigned in in fortran...)
+       if (final_level > 31)then
+          do ip=1,npoint
+             hkey1(ip) = ISHFT(hkey1(ip),4)
+             hkey1(ip) = ISHFT(hkey1(ip),-2)
+          end do
+          do ip=1,npoint
+             hkey1(ip) = hkey1(ip) + ISHFT(hkey0(ip),-60)
+          end do
+       end if
+
+       do ip=1,npoint
+          hkey0(ip) = ISHFT(hkey0(ip),4)
+          hkey0(ip) = ISHFT(hkey0(ip),-2)
+       end do
+
+       sdigit=0
+       do ip=1,npoint
+          if(btest(ix(ip),ibit)) sdigit(ip) = sdigit(ip)+two
+          if(btest(iy(ip),ibit)) sdigit(ip) = sdigit(ip)+one
+       end do
+
+       do ip=1,npoint
+          ind(ip) = cstate(ip)*four + sdigit(ip)
+       end do
+
+       do ip=1,npoint
+          nstate(ip) = next_state_diagram2d(ind(ip))
+       end do
+
+       do ip=1,npoint
+          hkey0(ip) = hkey0(ip) + two_digit_diagram(ind(ip))
+       end do
+
+       do ip=1,npoint
+          cstate(ip) = nstate(ip)
+       end do
+    enddo
+  end subroutine hilbert2d
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+  subroutine hilbert2d_reverse(ix, iy, hkey1, hkey0, key_level, npoint)
+    use amr_parameters, only: nvector
+    implicit none
+
+    ! Inpu/Output variables:
+    integer        , intent(in)                                :: key_level, npoint
+    integer(kind=8), intent(out), dimension(1:nvector)         :: ix, iy
+    integer(kind=8), intent(in),  dimension(1:nvector), target :: hkey0, hkey1
+
+    ! Descripton:
+    ! Compute nvector cartesian keys from the corresponding 2-integer hilbert keys.
+
+    ! pointer to one of the two hkey arrays
+    integer(kind=8), pointer              :: use_key(:)   
+    integer                               :: ip, ibit1, ikey, ilevel
+    integer(kind=4), dimension(1:nvector) :: cstate, nstate, ind
+    integer(kind=8), dimension(1:nvector) :: sdigit
+
+    ! Build the cartesian key using the state diagrams
+    cstate=0
+    ix=0; iy=0
+
+    do ilevel=1,key_level
+       ibit1 = (key_level-ilevel)*2
+       ikey = ibit1/62
+
+       ! use a pointer here to define which of the three integer keys 
+       ! must be accessed.
+       if (ikey==0) use_key => hkey0
+       if (ikey==1) use_key => hkey1
+
+       ibit1 = mod(ibit1,62)
+
+       ! leftshift the cartesian keys by one position
+       do ip=1,npoint
+          ix(ip)=ISHFT(ix(ip),1)
+          iy(ip)=ISHFT(iy(ip),1)
+       end do
+
+       ! read the next two bits from the hilbert key
+       do ip=1,npoint
+          sdigit(ip) = ibits(use_key(ip),ibit1,2)
+       end do
+
+       ! Compute lookup index in (flat) state diagrams
+       do ip=1,npoint
+          ind(ip) = cstate(ip)*four + sdigit(ip)
+       end do
+
+       ! save next state
+       do ip=1,npoint
+          nstate(ip) = next_state_diagram_reverse2d(ind(ip))
+       end do
+
+       ! add one integer key digit each
+       do ip=1,npoint
+          ix(ip) = ix(ip)+x_digit_diagram2d(ind(ip))
+       end do
+       do ip=1,npoint
+          iy(ip) = iy(ip)+y_digit_diagram2d(ind(ip))
+       end do
+       do ip=1,npoint
+          cstate(ip) = nstate(ip)
+       end do
+    enddo
+
+  end subroutine hilbert2d_reverse
   !================================================================
   !================================================================
   !================================================================
@@ -488,7 +660,7 @@ contains
        end do
 
        do ip=1,npoint
-          nstate(ip) = next_state_diagram(ind(ip))
+          nstate(ip) = next_state_diagram3d(ind(ip))
        end do
 
        do ip=1,npoint
@@ -557,7 +729,7 @@ contains
 
        ! save next state
        do ip=1,npoint
-          nstate(ip) = next_state_diagram_reverse(ind(ip))
+          nstate(ip) = next_state_diagram_reverse3d(ind(ip))
        end do
 
        ! add one integer key digit each
@@ -582,7 +754,7 @@ contains
   !================================================================
   !================================================================
   !================================================================
-  subroutine hilbert3d_for_particle(offset, np, initial_level, final_level)
+  subroutine hilbert_for_particle(offset, np, initial_level, final_level)
 
     use amr_parameters, only: nvector, boxlen, dp
     use amr_commons,    only: myid
@@ -631,16 +803,24 @@ contains
        do ip = 1, sweep_size 
           ix(ip) = int(xp_andreas(ip+sweep_offset,1)*ckey_factor, kind=8)
           iy(ip) = int(xp_andreas(ip+sweep_offset,2)*ckey_factor, kind=8)
+#if NDIM == 3
           iz(ip) = int(xp_andreas(ip+sweep_offset,3)*ckey_factor, kind=8)
+#endif
        end do
-
-       call hilbert3d(ix, iy, iz, &
+#if NDIM == 3
+       call hilbert3d(ix, iy, iz, &            
             part_hkey(1+sweep_offset:sweep_size+sweep_offset, 2), &
             part_hkey(1+sweep_offset:sweep_size+sweep_offset, 1), &
             part_hkey(1+sweep_offset:sweep_size+sweep_offset, 0), &
             current_state, initial_level, final_level, sweep_size)
-
+#endif
+#if NDIM == 2
+       call hilbert2d(ix, iy, &            
+            part_hkey(1+sweep_offset:sweep_size+sweep_offset, 1), &
+            part_hkey(1+sweep_offset:sweep_size+sweep_offset, 0), &
+            current_state, initial_level, final_level, sweep_size)
+#endif
     end do ! end sweeps  
-  end subroutine hilbert3d_for_particle
+  end subroutine hilbert_for_particle
   
 end module hilbert
