@@ -460,15 +460,15 @@ contains
        call clean_stop
     end if
     
-    do ip = 1, np
-       part_ind_permutation(offset+ip) = ip
+    do ip = offset+1, offset+np
+       part_ind_permutation(ip) = ip
     end do
 
     do ilevel=final_level,1,-1
 #if NDIM == 3
-       call lsd_counting_sort_onelevel(np, ilevel, key_level, &
-            part_ind_permutation(offset+1:offset+np), part_ind_permutation2(offset+1:offset+np), &
-            part_hkey(offset+1:offset+np, 2), part_hkey(offset+1:offset+np, 1), part_hkey(offset+1:offset+np, 0))
+       call lsd_counting_sort_onelevel(offset, np, ilevel, key_level, &
+            part_ind_permutation(1), part_ind_permutation2(1), &
+            part_hkey(1,2), part_hkey(1,1), part_hkey(1, 0))
 #endif 
 #if NDIM == 2
        call lsd_counting_sort_onelevel(np, ilevel, key_level, &
@@ -477,11 +477,12 @@ contains
 #endif
     end do
 
-    do ip = 1, np
-       part_ind_permutation(offset+ip) = part_ind_permutation(offset+ip) + offset
-    end do
+!    do ip = 1, np
+!       part_ind_permutation(offset+ip) = part_ind_permutation(offset+ip) + offset
+!       if (part_ind_permutation(offset+ip) > offset+np .or. part_ind_permutation(offset+ip) < offset+1)print*, 'something went wrong in sorting'
+!    end do
 
-    call apply_particle_permutation(offset,np, key_level)
+!    call apply_particle_permutation(offset,np, key_level)
 
   end subroutine lsd_radix_sort_particles
 
@@ -489,25 +490,27 @@ contains
   !########################################################################
   !########################################################################
 #if NDIM == 3
-  subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey2, hkey1, hkey0)      
-    implicit none
-    integer(kind=8), dimension(1:np), intent(in), target :: hkey2, hkey1, hkey0
+  subroutine lsd_counting_sort_onelevel(offset, np, ilevel, key_level, sigma1, sigma2, hkey2, hkey1, hkey0)
+    use pm_commons, only: npart_andreas
+    implicit none    
+    integer,                          intent(in)         :: offset, np, ilevel, key_level
+    integer(kind=8), dimension(1:offset+np), intent(in), target :: hkey2, hkey1, hkey0
 #endif
 
 #if NDIM == 2
   subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey1, hkey0)      
     implicit none
-    integer(kind=8), dimension(1:np), intent(in), target :: hkey1, hkey0
+    integer(kind=8), dimension(1:offset+np), intent(in), target :: hkey1, hkey0
 #endif
 
 #if NDIM == 1
   subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey0)
     implicit none
-    integer(kind=8), dimension(1:np), intent(in), target :: hkey0
+    integer(kind=8), dimension(1:offset+np), intent(in), target :: hkey0
 #endif
 
-    integer,                          intent(in)         :: np, ilevel, key_level
-    integer,         dimension(1:np), intent(inout)      :: sigma1, sigma2
+
+    integer,         dimension(1:offset+np), intent(inout)      :: sigma1, sigma2
 
     ! Update the given permuations sigma1, sigma2 such that sigma1  will 
     ! sort the 3 bits belonging to level ilevel of the input hilbert keys.
@@ -553,26 +556,26 @@ contains
 
     ! Count particles per bucket
     bucket_count=0
-    do ipart = 1, np
+    do ipart = offset+1, offset+np
        ibucket=ibits(use_key(ipart),ibit1,nbits_read)
        bucket_count(ibucket) = bucket_count(ibucket) + 1
     end do
 
     ! "Prefix sum"
-    bucket_offset(0) = 0
+    bucket_offset(0) = offset
     do ibucket = 1, nbucket
        bucket_offset(ibucket) = bucket_offset(ibucket-1) &
             + bucket_count(ibucket-1)
     end do
 
     ! Build up index permutation that will sort array
-    do ip = 1, np
+    do ip = offset+1,offset+ np
        ipart = sigma1(ip)
        ibucket=ibits(use_key(ipart),ibit1,nbits_read)
        bucket_offset(ibucket) = bucket_offset(ibucket) + 1
        sigma2(bucket_offset(ibucket))=ipart
     end do
-    sigma1(1:np) = sigma2(1:np)
+    sigma1(offset+1:offset+np) = sigma2(offset+1:offset+np)
     
   end subroutine  lsd_counting_sort_onelevel
   !########################################################################
@@ -588,6 +591,7 @@ contains
 
     real(dp),        allocatable, dimension(:)   :: extra_storage_dp
     integer(kind=8), allocatable, dimension(:)   :: extra_storage_i8
+    integer(kind=4), allocatable, dimension(:)   :: extra_storage_i4
 
 
     ! The permutation sigma built during the radix sort sorts the index array I such that
@@ -649,28 +653,29 @@ contains
     end do
     idp_andreas(offset + 1 : offset + np) = extra_storage_i8(offset + 1 : offset + np)
 #endif
-
     
     deallocate(extra_storage_i8)
 
     ! Rearrange short integer arrays
-    ! use permanent permutation array as tmp storage space    
+    allocate(extra_storage_i4(offset+1 : offset + np))
 #ifndef LONGINT
     do ipart = offset + 1, offset + np
-       part_ind_permutation(part_ind_permutation2(ipart)) = idp_andreas(ipart)
+       extra_storage_i4(part_ind_permutation2(ipart)) = idp_andreas(ipart)
     end do
-    idp_andreas(offset + 1 : offset + np) = part_ind_permutation(offset + 1 : offset + np)
+    idp_andreas(offset + 1 : offset + np) = extra_storage_i4(offset + 1 : offset + np)
 #endif
 
     do ipart = offset + 1, offset + np
-       part_ind_permutation(part_ind_permutation2(ipart)) = levelp_andreas(ipart)
+       extra_storage_i4(part_ind_permutation2(ipart)) = levelp_andreas(ipart)
     end do
-    levelp_andreas(offset + 1 : offset + np) = part_ind_permutation(offset + 1 : offset + np)
+    levelp_andreas(offset + 1 : offset + np) = extra_storage_i4(offset + 1 : offset + np)
     
     do ipart = offset + 1, offset + np
-       part_ind_permutation(part_ind_permutation2(ipart)) = current_state(ipart)
+       extra_storage_i4(part_ind_permutation2(ipart)) = current_state(ipart)
     end do
-    current_state(offset + 1 : offset + np) = part_ind_permutation(offset + 1 : offset + np)
+    current_state(offset + 1 : offset + np) = extra_storage_i4(offset + 1 : offset + np)
+
+    deallocate(extra_storage_i4)
 
   end subroutine apply_particle_permutation
 

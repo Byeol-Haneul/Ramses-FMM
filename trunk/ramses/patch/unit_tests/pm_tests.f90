@@ -24,7 +24,7 @@ subroutine sort_particle_tests(all_ok)
   use amr_parameters
   use pm_commons
   use hilbert,       only: hilbert_for_particle
-  use sort,          only: lsd_radix_sort_particles, gt_3keys, gt_2keys
+  use sort,          only: lsd_radix_sort_particles, gt_3keys, gt_2keys, apply_particle_permutation
   implicit none
 
   ! A simple test which transforms integer coordinates into a 3 integer hilbert key
@@ -53,6 +53,7 @@ subroutine sort_particle_tests(all_ok)
   allocate(bin_mass(1:2))
   allocate(bin_count(1:2))
   allocate(bin_keys(1:2,0:ndim-1))
+  npart_andreas=size
   boxlen=1
 
 #if NDIM > 1
@@ -68,6 +69,7 @@ subroutine sort_particle_tests(all_ok)
 
      call hilbert_for_particle(0, size,0,ilevel)
      call lsd_radix_sort_particles(0, size, ilevel, ilevel)
+     call apply_particle_permutation(0,size,ilevel)
 
      do i=1,size-1
 #if NDIM == 2
@@ -94,6 +96,7 @@ subroutine sort_particle_tests(all_ok)
 
      call hilbert_for_particle(offs, size-offs,0,ilevel)
      call lsd_radix_sort_particles(offs, size-offs, ilevel, ilevel)
+     call apply_particle_permutation(offs,size-offs,ilevel)
 
      do i=offs+1,size-1
 #if NDIM == 2
