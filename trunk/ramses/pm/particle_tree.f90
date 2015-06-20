@@ -1136,8 +1136,8 @@ subroutine send_histogram_bins(offset, np, ilevel)
   include 'mpif.h'
 #endif
   integer, intent(in) :: ilevel, offset, np
-  integer :: ipos, i, info, ibin, receive_cpu, nb, ipart
-  integer :: request
+  integer :: ipos, i, info, ibin, receive_cpu, nb, ipart, ip
+  integer :: request, np_small
   integer :: status(MPI_STATUS_SIZE)
   real(dp) :: told
   integer  :: unrefined_pos, refined_pos
@@ -1167,9 +1167,9 @@ subroutine send_histogram_bins(offset, np, ilevel)
      end if
   end do
   
-
-  call MPI_IALLTOALLV(send_bin_keys(1:bin_send_tot,0),bin_send_cnt,bin_send_oft,MPI_INTEGER8, &
-       &             recv_bin_keys(1:bin_recv_tot,0),bin_recv_cnt,bin_recv_oft,MPI_INTEGER8,MPI_COMM_WORLD,request,info)
+ 
+  call MPI_IALLTOALLV(send_bin_keys(1:bin_send_tot,0:2),3*bin_send_cnt,3*bin_send_oft,MPI_INTEGER8, &
+       &             recv_bin_keys(1:bin_recv_tot,0:2),3*bin_recv_cnt,3*bin_recv_oft,MPI_INTEGER8,MPI_COMM_WORLD,request,info)
 
 
   ! Probe domestic cells for refinement 
@@ -1178,7 +1178,6 @@ subroutine send_histogram_bins(offset, np, ilevel)
      call get_cell_index_from_hilbertkey(bin_index(ibin + 1 : ibin + nb), bin_level(ibin + 1 : ibin + nb), &
           bin_keys(ibin + 1: ibin + nb,2), bin_keys(ibin + 1: ibin + nb,1), bin_keys(ibin + 1: ibin + nb,0), nb, ilevel)
   end do
-  bin_level=0
 
   ! Mark bins corresponding to refined cells
   bin_level=0
@@ -1191,6 +1190,7 @@ subroutine send_histogram_bins(offset, np, ilevel)
 
   ! Finish first communication
   call MPI_WAIT(request,status,info)
+  
 
   ! Probe foreign cells for refinement
   do ibin = 0, bin_recv_tot - 1 , nvector
@@ -1201,17 +1201,21 @@ subroutine send_histogram_bins(offset, np, ilevel)
 
   recv_bin_level=0
   do ibin = 1, bin_recv_tot
-     if (son(recv_bin_index(ibin))>0) recv_bin_level = 1
+     if (son(recv_bin_index(ibin))>0) recv_bin_level(ibin) = 1
   end do
 
   ! Send information back
   call MPI_IALLTOALLV(recv_bin_level,bin_recv_cnt,bin_recv_oft,MPI_INTEGER, &
        &             send_bin_level,bin_send_cnt,bin_send_oft,MPI_INTEGER,MPI_COMM_WORLD,request,info)
 
+!  call MPI_ALLTOALLV(recv_bin_level,bin_recv_cnt,bin_recv_oft,MPI_INTEGER, &
+!       &             send_bin_level,bin_send_cnt,bin_send_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+
   
 
   ! Finish second communicagtion
   call MPI_WAIT(request,status,info)
+
 
   ! Read out buffer
   receive_cpu=1
@@ -1221,43 +1225,52 @@ subroutine send_histogram_bins(offset, np, ilevel)
         receive_cpu = receive_cpu + 1
      end do
      if (receive_cpu .ne. myid)then
-        bin_level (ibin) = send_bin_level(ipos)
+        bin_level(ibin) = send_bin_level(ipos)
         ipos = ipos + 1
      end if
   end do
   
-
   ! Find starting indices for refined / unrefined particles
-  unrefined_pos = offset
-  refined_pos = offset
 
-  ibin = 1
-  unrefined = (bin_level(ibin) == 0)  
-  do ipart = offset + 1, offset + np
-     if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
-        ibin=ibin+1
-        unrefined = (bin_level(ibin) == 0)
-     end if
-     if (unrefined) refined_pos = refined_pos + 1
-  end do
+  if (ilevel<nlevelmax)then
+     np_small = part_level_offset(ilevel+2) - part_level_offset(ilevel)
+     unrefined_pos = offset
+     refined_pos = offset
+     
+     ibin = 1
+     unrefined = (bin_level(ibin) == 0)
+     do ip = offset + 1, offset + np  
+        ipart=part_ind_permutation(ip)
+        if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
+           ibin=ibin+1
+           unrefined = (bin_level(ibin) == 0)
+        end if
+        if (unrefined) then 
+           refined_pos = refined_pos + 1
+        end if
+     end do
+     
+     part_level_offset(ilevel+1) = refined_pos
 
-  part_level_offset(ilevel) = refined_pos
+     do ip = offset + 1, offset 
+        ipart = part_ind_permutation(ip)
+        if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
+           ibin = ibin + 1
+           unrefined = (bin_level(ibin) == 1)
+        end if
+        if (unrefined) then
+           unrefined_pos = unrefined_pos + 1
+           part_ind_permutation2(unrefined_pos)=ip
+        else
+           refined_pos = refined_pos + 1
+           part_ind_permutation2(refined_pos)=ip
+        end if
+     end do
+    
+     part_ind_permutation(offset + 1:offset + np)=part_ind_permutation2(offset +1:offset + np)
 
-  do ipart = offset + 1, offset + np
-     if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
-        ibin = ibin + 1
-        unrefined = (bin_level(ibin) == 1)
-     end if
-     if (unrefined) then
-        unrefined_pos = unrefined_pos + 1
-        part_ind_permutation(ipart) = unrefined_pos
-     else
-        refined_pos = refined_pos + 1
-        part_ind_permutation(ipart) = refined_pos
-     end if
-  end do
-
-  call apply_particle_permutation(offset, np, ilevel)
+     call apply_particle_permutation(offset, np_small, ilevel)
+  end if
 
   deallocate(bin_level, bin_index)
   deallocate(recv_bin_level, recv_bin_index)
@@ -1467,7 +1480,8 @@ subroutine compute_particle_histogram(offset, np)
   ! sorted in memory by hilbert key.  
   !----------------------------------------------------------------------------
 
-  integer, save :: ibin, ipart
+  integer,                         save :: ibin, ipart, ip
+  integer(kind=8), dimension(0:2), save :: current_bin_key
 
 
   ! if there is nothing to do...
@@ -1475,9 +1489,12 @@ subroutine compute_particle_histogram(offset, np)
   
   ! Count the number of bins
   nbins=1
-  do ipart = offset + 2, offset + np
-     if (gt_3keys(part_hkey(ipart,0:2), part_hkey(ipart-1,0:2)))then
+  current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
+  do ip = offset + 2, offset + np
+     ipart = part_ind_permutation(ip)
+     if (gt_3keys(part_hkey(ipart,0:2), current_bin_key(0:2)))then
         nbins=nbins+1
+        current_bin_key(0:2) = part_hkey(ipart,0:2)
      end if
   end do
   
@@ -1500,15 +1517,18 @@ subroutine compute_particle_histogram(offset, np)
 
   ! first particle
   ibin=1
-  bin_keys(1,0:2)=part_hkey(offset+1,0:2)  
-  bin_mass(1)=mp(offset+1)
+  bin_keys(1,0:2)=part_hkey(part_ind_permutation(offset+1),0:2)  
+  bin_mass(1)=mp(part_ind_permutation(offset+1))
   bin_count(1)=1
 
   ! all other bins
-  do ipart=offset+2, offset+np
-     if (gt_3keys(part_hkey(ipart,0:2), part_hkey(ipart-1,0:2)))then
+  current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
+  do ip=offset+2, offset+np
+     ipart = part_ind_permutation(ip)
+     if (gt_3keys(part_hkey(ipart,0:2), current_bin_key(0:2)))then
         ibin=ibin+1
         bin_keys(ibin,0:2)=part_hkey(ipart,0:2)
+        current_bin_key(0:2) = part_hkey(ipart,0:2)
      end if
      ! NGP mass assignement --> replace by CIC by using weights instead of mp
      bin_mass(ibin)=bin_mass(ibin)+mp_andreas(ipart)

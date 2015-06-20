@@ -175,6 +175,13 @@ subroutine amr_step(ilevel,icount,test_ok)
 
   end do
 
+  do i=1,10
+  do ilev=levelmin, nlevelmax
+     told=MPI_WTIME(info)
+     call sort_particles(ilev)
+     print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
+  end do
+  end do
 end subroutine amr_step
 
 
@@ -323,7 +330,7 @@ subroutine check_new_hilbert(test_ok)
   levelp_andreas(1:npart_andreas)=levelmin
 
   told=MPI_WTIME(info)
-  call hilbert3d_for_particle(0,npart_andreas, 0, levelmin)
+  call hilbert_for_particle(0,npart_andreas, 0, levelmin)
   print*, 'new hilbert: ',MPI_WTIME(info)-told
 
 
@@ -353,7 +360,8 @@ end subroutine check_new_hilbert
 subroutine sort_particles(ilevel)
   use pm_commons
   use amr_commons
-  use sort, only:msd_radix_sort_particles, lsd_radix_sort_particles
+  use sort, only:msd_radix_sort_particles, lsd_radix_sort_particles,&
+       apply_particle_permutation
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -365,42 +373,27 @@ subroutine sort_particles(ilevel)
   integer::i, info, nkeys, key_offset,j,dint
   real(dp)::told
   integer ::  offset, np, ipart
-  
+
   offset = part_level_offset(ilevel)
-  if (ilevel < nlevelmax - 1)then
-     np = part_level_offset(ilevel+2) - part_level_offset(ilevel)  
-  else
-     np = npart_andreas - part_level_offset(ilevel)
-  end if
+  np = part_level_offset(ilevel + 1) - part_level_offset(ilevel)  
 
+  
+  
   if (ilevel == levelmin)then
-     told=MPI_WTIME(info)
-     call hilbert3d_for_particle(offset, npart_andreas-offset, 0, levelmin)
-
-
-     told=MPI_WTIME(info)
-     call lsd_radix_sort_particles(offset, np, levelmin, levelmin)
-
-
+     print*,myid,'offsets',part_level_offset 
+     call hilbert_for_particle(offset, npart_andreas - offset, 0, levelmin)
   else
-
-     told=MPI_WTIME(info)
-     call hilbert3d_for_particle(offset, npart_andreas-offset, ilevel-1, ilevel)
-
-
-     told=MPI_WTIME(info)
-     call msd_radix_sort_particles(offset, np, ilevel-1, ilevel, ilevel)
-
+     call hilbert_for_particle(offset, npart_andreas - offset, ilevel-1, ilevel)
   end if
+  call lsd_radix_sort_particles(offset, npart_andreas - offset, ilevel, ilevel)
+  call compute_particle_histogram(offset, npart_andreas - offset)
 
 
-  told=MPI_WTIME(info)
-  call compute_particle_histogram(offset, np)
 
-
-  told=MPI_WTIME(info)
-  call build_histogram_communicator(levelmin)
-  call send_histogram_bins(offset, np, levelmin)
+  call build_histogram_communicator(ilevel)
+  call send_histogram_bins(offset, npart_andreas - offset, ilevel)
+  call lsd_radix_sort_particles(offset, np, ilevel, ilevel)
+  call apply_particle_permutation(offset, np, ilevel)
 
 
 end subroutine sort_particles

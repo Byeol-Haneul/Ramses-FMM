@@ -785,7 +785,7 @@ subroutine init_part_andreas
   allocate(bin_mass(1:2))
   allocate(bin_count(1:2))
   allocate(bin_keys(1:2,0:2))
-  allocate(part_level_offset(levelmin:nlevelmax))
+  allocate(part_level_offset(levelmin:nlevelmax + 1))
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   stop
   allocate(ptcl_phi(npartmax))
