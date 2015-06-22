@@ -325,9 +325,7 @@ subroutine init_amr
   bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
   
 
-  if (myid==1)print*, bound_key_level(0:ncpu,nlevelmax)
   do ilev=nlevelmax-1, levelmin, - 1
-     if (myid==1)print*, bound_key_level(0:ncpu,ilev)
      do idomain=1,ndomain - 1
         bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
      end do

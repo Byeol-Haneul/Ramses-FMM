@@ -102,8 +102,6 @@ subroutine amr_step(ilevel,icount,test_ok)
 
 
 
-  if(pic)call make_tree_fine(ilevel)
-  
 !   if(poisson)then
 !      !save old potential for time-extrapolation at level boundaries
 !      call save_phi_old(ilevel)
@@ -136,10 +134,6 @@ subroutine amr_step(ilevel,icount,test_ok)
 
 
 
-  call kill_tree_fine(ilevel)
-
-
-
   do idomain=1,ndomain - 1
      bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
   end do
@@ -153,7 +147,10 @@ subroutine amr_step(ilevel,icount,test_ok)
      bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
      bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
   end do
-  
+  print*,bound_key(0:ndomain),myid
+  print*,bound_key_level(0:ndomain,8),myid,'8'
+  print*,bound_key_level(0:ndomain,7),myid,'7'
+  print*,bound_key_level(0:ndomain,6),myid,'6'
 
 
   call MPI_BARRIER(MPI_COMM_WORLD,info)
@@ -163,19 +160,21 @@ subroutine amr_step(ilevel,icount,test_ok)
 !  call check_refined_test(test_ok)
 !  call check_new_hilbert(test_ok)
   
+  call count_parts
   do ilev=levelmin, nlevelmax
      told=MPI_WTIME(info)
      call sort_particles(ilev)
      print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
      told=MPI_WTIME(info)
+     call make_tree_fine(ilev)
      call rho_fine(ilev,icount) 
      call kill_tree_fine(ilev)
      call virtual_tree_fine(ilev)
      print*, 'ilevel rho, kill, virt: ', ilev, MPI_WTIME(info)-told
-
   end do
+  call count_parts
 
-  do i=1,10
+  do i=1,1
   do ilev=levelmin, nlevelmax
      told=MPI_WTIME(info)
      call sort_particles(ilev)
@@ -357,43 +356,3 @@ subroutine check_new_hilbert(test_ok)
 
 end subroutine check_new_hilbert
 
-subroutine sort_particles(ilevel)
-  use pm_commons
-  use amr_commons
-  use sort, only:msd_radix_sort_particles, lsd_radix_sort_particles,&
-       apply_particle_permutation
-  use hilbert
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  integer, intent(in) :: ilevel
-
-  logical::test_ok
-  integer::i, info, nkeys, key_offset,j,dint
-  real(dp)::told
-  integer ::  offset, np, ipart
-
-  offset = part_level_offset(ilevel)
-  np = part_level_offset(ilevel + 1) - part_level_offset(ilevel)  
-
-  
-  
-  if (ilevel == levelmin)then
-     print*,myid,'offsets',part_level_offset 
-     call hilbert_for_particle(offset, npart_andreas - offset, 0, levelmin)
-  else
-     call hilbert_for_particle(offset, npart_andreas - offset, ilevel-1, ilevel)
-  end if
-  call lsd_radix_sort_particles(offset, npart_andreas - offset, ilevel, ilevel)
-  call compute_particle_histogram(offset, npart_andreas - offset)
-
-
-
-  call build_histogram_communicator(ilevel)
-  call send_histogram_bins(offset, npart_andreas - offset, ilevel)
-  call lsd_radix_sort_particles(offset, np, ilevel, ilevel)
-  call apply_particle_permutation(offset, np, ilevel)
-
-
-end subroutine sort_particles

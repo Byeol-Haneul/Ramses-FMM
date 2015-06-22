@@ -232,6 +232,29 @@ subroutine load_balance
   end if
 #endif
 
+
+
+
+
+  do idomain=1,ndomain - 1
+     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
+  end do
+  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
+  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  
+
+  do ilev=nlevelmax-1, levelmin, - 1
+     do idomain=1,ndomain - 1
+        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
+     end do
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
+  end do
+  
+
+
+
+
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
 end subroutine load_balance

@@ -1,40 +1,12 @@
 subroutine pm_tests(all_ok)
+  use pm_commons
+  use pm_parameters
+  use amr_parameters
   implicit none
   logical::all_ok
   logical::pm_ok=.true.
+  integer, parameter :: size=16
 
-  call sort_particle_tests(pm_ok)
-!  call other_test(pm_ok)
-!  call other_test2(pm_ok)
-
-  if(.not. pm_ok)then
-     write(*,*)'PM_TESTS FAILED'
-     all_ok=.false.
-  end if
-end subroutine pm_tests
-
-
-! =====================================================================================
-! =====================================================================================
-! ADD UNIT TESTS HERE
-! =====================================================================================
-! =====================================================================================
-subroutine sort_particle_tests(all_ok)
-  use amr_commons
-  use amr_parameters
-  use pm_commons
-  use hilbert,       only: hilbert_for_particle
-  use sort,          only: lsd_radix_sort_particles, gt_3keys, gt_2keys, apply_particle_permutation
-  implicit none
-
-  ! A simple test which transforms integer coordinates into a 3 integer hilbert key
-  ! and the hilbert key back into integer coordinate. Results must be equal to input.
-
-  integer, parameter :: size=1000
-  integer, parameter :: offs=317
-  integer::ilevel,i
-  logical::all_ok
-  real(dp),dimension(1:size, 1:ndim)::xfloat
 
 
   ! a little bit of init_part
@@ -54,7 +26,43 @@ subroutine sort_particle_tests(all_ok)
   allocate(bin_count(1:2))
   allocate(bin_keys(1:2,0:ndim-1))
   npart_andreas=size
-  boxlen=1
+  boxlen=3
+
+
+
+
+
+  call sort_particle_tests(pm_ok)
+!  call other_test(pm_ok)
+
+  if(.not. pm_ok)then
+     write(*,*)'PM_TESTS FAILED'
+     all_ok=.false.
+  end if
+
+contains
+
+! =====================================================================================
+! =====================================================================================
+! ADD UNIT TESTS HERE
+! =====================================================================================
+! =====================================================================================
+subroutine sort_particle_tests(all_ok)
+  use amr_commons
+  use amr_parameters
+  use pm_commons
+  use hilbert,       only: hilbert_for_particle
+  use sort,          only: lsd_radix_sort_particles, gt_3keys, gt_2keys, apply_particle_permutation
+  implicit none
+
+  ! A simple test which transforms integer coordinates into a 3 integer hilbert key
+  ! and the hilbert key back into integer coordinate. Results must be equal to input.
+
+  integer, parameter :: offs=317
+  integer::ilevel,i
+  logical::all_ok
+  real(dp),dimension(1:size, 1:ndim)::xfloat
+
 
 #if NDIM > 1
 #if NDIM == 2
@@ -112,5 +120,5 @@ subroutine sort_particle_tests(all_ok)
   end do
   
 #endif
-
+  
 end subroutine sort_particle_tests
