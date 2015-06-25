@@ -1149,3 +1149,238 @@ end subroutine cic_cell
 ! !   deallocate(order)
 
 ! end subroutine hilbert_allparts_andreas
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine rho_dump_part(part_level)
+  use amr_parameters, only: dp
+  use pm_parameters,  only: n_dump_parts_direct
+  use pm_commons
+  implicit none
+  integer, intent(in) :: part_level
+  
+  ! This routine deposits all particles that sit at level part_level to 
+  ! the grid at level grid_level <= part_level.
+  
+  ! in:           - particle_level
+  !               - offset, nparts for local particles 
+  !               - mask array which marks particles which are "histogrammed"                
+  !               - starting offset, number of particles                                     
+  !               - current level                                                            
+  
+  ! out:          - none                                                                     
+  
+  ! side effect:  - updates rho field on levels ilevel <= part_level   
+
+  real(dp), dimension(1:nvector, 1:ndim) :: xpart
+  real(dp), dimension(1:nvector)         :: mpart
+  integer  :: ip, offset, nparts, ibin, ipart, grid_level
+  
+  offset = part_level_offset(part_level)
+  nparts = part_level_offset(part_level+1) - part_level_offset(part_level)
+  
+  ! Project domestic particles
+  ip = 0
+  ibin = 1
+  do ipart = offset+1, nparts
+     if (ipart > bin_start_offset(ibin)) ibin = ibin + 1
+     if (bin_count(ibin) > n_dump_parts_direct) then
+        ip = ip + 1
+        xpart(ip,1:ndim) = xp_andreas(ipart,1:ndim)
+        mpart(ip)        = mp_andreas(ipart)
+     end if
+     if (ip == nvector) then
+        do grid_level = part_level, levelmin, -1
+           call cic_amr_andreas(xpart, mpart, ip,  grid_level)
+        end do
+        ip = 0
+     end if
+  end do
+  if (ip > 0) then
+     do grid_level = part_level, levelmin, -1
+        call cic_amr_andreas(xpart, mpart, ip,  grid_level)
+     end do
+  end if
+
+contains
+
+  subroutine cic_amr_andreas(xpart, mpart, np, grid_level)
+    use amr_commons,     only: boxlen, icoarse_max, & 
+                               icoarse_min, nvector, ndim
+    use poisson_commons, only: multipole, rho, phi
+    use hilbert,         only: hilbert3d
+    implicit none
+    integer,  intent(in)                                  :: np, grid_level
+    real(dp), intent(in),    dimension(1:nvector)         :: mpart
+    real(dp), intent(inout), dimension(1:nvector, 1:ndim) :: xpart
+
+    ! This routine deposits nvector particles (local or remote) onto the grid (local)
+    ! at level grid_level.
+
+    ! in:           - particle masses
+    !               - particle positions
+    !               - number of particles
+    !               - grid_level 
+    
+    ! out:          - "corrupted" particle positions -> do not reuse xpart outside of 
+    !                 this subroutine  
+    
+    ! side effect:  - updates rho field on level grid_level
+
+    integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
+    integer(kind=8), dimension(1:nvector, 1:ndim), save :: id
+    integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix
+    integer(kind=4), dimension(1:nvector),         save :: dummy_state
+    integer(kind=4), dimension(1:nvector),         save :: parent_cell_level, parent_cell_index
+    real(dp),   dimension(1:nvector, 0:1, 1:ndim), save :: cloud_boundary
+    real(dp),        dimension(1:nvector),         save :: vol, delta
+    logical,         dimension(1:nvector),         save :: ok
+    integer,         dimension(1:ndim),            save :: ind
+
+    integer,  save :: ipart, idim, nx_loc, ind_cloud
+    real(dp), save :: dx, dx_loc, scale, vol_loc, pos_to_cart
+
+    nx_loc=(icoarse_max-icoarse_min+1)
+    scale=boxlen/dble(nx_loc)
+    dx = 0.5D0**grid_level
+    dx_loc=dx*scale
+    vol_loc=dx_loc**ndim
+
+    ! Compute center of mass and total mass in box
+    if (grid_level == levelmin) then
+       do ip = 1, np
+          multipole(1) = multipole(1) + mpart(ip)
+       end do
+       do idim = 1, ndim
+          do ip = 1, np
+             multipole(idim+1) = multipole(idim+1) + mpart(ip)*xpart(ip,idim)
+          end do
+       end do
+    end if
+
+    ! Convert particle coordinates in code units
+    ! into "cartesian" coordinates at grid_level
+    pos_to_cart = 2.0**grid_level / dble(boxlen)
+    xpart = xpart * pos_to_cart
+
+
+    ! compute distances of cloud boundary from nearest "integer coordinate"
+    do idim=1,ndim       
+
+       ! upper/right/front boundary
+       do ip=1,np
+          cloud_boundary(ip,1,idim) = xpart(ip, idim) + 0.5D0
+       end do
+     
+       ! nearest integer coordinate
+       do ip=1,np
+          id(ip,idim) = int(cloud_boundary(ip,1,idim), kind=8)
+       end do
+
+       ! upper/rigt/front boundary rel to nearest integer
+       do ip=1,np
+          cloud_boundary(ip,idim,1) = cloud_boundary(ip,idim,1) - id(ip, idim)
+       end do
+       
+       ! lower/left/back boundary rel to nearest integer
+       do ip=1,np
+          cloud_boundary(ip,idim,0) = 1.0D0 - cloud_boundary(ip,idim,1)
+       end do
+    end do
+    
+#if NDIM<3
+    write(*,*)'add non-3D version of this routine'
+    stop
+#endif
+#if NDIM==1
+    ! Loop cloud/cell intersections
+    do ind_cloud = 0, 1
+       ind(1) = ind_cloud 
+       
+       ! Compute cloud volume
+       vol(ip) = cloud_boundary(ip,ind(1),1) * &
+            cloud_boundary(ip,ind(2),2) 
+       
+#endif
+#if NDIM==2
+    ! Loop cloud/cell intersections
+    do ind_cloud = 0, 3
+       ind(1) = ind_cloud/2
+       ind(2) = mod(ind_cloud,2)
+       
+       ! Compute cloud volume
+       vol(ip) = cloud_boundary(ip,ind(1),1) * &
+            cloud_boundary(ip,ind(2),2) 
+#endif
+#if NDIM==3
+    ! Loop cloud/cell intersections
+    do ind_cloud = 0, 7
+       ind(1) = ind_cloud/4
+       ind(2) = mod(ind_cloud,4)/2
+       ind(3) = mod(mod(ind_cloud,4),2)
+       
+       ! Compute cloud volume
+       vol(ip) = cloud_boundary(ip,ind(1),1) * &
+            cloud_boundary(ip,ind(2),2) * &
+            cloud_boundary(ip,ind(3),3) 
+#endif
+
+       ! Compute cloud corner offset from cloud center
+       delta(1:ndim) = ind(1:ndim) - 0.5D0       
+
+       ! Get cell indices which are covered by cloud
+       ! (cartesian key -> hilber key -> cell index)
+       do idim = 1, ndim
+          do ip = 1, np
+             ix(ip,idim) = int(xpart(ip,idim) + delta(idim), kind = 8)
+          end do
+       end do
+
+       call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
+            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
+            dummy_state, 0, grid_level, np)
+
+       call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
+            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
+
+       ! Exclude cloud fraction which lies in coarser level
+       do ip = 1, np        
+          ok(ip) = (parent_cell_level(ip) == grid_level)
+       end do
+
+       ! Add to number density which is stored in phi
+       do ip=1,np
+          if(ok(ip))then
+             phi(parent_cell_index(ip)) = phi(parent_cell_index(ip)) + vol(ip)
+          end if
+       end do
+
+       ! compute delta rho and add to rho
+       do ip = 1, np
+          vol(ip) = mpart(ip) * vol(ip) / vol_loc
+       end do
+
+       do ip = 1, np
+          if (ok(ip)) then
+             rho(parent_cell_index(ip)) = rho(parent_cell_index(ip)) + vol(ip)
+          end if
+       end do
+
+       ! Remove test particles for static runs
+       if(static)then
+          do ip = 1, np
+             ok(ip) = ok(ip) .and. (mpart(ip) > 0.0)
+          end do
+       endif
+
+       ! Remove massive dark matter particle
+       if (mass_cut_refine>0.0) then
+          do ip = 1, np
+             ok(ip) = ok(ip) .and. mpart(ip) < mass_cut_refine
+          end do
+       endif
+
+    end do ! end loop over cloud/cell intersections
+  end subroutine cic_amr_andreas
+end subroutine rho_dump_part

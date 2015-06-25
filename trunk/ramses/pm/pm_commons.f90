@@ -26,6 +26,7 @@ module pm_commons
   integer ,allocatable,dimension(:)  ::levelp,levelp_andreas   ! Current level of particle
   integer(i8b),allocatable,dimension(:)::idp,idp_andreas    ! Identity of particle
   integer ,allocatable,dimension(:)  :: part_level_offset    
+  integer ,allocatable,dimension(:)  :: bin_start_offset
 
 
   ! Tree related arrays

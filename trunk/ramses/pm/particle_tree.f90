@@ -1548,7 +1548,7 @@ subroutine compute_particle_histogram(offset, np)
   if (.not. np > 0)return
   
   ! Count the number of bins
-  nbins=1
+  nbins = 1
   current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
   do ip = offset + 2, offset + np
      ipart = part_ind_permutation(ip)
@@ -1559,27 +1559,25 @@ subroutine compute_particle_histogram(offset, np)
   end do
   
   ! allocate histograms if necessary
-  if(size(bin_mass) < nbins)then
+  if(size(bin_count) < nbins)then
      deallocate(bin_keys)
-     deallocate(bin_mass)
      deallocate(bin_count)
+     deallocate(bin_start_offset)
   end if
   if (.not. allocated(bin_mass))then
      allocate(bin_keys(nbins,0:2))
-     allocate(bin_mass(nbins))
      allocate(bin_count(nbins))
+     allocate(bin_start_offset(nbins))
   end if
-  bin_mass=0.d0
-  bin_count=0
-  
+  bin_count = 0
 
   ! label every bin by a key and sum up the particle mass per bin
 
   ! first particle
   ibin=1
-  bin_keys(1,0:2)=part_hkey(part_ind_permutation(offset+1),0:2)  
-  bin_mass(1)=mp(part_ind_permutation(offset+1))
-  bin_count(1)=1
+  bin_keys(ibin,0:2) = part_hkey(part_ind_permutation(offset+1),0:2)  
+  bin_count(ibin) = 1
+  bin_start_offset(ibin) = offset
 
   ! all other bins
   current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
@@ -1587,15 +1585,19 @@ subroutine compute_particle_histogram(offset, np)
      ipart = part_ind_permutation(ip)
      if (gt_3keys(part_hkey(ipart,0:2), current_bin_key(0:2)))then
         ibin=ibin+1
-        bin_keys(ibin,0:2)=part_hkey(ipart,0:2)
+        bin_start_offset(ibin) = ipart - 1
+        bin_keys(ibin,0:2) = part_hkey(ipart,0:2)
         current_bin_key(0:2) = part_hkey(ipart,0:2)
      end if
-     ! NGP mass assignement --> replace by CIC by using weights instead of mp
-     bin_mass(ibin)=bin_mass(ibin)+mp_andreas(ipart)
      bin_count(ibin)=bin_count(ibin)+1
   end do
 
 end subroutine compute_particle_histogram
+
+
+
+
+
 subroutine count_parts
   use pm_commons
   use amr_commons
