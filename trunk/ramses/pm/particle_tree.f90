@@ -45,7 +45,7 @@ subroutine init_tree
      prevp(ipart)=ipart-1
      nextp(ipart)=ipart+1
   end do
-  prevp(npartmax)=npartmax-1; nextp(npartmax)=0
+  prevp(npartmax)=npartmax-1; nextp(npartmax)
   ! Free memory linked list
   headp_free=npart+1
   tailp_free=npartmax
@@ -981,7 +981,7 @@ subroutine build_particle_communicator
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
-#endif
+
   
   ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
   integer,dimension(1:ncpu,1:ncpu)::npart_alltoall, npart_alltoall_tot
@@ -1028,19 +1028,20 @@ subroutine build_particle_communicator
   allocate(receive_keys(1:part_recv_tot,0:2))
   allocate(send_keys(1:part_send_tot,0:2))
  
-  
+#endif  
   
 end subroutine build_particle_communicator
 !################################################################
 !################################################################
 !################################################################
 !################################################################
+#ifndef WITHOUTMPI
 subroutine build_histogram_communicator(ilevel)
   use amr_commons,   only: ncpu, myid, bound_key_level, bound_key
   use pm_commons
   use pm_parameters, only: npartmax
   implicit none
-#ifndef WITHOUTMPI
+
   include 'mpif.h'
   integer, intent(in) ::  ilevel
   
@@ -1109,9 +1110,8 @@ subroutine build_histogram_communicator(ilevel)
   end do
   bin_send_tot=sum(bin_send_cnt); bin_recv_tot=sum(bin_recv_cnt)
 
-#endif
-
 end subroutine build_histogram_communicator
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -1143,7 +1143,7 @@ subroutine sort_particles(ilevel)
   call hilbert_for_particle(offset, npart_andreas - offset, 0, ilevel)
 
   ! Compute a permutation that sorts ALL particles starting from offset
-  call lsd_radix_sort_particles(offset, npart_andreas - offset, ilevel, ilevel)
+  call lsd_radix_sort_particles(offset, npart_andreas - offset, ilevel, ilevel, .true.)
 
   ! Use this to compute histogram for ALL particles starting from offset
   call compute_particle_histogram(offset, npart_andreas - offset)
@@ -1155,8 +1155,8 @@ subroutine sort_particles(ilevel)
   ! Compute NEW number fo particles in ilevel
   np = part_level_offset(ilevel + 1) - part_level_offset(ilevel)  
 
-  ! Te-sort remaining (ilevel particles)
-  call lsd_radix_sort_particles(offset, np, ilevel, ilevel)
+  ! Re-sort remaining (ilevel particles)
+  call lsd_radix_sort_particles(offset, np, ilevel, ilevel, .true.)
   call apply_particle_permutation(offset, np, ilevel)
 
 
@@ -1536,8 +1536,9 @@ subroutine compute_particle_histogram(offset, np)
   integer, intent(in) :: offset, np
 
   !----------------------------------------------------------------------------
-  ! This routine computes particle histograms. It assumes that particles are 
-  ! sorted in memory by hilbert key.  
+  ! This routine computes a particle histogram for np particles in memory, 
+  ! starting from offset+1 to offset+np. There must be a precomputed array 
+  ! part_ind_permutation which sorts the particles by hilbert key.
   !----------------------------------------------------------------------------
 
   integer,                         save :: ibin, ipart, ip
@@ -1558,7 +1559,7 @@ subroutine compute_particle_histogram(offset, np)
      end if
   end do
   
-  ! allocate histograms if necessary
+  ! Allocate histograms
   if(size(bin_count) < nbins)then
      deallocate(bin_keys)
      deallocate(bin_count)
@@ -1571,15 +1572,16 @@ subroutine compute_particle_histogram(offset, np)
   end if
   bin_count = 0
 
-  ! label every bin by a key and sum up the particle mass per bin
+  ! Label every bin by a key and sum up the particles per bin, store 
+  ! the offset of the first particle in each bin in the particle array
 
-  ! first particle
+  ! First particle in first bin
   ibin=1
   bin_keys(ibin,0:2) = part_hkey(part_ind_permutation(offset+1),0:2)  
   bin_count(ibin) = 1
   bin_start_offset(ibin) = offset
 
-  ! all other bins
+  ! All other particles/bins
   current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
   do ip=offset+2, offset+np
      ipart = part_ind_permutation(ip)
@@ -1666,7 +1668,7 @@ subroutine count_parts
       npts(ilevel)=npart2_tot
    end do
    if (myid==1)print*,'active'
-   if (myid==1)print*,npts(1:nlevelmax)        
+   if (myid==1)print*,npts(1:nlevelmax)
    
    
 end subroutine count_parts
