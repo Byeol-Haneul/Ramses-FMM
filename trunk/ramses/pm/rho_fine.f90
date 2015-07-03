@@ -1384,3 +1384,211 @@ contains
     end do ! end loop over cloud/cell intersections
   end subroutine cic_amr_andreas
 end subroutine rho_dump_part
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine rho_dump_histograms(part_level)
+  use amr_parameters, only: dp
+  use pm_parameters,  only: n_dump_parts_direct
+  use pm_commons
+  implicit none
+  integer, intent(in) :: part_level
+  
+  ! This routine deposits the mass of all particles at level part_level which have 
+  ! not been deposited directly.
+  
+  ! in:               - particle_level
+  
+  ! "implicit" input: - part_ind_permutation 
+  
+  ! out:              - none                                                       
+  
+  ! side effect:      - updates rho field on levels ilevel <= part_level   
+  
+  real(dp), dimension(1:nvector, 1:ndim) :: xpart
+  real(dp), dimension(1:nvector)         :: mpart
+  integer  :: ip, offset, nparts, ibin, ipart, grid_level
+  
+  offset = part_level_offset(part_level)
+  nparts = part_level_offset(part_level+1) - part_level_offset(part_level)
+  
+  ! Count number of "masked" particles and compute permuation of "masked" particles
+  n_masked = 0
+  ibin = 1
+  do ipart = offset+1, nparts
+     if (ipart > bin_start_offset(ibin)) ibin = ibin + 1
+     if (bin_count(ibin) > n_dump_parts_direct) then
+        n_masked = n_masked + 1
+        part_ind_permutation(offset + n_masked) = ipart
+     end if
+  end do
+  
+  ! outer loop here over deposit levels
+  do grid_level = part_level, levelmin, -1
+     call cic_amr_histogram(grid_level)
+  end do
+  
+contains
+  
+  subroutine cic_amr_histogram
+    implicit none
+    
+    
+
+
+    nx_loc = (icoarse_max - icoarse_min+1)
+    scale = boxlen / dble(nx_loc)
+    dx = 0.5D0**grid_level
+    dx_loc = dx * scale
+    vol_loc = dx_loc**ndim
+    
+
+  ! Loop over CIC cloud / cell intersections
+    do ind_cloud = 0, 7
+       ind(1) = ind_cloud/4
+       ind(2) = mod(ind_cloud,4)/2
+       ind(3) = mod(mod(ind_cloud,4),2)
+       
+       ! Compute cloud corner offset from cloud center
+       delta(1:ndim) = ind(1:ndim) - 0.5D0       
+
+       ! Relocate particle positions according to index
+       do idim = 1, ndim
+          do ip = offset + 1, offset + n_masked
+             ipart = part_ind_permutation(ip)
+             xp_andreas(ipart,idim) + delta(idim) * dx_loc  
+          end do
+       end do
+       
+       ! Recompute hilbert key for all parts, also the 
+       ! "unmasked ones" - > if too slow, do it only for the masked ones
+       call hilbert_for_particle(offset, np, 0, grid_level)
+
+       ! Sort hilbert keys
+       call lsd_radix_sort_particles(offset, np, grid_level, grid_level, .false.)
+       
+       ! Compute "reduced" histogram
+       call compute_particle_histogram(offset, n_masked)
+
+       ! Loop masked, sorted parts in sweeps and dump the mass for the
+       ! given cloud/cell intersection
+       ip_sweep = 0
+       ibin = 1
+       do ip = offset+1, n_masked
+          ipart = part_ind_permuatation(ip)
+          if (ipart > bin_start_offset(ibin)) ibin = ibin + 1
+          ip_sweep = ip_sweep + 1
+          xpart(ip_sweep,1:ndim) = xp_andreas(ipart,1:ndim)
+          mpart(ip_sweep)        = mp_andreas(ipart)
+          bin  (ip_sweep)        = ibin
+          
+          if (ip_sweep == nvector) then
+             call ngp_amr_andreas(xpart, mpart, bin_nr, ip_sweep,  grid_level, ind_cloud)
+             ip_sweep = 0
+          end if
+       end do
+       if (ip_sweep > 0) then
+          call ngp_amr_andreas(xpart, mpart, bin_nr, ip_sweep, grid_level, ind_cloud)
+       end if
+              
+       ! Reset particles to original positions
+       do idim = 1, ndim
+          do ip = offset + 1, offset + n_masked
+             ipart = part_ind_permutation(ip)
+             xp_andreas(ipart,idim) - delta(idim) * dx_loc  
+          end do          
+       end do
+
+       ! Dump bin_mass into rho and bin_count into phi
+       call dump_histograms
+       
+    end do
+
+  end subroutine cic_amr_histogram
+  
+  subroutine ngp_amr_andreas(xpart, mpart, bin_nr, np, grid_level, ind_cloud)
+    use amr_commons,     only: boxlen, icoarse_max, nvector, ndim
+    implicit none
+    integer,  intent(in)                                  :: np, grid_level, ind_cloud
+    integer,  intent(in),    dimension(1:nvector)         :: bin_nr
+    real(dp), intent(in),    dimension(1:nvector)         :: mpart
+    real(dp), intent(inout), dimension(1:nvector, 1:ndim) :: xpart
+
+    ! This routine deposits nvector particles (local or remote) onto the grid (local)
+    ! at level grid_level.
+
+    ! in:           - particle masses
+    !               - particle positions
+    !               - number of particles
+    !               - grid_level 
+    
+    ! out:          - "corrupted" particle positions -> do not reuse xpart outside of 
+    !                 this subroutine  
+    
+    ! side effect:  - updates rho field on level grid_level
+    real(dp),        dimension(1:nvector),         save :: vol, vol_idim
+
+    integer,  save :: ipart, idim, nx_loc, ind_cloud
+    real(dp), save :: pos_to_cart
+
+#if NDIM<3
+    write(*,*)'add non-3D version of this routine'
+    stop
+#endif
+
+    ! Convert particle coordinates in code units
+    ! into "cartesian" coordinates at grid_level
+    pos_to_cart = 2.0**grid_level / dble(boxlen)
+    xpart = xpart * pos_to_cart
+    
+    ind(1) = ind_cloud/4
+    ind(2) = mod(ind_cloud,4)/2
+    ind(3) = mod(mod(ind_cloud,4),2)
+
+    ! compute volume of cloud/cell intersection
+    vol(1:np) = 1.
+    do idim=1,ndim       
+       vol_idim(1:np) = xpart(1:np) - floor(xpart(1:np))
+       if (ind(idim)==0) vol_idim(1:np) = 1.d0 - vol_idim(1:np)
+       vol(1:np) = vol(1:np) * vol_idim(1:np)          
+    end do
+        
+    ! Compute particles per bin
+    do ip=1,np
+       bin_count(bin_nr(ip)) = bin_count(bin_nr(ip)) + vol(ip)
+    end do
+    
+    ! Compute mass per bin
+    do ip = 1, np
+       bin_mass(bin_nr(ip)) = bin_mass(bin_nr(ip)) + vol(ip)
+    end do
+
+  end subroutine ngp_amr_andreas
+
+  subroutine dump_histograms(ilevel)
+    implicit none
+    integer, intent(in) :: ilevel
+
+    ! Routine to dump the total mass and number of particles per bin
+    ! into rho/phi. Involves MPI communication
+
+!    call build_histogram_communicator
+    
+    ib = 0
+    do ibin = 1, nbins
+       ib = ib + 1
+       bkey(ib, 0) = bin_key
+  
+
+       call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
+            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)    
+
+
+
+  end subroutine dump_histograms
+
+    
+
+end subroutine rho_dump_histograms

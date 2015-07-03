@@ -1536,8 +1536,9 @@ subroutine compute_particle_histogram(offset, np)
   integer, intent(in) :: offset, np
 
   !----------------------------------------------------------------------------
-  ! This routine computes particle histograms. It assumes that particles are 
-  ! sorted in memory by hilbert key.  
+  ! This routine computes a particle histogram for np particles in memory, 
+  ! starting from offset+1 to offset+np. There must be a precomputed array 
+  ! part_ind_permutation which sorts the particles by hilbert key.
   !----------------------------------------------------------------------------
 
   integer,                         save :: ibin, ipart, ip
@@ -1558,7 +1559,7 @@ subroutine compute_particle_histogram(offset, np)
      end if
   end do
   
-  ! allocate histograms if necessary
+  ! Allocate histograms
   if(size(bin_count) < nbins)then
      deallocate(bin_keys)
      deallocate(bin_count)
@@ -1571,15 +1572,16 @@ subroutine compute_particle_histogram(offset, np)
   end if
   bin_count = 0
 
-  ! label every bin by a key and sum up the particle mass per bin
+  ! Label every bin by a key and sum up the particles per bin, store 
+  ! the offset of the first particle in each bin in the particle array
 
-  ! first particle
+  ! First particle in first bin
   ibin=1
   bin_keys(ibin,0:2) = part_hkey(part_ind_permutation(offset+1),0:2)  
   bin_count(ibin) = 1
   bin_start_offset(ibin) = offset
 
-  ! all other bins
+  ! All other particles/bins
   current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
   do ip=offset+2, offset+np
      ipart = part_ind_permutation(ip)

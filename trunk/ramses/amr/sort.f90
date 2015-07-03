@@ -439,11 +439,12 @@ contains
   !########################################################################
   !########################################################################
 
-  subroutine lsd_radix_sort_particles(offset, np, final_level, key_level)
+  subroutine lsd_radix_sort_particles(offset, np, final_level, key_level, reset_permutation)
     use pm_commons,     only: part_ind_permutation, part_ind_permutation2, part_hkey
     use amr_parameters, only: ndim
     implicit none
     integer, intent(in) :: offset, np, final_level, key_level
+    logical, intent(in) :: reset_permutation
 
     ! This routine sorts a contiguous sequence of the pariticle 
     ! array (specified by offset and np) by ascending hilbert keys
@@ -459,10 +460,13 @@ contains
        write(*,*)'you are trying to sort the hilbert keys to a too high level'
        call clean_stop
     end if
-    
-    do ip = offset+1, offset+np
-       part_ind_permutation(ip) = ip
-    end do
+ 
+
+    if (reset_permutation)then
+       do ip = offset+1, offset+np
+          part_ind_permutation(ip) = ip
+       end do
+    end if
 
     do ilevel=final_level,1,-1
 #if NDIM == 3
