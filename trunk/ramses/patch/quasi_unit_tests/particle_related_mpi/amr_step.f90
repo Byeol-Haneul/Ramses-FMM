@@ -338,7 +338,7 @@ subroutine check_new_hilbert(test_ok)
   
   told=MPI_WTIME(info)
   part_hkey(1:npart_andreas, 0) = store_key(1:npart_andreas)
-  call lsd_radix_sort_particles(0, npart_andreas, levelmin, levelmin)
+  call lsd_radix_sort_particles(0, npart_andreas, levelmin, levelmin, .true.)
   print*, 'lsd  sort: ', MPI_WTIME(info)-told
 
   do i=1,npart_andreas-1
