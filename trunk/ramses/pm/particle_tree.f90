@@ -45,7 +45,7 @@ subroutine init_tree
      prevp(ipart)=ipart-1
      nextp(ipart)=ipart+1
   end do
-  prevp(npartmax)=npartmax-1; nextp(npartmax)
+  prevp(npartmax)=npartmax-1; nextp(npartmax)=0
   ! Free memory linked list
   headp_free=npart+1
   tailp_free=npartmax
