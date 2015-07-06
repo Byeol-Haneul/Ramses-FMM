@@ -1529,7 +1529,7 @@ end subroutine get_cell_index
 !#########################################################################
 !#########################################################################
 subroutine compute_particle_histogram(offset, np)
-  use pm_commons 
+  use pm_commons
   use amr_commons
   use sort,      only: gt_3keys
   implicit none
