@@ -24,7 +24,19 @@ subroutine amr_step(ilevel,icount,test_ok)
 
   if(numbtot(1,ilevel)==0)return
 
-
+  ! put in a break to attach a debut session
+#ifndef WITHOUTMPI
+  if (myid==1)then
+     write(*,*)'ready?'
+     read(*,*)
+  endif
+  call MPI_BARRIER(MPI_COMM_WORLD,info)
+#endif
+#ifdef WITHOUTMPI
+  write(*,*)'ready?'
+  read(*,*)
+#endif
+  
   !-------------------------------------------
   ! Make new refinements and update boundaries
   !-------------------------------------------
