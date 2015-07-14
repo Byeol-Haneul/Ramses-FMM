@@ -27,6 +27,7 @@ subroutine init_tree
 
   if(verbose)write(*,*)'  Entering init_tree'
 
+  
   ! Local constants
   nxny=nx*ny
   xbound(1:3)=(/dble(nx),dble(ny),dble(nz)/)
@@ -1560,15 +1561,17 @@ subroutine compute_particle_histogram(offset, np)
   end do
   
   ! Allocate histograms
-  if(size(bin_count) < nbins)then
+  if(allocated(bin_count))then
      deallocate(bin_keys)
      deallocate(bin_count)
      deallocate(bin_start_offset)
+     deallocate(bin_mass)
   end if
-  if (.not. allocated(bin_mass))then
+  if (.not. allocated(bin_keys))then
      allocate(bin_keys(nbins,0:2))
      allocate(bin_count(nbins))
      allocate(bin_start_offset(nbins))
+     allocate(bin_mass(nbins))
   end if
   bin_count = 0
 

@@ -498,7 +498,7 @@ contains
     use pm_commons, only: npart_andreas
     implicit none    
     integer,                          intent(in)         :: offset, np, ilevel, key_level
-    integer(kind=8), dimension(1:offset+np), intent(in), target :: hkey2, hkey1, hkey0
+    integer(kind=8), dimension(1:npart_andreas), intent(in), target :: hkey2, hkey1, hkey0
 #endif
 
 #if NDIM == 2
@@ -514,7 +514,7 @@ contains
 #endif
 
 
-    integer,         dimension(1:offset+np), intent(inout)      :: sigma1, sigma2
+    integer,         dimension(1:npart_andreas), intent(inout)      :: sigma1, sigma2
 
     ! Update the given permuations sigma1, sigma2 such that sigma1  will 
     ! sort the 3 bits belonging to level ilevel of the input hilbert keys.

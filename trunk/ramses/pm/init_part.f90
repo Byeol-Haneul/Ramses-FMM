@@ -782,9 +782,6 @@ subroutine init_part_andreas
   allocate(current_state(npartmax))
   allocate(part_ind_permutation(npartmax))
   allocate(part_ind_permutation2(npartmax))
-  allocate(bin_mass(1:2))
-  allocate(bin_count(1:2))
-  allocate(bin_keys(1:2,0:2))
   allocate(part_level_offset(levelmin:nlevelmax + 1))
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   stop
