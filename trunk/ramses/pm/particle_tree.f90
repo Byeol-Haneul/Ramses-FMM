@@ -1532,7 +1532,7 @@ end subroutine get_cell_index
 subroutine compute_particle_histogram(offset, np)
   use pm_commons
   use amr_commons
-  use sort,      only: gt_3keys
+  use sort,        only: gt_3keys
   implicit none
   integer, intent(in) :: offset, np
 
@@ -1570,10 +1570,10 @@ subroutine compute_particle_histogram(offset, np)
   if (.not. allocated(bin_keys))then
      allocate(bin_keys(nbins,0:2))
      allocate(bin_count(nbins))
-     allocate(bin_start_offset(nbins))
+     allocate(bin_start_offset(nbins+1))
      allocate(bin_mass(nbins))
   end if
-  bin_count = 0
+  bin_mass=0
 
   ! Label every bin by a key and sum up the particles per bin, store 
   ! the offset of the first particle in each bin in the particle array
@@ -1596,7 +1596,10 @@ subroutine compute_particle_histogram(offset, np)
      end if
      bin_count(ibin)=bin_count(ibin)+1
   end do
+  bin_start_offset(nbins+1) = offset + np
 
+  print*, 'bins', nbins, np
+  
 end subroutine compute_particle_histogram
 
 
@@ -1679,3 +1682,33 @@ end subroutine count_parts
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine check_sorted(offset, np)
+  use pm_commons,   only : part_hkey, part_ind_permutation
+  use sort,         only : ge_3keys
+  implicit none
+  integer, intent(in) :: offset, np
+
+  !----------------------------------------------------------------------------
+  ! Simple helper routine to check whether the np particles starting form offset
+  ! are sorted by hilbert key
+  !----------------------------------------------------------------------------
+  logical,                         save :: ok
+  integer,                         save :: ipart, ip
+  integer(kind=8), dimension(0:2), save :: current_key
+
+  ok =.true.
+  
+  current_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
+  do ip = offset + 2, offset + np
+     ipart = part_ind_permutation(ip)
+     if (.not. ge_3keys(part_hkey(ipart,0:2), current_key(0:2)))then
+        ok=.false.
+        print*, part_hkey(ipart,0),current_key(0)
+        print*, part_hkey(ipart,1),current_key(1)
+        print*, part_hkey(ipart,2),current_key(2)
+     end if
+     current_key(0:2) = part_hkey(ipart,0:2)
+  end do
+  
+  
+end subroutine check_sorted

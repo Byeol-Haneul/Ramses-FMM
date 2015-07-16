@@ -1457,7 +1457,7 @@ subroutine rho_histogram_particles(part_level)
   
   offset = part_level_offset(part_level)
   nparts = part_level_offset(part_level+1) - part_level_offset(part_level)
-  
+
   ! Count number of "masked" particles and compute permuation such
   ! that masked particles are accessed first inside the level.
   n_masked = 0
@@ -1469,6 +1469,7 @@ subroutine rho_histogram_particles(part_level)
         part_ind_permutation(offset + n_masked) = ipart
      end if
   end do
+  print*,'nmasked ', n_masked, n_dump_parts_direct, nparts
   
   ! outer loop here over grid levels
   do grid_level = part_level, levelmin, -1
@@ -1479,7 +1480,7 @@ contains
   
   subroutine rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
     use amr_parameters, only: ndim, nvector
-    use pm_commons,     only: xp_andreas, part_ind_permutation
+    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2
     use hilbert,        only: hilbert_for_particle
     use sort,           only: lsd_radix_sort_particles
     implicit none
@@ -1511,7 +1512,6 @@ contains
     dx = 0.5D0**grid_level
     dx_loc = dx * scale
     vol_loc = dx_loc**ndim
-    
 
   ! Loop over CIC cloud / cell intersections
     do ind_cloud = 0, 7
@@ -1529,13 +1529,19 @@ contains
              xp_andreas(ipart,idim) = xp_andreas(ipart,idim) + delta(idim) * dx_loc
           end do
        end do
-       
+
        ! Recompute hilbert key for all parts, also the 
-       ! "unmasked ones" - > if too slow, do it only for the masked ones
+       ! "unmasked ones" - > if too slow, try do it only for the masked ones
        call hilbert_for_particle(offset, nparts, 0, grid_level)
 
        ! Sort hilbert keys
        call lsd_radix_sort_particles(offset, n_masked, grid_level, grid_level, .false.)
+
+       ! This here is a bit of a hack
+       ! The problem is, that lsd_radix does the sigam1=>sigma2 assignment only for the
+       ! particles in the interval [offset+1, offset+n_masked].
+       part_ind_permutation(offset + 1 : offset + nparts) = &
+            part_ind_permutation2(offset + 1 : offset + nparts)
        
        ! Compute "reduced" histogram
        call compute_particle_histogram(offset, n_masked)
@@ -1544,6 +1550,7 @@ contains
        ! given cloud/cell intersection
        ip_sweep = 0
        ibin = 1
+       print*, 'goin in loop', offset, n_masked, offset+n_masked
        do ip = offset+1,offset+n_masked
           ipart = part_ind_permutation(ip)
           if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
@@ -1588,7 +1595,7 @@ contains
 
     real(dp), dimension(1:nvector),save :: vol, vol_idim
     integer,  dimension(1:ndim),   save :: ind
-    integer,  save :: idim
+    integer,  save :: idim, ip
     real(dp), save :: pos_to_cart
 
 #if NDIM<3

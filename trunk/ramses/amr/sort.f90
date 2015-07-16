@@ -560,7 +560,9 @@ contains
 
     ! Count particles per bucket
     bucket_count=0
-    do ipart = offset+1, offset+np
+    do ip = offset+1, offset+np
+       ! This line here is necessary for the sorting of only n_masked particles
+       ipart = sigma1(ip)
        ibucket=ibits(use_key(ipart),ibit1,nbits_read)
        bucket_count(ibucket) = bucket_count(ibucket) + 1
     end do
