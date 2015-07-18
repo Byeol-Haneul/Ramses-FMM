@@ -29,7 +29,7 @@ subroutine rho_fine(ilevel,icount,new_rho)
   real(dp)::d0,m_refine_loc,dx_min,vol_min,mstar,msnk,nISM,nCOM
   real(kind=8)::total,total_all,total2,total2_all,tms
   real(kind=8),dimension(2)::totals_in,totals_out
-  logical::multigrid=.false., ok
+  logical::multigrid=.false., ok, first
   real(kind=8),dimension(1:ndim+1)::multipole_in,multipole_out
 
   if(.not. poisson)return
@@ -131,7 +131,6 @@ subroutine rho_fine(ilevel,icount,new_rho)
      end if
   end if
 
-  print*, rho(4690), rho_andreas(4690)
   if(pic)then
      if (new_rho)then
         do ilev = ilevel, nlevelmax
@@ -158,13 +157,15 @@ subroutine rho_fine(ilevel,icount,new_rho)
   ncoarse=nx*ny*nz
   ncell=ncoarse+twotondim*ngridmax
   ok = .true.
-  do icell = 1, ncell
-     if (rho(icell) > 0.)then
-        ok = ok .and. (abs(rho(icell) - rho_andreas(icell))/rho(icell) < 1.d-3 )
-        if (.not. ok)print*, rho(icell), rho_andreas(icell), icell
-        if (.not. ok)call clean_stop
-     end if
-  end do
+  first = .true.
+  ! do icell = 1, ncell
+  !    if (rho(icell) > 0.)then
+  !       ok = ok .and. (abs(rho(icell) - rho_andreas(icell))/rho(icell) < 1.d-3 )
+  !       if (.not. ok)print*, rho(icell), rho_andreas(icell), 1./rho(icell)*rho_andreas(icell), icell
+  !       if ((.not. ok) .and. new_rho .and. (.not. first))call clean_stop
+  !       if (.not. ok)first=.false.
+  !    end if
+  ! end do
   if (new_rho)then
      if (.not. ok)then
         write(*,*)'error in rho at level ',ilevel,' occurred in process ', myid
@@ -538,7 +539,11 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
 
   ! Update mass density and number density fields
   do ind=1,twotondim
-
+     ! do j=1,np
+     !    if(indp(j,ind)==4690)then
+     !       print*, ind_part(j),' contributes', idp(ind_part(j))
+     !    end if
+     ! end do
      do j=1,np
         ok(j)=igrid(j,ind)>0
      end do
@@ -1208,7 +1213,7 @@ subroutine rho_direct_particles(part_level)
   use amr_parameters, only: dp, levelmin, nvector, ndim
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_level_offset, bin_start_offset, bin_count, &
-                            xp_andreas, mp_andreas
+                            xp_andreas, mp_andreas, idp_andreas
   implicit none
   integer, intent(in) :: part_level
   
@@ -1239,10 +1244,11 @@ subroutine rho_direct_particles(part_level)
   ibin = 0
   do ipart = offset+1, offset + nparts
      if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
-     if (bin_count(ibin) > n_dump_parts_direct) then
+     if (bin_count(ibin) <= n_dump_parts_direct) then
         ip = ip + 1
         xpart(ip,1:ndim) = xp_andreas(ipart,1:ndim)
         mpart(ip)        = mp_andreas(ipart)
+        if (idp_andreas(ipart) == 369)print*, 'ipart now',ip
      end if
      if (ip == nvector) then
         do grid_level = part_level, levelmin, -1
@@ -1485,7 +1491,7 @@ subroutine rho_histogram_particles(part_level)
   ! Count number of "masked" particles and compute permuation such
   ! that masked particles are accessed first inside the level.
   n_masked = 0
-  ibin = 1
+  ibin = 0
   do ipart = offset + 1, offset + nparts
      if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
      if (bin_count(ibin) > n_dump_parts_direct) then
@@ -1506,7 +1512,7 @@ contains
   
   subroutine rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
     use amr_parameters, only: ndim, nvector
-    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset
+    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset, bin_count
     use hilbert,        only: hilbert_for_particle
     use sort,           only: lsd_radix_sort_particles
     implicit none
@@ -1565,20 +1571,22 @@ contains
 
        ! Compute "reduced" histogram
        call compute_particle_histogram(offset, n_masked)
-
+       ! Reset bin count as it is computed using cic later
+       bin_count=0
+       
        print*, 'going in loop', offset, n_masked, nbins, grid_level, part_level, ind_cloud 
        
        ! Loop masked, sorted parts in sweeps and dump the mass for the
        ! given cloud/cell intersection
        ip_sweep = 0
-       ibin = 1
+       ibin = 0
        do ip = offset+1,offset+n_masked
+          if (ip > bin_start_offset(ibin+1)) ibin = ibin + 1
           ipart = part_ind_permutation(ip)
-          if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
           ip_sweep = ip_sweep + 1
           xpart(ip_sweep,1:ndim) = xp_andreas(ipart,1:ndim)
           mpart(ip_sweep)        = mp_andreas(ipart)
-          bin_nr(ip_sweep)        = ibin
+          bin_nr(ip_sweep)       = ibin
           
           if (ip_sweep == nvector) then
              call cic_histogram(xpart, mpart, bin_nr, ip_sweep,  grid_level, ind_cloud)
@@ -1606,7 +1614,7 @@ contains
   
   subroutine cic_histogram(xpart, mpart, bin_nr, np, grid_level, ind_cloud)
     use amr_commons,     only: boxlen, icoarse_max, nvector, ndim
-    use pm_commons,      only: bin_keys, bin_mass, nbins
+    use pm_commons,      only: bin_keys, bin_mass, nbins, bin_count
     implicit none
     integer,  intent(in)                                  :: np, grid_level, ind_cloud
     integer,  intent(in),    dimension(1:nvector)         :: bin_nr
@@ -1668,8 +1676,8 @@ contains
     integer,  save :: i, ib, ibin
     real(dp), save :: vol_loc
 
-    vol_loc = (0.5**cell_level / dble(boxlen) )**3    
-
+    vol_loc = (0.5**cell_level * dble(boxlen) )**3    
+    
     ! slightly silly way to go through bins in sweeps and add mass to corresponding cell
     ib = 0
     do ibin = 1, nbins

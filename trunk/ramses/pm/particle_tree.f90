@@ -1590,7 +1590,7 @@ subroutine compute_particle_histogram(offset, np)
      ipart = part_ind_permutation(ip)
      if (gt_3keys(part_hkey(ipart,0:2), current_bin_key(0:2)))then
         ibin=ibin+1
-        bin_start_offset(ibin) = part_ind_permutation(ip - 1) 
+        bin_start_offset(ibin) = ip - 1 
         bin_keys(ibin,0:2) = part_hkey(ipart,0:2)
         current_bin_key(0:2) = part_hkey(ipart,0:2)
      end if
