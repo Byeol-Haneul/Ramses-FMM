@@ -115,7 +115,23 @@ subroutine rho_fine(ilevel,icount,new_rho)
 
   ! Copy the gas contribution to rho 
   rho_andreas = rho
-  
+
+  ncoarse=nx*ny*nz
+  ncell=ncoarse+twotondim*ngridmax
+  ok = .true.
+  do icell = 1, ncell
+     ok = ok .and. (rho(icell) == rho_andreas(icell))
+  end do
+  if (new_rho)then
+     if (.not. ok)then
+        write(*,*)'error in rho at level ',ilevel,' occurred in process ', myid
+        call clean_stop
+     else
+        write(*,*)'juhuu, all good for ', ilevel, ' on process ', myid
+     end if
+  end if
+
+  print*, rho(4690), rho_andreas(4690)
   if(pic)then
      if (new_rho)then
         do ilev = ilevel, nlevelmax
@@ -125,6 +141,8 @@ subroutine rho_fine(ilevel,icount,new_rho)
      end if
      call rho_from_current_level(ilevel)
   end if
+  print*, rho(4690), rho_andreas(4690) 
+  print*, rho(4600), rho_andreas(4600) 
   ! Update boudaries
   call make_virtual_reverse_dp(rho(1),ilevel)
   call make_virtual_fine_dp   (rho(1),ilevel)
@@ -141,7 +159,11 @@ subroutine rho_fine(ilevel,icount,new_rho)
   ncell=ncoarse+twotondim*ngridmax
   ok = .true.
   do icell = 1, ncell
-     ok = ok .and. (rho(icell) == rho_andreas(icell))
+     if (rho(icell) > 0.)then
+        ok = ok .and. (abs(rho(icell) - rho_andreas(icell))/rho(icell) < 1.d-3 )
+        if (.not. ok)print*, rho(icell), rho_andreas(icell), icell
+        if (.not. ok)call clean_stop
+     end if
   end do
   if (new_rho)then
      if (.not. ok)then
@@ -1224,14 +1246,14 @@ subroutine rho_direct_particles(part_level)
      end if
      if (ip == nvector) then
         do grid_level = part_level, levelmin, -1
-           call cic_amr_andreas(xpart, mpart, ip,  grid_level)
+           call cic_amr_andreas(xpart, mpart, ip, grid_level)
         end do
         ip = 0
      end if
   end do
   if (ip > 0) then
      do grid_level = part_level, levelmin, -1
-        call cic_amr_andreas(xpart, mpart, ip,  grid_level)
+        call cic_amr_andreas(xpart, mpart, ip, grid_level)
      end do
   end if
 
@@ -1241,7 +1263,7 @@ contains
     use amr_parameters,  only: static, mass_cut_refine
     use amr_commons,     only: boxlen, icoarse_max, & 
                                icoarse_min, nvector, ndim
-    use poisson_commons, only: multipole, rho, phi
+    use poisson_commons, only: multipole, rho_andreas, phi
     use hilbert,         only: hilbert3d
     implicit none
     integer,  intent(in)                                  :: np, grid_level
@@ -1401,7 +1423,7 @@ contains
 
        do ip = 1, np
           if (ok(ip)) then
-             rho(parent_cell_index(ip)) = rho(parent_cell_index(ip)) + vol(ip)
+             rho_andreas(parent_cell_index(ip)) = rho_andreas(parent_cell_index(ip)) + vol(ip)
           end if
        end do
 
@@ -1458,6 +1480,8 @@ subroutine rho_histogram_particles(part_level)
   offset = part_level_offset(part_level)
   nparts = part_level_offset(part_level+1) - part_level_offset(part_level)
 
+  call compute_particle_histogram(offset, nparts)
+  
   ! Count number of "masked" particles and compute permuation such
   ! that masked particles are accessed first inside the level.
   n_masked = 0
@@ -1472,15 +1496,17 @@ subroutine rho_histogram_particles(part_level)
   print*,'nmasked ', n_masked, n_dump_parts_direct, nparts
   
   ! outer loop here over grid levels
-  do grid_level = part_level, levelmin, -1
-     call rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
-  end do
+  if (n_masked > 0)then
+     do grid_level = part_level, levelmin, -1
+        call rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
+     end do
+  end if
   
 contains
   
   subroutine rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
     use amr_parameters, only: ndim, nvector
-    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2
+    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset
     use hilbert,        only: hilbert_for_particle
     use sort,           only: lsd_radix_sort_particles
     implicit none
@@ -1537,20 +1563,15 @@ contains
        ! Sort hilbert keys
        call lsd_radix_sort_particles(offset, n_masked, grid_level, grid_level, .false.)
 
-       ! This here is a bit of a hack
-       ! The problem is, that lsd_radix does the sigam1=>sigma2 assignment only for the
-       ! particles in the interval [offset+1, offset+n_masked].
-       part_ind_permutation(offset + 1 : offset + nparts) = &
-            part_ind_permutation2(offset + 1 : offset + nparts)
-       
        ! Compute "reduced" histogram
        call compute_particle_histogram(offset, n_masked)
 
+       print*, 'going in loop', offset, n_masked, nbins, grid_level, part_level, ind_cloud 
+       
        ! Loop masked, sorted parts in sweeps and dump the mass for the
        ! given cloud/cell intersection
        ip_sweep = 0
        ibin = 1
-       print*, 'goin in loop', offset, n_masked, offset+n_masked
        do ip = offset+1,offset+n_masked
           ipart = part_ind_permutation(ip)
           if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
@@ -1667,7 +1688,7 @@ contains
        call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
             bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)
        do i = 1, ib
-          rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + bin_mass(ibin - ib + i) / vol_loc             
+          rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + bin_mass(nbins - ib + i) / vol_loc             
        end do
     end if
   end subroutine dump_histograms
