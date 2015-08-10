@@ -159,11 +159,6 @@ subroutine amr_step(ilevel,icount,test_ok)
      bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
      bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
   end do
-  print*,bound_key(0:ndomain),myid
-  print*,bound_key_level(0:ndomain,8),myid,'8'
-  print*,bound_key_level(0:ndomain,7),myid,'7'
-  print*,bound_key_level(0:ndomain,6),myid,'6'
-
 
   call MPI_BARRIER(MPI_COMM_WORLD,info)
   if (myid==1)print*, 'starting tests now', npart_andreas
@@ -175,11 +170,11 @@ subroutine amr_step(ilevel,icount,test_ok)
   call count_parts
   do ilev=levelmin, nlevelmax
      told=MPI_WTIME(info)
-     call sort_particles(ilev)
+     call sort_particles(ilev, .true.)
      print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
      told=MPI_WTIME(info)
      call make_tree_fine(ilev)
-     call rho_fine(ilev,icount) 
+     call rho_fine(ilev,icount, .false.) 
      call kill_tree_fine(ilev)
      call virtual_tree_fine(ilev)
      print*, 'ilevel rho, kill, virt: ', ilev, MPI_WTIME(info)-told
@@ -189,7 +184,7 @@ subroutine amr_step(ilevel,icount,test_ok)
   do i=1,1
   do ilev=levelmin, nlevelmax
      told=MPI_WTIME(info)
-     call sort_particles(ilev)
+     call sort_particles(ilev, .true.)
      print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
   end do
   end do

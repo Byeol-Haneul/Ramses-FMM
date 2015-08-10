@@ -72,6 +72,12 @@ subroutine init_part
 #endif
   xp=0.0; vp=0.0; mp=0.0; levelp=0; idp=0
 
+  ! Allocate communicator variables
+  allocate(bin_send_cnt(1:ncpu), bin_send_oft(1:ncpu))
+  allocate(bin_recv_cnt(1:ncpu), bin_recv_oft(1:ncpu))
+  allocate(part_send_cnt(1:ncpu), part_send_oft(1:ncpu))
+  allocate(part_recv_cnt(1:ncpu), part_recv_oft(1:ncpu))
+  
   !--------------------
   ! Read part.tmp file
   !--------------------

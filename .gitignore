@@ -18,7 +18,11 @@ trunk/ramses/patch/*
 !trunk/ramses/patch/challenge
 !trunk/ramses/patch/quasi_unit_tests
 !trunk/ramses/patch/unit_tests
-
+trunk/ramses/patch/quasi_unit_tests/particle_related_mpi/r*
+trunk/ramses/patch/quasi_unit_tests/particle_related_mpi/s*
+trunk/ramses/patch/quasi_unit_tests/particle_related_mpi/*~
+trunk/ramses/patch/quasi_unit_tests/particle_related_mpi/*.log
+trunk/ramses/patch/quasi_unit_tests/particle_related_mpi/*.txt
 
 # some more to ignore
 *~

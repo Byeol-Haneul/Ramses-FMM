@@ -975,111 +975,51 @@ end subroutine empty_comm
 ! !################################################################
 ! !################################################################
 ! !################################################################
-subroutine build_particle_communicator
-  use amr_commons,   only:ncpu, myid, bound_key
-  use pm_commons
-  use pm_parameters, only:npartmax
-  implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
-
-  
-  ! ncpu^2 -> ugly, only for a start, replace by point to point communication later
-  integer,dimension(1:ncpu,1:ncpu)::npart_alltoall, npart_alltoall_tot
-  integer::receive_cpu, ipart, info, icpu
-  
-  npart_alltoall=0
-  receive_cpu=1
-
-  do ipart=1,npart_andreas
-     do while (part_hkey(ipart,0) > int(bound_key(receive_cpu),kind=8)) 
-        receive_cpu=receive_cpu+1
-     end do
-     npart_alltoall(myid,receive_cpu)=npart_alltoall(myid,receive_cpu)+1
-  end do
-  npart_alltoall(myid,myid)=0
-  call MPI_ALLREDUCE(npart_alltoall,npart_alltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  npart_alltoall=npart_alltoall_tot
-  
-  if(.not. allocated(part_send_cnt))then
-     allocate(part_send_cnt(1:ncpu),part_send_oft(1:ncpu))
-     allocate(part_recv_cnt(1:ncpu),part_recv_oft(1:ncpu))
-  endif
-  part_send_cnt=0; part_send_oft=0; part_send_tot=0
-  part_recv_cnt=0; part_recv_oft=0; part_recv_tot=0
-  do icpu=1,ncpu
-     part_send_cnt(icpu)=npart_alltoall(myid,icpu)
-     part_recv_cnt(icpu)=npart_alltoall(icpu,myid)
-     part_send_tot=part_send_tot+part_send_cnt(icpu)
-     part_recv_tot=part_recv_tot+part_recv_cnt(icpu)
-     if(icpu<ncpu)then
-        part_send_oft(icpu+1)=part_send_oft(icpu)+npart_alltoall(myid,icpu)
-        part_recv_oft(icpu+1)=part_recv_oft(icpu)+npart_alltoall(icpu,myid)
-     endif
-  end do
-
-  !maybe allocate in effective communication routine
-
-  if(allocated(receive_keys))then
-     deallocate(receive_keys)
-  endif
-  if(allocated(send_keys))then
-     deallocate(send_keys)
-  endif
-  allocate(receive_keys(1:part_recv_tot,0:2))
-  allocate(send_keys(1:part_send_tot,0:2))
- 
-#endif  
-  
-end subroutine build_particle_communicator
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-#ifndef WITHOUTMPI
-subroutine build_histogram_communicator(ilevel)
-  use amr_commons,   only: ncpu, myid, bound_key_level, bound_key
-  use pm_commons
-  use pm_parameters, only: npartmax
+subroutine build_communicator(send_cnt, send_oft, send_tot, &
+                              recv_cnt, recv_oft, recv_tot, &
+                              ndata, mydata, mydata_oft, keys, ilevel)
+  use amr_parameters, only: nlevelmax
+  use amr_commons,    only: ncpu, myid, bound_key_level, bound_key
   implicit none
 
   include 'mpif.h'
-  integer, intent(in) ::  ilevel
+  integer, intent(in) ::  ilevel, ndata
+  integer, intent(inout) :: send_tot, recv_tot, mydata, mydata_oft
+  integer(kind=8), dimension(1:ndata, 0:2), intent(in) :: keys
+  integer, dimension(1:ncpu), intent(inout) :: send_cnt, send_oft, recv_cnt, recv_oft
   
   !----------------------------------------------------------------------------
-  ! This routine sets up the communication structure for histogrammed particle
-  ! quantities. The bins are assumed to be sorted by hilbert key
+  ! This routine sets up the communication structure for any kind 3-integer 
+  ! quantity (particles, bins, etc.). The input hilbert keys (keys) are assumed
+  ! to be sorted.
   !----------------------------------------------------------------------------
   
-  integer :: receive_cpu, ibin, info, icpu, idest, isource
+  integer :: receive_cpu, idata, info, icpu, idest, isource
   integer :: countrecv, countsend  
   integer, dimension(MPI_STATUS_SIZE,2*ncpu) :: statuses
-  integer, dimension(2*ncpu)                 :: reqsend,reqrecv
+  integer, dimension(2*ncpu)                 :: reqsend, reqrecv
     
   if (nlevelmax>20)then 
      print*, 'problem here with precision'
      stop
   end if
   
-  
-  if(.not. allocated(bin_send_cnt))then
-     allocate(bin_send_cnt(1:ncpu), bin_send_oft(1:ncpu))
-     allocate(bin_recv_cnt(1:ncpu), bin_recv_oft(1:ncpu))
-  endif
-  bin_send_cnt=0; bin_send_oft=0; bin_send_tot=0
-  bin_recv_cnt=0; bin_recv_oft=0; bin_recv_tot=0
+  send_cnt=0; send_oft=0; send_tot=0
+  recv_cnt=0; recv_oft=0; recv_tot=0
 
   ! count number of bins that need to be sent to every other process
-  receive_cpu = 0; mybins = 0
-  do ibin = 1, nbins
-     do while (bin_keys(ibin,0) > bound_key_level(receive_cpu, ilevel) ) 
-        receive_cpu=receive_cpu+1
+  receive_cpu = 0; mydata = 0
+  do idata = 1, ndata
+     ! REPLACE this by do while( gt_3_keys(keys..., bound_key_level ))
+     do while (keys(idata, 0) > bound_key_level(receive_cpu, ilevel) ) 
+        receive_cpu = receive_cpu + 1
      end do
      if (receive_cpu == myid) then
-        if (mybins == 0) mybins_offset = ibin - 1
-        mybins = mybins + 1
+        if (mydata == 0) mydata_oft = idata - 1
+        mydata = mydata + 1
      else
-        bin_send_cnt(receive_cpu) = bin_send_cnt(receive_cpu)+1
+        send_cnt(receive_cpu) = send_cnt(receive_cpu) + 1
      end if
   end do
 
@@ -1089,14 +1029,14 @@ subroutine build_histogram_communicator(ilevel)
   do isource = 1, ncpu        
      if (isource .ne. myid) then
         countrecv = countrecv + 1
-        call MPI_IRECV(bin_recv_cnt(isource), 1, MPI_INTEGER, isource -1, &
+        call MPI_IRECV(recv_cnt(isource), 1, MPI_INTEGER, isource - 1, &
              1234, MPI_COMM_WORLD, reqrecv(countrecv), info)
      end if
   end do
   do idest = 1, ncpu
      if (idest .ne. myid) then
         countsend = countsend + 1
-        call MPI_ISEND(bin_send_cnt(idest), 1, MPI_INTEGER, idest -1, 1234, &
+        call MPI_ISEND(send_cnt(idest), 1, MPI_INTEGER, idest - 1, 1234, &
              MPI_COMM_WORLD, reqsend(countsend), info)
      end if
   end do
@@ -1106,27 +1046,34 @@ subroutine build_histogram_communicator(ilevel)
 
   ! "Prefix sum" of counters gives offsets
   do icpu = 1, ncpu-1
-     bin_send_oft(icpu+1)=bin_send_oft(icpu)+bin_send_cnt(icpu)
-     bin_recv_oft(icpu+1)=bin_recv_oft(icpu)+bin_recv_cnt(icpu)
+     send_oft(icpu+1)=send_oft(icpu)+send_cnt(icpu)
+     recv_oft(icpu+1)=recv_oft(icpu)+recv_cnt(icpu)
   end do
-  bin_send_tot=sum(bin_send_cnt); bin_recv_tot=sum(bin_recv_cnt)
+  send_tot=sum(send_cnt); recv_tot=sum(recv_cnt)
 
-end subroutine build_histogram_communicator
+end subroutine build_communicator
 #endif
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine sort_particles(ilevel)
-  use pm_commons,  only: npart_andreas, part_level_offset
+subroutine sort_particles(ilevel, use_histograms)
+  use pm_commons,  only: npart_andreas, part_level_offset, &
+                         bin_send_cnt, bin_send_oft, bin_send_tot, &
+                         bin_recv_cnt, bin_recv_oft, bin_recv_tot, &
+                         local_bins, local_bins_oft, nbins, bin_keys, &
+                         part_send_cnt, part_send_oft, part_send_tot, &
+                         part_recv_cnt, part_recv_oft, part_recv_tot, &
+                         local_parts, local_parts_oft, part_hkey
   use amr_commons, only: dp, myid, levelmin, nlevelmax
   use sort,        only: lsd_radix_sort_particles, apply_particle_permutation
   use hilbert,     only: hilbert_for_particle 
   implicit none
  
   integer, intent(in) :: ilevel
+  logical, intent(in) :: use_histograms
   
-  integer  :: ilev, offset, np, ipart
+  integer  :: ilev, offset, np
 
   ! This routine moves all particles that sit in refined cells at level ilevel
   ! to level ilevel + 1. It then sorts the remaining (true) ilevel particles 
@@ -1139,38 +1086,53 @@ subroutine sort_particles(ilevel)
         print*, 'nparts on ',myid, ilev, part_level_offset(ilev + 1) - part_level_offset(ilev)
      end do
   end if
+
+
   
   ! Compute hilbert keys (probably move outside of this routine)
   call hilbert_for_particle(offset, npart_andreas - offset, 0, ilevel)
-
+  
   ! Compute a permutation that sorts ALL particles starting from offset
   call lsd_radix_sort_particles(offset, npart_andreas - offset, ilevel, ilevel, .true.)
-
-  ! Use this to compute histogram for ALL particles starting from offset
-  call compute_particle_histogram(offset, npart_andreas - offset)
   
-  ! do the communication and the resorting fo the particles
-  call build_histogram_communicator(ilevel)
-  call particle_levelsort_histogram(ilevel)
+  if (use_histograms)then
+     
+     ! Use this to compute histogram for ALL particles starting from offset
+     call compute_particle_histogram(offset, npart_andreas - offset)
 
-  ! Compute NEW number fo particles in ilevel
-  np = part_level_offset(ilevel + 1) - part_level_offset(ilevel)  
+     ! Build communicator for histograms
+     call build_communicator(bin_send_cnt, bin_send_oft, bin_send_tot, &
+                             bin_recv_cnt, bin_recv_oft, bin_recv_tot, &
+                             nbins, local_bins, local_bins_oft, bin_keys, ilevel)
+     call particle_histogram_levelsort(ilevel)
+  else
+      ! Build communicator for particles
+     call build_communicator(part_send_cnt, part_send_oft, part_send_tot, &
+                             part_recv_cnt, part_recv_oft, part_recv_tot, &
+                             npart_andreas, local_parts, local_parts_oft, part_hkey, ilevel)
+!     call particle_direct_levelsort(ilevel)
+  end if
+     
+     ! Compute NEW number of particles in ilevel
+     np = part_level_offset(ilevel + 1) - part_level_offset(ilevel)  
 
-  ! Re-sort remaining (ilevel particles)
-  call lsd_radix_sort_particles(offset, np, ilevel, ilevel, .true.)
-  call apply_particle_permutation(offset, np, ilevel)
-
-
+     ! Re-sort remaining (ilevel particles)
+     call lsd_radix_sort_particles(offset, np, ilevel, ilevel, .true.)
+     call apply_particle_permutation(offset, np, ilevel)
+     
 end subroutine sort_particles
 
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-
-subroutine particle_levelsort_histogram(ilevel)
-  use amr_commons,   only: ncpu, myid, bound_key_level, son
-  use pm_commons
+subroutine particle_histogram_levelsort(ilevel)
+  use amr_commons,   only: ncpu, myid, bound_key_level, son, nvector, nlevelmax
+  use pm_commons,    only: npart_andreas, nbins, part_level_offset, &
+                           local_bins, local_bins_oft, bin_keys, part_hkey, &
+                           part_ind_permutation, part_ind_permutation2, &
+                           bin_send_tot, bin_send_cnt, bin_send_oft, &
+                           bin_recv_tot, bin_recv_cnt, bin_recv_oft  
   use pm_parameters, only: npartmax
   use sort,          only: gt_3keys, apply_particle_permutation
   implicit none
@@ -1184,7 +1146,7 @@ subroutine particle_levelsort_histogram(ilevel)
 
   ! The routine can only run after:
   ! call compute_particle_histogram(ilevel)
-  ! call build_histogram_communicator(ilevel)
+  ! call build_communicator(...)
 
   ! The "bins" here are the histogram bins and correspond to 
   ! actual grid cells. "send_... variables" denote properties in the
@@ -1216,7 +1178,7 @@ subroutine particle_levelsort_histogram(ilevel)
   do ibin_send=1,bin_send_tot
      ibin=ibin_send
      ! skip the local bins
-     if (ibin > mybins_offset)ibin=ibin + mybins
+     if (ibin > local_bins_oft)ibin=ibin + local_bins
      send_bin_keys(ibin_send, 0:2) = bin_keys(ibin, 0:2)
   end do
  
@@ -1232,15 +1194,15 @@ subroutine particle_levelsort_histogram(ilevel)
 
 
   ! Probe domestic cells for refinement 
-  do ibin = mybins_offset, mybins_offset + mybins -1, nvector
-     nb = min(mybins_offset + mybins - ibin, nvector) 
+  do ibin = local_bins_oft, local_bins_oft + local_bins -1, nvector
+     nb = min(local_bins_oft + local_bins - ibin, nvector) 
      call get_cell_index_from_hilbertkey(bin_index(ibin + 1 : ibin + nb), &
           bin_level(ibin + 1 : ibin + nb), bin_keys(ibin + 1: ibin + nb,2), &
           bin_keys(ibin + 1: ibin + nb,1), bin_keys(ibin + 1: ibin + nb,0), nb, ilevel)
   end do
 
   ! Mark bins corresponding to refined cells
-  do ibin = mybins_offset + 1, mybins_offset + mybins
+  do ibin = local_bins_oft + 1, local_bins_oft + local_bins
      if (son(bin_index(ibin)) > 0)then
         bin_level(ibin) = 1
      else
@@ -1276,14 +1238,14 @@ subroutine particle_levelsort_histogram(ilevel)
        &             send_bin_level,bin_send_cnt,bin_send_oft,MPI_INTEGER, &
        &             MPI_COMM_WORLD,request0,info)
 
-  ! Finish second communication (move to different location later for optimization)
+  ! Finish second communication (MOVE TO DIFFERENT LOCATION LATER FOR OPTIMIZATION)
   call MPI_WAIT(request0, status, info)
 
   ! Read out the reception buffer of the (reversed) communication
   do ibin_send = 1, bin_send_tot
      ibin = ibin_send
      ! skip the local bins
-     if (ibin > mybins_offset) ibin = ibin + mybins
+     if (ibin > local_bins_oft) ibin = ibin + local_bins
      bin_level(ibin) = send_bin_level(ibin_send)
   end do
   
@@ -1340,7 +1302,7 @@ subroutine particle_levelsort_histogram(ilevel)
   deallocate(send_bin_level)
   deallocate(recv_bin_keys, send_bin_keys)
 
-end subroutine particle_levelsort_histogram
+end subroutine particle_histogram_levelsort
 !################################################################
 !################################################################
 !################################################################
