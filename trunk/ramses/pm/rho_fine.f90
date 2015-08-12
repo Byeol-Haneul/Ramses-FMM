@@ -140,8 +140,8 @@ subroutine rho_fine(ilevel,icount,new_rho)
      end if
      call rho_from_current_level(ilevel)
   end if
-  print*, rho(4690), rho_andreas(4690) 
-  print*, rho(4600), rho_andreas(4600) 
+!  print*, rho(4690), rho_andreas(4690) 
+!  print*, rho(4600), rho_andreas(4600) 
   ! Update boudaries
   call make_virtual_reverse_dp(rho(1),ilevel)
   call make_virtual_fine_dp   (rho(1),ilevel)

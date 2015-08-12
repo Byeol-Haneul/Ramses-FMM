@@ -349,6 +349,29 @@ contains
        gt_3keys = .false.
     end if
   end function gt_3keys
+
+  function gt_3keys_individual_input(key_a2, key_a1, key_a0, key_b2, key_b1, key_b0)
+    implicit none
+    integer(kind=8), intent(in) :: key_a2, key_a1, key_a0, key_b2, key_b1, key_b0
+    logical::gt_3keys_individual_input
+    ! Function to test wether a > b for a and b three-integer hilbert keys, where
+    ! the keys are entered a individual (non-adjacent in memory) integers.
+    if     (key_a2 > key_b2) then
+       gt_3keys_individual_input = .true.
+    elseif (key_a2 < key_b2) then
+       gt_3keys_individual_input = .false.
+    elseif (key_a1 > key_b1) then
+       gt_3keys_individual_input = .true.
+    elseif (key_a1 < key_b1) then
+       gt_3keys_individual_input = .false.
+    elseif (key_a0 > key_b0) then
+       gt_3keys_individual_input = .true.
+    elseif (key_a0 < key_b0) then
+       gt_3keys_individual_input = .false.
+    else
+       gt_3keys_individual_input = .false.
+    end if
+  end function gt_3keys_individual_input
   
   !########################################################################
   !########################################################################

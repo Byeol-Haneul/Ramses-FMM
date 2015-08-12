@@ -978,7 +978,8 @@ end subroutine empty_comm
 #ifndef WITHOUTMPI
 subroutine build_communicator(send_cnt, send_oft, send_tot, &
                               recv_cnt, recv_oft, recv_tot, &
-                              ndata, local_data, local_data_oft, keys, ilevel)
+                              ndata, local_data, local_data_oft, &
+                              keys2, keys1, keys0, ilevel)
   use amr_parameters, only: nlevelmax
   use amr_commons,    only: ncpu, myid, bound_key_level, bound_key
   implicit none
@@ -986,7 +987,7 @@ subroutine build_communicator(send_cnt, send_oft, send_tot, &
   include 'mpif.h'
   integer, intent(in) ::  ilevel, ndata
   integer, intent(inout) :: send_tot, recv_tot, local_data, local_data_oft
-  integer(kind=8), dimension(1:ndata, 0:2), intent(in) :: keys
+  integer(kind=8), dimension(1:ndata), intent(in) :: keys2, keys1, keys0
   integer, dimension(1:ncpu), intent(inout) :: send_cnt, send_oft, recv_cnt, recv_oft
   
   !----------------------------------------------------------------------------
@@ -1011,8 +1012,10 @@ subroutine build_communicator(send_cnt, send_oft, send_tot, &
   ! count number of bins that need to be sent to every other process
   receive_cpu = 0; local_data = 0
   do idata = 1, ndata
-     ! REPLACE this by do while( gt_3_keys(keys..., bound_key_level ))
-     do while (keys(idata, 0) > bound_key_level(receive_cpu, ilevel) ) 
+     ! REPLACE this by do while( gt_3_keys(keys..., bound_key_level )):
+     ! do while (gt_3keys_individual_input(keys(idata,2),keys(idata,1),keys(idata,0), &
+     ! bound_key_level(idata,2),bound_key_level(idata,1),bound_key_level(idata,0)))
+     do while (keys0(idata) > bound_key_level(receive_cpu, ilevel) ) 
         receive_cpu = receive_cpu + 1
      end do
      if (receive_cpu == myid) then
@@ -1064,7 +1067,8 @@ subroutine sort_particles(ilevel, use_histograms)
                          local_bins, local_bins_oft, nbins, bin_keys, &
                          part_send_cnt, part_send_oft, part_send_tot, &
                          part_recv_cnt, part_recv_oft, part_recv_tot, &
-                         local_parts, local_parts_oft, part_hkey
+                         local_parts, local_parts_oft, part_hkey, &
+                         part_ind_permutation
   use amr_commons, only: dp, myid, levelmin, nlevelmax
   use sort,        only: lsd_radix_sort_particles, apply_particle_permutation
   use hilbert,     only: hilbert_for_particle 
@@ -1073,7 +1077,7 @@ subroutine sort_particles(ilevel, use_histograms)
   integer, intent(in) :: ilevel
   logical, intent(in) :: use_histograms
   
-  integer  :: ilev, offset, np
+  integer  :: ilev, offset, np, ip
   integer, allocatable, dimension(:) :: refined
   
   ! This routine moves all particles that sit in refined cells at level ilevel
@@ -1081,64 +1085,79 @@ subroutine sort_particles(ilevel, use_histograms)
   ! by hilbert key.
 
   offset = part_level_offset(ilevel)
+  np = npart_andreas - part_level_offset(ilevel)
 
   if (ilevel == levelmin)then
      do ilev=levelmin,nlevelmax
-        print*, 'nparts on ',myid, ilev, part_level_offset(ilev + 1) - part_level_offset(ilev)
+        print*, 'nparts on (going in) ',myid, ilev, part_level_offset(ilev + 1) - part_level_offset(ilev)
      end do
   end if
-
-
   
   ! Compute hilbert keys (probably move outside of this routine)
   call hilbert_for_particle(offset, npart_andreas - offset, 0, ilevel)
   
   ! Compute a permutation that sorts ALL particles starting from offset
   call lsd_radix_sort_particles(offset, npart_andreas - offset, ilevel, ilevel, .true.)
-  
-  if (use_histograms)then
-     
-     ! Use this to compute histogram for ALL particles starting from offset
-     call compute_particle_histogram(offset, npart_andreas - offset)
 
-     ! Build communicator for histograms
+  if (use_histograms)then
+     call compute_particle_histogram(offset, npart_andreas - offset)          
      call build_communicator(bin_send_cnt, bin_send_oft, bin_send_tot, &
                              bin_recv_cnt, bin_recv_oft, bin_recv_tot, &
-                             nbins, local_bins, local_bins_oft, bin_keys, ilevel)
-
-     allocate(refined(1:nbins))
-     
+                             nbins, local_bins, local_bins_oft, &
+                             bin_keys(1:nbins, 2), bin_keys(1:nbins, 1), bin_keys(1:nbins, 0), &
+                             ilevel)
+     allocate(refined(1:nbins))     
      call communicate_refinements(bin_send_cnt, bin_send_oft, bin_send_tot, &
                                   bin_recv_cnt, bin_recv_oft, bin_recv_tot, &
-                                  nbins, local_bins, local_bins_oft, refined, bin_keys, ilevel)
-     call reshuffle_particles_histograms(ilevel, nbins, refined)
+                                  nbins, local_bins, local_bins_oft, refined, &
+                                  bin_keys(1:nbins, 2), bin_keys(1:nbins, 1), bin_keys(1:nbins, 0), &
+                                  ilevel)
+     call reshuffle_particles(ilevel, np, nbins, refined, use_histograms)
   else
-     ! Build communicator for particles
+
+     ! Need to apply particle permutation here already to have parts sorted
+     ! in memory. Using the index insidet build_communicator and
+     ! communicate_refinements is possible but will let the code deviate more
+     ! from the histogrammed case.
+     call apply_particle_permutation(offset, npart_andreas - offset, ilevel) 
+     do ip = offset + 1, npart_andreas
+        part_ind_permutation(ip) = ip
+     end do
      call build_communicator(part_send_cnt, part_send_oft, part_send_tot, &
                              part_recv_cnt, part_recv_oft, part_recv_tot, &
-                             npart_andreas, local_parts, local_parts_oft, part_hkey, ilevel)
-     allocate(refined(1:npart_andreas))
-
+                             np, local_parts, local_parts_oft, &
+                             part_hkey(offset + 1: offset + np, 2), &
+                             part_hkey(offset + 1: offset + np, 1), &
+                             part_hkey(offset + 1: offset + np, 0), ilevel)
+     allocate(refined(1:np))
      call communicate_refinements(part_send_cnt, part_send_oft, part_send_tot, &
                                   part_recv_cnt, part_recv_oft, part_recv_tot, &
-                                  npart_andreas, local_parts, local_parts_oft, &
-                                  refined, part_hkey, ilevel)
-     
+                                  np, local_parts, local_parts_oft, refined, &
+                                  part_hkey(offset + 1: offset + np, 2), &
+                                  part_hkey(offset + 1: offset + np, 1), &
+                                  part_hkey(offset + 1: offset + np, 0), ilevel)
+
+     call reshuffle_particles(ilevel, np, np, refined, use_histograms)
+     print*, myid, 'refined total on level ', ilevel, sum(refined)
   end if
 
 
   
   ! Compute NEW number of particles in ilevel
   np = part_level_offset(ilevel + 1) - part_level_offset(ilevel)  
-  
+
   ! Re-sort remaining (ilevel particles)
   call lsd_radix_sort_particles(offset, np, ilevel, ilevel, .true.)
   call apply_particle_permutation(offset, np, ilevel)
-
   deallocate(refined)
-    
-end subroutine sort_particles
 
+  if (ilevel == nlevelmax)then
+     do ilev=levelmin,nlevelmax
+        print*, 'nparts on (going out) ',myid, ilev, part_level_offset(ilev + 1) - part_level_offset(ilev)
+     end do
+  end if
+  
+end subroutine sort_particles
 !################################################################
 !################################################################
 !################################################################
@@ -1146,7 +1165,7 @@ end subroutine sort_particles
 subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
                                    recv_cnt, recv_oft, recv_tot, &
                                    ndata, local_data, local_data_oft, &
-                                   refined, keys, ilevel)
+                                   refined, keys2, keys1, keys0, ilevel)
 
   use amr_commons,   only: ncpu, myid, bound_key_level, son, nvector, nlevelmax
   implicit none
@@ -1155,7 +1174,7 @@ subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
 #endif
   integer, intent(in) ::  ilevel, ndata
   integer, intent(in) :: send_tot, recv_tot, local_data, local_data_oft
-  integer(kind=8), dimension(1:ndata, 0:2), intent(in) :: keys
+  integer(kind=8), dimension(1:ndata), intent(in) :: keys2, keys1, keys0
   integer, dimension(1:ncpu), intent(in) :: send_cnt, send_oft, recv_cnt, recv_oft
   integer, dimension(1:ndata), intent(inout) :: refined
   
@@ -1173,15 +1192,16 @@ subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
   ! leaf-cell.
 
 
-  integer  :: info, idata, nb, isend
+  integer  :: info, idata, ioft, nd, isend
   integer  :: request0, request1, request2
   integer  :: status(MPI_STATUS_SIZE)
 
-  integer,         allocatable, dimension(:  ) :: cell_ind
-  integer,         allocatable, dimension(:  ) :: recv_cell_ind, recv_refined
-  integer,         allocatable, dimension(:  ) :: send_refined
+  integer,         allocatable, dimension(:  ) :: cell_ind, recv_cell_ind
+  integer,         allocatable, dimension(:  ) :: recv_refined, send_refined
   integer(kind=8), allocatable, dimension(:,:) :: recv_keys, send_keys
 
+  if(ilevel == 6)print*,'local data',local_data, local_data_oft, myid
+  
   allocate(cell_ind(1:ndata))
   allocate(send_keys(1:send_tot,0:2))
   allocate(recv_keys(1:recv_tot,0:2))
@@ -1190,11 +1210,15 @@ subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
   allocate(send_refined(1:send_tot))
 
   ! Fill communication buffer
-  do isend=1,send_tot
-     idata=isend
+  do isend = 1, send_tot
+     idata = isend
      ! skip the local bins
-     if (idata > local_data_oft)idata=idata + local_data
-     send_keys(isend, 0:2) = keys(idata, 0:2)
+     if (idata > local_data_oft)then
+        idata = idata + local_data
+     end if
+     send_keys(isend, 2) = keys2(idata)
+     send_keys(isend, 1) = keys1(idata)
+     send_keys(isend, 0) = keys0(idata)
   end do
  
   call MPI_IALLTOALLV(send_keys(1:send_tot,0),send_cnt,send_oft,MPI_INTEGER8, &
@@ -1208,15 +1232,15 @@ subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
        &             MPI_COMM_WORLD,request2,info)
 
 
-  ! Probe domestic cells for refinement 
-  do idata = local_data_oft, local_data_oft + local_data -1, nvector
-     nb = min(local_data_oft + local_data - idata, nvector) 
-     call get_cell_index_from_hilbertkey(cell_ind(idata + 1 : idata + nb), &
-          refined(idata + 1 : idata + nb), keys(idata + 1: idata + nb,2), &
-          keys(idata + 1: idata + nb,1), keys(idata + 1: idata + nb,0), nb, ilevel)
+  ! Probe local cells for refinement 
+  do ioft = local_data_oft, local_data_oft + local_data -1, nvector
+     nd = min(local_data_oft + local_data - ioft, nvector) 
+     call get_cell_index_from_hilbertkey(cell_ind(ioft + 1 : ioft + nd), &
+          refined(ioft + 1 : ioft + nd), keys2(ioft + 1: ioft + nd), &
+          keys1(ioft + 1: ioft + nd), keys0(ioft + 1: ioft + nd), nd, ilevel)
   end do
 
-  ! Mark bins corresponding to refined cells
+  ! Mark data corresponding to refined cells
   do idata = local_data_oft + 1, local_data_oft + local_data
      if (son(cell_ind(idata)) > 0)then
         refined(idata) = 1
@@ -1231,11 +1255,11 @@ subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
   call MPI_WAIT(request2, status, info)
   
   ! Probe foreign cells for refinement
-  do idata = 0, recv_tot - 1 , nvector
-     nb = min(recv_tot - idata, nvector) 
-     call get_cell_index_from_hilbertkey(recv_cell_ind(idata + 1 : idata + nb), &
-          recv_refined(idata + 1 : idata + nb), recv_keys(idata + 1: idata + nb,2), &
-          recv_keys(idata + 1: idata + nb,1), recv_keys(idata + 1: idata + nb,0), nb, ilevel)
+  do ioft = 0, recv_tot - 1 , nvector
+     nd = min(recv_tot - ioft, nvector) 
+     call get_cell_index_from_hilbertkey(recv_cell_ind(ioft + 1 : ioft + nd), &
+          recv_refined(ioft + 1 : ioft + nd), recv_keys(ioft + 1: ioft + nd,2), &
+          recv_keys(ioft + 1: ioft + nd,1), recv_keys(ioft + 1: ioft + nd,0), nd, ilevel)
   end do
 
   ! Mark bins corresponding to refined cells
@@ -1260,7 +1284,9 @@ subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
   do isend = 1, send_tot
      idata = isend
      ! skip the local bins
-     if (idata > local_data_oft) idata = idata + local_data
+     if (idata > local_data_oft)then
+        idata = idata + local_data
+     end if
      refined(idata) = send_refined(isend)
   end do
   
@@ -1270,68 +1296,87 @@ subroutine communicate_refinements(send_cnt, send_oft, send_tot, &
   deallocate(recv_keys, send_keys)
   
 end subroutine communicate_refinements
-  
-subroutine reshuffle_particles_histograms(ilevel, nbins, refined)
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine reshuffle_particles(ilevel, np, ndata, refined, use_histograms)
   use pm_commons,     only: part_level_offset, part_ind_permutation, part_hkey, &
-                            npart_andreas, bin_keys, part_ind_permutation2
+                            bin_keys, part_ind_permutation2
   use sort,           only: gt_3keys, apply_particle_permutation
   use amr_parameters, only: nlevelmax
   implicit none
 
   
-  integer, intent(in) :: ilevel, nbins
-  integer, dimension(1:nbins), intent(in) :: refined
-
+  integer, intent(in) :: ilevel, np, ndata
+  integer, dimension(1:ndata), intent(in) :: refined
+  logical, intent(in) :: use_histograms
+  
   ! Reshuffle particles in memory according to their level
   ! by applying a couting sort on the particles.
 
-  integer  :: np, offset, ibin, ip, ipart
+  integer  :: offset, ibin, ip, ipart
   integer  :: unrefined_pos, refined_pos
   logical  :: unrefined
 
-  if (ilevel < nlevelmax) then
+  if (ilevel == nlevelmax)return
 
-     offset = part_level_offset(ilevel)
-     np = npart_andreas - part_level_offset(ilevel)
+  offset = part_level_offset(ilevel)
 
-     ! Find starting indices for refined particles
-     unrefined_pos = offset; refined_pos = offset          
+  ! Find starting indices for refined particles
+  unrefined_pos = offset; refined_pos = offset          
+
+  if (use_histograms)then
      ibin = 1; unrefined = (refined(ibin) == 0)     
      do ip = offset + 1, offset + np  
         ipart = part_ind_permutation(ip)
         if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2)))then
            ibin=ibin+1
-           unrefined = (refined(ibin) == 0)
         end if
-        if (unrefined) then 
+        if (refined(ibin) == 0) then 
            refined_pos = refined_pos + 1
         end if
      end do
+  else
+     refined_pos = refined_pos + np - sum(refined)
+  end if
 
-     ! set "level boundary" in particle array and rearrange particles
-     part_level_offset(ilevel+1) = refined_pos
+  ! set "level boundary" in particle array and rearrange particles
+  part_level_offset(ilevel+1) = refined_pos
 
+  if (use_histograms)then
      ibin = 1; unrefined = (refined(ibin) == 0)
      do ip = offset + 1, offset + np
         ipart = part_ind_permutation(ip)
         if (gt_3keys(part_hkey(ipart,0:2), bin_keys(ibin,0:2))) then
            ibin = ibin + 1
-           unrefined = (refined(ibin) == 0)
         end if
-        if (unrefined) then
-           unrefined_pos = unrefined_pos + 1
-           part_ind_permutation2(unrefined_pos) = ipart
-        else
+        if (refined(ibin) == 1)then
            refined_pos = refined_pos + 1
            part_ind_permutation2(refined_pos) = ipart
+        else
+           unrefined_pos = unrefined_pos + 1
+           part_ind_permutation2(unrefined_pos) = ipart
         end if
      end do
-     part_ind_permutation(offset + 1:offset + np) = &
-          part_ind_permutation2(offset +1:offset + np)
-
-     call apply_particle_permutation(offset, np, ilevel)
+  else
+     do ip = offset + 1, offset + np
+        ipart = part_ind_permutation(ip)
+        if (refined(ipart - offset) == 1)then
+           refined_pos = refined_pos + 1
+           part_ind_permutation2(refined_pos) = ipart
+        else
+           unrefined_pos = unrefined_pos + 1
+           part_ind_permutation2(unrefined_pos) = ipart
+        end if
+     end do
   end if
-end subroutine reshuffle_particles_histograms
+  
+  part_ind_permutation(offset + 1:offset + np) = &
+       part_ind_permutation2(offset +1:offset + np)
+  call apply_particle_permutation(offset, np, ilevel)
+
+end subroutine reshuffle_particles
 !################################################################
 !################################################################
 !################################################################

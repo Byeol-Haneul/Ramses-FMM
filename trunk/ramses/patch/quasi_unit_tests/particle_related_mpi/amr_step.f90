@@ -25,17 +25,17 @@ subroutine amr_step(ilevel,icount,test_ok)
   if(numbtot(1,ilevel)==0)return
 
   ! put in a break to attach a debut session
-#ifndef WITHOUTMPI
-  if (myid==1)then
-     write(*,*)'ready?'
-     read(*,*)
-  endif
-  call MPI_BARRIER(MPI_COMM_WORLD,info)
-#endif
-#ifdef WITHOUTMPI
-  write(*,*)'ready?'
-  read(*,*)
-#endif
+! #ifndef WITHOUTMPI
+!   if (myid==1)then
+!      write(*,*)'ready?'
+!      read(*,*)
+!   endif
+!   call MPI_BARRIER(MPI_COMM_WORLD,info)
+! #endif
+! #ifdef WITHOUTMPI
+!   write(*,*)'ready?'
+!   read(*,*)
+! #endif
   
   !-------------------------------------------
   ! Make new refinements and update boundaries
@@ -170,7 +170,7 @@ subroutine amr_step(ilevel,icount,test_ok)
   call count_parts
   do ilev=levelmin, nlevelmax
      told=MPI_WTIME(info)
-     call sort_particles(ilev, .true.)
+     call sort_particles(ilev, .false.)
      print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
      told=MPI_WTIME(info)
      call make_tree_fine(ilev)
@@ -182,9 +182,9 @@ subroutine amr_step(ilevel,icount,test_ok)
   call count_parts
 
   do i=1,1
-  do ilev=levelmin, nlevelmax
+  do ilev=levelmin, nlevelmax 
      told=MPI_WTIME(info)
-     call sort_particles(ilev, .true.)
+     call sort_particles(ilev, .false.)
      print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
   end do
   end do
