@@ -14,10 +14,12 @@ recursive subroutine amr_step(ilevel,icount)
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
   integer::i,idim,ivar,info, idomain, ilev
-  logical::ok_defrag
+  logical::ok_defrag, use_histograms
   logical,save::first_step=.true.
   real(dp)::told,tnew,dthilbert,dtrho
-
+  integer :: ncell, icell
+  logical :: ok, first
+  
   if(numbtot(1,ilevel)==0)return
 
   if(verbose)write(*,999)icount,ilevel
@@ -153,9 +155,10 @@ recursive subroutine amr_step(ilevel,icount)
   ! HERE, the grid should be fully built. Do wild test things here...
   !  call check_refined_test(test_ok)
   !  call check_new_hilbert(test_ok)
-  
+
+  use_histograms = .true.
   do ilev=levelmin, nlevelmax
-     call sort_particles(ilev)
+     call sort_particles(ilev, use_histograms)
   end do
 
   !--------------------
@@ -169,8 +172,48 @@ recursive subroutine amr_step(ilevel,icount)
 !      told=MPI_WTIME(info)
 ! #endif
 
-     call rho_fine(ilevel,icount, .true.)     
+     print*, '1: son(594)= ',son(594), ilevel
+     print*, '1: rho(594)= ',rho(594), ilevel
+     print*, '1: rho_andreas(594)= ',rho_andreas(594), ilevel
+     call rho_fine(ilevel,icount, .false.)     
 
+     if (ilevel == levelmin)then
+        rho_andreas = 0.d0
+        do ilev = ilevel, nlevelmax
+           call rho_direct_particles(ilev)
+           print*, 'between: rho_andreas(594)= ',rho_andreas(594), ilevel, ilev
+           call rho_histogram_particles(ilev)
+        end do
+     end if
+
+     print*, '2: rho(594)= ',rho(594), ilevel
+     print*, '2: rho_andreas(594)= ',rho_andreas(594), ilevel
+     if (ilevel == nlevelmax)then
+        ! check if rho and rho andreas are identical:
+        ! Constants
+        ncoarse=nx*ny*nz
+        ncell=ncoarse+twotondim*ngridmax
+        ok = .true.
+        first = .true.
+        if (ilevel == nlevelmax)then
+           do icell = 1, ncell
+              if (rho(icell) > 0.)then
+                 ok = ok .and. (abs(rho(icell) - rho_andreas(icell))/rho(icell) < 1.d-3 )
+                 if (.not. ok)print*, myid, rho(icell), rho_andreas(icell), 1./rho(icell)*rho_andreas(icell), icell
+                 if ((.not. ok) .and. (.not. first))call clean_stop
+                 if (.not. ok)first=.false.
+              end if
+           end do
+
+           if (.not. ok)then
+              write(*,*)'error in rho at level ',ilevel,' occurred in process ', myid
+              call clean_stop
+           else
+              write(*,*)'juhuu, all good for ', ilevel, ' on process ', myid
+           end if
+        end if
+        call clean_stop
+     end if
 ! #ifndef WITHOUTMPI
 !      tnew=MPI_WTIME(info)
 !      dtrho=tnew-told
@@ -252,7 +295,8 @@ recursive subroutine amr_step(ilevel,icount)
   if(ilevel>levelmin)then
      dtnew(ilevel)=MIN(dtnew(ilevel-1)/real(nsubcycle(ilevel-1)),dtnew(ilevel))
   end if
-
+  dtnew(ilevel)=0.d0
+  
   ! Set unew equal to uold
   if(hydro)call set_unew(ilevel)
 

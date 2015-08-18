@@ -36,7 +36,7 @@ contains
     recv_tot = 0
 
     ! count number of bins that need to be sent to every other process
-    receive_cpu = 0; local_data = 0
+    receive_cpu = 1; local_data = 0
     do idata = 1, ndata
        ! REPLACE this by do while( gt_3_keys(keys..., bound_key_level )):
        ! do while (gt_3keys_individual_input(keys(idata,2),keys(idata,1),keys(idata,0), &
@@ -137,8 +137,8 @@ contains
     include 'mpif.h'
 
     integer, dimension(1:ncpu, 1:4), intent(in) :: communicator
-    integer, dimension(:), intent(in) :: send_data
-    integer, dimension(:), intent(inout) :: recv_data
+    real(dp), dimension(:), intent(in) :: send_data
+    real(dp), dimension(:), intent(inout) :: recv_data
 
     integer  :: info, request
     integer  :: status(MPI_STATUS_SIZE)

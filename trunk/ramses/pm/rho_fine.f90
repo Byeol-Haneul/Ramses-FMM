@@ -113,23 +113,6 @@ subroutine rho_fine(ilevel,icount,new_rho)
   !---------------------------------------------------------
   ! Compute density due to current level particles
 
-  ! Copy the gas contribution to rho 
-  rho_andreas = rho
-
-  ncoarse=nx*ny*nz
-  ncell=ncoarse+twotondim*ngridmax
-  ok = .true.
-  do icell = 1, ncell
-     ok = ok .and. (rho(icell) == rho_andreas(icell))
-  end do
-  if (new_rho)then
-     if (.not. ok)then
-        write(*,*)'error in rho at level ',ilevel,' occurred in process ', myid
-        call clean_stop
-     else
-        write(*,*)'juhuu, all good for ', ilevel, ' on process ', myid
-     end if
-  end if
 
   if(pic)then
      if (new_rho)then
@@ -140,40 +123,19 @@ subroutine rho_fine(ilevel,icount,new_rho)
      end if
      call rho_from_current_level(ilevel)
   end if
-!  print*, rho(4690), rho_andreas(4690) 
-!  print*, rho(4600), rho_andreas(4600) 
+
   ! Update boudaries
   call make_virtual_reverse_dp(rho(1),ilevel)
   call make_virtual_fine_dp   (rho(1),ilevel)
-  call make_virtual_reverse_dp(rho_andreas(1),ilevel)
-  call make_virtual_fine_dp   (rho_andreas(1),ilevel)
+  if (new_rho)then
+     call make_virtual_reverse_dp(rho_andreas(1),ilevel)
+     call make_virtual_fine_dp   (rho_andreas(1),ilevel)
+  end if
   if(m_refine(ilevel)>-1.0d0)then
      call make_virtual_reverse_dp(phi(1),ilevel)
      call make_virtual_fine_dp   (phi(1),ilevel)
   endif
 
-  ! check if rho and rho andreas are identical:
-  ! Constants
-  ncoarse=nx*ny*nz
-  ncell=ncoarse+twotondim*ngridmax
-  ok = .true.
-  first = .true.
-  ! do icell = 1, ncell
-  !    if (rho(icell) > 0.)then
-  !       ok = ok .and. (abs(rho(icell) - rho_andreas(icell))/rho(icell) < 1.d-3 )
-  !       if (.not. ok)print*, rho(icell), rho_andreas(icell), 1./rho(icell)*rho_andreas(icell), icell
-  !       if ((.not. ok) .and. new_rho .and. (.not. first))call clean_stop
-  !       if (.not. ok)first=.false.
-  !    end if
-  ! end do
-  if (new_rho)then
-     if (.not. ok)then
-        write(*,*)'error in rho at level ',ilevel,' occurred in process ', myid
-        call clean_stop
-     else
-        write(*,*)'juhuu, all good for ', ilevel, ' on process ', myid
-     end if
-  end if
   !--------------------------------------------------------------
   ! Compute multipole contribution from all cpus and set rho_tot
   !--------------------------------------------------------------
@@ -539,11 +501,6 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
 
   ! Update mass density and number density fields
   do ind=1,twotondim
-     ! do j=1,np
-     !    if(indp(j,ind)==4690)then
-     !       print*, ind_part(j),' contributes', idp(ind_part(j))
-     !    end if
-     ! end do
      do j=1,np
         ok(j)=igrid(j,ind)>0
      end do
@@ -555,6 +512,9 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
      do j=1,np
         if(ok(j))then
            rho(indp(j,ind))=rho(indp(j,ind))+vol2(j)
+           if(indp(j,ind)==594)then
+              print*, xp(ind_part(j), 1),' contributes',vol2(j), idp(ind_part(j))
+           end if
         end if
      end do
 
@@ -834,7 +794,6 @@ subroutine cic_cell(ind_grid,ngrid,ilevel)
   integer ,dimension(1:nvector),save::ind_cell,ind_cell_father
   integer ,dimension(1:nvector,1:threetondim),save::nbors_father_cells
   integer ,dimension(1:nvector,1:twotondim),save::nbors_father_grids
-  real(dp),dimension(1:nvector),save::new_rho
   ! Particle-based arrays
   logical ,dimension(1:nvector),save::ok
   real(dp),dimension(1:nvector),save::mmm,ttt
@@ -1211,9 +1170,11 @@ end subroutine cic_cell
 !##############################################################################
 subroutine rho_direct_particles(part_level)
   use amr_parameters, only: dp, levelmin, nvector, ndim
+  use amr_commons,    only: ncpu
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_level_offset, bin_start_offset, bin_count, &
-                            xp_andreas, mp_andreas, idp_andreas
+                            xp_andreas, mp_andreas, idp_andreas, nbins, part_hkey
+  use particle_communication, only: build_communicator, part_data_to_domain_dp
   implicit none
   integer, intent(in) :: part_level
   
@@ -1232,24 +1193,91 @@ subroutine rho_direct_particles(part_level)
 
   real(dp), dimension(1:nvector, 1:ndim) :: xpart
   real(dp), dimension(1:nvector)         :: mpart
-  integer  :: ip, offset, nparts, ibin, ipart, grid_level
+  integer,  dimension(1:ncpu, 1:4)       :: communicator
+  integer :: ip, offset, nparts, ibin, ipart, grid_level, npart_direct
+  integer :: recv_tot, local_data, local_data_oft
+
+  integer(kind=8), allocatable, dimension(:,:) :: part_hkey_direct
+  real(dp), allocatable, dimension(:,:) :: xp_direct, xp_remote
+  real(dp), allocatable, dimension(:)   :: mp_direct, mp_remote
   
   offset = part_level_offset(part_level)
   nparts = part_level_offset(part_level+1) - part_level_offset(part_level)
 
   call compute_particle_histogram(offset, nparts)
+
+  ! Count direct particles
+  npart_direct = 0
+  do ibin = 1, nbins
+     if (bin_count(ibin) <= n_dump_parts_direct) then
+        npart_direct = npart_direct + bin_count(ibin)
+     end if
+  end do
+
+  print*,'direct?',npart_direct, nparts, part_level, part_level_offset
   
-  ! Project domestic particles
+  allocate(part_hkey_direct(1:npart_direct, 0:2))
+  allocate(xp_direct(1:npart_direct, 1:3))
+  allocate(mp_direct(1:npart_direct))
+
+  ! Fill direct particle arrays
   ip = 0
   ibin = 0
-  do ipart = offset+1, offset + nparts
+  do ipart = offset + 1, offset + nparts
      if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
      if (bin_count(ibin) <= n_dump_parts_direct) then
         ip = ip + 1
-        xpart(ip,1:ndim) = xp_andreas(ipart,1:ndim)
-        mpart(ip)        = mp_andreas(ipart)
-        if (idp_andreas(ipart) == 369)print*, 'ipart now',ip
+        part_hkey_direct(ip, 0:2) = part_hkey(ipart, 0:2)
+        xp_direct(ip, 1:ndim)     = xp_andreas(ipart, 1:ndim)
+        mp_direct(ip)             = mp_andreas(ipart)
      end if
+  end do
+
+  
+  call build_communicator(communicator, recv_tot, npart_direct, local_data, local_data_oft, &
+                          part_hkey_direct(:, 2), &
+                          part_hkey_direct(:, 1), &
+                          part_hkey_direct(:, 0), &
+                          part_level)
+
+  deallocate(part_hkey_direct)
+
+  allocate(xp_remote(1:recv_tot, 1:3))
+  allocate(mp_remote(1:recv_tot))
+  
+  
+  call part_data_to_domain_dp(communicator, xp_direct(:, 1), xp_remote(:, 1))
+  call part_data_to_domain_dp(communicator, xp_direct(:, 2), xp_remote(:, 2))
+  call part_data_to_domain_dp(communicator, xp_direct(:, 3), xp_remote(:, 3))
+  call part_data_to_domain_dp(communicator, mp_direct, mp_remote)
+
+  ! Project local direct particles
+  ip = 0
+  do ipart = 1, npart_direct
+     ip = ip + 1
+     xpart(ip, 1:ndim) = xp_direct(ipart, 1:ndim)
+     mpart(ip)         = mp_direct(ipart)
+     idpart(ip)         = idp_(ipart + offset)
+     if (ip == nvector) then
+        do grid_level = part_level, levelmin, -1
+           call cic_amr_andreas(xpart, mpart, ip, grid_level)
+        end do
+        ip = 0
+     end if
+  end do
+  if (ip > 0) then
+     do grid_level = part_level, levelmin, -1
+        call cic_amr_andreas(xpart, mpart, ip, grid_level)
+     end do
+  end if
+
+
+  ! Project remote direct particles
+  ip = 0
+  do ipart = 1, recv_tot
+     ip = ip + 1
+     xpart(ip, 1:ndim) = xp_remote(ipart, 1:ndim)
+     mpart(ip)         = mp_remote(ipart)
      if (ip == nvector) then
         do grid_level = part_level, levelmin, -1
            call cic_amr_andreas(xpart, mpart, ip, grid_level)
@@ -1298,7 +1326,6 @@ contains
     real(dp),        dimension(1:nvector),         save :: vol, delta
     logical,         dimension(1:nvector),         save :: ok
     integer,         dimension(1:ndim),            save :: ind
-
     integer,  save :: idim, nx_loc, ind_cloud, ip
     real(dp), save :: dx, dx_loc, scale, vol_loc, pos_to_cart
 
@@ -1396,7 +1423,7 @@ contains
        delta(1:ndim) = ind(1:ndim) - 0.5D0       
 
        ! Get cell indices which are covered by cloud
-       ! (cartesian key -> hilber key -> cell index)
+       ! (cartesian key -> hilbert key -> cell index)
        do idim = 1, ndim
           do ip = 1, np
              ix(ip,idim) = int(xpart(ip,idim) + delta(idim), kind = 8)
@@ -1406,7 +1433,7 @@ contains
        call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
             cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
             dummy_state, 0, grid_level, np)
-
+       
        call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
             cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
 
@@ -1430,6 +1457,9 @@ contains
        do ip = 1, np
           if (ok(ip)) then
              rho_andreas(parent_cell_index(ip)) = rho_andreas(parent_cell_index(ip)) + vol(ip)
+             if(parent_cell_index(ip)==594)then
+                print*,xpart(ip,1)/pos_to_cart,' contributes',vol(ip)
+             end if
           end if
        end do
 
@@ -1499,7 +1529,7 @@ subroutine rho_histogram_particles(part_level)
         part_ind_permutation(offset + n_masked) = ipart
      end if
   end do
-  print*,'nmasked ', n_masked, n_dump_parts_direct, nparts
+  print*,'nmasked ', n_masked, n_dump_parts_direct, nparts, part_level
   
   ! outer loop here over grid levels
   if (n_masked > 0)then
@@ -1574,7 +1604,7 @@ contains
        ! Reset bin count as it is computed using cic later
        bin_count=0
        
-       print*, 'going in loop', offset, n_masked, nbins, grid_level, part_level, ind_cloud 
+!       print*, 'going in loop', offset, n_masked, nbins, grid_level, part_level, ind_cloud 
        
        ! Loop masked, sorted parts in sweeps and dump the mass for the
        ! given cloud/cell intersection

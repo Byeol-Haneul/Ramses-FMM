@@ -1158,11 +1158,6 @@ end subroutine communicate_refinements
 !################################################################
 !################################################################
 !################################################################
-
-!################################################################
-!################################################################
-!################################################################
-!################################################################
 subroutine reshuffle_particles(ilevel, np, ndata, refined, use_histograms)
   use pm_commons,     only: part_level_offset, part_ind_permutation, part_hkey, &
                             bin_keys, part_ind_permutation2
@@ -1446,6 +1441,7 @@ subroutine compute_particle_histogram(offset, np)
 
 
   ! if there is nothing to do...
+  nbins = 0
   if (.not. np > 0)return
   
   ! Count the number of bins

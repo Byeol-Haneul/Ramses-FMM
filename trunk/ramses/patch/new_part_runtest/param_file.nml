@@ -9,8 +9,8 @@ nrestart=1
 /
 
 &AMR_PARAMS
-levelmin=6
-levelmax=8
+levelmin=5
+levelmax=6
 ngridtot=20000000
 nparttot=40000000
 boxlen=60.0
