@@ -37,18 +37,6 @@ module pm_commons
   ! Global particle linked lists
   integer::headp_free,tailp_free,numbp_free=0,numbp_free_tot=0
 
-  ! Particle communicator arrays
-  integer,allocatable,dimension(:)::part_send_cnt, part_send_oft
-  integer,allocatable,dimension(:)::part_recv_cnt, part_recv_oft
-  integer::part_recv_tot,part_send_tot
-  integer(kind=8),allocatable,dimension(:,:)::receive_keys, send_keys
   real(dp),allocatable,dimension(:)::dp_part_send_buf,dp_part_recv_buf
-  ! Particle histogram communicator arrays
-  integer,allocatable,dimension(:)::bin_send_cnt, bin_send_oft
-  integer,allocatable,dimension(:)::bin_recv_cnt, bin_recv_oft
 
-  integer::bin_recv_tot,bin_send_tot
-  integer :: local_bins, local_bins_oft
-  integer :: local_parts, local_parts_oft
-  
 end module pm_commons
