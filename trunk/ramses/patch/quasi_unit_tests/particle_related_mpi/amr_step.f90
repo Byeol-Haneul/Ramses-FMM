@@ -170,7 +170,7 @@ subroutine amr_step(ilevel,icount,test_ok)
   call count_parts
   do ilev=levelmin, nlevelmax
      told=MPI_WTIME(info)
-     call sort_particles(ilev, .false.)
+     call sort_particles(ilev, .true.)
      print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
      told=MPI_WTIME(info)
      call make_tree_fine(ilev)
@@ -184,7 +184,7 @@ subroutine amr_step(ilevel,icount,test_ok)
   do i=1,1
   do ilev=levelmin, nlevelmax 
      told=MPI_WTIME(info)
-     call sort_particles(ilev, .false.)
+     call sort_particles(ilev, .true.)
      print*, 'ilevel sort: ', ilev, MPI_WTIME(info)-told
   end do
   end do

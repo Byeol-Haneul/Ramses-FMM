@@ -115,22 +115,26 @@ subroutine rho_fine(ilevel,icount,new_rho)
 
 
   if(pic)then
-     if (new_rho)then
-        do ilev = ilevel, nlevelmax
-           call rho_direct_particles(ilev)        
-           call rho_histogram_particles(ilev)
-        end do
-     end if
+!     if (new_rho)then
+!        do ilev = ilevel, nlevelmax
+!           call rho_direct_particles(ilev)        
+!           call rho_histogram_particles(ilev)
+!        end do
+!     end if
      call rho_from_current_level(ilevel)
   end if
 
+  if(myid==1)print*,'rho before',ilevel, rho(15080)
+  
   ! Update boudaries
   call make_virtual_reverse_dp(rho(1),ilevel)
+  if(myid==1)print*,'between',ilevel, rho(15080)
   call make_virtual_fine_dp   (rho(1),ilevel)
-  if (new_rho)then
-     call make_virtual_reverse_dp(rho_andreas(1),ilevel)
-     call make_virtual_fine_dp   (rho_andreas(1),ilevel)
-  end if
+  if(myid==1)print*,'rho after',ilevel, rho(15080)   
+  !  if (new_rho)then
+!     call make_virtual_reverse_dp(rho_andreas(1),ilevel)
+!     call make_virtual_fine_dp   (rho_andreas(1),ilevel)
+!  end if
   if(m_refine(ilevel)>-1.0d0)then
      call make_virtual_reverse_dp(phi(1),ilevel)
      call make_virtual_fine_dp   (phi(1),ilevel)
@@ -214,6 +218,11 @@ subroutine rho_from_current_level(ilevel)
     
   ! Mesh spacing in that level
   dx=0.5D0**ilevel 
+
+  if(myid==1)then
+     print*,'initial_rho'
+     print*,rho(15080)
+  end if
   
   ! Loop over cpus
   do icpu=1,ncpu
@@ -499,6 +508,7 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
      end do
   end do
 
+  
   ! Update mass density and number density fields
   do ind=1,twotondim
      do j=1,np
@@ -512,6 +522,10 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
      do j=1,np
         if(ok(j))then
            rho(indp(j,ind))=rho(indp(j,ind))+vol2(j)
+           if (indp(j,ind) == 15080 .and. myid == 1)then
+              print*,xp(ind_part(j), 1:3), idp(ind_part(j))
+              print*,rho(indp(j,ind))
+           end if
         end if
      end do
 
@@ -1209,7 +1223,6 @@ subroutine rho_direct_particles(part_level)
      end if
   end do
 
-  print*,'direct?',npart_direct, nparts, part_level, part_level_offset
   
   allocate(part_hkey_direct(1:npart_direct, 0:2))
   allocate(xp_direct(1:npart_direct, 1:3))
@@ -1239,23 +1252,11 @@ subroutine rho_direct_particles(part_level)
   allocate(xp_remote(1:recv_tot, 1:3))
   allocate(mp_remote(1:recv_tot))
 
-  print*, 'stuff',myid, nparts, npart_direct, local_data_oft, local_data, recv_tot
-  print*, 'comm', myid,communicator
-  
-  
   call part_data_to_domain_dp(communicator, xp_direct(:, 1), xp_remote(:, 1))
   call part_data_to_domain_dp(communicator, xp_direct(:, 2), xp_remote(:, 2))
   call part_data_to_domain_dp(communicator, xp_direct(:, 3), xp_remote(:, 3))
   call part_data_to_domain_dp(communicator, mp_direct, mp_remote)
 
-  if (recv_tot>1000)then
-  if (myid==2)print*,'here', xp_direct(1,1:3)
-  if (myid==2)print*,'here', mp_direct(1)
-
-  if (myid==1)print*,'there', xp_remote(1,1:3)
-  if (myid==1)print*,'there', mp_remote(1)
-end if
-  
   ! Project local direct particles
   ip = 0
   do ipart = local_data_oft + 1, local_data_oft + local_data 
@@ -1278,7 +1279,6 @@ end if
 
   ! Project remote direct particles
   ip = 0
-  print*,myid,recv_tot,'asdf'
   do ipart = 1, recv_tot
      ip = ip + 1
      xpart(ip, 1:ndim) = xp_remote(ipart, 1:ndim)
@@ -1534,7 +1534,6 @@ subroutine rho_histogram_particles(part_level)
         part_ind_permutation(offset + n_masked) = ipart
      end if
   end do
-  print*,'nmasked ', n_masked, n_dump_parts_direct, nparts, part_level
   
   ! outer loop here over grid levels
   if (n_masked > 0)then
@@ -1547,9 +1546,11 @@ contains
   
   subroutine rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
     use amr_parameters, only: ndim, nvector
-    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset, bin_count
+    use amr_commons,    only: myid
+    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset, bin_count, bin_mass
     use hilbert,        only: hilbert_for_particle
     use sort,           only: lsd_radix_sort_particles
+    use poisson_commons, only: rho_andreas
     implicit none
     integer, intent(in) :: grid_level, nparts, n_masked, offset
 
@@ -1580,6 +1581,10 @@ contains
     dx_loc = dx * scale
     vol_loc = dx_loc**ndim
 
+    if(myid==1)then
+       print*,'initial_andreas'
+       print*,rho_andreas(15080)
+    end if
   ! Loop over CIC cloud / cell intersections
     do ind_cloud = 0, 7
        ind(1) = ind_cloud/4
@@ -1607,7 +1612,7 @@ contains
        ! Compute "reduced" histogram
        call compute_particle_histogram(offset, n_masked)
        ! Reset bin count as it is computed using cic later
-       bin_count=0
+       bin_count=0; bin_mass = 0.d0;
        
 !       print*, 'going in loop', offset, n_masked, nbins, grid_level, part_level, ind_cloud 
        
@@ -1697,32 +1702,63 @@ contains
   end subroutine cic_histogram
 
   subroutine dump_histograms(cell_level)
-    use amr_parameters,  only: nvector
+    use amr_parameters,  only: nvector, dp
+    use amr_commons,     only: ncpu, myid
     use pm_commons,      only: bin_keys, bin_mass, nbins
     use poisson_commons, only: rho_andreas
+    use particle_communication, only: build_communicator, part_data_to_domain_dp, part_data_to_domain_i8
     implicit none
     integer, intent(in) :: cell_level
 
-    
+
+    integer,  dimension(1:ncpu, 1:4)             :: communicator
+    integer(kind=8), allocatable, dimension(:,:) :: bin_keys_remote
+    real(dp), allocatable, dimension(:)          :: bin_mass_remote
 
     integer        , dimension(1:nvector)     , save :: parent_cell_level, parent_cell_index
     integer(kind=8), dimension(1:nvector, 0:2), save :: bkey
 
-    integer,  save :: i, ib, ibin
+    integer,  save :: i, ib, ibin, recv_tot, local_bins, local_bins_oft
     real(dp), save :: vol_loc
 
     vol_loc = (0.5**cell_level * dble(boxlen) )**3    
+
+
+    ! TO DO: ICLUDE PARTICLE NUMBER DENSITY
+
+
+      call build_communicator(communicator, recv_tot, nbins, local_bins, local_bins_oft, &
+                          bin_keys(:, 2), bin_keys(:, 1), bin_keys(:, 0), cell_level)
+
+      allocate(bin_keys_remote(1:recv_tot, 0:2))
+      allocate(bin_mass_remote(1:recv_tot))
+
+      bin_mass_remote = 0.d0
+      bin_keys_remote = 0
+
+      call part_data_to_domain_i8(communicator, bin_keys(:, 0), bin_keys_remote(:, 0))
+      call part_data_to_domain_i8(communicator, bin_keys(:, 1), bin_keys_remote(:, 1))
+      call part_data_to_domain_i8(communicator, bin_keys(:, 2), bin_keys_remote(:, 2))
+      call part_data_to_domain_dp(communicator, bin_mass, bin_mass_remote)      
     
     ! slightly silly way to go through bins in sweeps and add mass to corresponding cell
     ib = 0
-    do ibin = 1, nbins
+    do ibin = local_bins_oft + 1, local_bins_oft + local_bins
        ib = ib + 1
        bkey(ib, 0:2) = bin_keys(ibin, 0:2)
        if (ib == nvector)then
           call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
                & bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)    
           do i = 1, ib
-             rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + bin_mass(ibin - ib + i) / vol_loc             
+             ! Don't add mass to coarser levels             
+             if (parent_cell_level(i) == cell_level) then
+                rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
+                     bin_mass(ibin - ib + i) / vol_loc             
+                if (parent_cell_index(i) == 15080 .and. myid == 1)then
+                   print*,'local'
+                   print*,rho_andreas(15080)
+                end if
+             end if
           end do
           ib = 0
        end if
@@ -1731,9 +1767,59 @@ contains
        call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
             bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)
        do i = 1, ib
-          rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + bin_mass(nbins - ib + i) / vol_loc             
+          ! Don't add mass to coarser levels
+          if (parent_cell_level(i) == cell_level) then
+             rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
+                  bin_mass(nbins - ib + i) / vol_loc             
+             if (parent_cell_index(i) == 15080 .and. myid == 1)then
+                print*,'local'
+                print*,rho_andreas(15080)
+             end if
+          end if
        end do
     end if
+
+    ! dump remote histograms
+    ib = 0
+    do ibin = 1, recv_tot
+       ib = ib + 1
+       bkey(ib, 0:2) = bin_keys_remote(ibin, 0:2)
+       if (ib == nvector)then
+          call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
+               & bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)    
+          do i = 1, ib
+             ! Don't add mass to coarser levels             
+             if (parent_cell_level(i) == cell_level) then
+                rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
+                     bin_mass_remote(ibin - ib + i) / vol_loc             
+                if (parent_cell_index(i) == 15080 .and. myid == 1)then
+                   print*,'remote'
+                   print*,rho_andreas(15080)
+                end if
+             end if
+          end do
+          ib = 0
+       end if
+    end do
+    if (ib > 0)then
+       call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
+            bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)
+       do i = 1, ib
+          ! Don't add mass to coarser levels
+          if (parent_cell_level(i) == cell_level) then
+             rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
+                  bin_mass_remote(recv_tot - ib + i) / vol_loc             
+             if (parent_cell_index(i) == 15080 .and. myid == 1)then
+                print*,'remote'
+                print*,rho_andreas(15080)
+             end if
+          end if
+       end do
+    end if
+
+    deallocate(bin_mass_remote, bin_keys_remote)
+    
   end subroutine dump_histograms
+
   
 end subroutine rho_histogram_particles

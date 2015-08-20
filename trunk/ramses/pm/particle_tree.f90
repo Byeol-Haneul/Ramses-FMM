@@ -1001,12 +1001,6 @@ subroutine sort_particles(ilevel, use_histograms)
   offset = part_level_offset(ilevel)
   np = npart_andreas - part_level_offset(ilevel)
 
-  if (ilevel == levelmin)then
-     do ilev=levelmin,nlevelmax
-        print*, 'nparts on (going in) ',myid, ilev, part_level_offset(ilev + 1) - part_level_offset(ilev)
-     end do
-  end if
-  
   ! Compute hilbert keys (probably move outside of this routine)
   call hilbert_for_particle(offset, npart_andreas - offset, 0, ilevel)
   
