@@ -172,22 +172,20 @@ recursive subroutine amr_step(ilevel,icount)
 !      told=MPI_WTIME(info)
 ! #endif
 
-     print*, '1: son(594)= ',son(594), ilevel
-     print*, '1: rho(594)= ',rho(594), ilevel
-     print*, '1: rho_andreas(594)= ',rho_andreas(594), ilevel
      call rho_fine(ilevel,icount, .false.)     
 
      if (ilevel == levelmin)then
         rho_andreas = 0.d0
         do ilev = ilevel, nlevelmax
            call rho_direct_particles(ilev)
-           print*, 'between: rho_andreas(594)= ',rho_andreas(594), ilevel, ilev
            call rho_histogram_particles(ilev)
+        end do
+        do ilev = ilevel, nlevelmax
+           call make_virtual_reverse_dp(rho_andreas(1),ilev)
+           call make_virtual_fine_dp   (rho_andreas(1),ilev)
         end do
      end if
 
-     print*, '2: rho(594)= ',rho(594), ilevel
-     print*, '2: rho_andreas(594)= ',rho_andreas(594), ilevel
      if (ilevel == nlevelmax)then
         ! check if rho and rho andreas are identical:
         ! Constants

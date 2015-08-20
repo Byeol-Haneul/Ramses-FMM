@@ -512,9 +512,6 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
      do j=1,np
         if(ok(j))then
            rho(indp(j,ind))=rho(indp(j,ind))+vol2(j)
-           if(indp(j,ind)==594)then
-              print*, xp(ind_part(j), 1),' contributes',vol2(j), idp(ind_part(j))
-           end if
         end if
      end do
 
@@ -1170,7 +1167,7 @@ end subroutine cic_cell
 !##############################################################################
 subroutine rho_direct_particles(part_level)
   use amr_parameters, only: dp, levelmin, nvector, ndim
-  use amr_commons,    only: ncpu
+  use amr_commons,    only: ncpu, myid
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_level_offset, bin_start_offset, bin_count, &
                             xp_andreas, mp_andreas, idp_andreas, nbins, part_hkey
@@ -1183,12 +1180,10 @@ subroutine rho_direct_particles(part_level)
   
   ! in:           - particle_level
   !               - offset, nparts for local particles 
-  !               - mask array which marks particles which are "histogrammed"                
-  !               - starting offset, number of particles                                     
-  !               - current level                                                            
-  
-  ! out:          - none                                                                     
-  
+  !               - mask array which marks particles which are "histogrammed"
+  !               - starting offset, number of particles
+  !               - current level  
+  ! out:          - none  
   ! side effect:  - updates rho field on levels ilevel <= part_level   
 
   real(dp), dimension(1:nvector, 1:ndim) :: xpart
@@ -1241,9 +1236,11 @@ subroutine rho_direct_particles(part_level)
                           part_level)
 
   deallocate(part_hkey_direct)
-
   allocate(xp_remote(1:recv_tot, 1:3))
   allocate(mp_remote(1:recv_tot))
+
+  print*, 'stuff',myid, nparts, npart_direct, local_data_oft, local_data, recv_tot
+  print*, 'comm', myid,communicator
   
   
   call part_data_to_domain_dp(communicator, xp_direct(:, 1), xp_remote(:, 1))
@@ -1251,13 +1248,20 @@ subroutine rho_direct_particles(part_level)
   call part_data_to_domain_dp(communicator, xp_direct(:, 3), xp_remote(:, 3))
   call part_data_to_domain_dp(communicator, mp_direct, mp_remote)
 
+  if (recv_tot>1000)then
+  if (myid==2)print*,'here', xp_direct(1,1:3)
+  if (myid==2)print*,'here', mp_direct(1)
+
+  if (myid==1)print*,'there', xp_remote(1,1:3)
+  if (myid==1)print*,'there', mp_remote(1)
+end if
+  
   ! Project local direct particles
   ip = 0
-  do ipart = 1, npart_direct
+  do ipart = local_data_oft + 1, local_data_oft + local_data 
      ip = ip + 1
      xpart(ip, 1:ndim) = xp_direct(ipart, 1:ndim)
      mpart(ip)         = mp_direct(ipart)
-     idpart(ip)         = idp_(ipart + offset)
      if (ip == nvector) then
         do grid_level = part_level, levelmin, -1
            call cic_amr_andreas(xpart, mpart, ip, grid_level)
@@ -1274,6 +1278,7 @@ subroutine rho_direct_particles(part_level)
 
   ! Project remote direct particles
   ip = 0
+  print*,myid,recv_tot,'asdf'
   do ipart = 1, recv_tot
      ip = ip + 1
      xpart(ip, 1:ndim) = xp_remote(ipart, 1:ndim)
@@ -1291,6 +1296,8 @@ subroutine rho_direct_particles(part_level)
      end do
   end if
 
+  deallocate(xp_remote, mp_remote)
+  
 contains
 
   subroutine cic_amr_andreas(xpart, mpart, np, grid_level)
@@ -1300,9 +1307,9 @@ contains
     use poisson_commons, only: multipole, rho_andreas, phi
     use hilbert,         only: hilbert3d
     implicit none
-    integer,  intent(in)                                  :: np, grid_level
-    real(dp), intent(in),    dimension(1:nvector)         :: mpart
-    real(dp), intent(inout), dimension(1:nvector, 1:ndim) :: xpart
+    integer,  intent(in)                               :: np, grid_level
+    real(dp), intent(in), dimension(1:nvector)         :: mpart
+    real(dp), intent(in), dimension(1:nvector, 1:ndim) :: xpart
 
     ! This routine deposits nvector particles (local or remote) onto the grid (local)
     ! at level grid_level.
@@ -1324,6 +1331,7 @@ contains
     integer(kind=4), dimension(1:nvector),         save :: parent_cell_level, parent_cell_index
     real(dp),   dimension(1:nvector, 0:1, 1:ndim), save :: cloud_boundary
     real(dp),        dimension(1:nvector),         save :: vol, delta
+    real(dp),        dimension(1:nvector, 1:3),    save :: xpart_cart
     logical,         dimension(1:nvector),         save :: ok
     integer,         dimension(1:ndim),            save :: ind
     integer,  save :: idim, nx_loc, ind_cloud, ip
@@ -1334,7 +1342,7 @@ contains
     dx = 0.5D0**grid_level
     dx_loc=dx*scale
     vol_loc=dx_loc**ndim
-
+    
     ! Compute center of mass and total mass in box
     if (grid_level == levelmin) then
        do ip = 1, np
@@ -1350,7 +1358,7 @@ contains
     ! Convert particle coordinates in code units
     ! into "cartesian" coordinates at grid_level
     pos_to_cart = 2.0**grid_level / dble(boxlen)
-    xpart = xpart * pos_to_cart
+    xpart_cart = xpart * pos_to_cart
 
 
     ! compute distances of cloud boundary from nearest "integer coordinate"
@@ -1358,7 +1366,7 @@ contains
 
        ! upper/right/front boundary
        do ip=1,np
-          cloud_boundary(ip,1,idim) = xpart(ip, idim) + 0.5D0
+          cloud_boundary(ip,1,idim) = xpart_cart(ip, idim) + 0.5D0
        end do
      
        ! nearest integer coordinate
@@ -1426,7 +1434,7 @@ contains
        ! (cartesian key -> hilbert key -> cell index)
        do idim = 1, ndim
           do ip = 1, np
-             ix(ip,idim) = int(xpart(ip,idim) + delta(idim), kind = 8)
+             ix(ip,idim) = int(xpart_cart(ip,idim) + delta(idim), kind = 8)
           end do
        end do
 
@@ -1457,9 +1465,6 @@ contains
        do ip = 1, np
           if (ok(ip)) then
              rho_andreas(parent_cell_index(ip)) = rho_andreas(parent_cell_index(ip)) + vol(ip)
-             if(parent_cell_index(ip)==594)then
-                print*,xpart(ip,1)/pos_to_cart,' contributes',vol(ip)
-             end if
           end if
        end do
 
