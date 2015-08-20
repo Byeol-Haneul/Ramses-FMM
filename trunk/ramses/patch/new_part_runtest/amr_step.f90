@@ -16,9 +16,9 @@ recursive subroutine amr_step(ilevel,icount)
   integer::i,idim,ivar,info, idomain, ilev
   logical::ok_defrag, use_histograms
   logical,save::first_step=.true.
-  real(dp)::told,tnew,dthilbert,dtrho
-  integer :: ncell, icell
-  logical :: ok, first
+  real(dp)::told,tnew,dthilbert,dtrho,errsum
+  integer :: ncell, icell, ind, il, ncache, ind_grid, ngrid,igrid
+  logical :: all_ok, ok, first
   
   if(numbtot(1,ilevel)==0)return
 
@@ -187,9 +187,51 @@ recursive subroutine amr_step(ilevel,icount)
      end if
 
      if (ilevel == nlevelmax)then
+
+        ncoarse=nx*ny*nz
+
+        
+        
+        
+        
+        
         ! check if rho and rho andreas are identical:
         ! Constants
-        ncoarse=nx*ny*nz
+        errsum = 0.
+        all_ok = .true.
+        do il=1,nlevelmax
+           ncache=active(il)%ngrid
+           do igrid=1,ncache,nvector
+              ngrid=MIN(nvector,ncache-igrid+1)
+              do i=1,ngrid
+                 ind_grid=active(il)%igrid(igrid+i-1)
+                 do ind = 1,twotondim
+                    icell = ncoarse + (ind -1)*ngridmax + ind_grid
+                    if (rho(icell) == 0.d0)then
+                       ok = (rho_andreas(icell) == 0.d0)
+                    else
+                       ok = (abs(rho(icell) - rho_andreas(icell))/rho(icell) < 1.d-4 )
+                    end if
+                    if (.not. ok)then
+                       print*,'no good', myid, rho(icell), rho_andreas(icell), rho(icell) - rho_andreas(icell), icell
+                       errsum = errsum + rho(icell) - rho_andreas(icell)
+                       print*,errsum
+                    end if
+                    all_ok = all_ok .and. ok
+                 end do
+              end do
+           end do           
+        end do
+        if (.not. all_ok)then
+           write(*,*)'error in active rho  occurred in process ', myid
+           call clean_stop
+        else
+           write(*,*)'juhuu, all active cells good  on process ', myid
+        end if
+
+        call MPI_BARRIER(MPI_COMM_WORLD,info)  
+
+ 
         ncell=ncoarse+twotondim*ngridmax
         ok = .true.
         first = .true.
