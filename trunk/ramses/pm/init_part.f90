@@ -667,6 +667,9 @@ subroutine init_part
                  mp(ipart)    =mm(i)
                  levelp(ipart)=levelmin
                  idp(ipart)   =ii(i)
+                 if (idp(ipart)==221)then
+                    print*, 'particle idp 221 on ', myid, xp(ipart,1:3), ipart
+                 end if
 #ifndef WITHOUTMPI
               endif
 #endif
@@ -905,6 +908,9 @@ subroutine init_part_andreas
                  vp_andreas(jpart_loc,3)=vv3
                  mp_andreas(jpart_loc  )=mm1
                  idp_andreas(jpart_loc )=indglob
+                 if (idp_andreas(jpart_loc)==221)then
+                    print*, 'particle idp_andreas 221 on ', myid, xp_andreas(jpart_loc,1:3), jpart_loc
+                 end if
                  levelp_andreas(jpart_loc)=1
               end if
            end do

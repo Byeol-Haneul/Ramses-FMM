@@ -113,7 +113,6 @@ subroutine rho_fine(ilevel,icount,new_rho)
   !---------------------------------------------------------
   ! Compute density due to current level particles
 
-
   if(pic)then
 !     if (new_rho)then
 !        do ilev = ilevel, nlevelmax
@@ -123,14 +122,11 @@ subroutine rho_fine(ilevel,icount,new_rho)
 !     end if
      call rho_from_current_level(ilevel)
   end if
-
-  if(myid==1)print*,'rho before',ilevel, rho(15080)
   
   ! Update boudaries
   call make_virtual_reverse_dp(rho(1),ilevel)
-  if(myid==1)print*,'between',ilevel, rho(15080)
   call make_virtual_fine_dp   (rho(1),ilevel)
-  if(myid==1)print*,'rho after',ilevel, rho(15080)   
+
   !  if (new_rho)then
 !     call make_virtual_reverse_dp(rho_andreas(1),ilevel)
 !     call make_virtual_fine_dp   (rho_andreas(1),ilevel)
@@ -219,11 +215,6 @@ subroutine rho_from_current_level(ilevel)
   ! Mesh spacing in that level
   dx=0.5D0**ilevel 
 
-  if(myid==1)then
-     print*,'initial_rho'
-     print*,rho(15080)
-  end if
-  
   ! Loop over cpus
   do icpu=1,ncpu
      ! Loop over grids
@@ -522,10 +513,6 @@ subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
      do j=1,np
         if(ok(j))then
            rho(indp(j,ind))=rho(indp(j,ind))+vol2(j)
-           if (indp(j,ind) == 15080 .and. myid == 1)then
-              print*,xp(ind_part(j), 1:3), idp(ind_part(j))
-              print*,rho(indp(j,ind))
-           end if
         end if
      end do
 
@@ -1494,7 +1481,8 @@ subroutine rho_histogram_particles(part_level)
   use amr_parameters, only: dp, levelmin, icoarse_min, icoarse_max, boxlen
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_ind_permutation, part_level_offset, bin_start_offset, &
-                            bin_count, mp_andreas
+       bin_count, mp_andreas
+  use amr_commons,    only: myid
   implicit none
   integer, intent(in) :: part_level
   ! """
@@ -1517,7 +1505,6 @@ subroutine rho_histogram_particles(part_level)
   
   
   integer  :: ip, offset, nparts, ibin, ipart, grid_level, n_masked
-  
   offset = part_level_offset(part_level)
   nparts = part_level_offset(part_level+1) - part_level_offset(part_level)
 
@@ -1547,7 +1534,7 @@ contains
   subroutine rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
     use amr_parameters, only: ndim, nvector
     use amr_commons,    only: myid
-    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset, bin_count, bin_mass
+    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset, bin_count, bin_mass, idp_andreas
     use hilbert,        only: hilbert_for_particle
     use sort,           only: lsd_radix_sort_particles
     use poisson_commons, only: rho_andreas
@@ -1581,10 +1568,6 @@ contains
     dx_loc = dx * scale
     vol_loc = dx_loc**ndim
 
-    if(myid==1)then
-       print*,'initial_andreas'
-       print*,rho_andreas(15080)
-    end if
   ! Loop over CIC cloud / cell intersections
     do ind_cloud = 0, 7
        ind(1) = ind_cloud/4
@@ -1644,6 +1627,7 @@ contains
              xp_andreas(ipart,idim) = xp_andreas(ipart,idim) - delta(idim) * dx_loc
           end do          
        end do
+
 
        ! Dump bin_mass into rho and bin_count into phi
        call dump_histograms(grid_level)
@@ -1718,7 +1702,7 @@ contains
     integer        , dimension(1:nvector)     , save :: parent_cell_level, parent_cell_index
     integer(kind=8), dimension(1:nvector, 0:2), save :: bkey
 
-    integer,  save :: i, ib, ibin, recv_tot, local_bins, local_bins_oft
+    integer,  save :: ib, nb, ibin, recv_tot, local_bins, local_bins_oft, ioft
     real(dp), save :: vol_loc
 
     vol_loc = (0.5**cell_level * dble(boxlen) )**3    
@@ -1741,85 +1725,44 @@ contains
       call part_data_to_domain_i8(communicator, bin_keys(:, 2), bin_keys_remote(:, 2))
       call part_data_to_domain_dp(communicator, bin_mass, bin_mass_remote)      
     
-    ! slightly silly way to go through bins in sweeps and add mass to corresponding cell
-    ib = 0
-    do ibin = local_bins_oft + 1, local_bins_oft + local_bins
-       ib = ib + 1
-       bkey(ib, 0:2) = bin_keys(ibin, 0:2)
-       if (ib == nvector)then
-          call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
-               & bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)    
-          do i = 1, ib
-             ! Don't add mass to coarser levels             
-             if (parent_cell_level(i) == cell_level) then
-                rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
-                     bin_mass(ibin - ib + i) / vol_loc             
-                if (parent_cell_index(i) == 15080 .and. myid == 1)then
-                   print*,'local'
-                   print*,rho_andreas(15080)
-                end if
-             end if
-          end do
-          ib = 0
-       end if
-    end do
-    if (ib > 0)then
-       call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
-            bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)
-       do i = 1, ib
-          ! Don't add mass to coarser levels
-          if (parent_cell_level(i) == cell_level) then
-             rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
-                  bin_mass(nbins - ib + i) / vol_loc             
-             if (parent_cell_index(i) == 15080 .and. myid == 1)then
-                print*,'local'
-                print*,rho_andreas(15080)
-             end if
-          end if
-       end do
-    end if
+      ! go through bins in sweeps and add mass to corresponding cell
+      do ioft = local_bins_oft, local_bins_oft + local_bins - 1, nvector
+         nb = min(nvector, local_bins_oft + local_bins - ioft)
+         call get_cell_index_from_hilbertkey(parent_cell_index(1:nb), &
+              parent_cell_level(1:nb), &
+              bin_keys(ioft + 1 : ioft + nb, 2), &
+              bin_keys(ioft + 1 : ioft + nb, 1), &
+              bin_keys(ioft + 1 : ioft + nb, 0), nb, cell_level)    
+         do ib = 1, nb
+            ! Don't add mass to coarser levels             
+            if (parent_cell_level(ib) == cell_level) then
+               rho_andreas(parent_cell_index(ib)) = rho_andreas(parent_cell_index(ib)) + &
+                    bin_mass(ioft + ib) / vol_loc             
+            end if
+         end do
+      end do
 
-    ! dump remote histograms
-    ib = 0
-    do ibin = 1, recv_tot
-       ib = ib + 1
-       bkey(ib, 0:2) = bin_keys_remote(ibin, 0:2)
-       if (ib == nvector)then
-          call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
-               & bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)    
-          do i = 1, ib
-             ! Don't add mass to coarser levels             
-             if (parent_cell_level(i) == cell_level) then
-                rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
-                     bin_mass_remote(ibin - ib + i) / vol_loc             
-                if (parent_cell_index(i) == 15080 .and. myid == 1)then
-                   print*,'remote'
-                   print*,rho_andreas(15080)
-                end if
-             end if
-          end do
-          ib = 0
-       end if
-    end do
-    if (ib > 0)then
-       call get_cell_index_from_hilbertkey(parent_cell_index(1:ib), parent_cell_level(1:ib), &
-            bkey(1:ib, 2), bkey(1:ib, 1), bkey(1:ib, 0), ib, cell_level)
-       do i = 1, ib
-          ! Don't add mass to coarser levels
-          if (parent_cell_level(i) == cell_level) then
-             rho_andreas(parent_cell_index(i)) = rho_andreas(parent_cell_index(i)) + &
-                  bin_mass_remote(recv_tot - ib + i) / vol_loc             
-             if (parent_cell_index(i) == 15080 .and. myid == 1)then
-                print*,'remote'
-                print*,rho_andreas(15080)
-             end if
-          end if
-       end do
-    end if
+      ! go through remote bins in sweeps and add mass to corresponding cell
+      do ioft = 0, recv_tot - 1, nvector
+         nb = min(nvector, recv_tot - ioft)
+         call get_cell_index_from_hilbertkey(parent_cell_index(1:nb), &
+              parent_cell_level(1:nb), &
+              bin_keys_remote(ioft + 1 : ioft + nb, 2), &
+              bin_keys_remote(ioft + 1 : ioft + nb, 1), &
+              bin_keys_remote(ioft + 1 : ioft + nb, 0), nb, cell_level)    
+         do ib = 1, nb
+            ! Don't add mass to coarser levels             
+            if (parent_cell_level(ib) == cell_level) then
+               rho_andreas(parent_cell_index(ib)) = rho_andreas(parent_cell_index(ib)) + &
+                    bin_mass_remote(ioft + ib) / vol_loc             
+            end if
+         end do
+      end do
+      
+      
+      deallocate(bin_mass_remote, bin_keys_remote)
+      
+    end subroutine dump_histograms
 
-    deallocate(bin_mass_remote, bin_keys_remote)
     
-  end subroutine dump_histograms
-
-  
 end subroutine rho_histogram_particles
