@@ -36,7 +36,7 @@ contains
     recv_tot = 0
 
     ! count number of bins that need to be sent to every other process
-    receive_cpu = 0; local_data = 0
+    receive_cpu = 1; local_data = 0
     do idata = 1, ndata
        ! REPLACE this by do while( gt_3_keys(keys..., bound_key_level )):
        ! do while (gt_3keys_individual_input(keys(idata,2),keys(idata,1),keys(idata,0), &
