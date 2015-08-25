@@ -397,3 +397,150 @@ end subroutine move1
 !#########################################################################
 !#########################################################################
 !#########################################################################
+ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
+  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas
+  use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson
+  use hydro_commons,   only: uold
+  use poisson_commons, only: f
+  use amr_commons,     only: dtnew
+  implicit none
+
+
+  integer, intent(in) :: ilevel
+
+
+
+  integer, dimension(1:nvector, 1:twotondim), save :: vol, cell_index
+  real(dp), dimension(1:nvector, 1:ndim),     save :: ff
+  integer :: offset, nparts, ioft, np, ip, ind, idim
+  
+  offset = part_level_offset(ilevel)
+  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
+
+  ! Loop all particles in that level in nvector sweeps
+  do ioft = offset, offset + nparts - 1, nvector
+     np = min(nvector, offset + nparts - ioft)
+
+     call cic(xp_andreas(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 0)
+
+     ff(1:np, 1:ndim) = 0.0D0
+     if(tracer .and. hydro)then
+        do idim = 1, ndim
+           do ind = 1, twotondim              
+              do ip = 1, np
+                 ff(ip,idim) = ff(ip,idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
+              end do
+           end do
+        end do
+     endif
+     
+     if(poisson)then
+        do idim = 1,ndim
+           do ind = 1,twotondim
+              do ip = 1,np
+                 ff(ip,idim) = ff(ip,idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
+              end do
+           end do
+        end do
+     endif
+
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+        ! Just a reminder that this option is not built in yet
+        call clean_stop
+#endif
+     
+     
+     ! Update velocity     
+     if(static .or. tracer)then
+        do idim = 1, ndim
+           do ip = 1, np
+              vp_andreas(ioft + ip, idim) = ff(ip, idim)
+           end do
+        end do
+     else
+        do idim = 1, ndim
+           do ip=1,np
+              vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
+                   + ff(ip, idim) * 0.5D0 * dtnew(ilevel)
+           end do
+        end do
+     end if
+     
+     ! Update position
+     if(.not. static)then
+        do idim=1,ndim
+           do ip=1,np
+              xp_andreas(ioft + ip, idim) = xp_andreas(ioft + ip, idim) &
+                   + vp_andreas(ioft + ip, idim) * dtnew(ilevel)
+           end do
+        end do
+     endif
+  end do
+  
+end subroutine kick_drift
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
+  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, levelp_andreas
+  use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson
+  use hydro_commons,   only: uold
+  use poisson_commons, only: f
+  use amr_commons,     only: dtnew, dtold
+  implicit none
+
+
+  integer, intent(in) :: ilevel
+
+
+
+  integer, dimension(1:nvector, 1:twotondim), save :: vol, cell_index
+  integer, dimension(1:nvector),              save :: dteff
+  real(dp), dimension(1:nvector, 1:ndim),     save :: ff
+  integer :: offset, nparts, ioft, np, ip, ind, idim
+  
+  offset = part_level_offset(ilevel)
+  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
+
+  ! Loop all particles in that level in nvector sweeps
+  do ioft = offset, offset + nparts - 1, nvector
+     np = min(nvector, offset + nparts - ioft)
+
+     call cic(xp_andreas(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 0)
+
+     ff(1:np, 1:ndim) = 0.0D0
+     do idim = 1,ndim
+        do ind = 1,twotondim
+           do ip = 1,np
+              ff(ip,idim) = ff(ip,idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
+           end do
+        end do
+     end do
+     
+     ! Compute individual time steps
+     do ip = 1,np
+        if(levelp_andreas(ioft + ip) >= ilevel)then
+           dteff(ip) = dtnew(levelp_andreas(ioft + ip))
+        else
+           dteff(ip) = dtold(levelp_andreas(ioft + ip))
+        endif
+     end do
+     
+     ! Update particles level
+     do ip = 1, np
+        levelp_andreas(ioft + ip) = ilevel
+     end do
+
+     do idim = 1, ndim
+        do ip=1,np
+           vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
+                + ff(ip, idim) * 0.5D0 * dteff(ilevel)
+        end do
+     end do
+  end do
+end subroutine second_kick
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
