@@ -4,8 +4,9 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    use hilbert,         only: hilbert3d
    implicit none
    integer,  intent(in)                                      :: np, cic_level, level_boundary_case
-   integer(kind=4), intent(inout), dimension(1:nvector, 1:8) :: cell_index, vol
-   real(dp), intent(in), dimension(1:nvector, 1:ndim)        :: xpart
+   integer(kind=4), intent(inout), dimension(1:nvector, 1:8) :: cell_index
+   real(dp),        intent(inout), dimension(1:nvector, 1:8) :: vol
+   real(dp), intent(in), dimension(1:np, 1:ndim)             :: xpart
 
    ! This routine deposits nvector particles (local or remote) onto the grid (local)
    ! at level grid_level.

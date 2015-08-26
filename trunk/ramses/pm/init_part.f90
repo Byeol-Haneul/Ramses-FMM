@@ -911,7 +911,7 @@ subroutine init_part_andreas
                  if (idp_andreas(jpart_loc)==221)then
                     print*, 'particle idp_andreas 221 on ', myid, xp_andreas(jpart_loc,1:3), jpart_loc
                  end if
-                 levelp_andreas(jpart_loc)=1
+                 levelp_andreas(jpart_loc)=levelmin
               end if
            end do
 100        continue

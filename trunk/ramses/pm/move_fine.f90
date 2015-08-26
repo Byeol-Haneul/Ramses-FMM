@@ -363,6 +363,7 @@ subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
      else
         do j=1,np
            new_vp(j,idim)=vp(ind_part(j),idim)+ff(j,idim)*0.5D0*dtnew(ilevel)
+           if (idp(ind_part(j))==25)print*,'oldmovef',idim,dtnew(ilevel),ff(j,idim),xp(ind_part(j),idim)
         end do
      endif
   end do
@@ -398,7 +399,7 @@ end subroutine move1
 !#########################################################################
 !#########################################################################
  subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
-  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas
+  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, idp_andreas
   use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson
   use hydro_commons,   only: uold
   use poisson_commons, only: f
@@ -410,8 +411,10 @@ end subroutine move1
 
 
 
-  integer, dimension(1:nvector, 1:twotondim), save :: vol, cell_index
-  real(dp), dimension(1:nvector, 1:ndim),     save :: ff
+  integer,  dimension(1:nvector, 1:twotondim), save :: cell_index
+  real(dp), dimension(1:nvector, 1:twotondim), save :: vol
+  real(dp), dimension(1:nvector, 1:ndim),      save :: ff
+
   integer :: offset, nparts, ioft, np, ip, ind, idim
   
   offset = part_level_offset(ilevel)
@@ -462,6 +465,7 @@ end subroutine move1
            do ip=1,np
               vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
                    + ff(ip, idim) * 0.5D0 * dtnew(ilevel)
+              if (idp_andreas(ioft + ip)==25)print*,'newmovef',idim,dtnew(ilevel),ff(ip,idim)
            end do
         end do
      end if
@@ -483,7 +487,7 @@ end subroutine kick_drift
 !#########################################################################
 !#########################################################################
 subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
-  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, levelp_andreas
+  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, levelp_andreas, idp_andreas
   use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson
   use hydro_commons,   only: uold
   use poisson_commons, only: f
@@ -495,9 +499,10 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
 
 
 
-  integer, dimension(1:nvector, 1:twotondim), save :: vol, cell_index
-  integer, dimension(1:nvector),              save :: dteff
-  real(dp), dimension(1:nvector, 1:ndim),     save :: ff
+  integer,  dimension(1:nvector, 1:twotondim), save ::  cell_index
+  real(dp), dimension(1:nvector, 1:twotondim), save :: vol
+  real(dp), dimension(1:nvector),              save :: dteff
+  real(dp), dimension(1:nvector, 1:ndim),      save :: ff
   integer :: offset, nparts, ioft, np, ip, ind, idim
   
   offset = part_level_offset(ilevel)
@@ -535,7 +540,8 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
      do idim = 1, ndim
         do ip=1,np
            vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
-                + ff(ip, idim) * 0.5D0 * dteff(ilevel)
+                + ff(ip, idim) * 0.5D0 * dteff(ip)
+           if (idp_andreas(ioft + ip)==25)print*,'new',idim,dteff(ip),ff(ip,idim)
         end do
      end do
   end do

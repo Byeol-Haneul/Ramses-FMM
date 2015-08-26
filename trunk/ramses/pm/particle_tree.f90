@@ -1604,3 +1604,64 @@ subroutine check_sorted(offset, np)
   
   
 end subroutine check_sorted
+
+
+
+
+subroutine write_ascii_parts
+  use pm_commons
+  use amr_commons
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+
+  ! ugly routine to count all particles in the simulation level by level
+  ! used for debugging
+  integer::ilevel, ilun
+  integer::igrid,jgrid,i,ngrid,ncache, ipart, jpart, next_part
+  integer::ig,ip,npart1,npart2,npart2_tot,icpu,info
+  integer,dimension(1:nvector)::ind_grid
+  integer,dimension(1:nlevelmax)::npts
+  character(len=80)::filename
+  character(LEN=5)::nchar
+  
+  ilun=myid+100
+  
+  call title(ilun,nchar)
+  filename='OLDParts'//nchar
+ 
+  open(unit=ilun,file=filename,form='formatted')
+  
+  do ilevel=levelmin,levelmin
+     ! Loop over cpus
+     do icpu=1,ncpu
+        igrid=headl(icpu,ilevel)
+        ! Loop over grids
+        do jgrid=1,numbl(icpu,ilevel)
+           npart1=numbp(igrid)  ! Number of particles in the grid
+           if(npart1>0)then
+              ipart=headp(igrid)
+              ! Loop over particles
+              do jpart=1,npart1
+                 ! Save next particle   <--- Very important !!!
+                 next_part=nextp(ipart)
+                 write(ilun,"(6(F20.15),2(I10))")xp(ipart,1:3),vp(ipart,1:3),idp(ipart), levelp(ipart) 
+                 ipart=next_part  ! Go to next particle
+              end do
+           endif
+           igrid=next(igrid)   ! Go to next grid                                                              
+        end do
+     end do
+  end do
+  close(ilun)
+
+  filename='NEWParts'//nchar
+  open(unit=ilun,file=filename,form='formatted')
+  do ipart=1,npart_andreas
+     write(ilun,"(6(F20.15),2(I10))")xp_andreas(ipart,1:3),vp_andreas(ipart,1:3), &
+          idp_andreas(ipart), levelp_andreas(ipart)
+  end do
+
+  close(ilun)
+end subroutine write_ascii_parts

@@ -13,7 +13,7 @@ recursive subroutine amr_step(ilevel,icount)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  integer::i,idim,ivar,info
+  integer::i,idim,ivar,info, idomain, ilev
   logical::ok_defrag
   logical,save::first_step=.true.
   real(dp)::told,tnew,dthilbert,dtrho
@@ -85,6 +85,26 @@ recursive subroutine amr_step(ilevel,icount)
      endif
   end if
 
+
+  do idomain=1,ndomain - 1
+     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
+  end do
+  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
+  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  
+  do ilev=nlevelmax-1, levelmin, - 1
+     do idomain=1,ndomain - 1
+        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
+     end do
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
+  end do
+  
+  call MPI_BARRIER(MPI_COMM_WORLD,info)
+  if (myid==1)print*, 'starting tests now', npart_andreas
+
+
+  
   !-----------------
   ! Particle leakage
   !-----------------
@@ -128,7 +148,7 @@ recursive subroutine amr_step(ilevel,icount)
 !      told=MPI_WTIME(info)
 ! #endif
 
-     call rho_fine(ilevel,icount)     
+     call rho_fine(ilevel,icount,.false.)     
 
 ! #ifndef WITHOUTMPI
 !      tnew=MPI_WTIME(info)
@@ -188,7 +208,7 @@ recursive subroutine amr_step(ilevel,icount)
 
      use_histograms = .false.
      call sort_particles(ilevel, use_histograms)
-
+     
      ! Synchronize remaining particles for gravity
      if(pic)then
         call synchro_fine(ilevel)
@@ -297,6 +317,11 @@ recursive subroutine amr_step(ilevel,icount)
   !----------------------------
   if(pic)call merge_tree_fine(ilevel)
 
+  if (ilevel==levelmin)then
+     call write_ascii_parts
+     print*,'written ascii', t
+     if(t>0.2)stop
+  endif
   !-------------------------------
   ! Update coarser level time-step
   !-------------------------------
