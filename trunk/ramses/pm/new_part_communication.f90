@@ -177,6 +177,29 @@ contains
   end subroutine domain_data_to_part_i4
   !################################################################
   !################################################################
+  subroutine domain_data_to_part_dp(communicator, send_data, recv_data)
+    use amr_commons,   only: ncpu, dp
+    implicit none
+    include 'mpif.h'
+
+    integer, dimension(1:ncpu, 1:4), intent(in) :: communicator
+    real(dp), dimension(:), intent(in) :: send_data
+    real(dp), dimension(:), intent(inout) :: recv_data
+
+    integer  :: info, request
+    integer  :: status(MPI_STATUS_SIZE)
+
+    call MPI_IALLTOALLV(send_data, communicator(:,3), communicator(:,4), MPI_INTEGER, &
+         &              recv_data, communicator(:,1), communicator(:,2), MPI_INTEGER, &
+         &              MPI_COMM_WORLD, request, info)
+
+    ! Finish communication (CAN BE MOVED OUTSIDE BY PASSING
+    ! REQUEST HANDLE OUT OF SUBROUTINE)
+    call MPI_WAIT(request, status, info)
+
+  end subroutine domain_data_to_part_dp
+  !################################################################
+  !################################################################
 
   !################################################################
   !################################################################

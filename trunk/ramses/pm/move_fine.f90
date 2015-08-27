@@ -344,6 +344,7 @@ subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
         do idim=1,ndim
            do j=1,np
               ff(j,idim)=ff(j,idim)+f(indp(j,ind),idim)*vol(j,ind)
+              if (idp(ind_part(j))==880 .and. idim ==1)print*,'oldforce',indp(j,ind),vol(j,ind),ok(j)
            end do
         end do
 #ifdef OUTPUT_PARTICLE_POTENTIAL
@@ -363,7 +364,7 @@ subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
      else
         do j=1,np
            new_vp(j,idim)=vp(ind_part(j),idim)+ff(j,idim)*0.5D0*dtnew(ilevel)
-           if (idp(ind_part(j))==25)print*,'oldmovef',idim,dtnew(ilevel),ff(j,idim),xp(ind_part(j),idim)
+           if (idp(ind_part(j))==880)print*,'oldmovef',idim,dtnew(ilevel),ff(j,idim),xp(ind_part(j),idim)
         end do
      endif
   end do
@@ -398,96 +399,56 @@ end subroutine move1
 !#########################################################################
 !#########################################################################
 !#########################################################################
- subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
-  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, idp_andreas
-  use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson
-  use hydro_commons,   only: uold
-  use poisson_commons, only: f
-  use amr_commons,     only: dtnew
+subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
+  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, ap_andreas, idp_andreas
+  use amr_parameters,  only: dp, ndim, tracer, hydro, static
+  use amr_commons,     only: ncpu, dtnew
   implicit none
 
 
   integer, intent(in) :: ilevel
 
-
-
-  integer,  dimension(1:nvector, 1:twotondim), save :: cell_index
-  real(dp), dimension(1:nvector, 1:twotondim), save :: vol
-  real(dp), dimension(1:nvector, 1:ndim),      save :: ff
-
-  integer :: offset, nparts, ioft, np, ip, ind, idim
+  integer :: offset, nparts, idim, ipart
   
   offset = part_level_offset(ilevel)
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
 
-  ! Loop all particles in that level in nvector sweeps
-  do ioft = offset, offset + nparts - 1, nvector
-     np = min(nvector, offset + nparts - ioft)
+  call compute_particle_acceleration(ilevel, tracer .and. hydro)
+  
+  ! Accelerate and move all parts 
+  do idim = 1, ndim
 
-     call cic(xp_andreas(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 0)
-
-     ff(1:np, 1:ndim) = 0.0D0
-     if(tracer .and. hydro)then
-        do idim = 1, ndim
-           do ind = 1, twotondim              
-              do ip = 1, np
-                 ff(ip,idim) = ff(ip,idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
-              end do
-           end do
-        end do
-     endif
-     
-     if(poisson)then
-        do idim = 1,ndim
-           do ind = 1,twotondim
-              do ip = 1,np
-                 ff(ip,idim) = ff(ip,idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-              end do
-           end do
-        end do
-     endif
-
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-        ! Just a reminder that this option is not built in yet
-        call clean_stop
-#endif
-     
-     
      ! Update velocity     
      if(static .or. tracer)then
-        do idim = 1, ndim
-           do ip = 1, np
-              vp_andreas(ioft + ip, idim) = ff(ip, idim)
-           end do
+        do ipart = offset + 1, offset + nparts 
+           vp_andreas(ipart, idim) = ap_andreas(ipart, idim)
         end do
      else
-        do idim = 1, ndim
-           do ip=1,np
-              vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
-                   + ff(ip, idim) * 0.5D0 * dtnew(ilevel)
-              if (idp_andreas(ioft + ip)==25)print*,'newmovef',idim,dtnew(ilevel),ff(ip,idim)
-           end do
+        do ipart = offset + 1, offset + nparts 
+           vp_andreas(ipart, idim) = vp_andreas(ipart, idim) &
+                + ap_andreas(ipart, idim) * 0.5D0 * dtnew(ilevel)
+           if (idp_andreas(ipart)==880)print*,'newmovef',idim,dtnew(ilevel),xp_andreas(ipart,idim)
         end do
      end if
-     
+
      ! Update position
      if(.not. static)then
-        do idim=1,ndim
-           do ip=1,np
-              xp_andreas(ioft + ip, idim) = xp_andreas(ioft + ip, idim) &
-                   + vp_andreas(ioft + ip, idim) * dtnew(ilevel)
-           end do
+        do ipart = offset + 1, offset + nparts 
+           xp_andreas(ipart, idim) = xp_andreas(ipart, idim) &
+                + vp_andreas(ipart, idim) * dtnew(ilevel)
         end do
-     endif
+     end if
+
   end do
-  
+
+ 
 end subroutine kick_drift
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
-  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, levelp_andreas, idp_andreas
+  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, ap_andreas, levelp_andreas, idp_andreas
   use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson
   use hydro_commons,   only: uold
   use poisson_commons, only: f
@@ -499,53 +460,152 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
 
 
 
-  integer,  dimension(1:nvector, 1:twotondim), save ::  cell_index
-  real(dp), dimension(1:nvector, 1:twotondim), save :: vol
   real(dp), dimension(1:nvector),              save :: dteff
-  real(dp), dimension(1:nvector, 1:ndim),      save :: ff
-  integer :: offset, nparts, ioft, np, ip, ind, idim
+  integer :: offset, nparts, ioft, ind, idim, ip, np
   
   offset = part_level_offset(ilevel)
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
 
-  ! Loop all particles in that level in nvector sweeps
+  call compute_particle_acceleration(ilevel, .false.)
+  
+  ! Compute individual time steps
   do ioft = offset, offset + nparts - 1, nvector
      np = min(nvector, offset + nparts - ioft)
 
-     call cic(xp_andreas(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 0)
-
-     ff(1:np, 1:ndim) = 0.0D0
-     do idim = 1,ndim
-        do ind = 1,twotondim
-           do ip = 1,np
-              ff(ip,idim) = ff(ip,idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-           end do
-        end do
-     end do
-     
-     ! Compute individual time steps
-     do ip = 1,np
+     do ip = 1, np
         if(levelp_andreas(ioft + ip) >= ilevel)then
            dteff(ip) = dtnew(levelp_andreas(ioft + ip))
         else
            dteff(ip) = dtold(levelp_andreas(ioft + ip))
         endif
      end do
+
      
      ! Update particles level
      do ip = 1, np
         levelp_andreas(ioft + ip) = ilevel
      end do
-
+     
      do idim = 1, ndim
-        do ip=1,np
+        do ip = 1, np
            vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
-                + ff(ip, idim) * 0.5D0 * dteff(ip)
-           if (idp_andreas(ioft + ip)==25)print*,'new',idim,dteff(ip),ff(ip,idim)
+                + ap_andreas(ioft + ip, idim) * 0.5D0 * dteff(ip)
+           if (idp_andreas(ioft + ip)==880)print*,'new',idim,dteff(ip),xp_andreas(ioft + ip,idim)
         end do
      end do
   end do
 end subroutine second_kick
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
+  use pm_commons,      only: part_level_offset, xp_andreas, ap_andreas, idp_andreas, &
+                             part_hkey
+  use amr_parameters,  only: dp, nvector, ndim, twotondim, poisson
+  use hydro_commons,   only: uold
+  use poisson_commons, only: f
+  use amr_commons,     only: dtnew, ncpu
+  use particle_communication, only: build_communicator, part_data_to_domain_dp, domain_data_to_part_dp
+  implicit none
+
+
+  integer, intent(in) :: ilevel
+  logical, intent(in) :: read_gas_velocity
+  
+  real(dp), allocatable, dimension(:,:) :: xp_remote, ap_remote
+  integer,  dimension(1:ncpu, 1:4)       :: communicator
+  integer,  dimension(1:nvector, 1:twotondim), save :: cell_index
+  real(dp), dimension(1:nvector, 1:twotondim), save :: vol
+
+  integer :: offset, nparts, ioft, np, ip, ind, idim, ipart, local_oft, npart_recv, nparts_local
+  
+  offset = part_level_offset(ilevel)
+  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
+
+   
+!  call compute_particle_histogram(offset, nparts)
+  call build_communicator(communicator, npart_recv, &
+       nparts, nparts_local, local_oft, &
+       part_hkey(offset + 1 : offset + nparts, 2), &
+       part_hkey(offset + 1 : offset + nparts, 1), &
+       part_hkey(offset + 1 : offset + nparts, 0), & 
+       ilevel)
+
+  allocate(xp_remote(1:npart_recv, 1:3), ap_remote(1:npart_recv, 1:3))
+  call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 1), xp_remote(:, 1))
+  call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 2), xp_remote(:, 2))
+  call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 3), xp_remote(:, 3))
+
+
+ ! Deal with remote particles
+  do ioft = 0, npart_recv - 1, nvector
+     np = min(nvector, npart_recv - ioft)
+
+     call cic(xp_remote(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
+
+     ap_remote(ioft + 1: ioft + np, 1: ndim) = 0.0D0
+     if(read_gas_velocity)then
+        do idim = 1, ndim
+           do ind = 1, twotondim              
+              do ip = 1, np
+                 ap_remote(ioft + ip, 1: idim) = ap_remote(ioft + ip, 1: idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
+              end do
+           end do
+        end do
+     endif
+     
+     if(poisson)then
+        do idim = 1,ndim
+           do ind = 1,twotondim
+              do ip = 1,np
+                 ap_remote(ioft + ip, 1: idim) = ap_remote(ioft + ip, 1: idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
+              end do
+           end do
+        end do
+     endif
+  end do
+     
+  call domain_data_to_part_dp(communicator, ap_remote(:,3), ap_andreas(offset + 1 : offset + nparts, 3))
+  call domain_data_to_part_dp(communicator, ap_remote(:,2), ap_andreas(offset + 1 : offset + nparts, 2))
+  call domain_data_to_part_dp(communicator, ap_remote(:,1), ap_andreas(offset + 1 : offset + nparts, 1))
+
+  deallocate(xp_remote, ap_remote)
+
+  ! Deal with local particles
+  do ioft = local_oft, local_oft + nparts_local - 1, nvector
+     np = min(nvector, local_oft + nparts_local - ioft)
+
+     call cic(xp_andreas(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
+
+     ap_andreas(ioft + 1: ioft + np, 1: ndim) = 0.0D0
+     if(read_gas_velocity)then
+        do idim = 1, ndim
+           do ind = 1, twotondim              
+              do ip = 1, np
+                  ap_andreas(ioft + ip, idim) = ap_andreas(ioft + ip, idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
+              end do
+           end do
+        end do
+     endif
+     
+     if(poisson)then
+        do idim = 1,ndim
+           do ind = 1,twotondim
+              do ip = 1,np
+                  ap_andreas(ioft + ip, idim) =  ap_andreas(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
+                 if (idp_andreas(ioft + ip)==880 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip
+              end do
+           end do
+        end do
+     endif
+  end do
+
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  ! Just a reminder that this option is not built in yet
+  call clean_stop
+#endif
+end subroutine compute_particle_acceleration
 !#########################################################################
 !#########################################################################
 !#########################################################################

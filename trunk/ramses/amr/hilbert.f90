@@ -606,9 +606,9 @@ contains
     use amr_parameters, only: qdp, nvector
     implicit none
     integer        , intent(in)                          :: initial_level, final_level, npoint
-    integer(kind=8), intent(in),    dimension(1:nvector) :: ix, iy, iz
-    integer(kind=4), intent(inout), dimension(1:nvector) :: cstate
-    integer(kind=8), intent(inout), dimension(1:nvector) :: hkey2, hkey1, hkey0
+    integer(kind=8), intent(in),    dimension(1:npoint) :: ix, iy, iz
+    integer(kind=4), intent(inout), dimension(1:npoint) :: cstate
+    integer(kind=8), intent(inout), dimension(1:npoint) :: hkey2, hkey1, hkey0
     
     ! Compute nvector 3-integer hilbert keys from the cartesian keys ix, iy, iz
     

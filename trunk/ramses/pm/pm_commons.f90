@@ -6,6 +6,8 @@ module pm_commons
   real(dp),allocatable,dimension(:,:)       ::xp, xp_andreas       ! Positions
   real(dp),allocatable,dimension(:,:)       ::vp, vp_andreas       ! Velocities
   real(dp),allocatable,dimension(:)         ::mp, mp_andreas       ! Masses
+  real(dp),allocatable,dimension(:,:)       ::ap_andreas           ! Accelerations (more convenient communication if allocated fully
+                                                                   ! for all particles
   integer(kind=8),allocatable,dimension(:)  ::part_ref_mask        ! mask for refinement
   integer(kind=8),allocatable,dimension(:,:)::part_hkey
   integer(kind=4),allocatable,dimension(:)  ::current_state

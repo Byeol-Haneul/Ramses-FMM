@@ -777,6 +777,7 @@ subroutine init_part_andreas
   ! Allocate particle variables
   allocate(xp_andreas    (npartmax,ndim))
   allocate(vp_andreas    (npartmax,ndim))
+  allocate(ap_andreas    (npartmax,ndim))
   allocate(mp_andreas    (npartmax))
   allocate(levelp_andreas(npartmax))
   allocate(idp_andreas   (npartmax))
