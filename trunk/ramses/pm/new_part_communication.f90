@@ -189,8 +189,8 @@ contains
     integer  :: info, request
     integer  :: status(MPI_STATUS_SIZE)
 
-    call MPI_IALLTOALLV(send_data, communicator(:,3), communicator(:,4), MPI_INTEGER, &
-         &              recv_data, communicator(:,1), communicator(:,2), MPI_INTEGER, &
+    call MPI_IALLTOALLV(send_data, communicator(:,3), communicator(:,4), MPI_DOUBLE_PRECISION, &
+         &              recv_data, communicator(:,1), communicator(:,2), MPI_DOUBLE_PRECISION, &
          &              MPI_COMM_WORLD, request, info)
 
     ! Finish communication (CAN BE MOVED OUTSIDE BY PASSING

@@ -344,7 +344,7 @@ subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
         do idim=1,ndim
            do j=1,np
               ff(j,idim)=ff(j,idim)+f(indp(j,ind),idim)*vol(j,ind)
-              if (idp(ind_part(j))==880 .and. idim ==1)print*,'oldforce',indp(j,ind),vol(j,ind),ok(j)
+              if (idp(ind_part(j))==1023 .and. idim ==1)print*,'oldforce',indp(j,ind),vol(j,ind),ok(j),ff(j,idim)
            end do
         end do
 #ifdef OUTPUT_PARTICLE_POTENTIAL
@@ -364,7 +364,7 @@ subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
      else
         do j=1,np
            new_vp(j,idim)=vp(ind_part(j),idim)+ff(j,idim)*0.5D0*dtnew(ilevel)
-           if (idp(ind_part(j))==880)print*,'oldmovef',idim,dtnew(ilevel),ff(j,idim),xp(ind_part(j),idim)
+           if (idp(ind_part(j))==1023)print*,'oldmovef',idim,dtnew(ilevel),ff(j,idim),xp(ind_part(j),idim)
         end do
      endif
   end do
@@ -401,18 +401,23 @@ end subroutine move1
 !#########################################################################
 subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
   use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, ap_andreas, idp_andreas
-  use amr_parameters,  only: dp, ndim, tracer, hydro, static
-  use amr_commons,     only: ncpu, dtnew
+  use amr_parameters,  only: dp, ndim, tracer, hydro, static, verbose
+  use amr_commons,     only: ncpu, dtnew, myid
   implicit none
 
 
   integer, intent(in) :: ilevel
-
   integer :: offset, nparts, idim, ipart
   
+  
+  if(verbose)write(*,'("Test: " (I2))')ilevel 
+
   offset = part_level_offset(ilevel)
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
 
+  do ipart = offset + 1, offset + nparts
+     if (idp_andreas(ipart)==1023)print*,myid,xp_andreas(ipart,1),ipart
+  end do
   call compute_particle_acceleration(ilevel, tracer .and. hydro)
   
   ! Accelerate and move all parts 
@@ -427,7 +432,7 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
         do ipart = offset + 1, offset + nparts 
            vp_andreas(ipart, idim) = vp_andreas(ipart, idim) &
                 + ap_andreas(ipart, idim) * 0.5D0 * dtnew(ilevel)
-           if (idp_andreas(ipart)==880)print*,'newmovef',idim,dtnew(ilevel),xp_andreas(ipart,idim)
+           if (idp_andreas(ipart)==1023)print*,'newmovef',idim,dtnew(ilevel),xp_andreas(ipart,idim)
         end do
      end if
 
@@ -440,8 +445,7 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
      end if
 
   end do
-
- 
+  
 end subroutine kick_drift
 !#########################################################################
 !#########################################################################
@@ -449,11 +453,16 @@ end subroutine kick_drift
 !#########################################################################
 subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
   use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, ap_andreas, levelp_andreas, idp_andreas
-  use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson
+  use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson, verbose
   use hydro_commons,   only: uold
   use poisson_commons, only: f
-  use amr_commons,     only: dtnew, dtold
+  use amr_commons,     only: dtnew, dtold, myid, levelmin, nlevelmax
   implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h' 
+  integer :: info
+#endif
+
 
 
   integer, intent(in) :: ilevel
@@ -462,12 +471,14 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
 
   real(dp), dimension(1:nvector),              save :: dteff
   integer :: offset, nparts, ioft, ind, idim, ip, np
+
+  if(verbose)write(*,'("Entering second_kick, level " I2)')ilevel 
   
   offset = part_level_offset(ilevel)
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
 
   call compute_particle_acceleration(ilevel, .false.)
-  
+
   ! Compute individual time steps
   do ioft = offset, offset + nparts - 1, nvector
      np = min(nvector, offset + nparts - ioft)
@@ -480,7 +491,6 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
         endif
      end do
 
-     
      ! Update particles level
      do ip = 1, np
         levelp_andreas(ioft + ip) = ilevel
@@ -488,12 +498,17 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
      
      do idim = 1, ndim
         do ip = 1, np
+           if (.not. abs(ap_andreas(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap_andreas(ioft+ip, idim)
+           if (.not. abs(vp_andreas(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap_andreas(ioft+ip, idim)
+           if (.not. abs(dteff(ip)) < 1000.)print*,'ap',myid, ioft + ip, ap_andreas(ioft+ip, idim)
            vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
                 + ap_andreas(ioft + ip, idim) * 0.5D0 * dteff(ip)
-           if (idp_andreas(ioft + ip)==880)print*,'new',idim,dteff(ip),xp_andreas(ioft + ip,idim)
         end do
      end do
   end do
+
+  call MPI_BARRIER(MPI_COMM_WORLD,info) 
+  if(verbose)write(*,'("Leaving second_kick, level " I2)')ilevel 
 end subroutine second_kick
 !#########################################################################
 !#########################################################################
@@ -502,12 +517,18 @@ end subroutine second_kick
 subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   use pm_commons,      only: part_level_offset, xp_andreas, ap_andreas, idp_andreas, &
                              part_hkey
-  use amr_parameters,  only: dp, nvector, ndim, twotondim, poisson
+  use amr_parameters,  only: dp, nvector, ndim, twotondim, poisson, verbose
   use hydro_commons,   only: uold
   use poisson_commons, only: f
-  use amr_commons,     only: dtnew, ncpu
+  use amr_commons,     only: dtnew, ncpu, myid
   use particle_communication, only: build_communicator, part_data_to_domain_dp, domain_data_to_part_dp
   implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h' 
+  integer :: info
+#endif
+
+
 
 
   integer, intent(in) :: ilevel
@@ -523,8 +544,10 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   offset = part_level_offset(ilevel)
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
 
-   
-!  call compute_particle_histogram(offset, nparts)
+  if(verbose)write(*,'("Entering compute_particle_acceleration, level " I2)')ilevel 
+
+  !  call compute_particle_histogram(offset, nparts)
+  call check_sorted(offset,nparts)
   call build_communicator(communicator, npart_recv, &
        nparts, nparts_local, local_oft, &
        part_hkey(offset + 1 : offset + nparts, 2), &
@@ -537,19 +560,19 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 2), xp_remote(:, 2))
   call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 3), xp_remote(:, 3))
 
-
+  print*,'xp_remote',myid,xp_remote(1,1:3)
  ! Deal with remote particles
   do ioft = 0, npart_recv - 1, nvector
      np = min(nvector, npart_recv - ioft)
 
      call cic(xp_remote(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
-
+     
      ap_remote(ioft + 1: ioft + np, 1: ndim) = 0.0D0
      if(read_gas_velocity)then
         do idim = 1, ndim
            do ind = 1, twotondim              
               do ip = 1, np
-                 ap_remote(ioft + ip, 1: idim) = ap_remote(ioft + ip, 1: idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
+                 ap_remote(ioft + ip, idim) = ap_remote(ioft + ip, idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
               end do
            end do
         end do
@@ -559,22 +582,24 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
         do idim = 1,ndim
            do ind = 1,twotondim
               do ip = 1,np
-                 ap_remote(ioft + ip, 1: idim) = ap_remote(ioft + ip, 1: idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
+                 ap_remote(ioft + ip, idim) = ap_remote(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
+                 if (abs(xp_remote(ioft + ip,1) - 42.075531959999999) < 1.d-6 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip,ap_remote(ioft + ip,1), ioft + ip, myid
               end do
            end do
         end do
      endif
   end do
-     
+  if (myid==2)print*,'ap_remote',ap_remote(207,1:3)
   call domain_data_to_part_dp(communicator, ap_remote(:,3), ap_andreas(offset + 1 : offset + nparts, 3))
   call domain_data_to_part_dp(communicator, ap_remote(:,2), ap_andreas(offset + 1 : offset + nparts, 2))
   call domain_data_to_part_dp(communicator, ap_remote(:,1), ap_andreas(offset + 1 : offset + nparts, 1))
-
+  if (myid==1)print*,'ap_andreas',myid,ap_andreas(260, 1:3), idp_andreas(260) 
   deallocate(xp_remote, ap_remote)
 
+
   ! Deal with local particles
-  do ioft = local_oft, local_oft + nparts_local - 1, nvector
-     np = min(nvector, local_oft + nparts_local - ioft)
+  do ioft = offset + local_oft, offset + local_oft + nparts_local - 1, nvector
+     np = min(nvector, offset + local_oft + nparts_local - ioft)
 
      call cic(xp_andreas(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
 
@@ -594,7 +619,7 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
            do ind = 1,twotondim
               do ip = 1,np
                   ap_andreas(ioft + ip, idim) =  ap_andreas(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-                 if (idp_andreas(ioft + ip)==880 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip
+                 if (idp_andreas(ioft + ip)==1023 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip
               end do
            end do
         end do
@@ -605,6 +630,8 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   ! Just a reminder that this option is not built in yet
   call clean_stop
 #endif
+  call MPI_BARRIER(MPI_COMM_WORLD,info) 
+  if(verbose)write(*,'("Leaving compute_particle_acceleration, level " I2)')ilevel 
 end subroutine compute_particle_acceleration
 !#########################################################################
 !#########################################################################

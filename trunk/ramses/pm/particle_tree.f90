@@ -1601,8 +1601,7 @@ subroutine check_sorted(offset, np)
      end if
      current_key(0:2) = part_hkey(ipart,0:2)
   end do
-  
-  
+  if (.not. ok)stop
 end subroutine check_sorted
 
 

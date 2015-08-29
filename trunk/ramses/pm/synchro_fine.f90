@@ -354,7 +354,7 @@ subroutine sync(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
      else
         do j=1,np
            new_vp(j,idim)=vp(ind_part(j),idim)+ff(j,idim)*0.5D0*dteff(j)
-           if (idp(ind_part(j))==544)print*,'old',idim,dteff(j),ff(j,idim)
+!           if (idp(ind_part(j))==544)print*,'old',idim,dteff(j),ff(j,idim)
         end do
      endif
   end do

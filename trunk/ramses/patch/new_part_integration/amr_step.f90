@@ -320,7 +320,7 @@ recursive subroutine amr_step(ilevel,icount)
   if (ilevel==levelmin)then
      call write_ascii_parts
      print*,'written ascii', t
-     if(t>0.2)stop
+     if(t>0.4)stop
   endif
   !-------------------------------
   ! Update coarser level time-step
