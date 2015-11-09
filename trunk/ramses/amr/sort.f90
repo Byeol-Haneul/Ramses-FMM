@@ -245,19 +245,19 @@ contains
 !     ! current_state of hilbert state diagram
 !     i4_temp = current_state(i); current_state(i) = current_state(j); current_state(j) = i4_temp
 !     ! position
-!     dp_temp = xp_andreas(i,1); xp_andreas(i,1) = xp_andreas(j,1); xp_andreas(j,1) = dp_temp
-!     dp_temp = xp_andreas(i,2); xp_andreas(i,2) = xp_andreas(j,2); xp_andreas(j,2) = dp_temp
-!     dp_temp = xp_andreas(i,3); xp_andreas(i,3) = xp_andreas(j,3); xp_andreas(j,3) = dp_temp
+!     dp_temp = xp(i,1); xp(i,1) = xp(j,1); xp(j,1) = dp_temp
+!     dp_temp = xp(i,2); xp(i,2) = xp(j,2); xp(j,2) = dp_temp
+!     dp_temp = xp(i,3); xp(i,3) = xp(j,3); xp(j,3) = dp_temp
 !     ! velocity
-!     dp_temp = vp_andreas(i,1); vp_andreas(i,1) = vp_andreas(j,1); vp_andreas(j,1) = dp_temp
-!     dp_temp = vp_andreas(i,2); vp_andreas(i,2) = vp_andreas(j,2); vp_andreas(j,2) = dp_temp
-!     dp_temp = vp_andreas(i,3); vp_andreas(i,3) = vp_andreas(j,3); vp_andreas(j,3) = dp_temp
+!     dp_temp = vp(i,1); vp(i,1) = vp(j,1); vp(j,1) = dp_temp
+!     dp_temp = vp(i,2); vp(i,2) = vp(j,2); vp(j,2) = dp_temp
+!     dp_temp = vp(i,3); vp(i,3) = vp(j,3); vp(j,3) = dp_temp
 !     ! mass
-!     dp_temp = mp_andreas(i); mp_andreas(i) = mp_andreas(j); mp_andreas(j) = dp_temp
+!     dp_temp = mp(i); mp(i) = mp(j); mp(j) = dp_temp
 !     ! level
-!     i4_temp = levelp_andreas(i); levelp_andreas(i) = levelp_andreas(j); levelp_andreas(j) = i4_temp
+!     i4_temp = levelp(i); levelp(i) = levelp(j); levelp(j) = i4_temp
 !     ! particle index
-!     i8b_temp = idp_andreas(i); idp_andreas(i) = idp_andreas(j); idp_andreas(j) = i8b_temp
+!     i8b_temp = idp(i); idp(i) = idp(j); idp(j) = i8b_temp
     
 ! #ifdef OUTPUT_PARTICLE_POTENTIAL
 !     print*, 'add particle potential here'
@@ -518,10 +518,10 @@ contains
   !########################################################################
 #if NDIM == 3
   subroutine lsd_counting_sort_onelevel(offset, np, ilevel, key_level, sigma1, sigma2, hkey2, hkey1, hkey0)
-    use pm_commons, only: npart_andreas
+    use pm_commons, only: npart
     implicit none    
     integer,                          intent(in)         :: offset, np, ilevel, key_level
-    integer(kind=8), dimension(1:npart_andreas), intent(in), target :: hkey2, hkey1, hkey0
+    integer(kind=8), dimension(1:npart), intent(in), target :: hkey2, hkey1, hkey0
 #endif
 
 #if NDIM == 2
@@ -537,7 +537,7 @@ contains
 #endif
 
 
-    integer,         dimension(1:npart_andreas), intent(inout)      :: sigma1, sigma2
+    integer,         dimension(1:npart), intent(inout)      :: sigma1, sigma2
 
     ! Update the given permuations sigma1, sigma2 such that sigma1  will 
     ! sort the 3 bits belonging to level ilevel of the input hilbert keys.
@@ -638,22 +638,22 @@ contains
 
     do idim = 1, ndim       
        do ipart = offset + 1, offset + np
-          extra_storage_dp(part_ind_permutation2(ipart)) = xp_andreas(ipart, idim) 
+          extra_storage_dp(part_ind_permutation2(ipart)) = xp(ipart, idim) 
        end do
-       xp_andreas(offset + 1 : offset + np, idim) = extra_storage_dp(offset + 1 : offset + np)
+       xp(offset + 1 : offset + np, idim) = extra_storage_dp(offset + 1 : offset + np)
     end do
 
     do idim = 1, ndim       
        do ipart = offset + 1, offset + np
-          extra_storage_dp(part_ind_permutation2(ipart)) = vp_andreas(ipart, idim) 
+          extra_storage_dp(part_ind_permutation2(ipart)) = vp(ipart, idim) 
        end do
-       vp_andreas(offset + 1 : offset + np, idim) = extra_storage_dp(offset + 1 : offset + np)
+       vp(offset + 1 : offset + np, idim) = extra_storage_dp(offset + 1 : offset + np)
     end do
 
     do ipart = offset + 1, offset + np
-       extra_storage_dp(part_ind_permutation2(ipart)) = mp_andreas(ipart) 
+       extra_storage_dp(part_ind_permutation2(ipart)) = mp(ipart) 
     end do
-    mp_andreas(offset + 1 : offset + np) = extra_storage_dp(offset + 1 : offset + np)
+    mp(offset + 1 : offset + np) = extra_storage_dp(offset + 1 : offset + np)
 
     deallocate(extra_storage_dp)
 
@@ -678,9 +678,9 @@ contains
     
 #ifdef LONGINT
     do ipart = offset + 1, offset + np
-       extra_storage_i8(part_ind_permutation2(ipart)) = idp_andreas(ipart)
+       extra_storage_i8(part_ind_permutation2(ipart)) = idp(ipart)
     end do
-    idp_andreas(offset + 1 : offset + np) = extra_storage_i8(offset + 1 : offset + np)
+    idp(offset + 1 : offset + np) = extra_storage_i8(offset + 1 : offset + np)
 #endif
     
     deallocate(extra_storage_i8)
@@ -689,15 +689,15 @@ contains
     allocate(extra_storage_i4(offset+1 : offset + np))
 #ifndef LONGINT
     do ipart = offset + 1, offset + np
-       extra_storage_i4(part_ind_permutation2(ipart)) = idp_andreas(ipart)
+       extra_storage_i4(part_ind_permutation2(ipart)) = idp(ipart)
     end do
-    idp_andreas(offset + 1 : offset + np) = extra_storage_i4(offset + 1 : offset + np)
+    idp(offset + 1 : offset + np) = extra_storage_i4(offset + 1 : offset + np)
 #endif
 
     do ipart = offset + 1, offset + np
-       extra_storage_i4(part_ind_permutation2(ipart)) = levelp_andreas(ipart)
+       extra_storage_i4(part_ind_permutation2(ipart)) = levelp(ipart)
     end do
-    levelp_andreas(offset + 1 : offset + np) = extra_storage_i4(offset + 1 : offset + np)
+    levelp(offset + 1 : offset + np) = extra_storage_i4(offset + 1 : offset + np)
     
     do ipart = offset + 1, offset + np
        extra_storage_i4(part_ind_permutation2(ipart)) = current_state(ipart)

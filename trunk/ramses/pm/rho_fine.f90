@@ -14,15 +14,7 @@ subroutine rho_fine(ilevel,icount,new_rho)
   integer::ilevel,icount
   logical::new_rho
   !------------------------------------------------------------------
-  ! This routine computes the density field at level ilevel using
-  ! the CIC scheme. Particles that are not entirely in
-  ! level ilevel contribute also to the level density field
-  ! (boundary particles) using buffer grids.
-  ! Array flag1, flag2 and phi are used as temporary work space.
-  ! Array rho and cpu_map2 are stored with:
-  ! - rho containing the Poisson source term
-  ! - cpu_map2 containing the refinement map due to particle
-  !   number density criterion (quasi Lagrangian mesh).
+  ! ADD NEW DESCRIPTION HERE!
   !------------------------------------------------------------------
   integer::iskip,icpu,ind,i,info,nx_loc,ibound,idim,icell, ncell, ilev
   real(dp)::dx,d_scale,scale,dx_loc,scalar
@@ -114,23 +106,15 @@ subroutine rho_fine(ilevel,icount,new_rho)
   ! Compute density due to current level particles
 
   if(pic)then
-!     if (new_rho)then
-!        do ilev = ilevel, nlevelmax
-!           call rho_direct_particles(ilev)        
-!           call rho_histogram_particles(ilev)
-!        end do
-!     end if
-     call rho_from_current_level(ilevel)
+     do ilev = ilevel, nlevelmax
+        call rho_direct_particles(ilev)        
+        call rho_histogram_particles(ilev)
+     end do
   end if
   
-  ! Update boudaries
   call make_virtual_reverse_dp(rho(1),ilevel)
   call make_virtual_fine_dp   (rho(1),ilevel)
 
-  !  if (new_rho)then
-!     call make_virtual_reverse_dp(rho_andreas(1),ilevel)
-!     call make_virtual_fine_dp   (rho_andreas(1),ilevel)
-!  end if
   if(m_refine(ilevel)>-1.0d0)then
      call make_virtual_reverse_dp(phi(1),ilevel)
      call make_virtual_fine_dp   (phi(1),ilevel)
@@ -169,6 +153,7 @@ subroutine rho_fine(ilevel,icount,new_rho)
   !-----------------------------------------
   ! Compute quasi Lagrangian refinement map
   !-----------------------------------------
+  ! TODO: FIX QUASI LAGRANGIAN REFINEMENT STRATEGY FOR HISTOGRAM MODE!
   if(m_refine(ilevel)>-1.0d0)then
      do ind=1,twotondim
         iskip=ncoarse+(ind-1)*ngridmax
@@ -187,362 +172,6 @@ subroutine rho_fine(ilevel,icount,new_rho)
 111 format('   Entering rho_fine for level ',I2)
   
 end subroutine rho_fine
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine rho_from_current_level(ilevel)
-  use amr_commons
-  use pm_commons
-  use hydro_commons
-  use poisson_commons
-  implicit none
-  integer::ilevel
-  !------------------------------------------------------------------
-  ! This routine computes the density field at level ilevel using
-  ! the CIC scheme from particles that are not entirely in
-  ! level ilevel (boundary particles).
-  ! Arrays flag1 and flag2 are used as temporary work space.
-  !------------------------------------------------------------------
-  integer::igrid,jgrid,ipart,jpart,idim,icpu
-  integer::i,ig,ip,npart1
-  real(dp)::dx
-
-  integer,dimension(1:nvector),save::ind_grid,ind_cell
-  integer,dimension(1:nvector),save::ind_part,ind_grid_part
-  real(dp),dimension(1:nvector,1:ndim),save::x0
-    
-  ! Mesh spacing in that level
-  dx=0.5D0**ilevel 
-
-  ! Loop over cpus
-  do icpu=1,ncpu
-     ! Loop over grids
-     igrid=headl(icpu,ilevel)
-     ig=0
-     ip=0   
-     do jgrid=1,numbl(icpu,ilevel)
-        npart1=numbp(igrid)  ! Number of particles in the grid
-        if(npart1>0)then        
-           ig=ig+1
-           ind_grid(ig)=igrid
-           ipart=headp(igrid)
-           
-           ! Loop over particles
-           do jpart=1,npart1
-              if(ig==0)then
-                 ig=1
-                 ind_grid(ig)=igrid
-              end if
-              ip=ip+1
-              ind_part(ip)=ipart
-              ind_grid_part(ip)=ig
-              if(ip==nvector)then
-                 ! Lower left corner of 3x3x3 grid-cube
-                 do idim=1,ndim
-                    do i=1,ig
-                       x0(i,idim)=xg(ind_grid(i),idim)-3.0D0*dx
-                    end do
-                 end do
-                 do i=1,ig
-                    ind_cell(i)=father(ind_grid(i))
-                 end do
-                 call cic_amr(ind_cell,ind_part,ind_grid_part,x0,ig,ip,ilevel)
-                 ip=0
-                 ig=0
-              end if
-              ipart=nextp(ipart)  ! Go to next particle
-           end do
-           ! End loop over particles
-           
-        end if
-
-        igrid=next(igrid)   ! Go to next grid
-     end do
-     ! End loop over grids
-
-     if(ip>0)then
-        ! Lower left corner of 3x3x3 grid-cube
-        do idim=1,ndim
-           do i=1,ig
-              x0(i,idim)=xg(ind_grid(i),idim)-3.0D0*dx
-           end do
-        end do
-        do i=1,ig
-           ind_cell(i)=father(ind_grid(i))
-        end do
-        call cic_amr(ind_cell,ind_part,ind_grid_part,x0,ig,ip,ilevel)
-     end if
-
-  end do
-  ! End loop over cpus
-
-end subroutine rho_from_current_level
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine cic_amr(ind_cell,ind_part,ind_grid_part,x0,ng,np,ilevel)
-  use amr_commons
-  use pm_commons
-  use poisson_commons
-  use hydro_commons, ONLY: mass_sph
-  implicit none
-  integer::ng,np,ilevel
-  integer ,dimension(1:nvector)::ind_cell,ind_grid_part,ind_part
-  real(dp),dimension(1:nvector,1:ndim)::x0
-  !------------------------------------------------------------------
-  ! This routine computes the density field at level ilevel using
-  ! the CIC scheme. Only cells that are in level ilevel
-  ! are updated by the input particle list.
-  !------------------------------------------------------------------
-  logical::error
-  integer::j,ind,idim,nx_loc
-  real(dp)::dx,dx_loc,scale,vol_loc
-  ! Grid-based arrays
-  integer ,dimension(1:nvector,1:threetondim),save::nbors_father_cells
-  integer ,dimension(1:nvector,1:twotondim),save::nbors_father_grids
-  ! Particle-based arrays
-  logical ,dimension(1:nvector),save::ok
-  real(dp),dimension(1:nvector),save::mmm
-  real(dp),dimension(1:nvector),save::ttt=0d0
-  real(dp),dimension(1:nvector),save::vol2
-  real(dp),dimension(1:nvector,1:ndim),save::x,dd,dg
-  integer ,dimension(1:nvector,1:ndim),save::ig,id,igg,igd,icg,icd
-  real(dp),dimension(1:nvector,1:twotondim),save::vol
-  integer ,dimension(1:nvector,1:twotondim),save::igrid,icell,indp,kg
-  real(dp),dimension(1:3)::skip_loc
-
-  ! Mesh spacing in that level
-  dx=0.5D0**ilevel 
-  nx_loc=(icoarse_max-icoarse_min+1)
-  skip_loc=(/0.0d0,0.0d0,0.0d0/)
-  if(ndim>0)skip_loc(1)=dble(icoarse_min)
-  if(ndim>1)skip_loc(2)=dble(jcoarse_min)
-  if(ndim>2)skip_loc(3)=dble(kcoarse_min)
-  scale=boxlen/dble(nx_loc)
-  dx_loc=dx*scale
-  vol_loc=dx_loc**ndim
-
-
-  ! Gather neighboring father cells (should be present anytime !)
-  call get3cubefather(ind_cell,nbors_father_cells,nbors_father_grids,ng,ilevel)
-
-  ! Rescale particle position at level ilevel
-  do idim=1,ndim
-     do j=1,np
-        x(j,idim)=xp(ind_part(j),idim)/scale+skip_loc(idim)
-     end do
-  end do
-  do idim=1,ndim
-     do j=1,np
-        x(j,idim)=x(j,idim)-x0(ind_grid_part(j),idim)
-     end do
-  end do
-  do idim=1,ndim
-     do j=1,np
-        x(j,idim)=x(j,idim)/dx
-     end do
-  end do
-
-  ! Gather particle mass
-  do j=1,np
-     mmm(j)=mp(ind_part(j))
-  end do
-
-  if(ilevel==levelmin)then
-     do j=1,np
-        multipole(1)=multipole(1)+mp(ind_part(j))
-     end do
-     do idim=1,ndim
-        do j=1,np
-           multipole(idim+1)=multipole(idim+1)+mp(ind_part(j))*xp(ind_part(j),idim)
-        end do
-     end do
-  end if
-
-  ! Check for illegal moves
-  error=.false.
-  do idim=1,ndim
-     do j=1,np
-        if(x(j,idim)<0.5D0.or.x(j,idim)>5.5D0)error=.true.
-     end do
-  end do
-  if(error)then
-     write(*,*)'problem in cic'
-     do idim=1,ndim
-        do j=1,np
-           if(x(j,idim)<0.5D0.or.x(j,idim)>5.5D0)then
-              write(*,*)x(j,1:ndim)
-           endif
-        end do
-     end do
-     stop
-  end if
-
-  ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
-  do idim=1,ndim
-     do j=1,np
-        dd(j,idim)=x(j,idim)+0.5D0
-        id(j,idim)=dd(j,idim)
-        dd(j,idim)=dd(j,idim)-id(j,idim)
-        dg(j,idim)=1.0D0-dd(j,idim)
-        ig(j,idim)=id(j,idim)-1
-     end do
-  end do
-
-  ! Compute cloud volumes
-#if NDIM==1
-  do j=1,np
-     vol(j,1)=dg(j,1)
-     vol(j,2)=dd(j,1)
-  end do
-#endif
-#if NDIM==2
-  do j=1,np
-     vol(j,1)=dg(j,1)*dg(j,2)
-     vol(j,2)=dd(j,1)*dg(j,2)
-     vol(j,3)=dg(j,1)*dd(j,2)
-     vol(j,4)=dd(j,1)*dd(j,2)
-  end do
-#endif
-#if NDIM==3
-  do j=1,np
-     vol(j,1)=dg(j,1)*dg(j,2)*dg(j,3)
-     vol(j,2)=dd(j,1)*dg(j,2)*dg(j,3)
-     vol(j,3)=dg(j,1)*dd(j,2)*dg(j,3)
-     vol(j,4)=dd(j,1)*dd(j,2)*dg(j,3)
-     vol(j,5)=dg(j,1)*dg(j,2)*dd(j,3)
-     vol(j,6)=dd(j,1)*dg(j,2)*dd(j,3)
-     vol(j,7)=dg(j,1)*dd(j,2)*dd(j,3)
-     vol(j,8)=dd(j,1)*dd(j,2)*dd(j,3)
-  end do
-#endif
-        
-  ! Compute parent grids
-  do idim=1,ndim
-     do j=1,np
-        igg(j,idim)=ig(j,idim)/2
-        igd(j,idim)=id(j,idim)/2
-     end do
-  end do
-#if NDIM==1
-  do j=1,np
-     kg(j,1)=1+igg(j,1)
-     kg(j,2)=1+igd(j,1)
-  end do
-#endif
-#if NDIM==2
-  do j=1,np
-     kg(j,1)=1+igg(j,1)+3*igg(j,2)
-     kg(j,2)=1+igd(j,1)+3*igg(j,2)
-     kg(j,3)=1+igg(j,1)+3*igd(j,2)
-     kg(j,4)=1+igd(j,1)+3*igd(j,2)
-  end do
-#endif
-#if NDIM==3
-  do j=1,np
-     kg(j,1)=1+igg(j,1)+3*igg(j,2)+9*igg(j,3)
-     kg(j,2)=1+igd(j,1)+3*igg(j,2)+9*igg(j,3)
-     kg(j,3)=1+igg(j,1)+3*igd(j,2)+9*igg(j,3)
-     kg(j,4)=1+igd(j,1)+3*igd(j,2)+9*igg(j,3)
-     kg(j,5)=1+igg(j,1)+3*igg(j,2)+9*igd(j,3)
-     kg(j,6)=1+igd(j,1)+3*igg(j,2)+9*igd(j,3)
-     kg(j,7)=1+igg(j,1)+3*igd(j,2)+9*igd(j,3)
-     kg(j,8)=1+igd(j,1)+3*igd(j,2)+9*igd(j,3)
-  end do
-#endif
-  do ind=1,twotondim
-     do j=1,np
-        igrid(j,ind)=son(nbors_father_cells(ind_grid_part(j),kg(j,ind)))
-     end do
-  end do
-
-  ! Compute parent cell position
-  do idim=1,ndim
-     do j=1,np
-        icg(j,idim)=ig(j,idim)-2*igg(j,idim)
-        icd(j,idim)=id(j,idim)-2*igd(j,idim)
-     end do
-  end do
-#if NDIM==1
-  do j=1,np
-     icell(j,1)=1+icg(j,1)
-     icell(j,2)=1+icd(j,1)
-  end do
-#endif
-#if NDIM==2
-  do j=1,np
-     icell(j,1)=1+icg(j,1)+2*icg(j,2)
-     icell(j,2)=1+icd(j,1)+2*icg(j,2)
-     icell(j,3)=1+icg(j,1)+2*icd(j,2)
-     icell(j,4)=1+icd(j,1)+2*icd(j,2)
-  end do
-#endif
-#if NDIM==3
-  do j=1,np
-     icell(j,1)=1+icg(j,1)+2*icg(j,2)+4*icg(j,3)
-     icell(j,2)=1+icd(j,1)+2*icg(j,2)+4*icg(j,3)
-     icell(j,3)=1+icg(j,1)+2*icd(j,2)+4*icg(j,3)
-     icell(j,4)=1+icd(j,1)+2*icd(j,2)+4*icg(j,3)
-     icell(j,5)=1+icg(j,1)+2*icg(j,2)+4*icd(j,3)
-     icell(j,6)=1+icd(j,1)+2*icg(j,2)+4*icd(j,3)
-     icell(j,7)=1+icg(j,1)+2*icd(j,2)+4*icd(j,3)
-     icell(j,8)=1+icd(j,1)+2*icd(j,2)+4*icd(j,3)
-  end do
-#endif
-
-  ! Compute parent cell adress
-  do ind=1,twotondim
-     do j=1,np
-        indp(j,ind)=ncoarse+(icell(j,ind)-1)*ngridmax+igrid(j,ind)
-     end do
-  end do
-
-  
-  ! Update mass density and number density fields
-  do ind=1,twotondim
-     do j=1,np
-        ok(j)=igrid(j,ind)>0
-     end do
-
-     do j=1,np
-        vol2(j)=mmm(j)*vol(j,ind)/vol_loc
-     end do
-
-     do j=1,np
-        if(ok(j))then
-           rho(indp(j,ind))=rho(indp(j,ind))+vol2(j)
-        end if
-     end do
-
-     do j=1,np
-        vol2(j)=vol(j,ind)
-     end do
-
-     ! Remove test particles for static runs
-     if(static)then
-        do j=1,np
-           ok(j)=ok(j).and.mmm(j)>0.0
-        end do
-     endif
-
-     ! Remove massive dark matter particle
-     if(mass_cut_refine>0.0)then
-        do j=1,np
-           if(ttt(j)==0d0)then
-              ok(j)=ok(j).and.mmm(j)<mass_cut_refine
-           endif
-        end do
-     endif
-
-     do j=1,np
-        if(ok(j))then
-           phi(indp(j,ind))=phi(indp(j,ind))+vol2(j)
-        end if
-     end do
-  end do
-end subroutine cic_amr
 !###########################################################
 !###########################################################
 !###########################################################
@@ -1089,7 +718,7 @@ end subroutine cic_cell
 !      end if
 !   end do
 
-!   print*,'ntot:',ntot,npart_andreas,myid
+!   print*,'ntot:',ntot,npart,myid
 
 ! !  call qsort_parts_in_mem(ntot,1)
 
@@ -1105,7 +734,7 @@ end subroutine cic_cell
 
 
 
-! subroutine hilbert_allparts_andreas
+! subroutine hilbert_allparts
 !   use pm_commons
 !   use amr_commons
 !   use sort, only: qsort_parts_in_mem
@@ -1129,9 +758,9 @@ end subroutine cic_cell
 
 !   ntot=0
 !   ip=0
-!   do while(ntot+ip<npart_andreas)
+!   do while(ntot+ip<npart)
 !      ip=ip+1
-!      xtest(ip,1:ndim)=xp_andreas(ntot+ip,1:ndim)
+!      xtest(ip,1:ndim)=xp(ntot+ip,1:ndim)
 !      if(ip==nvector)then
 !         call cmp_ordering_int(xtest,hkey2,hkey1,hkey0,ip)
 !         part_hkey(ntot+1:ntot+ip,2)=hkey2(1:ip)
@@ -1149,7 +778,7 @@ end subroutine cic_cell
 !      ntot=ntot+ip
 !   end if
 
-!   print*,'ntot:',ntot,npart_andreas,myid
+!   print*,'ntot:',ntot,npart,myid
 
 ! !  call qsort_parts_in_mem(ntot,1)
 
@@ -1161,7 +790,7 @@ end subroutine cic_cell
 ! ! !  end do
 ! !   deallocate(order)
 
-! end subroutine hilbert_allparts_andreas
+! end subroutine hilbert_allparts
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -1171,7 +800,7 @@ subroutine rho_direct_particles(part_level)
   use amr_commons,    only: ncpu, myid
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_level_offset, bin_start_offset, bin_count, &
-                            xp_andreas, mp_andreas, idp_andreas, nbins, part_hkey
+                            xp, mp, idp, nbins, part_hkey
   use particle_communication, only: build_communicator, part_data_to_domain_dp
   implicit none
   integer, intent(in) :: part_level
@@ -1205,7 +834,8 @@ subroutine rho_direct_particles(part_level)
   ! Count direct particles
   npart_direct = 0
   do ibin = 1, nbins
-     if (bin_count(ibin) <= n_dump_parts_direct) then
+     ! a bit of a hacky comparison between a float and an integer 
+     if (bin_count(ibin) < n_dump_parts_direct + 0.5d0) then
         npart_direct = npart_direct + bin_count(ibin)
      end if
   end do
@@ -1220,11 +850,12 @@ subroutine rho_direct_particles(part_level)
   ibin = 0
   do ipart = offset + 1, offset + nparts
      if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
-     if (bin_count(ibin) <= n_dump_parts_direct) then
+     ! a bit of a hacky comparison between a float and an integer 
+     if (bin_count(ibin) < n_dump_parts_direct + 0.5d0) then
         ip = ip + 1
         part_hkey_direct(ip, 0:2) = part_hkey(ipart, 0:2)
-        xp_direct(ip, 1:ndim)     = xp_andreas(ipart, 1:ndim)
-        mp_direct(ip)             = mp_andreas(ipart)
+        xp_direct(ip, 1:ndim)     = xp(ipart, 1:ndim)
+        mp_direct(ip)             = mp(ipart)
      end if
   end do
 
@@ -1252,14 +883,14 @@ subroutine rho_direct_particles(part_level)
      mpart(ip)         = mp_direct(ipart)
      if (ip == nvector) then
         do grid_level = part_level, levelmin, -1
-           call cic_amr_andreas(xpart, mpart, ip, grid_level)
+           call cic_amr(xpart, mpart, ip, grid_level)
         end do
         ip = 0
      end if
   end do
   if (ip > 0) then
      do grid_level = part_level, levelmin, -1
-        call cic_amr_andreas(xpart, mpart, ip, grid_level)
+        call cic_amr(xpart, mpart, ip, grid_level)
      end do
   end if
 
@@ -1272,14 +903,14 @@ subroutine rho_direct_particles(part_level)
      mpart(ip)         = mp_remote(ipart)
      if (ip == nvector) then
         do grid_level = part_level, levelmin, -1
-           call cic_amr_andreas(xpart, mpart, ip, grid_level)
+           call cic_amr(xpart, mpart, ip, grid_level)
         end do
         ip = 0
      end if
   end do
   if (ip > 0) then
      do grid_level = part_level, levelmin, -1
-        call cic_amr_andreas(xpart, mpart, ip, grid_level)
+        call cic_amr(xpart, mpart, ip, grid_level)
      end do
   end if
 
@@ -1287,11 +918,11 @@ subroutine rho_direct_particles(part_level)
   
 contains
 
-  subroutine cic_amr_andreas(xpart, mpart, np, grid_level)
+  subroutine cic_amr(xpart, mpart, np, grid_level)
     use amr_parameters,  only: static, mass_cut_refine
     use amr_commons,     only: boxlen, icoarse_max, & 
                                icoarse_min, nvector, ndim
-    use poisson_commons, only: multipole, rho_andreas, phi
+    use poisson_commons, only: multipole, rho, phi
     use hilbert,         only: hilbert3d
     implicit none
     integer,  intent(in)                               :: np, grid_level
@@ -1451,7 +1082,7 @@ contains
 
        do ip = 1, np
           if (ok(ip)) then
-             rho_andreas(parent_cell_index(ip)) = rho_andreas(parent_cell_index(ip)) + vol(ip)
+             rho(parent_cell_index(ip)) = rho(parent_cell_index(ip)) + vol(ip)
           end if
        end do
 
@@ -1470,7 +1101,7 @@ contains
        endif
 
     end do ! end loop over cloud/cell intersections
-  end subroutine cic_amr_andreas
+  end subroutine cic_amr
 end subroutine rho_direct_particles
 
 !##############################################################################
@@ -1481,7 +1112,7 @@ subroutine rho_histogram_particles(part_level)
   use amr_parameters, only: dp, levelmin, icoarse_min, icoarse_max, boxlen
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_ind_permutation, part_level_offset, bin_start_offset, &
-       bin_count, mp_andreas
+       bin_count, mp
   use amr_commons,    only: myid
   implicit none
   integer, intent(in) :: part_level
@@ -1532,12 +1163,13 @@ subroutine rho_histogram_particles(part_level)
 contains
   
   subroutine rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
-    use amr_parameters, only: ndim, nvector
-    use amr_commons,    only: myid
-    use pm_commons,     only: xp_andreas, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset, bin_count, bin_mass, idp_andreas
-    use hilbert,        only: hilbert_for_particle
-    use sort,           only: lsd_radix_sort_particles
-    use poisson_commons, only: rho_andreas
+    use amr_parameters,  only: ndim, nvector
+    use amr_commons,     only: myid
+    use pm_commons,      only: xp, part_ind_permutation, part_ind_permutation2, nbins, bin_start_offset, &
+                              bin_count, bin_mass, idp
+    use hilbert,         only: hilbert_for_particle
+    use sort,            only: lsd_radix_sort_particles
+    use poisson_commons, only: rho
     implicit none
     integer, intent(in) :: grid_level, nparts, n_masked, offset
 
@@ -1581,7 +1213,7 @@ contains
        do idim = 1, ndim
           do ip = offset + 1, offset + n_masked
              ipart = part_ind_permutation(ip)
-             xp_andreas(ipart,idim) = xp_andreas(ipart,idim) + delta(idim) * dx_loc
+             xp(ipart,idim) = xp(ipart,idim) + delta(idim) * dx_loc
           end do
        end do
 
@@ -1595,7 +1227,7 @@ contains
        ! Compute "reduced" histogram
        call compute_particle_histogram(offset, n_masked)
        ! Reset bin count as it is computed using cic later
-       bin_count=0; bin_mass = 0.d0;
+       bin_count = 0.d0; bin_mass = 0.d0;
        
 !       print*, 'going in loop', offset, n_masked, nbins, grid_level, part_level, ind_cloud 
        
@@ -1607,8 +1239,8 @@ contains
           if (ip > bin_start_offset(ibin+1)) ibin = ibin + 1
           ipart = part_ind_permutation(ip)
           ip_sweep = ip_sweep + 1
-          xpart(ip_sweep,1:ndim) = xp_andreas(ipart,1:ndim)
-          mpart(ip_sweep)        = mp_andreas(ipart)
+          xpart(ip_sweep,1:ndim) = xp(ipart,1:ndim)
+          mpart(ip_sweep)        = mp(ipart)
           bin_nr(ip_sweep)       = ibin
           
           if (ip_sweep == nvector) then
@@ -1624,10 +1256,9 @@ contains
        do idim = 1, ndim
           do ip = offset + 1, offset + n_masked
              ipart = part_ind_permutation(ip)
-             xp_andreas(ipart,idim) = xp_andreas(ipart,idim) - delta(idim) * dx_loc
+             xp(ipart,idim) = xp(ipart,idim) - delta(idim) * dx_loc
           end do          
        end do
-
 
        ! Dump bin_mass into rho and bin_count into phi
        call dump_histograms(grid_level)
@@ -1689,7 +1320,7 @@ contains
     use amr_parameters,  only: nvector, dp
     use amr_commons,     only: ncpu, myid
     use pm_commons,      only: bin_keys, bin_mass, nbins
-    use poisson_commons, only: rho_andreas
+    use poisson_commons, only: rho
     use particle_communication, only: build_communicator, part_data_to_domain_dp, part_data_to_domain_i8
     implicit none
     integer, intent(in) :: cell_level
@@ -1698,6 +1329,7 @@ contains
     integer,  dimension(1:ncpu, 1:4)             :: communicator
     integer(kind=8), allocatable, dimension(:,:) :: bin_keys_remote
     real(dp), allocatable, dimension(:)          :: bin_mass_remote
+    real(dp), allocatable, dimension(:)          :: bin_count_remote
 
     integer        , dimension(1:nvector)     , save :: parent_cell_level, parent_cell_index
     integer(kind=8), dimension(1:nvector, 0:2), save :: bkey
@@ -1736,7 +1368,7 @@ contains
          do ib = 1, nb
             ! Don't add mass to coarser levels             
             if (parent_cell_level(ib) == cell_level) then
-               rho_andreas(parent_cell_index(ib)) = rho_andreas(parent_cell_index(ib)) + &
+               rho(parent_cell_index(ib)) = rho(parent_cell_index(ib)) + &
                     bin_mass(ioft + ib) / vol_loc             
             end if
          end do
@@ -1753,14 +1385,14 @@ contains
          do ib = 1, nb
             ! Don't add mass to coarser levels             
             if (parent_cell_level(ib) == cell_level) then
-               rho_andreas(parent_cell_index(ib)) = rho_andreas(parent_cell_index(ib)) + &
+               rho(parent_cell_index(ib)) = rho(parent_cell_index(ib)) + &
                     bin_mass_remote(ioft + ib) / vol_loc             
             end if
          end do
       end do
       
       
-      deallocate(bin_mass_remote, bin_keys_remote)
+      deallocate(bin_mass_remote, bin_keys_remote, bin_count_remote)
       
     end subroutine dump_histograms
 

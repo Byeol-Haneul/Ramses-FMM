@@ -452,6 +452,8 @@ subroutine init_amr
      end do
 
   end if
+
+  call cmp_particle_boundary_key
   
 end subroutine init_amr
 

@@ -3,10 +3,10 @@ module pm_commons
   use pm_parameters
 
   ! Particles related arrays
-  real(dp),allocatable,dimension(:,:)       ::xp, xp_andreas       ! Positions
-  real(dp),allocatable,dimension(:,:)       ::vp, vp_andreas       ! Velocities
-  real(dp),allocatable,dimension(:)         ::mp, mp_andreas       ! Masses
-  real(dp),allocatable,dimension(:,:)       ::ap_andreas           ! Accelerations (more convenient communication if allocated fully
+  real(dp),allocatable,dimension(:,:)       ::xp       ! Positions
+  real(dp),allocatable,dimension(:,:)       ::vp       ! Velocities
+  real(dp),allocatable,dimension(:)         ::mp       ! Masses
+  real(dp),allocatable,dimension(:,:)       ::ap       ! Accelerations (more convenient communication if allocated fully
                                                                    ! for all particles
   integer(kind=8),allocatable,dimension(:)  ::part_ref_mask        ! mask for refinement
   integer(kind=8),allocatable,dimension(:,:)::part_hkey
@@ -16,8 +16,7 @@ module pm_commons
   integer(kind=4),allocatable,dimension(:)  ::part_ind_permutation, part_ind_permutation2
   ! Particle histogram related variables and arrays
   integer(kind=8),allocatable,dimension(:,:)::bin_keys,particle_histogram_keys
-  real(dp),allocatable,dimension(:)         ::bin_mass,particle_histogram_mass
-  integer,allocatable,dimension(:)         ::bin_count
+  real(dp),allocatable,dimension(:)         ::bin_mass,particle_histogram_mass, bin_count
   integer                                   ::nbins
 
 #ifdef OUTPUT_PARTICLE_POTENTIAL
@@ -25,8 +24,8 @@ module pm_commons
 #endif
   integer ,allocatable,dimension(:)  ::nextp    ! Next particle in list
   integer ,allocatable,dimension(:)  ::prevp    ! Previous particle in list
-  integer ,allocatable,dimension(:)  ::levelp,levelp_andreas   ! Current level of particle
-  integer(i8b),allocatable,dimension(:)::idp,idp_andreas    ! Identity of particle
+  integer ,allocatable,dimension(:)  ::levelp   ! Current level of particle
+  integer(i8b),allocatable,dimension(:)::idp    ! Identity of particle
   integer ,allocatable,dimension(:)  :: part_level_offset    
   integer ,allocatable,dimension(:)  :: bin_start_offset
 

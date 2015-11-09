@@ -1,406 +1,9 @@
-subroutine move_fine(ilevel)
-  use amr_commons
-  use pm_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h' 
-#endif
-  integer::ilevel
-  !----------------------------------------------------------------------
-  ! Update particle position and time-centred velocity at level ilevel. 
-  ! If particle sits entirely in level ilevel, then use fine grid force
-  ! for CIC interpolation. Otherwise, use coarse grid (ilevel-1) force.
-  !----------------------------------------------------------------------
-  integer::igrid,jgrid,ipart,jpart,next_part,ig,ip,npart1,info
-  integer,dimension(1:nvector),save::ind_grid,ind_part,ind_grid_part
-
-  if(numbtot(1,ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-  ! Update particles position and velocity
-  ig=0
-  ip=0
-  ! Loop over grids
-  igrid=headl(myid,ilevel)
-  do jgrid=1,numbl(myid,ilevel)
-     npart1=numbp(igrid)  ! Number of particles in the grid
-     if(npart1>0)then        
-        ig=ig+1
-        ind_grid(ig)=igrid
-        ipart=headp(igrid)
-        ! Loop over particles
-        do jpart=1,npart1
-           ! Save next particle  <---- Very important !!!
-           next_part=nextp(ipart)
-           if(ig==0)then
-              ig=1
-              ind_grid(ig)=igrid
-           end if
-           ip=ip+1
-           ind_part(ip)=ipart
-           ind_grid_part(ip)=ig   
-           if(ip==nvector)then
-              call move1(ind_grid,ind_part,ind_grid_part,ig,ip,ilevel)
-              ip=0
-              ig=0
-           end if
-           ipart=next_part  ! Go to next particle
-        end do
-        ! End loop over particles
-     end if
-     igrid=next(igrid)   ! Go to next grid
-  end do
-  ! End loop over grids
-  if(ip>0)call move1(ind_grid,ind_part,ind_grid_part,ig,ip,ilevel)
-
-111 format('   Entering move_fine for level ',I2)
-
-end subroutine move_fine
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine move1(ind_grid,ind_part,ind_grid_part,ng,np,ilevel)
-  use amr_commons
-  use pm_commons
-  use poisson_commons
-  use hydro_commons, ONLY: uold
-  implicit none
-  integer::ng,np,ilevel
-  integer,dimension(1:nvector)::ind_grid
-  integer,dimension(1:nvector)::ind_grid_part,ind_part
-  !------------------------------------------------------------
-  ! This routine computes the force on each particle by
-  ! inverse CIC and computes new positions for all particles.
-  ! If particle sits entirely in fine level, then CIC is performed
-  ! at level ilevel. Otherwise, it is performed at level ilevel-1.
-  ! This routine is called by move_fine.
-  !------------------------------------------------------------
-  logical::error
-  integer::i,j,ind,idim,nx_loc
-  real(dp)::dx,length,dx_loc,scale,vol_loc,r2
-  ! Grid-based arrays
-  integer ,dimension(1:nvector),save::father_cell
-  real(dp),dimension(1:nvector,1:ndim),save::x0
-  integer ,dimension(1:nvector,1:threetondim),save::nbors_father_cells
-  integer ,dimension(1:nvector,1:twotondim),save::nbors_father_grids
-  ! Particle-based arrays
-  logical ,dimension(1:nvector),save::ok
-  real(dp),dimension(1:nvector,1:ndim),save::x,ff,new_xp,new_vp,dd,dg
-  integer ,dimension(1:nvector,1:ndim),save::ig,id,igg,igd,icg,icd
-  real(dp),dimension(1:nvector,1:twotondim),save::vol
-  integer ,dimension(1:nvector,1:twotondim),save::igrid,icell,indp,kg
-  real(dp),dimension(1:3)::skip_loc
-
-  ! Mesh spacing in that level
-  dx=0.5D0**ilevel 
-  nx_loc=(icoarse_max-icoarse_min+1)
-  skip_loc=(/0.0d0,0.0d0,0.0d0/)
-  if(ndim>0)skip_loc(1)=dble(icoarse_min)
-  if(ndim>1)skip_loc(2)=dble(jcoarse_min)
-  if(ndim>2)skip_loc(3)=dble(kcoarse_min)
-  scale=boxlen/dble(nx_loc)
-  dx_loc=dx*scale
-  vol_loc=dx_loc**3
-
-  ! Lower left corner of 3x3x3 grid-cube
-  do idim=1,ndim
-     do i=1,ng
-        x0(i,idim)=xg(ind_grid(i),idim)-3.0D0*dx
-     end do
-  end do
-  
-  ! Gather neighboring father cells (should be present anytime !)
-  do i=1,ng
-     father_cell(i)=father(ind_grid(i))
-  end do
-  call get3cubefather(father_cell,nbors_father_cells,nbors_father_grids,&
-       & ng,ilevel)
-
-  ! Rescale particle position at level ilevel
-  do idim=1,ndim
-     do j=1,np
-        x(j,idim)=xp(ind_part(j),idim)/scale+skip_loc(idim)
-     end do
-  end do
-  do idim=1,ndim
-     do j=1,np
-        x(j,idim)=x(j,idim)-x0(ind_grid_part(j),idim)
-     end do
-  end do
-  do idim=1,ndim
-     do j=1,np
-        x(j,idim)=x(j,idim)/dx
-     end do
-  end do
-
-  ! Check for illegal moves
-  error=.false.
-  do idim=1,ndim
-     do j=1,np
-        if(x(j,idim)<0.5D0.or.x(j,idim)>5.5D0)error=.true.
-     end do
-  end do
-  if(error)then
-     write(*,*)'problem in move'
-     do idim=1,ndim
-        do j=1,np
-           if(x(j,idim)<0.5D0.or.x(j,idim)>5.5D0)then
-              write(*,*)x(j,1:ndim)
-           endif
-        end do
-     end do
-     stop
-  end if
-
-  ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
-  do idim=1,ndim
-     do j=1,np
-        dd(j,idim)=x(j,idim)+0.5D0
-        id(j,idim)=dd(j,idim)
-        dd(j,idim)=dd(j,idim)-id(j,idim)
-        dg(j,idim)=1.0D0-dd(j,idim)
-        ig(j,idim)=id(j,idim)-1
-     end do
-  end do
-
-   ! Compute parent grids
-  do idim=1,ndim
-     do j=1,np
-        igg(j,idim)=ig(j,idim)/2
-        igd(j,idim)=id(j,idim)/2
-     end do
-  end do
-#if NDIM==1
-  do j=1,np
-     kg(j,1)=1+igg(j,1)
-     kg(j,2)=1+igd(j,1)
-  end do
-#endif
-#if NDIM==2
-  do j=1,np
-     kg(j,1)=1+igg(j,1)+3*igg(j,2)
-     kg(j,2)=1+igd(j,1)+3*igg(j,2)
-     kg(j,3)=1+igg(j,1)+3*igd(j,2)
-     kg(j,4)=1+igd(j,1)+3*igd(j,2)
-  end do
-#endif
-#if NDIM==3
-  do j=1,np
-     kg(j,1)=1+igg(j,1)+3*igg(j,2)+9*igg(j,3)
-     kg(j,2)=1+igd(j,1)+3*igg(j,2)+9*igg(j,3)
-     kg(j,3)=1+igg(j,1)+3*igd(j,2)+9*igg(j,3)
-     kg(j,4)=1+igd(j,1)+3*igd(j,2)+9*igg(j,3)
-     kg(j,5)=1+igg(j,1)+3*igg(j,2)+9*igd(j,3)
-     kg(j,6)=1+igd(j,1)+3*igg(j,2)+9*igd(j,3)
-     kg(j,7)=1+igg(j,1)+3*igd(j,2)+9*igd(j,3)
-     kg(j,8)=1+igd(j,1)+3*igd(j,2)+9*igd(j,3)
-  end do
-#endif
-  do ind=1,twotondim
-     do j=1,np
-        igrid(j,ind)=son(nbors_father_cells(ind_grid_part(j),kg(j,ind)))
-     end do
-  end do
-
-  ! Check if particles are entirely in level ilevel
-  ok(1:np)=.true.
-  do ind=1,twotondim
-     do j=1,np
-        ok(j)=ok(j).and.igrid(j,ind)>0
-     end do
-  end do
-
-  ! If not, rescale position at level ilevel-1
-  do idim=1,ndim
-     do j=1,np
-        if(.not.ok(j))then
-           x(j,idim)=x(j,idim)/2.0D0
-        end if
-     end do
-  end do
-  ! If not, redo CIC at level ilevel-1
-  do idim=1,ndim
-     do j=1,np
-        if(.not.ok(j))then
-           dd(j,idim)=x(j,idim)+0.5D0
-           id(j,idim)=dd(j,idim)
-           dd(j,idim)=dd(j,idim)-id(j,idim)
-           dg(j,idim)=1.0D0-dd(j,idim)
-           ig(j,idim)=id(j,idim)-1
-        end if
-     end do
-  end do
-
- ! Compute parent cell position
-  do idim=1,ndim
-     do j=1,np
-        if(ok(j))then
-           icg(j,idim)=ig(j,idim)-2*igg(j,idim)
-           icd(j,idim)=id(j,idim)-2*igd(j,idim)
-        else
-           icg(j,idim)=ig(j,idim)
-           icd(j,idim)=id(j,idim)
-        end if
-     end do
-  end do
-#if NDIM==1
-  do j=1,np
-     icell(j,1)=1+icg(j,1)
-     icell(j,2)=1+icd(j,1)
-  end do
-#endif
-#if NDIM==2
-  do j=1,np
-     if(ok(j))then
-        icell(j,1)=1+icg(j,1)+2*icg(j,2)
-        icell(j,2)=1+icd(j,1)+2*icg(j,2)
-        icell(j,3)=1+icg(j,1)+2*icd(j,2)
-        icell(j,4)=1+icd(j,1)+2*icd(j,2)
-     else
-        icell(j,1)=1+icg(j,1)+3*icg(j,2)
-        icell(j,2)=1+icd(j,1)+3*icg(j,2)
-        icell(j,3)=1+icg(j,1)+3*icd(j,2)
-        icell(j,4)=1+icd(j,1)+3*icd(j,2)
-     end if
-  end do
-#endif
-#if NDIM==3
-  do j=1,np
-     if(ok(j))then
-        icell(j,1)=1+icg(j,1)+2*icg(j,2)+4*icg(j,3)
-        icell(j,2)=1+icd(j,1)+2*icg(j,2)+4*icg(j,3)
-        icell(j,3)=1+icg(j,1)+2*icd(j,2)+4*icg(j,3)
-        icell(j,4)=1+icd(j,1)+2*icd(j,2)+4*icg(j,3)
-        icell(j,5)=1+icg(j,1)+2*icg(j,2)+4*icd(j,3)
-        icell(j,6)=1+icd(j,1)+2*icg(j,2)+4*icd(j,3)
-        icell(j,7)=1+icg(j,1)+2*icd(j,2)+4*icd(j,3)
-        icell(j,8)=1+icd(j,1)+2*icd(j,2)+4*icd(j,3)
-     else
-        icell(j,1)=1+icg(j,1)+3*icg(j,2)+9*icg(j,3)
-        icell(j,2)=1+icd(j,1)+3*icg(j,2)+9*icg(j,3)
-        icell(j,3)=1+icg(j,1)+3*icd(j,2)+9*icg(j,3)
-        icell(j,4)=1+icd(j,1)+3*icd(j,2)+9*icg(j,3)
-        icell(j,5)=1+icg(j,1)+3*icg(j,2)+9*icd(j,3)
-        icell(j,6)=1+icd(j,1)+3*icg(j,2)+9*icd(j,3)
-        icell(j,7)=1+icg(j,1)+3*icd(j,2)+9*icd(j,3)
-        icell(j,8)=1+icd(j,1)+3*icd(j,2)+9*icd(j,3)   
-     end if
-  end do
-#endif
-        
-  ! Compute parent cell adresses
-  do ind=1,twotondim
-     do j=1,np
-        if(ok(j))then
-           indp(j,ind)=ncoarse+(icell(j,ind)-1)*ngridmax+igrid(j,ind)
-        else
-           indp(j,ind)=nbors_father_cells(ind_grid_part(j),icell(j,ind))
-        end if
-     end do
-  end do
-
-  ! Compute cloud volumes
-#if NDIM==1
-  do j=1,np
-     vol(j,1)=dg(j,1)
-     vol(j,2)=dd(j,1)
-  end do
-#endif
-#if NDIM==2
-  do j=1,np
-     vol(j,1)=dg(j,1)*dg(j,2)
-     vol(j,2)=dd(j,1)*dg(j,2)
-     vol(j,3)=dg(j,1)*dd(j,2)
-     vol(j,4)=dd(j,1)*dd(j,2)
-  end do
-#endif
-#if NDIM==3
-  do j=1,np
-     vol(j,1)=dg(j,1)*dg(j,2)*dg(j,3)
-     vol(j,2)=dd(j,1)*dg(j,2)*dg(j,3)
-     vol(j,3)=dg(j,1)*dd(j,2)*dg(j,3)
-     vol(j,4)=dd(j,1)*dd(j,2)*dg(j,3)
-     vol(j,5)=dg(j,1)*dg(j,2)*dd(j,3)
-     vol(j,6)=dd(j,1)*dg(j,2)*dd(j,3)
-     vol(j,7)=dg(j,1)*dd(j,2)*dd(j,3)
-     vol(j,8)=dd(j,1)*dd(j,2)*dd(j,3)
-  end do
-#endif
-  
-  ! Gather 3-force
-  ff(1:np,1:ndim)=0.0D0
-  if(tracer.and.hydro)then
-     do ind=1,twotondim
-        do idim=1,ndim
-           do j=1,np
-              ff(j,idim)=ff(j,idim)+uold(indp(j,ind),idim+1)*vol(j,ind)
-           end do
-        end do
-     end do
-  endif
-  if(poisson)then
-     do ind=1,twotondim
-        do idim=1,ndim
-           do j=1,np
-              ff(j,idim)=ff(j,idim)+f(indp(j,ind),idim)*vol(j,ind)
-              if (idp(ind_part(j))==1023 .and. idim ==1)print*,'oldforce',indp(j,ind),vol(j,ind),ok(j),ff(j,idim)
-           end do
-        end do
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-        do j=1,np
-           ptcl_phi(ind_part(j)) = phi(indp(j,ind))
-        end do
-#endif
-     end do
-  endif
-
-  ! Update velocity
-  do idim=1,ndim
-     if(static.or.tracer)then
-        do j=1,np
-           new_vp(j,idim)=ff(j,idim)
-        end do
-     else
-        do j=1,np
-           new_vp(j,idim)=vp(ind_part(j),idim)+ff(j,idim)*0.5D0*dtnew(ilevel)
-           if (idp(ind_part(j))==1023)print*,'oldmovef',idim,dtnew(ilevel),ff(j,idim),xp(ind_part(j),idim)
-        end do
-     endif
-  end do
-
-  ! Store velocity
-  do idim=1,ndim
-     do j=1,np
-        vp(ind_part(j),idim)=new_vp(j,idim)
-     end do
-  end do
-
-  ! Update position
-  do idim=1,ndim
-     if(static)then
-        do j=1,np
-           new_xp(j,idim)=xp(ind_part(j),idim)
-        end do
-     else
-        do j=1,np
-           new_xp(j,idim)=xp(ind_part(j),idim)+new_vp(j,idim)*dtnew(ilevel)
-        end do
-     endif
-  end do
-  do idim=1,ndim
-     do j=1,np
-        xp(ind_part(j),idim)=new_xp(j,idim)
-     end do
-  end do
-
-end subroutine move1
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
-  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, ap_andreas, idp_andreas
+  use pm_commons,      only: part_level_offset, xp, vp, ap, idp
   use amr_parameters,  only: dp, ndim, tracer, hydro, static, verbose
   use amr_commons,     only: ncpu, dtnew, myid
   implicit none
@@ -416,7 +19,7 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
 
   do ipart = offset + 1, offset + nparts
-     if (idp_andreas(ipart)==1023)print*,myid,xp_andreas(ipart,1),ipart
+     if (idp(ipart)==1023)print*,myid,xp(ipart,1),ipart
   end do
   call compute_particle_acceleration(ilevel, tracer .and. hydro)
   
@@ -426,21 +29,21 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
      ! Update velocity     
      if(static .or. tracer)then
         do ipart = offset + 1, offset + nparts 
-           vp_andreas(ipart, idim) = ap_andreas(ipart, idim)
+           vp(ipart, idim) = ap(ipart, idim)
         end do
      else
         do ipart = offset + 1, offset + nparts 
-           vp_andreas(ipart, idim) = vp_andreas(ipart, idim) &
-                + ap_andreas(ipart, idim) * 0.5D0 * dtnew(ilevel)
-           if (idp_andreas(ipart)==1023)print*,'newmovef',idim,dtnew(ilevel),xp_andreas(ipart,idim)
+           vp(ipart, idim) = vp(ipart, idim) &
+                + ap(ipart, idim) * 0.5D0 * dtnew(ilevel)
+           if (idp(ipart)==1023)print*,'newmovef',idim,dtnew(ilevel),xp(ipart,idim)
         end do
      end if
 
      ! Update position
      if(.not. static)then
         do ipart = offset + 1, offset + nparts 
-           xp_andreas(ipart, idim) = xp_andreas(ipart, idim) &
-                + vp_andreas(ipart, idim) * dtnew(ilevel)
+           xp(ipart, idim) = xp(ipart, idim) &
+                + vp(ipart, idim) * dtnew(ilevel)
         end do
      end if
 
@@ -452,7 +55,7 @@ end subroutine kick_drift
 !#########################################################################
 !#########################################################################
 subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
-  use pm_commons,      only: part_level_offset, xp_andreas, vp_andreas, ap_andreas, levelp_andreas, idp_andreas
+  use pm_commons,      only: part_level_offset, xp, vp, ap, levelp, idp
   use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson, verbose
   use hydro_commons,   only: uold
   use poisson_commons, only: f
@@ -484,25 +87,25 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
      np = min(nvector, offset + nparts - ioft)
 
      do ip = 1, np
-        if(levelp_andreas(ioft + ip) >= ilevel)then
-           dteff(ip) = dtnew(levelp_andreas(ioft + ip))
+        if(levelp(ioft + ip) >= ilevel)then
+           dteff(ip) = dtnew(levelp(ioft + ip))
         else
-           dteff(ip) = dtold(levelp_andreas(ioft + ip))
+           dteff(ip) = dtold(levelp(ioft + ip))
         endif
      end do
 
      ! Update particles level
      do ip = 1, np
-        levelp_andreas(ioft + ip) = ilevel
+        levelp(ioft + ip) = ilevel
      end do
      
      do idim = 1, ndim
         do ip = 1, np
-           if (.not. abs(ap_andreas(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap_andreas(ioft+ip, idim)
-           if (.not. abs(vp_andreas(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap_andreas(ioft+ip, idim)
-           if (.not. abs(dteff(ip)) < 1000.)print*,'ap',myid, ioft + ip, ap_andreas(ioft+ip, idim)
-           vp_andreas(ioft + ip, idim) = vp_andreas(ioft + ip, idim) &
-                + ap_andreas(ioft + ip, idim) * 0.5D0 * dteff(ip)
+           if (.not. abs(ap(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap(ioft+ip, idim)
+           if (.not. abs(vp(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap(ioft+ip, idim)
+           if (.not. abs(dteff(ip)) < 1000.)print*,'ap',myid, ioft + ip, ap(ioft+ip, idim)
+           vp(ioft + ip, idim) = vp(ioft + ip, idim) &
+                + ap(ioft + ip, idim) * 0.5D0 * dteff(ip)
         end do
      end do
   end do
@@ -515,7 +118,7 @@ end subroutine second_kick
 !#########################################################################
 !#########################################################################
 subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
-  use pm_commons,      only: part_level_offset, xp_andreas, ap_andreas, idp_andreas, &
+  use pm_commons,      only: part_level_offset, xp, ap, idp, &
                              part_hkey
   use amr_parameters,  only: dp, nvector, ndim, twotondim, poisson, verbose
   use hydro_commons,   only: uold
@@ -556,9 +159,9 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
        ilevel)
 
   allocate(xp_remote(1:npart_recv, 1:3), ap_remote(1:npart_recv, 1:3))
-  call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 1), xp_remote(:, 1))
-  call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 2), xp_remote(:, 2))
-  call part_data_to_domain_dp(communicator, xp_andreas(offset + 1 : offset + nparts, 3), xp_remote(:, 3))
+  call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 1), xp_remote(:, 1))
+  call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 2), xp_remote(:, 2))
+  call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 3), xp_remote(:, 3))
 
   print*,'xp_remote',myid,xp_remote(1,1:3)
  ! Deal with remote particles
@@ -590,10 +193,10 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
      endif
   end do
   if (myid==2)print*,'ap_remote',ap_remote(207,1:3)
-  call domain_data_to_part_dp(communicator, ap_remote(:,3), ap_andreas(offset + 1 : offset + nparts, 3))
-  call domain_data_to_part_dp(communicator, ap_remote(:,2), ap_andreas(offset + 1 : offset + nparts, 2))
-  call domain_data_to_part_dp(communicator, ap_remote(:,1), ap_andreas(offset + 1 : offset + nparts, 1))
-  if (myid==1)print*,'ap_andreas',myid,ap_andreas(260, 1:3), idp_andreas(260) 
+  call domain_data_to_part_dp(communicator, ap_remote(:,3), ap(offset + 1 : offset + nparts, 3))
+  call domain_data_to_part_dp(communicator, ap_remote(:,2), ap(offset + 1 : offset + nparts, 2))
+  call domain_data_to_part_dp(communicator, ap_remote(:,1), ap(offset + 1 : offset + nparts, 1))
+  if (myid==1)print*,'ap',myid,ap(260, 1:3), idp(260) 
   deallocate(xp_remote, ap_remote)
 
 
@@ -601,14 +204,14 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   do ioft = offset + local_oft, offset + local_oft + nparts_local - 1, nvector
      np = min(nvector, offset + local_oft + nparts_local - ioft)
 
-     call cic(xp_andreas(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
+     call cic(xp(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
 
-     ap_andreas(ioft + 1: ioft + np, 1: ndim) = 0.0D0
+     ap(ioft + 1: ioft + np, 1: ndim) = 0.0D0
      if(read_gas_velocity)then
         do idim = 1, ndim
            do ind = 1, twotondim              
               do ip = 1, np
-                  ap_andreas(ioft + ip, idim) = ap_andreas(ioft + ip, idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
+                  ap(ioft + ip, idim) = ap(ioft + ip, idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
               end do
            end do
         end do
@@ -618,8 +221,8 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
         do idim = 1,ndim
            do ind = 1,twotondim
               do ip = 1,np
-                  ap_andreas(ioft + ip, idim) =  ap_andreas(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-                 if (idp_andreas(ioft + ip)==1023 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip
+                  ap(ioft + ip, idim) =  ap(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
+                 if (idp(ioft + ip)==1023 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip
               end do
            end do
         end do

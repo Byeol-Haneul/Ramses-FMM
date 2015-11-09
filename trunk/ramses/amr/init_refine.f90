@@ -49,10 +49,25 @@ subroutine init_refine_2
   use hydro_commons
   use pm_commons
   use poisson_commons
+  use sort, only: lsd_radix_sort_particles, apply_particle_permutation
+  use hilbert, only: hilbert_for_particle
   implicit none
-  integer::ilevel,i,ivar
+  integer::ilevel,i,ivar, np, offset
 
   if(filetype.eq.'grafic')return
+
+  offset = part_level_offset(ilevel)
+  np = npart - part_level_offset(ilevel)
+
+  ! Compute hilbert keys (probably move outside of this routine)
+  call hilbert_for_particle(offset, npart - offset, 0, ilevel)
+  
+  ! Compute a permutation that sorts ALL particles starting from offset
+  call lsd_radix_sort_particles(offset, npart - offset, ilevel, ilevel, .true.)
+
+  call apply_particle_permutation(offset, npart - offset, ilevel) 
+
+
 
   do i=levelmin,nlevelmax+1
 
@@ -67,16 +82,10 @@ subroutine init_refine_2
      if(nremap>0)call load_balance
 
      do ilevel=levelmin,nlevelmax
-        if(pic)call make_tree_fine(ilevel)
         if(poisson)call rho_fine(ilevel,2,.false.)
-        if(pic)then
-           call kill_tree_fine(ilevel)
-           call virtual_tree_fine(ilevel)
-        endif
      end do
 
      do ilevel=nlevelmax,levelmin,-1
-        if(pic)call merge_tree_fine(ilevel)
         if(hydro)then
            call upload_fine(ilevel)
            do ivar=1,nvar

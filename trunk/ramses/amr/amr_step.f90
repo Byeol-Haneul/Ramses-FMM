@@ -13,9 +13,9 @@ recursive subroutine amr_step(ilevel,icount)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  integer::i,idim,ivar,info
+  integer::i,idim,ivar,info, ilev
   logical::ok_defrag
-  logical,save::first_step=.true.
+  logical,save::first_step=.true., use_histograms
   real(dp)::told,tnew,dthilbert,dtrho
 
   if(numbtot(1,ilevel)==0)return
@@ -84,10 +84,8 @@ recursive subroutine amr_step(ilevel,icount)
      endif
   end if
 
-  !-----------------
-  ! Particle leakage
-  !-----------------
-  if(pic)call make_tree_fine(ilevel)
+  call cmp_particle_boundary_key
+  
   
   !------------------------
   ! Output results to files
@@ -112,58 +110,27 @@ recursive subroutine amr_step(ilevel,icount)
      endif
   end if
 
-  !-----------------------------------------------------------
-  ! Put here all stuffs that are done only at coarse time step
-  !-----------------------------------------------------------
-
+  ! particles must be re-sorted before density is computed
+  use_histograms = .true.
+  do ilev=levelmin, nlevelmax
+     call sort_particles(ilev, use_histograms)
+  end do
+  
   !--------------------
   ! Poisson source term
   !--------------------
   if(poisson)then
      !save old potential for time-extrapolation at level boundaries
      call save_phi_old(ilevel)
-
-! #ifndef WITHOUTMPI
-!      told=MPI_WTIME(info)
-! #endif
-
      call rho_fine(ilevel,icount)     
-
-! #ifndef WITHOUTMPI
-!      tnew=MPI_WTIME(info)
-!      dtrho=tnew-told
-!      told=tnew
-! #endif
-
-!      if(pic)call hilbert_allparts(ilevel)
-
-! #ifndef WITHOUTMPI
-!      tnew=MPI_WTIME(info)
-!      dthilbert=tnew-told
-!      told=tnew
-! #endif
-
-!      if (dthilbert>0. .and. dtrho > 0.)then
-!         print*,'dt(hilbert+sort)/dt(rho): ',dthilbert/dtrho,myid,ilevel
-!      end if
   endif
-!  stop
-  !-------------------------------------------
-  ! Sort particles between ilevel and ilevel+1
-  !-------------------------------------------
-  if(pic)then
-     ! Remove particles to finer levels
-     call kill_tree_fine(ilevel)
-     ! Update boundary conditions for remaining particles
-     call virtual_tree_fine(ilevel)
-  end if
 
   !---------------
   ! Gravity update
   !---------------
   if(poisson)then
- 
-     ! Remove gravity source term with half time step and old force
+   
+   ! Remove gravity source term with half time step and old force
      if(hydro)then
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
@@ -186,7 +153,7 @@ recursive subroutine amr_step(ilevel,icount)
 
      ! Synchronize remaining particles for gravity
      if(pic)then
-        call synchro_fine(ilevel)
+        call second_kick(ilevel)
      end if
 
      if(hydro)then
@@ -238,7 +205,7 @@ recursive subroutine amr_step(ilevel,icount)
   ! Move particles
   !---------------
   if(pic)then
-     call move_fine(ilevel) ! Only remaining particles
+     call kick_drift(ilevel) ! Only remaining particles
   end if
 
   !-----------
@@ -284,11 +251,6 @@ recursive subroutine amr_step(ilevel,icount)
   ! Compute refinement map
   !-----------------------
   if(.not.static) call flag_fine(ilevel,icount)
-
-  !----------------------------
-  ! Merge finer level particles
-  !----------------------------
-  if(pic)call merge_tree_fine(ilevel)
 
   !-------------------------------
   ! Update coarser level time-step

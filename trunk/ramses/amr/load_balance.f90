@@ -26,14 +26,6 @@ subroutine load_balance
 #ifndef WITHOUTMPI
   if(myid==1)write(*,*)'Load balancing AMR grid...'
   
-  ! Put all particle in main tree trunk
-  if(pic.and.(.not.init))then
-     call make_tree_fine(levelmin)
-     do ilevel=levelmin-1,1,-1
-        call merge_tree_fine(ilevel)
-     end do
-  endif
-
   balance=.true.
 
   if(verbose)then
@@ -195,18 +187,6 @@ subroutine load_balance
      end do
      call make_virtual_fine_int(cpu_map(1),ilevel)
   end do
-
-  if(pic.and.(.not.init))then
-     ! Sort particles down to nlevelmax
-     do ilevel=1,nlevelmax-1
-        call kill_tree_fine(ilevel)
-        call virtual_tree_fine(ilevel)
-     end do
-     call virtual_tree_fine(nlevelmax)
-     do ilevel=nlevelmax-1,levelmin,-1
-        call merge_tree_fine(ilevel)
-     end do
-  end if
 
   !--------------------------------------------
   ! Shrink boundaries around new mesh partition
@@ -1488,3 +1468,23 @@ end subroutine cmp_ordering_int
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine cmp_particle_boundary_key
+  use amr_commons, only: ndomain, nlevelmax, levelmin, bound_key, bound_key_level
+  implicit none
+  integer :: idomain, ilev
+
+  do idomain = 1, ndomain - 1
+     bound_key_level(idomain, nlevelmax) = nint(bound_key(idomain) / 8.)
+  end do
+  bound_key_level(0, nlevelmax) = floor(bound_key(0) / 8.)
+  bound_key_level(ndomain, nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  
+  do ilev = nlevelmax - 1, levelmin, - 1
+     do idomain = 1, ndomain - 1
+        bound_key_level(idomain, ilev) = nint(bound_key_level(idomain, ilev + 1) / 8.)
+     end do
+     bound_key_level(0, ilev) = floor(bound_key_level(0, ilev + 1) / 8.)
+     bound_key_level(ndomain, ilev) = ceiling(bound_key_level(ndomain, ilev + 1) / 8.)
+  end do
+  
+end subroutine cmp_particle_boundary_key

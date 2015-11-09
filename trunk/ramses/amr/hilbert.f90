@@ -341,7 +341,7 @@ contains
   !================================================================
   !================================================================
   !================================================================
-!   subroutine hilbert3d_andreas(x,y,z,order,bit_length,npoint)
+!   subroutine hilbert3d(x,y,z,order,bit_length,npoint)
 !     use amr_parameters, ONLY: qdp,nvector
 !     implicit none
 ! #ifndef WITHOUTMPI
@@ -404,7 +404,7 @@ contains
 !        order(ip)=real(hkey(ip),kind=8)             
 !     end do
 
-!   end subroutine hilbert3d_andreas
+!   end subroutine hilbert3d
   !================================================================
   !================================================================
   !================================================================
@@ -758,7 +758,7 @@ contains
 
     use amr_parameters, only: nvector, boxlen, dp
     use amr_commons,    only: myid
-    use pm_commons,     only: part_hkey, current_state, xp_andreas
+    use pm_commons,     only: part_hkey, current_state, xp
     implicit none
 
     integer, intent(in) :: initial_level, final_level
@@ -801,10 +801,10 @@ contains
 
        ! compute cartesian keys
        do ip = 1, sweep_size 
-          ix(ip) = int(xp_andreas(ip+sweep_offset,1)*ckey_factor, kind=8)
-          iy(ip) = int(xp_andreas(ip+sweep_offset,2)*ckey_factor, kind=8)
+          ix(ip) = int(xp(ip+sweep_offset,1)*ckey_factor, kind=8)
+          iy(ip) = int(xp(ip+sweep_offset,2)*ckey_factor, kind=8)
 #if NDIM == 3
-          iz(ip) = int(xp_andreas(ip+sweep_offset,3)*ckey_factor, kind=8)
+          iz(ip) = int(xp(ip+sweep_offset,3)*ckey_factor, kind=8)
 #endif
        end do
 #if NDIM == 3
