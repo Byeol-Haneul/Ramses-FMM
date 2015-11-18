@@ -271,8 +271,9 @@ subroutine reshuffle_particles(ilevel, np, ndata, refined, use_histograms)
   integer  :: unrefined_pos, refined_pos
   logical  :: unrefined
 
-  if (ilevel == nlevelmax)return
-
+  if (ilevel == nlevelmax) return
+  if (ndata == 0) return
+  
   offset = part_level_offset(ilevel)
 
   ! Find starting indices for refined particles
