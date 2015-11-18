@@ -3,24 +3,29 @@
 !#########################################################################
 !#########################################################################
 subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
-  use pm_commons,      only: part_level_offset, xp, vp, ap, idp
+  use pm_commons,      only: part_level_offset, xp, vp, ap, idp, nx, ny, nz, boxlen
   use amr_parameters,  only: dp, ndim, tracer, hydro, static, verbose
   use amr_commons,     only: ncpu, dtnew, myid
   implicit none
 
-
   integer, intent(in) :: ilevel
   integer :: offset, nparts, idim, ipart
+  logical,dimension(1:ndim)::period
   
-  
-  if(verbose)write(*,'("Test: " (I2))')ilevel 
+  ! TODO: make this nicer!
+  period(1)=(nx==1)
+#if NDIM>1
+  if(ndim>1)period(2)=(ny==1)
+#endif
+#if NDIM>2
+  if(ndim>2)period(3)=(nz==1)
+#endif
 
+  if(verbose)write(*,'("Test: " (I2))')ilevel 
+  
   offset = part_level_offset(ilevel)
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
-
-  do ipart = offset + 1, offset + nparts
-     if (idp(ipart)==1023)print*,myid,xp(ipart,1),ipart
-  end do
+  
   call compute_particle_acceleration(ilevel, tracer .and. hydro)
   
   ! Accelerate and move all parts 
@@ -35,7 +40,6 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
         do ipart = offset + 1, offset + nparts 
            vp(ipart, idim) = vp(ipart, idim) &
                 + ap(ipart, idim) * 0.5D0 * dtnew(ilevel)
-           if (idp(ipart)==1023)print*,'newmovef',idim,dtnew(ilevel),xp(ipart,idim)
         end do
      end if
 
@@ -47,8 +51,20 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
         end do
      end if
 
+     ! Take care of boundary conditions
+     ! TODO: non-periodic boundaries!!
+     if (period(idim))then
+        do ipart = offset + 1, offset + nparts
+           if (xp(ipart, idim) > boxlen)then
+              xp(ipart, idim) = xp(ipart, idim) - boxlen
+           end if
+           if(xp(ipart, idim) < 0.d0)then
+              xp(ipart, idim) = xp(ipart, idim) + boxlen
+           end if
+        end do
+     end if
+
   end do
-  
 end subroutine kick_drift
 !#########################################################################
 !#########################################################################
@@ -101,9 +117,6 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
      
      do idim = 1, ndim
         do ip = 1, np
-           if (.not. abs(ap(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap(ioft+ip, idim)
-           if (.not. abs(vp(ioft+ip, idim)) < 1000.)print*,'ap',myid, ioft + ip, ap(ioft+ip, idim)
-           if (.not. abs(dteff(ip)) < 1000.)print*,'ap',myid, ioft + ip, ap(ioft+ip, idim)
            vp(ioft + ip, idim) = vp(ioft + ip, idim) &
                 + ap(ioft + ip, idim) * 0.5D0 * dteff(ip)
         end do
@@ -149,8 +162,8 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
 
   if(verbose)write(*,'("Entering compute_particle_acceleration, level " I2)')ilevel 
 
-  !  call compute_particle_histogram(offset, nparts)
-  call check_sorted(offset,nparts)
+  ! call compute_particle_histogram(offset, nparts)
+  ! call check_sorted(offset,nparts)
   call build_communicator(communicator, npart_recv, &
        nparts, nparts_local, local_oft, &
        part_hkey(offset + 1 : offset + nparts, 2), &
@@ -163,7 +176,6 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 2), xp_remote(:, 2))
   call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 3), xp_remote(:, 3))
 
-  print*,'xp_remote',myid,xp_remote(1,1:3)
  ! Deal with remote particles
   do ioft = 0, npart_recv - 1, nvector
      np = min(nvector, npart_recv - ioft)
@@ -186,17 +198,14 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
            do ind = 1,twotondim
               do ip = 1,np
                  ap_remote(ioft + ip, idim) = ap_remote(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-                 if (abs(xp_remote(ioft + ip,1) - 42.075531959999999) < 1.d-6 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip,ap_remote(ioft + ip,1), ioft + ip, myid
               end do
            end do
         end do
      endif
   end do
-  if (myid==2)print*,'ap_remote',ap_remote(207,1:3)
   call domain_data_to_part_dp(communicator, ap_remote(:,3), ap(offset + 1 : offset + nparts, 3))
   call domain_data_to_part_dp(communicator, ap_remote(:,2), ap(offset + 1 : offset + nparts, 2))
   call domain_data_to_part_dp(communicator, ap_remote(:,1), ap(offset + 1 : offset + nparts, 1))
-  if (myid==1)print*,'ap',myid,ap(260, 1:3), idp(260) 
   deallocate(xp_remote, ap_remote)
 
 
@@ -222,7 +231,6 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
            do ind = 1,twotondim
               do ip = 1,np
                   ap(ioft + ip, idim) =  ap(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-                 if (idp(ioft + ip)==1023 .and. idim==1)print*,'newforce',cell_index(ip,ind), vol(ip,ind),ip
               end do
            end do
         end do
@@ -231,6 +239,7 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
 
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   ! Just a reminder that this option is not built in yet
+  print*,"stopping because of OUTPUT_PARTICLE_POTENTIAL"
   call clean_stop
 #endif
   call MPI_BARRIER(MPI_COMM_WORLD,info) 

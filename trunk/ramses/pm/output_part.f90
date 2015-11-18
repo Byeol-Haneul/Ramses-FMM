@@ -34,7 +34,7 @@ subroutine backup_part(filename)
   allocate(xdp(1:npart))
   do idim=1,ndim
      ipart=0
-     do i=1,npartmax
+     do i=1,npart
         if(levelp(i)>0)then
            ipart=ipart+1
            xdp(ipart)=xp(i,idim)
@@ -45,7 +45,7 @@ subroutine backup_part(filename)
   ! Write velocity
   do idim=1,ndim
      ipart=0
-     do i=1,npartmax
+     do i=1,npart
         if(levelp(i)>0)then
            ipart=ipart+1
            xdp(ipart)=vp(i,idim)
@@ -55,7 +55,7 @@ subroutine backup_part(filename)
   end do
   ! Write mass
   ipart=0
-  do i=1,npartmax
+  do i=1,npart
      if(levelp(i)>0)then
         ipart=ipart+1
         xdp(ipart)=mp(i)
@@ -66,7 +66,7 @@ subroutine backup_part(filename)
   ! Write identity
   allocate(ii8(1:npart))
   ipart=0
-  do i=1,npartmax
+  do i=1,npart
      if(levelp(i)>0)then
         ipart=ipart+1
         ii8(ipart)=idp(i)
@@ -77,7 +77,7 @@ subroutine backup_part(filename)
   ! Write level
   allocate(ll(1:npart))
   ipart=0
-  do i=1,npartmax
+  do i=1,npart
      if(levelp(i)>0)then
         ipart=ipart+1
         ll(ipart)=levelp(i)
@@ -91,7 +91,7 @@ subroutine backup_part(filename)
   ! Write potential (added by AP)
   allocate(xdp(1:npart))
   ipart=0
-  do i=1, npartmax
+  do i=1, npart
      if(levelp(i)>0) then
         ipart=ipart+1
         xdp(ipart)=ptcl_phi(i)

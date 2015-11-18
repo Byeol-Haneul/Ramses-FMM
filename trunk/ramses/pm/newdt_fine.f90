@@ -48,34 +48,8 @@ subroutine newdt_fine(ilevel)
 
      dt_all=dtnew(ilevel); dt_loc=dt_all
      ekin_all=0.0; ekin_loc=0.0
+     call newdt_part(ilevel, dt_loc, ekin_loc)
      
-     ! Compute maximum time step on active region
-     if(numbl(myid,ilevel)>0)then
-        ! Loop over grids
-        ip=0
-        igrid=headl(myid,ilevel)
-        do jgrid=1,numbl(myid,ilevel)
-           npart1=numbp(igrid)   ! Number of particles in the grid
-           if(npart1>0)then
-              ! Loop over particles
-              ipart=headp(igrid)
-              do jpart=1,npart1
-                 ip=ip+1
-                 ind_part(ip)=ipart
-                 if(ip==nvector)then
-                    call newdt2(ind_part,dt_loc,ekin_loc,ip,ilevel)
-                    ip=0
-                 end if
-                 ipart=nextp(ipart)    ! Go to next particle
-              end do
-              ! End loop over particles
-           end if
-           igrid=next(igrid)   ! Go to next grid
-        end do
-        ! End loop over grids
-        if(ip>0)call newdt2(ind_part,dt_loc,ekin_loc,ip,ilevel)
-     end if
-
      ! Minimize time step over all cpus
 #ifndef WITHOUTMPI
      call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,&
@@ -101,47 +75,48 @@ end subroutine newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine newdt2(ind_part,dt_loc,ekin_loc,nn,ilevel)
-  use amr_commons
-  use pm_commons
-  use hydro_commons
+subroutine newdt_part(ilevel, dt_loc, ekin_loc)
+  use amr_commons, only: dp, icoarse_min, icoarse_max, boxlen, ndim
+  use pm_commons, only: vp, mp, part_level_offset
+  use hydro_commons, only: courant_factor
   implicit none
-  real(kind=8)::dt_loc,ekin_loc
-  integer::nn,ilevel
-  integer,dimension(1:nvector)::ind_part
+  integer      :: ilevel
+  real(kind=8) :: dt_loc, ekin_loc
+  ! TODO: add description here
+  !
+  integer  :: ipart, idim, nx_loc, offset, nparts
+  real(dp) :: dx, dx_loc, scale, dtpart, v2max
 
-  integer::i,idim,nx_loc
-  real(dp)::dx,dx_loc,scale,dtpart
-  real(dp),dimension(1:nvector),save::v2
+  offset = part_level_offset(ilevel)
+  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
+  
+  ! Compute cell spacing
+  dx = 0.5D0**ilevel
+  nx_loc = (icoarse_max - icoarse_min + 1)
+  scale = boxlen / dble(nx_loc)
+  dx_loc = dx * scale
 
-  ! Compute time step
-  dx=0.5D0**ilevel
-  nx_loc=(icoarse_max-icoarse_min+1)
-  scale=boxlen/dble(nx_loc)
-  dx_loc=dx*scale
-
-  v2(1:nn)=0.0D0
-  do idim=1,ndim
-     do i=1,nn
-        v2(i)=MAX(v2(i),vp(ind_part(i),idim)**2)
-!        v2(i)=v2(i)+vp(ind_part(i),idim)**2
+  ! Compute minimum time step due to particle velocities
+  v2max = 0.d0
+  do idim = 1, ndim
+     do ipart = offset + 1, offset + nparts
+        v2max = MAX(v2max, vp(ipart, idim)**2)
      end do
   end do
-  do i=1,nn
-     if(v2(i)>0.0D0)then
-        dtpart=courant_factor*dx_loc/sqrt(v2(i))
-        dt_loc=MIN(dt_loc,dtpart)
-     end if
-  end do
+  
+  if(v2max > 0.0D0)then
+     dtpart = courant_factor * dx_loc / sqrt(v2max)
+     dt_loc = MIN(dt_loc, dtpart)
+  end if
 
-  ! Compute kinetic energy
-  do idim=1,ndim
-     do i=1,nn
-        ekin_loc=ekin_loc+0.5D0*mp(ind_part(i))*vp(ind_part(i),idim)**2
+  ! Compute kinetic energy (WHY IS THIS ACTUALLY DONE HERE???)
+  do idim = 1, ndim
+     do ipart = offset + 1, offset + nparts
+        ekin_loc = ekin_loc + 0.5D0 * mp(ipart) * vp(ipart, idim)**2
      end do
   end do
     
-end subroutine newdt2
+end subroutine newdt_part
 
 
 

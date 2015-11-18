@@ -52,21 +52,10 @@ subroutine init_refine_2
   use sort, only: lsd_radix_sort_particles, apply_particle_permutation
   use hilbert, only: hilbert_for_particle
   implicit none
-  integer::ilevel,i,ivar, np, offset
+  integer::ilevel,i,ivar, ilev
+  logical :: use_histograms 
 
   if(filetype.eq.'grafic')return
-
-  offset = part_level_offset(ilevel)
-  np = npart - part_level_offset(ilevel)
-
-  ! Compute hilbert keys (probably move outside of this routine)
-  call hilbert_for_particle(offset, npart - offset, 0, ilevel)
-  
-  ! Compute a permutation that sorts ALL particles starting from offset
-  call lsd_radix_sort_particles(offset, npart - offset, ilevel, ilevel, .true.)
-
-  call apply_particle_permutation(offset, npart - offset, ilevel) 
-
 
 
   do i=levelmin,nlevelmax+1
@@ -80,9 +69,14 @@ subroutine init_refine_2
      end do
 
      if(nremap>0)call load_balance
-
+     ! particles must be re-sorted before density is computed
+     use_histograms = .true.
+     do ilev=levelmin, nlevelmax
+        call sort_particles(ilev, use_histograms)
+     end do
+     
      do ilevel=levelmin,nlevelmax
-        if(poisson)call rho_fine(ilevel,2,.false.)
+        if(poisson)call rho_fine(ilevel,2)
      end do
 
      do ilevel=nlevelmax,levelmin,-1

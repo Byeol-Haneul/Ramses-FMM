@@ -672,6 +672,7 @@ end subroutine count_parts
 subroutine check_sorted(offset, np)
   use pm_commons,   only : part_hkey, part_ind_permutation
   use sort,         only : ge_3keys
+  use amr_commons,  only : myid
   implicit none
   integer, intent(in) :: offset, np
 
@@ -690,6 +691,7 @@ subroutine check_sorted(offset, np)
      ipart = part_ind_permutation(ip)
      if (.not. ge_3keys(part_hkey(ipart,0:2), current_key(0:2)))then
         ok=.false.
+        print*, "Detected unsorted particles on process", myid
         print*, part_hkey(ipart,0),current_key(0)
         print*, part_hkey(ipart,1),current_key(1)
         print*, part_hkey(ipart,2),current_key(2)

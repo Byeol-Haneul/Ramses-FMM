@@ -8,15 +8,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    real(dp),        intent(inout), dimension(1:nvector, 1:8) :: vol
    real(dp), intent(in), dimension(1:np, 1:ndim)             :: xpart
    
-   ! This routine deposits nvector particles (local or remote) onto the grid (local)
-   ! at level grid_level.
 
-   ! in:           - particle masses
-   !               - particle positions
-   !               - number of particles
-   !               - grid_level 
-
-   ! side effect:  - updates rho field on level grid_level
 
    integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
    integer(kind=8), dimension(1:nvector, 1:ndim), save :: id, ix
@@ -30,22 +22,17 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    integer,  save :: idim, ind_cloud, ip
    real(dp), save :: part_to_grid
    logical :: verb
+   integer(kind=8), save :: boxlen8
+   boxlen8 = int(boxlen, kind=8)
    
    if (level_boundary_case==2) repeat_coarser = .false.
-   verb = .false.
-   if (np>=10000 .and. level_boundary_case ==2)then
-      if (abs(xpart(30,1)-28.723039865000001)<0.001)then
-         verb = .true.
-      end if
-   end if
+   verb = .true.
 
    ! Convert particle coordinates (0 to boxlen)
    ! into grid-coordinates (0 to 2.**grid_level)
    part_to_grid = 2.0**cic_level / dble(boxlen)
    xpart_grid(1:np, 1:ndim) = xpart(1:np, 1:ndim) * part_to_grid
 
-   if(verb)print*,'xpart_grid',xpart_grid(30,1:3)
-   
    ! Compute distances of cloud boundary from nearest "integer coordinate"
    do idim = 1, ndim       
 
@@ -70,10 +57,6 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       end do
    end do
 
-   if(verb)print*,'cloud_boundary',cloud_boundary(30,0:1,1:3)
-
-   if(verb)print*,'repeat_coarser',repeat_coarser(30),'before'
-   
 #if NDIM==1
    ! Loop cloud/cell intersections
    do ind_cloud = 0, 1
@@ -108,9 +91,6 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
          vol(ip, ind_cloud + 1) = cloud_boundary(ip,ind(1),1) * &
               cloud_boundary(ip,ind(2),2) * &
               cloud_boundary(ip,ind(3),3) 
-         if(verb .and. ip ==30)print*,'ind',ind(1:3)
-         if(verb .and. ip ==30)print*,'cloudb',cloud_boundary(ip,ind(1),1), cloud_boundary(ip,ind(2),2) ,cloud_boundary(ip,ind(3),3)
-         if(verb .and. ip ==30)print*,'vol', vol(ip, ind_cloud + 1), ind_cloud + 1
       end do
 #endif
          
@@ -121,7 +101,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       ! (cartesian key -> hilbert key -> cell index)
       do idim = 1, ndim
          do ip = 1, np
-            ix(ip,idim) = int(xpart_grid(ip,idim) + delta(idim), kind = 8)
+            ix(ip,idim) = modulo(int(xpart_grid(ip,idim) + delta(idim), kind = 8), boxlen8)
          end do
       end do
 
@@ -143,26 +123,20 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       if (level_boundary_case == 2)then
          do ip = 1, np        
             if(cell_level(ip) < cic_level)then
-               if(verb .and. ip == 30)print*,'repeating 30 due to',ind_cloud
                repeat_coarser(ip) = .true.
             end if
          end do
       end if
 
-      if(verb)print*,'repeat_coarser',repeat_coarser(30),ind_cloud
-      
    end do ! end loop over cloud/cell intersections
-   if(verb)print*,'before repeat',vol(30, 1:8)
    if (level_boundary_case == 2)then
       do ip = 1, np        
          if (repeat_coarser(ip)) then
-            if(verb)print*,'repeating', ip
             call cic_one(xpart(ip,1:ndim), cell_index(ip, 1:twotondim), vol(ip, 1:twotondim), cic_level - 1)
          end if
       end do
    end if
       
-   if(verb)print*,'on exit',vol(30, 1:8)
 end subroutine cic
 
  subroutine cic_one(xpart, cell_index, vol, cic_level)
@@ -190,7 +164,8 @@ end subroutine cic
    integer, dimension(1:1), save :: cell_level
    integer,  dimension(1:1),  save ::  dummy_state
    real(dp), save :: part_to_grid
-
+   integer(kind=8), save :: boxlen8
+   boxlen8 = int(boxlen, kind=8)
    ! Convert particle coordinates (0 to boxlen)
    ! into grid-coordinates (0 to 2.**grid_level)
    part_to_grid = 2.0**cic_level / dble(boxlen)
@@ -251,7 +226,7 @@ end subroutine cic
       ! Get cell indices where the cloud corners fall into
       ! (cartesian key -> hilbert key -> cell index)
       do idim = 1, ndim
-         ix(1,idim) = int(xpart_grid(idim) + delta(idim), kind = 8)
+         ix(1,idim) = modulo(int(xpart_grid(idim) + delta(idim), kind = 8), boxlen8)
       end do
 
       call hilbert3d(ix(1,1), ix(1,2), ix(1,3), &

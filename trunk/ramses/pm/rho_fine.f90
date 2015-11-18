@@ -2,7 +2,7 @@
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine rho_fine(ilevel,icount,new_rho)
+subroutine rho_fine(ilevel)
   use amr_commons
   use pm_commons
   use hydro_commons
@@ -11,11 +11,11 @@ subroutine rho_fine(ilevel,icount,new_rho)
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  integer::ilevel,icount
-  logical::new_rho
+  integer :: ilevel
   !------------------------------------------------------------------
   ! ADD NEW DESCRIPTION HERE!
   !------------------------------------------------------------------
+  integer :: particle_level
   integer::iskip,icpu,ind,i,info,nx_loc,ibound,idim,icell, ncell, ilev
   real(dp)::dx,d_scale,scale,dx_loc,scalar
   real(dp)::d0,m_refine_loc,dx_min,vol_min,mstar,msnk,nISM,nCOM
@@ -38,87 +38,91 @@ subroutine rho_fine(ilevel,icount,new_rho)
   !-------------------------------------------------------
   ! Initialize rho to analytical and baryon density field
   !-------------------------------------------------------
-  if(ilevel==levelmin.or.icount>1)then
-     do i=nlevelmax,ilevel,-1
-        ! Compute mass multipole
-        if(hydro)call multipole_fine(i)
-        ! Perform CIC using pseudo-particle
-        call cic_from_multipole(i)
-        ! Update boundaries
-        call make_virtual_reverse_dp(rho(1),i)
-        call make_virtual_fine_dp   (rho(1),i)
-     end do
-  end if
-
-  !--------------------------
-  ! Initialize fields to zero
-  !--------------------------
-  do ind=1,twotondim
-     iskip=ncoarse+(ind-1)*ngridmax
-     do i=1,active(ilevel)%ngrid
-        phi(active(ilevel)%igrid(i)+iskip)=0.0D0
-     end do
+  do i=nlevelmax,ilevel,-1
+     ! Compute mass multipole
+     if(hydro)call multipole_fine(i)
+     ! Perform CIC using pseudo-particle
+     call cic_from_multipole(i)
+     ! Update boundaries
+     call make_virtual_reverse_dp(rho(1),i)
+     call make_virtual_fine_dp   (rho(1),i)
   end do
 
-  !-------------------------------------------------------------------------
-  ! Initialize "number density" field to baryon number density in array phi.
-  !-------------------------------------------------------------------------
-  if(m_refine(ilevel)>-1.0d0)then
-     d_scale=max(mass_sph/dx_loc**ndim,smallr)
+  do ilev = ilevel, nlevelmax
+     !--------------------------
+     ! Initialize fields to zero
+     !--------------------------
      do ind=1,twotondim
         iskip=ncoarse+(ind-1)*ngridmax
-        if(hydro)then
-           if(ivar_refine>0)then
-              do i=1,active(ilevel)%ngrid
-                 scalar=uold(active(ilevel)%igrid(i)+iskip,ivar_refine) &
-                      & /uold(active(ilevel)%igrid(i)+iskip,1)
-                 if(scalar>var_cut_refine)then
-                    phi(active(ilevel)%igrid(i)+iskip)= &
-                         & rho(active(ilevel)%igrid(i)+iskip)/d_scale
-                 endif
-              end do
-           else
-              do i=1,active(ilevel)%ngrid
-                 phi(active(ilevel)%igrid(i)+iskip)= &
-                      & rho(active(ilevel)%igrid(i)+iskip)/d_scale
-              end do
-           endif
-        endif
+        do i=1,active(ilev)%ngrid
+           phi(active(ilev)%igrid(i)+iskip)=0.0D0
+        end do
      end do
-  endif
 
-  !-------------------------------------------------------
-  ! Initialize rho and phi to zero in virtual boundaries
-  !-------------------------------------------------------
-  do icpu=1,ncpu
-     do ind=1,twotondim
-        iskip=ncoarse+(ind-1)*ngridmax
-        do i=1,reception(icpu,ilevel)%ngrid
-           rho(reception(icpu,ilevel)%igrid(i)+iskip)=0.0D0
-           phi(reception(icpu,ilevel)%igrid(i)+iskip)=0.0D0
+     !-------------------------------------------------------------------------
+     ! Initialize "number density" field to baryon number density in array phi.
+     !-------------------------------------------------------------------------
+     if(m_refine(ilev)>-1.0d0)then
+        d_scale=max(mass_sph/dx_loc**ndim,smallr)
+        do ind=1,twotondim
+           iskip=ncoarse+(ind-1)*ngridmax
+           if(hydro)then
+              if(ivar_refine>0)then
+                 do i=1,active(ilev)%ngrid
+                    scalar=uold(active(ilev)%igrid(i)+iskip,ivar_refine) &
+                         & /uold(active(ilev)%igrid(i)+iskip,1)
+                    if(scalar>var_cut_refine)then
+                       phi(active(ilev)%igrid(i)+iskip)= &
+                            & rho(active(ilev)%igrid(i)+iskip)/d_scale
+                    endif
+                 end do
+              else
+                 do i=1,active(ilev)%ngrid
+                    phi(active(ilev)%igrid(i)+iskip)= &
+                         & rho(active(ilev)%igrid(i)+iskip)/d_scale
+                 end do
+              endif
+           endif
+        end do
+     endif
+
+     !-------------------------------------------------------
+     ! Initialize rho and phi to zero in virtual boundaries
+     !-------------------------------------------------------
+     do icpu=1,ncpu
+        do ind=1,twotondim
+           iskip=ncoarse+(ind-1)*ngridmax
+           do i=1,reception(icpu,ilev)%ngrid
+              rho(reception(icpu,ilev)%igrid(i)+iskip)=0.0D0
+              phi(reception(icpu,ilev)%igrid(i)+iskip)=0.0D0
+           end do
         end do
      end do
   end do
-
   !---------------------------------------------------------
   ! Compute particle contribution to density field
   !---------------------------------------------------------
   ! Compute density due to current level particles
 
   if(pic)then
-     do ilev = ilevel, nlevelmax
-        call rho_direct_particles(ilev)        
-        call rho_histogram_particles(ilev)
+     do particle_level = ilevel, nlevelmax
+        call rho_direct_particles(particle_level, ilevel)        
+        call rho_histogram_particles(particle_level, ilevel)
      end do
   end if
-  
-  call make_virtual_reverse_dp(rho(1),ilevel)
-  call make_virtual_fine_dp   (rho(1),ilevel)
 
-  if(m_refine(ilevel)>-1.0d0)then
-     call make_virtual_reverse_dp(phi(1),ilevel)
-     call make_virtual_fine_dp   (phi(1),ilevel)
-  endif
+  do particle_level = ilevel, nlevelmax
+     call make_virtual_reverse_dp(rho(1),particle_level)
+     call make_virtual_fine_dp   (rho(1),particle_level)
+     if(m_refine(particle_level)>-1.0d0)then
+        call make_virtual_reverse_dp(phi(1),particle_level)
+        call make_virtual_fine_dp   (phi(1),particle_level)
+     endif
+  end do
+
+  if (ilevel==levelmin) then
+     call add_particle_multipole
+  end if
 
   !--------------------------------------------------------------
   ! Compute multipole contribution from all cpus and set rho_tot
@@ -137,37 +141,39 @@ subroutine rho_fine(ilevel,icount,new_rho)
      rho_tot=0d0
   endif
 
-  !----------------------------------------------------
-  ! Reset rho and phi in physical boundaries
-  !----------------------------------------------------
-  do ibound=1,nboundary
-     do ind=1,twotondim
-        iskip=ncoarse+(ind-1)*ngridmax
-        do i=1,boundary(ibound,ilevel)%ngrid
-           phi(boundary(ibound,ilevel)%igrid(i)+iskip)=0.0
-           rho(boundary(ibound,ilevel)%igrid(i)+iskip)=0.0
+  do particle_level = ilevel, nlevelmax
+     !----------------------------------------------------
+     ! Reset rho and phi in physical boundaries
+     !----------------------------------------------------
+     do ibound=1,nboundary
+        do ind=1,twotondim
+           iskip=ncoarse+(ind-1)*ngridmax
+           do i=1,boundary(ibound,particle_level)%ngrid
+              phi(boundary(ibound,particle_level)%igrid(i)+iskip)=0.0
+              rho(boundary(ibound,particle_level)%igrid(i)+iskip)=0.0
+           end do
         end do
      end do
-  end do
 
-  !-----------------------------------------
-  ! Compute quasi Lagrangian refinement map
-  !-----------------------------------------
-  ! TODO: FIX QUASI LAGRANGIAN REFINEMENT STRATEGY FOR HISTOGRAM MODE!
-  if(m_refine(ilevel)>-1.0d0)then
-     do ind=1,twotondim
-        iskip=ncoarse+(ind-1)*ngridmax
-        do i=1,active(ilevel)%ngrid
-           if(phi(active(ilevel)%igrid(i)+iskip)>=m_refine(ilevel))then
-              cpu_map2(active(ilevel)%igrid(i)+iskip)=1
-           else
-              cpu_map2(active(ilevel)%igrid(i)+iskip)=0
-           end if
+     !-----------------------------------------
+     ! Compute quasi Lagrangian refinement map
+     !-----------------------------------------
+     ! TODO: FIX QUASI LAGRANGIAN REFINEMENT STRATEGY FOR HISTOGRAM MODE!
+     if(m_refine(particle_level)>-1.0d0)then
+        do ind=1,twotondim
+           iskip=ncoarse+(ind-1)*ngridmax
+           do i=1,active(particle_level)%ngrid
+              if(phi(active(particle_level)%igrid(i)+iskip)>=m_refine(particle_level))then
+                 cpu_map2(active(particle_level)%igrid(i)+iskip)=1
+              else
+                 cpu_map2(active(particle_level)%igrid(i)+iskip)=0
+              end if
+           end do
         end do
-     end do
-     ! Update boundaries
-     call make_virtual_fine_int(cpu_map2(1),ilevel)
-  end if
+        ! Update boundaries
+        call make_virtual_fine_int(cpu_map2(1),particle_level)
+     end if
+  end do
 
 111 format('   Entering rho_fine for level ',I2)
   
@@ -795,7 +801,7 @@ end subroutine cic_cell
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine rho_direct_particles(part_level)
+subroutine rho_direct_particles(part_level, min_grid_level)
   use amr_parameters, only: dp, levelmin, nvector, ndim
   use amr_commons,    only: ncpu, myid
   use pm_parameters,  only: n_dump_parts_direct
@@ -803,10 +809,10 @@ subroutine rho_direct_particles(part_level)
                             xp, mp, idp, nbins, part_hkey
   use particle_communication, only: build_communicator, part_data_to_domain_dp
   implicit none
-  integer, intent(in) :: part_level
+  integer, intent(in) :: part_level, min_grid_level
   
   ! This routine deposits all particles that sit at level part_level to 
-  ! the grid at level grid_level <= part_level.
+  ! the grid at level min_grid_level <= grid_level <= part_level.
   
   ! in:           - particle_level
   !               - offset, nparts for local particles 
@@ -834,8 +840,7 @@ subroutine rho_direct_particles(part_level)
   ! Count direct particles
   npart_direct = 0
   do ibin = 1, nbins
-     ! a bit of a hacky comparison between a float and an integer 
-     if (bin_count(ibin) < n_dump_parts_direct + 0.5d0) then
+     if (bin_count(ibin) < 1.d0 * n_dump_parts_direct) then
         npart_direct = npart_direct + bin_count(ibin)
      end if
   end do
@@ -851,7 +856,7 @@ subroutine rho_direct_particles(part_level)
   do ipart = offset + 1, offset + nparts
      if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
      ! a bit of a hacky comparison between a float and an integer 
-     if (bin_count(ibin) < n_dump_parts_direct + 0.5d0) then
+     if (bin_count(ibin) < 1.d0 * n_dump_parts_direct) then
         ip = ip + 1
         part_hkey_direct(ip, 0:2) = part_hkey(ipart, 0:2)
         xp_direct(ip, 1:ndim)     = xp(ipart, 1:ndim)
@@ -861,9 +866,9 @@ subroutine rho_direct_particles(part_level)
 
   
   call build_communicator(communicator, recv_tot, npart_direct, local_data, local_data_oft, &
-                          part_hkey_direct(:, 2), &
-                          part_hkey_direct(:, 1), &
-                          part_hkey_direct(:, 0), &
+                          part_hkey_direct(1:npart_direct, 2), &
+                          part_hkey_direct(1:npart_direct, 1), &
+                          part_hkey_direct(1:npart_direct, 0), &
                           part_level)
 
   deallocate(part_hkey_direct)
@@ -882,14 +887,14 @@ subroutine rho_direct_particles(part_level)
      xpart(ip, 1:ndim) = xp_direct(ipart, 1:ndim)
      mpart(ip)         = mp_direct(ipart)
      if (ip == nvector) then
-        do grid_level = part_level, levelmin, -1
+        do grid_level = part_level, min_grid_level, -1
            call cic_amr(xpart, mpart, ip, grid_level)
         end do
         ip = 0
      end if
   end do
   if (ip > 0) then
-     do grid_level = part_level, levelmin, -1
+     do grid_level = part_level, min_grid_level, -1
         call cic_amr(xpart, mpart, ip, grid_level)
      end do
   end if
@@ -902,14 +907,14 @@ subroutine rho_direct_particles(part_level)
      xpart(ip, 1:ndim) = xp_remote(ipart, 1:ndim)
      mpart(ip)         = mp_remote(ipart)
      if (ip == nvector) then
-        do grid_level = part_level, levelmin, -1
+        do grid_level = part_level, min_grid_level, -1
            call cic_amr(xpart, mpart, ip, grid_level)
         end do
         ip = 0
      end if
   end do
   if (ip > 0) then
-     do grid_level = part_level, levelmin, -1
+     do grid_level = part_level, min_grid_level, -1
         call cic_amr(xpart, mpart, ip, grid_level)
      end do
   end if
@@ -928,7 +933,6 @@ contains
     integer,  intent(in)                               :: np, grid_level
     real(dp), intent(in), dimension(1:nvector)         :: mpart
     real(dp), intent(in), dimension(1:nvector, 1:ndim) :: xpart
-
     ! This routine deposits nvector particles (local or remote) onto the grid (local)
     ! at level grid_level.
 
@@ -954,25 +958,15 @@ contains
     integer,         dimension(1:ndim),            save :: ind
     integer,  save :: idim, nx_loc, ind_cloud, ip
     real(dp), save :: dx, dx_loc, scale, vol_loc, pos_to_cart
-
+    integer(kind=8) :: boxlen8
+    boxlen8 = int(boxlen, kind=8)
+    
     nx_loc=(icoarse_max-icoarse_min+1)
     scale=boxlen/dble(nx_loc)
     dx = 0.5D0**grid_level
     dx_loc=dx*scale
     vol_loc=dx_loc**ndim
     
-    ! Compute center of mass and total mass in box
-    if (grid_level == levelmin) then
-       do ip = 1, np
-          multipole(1) = multipole(1) + mpart(ip)
-       end do
-       do idim = 1, ndim
-          do ip = 1, np
-             multipole(idim+1) = multipole(idim+1) + mpart(ip)*xpart(ip,idim)
-          end do
-       end do
-    end if
-
     ! Convert particle coordinates in code units
     ! into "cartesian" coordinates at grid_level
     pos_to_cart = 2.0**grid_level / dble(boxlen)
@@ -1050,9 +1044,12 @@ contains
 
        ! Get cell indices which are covered by cloud
        ! (cartesian key -> hilbert key -> cell index)
+       ! TODO: Add support for non-periodic boundaries
+       ! TODO: Check boundary behaviour - currently particles sitting in cell touching the boundary cause
+       ! deviations from the old code.
        do idim = 1, ndim
           do ip = 1, np
-             ix(ip,idim) = int(xpart_cart(ip,idim) + delta(idim), kind = 8)
+             ix(ip,idim) = modulo(int(xpart_cart(ip,idim) + delta(idim), kind = 8), boxlen8)
           end do
        end do
 
@@ -1086,20 +1083,6 @@ contains
           end if
        end do
 
-       ! Remove test particles for static runs
-       if(static)then
-          do ip = 1, np
-             ok(ip) = ok(ip) .and. (mpart(ip) > 0.0)
-          end do
-       endif
-
-       ! Remove massive dark matter particle
-       if (mass_cut_refine>0.0) then
-          do ip = 1, np
-             ok(ip) = ok(ip) .and. mpart(ip) < mass_cut_refine
-          end do
-       endif
-
     end do ! end loop over cloud/cell intersections
   end subroutine cic_amr
 end subroutine rho_direct_particles
@@ -1108,14 +1091,14 @@ end subroutine rho_direct_particles
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine rho_histogram_particles(part_level)
+subroutine rho_histogram_particles(part_level, min_grid_level)
   use amr_parameters, only: dp, levelmin, icoarse_min, icoarse_max, boxlen
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_ind_permutation, part_level_offset, bin_start_offset, &
        bin_count, mp
   use amr_commons,    only: myid
   implicit none
-  integer, intent(in) :: part_level
+  integer, intent(in) :: part_level, min_grid_level
   ! """
   ! This routine deposits the mass of all those part_level particles which have 
   ! not been deposited directly.
@@ -1155,7 +1138,7 @@ subroutine rho_histogram_particles(part_level)
   
   ! outer loop here over grid levels
   if (n_masked > 0)then
-     do grid_level = part_level, levelmin, -1
+     do grid_level = part_level, min_grid_level, -1
         call rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
      end do
   end if
@@ -1340,7 +1323,7 @@ contains
     vol_loc = (0.5**cell_level * dble(boxlen) )**3    
 
 
-    ! TO DO: ICLUDE PARTICLE NUMBER DENSITY
+    ! TODO: INCLUDE PARTICLE NUMBER DENSITY
 
 
       call build_communicator(communicator, recv_tot, nbins, local_bins, local_bins_oft, &
@@ -1348,6 +1331,7 @@ contains
 
       allocate(bin_keys_remote(1:recv_tot, 0:2))
       allocate(bin_mass_remote(1:recv_tot))
+      allocate(bin_count_remote(1:recv_tot))
 
       bin_mass_remote = 0.d0
       bin_keys_remote = 0
@@ -1398,3 +1382,26 @@ contains
 
     
 end subroutine rho_histogram_particles
+
+subroutine add_particle_multipole
+  use amr_parameters, only: ndim
+  use pm_commons, only: xp, mp, npart
+  use poisson_commons, only: multipole
+  implicit none
+  
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Simple routine to compute the multipole contribution from particles
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  integer :: ipart, idim
+  
+  do ipart = 1, npart
+     multipole(1) = multipole(1) + mp(ipart)
+  end do
+  do idim = 1, ndim
+     do ipart = 1, npart
+        multipole(idim + 1) = multipole(idim+1) + mp(ipart) * xp(ipart, idim)
+     end do
+  end do
+       
+end subroutine add_particle_multipole

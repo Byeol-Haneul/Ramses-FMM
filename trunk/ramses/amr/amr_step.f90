@@ -35,7 +35,7 @@ recursive subroutine amr_step(ilevel,icount)
               !--------------------------
               call build_comm(i)
 
-              !--------------------------
+               !--------------------------
               ! Update boundaries
               !--------------------------
               call make_virtual_fine_int(cpu_map(1),i)
@@ -85,8 +85,7 @@ recursive subroutine amr_step(ilevel,icount)
   end if
 
   call cmp_particle_boundary_key
-  
-  
+    
   !------------------------
   ! Output results to files
   !------------------------
@@ -98,7 +97,6 @@ recursive subroutine amr_step(ilevel,icount)
         call dump_all
      endif
   endif
-
   !----------------------------
   ! Output frame to movie dump (without synced levels)
   !----------------------------
@@ -111,18 +109,24 @@ recursive subroutine amr_step(ilevel,icount)
   end if
 
   ! particles must be re-sorted before density is computed
-  use_histograms = .true.
-  do ilev=levelmin, nlevelmax
-     call sort_particles(ilev, use_histograms)
-  end do
-  
+  if(pic .and. (ilevel == levelmin .or. icount > 1))then
+     use_histograms = .true.
+     do ilev=ilevel, nlevelmax
+        call sort_particles(ilev, use_histograms)
+     end do
+  end if
+
   !--------------------
   ! Poisson source term
   !--------------------
   if(poisson)then
      !save old potential for time-extrapolation at level boundaries
      call save_phi_old(ilevel)
-     call rho_fine(ilevel,icount)     
+
+     ! Rho is now updated for ALL levels >= ilevel at one call
+     if(ilevel==levelmin.or.icount>1)then  
+        call rho_fine(ilevel)
+     end if
   endif
 
   !---------------
@@ -145,6 +149,7 @@ recursive subroutine amr_step(ilevel,icount)
      else
         call multigrid_fine(levelmin,icount)
      end if
+
      !when there is no old potential...
      if (nstep==0)call save_phi_old(ilevel)
 
