@@ -563,28 +563,28 @@ subroutine compute_particle_histogram(offset, np)
      allocate(bin_start_offset(nbins+1))
      allocate(bin_mass(nbins))
   end if
-  bin_mass=0; bin_count=0
+  bin_mass = 0; bin_count = 0.d0
 
   ! Label every bin by a key and sum up the particles per bin, store 
   ! the offset of the first particle in each bin in the particle array
 
   ! First particle in first bin
   ibin=1
-  bin_keys(ibin,0:2) = part_hkey(part_ind_permutation(offset+1),0:2)  
-  bin_count(ibin) = 1
+  bin_keys(ibin, 0:2) = part_hkey(part_ind_permutation(offset + 1), 0:2)  
+  bin_count(ibin) = 1.d0
   bin_start_offset(ibin) = offset
 
   ! All other particles/bins
-  current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
-  do ip=offset+2, offset+np
+  current_bin_key(0:2) = part_hkey(part_ind_permutation(offset + 1), 0:2)
+  do ip = offset + 2, offset + np
      ipart = part_ind_permutation(ip)
      if (gt_3keys(part_hkey(ipart,0:2), current_bin_key(0:2)))then
-        ibin=ibin+1
+        ibin = ibin + 1
         bin_start_offset(ibin) = ip - 1 
-        bin_keys(ibin,0:2) = part_hkey(ipart,0:2)
-        current_bin_key(0:2) = part_hkey(ipart,0:2)
+        bin_keys(ibin,0:2) = part_hkey(ipart, 0:2)
+        current_bin_key(0:2) = part_hkey(ipart, 0:2)
      end if
-     bin_count(ibin)=bin_count(ibin)+1
+     bin_count(ibin) = bin_count(ibin) + 1.d0
   end do
   bin_start_offset(nbins+1) = offset + np
 

@@ -840,7 +840,7 @@ subroutine rho_direct_particles(part_level, min_grid_level)
   ! Count direct particles
   npart_direct = 0
   do ibin = 1, nbins
-     if (bin_count(ibin) < 1.d0 * n_dump_parts_direct) then
+     if (bin_count(ibin) < n_dump_parts_direct + 0.5) then
         npart_direct = npart_direct + bin_count(ibin)
      end if
   end do
@@ -856,7 +856,7 @@ subroutine rho_direct_particles(part_level, min_grid_level)
   do ipart = offset + 1, offset + nparts
      if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
      ! a bit of a hacky comparison between a float and an integer 
-     if (bin_count(ibin) < 1.d0 * n_dump_parts_direct) then
+     if (bin_count(ibin) < n_dump_parts_direct + 0.5) then
         ip = ip + 1
         part_hkey_direct(ip, 0:2) = part_hkey(ipart, 0:2)
         xp_direct(ip, 1:ndim)     = xp(ipart, 1:ndim)
@@ -1124,7 +1124,7 @@ subroutine rho_histogram_particles(part_level, min_grid_level)
   ibin = 0
   do ipart = offset + 1, offset + nparts
      if (ipart > bin_start_offset(ibin+1)) ibin = ibin + 1
-     if (bin_count(ibin) > n_dump_parts_direct) then
+     if (bin_count(ibin) > n_dump_parts_direct + 0.5) then
         n_masked = n_masked + 1
         part_ind_permutation(offset + n_masked) = ipart
      end if
