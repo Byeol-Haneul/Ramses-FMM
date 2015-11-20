@@ -926,7 +926,7 @@ contains
   subroutine cic_amr(xpart, mpart, np, grid_level)
     use amr_parameters,  only: static, mass_cut_refine
     use amr_commons,     only: boxlen, icoarse_max, & 
-                               icoarse_min, nvector, ndim
+                               icoarse_min, nvector, ndim, nstep_coarse
     use poisson_commons, only: multipole, rho, phi
     use hilbert,         only: hilbert3d
     implicit none
@@ -947,7 +947,7 @@ contains
     ! side effect:  - updates rho field on level grid_level
 
     integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
-    integer(kind=8), dimension(1:nvector, 1:ndim), save :: id
+!    integer(kind=8), dimension(1:nvector, 1:ndim), save :: id
     integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix
     integer(kind=4), dimension(1:nvector),         save :: dummy_state
     integer(kind=4), dimension(1:nvector),         save :: parent_cell_level, parent_cell_index
@@ -958,9 +958,9 @@ contains
     integer,         dimension(1:ndim),            save :: ind
     integer,  save :: idim, nx_loc, ind_cloud, ip
     real(dp), save :: dx, dx_loc, scale, vol_loc, pos_to_cart
-    integer(kind=8) :: boxlen8
-    boxlen8 = int(boxlen, kind=8)
-    
+    integer(kind=8) :: grid_size
+
+    grid_size = 2**grid_level    
     nx_loc=(icoarse_max-icoarse_min+1)
     scale=boxlen/dble(nx_loc)
     dx = 0.5D0**grid_level
@@ -969,31 +969,25 @@ contains
     
     ! Convert particle coordinates in code units
     ! into "cartesian" coordinates at grid_level
-    pos_to_cart = 2.0**grid_level / dble(boxlen)
+    pos_to_cart = 2.0_dp**grid_level / dble(boxlen)
     xpart_cart = xpart * pos_to_cart
-
 
     ! compute distances of cloud boundary from nearest "integer coordinate"
     do idim=1,ndim       
 
-       ! upper/right/front boundary
+       ! upper/right/front boundary of the cloud
        do ip=1,np
           cloud_boundary(ip,1,idim) = xpart_cart(ip, idim) + 0.5D0
        end do
      
-       ! nearest integer coordinate
+       ! upper/rigt/front boundary rel to nearest integer (type conversion here...)
        do ip=1,np
-          id(ip,idim) = int(cloud_boundary(ip,1,idim), kind=8)
-       end do
-
-       ! upper/rigt/front boundary rel to nearest integer
-       do ip=1,np
-          cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - id(ip, idim)
+          cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - floor(cloud_boundary(ip,1,idim), kind=8)
        end do
        
        ! lower/left/back boundary rel to nearest integer
        do ip=1,np
-          cloud_boundary(ip,0,idim) = 1.0D0 - cloud_boundary(ip,1,idim)
+          cloud_boundary(ip,0,idim) = 1._dp - cloud_boundary(ip,1,idim)
        end do
     end do
     
@@ -1049,7 +1043,7 @@ contains
        ! deviations from the old code.
        do idim = 1, ndim
           do ip = 1, np
-             ix(ip,idim) = modulo(int(xpart_cart(ip,idim) + delta(idim), kind = 8), boxlen8)
+             ix(ip,idim) = modulo(floor(xpart_cart(ip,idim) + delta(idim), kind = 8), grid_size)
           end do
        end do
 
@@ -1197,6 +1191,12 @@ contains
           do ip = offset + 1, offset + n_masked
              ipart = part_ind_permutation(ip)
              xp(ipart,idim) = xp(ipart,idim) + delta(idim) * dx_loc
+             if (xp(ipart, idim) > boxlen) then
+                xp(ipart, idim) = xp(ipart, idim) - boxlen
+             end if
+             if (xp(ipart, idim) < 0.0_dp) then
+                xp(ipart, idim) = xp(ipart, idim) + boxlen
+             end if
           end do
        end do
 
@@ -1240,7 +1240,13 @@ contains
           do ip = offset + 1, offset + n_masked
              ipart = part_ind_permutation(ip)
              xp(ipart,idim) = xp(ipart,idim) - delta(idim) * dx_loc
-          end do          
+             if (xp(ipart, idim) > boxlen) then
+                xp(ipart, idim) = xp(ipart, idim) - boxlen
+             end if
+             if (xp(ipart, idim) < 0.0_dp) then
+                xp(ipart, idim) = xp(ipart, idim) + boxlen
+             end if
+          end do
        end do
 
        ! Dump bin_mass into rho and bin_count into phi
@@ -1303,7 +1309,7 @@ contains
     use amr_parameters,  only: nvector, dp
     use amr_commons,     only: ncpu, myid
     use pm_commons,      only: bin_keys, bin_mass, nbins
-    use poisson_commons, only: rho
+    use poisson_commons, only: rho, phi
     use particle_communication, only: build_communicator, part_data_to_domain_dp, part_data_to_domain_i8
     implicit none
     integer, intent(in) :: cell_level
@@ -1323,9 +1329,6 @@ contains
     vol_loc = (0.5**cell_level * dble(boxlen) )**3    
 
 
-    ! TODO: INCLUDE PARTICLE NUMBER DENSITY
-
-
       call build_communicator(communicator, recv_tot, nbins, local_bins, local_bins_oft, &
                           bin_keys(:, 2), bin_keys(:, 1), bin_keys(:, 0), cell_level)
 
@@ -1335,12 +1338,14 @@ contains
 
       bin_mass_remote = 0.d0
       bin_keys_remote = 0
+      bin_count_remote = 0.d0
 
       call part_data_to_domain_i8(communicator, bin_keys(:, 0), bin_keys_remote(:, 0))
       call part_data_to_domain_i8(communicator, bin_keys(:, 1), bin_keys_remote(:, 1))
       call part_data_to_domain_i8(communicator, bin_keys(:, 2), bin_keys_remote(:, 2))
-      call part_data_to_domain_dp(communicator, bin_mass, bin_mass_remote)      
-    
+      call part_data_to_domain_dp(communicator, bin_mass, bin_mass_remote)
+      call part_data_to_domain_dp(communicator, bin_count, bin_count_remote)
+      
       ! go through bins in sweeps and add mass to corresponding cell
       do ioft = local_bins_oft, local_bins_oft + local_bins - 1, nvector
          nb = min(nvector, local_bins_oft + local_bins - ioft)
@@ -1354,6 +1359,8 @@ contains
             if (parent_cell_level(ib) == cell_level) then
                rho(parent_cell_index(ib)) = rho(parent_cell_index(ib)) + &
                     bin_mass(ioft + ib) / vol_loc             
+               phi(parent_cell_index(ib)) = phi(parent_cell_index(ib)) + &
+                    bin_count(ioft + ib)
             end if
          end do
       end do
@@ -1370,7 +1377,9 @@ contains
             ! Don't add mass to coarser levels             
             if (parent_cell_level(ib) == cell_level) then
                rho(parent_cell_index(ib)) = rho(parent_cell_index(ib)) + &
-                    bin_mass_remote(ioft + ib) / vol_loc             
+                    bin_mass_remote(ioft + ib) / vol_loc
+               phi(parent_cell_index(ib)) = phi(parent_cell_index(ib)) + & 
+                    bin_mass_remote(ioft + ib) 
             end if
          end do
       end do

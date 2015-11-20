@@ -11,7 +11,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
 
 
    integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
-   integer(kind=8), dimension(1:nvector, 1:ndim), save :: id, ix
+   integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix!, id
    integer(kind=4), dimension(1:nvector),         save :: dummy_state
    integer(kind=4), dimension(1:nvector),         save :: cell_level
    real(dp),   dimension(1:nvector, 0:1, 1:ndim), save :: cloud_boundary
@@ -22,8 +22,9 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    integer,  save :: idim, ind_cloud, ip
    real(dp), save :: part_to_grid
    logical :: verb
-   integer(kind=8), save :: boxlen8
-   boxlen8 = int(boxlen, kind=8)
+   integer(kind=8), save :: grid_size
+
+   grid_size = 2**cic_level
    
    if (level_boundary_case==2) repeat_coarser = .false.
    verb = .true.
@@ -41,14 +42,9 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
          cloud_boundary(ip,1,idim) = xpart_grid(ip, idim) + 0.5D0
       end do
 
-      ! nearest integer coordinate
-      do ip=1,np
-         id(ip,idim) = int(cloud_boundary(ip,1,idim), kind=8)
-      end do
-
       ! upper/rigt/front boundary rel to nearest integer
       do ip=1,np
-         cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - id(ip, idim)
+         cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - floor(cloud_boundary(ip,1,idim), kind = 8)
       end do
 
       ! lower/left/back boundary rel to nearest integer
@@ -101,7 +97,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       ! (cartesian key -> hilbert key -> cell index)
       do idim = 1, ndim
          do ip = 1, np
-            ix(ip,idim) = modulo(int(xpart_grid(ip,idim) + delta(idim), kind = 8), boxlen8)
+            ix(ip,idim) = modulo(floor(xpart_grid(ip,idim) + delta(idim), kind = 8), grid_size)
          end do
       end do
 
@@ -155,7 +151,7 @@ end subroutine cic
    ! original routine down. GET RID OF THIS AT SOME POINT
    
    integer(kind=8), dimension(1:1,0:2),    save :: cloud_hkey
-   integer(kind=8), dimension(1:ndim), save :: id
+!   integer(kind=8), dimension(1:ndim), save :: id
    integer(kind=8), dimension(1:1,1:ndim), save :: ix
    real(dp),   dimension(0:1, 1:ndim), save :: cloud_boundary
    real(dp), dimension(1:ndim), save :: xpart_grid, delta
@@ -164,8 +160,9 @@ end subroutine cic
    integer, dimension(1:1), save :: cell_level
    integer,  dimension(1:1),  save ::  dummy_state
    real(dp), save :: part_to_grid
-   integer(kind=8), save :: boxlen8
-   boxlen8 = int(boxlen, kind=8)
+   integer(kind=8), save :: grid_size
+
+   grid_size = 2**cic_level
    ! Convert particle coordinates (0 to boxlen)
    ! into grid-coordinates (0 to 2.**grid_level)
    part_to_grid = 2.0**cic_level / dble(boxlen)
@@ -179,10 +176,10 @@ end subroutine cic
       cloud_boundary(1,idim) = xpart_grid(idim) + 0.5D0
       
       ! nearest integer coordinate
-      id(idim) = int(cloud_boundary(1,idim), kind=8)
+!      id(idim) = int(cloud_boundary(1,idim), kind=8)
       
       ! upper/rigt/front boundary rel to nearest integer
-      cloud_boundary(1,idim) = cloud_boundary(1,idim) - id(idim)
+      cloud_boundary(1,idim) = cloud_boundary(1,idim) - floor(cloud_boundary(1,idim), kind=8)!id(idim)
       
       ! lower/left/back boundary rel to nearest integer
       cloud_boundary(0,idim) = 1.0D0 - cloud_boundary(1,idim)
@@ -226,7 +223,7 @@ end subroutine cic
       ! Get cell indices where the cloud corners fall into
       ! (cartesian key -> hilbert key -> cell index)
       do idim = 1, ndim
-         ix(1,idim) = modulo(int(xpart_grid(idim) + delta(idim), kind = 8), boxlen8)
+         ix(1,idim) = modulo(floor(xpart_grid(idim) + delta(idim), kind = 8), grid_size)
       end do
 
       call hilbert3d(ix(1,1), ix(1,2), ix(1,3), &
