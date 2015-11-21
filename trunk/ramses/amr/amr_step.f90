@@ -13,7 +13,7 @@ recursive subroutine amr_step(ilevel,icount)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  integer::i,idim,ivar,info, ilev
+  integer::i,idim,ivar,info, ilev, j
   logical::ok_defrag
   logical,save::first_step=.true., use_histograms
   real(dp)::told,tnew,dthilbert,dtrho
@@ -97,6 +97,7 @@ recursive subroutine amr_step(ilevel,icount)
         call dump_all
      endif
   endif
+  
   !----------------------------
   ! Output frame to movie dump (without synced levels)
   !----------------------------
@@ -133,8 +134,13 @@ recursive subroutine amr_step(ilevel,icount)
   ! Gravity update
   !---------------
   if(poisson)then
-   
-   ! Remove gravity source term with half time step and old force
+!     if (nstep_coarse == 10 .and. ilevel == nlevelmax)then
+!        do i=1,size(rho)
+!        print*,"phi", i,t, phi(i)
+!           if (rho(i) > 0.d0)print*,"rho", i,nstep_coarse, rho(i)
+!        end do
+!     end if
+        ! Remove gravity source term with half time step and old force
      if(hydro)then
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
@@ -160,7 +166,17 @@ recursive subroutine amr_step(ilevel,icount)
      if(pic)then
         call second_kick(ilevel)
      end if
-
+     if (ilevel==levelmin)then
+     do i=1,npart
+        do j=1,npart
+           if (idp(j)==i)then
+              print*,"xp:",nstep_coarse,i,xp(j,:)
+              print*,"vp:",nstep_coarse,i,vp(j,:)
+           end if
+        end do
+     end do
+     endif
+     
      if(hydro)then
 
         ! Add gravity source term with half time step and new force
@@ -180,7 +196,9 @@ recursive subroutine amr_step(ilevel,icount)
   call newdt_fine(ilevel)
   if(ilevel>levelmin)then
      dtnew(ilevel)=MIN(dtnew(ilevel-1)/real(nsubcycle(ilevel-1)),dtnew(ilevel))
+     print*,'dtlev',dtnew(ilevel),t
   end if
+
 
   ! Set unew equal to uold
   if(hydro)call set_unew(ilevel)
