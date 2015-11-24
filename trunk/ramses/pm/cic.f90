@@ -1,5 +1,5 @@
 subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
-   use amr_parameters,  only: static, mass_cut_refine, dp, twotondim
+   use amr_parameters,  only: static, dp, twotondim
    use amr_commons,     only: boxlen, nvector, ndim
    use hilbert,         only: hilbert3d
    implicit none
@@ -9,9 +9,8 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    real(dp), intent(in), dimension(1:np, 1:ndim)             :: xpart
    
 
-
    integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
-   integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix!, id
+   integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix
    integer(kind=4), dimension(1:nvector),         save :: dummy_state
    integer(kind=4), dimension(1:nvector),         save :: cell_level
    real(dp),   dimension(1:nvector, 0:1, 1:ndim), save :: cloud_boundary
@@ -95,6 +94,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       
       ! Get cell indices where the cloud corners fall into
       ! (cartesian key -> hilbert key -> cell index)
+      ! TODO: WHAT IF PARTICLE SITS CLOSE TO PERIODIC BOX BOUNDARY WITH AMR  -> should be ok
       do idim = 1, ndim
          do ip = 1, np
             ix(ip,idim) = modulo(floor(xpart_grid(ip,idim) + delta(idim), kind = 8), grid_size)

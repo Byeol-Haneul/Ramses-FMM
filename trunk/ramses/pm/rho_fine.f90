@@ -106,11 +106,8 @@ subroutine rho_fine(ilevel)
 
   if(pic)then
      do particle_level = ilevel, nlevelmax
-        print*,myid,'rho_direct_in', particle_level
         call rho_direct_particles(particle_level, ilevel)        
-        print*,myid,'rho_histogram_in', particle_level
         call rho_histogram_particles(particle_level, ilevel)
-        print*,myid,'rho_hisogram_out', particle_level
      end do
   end if
 
@@ -126,7 +123,6 @@ subroutine rho_fine(ilevel)
   if (ilevel==levelmin) then
      call add_particle_multipole
   end if
-
   !--------------------------------------------------------------
   ! Compute multipole contribution from all cpus and set rho_tot
   !--------------------------------------------------------------
@@ -1119,10 +1115,8 @@ subroutine rho_histogram_particles(part_level, min_grid_level)
   offset = part_level_offset(part_level)
   nparts = part_level_offset(part_level+1) - part_level_offset(part_level)
 
-  print*,myid,'was here1'
-  
   call compute_particle_histogram(offset, nparts)
-  print*,myid,'was here2'  
+
   ! Count number of "masked" particles and compute permuation such
   ! that masked particles are accessed first inside the level.
   n_masked = 0
@@ -1137,11 +1131,11 @@ subroutine rho_histogram_particles(part_level, min_grid_level)
   
   ! outer loop here over grid levels
 !  if (n_masked > 0)then
-     do grid_level = part_level, min_grid_level, -1
+     do grid_level = min_grid_level, part_level
         call rho_particle_histogram_onelevel(offset, nparts, n_masked, grid_level)
      end do
 !  end if
-  print*,myid,'was here3'
+
   
 contains
   
@@ -1176,7 +1170,6 @@ contains
     real(dp), save :: dx, dx_loc, scale, vol_loc
     integer,  save :: nx_loc, idim, ind_cloud, ip_sweep
 
-    print*,myid,'was here2.1'
     nx_loc = (icoarse_max - icoarse_min+1)
     scale = boxlen / dble(nx_loc)
     dx = 0.5D0**grid_level
@@ -1205,14 +1198,14 @@ contains
              end if
           end do
        end do
-       print*,myid,'was here2.2',ind_cloud
+
        ! Recompute hilbert key for all parts, also the 
        ! "unmasked ones" - > if too slow, try do it only for the masked ones
        call hilbert_for_particle(offset, nparts, 0, grid_level)
-       print*,myid,'was here2.3',ind_cloud
+
        ! Sort hilbert keys
        call lsd_radix_sort_particles(offset, n_masked, grid_level, grid_level, .false.)
-       print*,myid,'was here2.4',ind_cloud
+
        ! Compute "reduced" histogram
        call compute_particle_histogram(offset, n_masked)
        ! Reset bin count as it is computed using cic later
@@ -1240,7 +1233,7 @@ contains
        if (ip_sweep > 0) then
           call cic_histogram(xpart, mpart, bin_nr, ip_sweep, grid_level, ind_cloud)
        end if
-       print*,myid,'was here2.5',ind_cloud              
+
        ! Reset particles to original positions
        do idim = 1, ndim
           do ip = offset + 1, offset + n_masked
@@ -1257,9 +1250,11 @@ contains
 
        ! Dump bin_mass into rho and bin_count into phi
        call dump_histograms(grid_level)
-       print*,myid,'was here2.6',ind_cloud       
-    end do ! end loop over 8 cic-particles
 
+    end do ! end loop over 8 cic-particles
+    ! fix hilber keys for particles!
+    call hilbert_for_particle(offset, nparts, 0, grid_level)
+    
   end subroutine rho_particle_histogram_onelevel
   
   subroutine cic_histogram(xpart, mpart, bin_nr, np, grid_level, ind_cloud)
@@ -1316,7 +1311,8 @@ contains
     use amr_commons,     only: ncpu, myid
     use pm_commons,      only: bin_keys, bin_mass, nbins
     use poisson_commons, only: rho, phi
-    use particle_communication, only: build_communicator, part_data_to_domain_dp, part_data_to_domain_i8
+    use particle_communication, only: build_communicator, part_data_to_domain_dp, &
+         part_data_to_domain_i8
     implicit none
     integer, intent(in) :: cell_level
 
@@ -1400,6 +1396,7 @@ end subroutine rho_histogram_particles
 
 subroutine add_particle_multipole
   use amr_parameters, only: ndim
+  use amr_commons, only: myid
   use pm_commons, only: xp, mp, npart
   use poisson_commons, only: multipole
   implicit none
@@ -1409,13 +1406,13 @@ subroutine add_particle_multipole
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   integer :: ipart, idim
-  
+
   do ipart = 1, npart
      multipole(1) = multipole(1) + mp(ipart)
   end do
   do idim = 1, ndim
      do ipart = 1, npart
-        multipole(idim + 1) = multipole(idim+1) + mp(ipart) * xp(ipart, idim)
+        multipole(idim + 1) = multipole(idim + 1) + mp(ipart) * xp(ipart, idim)
      end do
   end do
        

@@ -148,11 +148,11 @@ subroutine sort_particles(ilevel, use_histograms)
   call apply_particle_permutation(offset, np, ilevel)
   deallocate(refined)
 
-  if (ilevel == nlevelmax)then
-     do ilev=levelmin,nlevelmax
-        print*, 'nparts on (going out) ',myid, ilev, part_level_offset(ilev + 1) - part_level_offset(ilev)
-     end do
-  end if
+!  if (ilevel == nlevelmax)then
+!     do ilev=levelmin,nlevelmax
+!        print*, 'nparts on (going out) ',myid, ilev, part_level_offset(ilev + 1) - part_level_offset(ilev)
+!     end do
+!  end if
   
 end subroutine sort_particles
 !################################################################
@@ -687,9 +687,11 @@ subroutine check_sorted(offset, np)
 
   ok =.true.
   
-  current_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
+  !  current_key(0:2) = part_hkey(part_ind_permutation(offset + 1),0:2)
+    current_key(0:2) = part_hkey(offset + 1,0:2)
   do ip = offset + 2, offset + np
-     ipart = part_ind_permutation(ip)
+     !ipart = part_ind_permutation(ip)
+     ipart = ip
      if (.not. ge_3keys(part_hkey(ipart,0:2), current_key(0:2)))then
         ok=.false.
         print*, "Detected unsorted particles on process", myid
@@ -762,3 +764,8 @@ subroutine write_ascii_parts
 
   close(ilun)
 end subroutine write_ascii_parts
+! ################################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
