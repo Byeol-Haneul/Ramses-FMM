@@ -17,7 +17,9 @@ recursive subroutine amr_step(ilevel,icount)
   logical::ok_defrag
   logical,save::first_step=.true., use_histograms
   real(dp)::told,tnew,dthilbert,dtrho
-
+  real(dp), dimension(1:nvector, 1:3)::pos
+  integer, dimension(1:nvector)::cell_level, cell_index, cc
+  integer::k, nmax
   if(numbtot(1,ilevel)==0)return
 
   if(verbose)write(*,999)icount,ilevel
@@ -129,7 +131,7 @@ recursive subroutine amr_step(ilevel,icount)
         call rho_fine(ilevel)
      end if
   endif
-
+           
   !---------------
   ! Gravity update
   !---------------
@@ -145,6 +147,40 @@ recursive subroutine amr_step(ilevel,icount)
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
      
+     if (myid==1)print*,'here comes rho', ilevel
+     nmax = 2**ilevel
+     do i=1,nmax
+        do j=1,nmax
+           do k=1,nmax
+              pos(1,1)=(i-0.5)/nmax
+              pos(1,2)=(j-0.5)/nmax
+              pos(1,3)=(k-0.5)/nmax
+              call cmp_cpumap(pos,cc,1)
+              if (cc(1)==myid)then
+                 call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+                 print*,'rho', i,j,k, rho(cell_index(1)), ilevel, cell_level(1)
+                 write(*,'(A,3(X,I5),X,E16.8E2,2(X,I5))'),'rho', i,j,k, rho(cell_index(1)), ilevel, cell_level(1) 
+              end if
+           end do
+        end do
+     end do
+     if (myid==1)print*,'here comes phi - 1', ilevel
+     nmax = 2**(ilevel-1)
+     do i=1,nmax
+        do j=1,nmax
+           do k=1,nmax
+              pos(1,1)=(i-0.5)/nmax
+              pos(1,2)=(j-0.5)/nmax
+              pos(1,3)=(k-0.5)/nmax
+              call cmp_cpumap(pos,cc,1)
+              if (cc(1)==myid)then
+                 call get_cell_index(cell_index, cell_level, pos, ilevel-1, 1 )
+                 write(*,'(A,3(X,I5),X,E16.8E2,2(X,I5))'),'phi', i,j,k, phi(cell_index(1)), ilevel-1, cell_level(1) 
+              end if
+           end do
+        end do
+     end do
+
      ! Compute gravitational potential
      if(ilevel>levelmin)then
         if(ilevel .ge. cg_levelmin) then
@@ -155,6 +191,25 @@ recursive subroutine amr_step(ilevel,icount)
      else
         call multigrid_fine(levelmin,icount)
      end if
+
+     !probe field
+     if (myid==1)print*,'here comes phi', ilevel
+     nmax = 2**ilevel
+     do i=1,nmax
+        do j=1,nmax
+           do k=1,nmax
+              pos(1,1)=(i-0.5)/nmax
+              pos(1,2)=(j-0.5)/nmax
+              pos(1,3)=(k-0.5)/nmax
+              call cmp_cpumap(pos,cc,1)
+              if (cc(1)==myid)then
+                 call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+                 write(*,'(A,3(X,I5),X,E16.8E2,2(X,I5))'),'phi', i,j,k, phi(cell_index(1)), ilevel, cell_level(1)
+              end if
+           end do
+        end do
+     end do
+     
 
      !when there is no old potential...
      if (nstep==0)call save_phi_old(ilevel)
@@ -167,15 +222,34 @@ recursive subroutine amr_step(ilevel,icount)
         call second_kick(ilevel)
      end if
      if (ilevel==levelmin)then
-     do i=1,npart
+     do i=1,npartmax
         do j=1,npart
            if (idp(j)==i)then
-              print*,"xp:",nstep_coarse,i,xp(j,:)
-              print*,"vp:",nstep_coarse,i,vp(j,:)
+              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"xp:",nstep_coarse,i,xp(j,:)
+              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"vp:",nstep_coarse,i,vp(j,:)
            end if
         end do
+        call MPI_BARRIER(MPI_COMM_WORLD,info)
      end do
      endif
+
+     if (myid==1)print*,'here comes f', ilevel
+     nmax = 2**ilevel
+     do i=1,nmax
+        do j=1,nmax
+           do k=1,nmax
+              pos(1,1)=(i-0.5)/nmax
+              pos(1,2)=(j-0.5)/nmax
+              pos(1,3)=(k-0.5)/nmax
+              call cmp_cpumap(pos,cc,1)
+              if (cc(1)==myid)then
+                 call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+                 write(*,'(A,3(X,I5),X,3(E18.10E2),2(X,I5))'),'f', i,j,k, f(cell_index(1),1:3), ilevel, cell_level(1)
+              end if
+           end do
+        end do
+     end do
+     
      
      if(hydro)then
 
@@ -196,7 +270,6 @@ recursive subroutine amr_step(ilevel,icount)
   call newdt_fine(ilevel)
   if(ilevel>levelmin)then
      dtnew(ilevel)=MIN(dtnew(ilevel-1)/real(nsubcycle(ilevel-1)),dtnew(ilevel))
-     print*,'dtlev',dtnew(ilevel),t
   end if
 
 
@@ -231,6 +304,17 @@ recursive subroutine amr_step(ilevel,icount)
      call kick_drift(ilevel) ! Only remaining particles
   end if
 
+  if (ilevel==levelmin)then
+     do i=1,npartmax
+        do j=1,npart
+           if (idp(j)==i)then
+              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"xp2:",nstep_coarse,i,xp(j,:)
+              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"vp2:",nstep_coarse,i,vp(j,:)
+           end if
+        end do
+        call MPI_BARRIER(MPI_COMM_WORLD,info)
+     end do
+  endif
   !-----------
   ! Hydro step
   !-----------
