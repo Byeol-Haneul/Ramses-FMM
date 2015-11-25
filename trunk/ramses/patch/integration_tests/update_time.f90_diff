@@ -1,0 +1,13 @@
+*** update_time.f90	2015-11-25 15:17:55.041514726 +0100
+--- /home/ics/ableuler/mini-ramses/amr/update_time.f90	2015-11-25 14:25:18.676462853 +0100
+***************
+*** 100,107 ****
+             write(*,*)'Total elapsed time:',ttend-ttstart
+  #endif
+          endif
+-         ! Write an ascii file with all the particles positions/velocities
+-         call part_to_ascii
+          call clean_stop
+       end if
+  
+--- 100,105 ----
