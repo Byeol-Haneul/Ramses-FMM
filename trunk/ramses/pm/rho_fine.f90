@@ -1381,7 +1381,7 @@ contains
                rho(parent_cell_index(ib)) = rho(parent_cell_index(ib)) + &
                     bin_mass_remote(ioft + ib) / vol_loc
                phi(parent_cell_index(ib)) = phi(parent_cell_index(ib)) + & 
-                    bin_mass_remote(ioft + ib) 
+                    bin_count_remote(ioft + ib) 
             end if
          end do
       end do
