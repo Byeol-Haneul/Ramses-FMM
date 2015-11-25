@@ -123,15 +123,36 @@ recursive subroutine amr_step(ilevel,icount)
   ! Poisson source term
   !--------------------
   if(poisson)then
-     !save old potential for time-extrapolation at level boundaries
-     call save_phi_old(ilevel)
+!     if (nstep_coarse>0)then
+     ! if (myid==1)print*,'here comes phibef', ilevel, nstep_coarse, icount
+     ! nmax = 2**ilevel
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+     !             write(*,'(A,3(X,I5),X,E16.8E2,5(X,I5))'),'phibef', i,j,k, phi(cell_index(1)), ilevel, cell_level(1),nstep_coarse, icount, cell_index(1) 
+     !          end if
+     !       end do
+     !    end do
+     ! end do
+     ! endif
+
 
      ! Rho is now updated for ALL levels >= ilevel at one call
      if(ilevel==levelmin.or.icount>1)then  
+        do ilev=ilevel,nlevelmax
+           !save old potential for time-extrapolation at level boundaries
+           call save_phi_old(ilev)
+        end do
         call rho_fine(ilevel)
      end if
   endif
-           
+
   !---------------
   ! Gravity update
   !---------------
@@ -147,39 +168,54 @@ recursive subroutine amr_step(ilevel,icount)
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
      
-     if (myid==1)print*,'here comes rho', ilevel
-     nmax = 2**ilevel
-     do i=1,nmax
-        do j=1,nmax
-           do k=1,nmax
-              pos(1,1)=(i-0.5)/nmax
-              pos(1,2)=(j-0.5)/nmax
-              pos(1,3)=(k-0.5)/nmax
-              call cmp_cpumap(pos,cc,1)
-              if (cc(1)==myid)then
-                 call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
-                 print*,'rho', i,j,k, rho(cell_index(1)), ilevel, cell_level(1)
-                 write(*,'(A,3(X,I5),X,E16.8E2,2(X,I5))'),'rho', i,j,k, rho(cell_index(1)), ilevel, cell_level(1) 
-              end if
-           end do
-        end do
-     end do
-     if (myid==1)print*,'here comes phi - 1', ilevel
-     nmax = 2**(ilevel-1)
-     do i=1,nmax
-        do j=1,nmax
-           do k=1,nmax
-              pos(1,1)=(i-0.5)/nmax
-              pos(1,2)=(j-0.5)/nmax
-              pos(1,3)=(k-0.5)/nmax
-              call cmp_cpumap(pos,cc,1)
-              if (cc(1)==myid)then
-                 call get_cell_index(cell_index, cell_level, pos, ilevel-1, 1 )
-                 write(*,'(A,3(X,I5),X,E16.8E2,2(X,I5))'),'phi', i,j,k, phi(cell_index(1)), ilevel-1, cell_level(1) 
-              end if
-           end do
-        end do
-     end do
+     ! if (myid==1)print*,'here comes rho', ilevel, nstep_coarse, icount
+     ! nmax = 2**ilevel
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+     !             write(*,'(A,3(X,I5),X,E16.8E2,4(X,I5))'),'rho', i,j,k, rho(cell_index(1)), ilevel, cell_level(1),nstep_coarse, icount 
+     !          end if
+     !       end do
+     !    end do
+     ! end do
+     ! if (myid==1)print*,'here comes phi - 1', ilevel, nstep_coarse, icount
+     ! nmax = 2**(ilevel-1)
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel-1, 1 )
+     !             write(*,'(A,3(X,I5),X,E16.8E2,4(X,I5))'),'phi-1', i,j,k, phi(cell_index(1)), ilevel-1, cell_level(1),nstep_coarse, icount 
+     !          end if
+     !       end do
+     !    end do
+     ! end do
+     ! if (myid==1)print*,'here comes phiold', ilevel, nstep_coarse, icount
+     ! nmax = 2**(ilevel)
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+     !             write(*,'(A,3(X,I5),X,E16.8E2,4(X,I5))'),'phiold', i,j,k, phi_old(cell_index(1)), ilevel, cell_level(1),nstep_coarse, icount 
+     !          end if
+     !       end do
+     !    end do
+     ! end do
 
      ! Compute gravitational potential
      if(ilevel>levelmin)then
@@ -192,23 +228,39 @@ recursive subroutine amr_step(ilevel,icount)
         call multigrid_fine(levelmin,icount)
      end if
 
+     ! if (myid==1)print*,'here comes phiafter', ilevel, nstep_coarse, icount
+     ! nmax = 2**(ilevel)
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+     !             write(*,'(A,3(X,I5),X,E16.8E2,4(X,I5))'),'phiafter', i,j,k, phi_old(cell_index(1)), ilevel, cell_level(1),nstep_coarse, icount 
+     !          end if
+     !       end do
+     !    end do
+     ! end do
      !probe field
-     if (myid==1)print*,'here comes phi', ilevel
-     nmax = 2**ilevel
-     do i=1,nmax
-        do j=1,nmax
-           do k=1,nmax
-              pos(1,1)=(i-0.5)/nmax
-              pos(1,2)=(j-0.5)/nmax
-              pos(1,3)=(k-0.5)/nmax
-              call cmp_cpumap(pos,cc,1)
-              if (cc(1)==myid)then
-                 call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
-                 write(*,'(A,3(X,I5),X,E16.8E2,2(X,I5))'),'phi', i,j,k, phi(cell_index(1)), ilevel, cell_level(1)
-              end if
-           end do
-        end do
-     end do
+     ! if (myid==1)print*,'here comes phi', ilevel
+     ! nmax = 2**ilevel
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+     !             write(*,'(A,3(X,I5),X,E16.8E2,2(X,I5))'),'phi', i,j,k, phi(cell_index(1)), ilevel, cell_level(1)
+     !          end if
+     !       end do
+     !    end do
+     ! end do
      
 
      !when there is no old potential...
@@ -216,39 +268,53 @@ recursive subroutine amr_step(ilevel,icount)
 
      ! Compute gravitational acceleration
      call force_fine(ilevel,icount)
+     ! if (myid==1)print*,'here comes f', ilevel, nstep_coarse, icount
+     ! nmax = 2**(ilevel)
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+     !             write(*,'(A,4(X,I5),X,E16.8E2,4(X,I5))'),'f', i,j,k, cell_index(1),f(cell_index(1),1), ilevel, cell_level(1),nstep_coarse, icount 
+     !          end if
+     !       end do
+     !    end do
+     ! end do
 
      ! Synchronize remaining particles for gravity
      if(pic)then
         call second_kick(ilevel)
      end if
-     if (ilevel==levelmin)then
-     do i=1,npartmax
-        do j=1,npart
-           if (idp(j)==i)then
-              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"xp:",nstep_coarse,i,xp(j,:)
-              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"vp:",nstep_coarse,i,vp(j,:)
-           end if
-        end do
-        call MPI_BARRIER(MPI_COMM_WORLD,info)
-     end do
-     endif
+     ! do i=1,npartmax
+     !    do j=1,npart
+     !       if (idp(j)==i)then
+     !          write(*,'(A,X,I3,X,I8,3(X,F10.6),X,I3,X,I3)'),"xp:",nstep_coarse,i,xp(j,:), ilevel,icount
+     !          write(*,'(A,X,I3,X,I8,3(X,F10.6),X,I3,X,I3)'),"vp:",nstep_coarse,i,vp(j,:), ilevel,icount
+     !       end if
+     !    end do
+     !    call MPI_BARRIER(MPI_COMM_WORLD,info)
+     ! end do
 
-     if (myid==1)print*,'here comes f', ilevel
-     nmax = 2**ilevel
-     do i=1,nmax
-        do j=1,nmax
-           do k=1,nmax
-              pos(1,1)=(i-0.5)/nmax
-              pos(1,2)=(j-0.5)/nmax
-              pos(1,3)=(k-0.5)/nmax
-              call cmp_cpumap(pos,cc,1)
-              if (cc(1)==myid)then
-                 call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
-                 write(*,'(A,3(X,I5),X,3(E18.10E2),2(X,I5))'),'f', i,j,k, f(cell_index(1),1:3), ilevel, cell_level(1)
-              end if
-           end do
-        end do
-     end do
+     ! if (myid==1)print*,'here comes f', ilevel
+     ! nmax = 2**ilevel
+     ! do i=1,nmax
+     !    do j=1,nmax
+     !       do k=1,nmax
+     !          pos(1,1)=(i-0.5)/nmax*boxlen
+     !          pos(1,2)=(j-0.5)/nmax*boxlen
+     !          pos(1,3)=(k-0.5)/nmax*boxlen
+     !          call cmp_cpumap(pos,cc,1)
+     !          if (cc(1)==myid)then
+     !             call get_cell_index(cell_index, cell_level, pos, ilevel, 1 )
+     !             write(*,'(A,3(X,I5),X,3(E18.10E2),2(X,I5))'),'f', i,j,k, f(cell_index(1),1:3), ilevel, cell_level(1)
+     !          end if
+     !       end do
+     !    end do
+     ! end do
      
      
      if(hydro)then
@@ -304,17 +370,26 @@ recursive subroutine amr_step(ilevel,icount)
      call kick_drift(ilevel) ! Only remaining particles
   end if
 
-  if (ilevel==levelmin)then
-     do i=1,npartmax
-        do j=1,npart
-           if (idp(j)==i)then
-              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"xp2:",nstep_coarse,i,xp(j,:)
-              write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"vp2:",nstep_coarse,i,vp(j,:)
-           end if
-        end do
-        call MPI_BARRIER(MPI_COMM_WORLD,info)
-     end do
-  endif
+  ! if (ilevel==levelmin)then
+  !    do i=1,npartmax
+  !       do j=1,npart
+  !          if (idp(j)==i)then
+  !             write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"xp2:",nstep_coarse,i,xp(j,:)
+  !             write(*,'(A,X,I3,X,I8,3(X,F10.6))'),"vp2:",nstep_coarse,i,vp(j,:)
+  !          end if
+  !       end do
+  !       call MPI_BARRIER(MPI_COMM_WORLD,info)
+  !    end do
+  ! endif
+     !   do i=1,npartmax
+     !    do j=1,npart
+     !       if (idp(j)==i)then
+     !          write(*,'(A,X,I3,X,I8,3(X,F10.6),X,I3)'),"xp2:",nstep_coarse,i,xp(j,:), ilevel
+     !          write(*,'(A,X,I3,X,I8,3(X,F10.6),X,I3)'),"vp2:",nstep_coarse,i,vp(j,:), ilevel
+     !       end if
+     !    end do
+     !    call MPI_BARRIER(MPI_COMM_WORLD,info)
+     ! end do
   !-----------
   ! Hydro step
   !-----------

@@ -195,9 +195,6 @@ subroutine init_part
                  vp(jpart_loc,3)=vv3
                  mp(jpart_loc  )=mm1
                  idp(jpart_loc )=indglob
-                 if (idp(jpart_loc)==221)then
-                    print*, 'particle idp 221 on ', myid, xp(jpart_loc,1:3), jpart_loc
-                 end if
                  levelp(jpart_loc)=levelmin
               end if
            end do
