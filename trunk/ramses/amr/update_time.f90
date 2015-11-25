@@ -78,7 +78,9 @@ subroutine update_time(ilevel)
            if(pic)then
               write(*,888)nstep,t,dt,aexp,&
                    & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1)),&
-                   & real(100.0D0*dble(npartmax-numbp_free_tot)/dble(npartmax+1))
+                   ! TODO: replace npart with max over all cpus as soon as there is
+                   ! some particle load balancing scheme
+                   & real(100.0D0*dble(npart)/dble(npartmax+1))
            else
               write(*,888)nstep,t,dt,aexp,&
                    & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1))
@@ -114,7 +116,9 @@ subroutine update_time(ilevel)
         if(pic)then
            write(*,888)nstep,t,dt,aexp,&
                 & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1)),&
-                & real(100.0D0*dble(npartmax-numbp_free_tot)/dble(npartmax+1))
+                ! TODO: replace npart with max over all cpus as soon as there is
+                ! some particle load balancing scheme
+                & real(100.0D0*dble(npart)/dble(npartmax+1))
         else
            write(*,888)nstep,t,dt,aexp,&
                 & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1))
