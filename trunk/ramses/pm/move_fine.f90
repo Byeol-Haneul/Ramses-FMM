@@ -31,14 +31,14 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
   
   call compute_particle_acceleration(ilevel, tracer .and. hydro)
 
-     do i=1,npartmax
-        do j=1,npart
-           if (idp(j)==i)then
-              write(*,'(A,X,I8,3(X,F12.8),X,I2)'),"ap:",i,ap(j,:), ilevel
-           end if
-        end do
-        call MPI_BARRIER(MPI_COMM_WORLD,info)
-     end do
+     ! do i=1,npartmax
+     !    do j=1,npart
+     !       if (idp(j)==i)then
+     !          write(*,'(A,X,I8,3(X,F12.8),X,I2)'),"ap:",i,ap(j,:), ilevel
+     !       end if
+     !    end do
+     !    call MPI_BARRIER(MPI_COMM_WORLD,info)
+     ! end do
   
   ! Accelerate and move all parts 
   do idim = 1, ndim
@@ -65,17 +65,14 @@ subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
 
      ! Take care of boundary conditions
      ! TODO: non-periodic boundaries!!
-     if (period(idim))then
-        do ipart = offset + 1, offset + nparts
-           if (xp(ipart, idim) > boxlen)then
-              xp(ipart, idim) = xp(ipart, idim) - boxlen
-           end if
-           if(xp(ipart, idim) < 0.d0)then
-              xp(ipart, idim) = xp(ipart, idim) + boxlen
-           end if
-        end do
-     end if
-
+     do ipart = offset + 1, offset + nparts
+        if (xp(ipart, idim) > boxlen)then
+           xp(ipart, idim) = xp(ipart, idim) - boxlen
+        end if
+        if(xp(ipart, idim) < 0.d0)then
+           xp(ipart, idim) = xp(ipart, idim) + boxlen
+        end if
+     end do
   end do
 end subroutine kick_drift
 !#########################################################################
@@ -108,7 +105,7 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
   offset = part_level_offset(ilevel)
   nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
 
-  call compute_particle_acceleration(ilevel, .false.)
+  call compute_particle_acceleration(ilevel, tracer .and. hydro)
 
   ! Compute individual time steps
   do ioft = offset, offset + nparts - 1, nvector
@@ -124,6 +121,7 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
 
      ! Update particles level
      do ip = 1, np
+!        if (idp(ioft + ip)==1)print*,'dteff',dteff(ip)
         levelp(ioft + ip) = ilevel
      end do
      
@@ -148,7 +146,7 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   use amr_parameters,  only: dp, nvector, ndim, twotondim, poisson, verbose
   use hydro_commons,   only: uold
   use poisson_commons, only: f
-  use amr_commons,     only: dtnew, ncpu, myid
+  use amr_commons,     only: dtnew, ncpu, myid, t, son
   use particle_communication, only: build_communicator, part_data_to_domain_dp, domain_data_to_part_dp
   use hilbert,     only: hilbert_for_particle 
   implicit none
@@ -176,15 +174,15 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
 
   if(verbose)write(*,'("Entering compute_particle_acceleration, level " I2)')ilevel 
 
-!  do ipart = 1, npart
-!     if (idp(ipart)==5)then
-!        print*,'found 5', myid, ipart, xp(ipart,1), part_hkey(ipart,0), ilevel, offset, nparts
-!        print*,'found 5 coords', myid, ipart, xp(ipart,1:3)
-!     end if
-!  end do
+ ! do ipart = offset+1, offset+nparts
+ !    if (idp(ipart)==1)then
+ !       print*,'found 1', myid, ipart, xp(ipart,1), part_hkey(ipart,0), ilevel, offset, nparts
+ !       print*,'found 1 coords', myid, ipart, xp(ipart,1:3)
+ !    end if
+ ! end do
   !call compute_particle_histogram(offset, nparts)
 !  call hilbert_for_particle(offset, nparts, 0, ilevel) 
-  call check_sorted(offset,nparts)
+!  call check_sorted(offset,nparts)
   call build_communicator(communicator, npart_recv, &
        nparts, nparts_local, local_oft, &
        part_hkey(offset + 1 : offset + nparts, 2), &
@@ -233,7 +231,7 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   ! Deal with local particles
   do ioft = offset + local_oft, offset + local_oft + nparts_local - 1, nvector
      np = min(nvector, offset + local_oft + nparts_local - ioft)
-  !   if (ioft==416)print*,'next'
+     if (ioft==389)print*,'nextVol'
      call cic(xp(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
 
      ap(ioft + 1: ioft + np, 1: ndim) = 0.0D0
@@ -252,7 +250,7 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
            do ind = 1,twotondim
               do ip = 1,np
                   ap(ioft + ip, idim) =  ap(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-   !               if (xp(ioft + ip, 1) > 61.336 .and. xp(ioft + ip, 1)<  61.338  .and. idim==1)print*,'Vol_local',vol(ip,ind), ind, f(cell_index(ip,ind),1), ioft, ip
+!                  if (xp(ioft + ip, 1) > 27.04991.and. xp(ioft + ip, 1)<  27.04992 .and. idim==1)write(*,'(A,(X,E16.8E2),2(X,I5),X,F6.4,X,I6)'),'Vol_local', f(cell_index(ip,ind),1), cell_index(ip, ind), son(cell_index(ip, ind)), t, ip + ioft
                end do
            end do
         end do
