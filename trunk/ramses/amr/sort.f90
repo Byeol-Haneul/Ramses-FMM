@@ -706,6 +706,11 @@ contains
 
     deallocate(extra_storage_i4)
 
+    ! Reset applied part of permutation
+    do ipart = offset + 1, offset + np
+       part_ind_permutation(ipart) = ipart
+    end do
+    
   end subroutine apply_particle_permutation
 
   !########################################################################

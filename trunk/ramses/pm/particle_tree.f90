@@ -121,9 +121,6 @@ subroutine sort_particles(ilevel, use_histograms)
      ! communicate_refinements is possible but will let the code deviate more
      ! from the histogrammed case.
      call apply_particle_permutation(offset, npart - offset, ilevel) 
-     do ip = offset + 1, npart
-        part_ind_permutation(ip) = ip
-     end do
      call build_communicator(communicator, ndata_remote, &
                              np, ndata_local, local_oft, &
                              part_hkey(offset + 1: offset + np, 2), &
