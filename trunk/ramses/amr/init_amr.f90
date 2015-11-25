@@ -103,7 +103,21 @@ subroutine init_amr
 #endif
   end do
   bound_key(ndomain)=order_all_max
+  ! TODO: make this nicer
+  do idomain=1,ndomain - 1
+     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8., kind=8)
+  end do
+  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8., kind=8)
+  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8., kind=8)
   
+  
+  do ilev=nlevelmax-1, levelmin, - 1
+     do idomain=1,ndomain - 1
+        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.,kind=8)
+     end do
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.,kind=8)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.,kind=8)
+  end do
   ! Compute coarse cpu map
   do iz=kcoarse_min,kcoarse_max
   do iy=jcoarse_min,jcoarse_max
@@ -315,29 +329,22 @@ subroutine init_amr
      endif
      read(ilun)bound_key(0:ndomain)
 
-     ! ugly to do this here, but ok for the moment :-)
-
-
-  do idomain=1,ndomain - 1
-     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
-  end do
-  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
-  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
-  
-
-  do ilev=nlevelmax-1, levelmin, - 1
+     ! TODO: make this nicer
      do idomain=1,ndomain - 1
-        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
+        bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8., kind=8)
      end do
-     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
-     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
-  end do
-  
-
-
-
-
-
+     bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8., kind=8)
+     bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8., kind=8)
+     
+     
+     do ilev=nlevelmax-1, levelmin, - 1
+        do idomain=1,ndomain - 1
+           bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8., kind=8)
+        end do
+        bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8., kind=8)
+        bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8., kind=8)
+     end do
+ 
 
      ! Read coarse level
      read(ilun)son(1:ncoarse)

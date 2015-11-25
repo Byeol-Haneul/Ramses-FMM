@@ -217,18 +217,18 @@ subroutine load_balance
 
 
   do idomain=1,ndomain - 1
-     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8.)
+     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8., kind=8)
   end do
-  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8.)
-  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8., kind=8)
+  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8., kind=8)
   
 
   do ilev=nlevelmax-1, levelmin, - 1
      do idomain=1,ndomain - 1
-        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8.)
+        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8., kind=8)
      end do
-     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8.)
-     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8.)
+     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8., kind=8)
+     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8., kind=8)
   end do
   
 
@@ -1474,17 +1474,17 @@ subroutine cmp_particle_boundary_key
   integer :: idomain, ilev
 
   do idomain = 1, ndomain - 1
-     bound_key_level(idomain, nlevelmax) = nint(bound_key(idomain) / 8.)
+     bound_key_level(idomain, nlevelmax) = nint(bound_key(idomain) / 8., kind=8)
   end do
-  bound_key_level(0, nlevelmax) = floor(bound_key(0) / 8.)
-  bound_key_level(ndomain, nlevelmax) = ceiling(bound_key(ndomain) / 8.)
+  bound_key_level(0, nlevelmax) = floor(bound_key(0) / 8., kind=8)
+  bound_key_level(ndomain, nlevelmax) = ceiling(bound_key(ndomain) / 8., kind=8)
   
   do ilev = nlevelmax - 1, levelmin, - 1
      do idomain = 1, ndomain - 1
-        bound_key_level(idomain, ilev) = nint(bound_key_level(idomain, ilev + 1) / 8.)
+        bound_key_level(idomain, ilev) = nint(bound_key_level(idomain, ilev + 1) / 8., kind=8)
      end do
-     bound_key_level(0, ilev) = floor(bound_key_level(0, ilev + 1) / 8.)
-     bound_key_level(ndomain, ilev) = ceiling(bound_key_level(ndomain, ilev + 1) / 8.)
+     bound_key_level(0, ilev) = floor(bound_key_level(0, ilev + 1) / 8., kind=8)
+     bound_key_level(ndomain, ilev) = ceiling(bound_key_level(ndomain, ilev + 1) / 8., kind=8)
   end do
   
 end subroutine cmp_particle_boundary_key
