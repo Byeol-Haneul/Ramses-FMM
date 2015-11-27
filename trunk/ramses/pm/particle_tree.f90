@@ -403,7 +403,8 @@ subroutine get_cell_index_from_hilbertkey(cell_index,cell_levl,hilbert_key2,hilb
   integer,dimension(1:nvector)::cell_levl, cell_index
 
   call hilbert3d_reverse(x,y,z,hilbert_key2,hilbert_key1,hilbert_key0,ilevel,np)
-  call get_cell_index_from_cartesian(cell_index,cell_levl,x,y,z,ilevel,np,ilevel)
+!  call get_cell_index_from_cartesian(cell_index,cell_levl,x,y,z,ilevel,np,ilevel)
+  call get_cell_index_from_cartesian_hash(cell_index,cell_levl,x,y,z,ilevel,np,ilevel)
   
 end subroutine get_cell_index_from_hilbertkey
 
@@ -452,6 +453,58 @@ subroutine get_cell_index_from_cartesian(cell_index,cell_levl,xx,yy,zz,ilevel,n,
      cell_levl(i)=j
   end do
 end subroutine get_cell_index_from_cartesian
+
+
+subroutine get_cell_index_from_cartesian_hash(cell_index,cell_levl,xx,yy,zz,ilevel,n,bit_length)
+  use amr_commons
+  use hash, only: hash_get
+  implicit none
+
+  integer, intent(in)::n,ilevel,bit_length
+  integer,intent(inout), dimension(1:nvector)::cell_index,cell_levl
+  integer(kind=8),intent(in),dimension(1:nvector)::xx,yy,zz
+  !----------------------------------------------------------------------------
+  !----------------------------------------------------------------------------
+  integer :: i
+  integer(kind=8), dimension(0:ndim - 1) :: key
+  
+  if ((nx.eq.1).and.(ny.eq.1).and.(nz.eq.1)) then
+  else if ((nx.eq.3).and.(ny.eq.3).and.(nz.eq.3)) then
+  else
+     write(*,*)"nx=ny=nz != 1,3 is not supported."
+     stop
+  end if
+
+  if (bit_length>21)then
+     print*, 'bit length too big for now'
+  end if
+
+  cell_levl(1:n) = ilevel
+
+  ! Probe for cells starting from ilevel, if cell not present, try coarser
+  do i = 1, n
+     key(0) = xx(i)
+     key(1) = yy(i)
+     key(2) = zz(i)
+     cell_index(i) = hash_get(cell_dict, key, ilevel)     
+
+     do while (cell_index(i) == 0 .and. cell_levl(i) > 1)
+        cell_levl(i) = cell_levl(i) - 1
+        key(0) = ISHFT(key(0), -1)
+        key(1) = ISHFT(key(1), -1)
+        key(2) = ISHFT(key(2), -1)
+        cell_index(i) = hash_get(cell_dict, key, cell_levl(i))
+     end do
+  end do
+
+  ! Do check if all went well
+  do i = 1, n
+     if (cell_index(i) == 0) then
+        write(*,*)"Problem in get_cell_index_from_cartesian"
+        stop
+     end if
+  end do
+end subroutine get_cell_index_from_cartesian_hash
 
 !#########################################################################
 !#########################################################################

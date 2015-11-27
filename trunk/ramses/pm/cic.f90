@@ -1,13 +1,26 @@
 subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    use amr_parameters,  only: static, dp, twotondim
    use amr_commons,     only: boxlen, nvector, ndim
-   use hilbert,         only: hilbert3d
    implicit none
+
    integer,  intent(in)                                      :: np, cic_level, level_boundary_case
    integer(kind=4), intent(inout), dimension(1:nvector, 1:8) :: cell_index
    real(dp),        intent(inout), dimension(1:nvector, 1:8) :: vol
    real(dp), intent(in), dimension(1:np, 1:ndim)             :: xpart
-   
+
+   ! Subroutine to do the Cloud-in-Cell interpolation for nvector particle positions at level cic_level.
+
+   ! Input variables
+   ! - xpart: particle coordinates
+   ! - cic_level: grid level at which interpolation takes place)
+   ! - np: number of particles
+   ! - level_boundary_case: 1 (default) if CIC is performed only at cic_level or 2 if
+   !   interpolation should be repeated at level cic_level - 1 whenever parts of the
+   !   CIC cloud fall outside the boundaries of cic_level
+                            
+   ! Output variables:
+   ! - cell_index: indices of the cells touched by the CIC clouds
+   ! - vol: Fractional volume of of a particle that falls in a given cell
 
    integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
    integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix
@@ -20,13 +33,11 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    real(dp),        dimension(1:ndim),            save :: delta
    integer,  save :: idim, ind_cloud, ip
    real(dp), save :: part_to_grid
-   logical :: verb
    integer(kind=8), save :: grid_size
 
    grid_size = 2**cic_level
    
    if (level_boundary_case==2) repeat_coarser = .false.
-   verb = .true.
 
    ! Convert particle coordinates (0 to boxlen)
    ! into grid-coordinates (0 to 2.**grid_level)
@@ -97,17 +108,30 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       ! TODO: WHAT IF PARTICLE SITS CLOSE TO PERIODIC BOX BOUNDARY WITH AMR  -> should be ok
       do idim = 1, ndim
          do ip = 1, np
-            ix(ip,idim) = modulo(floor(xpart_grid(ip,idim) + delta(idim), kind = 8), grid_size)
+            ix(ip,idim) = floor(xpart_grid(ip,idim) + delta(idim), kind = 8)
          end do
       end do
+      do idim = 1, ndim
+         do ip = 1, np
+            if (ix(ip, idim) >= grid_size)then
+               ix(ip, idim) = ix(ip, idim) - grid_size
+            else if (ix(ip, idim) < 0) then
+               ix(ip, idim) = ix(ip, idim) + grid_size
+            end if
+         end do
+      end do
+      
+      
+!      call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
+!           cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
+!           dummy_state(1:np), 0, cic_level, np)
 
-      call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
-           cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
-           dummy_state(1:np), 0, cic_level, np)
+!      call get_cell_index_from_hilbertkey(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
+!           cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, cic_level)
 
-      call get_cell_index_from_hilbertkey(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
-           cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, cic_level)
-
+      call get_cell_index_from_cartesian_hash(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
+           ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), cic_level, np, cic_level)  
+      
       ! Exclude cloud fraction which lies in coarser level
       if (level_boundary_case == 1)then
          do ip = 1, np        
@@ -226,13 +250,16 @@ end subroutine cic
          ix(1,idim) = modulo(floor(xpart_grid(idim) + delta(idim), kind = 8), grid_size)
       end do
 
-      call hilbert3d(ix(1,1), ix(1,2), ix(1,3), &
-           cloud_hkey(1:1,2), cloud_hkey(1:1,1), cloud_hkey(1:1,0), &
-           dummy_state, 0, cic_level, 1)
+!      call hilbert3d(ix(1,1), ix(1,2), ix(1,3), &
+!           cloud_hkey(1:1,2), cloud_hkey(1:1,1), cloud_hkey(1:1,0), &
+!           dummy_state, 0, cic_level, 1)
 
-      call get_cell_index_from_hilbertkey(cell_index(1,ind_cloud + 1), cell_level(1), &
-           cloud_hkey(1,2), cloud_hkey(1,1), cloud_hkey(1,0), 1, cic_level)
+!      call get_cell_index_from_hilbertkey(cell_index(1,ind_cloud + 1), cell_level(1), &
+!           cloud_hkey(1,2), cloud_hkey(1,1), cloud_hkey(1,0), 1, cic_level)
 
+      call get_cell_index_from_cartesian_hash(cell_index(1, ind_cloud + 1), cell_level(1), &
+           ix(1, 1), ix(1, 2), ix(1, 3), cic_level, 1, cic_level)  
+      
    end do ! end loop over cloud/cell intersections
 
 end subroutine cic_one

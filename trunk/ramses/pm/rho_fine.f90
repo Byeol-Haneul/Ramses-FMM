@@ -923,10 +923,9 @@ subroutine rho_direct_particles(part_level, min_grid_level)
 contains
 
   subroutine cic_amr(xpart, mpart, np, grid_level)
-    use amr_parameters,  only: static, mass_cut_refine
-    use amr_commons,     only: boxlen, icoarse_max, & 
-                               icoarse_min, nvector, ndim, nstep_coarse
-    use poisson_commons, only: multipole, rho, phi
+    use amr_parameters,  only: static, mass_cut_refine, nvector, ndim
+    use amr_commons,     only: boxlen, icoarse_max, icoarse_min
+    use poisson_commons, only: rho, phi
     use hilbert,         only: hilbert3d
     implicit none
     integer,  intent(in)                               :: np, grid_level
@@ -945,139 +944,202 @@ contains
     
     ! side effect:  - updates rho field on level grid_level
 
-    integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
-!    integer(kind=8), dimension(1:nvector, 1:ndim), save :: id
-    integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix
-    integer(kind=4), dimension(1:nvector),         save :: dummy_state
-    integer(kind=4), dimension(1:nvector),         save :: parent_cell_level, parent_cell_index
-    real(dp),   dimension(1:nvector, 0:1, 1:ndim), save :: cloud_boundary
-    real(dp),        dimension(1:nvector),         save :: vol, delta
-    real(dp),        dimension(1:nvector, 1:3),    save :: xpart_cart
-    logical,         dimension(1:nvector),         save :: ok
-    integer,         dimension(1:ndim),            save :: ind
-    integer,  save :: idim, nx_loc, ind_cloud, ip
-    real(dp), save :: dx, dx_loc, scale, vol_loc, pos_to_cart
-    integer(kind=8) :: grid_size
+    integer(kind=4), dimension(1:nvector, 1:8), save :: cell_index
+    real(dp),        dimension(1:nvector, 1:8), save :: vol
+    integer  :: ind_cloud, ip, nx_loc
+    real(dp) :: one_over_vol_loc, dx_loc
 
-    grid_size = 2**grid_level    
-    nx_loc=(icoarse_max-icoarse_min+1)
-    scale=boxlen/dble(nx_loc)
-    dx = 0.5D0**grid_level
-    dx_loc=dx*scale
-    vol_loc=dx_loc**ndim
+    nx_loc = (icoarse_max - icoarse_min + 1)
+    dx_loc = 0.5D0**grid_level * boxlen / dble(nx_loc)
+    one_over_vol_loc = 1.d0 / dx_loc**ndim    
     
-    ! Convert particle coordinates in code units
-    ! into "cartesian" coordinates at grid_level
-    pos_to_cart = 2.0_dp**grid_level / dble(boxlen)
-    xpart_cart = xpart * pos_to_cart
-
-    ! compute distances of cloud boundary from nearest "integer coordinate"
-    do idim=1,ndim       
-
-       ! upper/right/front boundary of the cloud
-       do ip=1,np
-          cloud_boundary(ip,1,idim) = xpart_cart(ip, idim) + 0.5D0
-       end do
-     
-       ! upper/rigt/front boundary rel to nearest integer (type conversion here...)
-       do ip=1,np
-          cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - floor(cloud_boundary(ip,1,idim), kind=8)
-       end do
-       
-       ! lower/left/back boundary rel to nearest integer
-       do ip=1,np
-          cloud_boundary(ip,0,idim) = 1._dp - cloud_boundary(ip,1,idim)
-       end do
-    end do
+         
+    call cic(xpart, cell_index, vol, np, grid_level, 1)
     
-#if NDIM<3
-    write(*,*)'add non-3D version of this routine'
-    stop
-#endif
-#if NDIM==1
     ! Loop cloud/cell intersections
-    do ind_cloud = 0, 1
-       ind(1) = ind_cloud 
+    do ind_cloud = 1, 8
        
-       ! Compute cloud volume
-       do ip=1,np
-          vol(ip) = cloud_boundary(ip,ind(1),1) * &
-               cloud_boundary(ip,ind(2),2) 
-       end do
-#endif
-#if NDIM==2
-    ! Loop cloud/cell intersections
-    do ind_cloud = 0, 3
-       ind(1) = ind_cloud/2
-       ind(2) = mod(ind_cloud,2)
-       
-       ! Compute cloud volume
-       do ip=1,np
-          vol(ip) = cloud_boundary(ip,ind(1),1) * &
-               cloud_boundary(ip,ind(2),2) 
-       end do
-#endif
-#if NDIM==3
-    ! Loop cloud/cell intersections
-    do ind_cloud = 0, 7
-       ind(1) = ind_cloud/4
-       ind(2) = mod(ind_cloud,4)/2
-       ind(3) = mod(mod(ind_cloud,4),2)
-       
-       ! Compute cloud volume
-       do ip=1,np
-          vol(ip) = cloud_boundary(ip,ind(1),1) * &
-               cloud_boundary(ip,ind(2),2) * &
-               cloud_boundary(ip,ind(3),3) 
-       end do
-#endif
-
-       ! Compute cloud corner offset from cloud center
-       delta(1:ndim) = ind(1:ndim) - 0.5D0       
-
-       ! Get cell indices which are covered by cloud
-       ! (cartesian key -> hilbert key -> cell index)
-       ! TODO: Add support for non-periodic boundaries
-       ! TODO: Check boundary behaviour - currently particles sitting in cell touching the boundary cause
-       ! deviations from the old code.
-       do idim = 1, ndim
-          do ip = 1, np
-             ix(ip,idim) = modulo(floor(xpart_cart(ip,idim) + delta(idim), kind = 8), grid_size)
-          end do
-       end do
-
-       call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
-            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
-            dummy_state, 0, grid_level, np)
-       
-       call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
-            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
-
-       ! Exclude cloud fraction which lies in coarser level
-       do ip = 1, np        
-          ok(ip) = (parent_cell_level(ip) == grid_level)
-       end do
-
        ! Add to number density which is stored in phi
        do ip=1,np
-          if(ok(ip))then
-             phi(parent_cell_index(ip)) = phi(parent_cell_index(ip)) + vol(ip)
-          end if
+             phi(cell_index(ip, ind_cloud)) = phi(cell_index(ip, ind_cloud)) + vol(ip, ind_cloud)
        end do
-
-       ! compute delta rho and add to rho
+       ! Add to mass density rho
        do ip = 1, np
-          vol(ip) = mpart(ip) * vol(ip) / vol_loc
-       end do
-
-       do ip = 1, np
-          if (ok(ip)) then
-             rho(parent_cell_index(ip)) = rho(parent_cell_index(ip)) + vol(ip)
-          end if
-       end do
-
-    end do ! end loop over cloud/cell intersections
+          rho(cell_index(ip, ind_cloud)) = rho(cell_index(ip, ind_cloud)) + &
+               mpart(ip) * vol(ip, ind_cloud) * one_over_vol_loc
+       end do       
+    end do
+    
   end subroutine cic_amr
+
+  !     subroutine cic_amr(xpart, mpart, np, grid_level)
+!     use amr_parameters,  only: static, mass_cut_refine
+!     use amr_commons,     only: boxlen, icoarse_max, & 
+!                                icoarse_min, nvector, ndim, nstep_coarse
+!     use poisson_commons, only: multipole, rho, phi
+!     use hilbert,         only: hilbert3d
+!     implicit none
+!     integer,  intent(in)                               :: np, grid_level
+!     real(dp), intent(in), dimension(1:nvector)         :: mpart
+!     real(dp), intent(in), dimension(1:nvector, 1:ndim) :: xpart
+!     ! This routine deposits nvector particles (local or remote) onto the grid (local)
+!     ! at level grid_level.
+
+!     ! in:           - particle masses
+!     !               - particle positions
+!     !               - number of particles
+!     !               - grid_level 
+    
+!     ! out:          - "corrupted" particle positions -> do not reuse xpart outside of 
+!     !                 this subroutine  
+    
+!     ! side effect:  - updates rho field on level grid_level
+
+!     integer(kind=8), dimension(1:nvector, 0:2),    save :: cloud_hkey
+! !    integer(kind=8), dimension(1:nvector, 1:ndim), save :: id
+!     integer(kind=8), dimension(1:nvector, 1:ndim), save :: ix
+!     integer(kind=4), dimension(1:nvector),         save :: dummy_state
+!     integer(kind=4), dimension(1:nvector),         save :: parent_cell_level, parent_cell_index
+!     real(dp),   dimension(1:nvector, 0:1, 1:ndim), save :: cloud_boundary
+!     real(dp),        dimension(1:nvector),         save :: vol, delta
+!     real(dp),        dimension(1:nvector, 1:3),    save :: xpart_cart
+!     logical,         dimension(1:nvector),         save :: ok
+!     integer,         dimension(1:ndim),            save :: ind
+!     integer,  save :: idim, nx_loc, ind_cloud, ip
+!     real(dp), save :: dx, dx_loc, scale, vol_loc, pos_to_cart
+!     integer(kind=8) :: grid_size
+
+!     grid_size = 2**grid_level    
+!     nx_loc=(icoarse_max-icoarse_min+1)
+!     scale=boxlen/dble(nx_loc)
+!     dx = 0.5D0**grid_level
+!     dx_loc=dx*scale
+!     vol_loc=dx_loc**ndim
+    
+!     ! Convert particle coordinates in code units
+!     ! into "cartesian" coordinates at grid_level
+!     pos_to_cart = 2.0_dp**grid_level / dble(boxlen)
+!     xpart_cart = xpart * pos_to_cart
+
+!     ! compute distances of cloud boundary from nearest "integer coordinate"
+!     do idim=1,ndim       
+
+!        ! upper/right/front boundary of the cloud
+!        do ip=1,np
+!           cloud_boundary(ip,1,idim) = xpart_cart(ip, idim) + 0.5D0
+!        end do
+     
+!        ! upper/rigt/front boundary rel to nearest integer (type conversion here...)
+!        do ip=1,np
+!           cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - floor(cloud_boundary(ip,1,idim), kind=8)
+!        end do
+       
+!        ! lower/left/back boundary rel to nearest integer
+!        do ip=1,np
+!           cloud_boundary(ip,0,idim) = 1._dp - cloud_boundary(ip,1,idim)
+!        end do
+!     end do
+    
+! #if NDIM<3
+!     write(*,*)'add non-3D version of this routine'
+!     stop
+! #endif
+! #if NDIM==1
+!     ! Loop cloud/cell intersections
+!     do ind_cloud = 0, 1
+!        ind(1) = ind_cloud 
+       
+!        ! Compute cloud volume
+!        do ip=1,np
+!           vol(ip) = cloud_boundary(ip,ind(1),1) * &
+!                cloud_boundary(ip,ind(2),2) 
+!        end do
+! #endif
+! #if NDIM==2
+!     ! Loop cloud/cell intersections
+!     do ind_cloud = 0, 3
+!        ind(1) = ind_cloud/2
+!        ind(2) = mod(ind_cloud,2)
+       
+!        ! Compute cloud volume
+!        do ip=1,np
+!           vol(ip) = cloud_boundary(ip,ind(1),1) * &
+!                cloud_boundary(ip,ind(2),2) 
+!        end do
+! #endif
+! #if NDIM==3
+!     ! Loop cloud/cell intersections
+!     do ind_cloud = 0, 7
+!        ind(1) = ind_cloud/4
+!        ind(2) = mod(ind_cloud,4)/2
+!        ind(3) = mod(mod(ind_cloud,4),2)
+       
+!        ! Compute cloud volume
+!        do ip=1,np
+!           vol(ip) = cloud_boundary(ip,ind(1),1) * &
+!                cloud_boundary(ip,ind(2),2) * &
+!                cloud_boundary(ip,ind(3),3) 
+!        end do
+! #endif
+
+!        ! Compute cloud corner offset from cloud center
+!        delta(1:ndim) = ind(1:ndim) - 0.5D0       
+
+!        ! Get cell indices which are covered by cloud
+!        ! (cartesian key -> hilbert key -> cell index)
+!        ! TODO: Add support for non-periodic boundaries
+!        ! TODO: Check boundary behaviour - currently particles sitting in cell touching the boundary cause
+!        ! deviations from the old code.
+!        do idim = 1, ndim
+!           do ip = 1, np
+!              ix(ip,idim) = floor(xpart_cart(ip,idim) + delta(idim), kind = 8)
+!           end do
+!        end do
+!        do idim = 1, ndim
+!           do ip = 1, np
+!              if (ix(ip, idim) >= grid_size)then
+!                 ix(ip, idim) = ix(ip, idim) - grid_size
+!              else if (ix(ip, idim) < 0) then
+!                 ix(ip, idim) = ix(ip, idim) + grid_size
+!              end if
+!           end do
+!        end do
+       
+! !       call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
+! !            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
+! !            dummy_state, 0, grid_level, np)
+       
+! !       call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
+! !            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
+
+!       call get_cell_index_from_cartesian_hash(parent_cell_index(1:np), parent_cell_level(1:np), &
+!            ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), grid_level, np, grid_level)  
+       
+!        ! Exclude cloud fraction which lies in coarser level
+!        do ip = 1, np        
+!           ok(ip) = (parent_cell_level(ip) == grid_level)
+!        end do
+
+!        ! Add to number density which is stored in phi
+!        do ip=1,np
+!           if(ok(ip))then
+!              phi(parent_cell_index(ip)) = phi(parent_cell_index(ip)) + vol(ip)
+!           end if
+!        end do
+
+!        ! compute delta rho and add to rho
+!        do ip = 1, np
+!           vol(ip) = mpart(ip) * vol(ip) / vol_loc
+!        end do
+
+!        do ip = 1, np
+!           if (ok(ip)) then
+!              rho(parent_cell_index(ip)) = rho(parent_cell_index(ip)) + vol(ip)
+!           end if
+!        end do
+
+!     end do ! end loop over cloud/cell intersections
+!   end subroutine cic_amr
 end subroutine rho_direct_particles
 
 !##############################################################################

@@ -194,7 +194,7 @@ subroutine make_grid_coarse(ind_cell,ibound,boundary_region)
   headf=next(headf)
   numbf=numbf-1
   used_mem=ngridmax-numbf
-
+  
   ! Compute grid center
   iz=(ind_cell-1)/nxny
   iy=(ind_cell-1-iz*nxny)/nx
@@ -203,6 +203,9 @@ subroutine make_grid_coarse(ind_cell,ibound,boundary_region)
   if(ndim>1)xg(ind_grid_son,2)=(dble(iy)+0.5D0)
   if(ndim>2)xg(ind_grid_son,3)=(dble(iz)+0.5D0)
 
+  ! Add grid cells to hash table
+  call add_grid_to_hash_table(ind_grid_son, 1) 
+  
   ! Connect to father cell
   son(ind_cell)=ind_grid_son
   father(ind_grid_son)=ind_cell
@@ -626,6 +629,11 @@ subroutine make_grid_fine(ind_grid,ind_cell,ind,ilevel,nn,ibound,boundary_region
      end do
   end do
 
+  ! Add grid cells to hash table
+  do i = 1, nn
+     call add_grid_to_hash_table(ind_grid_son(i), ilevel)
+  end do
+  
   ! Connect new grids to father cells
   do i=1,nn
      son(ind_cell(i))=ind_grid_son(i)
@@ -800,6 +808,8 @@ subroutine kill_grid(ind_cell,ilevel,nn,ibound,boundary_region)
   use pm_commons
   use hydro_commons
   use poisson_commons
+  use coordinates
+  use hash, only: hash_free
   implicit none
   integer::nn,ilevel,ibound
   logical::boundary_region
@@ -811,7 +821,8 @@ subroutine kill_grid(ind_cell,ilevel,nn,ibound,boundary_region)
   integer::igrid,iskip,icpu
   integer::i,j,idim,ind,ivar
   integer,dimension(1:nvector),save::ind_grid_son,ind_cell_son
-
+  integer(kind=8), dimension(1:ndim) :: ix
+  
   ! Gather son grids
   do i=1,nn
      ind_grid_son(i)=son(ind_cell(i))
@@ -870,6 +881,11 @@ subroutine kill_grid(ind_cell,ilevel,nn,ibound,boundary_region)
      end do
   end if
 
+  ! Remove grids from hash table
+  do i = 1, nn
+     call remove_grid_from_hash_table(ind_grid_son(i), ilevel)
+  end do
+  
   ! Reset grid variables
   do idim=1,ndim
      do i=1,nn
@@ -939,5 +955,59 @@ subroutine kill_grid(ind_cell,ilevel,nn,ibound,boundary_region)
      tailf=igrid
      numbf=numbf+1
   end do
-  
+ 
 end subroutine kill_grid
+
+
+subroutine add_grid_to_hash_table(igrid, ilevel)
+  use amr_parameters, only: ndim, ngridmax
+  use amr_commons,    only: xg, twotondim, ncoarse, cell_dict
+  use hash,           only: hash_set
+  use coordinates,    only: grid_to_integer
+  implicit none
+
+  integer, intent(in) :: igrid, ilevel
+  ! Add all cells belonging to igrid to hash table  
+  integer :: ind, idim, iskip
+  integer(kind=8), dimension(1:ndim) :: ix
+  
+  do ind = 1, twotondim
+     ix = grid_to_integer(xg(igrid, 1:ndim), ilevel - 1)
+     ix(1) = ISHFT(ix(1), 1) + mod(ind - 1, 2)
+#if NDIM>1
+     ix(2) = ISHFT(ix(2), 1) + mod(ind - 1, 4) / 2
+#endif
+#if NDIM>2     
+     ix(3) = ISHFT(ix(3), 1) + (ind - 1) / 4
+#endif
+!     write(*,'(3(I4,X),3(F8.6,X))'), ix, xg(igrid, 1:ndim), ilevel
+     iskip = ncoarse + ngridmax * (ind -1)
+     call hash_set(cell_dict, ix, ilevel, iskip + igrid)
+  end do
+
+end subroutine add_grid_to_hash_table
+
+subroutine remove_grid_from_hash_table(igrid, ilevel)
+  use amr_parameters, only: ndim, ngridmax
+  use amr_commons,    only: xg, twotondim, cell_dict
+  use hash,           only: hash_free
+  use coordinates,    only: grid_to_integer
+  implicit none
+  integer, intent(in) :: igrid, ilevel
+  ! Remove all cells belonging to igrid to hash table  
+  integer :: ind, idim, iskip
+  integer(kind=8), dimension(1:ndim) :: ix
+  
+  do ind = 1, twotondim
+     ix = grid_to_integer(xg(igrid, 1:ndim), ilevel - 1)
+     ix(1) = ISHFT(ix(1), 1) + mod(ind - 1, 2)
+#if NDIM>1
+     ix(2) = ISHFT(ix(2), 1) + mod(ind - 1, 4) / 2
+#endif
+#if NDIM>2 
+     ix(3) = ISHFT(ix(3), 1) + (ind - 1) / 4
+#endif
+     call hash_free(cell_dict, ix, ilevel)
+  end do
+end subroutine remove_grid_from_hash_table
+  

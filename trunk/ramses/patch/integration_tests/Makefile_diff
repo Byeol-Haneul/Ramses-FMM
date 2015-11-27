@@ -1,0 +1,36 @@
+*** Makefile	2015-11-27 11:46:52.314492424 +0100
+--- /home/ics/ableuler/mini-ramses/bin/Makefile	2015-11-27 10:48:28.452598221 +0100
+***************
+*** 8,14 ****
+  NVAR = 5
+  NENER = 0
+  SOLVER = hydro
+! PATCH = ../patch/integration_tests/
+  EXEC = ramses
+  #############################################################################
+  GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
+--- 8,14 ----
+  NVAR = 5
+  NENER = 0
+  SOLVER = hydro
+! PATCH = 
+  EXEC = ramses
+  #############################################################################
+  GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
+***************
+*** 98,104 ****
+           load_balance.o title.o units.o movie.o
+  # Particle-Mesh objects
+  PMOBJ = init_part.o output_part.o rho_fine.o synchro_fine.o move_fine.o newdt_fine.o particle_tree.o \
+!         add_list.o remove_list.o cic.o output_part_ascii.o
+  # Poisson solver objects
+  POISSONOBJ = init_poisson.o phi_fine_cg.o interpol_phi.o force_fine.o multigrid_coarse.o multigrid_fine_commons.o \
+               multigrid_fine_fine.o multigrid_fine_coarse.o gravana.o boundary_potential.o rho_ana.o output_poisson.o
+--- 98,104 ----
+           load_balance.o title.o units.o movie.o
+  # Particle-Mesh objects
+  PMOBJ = init_part.o output_part.o rho_fine.o synchro_fine.o move_fine.o newdt_fine.o particle_tree.o \
+!         add_list.o remove_list.o cic.o
+  # Poisson solver objects
+  POISSONOBJ = init_poisson.o phi_fine_cg.o interpol_phi.o force_fine.o multigrid_coarse.o multigrid_fine_commons.o \
+               multigrid_fine_fine.o multigrid_fine_coarse.o gravana.o boundary_potential.o rho_ana.o output_poisson.o

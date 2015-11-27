@@ -3,6 +3,7 @@ subroutine init_amr
   use hydro_commons, only:mass_tot_0,mass_sph
   use pm_commons  
   use poisson_commons
+  use hash, only: init_empty_hash
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'  
@@ -50,6 +51,9 @@ subroutine init_amr
   allocate(son  (1:ncell)) ! Son index
   flag1=0; flag2=0; son=0
 
+  ! Allocate hash table
+  call init_empty_hash(cell_dict, floor(ncell * 1.5))
+  
   ! Allocate MPI cell-based arrays
   allocate(cpu_map    (1:ncell)) ! Cpu map
   allocate(cpu_map2   (1:ncell)) ! New cpu map for load balance
@@ -380,7 +384,7 @@ subroutine init_amr
               do idim=1,ndim
                  read(ilun)xxg
                  do i=1,ncache
-                    xg(ind_grid(i),idim)=xxg(i)
+                    xg(ind_grid(i),idim)=xxg(i)                    
                  end do
               end do
               ! Read father index
@@ -461,7 +465,29 @@ subroutine init_amr
   end if
 
   call cmp_particle_boundary_key
-  
+
 end subroutine init_amr
 
+subroutine build_cell_dict
+  use amr_commons   , only: headl, numbl, next, ncpu
+  use amr_parameters, only: nlevelmax
+  implicit none
 
+  ! Walk the linked list of grids for each level
+  ! and add the cells for each grid to the dictionaries
+
+  integer :: igrid, dummy, icpu, ilevel  
+
+  do ilevel = 1, nlevelmax
+     ! Loop over cpus
+     do icpu = 1, ncpu
+        igrid = headl(icpu, ilevel)
+        ! Loop over grids
+        do dummy = 1, numbl(icpu, ilevel)
+           call add_grid_to_hash_table(igrid, ilevel)
+           ! Go to next grid
+           igrid = next(igrid)
+        end do
+     end do
+  end do
+end subroutine build_cell_dict

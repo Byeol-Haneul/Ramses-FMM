@@ -3,7 +3,10 @@
 export OMPI_FC=ifort
 
 cp  ../../amr/update_time.f90 ./
-patch -R update_time.f90 < update_time.f90_diff 
+cp  ../../bin/Makefile ./
+
+patch -R update_time.f90 < update_time.f90_diff
+patch -R Makefile < Makefile_diff 
 
 cd ../../bin/
 make clean > log.txt
@@ -32,3 +35,4 @@ else
 fi
 rm particles.txt
 rm update_time.f90
+rm Makefile

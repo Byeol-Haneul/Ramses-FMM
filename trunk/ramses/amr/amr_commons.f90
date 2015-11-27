@@ -1,6 +1,7 @@
 module amr_commons
   use amr_parameters
-
+  use hash
+  
   logical::output_done=.false.                  ! Output just performed
   logical::init=.false.                         ! Set up or run
   logical::balance=.false.                      ! Load balance or run
@@ -83,6 +84,9 @@ module amr_commons
   real(qdp),allocatable,dimension(:)::bound_key,bound_key2
   integer(kind=8),allocatable,dimension(:,:)::bound_key_level
   real(qdp)                         ::order_all_min,order_all_max
+
+  ! Cell hash table
+  type(hash_table) ::  cell_dict
 
   ! Communication structure
   type communicator
