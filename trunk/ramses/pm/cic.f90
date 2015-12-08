@@ -35,13 +35,13 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    real(dp), save :: part_to_grid
    integer(kind=8), save :: grid_size
 
-   grid_size = 2**cic_level
+   grid_size = 2_8**cic_level
    
    if (level_boundary_case==2) repeat_coarser = .false.
 
    ! Convert particle coordinates (0 to boxlen)
    ! into grid-coordinates (0 to 2.**grid_level)
-   part_to_grid = 2.0**cic_level / dble(boxlen)
+   part_to_grid = 2.0**cic_level / boxlen
    xpart_grid(1:np, 1:ndim) = xpart(1:np, 1:ndim) * part_to_grid
 
    ! Compute distances of cloud boundary from nearest "integer coordinate"
@@ -54,7 +54,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
 
       ! upper/rigt/front boundary rel to nearest integer
       do ip=1,np
-         cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - floor(cloud_boundary(ip,1,idim), kind = 8)
+         cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - int(cloud_boundary(ip,1,idim), kind = 8)
       end do
 
       ! lower/left/back boundary rel to nearest integer
@@ -108,14 +108,15 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       ! TODO: WHAT IF PARTICLE SITS CLOSE TO PERIODIC BOX BOUNDARY WITH AMR  -> should be ok
       do idim = 1, ndim
          do ip = 1, np
-            ix(ip,idim) = floor(xpart_grid(ip,idim) + delta(idim), kind = 8)
+            ix(ip,idim) = int(xpart_grid(ip,idim) + delta(idim), kind = 8)
          end do
       end do
       do idim = 1, ndim
          do ip = 1, np
             if (ix(ip, idim) >= grid_size)then
                ix(ip, idim) = ix(ip, idim) - grid_size
-            else if (ix(ip, idim) < 0) then
+            end if
+            if (ix(ip, idim) < 0) then
                ix(ip, idim) = ix(ip, idim) + grid_size
             end if
          end do
