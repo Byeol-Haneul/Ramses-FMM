@@ -1,7 +1,7 @@
-*** update_time.f90	2015-11-25 15:17:55.041514726 +0100
---- /home/ics/ableuler/mini-ramses/amr/update_time.f90	2015-11-25 14:25:18.676462853 +0100
+*** update_time.f90	2015-12-09 21:54:23.932501645 +0100
+--- ../../amr/update_time.f90	2015-11-25 16:29:51.979519095 +0100
 ***************
-*** 100,107 ****
+*** 102,109 ****
              write(*,*)'Total elapsed time:',ttend-ttstart
   #endif
           endif
@@ -10,4 +10,4 @@
           call clean_stop
        end if
   
---- 100,105 ----
+--- 102,107 ----
