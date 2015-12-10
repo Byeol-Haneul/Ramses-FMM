@@ -1,6 +1,7 @@
 subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    use amr_parameters,  only: static, dp, twotondim
    use amr_commons,     only: boxlen, nvector, ndim
+   use hilbert,         only: hilbert3d
    implicit none
 
    integer,  intent(in)                                      :: np, cic_level, level_boundary_case
@@ -128,7 +129,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
 !           dummy_state(1:np), 0, cic_level, np)
 
 !      call get_cell_index_from_hilbertkey(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
-!           cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, cic_level)
+!      cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, cic_level)
 
       call get_cell_index_from_cartesian_hash(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
            ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), cic_level, np, cic_level)  
@@ -251,12 +252,12 @@ end subroutine cic
          ix(1,idim) = modulo(floor(xpart_grid(idim) + delta(idim), kind = 8), grid_size)
       end do
 
-!      call hilbert3d(ix(1,1), ix(1,2), ix(1,3), &
-!           cloud_hkey(1:1,2), cloud_hkey(1:1,1), cloud_hkey(1:1,0), &
-!           dummy_state, 0, cic_level, 1)
+      ! call hilbert3d(ix(1,1), ix(1,2), ix(1,3), &
+      !      cloud_hkey(1:1,2), cloud_hkey(1:1,1), cloud_hkey(1:1,0), &
+      !      dummy_state, 0, cic_level, 1)
 
-!      call get_cell_index_from_hilbertkey(cell_index(1,ind_cloud + 1), cell_level(1), &
-!           cloud_hkey(1,2), cloud_hkey(1,1), cloud_hkey(1,0), 1, cic_level)
+      ! call get_cell_index_from_hilbertkey(cell_index(1,ind_cloud + 1), cell_level(1), &
+      !     cloud_hkey(1,2), cloud_hkey(1,1), cloud_hkey(1,0), 1, cic_level)
 
       call get_cell_index_from_cartesian_hash(cell_index(1, ind_cloud + 1), cell_level(1), &
            ix(1, 1), ix(1, 2), ix(1, 3), cic_level, 1, cic_level)  

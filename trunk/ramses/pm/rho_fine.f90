@@ -972,7 +972,7 @@ contains
     
   end subroutine cic_amr
 
-  !     subroutine cic_amr(xpart, mpart, np, grid_level)
+!   subroutine cic_amr(xpart, mpart, np, grid_level)
 !     use amr_parameters,  only: static, mass_cut_refine
 !     use amr_commons,     only: boxlen, icoarse_max, & 
 !                                icoarse_min, nvector, ndim, nstep_coarse
@@ -1105,15 +1105,15 @@ contains
 !           end do
 !        end do
        
-! !       call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
-! !            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
-! !            dummy_state, 0, grid_level, np)
-       
-! !       call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
-! !            cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
+!        call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
+!             cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
+!             dummy_state, 0, grid_level, np)
+      
+!        call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
+!             cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
 
-!       call get_cell_index_from_cartesian_hash(parent_cell_index(1:np), parent_cell_level(1:np), &
-!            ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), grid_level, np, grid_level)  
+! !      call get_cell_index_from_cartesian_hash(parent_cell_index(1:np), parent_cell_level(1:np), &
+! !           ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), grid_level, np, grid_level)  
        
 !        ! Exclude cloud fraction which lies in coarser level
 !        do ip = 1, np        

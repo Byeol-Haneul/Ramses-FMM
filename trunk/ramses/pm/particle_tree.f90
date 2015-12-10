@@ -466,7 +466,7 @@ subroutine get_cell_index_from_cartesian_hash(cell_index,cell_levl,xx,yy,zz,ilev
   !----------------------------------------------------------------------------
   !----------------------------------------------------------------------------
   integer :: i
-  integer(kind=8), dimension(0:ndim - 1) :: key
+  integer(kind=8), dimension(0:ndim) :: key
   
   if ((nx.eq.1).and.(ny.eq.1).and.(nz.eq.1)) then
   else if ((nx.eq.3).and.(ny.eq.3).and.(nz.eq.3)) then
@@ -483,17 +483,19 @@ subroutine get_cell_index_from_cartesian_hash(cell_index,cell_levl,xx,yy,zz,ilev
 
   ! Probe for cells starting from ilevel, if cell not present, try coarser
   do i = 1, n
-     key(0) = xx(i)
-     key(1) = yy(i)
-     key(2) = zz(i)
-     cell_index(i) = hash_get(cell_dict, key, ilevel)     
+     key(0) = ilevel
+     key(1) = xx(i)
+     key(2) = yy(i)
+     key(3) = zz(i)
+     cell_index(i) = hash_get(cell_dict, key)
 
      do while (cell_index(i) == 0 .and. cell_levl(i) > 1)
         cell_levl(i) = cell_levl(i) - 1
-        key(0) = ISHFT(key(0), -1)
+        key(0) = cell_levl(i)
         key(1) = ISHFT(key(1), -1)
         key(2) = ISHFT(key(2), -1)
-        cell_index(i) = hash_get(cell_dict, key, cell_levl(i))
+        key(3) = ISHFT(key(3), -1)
+        cell_index(i) = hash_get(cell_dict, key)
      end do
   end do
 
