@@ -107,7 +107,7 @@ subroutine rho_fine(ilevel)
   if(pic)then
      do particle_level = ilevel, nlevelmax
         call rho_direct_particles(particle_level, ilevel)        
-        call rho_histogram_particles(particle_level, ilevel)
+!        call rho_histogram_particles(particle_level, ilevel)
      end do
   end if
 
