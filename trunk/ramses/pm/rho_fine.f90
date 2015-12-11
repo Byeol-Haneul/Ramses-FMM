@@ -157,7 +157,6 @@ subroutine rho_fine(ilevel)
      !-----------------------------------------
      ! Compute quasi Lagrangian refinement map
      !-----------------------------------------
-     ! TODO: FIX QUASI LAGRANGIAN REFINEMENT STRATEGY FOR HISTOGRAM MODE!
      if(m_refine(particle_level)>-1.0d0)then
         do ind=1,twotondim
            iskip=ncoarse+(ind-1)*ngridmax
@@ -921,7 +920,9 @@ subroutine rho_direct_particles(part_level, min_grid_level)
   deallocate(xp_remote, mp_remote)
   
 contains
+  ! TODO: fix usage of cic in cic_amr
 
+  
   subroutine cic_amr(xpart, mpart, np, grid_level)
     use amr_parameters,  only: static, mass_cut_refine, nvector, ndim
     use amr_commons,     only: boxlen, icoarse_max, icoarse_min
@@ -931,6 +932,7 @@ contains
     integer,  intent(in)                               :: np, grid_level
     real(dp), intent(in), dimension(1:nvector)         :: mpart
     real(dp), intent(in), dimension(1:nvector, 1:ndim) :: xpart
+
     ! This routine deposits nvector particles (local or remote) onto the grid (local)
     ! at level grid_level.
 
@@ -949,16 +951,16 @@ contains
     integer  :: ind_cloud, ip, nx_loc
     real(dp) :: one_over_vol_loc, dx_loc
 
+    
     nx_loc = (icoarse_max - icoarse_min + 1)
     dx_loc = 0.5D0**grid_level * boxlen / dble(nx_loc)
     one_over_vol_loc = 1.d0 / dx_loc**ndim    
-    
-         
+
     call cic(xpart, cell_index, vol, np, grid_level, 1)
     
     ! Loop cloud/cell intersections
     do ind_cloud = 1, 8
-       
+
        ! Add to number density which is stored in phi
        do ip=1,np
              phi(cell_index(ip, ind_cloud)) = phi(cell_index(ip, ind_cloud)) + vol(ip, ind_cloud)
@@ -967,7 +969,7 @@ contains
        do ip = 1, np
           rho(cell_index(ip, ind_cloud)) = rho(cell_index(ip, ind_cloud)) + &
                mpart(ip) * vol(ip, ind_cloud) * one_over_vol_loc
-       end do       
+       end do
     end do
     
   end subroutine cic_amr
@@ -1016,6 +1018,7 @@ contains
 !     dx_loc=dx*scale
 !     vol_loc=dx_loc**ndim
     
+
 !     ! Convert particle coordinates in code units
 !     ! into "cartesian" coordinates at grid_level
 !     pos_to_cart = 2.0_dp**grid_level / dble(boxlen)
@@ -1028,7 +1031,7 @@ contains
 !        do ip=1,np
 !           cloud_boundary(ip,1,idim) = xpart_cart(ip, idim) + 0.5D0
 !        end do
-     
+
 !        ! upper/rigt/front boundary rel to nearest integer (type conversion here...)
 !        do ip=1,np
 !           cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - floor(cloud_boundary(ip,1,idim), kind=8)
@@ -1105,15 +1108,16 @@ contains
 !           end do
 !        end do
        
-!        call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
-!             cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
-!             dummy_state, 0, grid_level, np)
+!        ! call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
+!        !      cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
+!        !      dummy_state, 0, grid_level, np)
       
-!        call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
-!             cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
+!        ! call get_cell_index_from_hilbertkey(parent_cell_index(1:np), parent_cell_level(1:np), &
+!        !      cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, grid_level)
 
-! !      call get_cell_index_from_cartesian_hash(parent_cell_index(1:np), parent_cell_level(1:np), &
-! !           ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), grid_level, np, grid_level)  
+
+!        call get_cell_index_from_cartesian_hash(parent_cell_index(1:np), parent_cell_level(1:np), &
+!             ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), grid_level, np, grid_level)  
        
 !        ! Exclude cloud fraction which lies in coarser level
 !        do ip = 1, np        

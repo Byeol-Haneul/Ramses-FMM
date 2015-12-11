@@ -394,20 +394,31 @@ end subroutine reshuffle_particles
 ! end subroutine get_cell_index
 
 subroutine get_cell_index_from_hilbertkey(cell_index,cell_levl,hilbert_key2,hilbert_key1,hilbert_key0,np,ilevel)
-  use amr_commons, only: nlevelmax, nvector, myid
+  use amr_commons, only: nlevelmax, nvector, myid, ncoarse, ngridmax, xg
   use hilbert,     only: hilbert3d_reverse
   implicit none
   integer, intent(in)::np,ilevel
   integer(kind=8),dimension(1:nvector)::x,y,z
   integer(kind=8),dimension(1:nvector)::hilbert_key2,hilbert_key1,hilbert_key0
   integer,dimension(1:nvector)::cell_levl, cell_index
-
+  integer,dimension(1:nvector)::cell_levl2, cell_index2
+  integer :: i
   call hilbert3d_reverse(x,y,z,hilbert_key2,hilbert_key1,hilbert_key0,ilevel,np)
-!  call get_cell_index_from_cartesian(cell_index,cell_levl,x,y,z,ilevel,np,ilevel)
   call get_cell_index_from_cartesian_hash(cell_index,cell_levl,x,y,z,ilevel,np,ilevel)
-  
-end subroutine get_cell_index_from_hilbertkey
+  ! call get_cell_index_from_cartesian(cell_index2,cell_levl2,x,y,z,ilevel,np,ilevel)
 
+  ! do i = 1, np
+  !    if (cell_index(i) .ne. cell_index2(i) .or. cell_levl(i) .ne. cell_levl2(i) ) then
+  !       print*, 'problem in cind:', i
+  !       print*, x(i),y(i),z(i)
+  !       print*, cell_index(i), cell_index2(i)
+  !       print*,cell_levl(i), cell_levl2(i), ilevel
+  !       print*,'xg',xg(mod(cell_index2(i) - ncoarse,ngridmax),1:3) 
+  !       stop
+  !    end if
+  ! end do
+     
+end subroutine get_cell_index_from_hilbertkey
 
 subroutine get_cell_index_from_cartesian(cell_index,cell_levl,xx,yy,zz,ilevel,n,bit_length)
   use amr_commons

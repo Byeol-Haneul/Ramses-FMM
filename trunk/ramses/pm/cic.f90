@@ -7,7 +7,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
    integer,  intent(in)                                      :: np, cic_level, level_boundary_case
    integer(kind=4), intent(inout), dimension(1:nvector, 1:8) :: cell_index
    real(dp),        intent(inout), dimension(1:nvector, 1:8) :: vol
-   real(dp), intent(in), dimension(1:np, 1:ndim)             :: xpart
+   real(dp), intent(in), dimension(1:nvector, 1:ndim)             :: xpart
 
    ! Subroutine to do the Cloud-in-Cell interpolation for nvector particle positions at level cic_level.
 
@@ -55,7 +55,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
 
       ! upper/rigt/front boundary rel to nearest integer
       do ip=1,np
-         cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - int(cloud_boundary(ip,1,idim), kind = 8)
+         cloud_boundary(ip,1,idim) = cloud_boundary(ip,1,idim) - floor(cloud_boundary(ip,1,idim), kind = 8)
       end do
 
       ! lower/left/back boundary rel to nearest integer
@@ -109,7 +109,7 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       ! TODO: WHAT IF PARTICLE SITS CLOSE TO PERIODIC BOX BOUNDARY WITH AMR  -> should be ok
       do idim = 1, ndim
          do ip = 1, np
-            ix(ip,idim) = int(xpart_grid(ip,idim) + delta(idim), kind = 8)
+            ix(ip,idim) = floor(xpart_grid(ip,idim) + delta(idim), kind = 8)
          end do
       end do
       do idim = 1, ndim
@@ -124,15 +124,15 @@ subroutine cic(xpart, cell_index, vol, np, cic_level, level_boundary_case)
       end do
       
       
-!      call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
-!           cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
-!           dummy_state(1:np), 0, cic_level, np)
+      ! call hilbert3d(ix(1:np,1), ix(1:np,2), ix(1:np,3), &
+      !      cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), &
+      !      dummy_state(1:np), 0, cic_level, np)
 
-!      call get_cell_index_from_hilbertkey(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
-!      cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, cic_level)
+      ! call get_cell_index_from_hilbertkey(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
+      !      cloud_hkey(1:np, 2), cloud_hkey(1:np, 1), cloud_hkey(1:np, 0), np, cic_level)
 
       call get_cell_index_from_cartesian_hash(cell_index(1:np, ind_cloud + 1), cell_level(1:np), &
-           ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), cic_level, np, cic_level)  
+            ix(1:np, 1), ix(1:np, 2), ix(1:np, 3), cic_level, np, cic_level)  
       
       ! Exclude cloud fraction which lies in coarser level
       if (level_boundary_case == 1)then

@@ -121,7 +121,6 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
 
      ! Update particles level
      do ip = 1, np
-!        if (idp(ioft + ip)==1)print*,'dteff',dteff(ip)
         levelp(ioft + ip) = ilevel
      end do
      
@@ -165,7 +164,8 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   integer,  dimension(1:ncpu, 1:4)       :: communicator
   integer,  dimension(1:nvector, 1:twotondim), save :: cell_index
   real(dp), dimension(1:nvector, 1:twotondim), save :: vol
-
+  real(dp), dimension(1:nvector, 1:ndim), save :: xpart
+  
   integer :: offset, nparts, ioft, np, ip, ind, idim, ipart, local_oft, npart_recv, nparts_local
 
   ! TODO: better naming (np, nparts, npart)
@@ -198,7 +198,13 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
  ! Deal with remote particles
   do ioft = 0, npart_recv - 1, nvector
      np = min(nvector, npart_recv - ioft)
-     call cic(xp_remote(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
+
+     ! TODO:avoid this copy by changing cic such that 3 arrays (xcoords, ycoords, zcoords) are passed in instead of 1 2d array
+     do idim = 1, ndim
+        xpart(1:np, idim) = xp_remote(ioft + 1: ioft + np, idim)
+     end do
+
+     call cic(xpart, cell_index, vol, np, ilevel, 2)
 
      ap_remote(ioft + 1: ioft + np, 1: ndim) = 0.0D0
      if(read_gas_velocity)then
@@ -216,7 +222,6 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
            do ind = 1,twotondim
               do ip = 1,np
                  ap_remote(ioft + ip, idim) = ap_remote(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
- !                if (xp_remote(ioft + ip, 1) > 61.336 .and. xp_remote(ioft + ip, 1)<  61.338  .and. idim==1)print*,'Vol',vol(ip,ind), ind, f(cell_index(ip,ind),1)
               end do
            end do
         end do
@@ -231,9 +236,12 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   ! Deal with local particles
   do ioft = offset + local_oft, offset + local_oft + nparts_local - 1, nvector
      np = min(nvector, offset + local_oft + nparts_local - ioft)
-     if (ioft==389)print*,'nextVol'
-     call cic(xp(ioft + 1: ioft + np, 1: ndim), cell_index, vol, np, ilevel, 2)
-
+     do idim = 1, ndim
+        xpart(1:np, idim) = xp(ioft + 1: ioft + np, idim)
+     end do
+     call cic(xpart, cell_index, vol, np, ilevel, 2)
+     
+     ! TODO: get rid of big ap array!!!!!!!!
      ap(ioft + 1: ioft + np, 1: ndim) = 0.0D0
      if(read_gas_velocity)then
         do idim = 1, ndim
@@ -250,7 +258,6 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
            do ind = 1,twotondim
               do ip = 1,np
                   ap(ioft + ip, idim) =  ap(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-!                  if (xp(ioft + ip, 1) > 27.04991.and. xp(ioft + ip, 1)<  27.04992 .and. idim==1)write(*,'(A,(X,E16.8E2),2(X,I5),X,F6.4,X,I6)'),'Vol_local', f(cell_index(ip,ind),1), cell_index(ip, ind), son(cell_index(ip, ind)), t, ip + ioft
                end do
            end do
         end do
