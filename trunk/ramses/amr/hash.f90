@@ -205,19 +205,19 @@ contains
 
     bucket = hash_func(htable, key)
 
-    ! Walk linked list until key is found or to the end is reached
-    do while( htable%next_bucket(bucket) > 0)
-       if (same_keys(htable%key(0:ndim,bucket), key(0:ndim)))then
-          hash_get = htable%value(bucket)
-          return
-       end if       
-       bucket = htable%next_bucket(bucket)
-    end do
-
     if (same_keys(htable%key(0:ndim,bucket), key(0:ndim)))then
        hash_get = htable%value(bucket)
        return
     end if
+    
+    ! Walk linked list until key is found or to the end is reached
+    do while( htable%next_bucket(bucket) > 0)
+       bucket = htable%next_bucket(bucket)
+       if (same_keys(htable%key(0:ndim,bucket), key(0:ndim)))then
+          hash_get = htable%value(bucket)
+          return
+       end if
+    end do
 
     ! Nothing found...
     hash_get = 0
@@ -283,13 +283,19 @@ contains
   end subroutine hash_stats
   ! =============================================================================
 
+  ! function same_keys(key1, key2)
+  !   logical :: same_keys
+  !   integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2     
+  !   same_keys =  ( IOR(IEOR(key1(3), key2(3)), &
+  !        IOR(IEOR(key1(2), key2(2)), &
+  !        IOR(IEOR(key1(1), key2(1)), &
+  !        IEOR(key1(0), key2(0)))))) == 0_8
+  ! end function same_keys
   function same_keys(key1, key2)
     logical :: same_keys
+    integer, parameter :: thirtytwo=32
     integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2     
-    same_keys =  ( IOR(IEOR(key1(3), key2(3)), &
-         IOR(IEOR(key1(2), key2(2)), &
-         IOR(IEOR(key1(1), key2(1)), &
-         IEOR(key1(0), key2(0)))))) == 0_8
+    same_keys =  memcmp(key1, key2, thirtytwo) == 0_4
   end function same_keys
   ! end function same_keys
   !   function same_keys(key1, key2)
