@@ -9,12 +9,12 @@ patch -R update_time.f90 < update_time.f90_diff
 patch -R Makefile < Makefile_diff 
 
 cd ../../bin/
-make clean > log.txt
+make clean 
 rm ramses3d
-make -f ../patch/integration_tests/Makefile > log.txt
+make -f ../patch/integration_tests/Makefile
 cd ../patch/integration_tests/
 
-../../bin/ramses3d param_file.nml > log.txt
+../../bin/ramses3d param_file.nml > run_serial.log
 if diff particles.txt particles.txt_comp > /dev/null; then
     echo "=============================="
     echo "NON MPI TEST OK"
@@ -25,7 +25,7 @@ else
     echo "=============================="
 fi
 rm particles.txt
-mpirun -np 3 ../../bin/ramses3d param_file.nml > log.txt
+mpirun -np 3 ../../bin/ramses3d param_file.nml > run_parallel.log
 if diff particles.txt particles.txt_comp > /dev/null; then
     echo "=============================="
     echo "MPI TEST OK"

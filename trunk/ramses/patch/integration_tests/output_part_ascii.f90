@@ -1,5 +1,5 @@
 subroutine part_to_ascii
-  use amr_commons,   only: myid
+  use amr_commons,   only: myid, ncpu
   use pm_commons,    only: npart, xp, vp, idp
   use pm_parameters, only: npartmax
   implicit none
@@ -25,7 +25,7 @@ subroutine part_to_ascii
   call MPI_BARRIER(MPI_COMM_WORLD, info)
 #endif
 
-  do i = 1, npartmax
+  do i = 1, ncpu * npartmax
      do j = 1, npartmax
         if (idp(j) == i)then
            open(12, file="particles.txt", status="old", position="append", action="write", form="formatted")
