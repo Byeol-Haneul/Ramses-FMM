@@ -968,11 +968,12 @@ subroutine add_grid_to_hash_table(igrid, ilevel)
 
   integer, intent(in) :: igrid, ilevel
   ! Add all cells belonging to igrid to hash table  
-  integer :: ind, idim, iskip
-  integer(kind=8), dimension(1:ndim) :: ix
-  
+  integer :: ind, idim, icell
+  integer(kind=8), dimension(0:ndim) :: ix
+
   do ind = 1, twotondim
-     ix = grid_to_integer(xg(igrid, 1:ndim), ilevel - 1)
+     ix(0) = ilevel
+     ix(1:ndim) = grid_to_integer(xg(igrid, 1:ndim), ilevel - 1)
      ix(1) = ISHFT(ix(1), 1) + mod(ind - 1, 2)
 #if NDIM>1
      ix(2) = ISHFT(ix(2), 1) + mod(ind - 1, 4) / 2
@@ -980,26 +981,26 @@ subroutine add_grid_to_hash_table(igrid, ilevel)
 #if NDIM>2     
      ix(3) = ISHFT(ix(3), 1) + (ind - 1) / 4
 #endif
-!     write(*,'(3(I4,X),3(F8.6,X))'), ix, xg(igrid, 1:ndim), ilevel
-     iskip = ncoarse + ngridmax * (ind -1)
-     call hash_set(cell_dict, ix, ilevel, iskip + igrid)
+     icell = igrid + ncoarse + ngridmax * (ind - 1)
+     call hash_set(cell_dict, ix, icell)
   end do
 
 end subroutine add_grid_to_hash_table
 
 subroutine remove_grid_from_hash_table(igrid, ilevel)
   use amr_parameters, only: ndim, ngridmax
-  use amr_commons,    only: xg, twotondim, cell_dict
+  use amr_commons,    only: xg, twotondim, cell_dict, ncoarse
   use hash,           only: hash_free
   use coordinates,    only: grid_to_integer
   implicit none
   integer, intent(in) :: igrid, ilevel
   ! Remove all cells belonging to igrid to hash table  
-  integer :: ind, idim, iskip
-  integer(kind=8), dimension(1:ndim) :: ix
+  integer :: ind, idim
+  integer(kind=8), dimension(0:ndim) :: ix
   
   do ind = 1, twotondim
-     ix = grid_to_integer(xg(igrid, 1:ndim), ilevel - 1)
+     ix(0) = ilevel
+     ix(1:ndim) = grid_to_integer(xg(igrid, 1:ndim), ilevel - 1)
      ix(1) = ISHFT(ix(1), 1) + mod(ind - 1, 2)
 #if NDIM>1
      ix(2) = ISHFT(ix(2), 1) + mod(ind - 1, 4) / 2
@@ -1007,7 +1008,7 @@ subroutine remove_grid_from_hash_table(igrid, ilevel)
 #if NDIM>2 
      ix(3) = ISHFT(ix(3), 1) + (ind - 1) / 4
 #endif
-     call hash_free(cell_dict, ix, ilevel)
+     call hash_free(cell_dict, ix)
   end do
 end subroutine remove_grid_from_hash_table
   

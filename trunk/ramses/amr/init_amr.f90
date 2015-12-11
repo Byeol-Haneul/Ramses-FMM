@@ -472,12 +472,13 @@ subroutine build_cell_dict
   use amr_commons   , only: headl, numbl, next, ncpu
   use amr_parameters, only: nlevelmax
   implicit none
-
+  
   ! Walk the linked list of grids for each level
   ! and add the cells for each grid to the dictionaries
 
   integer :: igrid, dummy, icpu, ilevel  
 
+  ! TODO: TAKE CARE OF BOUNARY CELLS FOR NON-PERIODIC BOUNDARIES
   do ilevel = 1, nlevelmax
      ! Loop over cpus
      do icpu = 1, ncpu
