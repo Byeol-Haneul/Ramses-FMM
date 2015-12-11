@@ -78,7 +78,9 @@ subroutine sort_particles(ilevel, use_histograms)
   use amr_commons, only: dp, myid, levelmin, nlevelmax, ncpu
   use sort,        only: lsd_radix_sort_particles, apply_particle_permutation
   use hilbert,     only: hilbert_for_particle 
+#ifndef WITHOUTMPI
   use particle_communication, only: build_communicator
+#endif
   implicit none
 
   integer, intent(in) :: ilevel
@@ -104,15 +106,19 @@ subroutine sort_particles(ilevel, use_histograms)
 
   if (use_histograms)then
      call compute_particle_histogram(offset, npart - offset)          
+#ifndef WITHOUTMPI
      call build_communicator(communicator, ndata_remote, &
                              nbins, ndata_local, local_oft, &
                              bin_keys(1:nbins, 2), bin_keys(1:nbins, 1), bin_keys(1:nbins, 0), &
                              ilevel)
+#endif
      allocate(refined(1:nbins))     
+#ifndef WITHOUTMPI
      call communicate_refinements(communicator, ndata_remote, &
                                   nbins, ndata_local, local_oft, refined, &
                                   bin_keys(1:nbins, 2), bin_keys(1:nbins, 1), bin_keys(1:nbins, 0), &
                                   ilevel)
+#endif
      call reshuffle_particles(ilevel, np, nbins, refined, use_histograms)
   else
 
@@ -121,18 +127,22 @@ subroutine sort_particles(ilevel, use_histograms)
      ! communicate_refinements is possible but will let the code deviate more
      ! from the histogrammed case.
      call apply_particle_permutation(offset, npart - offset, ilevel) 
+#ifndef WITHOUTMPI
      call build_communicator(communicator, ndata_remote, &
                              np, ndata_local, local_oft, &
                              part_hkey(offset + 1: offset + np, 2), &
                              part_hkey(offset + 1: offset + np, 1), &
                              part_hkey(offset + 1: offset + np, 0), ilevel)
+#endif
      allocate(refined(1:np))
+#ifndef WITHOUTMPI
      call communicate_refinements(communicator, ndata_remote, &
                                   np, ndata_local, local_oft, refined, &
                                   part_hkey(offset + 1: offset + np, 2), &
                                   part_hkey(offset + 1: offset + np, 1), &
                                   part_hkey(offset + 1: offset + np, 0), ilevel)
 
+#endif
      call reshuffle_particles(ilevel, np, np, refined, use_histograms)
      print*, myid, 'refined total on level ', ilevel, sum(refined)
   end if
@@ -156,6 +166,7 @@ end subroutine sort_particles
 !################################################################
 !################################################################
 !################################################################
+#ifndef WITHOUTMPI
 subroutine communicate_refinements(communicator, ndata_remote, ndata, ndata_local, ndata_local_oft, &
                                    refined, keys2, keys1, keys0, ilevel)
 
@@ -163,9 +174,7 @@ subroutine communicate_refinements(communicator, ndata_remote, ndata, ndata_loca
   use particle_communication, only: part_data_to_domain_i8, part_data_to_domain_i4, &
                                     domain_data_to_part_i4
   implicit none
-#ifndef WITHOUTMPI
   include 'mpif.h'
-#endif
   integer, intent(in) ::  ilevel, ndata
   integer, intent(in) :: ndata_remote, ndata_local, ndata_local_oft
   integer(kind=8), dimension(1:ndata), intent(in) :: keys2, keys1, keys0
@@ -240,6 +249,7 @@ subroutine communicate_refinements(communicator, ndata_remote, ndata, ndata_loca
   deallocate(remote_keys)
   
 end subroutine communicate_refinements
+#endif
 !################################################################
 !################################################################
 !################################################################

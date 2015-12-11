@@ -805,7 +805,9 @@ subroutine rho_direct_particles(part_level, min_grid_level)
   use pm_parameters,  only: n_dump_parts_direct
   use pm_commons,     only: part_level_offset, bin_start_offset, bin_count, &
                             xp, mp, idp, nbins, part_hkey
+#ifndef WITHOUTMPI
   use particle_communication, only: build_communicator, part_data_to_domain_dp
+#endif
   implicit none
   integer, intent(in) :: part_level, min_grid_level
   
@@ -862,7 +864,7 @@ subroutine rho_direct_particles(part_level, min_grid_level)
      end if
   end do
 
-  
+#ifndef WITHOUTMPI
   call build_communicator(communicator, recv_tot, npart_direct, local_data, local_data_oft, &
                           part_hkey_direct(1:npart_direct, 2), &
                           part_hkey_direct(1:npart_direct, 1), &
@@ -877,7 +879,7 @@ subroutine rho_direct_particles(part_level, min_grid_level)
   call part_data_to_domain_dp(communicator, xp_direct(:, 2), xp_remote(:, 2))
   call part_data_to_domain_dp(communicator, xp_direct(:, 3), xp_remote(:, 3))
   call part_data_to_domain_dp(communicator, mp_direct, mp_remote)
-
+#endif
   ! Project local direct particles
   ip = 0
   do ipart = local_data_oft + 1, local_data_oft + local_data 
@@ -897,7 +899,7 @@ subroutine rho_direct_particles(part_level, min_grid_level)
      end do
   end if
 
-
+#ifndef WITHOUTMPI
   ! Project remote direct particles
   ip = 0
   do ipart = 1, recv_tot
@@ -916,9 +918,8 @@ subroutine rho_direct_particles(part_level, min_grid_level)
         call cic_amr(xpart, mpart, ip, grid_level)
      end do
   end if
-
   deallocate(xp_remote, mp_remote)
-  
+#endif
 contains
   ! TODO: fix usage of cic in cic_amr
 
@@ -1377,8 +1378,10 @@ contains
     use amr_commons,     only: ncpu, myid
     use pm_commons,      only: bin_keys, bin_mass, nbins
     use poisson_commons, only: rho, phi
+#ifndef WITHOUTMPI
     use particle_communication, only: build_communicator, part_data_to_domain_dp, &
          part_data_to_domain_i8
+#endif
     implicit none
     integer, intent(in) :: cell_level
 
@@ -1396,7 +1399,7 @@ contains
 
     vol_loc = (0.5**cell_level * dble(boxlen) )**3    
 
-
+#ifndef WITHOUTMPI
       call build_communicator(communicator, recv_tot, nbins, local_bins, local_bins_oft, &
                           bin_keys(:, 2), bin_keys(:, 1), bin_keys(:, 0), cell_level)
 
@@ -1413,7 +1416,7 @@ contains
       call part_data_to_domain_i8(communicator, bin_keys(:, 2), bin_keys_remote(:, 2))
       call part_data_to_domain_dp(communicator, bin_mass, bin_mass_remote)
       call part_data_to_domain_dp(communicator, bin_count, bin_count_remote)
-      
+#endif      
       ! go through bins in sweeps and add mass to corresponding cell
       do ioft = local_bins_oft, local_bins_oft + local_bins - 1, nvector
          nb = min(nvector, local_bins_oft + local_bins - ioft)
@@ -1432,7 +1435,7 @@ contains
             end if
          end do
       end do
-
+#ifndef WITHOUTMPI
       ! go through remote bins in sweeps and add mass to corresponding cell
       do ioft = 0, recv_tot - 1, nvector
          nb = min(nvector, recv_tot - ioft)
@@ -1454,7 +1457,7 @@ contains
       
       
       deallocate(bin_mass_remote, bin_keys_remote, bin_count_remote)
-      
+#endif      
     end subroutine dump_histograms
 
     

@@ -21,8 +21,8 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 # Fortran compiler options and directives
 
 # --- No MPI, gfortran -------------------------------
-#F90 = gfortran -O3 -frecord-marker=4 -fbacktrace -ffree-line-length-none -g
-#FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
+F90 = gfortran -O0 -frecord-marker=4 -fbacktrace -ffree-line-length-none -g
+FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
 
 # --- No MPI, tau ----------------------------------
 #F90 = tau_f90.sh -optKeepFiles -optPreProcess -optCPPOpts=$(DEFINES) -DWITHOUTMPI
@@ -60,9 +60,9 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 #FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
 
 # --- MPI, ifort syntax, additional checks -----------
-F90 = mpif90 -f90=ifort
+#F90 = mpif90 -f90=ifort
 #FFLAGS = -warn all -O0 -g -traceback -fpe0 -ftrapuv -check bounds -cpp $(DEFINES) -DNOSYSTEM
-FFLAGS = -cpp -fast -g  $(DEFINES) -DNOSYSTEM
+#FFLAGS = -cpp -fast -g  $(DEFINES) -DNOSYSTEM
 #FFLAGS = -cpp  $(DEFINES) -DNOSYSTEM    
 
 # --- MPI, ifort syntax ------------------------------
@@ -73,8 +73,8 @@ FFLAGS = -cpp -fast -g  $(DEFINES) -DNOSYSTEM
 #F90 = ftn
 #FFLAGS = -O3 -g -traceback -fpe0 -ftrapuv -cpp $(DEFINES) -DNOSYSTEM #-DRT
 
-C = icc
-CFLAGS = -g -fast
+C = gcc
+CFLAGS = -g -O3
 
 
 #############################################################################

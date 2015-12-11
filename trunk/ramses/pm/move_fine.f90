@@ -132,8 +132,6 @@ subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
      end do
   end do
 
-  call MPI_BARRIER(MPI_COMM_WORLD,info) 
-  if(verbose)write(*,'("Leaving second_kick, level " I2)')ilevel 
 end subroutine second_kick
 !#########################################################################
 !#########################################################################
@@ -146,7 +144,9 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   use hydro_commons,   only: uold
   use poisson_commons, only: f
   use amr_commons,     only: dtnew, ncpu, myid, t, son
+#ifndef WITHOUTMPI
   use particle_communication, only: build_communicator, part_data_to_domain_dp, domain_data_to_part_dp
+#endif
   use hilbert,     only: hilbert_for_particle 
   implicit none
 #ifndef WITHOUTMPI
@@ -183,6 +183,8 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   !call compute_particle_histogram(offset, nparts)
 !  call hilbert_for_particle(offset, nparts, 0, ilevel) 
 !  call check_sorted(offset,nparts)
+
+#ifndef WITHOUTMPI
   call build_communicator(communicator, npart_recv, &
        nparts, nparts_local, local_oft, &
        part_hkey(offset + 1 : offset + nparts, 2), &
@@ -195,6 +197,7 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 2), xp_remote(:, 2))
   call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 3), xp_remote(:, 3))
 
+  
  ! Deal with remote particles
   do ioft = 0, npart_recv - 1, nvector
      np = min(nvector, npart_recv - ioft)
@@ -232,7 +235,7 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   call domain_data_to_part_dp(communicator, ap_remote(:,1), ap(offset + 1 : offset + nparts, 1))
   deallocate(xp_remote, ap_remote)
 
-
+#endif
   ! Deal with local particles
   do ioft = offset + local_oft, offset + local_oft + nparts_local - 1, nvector
      np = min(nvector, offset + local_oft + nparts_local - ioft)
@@ -269,8 +272,6 @@ subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
   print*,"stopping because of OUTPUT_PARTICLE_POTENTIAL"
   call clean_stop
 #endif
-  call MPI_BARRIER(MPI_COMM_WORLD,info) 
-  if(verbose)write(*,'("Leaving compute_particle_acceleration, level " I2)')ilevel 
 end subroutine compute_particle_acceleration
 !#########################################################################
 !#########################################################################
