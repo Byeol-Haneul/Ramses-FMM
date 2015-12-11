@@ -132,9 +132,9 @@ subroutine hash_tests(all_ok)
   integer::i,nfree_store,nfree_chain_store
   logical::ok,all_ok
   real,dimension(1:3000)::val_float
-  real,dimension(0:nkey,1:3000)::key_float
+  real,dimension(0:ndim,1:3000)::key_float
   integer,dimension(1:3000)::val
-  integer(kind=8),dimension(0:nkey,1:3000)::key
+  integer(kind=8),dimension(0:ndim,1:3000)::key
 
   ok=.true.
  
@@ -142,8 +142,8 @@ subroutine hash_tests(all_ok)
   call random_number(val_float)
   
   do i=1,3000
-     key(0:nkey,i)=int(key_float(0:nkey,i)*2.0**62,kind=8)
-     val(i)=int(val_float(i)*2000,kind=4)
+     key(0:ndim,i)=int(key_float(0:ndim,i)*2.0**12,kind=8)
+     val(i)=int(val_float(i)*2000,kind=4) + 1
   end do
 
   call init_empty_hash(htable,3000)
@@ -154,46 +154,45 @@ subroutine hash_tests(all_ok)
   nfree_chain_store=htable%nfree_chain
   
   do i=1,2000
-     call hash_set(htable,key(0:nkey,i),val(i))     
+     call hash_set(htable,key(0:ndim,i),val(i))     
   end do
 
 !  call hash_stats(htable)
 
 
   do i=2000,1,-1
-     ok=ok .and. (val(i)==hash_get(htable,key(0:nkey ,i) ))
+     ok=ok .and. (val(i)==hash_get(htable,key(0:ndim ,i) ))
   end do
 
 
   do i=1001,2000
-     call hash_free(htable,key(0:nkey ,i) )
+     call hash_free(htable,key(0:ndim ,i) )
   end do
 
 !  call hash_stats(htable)
 
   do i=2001,3000
-     call hash_set(htable,key(0:nkey ,i) ,val(i))
+     call hash_set(htable,key(0:ndim ,i) ,val(i))
   end do
   
-  call hash_stats(htable)
+!  call hash_stats(htable)
 
   do i=1,1000
-     ok=ok .and. (val(i)==hash_get(htable,key(0:nkey ,i) ))
+     ok=ok .and. (val(i)==hash_get(htable,key(0:ndim ,i) ))
   end do
 
-
   do i=2001,3000
-     ok=ok .and. (val(i)==hash_get(htable,key(0:nkey ,i) ))
-     call hash_free(htable,key(0:nkey ,i) )
+     ok=ok .and. (val(i)==hash_get(htable,key(0:ndim ,i) ))
+     call hash_free(htable,key(0:ndim ,i) )
   end do
 
 !  call hash_stats(htable)
 
   do i=1000,1,-1
-     ok=ok .and. (val(i)==hash_get(htable,key(0:nkey ,i) ))
-     call hash_free(htable,key(0:nkey ,i) )
+     ok=ok .and. (val(i)==hash_get(htable,key(0:ndim ,i) ))
+     call hash_free(htable,key(0:ndim ,i) )
   end do
-
+  
 !  call hash_stats(htable)
   
   ok=ok .and. (nfree_store==htable%nfree)
