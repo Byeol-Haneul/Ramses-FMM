@@ -53,16 +53,13 @@ subroutine refine_fine(ilevel)
   call authorize_fine(ilevel)
 
   !---------------------------------------------------
-  ! Step 1: if cell is flagged for refinement and
-  ! if it is not already refined, create a son grid.
+  ! Step 1: if a cell is flagged for refinement and
+  ! if it is not already refined, create its son grid.
   !---------------------------------------------------        
   ncreate=0
   ifree=noct_tot+1
-  do ilev=ilevel,nlevelmax
-     imin=head(ilev)
-     ntot=noct(ilev)
-     imax=imin+noct-1
-     do ioct=imin,imax
+  do ilev=ilevel,nlevelmax-1
+     do ioct=head(ilev),head(ilev)+noct(ilev)-1
         do ind=1,twotondim
            ok   = grid(ioct)%flag2(ind)==1 .and. &
                 & grid(ioct)%flag1(ind)==1 .and. &
@@ -74,49 +71,94 @@ subroutine refine_fine(ilevel)
               call make_new_oct(ind_child,ind_parent,ind_cell,ilev+1,1)
               ncreate=ncreate+1
               ifree=ifree+1
-              if(ifree.GT.ngridmax)then
-                 write(*,*)'No more free memory'
-                 write(*,*)'Increase ngridmax'
-                 call clean_abort
-              end if
         end do
      end do
   end do
   if(verbose)write(*,112)ncreate
 
-  !-----------------------------------------------------
-  ! Step 2: if cell is not flagged for refinement, but
-  ! it is refined, then destroy its child grid.
-  !-----------------------------------------------------
+  !----------------------------------------------------------
+  ! Step 2: if the parent cell is not flagged for refinement,
+  ! but it is refined, then destroy the child grid.
+  !----------------------------------------------------------
   nkill=0  
   do ilev=ilevel+1,nlevelmax
-     imin=head(ilev)
-     ntot=noct(ilev)
-     imax=imin+noct-1
-     do ioct=imin,imax
-        do ind=1,twotondim
-           parent_cell=get_parent_cell(ioct)
-           itile=parent_cell%tile
-           igrid=parent_cell%grid
-           icell=parent_cell%cell
-           ok   = cache(itile)%flag1(igrid,icell)==0 .and. &
-                & cache(itile)%refined(igrid,icell)
-           if(ok)then
-              grid(ioct)%lev=0
-              cache(itile)%refined(igrid,icell)=.false.
-              cache(itile)%dirty=.true.
-              cache(itile)%clean=.false.
-              nkill=kill+1
-           end if
-        end do
+     do ioct=head(ilev),head(ilev)+noct(ilev)-1
+        parent_cell=get_parent_cell(ioct)
+        itile=parent_cell%tile
+        igrid=parent_cell%grid
+        icell=parent_cell%cell
+        ok   = cache(itile)%flag1(igrid,icell)==0 .and. &
+             & cache(itile)%refined(igrid,icell)
+        if(ok)then
+           grid(ioct)%lev=0
+           cache(itile)%refined(igrid,icell)=.false.
+           cache(itile)%dirty=.true.
+           nkill=kill+1
+        end if
      end do
   end do
   if(verbose)write(*,112)nkill
 
   !-----------------------------------------------------
   ! Step 3: sort new octs and empty slots according to 
-  ! the grid level.
+  ! their level (using counting sort algorithm).
   !-----------------------------------------------------
+  ! Count number of octs per bucket
+  noct_level=0
+  noct_zero=0
+  noct_level(levelmin:ilevel)=noct(levelmin:ilevel)
+  do ioct=head(ilevel+1),ifree-1
+     true_level=grid(ioct)%lev
+     if(true_level.NE.0)then
+        noct_level(true_level)=noct_level(true_level)+1
+     else
+        noct_zero=noct_zero+1
+     end if
+  end do
+  head_level(levelmin)=1
+  do ilev=levelmin+1,nlevelmax
+     head_level(ilev)=head_level(ilev-1)+noct_level(ilev-1)
+  end do
+  head_zero=head_level(levelmax)+head_level(nlevelmax)
+  ! Build index permutation table
+  new_index_level=0
+  new_index_zero=0
+  noct_swap=ifree-head(ilevel+1)
+  allocate(swap_table(1:noct_swap))
+  do ioct=head(ilevel+1),ifree-1
+     true_level=grid(ioct)%lev
+     if(true_level.NE.0)then
+        swap_table(ioct)=head_level(true_level)+new_index_level(true_level)
+        new_index_level(true_level)=new_index_level(true_level)+1
+     else
+        swap_table(ioct)=head_zero+new_index_zero
+        new_index_zero=new_index_zero+1
+     end if
+  end do
+  ! Apply permutations directly in main memory
+  call apply_oct_permutation(head(ilevel+1),swap_table,noct_swap)
+
+  !-----------------------------------------------------
+  ! Step 3: sort all octs according to their Hilbert key 
+  ! using radix sort algorithm.
+  !-----------------------------------------------------
+  ! Count number of octs per bucket
+
+  
+        parent_cell=get_parent_cell(ioct)
+        itile=parent_cell%tile
+        igrid=parent_cell%grid
+        icell=parent_cell%cell
+        ok   = cache(itile)%flag1(igrid,icell)==0 .and. &
+             & cache(itile)%refined(igrid,icell)
+        if(ok)then
+           grid(ioct)%lev=0
+           cache(itile)%refined(igrid,icell)=.false.
+           cache(itile)%dirty=.true.
+           nkill=kill+1
+        end if
+     end do
+  end do
 
 
   ! Compute grid number statistics at level ilevel+1
@@ -205,6 +247,11 @@ subroutine make_new_oct(ind_child,ind_parent,ind_cell,ilevel,ngrid)
   do igrid=1,ngrid
      ! Insert new oct in main resident memory
      ichild=ind_child(igrid)
+     if(ichild.GT.ngridmax)then
+        write(*,*)'No more free memory'
+        write(*,*)'Increase ngridmax'
+        call clean_abort
+     end if
      grid(ichild)%ckey(1:ndim)=cart_key(igrid,1:ndim)
      grid(ichild)%hkey=hk0(igrid)
      grid(ichild)%refined(1:twotondim)=.false.
