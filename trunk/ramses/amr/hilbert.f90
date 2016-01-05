@@ -150,7 +150,7 @@ contains
   !================================================================
   !================================================================
   !================================================================
-  subroutine hilbert1d(x,order,npoint)
+  subroutine hilbert1d_orig(x,order,npoint)
     use amr_parameters, ONLY: qdp
     implicit none
     integer     ,INTENT(IN)                     ::npoint
@@ -167,7 +167,7 @@ contains
 #endif
     end do
 
-  end subroutine hilbert1d
+  end subroutine hilbert1d_orig
   !================================================================
   !================================================================
   !================================================================
@@ -341,124 +341,30 @@ contains
   !================================================================
   !================================================================
   !================================================================
-!   subroutine hilbert3d(x,y,z,order,bit_length,npoint)
-!     use amr_parameters, ONLY: qdp,nvector
-!     implicit none
-! #ifndef WITHOUTMPI
-!     include 'mpif.h'
-! #endif
-!     integer     ,INTENT(IN)                     ::bit_length,npoint
-!     integer     ,INTENT(IN) ,dimension(1:nvector)::x,y,z
-!     real(qdp),INTENT(OUT),dimension(1:nvector)::order
+  subroutine hilbert1d(ix,hkey0,npoint)
+    use amr_parameters
+    implicit none
+    integer        ,INTENT(IN)                     ::npoint
+    integer(kind=8),INTENT(IN) ,dimension(1:npoint)::ix
+    integer(kind=8),INTENT(OUT),dimension(1:npoint)::hkey0
 
-!     integer::i,ip,info
-!     integer(kind=8)::testint
-!     integer(kind=8),dimension(1:nvector)::hkey
-!     integer(kind=4),dimension(1:nvector)::cstate,nstate,hdigit,sdigit,ind
+    hkey0(1:npoint)=ix(1:npoint)
 
-
-!     if(bit_length>bit_size(bit_length))then
-!        write(*,*)'Maximum bit length=',bit_size(bit_length)
-!        write(*,*)'stop in hilbert3d'
-!        call clean_stop
-!     endif
-
-
-! #ifdef QUADHILBERT
-!     call MPI_ABORT(MPI_COMM_WORLD,1,info)
-! #endif
-
-!     ! build Hilbert ordering using state diagram
-!     cstate=0
-!     hkey=0
-!     do i=bit_length-1,0,-1
-!        do ip=1,npoint
-!           hkey(ip)=hkey(ip)*longeight
-!        end do
-
-!        sdigit=0
-!        do ip=1,npoint
-!           if(btest(x(ip),i))sdigit(ip)=sdigit(ip)+four
-!           if(btest(y(ip),i))sdigit(ip)=sdigit(ip)+two
-!           if(btest(z(ip),i))sdigit(ip)=sdigit(ip)+one
-!        end do
-
-!        do ip=1,npoint
-!           ind(ip)=cstate(ip)*eight+sdigit(ip)
-!        end do
-
-!        do ip=1,npoint
-!           nstate(ip)=next_state_diagram3d(ind(ip))
-!        end do
-
-!        do ip=1,npoint
-!           hkey(ip)=hkey(ip)+three_digit_diagram(ind(ip))
-!        end do
-
-!        do ip=1,npoint
-!           cstate(ip)=nstate(ip)
-!        end do
-!     enddo
-
-!     do ip=1,npoint
-!        order(ip)=real(hkey(ip),kind=8)             
-!     end do
-
-!   end subroutine hilbert3d
+  end subroutine hilbert1d
   !================================================================
   !================================================================
   !================================================================
   !================================================================
-!   subroutine hilbert3d_nonvec(x,y,z,order,bit_length,npoint)
-!     use amr_parameters, ONLY: qdp,nvector
-!     implicit none
-! #ifndef WITHOUTMPI
-!     include 'mpif.h'
-! #endif
-!     integer  , INTENT(IN)                       :: bit_length,npoint
-!     integer  , INTENT(IN) ,dimension(1:nvector) :: x,y,z
-!     real(qdp), INTENT(OUT), dimension(1:nvector) :: order
+  subroutine hilbert1d_reverse(ix,hkey0,npoint)
+    use amr_parameters
+    implicit none
+    integer        ,INTENT(IN)                     ::npoint
+    integer(kind=8),INTENT(OUT),dimension(1:npoint)::ix
+    integer(kind=8),INTENT(IN) ,dimension(1:npoint)::hkey0
 
+    ix(1:npoint)=hkey0(1:npoint)
 
-
-!     integer(kind=4)::i,ip,xx,yy,zz,info
-!     integer(kind=8)::hkey
-!     integer(kind=4)::cstate,nstate,sdigit,ind
-!     if(bit_length>bit_size(bit_length))then
-!        write(*,*)'Maximum bit length=',bit_size(bit_length)
-!        write(*,*)'stop in hilbert3d'
-!        call clean_stop
-!     endif
-
-! #ifdef QUADHILBERT
-! #ifndef WITHOUTMPI
-!     call MPI_ABORT(MPI_COMM_WORLD,1,info)
-! #else
-!     stop
-! #endif
-! #endif
-
-
-!     do ip=1,npoint  
-!        ! build Hilbert ordering using state diagram
-!        xx=x(ip); yy=y(ip); zz=z(ip)
-!        cstate=0
-!        hkey=0
-!        do i=bit_length-1,0,-1
-!           hkey=hkey*longeight
-!           sdigit=zero
-!           if(btest(xx,i))sdigit=sdigit+four
-!           if(btest(yy,i))sdigit=sdigit+two
-!           if(btest(zz,i))sdigit=sdigit+one
-!           ind=cstate*eight+sdigit
-!           nstate=next_state_diagram3d(ind)
-!           hkey=hkey+three_digit_diagram(ind)
-!           cstate=nstate        
-!        enddo
-!        order(ip)=real(hkey,kind=8)             
-!     end do
-
-!   end subroutine hilbert3d_nonvec
+  end subroutine hilbert1d_reverse
   !================================================================
   !================================================================
   !================================================================
@@ -605,7 +511,7 @@ contains
        initial_level, final_level, npoint)
     use amr_parameters, only: qdp, nvector
     implicit none
-    integer        , intent(in)                          :: initial_level, final_level, npoint
+    integer        , intent(in)                         :: initial_level, final_level, npoint
     integer(kind=8), intent(in),    dimension(1:npoint) :: ix, iy, iz
     integer(kind=4), intent(inout), dimension(1:npoint) :: cstate
     integer(kind=8), intent(inout), dimension(1:npoint) :: hkey2, hkey1, hkey0

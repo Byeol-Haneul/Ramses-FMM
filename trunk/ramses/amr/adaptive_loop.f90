@@ -15,13 +15,17 @@ subroutine adaptive_loop
   tt1=MPI_WTIME(info)
 #endif
 
-  call init_amr                      ! Initialize AMR variables
-  call init_time                     ! Initialize time variables
-  if(hydro)call init_hydro           ! Initialize hydro variables
-  if(poisson)call init_poisson       ! Initialize poisson variables
-  if(nrestart==0)call init_refine    ! Build initial AMR grid
-  if(pic)call init_part              ! Initialize Andreas particle variables
-  if(nrestart==0)call init_refine_2  ! Build initial AMR grid again
+  call init_amr                ! Initialize grid variables
+  call init_time               ! Initialize time variables
+  if(hydro)call init_hydro     ! Initialize hydro variables
+  if(poisson)call init_poisson ! Initialize poisson variables
+  if(pic)call init_part        ! Initialize particle variables
+  if(nrestart==0)then
+     call init_refine_basegrid ! Build initial coarsest grid
+     call init_refine_adaptive ! Build initial adaptive grid
+  endif
+
+#ifdef TOTO
 
 #ifndef WITHOUTMPI
   tt2=MPI_WTIME(info)
@@ -121,5 +125,7 @@ subroutine adaptive_loop
   end do
 
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
+
+#endif
 
 end subroutine adaptive_loop

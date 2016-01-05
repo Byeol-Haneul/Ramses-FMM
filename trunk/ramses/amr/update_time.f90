@@ -63,9 +63,6 @@ subroutine update_time(ilevel)
            ! Output AMR structure to screen
            !-------------------------------
            write(*,*)'Mesh structure'
-           do i=1,nlevelmax
-              if(numbtot(1,i)>0)write(*,999)i,numbtot(1:4,i)
-           end do
            
            !----------------------------------------------
            ! Output mass and energy conservation to screen
@@ -77,13 +74,11 @@ subroutine update_time(ilevel)
            end if
            if(pic)then
               write(*,888)nstep,t,dt,aexp,&
-                   & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1)),&
                    ! TODO: replace npart with max over all cpus as soon as there is
                    ! some particle load balancing scheme
                    & real(100.0D0*dble(npart)/dble(npartmax+1))
            else
-              write(*,888)nstep,t,dt,aexp,&
-                   & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1))
+              write(*,888)nstep,t,dt,aexp
            endif
            itest=1
         end if
@@ -115,13 +110,11 @@ subroutine update_time(ilevel)
      if(myid==1.and.itest==0)then
         if(pic)then
            write(*,888)nstep,t,dt,aexp,&
-                & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1)),&
                 ! TODO: replace npart with max over all cpus as soon as there is
                 ! some particle load balancing scheme
                 & real(100.0D0*dble(npart)/dble(npartmax+1))
         else
-           write(*,888)nstep,t,dt,aexp,&
-                & real(100.0D0*dble(used_mem_tot)/dble(ngridmax+1))
+           write(*,888)nstep,t,dt,aexp
         endif
      end if
   end if
@@ -172,6 +165,20 @@ subroutine clean_stop
 #endif
   stop
 end subroutine clean_stop
+
+subroutine clean_abort
+  use amr_commons
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  integer::info
+#ifndef WITHOUTMPI
+     call MPI_ABORT(MPI_COMM_WORLD,1,info)
+#else
+     stop
+#endif
+end subroutine clean_abort
 
 subroutine writemem(usedmem)
   real::usedmem

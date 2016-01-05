@@ -526,7 +526,9 @@ contains
 
 #if NDIM == 2
   subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey1, hkey0)      
+    use pm_commons, only: npart
     implicit none
+    integer,                          intent(in)         :: np, ilevel, key_level
     integer(kind=8), dimension(1:offset+np), intent(in), target :: hkey1, hkey0
 #endif
 
@@ -568,7 +570,8 @@ contains
     integer, dimension(0:3), save :: bucket_offset, bucket_count
     integer, parameter :: nbucket = 3
     integer, parameter :: nbits_read = 2
- 
+    integer, parameter :: offset
+
     ! get bit and key to read from 
     ibit1 = (key_level-ilevel)*2       
     ikey = ibit1/62

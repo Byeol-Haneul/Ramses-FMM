@@ -2,45 +2,69 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine
+subroutine init_refine_basegrid
   use amr_commons
   use pm_commons
+  use hilbert
   implicit none
   !-------------------------------------------
   ! This routine builds the initial AMR grid
   !-------------------------------------------
-  integer::ilevel
+  integer::ilevel,i,j,k,igrid
+  integer(kind=8)::ikey
+  integer(kind=8),dimension(1:nvector)::hk0,hk1,hk2
+  integer(kind=8),dimension(1:nvector)::ix=0,iy=0,iz=0
+  integer(kind=8),dimension(0:ndim)::hash_key
 
-  if(myid==1)write(*,*)'Building initial AMR grid'
+  if(myid==1)write(*,*)'Building initial base grid'
   init=.true.
 
-  ! Base refinement
-  do ilevel=1,levelmin
-     call flag
-     call refine
+  ! Loop over the base level grid
+  igrid=0
+  do ikey=bound_key_level(myid-1,levelmin),bound_key_level(myid,levelmin)-1
+     hk0(1)=ikey
+     ! Compute Cartesian index from Hilbert index
+     If(ndim==1)then
+        call hilbert1d_reverse(ix,hk0,1)
+     else if(ndim==2)then
+        call hilbert2d_reverse(ix,iy,hk1,hk0,levelmin-1,1)
+     else if (ndim==3)then
+        call hilbert3d_reverse(ix,iy,iz,hk2,hk1,hk0,levelmin-1,1)
+     end if
+     ! Insert new grid in main array
+     igrid=igrid+1
+     if(igrid==1)head(levelmin)=1
+     tail(levelmin)=igrid
+     noct(levelmin)=noct(levelmin)+1
+     noct_tot=noct_tot+1
+     grid(igrid)%lev=levelmin
+     grid(igrid)%ckey(1)=ix(1)
+#if NDIM>1
+     grid(igrid)%ckey(2)=iy(1)
+#endif
+#if NDIM>2
+     grid(igrid)%ckey(3)=iz(1)
+#endif
+     grid(igrid)%hkey=hk0(1)
+     grid(igrid)%refined(1:twotondim)=.false.
+     ! Insert new grid in hash table
+     hash_key(0)=levelmin
+     hash_key(1)=ix(1)
+#if NDIM>1
+     hash_key(2)=iy(1)
+#endif
+#if NDIM>2
+     hash_key(3)=iz(1)
+#endif
+     call hash_set(grid_dict,hash_key,igrid)
   end do
 
-  ! Further refinements if necessary
-  do ilevel=levelmin+1,nlevelmax
-     if(initfile(levelmin).ne.' '.and.initfile(ilevel).eq.' ')exit
-     if(hydro)call init_flow
-     if(ivar_refine==0)call init_refmap
-     call flag
-     call refine
-     if(nremap>0)call load_balance
-     if(numbtot(1,ilevel)==0)exit
-  end do 
-
-  ! Final pass to initialize the flow
-  init=.false.
-  if(hydro)call init_flow
-
-end subroutine init_refine
+end subroutine init_refine_basegrid
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_2
+subroutine init_refine_adaptive
   !--------------------------------------------------------------
   ! This routine builds additional refinements to the
   ! the initial AMR grid for filetype ne 'grafic'
@@ -49,54 +73,33 @@ subroutine init_refine_2
   use hydro_commons
   use pm_commons
   use poisson_commons
-  use sort, only: lsd_radix_sort_particles, apply_particle_permutation
   use hilbert, only: hilbert_for_particle
   implicit none
   integer::ilevel,i,ivar, ilev
   logical :: use_histograms 
 
-  if(filetype.eq.'grafic')return
-
+  if(myid==1)write(*,*)'Building initial adaptive grid'
 
   do i=levelmin,nlevelmax+1
 
-     call refine_coarse
-     do ilevel=1,nlevelmax
-        call build_comm(ilevel)
-        call make_virtual_fine_int(cpu_map(1),ilevel)
+     do ilevel=levelmin,nlevelmax
         call refine_fine(ilevel)
         if(hydro)call init_flow_fine(ilevel)
-     end do
-
-     if(nremap>0)call load_balance
-     ! particles must be re-sorted before density is computed
-     use_histograms = .true.
-     do ilev=levelmin, nlevelmax
-        call sort_particles(ilev, use_histograms)
-     end do
-     
-     do ilevel=levelmin,nlevelmax
-        if(poisson)call rho_fine(ilevel,2)
      end do
 
      do ilevel=nlevelmax,levelmin,-1
         if(hydro)then
            call upload_fine(ilevel)
-           do ivar=1,nvar
-              call make_virtual_fine_dp(uold(1,ivar),ilevel)
-           end do
-           if(simple_boundary)call make_boundary_hydro(ilevel)
         endif
      end do
 
-     do ilevel=nlevelmax,1,-1
+     do ilevel=nlevelmax,levelmin,-1
         call flag_fine(ilevel,2)
      end do
-     call flag_coarse
 
   end do
 
-end subroutine init_refine_2
+end subroutine init_refine_adaptive
 !################################################################
 !################################################################
 !################################################################

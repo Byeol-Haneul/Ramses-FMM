@@ -93,8 +93,8 @@ LIBS = $(LIBMPI)
 VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 #############################################################################
 # All objects
-MODOBJ = amr_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
-         poisson_commons.o hydro_parameters.o hydro_commons.o gadgetreadfile.o write_makefile.o \
+MODOBJ = amr_parameters.o hydro_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
+         poisson_commons.o hydro_commons.o gadgetreadfile.o write_makefile.o \
 	 write_patch.o write_gitinfo.o sort.o hilbert.o new_part_communication.o coordinates.o
 
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o amr_step.o update_time.o \

@@ -11,10 +11,6 @@ module poisson_commons
   ! Multigrid lookup table for amr -> mg index mapping
   integer, allocatable, dimension(:) :: lookup_mg   ! Lookup table
 
-  ! Communicator arrays for multigrid levels
-  type(communicator), allocatable, dimension(:,:) :: active_mg
-  type(communicator), allocatable, dimension(:,:) :: emission_mg
-
   ! Minimum MG level
   integer :: levelmin_mg
 

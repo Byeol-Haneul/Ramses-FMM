@@ -1,5 +1,6 @@
 module amr_commons
   use amr_parameters
+  use hydro_parameters
   use hash
   
   logical::output_done=.false.                  ! Output just performed
@@ -51,69 +52,107 @@ module amr_commons
   real(dp),dimension(1:MAXLEVEL)::rho_max     ! Maximum density at each level
   integer ,dimension(1:MAXLEVEL)::nsubcycle=2 ! Subcycling at each level
 
-  ! Pointers for each level linked list
-  integer,allocatable,dimension(:,:)::headl
-  integer,allocatable,dimension(:,:)::taill
-  integer,allocatable,dimension(:,:)::numbl
-  integer(i8b),allocatable,dimension(:,:)::numbtot
+  ! Oct structure
+  type oct
+     integer(kind=4)::lev
+     integer(kind=4),dimension(1:ndim)::ckey
+     integer(kind=8)::hkey
+     integer,dimension(1:twotondim)::flag1
+     integer,dimension(1:twotondim)::flag2
+     logical,dimension(1:twotondim)::refined
+#ifdef GRAV
+     real(kind=dp),dimension(1:twotondim)::rho
+     real(kind=dp),dimension(1:twotondim)::phi
+     real(kind=dp),dimension(1:twotondim)::phi_old
+     real(kind=dp),dimension(1:twotondim,1:ndim)::f
+#endif
+#ifdef SOLVERhydro
+     real(kind=dp),dimension(1:twotondim,1:nvar)::uold
+     real(kind=dp),dimension(1:twotondim,1:nvar)::unew
+#endif
+#ifdef SOLVERmhd
+     real(kind=dp),dimension(1:twotondim,1:nvar+3)::uold
+     real(kind=dp),dimension(1:twotondim,1:nvar+3)::unew
+#endif
+#ifdef DUALENER
+     real(kind=dp),dimension(1:twotondim)::divu
+     real(kind=dp),dimension(1:twotondim)::enew
+#endif
+  end type oct
 
-  ! Pointers for each level boundary linked list
-  integer,allocatable,dimension(:,:)::headb
-  integer,allocatable,dimension(:,:)::tailb
-  integer,allocatable,dimension(:,:)::numbb
+  ! Tile structure
+  type tile
+     ! Header information
+     integer(kind=4)::lev    ! Level of the tile
+     integer(kind=4)::cpu    ! CPU in which the tile sits
+     integer(kind=4)::noct   ! Number of octs in the tile
+     integer(kind=4)::status ! Status of the tile
+     ! Tile AMR data
+     ! Oct-based arrays
+     integer(kind=4),dimension(1:nvector,1:ndim)::ckey ! Cartesian key of each oct
+     integer(kind=8),dimension(1:nvector)::hkey        ! Hilbert key of each oct
+     ! Cell-based arrays
+     integer,dimension(1:nvector,1:twotondim)::flag1   ! Flag1
+     integer,dimension(1:nvector,1:twotondim)::flag2   ! Flag2
+     logical,dimension(1:nvector,1:twotondim)::refined ! Refined flag
+#ifdef GRAV
+     ! Tile gravity data
+     real(kind=dp),dimension(1:nvector,1:twotondim)::rho       ! Total mass density
+     real(kind=dp),dimension(1:nvector,1:twotondim)::phi       ! Gravitationall potential
+     real(kind=dp),dimension(1:nvector,1:twotondim)::phi_old   ! Previous potential
+     real(kind=dp),dimension(1:nvector,1:twotondim,1:ndim)::f  ! Gravity acceleration
+#endif
+#ifdef SOLVERhydro
+     ! Tile hydro data
+     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar)::uold ! Old conservative variables
+     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar)::unew ! New conservative variables
+#endif
+#ifdef SOLVERmhd
+     ! Tile MHD data
+     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar+3)::uold ! Old conservative variables
+     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar+3)::unew ! New conservative variables
+#endif
+#ifdef DUALENER
+     ! Tile dual energy forumlation data
+     real(kind=dp),dimension(1:nvector,1:twotondim)::divu ! Velocity divergence
+     real(kind=dp),dimension(1:nvector,1:twotondim)::enew ! New internal energy density
+#endif
+  end type tile
 
-  ! Pointers for free memory grid linked list
-  integer::headf,tailf,numbf,used_mem,used_mem_tot
+  type cache_cell
+     integer(kind=4)::tile
+     integer(kind=4)::grid
+     integer(kind=4)::cell
+  end type cache_cell
 
-  ! Tree arrays
-  real(dp),allocatable,dimension(:,:)::xg      ! grids position
-  integer ,allocatable,dimension(:,:)::nbor    ! neighboring father cells
-  integer ,allocatable,dimension(:)  ::father  ! father cell
-  integer ,allocatable,dimension(:)  ::next    ! next grid in list
-  integer ,allocatable,dimension(:)  ::prev    ! previous grid in list
-  integer ,allocatable,dimension(:)  ::son     ! sons grids
-  integer ,allocatable,dimension(:)  ::flag1   ! flag for refine
-  integer ,allocatable,dimension(:)  ::flag2   ! flag for expansion
+  ! Persistent array for the AMR grid
+  type(oct),dimension(:),allocatable::grid
+  type(hash_table)::grid_dict   ! Oct hash table
 
-  ! Global indexing
-  integer ,allocatable,dimension(:)  ::cpu_map  ! domain decomposition
-  integer ,allocatable,dimension(:)  ::cpu_map2 ! new domain decomposition
+  ! Starting index for each level 
+  integer,allocatable,dimension(:)::head
+  integer,allocatable,dimension(:)::tail
+  integer,allocatable,dimension(:)::noct
+  integer(i8b)::noct_tot
 
   ! Hilbert key
-  real(qdp),allocatable,dimension(:)::hilbert_key
-  real(qdp),allocatable,dimension(:)::bound_key,bound_key2
   integer(kind=8),allocatable,dimension(:,:)::bound_key_level
-  real(qdp)                         ::order_all_min,order_all_max
 
-  ! Cell hash table
-  type(hash_table) ::  cell_dict
-
-  ! Communication structure
-  type communicator
-     integer                            ::ngrid
-     integer                            ::npart
-     integer     ,dimension(:)  ,pointer::igrid
-     integer     ,dimension(:,:),pointer::f
-     real(kind=8),dimension(:,:),pointer::u
-     integer(i8b),dimension(:,:),pointer::fp
-     real(kind=8),dimension(:,:),pointer::up
-  end type communicator
-
-  ! Active grid, emission and reception communicators
-  type(communicator),allocatable,dimension(:)  ::active
-  type(communicator),allocatable,dimension(:,:)::boundary
-  type(communicator),allocatable,dimension(:,:)::emission
-  type(communicator),allocatable,dimension(:,:)::reception
+  ! Software cache array for the AMR grid
+  type(tile),dimension(:),allocatable::cache
+  type(hash_table)::cache_dict  ! Oct hash table
+  integer::ntile_tot
+  integer::cache_type
 
   ! Types for physical boundary conditions
-  CHARACTER(LEN=20)::type_hydro  ='hydro'
-  CHARACTER(LEN=20)::type_accel  ='accel'
-  CHARACTER(LEN=20)::type_flag   ='flag'
+  CHARACTER(LEN=20)::type_hydro='hydro'
+  CHARACTER(LEN=20)::type_accel='accel'
+  CHARACTER(LEN=20)::type_flag='flag'
 
-  ! Units specified by the user in the UNITS_PARAMS namelist for non-cosmo runs.
-  ! These values shouldn't be used directly. Instead call units() in amr/units.f90.
-  real(dp)::units_density=1.0  ! [g/cm^3]
-  real(dp)::units_time=1.0     ! [seconds]
-  real(dp)::units_length=1.0   ! [cm]
+  ! Default units
+  real(dp)::units_density=1.0 ! [g/cm^3]
+  real(dp)::units_time=1.0    ! [seconds]
+  real(dp)::units_length=1.0  ! [cm]
+
 end module amr_commons
 

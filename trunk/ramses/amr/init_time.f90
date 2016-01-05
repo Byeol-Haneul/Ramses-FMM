@@ -6,6 +6,8 @@ subroutine init_time
   integer::i,Nmodel
   real(kind=8)::T2_sim  
 
+  if(verbose)write(*,*)'Entering init_time'
+
   if(nrestart==0)then
      if(cosmo)then
         ! Get cosmological parameters from input files
