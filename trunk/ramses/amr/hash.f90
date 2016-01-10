@@ -53,13 +53,6 @@ contains
          & 3145739,6291469,12582917,25165843,50331653,100663319,201326611, &
          & 402653189,805306457,1610612741/)
 
-    ! Compute prime number
-    ! ncode=req_size
-    ! do bit_length=1,32
-    !    ncode=ncode/2
-    !    if(ncode<=1) exit
-    ! end do
-
     ! TODO: rename prime since it's not a prime anymore...
     htable%prime = 2
     do while (htable%prime < req_size)

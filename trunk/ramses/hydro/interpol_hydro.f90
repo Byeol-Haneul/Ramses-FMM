@@ -11,57 +11,33 @@ subroutine upload_fine(ilevel)
   ! This routine performs a restriction operation (averaging down)
   ! for the hydro variables.
   !----------------------------------------------------------------------
-  integer::i,ncache,igrid,ngrid,ind,iskip,nsplit,icell
-  integer,dimension(1:nvector),save::ind_grid,ind_cell,ind_split
-  logical,dimension(1:nvector),save::ok
+  integer::ioct,parent_cell,get_parent_cell
+  integer::ind,ivar,igrid,icell
+  integer(kind=8),dimension(0:ndim)::hash_key
+  real(dp)::average
 
   if(ilevel==nlevelmax)return
-  if(numbtot(1,ilevel)==0)return
+  if(noct(ilevel)==0)return
+  if(noct(ilevel+1)==0)return
   if(verbose)write(*,111)ilevel
  
-  ! Loop over active grids by vector sweeps
-  ncache=active(ilevel)%ngrid
-  do igrid=1,ncache,nvector
-     ngrid=MIN(nvector,ncache-igrid+1)
-     do i=1,ngrid
-        ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
+  ! Loop over finer level grids
+  hash_key(0)=ilevel+1
+  do ioct=head(ilevel+1),tail(ilevel+1)
+     hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
+     parent_cell=get_parent_cell(hash_key)
+     igrid=(parent_cell-1)/twotondim+1
+     icell=parent_cell-(igrid-1)*twotondim
+     ! Average conservative variables
+     do ivar=1,nvar
+        average=0.0d0
+        do ind=1,twotondim
+           average=average+grid(ioct)%uold(ind,ivar)
+        end do
+        ! Scatter result to cell
+        grid(igrid)%uold(icell,ivar)=average/dble(twotondim)
      end do
- 
-     ! Loop over cells
-     do ind=1,twotondim
-        iskip=ncoarse+(ind-1)*ngridmax
-        do i=1,ngrid
-           ind_cell(i)=iskip+ind_grid(i)
-        end do
-        
-        ! Gather split cells
-        do i=1,ngrid
-           ok(i)=son(ind_cell(i))>0
-        end do
-        
-        ! Count split cells
-        nsplit=0
-        do i=1,ngrid
-           if(ok(i))nsplit=nsplit+1
-        end do
-        
-        ! Upload for selected cells
-        if(nsplit>0)then
-           icell=0
-           do i=1,ngrid
-              if(ok(i))then
-                 icell=icell+1
-                 ind_split(icell)=ind_cell(i)
-              end if
-           end do
-           call upl(ind_split,nsplit)
-        end if
-        
-     end do
-     ! End loop over cells
-
   end do
-  ! End loop over grids
 
 111 format('   Entering upload_fine for level',i2)
 
@@ -70,117 +46,7 @@ end subroutine upload_fine
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine upl(ind_cell,ncell)
-  use amr_commons
-  use hydro_commons
-  implicit none
-  integer::ncell
-  integer,dimension(1:nvector)::ind_cell
-  !---------------------------------------------------------------------
-  ! This routine performs a restriction operation (averaging down)
-  ! for the following variables:
-  ! interpol_var=0: use rho, rho u and E
-  ! interpol_tar=1: use rho, rho u and rho epsilon
-  !---------------------------------------------------------------------
-  integer ::ivar,irad,i,idim,ind_son,iskip_son
-  integer ,dimension(1:nvector),save::igrid_son,ind_cell_son
-  real(dp),dimension(1:nvector),save::getx,ekin,erad
-
-  ! Get child oct index
-  do i=1,ncell
-     igrid_son(i)=son(ind_cell(i))
-  end do
-
-  !-------------------------------
-  ! Average conservative variables
-  !-------------------------------
-  ! Loop over variables
-  do ivar=1,nvar     
-
-     getx(1:ncell)=0.0d0
-     do ind_son=1,twotondim
-        iskip_son=ncoarse+(ind_son-1)*ngridmax
-        do i=1,ncell
-           ind_cell_son(i)=iskip_son+igrid_son(i)
-        end do
-        ! Update average
-        do i=1,ncell
-           getx(i)=getx(i)+uold(ind_cell_son(i),ivar)
-        end do
-     end do
-     
-     ! Scatter result to cells
-     do i=1,ncell
-        uold(ind_cell(i),ivar)=getx(i)/dble(twotondim)
-     end do
-
-  end do
-  ! End loop over variables
-
-  !------------------------------------------------
-  ! Average internal energy instead of total energy
-  !------------------------------------------------
-  if(interpol_var==1 .or. interpol_var==2)then
-
-     getx(1:ncell)=0.0d0
-     do ind_son=1,twotondim
-        iskip_son=ncoarse+(ind_son-1)*ngridmax
-        do i=1,ncell
-           ind_cell_son(i)=iskip_son+igrid_son(i)
-        end do
-        ! Compute child kinetic energy
-        ekin(1:ncell)=0.0d0
-        do idim=1,ndim
-           do i=1,ncell
-              ekin(i)=ekin(i)+0.5d0*uold(ind_cell_son(i),1+idim)**2 &
-                   &               /max(uold(ind_cell_son(i),1),smallr)
-           end do
-        end do
-        ! Compute child radiative energy
-        erad(1:ncell)=0.0d0
-#if NENER>0
-        do irad=1,nener
-           do i=1,ncell
-              erad(i)=erad(i)+uold(ind_cell_son(i),ndim+2+irad)
-           end do
-        end do
-#endif
-        ! Update average
-        do i=1,ncell
-           getx(i)=getx(i)+uold(ind_cell_son(i),ndim+2)-ekin(i)-erad(i)
-        end do
-     end do
-     
-     ! Compute new kinetic energy
-     ekin(1:ncell)=0.0d0
-     do idim=1,ndim
-        do i=1,ncell
-           ekin(i)=ekin(i)+0.5d0*uold(ind_cell(i),1+idim)**2 &
-                &               /max(uold(ind_cell(i),1),smallr)
-        end do
-     end do
-     ! Compute new radiative energy
-     erad(1:ncell)=0.0d0
-#if NENER>0
-     do irad=1,nener
-        do i=1,ncell
-           erad(i)=erad(i)+uold(ind_cell(i),ndim+2+irad)
-        end do
-     end do
-#endif
-
-     ! Scatter result to cells
-     do i=1,ncell
-        uold(ind_cell(i),ndim+2)=getx(i)/dble(twotondim)+ekin(i)+erad(i)
-     end do
-
-  end if
-
-end subroutine upl
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
+#ifdef TOTO
 subroutine interpol_hydro(u1,u2,nn)
   use amr_commons
   use hydro_commons
@@ -548,3 +414,4 @@ subroutine compute_central(a,w,nn)
   end do
 
 end subroutine compute_central
+#endif

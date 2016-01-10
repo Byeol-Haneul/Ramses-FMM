@@ -57,8 +57,8 @@ module amr_commons
      integer(kind=4)::lev
      integer(kind=4),dimension(1:ndim)::ckey
      integer(kind=8)::hkey
-     integer,dimension(1:twotondim)::flag1
-     integer,dimension(1:twotondim)::flag2
+     integer(kind=4),dimension(1:twotondim)::flag1
+     integer(kind=4),dimension(1:twotondim)::flag2
      logical,dimension(1:twotondim)::refined
 #ifdef GRAV
      real(kind=dp),dimension(1:twotondim)::rho
@@ -85,42 +85,40 @@ module amr_commons
      ! Header information
      integer(kind=4)::lev    ! Level of the tile
      integer(kind=4)::cpu    ! CPU in which the tile sits
-     integer(kind=4)::noct   ! Number of octs in the tile
      integer(kind=4)::status ! Status of the tile
-     ! Tile AMR data
+     ! AMR data
      ! Oct-based arrays
-     integer(kind=4),dimension(1:nvector,1:ndim)::ckey ! Cartesian key of each oct
-     integer(kind=8),dimension(1:nvector)::hkey        ! Hilbert key of each oct
+     integer(kind=4),dimension(1:ndim)::ckey ! Cartesian key of each oct
+     integer(kind=8)::hkey                   ! Hilbert key of each oct
      ! Cell-based arrays
-     integer,dimension(1:nvector,1:twotondim)::flag1   ! Flag1
-     integer,dimension(1:nvector,1:twotondim)::flag2   ! Flag2
-     logical,dimension(1:nvector,1:twotondim)::refined ! Refined flag
+     integer,dimension(1:twotondim)::flag1   ! Flag1
+     integer,dimension(1:twotondim)::flag2   ! Flag2
+     logical,dimension(1:twotondim)::refined ! Refined flag
 #ifdef GRAV
      ! Tile gravity data
-     real(kind=dp),dimension(1:nvector,1:twotondim)::rho       ! Total mass density
-     real(kind=dp),dimension(1:nvector,1:twotondim)::phi       ! Gravitationall potential
-     real(kind=dp),dimension(1:nvector,1:twotondim)::phi_old   ! Previous potential
-     real(kind=dp),dimension(1:nvector,1:twotondim,1:ndim)::f  ! Gravity acceleration
+     real(kind=dp),dimension(1:twotondim)::rho       ! Total mass density
+     real(kind=dp),dimension(1:twotondim)::phi       ! Gravitationall potential
+     real(kind=dp),dimension(1:twotondim)::phi_old   ! Previous potential
+     real(kind=dp),dimension(1:twotondim,1:ndim)::f  ! Gravity acceleration
 #endif
 #ifdef SOLVERhydro
      ! Tile hydro data
-     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar)::uold ! Old conservative variables
-     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar)::unew ! New conservative variables
+     real(kind=dp),dimension(1:twotondim,1:nvar)::uold ! Old conservative variables
+     real(kind=dp),dimension(1:twotondim,1:nvar)::unew ! New conservative variables
 #endif
 #ifdef SOLVERmhd
      ! Tile MHD data
-     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar+3)::uold ! Old conservative variables
-     real(kind=dp),dimension(1:nvector,1:twotondim,1:nvar+3)::unew ! New conservative variables
+     real(kind=dp),dimension(1:twotondim,1:nvar+3)::uold ! Old conservative variables
+     real(kind=dp),dimension(1:twotondim,1:nvar+3)::unew ! New conservative variables
 #endif
 #ifdef DUALENER
      ! Tile dual energy forumlation data
-     real(kind=dp),dimension(1:nvector,1:twotondim)::divu ! Velocity divergence
-     real(kind=dp),dimension(1:nvector,1:twotondim)::enew ! New internal energy density
+     real(kind=dp),dimension(1:twotondim)::divu ! Velocity divergence
+     real(kind=dp),dimension(1:twotondim)::enew ! New internal energy density
 #endif
   end type tile
 
   type cache_cell
-     integer(kind=4)::tile
      integer(kind=4)::grid
      integer(kind=4)::cell
   end type cache_cell
@@ -133,7 +131,8 @@ module amr_commons
   integer,allocatable,dimension(:)::head
   integer,allocatable,dimension(:)::tail
   integer,allocatable,dimension(:)::noct
-  integer(i8b)::noct_tot
+  integer,allocatable,dimension(:)::ckey_max
+  integer(i8b)::noct_used
 
   ! Hilbert key
   integer(kind=8),allocatable,dimension(:,:)::bound_key_level
@@ -141,7 +140,7 @@ module amr_commons
   ! Software cache array for the AMR grid
   type(tile),dimension(:),allocatable::cache
   type(hash_table)::cache_dict  ! Oct hash table
-  integer::ntile_tot
+  integer::free_line
   integer::cache_type
 
   ! Types for physical boundary conditions

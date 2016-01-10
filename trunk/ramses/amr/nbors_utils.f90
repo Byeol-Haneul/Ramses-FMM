@@ -1,7 +1,199 @@
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+integer function get_parent_cell(hash_key) result(parent_cell)
+  use amr_commons
+  use hash
+  implicit none
+  integer(kind=8),dimension(0:ndim)::hash_key
+  !
+  integer(kind=8),dimension(0:ndim)::hash_father
+  integer(kind=8),dimension(1:ndim)::ii
+  integer::ind,ipos,idim
+
+  hash_father(0)=hash_key(0)-1
+  hash_father(1:ndim)=hash_key(1:ndim)/2
+  ii(1:ndim)=hash_key(1:ndim)-2*hash_father(1:ndim)
+  ind=1
+  do idim=1,ndim
+     ind=ind+2**(idim-1)*ii(idim)
+  end do
+  ipos=hash_get(grid_dict,hash_father)
+  write(*,*)'parent_cell',hash_father,ipos
+  parent_cell=0
+  if(ipos>0)parent_cell=(ipos-1)*twotondim+ind
+end function get_parent_cell
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
+function getnborgrids(hash_key) result(igridn)
+  use amr_commons
+  implicit none
+  integer(kind=8),dimension(0:ndim)::hash_key
+  integer,dimension(0:twondim)::igridn
+  !---------------------------------------------------------
+  ! This routine computes the index of the 6 neighboring 
+  ! grids for grid igrid(:). The index for the central 
+  ! grid is stored in igridn(:,0). If for some reasons
+  ! the neighboring grids don't exist, then igridn(:,j) = 0.
+  !---------------------------------------------------------
+  integer::ilevel,j,idim,shift
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+
+  ilevel=hash_key(0)
+  igridn(0)=hash_get(grid_dict,hash_key)
+  ! Store neighboring grids
+  do j=1,twondim
+     hash_nbor=hash_key
+     idim=(j-1)/2+1
+     shift=2*(j-(idim-1)*2)-3
+     hash_nbor(idim)=hash_nbor(idim)+shift
+     ! Periodic boundary conditons
+     if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+     if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+     igridn(j)=hash_get(grid_dict,hash_nbor)
+  end do
+    
+end function getnborgrids
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+function getnborcells(igridn,ind) result(icelln)
+  use amr_commons
+  implicit none
+  integer::ind
+  integer,dimension(0:twondim)::igridn
+  integer,dimension(1:twondim)::icelln
+  !--------------------------------------------------------------
+  ! This routine computes the index of 6-neighboring cells
+  ! The user must provide igridn = index of the 6 neighboring
+  ! grids and the cell's grid (see routine getnborgrids). 
+  ! ind is the cell index in the grid.
+  !--------------------------------------------------------------
+  integer::in,ig,ih
+  integer,dimension(1:8,1:6),save::ggg=reshape(& 
+       & (/1,0,1,0,1,0,1,0,&
+       &   0,2,0,2,0,2,0,2,&
+       &   3,3,0,0,3,3,0,0,& 
+       &   0,0,4,4,0,0,4,4,&
+       &   5,5,5,5,0,0,0,0,&
+       &   0,0,0,0,6,6,6,6/),(/8,6/))
+  integer,dimension(1:8,1:6),save::hhh=reshape(& 
+       & (/2,1,4,3,6,5,8,7,&
+       &   2,1,4,3,6,5,8,7,&
+       &   3,4,1,2,7,8,5,6,&
+       &   3,4,1,2,7,8,5,6,&
+       &   5,6,7,8,1,2,3,4,&
+       &   5,6,7,8,1,2,3,4/),(/8,6/))
+  ! Reset indices
+  icelln(1:twondim)=0
+  ! Compute cell numbers
+  do in=1,twondim
+     ig=ggg(ind,in)
+     ih=hhh(ind,in)
+     if(igridn(ig)>0)then
+        icelln(in)=(igridn(ig)-1)*twotondim+ih
+     end if
+  end do
+end function getnborcells
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+function get_nbor_father_cells(hash_key) result(icelln)
+  use amr_commons
+  implicit none
+  integer(kind=8),dimension(0:ndim)::hash_key
+  integer,dimension(1:threetondim)::icelln
+  !---------------------------------------------------------
+  ! This routine computes 3**ndim neighboring father cells
+  ! of the input grid labeled by its Cartesian hash key.
+  ! According to the refinement rules, they should exist
+  ! at all times.
+  !---------------------------------------------------------
+  integer::i,j,k,ind1,ind2,ind3,ind31,ind32,ind33,ipos
+  integer::ilevel
+  integer,dimension(1:ndim)::ii
+  integer(kind=8),dimension(0:ndim)::hash_father
+
+  hash_father(0)=hash_key(0)-1
+  ilevel=hash_father(0)
+
+#if NDIM==1
+  do i=-1,1
+     ind31=1+(i+1)
+     hash_father(1)=(hash_key(1)+i)/2
+     ii(1)=hash_key(1)-2*hash_father(1)
+     ind1=1+ii(1)
+     ! Periodic boundary conditons
+     if(hash_father(1)<0)hash_father(1)=ckey_max(ilevel)-1
+     if(hash_father(1)==ckey_max(ilevel))hash_father(1)=0     
+     ipos=hash_get(grid_dict,hash_father)
+     icelln(ind31)=(ipos-1)*twotondim+ind1
+  end do
+#endif
+#if NDIM==2
+  do i=-1,1
+     ind31=1+(i+1)
+     hash_father(1)=(hash_key(1)+i)/2
+     ii(1)=hash_key(1)-2*hash_father(1)
+     ind1=1+ii(1)
+     ! Periodic boundary conditons
+     if(hash_father(1)<0)hash_father(1)=ckey_max(ilevel)-1
+     if(hash_father(1)==ckey_max(ilevel))hash_father(1)=0     
+     do j=-1,1
+        ind32=ind1+3*(j+1)
+        hash_father(2)=(hash_key(2)+j)/2
+        ii(2)=hash_key(2)-2*hash_father(2)
+        ind2=ind1+2*ii(2)
+        ! Periodic boundary conditons
+        if(hash_father(2)<0)hash_father(2)=ckey_max(ilevel)-1
+        if(hash_father(2)==ckey_max(ilevel))hash_father(2)=0     
+        ipos=hash_get(grid_dict,hash_father)
+        icelln(ind32)=(ipos-1)*twotondim+ind2
+     end do
+  end do
+#endif
+#if NDIM==3
+  do i=-1,1
+     ind31=1+(i+1)
+     hash_father(1)=(hash_key(1)+i)/2
+     ii(1)=hash_key(1)-2*hash_father(1)
+     ind1=1+ii(1)
+     ! Periodic boundary conditons
+     if(hash_father(1)<0)hash_father(1)=ckey_max(ilevel)-1
+     if(hash_father(1)==ckey_max(ilevel))hash_father(1)=0     
+     do j=-1,1
+        ind32=ind1+3*(j+1)
+        hash_father(2)=(hash_key(2)+j)/2
+        ii(2)=hash_key(2)-2*hash_father(2)
+        ind2=ind1+2*ii(2)
+        ! Periodic boundary conditons
+        if(hash_father(2)<0)hash_father(2)=ckey_max(ilevel)-1
+        if(hash_father(2)==ckey_max(ilevel))hash_father(2)=0     
+        do k=-1,1
+           ind33=ind2+9*(k+1)
+           hash_father(3)=(hash_key(3)+k)/2
+           ii(3)=hash_key(3)-2*hash_father(3)
+           ind3=ind2+4*ii(3)
+           ! Periodic boundary conditons
+           if(hash_father(3)<0)hash_father(3)=ckey_max(ilevel)-1
+           if(hash_father(3)==ckey_max(ilevel))hash_father(3)=0     
+           ipos=hash_get(grid_dict,hash_father)
+           icelln(ind33)=(ipos-1)*twotondim+ind3
+        end do
+     end do
+  end do
+#endif
+end function get_nbor_father_cells
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+#ifdef TOTO
 subroutine get3cubefather(ind_cell_father,nbors_father_cells,&
      &                    nbors_father_grids,ncell,ilevel)
   use amr_commons 
@@ -350,47 +542,6 @@ end subroutine getindices3cube
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine getnborcells(igridn,ind,icelln,ng)
-  use amr_commons
-  implicit none
-  integer::ng,ind
-  integer,dimension(1:nvector,0:twondim)::igridn
-  integer,dimension(1:nvector,1:twondim)::icelln
-  !--------------------------------------------------------------
-  ! This routine computes the index of 6-neighboring cells
-  ! The user must provide igridn = index of the 6 neighboring
-  ! grids and the cell's grid (see routine getnborgrids). 
-  ! ind is the cell index in the grid.
-  !--------------------------------------------------------------
-  integer::i,in,ig,ih,iskip
-  integer,dimension(1:8,1:6)::ggg,hhh
-
-  ggg(1:8,1)=(/1,0,1,0,1,0,1,0/); hhh(1:8,1)=(/2,1,4,3,6,5,8,7/)
-  ggg(1:8,2)=(/0,2,0,2,0,2,0,2/); hhh(1:8,2)=(/2,1,4,3,6,5,8,7/)
-  ggg(1:8,3)=(/3,3,0,0,3,3,0,0/); hhh(1:8,3)=(/3,4,1,2,7,8,5,6/)
-  ggg(1:8,4)=(/0,0,4,4,0,0,4,4/); hhh(1:8,4)=(/3,4,1,2,7,8,5,6/)
-  ggg(1:8,5)=(/5,5,5,5,0,0,0,0/); hhh(1:8,5)=(/5,6,7,8,1,2,3,4/)
-  ggg(1:8,6)=(/0,0,0,0,6,6,6,6/); hhh(1:8,6)=(/5,6,7,8,1,2,3,4/)
-
-  ! Reset indices
-  icelln(1:ng,1:twondim)=0
-  ! Compute cell numbers
-  do in=1,twondim
-     ig=ggg(ind,in)
-     ih=hhh(ind,in)
-     iskip=ncoarse+(ih-1)*ngridmax
-     do i=1,ng
-        if(igridn(i,ig)>0)then
-           icelln(i,in)=iskip+igridn(i,ig)
-        end if
-     end do
-  end do
-
-end subroutine getnborcells
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
 subroutine getnborfather(ind_cell,ind_father,ncell,ilevel)
   use amr_commons
   implicit none
@@ -517,36 +668,6 @@ end subroutine getnborfather
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine getnborgrids(igrid,igridn,ngrid)
-  use amr_commons
-  implicit none
-  integer::ngrid
-  integer,dimension(1:nvector)::igrid
-  integer,dimension(1:nvector,0:twondim)::igridn
-  !---------------------------------------------------------
-  ! This routine computes the index of the 6 neighboring 
-  ! grids for grid igrid(:). The index for the central 
-  ! grid is stored in igridn(:,0). If for some reasons
-  ! the neighboring grids don't exist, then igridn(:,j) = 0.
-  !---------------------------------------------------------
-  integer::i,j
-
-  ! Store central grid
-  do i=1,ngrid
-     igridn(i,0)=igrid(i)
-  end do
-  ! Store neighboring grids
-  do j=1,twondim
-     do i=1,ngrid
-        igridn(i,j)=son(nbor(igrid(i),j))
-     end do
-  end do
-    
-end subroutine getnborgrids
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
 subroutine getnborgrids_check(igrid,igridn,ngrid)
   use amr_commons
   implicit none
@@ -573,4 +694,4 @@ subroutine getnborgrids_check(igrid,igridn,ngrid)
     
 end subroutine getnborgrids_check
 
-
+#endif

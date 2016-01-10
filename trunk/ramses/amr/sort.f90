@@ -1,5 +1,5 @@
 module sort
-  
+   
   ! module containing various routines related to sorting
 
   ! quick sort routines
@@ -270,85 +270,100 @@ contains
   !########################################################################
   !########################################################################
   !########################################################################
-  function ge_2keys(key_a, key_b)
+
+  function ge_keys(key_a, key_b)
     implicit none
+    logical::ge_keys
+
+#if NHILBERT == 1
+    integer(kind=8), intent(in), dimension(0:0) :: key_a, key_b
+
+    ge_keys = (key_a(0) >= key_b(0))
+#endif
+  
+#if NHILBERT == 2
     integer(kind=8), intent(in), dimension (0:1):: key_a, key_b
-    logical::ge_2keys
-    ! Function to test wether a >= b for a and b two-integer hilbert keys 
     if     (key_a(1) > key_b(1)) then
-       ge_2keys  =  .true.
+       ge_keys  =  .true.
     elseif (key_a(1) < key_b(1)) then
-       ge_2keys = .false.
+       ge_keys = .false.
     elseif (key_a(0) > key_b(0)) then
-       ge_2keys = .true.
+       ge_keys = .true.
     elseif (key_a(0) < key_b(0)) then
-       ge_2keys = .false.
+       ge_keys = .false.
     else
-       ge_2keys = .true.
+       ge_keys = .true.
     end if
-  end function ge_2keys
-
-  function ge_3keys(key_a, key_b)
-    implicit none
+#endif
+    
+#if NHILBERT == 3  
     integer(kind=8), intent(in), dimension (0:2):: key_a, key_b
-    logical::ge_3keys
-    ! Function to test wether a >= b for a and b three-integer hilbert keys 
-    if     (key_a(2) > key_b(2)) then
-       ge_3keys = .true.
-    elseif (key_a(2) < key_b(2)) then
-       ge_3keys = .false.
-    elseif (key_a(1) > key_b(1)) then
-       ge_3keys = .true.
-    elseif (key_a(1) < key_b(1)) then
-       ge_3keys = .false.
-    elseif (key_a(0) > key_b(0)) then
-       ge_3keys = .true.
-    elseif (key_a(0) < key_b(0)) then
-       ge_3keys = .false.
-    else
-       ge_3keys = .true.
-    end if
-  end function ge_3keys
 
-  function gt_2keys(key_a, key_b)
+    if     (key_a(2) > key_b(2)) then
+       ge_keys = .true.
+    elseif (key_a(2) < key_b(2)) then
+       ge_keys = .false.
+    elseif (key_a(1) > key_b(1)) then
+       ge_keys = .true.
+    elseif (key_a(1) < key_b(1)) then
+       ge_keys = .false.
+    elseif (key_a(0) > key_b(0)) then
+       ge_keys = .true.
+    elseif (key_a(0) < key_b(0)) then
+       ge_keys = .false.
+    else
+       ge_keys = .true.
+    end if
+#endif
+
+  end function ge_keys
+ 
+  function gt_keys(key_a, key_b)
     implicit none
+    logical::gt_keys
+
+#if NHILBERT == 1
+    integer(kind=8), intent(in), dimension(0:0) :: key_a, key_b
+    
+    gt_keys = (key_a(0) > key_b(0))
+#endif
+
+#if NHILBERT == 2
     integer(kind=8), intent(in), dimension (0:1):: key_a, key_b
-    logical::gt_2keys
-    ! Function to test wether a >= b for a and b two-integer hilbert keys 
-    if     (key_a(1) > key_b(1)) then
-       gt_2keys  =  .true.
-    elseif (key_a(1) < key_b(1)) then
-       gt_2keys = .false.
-    elseif (key_a(0) > key_b(0)) then
-       gt_2keys = .true.
-    elseif (key_a(0) < key_b(0)) then
-       gt_2keys = .false.
-    else
-       gt_2keys = .false.
-    end if
-  end function gt_2keys
 
-  function gt_3keys(key_a, key_b)
-    implicit none
-    integer(kind=8), intent(in), dimension (0:2):: key_a, key_b
-    logical::gt_3keys
-    ! Function to test wether a > b for a and b three-integer hilbert keys 
-    if     (key_a(2) > key_b(2)) then
-       gt_3keys = .true.
-    elseif (key_a(2) < key_b(2)) then
-       gt_3keys = .false.
-    elseif (key_a(1) > key_b(1)) then
-       gt_3keys = .true.
+    if     (key_a(1) > key_b(1)) then
+       gt_keys  =  .true.
     elseif (key_a(1) < key_b(1)) then
-       gt_3keys = .false.
+       gt_keys = .false.
     elseif (key_a(0) > key_b(0)) then
-       gt_3keys = .true.
+       gt_keys = .true.
     elseif (key_a(0) < key_b(0)) then
-       gt_3keys = .false.
+       gt_keys = .false.
     else
-       gt_3keys = .false.
+       gt_keys = .false.
     end if
-  end function gt_3keys
+#endif
+
+#if NHILBERT == 3
+    integer(kind=8), intent(in), dimension (0:2):: key_a, key_b
+
+    if     (key_a(2) > key_b(2)) then
+       gt_keys = .true.
+    elseif (key_a(2) < key_b(2)) then
+       gt_keys = .false.
+    elseif (key_a(1) > key_b(1)) then
+       gt_keys = .true.
+    elseif (key_a(1) < key_b(1)) then
+       gt_keys = .false.
+    elseif (key_a(0) > key_b(0)) then
+       gt_keys = .true.
+    elseif (key_a(0) < key_b(0)) then
+       gt_keys = .false.
+    else
+       gt_keys = .false.
+    end if
+#endif
+  end function gt_keys
 
   function gt_3keys_individual_input(key_a2, key_a1, key_a0, key_b2, key_b1, key_b0)
     implicit none
@@ -461,7 +476,6 @@ contains
   !########################################################################
   !########################################################################
   !########################################################################
-
   subroutine lsd_radix_sort_particles(offset, np, final_level, key_level, reset_permutation)
     use pm_commons,     only: part_ind_permutation, part_ind_permutation2, part_hkey
     use amr_parameters, only: ndim
@@ -492,17 +506,17 @@ contains
     end if
 
     do ilevel=final_level,1,-1
-#if NDIM == 3
        call lsd_counting_sort_onelevel(offset, np, ilevel, key_level, &
             part_ind_permutation(1), part_ind_permutation2(1), &
-            part_hkey(1,2), part_hkey(1,1), part_hkey(1, 0))
-#endif 
-#if NDIM == 2
-       call lsd_counting_sort_onelevel(np, ilevel, key_level, &
-            part_ind_permutation(offset+1:offset+np), part_ind_permutation2(offset+1:offset+np), &
-            part_hkey(offset+1:offset+np, 1), part_hkey(offset+1:offset+np, 0))
+            part_hkey(1,1)  &
+#if NHILBERT > 1
+            , part_hkey(1,2)&
 #endif
-    end do
+#if NHILBERT > 2
+            , part_hkey(1,3) &
+#endif
+            )
+            end do
 
 !    do ip = 1, np
 !       part_ind_permutation(offset+ip) = part_ind_permutation(offset+ip) + offset
@@ -516,29 +530,24 @@ contains
   !########################################################################
   !########################################################################
   !########################################################################
-#if NDIM == 3
-  subroutine lsd_counting_sort_onelevel(offset, np, ilevel, key_level, sigma1, sigma2, hkey2, hkey1, hkey0)
+  subroutine lsd_counting_sort_onelevel(offset, np, ilevel, key_level, sigma1, sigma2, hkey1 &
+#if NHILBERT > 1
+       , hkey2 &
+#endif
+#if NHILBERT > 2
+       , hkey3 &
+#endif
+       )
     use pm_commons, only: npart
     implicit none    
     integer,                          intent(in)         :: offset, np, ilevel, key_level
-    integer(kind=8), dimension(1:npart), intent(in), target :: hkey2, hkey1, hkey0
+    integer(kind=8), dimension(1:npart), intent(in), target :: hkey1
+#if NHILBERT > 1
+    integer(kind=8), dimension(1:npart), intent(in), target :: hkey2
 #endif
-
-#if NDIM == 2
-  subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey1, hkey0)      
-    use pm_commons, only: npart
-    implicit none
-    integer,                          intent(in)         :: np, ilevel, key_level
-    integer(kind=8), dimension(1:offset+np), intent(in), target :: hkey1, hkey0
+#if NHILBERT > 2
+    integer(kind=8), dimension(1:npart), intent(in), target :: hkey3
 #endif
-
-#if NDIM == 1
-  subroutine lsd_counting_sort_onelevel(np, ilevel, key_level, sigma1, sigma2, hkey0)
-    implicit none
-    integer(kind=8), dimension(1:offset+np), intent(in), target :: hkey0
-#endif
-
-
     integer,         dimension(1:npart), intent(inout)      :: sigma1, sigma2
 
     ! Update the given permuations sigma1, sigma2 such that sigma1  will 
@@ -558,20 +567,14 @@ contains
     ! get bit and key to read from 
     ibit1 = (key_level-ilevel)*3       
     ikey = ibit1/63
-    ibit1 = mod(ibit1,63)
-
-    ! a bit ugly, but move this line here as 
-    ! hkey2 does not exist in 2d version of the routine
-    if (ikey==2) use_key => hkey2
-
+    ibit1 = mod(ibit1,63)    
 #endif
 
 #if NDIM==2
     integer, dimension(0:3), save :: bucket_offset, bucket_count
     integer, parameter :: nbucket = 3
     integer, parameter :: nbits_read = 2
-    integer, parameter :: offset
-
+ 
     ! get bit and key to read from 
     ibit1 = (key_level-ilevel)*2       
     ikey = ibit1/62
@@ -580,8 +583,13 @@ contains
 
     ! use a pointer here to define which of the three integer keys                          
     ! must be accessed.                                                                     
-    if (ikey==0) use_key => hkey0
-    if (ikey==1) use_key => hkey1
+    if (ikey==0) use_key => hkey1
+#if NHILBERT == 2
+    if (ikey==1) use_key => hkey2
+#endif
+#if NHILBERT == 3 
+    if (ikey==2) use_key => hkey3
+#endif
 
 
     ! Count particles per bucket
@@ -619,7 +627,7 @@ contains
     use pm_commons
     implicit none
     integer, intent(in)                          :: offset, np, key_level
-    integer, save                                :: ipart, ikey, nkey, idim
+    integer, save                                :: ipart, ikey, idim
 
     real(dp),        allocatable, dimension(:)   :: extra_storage_dp
     integer(kind=8), allocatable, dimension(:)   :: extra_storage_i8
@@ -663,23 +671,14 @@ contains
     ! Rearrange long integer arrays
     allocate(extra_storage_i8(offset+1 : offset + np))
 
-    nkey = 0
-#if NDIM==3
-    if (key_level > 21) nkey = nkey + 1
-    if (key_level > 42) nkey = nkey + 1
-#endif
-#if NDIM==2
-    if (key_level > 31) nkey = nkey + 1
-#endif
-
-    do ikey = 0, nkey  
+    do ikey = 1, nhilbert  
        do ipart = offset + 1, offset + np
           extra_storage_i8(part_ind_permutation2(ipart)) = part_hkey(ipart, ikey) 
        end do
        part_hkey(offset + 1 : offset + np, ikey) = extra_storage_i8(offset + 1 : offset + np)
     end do
     
-#ifdef LONGINT
+#if ID_PRECISION == 8
     do ipart = offset + 1, offset + np
        extra_storage_i8(part_ind_permutation2(ipart)) = idp(ipart)
     end do
@@ -690,7 +689,7 @@ contains
 
     ! Rearrange short integer arrays
     allocate(extra_storage_i4(offset+1 : offset + np))
-#ifndef LONGINT
+#if ID_PRECISION == 4
     do ipart = offset + 1, offset + np
        extra_storage_i4(part_ind_permutation2(ipart)) = idp(ipart)
     end do

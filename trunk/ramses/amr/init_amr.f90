@@ -1,6 +1,6 @@
 subroutine init_amr
   use amr_commons
-  use hash, only: init_empty_hash
+  use hash
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'  
@@ -19,12 +19,15 @@ subroutine init_amr
 
   ! Allocate oct hash table
   if(verbose.and.myid==1)write(*,*)'Initialize empty hash'
-  call init_empty_hash(grid_dict, floor(ngridmax * 1.5))
+  call init_empty_hash(grid_dict,2*ngridmax)
   
   ! Set initial cpu boundaries
+  ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
   allocate(bound_key_level(0:ncpu,levelmin:nlevelmax))
+  allocate(ckey_max(levelmin:nlevelmax))
   do ilevel=levelmin,nlevelmax
+     ckey_max(ilevel)=2**(ilevel-1)
      maxkey=2**((ilevel-1)*ndim)
      do icpu=1,ncpu-1
         bound_key_level(icpu,ilevel) = (icpu*maxkey)/ncpu
@@ -38,10 +41,10 @@ subroutine init_amr
   allocate(head(levelmin:nlevelmax))
   allocate(tail(levelmin:nlevelmax))
   allocate(noct(levelmin:nlevelmax))
-  head=0    ! Head oct in the level
-  tail=0    ! Tail oct in the level
-  noct=0    ! Number of oct in the level
-  noct_tot=0  ! Total number of oct
+  head=0       ! Head oct in the level
+  tail=0       ! Tail oct in the level
+  noct=0       ! Number of oct in the level
+  noct_used=0  ! Total number of oct used
 
 end subroutine init_amr
 

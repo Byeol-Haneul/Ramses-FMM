@@ -6,15 +6,16 @@ subroutine init_refine_basegrid
   use amr_commons
   use pm_commons
   use hilbert
+  use hash, only:hash_set,hash_get
   implicit none
   !-------------------------------------------
   ! This routine builds the initial AMR grid
   !-------------------------------------------
-  integer::ilevel,i,j,k,igrid
+  integer::ilevel,i,j,k,igrid,ipos
   integer(kind=8)::ikey
   integer(kind=8),dimension(1:nvector)::hk0,hk1,hk2
   integer(kind=8),dimension(1:nvector)::ix=0,iy=0,iz=0
-  integer(kind=8),dimension(0:ndim)::hash_key
+  integer(kind=8),dimension(0:ndim)::hash_key,hash_test
 
   if(myid==1)write(*,*)'Building initial base grid'
   init=.true.
@@ -36,7 +37,7 @@ subroutine init_refine_basegrid
      if(igrid==1)head(levelmin)=1
      tail(levelmin)=igrid
      noct(levelmin)=noct(levelmin)+1
-     noct_tot=noct_tot+1
+     noct_used=noct_used+1
      grid(igrid)%lev=levelmin
      grid(igrid)%ckey(1)=ix(1)
 #if NDIM>1
@@ -56,7 +57,10 @@ subroutine init_refine_basegrid
 #if NDIM>2
      hash_key(3)=iz(1)
 #endif
+     write(*,*)hash_key,igrid
      call hash_set(grid_dict,hash_key,igrid)
+     ipos=hash_get(grid_dict,hash_key)
+     write(*,*)ipos
   end do
 
 end subroutine init_refine_basegrid
@@ -73,7 +77,6 @@ subroutine init_refine_adaptive
   use hydro_commons
   use pm_commons
   use poisson_commons
-  use hilbert, only: hilbert_for_particle
   implicit none
   integer::ilevel,i,ivar, ilev
   logical :: use_histograms 
@@ -88,12 +91,7 @@ subroutine init_refine_adaptive
      end do
 
      do ilevel=nlevelmax,levelmin,-1
-        if(hydro)then
-           call upload_fine(ilevel)
-        endif
-     end do
-
-     do ilevel=nlevelmax,levelmin,-1
+        if(hydro)call upload_fine(ilevel)
         call flag_fine(ilevel,2)
      end do
 

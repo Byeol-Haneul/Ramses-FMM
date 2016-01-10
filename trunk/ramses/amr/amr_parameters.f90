@@ -44,8 +44,6 @@ module amr_parameters
   integer,parameter::nvector=NVECTOR
 #endif
 
-  integer, parameter :: nstride = 65536
-
   ! Run control
   logical::verbose =.false.   ! Write everything
   logical::hydro   =.false.   ! Hydro activated

@@ -189,7 +189,7 @@ subroutine read_params
      npartmax=nparttot/int(ncpu,kind=8)
   endif
   if(myid>1)verbose=.false.
-!  call read_hydro_params(nml_ok)
+  call read_hydro_params(nml_ok)
 
   close(1)
 

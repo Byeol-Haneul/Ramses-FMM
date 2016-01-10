@@ -25,8 +25,6 @@ subroutine adaptive_loop
      call init_refine_adaptive ! Build initial adaptive grid
   endif
 
-#ifdef TOTO
-
 #ifndef WITHOUTMPI
   tt2=MPI_WTIME(info)
   if(myid==1)write(*,*)'Time elapsed since startup:',tt2-tt1
@@ -34,14 +32,17 @@ subroutine adaptive_loop
 
   if(myid==1)then
      write(*,*)'Initial mesh structure'
-     do ilevel=1,nlevelmax
-        if(numbtot(1,ilevel)>0)write(*,999)ilevel,numbtot(1:4,ilevel)
+     do ilevel=levelmin,nlevelmax
+        if(noct(ilevel)>0)write(*,999)ilevel,noct(ilevel),head(ilevel),tail(ilevel)
      end do
   end if
+999 format(' Level ',I2,' has ',I10,' grids (',2(I8,','),')')
 
   nstep_coarse_old=nstep_coarse
 
   if(myid==1)write(*,*)'Starting time integration' 
+
+#ifdef TOTO
 
   do ! Main time loop
 
