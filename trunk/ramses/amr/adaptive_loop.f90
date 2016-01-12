@@ -42,8 +42,6 @@ subroutine adaptive_loop
 
   if(myid==1)write(*,*)'Starting time integration' 
 
-#ifdef TOTO
-
   do ! Main time loop
 
 #ifndef WITHOUTMPI
@@ -57,56 +55,8 @@ subroutine adaptive_loop
      mass_tot=0.0D0  ! Reset total mass
      eint_tot=0.0D0  ! Reset total internal energy
 
-     ! Make new refinements
-     if(levelmin.lt.nlevelmax .and..not.static)then
-        call refine_coarse
-        do ilevel=1,levelmin
-           call build_comm(ilevel)
-           call make_virtual_fine_int(cpu_map(1),ilevel)
-           if(hydro)then
-              do ivar=1,nvar
-                 call make_virtual_fine_dp(uold(1,ivar),ilevel)
-              end do
-              if(simple_boundary)call make_boundary_hydro(ilevel)
-           endif
-           if(poisson)then
-              call make_virtual_fine_dp(phi(1),ilevel)
-              do idim=1,ndim
-                 call make_virtual_fine_dp(f(1,idim),ilevel)
-              end do
-           end if
-           if(ilevel<levelmin)call refine_fine(ilevel)
-        end do
-     endif
-
      ! Call base level
      call amr_step(levelmin,1)
-
-     if(levelmin.lt.nlevelmax .and..not. static)then
-        do ilevel=levelmin-1,1,-1
-           ! Hydro book-keeping
-           if(hydro)then
-              call upload_fine(ilevel)
-              do ivar=1,nvar
-                 call make_virtual_fine_dp(uold(1,ivar),ilevel)
-              end do
-              if(simple_boundary)call make_boundary_hydro(ilevel)
-           end if
-           ! Gravity book-keeping
-           if(poisson)then
-              call make_virtual_fine_dp(phi(1),ilevel)
-              do idim=1,ndim
-                 call make_virtual_fine_dp(f(1,idim),ilevel)
-              end do
-           end if
-        end do
-        
-        ! Build refinement map
-        do ilevel=levelmin-1,1,-1
-           call flag_fine(ilevel,2)
-        end do
-        call flag_coarse
-     endif
 
      ! New coarse time-step
      nstep_coarse=nstep_coarse+1
@@ -124,9 +74,5 @@ subroutine adaptive_loop
 #endif
 
   end do
-
-999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
-
-#endif
 
 end subroutine adaptive_loop

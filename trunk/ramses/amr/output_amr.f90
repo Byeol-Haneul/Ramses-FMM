@@ -19,12 +19,16 @@ subroutine dump_all
   if(nstep_coarse==0.and.nrestart>0)return
   if(verbose)write(*,*)'Entering dump_all'
 
-  call write_screen
+  do i=levelmin,nlevelmax
+     call write_screen(i)
+  end do
+
   call title(ifout,nchar)
   ifout=ifout+1
   if(t>=tout(iout).or.aexp>=aout(iout))iout=iout+1
   output_done=.true.
 
+#ifdef TOTO
   if(ndim>1)then
      filedir='output_'//TRIM(nchar)//'/'
      filecmd='mkdir -p '//TRIM(filedir)
@@ -91,8 +95,10 @@ subroutine dump_all
         call savegadget(filename)
      end if
   end if
+#endif
 
 end subroutine dump_all
+#ifdef TOTO
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -473,4 +479,4 @@ subroutine savegadget(filename)
   deallocate(pos, vel, ids)
 
 end subroutine savegadget
-
+#endif

@@ -33,7 +33,7 @@ subroutine refine_fine(ilevel)
   ! automatically satisfied. For adaptive time-stepping,
   ! numerical rules are checked before refining any cell.
   !---------------------------------------------------------
-  integer::igrid,icell,i,ibit,ibucket,ifree,ilev,ind,inew,ioct,iold,iold_true
+  integer::igrid,icell,i,j,ibit,ibucket,ifree,ilev,ind,inew,ioct,iold,iold_true
   integer::noct_zero,head_zero,indx_zero
   integer::parent_cell,skip_bit,true_level
   integer::get_parent_cell
@@ -99,7 +99,7 @@ subroutine refine_fine(ilevel)
         end if
      end do
   end do
-  if(verbose)write(*,112)nkill
+  if(verbose)write(*,113)nkill
 
   !-----------------------------------------------------
   ! Step 3: sort new octs and empty slots according to 
@@ -111,7 +111,7 @@ subroutine refine_fine(ilevel)
   ! Count number of octs per bucket
   noct_level=0
   noct_zero=0
-  do ioct=head(ilevel+1),ifree-1
+  do ioct=tail(ilevel)+1,ifree-1
      true_level=grid(ioct)%lev
      if(true_level.NE.0)then
         noct_level(true_level)=noct_level(true_level)+1
@@ -119,19 +119,20 @@ subroutine refine_fine(ilevel)
         noct_zero=noct_zero+1
      end if
   end do
-  head_level(ilevel+1)=head(ilevel+1)
+  head_level(ilevel+1)=tail(ilevel)+1
   do ilev=ilevel+2,nlevelmax
      head_level(ilev)=head_level(ilev-1)+noct_level(ilev-1)
   end do
   head_zero=head_level(nlevelmax)+noct_level(nlevelmax)
 
   ! Allocate main swap table
-  allocate(swap_table(head(ilevel+1):ifree-1))
+  if(ifree.GT.head_level(ilevel+1))then
+  allocate(swap_table(head_level(ilevel+1):ifree-1))
 
   ! Build index permutation table
   indx_level=head_level
   indx_zero=head_zero
-  do ioct=head(ilevel+1),ifree-1
+  do ioct=tail(ilevel)+1,ifree-1
      true_level=grid(ioct)%lev
      if(true_level.NE.0)then
         swap_table(indx_level(true_level))=ioct
@@ -189,25 +190,35 @@ subroutine refine_fine(ilevel)
   ! New data at position inew COMES FROM
   ! Old data at position iold.
   !-----------------------------------------------------
-  ! Allocate temporary swap table
-  allocate(swap_tmp(head(ilevel+1):ifree-1))
-  ! Keep track of the permutation during swap
-  do iold=head_level(ilevel+1),ifree-1
-     swap_tmp(iold)=iold
-  end do
-  ! Perform the swap
-  do inew=head_level(ilevel+1),ifree-1
-     iold=swap_table(inew)
-     iold_true=swap_tmp(iold)
-     if(iold_true.NE.inew)then
-        oct_tmp=grid(inew)
-        grid(inew)=grid(iold_true)
-        grid(iold_true)=oct_tmp
-        swap_tmp(inew)=iold_true
+  ! Perform the swap  
+  do j=head_level(ilevel+1),ifree-1
+     if(j.NE.swap_table(j))then
+        hash_key(0)=grid(j)%lev
+        hash_key(1:ndim)=grid(j)%ckey(1:ndim)
+        if(grid(j)%lev>0)call hash_free(grid_dict,hash_key)
+        oct_tmp=grid(j)
+        i=j
+        inew=swap_table(j)
+        do while(inew.NE.j)
+           grid(i)=grid(inew)
+           hash_key(0)=grid(inew)%lev
+           hash_key(1:ndim)=grid(inew)%ckey(1:ndim)
+           if(grid(inew)%lev>0)then
+              call hash_free(grid_dict,hash_key)
+              call hash_set(grid_dict,hash_key,i)
+           endif
+           swap_table(i)=i
+           i=inew
+           inew=swap_table(inew)
+        end do
+        grid(i)=oct_tmp
+        hash_key(0)=grid(i)%lev
+        hash_key(1:ndim)=grid(i)%ckey(1:ndim)
+        if(grid(i)%lev>0)call hash_set(grid_dict,hash_key,i)
+        swap_table(i)=i
      endif
   end do
-  ! Deallocate all swap arrays
-  deallocate(swap_table,swap_tmp)
+  endif
 
   !-----------------------------------------------------
   ! Step 6: Clean up final AMR structure
@@ -288,9 +299,12 @@ subroutine make_new_oct(ind_child,ind_parent,ind_cell,ilevel,ngrid)
         write(*,*)'Increase ngridmax'
         call clean_abort
      end if
+     grid(ichild)%lev=ilevel
      grid(ichild)%ckey(1:ndim)=cart_key(igrid,1:ndim)
      grid(ichild)%hkey=hk0(igrid)
      grid(ichild)%refined(1:twotondim)=.false.
+     grid(ichild)%flag1(1:twotondim)=0
+     grid(ichild)%flag2(1:twotondim)=0
      ! Insert new grid in hash table
      hash_key(0)=ilevel
      hash_key(1:ndim)=cart_key(igrid,1:ndim)
@@ -310,21 +324,20 @@ subroutine make_new_oct(ind_child,ind_parent,ind_cell,ilevel,ngrid)
   !=====================================================
   ! Inject parent hydro variables into new children ones
   !=====================================================
-  ! No interpolation yet (to be done later)...
   if(.not.init)then
      !============================
      ! Interpolate hydro variables
      !============================
-     if(hydro)then
-        do igrid=1,ngrid
-           ichild=ind_child(igrid)
-           iparent=ind_parent(igrid)
-           icell=ind_cell(igrid)
-           do ind=1,twotondim
-              grid(ichild)%uold(ind,1:nvar)=grid(iparent)%uold(icell,1:nvar)
-           enddo
+#ifdef SOLVERhydro
+     do igrid=1,ngrid
+        ichild=ind_child(igrid)
+        iparent=ind_parent(igrid)
+        icell=ind_cell(igrid)
+        do ind=1,twotondim
+           grid(ichild)%uold(ind,1:nvar)=grid(iparent)%uold(icell,1:nvar)
         enddo
-     endif
+     enddo
+#endif
      !==============================
      ! Interpolate gravity variables
      !==============================

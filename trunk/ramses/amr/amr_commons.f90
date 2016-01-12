@@ -132,7 +132,7 @@ module amr_commons
   integer,allocatable,dimension(:)::tail
   integer,allocatable,dimension(:)::noct
   integer,allocatable,dimension(:)::ckey_max
-  integer(i8b)::noct_used
+  integer::noct_used
 
   ! Hilbert key
   integer(kind=8),allocatable,dimension(:,:)::bound_key_level

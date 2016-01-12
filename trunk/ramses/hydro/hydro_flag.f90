@@ -22,7 +22,6 @@ subroutine hydro_flag(ilevel)
 
   if(ilevel==nlevelmax)return
   if(noct(ilevel)==0)return
-  write(*,*)' Entering hydro_flag'
 
   hash_key(0)=ilevel+1
 
@@ -39,8 +38,6 @@ subroutine hydro_flag(ilevel)
         ! Compute cell hash key
         hash_key(1:ndim)=2*grid(igrid)%ckey(1:ndim)+iii(1:ndim,ind)
 
-        print*,hash_key
-
         ! Initialize refinement to false
         ok=.false.
 
@@ -54,9 +51,7 @@ subroutine hydro_flag(ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel+1)-1
               if(hash_nbor(idim)==ckey_max(ilevel+1))hash_nbor(idim)=0
            enddo
-           print*,i_nbor,hash_nbor
            parent_cell=get_parent_cell(hash_nbor)
-           print*,i_nbor,parent_cell
            if(parent_cell>0)then
               indn(i_nbor)=parent_cell
            else
@@ -66,8 +61,6 @@ subroutine hydro_flag(ilevel)
               indn(i_nbor)=parent_cell
            endif
         end do
-
-        print*,indn(1:twotondim)
 
         ! Loop over dimensions
         do idim=1,ndim
@@ -81,7 +74,6 @@ subroutine hydro_flag(ilevel)
               uum(ivar)=grid(igrid )%uold(ind ,ivar)
               uud(ivar)=grid(igridd)%uold(indd,ivar)
            end do
-           write(*,*)idim,uug,uum,uud
            call hydro_refine(uug,uum,uud,ok)
         end do
      

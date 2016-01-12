@@ -13,7 +13,6 @@ module hash
      integer         :: c1, c2, c3
      integer(kind=8) :: prime     
   end type hash_table
-  integer, parameter :: nkey = ndim - 1                   
 contains
 
   ! ============================================================================= 
@@ -25,15 +24,23 @@ contains
     integer(kind=4), parameter :: seed=42, len = 32
     integer(kind=4), save :: tablesize
 
-    tablesize = htable%prime-1
-
     ! compute the "bucket" as a function of the nkey-integer key.
-    !    hash_func = MOD(MOD(key(0),htable%prime) + htable%c1 * MOD(key(1),htable%prime)&
-    !         + htable%c2 * MOD(key(2),htable%prime) + htable%c3 * key_level, htable%prime) + 1
+#if NDIM==1
+    hash_func = key(0)+htable%c1*key(1)
+#endif    
+#if NDIM==2
+    hash_func = key(0)+htable%c1*key(1)+htable%c2*key(2)
+#endif    
+#if NDIM==3
+    hash_func = key(0)+htable%c1*key(1)+htable%c2*key(2)+htable%c3*key(3) 
+#endif    
+    hash_func = MOD(hash_func,htable%prime) + 1
 
-    call murmurhash3_x64_128(key, len, tablesize, seed, hash)
+!    tablesize = htable%prime-1
+    !call murmurhash3_x64_128(key, len, tablesize, seed, hash)
     ! TODO: maybe remove this by allocating the buckets starting from )...
-    hash_func = hash(1) + 1
+    !hash_func = hash(1) + 1
+
   end function hash_func
   ! =============================================================================
 
@@ -54,13 +61,20 @@ contains
          & 402653189,805306457,1610612741/)
 
     ! TODO: rename prime since it's not a prime anymore...
-    htable%prime = 2
-    do while (htable%prime < req_size)
-       htable%prime = htable%prime * 2
+    ! Compute prime number
+    ncode=req_size
+    do bit_length=1,32
+       ncode=ncode/2
+       if(ncode<=1) exit
     end do
 
+    !htable%prime = 2
+    !do while (htable%prime < req_size)
+    !   htable%prime = htable%prime * 2
+    !end do
+
     ! Allocate and initialize arrays
-    !    htable%prime         = prime(bit_length + 1)
+    htable%prime = prime(bit_length)
     htable%size = htable%prime / 4 + htable%prime
     htable%nfree = htable%prime
     allocate(htable%value      (1:htable%size))
@@ -79,21 +93,9 @@ contains
     htable%nfree_chain = htable%size - htable%prime
 
     ! build constants
-    htable%c1 = 1
-    do i = 1, nlevelmax
-       htable%c1 = mod(2 * htable%c1, htable%prime)
-    end do
-
-    htable%c2 = htable%c1
-    do i = 1, nlevelmax
-       htable%c2 = mod(2 * htable%c2, htable%prime)
-    end do
-
-    htable%c3 = htable%c2
-    do i = 1, nlevelmax
-       htable%c3 = mod(2 * htable%c3, htable%prime)
-    end do
-    
+    htable%c1 = nlevelmax
+    htable%c2 = nlevelmax*2**nlevelmax
+    htable%c3 = nlevelmax*4**nlevelmax
 
   end subroutine init_empty_hash
   ! =============================================================================
@@ -284,17 +286,24 @@ contains
   !        IOR(IEOR(key1(1), key2(1)), &
   !        IEOR(key1(0), key2(0)))))) == 0_8
   ! end function same_keys
+!!$  function same_keys(key1, key2)
+!!$    logical :: same_keys
+!!$    integer, parameter :: thirtytwo=32
+!!$    integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2     
+!!$    same_keys =  memcmp(key1, key2, thirtytwo) == 0_4
+!!$  end function same_keys
   function same_keys(key1, key2)
     logical :: same_keys
-    integer, parameter :: thirtytwo=32
     integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2     
-    same_keys =  memcmp(key1, key2, thirtytwo) == 0_4
+#if NDIM==1
+    same_keys =  (key1(0)==key2(0) .and. key1(1)==key2(1))
+#endif
+#if NDIM==2
+    same_keys =  (key1(0)==key2(0) .and. key1(1)==key2(1) .and. key1(2)==key2(2))
+#endif
+#if NDIM==3
+    same_keys =  (key1(0)==key2(0) .and. key1(1)==key2(1) .and. key1(2)==key2(2) .and. key1(3)==key2(3))
+#endif
+    return
   end function same_keys
-  ! end function same_keys
-  !   function same_keys(key1, key2)
-  !   logical :: same_keys
-  !   integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2     
-  !   same_keys =  (key1(0)==key2(0) .and. key1(1)==key2(1) .and. key1(2)==key2(2) .and. key1(3)==key2(3))
-  !   return
-  ! end function same_keys
 end module hash

@@ -57,12 +57,10 @@ subroutine init_refine_basegrid
 #if NDIM>2
      hash_key(3)=iz(1)
 #endif
-     write(*,*)hash_key,igrid
      call hash_set(grid_dict,hash_key,igrid)
-     ipos=hash_get(grid_dict,hash_key)
-     write(*,*)ipos
   end do
-
+  if(hydro)call init_flow_fine(levelmin)
+  
 end subroutine init_refine_basegrid
 !################################################################
 !################################################################
@@ -85,17 +83,26 @@ subroutine init_refine_adaptive
 
   do i=levelmin,nlevelmax+1
 
-     do ilevel=levelmin,nlevelmax
-        call refine_fine(ilevel)
-        if(hydro)call init_flow_fine(ilevel)
+     call refine_fine(levelmin)
+
+     do ilevel=nlevelmax,levelmin,-1
+        if(hydro)then
+           call init_flow_fine(ilevel)
+           call upload_fine(ilevel)
+        endif
      end do
 
      do ilevel=nlevelmax,levelmin,-1
-        if(hydro)call upload_fine(ilevel)
         call flag_fine(ilevel,2)
      end do
 
   end do
+
+  do ilevel=levelmin,nlevelmax
+     call write_screen(ilevel)
+  end do
+
+  init=.false.
 
 end subroutine init_refine_adaptive
 !################################################################

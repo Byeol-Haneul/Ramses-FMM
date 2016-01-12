@@ -154,7 +154,7 @@ subroutine smooth_fine(ilevel)
   ! -------------------------------------------------------------------
   integer::ismooth,count_nbor
   integer::i,ncache,iskip,ngrid
-  integer::igrid,ind,i_nbor,igrid_nbor,icell_nbor
+  integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
   integer::getnborgrids
   integer::parent_cell,get_parent_cell
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
@@ -184,7 +184,12 @@ subroutine smooth_fine(ilevel)
            hash_key(1:ndim)=2*grid(igrid)%ckey(1:ndim)+iii(1:ndim,ind)
            count_nbor=0
            do i_nbor=1,twondim
-              hash_nbor(1:ndim)=hash_key(1:ndim)+shift(1:ndim,i_nbor)
+              ! Periodic boundary conditons
+              do idim=1,ndim
+                 hash_nbor(idim)=hash_key(idim)+shift(idim,i_nbor)
+                 if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel+1)-1
+                 if(hash_nbor(idim)==ckey_max(ilevel+1))hash_nbor(idim)=0
+              enddo
               parent_cell=get_parent_cell(hash_nbor)
               if(parent_cell>0)then
                  igrid_nbor=(parent_cell-1)/twotondim+1

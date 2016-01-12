@@ -24,7 +24,7 @@ subroutine newdt_fine(ilevel)
   real(dp)::dx_min,dx,scale,dt_fact,limiting_dt_fact
   logical::highest_level
 
-  if(numbtot(1,ilevel)==0)return
+  if(noct(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   threepi2=3.0d0*ACOS(-1.0d0)**2
@@ -44,28 +44,6 @@ subroutine newdt_fine(ilevel)
      dtnew(ilevel)=MIN(dtnew(ilevel),0.1/hexp)
   end if
 
-  if(pic) then
-
-     dt_all=dtnew(ilevel); dt_loc=dt_all
-     ekin_all=0.0; ekin_loc=0.0
-     call newdt_part(ilevel, dt_loc, ekin_loc)
-     
-     ! Minimize time step over all cpus
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,&
-          & MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(ekin_loc,ekin_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,&
-          & MPI_COMM_WORLD,info)
-#endif
-#ifdef WITHOUTMPI
-     dt_all=dt_loc
-     ekin_all=ekin_loc
-#endif
-     ekin_tot=ekin_tot+ekin_all
-     dtnew(ilevel)=MIN(dtnew(ilevel),dt_all)
-
-  end if
-
   if(hydro)call courant_fine(ilevel)
   
 111 format('   Entering newdt_fine for level ',I2)
@@ -75,6 +53,7 @@ end subroutine newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
+#ifdef TOTO
 subroutine newdt_part(ilevel, dt_loc, ekin_loc)
   use amr_commons, only: dp, icoarse_min, icoarse_max, boxlen, ndim
   use pm_commons, only: vp, mp, part_level_offset
@@ -117,7 +96,7 @@ subroutine newdt_part(ilevel, dt_loc, ekin_loc)
   end do
     
 end subroutine newdt_part
-
+#endif
 
 
 

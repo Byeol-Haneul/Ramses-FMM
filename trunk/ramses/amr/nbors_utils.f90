@@ -20,7 +20,6 @@ integer function get_parent_cell(hash_key) result(parent_cell)
      ind=ind+2**(idim-1)*ii(idim)
   end do
   ipos=hash_get(grid_dict,hash_father)
-  write(*,*)'parent_cell',hash_father,ipos
   parent_cell=0
   if(ipos>0)parent_cell=(ipos-1)*twotondim+ind
 end function get_parent_cell
@@ -224,7 +223,6 @@ subroutine get3cubefather(ind_cell_father,nbors_father_cells,&
         if(ind_cell_father(i)>ncoarse)oups=.true.
      end do
      if(oups)then
-        write(*,*)'get3cubefather'
         write(*,*)'oupsssss !'
         call clean_stop
      endif
