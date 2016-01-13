@@ -91,17 +91,23 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
        &       qp,iu1  ,iu2  ,ju1  ,ju2  ,ku1  ,ku2  , &
        &          if1  ,if2  ,jlo  ,jhi  ,klo  ,khi  , 2,3,4,fx,tx)
   ! Save flux in output array
-  do i=if1,if2
-  do j=jlo,jhi
+  do ivar=1,nvar
+     do k=klo,khi
+        do j=jlo,jhi
+           do i=if1,if2
+              flux(i,j,k,ivar,1)=fx(i,j,k,ivar)*dt/dx
+           end do
+        end do
+     end do
+  end do
   do k=klo,khi
-     do ivar=1,nvar
-        flux(i,j,k,ivar,1)=fx(i,j,k,ivar)*dt/dx
+     do j=jlo,jhi
+        do i=if1,if2
+           do ivar=1,2
+              tmp (i,j,k,ivar,1)=tx(i,j,k,ivar)*dt/dx
+           end do
+        end do
      end do
-     do ivar=1,2
-        tmp (i,j,k,ivar,1)=tx(i,j,k,ivar)*dt/dx
-     end do
-  end do
-  end do
   end do
 
   ! Solve for 1D flux in Y direction
@@ -110,17 +116,23 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
        &       qp,iu1  ,iu2  ,ju1  ,ju2  ,ku1  ,ku2  , &
        &          ilo  ,ihi  ,jf1  ,jf2  ,klo  ,khi  , 3,2,4,fx,tx)
   ! Save flux in output array
-  do i=ilo,ihi
-  do j=jf1,jf2
-  do k=klo,khi
-     do ivar=1,nvar
-        flux(i,j,k,ivar,2)=fx(i,j,k,ivar)*dt/dy
-     end do
-     do ivar=1,2
-        tmp (i,j,k,ivar,2)=tx(i,j,k,ivar)*dt/dy
+  do ivar=1,nvar
+     do k=klo,khi
+        do j=jf1,jf2
+           do i=ilo,ihi
+              flux(i,j,k,ivar,2)=fx(i,j,k,ivar)*dt/dy
+           end do
+        end do
      end do
   end do
-  end do
+  do ivar=1,2
+     do k=klo,khi
+        do j=jf1,jf2
+           do i=ilo,ihi
+              tmp (i,j,k,ivar,2)=tx(i,j,k,ivar)*dt/dy
+           end do
+        end do
+     end do
   end do
 #endif
 
@@ -130,17 +142,23 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
        &       qp,iu1  ,iu2  ,ju1  ,ju2  ,ku1  ,ku2  , &
        &          ilo  ,ihi  ,jlo  ,jhi  ,kf1  ,kf2  , 4,2,3,fx,tx)
   ! Save flux in output array
-  do i=ilo,ihi
-  do j=jlo,jhi
-  do k=kf1,kf2
-     do ivar=1,nvar
-        flux(i,j,k,ivar,3)=fx(i,j,k,ivar)*dt/dz
-     end do
-     do ivar=1,2
-        tmp (i,j,k,ivar,3)=tx(i,j,k,ivar)*dt/dz
+  do ivar=1,nvar
+     do k=kf1,kf2
+        do j=jlo,jhi
+           do i=ilo,ihi
+              flux(i,j,k,ivar,3)=fx(i,j,k,ivar)*dt/dz
+           end do
+        end do
      end do
   end do
-  end do
+  do ivar=1,2
+     do k=kf1,kf2
+        do j=jlo,jhi
+           do i=ilo,ihi
+              tmp (i,j,k,ivar,3)=tx(i,j,k,ivar)*dt/dz
+           end do
+        end do
+     end do
   end do
 #endif
 
