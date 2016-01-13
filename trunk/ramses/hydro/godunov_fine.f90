@@ -13,17 +13,19 @@ subroutine godunov_fine(ilevel)
   ! hydro solver. On entry, hydro variables are gathered from array uold.
   ! On exit, unew has been updated. 
   !--------------------------------------------------------------------------
-  integer::i,ivar,igrid,ncache,ngrid
-  integer,dimension(1:nvector),save::ind_grid
+  integer::i,ivar,igrid
 
   if(noct(ilevel)==0)return
   if(static)return
   if(verbose)write(*,111)ilevel
-
+  
   ! Loop over active grids by vector sweeps
   do igrid=head(ilevel),tail(ilevel)
-     ind_grid(1)=igrid
-     call godfine1(ind_grid,1,ilevel)
+     call godfine1(igrid,ilevel,&
+          & uloc,gloc,qloc,cloc,okoc,&
+          & flux,tmp,dq,qm,qp,fx,tx,divu,&
+          & iu1,iu2,ju1,ju2,ku1,ku2,&
+          & if1,if2,jf1,jf2,kf1,kf2)
   end do
 
 111 format('   Entering godunov_fine for level ',i2)
@@ -137,14 +139,30 @@ end subroutine set_uold
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godfine1(ind_grid,ncache,ilevel)
+subroutine godfine1(ind_grid,ilevel,&
+     & uloc,gloc,qloc,cloc,okoc,&
+     & flux,tmp,dq,qm,qp,fx,tx,divu,&
+     & iu1,iu2,ju1,ju2,ku1,ku2,&
+     & if1,if2,jf1,jf2,kf1,kf2)
   use amr_commons
-  use hydro_commons
-  use poisson_commons
   use hash
   implicit none
-  integer::ilevel,ncache
-  integer,dimension(1:nvector)::ind_grid
+  integer::ind_grid,ilevel
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
+  integer::if1,if2,jf1,jf2,kf1,kf2
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uloc
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gloc
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::qloc
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2)::cloc
+  logical ,dimension(iu1:iu2,ju1:ju2,ku1:ku2)::okoc
+  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nvar,1:ndim)::flux
+  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:2   ,1:ndim)::tmp
+  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::divu
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qm
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qp
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::fx
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:2   )::tx
   !-------------------------------------------------------------------
   ! This routine gathers first hydro variables from neighboring grids
   ! to set initial conditions in a 6x6x6 grid. It interpolate from
@@ -155,12 +173,6 @@ subroutine godfine1(ind_grid,ncache,ilevel)
   ! and stored in array unew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar),save::uloc
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim),save::gloc=0.0d0
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nvar,1:ndim),save::flux
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:2,1:ndim),save::tmp
-  logical ,dimension(iu1:iu2,ju1:ju2,ku1:ku2),save::ok
-
   integer::i,j,ivar,idim,ind_son,ind_father,iskip,nbuffer,ibuffer,ipos
   integer::igrid,icell,ichild,parent_cell,get_parent_cell,indf,parent_cell2
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3,nx_loc,nb_noneigh,nexist
@@ -190,11 +202,13 @@ subroutine godfine1(ind_grid,ncache,ilevel)
      k1max=2; k2max=1; k3max=2
   end if
 
+  gloc=0.0
+
   !---------------------------
   ! Gather 6x6x6 cells stencil
   !---------------------------
-  hash_key(0)=grid(ind_grid(1))%lev
-  hash_key(1:ndim)=grid(ind_grid(1))%ckey(1:ndim)
+  hash_key(0)=grid(ind_grid)%lev
+  hash_key(1:ndim)=grid(ind_grid)%ckey(1:ndim)
   hash_nbor(0)=hash_key(0)
 
   ! Loop over 3x3x3 neighboring father cells
@@ -240,7 +254,7 @@ subroutine godfine1(ind_grid,ncache,ilevel)
               uloc(i3,j3,k3,ivar)=grid(ichild)%uold(ind_son,ivar)
            end do
            ! Gather refinement flag
-           ok(i3,j3,k3)=grid(ichild)%refined(ind_son)
+           okoc(i3,j3,k3)=grid(ichild)%refined(ind_son)
         else
            ! Get parent father cell
            parent_cell=get_parent_cell(hash_nbor)           
@@ -255,7 +269,7 @@ subroutine godfine1(ind_grid,ncache,ilevel)
            do ivar=1,nvar
               uloc(i3,j3,k3,ivar)=grid(igrid)%uold(icell,ivar)
            end do
-           ok(i3,j3,k3)=.false.
+           okoc(i3,j3,k3)=.false.
         end if
 
      end do
@@ -271,7 +285,11 @@ subroutine godfine1(ind_grid,ncache,ilevel)
   !-----------------------------------------------
   ! Compute flux using second-order Godunov method
   !-----------------------------------------------
-  call unsplit(uloc,gloc,flux,tmp,dx,dx,dx,dtnew(ilevel),1)
+  call unsplit(uloc,gloc,qloc,cloc,&
+       & flux,tmp,dq,qm,qp,fx,tx,divu,&
+       & dx,dx,dx,dtnew(ilevel),&
+       & iu1,iu2,ju1,ju2,ku1,ku2,&
+       & if1,if2,jf1,jf2,kf1,kf2)
 
   !------------------------------------------------
   ! Reset flux along direction at refined interface    
@@ -285,13 +303,13 @@ subroutine godfine1(ind_grid,ncache,ilevel)
      do j3=j3min,j3max+j0
      do i3=i3min,i3max+i0
         do ivar=1,nvar
-           if(ok(i3-i0,j3-j0,k3-k0) .or. ok(i3,j3,k3))then
+           if(okoc(i3-i0,j3-j0,k3-k0) .or. okoc(i3,j3,k3))then
               flux(i3,j3,k3,ivar,idim)=0.0d0
            end if
         end do
 #ifdef DUALENER
         do ivar=1,2
-           if(ok(i3-i0,j3-j0,k3-k0) .or. ok(i3,j3,k3))then
+           if(okoc(i3-i0,j3-j0,k3-k0) .or. okoc(i3,j3,k3))then
               tmp(i3,j3,k3,ivar,idim)=0.0d0
            end if
         end do
@@ -318,20 +336,20 @@ subroutine godfine1(ind_grid,ncache,ilevel)
         k3=1+k2
         ! Update conservative variables new state vector
         do ivar=1,nvar
-           grid(ind_grid(1))%unew(ind_son,ivar)=&
-                & grid(ind_grid(1))%unew(ind_son,ivar)+ &
+           grid(ind_grid)%unew(ind_son,ivar)=&
+                & grid(ind_grid)%unew(ind_son,ivar)+ &
                 & (flux(i3   ,j3   ,k3   ,ivar,idim) &
                 & -flux(i3+i0,j3+j0,k3+k0,ivar,idim))
         end do
 #ifdef DUALENER
         ! Update velocity divergence
-        grid(ind_grid(1))%divu(ind_son)=&
-             & grid(ind_grid(1))%divu(ind_son)+ &
+        grid(ind_grid)%divu(ind_son)=&
+             & grid(ind_grid)%divu(ind_son)+ &
              & (tmp(i3   ,j3   ,k3   ,1,idim) &
              & -tmp(i3+i0,j3+j0,k3+k0,1,idim))
         ! Update internal energy
-        grid(ind_grid(1))%enew(ind_son)=&
-             & grid(ind_grid(1))%enew(ind_son)+ &
+        grid(ind_grid)%enew(ind_son)=&
+             & grid(ind_grid)%enew(ind_son)+ &
              & (tmp(i3   ,j3   ,k3   ,2,idim) &
              & -tmp(i3+i0,j3+j0,k3+k0,2,idim))
 #endif

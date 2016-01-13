@@ -8,14 +8,17 @@ subroutine init_refine_basegrid
   use hilbert
   use hash, only:hash_set,hash_get
   implicit none
-  !-------------------------------------------
-  ! This routine builds the initial AMR grid
-  !-------------------------------------------
-  integer::ilevel,i,j,k,igrid,ipos
+  !------------------------------------------
+  ! This routine builds the coarse level grid
+  !------------------------------------------
+  integer::ilevel,i,j,k,igrid,ipos,ioct,ilev
   integer(kind=8)::ikey
   integer(kind=8),dimension(1:nvector)::hk0,hk1,hk2
   integer(kind=8),dimension(1:nvector)::ix=0,iy=0,iz=0
   integer(kind=8),dimension(0:ndim)::hash_key,hash_test
+  integer(kind=8),dimension(1:nlevelmax)::key_ref
+  integer(kind=8)::coarse_key
+  integer,dimension(1:nlevelmax)::n_same,npatch
 
   if(myid==1)write(*,*)'Building initial base grid'
   init=.true.
@@ -59,6 +62,33 @@ subroutine init_refine_basegrid
 #endif
      call hash_set(grid_dict,hash_key,igrid)
   end do
+
+  !-----------
+  ! Super-octs
+  !-----------
+  do i=1,levelmin
+     npatch(i)=twotondim**i
+  end do
+  ilev=levelmin
+  n_same=0
+  key_ref=-1
+  do ioct=head(ilev),tail(ilev)
+     grid(ioct)%superoct=1
+     coarse_key=grid(ioct)%hkey
+     do i=1,ilev-1
+        coarse_key=coarse_key/twotondim
+        if(coarse_key.EQ.key_ref(i))then
+           n_same(i)=n_same(i)+1
+        else
+           n_same(i)=1
+           key_ref(i)=coarse_key
+        endif
+        if(n_same(i).EQ.npatch(i))then
+           grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
+        endif
+     end do
+  end do
+
   if(hydro)call init_flow_fine(levelmin)
   
 end subroutine init_refine_basegrid

@@ -14,6 +14,25 @@ module hydro_commons
   real(kind=8)           ::Y       = 0.24
   real(kind=8),parameter ::rhoc    = 1.8800000d-29
   real(kind=8),parameter ::mH      = 1.6600000d-24
+
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
+  integer::if1,if2,jf1,jf2,kf1,kf2
+
+  ! Work space for hydro kernel
+  real(dp),dimension(:,:,:,:),allocatable::uloc
+  real(dp),dimension(:,:,:,:),allocatable::gloc
+  real(dp),dimension(:,:,:,:),allocatable::qloc
+  real(dp),dimension(:,:,:),allocatable::cloc
+  real(dp),dimension(:,:,:,:,:),allocatable::flux
+  real(dp),dimension(:,:,:,:,:),allocatable::tmp
+  real(dp),dimension(:,:,:,:,:),allocatable::dq
+  real(dp),dimension(:,:,:,:,:),allocatable::qm
+  real(dp),dimension(:,:,:,:,:),allocatable::qp
+  real(dp),dimension(:,:,:,:),allocatable::fx
+  real(dp),dimension(:,:,:,:),allocatable::tx
+  real(dp),dimension(:,:,:),allocatable::divu
+  logical ,dimension(:,:,:),allocatable::okoc
+
 end module hydro_commons
 
 module const

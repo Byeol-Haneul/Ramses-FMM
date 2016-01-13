@@ -71,6 +71,7 @@ subroutine read_hydro_params(nml_ok)
   endif
 #endif
 
+#ifdef TOTO
   !-------------------------------------------------
   ! This section deals with hydro boundary conditions
   !-------------------------------------------------
@@ -222,6 +223,7 @@ subroutine read_hydro_params(nml_ok)
   do i=1,levelmin-1
      jeans_refine(i)=-1.0
   end do
+#endif
 
 end subroutine read_hydro_params
 

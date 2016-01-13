@@ -221,22 +221,22 @@ subroutine init_cosmo
      
      ! Check compatibility with run parameters
      if(.not. multiple) then
-        if(         nx.ne.n1(levelmin)/2**levelmin &
-             & .or. ny.ne.n2(levelmin)/2**levelmin &
-             & .or. nz.ne.n3(levelmin)/2**levelmin) then 
+        if(         n1(levelmin).ne.2**levelmin &
+             & .or. n2(levelmin).ne.2**levelmin &
+             & .or. n3(levelmin).ne.2**levelmin) then 
            write(*,*)'coarser grid is not compatible with initial conditions file'
            write(*,*)'Found    n1=',n1(levelmin),&
                 &            ' n2=',n2(levelmin),&
                 &            ' n3=',n3(levelmin)
-           write(*,*)'Expected n1=',nx*2**levelmin &
-                &           ,' n2=',ny*2**levelmin &
-                &           ,' n3=',nz*2**levelmin
+           write(*,*)'Expected n1=',2**levelmin &
+                &           ,' n2=',2**levelmin &
+                &           ,' n3=',2**levelmin
            call clean_stop
         endif
      end if
      
      ! Compute box length in the initial conditions in units of h-1 Mpc
-     boxlen_ini=dble(nx)*2**levelmin*dxini(levelmin)*(h0/100.)
+     boxlen_ini=2**levelmin*dxini(levelmin)*(h0/100.)
      
   CASE ('gadget')
      if (verbose) write(*,*)'Reading in gadget format from '//TRIM(initfile(levelmin))
@@ -267,7 +267,7 @@ subroutine init_cosmo
      xoff1(levelmin)=0
      xoff2(levelmin)=0
      xoff3(levelmin)=0
-     dxini(levelmin) = boxlen_ini/(nx*2**levelmin*(h0/100.0))
+     dxini(levelmin) = boxlen_ini/(2**levelmin*(h0/100.0))
 
   CASE DEFAULT
      write(*,*) 'Unsupported input format '//filetype

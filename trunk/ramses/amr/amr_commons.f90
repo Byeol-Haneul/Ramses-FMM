@@ -60,6 +60,7 @@ module amr_commons
      integer(kind=4),dimension(1:twotondim)::flag1
      integer(kind=4),dimension(1:twotondim)::flag2
      logical,dimension(1:twotondim)::refined
+     integer(kind=4)::superoct
 #ifdef GRAV
      real(kind=dp),dimension(1:twotondim)::rho
      real(kind=dp),dimension(1:twotondim)::phi

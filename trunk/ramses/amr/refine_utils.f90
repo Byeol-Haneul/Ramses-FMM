@@ -40,6 +40,9 @@ subroutine refine_fine(ilevel)
   integer,dimension(1:nvector),save::ind_cell,ind_child,ind_parent
   integer,dimension(1:nvector,1:ndim)::cart_key
   integer(kind=8),dimension(0:ndim)::hash_key
+  integer(kind=8),dimension(1:nlevelmax)::key_ref
+  integer(kind=8)::coarse_key
+  integer,dimension(1:nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
@@ -231,6 +234,34 @@ subroutine refine_fine(ilevel)
   noct_used=tail(nlevelmax)
   deallocate(noct_level,head_level,indx_level)
 
+  !-----------
+  ! Super-octs
+  !-----------
+  do ilev=1,nlevelmax
+     npatch(ilev)=twotondim**ilev
+  end do
+  do ilev=ilevel+1,nlevelmax
+     n_same=0
+     key_ref=-1
+     do ioct=head(ilev),tail(ilev)
+        grid(ioct)%superoct=1
+        coarse_key=grid(ioct)%hkey
+        do i=1,ilev-1
+           coarse_key=coarse_key/twotondim
+           if(coarse_key.EQ.key_ref(i))then
+              n_same(i)=n_same(i)+1
+           else
+              n_same(i)=1
+              key_ref(i)=coarse_key
+           endif
+           if(n_same(i).EQ.npatch(i))then
+              grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
+           endif
+        end do
+     end do
+  end do
+222 continue
+
 111 format('   Entering refine_fine for level ',I2)
 112 format('   ==> Make ',i6,' sub-grids')
 113 format('   ==> Kill ',i6,' sub-grids')
@@ -305,6 +336,7 @@ subroutine make_new_oct(ind_child,ind_parent,ind_cell,ilevel,ngrid)
      grid(ichild)%refined(1:twotondim)=.false.
      grid(ichild)%flag1(1:twotondim)=0
      grid(ichild)%flag2(1:twotondim)=0
+     grid(ichild)%superoct=1
      ! Insert new grid in hash table
      hash_key(0)=ilevel
      hash_key(1:ndim)=cart_key(igrid,1:ndim)

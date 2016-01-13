@@ -2,13 +2,17 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cmpdivu(q,div,dx,dy,dz)
+subroutine cmpdivu(q,div,dx,dy,dz,&
+     & iu1,iu2,ju1,ju2,ku1,ku2,&
+     & if1,if2,jf1,jf2,kf1,kf2)
   use amr_parameters
   use hydro_parameters
   use const
   implicit none
 
   real(dp)::dx, dy, dz
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
+  integer::if1,if2,jf1,jf2,kf1,kf2
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
 
@@ -53,13 +57,17 @@ end subroutine cmpdivu
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine consup(uin,flux,div,dt)
+subroutine consup(uin,flux,div,dt,&
+     & iu1,iu2,ju1,ju2,ku1,ku2,&
+     & if1,if2,jf1,jf2,kf1,kf2)
   use amr_parameters
   use hydro_parameters
   use const
   implicit none
 
   real(dp)::dt
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
+  integer::if1,if2,jf1,jf2,kf1,kf2
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin 
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nvar,1:ndim)::flux
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::div 

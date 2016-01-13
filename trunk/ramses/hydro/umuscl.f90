@@ -18,14 +18,17 @@
 !  dt          => (const)  time step
 !  ndim        => (const)  number of dimensions
 ! ----------------------------------------------------------------
-subroutine unsplit(uin,gravin,flux,tmp,dx,dy,dz,dt)
+subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
+     & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
   use amr_parameters
   use const             
   use hydro_parameters
   implicit none 
 
-  integer ::ngrid
+  ! Input parameters
   real(dp)::dx,dy,dz,dt
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
+  integer::if1,if2,jf1,jf2,kf1,kf2
 
   ! Input states
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin 
@@ -36,19 +39,19 @@ subroutine unsplit(uin,gravin,flux,tmp,dx,dy,dz,dt)
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:2   ,1:ndim)::tmp 
 
   ! Primitive variables
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar),save::qin 
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2       ),save::cin
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::qin 
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2       )::cin
 
   ! Slopes
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim),save::dq
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq
 
   ! Left and right state arrays
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim),save::qm
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim),save::qp
-  
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qm
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qp
+
   ! Intermediate fluxes
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar),save::fx
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:2   ),save::tx
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::fx
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:2   )::tx
 
   ! Velocity divergence
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::divu
@@ -62,20 +65,25 @@ subroutine unsplit(uin,gravin,flux,tmp,dx,dy,dz,dt)
   klo=MIN(1,ku1+2); khi=MAX(1,ku2-2)
 
   ! Translate to primative variables, compute sound speeds  
-  call ctoprim(uin,qin,cin,gravin,dt)
+  call ctoprim(uin,qin,cin,gravin,dt,&
+     & iu1,iu2,ju1,ju2,ku1,ku2)
 
   ! Compute TVD slopes
-  call uslope(qin,dq,dx,dt)
+  call uslope(qin,dq,dx,dt,&
+       & iu1,iu2,ju1,ju2,ku1,ku2)
 
   ! Compute 3D traced-states in all three directions
 #if NDIM==1
-  call trace1d(qin,dq,qm,qp,dx      ,dt)
+  call trace1d(qin,dq,qm,qp,dx,dt,&
+       & iu1,iu2,ju1,ju2,ku1,ku2)
 #endif
 #if NDIM==2
-  call trace2d(qin,dq,qm,qp,dx,dy   ,dt)
+  call trace2d(qin,dq,qm,qp,dx,dy,dt,&
+       & iu1,iu2,ju1,ju2,ku1,ku2)
 #endif
 #if NDIM==3
-  call trace3d(qin,dq,qm,qp,dx,dy,dz,dt)
+  call trace3d(qin,dq,qm,qp,dx,dy,dz,dt,&
+       & iu1,iu2,ju1,ju2,ku1,ku2)
 #endif
 
   ! Solve for 1D flux in X direction
@@ -137,8 +145,12 @@ subroutine unsplit(uin,gravin,flux,tmp,dx,dy,dz,dt)
 #endif
 
   if(difmag>0.0)then
-     call cmpdivu(qin,divu,dx,dy,dz)
-     call consup(uin,flux,divu,dt)
+     call cmpdivu(qin,divu,dx,dy,dz,&
+          & iu1,iu2,ju1,ju2,ku1,ku2,&
+          & if1,if2,jf1,jf2,kf1,kf2)
+     call consup(uin,flux,divu,dt,&
+          & iu1,iu2,ju1,ju2,ku1,ku2,&
+          & if1,if2,jf1,jf2,kf1,kf2)
   endif
 
 end subroutine unsplit
@@ -146,13 +158,15 @@ end subroutine unsplit
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine trace1d(q,dq,qm,qp,dx,dt)
+subroutine trace1d(q,dq,qm,qp,dx,dt,&
+     & iu1,iu2,ju1,ju2,ku1,ku2)
   use amr_parameters
   use hydro_parameters
   use const
   implicit none
 
   real(dp)::dx, dt
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq 
@@ -265,13 +279,15 @@ end subroutine trace1d
 !###########################################################
 !###########################################################
 #if NDIM>1
-subroutine trace2d(q,dq,qm,qp,dx,dy,dt)
+subroutine trace2d(q,dq,qm,qp,dx,dy,dt,&
+     & iu1,iu2,ju1,ju2,ku1,ku2)
   use amr_parameters
   use hydro_parameters
   use const
   implicit none
 
   real(dp)::dx, dy, dt
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq 
@@ -433,13 +449,15 @@ end subroutine trace2d
 !###########################################################
 !###########################################################
 #if NDIM>2
-subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt)
+subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
+     & iu1,iu2,ju1,ju2,ku1,ku2)
   use amr_parameters
   use hydro_parameters
   use const
   implicit none
 
   real(dp)::dx, dy, dz, dt
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq 
@@ -765,13 +783,15 @@ end subroutine cmpflxm
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine ctoprim(uin,q,c,gravin,dt)
+subroutine ctoprim(uin,q,c,gravin,dt,&
+     & iu1,iu2,ju1,ju2,ku1,ku2)
   use amr_parameters
   use hydro_parameters
   use const
   implicit none
 
   real(dp)::dt
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gravin
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
@@ -863,13 +883,15 @@ end subroutine ctoprim
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine uslope(q,dq,dx,dt)
+subroutine uslope(q,dq,dx,dt,&
+     & iu1,iu2,ju1,ju2,ku1,ku2)
   use amr_parameters
   use hydro_parameters
   use const
   implicit none
 
   real(dp)::dx,dt
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq
 
