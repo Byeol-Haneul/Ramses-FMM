@@ -11,7 +11,6 @@ module amr_commons
   integer::nstep_coarse=0                       ! Coarse step
   integer::nstep_coarse_old=0                   ! Old coarse step
   integer::nflag,ncreate,nkill                  ! Refinements
-  integer::ncoarse                              ! nx.ny.nz
   integer::ngrid_current                        ! Actual number of octs
 
   real(dp)::emag_tot=0.0D0                      ! Total magnetic energy

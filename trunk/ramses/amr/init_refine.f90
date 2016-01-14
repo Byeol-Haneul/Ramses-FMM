@@ -75,7 +75,7 @@ subroutine init_refine_basegrid
   do ioct=head(ilev),tail(ilev)
      grid(ioct)%superoct=1
      coarse_key=grid(ioct)%hkey
-     do i=1,ilev-1
+     do i=1,MIN(ilev-1,nsuperoct)
         coarse_key=coarse_key/twotondim
         if(coarse_key.EQ.key_ref(i))then
            n_same(i)=n_same(i)+1

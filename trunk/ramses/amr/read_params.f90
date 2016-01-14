@@ -24,7 +24,7 @@ subroutine read_params
   !--------------------------------------------------
   namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap,ordering &
-       & ,static,geom,overload,cost_weighting
+       & ,static,geom,overload,cost_weighting,nsuperoct
   namelist/output_params/noutput,foutput,fbackup,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
@@ -165,6 +165,7 @@ subroutine read_params
   !--------------------------------------------------
   levelmin=MAX(levelmin,1)
   nlevelmax=levelmax
+  nsuperoct=MIN(nsuperoct,5)
   nml_ok=.true.
   if(levelmin<1)then
      if(myid==1)write(*,*)'Error in the namelist:'

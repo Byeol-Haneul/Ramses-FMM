@@ -69,6 +69,7 @@ recursive subroutine amr_step(ilevel,icount)
   !---------------------------
   ! Recursive call to amr_step
   !---------------------------
+                               call timer('recursive call','start')
   if(ilevel<nlevelmax)then
      if(noct(ilevel+1)>0)then
         if(nsubcycle(ilevel)==2)then

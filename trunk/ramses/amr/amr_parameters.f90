@@ -43,6 +43,7 @@ module amr_parameters
 #else
   integer,parameter::nvector=NVECTOR
 #endif
+  integer::nsuperoct=0 ! Number of superoct levels
 
   ! Run control
   logical::verbose =.false.   ! Write everything
