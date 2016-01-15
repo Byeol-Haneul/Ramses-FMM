@@ -34,7 +34,7 @@ contains
 #if NDIM==3
     hash_func = key(0)+htable%c1*key(1)+htable%c2*key(2)+htable%c3*key(3) 
 #endif    
-    hash_func = MOD(hash_func,htable%prime) + 1
+    hash_func = MODULO(hash_func,htable%prime) + 1
 
 !    tablesize = htable%prime-1
     !call murmurhash3_x64_128(key, len, tablesize, seed, hash)
