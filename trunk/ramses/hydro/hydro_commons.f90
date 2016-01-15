@@ -16,9 +16,16 @@ module hydro_commons
   real(kind=8),parameter ::mH      = 1.6600000d-24
 
   ! Work space for hydro kernel
-  integer::iu1,iu2,ju1,ju2,ku1,ku2 ! Hydro cell-grid size
-  integer::if1,if2,jf1,jf2,kf1,kf2 ! Hydro face-grid size
-  integer::io1,io2,jo1,jo2,ko1,ko2 ! Hydro oct-grid size
+  integer,parameter::nx=2
+  integer,parameter::iu1=-1,iu2=nx+2
+  integer,parameter::ju1=(1-ndim/2)-1*(ndim/2),ju2=(1-ndim/2)+(nx+2)*(ndim/2)
+  integer,parameter::ku1=(1-ndim/3)-1*(ndim/3),ku2=(1-ndim/3)+(nx+2)*(ndim/3)
+  integer,parameter::if1=1,if2=nx+1
+  integer,parameter::jf1=1,jf2=(1-ndim/2)+(nx+1)*(ndim/2)
+  integer,parameter::kf1=1,kf2=(1-ndim/3)+(nx+1)*(ndim/3)
+  integer,parameter::io1=0,io2=nx/2+1
+  integer,parameter::jo1=(1-ndim/2),jo2=(1-ndim/2)+(nx/2+1)*(ndim/2)
+  integer,parameter::ko1=(1-ndim/3),ko2=(1-ndim/3)+(nx/2+1)*(ndim/3)
   real(dp),dimension(:,:,:,:),allocatable::uloc
   real(dp),dimension(:,:,:,:),allocatable::gloc
   real(dp),dimension(:,:,:,:),allocatable::qloc
@@ -36,9 +43,16 @@ module hydro_commons
   integer ,dimension(:,:,:),allocatable::parentloc
 
   ! Work space for hydro kernel
-  integer::iu1_2,iu2_2,ju1_2,ju2_2,ku1_2,ku2_2 ! Hydro cell-grid size
-  integer::if1_2,if2_2,jf1_2,jf2_2,kf1_2,kf2_2 ! Hydro face-grid size
-  integer::io1_2,io2_2,jo1_2,jo2_2,ko1_2,ko2_2 ! Hydro oct-grid size
+  integer,parameter::nx_2=4
+  integer,parameter::iu1_2=-1,iu2_2=nx_2+2
+  integer,parameter::ju1_2=(1-ndim/2)-1*(ndim/2),ju2_2=(1-ndim/2)+(nx_2+2)*(ndim/2)
+  integer,parameter::ku1_2=(1-ndim/3)-1*(ndim/3),ku2_2=(1-ndim/3)+(nx_2+2)*(ndim/3)
+  integer,parameter::if1_2=1,if2_2=nx_2+1
+  integer,parameter::jf1_2=1,jf2_2=(1-ndim/2)+(nx_2+1)*(ndim/2)
+  integer,parameter::kf1_2=1,kf2_2=(1-ndim/3)+(nx_2+1)*(ndim/3)
+  integer,parameter::io1_2=0,io2_2=nx_2/2+1
+  integer,parameter::jo1_2=(1-ndim/2),jo2_2=(1-ndim/2)+(nx_2/2+1)*(ndim/2)
+  integer,parameter::ko1_2=(1-ndim/3),ko2_2=(1-ndim/3)+(nx_2/2+1)*(ndim/3)
   real(dp),dimension(:,:,:,:),allocatable::uloc_2
   real(dp),dimension(:,:,:,:),allocatable::gloc_2
   real(dp),dimension(:,:,:,:),allocatable::qloc_2
@@ -56,9 +70,16 @@ module hydro_commons
   integer ,dimension(:,:,:),allocatable::parentloc_2
 
   ! Work space for hydro kernel
-  integer::iu1_4,iu2_4,ju1_4,ju2_4,ku1_4,ku2_4 ! Hydro cell-grid size
-  integer::if1_4,if2_4,jf1_4,jf2_4,kf1_4,kf2_4 ! Hydro face-grid size
-  integer::io1_4,io2_4,jo1_4,jo2_4,ko1_4,ko2_4 ! Hydro oct-grid size
+  integer,parameter::nx_4=8
+  integer,parameter::iu1_4=-1,iu2_4=nx_4+2
+  integer,parameter::ju1_4=(1-ndim/2)-1*(ndim/2),ju2_4=(1-ndim/2)+(nx_4+2)*(ndim/2)
+  integer,parameter::ku1_4=(1-ndim/3)-1*(ndim/3),ku2_4=(1-ndim/3)+(nx_4+2)*(ndim/3)
+  integer,parameter::if1_4=1,if2_4=nx_4+1
+  integer,parameter::jf1_4=1,jf2_4=(1-ndim/2)+(nx_4+1)*(ndim/2)
+  integer,parameter::kf1_4=1,kf2_4=(1-ndim/3)+(nx_4+1)*(ndim/3)
+  integer,parameter::io1_4=0,io2_4=nx_4/2+1
+  integer,parameter::jo1_4=(1-ndim/2),jo2_4=(1-ndim/2)+(nx_4/2+1)*(ndim/2)
+  integer,parameter::ko1_4=(1-ndim/3),ko2_4=(1-ndim/3)+(nx_4/2+1)*(ndim/3)
   real(dp),dimension(:,:,:,:),allocatable::uloc_4
   real(dp),dimension(:,:,:,:),allocatable::gloc_4
   real(dp),dimension(:,:,:,:),allocatable::qloc_4
@@ -76,9 +97,16 @@ module hydro_commons
   integer ,dimension(:,:,:),allocatable::parentloc_4
 
   ! Work space for hydro kernel
-  integer::iu1_8,iu2_8,ju1_8,ju2_8,ku1_8,ku2_8 ! Hydro cell-grid size
-  integer::if1_8,if2_8,jf1_8,jf2_8,kf1_8,kf2_8 ! Hydro face-grid size
-  integer::io1_8,io2_8,jo1_8,jo2_8,ko1_8,ko2_8 ! Hydro oct-grid size
+  integer,parameter::nx_8=16
+  integer,parameter::iu1_8=-1,iu2_8=nx_8+2
+  integer,parameter::ju1_8=(1-ndim/2)-1*(ndim/2),ju2_8=(1-ndim/2)+(nx_8+2)*(ndim/2)
+  integer,parameter::ku1_8=(1-ndim/3)-1*(ndim/3),ku2_8=(1-ndim/3)+(nx_8+2)*(ndim/3)
+  integer,parameter::if1_8=1,if2_8=nx_8+1
+  integer,parameter::jf1_8=1,jf2_8=(1-ndim/2)+(nx_8+1)*(ndim/2)
+  integer,parameter::kf1_8=1,kf2_8=(1-ndim/3)+(nx_8+1)*(ndim/3)
+  integer,parameter::io1_8=0,io2_8=nx_8/2+1
+  integer,parameter::jo1_8=(1-ndim/2),jo2_8=(1-ndim/2)+(nx_8/2+1)*(ndim/2)
+  integer,parameter::ko1_8=(1-ndim/3),ko2_8=(1-ndim/3)+(nx_8/2+1)*(ndim/3)
   real(dp),dimension(:,:,:,:),allocatable::uloc_8
   real(dp),dimension(:,:,:,:),allocatable::gloc_8
   real(dp),dimension(:,:,:,:),allocatable::qloc_8
@@ -96,9 +124,16 @@ module hydro_commons
   integer ,dimension(:,:,:),allocatable::parentloc_8
 
   ! Work space for hydro kernel
-  integer::iu1_16,iu2_16,ju1_16,ju2_16,ku1_16,ku2_16 ! Hydro cell-grid size
-  integer::if1_16,if2_16,jf1_16,jf2_16,kf1_16,kf2_16 ! Hydro face-grid size
-  integer::io1_16,io2_16,jo1_16,jo2_16,ko1_16,ko2_16 ! Hydro oct-grid size
+  integer,parameter::nx_16=32
+  integer,parameter::iu1_16=-1,iu2_16=nx_16+2
+  integer,parameter::ju1_16=(1-ndim/2)-1*(ndim/2),ju2_16=(1-ndim/2)+(nx_16+2)*(ndim/2)
+  integer,parameter::ku1_16=(1-ndim/3)-1*(ndim/3),ku2_16=(1-ndim/3)+(nx_16+2)*(ndim/3)
+  integer,parameter::if1_16=1,if2_16=nx_16+1
+  integer,parameter::jf1_16=1,jf2_16=(1-ndim/2)+(nx_16+1)*(ndim/2)
+  integer,parameter::kf1_16=1,kf2_16=(1-ndim/3)+(nx_16+1)*(ndim/3)
+  integer,parameter::io1_16=0,io2_16=nx_16/2+1
+  integer,parameter::jo1_16=(1-ndim/2),jo2_16=(1-ndim/2)+(nx_16/2+1)*(ndim/2)
+  integer,parameter::ko1_16=(1-ndim/3),ko2_16=(1-ndim/3)+(nx_16/2+1)*(ndim/3)
   real(dp),dimension(:,:,:,:),allocatable::uloc_16
   real(dp),dimension(:,:,:,:),allocatable::gloc_16
   real(dp),dimension(:,:,:,:),allocatable::qloc_16
@@ -116,9 +151,16 @@ module hydro_commons
   integer ,dimension(:,:,:),allocatable::parentloc_16
 
   ! Work space for hydro kernel
-  integer::iu1_32,iu2_32,ju1_32,ju2_32,ku1_32,ku2_32 ! Hydro cell-grid size
-  integer::if1_32,if2_32,jf1_32,jf2_32,kf1_32,kf2_32 ! Hydro face-grid size
-  integer::io1_32,io2_32,jo1_32,jo2_32,ko1_32,ko2_32 ! Hydro oct-grid size
+  integer,parameter::nx_32=64
+  integer,parameter::iu1_32=-1,iu2_32=nx_32+2
+  integer,parameter::ju1_32=(1-ndim/2)-1*(ndim/2),ju2_32=(1-ndim/2)+(nx_32+2)*(ndim/2)
+  integer,parameter::ku1_32=(1-ndim/3)-1*(ndim/3),ku2_32=(1-ndim/3)+(nx_32+2)*(ndim/3)
+  integer,parameter::if1_32=1,if2_32=nx_32+1
+  integer,parameter::jf1_32=1,jf2_32=(1-ndim/2)+(nx_32+1)*(ndim/2)
+  integer,parameter::kf1_32=1,kf2_32=(1-ndim/3)+(nx_32+1)*(ndim/3)
+  integer,parameter::io1_32=0,io2_32=nx_32/2+1
+  integer,parameter::jo1_32=(1-ndim/2),jo2_32=(1-ndim/2)+(nx_32/2+1)*(ndim/2)
+  integer,parameter::ko1_32=(1-ndim/3),ko2_32=(1-ndim/3)+(nx_32/2+1)*(ndim/3)
   real(dp),dimension(:,:,:,:),allocatable::uloc_32
   real(dp),dimension(:,:,:,:),allocatable::gloc_32
   real(dp),dimension(:,:,:,:),allocatable::qloc_32

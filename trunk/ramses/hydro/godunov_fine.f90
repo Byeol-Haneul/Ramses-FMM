@@ -31,7 +31,7 @@ subroutine godunov_fine(ilevel)
              & iu1,iu2,ju1,ju2,ku1,ku2,&
              & io1,io2,jo1,jo2,ko1,ko2,&
              & if1,if2,jf1,jf2,kf1,kf2)
-     CASE(2)
+     CASE(2**ndim)
         call godfine1(igrid,ilevel,&
              & uloc_2,gloc_2,qloc_2,cloc_2,&
              & okloc_2,childloc_2,parentloc_2,&
@@ -39,7 +39,7 @@ subroutine godunov_fine(ilevel)
              & iu1_2,iu2_2,ju1_2,ju2_2,ku1_2,ku2_2,&
              & io1_2,io2_2,jo1_2,jo2_2,ko1_2,ko2_2,&
              & if1_2,if2_2,jf1_2,jf2_2,kf1_2,kf2_2)
-     CASE(4)
+     CASE(4**ndim)
         call godfine1(igrid,ilevel,&
              & uloc_4,gloc_4,qloc_4,cloc_4,&
              & okloc_4,childloc_4,parentloc_4,&
@@ -47,7 +47,7 @@ subroutine godunov_fine(ilevel)
              & iu1_4,iu2_4,ju1_4,ju2_4,ku1_4,ku2_4,&
              & io1_4,io2_4,jo1_4,jo2_4,ko1_4,ko2_4,&
              & if1_4,if2_4,jf1_4,jf2_4,kf1_4,kf2_4)
-     CASE(8)
+     CASE(8**ndim)
         call godfine1(igrid,ilevel,&
              & uloc_8,gloc_8,qloc_8,cloc_8,&
              & okloc_8,childloc_8,parentloc_8,&
@@ -55,7 +55,7 @@ subroutine godunov_fine(ilevel)
              & iu1_8,iu2_8,ju1_8,ju2_8,ku1_8,ku2_8,&
              & io1_8,io2_8,jo1_8,jo2_8,ko1_8,ko2_8,&
              & if1_8,if2_8,jf1_8,jf2_8,kf1_8,kf2_8)
-     CASE(16)
+     CASE(16**ndim)
         call godfine1(igrid,ilevel,&
              & uloc_16,gloc_16,qloc_16,cloc_16,&
              & okloc_16,childloc_16,parentloc_16,&
@@ -63,7 +63,7 @@ subroutine godunov_fine(ilevel)
              & iu1_16,iu2_16,ju1_16,ju2_16,ku1_16,ku2_16,&
              & io1_16,io2_16,jo1_16,jo2_16,ko1_16,ko2_16,&
              & if1_16,if2_16,jf1_16,jf2_16,kf1_16,kf2_16)
-     CASE(32)
+     CASE(32**ndim)
         call godfine1(igrid,ilevel,&
              & uloc_32,gloc_32,qloc_32,cloc_32,&
              & okloc_32,childloc_32,parentloc_32,&
@@ -273,7 +273,7 @@ subroutine godfine1(ind_grid,ilevel,&
 #endif
      do j1=j1min,j1max
 #if NDIM>1
-        oky=j1>j1min.and.j1<j1max)
+        oky=(j1>j1min.and.j1<j1max)
 #endif
         do i1=i1min,i1max     
 #if NDIM>0
@@ -293,7 +293,7 @@ subroutine godfine1(ind_grid,ilevel,&
 #if NDIM>1
               jj1=ckey(2)+1
 #endif
-#if NDIM>1
+#if NDIM>2
               kk1=ckey(3)+1
 #endif
               childloc(ii1,jj1,kk1)=ind_oct

@@ -7,21 +7,10 @@ subroutine init_hydro
 #endif
   character(LEN=80)::fileloc
   character(LEN=5)::nchar
-  integer::nx
 
   if(verbose)write(*,*)'Entering init_hydro'
 
   ! Allocate work space for hydro kernel
-  nx=2
-  iu1=-1; iu2=nx+2
-  ju1=(1-ndim/2)-1*(ndim/2); ju2=(1-ndim/2)+(nx+2)*(ndim/2)
-  ku1=(1-ndim/3)-1*(ndim/3); ku2=(1-ndim/3)+(nx+2)*(ndim/3)
-  if1=1; if2=nx+1
-  jf1=1; jf2=(1-ndim/2)+(nx+1)*(ndim/2)
-  kf1=1; kf2=(1-ndim/3)+(nx+1)*(ndim/3)
-  io1=0; io2=nx/2+1
-  jo1=(1-ndim/2); jo2=(1-ndim/2)+(nx/2+1)*(ndim/2)
-  ko1=(1-ndim/3); ko2=(1-ndim/3)+(nx/2+1)*(ndim/3)
   allocate(uloc(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar))
   allocate(gloc(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim))
   allocate(qloc(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar))
@@ -39,16 +28,6 @@ subroutine init_hydro
   allocate(parentloc(io1:io2,jo1:jo2,ko1:ko2))
 
   ! Allocate work space for hydro kernel
-  nx=4
-  iu1_2=-1; iu2_2=nx+2
-  ju1_2=(1-ndim/2)-1*(ndim/2); ju2_2=(1-ndim/2)+(nx+2)*(ndim/2)
-  ku1_2=(1-ndim/3)-1*(ndim/3); ku2_2=(1-ndim/3)+(nx+2)*(ndim/3)
-  if1_2=1; if2_2=nx+1
-  jf1_2=1; jf2_2=(1-ndim/2)+(nx+1)*(ndim/2)
-  kf1_2=1; kf2_2=(1-ndim/3)+(nx+1)*(ndim/3)
-  io1_2=0; io2_2=nx/2+1
-  jo1_2=(1-ndim/2); jo2_2=(1-ndim/2)+(nx/2+1)*(ndim/2)
-  ko1_2=(1-ndim/3); ko2_2=(1-ndim/3)+(nx/2+1)*(ndim/3)
   allocate(uloc_2(iu1_2:iu2_2,ju1_2:ju2_2,ku1_2:ku2_2,1:nvar))
   allocate(gloc_2(iu1_2:iu2_2,ju1_2:ju2_2,ku1_2:ku2_2,1:ndim))
   allocate(qloc_2(iu1_2:iu2_2,ju1_2:ju2_2,ku1_2:ku2_2,1:nvar))
@@ -66,16 +45,6 @@ subroutine init_hydro
   allocate(parentloc_2(io1_2:io2_2,jo1_2:jo2_2,ko1_2:ko2_2))
 
   ! Allocate work space for hydro kernel
-  nx=8
-  iu1_4=-1; iu2_4=nx+2
-  ju1_4=(1-ndim/2)-1*(ndim/2); ju2_4=(1-ndim/2)+(nx+2)*(ndim/2)
-  ku1_4=(1-ndim/3)-1*(ndim/3); ku2_4=(1-ndim/3)+(nx+2)*(ndim/3)
-  if1_4=1; if2_4=nx+1
-  jf1_4=1; jf2_4=(1-ndim/2)+(nx+1)*(ndim/2)
-  kf1_4=1; kf2_4=(1-ndim/3)+(nx+1)*(ndim/3)
-  io1_4=0; io2_4=nx/2+1
-  jo1_4=(1-ndim/2); jo2_4=(1-ndim/2)+(nx/2+1)*(ndim/2)
-  ko1_4=(1-ndim/3); ko2_4=(1-ndim/3)+(nx/2+1)*(ndim/3)
   allocate(uloc_4(iu1_4:iu2_4,ju1_4:ju2_4,ku1_4:ku2_4,1:nvar))
   allocate(gloc_4(iu1_4:iu2_4,ju1_4:ju2_4,ku1_4:ku2_4,1:ndim))
   allocate(qloc_4(iu1_4:iu2_4,ju1_4:ju2_4,ku1_4:ku2_4,1:nvar))
@@ -93,16 +62,6 @@ subroutine init_hydro
   allocate(parentloc_4(io1_4:io2_4,jo1_4:jo2_4,ko1_4:ko2_4))
 
   ! Allocate work space for hydro kernel
-  nx=16
-  iu1_8=-1; iu2_8=nx+2
-  ju1_8=(1-ndim/2)-1*(ndim/2); ju2_8=(1-ndim/2)+(nx+2)*(ndim/2)
-  ku1_8=(1-ndim/3)-1*(ndim/3); ku2_8=(1-ndim/3)+(nx+2)*(ndim/3)
-  if1_8=1; if2_8=nx+1
-  jf1_8=1; jf2_8=(1-ndim/2)+(nx+1)*(ndim/2)
-  kf1_8=1; kf2_8=(1-ndim/3)+(nx+1)*(ndim/3)
-  io1_8=0; io2_8=nx/2+1
-  jo1_8=(1-ndim/2); jo2_8=(1-ndim/2)+(nx/2+1)*(ndim/2)
-  ko1_8=(1-ndim/3); ko2_8=(1-ndim/3)+(nx/2+1)*(ndim/3)
   allocate(uloc_8(iu1_8:iu2_8,ju1_8:ju2_8,ku1_8:ku2_8,1:nvar))
   allocate(gloc_8(iu1_8:iu2_8,ju1_8:ju2_8,ku1_8:ku2_8,1:ndim))
   allocate(qloc_8(iu1_8:iu2_8,ju1_8:ju2_8,ku1_8:ku2_8,1:nvar))
@@ -120,16 +79,6 @@ subroutine init_hydro
   allocate(parentloc_8(io1_8:io2_8,jo1_8:jo2_8,ko1_8:ko2_8))
 
   ! Allocate work space for hydro kernel
-  nx=32
-  iu1_16=-1; iu2_16=nx+2
-  ju1_16=(1-ndim/2)-1*(ndim/2); ju2_16=(1-ndim/2)+(nx+2)*(ndim/2)
-  ku1_16=(1-ndim/3)-1*(ndim/3); ku2_16=(1-ndim/3)+(nx+2)*(ndim/3)
-  if1_16=1; if2_16=nx+1
-  jf1_16=1; jf2_16=(1-ndim/2)+(nx+1)*(ndim/2)
-  kf1_16=1; kf2_16=(1-ndim/3)+(nx+1)*(ndim/3)
-  io1_16=0; io2_16=nx/2+1
-  jo1_16=(1-ndim/2); jo2_16=(1-ndim/2)+(nx/2+1)*(ndim/2)
-  ko1_16=(1-ndim/3); ko2_16=(1-ndim/3)+(nx/2+1)*(ndim/3)
   allocate(uloc_16(iu1_16:iu2_16,ju1_16:ju2_16,ku1_16:ku2_16,1:nvar))
   allocate(gloc_16(iu1_16:iu2_16,ju1_16:ju2_16,ku1_16:ku2_16,1:ndim))
   allocate(qloc_16(iu1_16:iu2_16,ju1_16:ju2_16,ku1_16:ku2_16,1:nvar))
@@ -147,16 +96,6 @@ subroutine init_hydro
   allocate(parentloc_16(io1_16:io2_16,jo1_16:jo2_16,ko1_16:ko2_16))
 
   ! Allocate work space for hydro kernel
-  nx=64
-  iu1_32=-1; iu2_32=nx+2
-  ju1_32=(1-ndim/2)-1*(ndim/2); ju2_32=(1-ndim/2)+(nx+2)*(ndim/2)
-  ku1_32=(1-ndim/3)-1*(ndim/3); ku2_32=(1-ndim/3)+(nx+2)*(ndim/3)
-  if1_32=1; if2_32=nx+1
-  jf1_32=1; jf2_32=(1-ndim/2)+(nx+1)*(ndim/2)
-  kf1_32=1; kf2_32=(1-ndim/3)+(nx+1)*(ndim/3)
-  io1_32=0; io2_32=nx/2+1
-  jo1_32=(1-ndim/2); jo2_32=(1-ndim/2)+(nx/2+1)*(ndim/2)
-  ko1_32=(1-ndim/3); ko2_32=(1-ndim/3)+(nx/2+1)*(ndim/3)
   allocate(uloc_32(iu1_32:iu2_32,ju1_32:ju2_32,ku1_32:ku2_32,1:nvar))
   allocate(gloc_32(iu1_32:iu2_32,ju1_32:ju2_32,ku1_32:ku2_32,1:ndim))
   allocate(qloc_32(iu1_32:iu2_32,ju1_32:ju2_32,ku1_32:ku2_32,1:nvar))
