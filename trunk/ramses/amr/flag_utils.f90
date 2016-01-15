@@ -88,7 +88,9 @@ subroutine init_flag(ilevel)
   ! Initialize flag1 to 0 for ilevel grids
   nflag=0
   do igrid=head(ilevel),tail(ilevel)
-     grid(igrid)%flag1(1:twondim)=0
+     do ind=1,twotondim
+        grid(igrid)%flag1(ind)=0
+     end do
   end do
   !---------------------------------------------------------
   ! Set flag1 to 1 if cell is refined and  contains a 
@@ -152,54 +154,83 @@ subroutine smooth_fine(ilevel)
   ! step 3: flag1 cells with at least 2 flag1 neighbors (if ndim > 2) 
   ! Array flag2 is used as temporary workspace.
   ! -------------------------------------------------------------------
-  integer::ismooth,count_nbor
+  integer::ismooth,count_nbor,ig,ih,in
   integer::i,ncache,iskip,ngrid
   integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
   integer::getnborgrids
   integer::parent_cell,get_parent_cell
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
-  integer,dimension(1:3,1:8),save::iii=reshape(&
-       & (/0,0,0,1,0,0,0,1,0,1,1,0,0,0,1,1,0,1,0,1,1,1,1,1/),(/3,8/))
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer,dimension(0:twondim)::igridn
+
   integer,dimension(1:3,1:6),save::shift=reshape(&
-       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
+       & (/-1,0,0,1,0,0,&
+       &   0,-1,0,0,1,0,&
+       &   0,0,-1,0,0,1/),(/3,6/))
+  integer,dimension(1:8,1:6),save::ggg=reshape(&
+       & (/1,0,1,0,1,0,1,0,&
+       &   0,2,0,2,0,2,0,2,&
+       &   3,3,0,0,3,3,0,0,&
+       &   0,0,4,4,0,0,4,4,&
+       &   5,5,5,5,0,0,0,0,&
+       &   0,0,0,0,6,6,6,6/),(/8,6/))
+  integer,dimension(1:8,1:6),save::hhh=reshape(&
+       & (/2,1,4,3,6,5,8,7,&
+       &   2,1,4,3,6,5,8,7,&
+       &   3,4,1,2,7,8,5,6,&
+       &   3,4,1,2,7,8,5,6,&
+       &   5,6,7,8,1,2,3,4,&
+       &   5,6,7,8,1,2,3,4/),(/8,6/))
 
   if(ilevel==nlevelmax)return
   if(noct(ilevel)==0)return
 
-  hash_key(0)=ilevel+1
-  hash_nbor(0)=ilevel+1
+  hash_nbor(0)=ilevel
 
   ! Loop over steps
   do ismooth=1,ndim
 
      ! Initialize flag2 to 0
      do igrid=head(ilevel),tail(ilevel)
-        grid(igrid)%flag2(1:twondim)=0
+        do ind=1,twotondim
+           grid(igrid)%flag2(ind)=0
+        end do
      end do
 
      ! Count neighbors and set flag2 accordingly
      do igrid=head(ilevel),tail(ilevel)
+
+        ! Get neighboring octs
+        igridn(0)=igrid
+        do i_nbor=1,twondim
+           hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
+           ! Periodic boundary conditons
+           do idim=1,ndim
+              if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+              if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+           enddo
+           igridn(i_nbor)=hash_get(grid_dict,hash_nbor)
+        end do
+
+        ! Count neighbors and set flag2 accordingly        
         do ind=1,twotondim
-           hash_key(1:ndim)=2*grid(igrid)%ckey(1:ndim)+iii(1:ndim,ind)
            count_nbor=0
-           do i_nbor=1,twondim
-              ! Periodic boundary conditons
-              do idim=1,ndim
-                 hash_nbor(idim)=hash_key(idim)+shift(idim,i_nbor)
-                 if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel+1)-1
-                 if(hash_nbor(idim)==ckey_max(ilevel+1))hash_nbor(idim)=0
-              enddo
-              parent_cell=get_parent_cell(hash_nbor)
-              if(parent_cell>0)then
-                 igrid_nbor=(parent_cell-1)/twotondim+1
-                 icell_nbor=parent_cell-(igrid_nbor-1)*twotondim
+           do in=1,twondim
+              ig=ggg(ind,in)
+              igrid_nbor=igridn(ig)
+              icell_nbor=hhh(ind,in)
+              if(igrid_nbor>0)then
                  count_nbor=count_nbor+grid(igrid_nbor)%flag1(icell_nbor)
-              end if
+              endif
            end do
-           if(count_nbor>=n_nbor(ismooth))grid(igrid)%flag2(ind)=1
-         end do
-      end do
+           ! flag2 cell if necessary
+           if(count_nbor>=n_nbor(ismooth))then
+              grid(igrid)%flag2(ind)=1
+           endif
+        end do
+
+     end do
+     ! End loop over grids
 
      ! Set flag1=1 for cells with flag2=1
      do igrid=head(ilevel),tail(ilevel)

@@ -27,6 +27,7 @@ subroutine init_hydro
   allocate(childloc(io1:io2,jo1:jo2,ko1:ko2))
   allocate(parentloc(io1:io2,jo1:jo2,ko1:ko2))
 
+  if(nsuperoct>0)then
   ! Allocate work space for hydro kernel
   allocate(uloc_2(iu1_2:iu2_2,ju1_2:ju2_2,ku1_2:ku2_2,1:nvar))
   allocate(gloc_2(iu1_2:iu2_2,ju1_2:ju2_2,ku1_2:ku2_2,1:ndim))
@@ -43,7 +44,9 @@ subroutine init_hydro
   allocate(okloc_2    (iu1_2:iu2_2,ju1_2:ju2_2,ku1_2:ku2_2))
   allocate(childloc_2 (io1_2:io2_2,jo1_2:jo2_2,ko1_2:ko2_2))
   allocate(parentloc_2(io1_2:io2_2,jo1_2:jo2_2,ko1_2:ko2_2))
+  endif
 
+  if(nsuperoct>1)then
   ! Allocate work space for hydro kernel
   allocate(uloc_4(iu1_4:iu2_4,ju1_4:ju2_4,ku1_4:ku2_4,1:nvar))
   allocate(gloc_4(iu1_4:iu2_4,ju1_4:ju2_4,ku1_4:ku2_4,1:ndim))
@@ -60,7 +63,9 @@ subroutine init_hydro
   allocate(okloc_4    (iu1_4:iu2_4,ju1_4:ju2_4,ku1_4:ku2_4))
   allocate(childloc_4 (io1_4:io2_4,jo1_4:jo2_4,ko1_4:ko2_4))
   allocate(parentloc_4(io1_4:io2_4,jo1_4:jo2_4,ko1_4:ko2_4))
+  endif
 
+  if(nsuperoct>2)then
   ! Allocate work space for hydro kernel
   allocate(uloc_8(iu1_8:iu2_8,ju1_8:ju2_8,ku1_8:ku2_8,1:nvar))
   allocate(gloc_8(iu1_8:iu2_8,ju1_8:ju2_8,ku1_8:ku2_8,1:ndim))
@@ -77,7 +82,9 @@ subroutine init_hydro
   allocate(okloc_8    (iu1_8:iu2_8,ju1_8:ju2_8,ku1_8:ku2_8))
   allocate(childloc_8 (io1_8:io2_8,jo1_8:jo2_8,ko1_8:ko2_8))
   allocate(parentloc_8(io1_8:io2_8,jo1_8:jo2_8,ko1_8:ko2_8))
+  endif
 
+  if(nsuperoct>3)then
   ! Allocate work space for hydro kernel
   allocate(uloc_16(iu1_16:iu2_16,ju1_16:ju2_16,ku1_16:ku2_16,1:nvar))
   allocate(gloc_16(iu1_16:iu2_16,ju1_16:ju2_16,ku1_16:ku2_16,1:ndim))
@@ -94,7 +101,9 @@ subroutine init_hydro
   allocate(okloc_16    (iu1_16:iu2_16,ju1_16:ju2_16,ku1_16:ku2_16))
   allocate(childloc_16 (io1_16:io2_16,jo1_16:jo2_16,ko1_16:ko2_16))
   allocate(parentloc_16(io1_16:io2_16,jo1_16:jo2_16,ko1_16:ko2_16))
+  endif
 
+  if(nsuperoct>4)then
   ! Allocate work space for hydro kernel
   allocate(uloc_32(iu1_32:iu2_32,ju1_32:ju2_32,ku1_32:ku2_32,1:nvar))
   allocate(gloc_32(iu1_32:iu2_32,ju1_32:ju2_32,ku1_32:ku2_32,1:ndim))
@@ -111,6 +120,7 @@ subroutine init_hydro
   allocate(okloc_32    (iu1_32:iu2_32,ju1_32:ju2_32,ku1_32:ku2_32))
   allocate(childloc_32 (io1_32:io2_32,jo1_32:jo2_32,ko1_32:ko2_32))
   allocate(parentloc_32(io1_32:io2_32,jo1_32:jo2_32,ko1_32:ko2_32))
+  endif
 
 end subroutine init_hydro
 

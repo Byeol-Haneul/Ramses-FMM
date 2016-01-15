@@ -30,9 +30,7 @@ subroutine courant_fine(ilevel)
   dt_all=dtnew(ilevel); dt_loc=dt_all
 
   ! Mesh spacing at that level
-  nx_loc=icoarse_max-icoarse_min+1
-  scale=boxlen/dble(nx_loc)
-  dx=0.5D0**ilevel*scale
+  dx=0.5D0**ilevel*boxlen
   vol=dx**ndim
 
   ! Loop over active grids by vector sweeps

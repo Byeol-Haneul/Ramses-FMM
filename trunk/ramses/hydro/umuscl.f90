@@ -752,11 +752,11 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
 #endif          
            ! Solve Riemann problem
            if(riemann.eq.'llf')then
-              call riemann_llf     (qleft,qright,fgdnv)
+              call riemann_llf(qleft,qright,fgdnv)
            else if (riemann.eq.'hllc')then
-              call riemann_hllc    (qleft,qright,fgdnv)
+              call riemann_hllc(qleft,qright,fgdnv)
            else if (riemann.eq.'hll')then
-              call riemann_hll     (qleft,qright,fgdnv)
+              call riemann_hll(qleft,qright,fgdnv)
            else
               write(*,*)'unknown Riemann solver'
               stop

@@ -252,7 +252,7 @@ subroutine godfine1(ind_grid,ilevel,&
 #if NDIM>1
   j2max=1; j3min=ju1+2; j3max=ju2-2
 #endif
-#if NDI>2
+#if NDIM>2
   k2max=1; k3min=ku1+2; k3max=ku2-2
 #endif
 
@@ -413,7 +413,7 @@ subroutine godfine1(ind_grid,ilevel,&
        & dx,dx,dx,dtnew(ilevel),&
        & iu1,iu2,ju1,ju2,ku1,ku2,&
        & if1,if2,jf1,jf2,kf1,kf2)
-
+  
   !------------------------------------------------
   ! Reset flux along direction at refined interface    
   !------------------------------------------------
