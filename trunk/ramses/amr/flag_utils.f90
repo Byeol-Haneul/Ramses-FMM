@@ -54,14 +54,12 @@ subroutine flag_fine(ilevel,icount)
 
   if(verbose)write(*,112)nflag
 
-#ifdef TOTO
   ! In case of adaptive time step ONLY, check for refinement rules.
   if(ilevel>levelmin)then
      if(icount<nsubcycle(ilevel-1))then
         call ensure_ref_rules(ilevel)
      end if
   end if
-#endif
 
 111 format('   Entering flag_fine for level ',I2)
 112 format('   ==> Flag ',i6,' cells')
@@ -252,7 +250,6 @@ end subroutine smooth_fine
 !############################################################
 !############################################################
 !############################################################
-#ifdef TOTO
 subroutine ensure_ref_rules(ilevel)
   use amr_commons
   implicit none
@@ -263,59 +260,68 @@ subroutine ensure_ref_rules(ilevel)
   ! strict refinement rule. 
   ! Used in case of adaptive time steps only.
   !-----------------------------------------------------------------
-  integer::i,ind,iskip,igrid,ngrid,ncache
-  integer,dimension(1:nvector),save::ind_cell,ind_grid
-  integer,dimension(1:nvector,1:threetondim),save::nbors_father_cells
-  integer,dimension(1:nvector,1:twotondim),save::nbors_father_grids
-  logical,dimension(1:nvector),save::ok
+  integer::idim,ind,igrid,ichild
+  integer::i1,j1,k1
+  integer::i1min,i1max,j1min,j1max,k1min,k1max
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  logical::ok
 
-  ncache=active(ilevel)%ngrid
-  do igrid=1,ncache,nvector
-     ! Gather nvector grids
-     ngrid=MIN(nvector,ncache-igrid+1)
-     do i=1,ngrid
-        ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
-     end do
+  ! Integer constants
+  i1min=0; i1max=0; j1min=0; j1max=0; k1min=0; k1max=0
+#if NDIM>0
+  i1max=2
+#endif
+#if NDIM>1
+  j1max=2
+#endif
+#if NDIM>2
+  k1max=2
+#endif
+
+  hash_nbor(0)=ilevel
+  do igrid=head(ilevel),tail(ilevel)
      
-     ! Gather neighboring father cells (should be present anytime !)
-     do i=1,ngrid
-        ind_cell(i)=father(ind_grid(i))
-     end do
-     call get3cubefather(ind_cell,nbors_father_cells,nbors_father_grids &
-          & ,ngrid,ilevel)
-     
-     do i=1,ngrid
-        ok(i)=.true.
+     ok=.true.
+
+     ! Loop over 3x3x3 neighboring father cells
+     do k1=k1min,k1max
+        do j1=j1min,j1max
+           do i1=i1min,i1max
+
+              ! Compute neighboring grid Cartesian index
+#if NDIM>0
+              hash_nbor(1)=grid(igrid)%ckey(1)+i1-1.0
+#endif
+#if NDIM>1
+              hash_nbor(2)=grid(igrid)%ckey(2)+j1-1.0
+#endif
+#if NDIM>2
+              hash_nbor(3)=grid(igrid)%ckey(3)+k1-1.0
+#endif
+              ! Periodic boundary conditons
+              do idim=1,ndim
+                 if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+                 if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+              enddo
+
+              ! Get neighboring grid index
+              ichild=hash_get(grid_dict,hash_nbor)
+              ok=ok.and.(ichild>0)
+
+           end do
+        end do
      end do
 
-     do ind=1,threetondim
-        do i=1,ngrid
-           ind_cell(i)=nbors_father_cells(i,ind)
+     if(.not. ok)then
+        do ind=1,twotondim
+           grid(igrid)%flag1(ind)=0
         end do
-        do i=1,ngrid
-           if(son(ind_cell(i))==0)ok(i)=.false.
-        end do
-     end do
-     
-     do ind=1,twotondim
-        iskip=ncoarse+(ind-1)*ngridmax
-        do i=1,ngrid
-           ind_cell(i)=iskip+ind_grid(i)
-        end do
-        do i=1,ngrid
-           if(.not.ok(i))flag1(ind_cell(i))=0
-        end do
-     end do
+     end if
 
   end do
-
-  ! Update boundaries
-  call make_virtual_fine_int(flag1(1),ilevel)
-  if(simple_boundary)call make_boundary_flag(ilevel)
 
 end subroutine ensure_ref_rules 
 !############################################################
 !############################################################
 !############################################################
 !############################################################
-#endif

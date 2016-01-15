@@ -295,12 +295,12 @@ subroutine update_time(ilevel)
   if(mod(nstep,ncontrol)==0)then
      if(myid==1.and.itest==0)then
         if(pic)then
-           write(*,888)nstep,t,dt,aexp,&
+           write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used)/dble(ngridmax)),&
                 ! TODO: replace npart with max over all cpus as soon as there is
                 ! some particle load balancing scheme
                 & real(100.0D0*dble(npart)/dble(npartmax+1))
         else
-           write(*,888)nstep,t,dt,aexp
+           write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used)/dble(ngridmax))
         endif
      end if
   end if
