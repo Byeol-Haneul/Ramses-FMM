@@ -225,6 +225,7 @@ subroutine godfine1(ind_grid,ilevel,&
   ! and stored in array unew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
+  integer::get_grid
   integer::i,j,ivar,idim,ind_son,iskip,nbuffer,ibuffer,ipos,ind_oct
   integer::igrid,icell,ichild,parent_cell,get_parent_cell,indf,parent_cell2
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
@@ -346,7 +347,7 @@ subroutine godfine1(ind_grid,ilevel,&
               enddo
               
               ! Get neighboring grid index
-              ichild=hash_get(grid_dict,hash_nbor)              
+              ichild=get_grid(hash_nbor)              
               parent_cell=0
               if(ichild==0)then
                  ! Get parent father cell

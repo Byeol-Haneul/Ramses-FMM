@@ -6,7 +6,7 @@ subroutine init_refine_basegrid
   use amr_commons
   use pm_commons
   use hilbert
-  use hash, only:hash_set,hash_get
+  use hash, only:hash_set
   implicit none
   !------------------------------------------
   ! This routine builds the coarse level grid

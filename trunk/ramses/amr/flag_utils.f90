@@ -155,8 +155,7 @@ subroutine smooth_fine(ilevel)
   integer::ismooth,count_nbor,ig,ih,in
   integer::i,ncache,iskip,ngrid
   integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
-  integer::getnborgrids
-  integer::parent_cell,get_parent_cell
+  integer::parent_cell,get_parent_cell,get_grid
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::igridn
@@ -207,7 +206,7 @@ subroutine smooth_fine(ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
               if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
            enddo
-           igridn(i_nbor)=hash_get(grid_dict,hash_nbor)
+           igridn(i_nbor)=get_grid(hash_nbor)
         end do
 
         ! Count neighbors and set flag2 accordingly        
@@ -260,6 +259,7 @@ subroutine ensure_ref_rules(ilevel)
   ! strict refinement rule. 
   ! Used in case of adaptive time steps only.
   !-----------------------------------------------------------------
+  integer::get_grid
   integer::idim,ind,igrid,ichild
   integer::i1,j1,k1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -305,7 +305,7 @@ subroutine ensure_ref_rules(ilevel)
               enddo
 
               ! Get neighboring grid index
-              ichild=hash_get(grid_dict,hash_nbor)
+              ichild=get_grid(hash_nbor)
               ok=ok.and.(ichild>0)
 
            end do
