@@ -12,7 +12,7 @@ subroutine write_screen(ilevel)
 
   if(ndim>1)return
 
-  if(noct(ilevel)>0)then
+  if(noct_tot(ilevel)>0)then
      write(*,*)'================================'
      write(*,'(" Level",I4," has ",I4, " grids.")')ilevel,noct(ilevel)
      do igrid=head(ilevel),tail(ilevel)

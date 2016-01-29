@@ -247,8 +247,8 @@ subroutine update_time(ilevel)
            !-------------------------------
            write(*,*)'Mesh structure'
            do i=levelmin,nlevelmax
-              if(noct(i)>0)write(*,999)i,noct(i),head(i),tail(i)
-           end do           
+              if(noct_tot(i)>0)write(*,999)i,noct_tot(i),noct_min(i),noct_max(i),noct_tot(i)/ncpu
+           end do
            !----------------------------------------------
            ! Output mass and energy conservation to screen
            !----------------------------------------------
@@ -258,10 +258,10 @@ subroutine update_time(ilevel)
               write(*,777)nstep_coarse,mcons,econs,epot_tot,ekin_tot
            end if
            if(pic)then
-              write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used)/dble(ngridmax)),&
+              write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used_max)/dble(ngridmax)),&
                    & real(100.0D0*dble(npart)/dble(npartmax+1))
            else
-              write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used)/dble(ngridmax))
+              write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used_max)/dble(ngridmax))
            endif
            itest=1
         end if
@@ -295,12 +295,12 @@ subroutine update_time(ilevel)
   if(mod(nstep,ncontrol)==0)then
      if(myid==1.and.itest==0)then
         if(pic)then
-           write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used)/dble(ngridmax)),&
+           write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used_max)/dble(ngridmax)),&
                 ! TODO: replace npart with max over all cpus as soon as there is
                 ! some particle load balancing scheme
                 & real(100.0D0*dble(npart)/dble(npartmax+1))
         else
-           write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used)/dble(ngridmax))
+           write(*,888)nstep,t,dt,aexp,real(100.0D0*dble(noct_used_max)/dble(ngridmax))
         endif
      end if
   end if
@@ -335,7 +335,7 @@ subroutine update_time(ilevel)
          & ' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2)
 888 format(' Fine step=',i6,' t=',1pe12.5,' dt=',1pe10.3, &
          & ' a=',1pe10.3,' mem=',0pF4.1,'% ',0pF4.1,'%')
-999 format(' Level ',I2,' has ',I10,' grids (',2(I8,','),')')
+999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
  
 end subroutine update_time
   

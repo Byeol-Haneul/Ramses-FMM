@@ -40,8 +40,8 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 #FFLAGS = -O3 -g -cpp $(DEFINES) -DWITHOUTMPI
 
 # --- No MPI, ifort ----------------------------------
-F90 = ifort
-FFLAGS = -O3 -g -cpp $(DEFINES) -DWITHOUTMPI
+#F90 = ifort
+#FFLAGS = -O3 -g -traceback -cpp $(DEFINES) -DWITHOUTMPI
 
 # --- MPI, gfortran syntax ------------------------------
 #F90 = mpif90 -frecord-marker=4 -O3 -ffree-line-length-none -g -fbacktrace 
@@ -56,8 +56,9 @@ FFLAGS = -O3 -g -cpp $(DEFINES) -DWITHOUTMPI
 #FFLAGS = -Mpreprocess $(DEFINES)
 
 # --- MPI, ifort syntax ------------------------------
-#F90 = mpif90
+F90 = mpif90 -f90=ifort
 #FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
+FFLAGS = -cpp -g -fast -debug inline-debug-info -shared-intel -shared-libgcc -traceback  $(DEFINES) -DNOSYSTEM
 
 # --- MPI, ifort syntax, additional checks -----------
 #F90 = mpif90 -f90=ifort
@@ -95,7 +96,7 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 # All objects
 MODOBJ = amr_parameters.o hydro_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
          poisson_commons.o hydro_commons.o gadgetreadfile.o write_makefile.o \
-	 write_patch.o write_gitinfo.o sort.o hilbert.o new_part_communication.o coordinates.o
+	 write_patch.o write_gitinfo.o sort.o hilbert.o coordinates.o
 
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o amr_step.o update_time.o \
          output_amr.o flag_utils.o physical_boundaries.o virtual_boundaries.o refine_utils.o nbors_utils.o \
@@ -114,10 +115,10 @@ HYDROOBJ = init_hydro.o init_flow_fine.o write_screen.o output_hydro.o courant_f
 # All objects
 MODOBJ = amr_parameters.o hydro_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
          poisson_commons.o hydro_commons.o gadgetreadfile.o write_makefile.o \
-	 write_patch.o write_gitinfo.o hilbert.o new_part_communication.o coordinates.o
+	 write_patch.o write_gitinfo.o hilbert.o coordinates.o
 
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o update_time.o title.o units.o murmur3.o \
-       	 mem_compare.o refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o
+       	 mem_compare.o refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o
 
 # Particle-Mesh objects
 PMOBJ = init_part.o 

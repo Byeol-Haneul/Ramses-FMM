@@ -21,38 +21,67 @@ end subroutine flag
 subroutine flag_fine(ilevel,icount)
   use amr_commons
   implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
   integer::ilevel,icount
   !--------------------------------------------------------
   ! This routine builds the refinement map at level ilevel.
   !--------------------------------------------------------
-  integer::iexpand
+  integer::iexpand,nflag_tot,info
+  
 
   if(ilevel==nlevelmax)return
   if(ilevel<levelmin)return
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   ! Step 1: initialize refinement map to minimal refinement rules
   call init_flag(ilevel)
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  if(verbose)write(*,*) '  ==> end step 1',nflag_tot
+#else
   if(verbose)write(*,*) '  ==> end step 1',nflag
-
+#endif
+  
   ! Step 2: make one cubic buffer around flagged cells,
   ! in order to enforce numerical rule.
   call smooth_fine(ilevel)
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  if(verbose)write(*,*) '  ==> end step 2',nflag_tot
+#else
   if(verbose)write(*,*) '  ==> end step 2',nflag
+#endif
 
   ! Step 3: if cell satisfies user-defined physical citeria,
   ! then flag cell for refinement.
-  call userflag_fine(ilevel)    
+  call userflag_fine(ilevel)
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  if(verbose)write(*,*) '  ==> end step 3',nflag_tot
+#else
   if(verbose)write(*,*) '  ==> end step 3',nflag
+#endif
 
   ! Step 4: make nexpand cubic buffers around flagged cells.
   do iexpand=1,nexpand(ilevel)
      call smooth_fine(ilevel)
   end do
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  if(verbose)write(*,*) '  ==> end step 4',nflag_tot
+#else
   if(verbose)write(*,*) '  ==> end step 4',nflag
+#endif
 
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  if(verbose)write(*,112)nflag_tot
+#else
   if(verbose)write(*,112)nflag
+#endif
 
   ! In case of adaptive time step ONLY, check for refinement rules.
   if(ilevel>levelmin)then
@@ -95,11 +124,14 @@ subroutine init_flag(ilevel)
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------
+  cache_operation=operation_initflag
+  call open_cache
+
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ichild=head(ilevel+1),tail(ilevel+1)
      hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
-     parent_cell=get_parent_cell(hash_key)
+     parent_cell=get_parent_cell(hash_key,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
      ok=.false.
@@ -113,6 +145,8 @@ subroutine init_flag(ilevel)
         nflag=nflag+1
      endif
   end do
+
+  call close_cache
 
 end subroutine init_flag
 !###############################################################
@@ -129,7 +163,7 @@ subroutine userflag_fine(ilevel)
   ! some user-defined physical criteria at the level ilevel. 
   ! -------------------------------------------------------------------
   if(ilevel==nlevelmax)return
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
  
   ! Refinement rules for the hydro solver
   if(hydro)call hydro_flag(ilevel)
@@ -153,7 +187,7 @@ subroutine smooth_fine(ilevel)
   ! Array flag2 is used as temporary workspace.
   ! -------------------------------------------------------------------
   integer::ismooth,count_nbor,ig,ih,in
-  integer::i,ncache,iskip,ngrid
+  integer::i,iskip,ngrid
   integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
   integer::parent_cell,get_parent_cell,get_grid
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
@@ -180,7 +214,7 @@ subroutine smooth_fine(ilevel)
        &   5,6,7,8,1,2,3,4/),(/8,6/))
 
   if(ilevel==nlevelmax)return
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
 
   hash_nbor(0)=ilevel
 
@@ -194,6 +228,9 @@ subroutine smooth_fine(ilevel)
         end do
      end do
 
+     cache_operation=operation_smooth
+     call open_cache
+
      ! Count neighbors and set flag2 accordingly
      do igrid=head(ilevel),tail(ilevel)
 
@@ -206,7 +243,7 @@ subroutine smooth_fine(ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
               if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
            enddo
-           igridn(i_nbor)=get_grid(hash_nbor)
+           igridn(i_nbor)=get_grid(hash_nbor,.false.,.true.)
         end do
 
         ! Count neighbors and set flag2 accordingly        
@@ -229,6 +266,8 @@ subroutine smooth_fine(ilevel)
      end do
      ! End loop over grids
 
+    call close_cache
+
      ! Set flag1=1 for cells with flag2=1
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
@@ -241,7 +280,8 @@ subroutine smooth_fine(ilevel)
            endif
         end do
      end do     
-  end do
+
+   end do
   ! End loop over steps
 
 end subroutine smooth_fine
@@ -277,6 +317,9 @@ subroutine ensure_ref_rules(ilevel)
 #if NDIM>2
   k1max=2
 #endif
+
+  cache_operation=operation_smooth
+  call open_cache
 
   hash_nbor(0)=ilevel
   do igrid=head(ilevel),tail(ilevel)
@@ -319,6 +362,8 @@ subroutine ensure_ref_rules(ilevel)
      end if
 
   end do
+
+  call close_cache 
 
 end subroutine ensure_ref_rules 
 !############################################################

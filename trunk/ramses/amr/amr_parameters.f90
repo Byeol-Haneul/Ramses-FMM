@@ -60,6 +60,7 @@ module amr_parameters
   integer::levelmin=1         ! Full refinement up to levelmin
   integer::nlevelmax=1        ! Maximum number of level
   integer::ngridmax=0         ! Maximum number of grids
+  integer::ncachemax=0        ! Maximum number of cache lines
   integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
   integer::nexpand_bound=1    ! Number of mesh expansion for virtual boundaries
   real(dp)::boxlen=1.0D0      ! Box length along x direction

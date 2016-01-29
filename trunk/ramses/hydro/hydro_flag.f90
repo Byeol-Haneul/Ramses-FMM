@@ -21,13 +21,16 @@ subroutine hydro_flag(ilevel)
   logical::ok
 
   if(ilevel==nlevelmax)return
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
 
   hash_key(0)=ilevel+1
 
   if(    err_grad_d==-1.0.and.&
        & err_grad_p==-1.0.and.&
        & err_grad_u==-1.0)return
+
+  cache_operation=operation_hydro
+  call open_cache
 
   ! Loop over active grids
   do igrid=head(ilevel),tail(ilevel)
@@ -51,13 +54,13 @@ subroutine hydro_flag(ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel+1)-1
               if(hash_nbor(idim)==ckey_max(ilevel+1))hash_nbor(idim)=0
            enddo
-           parent_cell=get_parent_cell(hash_nbor)
+           parent_cell=get_parent_cell(hash_nbor,.false.,.true.)
            if(parent_cell>0)then
               indn(i_nbor)=parent_cell
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
-              parent_cell=get_parent_cell(hash_nbor)
+              parent_cell=get_parent_cell(hash_nbor,.false.,.true.)
               indn(i_nbor)=parent_cell
            endif
         end do
@@ -85,6 +88,8 @@ subroutine hydro_flag(ilevel)
      ! End loop over cells
   end do
   ! End loop over grids
+
+  call close_cache
 
 end subroutine hydro_flag
 !#####################################################################

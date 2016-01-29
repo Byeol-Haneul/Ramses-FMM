@@ -80,49 +80,6 @@ module amr_commons
 #endif
   end type oct
 
-  ! Tile structure
-  type tile
-     ! Header information
-     integer(kind=4)::lev    ! Level of the tile
-     integer(kind=4)::cpu    ! CPU in which the tile sits
-     integer(kind=4)::status ! Status of the tile
-     ! AMR data
-     ! Oct-based arrays
-     integer(kind=4),dimension(1:ndim)::ckey ! Cartesian key of each oct
-     integer(kind=8)::hkey                   ! Hilbert key of each oct
-     ! Cell-based arrays
-     integer,dimension(1:twotondim)::flag1   ! Flag1
-     integer,dimension(1:twotondim)::flag2   ! Flag2
-     logical,dimension(1:twotondim)::refined ! Refined flag
-#ifdef GRAV
-     ! Tile gravity data
-     real(kind=dp),dimension(1:twotondim)::rho       ! Total mass density
-     real(kind=dp),dimension(1:twotondim)::phi       ! Gravitationall potential
-     real(kind=dp),dimension(1:twotondim)::phi_old   ! Previous potential
-     real(kind=dp),dimension(1:twotondim,1:ndim)::f  ! Gravity acceleration
-#endif
-#ifdef SOLVERhydro
-     ! Tile hydro data
-     real(kind=dp),dimension(1:twotondim,1:nvar)::uold ! Old conservative variables
-     real(kind=dp),dimension(1:twotondim,1:nvar)::unew ! New conservative variables
-#endif
-#ifdef SOLVERmhd
-     ! Tile MHD data
-     real(kind=dp),dimension(1:twotondim,1:nvar+3)::uold ! Old conservative variables
-     real(kind=dp),dimension(1:twotondim,1:nvar+3)::unew ! New conservative variables
-#endif
-#ifdef DUALENER
-     ! Tile dual energy forumlation data
-     real(kind=dp),dimension(1:twotondim)::divu ! Velocity divergence
-     real(kind=dp),dimension(1:twotondim)::enew ! New internal energy density
-#endif
-  end type tile
-
-  type cache_cell
-     integer(kind=4)::grid
-     integer(kind=4)::cell
-  end type cache_cell
-
   ! Persistent array for the AMR grid
   type(oct),dimension(:),allocatable::grid
   type(hash_table)::grid_dict   ! Oct hash table
@@ -131,17 +88,33 @@ module amr_commons
   integer,allocatable,dimension(:)::head
   integer,allocatable,dimension(:)::tail
   integer,allocatable,dimension(:)::noct
+  integer,allocatable,dimension(:)::noct_min
+  integer,allocatable,dimension(:)::noct_max
+  integer,allocatable,dimension(:)::noct_tot
   integer,allocatable,dimension(:)::ckey_max
-  integer::noct_used
+  integer::noct_used,noct_used_max
 
   ! Hilbert key
   integer(kind=8),allocatable,dimension(:,:)::bound_key_level
 
+  ! Software cache parameters
+  integer::cache_operation
+  integer::operation_initflag=1,operation_upload=2,operation_godunov=3,operation_smooth=4
+  integer::operation_hydro=5,operation_refine=6,operation_derefine=7,operation_loadbalance=8
+  integer::cache_operation_type
+  integer::operation_type_flag=1,operation_type_hydro=2  
+
   ! Software cache array for the AMR grid
-  type(tile),dimension(:),allocatable::cache
-  type(hash_table)::cache_dict  ! Oct hash table
-  integer::free_line
-  integer::cache_type
+  integer,allocatable,dimension(:)::dirty
+  integer,allocatable,dimension(:)::occupied
+  integer,allocatable,dimension(:)::parent_cpu
+  integer::free_cache,ncache,ifree
+
+  ! Software cache array for failed requests
+  integer,allocatable,dimension(:)::occupied_null
+  integer,allocatable,dimension(:)::lev_null
+  integer,allocatable,dimension(:,:)::ckey_null
+  integer::free_null,nnull
 
   ! Types for physical boundary conditions
   CHARACTER(LEN=20)::type_hydro='hydro'
@@ -152,6 +125,66 @@ module amr_commons
   real(dp)::units_density=1.0 ! [g/cm^3]
   real(dp)::units_time=1.0    ! [seconds]
   real(dp)::units_length=1.0  ! [cm]
+
+  ! Communication-related objects
+  integer::mail_counter=0
+  integer::request_id,flush_id
+  integer,allocatable,dimension(:)::reply_id
+  logical::expect_flush=.false.
+
+  ! New MPI derived types
+  integer::new_mpi_int4_msg,new_mpi_realdp_msg,new_mpi_request
+  integer::new_mpi_int4_flush,new_mpi_realdp_flush
+  integer::flush_tag=1000,msg_tag=100,request_tag=10
+
+  ! Request message buffer
+  type request
+     integer(kind=4)::lev
+     integer(kind=4),dimension(1:ndim)::ckey
+  end type request
+
+  ! Response message buffer
+  integer,parameter::ntilemax=16
+  type int4_msg
+     integer(kind=4)::type
+     integer(kind=4)::ntile
+     integer(kind=4),dimension(1:ntilemax)::lev
+     integer(kind=4),dimension(1:ndim,1:ntilemax)::ckey
+     integer(kind=4),dimension(1:twotondim,1:ntilemax)::int4
+  end type int4_msg
+  type realdp_msg
+     integer(kind=4)::type
+     integer(kind=4)::ntile
+     integer(kind=4),dimension(1:ntilemax)::lev
+     integer(kind=4),dimension(1:ndim,1:ntilemax)::ckey
+     integer(kind=4),dimension(1:twotondim,1:ntilemax)::int4
+     real(kind=dp),dimension(1:twotondim,1:nvar,1:ntilemax)::realdp
+  end type realdp_msg
+
+  ! Fush message buffer
+  integer,parameter::nflushmax=128
+  type int4_flush
+     integer(kind=4)::nflush
+     integer(kind=4),dimension(1:nflushmax)::lev
+     integer(kind=4),dimension(1:ndim,1:nflushmax)::ckey
+     integer(kind=4),dimension(1:twotondim,1:nflushmax)::int4
+  end type int4_flush
+  type realdp_flush
+     integer(kind=4)::nflush
+     integer(kind=4),dimension(1:nflushmax)::lev
+     integer(kind=4),dimension(1:ndim,1:nflushmax)::ckey
+     integer(kind=4),dimension(1:twotondim,1:nflushmax)::int4
+     real(kind=dp),dimension(1:twotondim,1:nvar,1:nflushmax)::realdp
+  end type realdp_flush
+
+  ! Communication buffers
+  type(request)::recv_request
+  type(int4_msg),allocatable,dimension(:)::reply_flag
+  type(realdp_msg),allocatable,dimension(:)::reply_hydro
+  type(int4_flush)::recv_flush_flag
+  type(realdp_flush)::recv_flush_hydro
+  type(int4_flush),allocatable,dimension(:)::send_flush_flag
+  type(realdp_flush),allocatable,dimension(:)::send_flush_hydro
 
 end module amr_commons
 

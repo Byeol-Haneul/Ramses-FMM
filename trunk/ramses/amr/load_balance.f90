@@ -2,239 +2,400 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine load_balance
+subroutine load_balance(ilevel)
   use amr_commons
-  use pm_commons
-  use hydro_commons, ONLY: nvar, uold
-  use poisson_commons, ONLY: phi, f
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h' 
 #endif
+  integer::ilevel
   !------------------------------------------------
   ! This routine performs parallel load balancing.
   !------------------------------------------------
-  integer::igrid,ncache,ilevel,i,ind,jlevel,info
-  integer::idim,ivar,icpu,jcpu,kcpu
-  integer::nxny,ix,iy,iz,iskip
-  integer,dimension(nlevelmax,3)::comm_buffin,comm_buffout
-  integer :: idomain, ilev
-!  external hilbert3d_c
+  integer::igrid,i,ind,jlevel,info
+  integer::icpu,grid_cpu,ichild
+  integer::nleft,nright,ileft,iright,istart,nstart
+  integer::ilev,ioct
+  integer,dimension(:),allocatable::noct_cpu,noct_cum
+  integer,dimension(:),allocatable::ntarget_cum
+  integer(kind=8),allocatable,dimension(:)::bound_key_target
+  real(dp)::xtarget
 
-  if(ncpu==1)return
+  integer::icell,j,ibit,ibucket,inew,iold,iold_true
+  integer::noct_zero,head_zero,indx_zero
+  integer::ncreate_tot,nkill_tot
+  integer::parent_cell,skip_bit,true_level
+  integer::get_parent_cell
+  integer::ind_cell,ind_parent
+  integer(kind=8),dimension(0:ndim)::hash_key
+  integer(kind=8),dimension(1:nlevelmax)::key_ref
+  integer(kind=8), dimension(1:ndim)::cart_key
+  integer(kind=8)::coarse_key
+  integer,dimension(1:nlevelmax)::n_same,npatch
+  integer,dimension(:),allocatable::noct_level,head_level,indx_level
+  integer,dimension(:),allocatable::swap_table,swap_tmp
+  integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
+  logical::ok_free,ok_all,ok
+  type(oct)::oct_tmp
+
 
 #ifndef WITHOUTMPI
-  if(myid==1)write(*,*)'Load balancing AMR grid...'
+  if(ncpu==1)return
+  if(myid==1)write(*,111)ilevel
   
-  balance=.true.
+!!$  if(verbose)then
+!!$     write(*,*)'Input mesh structure'
+!!$     do ilev=levelmin,nlevelmax
+!!$        if(noct_tot(ilev)>0)write(*,999)ilev,noct_tot(ilev),noct_min(ilev),noct_max(ilev),noct_tot(ilev)/ncpu
+!!$     end do
+!!$  end if
 
-  if(verbose)then
-     write(*,*)'Input mesh structure'
-     do ilevel=1,nlevelmax
-        if(numbtot(1,ilevel)>0)write(*,999)ilevel,numbtot(1:4,ilevel)
+!!$  if(myid==1)then
+!!$     write(*,*)'Old Hilbert tick marks'
+!!$     do ilev=ilevel,nlevelmax
+!!$        write(*,'(40(I6,1X))')(bound_key_level(icpu,ilev),icpu=0,ncpu)
+!!$     end do
+!!$  end if
+
+  !-----------------------------------------------------
+  ! Step 1: determine the new Hilbert tick marks
+  !-----------------------------------------------------
+  allocate(noct_cpu(1:ncpu))
+  allocate(noct_cum(1:ncpu))
+  allocate(ntarget_cum(1:ncpu))
+  allocate(bound_key_target(0:ncpu))
+  ! Compute new Hilbert tick marks
+  do ilev=ilevel,nlevelmax
+
+     noct_cpu=0
+     noct_cpu(myid)=noct(ilev)
+     call MPI_ALLREDUCE(noct_cpu,noct_cum,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+     noct_cpu=noct_cum
+     do icpu=2,ncpu
+        noct_cum(icpu)=noct_cum(icpu-1)+noct_cpu(icpu)
      end do
-  end if
 
-  !-------------------------------------------
-  ! Compute new cpu map using chosen ordering
-  !-------------------------------------------
-  call cmp_new_cpu_map
+     xtarget=dble(noct_cum(ncpu))/dble(ncpu)
 
-  !------------------------------------------------------
-  ! Expand boundaries to account for new mesh partition
-  !------------------------------------------------------
-  call flag_coarse
-  call refine_coarse
-  call build_comm(1)
-  call make_virtual_fine_int(cpu_map (1),1)
-  call make_virtual_fine_int(cpu_map2(1),1)
-  do i=1,nlevelmax-1
-     call flag_fine(i,2)
-     call refine_fine(i)
-     call build_comm(i+1)
-     call make_virtual_fine_int(cpu_map (1),i+1)
-     call make_virtual_fine_int(cpu_map2(1),i+1)
-  end do
-
-  !--------------------------------------
-  ! Update physical boundary conditions
-  !--------------------------------------
-  do ilevel=nlevelmax,1,-1
-     if(hydro)then
-        do ivar=1,nvar
-           call make_virtual_fine_dp(uold(1,ivar),ilevel)
-        end do
-        if(simple_boundary)then
-           call make_boundary_hydro(ilevel)
-        end if
-     end if
-     if(poisson)then
-        call make_virtual_fine_dp(phi(1),ilevel)
-        do idim=1,ndim
-           call make_virtual_fine_dp(f(1,idim),ilevel)
-        end do
-     end if
-  end do
-
-  !--------------------------------------
-  ! Rearrange octs between cpus
-  !--------------------------------------
-  do ilevel=1,nlevelmax
+     ileft=0
+     iright=-1
+     bound_key_target=0
      do icpu=1,ncpu
-        if(icpu==myid)then
-           ncache=active(ilevel)%ngrid
+        ntarget_cum(icpu)=int(dble(icpu)*xtarget)
+        if(myid>1)then
+           nleft=noct_cum(myid-1)
         else
-           ncache=reception(icpu,ilevel)%ngrid
+           nleft=0
+        endif
+        nright=noct_cum(myid)
+        IF(nright.GT.nleft)then
+           if(ntarget_cum(icpu).GT.nleft.AND.ntarget_cum(icpu).LE.nright)then
+              if(ileft==0)ileft=icpu
+              iright=MAX(icpu,iright)
+           endif
+        endif
+     end do
+
+     if(iright.GE.ileft)then
+        if(myid.GT.1)then
+           nstart=noct_cum(myid-1)
+        else
+           nstart=0
+        endif
+        istart=ileft
+        do ioct=head(ilev),tail(ilev)
+           nstart=nstart+1
+           if(nstart.GE.ntarget_cum(istart))then
+              bound_key_target(istart)=grid(ioct)%hkey+1
+              istart=istart+1
+           endif
+           if(istart.GT.iright)exit
+        end do
+     endif
+
+     call MPI_ALLREDUCE(bound_key_target,bound_key_target,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+
+     bound_key_target(0)=0
+     do icpu=1,ncpu
+        bound_key_target(icpu)=max(bound_key_target(icpu),bound_key_target(icpu-1))
+     end do
+     bound_key_target(ncpu)=bound_key_level(ncpu,ilev)
+
+     do icpu=0,ncpu
+        bound_key_level(icpu,ilev)=bound_key_target(icpu)
+     end do
+
+  end do
+  deallocate(noct_cpu,noct_cum,ntarget_cum)
+  deallocate(bound_key_target)
+
+!!$  if(myid==1)then
+!!$     write(*,*)'New Hilbert tick marks'
+!!$     do ilev=ilevel,nlevelmax
+!!$        write(*,'(40(I6,1X))')(bound_key_level(icpu,ilev),icpu=0,ncpu)
+!!$     end do
+!!$  end if
+
+  !-----------------------------------------------------
+  ! Step 2: dispatch octs and empty slots according to
+  ! the new target Hilbert tick marks
+  !-----------------------------------------------------
+  ifree=noct_used+1
+  do ilev=ilevel,nlevelmax
+
+     cache_operation=operation_loadbalance
+     call open_cache
+
+     hash_key(0)=ilev
+     do ioct=head(ilev),tail(ilev)
+
+        ! Check if grid sits outside future processor boundaries
+        if(    grid(ioct)%hkey.lt.bound_key_level(myid-1,ilev).OR. &
+             & grid(ioct)%hkey.ge.bound_key_level(myid  ,ilev))then
+           
+           ! Determine the future processor
+           do icpu=1,ncpu
+              if(    grid(ioct)%hkey.ge.bound_key_level(icpu-1,ilev).AND. &
+                   & grid(ioct)%hkey.lt.bound_key_level(icpu  ,ilev))then
+                 grid_cpu=icpu
+              end if
+           end do
+
+           ! If next cache line is occupied, free it.
+           if(occupied(free_cache))call destage(ngridmax+free_cache)
+           ! Set grid index to a virtual grid in local cache memory
+           ichild=ngridmax+free_cache
+           occupied(free_cache)=.true.
+           parent_cpu(free_cache)=grid_cpu
+           dirty(free_cache)=.true.
+           ! Go to next free cache line
+           free_cache=free_cache+1
+           ncache=ncache+1
+           if(free_cache.GT.ncachemax)free_cache=1
+           if(ncache.GT.ncachemax)ncache=ncachemax
+
+           ! Copy all data to the cache grid
+           grid(ichild)=grid(ioct)
+
+           ! Set grid level to zero
+           grid(ioct)%lev=0
+           ! Free grid from hash table
+           hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
+           call hash_free(grid_dict,hash_key)
+           
+           ! Insert new cache grid in hash table
+           call hash_set(grid_dict,hash_key,ichild)
+        
+        endif
+
+     end do
+
+     call close_cache
+
+  end do
+
+!  if(myid==1)write(*,*)'Dispatch completed'
+
+  !-----------------------------------------------------
+  ! Step 3: sort new octs and empty slots according to
+  ! their level (using counting sort algorithm).
+  !-----------------------------------------------------
+  allocate(noct_level(levelmin:nlevelmax))
+  allocate(head_level(levelmin:nlevelmax))
+  allocate(indx_level(levelmin:nlevelmax))
+  ! Count number of octs per bucket
+  noct_level=0
+  noct_zero=0
+  do ioct=tail(ilevel)+1,ifree-1
+     true_level=grid(ioct)%lev
+     if(true_level.NE.0)then
+        noct_level(true_level)=noct_level(true_level)+1
+     else
+        noct_zero=noct_zero+1
+     end if
+  end do
+  head_level(ilevel+1)=tail(ilevel)+1
+  do ilev=ilevel+2,nlevelmax
+     head_level(ilev)=head_level(ilev-1)+noct_level(ilev-1)
+  end do
+  head_zero=head_level(nlevelmax)+noct_level(nlevelmax)
+
+  ! Allocate main swap table
+  if(ifree.GT.head_level(ilevel+1))then
+  allocate(swap_table(head_level(ilevel+1):ifree-1))
+
+  ! Build index permutation table
+  indx_level=head_level
+  indx_zero=head_zero
+  do ioct=tail(ilevel)+1,ifree-1
+     true_level=grid(ioct)%lev
+     if(true_level.NE.0)then
+        swap_table(indx_level(true_level))=ioct
+        indx_level(true_level)=indx_level(true_level)+1
+     else
+        swap_table(indx_zero)=ioct
+        indx_zero=indx_zero+1
+     end if
+  end do
+
+
+  !-----------------------------------------------------
+  ! Step 4: sort octs level by level according to their
+  ! Hilbert key using LSD Radix Sort algorithm.
+  !-----------------------------------------------------
+  ! Loop over levels
+  do ilev=ilevel+1,nlevelmax
+     if(noct_level(ilev)>0)then
+        ! Allocate temporary swap table just for the level
+        allocate(swap_tmp(head_level(ilev):head_level(ilev)+noct_level(ilev)-1))
+        ! Loop over useful bits at that level
+        do ibit=ilev,1,-1
+           skip_bit=ndim*(ilev-ibit) ! Carefull: this works only up to 63 bits !!
+           ! Count octs in buckets
+           bucket_count=0
+           do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
+              ioct=swap_table(inew)
+              if(    grid(ioct)%hkey.lt.bound_key_level(myid-1,ilev).OR. &
+                   & grid(ioct)%hkey.ge.bound_key_level(myid  ,ilev))then
+                 write(*,*)'PE ',myid,'######### ',ioct
+                 write(*,*)grid(ioct)%hkey
+                 write(*,*)grid(ioct)%lev
+                 write(*,*)grid(ioct)%ckey
+                 write(*,*)bound_key_level(myid-1,ilev)
+                 write(*,*)bound_key_level(myid  ,ilev)
+                 stop
+              endif
+              ibucket=ibits(grid(ioct)%hkey,skip_bit,ndim)
+              bucket_count(ibucket)=bucket_count(ibucket)+1
+           end do
+           ! Compute offsets
+           bucket_offset(0)=head_level(ilev)
+           do ibucket=1,twotondim-1
+              bucket_offset(ibucket)=bucket_offset(ibucket-1)+bucket_count(ibucket-1)
+           end do
+           ! Sort according to Hilbert key
+           do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
+              ioct=swap_table(inew)
+              ibucket=ibits(grid(ioct)%hkey,skip_bit,ndim)
+              swap_tmp(bucket_offset(ibucket))=ioct
+              bucket_offset(ibucket)=bucket_offset(ibucket)+1
+           end do
+           ! Store permutations in swap table
+           do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
+              swap_table(inew)=swap_tmp(inew)
+           end do
+        end do
+        ! Deallocate tmp swap array
+        deallocate(swap_tmp)
+     endif
+  end do
+
+
+  !-----------------------------------------------------
+  ! Step 5: Apply permutations directly in main memory
+  ! Remember: swap_table(inew)=iold means:
+  ! New data at position inew COMES FROM
+  ! Old data at position iold.
+  !-----------------------------------------------------
+  ! Perform the swap
+  do j=head_level(ilevel+1),ifree-1
+     if(j.NE.swap_table(j))then
+        hash_key(0)=grid(j)%lev
+        hash_key(1:ndim)=grid(j)%ckey(1:ndim)
+        if(grid(j)%lev>0)call hash_free(grid_dict,hash_key)
+        oct_tmp=grid(j)
+        i=j
+        inew=swap_table(j)
+        do while(inew.NE.j)
+           grid(i)=grid(inew)
+           hash_key(0)=grid(inew)%lev
+           hash_key(1:ndim)=grid(inew)%ckey(1:ndim)
+           if(grid(inew)%lev>0)then
+              call hash_free(grid_dict,hash_key)
+              call hash_set(grid_dict,hash_key,i)
+           endif
+           swap_table(i)=i
+           i=inew
+           inew=swap_table(inew)
+        end do
+        grid(i)=oct_tmp
+        hash_key(0)=grid(i)%lev
+        hash_key(1:ndim)=grid(i)%ckey(1:ndim)
+        if(grid(i)%lev>0)then
+           call hash_set(grid_dict,hash_key,i)
         end if
-        ! Disconnect from old linked list
-        do i=1,ncache
-           if(icpu==myid)then
-              igrid=active(ilevel)%igrid(i)
+        swap_table(i)=i
+     endif
+  end do
+  endif
+
+  !-----------------------------------------------------
+  ! Step 6: Clean up final AMR structure
+  !-----------------------------------------------------
+  do ilev=ilevel+1,nlevelmax
+     head(ilev)=head_level(ilev)
+     tail(ilev)=head_level(ilev)+noct_level(ilev)-1
+     noct(ilev)=noct_level(ilev)
+  end do
+  noct_used=tail(nlevelmax)
+  deallocate(noct_level,head_level,indx_level)
+
+  !-----------
+  ! Super-octs
+  !-----------
+  do ilev=1,nlevelmax
+     npatch(ilev)=twotondim**ilev
+  end do
+  do ilev=ilevel+1,nlevelmax
+     n_same=0
+     key_ref=-1
+     do ioct=head(ilev),tail(ilev)
+        grid(ioct)%superoct=1
+        coarse_key=grid(ioct)%hkey
+        do i=1,MIN(ilev-1,nsuperoct)
+           coarse_key=coarse_key/twotondim
+           if(coarse_key.EQ.key_ref(i))then
+              n_same(i)=n_same(i)+1
            else
-              igrid=reception(icpu,ilevel)%igrid(i)
-           end if
-           kcpu=cpu_map (father(igrid))
-           jcpu=cpu_map2(father(igrid))
-           if(kcpu.ne.jcpu)then
-              if(prev(igrid).ne.0) then
-                 if(next(igrid).ne.0)then
-                    next(prev(igrid))=next(igrid)
-                    prev(next(igrid))=prev(igrid)
-                 else
-                    next(prev(igrid))=0
-                    taill(kcpu,ilevel)=prev(igrid)
-                 end if
-              else
-                 if(next(igrid).ne.0)then
-                    prev(next(igrid))=0
-                    headl(kcpu,ilevel)=next(igrid)
-                 else
-                    headl(kcpu,ilevel)=0
-                    taill(kcpu,ilevel)=0
-                 end if
-              end if
-              numbl(kcpu,ilevel)=numbl(kcpu,ilevel)-1 
-           end if
-        end do        
-        ! Connect to new linked list
-        do i=1,ncache
-           if(icpu==myid)then
-              igrid=active(ilevel)%igrid(i)
-           else
-              igrid=reception(icpu,ilevel)%igrid(i)
-           end if
-           kcpu=cpu_map (father(igrid))
-           jcpu=cpu_map2(father(igrid))
-           if(kcpu.ne.jcpu)then
-              if(numbl(jcpu,ilevel)>0)then
-                 next(igrid)=0
-                 prev(igrid)=taill(jcpu,ilevel)
-                 next(taill(jcpu,ilevel))=igrid
-                 taill(jcpu,ilevel)=igrid
-                 numbl(jcpu,ilevel)=numbl(jcpu,ilevel)+1
-              else
-                 next(igrid)=0
-                 prev(igrid)=0
-                 headl(jcpu,ilevel)=igrid
-                 taill(jcpu,ilevel)=igrid
-                 numbl(jcpu,ilevel)=1
-              end if
-           end if
+              n_same(i)=1
+              key_ref(i)=coarse_key
+           endif
+           if(n_same(i).EQ.npatch(i))then
+              grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
+           endif
         end do
      end do
   end do
-  !--------------------------------------
-  ! Compute new grid number statistics
-  !--------------------------------------
-  do ilevel=1,nlevelmax
-     comm_buffin(ilevel,1)=numbl(myid,ilevel)
-     comm_buffin(ilevel,2)=numbl(myid,ilevel)
-     comm_buffin(ilevel,3)=numbl(myid,ilevel)
-  end do
-  call MPI_ALLREDUCE(comm_buffin(1,1),comm_buffout(1,1),nlevelmax,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(comm_buffin(1,2),comm_buffout(1,2),nlevelmax,MPI_INTEGER,MPI_MIN,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(comm_buffin(1,3),comm_buffout(1,3),nlevelmax,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(used_mem        ,used_mem_tot     ,1        ,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
-  do ilevel=1,nlevelmax
-     numbtot(1,ilevel)=comm_buffout(ilevel,1)
-     numbtot(2,ilevel)=comm_buffout(ilevel,2)
-     numbtot(3,ilevel)=comm_buffout(ilevel,3)
-     numbtot(4,ilevel)=numbtot(1,ilevel)/ncpu
+
+
+  !---------------------
+  ! Total number of octs
+  !---------------------
+  do ilev=ilevel+1,nlevelmax
+     noct_tot(ilev)=noct(ilev)
+     noct_min(ilev)=noct(ilev)
+     noct_max(ilev)=noct(ilev)
+#ifndef WITHOUTMPI
+     call MPI_ALLREDUCE(noct(ilev),noct_tot(ilev),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(noct(ilev),noct_min(ilev),1,MPI_INTEGER,MPI_MIN,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(noct(ilev),noct_max(ilev),1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+#endif
   end do
 
-  !--------------------------------------
-  ! Set old cpu map to new cpu map
-  !--------------------------------------
-  bound_key=bound_key2
-
-  nxny=nx*ny
-  do iz=kcoarse_min,kcoarse_max
-  do iy=jcoarse_min,jcoarse_max
-  do ix=icoarse_min,icoarse_max
-     ind=1+ix+iy*nx+iz*nxny
-     cpu_map(ind)=cpu_map2(ind)
-  end do
-  end do
-  end do
-  do ilevel=1,nlevelmax
-     ! Build new communicators
-     call build_comm(ilevel)
-     do ind=1,twotondim
-        iskip=ncoarse+(ind-1)*ngridmax
-        do i=1,active(ilevel)%ngrid
-           cpu_map(active(ilevel)%igrid(i)+iskip)=cpu_map2(active(ilevel)%igrid(i)+iskip)
-        end do
-     end do
-     call make_virtual_fine_int(cpu_map(1),ilevel)
-  end do
-
-  !--------------------------------------------
-  ! Shrink boundaries around new mesh partition
-  !--------------------------------------------
-  shrink=.true.
-  do i=nlevelmax-1,1,-1
-     call flag_fine(i,2)
-     call refine_fine(i)
-     call build_comm(i+1)
-  end do  
-  call flag_coarse
-  call refine_coarse
-  call build_comm(1)
-  shrink=.false.
-
-  balance=.false.
-
-  if(verbose)then
-     write(*,*)'Output mesh structure'
-     do ilevel=1,nlevelmax
-        if(numbtot(1,ilevel)>0)write(*,999)ilevel,numbtot(1:4,ilevel)
-     end do
-  end if
+  noct_used_max=noct_used
+#ifndef WITHOUTMPI
+     call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 #endif
 
+!!$  if(verbose)then
+!!$     write(*,*)'Output mesh structure'
+!!$     do ilev=levelmin,nlevelmax
+!!$        if(noct_tot(ilev)>0)write(*,999)ilev,noct_tot(ilev),noct_min(ilev),noct_max(ilev),noct_tot(ilev)/ncpu
+!!$     end do
+!!$  end if
+#endif
 
-
-
-
-  do idomain=1,ndomain - 1
-     bound_key_level(idomain,nlevelmax) = nint(bound_key(idomain) / 8., kind=8)
-  end do
-  bound_key_level(0,nlevelmax) = floor(bound_key(0) / 8., kind=8)
-  bound_key_level(ndomain,nlevelmax) = ceiling(bound_key(ndomain) / 8., kind=8)
-  
-
-  do ilev=nlevelmax-1, levelmin, - 1
-     do idomain=1,ndomain - 1
-        bound_key_level(idomain,ilev) = nint(bound_key_level(idomain, ilev +1) / 8., kind=8)
-     end do
-     bound_key_level(0,ilev) = floor(bound_key_level(0, ilev +1) / 8., kind=8)
-     bound_key_level(ndomain,ilev) = ceiling(bound_key_level(ndomain, ilev +1) / 8., kind=8)
-  end do
-  
-
-
-
-
+111 format(' Load balancing for all levels greater than ',I2)
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
 end subroutine load_balance
@@ -242,1251 +403,3 @@ end subroutine load_balance
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine cmp_new_cpu_map
-  use amr_commons
-  use pm_commons
-  use sort
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  !---------------------------------------------------
-  ! This routine computes the new cpu map using 
-  ! the choosen ordering to balance load across cpus.
-  !---------------------------------------------------
-  integer::igrid,ncell,ncell_loc,ncache,ngrid
-  integer::ncode,bit_length,ilevel,i,ind,idim
-  integer::nx_loc,ny_loc,nz_loc,nfar
-  integer::info,icpu,jcpu,isub,idom,jdom
-  integer::nxny,ix,iy,iz,iskip
-  integer::ind_long
-  integer,dimension(1:nvector),save::ind_grid,ind_cell
-
-  real(dp)::dx,scale,weight
-  real(dp),dimension(1:twotondim,1:3)::xc
-  real(dp),dimension(1:nvector,1:ndim),save::xx
-  real(kind=8)::incost_tot,local_cost,cell_cost
-  real(kind=8),dimension(0:ndomain)::incost_new,incost_old
-  integer(kind=8),dimension(1:overload)::npart_sub
-  integer(kind=8)::wflag
-  integer,dimension(1:overload)::ncell_sub
-  real(kind=8),dimension(1:ndomain)::cost_loc,cost_old,cost_new
-  real(qdp),dimension(0:ndomain)::bound_key_loc
-  real(kind=8),dimension(0:ndomain)::bigdbl,bigtmp
-  integer,dimension(1:nvector),save::dom
-  real(qdp),dimension(1:nvector),save::order_min,order_max
-  integer,dimension(1:MAXLEVEL),save::niter_cost
-
-  real(dp),dimension(1:1,1:ndim),save :: xx_tmp
-  integer,dimension(1:1),save :: c_tmp
-  integer, save :: idomain, ilev
-
-  ! Local constants
-  nxny=nx*ny
-  nx_loc=icoarse_max-icoarse_min+1
-  scale=boxlen/dble(nx_loc)
-  
-  ! Compute time step related cost
-  if(cost_weighting)then
-     niter_cost(levelmin)=1
-     if (nlevelmax - levelmin - 1 > 31) write(*,*) 'Warning load_balance: niter_cost may need to become a kind=8 integer'
-     do ilevel=levelmin+1,nlevelmax
-        niter_cost(ilevel)=nsubcycle(ilevel-1)*niter_cost(ilevel-1)
-     end do
-  else
-     niter_cost(levelmin:nlevelmax)=1
-  endif
-
-  if(verbose) print *,"Entering cmp_new_cpu_map"
-
-  !----------------------------------------
-  ! Compute cell ordering and cost
-  ! for leaf cells with cpu map = myid.
-  ! Store cost in flag1 and MAXIMUM  
-  ! ordering key in hilbert_key of kind=16
-  !----------------------------------------
-  ncell=0
-  npart_sub=0
-  ncell_sub=0
-  ncell_loc=1
-  dx=1.0*scale
-  do iz=0,nz-1
-  do iy=0,ny-1
-  do ix=0,nx-1
-     ind=1+ix+iy*nx+iz*nxny
-     if(cpu_map(ind)==myid.and.son(ind)==0)then
-        xx(1,1)=(dble(ix)+0.5d0-dble(icoarse_min))*scale
-#if NDIM>1
-        xx(1,2)=(dble(iy)+0.5d0-dble(jcoarse_min))*scale
-#endif
-#if NDIM>2
-        xx(1,3)=(dble(iz)+0.5d0-dble(kcoarse_min))*scale
-#endif
-        call cmp_minmaxorder(xx,order_min,order_max,dx,ncell_loc)
-        call cmp_dommap(xx,dom,ncell_loc)
-        ncell=ncell+1
-        isub=(dom(1)-1)/ncpu+1
-        ncell_sub(isub)=ncell_sub(isub)+1
-        flag1(ncell)=0
-        hilbert_key(ncell)=order_max(1)
-     end if
-  end do
-  end do
-  end do
-  ! Loop over levels
-  do ilevel=1,nlevelmax
-     ! Cell size and cell center offset
-     dx=0.5d0**ilevel
-     do ind=1,twotondim
-        iz=(ind-1)/4
-        iy=(ind-1-4*iz)/2
-        ix=(ind-1-2*iy-4*iz)
-        xc(ind,1)=(dble(ix)-0.5d0)*dx-dble(icoarse_min)
-#if NDIM>1
-        xc(ind,2)=(dble(iy)-0.5d0)*dx-dble(jcoarse_min)
-#endif
-#if NDIM>2
-        xc(ind,3)=(dble(iz)-0.5d0)*dx-dble(kcoarse_min)
-#endif
-     end do
-     ! Loop over cpus
-     do icpu=1,ncpu
-        if(icpu==myid)then
-           ncache=active(ilevel)%ngrid
-        else
-           ncache=reception(icpu,ilevel)%ngrid
-        end if
-        ! Loop over grids by vector sweeps
-        do igrid=1,ncache,nvector
-           ! Gather nvector grids
-           ngrid=MIN(nvector,ncache-igrid+1)
-           if(icpu==myid)then
-              do i=1,ngrid
-                 ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
-              end do
-           else
-              do i=1,ngrid
-                 ind_grid(i)=reception(icpu,ilevel)%igrid(igrid+i-1)
-              end do
-           end if
-           ! Loop over cells
-           do ind=1,twotondim
-              iskip=ncoarse+(ind-1)*ngridmax
-              do i=1,ngrid
-                 ind_cell(i)=ind_grid(i)+iskip
-              end do
-              do idim=1,ndim
-              ncell_loc=0
-              do i=1,ngrid
-              if(cpu_map(ind_cell(i))==myid.and.son(ind_cell(i))==0)then
-                 ncell_loc=ncell_loc+1
-                 xx(ncell_loc,idim)=(xg(ind_grid(i),idim)+xc(ind,idim))*scale
-              end if
-              end do
-              end do
-              if(ncell_loc>0)then
-                 call cmp_minmaxorder(xx,order_min,order_max,dx*scale,ncell_loc)
-                 call cmp_dommap(xx,dom,ncell_loc)
-              end if
-              ncell_loc=0
-              do i=1,ngrid
-                 if(cpu_map(ind_cell(i))==myid.and.son(ind_cell(i))==0)then
-                    ncell    =ncell    +1
-                    ncell_loc=ncell_loc+1
-                    isub=(dom(ncell_loc)-1)/ncpu+1
-                    ncell_sub(isub)=ncell_sub(isub)+1
-                    flag1(ncell)=8*10 ! Magic number
-                    if(pic)then
-                       flag1(ncell)=flag1(ncell)+numbp(ind_grid(i))
-                    endif
-                    wflag = flag1(ncell)*niter_cost(ilevel)
-                    if (wflag > 2147483647) then 
-                       write(*,*) ' wrong type for flag1 --> change to integer kind=8: ',wflag
-                       stop
-                    endif
-                    flag1(ncell)=flag1(ncell)*niter_cost(ilevel)
-                    npart_sub(isub)=npart_sub(isub)+flag1(ncell)
-                    hilbert_key(ncell)=order_max(ncell_loc)
-                 end if
-              end do
-           end do
-           ! End loop over cells
-        end do
-        ! End loop over grids
-     end do
-     ! End loop over cpus
-  end do
-  ! End loop over levels
-
-  !------------------------------------------------
-  ! Sort ordering key and store new index in flag2
-  !------------------------------------------------
-  if (ncell>0) call quick_sort(hilbert_key(1),flag2(1),ncell)
-
-  !-----------------------------
-  ! Balance cost across cpus
-  !-----------------------------
-  cost_loc = 0 ! Compute local and global cost
-  do isub=1,overload
-     cost_loc(myid+(isub-1)*ncpu) = dble(npart_sub(isub))
-  end do
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(cost_loc,cost_old,ndomain,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
-  incost_tot = 0D0
-  incost_old(0) = 0D0
-  do idom = 1,ndomain
-     incost_tot = incost_tot + cost_old(idom)
-     incost_old(idom) = incost_tot
-  end do
-  incost_new(0) = 0D0
-  do idom = 1,ndomain
-     cost_new(idom) = incost_tot/dble(ndomain) ! Exact load balancing
-     incost_new(idom) = incost_new(idom-1) + cost_new(idom)
-  end do
-
-  !-----------------------------
-  ! Compute new cpu boundaries
-  !-----------------------------
-  bound_key_loc=0.0d0; bound_key2=0.0d0
-  ncell_loc=0
-  do isub=1,overload
-     if(ncell_sub(isub)>0)then
-        ! First cpu on local domain
-        idom=0
-        do while(incost_new(idom)<incost_old(myid-1+(isub-1)*ncpu))
-           idom=idom+1
-           if (idom > ndomain) exit 
-        end do
-        ! Compute Hilbert key at boundaries
-        i=idom
-        local_cost=incost_old(myid-1+(isub-1)*ncpu)
-        do ind_long=1,ncell_sub(isub)
-           cell_cost=dble(flag1(flag2(ind_long+ncell_loc)))
-           local_cost=local_cost+cell_cost
-           if (i > ndomain) exit
-           if(incost_new(i)<local_cost)then
-              bound_key_loc(i)=hilbert_key(ind_long+ncell_loc)
-              i=i+1
-           endif
-        end do
-     end if
-     ncell_loc=ncell_loc+ncell_sub(isub)
-  end do
-#ifndef WITHOUTMPI
-#ifdef QUADHILBERT
-  bigdbl= real(bound_key_loc,kind=8)
-  bigtmp= 0.0d0
-  call MPI_ALLREDUCE(bigdbl,bigtmp,ndomain+1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  ! if call to mpi_sum with mpi_type=mpi_real16 is supported by mpi_allreduce we can do: 
-  !call MPI_ALLREDUCE(bound_key_loc,bound_key2,ndomain+1,MPI_REAL16,MPI_SUM,MPI_COMM_WORLD,info)
-  bound_key2         = real(bigtmp,kind=qdp)
-#else
-  call MPI_ALLREDUCE(bound_key_loc,bound_key2,ndomain+1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
-#endif
-  bound_key2(0)      =order_all_min
-  bound_key2(ndomain)=order_all_max
-
-  !----------------------------------------
-  ! Compute new cpu map
-  !----------------------------------------
-  cpu_map2=0
-  ncell_loc=1
-  do iz=0,nz-1
-  do iy=0,ny-1
-  do ix=0,nx-1
-     ind=1+ix+iy*nx+iz*nxny
-     xx(1,1)=(dble(ix)+0.5d0-dble(icoarse_min))*scale
-#if NDIM>1
-     xx(1,2)=(dble(iy)+0.5d0-dble(jcoarse_min))*scale
-#endif
-#if NDIM>2
-     xx(1,3)=(dble(iz)+0.5d0-dble(kcoarse_min))*scale
-#endif
-     cpu_map2(ind)=ncpu ! default value                                                               
-
-     call cmp_ordering(xx,order_max,ncell_loc)
-     cpu_map2(ind)=ncpu ! default value
-     do idom=1,ndomain
-        if( order_max(1).ge.bound_key2(idom-1).and. &
-             & order_max(1).lt.bound_key2(idom))then
-           cpu_map2(ind)=mod(idom-1,ncpu)+1
-        endif
-     end do
-  end do
-  end do
-  end do
-  ! Loop over levels
-  do ilevel=1,nlevelmax
-     ! Cell size and cell center offset
-     dx=0.5d0**ilevel
-     do ind=1,twotondim
-        iz=(ind-1)/4
-        iy=(ind-1-4*iz)/2
-        ix=(ind-1-2*iy-4*iz)
-        xc(ind,1)=(dble(ix)-0.5d0)*dx-dble(icoarse_min)
-#if NDIM>1
-        xc(ind,2)=(dble(iy)-0.5d0)*dx-dble(jcoarse_min)
-#endif
-#if NDIM>2
-        xc(ind,3)=(dble(iz)-0.5d0)*dx-dble(kcoarse_min)
-#endif
-     end do     
-     ncache=active(ilevel)%ngrid
-     ! Loop over grids by vector sweeps
-     do igrid=1,ncache,nvector
-        ! Gather nvector grids
-        ngrid=MIN(nvector,ncache-igrid+1)
-        do i=1,ngrid
-           ind_grid(i)=active(ilevel)%igrid(igrid+i-1)
-        end do           
-        ! Loop over cells
-        do ind=1,twotondim
-           iskip=ncoarse+(ind-1)*ngridmax
-           do i=1,ngrid
-              ind_cell(i)=ind_grid(i)+iskip
-           end do
-           do idim=1,ndim
-              do i=1,ngrid
-                 xx(i,idim)=(xg(ind_grid(i),idim)+xc(ind,idim))*scale
-              end do
-           end do
-
-           if(ngrid>0)call cmp_ordering(xx,order_max,ngrid)
-           do i=1,ngrid
-              cpu_map2(ind_cell(i))=ncpu ! default value
-              do idom=1,ndomain
-                 if( order_max(i).ge.bound_key2(idom-1).and. &
-                      & order_max(i).lt.bound_key2(idom))then
-                    cpu_map2(ind_cell(i))=mod(idom-1,ncpu)+1
-                 endif
-              end do
-           end do
-        end do
-        ! End loop over cells
-     end do
-     ! End loop over grids
-  end do
-  ! End loop over levels
-
-  ! Update virtual boundaries for new cpu map
-  call make_virtual_coarse_int(cpu_map2(1))
-  do ilevel=1,nlevelmax
-     call make_virtual_fine_int(cpu_map2(1),ilevel)
-  end do 
-
-end subroutine cmp_new_cpu_map
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine cmp_cpumap(x,c,nn)
-  use amr_parameters
-  use amr_commons
-  implicit none
-  integer ::nn
-  integer ,dimension(1:nvector)::c
-  real(dp),dimension(1:nvector,1:ndim)::x
-
-  integer::i,idom
-  real(qdp),dimension(1:nvector),save::order
-
-  call cmp_ordering(x,order,nn)
-  do i=1,nn
-     c(i)=ndomain ! default value
-     do idom=1,ndomain
-        if(    order(i).ge.bound_key(idom-1).and. &
-             & order(i).lt.bound_key(idom  ))then
-           c(i)=idom
-        endif
-     end do
-  end do
-  do i=1,nn
-     c(i)=MOD(c(i)-1,ncpu)+1
-     !        c(i)=c(i)-((c(i)-1)/ncpu)*ncpu
-  end do
-
-end subroutine cmp_cpumap
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine cmp_dommap(x,c,nn)
-  use amr_parameters
-  use amr_commons
-  implicit none
-  integer ::nn
-  integer ,dimension(1:nvector)::c
-  real(dp),dimension(1:nvector,1:ndim)::x
-
-  integer::i,idom
-  real(qdp),dimension(1:nvector),save::order
-
-  call cmp_ordering(x,order,nn)
-  do i=1,nn
-     c(i)=ndomain ! default value
-     do idom=1,ndomain
-        if(    order(i).ge.bound_key(idom-1).and. &
-             & order(i).lt.bound_key(idom  ))then
-           c(i)=idom
-        endif
-     end do
-  end do
-  
-end subroutine cmp_dommap
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine cmp_ordering(x,order,nn)
-  use amr_parameters
-  use amr_commons
-  use hilbert
-  implicit none
-  integer ::nn
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  real(dp),dimension(1:nvector,1:ndim)::x
-  real(qdp),dimension(1:nvector)::order
-  !--------------------------------------------------------
-  ! This routine computes the index key of the input cell
-  ! according to its position in space and for the chosen
-  ! ordering. Position x are in user units.
-  !-----------------------------------------------------
-  integer,dimension(1:nvector),save::ix,iy,iz
-  integer::i,ncode,bit_length,nx_loc
-  integer::temp,info
-  real(kind=8)::scale,bscale,xx,yy,zz,xc,yc,zc
-
-  nx_loc=icoarse_max-icoarse_min+1
-  scale=boxlen/dble(nx_loc)
-
-  if(ordering=='planar')then
-     ! Planar domain decomposition
-     do i=1,nn
-        order(i)=x(i,1)
-     end do
-  end if
-
-#if NDIM>1
-  if(ordering=='angular')then
-     ! Angular domain decomposition
-     xc=boxlen/2.
-     yc=boxlen/2.
-     zc=boxlen/2.
-     do i=1,nn
-        xx=x(i,1)-xc+1d-10
-        yy=x(i,2)-yc
-#if NDIM>2
-        zz=x(i,3)
-#endif
-        if(xx>0.)then
-           order(i)=atan(yy/xx)+acos(-1.)/2.
-        else
-           order(i)=atan(yy/xx)+acos(-1.)*3./2.
-        endif
-#if NDIM>2
-        if(zz.gt.zc)order(i)=order(i)+2.*acos(-1.)
-#endif
-     end do
-  end if
-#endif
-
-  if(ordering=='hilbert')then
-     ! Hilbert curve domain decomposition
-     bscale=2**(nlevelmax+1)
-     ncode=nx_loc*int(bscale)
-     bscale=bscale/scale
-     
-     temp=ncode
-     do bit_length=1,32
-        ncode=ncode/2
-        if(ncode<=1) exit
-     end do
-     if(bit_length==32) then
-        write(*,*)'Error in cmp_minmaxorder'
-#ifndef WITHOUTMPI
-        call MPI_ABORT(MPI_COMM_WORLD,1,info)
-#else
-        stop
-#endif
-     end if
-
-     do i=1,nn
-        ix(i)=int(x(i,1)*bscale)
-#if NDIM>1           
-        iy(i)=int(x(i,2)*bscale)
-#endif
-#if NDIM>2
-        iz(i)=int(x(i,3)*bscale)
-#endif
-     end do
-
-     if(ndim==1)then
-        call hilbert1d(ix,order,nn)
-     else if(ndim==2)then
-        call hilbert2d_orig(ix,iy,order,bit_length,nn)
-     else if (ndim==3)then
-        call hilbert3d_orig(ix,iy,iz,order,bit_length,nn)
-     end if
-
-  end if
-
-end subroutine cmp_ordering
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine cmp_minmaxorder(x,order_min,order_max,dx,nn)
-  use amr_parameters
-  use amr_commons
-  use hilbert
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  integer ::nn
-  integer ::temp,info
-  real(dp)::dx
-  real(dp),dimension(1:nvector,1:ndim)::x
-  real(qdp),dimension(1:nvector)::order_min,order_max
-  !-----------------------------------------------------
-  ! This routine computes the minimum and maximum index
-  ! key contained in the input cell and for the chosen 
-  ! ordering.
-  !-----------------------------------------------------
-  integer,dimension(1:nvector),save::ix,iy,iz
-  integer::i,ncode,bit_length,nxny,nx_loc
-
-  real(dp)::theta1,theta2,theta3,theta4,dxx,dxmin  
-  real(kind=8)::scale,bscaleloc,bscale,xx,yy,zz,xc,yc,zc
-  real(qdp)::dkey,oneqdp=1.0
-
-  nx_loc=icoarse_max-icoarse_min+1
-  scale=boxlen/dble(nx_loc)
-  dxmin=scale/dble(2**nlevelmax)
-
-  if(ordering=='planar')then
-     ! Planar domain decomposition
-     dxx=0.5d0*dx
-     do i=1,nn
-        order_min(i)=x(i,1)-dxx
-        order_max(i)=x(i,1)+dxx
-     end do
-  end if
-
-#if NDIM>1
-  if(ordering=='angular')then
-     ! Angular domain decomposition
-     dxx=0.5d0*dx
-     xc=boxlen/2.
-     yc=boxlen/2.
-     zc=boxlen/2.
-     do i=1,nn
-        if(dx==boxlen)then
-           order_min(i)=0.
-           order_max(i)=4.*acos(-1.)
-        else
-           ! x- y-
-           yy=x(i,2)-yc-dxx
-           xx=x(i,1)-xc-dxx
-           if(xx.ge.0.)then
-              xx=xx+1d-10
-              theta1=atan(yy/xx)+acos(-1.)/2.
-           else
-              xx=xx-1d-10
-              theta1=atan(yy/xx)+acos(-1.)*3./2.
-           endif
-           ! x+ y-
-           xx=x(i,1)-xc+dxx
-           if(xx.gt.0.)then
-              xx=xx+1d-10
-              theta2=atan(yy/xx)+acos(-1.)/2.
-           else
-              xx=xx-1d-10
-              theta2=atan(yy/xx)+acos(-1.)*3./2.
-           endif
-           
-           ! x+ y+
-           yy=x(i,2)-yc+dxx
-           if(xx.gt.0.)then
-              xx=xx+1d-10
-              theta3=atan(yy/xx)+acos(-1.)/2.
-           else
-              xx=xx-1d-10
-              theta3=atan(yy/xx)+acos(-1.)*3./2.
-           endif
-           ! x- y+
-           xx=x(i,1)-xc-dxx
-           if(xx.ge.0.)then
-              xx=xx+1d-10
-              theta4=atan(yy/xx)+acos(-1.)/2.
-           else
-              xx=xx-1d-10
-              theta4=atan(yy/xx)+acos(-1.)*3./2.
-           endif
-           order_min(i)=min(theta1,theta2,theta3,theta4)
-           order_max(i)=max(theta1,theta2,theta3,theta4)
-#if NDIM>2
-           zz=x(i,3)
-           if(zz.gt.zc)then
-              order_min(i)=order_min(i)+2.*acos(-1.)
-              order_max(i)=order_max(i)+2.*acos(-1.)
-           endif
-#endif
-        endif
-     end do
-  end if
-#endif
-
-  if(ordering=='hilbert')then
-     ! Hilbert curve domain decomposition
-     bscale=2**(nlevelmax+1)
-     bscaleloc=2**nlevelmax*dxmin/dx
-     ncode=nx_loc*int(bscaleloc)
-     bscaleloc=bscaleloc/scale
-     bscale   =bscale   /scale
-     
-     temp=ncode
-     do bit_length=1,32
-        ncode=ncode/2
-        if(ncode<=1) exit
-     end do
-     if(bit_length==32) then
-        write(*,*)'Error in cmp_minmaxorder'
-#ifndef WITHOUTMPI
-        call MPI_ABORT(MPI_COMM_WORLD,1,info)
-#else
-        stop
-#endif
-     end if
-
-     do i=1,nn
-        ix(i)=int(x(i,1)*bscaleloc)
-#if NDIM>1           
-        iy(i)=int(x(i,2)*bscaleloc)
-#endif
-#if NDIM>2
-        iz(i)=int(x(i,3)*bscaleloc)
-#endif
-     end do
-
-     if(ndim==1)then
-        call hilbert1d(ix,order_min,nn)
-     else if(ndim==2)then
-        call hilbert2d_orig(ix,iy,order_min,bit_length,nn)
-     else if (ndim==3)then
-        call hilbert3d_orig(ix,iy,iz,order_min,bit_length,nn)
-     end if
-
-     dkey=(real(bscale,kind=qdp)/real(bscaleloc,kind=qdp))**ndim
-     do i=1,nn
-        order_max(i)=(order_min(i)+oneqdp)*dkey
-        order_min(i)=(order_min(i))*dkey
-     end do
-
-  end if
-
-end subroutine cmp_minmaxorder
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine defrag
-  use amr_commons
-  use pm_commons
-  use poisson_commons
-  use hydro_commons
-  implicit none
-
-  integer::ncache,ngrid2,igridmax,i,igrid,ibound,ilevel
-  integer::iskip1,iskip2,igrid1,igrid2,ind1,ind2,icell1,icell2
-  integer::ind,idim,ivar,istart
-
-  if(verbose)write(*,*)'Defragmenting main memory...'
-
-  ngrid2=0
-  igridmax=0
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              cpu_map2(igrid)=ngrid2+i
-              igridmax=max(igridmax,igrid)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              icell1=father(igrid)
-              if(icell1>ncoarse)then
-                 ind1=(icell1-ncoarse-1)/ngridmax+1
-                 iskip1=ncoarse+(ind1-1)*ngridmax
-                 igrid1=(icell1-iskip1)
-                 igrid2=cpu_map2(igrid1)
-                 iskip2=ncoarse+(ind1-1)*ngridmax
-                 icell2=iskip2+igrid2
-              else
-                 icell2=icell1
-              end if
-              flag2(ngrid2+i)=icell2
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     father(igrid)=flag2(igrid)
-  end do
-
-  do ind=1,twondim
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              icell1=nbor(igrid,ind)
-              if(icell1>ncoarse)then
-                 ind1=(icell1-ncoarse-1)/ngridmax+1
-                 iskip1=ncoarse+(ind1-1)*ngridmax
-                 igrid1=(icell1-iskip1)
-                 igrid2=cpu_map2(igrid1)
-                 iskip2=ncoarse+(ind1-1)*ngridmax
-                 icell2=iskip2+igrid2
-              else
-                 icell2=icell1
-              end if
-              flag2(ngrid2+i)=icell2
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     nbor(igrid,ind)=flag2(igrid)
-  end do
-  end do
-
-  do idim=1,ndim
-  ngrid2=0
-  do igrid=1,igridmax
-     hilbert_key(igrid)=0.0D0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              hilbert_key(ngrid2+i)=real(xg(igrid,idim),kind=qdp)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     xg(igrid,idim)=real(hilbert_key(igrid),kind=8)
-  end do
-  end do
-
-  if(pic)then
-
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              flag2(ngrid2+i)=headp(igrid)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     headp(igrid)=flag2(igrid)
-  end do
-
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              flag2(ngrid2+i)=tailp(igrid)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     tailp(igrid)=flag2(igrid)
-  end do
-
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              flag2(ngrid2+i)=numbp(igrid)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     numbp(igrid)=flag2(igrid)
-  end do
-
-  endif
-
-  do ind=1,twotondim
-  iskip2=ncoarse+(ind-1)*ngridmax
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              igrid1=son(iskip2+igrid)
-              if(igrid1>0)then
-                 igrid2=cpu_map2(igrid1)
-              else
-                 igrid2=0
-              end if
-              flag2(ngrid2+i)=igrid2
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     son(iskip2+igrid)=flag2(igrid)
-  end do
-  end do
-
-  do ind=1,twotondim
-  iskip2=ncoarse+(ind-1)*ngridmax
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              flag2(ngrid2+i)=cpu_map(iskip2+igrid)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     cpu_map(iskip2+igrid)=flag2(igrid)
-  end do
-  end do
-
-  do ind=1,twotondim
-  iskip2=ncoarse+(ind-1)*ngridmax
-  ngrid2=0
-  do igrid=1,igridmax
-     flag2(igrid)=0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              flag2(ngrid2+i)=flag1(iskip2+igrid)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     flag1(iskip2+igrid)=flag2(igrid)
-  end do
-  end do
-
-  if(hydro)then
-
-  do ivar=1,nvar
-  do ind=1,twotondim
-  iskip2=ncoarse+(ind-1)*ngridmax
-  ngrid2=0
-  do igrid=1,igridmax
-     hilbert_key(igrid)=0.0D0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              hilbert_key(ngrid2+i)=real(uold(iskip2+igrid,ivar),kind=qdp)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     uold(iskip2+igrid,ivar)=real(hilbert_key(igrid),kind=8)
-  end do
-  end do
-  end do
-
-  end if
-
-
-  if(poisson)then
-
-  do ind=1,twotondim
-  iskip2=ncoarse+(ind-1)*ngridmax
-  ngrid2=0
-  do igrid=1,igridmax
-     hilbert_key(igrid)=0.0D0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              hilbert_key(ngrid2+i)=real(phi(iskip2+igrid),kind=qdp)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     phi(iskip2+igrid)=real(hilbert_key(igrid),kind=8)
-  end do
-  end do
-
-  do idim=1,ndim
-  do ind=1,twotondim
-  iskip2=ncoarse+(ind-1)*ngridmax
-  ngrid2=0
-  do igrid=1,igridmax
-     hilbert_key(igrid)=0.0D0
-  end do
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           igrid=istart
-           do i=1,ncache
-              hilbert_key(ngrid2+i)=real(f(iskip2+igrid,idim),kind=qdp)
-              igrid=next(igrid)
-           end do
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  do igrid=1,igridmax
-     f(iskip2+igrid,idim)=real(hilbert_key(igrid),kind=8)
-  end do
-  end do
-  end do
-
-  end if
-
-  ngrid2=0
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           if(ibound<=ncpu)then
-              headl(ibound,ilevel)=ngrid2+1
-              taill(ibound,ilevel)=ngrid2+ncache
-           else
-              headb(ibound-ncpu,ilevel)=ngrid2+1
-              tailb(ibound-ncpu,ilevel)=ngrid2+ncache
-           end if
-           prev(ngrid2+1)=0
-           do i=2,ncache
-              prev(ngrid2+i)=ngrid2+i-1
-           end do
-           do i=1,ncache-1
-              next(ngrid2+i)=ngrid2+i+1
-           end do
-           next(ngrid2+ncache)=0
-           ngrid2=ngrid2+ncache
-        end if
-     end do
-  end do
-  headf=ngrid2+1
-  tailf=ngridmax
-  numbf=ngridmax-ngrid2
-  prev(headf)=0
-  next(tailf)=0
-  do i=ngrid2+2,ngridmax
-     prev(i)=i-1
-  end do
-  do i=ngrid2+1,ngridmax-1
-     next(i)=i+1
-  end do
-
-  do i=1,nlevelmax
-     call build_comm(i)
-  end do
-
-  ngrid_current=ngrid2
-
-  call reset_entire_hash(cell_dict)
-  call build_cell_dict
-end subroutine defrag
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine cmp_ordering_int(x,hkey2,hkey1,hkey0,nn)
-  use amr_parameters
-  use amr_commons
-  use hilbert, only: hilbert3d
-  implicit none
-  integer ::nn
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  real(dp),dimension(1:nvector,1:ndim)::x
-!  real(qdp),dimension(1:nvector)::order
-  integer(kind=8),dimension(1:nvector)::hkey2,hkey1,hkey0
-  !--------------------------------------------------------
-  ! This routine computes the index key of the input cell
-  ! according to its position in space and for the chosen
-  ! ordering. Position x are in user units.
-  !-----------------------------------------------------
-  integer(kind=4),dimension(1:nvector)::cstate
-  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
-  integer::i,ncode,bit_length,nx_loc
-  integer::temp,info
-  real(kind=8)::scale,bscale,xx,yy,zz,xc,yc,zc
-
-  nx_loc=icoarse_max-icoarse_min+1
-  scale=boxlen/dble(nx_loc)
-
-
-  ! Hilbert curve domain decomposition
-  bscale=2**(nlevelmax+1)
-  ncode=nx_loc*int(bscale)
-  bscale=bscale/scale
-  
-  temp=ncode
-  do bit_length=1,32
-     ncode=ncode/2
-     if(ncode<=1) exit
-  end do
-  if(bit_length==32) then
-     write(*,*)'Error in cmp_minmaxorder'
-#ifndef WITHOUTMPI
-     call MPI_ABORT(MPI_COMM_WORLD,1,info)
-#else
-     stop
-#endif
-  end if
-  
-  do i=1,nn
-     ix(i)=int(x(i,1)*bscale,kind=8)
-#if NDIM>1           
-     iy(i)=int(x(i,2)*bscale,kind=8)
-#endif
-#if NDIM>2
-     iz(i)=int(x(i,3)*bscale,kind=8)
-#endif
-  end do
-
-  call hilbert3d(ix,iy,iz,hkey2,hkey1,hkey0,cstate,0,bit_length,nn)
-
-end subroutine cmp_ordering_int
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-! subroutine cmp_cpumap_keys(hkey0,hkey1,hkey2,c,nn)
-!   use amr_parameters
-!   use amr_commons
-!   implicit none
-!   integer ::nn
-!   integer ,dimension(1:nvector)::c
-!   integer(kind=8),dimension(1:nvector)::hkey0,hkey1,hkey2
-  
-!   integer,save::i,idom
-
-!   do i=1,nn
-!      c(i)=ndomain ! default value
-!      do idom=1,ndomain
-!         if(    order(i).ge.bound_key(idom-1).and. &
-!              & order(i).lt.bound_key(idom  ))then
-!            c(i)=idom
-!         endif
-!      end do
-!   end do
-!   do i=1,nn
-!      c(i)=MOD(c(i)-1,ncpu)+1
-!      !        c(i)=c(i)-((c(i)-1)/ncpu)*ncpu
-!   end do
-
-! end subroutine cmp_cpumap_keys
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine cmp_particle_boundary_key
-  use amr_commons, only: ndomain, nlevelmax, levelmin, bound_key, bound_key_level
-  implicit none
-  integer :: idomain, ilev
-
-  do idomain = 1, ndomain - 1
-     bound_key_level(idomain, nlevelmax) = nint(bound_key(idomain) / 8., kind=8)
-  end do
-  bound_key_level(0, nlevelmax) = floor(bound_key(0) / 8., kind=8)
-  bound_key_level(ndomain, nlevelmax) = ceiling(bound_key(ndomain) / 8., kind=8)
-  
-  do ilev = nlevelmax - 1, levelmin, - 1
-     do idomain = 1, ndomain - 1
-        bound_key_level(idomain, ilev) = nint(bound_key_level(idomain, ilev + 1) / 8., kind=8)
-     end do
-     bound_key_level(0, ilev) = floor(bound_key_level(0, ilev + 1) / 8., kind=8)
-     bound_key_level(ndomain, ilev) = ceiling(bound_key_level(ndomain, ilev + 1) / 8., kind=8)
-  end do
-  
-end subroutine cmp_particle_boundary_key

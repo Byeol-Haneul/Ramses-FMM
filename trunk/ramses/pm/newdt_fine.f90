@@ -24,7 +24,7 @@ subroutine newdt_fine(ilevel)
   real(dp)::dx_min,dx,scale,dt_fact,limiting_dt_fact
   logical::highest_level
 
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   threepi2=3.0d0*ACOS(-1.0d0)**2

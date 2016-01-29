@@ -33,12 +33,12 @@ subroutine refine_fine(ilevel)
   ! automatically satisfied. For adaptive time-stepping,
   ! numerical rules are checked before refining any cell.
   !---------------------------------------------------------
-  integer::igrid,icell,i,j,ibit,ibucket,ifree,ilev,ind,inew,ioct,iold,iold_true
-  integer::noct_zero,head_zero,indx_zero
+  integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct,iold,iold_true
+  integer::noct_zero,head_zero,indx_zero,info
+  integer::ncreate_tot,nkill_tot
   integer::parent_cell,skip_bit,true_level
   integer::get_parent_cell
-  integer,dimension(1:nvector),save::ind_cell,ind_child,ind_parent
-  integer,dimension(1:nvector,1:ndim)::cart_key
+  integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nlevelmax)::key_ref
   integer(kind=8)::coarse_key
@@ -50,7 +50,7 @@ subroutine refine_fine(ilevel)
   type(oct)::oct_tmp
 
   if(ilevel==nlevelmax)return
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   !---------------------------------------------------
@@ -60,22 +60,36 @@ subroutine refine_fine(ilevel)
   ncreate=0
   ifree=noct_used+1
   do ilev=ilevel,nlevelmax-1
-     do ioct=head(ilev),head(ilev)+noct(ilev)-1
+
+     cache_operation=operation_refine
+     call open_cache
+
+     do ioct=head(ilev),tail(ilev)
         do ind=1,twotondim
            ok   = grid(ioct)%flag1(ind)==1 .and. &
                 & .not.grid(ioct)%refined(ind)
            if(ok)then
-              ind_child(1)=ifree
-              ind_parent(1)=ioct
-              ind_cell(1)=ind
-              call make_new_oct(ind_child,ind_parent,ind_cell,ilev+1,1)
+              ind_parent=ioct
+              ind_cell=ind
+              call make_new_oct(ind_parent,ind_cell,ilev+1)
               ncreate=ncreate+1
-              ifree=ifree+1
            endif
         end do
      end do
+
+     call close_cache
+
   end do
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(ncreate,ncreate_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  if(verbose)write(*,112)ncreate_tot
+#else
   if(verbose)write(*,112)ncreate
+#endif
+
+!!$  do ioct=head(levelmin),ifree-1
+!!$     write(*,*)'PE ',myid,grid(ioct)%lev,grid(ioct)%hkey
+!!$  end do
 
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
@@ -83,10 +97,14 @@ subroutine refine_fine(ilevel)
   !----------------------------------------------------------
   nkill=0  
   do ilev=ilevel+1,nlevelmax
+
+     cache_operation=operation_derefine
+     call open_cache
+
      hash_key(0)=ilev
-     do ioct=head(ilev),head(ilev)+noct(ilev)-1
+     do ioct=head(ilev),tail(ilev)
         hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
-        parent_cell=get_parent_cell(hash_key)
+        parent_cell=get_parent_cell(hash_key,.true.,.true.)
         igrid=(parent_cell-1)/twotondim+1
         icell=parent_cell-(igrid-1)*twotondim
         ok   = grid(igrid)%flag1(icell)==0 .and. &
@@ -101,8 +119,16 @@ subroutine refine_fine(ilevel)
            nkill=nkill+1
         end if
      end do
+
+     call close_cache
+
   end do
-  if(verbose)write(*,113)nkill
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nkill,nkill_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  if(verbose)write(*,112)nkill_tot
+#else
+  if(verbose)write(*,112)nkill
+#endif
 
   !-----------------------------------------------------
   ! Step 3: sort new octs and empty slots according to 
@@ -162,6 +188,16 @@ subroutine refine_fine(ilevel)
            bucket_count=0
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               ioct=swap_table(inew)
+              if(    grid(ioct)%hkey.lt.bound_key_level(myid-1,ilev).OR. &
+                   & grid(ioct)%hkey.ge.bound_key_level(myid  ,ilev))then
+                 write(*,*)'PE ',myid,'######### ',ioct
+                 write(*,*)grid(ioct)%hkey
+                 write(*,*)grid(ioct)%lev
+                 write(*,*)grid(ioct)%ckey
+                 write(*,*)bound_key_level(myid-1,ilev)
+                 write(*,*)bound_key_level(myid  ,ilev)
+                 stop
+              endif
               ibucket=ibits(grid(ioct)%hkey,skip_bit,ndim)
               bucket_count(ibucket)=bucket_count(ibucket)+1
            end do
@@ -217,7 +253,9 @@ subroutine refine_fine(ilevel)
         grid(i)=oct_tmp
         hash_key(0)=grid(i)%lev
         hash_key(1:ndim)=grid(i)%ckey(1:ndim)
-        if(grid(i)%lev>0)call hash_set(grid_dict,hash_key,i)
+        if(grid(i)%lev>0)then
+           call hash_set(grid_dict,hash_key,i)
+        end if
         swap_table(i)=i
      endif
   end do
@@ -262,6 +300,32 @@ subroutine refine_fine(ilevel)
   end do
 222 continue
 
+  !---------------------
+  ! Total number of octs
+  !---------------------
+  do ilev=ilevel+1,nlevelmax
+     noct_tot(ilev)=noct(ilev)
+     noct_min(ilev)=noct(ilev)
+     noct_max(ilev)=noct(ilev)
+#ifndef WITHOUTMPI
+     call MPI_ALLREDUCE(noct(ilev),noct_tot(ilev),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(noct(ilev),noct_min(ilev),1,MPI_INTEGER,MPI_MIN,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(noct(ilev),noct_max(ilev),1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+#endif
+  end do
+
+  noct_used_max=noct_used
+#ifndef WITHOUTMPI
+     call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+#endif
+!!$  if(myid==1)then
+!!$     write(*,*)'Temporary mesh structure'
+!!$     do ilev=levelmin,nlevelmax
+!!$        if(noct_tot(ilev)>0)write(*,999)ilev,noct_tot(ilev),noct_min(ilev),noct_max(ilev),noct_tot(ilev)/ncpu
+!!$     end do
+!!$  end if
+!!$999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
+
 111 format('   Entering refine_fine for level ',I2)
 112 format('   ==> Make ',i6,' sub-grids')
 113 format('   ==> Kill ',i6,' sub-grids')
@@ -271,118 +335,139 @@ end subroutine refine_fine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine make_new_oct(ind_child,ind_parent,ind_cell,ilevel,ngrid)
+subroutine make_new_oct(iparent,icell,ilevel)
   use amr_commons
   use hilbert
   implicit none
-  integer::ngrid,ilevel
-  integer,dimension(1:nvector)::ind_child,ind_parent,ind_cell
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  integer::ilevel
+  integer::iparent,icell
   !--------------------------------------------------------------
-  ! This routine creates children octs at level ilevel.
-  ! ilevel is thus the level of the new children octs.
-  ! The new octs are labelled using the new index ind_child(:).
-  ! The parent cells are labeled with their parent oct index ind_parent(:)
-  ! and their cell index ind_cell(:) (from 1 to 8).
+  ! This routine creates a children oct at level ilevel.
+  ! ilevel is thus the level of the new children oct.
+  ! The new oct is labelled using the new index ichild.
+  ! The parent cell is labeled with the parent oct index iparent
+  ! and the cell index icell (from 1 to 8).
   !--------------------------------------------------------------
-  integer::idim,ind,igrid,iparent,ichild,icell,nstride
+  integer::icpu,idim,ichild,ind,nstride,grid_cpu
   integer(kind=4), dimension(1:nvector),save::dummy_state
   integer(kind=8), dimension(1:nvector),save::hk0,hk1,hk2
   integer(kind=8), dimension(1:nvector),save::ix,iy,iz
-  integer(kind=8), dimension(1:nvector,1:ndim),save::cart_key
+  integer(kind=8), dimension(1:ndim),save::cart_key
   integer(kind=8), dimension(0:ndim)::hash_key
+
+#ifndef WITHOUTMPI
+  ! If counter is good, check on incoming messages and perform actions
+  if(mail_counter==32)then
+     call check_mail(MPI_REQUEST_NULL)
+     mail_counter=0
+  endif
+  mail_counter=mail_counter+1
+#endif
 
   !=================================
   ! Create new octs into main memory
   !=================================
   ! Compute Cartesian keys of new octs
-  do igrid=1,ngrid
-     iparent=ind_parent(igrid)
-     icell=ind_cell(igrid)-1
-     do idim=1,ndim
-        nstride=2**(idim-1)
-        cart_key(igrid,idim)=2*grid(iparent)%ckey(idim)+MOD(icell/nstride,2)
-     end do
+  do idim=1,ndim
+     nstride=2**(idim-1)
+     cart_key(idim)=2*grid(iparent)%ckey(idim)+MOD((icell-1)/nstride,2)
   end do
 
   ! Compute Hilbert keys of new octs
 #if NDIM==1
-  ix(1:ngrid)=cart_key(1:ngrid,1)
-  call hilbert1d(ix,hk0,ngrid)
+  ix(1)=cart_key(1)
+  call hilbert1d(ix,hk0,1)
 #endif
 #if NDIM==2
-  ix(1:ngrid)=cart_key(1:ngrid,1)
-  iy(1:ngrid)=cart_key(1:ngrid,2)
-  call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,ngrid)
+  ix(1)=cart_key(1)
+  iy(1)=cart_key(2)
+  call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
 #endif
 #if NDIM==3
-  ix(1:ngrid)=cart_key(1:ngrid,1)
-  iy(1:ngrid)=cart_key(1:ngrid,2)
-  iz(1:ngrid)=cart_key(1:ngrid,3)
-  call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,ngrid)
+  ix(1)=cart_key(1)
+  iy(1)=cart_key(2)
+  iz(1)=cart_key(3)
+  call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
 #endif
 
-  ! Loop over the new octs
-  do igrid=1,ngrid
-     ! Insert new oct in main resident memory
-     ichild=ind_child(igrid)
-     if(ichild.GT.ngridmax)then
+  ! Check if grid sits inside processor boundaries
+  if(    hk0(1).ge.bound_key_level(myid-1,ilevel).AND. &
+       & hk0(1).lt.bound_key_level(myid  ,ilevel))then
+
+
+     ! Set grid index to a virtual grid in local main memory
+     ichild=ifree
+
+     ! Go to next main memory free line
+     ifree=ifree+1
+     if(ifree.GT.ngridmax)then
         write(*,*)'No more free memory'
         write(*,*)'Increase ngridmax'
         call clean_abort
      end if
-     grid(ichild)%lev=ilevel
-     grid(ichild)%ckey(1:ndim)=cart_key(igrid,1:ndim)
-     grid(ichild)%hkey=hk0(igrid)
-     grid(ichild)%refined(1:twotondim)=.false.
-     grid(ichild)%flag1(1:twotondim)=0
-     grid(ichild)%flag2(1:twotondim)=0
-     grid(ichild)%superoct=1
-     ! Insert new grid in hash table
-     hash_key(0)=ilevel
-     hash_key(1:ndim)=cart_key(igrid,1:ndim)
-     call hash_set(grid_dict,hash_key,ichild)
-  end do
 
-  !=======================================
+  ! Otherwise, determine parent processor and use the cache
+  else
+     do icpu=1,ncpu
+        if(    hk0(1).ge.bound_key_level(icpu-1,ilevel).AND. &
+             & hk0(1).lt.bound_key_level(icpu  ,ilevel))then
+           grid_cpu=icpu
+        end if
+     end do
+!     write(*,*)'PE ',myid,' creates a grid in cache memory'
+!     write(*,*)'PE ',myid,ilevel,cart_key
+!     write(*,*)'PE ',myid,grid_cpu,free_cache
+!!$     write(*,*)'PE ',bound_key_level(grid_cpu-1,ilevel)
+!!$     write(*,*)'PE ',bound_key_level(grid_cpu  ,ilevel)
+!!$     write(*,*)'PE ',free_cache
+
+     ! If next cache line is occupied, free it.
+     if(occupied(free_cache))call destage(ngridmax+free_cache)
+     ! Set grid index to a virtual grid in local cache memory
+     ichild=ngridmax+free_cache
+     occupied(free_cache)=.true.
+     parent_cpu(free_cache)=grid_cpu
+     dirty(free_cache)=.true.
+     ! Go to next free cache line
+     free_cache=free_cache+1
+     ncache=ncache+1
+     if(free_cache.GT.ncachemax)free_cache=1
+     if(ncache.GT.ncachemax)ncache=ncachemax
+  endif
+
+  grid(ichild)%lev=ilevel
+  grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
+  grid(ichild)%hkey=hk0(1)
+  grid(ichild)%refined(1:twotondim)=.false.
+  grid(ichild)%flag1(1:twotondim)=0
+  grid(ichild)%flag2(1:twotondim)=0
+  grid(ichild)%superoct=1
+
+  ! Insert new grid in hash table
+  hash_key(0)=ilevel
+  hash_key(1:ndim)=cart_key(1:ndim)
+  call hash_set(grid_dict,hash_key,ichild)
+
   ! Set status of parent cell to "refined"
-  !=======================================
-  ! Loop over the parent octs
-  do igrid=1,ngrid
-     iparent=ind_parent(igrid)
-     icell=ind_cell(igrid)
-     grid(iparent)%refined(icell)=.true.
-  end do
+  grid(iparent)%refined(icell)=.true.
 
-  !=====================================================
   ! Inject parent hydro variables into new children ones
-  !=====================================================
   if(.not.init)then
-     !============================
      ! Interpolate hydro variables
-     !============================
 #ifdef SOLVERhydro
-     do igrid=1,ngrid
-        ichild=ind_child(igrid)
-        iparent=ind_parent(igrid)
-        icell=ind_cell(igrid)
-        do ind=1,twotondim
-           grid(ichild)%uold(ind,1:nvar)=grid(iparent)%uold(icell,1:nvar)
-        enddo
+     do ind=1,twotondim
+        grid(ichild)%uold(ind,1:nvar)=grid(iparent)%uold(icell,1:nvar)
      enddo
 #endif
-     !==============================
      ! Interpolate gravity variables
-     !==============================
 #ifdef GRAV
-     do igrid=1,ngrid
-        ichild=ind_child(igrid)
-        iparent=ind_parent(igrid)
-        icell=ind_cell(igrid)
-        do ind=1,twotondim
-           grid(ichild)%f(ind,1:ndim)=grid(iparent)%f(icell,1:ndim)
-           grid(ichild)%phi(ind)=grid(iparent)%phi(icell)
-           grid(ichild)%phi_old(ind)=grid(iparent)%phi_old(icell)
-        enddo
+     do ind=1,twotondim
+        grid(ichild)%f(ind,1:ndim)=grid(iparent)%f(icell,1:ndim)
+        grid(ichild)%phi(ind)=grid(iparent)%phi(icell)
+        grid(ichild)%phi_old(ind)=grid(iparent)%phi_old(icell)
      enddo
 #endif
   endif

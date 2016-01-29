@@ -8,10 +8,13 @@ subroutine init_refine_basegrid
   use hilbert
   use hash, only:hash_set
   implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
   !------------------------------------------
   ! This routine builds the coarse level grid
   !------------------------------------------
-  integer::ilevel,i,j,k,igrid,ipos,ioct,ilev
+  integer::ilevel,i,j,k,igrid,ipos,ioct,ilev,info
   integer(kind=8)::ikey
   integer(kind=8),dimension(1:nvector)::hk0,hk1,hk2
   integer(kind=8),dimension(1:nvector)::ix=0,iy=0,iz=0
@@ -38,6 +41,7 @@ subroutine init_refine_basegrid
      ! Insert new grid in main array
      igrid=igrid+1
      if(igrid==1)head(levelmin)=1
+!     write(*,'("PE ",5(I6,1X))')myid,igrid,ikey,ix(1),iy(1)
      tail(levelmin)=igrid
      noct(levelmin)=noct(levelmin)+1
      noct_used=noct_used+1
@@ -88,6 +92,16 @@ subroutine init_refine_basegrid
         endif
      end do
   end do
+
+  !---------------------
+  ! Total number of octs
+  !---------------------
+  noct_tot(levelmin)=noct(levelmin)
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(noct(levelmin),noct_tot(levelmin),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(noct(levelmin),noct_min(levelmin),1,MPI_INTEGER,MPI_MIN,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(noct(levelmin),noct_max(levelmin),1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+#endif
 
   if(hydro)call init_flow_fine(levelmin)
   

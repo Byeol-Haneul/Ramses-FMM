@@ -15,10 +15,13 @@ subroutine godunov_fine(ilevel)
   !--------------------------------------------------------------------------
   integer::i,ivar,igrid
 
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(static)return
   if(verbose)write(*,111)ilevel
-  
+
+  cache_operation=operation_godunov
+  call open_cache
+
   ! Loop over active grids by vector sweeps
   igrid=head(ilevel)
   do while(igrid.LE.tail(ilevel))
@@ -75,6 +78,8 @@ subroutine godunov_fine(ilevel)
      igrid=igrid+grid(igrid)%superoct
   end do
 
+  call close_cache
+
 111 format('   Entering godunov_fine for level ',i2)
 
 end subroutine godunov_fine
@@ -94,7 +99,7 @@ subroutine set_unew(ilevel)
   integer::i,ivar,irad,ind,icpu,iskip
   real(dp)::d,u,v,w,e
 
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   ! Set unew to uold for myid cells
@@ -143,7 +148,7 @@ subroutine set_uold(ilevel)
   real(dp)::scale,d,u,v,w
   real(dp)::e_kin,e_cons,e_prim,e_trunc,div,dx,fact,d_old
 
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   dx=0.5d0**ilevel*boxlen
@@ -225,9 +230,9 @@ subroutine godfine1(ind_grid,ilevel,&
   ! and stored in array unew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
-  integer::get_grid
+  integer::get_grid,get_parent_cell
   integer::i,j,ivar,idim,ind_son,iskip,nbuffer,ibuffer,ipos,ind_oct
-  integer::igrid,icell,ichild,parent_cell,get_parent_cell,indf,parent_cell2
+  integer::igrid,icell,ichild,parent_cell,indf,parent_cell2
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -347,13 +352,15 @@ subroutine godfine1(ind_grid,ilevel,&
               enddo
               
               ! Get neighboring grid index
-              ichild=get_grid(hash_nbor)              
+              ichild=get_grid(hash_nbor,.false.,.true.)
               parent_cell=0
               if(ichild==0)then
+
                  ! Get parent father cell
-                 parent_cell=get_parent_cell(hash_nbor)           
+                 parent_cell=get_parent_cell(hash_nbor,.true.,.true.)           
                  if(parent_cell==0)then
-                    write(*,*)'parent_cell should exist'
+                    write(*,*)'GODUNOV: parent_cell should exist'
+                    write(*,*)'PE ',myid,hash_nbor
                     stop
                  endif
                  igrid=(parent_cell-1)/twotondim+1

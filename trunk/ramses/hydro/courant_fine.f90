@@ -11,7 +11,7 @@ subroutine courant_fine(ilevel)
   ! Using the Courant-Friedrich-Levy stability condition,               !
   ! this routine computes the maximum allowed time-step.                !
   !----------------------------------------------------------------------
-  integer::i,ivar,idim,ind,ncache,igrid,iskip
+  integer::i,ivar,idim,ind,igrid,iskip
   integer::info,nleaf,ngrid,nx_loc
 
   real(dp)::dt_lev,dx,vol,scale
@@ -21,7 +21,7 @@ subroutine courant_fine(ilevel)
   real(dp),dimension(1:nvar),save::uu
   real(dp),dimension(1:ndim),save::gg
 
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   mass_all=0.0d0; mass_loc=0.0d0
@@ -69,10 +69,8 @@ subroutine courant_fine(ilevel)
   comm_buffin(1)=mass_loc
   comm_buffin(2)=ekin_loc
   comm_buffin(3)=eint_loc
-  call MPI_ALLREDUCE(comm_buffin,comm_buffout,3,MPI_DOUBLE_PRECISION,MPI_SUM,&
-       &MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,&
-       &MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(comm_buffin,comm_buffout,3,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
   mass_all=comm_buffout(1)
   ekin_all=comm_buffout(2)
   eint_all=comm_buffout(3)

@@ -34,7 +34,7 @@ subroutine init_flow_fine(ilevel)
   real(dp),dimension(1:nvector,1:nvar),save::uu
   real(dp)::dx
 
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   ! Mesh size at level ilevel in code units

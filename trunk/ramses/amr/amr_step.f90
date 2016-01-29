@@ -21,15 +21,17 @@ recursive subroutine amr_step(ilevel,icount)
   integer, dimension(1:nvector)::cell_level, cell_index, cc
   integer::k, nmax
 
-  if(noct(ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   if(verbose)write(*,999)icount,ilevel
 
   !---------------------
   ! Make new refinements
   !---------------------
-                               call timer('refine','start')
   if(ilevel==levelmin.or.icount>1)then
+                               call timer('refine','start')
      call refine_fine(ilevel)
+                               call timer('load balance','start')
+     call load_balance(ilevel)
   endif
   !------------------------
   ! Output results to files
@@ -59,7 +61,7 @@ recursive subroutine amr_step(ilevel,icount)
   if(ilevel>levelmin)then
      dtnew(ilevel)=MIN(dtnew(ilevel-1)/real(nsubcycle(ilevel-1)),dtnew(ilevel))
   end if
-
+  
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
@@ -71,7 +73,7 @@ recursive subroutine amr_step(ilevel,icount)
   !---------------------------
                                call timer('recursive call','start')
   if(ilevel<nlevelmax)then
-     if(noct(ilevel+1)>0)then
+     if(noct_tot(ilevel+1)>0)then
         if(nsubcycle(ilevel)==2)then
            call amr_step(ilevel+1,1)
            call amr_step(ilevel+1,2)

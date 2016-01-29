@@ -33,10 +33,10 @@ subroutine adaptive_loop
   if(myid==1)then
      write(*,*)'Initial mesh structure'
      do ilevel=levelmin,nlevelmax
-        if(noct(ilevel)>0)write(*,999)ilevel,noct(ilevel),head(ilevel),tail(ilevel)
+        if(noct_tot(ilevel)>0)write(*,999)ilevel,noct_tot(ilevel),noct_min(ilevel),noct_max(ilevel),noct_tot(ilevel)/ncpu
      end do
   end if
-999 format(' Level ',I2,' has ',I10,' grids (',2(I8,','),')')
+999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
   nstep_coarse_old=nstep_coarse
 

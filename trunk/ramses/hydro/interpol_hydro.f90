@@ -17,15 +17,27 @@ subroutine upload_fine(ilevel)
   real(dp)::average
 
   if(ilevel==nlevelmax)return
-  if(noct(ilevel)==0)return
-  if(noct(ilevel+1)==0)return
+  if(noct_tot(ilevel)==0)return
+  if(noct_tot(ilevel+1)==0)return
   if(verbose)write(*,111)ilevel
  
+  ! Set conservative variable to zero in refined cells
+  do ioct=head(ilevel),tail(ilevel)
+     do ivar=1,nvar
+        do ind=1,twotondim
+           if(grid(ioct)%refined(ind))grid(ioct)%uold(ind,ivar)=0.0
+        end do
+     end do
+  end do
+
+  cache_operation=operation_upload
+  call open_cache
+
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ioct=head(ilevel+1),tail(ilevel+1)
      hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
-     parent_cell=get_parent_cell(hash_key)
+     parent_cell=get_parent_cell(hash_key,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
      ! Average conservative variables
@@ -38,6 +50,8 @@ subroutine upload_fine(ilevel)
         grid(igrid)%uold(icell,ivar)=average/dble(twotondim)
      end do
   end do
+
+  call close_cache
 
 111 format('   Entering upload_fine for level',i2)
 
