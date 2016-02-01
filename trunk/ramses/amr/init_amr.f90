@@ -24,10 +24,12 @@ subroutine init_amr
 
   ! Allocate cache-related arrays
   allocate(dirty(1:ncachemax))
+  allocate(locked(1:ncachemax))
   allocate(occupied(1:ncachemax))
   allocate(parent_cpu(1:ncachemax))
   dirty=.false.
   occupied=.false.
+  locked=.false.
   free_cache=1; ncache=0
   allocate(lev_null(1:ncachemax))
   allocate(ckey_null(1:ndim,1:ncachemax))

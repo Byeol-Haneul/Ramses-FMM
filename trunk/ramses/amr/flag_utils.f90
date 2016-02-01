@@ -83,12 +83,12 @@ subroutine flag_fine(ilevel,icount)
   if(verbose)write(*,112)nflag
 #endif
 
-  ! In case of adaptive time step ONLY, check for refinement rules.
-  if(ilevel>levelmin)then
-     if(icount<nsubcycle(ilevel-1))then
-        call ensure_ref_rules(ilevel)
-     end if
-  end if
+!!$  ! In case of adaptive time step ONLY, check for refinement rules.
+!!$  if(ilevel>levelmin)then
+!!$     if(icount<nsubcycle(ilevel-1))then
+!!$        call ensure_ref_rules(ilevel)
+!!$     end if
+!!$  end if
 
 111 format('   Entering flag_fine for level ',I2)
 112 format('   ==> Flag ',i6,' cells')
@@ -244,6 +244,7 @@ subroutine smooth_fine(ilevel)
               if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
            enddo
            igridn(i_nbor)=get_grid(hash_nbor,.false.,.true.)
+           call lock_cache(igridn(i_nbor))
         end do
 
         ! Count neighbors and set flag2 accordingly        
@@ -261,6 +262,10 @@ subroutine smooth_fine(ilevel)
            if(count_nbor>=n_nbor(ismooth))then
               grid(igrid)%flag2(ind)=1
            endif
+        end do
+
+        do i_nbor=1,twondim
+           call unlock_cache(igridn(i_nbor))
         end do
 
      end do

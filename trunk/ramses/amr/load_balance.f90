@@ -327,6 +327,7 @@ subroutine load_balance(ilevel)
         swap_table(i)=i
      endif
   end do
+  deallocate(swap_table)
   endif
 
   !-----------------------------------------------------

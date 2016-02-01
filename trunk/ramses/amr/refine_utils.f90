@@ -259,6 +259,7 @@ subroutine refine_fine(ilevel)
         swap_table(i)=i
      endif
   end do
+  deallocate(swap_table)
   endif
 
   !-----------------------------------------------------
@@ -425,6 +426,13 @@ subroutine make_new_oct(iparent,icell,ilevel)
 !!$     write(*,*)'PE ',free_cache
 
      ! If next cache line is occupied, free it.
+!!$     if(locked(free_cache))then
+!!$        write(*,*)'found locked cache line'
+!!$        do while(.NOT.locked(free_cache))
+!!$           free_cache=free_cache+1
+!!$           if(free_cache>ncachemax)free_cache=1
+!!$        end do
+!!$     end if
      if(occupied(free_cache))call destage(ngridmax+free_cache)
      ! Set grid index to a virtual grid in local cache memory
      ichild=ngridmax+free_cache

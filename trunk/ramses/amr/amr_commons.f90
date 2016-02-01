@@ -105,13 +105,14 @@ module amr_commons
   integer::operation_type_flag=1,operation_type_hydro=2  
 
   ! Software cache array for the AMR grid
-  integer,allocatable,dimension(:)::dirty
-  integer,allocatable,dimension(:)::occupied
+  logical,allocatable,dimension(:)::dirty
+  logical,allocatable,dimension(:)::occupied
+  logical,allocatable,dimension(:)::locked
   integer,allocatable,dimension(:)::parent_cpu
   integer::free_cache,ncache,ifree
 
   ! Software cache array for failed requests
-  integer,allocatable,dimension(:)::occupied_null
+  logical,allocatable,dimension(:)::occupied_null
   integer,allocatable,dimension(:)::lev_null
   integer,allocatable,dimension(:,:)::ckey_null
   integer::free_null,nnull
@@ -144,7 +145,7 @@ module amr_commons
   end type request
 
   ! Response message buffer
-  integer,parameter::ntilemax=16
+  integer,parameter::ntilemax=8
   type int4_msg
      integer(kind=4)::type
      integer(kind=4)::ntile
@@ -162,7 +163,7 @@ module amr_commons
   end type realdp_msg
 
   ! Fush message buffer
-  integer,parameter::nflushmax=128
+  integer,parameter::nflushmax=8
   type int4_flush
      integer(kind=4)::nflush
      integer(kind=4),dimension(1:nflushmax)::lev

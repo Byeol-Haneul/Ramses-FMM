@@ -14,7 +14,7 @@ subroutine hydro_flag(ilevel)
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer::igrid,ind,idim,ngrid,ivar,i_nbor
   integer::parent_cell,get_parent_cell
-  integer::igridd,igridg,indd,indg
+  integer::igridd,igridg,indd,indg,igridp
   integer,dimension(1:twondim),save::indn
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
   real(dp),dimension(1:nvar),save::uug,uum,uud
@@ -63,6 +63,8 @@ subroutine hydro_flag(ilevel)
               parent_cell=get_parent_cell(hash_nbor,.false.,.true.)
               indn(i_nbor)=parent_cell
            endif
+           igridp=(indn(i_nbor)-1)/twotondim+1
+           call lock_cache(igridp)
         end do
 
         ! Loop over dimensions
@@ -80,6 +82,11 @@ subroutine hydro_flag(ilevel)
            call hydro_refine(uug,uum,uud,ok)
         end do
      
+        do i_nbor=1,twondim
+           igridp=(indn(i_nbor)-1)/twotondim+1
+           call unlock_cache(igridp)
+        end do
+
         ! Count only newly flagged cells
         if(grid(igrid)%flag1(ind)==0.and.ok)nflag=nflag+1
         if(ok)grid(igrid)%flag1(ind)=1

@@ -365,6 +365,9 @@ subroutine godfine1(ind_grid,ilevel,&
                  endif
                  igrid=(parent_cell-1)/twotondim+1
                  icell=parent_cell-(igrid-1)*twotondim
+                 call lock_cache(igrid)
+              else
+                 call lock_cache(ichild)
               endif
 
               ! Store grid index
@@ -519,7 +522,7 @@ subroutine godfine1(ind_grid,ilevel,&
   end do
 
   ! If sitting in coarsest level, exit. 
-  if(ilevel==levelmin)return
+  if(ilevel>levelmin)then
 
   !--------------------------------------
   ! Conservative update at level ilevel-1
@@ -663,5 +666,26 @@ subroutine godfine1(ind_grid,ilevel,&
      ! End loop over boundary octs
   end do
   ! End loop over dimensions
+  endif
+
+  ! Unlock all octs
+  do k1=k1min,k1max
+     do j1=j1min,j1max
+        do i1=i1min,i1max     
+           ! Get oct index
+           ind_oct=childloc(i1,j1,k1)
+           ! Check that parent cell is not refined
+           if(ind_oct>0)then
+              call unlock_cache(ind_oct)
+           else
+              ! Get parent cell index
+              parent_cell=parentloc(i1,j1,k1)
+              igrid=(parent_cell-1)/twotondim+1
+              icell=parent_cell-(igrid-1)*twotondim
+              call unlock_cache(igrid)
+           endif
+        end do
+     end do
+  end do
 
 end subroutine godfine1
