@@ -41,7 +41,7 @@ subroutine load_balance(ilevel)
 
 #ifndef WITHOUTMPI
   if(ncpu==1)return
-  if(myid==1)write(*,111)ilevel
+  if(verbose)write(*,111)ilevel
   
 !!$  if(verbose)then
 !!$     write(*,*)'Input mesh structure'

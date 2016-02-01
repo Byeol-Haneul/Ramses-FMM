@@ -151,9 +151,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
      send_request%lev=ilevel
      send_request%ckey(1:ndim)=hash_key(1:ndim)
      
-!     write(*,*)'PE ',myid,' sent a request to cpu ',grid_cpu,cache_operation,cache_operation_type
-!     write(*,*)'PE ',myid,' posted a msg RECV from cpu ',grid_cpu
-
      ! Post RECV for the expected response
      if(cache_operation_type.EQ.operation_type_flag)then
         call MPI_IRECV(response_flag,1,new_mpi_int4_msg,grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
@@ -166,15 +163,9 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
      ! While waiting for reply, check on incoming messages and perform actions
      call check_mail(response_id)
 
-!     write(*,*)'PE ',myid,' got the response type',response_flag%type
-!     write(*,*)'PE ',myid,' got the response ntile',response_flag%ntile
-
-!     write(*,'(17(1X,I6))')myid,(response_flag%lev(i),i=1,16)
-!     write(*,'(17(1X,I6))')myid,(response_flag%ckey(1,i),i=1,16)
-!     write(*,'(17(1X,I6))')myid,(response_flag%ckey(2,i),i=1,16)
-
      ! Test for ISEND completion to free memory in corresponding MPI buffer
-     call MPI_TEST(send_request_id,send_request_completed,send_request_status,info)
+!     call MPI_TEST(send_request_id,send_request_completed,send_request_status,info)
+     call MPI_WAIT(send_request_id,send_request_status,info)
      
      if(cache_operation_type.EQ.operation_type_flag)then
         failed_request=response_flag%type==-1
@@ -215,7 +206,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
 
            ! If next cache line is occupied, free it.
            if(locked(free_cache))then
-!              write(*,*)'PE ',myid,' found locked cache line'
               icounter=0
               do while(locked(free_cache))
                  free_cache=free_cache+1
@@ -227,7 +217,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
                  endif
               end do
            end if
-!           if(occupied(free_cache))call destage(ngridmax+free_cache)
 
            ! Create the grid in local memory
            if(cache_operation_type.EQ.operation_type_flag)then
@@ -244,9 +233,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
 
               if(occupied(free_cache))call destage(ngridmax+free_cache)
 
-!!$              write(*,*)'PE ',myid,'ichild ',ichild
-!!$              write(*,*)'check ',hash_get(grid_dict,hash_child)
-!!$              write(*,*)'hash_set ',hash_child
               call hash_set(grid_dict,hash_child,ichild)
               
               occupied(free_cache)=.true.
@@ -315,7 +301,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
 
      ! If next cache line is occupied, free it.
      if(locked(free_cache))then
-!        write(*,*)'found locked cache line'
         do while(locked(free_cache))
            free_cache=free_cache+1
            if(free_cache>ncachemax)free_cache=1
@@ -325,7 +310,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
 
      ! Set grid index to a virtual grid in local memory
      child_grid=ngridmax+free_cache
-!     write(*,*)'PE ',myid,'hash set 2',hash_key
      call hash_set(grid_dict,hash_key,child_grid)
 
      ! Store the grid coordinates
@@ -334,7 +318,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
      occupied(free_cache)=.true.
      parent_cpu(free_cache)=grid_cpu
      dirty(free_cache)=.true.
-!     write(*,*)'PE ',myid,'hash set',free_cache,child_grid
 
      !===============================================
      ! Set initialisation rule for combiner operation
@@ -457,7 +440,8 @@ subroutine check_mail(comm_id)
         endif
 
         ! Test the old SEND to free memory in corresponding MPI buffer
-        call MPI_Test(reply_id(grid_cpu),reply_sent,reply_status,info)
+!        call MPI_Test(reply_id(grid_cpu),reply_sent,reply_status,info)
+        call MPI_WAIT(reply_id(grid_cpu),reply_status,info)
 
         ! Send back the reply
         if(cache_operation_type.EQ.operation_type_flag)then
@@ -499,8 +483,8 @@ subroutine check_mail(comm_id)
               hash_child(0)=recv_flush_flag%lev(i)
               hash_child(1:ndim)=recv_flush_flag%ckey(1:ndim,i)
               ichild=hash_get(grid_dict,hash_child)
-              if(ichild>0)then
-                 do ind=1,twotondim
+              if(ichild>0)then ! Since we are in the process of derefining,
+                 do ind=1,twotondim ! we need to check if the grid is still here.
                     if(grid(ichild)%refined(ind))then
                        if(recv_flush_flag%int4(ind,i).EQ.0)then
                           grid(ichild)%refined(ind)=.false.
@@ -542,8 +526,6 @@ subroutine check_mail(comm_id)
         ! Combiner rules for refinements
         if(cache_operation.EQ.operation_refine)then
 
-!           write(*,*)'PE ',myid,'flush received'
-!           write(*,*)'PE ',myid,recv_flush_hydro%nflush
            do i=1,recv_flush_hydro%nflush
               ilevel=recv_flush_hydro%lev(i)
               hash_child(0)=ilevel
@@ -567,9 +549,6 @@ subroutine check_mail(comm_id)
 #endif
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
-
-!              write(*,*)'PE ',myid,'combiner refine'
-!              write(*,*)'PE ',myid,ilevel,hash_child(1:ndim)
 
               ! Go to next main memory free line
               ifree=ifree+1
@@ -843,8 +822,13 @@ subroutine close_cache
   integer::send_flush_id,ndebug
   integer::dummy_int,close_tag=7,close_id
   integer(kind=8),dimension(0:ndim)::hash_child
+  logical::request_received,flush_received
+#ifndef WITHOUTMPI
+  integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status
+#endif
   !
 #ifndef WITHOUTMPI
+
   ! EMPTY AND CLEAN THE CACHE
   do icache=1,ncache
      igrid=ngridmax+icache
@@ -914,6 +898,13 @@ subroutine close_cache
   ! Finally CANCEL THE 2 RECV
   call MPI_CANCEL(request_id,info)
   call MPI_CANCEL(flush_id,info)
+
+  ! Test to free memory in corresponding MPI buffer
+  call MPI_Wait(request_id,request_status,info)
+  call MPI_Wait(flush_id,flush_status,info)
+  do icpu=1,ncpu
+     call MPI_WAIT(reply_id(icpu),reply_status,info)
+  end do
   
   ! Barrier to prevent interference with the next cache
   call MPI_BARRIER(MPI_COMM_WORLD,info)
@@ -934,6 +925,7 @@ subroutine open_cache
   integer::info,icpu
   !
 #ifndef WITHOUTMPI
+
   do icpu=1,ncpu
      reply_id(icpu)=MPI_REQUEST_NULL
   end do

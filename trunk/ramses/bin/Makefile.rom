@@ -58,7 +58,9 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 # --- MPI, ifort syntax ------------------------------
 F90 = mpif90 -f90=ifort
 #FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
-FFLAGS = -cpp -g -fast -debug inline-debug-info -shared-intel -shared-libgcc -traceback -check all -ftrapuv $(DEFINES) -DNOSYSTEM
+FFLAGS = -cpp -g -fast -debug inline-debug-info -shared-intel -shared-libgcc -traceback $(DEFINES) -DNOSYSTEM
+# -DWITHOUTMPI
+# -check all -ftrapuv
 
 # --- MPI, ifort syntax, additional checks -----------
 #F90 = mpif90 -f90=ifort

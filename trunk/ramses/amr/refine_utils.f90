@@ -87,10 +87,6 @@ subroutine refine_fine(ilevel)
   if(verbose)write(*,112)ncreate
 #endif
 
-!!$  do ioct=head(levelmin),ifree-1
-!!$     write(*,*)'PE ',myid,grid(ioct)%lev,grid(ioct)%hkey
-!!$  end do
-
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
   ! but it is refined, then destroy the child grid.
@@ -418,21 +414,8 @@ subroutine make_new_oct(iparent,icell,ilevel)
            grid_cpu=icpu
         end if
      end do
-!     write(*,*)'PE ',myid,' creates a grid in cache memory'
-!     write(*,*)'PE ',myid,ilevel,cart_key
-!     write(*,*)'PE ',myid,grid_cpu,free_cache
-!!$     write(*,*)'PE ',bound_key_level(grid_cpu-1,ilevel)
-!!$     write(*,*)'PE ',bound_key_level(grid_cpu  ,ilevel)
-!!$     write(*,*)'PE ',free_cache
 
      ! If next cache line is occupied, free it.
-!!$     if(locked(free_cache))then
-!!$        write(*,*)'found locked cache line'
-!!$        do while(.NOT.locked(free_cache))
-!!$           free_cache=free_cache+1
-!!$           if(free_cache>ncachemax)free_cache=1
-!!$        end do
-!!$     end if
      if(occupied(free_cache))call destage(ngridmax+free_cache)
      ! Set grid index to a virtual grid in local cache memory
      ichild=ngridmax+free_cache

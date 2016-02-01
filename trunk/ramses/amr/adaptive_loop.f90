@@ -71,6 +71,11 @@ subroutine adaptive_loop
            call writemem(real_mem_tot)
         endif
      endif
+#else
+     if(mod(nstep_coarse,ncontrol)==0)then
+        call getmem(real_mem)
+        call writemem(real_mem)
+     endif
 #endif
 
   end do

@@ -145,7 +145,7 @@ module amr_commons
   end type request
 
   ! Response message buffer
-  integer,parameter::ntilemax=8
+  integer,parameter::ntilemax=16
   type int4_msg
      integer(kind=4)::type
      integer(kind=4)::ntile
@@ -163,7 +163,7 @@ module amr_commons
   end type realdp_msg
 
   ! Fush message buffer
-  integer,parameter::nflushmax=8
+  integer,parameter::nflushmax=128
   type int4_flush
      integer(kind=4)::nflush
      integer(kind=4),dimension(1:nflushmax)::lev
