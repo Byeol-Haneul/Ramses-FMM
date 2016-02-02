@@ -97,6 +97,8 @@ subroutine init_refine_basegrid
   ! Total number of octs
   !---------------------
   noct_tot(levelmin)=noct(levelmin)
+  noct_min(levelmin)=noct(levelmin)
+  noct_max(levelmin)=noct(levelmin)
   noct_used_max=noct_used
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(noct(levelmin),noct_tot(levelmin),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
