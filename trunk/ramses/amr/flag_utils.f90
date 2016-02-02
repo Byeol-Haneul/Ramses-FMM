@@ -353,7 +353,7 @@ subroutine ensure_ref_rules(ilevel)
               enddo
 
               ! Get neighboring grid index
-              ichild=get_grid(hash_nbor)
+              ichild=get_grid(hash_nbor,.false.,.true.)
               ok=ok.and.(ichild>0)
 
            end do

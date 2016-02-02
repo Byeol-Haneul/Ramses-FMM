@@ -9,6 +9,7 @@ subroutine init_amr
   integer::intex,realdpex
   integer(kind=8)::max_key
   integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length
+  real(kind=4)::real_mem,real_mem_tot
 
   if(verbose.and.myid==1)write(*,*)'Entering init_amr'
 
@@ -56,12 +57,6 @@ subroutine init_amr
      bound_key_level(ncpu,ilevel) = max_key
   end do
 
-!!$  if(verbose)then
-!!$     do ilevel=levelmin,nlevelmax
-!!$        write(*,*)ilevel,(bound_key_level(icpu,ilevel),icpu=1,ncpu)
-!!$     end do
-!!$  end if
-
   ! Allocate head, tail and numbers for each level
   if(verbose.and.myid==1)write(*,*)'Initialize oct decomposition'
   allocate(head(levelmin:nlevelmax))
@@ -77,7 +72,6 @@ subroutine init_amr
   noct_min=0   ! Minimum number of oct across all cpus
   noct_max=0   ! Maximum number of oct across all cpus
   noct_used=0  ! Total number of oct used
-
 #ifndef WITHOUTMPI
   
   ! Allocate all communication and cache-related variables

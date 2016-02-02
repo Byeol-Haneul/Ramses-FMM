@@ -27,7 +27,12 @@ subroutine adaptive_loop
 
 #ifndef WITHOUTMPI
   tt2=MPI_WTIME(info)
-  if(myid==1)write(*,*)'Time elapsed since startup:',tt2-tt1
+  call getmem(real_mem)
+  call MPI_ALLREDUCE(real_mem,real_mem_tot,1,MPI_REAL,MPI_MAX,MPI_COMM_WORLD,info)
+  if(myid==1)then
+     write(*,*)'Time elapsed since startup:',tt2-tt1
+     call writemem(real_mem_tot)
+  endif
 #endif
 
   if(myid==1)then

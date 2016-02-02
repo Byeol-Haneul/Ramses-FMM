@@ -18,6 +18,7 @@ subroutine read_params
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
+  real(kind=4)::real_mem,real_mem_tot
 
   !--------------------------------------------------
   ! Namelist definitions
@@ -86,6 +87,15 @@ subroutine read_params
   endif
 #ifndef WITHOUTMPI
   call MPI_BCAST(infile,80,MPI_CHARACTER,0,MPI_COMM_WORLD,ierr)
+#endif
+
+#ifndef WITHOUTMPI
+  call getmem(real_mem)
+  call MPI_ALLREDUCE(real_mem,real_mem_tot,1,MPI_REAL,MPI_MAX,MPI_COMM_WORLD,ierr)
+  if(myid==1)then
+     write(*,*)'Diagnostic right at start-up'
+     call writemem(real_mem_tot)
+  endif
 #endif
 
   !-------------------------------------------------
