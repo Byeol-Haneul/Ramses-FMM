@@ -41,6 +41,7 @@ subroutine load_balance(ilevel)
 
 #ifndef WITHOUTMPI
   if(ncpu==1)return
+  if(ilevel==nlevelmax)return
   if(verbose)write(*,111)ilevel
   
 !!$  if(verbose)then
@@ -65,7 +66,7 @@ subroutine load_balance(ilevel)
   allocate(ntarget_cum(1:ncpu))
   allocate(bound_key_target(0:ncpu))
   ! Compute new Hilbert tick marks
-  do ilev=ilevel,nlevelmax
+  do ilev=ilevel+1,nlevelmax
 
      noct_cpu=0
      noct_cpu(myid)=noct(ilev)
@@ -131,7 +132,7 @@ subroutine load_balance(ilevel)
 
 !!$  if(myid==1)then
 !!$     write(*,*)'New Hilbert tick marks'
-!!$     do ilev=ilevel,nlevelmax
+!!$     do ilev=ilevel+1,nlevelmax
 !!$        write(*,'(40(I6,1X))')(bound_key_level(icpu,ilev),icpu=0,ncpu)
 !!$     end do
 !!$  end if
@@ -141,7 +142,7 @@ subroutine load_balance(ilevel)
   ! the new target Hilbert tick marks
   !-----------------------------------------------------
   ifree=noct_used+1
-  do ilev=ilevel,nlevelmax
+  do ilev=ilevel+1,nlevelmax
 
      cache_operation=operation_loadbalance
      call open_cache
