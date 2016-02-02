@@ -19,6 +19,7 @@ subroutine load_balance(ilevel)
   integer,dimension(:),allocatable::noct_cpu,noct_cum
   integer,dimension(:),allocatable::ntarget_cum
   integer(kind=8),allocatable,dimension(:)::bound_key_target
+  integer(kind=8),allocatable,dimension(:)::bound_key_target_tot
   real(dp)::xtarget
 
   integer::icell,j,ibit,ibucket,inew,iold,iold_true
@@ -65,6 +66,7 @@ subroutine load_balance(ilevel)
   allocate(noct_cum(1:ncpu))
   allocate(ntarget_cum(1:ncpu))
   allocate(bound_key_target(0:ncpu))
+  allocate(bound_key_target_tot(0:ncpu))
   ! Compute new Hilbert tick marks
   do ilev=ilevel+1,nlevelmax
 
@@ -114,7 +116,8 @@ subroutine load_balance(ilevel)
         end do
      endif
 
-     call MPI_ALLREDUCE(bound_key_target,bound_key_target,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+     bound_key_target=bound_key_target_tot
 
      bound_key_target(0)=0
      do icpu=1,ncpu
@@ -129,6 +132,7 @@ subroutine load_balance(ilevel)
   end do
   deallocate(noct_cpu,noct_cum,ntarget_cum)
   deallocate(bound_key_target)
+  deallocate(bound_key_target_tot)
 
 !!$  if(myid==1)then
 !!$     write(*,*)'New Hilbert tick marks'

@@ -18,7 +18,7 @@ subroutine init_amr
   dtnew=0.0D0
 
   ! Set up cache size
-  ncachemax=100 !0.1*ngridmax
+  ncachemax=0.01*ngridmax
 
   ! Allocate main oct array
   allocate(grid(1:ngridmax+ncachemax))

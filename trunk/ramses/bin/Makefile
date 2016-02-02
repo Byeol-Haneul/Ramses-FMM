@@ -95,7 +95,7 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 # All objects
 MODOBJ = amr_parameters.o hydro_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
          poisson_commons.o hydro_commons.o gadgetreadfile.o write_makefile.o \
-	 write_patch.o write_gitinfo.o sort.o hilbert.o new_part_communication.o coordinates.o
+	 write_patch.o write_gitinfo.o sort.o hilbert.o coordinates.o
 
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o amr_step.o update_time.o \
          output_amr.o flag_utils.o physical_boundaries.o virtual_boundaries.o refine_utils.o nbors_utils.o \
@@ -110,6 +110,22 @@ POISSONOBJ = init_poisson.o phi_fine_cg.o interpol_phi.o force_fine.o multigrid_
 HYDROOBJ = init_hydro.o init_flow_fine.o write_screen.o output_hydro.o courant_fine.o godunov_fine.o \
            uplmde.o umuscl.o interpol_hydro.o godunov_utils.o condinit.o hydro_flag.o hydro_boundary.o \
            boundana.o read_hydro_params.o synchro_hydro_fine.o
+# All objects
+MODOBJ = amr_parameters.o hydro_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
+         poisson_commons.o hydro_commons.o gadgetreadfile.o write_makefile.o \
+         write_patch.o write_gitinfo.o hilbert.o coordinates.o
+
+AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o update_time.o title.o units.o murmur3.o \
+         mem_compare.o refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o
+
+# Particle-Mesh objects
+PMOBJ = init_part.o
+# Poisson solver objects
+POISSONOBJ = init_poisson.o newdt_fine.o
+# Hydro objects
+HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o \
+	   read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o
+
 # All objects
 AMRLIB = $(AMROBJ) $(HYDROOBJ) $(PMOBJ) $(POISSONOBJ)
 # ATON objects
