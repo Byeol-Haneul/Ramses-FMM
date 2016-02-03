@@ -36,11 +36,11 @@ recursive subroutine amr_step(ilevel,icount)
   !------------------------
   ! Output results to files
   !------------------------
-!!$  if(ilevel==levelmin)then
-!!$     if(mod(nstep_coarse,foutput)==0.or.aexp>=aout(iout).or.t>=tout(iout))then
-!!$        call dump_all
-!!$     endif
-!!$  endif
+  if(ilevel==levelmin)then
+     if(mod(nstep_coarse,foutput)==0.or.aexp>=aout(iout).or.t>=tout(iout))then
+        call dump_all
+     endif
+  endif
   
   !----------------------------
   ! Output frame to movie dump (without synced levels)

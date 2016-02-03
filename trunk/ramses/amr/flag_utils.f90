@@ -83,12 +83,12 @@ subroutine flag_fine(ilevel,icount)
   if(verbose)write(*,112)nflag
 #endif
 
-!!$  ! In case of adaptive time step ONLY, check for refinement rules.
-!!$  if(ilevel>levelmin)then
-!!$     if(icount<nsubcycle(ilevel-1))then
-!!$        call ensure_ref_rules(ilevel)
-!!$     end if
-!!$  end if
+  ! In case of adaptive time step ONLY, check for refinement rules.
+  if(ilevel>levelmin)then
+     if(icount<nsubcycle(ilevel-1))then
+        call ensure_ref_rules(ilevel)
+     end if
+  end if
 
 111 format('   Entering flag_fine for level ',I2)
 112 format('   ==> Flag ',i6,' cells')
