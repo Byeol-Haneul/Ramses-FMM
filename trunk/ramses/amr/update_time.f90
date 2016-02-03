@@ -402,10 +402,8 @@ subroutine getmem(outmem)
   integer::read_status
   file='/proc/self/stat'
   open(unit=1,file=file,form='formatted',err=101)
-  goto 102
-101 continue
   read(1,'(A300)',IOSTAT=read_status)dir
-102  close(1)
+101  close(1)
   if (read_status < 0)then
      outmem=dble(0.)
      if (myid==1)write(*,*)'Problem in checking free memory'

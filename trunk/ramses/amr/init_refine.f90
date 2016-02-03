@@ -64,6 +64,7 @@ subroutine init_refine_basegrid
 #if NDIM>2
      hash_key(3)=iz(1)
 #endif
+!     if(myid==1)write(*,*)igrid,hash_key
      call hash_set(grid_dict,hash_key,igrid)
   end do
 

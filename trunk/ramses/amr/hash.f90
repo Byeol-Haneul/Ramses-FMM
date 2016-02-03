@@ -182,6 +182,7 @@ contains
 
     else
        write(*,*)"hash chaining space full on process "
+       write(*,*)key,val
        stop
     end if
   end subroutine hash_set
