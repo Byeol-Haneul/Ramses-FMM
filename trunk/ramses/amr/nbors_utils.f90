@@ -503,7 +503,10 @@ subroutine check_mail(comm_id)
               ichild=hash_get(grid_dict,hash_child)
               do ivar=1,nvar
                  do ind=1,twotondim
-                    if(grid(ichild)%refined(ind))grid(ichild)%uold(ind,ivar)=grid(ichild)%uold(ind,ivar)+recv_flush_hydro%realdp(ind,ivar,i)
+                    if(grid(ichild)%refined(ind))then
+                       grid(ichild)%uold(ind,ivar)=grid(ichild)%uold(ind,ivar)&
+                            & +recv_flush_hydro%realdp(ind,ivar,i)
+                    endif
                  end do
               end do
            end do

@@ -10,7 +10,6 @@ subroutine dump_all
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  character::nml_char
   character(LEN=5)::nchar
   character(LEN=80)::filename,filedir,filecmd
   integer::i,itest,info,irec,ierr
@@ -28,7 +27,6 @@ subroutine dump_all
   if(t>=tout(iout).or.aexp>=aout(iout))iout=iout+1
   output_done=.true.
 
-#ifdef TOTO
   if(ndim>1)then
      filedir='output_'//TRIM(nchar)//'/'
      filecmd='mkdir -p '//TRIM(filedir)
@@ -40,65 +38,142 @@ subroutine dump_all
 #ifndef WITHOUTMPI
      call MPI_BARRIER(MPI_COMM_WORLD,info)
 #endif
-     ! Output header: must be called by each process !
-     filename=TRIM(filedir)//'header_'//TRIM(nchar)//'.txt'
-     call output_header(filename)
      ! Only master process
+     ! Output header: must be called by each process !
      if(myid==1)then
-        filename=TRIM(filedir)//'info_'//TRIM(nchar)//'.txt'
+        if(pic)then
+           filename=TRIM(filedir)//'header.txt'
+           call output_header(filename)
+        endif
+        filename=TRIM(filedir)//'info.txt'
         call output_info(filename)
         filename=TRIM(filedir)//'makefile.txt'
         call output_makefile(filename)
         filename=TRIM(filedir)//'patches.txt'
         call output_patch(filename)
-        ! Copy namelist file to output directory
         filename=TRIM(filedir)//'namelist.txt'
-        OPEN(UNIT=10, FILE=namelist_file, ACCESS='DIRECT', STATUS='OLD', &
-             & ACTION='READ',  IOSTAT=IERR, RECL=1)
-        OPEN(UNIT=11, FILE=filename, ACCESS='DIRECT', STATUS='REPLACE', &
-             & ACTION='WRITE', IOSTAT=IERR, RECL=1)
-        IREC = 1
-        DO
-           READ(UNIT=10, REC=IREC, IOSTAT=IERR)nml_char
-           IF (IERR.NE.0) EXIT
-           WRITE(UNIT=11, REC=IREC)nml_char
-           IREC = IREC + 1
-        END DO
-        CLOSE(10)
-        CLOSE(11)
-        ! Copy compilation details to output directory
+        call output_namelist(filename)
         filename=TRIM(filedir)//'compilation.txt'
-        OPEN(UNIT=11, FILE=filename, FORM='formatted')
-        write(11,'(" compile date = ",A)')TRIM(builddate)
-        write(11,'(" patch dir    = ",A)')TRIM(patchdir)
-        write(11,'(" remote repo  = ",A)')TRIM(gitrepo)
-        write(11,'(" local branch = ",A)')TRIM(gitbranch)
-        write(11,'(" last commit  = ",A)')TRIM(githash)
-        CLOSE(11)
+        call output_compil(filename)
+        filename=TRIM(filedir)//'params.out'
+        call backup_params(filename)
      endif
-     filename=TRIM(filedir)//'amr_'//TRIM(nchar)//'.out'
+     ! For each process
+     filename=TRIM(filedir)//'amr.out'
      call backup_amr(filename)
      if(hydro)then
-        filename=TRIM(filedir)//'hydro_'//TRIM(nchar)//'.out'
+        filename=TRIM(filedir)//'hydro.out'
         call backup_hydro(filename)
      end if
+#ifdef TOTO
      if(pic)then
-        filename=TRIM(filedir)//'part_'//TRIM(nchar)//'.out'
+        filename=TRIM(filedir)//'part.out'
         call backup_part(filename)
      end if
      if(poisson)then
-        filename=TRIM(filedir)//'grav_'//TRIM(nchar)//'.out'
+        filename=TRIM(filedir)//'grav.out'
         call backup_poisson(filename)
      end if
      if (gadget_output) then
         filename=TRIM(filedir)//'gsnapshot_'//TRIM(nchar)
         call savegadget(filename)
      end if
-  end if
 #endif
+  end if
 
 end subroutine dump_all
-#ifdef TOTO
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine output_namelist(filename)
+  use amr_commons
+  use pm_commons
+  use hydro_commons
+  implicit none
+  character(LEN=80)::filename
+  ! Copy namelist file to output directory
+  character::nml_char
+  integer::ierr
+
+  open(10,file=namelist_file,access="stream",action="read")
+  open(11,file=filename,access="stream",action="write")
+  do 
+     read(10,iostat=ierr)nml_char 
+     if(ierr.NE.0)exit
+     write(11)nml_char 
+  end do
+  close(10)
+  close(11)
+
+end subroutine output_namelist
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine output_compil(filename)
+  use amr_commons
+  use pm_commons
+  use hydro_commons
+  implicit none
+  character(LEN=80)::filename
+  ! Copy compilation details to output directory
+  OPEN(UNIT=11, FILE=filename, FORM='formatted')
+  write(11,'(" compile date = ",A)')TRIM(builddate)
+  write(11,'(" patch dir    = ",A)')TRIM(patchdir)
+  write(11,'(" remote repo  = ",A)')TRIM(gitrepo)
+  write(11,'(" local branch = ",A)')TRIM(gitbranch)
+  write(11,'(" last commit  = ",A)')TRIM(githash)
+  CLOSE(11)
+end subroutine output_compil
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine backup_params(filename)
+  use amr_commons
+  use hydro_commons
+  use pm_commons
+  implicit none
+  character(LEN=80)::filename
+
+  integer::ilun
+  integer::ilevel,ibound,istart,i,igrid,idim,ind,iskip
+  character(LEN=80)::fileloc
+
+  if(verbose)write(*,*)'Entering backup_params'
+
+  !-----------------------------------
+  ! Output run parameters in file
+  !-----------------------------------  
+  ilun=10
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='unformatted')
+  ! Write grid variables
+  write(ilun)ncpu
+  write(ilun)ndim
+  write(ilun)levelmin
+  write(ilun)nlevelmax
+  write(ilun)boxlen
+  write(ilun)noct_used_tot
+  ! Write time variables
+  write(ilun)noutput,iout,ifout
+  write(ilun)tout(1:noutput)
+  write(ilun)aout(1:noutput)
+  write(ilun)t
+  write(ilun)dtold(1:nlevelmax)
+  write(ilun)dtnew(1:nlevelmax)
+  write(ilun)nstep,nstep_coarse
+  ! Write various constants
+  write(ilun)const,mass_tot_0,rho_tot
+  write(ilun)omega_m,omega_l,omega_k,omega_b,h0,aexp_ini,boxlen_ini
+  write(ilun)aexp,hexp,aexp_old,epot_tot_int,epot_tot_old
+  ! Write cpu boundaries
+  do ilevel=levelmin,nlevelmax
+     write(ilun)bound_key_level(0:ncpu,ilevel)
+  end do
+  close(ilun)
+end subroutine backup_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -109,9 +184,11 @@ subroutine backup_amr(filename)
   use pm_commons
   implicit none
   character(LEN=80)::filename
-
-  integer::nx_loc,ny_loc,nz_loc,ilun
-  integer::ilevel,ibound,ncache,istart,i,igrid,idim,ind,iskip
+  !-----------------------------------
+  ! Output amr grid in file
+  !-----------------------------------  
+  integer::ilun
+  integer::ilevel,ibound,istart,i,igrid,idim,ind,iskip
   integer,allocatable,dimension(:)::ind_grid,iig
   real(dp),allocatable,dimension(:)::xdp
   real(sp),allocatable,dimension(:)::xsp
@@ -120,150 +197,23 @@ subroutine backup_amr(filename)
   character(LEN=5)::nchar
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::scale
-
   if(verbose)write(*,*)'Entering backup_amr'
-
-  ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-
-  ! Local constants
-  nx_loc=nx; ny_loc=ny; nz_loc=nz
-  if(ndim>0)nx_loc=(icoarse_max-icoarse_min+1)
-  if(ndim>1)ny_loc=(jcoarse_max-jcoarse_min+1)
-  if(ndim>2)nz_loc=(kcoarse_max-kcoarse_min+1)
-  skip_loc=(/0.0d0,0.0d0,0.0d0/)
-  if(ndim>0)skip_loc(1)=dble(icoarse_min)
-  if(ndim>1)skip_loc(2)=dble(jcoarse_min)
-  if(ndim>2)skip_loc(3)=dble(kcoarse_min)
-  scale=boxlen/dble(nx_loc)
-
-  !-----------------------------------
-  ! Output amr grid in file
-  !-----------------------------------  
   ilun=myid+10
   call title(myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
   open(unit=ilun,file=fileloc,form='unformatted')
-  ! Write grid variables
-  write(ilun)ncpu
   write(ilun)ndim
-  write(ilun)nx,ny,nz
+  write(ilun)levelmin
   write(ilun)nlevelmax
-  write(ilun)ngridmax
-  write(ilun)nboundary
-  write(ilun)ngrid_current
-  write(ilun)boxlen
-  ! Write time variables
-  write(ilun)noutput,iout,ifout
-  write(ilun)tout(1:noutput)
-  write(ilun)aout(1:noutput)
-  write(ilun)t
-  write(ilun)dtold(1:nlevelmax)
-  write(ilun)dtnew(1:nlevelmax)
-  write(ilun)nstep,nstep_coarse
-  write(ilun)const,mass_tot_0,rho_tot
-  write(ilun)omega_m,omega_l,omega_k,omega_b,h0,aexp_ini,boxlen_ini
-  write(ilun)aexp,hexp,aexp_old,epot_tot_int,epot_tot_old
-  write(ilun)mass_sph
-  ! Write levels variables
-  write(ilun)headl(1:ncpu,1:nlevelmax)
-  write(ilun)taill(1:ncpu,1:nlevelmax)
-  write(ilun)numbl(1:ncpu,1:nlevelmax)
-  write(ilun)numbtot(1:10,1:nlevelmax)
-  ! Read boundary linked list
-  if(simple_boundary)then
-     write(ilun)headb(1:nboundary,1:nlevelmax)
-     write(ilun)tailb(1:nboundary,1:nlevelmax)
-     write(ilun)numbb(1:nboundary,1:nlevelmax)
-  end if
-  ! Write free memory
-  write(ilun)headf,tailf,numbf,used_mem,used_mem_tot
-  ! Write cpu boundaries
-  write(ilun)ordering
-  write(ilun)bound_key(0:ndomain)
-
-  ! Write coarse level
-  write(ilun)son(1:ncoarse)
-  write(ilun)flag1(1:ncoarse)
-  write(ilun)cpu_map(1:ncoarse)
-  ! Write fine levels
-  do ilevel=1,nlevelmax
-     do ibound=1,nboundary+ncpu
-        if(ibound<=ncpu)then
-           ncache=numbl(ibound,ilevel)
-           istart=headl(ibound,ilevel)
-        else
-           ncache=numbb(ibound-ncpu,ilevel)
-           istart=headb(ibound-ncpu,ilevel)
-        end if
-        if(ncache>0)then
-           allocate(ind_grid(1:ncache),xdp(1:ncache),iig(1:ncache))
-           ! Write grid index
-           igrid=istart
-           do i=1,ncache
-              ind_grid(i)=igrid
-              igrid=next(igrid)
-           end do
-           write(ilun)ind_grid
-           ! Write next index
-           do i=1,ncache
-              iig(i)=next(ind_grid(i))
-           end do
-           write(ilun)iig
-           ! Write prev index
-           do i=1,ncache
-              iig(i)=prev(ind_grid(i))
-           end do
-           write(ilun)iig
-           ! Write grid center
-           do idim=1,ndim
-              do i=1,ncache
-                 xdp(i)=xg(ind_grid(i),idim)
-              end do
-              write(ilun)xdp
-           end do
-           ! Write father index
-           do i=1,ncache
-              iig(i)=father(ind_grid(i))
-           end do
-           write(ilun)iig
-           ! Write nbor index
-           do ind=1,twondim
-              do i=1,ncache
-                 iig(i)=nbor(ind_grid(i),ind)
-              end do
-              write(ilun)iig
-           end do
-           ! Write son index
-           do ind=1,twotondim
-              iskip=ncoarse+(ind-1)*ngridmax
-              do i=1,ncache
-                 iig(i)=son(ind_grid(i)+iskip)
-              end do
-              write(ilun)iig
-           end do
-           ! Write cpu map
-           do ind=1,twotondim
-              iskip=ncoarse+(ind-1)*ngridmax
-              do i=1,ncache
-                 iig(i)=cpu_map(ind_grid(i)+iskip)
-              end do
-              write(ilun)iig
-           end do
-           ! Write refinement map
-           do ind=1,twotondim
-              iskip=ncoarse+(ind-1)*ngridmax
-              do i=1,ncache
-                 iig(i)=flag1(ind_grid(i)+iskip)
-              end do
-              write(ilun)iig
-           end do
-           deallocate(xdp,iig,ind_grid)
-        end if
+  write(ilun)noct_used
+  do ilevel=levelmin,nlevelmax
+     write(ilun)noct(ilevel)
+     do igrid=head(ilevel),tail(ilevel)
+        write(ilun)grid(igrid)%ckey
+        write(ilun)grid(igrid)%refined
      end do
   end do
-  close(ilun)
-  
+  close(ilun)  
 end subroutine backup_amr
 !#########################################################################
 !#########################################################################
@@ -276,7 +226,7 @@ subroutine output_info(filename)
   implicit none
   character(LEN=80)::filename
 
-  integer::nx_loc,ny_loc,nz_loc,ilun,icpu,idom
+  integer::ilun,icpu,idom
   real(dp)::scale
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   character(LEN=80)::fileloc
@@ -288,13 +238,6 @@ subroutine output_info(filename)
 
   ! Conversion factor from user units to cgs units
   call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-
-  ! Local constants
-  nx_loc=nx; ny_loc=ny; nz_loc=nz
-  if(ndim>0)nx_loc=(icoarse_max-icoarse_min+1)
-  if(ndim>1)ny_loc=(jcoarse_max-jcoarse_min+1)
-  if(ndim>2)nz_loc=(kcoarse_max-kcoarse_min+1)
-  scale=boxlen/dble(nx_loc)
 
   ! Open file
   fileloc=TRIM(filename)
@@ -323,13 +266,6 @@ subroutine output_info(filename)
   write(ilun,'("unit_t      =",E23.15)')scale_t
   write(ilun,*)
   
-  ! Write ordering information
-  write(ilun,'("ordering type=",A80)')ordering
-  write(ilun,'("   DOMAIN   ind_min                 ind_max")')
-  do idom=1,ndomain
-     write(ilun,'(I8,1X,E23.15,1X,E23.15)')idom,bound_key(idom-1),bound_key(idom)
-  end do
-
   close(ilun)
 
 end subroutine output_info
@@ -352,47 +288,31 @@ subroutine output_header(filename)
   character(LEN=80)::fileloc
 
   if(verbose)write(*,*)'Entering output_header'
-
-  ! Compute total number of particles
-#ifndef WITHOUTMPI
-#ifndef LONGINT
-  call MPI_ALLREDUCE(npart,npart_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#else
-  tmp_long=npart
-  call MPI_ALLREDUCE(tmp_long,npart_tot,1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
-#endif
-#ifdef WITHOUTMPI
-  npart_tot=npart
-#endif
-
-  if(myid==1)then
-
-     ilun=myid+10
-
-     ! Open file
-     fileloc=TRIM(filename)
-     open(unit=ilun,file=fileloc,form='formatted')
-     
-     ! Write header information
-     write(ilun,*)'Total number of particles'
-     write(ilun,*)npart_tot
-
-     ! Keep track of what particle fields are present
-     write(ilun,*)'Particle fields'
-     write(ilun,'(a)',advance='no')'pos vel mass iord level '
+  
+  ilun=myid+10
+  
+  ! Open file
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')
+  
+  ! Write header information
+  write(ilun,*)'Total number of particles'
+  write(ilun,*)npart_tot
+  
+  ! Keep track of what particle fields are present
+  write(ilun,*)'Particle fields'
+  write(ilun,'(a)',advance='no')'pos vel mass iord level '
 #ifdef OUTPUT_PARTICLE_POTENTIAL
-     write(ilun,'(a)',advance='no')'phi '
+  write(ilun,'(a)',advance='no')'phi '
 #endif
-     close(ilun)
-
-  endif
+  close(ilun)
 
 end subroutine output_header
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine savegadget(filename)
   use amr_commons
   use hydro_commons

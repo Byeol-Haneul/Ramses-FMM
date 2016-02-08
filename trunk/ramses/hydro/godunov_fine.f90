@@ -472,7 +472,6 @@ subroutine godfine1(ind_grid,ilevel,&
 #if NDIM>2
      kk0=1
 #endif
-
      ! Loop over inner octs
      do k1=k1min+kk0,k1max-kk0
         do j1=j1min+jj0,j1max-jj0
@@ -589,7 +588,7 @@ subroutine godfine1(ind_grid,ilevel,&
                              grid(igrid)%unew(icell,ivar)=grid(igrid)%unew(icell,ivar) &
                                   & -flux(i3,j3,k3,ivar,idim)*oneontwotondim
                           end do
-#ifdef DUELENER
+#ifdef DUALENER
                           ! Update velocity divergence
                           grid(igrid)%divu(icell)=grid(igrid)%divu(icell) &
                                & -tmp(i3,j3,k3,1,idim)*oneontwotondim

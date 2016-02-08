@@ -205,9 +205,9 @@ subroutine riemann_llf(qleft,qright,fgdnv)
   ! Compute maximum wave speed
   !===========================
   ! Left states
-  rl = max(qleft (1),smallr)
-  ul =     qleft (2)
-  pl = max(qleft (3),rl*smallp)
+  rl = max(qleft(1),smallr)
+  ul =     qleft(2)
+  pl = max(qleft(3),rl*smallp)
   cl = gamma*pl
 #if NENER>0
   do n = 1,nener

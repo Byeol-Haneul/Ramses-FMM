@@ -25,7 +25,9 @@ subroutine upload_fine(ilevel)
   do ioct=head(ilevel),tail(ilevel)
      do ivar=1,nvar
         do ind=1,twotondim
-           if(grid(ioct)%refined(ind))grid(ioct)%uold(ind,ivar)=0.0
+           if(grid(ioct)%refined(ind))then
+              grid(ioct)%uold(ind,ivar)=0.0
+           endif
         end do
      end do
   end do

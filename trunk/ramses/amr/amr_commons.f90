@@ -92,7 +92,7 @@ module amr_commons
   integer,allocatable,dimension(:)::noct_max
   integer,allocatable,dimension(:)::noct_tot
   integer,allocatable,dimension(:)::ckey_max
-  integer::noct_used,noct_used_max
+  integer::noct_used,noct_used_max,noct_used_tot
 
   ! Hilbert key
   integer(kind=8),allocatable,dimension(:,:)::bound_key_level

@@ -133,6 +133,7 @@ subroutine init_refine_adaptive
   do i=levelmin,nlevelmax+1
 
      call refine_fine(levelmin)
+     call load_balance(levelmin)
 
      do ilevel=nlevelmax,levelmin,-1
         if(hydro)then

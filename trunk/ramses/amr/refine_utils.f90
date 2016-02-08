@@ -312,8 +312,10 @@ subroutine refine_fine(ilevel)
   end do
 
   noct_used_max=noct_used
+  noct_used_tot=noct_used
 #ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(noct_used,noct_used_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 #endif
 !!$  if(myid==1)then
 !!$     write(*,*)'Temporary mesh structure'
@@ -348,7 +350,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
   ! The parent cell is labeled with the parent oct index iparent
   ! and the cell index icell (from 1 to 8).
   !--------------------------------------------------------------
-  integer::icpu,idim,ichild,ind,nstride,grid_cpu
+  integer::icpu,idim,ivar,ichild,ind,nstride,grid_cpu
   integer(kind=4), dimension(1:nvector),save::dummy_state
   integer(kind=8), dimension(1:nvector),save::hk0,hk1,hk2
   integer(kind=8), dimension(1:nvector),save::ix,iy,iz
@@ -449,9 +451,11 @@ subroutine make_new_oct(iparent,icell,ilevel)
   if(.not.init)then
      ! Interpolate hydro variables
 #ifdef SOLVERhydro
-     do ind=1,twotondim
-        grid(ichild)%uold(ind,1:nvar)=grid(iparent)%uold(icell,1:nvar)
-     enddo
+     do ivar=1,nvar
+        do ind=1,twotondim
+           grid(ichild)%uold(ind,ivar)=grid(iparent)%uold(icell,ivar)
+        enddo
+     end do
 #endif
      ! Interpolate gravity variables
 #ifdef GRAV

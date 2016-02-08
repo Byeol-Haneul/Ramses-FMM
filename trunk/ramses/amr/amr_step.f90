@@ -28,10 +28,26 @@ recursive subroutine amr_step(ilevel,icount)
   ! Make new refinements
   !---------------------
   if(ilevel==levelmin.or.icount>1)then
+
+!!$     ekin_tot=0.0D0  ! Reset total kinetic energy
+!!$     mass_tot=0.0D0  ! Reset total mass
+!!$     do ilev=ilevel,nlevelmax
+!!$        call check_cons(ilev)
+!!$     end do
+!!$     if(myid==1)write(*,*)'before refine ',mass_tot,ekin_tot
+
                                call timer('refine','start')
      call refine_fine(ilevel)
                                call timer('load balance','start')
      call load_balance(ilevel)
+
+!!$     ekin_tot=0.0D0  ! Reset total kinetic energy
+!!$     mass_tot=0.0D0  ! Reset total mass
+!!$     do ilev=ilevel,nlevelmax
+!!$        call check_cons(ilev)
+!!$     end do
+!!$     if(myid==1)write(*,*)'after refine ',mass_tot,ekin_tot
+
   endif
   !------------------------
   ! Output results to files
@@ -108,6 +124,15 @@ recursive subroutine amr_step(ilevel,icount)
      call upload_fine(ilevel)
 
   endif
+
+!!$  if(ilevel==levelmin)then
+!!$     ekin_tot=0.0D0  ! Reset total kinetic energy
+!!$     mass_tot=0.0D0  ! Reset total mass
+!!$     do ilev=ilevel,nlevelmax
+!!$        call check_cons(ilev)
+!!$     end do
+!!$     if(myid==1)write(*,*)'after hydro ',mass_tot,ekin_tot
+!!$  endif
 
   !-----------------------
   ! Compute refinement map

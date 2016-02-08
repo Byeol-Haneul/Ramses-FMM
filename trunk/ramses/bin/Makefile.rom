@@ -56,10 +56,10 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 #FFLAGS = -Mpreprocess $(DEFINES)
 
 # --- MPI, ifort syntax ------------------------------
-F90 = mpif90
-FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
-#F90 = mpif90 -f90=ifort
-#FFLAGS = -cpp -g -fast -debug inline-debug-info -shared-intel -shared-libgcc -traceback $(DEFINES) -DNOSYSTEM
+#F90 = mpif90
+#FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
+F90 = mpif90 -f90=ifort
+FFLAGS = -cpp -g -fast -debug inline-debug-info -shared-intel -shared-libgcc -traceback $(DEFINES) -DNOSYSTEM
 # -DWITHOUTMPI
 # -check all -ftrapuv
 
@@ -128,7 +128,7 @@ PMOBJ = init_part.o
 # Poisson solver objects
 POISSONOBJ = init_poisson.o newdt_fine.o
 # Hydro objects
-HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o
+HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o output_hydro.o
 
 # All objects
 AMRLIB = $(AMROBJ) $(HYDROOBJ) $(PMOBJ) $(POISSONOBJ)

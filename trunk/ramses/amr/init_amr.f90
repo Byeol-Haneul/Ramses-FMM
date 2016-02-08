@@ -18,7 +18,7 @@ subroutine init_amr
   dtnew=0.0D0
 
   ! Set up cache size
-  ncachemax=0.01*ngridmax
+  ncachemax=100000 !0.1*ngridmax
 
   ! Allocate main oct array
   allocate(grid(1:ngridmax+ncachemax))
@@ -71,9 +71,10 @@ subroutine init_amr
   noct_tot=0   ! Total number of oct in the level (all cpus)
   noct_min=0   ! Minimum number of oct across all cpus
   noct_max=0   ! Maximum number of oct across all cpus
-  noct_used=0  ! Total number of oct used
-#ifndef WITHOUTMPI
-  
+  noct_used=0  ! Number of oct used across all levels
+  noct_used_tot=0  ! Total number of oct used (all cpus)
+
+#ifndef WITHOUTMPI  
   ! Allocate all communication and cache-related variables
   allocate(reply_id(1:ncpu))
   allocate(reply_flag(1:ncpu))

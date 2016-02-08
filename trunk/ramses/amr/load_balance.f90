@@ -389,8 +389,10 @@ subroutine load_balance(ilevel)
   end do
 
   noct_used_max=noct_used
+  noct_used_tot=noct_used
 #ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(noct_used,noct_used_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 #endif
 
 !!$  if(verbose)then
