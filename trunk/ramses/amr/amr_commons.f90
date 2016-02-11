@@ -39,8 +39,8 @@ module amr_commons
   real(dp),allocatable,dimension(:)::aexp_frw,hexp_frw,tau_frw,t_frw
 
   ! Initial conditions parameters from grafic
-  integer                  ::nlevelmax_part
-  real(dp)                 ::aexp_ini=10.
+  integer::nlevelmax_part
+  real(dp)::aexp_ini=10.
   real(dp),dimension(1:MAXLEVEL)::dfact=1.0d0,astart
   real(dp),dimension(1:MAXLEVEL)::vfact
   real(dp),dimension(1:MAXLEVEL)::xoff1,xoff2,xoff3,dxini
@@ -147,6 +147,7 @@ module amr_commons
   ! Response message buffer
   integer,parameter::ntilemax=16
   type int4_msg
+     sequence
      integer(kind=4)::type
      integer(kind=4)::ntile
      integer(kind=4),dimension(1:ntilemax)::lev
@@ -154,6 +155,7 @@ module amr_commons
      integer(kind=4),dimension(1:twotondim,1:ntilemax)::int4
   end type int4_msg
   type realdp_msg
+     sequence
      integer(kind=4)::type
      integer(kind=4)::ntile
      integer(kind=4),dimension(1:ntilemax)::lev
@@ -165,12 +167,14 @@ module amr_commons
   ! Fush message buffer
   integer,parameter::nflushmax=128
   type int4_flush
+     sequence
      integer(kind=4)::nflush
      integer(kind=4),dimension(1:nflushmax)::lev
      integer(kind=4),dimension(1:ndim,1:nflushmax)::ckey
      integer(kind=4),dimension(1:twotondim,1:nflushmax)::int4
   end type int4_flush
   type realdp_flush
+     sequence
      integer(kind=4)::nflush
      integer(kind=4),dimension(1:nflushmax)::lev
      integer(kind=4),dimension(1:ndim,1:nflushmax)::ckey

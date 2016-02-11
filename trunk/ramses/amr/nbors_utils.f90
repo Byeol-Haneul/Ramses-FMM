@@ -71,7 +71,7 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
   integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
   integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer(kind=8),dimension(0:ndim)::hash_child
-  integer::i,ind,ichild,ilevel,info,icpu,grid_cpu,ntile_response,icounter
+  integer::i,ind,ivar,ichild,ilevel,info,icpu,grid_cpu,ntile_response,icounter
   integer::send_request_id
   type(request),save::send_request
   integer::response_id
@@ -153,12 +153,15 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
      
      ! Post RECV for the expected response
      if(cache_operation_type.EQ.operation_type_flag)then
-        call MPI_IRECV(response_flag,1,new_mpi_int4_msg,grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
+        call MPI_IRECV(response_flag,1,new_mpi_int4_msg,&
+             & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
      endif
      if(cache_operation_type.EQ.operation_type_hydro)then
-        call MPI_IRECV(response_hydro,1,new_mpi_realdp_msg,grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
+        call MPI_IRECV(response_hydro,1,new_mpi_realdp_msg,&
+             & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
      endif
-     call MPI_ISEND(send_request,1,new_mpi_request,grid_cpu-1,request_tag,MPI_COMM_WORLD,send_request_id,info)
+     call MPI_ISEND(send_request,1,new_mpi_request,&
+          & grid_cpu-1,request_tag,MPI_COMM_WORLD,send_request_id,info)
 
      ! While waiting for reply, check on incoming messages and perform actions
      call check_mail(response_id)
@@ -259,8 +262,10 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
                     else
                        grid(ichild)%refined(ind)=.false.
                     end if
+                    do ivar=1,nvar
+                       grid(ichild)%uold(ind,ivar)=response_hydro%realdp(ind,ivar,i)
+                    end do
                  end do
-                 grid(ichild)%uold(1:twotondim,1:nvar)=response_hydro%realdp(1:twotondim,1:nvar,i)
               endif
               
               ! If we also have a flush cache...
@@ -290,6 +295,7 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
                  free_cache=1
               endif
               if(ncache.GT.ncachemax)ncache=ncachemax
+
            endif
         end do
      endif
@@ -419,7 +425,9 @@ subroutine check_mail(comm_id)
               if(cache_operation_type.EQ.operation_type_flag)then
                  reply_flag(grid_cpu)%lev(i)=grid(ipos)%lev
                  reply_flag(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
-                 reply_flag(grid_cpu)%int4(1:twotondim,i)=grid(ipos)%flag1(1:twotondim)
+                 do ind=1,twotondim
+                    reply_flag(grid_cpu)%int4(ind,i)=grid(ipos)%flag1(ind)
+                 end do
               endif
 
               ! Reply of type hydro
@@ -432,8 +440,10 @@ subroutine check_mail(comm_id)
                     else
                        reply_hydro(grid_cpu)%int4(ind,i)=0
                     endif
+                    do ivar=1,nvar
+                       reply_hydro(grid_cpu)%realdp(ind,ivar,i)=grid(ipos)%uold(ind,ivar)
+                    end do
                  end do
-                 reply_hydro(grid_cpu)%realdp(1:twotondim,1:nvar,i)=grid(ipos)%uold(1:twotondim,1:nvar)
               endif
 
            end do
@@ -458,8 +468,10 @@ subroutine check_mail(comm_id)
      !=========================
      ! Check for incoming flush
      !=========================
-     call MPI_Test(flush_id,flush_received,flush_status,info)
-     if(flush_received)then
+     flush_received=.true.
+     do while(flush_received)
+        call MPI_Test(flush_id,flush_received,flush_status,info)
+        if(flush_received)then
 
         !===========================================================
         ! Combine received data to local memory using combiner rules
@@ -520,7 +532,8 @@ subroutine check_mail(comm_id)
               ichild=hash_get(grid_dict,hash_child)
               do ivar=1,nvar
                  do ind=1,twotondim
-                    grid(ichild)%unew(ind,ivar)=grid(ichild)%unew(ind,ivar)+recv_flush_hydro%realdp(ind,ivar,i)
+                    grid(ichild)%unew(ind,ivar)=grid(ichild)%unew(ind,ivar)&
+                         & +recv_flush_hydro%realdp(ind,ivar,i)
                  end do
               end do
            end do
@@ -625,6 +638,10 @@ subroutine check_mail(comm_id)
                  else
                     grid(ichild)%refined(ind)=.false.
                  endif
+                 ! Flush hydro variables
+                 do ivar=1,nvar
+                    grid(ichild)%uold(ind,ivar)=recv_flush_hydro%realdp(ind,ivar,i)
+                 end do
               end do
               grid(ichild)%flag1(1:twotondim)=0
               grid(ichild)%flag2(1:twotondim)=0
@@ -633,23 +650,20 @@ subroutine check_mail(comm_id)
               ! Insert new grid in hash table
               call hash_set(grid_dict,hash_child,ichild)
 
-              ! Flush hydro variables
-              do ivar=1,nvar
-                 do ind=1,twotondim
-                    grid(ichild)%uold(ind,ivar)=recv_flush_hydro%realdp(ind,ivar,i)
-                 end do
-              end do
            end do
         endif
 
         ! Post a new RECV for flush
         if(cache_operation_type.EQ.operation_type_flag)then
-           call MPI_IRECV(recv_flush_flag,1,new_mpi_int4_flush,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+           call MPI_IRECV(recv_flush_flag,1,new_mpi_int4_flush,&
+                & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
         endif
         if(cache_operation_type.EQ.operation_type_hydro)then
-           call MPI_IRECV(recv_flush_hydro,1,new_mpi_realdp_flush,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+           call MPI_IRECV(recv_flush_hydro,1,new_mpi_realdp_flush,&
+                & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
         endif
-     endif
+        endif
+     end do
 
      !=================================
      ! Check for input comm. completion
@@ -675,11 +689,12 @@ subroutine destage(igrid)
 #endif
   integer::igrid
   !
-  integer::ind,ipos,info,icache,iflush,grid_cpu
+  integer::ind,ivar,ipos,info,icache,iflush,grid_cpu
   integer::send_flush_id
   integer(kind=8),dimension(0:ndim)::hash_key
   !
 #ifndef WITHOUTMPI
+
   hash_key(0)=grid(igrid)%lev
   hash_key(1:ndim)=grid(igrid)%ckey(1:ndim)
   ipos=hash_get(grid_dict,hash_key)
@@ -699,15 +714,15 @@ subroutine destage(igrid)
      dirty(icache)=.false.
   
      if(cache_operation.EQ.operation_initflag)then
-        send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
-        if(send_flush_flag(grid_cpu)%nflush>nflushmax)then
-           send_flush_flag(grid_cpu)%nflush=nflushmax
+        if(send_flush_flag(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_flag(grid_cpu)%nflush=1
+           send_flush_flag(grid_cpu)%nflush=0
         endif
+        send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
         iflush=send_flush_flag(grid_cpu)%nflush
         send_flush_flag(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_flag(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
@@ -715,95 +730,109 @@ subroutine destage(igrid)
      endif
      
      if(cache_operation.EQ.operation_derefine)then
-        send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
-        if(send_flush_flag(grid_cpu)%nflush>nflushmax)then
-           send_flush_flag(grid_cpu)%nflush=nflushmax
+        if(send_flush_flag(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_flag(grid_cpu)%nflush=1
+           send_flush_flag(grid_cpu)%nflush=0
         endif
+        send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
         iflush=send_flush_flag(grid_cpu)%nflush
         send_flush_flag(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_flag(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
         do ind=1,twotondim
            if(grid(igrid)%refined(ind))then
-              send_flush_flag(grid_cpu)%int4(ind,iflush)=1.0
+              send_flush_flag(grid_cpu)%int4(ind,iflush)=1
            else
-              send_flush_flag(grid_cpu)%int4(ind,iflush)=0.0
+              send_flush_flag(grid_cpu)%int4(ind,iflush)=0
            endif
         end do
      endif
      
      if(cache_operation.EQ.operation_upload)then
-        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
-        if(send_flush_hydro(grid_cpu)%nflush>nflushmax)then
-           send_flush_hydro(grid_cpu)%nflush=nflushmax
+        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_hydro(grid_cpu)%nflush=1
+           send_flush_hydro(grid_cpu)%nflush=0
         endif
+        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-        send_flush_hydro(grid_cpu)%realdp(1:twotondim,1:nvar,iflush)=grid(igrid)%uold(1:twotondim,1:nvar)
+        do ind=1,twotondim
+           do ivar=1,nvar
+              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
+           end do
+        end do
      endif
 
      if(cache_operation.EQ.operation_godunov)then
-        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
-        if(send_flush_hydro(grid_cpu)%nflush>nflushmax)then
-           send_flush_hydro(grid_cpu)%nflush=nflushmax
+        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_hydro(grid_cpu)%nflush=1
+           send_flush_hydro(grid_cpu)%nflush=0
         endif
+        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-        send_flush_hydro(grid_cpu)%realdp(1:twotondim,1:nvar,iflush)=grid(igrid)%unew(1:twotondim,1:nvar)
+        do ind=1,twotondim
+           do ivar=1,nvar
+              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%unew(ind,ivar)
+           end do
+        end do
      endif
 
      if(cache_operation.EQ.operation_refine)then
-        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
-        if(send_flush_hydro(grid_cpu)%nflush>nflushmax)then
-           send_flush_hydro(grid_cpu)%nflush=nflushmax
+        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_hydro(grid_cpu)%nflush=1
+           send_flush_hydro(grid_cpu)%nflush=0
         endif
+        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-        send_flush_hydro(grid_cpu)%realdp(1:twotondim,1:nvar,iflush)=grid(igrid)%uold(1:twotondim,1:nvar)
+        do ind=1,twotondim
+           do ivar=1,nvar
+              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
+           end do
+        end do
      endif
 
      if(cache_operation.EQ.operation_loadbalance)then
-        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
-        if(send_flush_hydro(grid_cpu)%nflush>nflushmax)then
-           send_flush_hydro(grid_cpu)%nflush=nflushmax
+        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_hydro(grid_cpu)%nflush=1
+           send_flush_hydro(grid_cpu)%nflush=0
         endif
+        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-        send_flush_hydro(grid_cpu)%realdp(1:twotondim,1:nvar,iflush)=grid(igrid)%uold(1:twotondim,1:nvar)
         do ind=1,twotondim
            if(grid(igrid)%refined(ind))then
-              send_flush_hydro(grid_cpu)%int4(ind,iflush)=1.0
+              send_flush_hydro(grid_cpu)%int4(ind,iflush)=1
            else
-              send_flush_hydro(grid_cpu)%int4(ind,iflush)=0.0
+              send_flush_hydro(grid_cpu)%int4(ind,iflush)=0
            endif
+           do ivar=1,nvar
+              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
+           end do
         end do
      endif
 
@@ -836,7 +865,7 @@ subroutine close_cache
   do icache=1,ncache
      igrid=ngridmax+icache
      locked(icache)=.false.
-     call destage(igrid)
+     if(occupied(icache))call destage(igrid)
      occupied(icache)=.false.
      dirty(icache)=.false.
   end do
@@ -859,17 +888,18 @@ subroutine close_cache
      if(cache_operation_type.EQ.operation_type_flag)then
         if(send_flush_flag(icpu)%nflush>0)then
            ! Post send
-           call MPI_ISSEND(send_flush_flag(icpu),1,new_mpi_int4_flush,icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_flag(icpu),1,new_mpi_int4_flush,&
+                & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
            send_flush_flag(icpu)%nflush=0
         endif
      endif     
      if(cache_operation_type.EQ.operation_type_hydro)then
-
         if(send_flush_hydro(icpu)%nflush>0)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(icpu),1,new_mpi_realdp_flush,icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           call MPI_ISSEND(send_flush_hydro(icpu),1,new_mpi_realdp_flush,&
+                & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
            send_flush_hydro(icpu)%nflush=0
@@ -885,11 +915,14 @@ subroutine close_cache
      call check_mail(close_id)
   else
      do icpu=2,ncpu
-        call MPI_IRECV(dummy_int,1,MPI_INTEGER,MPI_ANY_SOURCE,close_tag,MPI_COMM_WORLD,close_id,info)
+        call MPI_IRECV(dummy_int,1,MPI_INTEGER,&
+!             & icpu-1,close_tag,MPI_COMM_WORLD,close_id,info)
+             & MPI_ANY_SOURCE,close_tag,MPI_COMM_WORLD,close_id,info)
         call check_mail(close_id)
      end do
      do icpu=2,ncpu
-        call MPI_ISEND(dummy_int,1,MPI_INTEGER,icpu-1,close_tag,MPI_COMM_WORLD,close_id,info)
+        call MPI_ISEND(dummy_int,1,MPI_INTEGER,&
+             & icpu-1,close_tag,MPI_COMM_WORLD,close_id,info)
         call check_mail(close_id)
      end do
   endif
@@ -951,14 +984,17 @@ subroutine open_cache
   if(cache_operation.EQ.operation_loadbalance)cache_operation_type=operation_type_hydro
 
   ! Post the first RECV for request
-  call MPI_IRECV(recv_request,1,new_mpi_request,MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,request_id,info)
+  call MPI_IRECV(recv_request,1,new_mpi_request,&
+       & MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,request_id,info)
   
   ! Post the first RECV for flush
   if(cache_operation_type.EQ.operation_type_flag)then
-     call MPI_IRECV(recv_flush_flag,1,new_mpi_int4_flush,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+     call MPI_IRECV(recv_flush_flag,1,new_mpi_int4_flush,&
+          & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
   endif
   if(cache_operation_type.EQ.operation_type_hydro)then
-     call MPI_IRECV(recv_flush_hydro,1,new_mpi_realdp_flush,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+     call MPI_IRECV(recv_flush_hydro,1,new_mpi_realdp_flush,&
+          & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
   endif
 
 #endif

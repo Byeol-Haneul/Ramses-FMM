@@ -5,10 +5,10 @@ subroutine init_amr
 #ifndef WITHOUTMPI
   include 'mpif.h'  
 #endif
-  integer::ilevel,icpu,info
+  integer::ilevel,icpu,info,igrid
   integer::intex,realdpex
   integer(kind=8)::max_key
-  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length
+  integer,dimension(1:4)::new_type_disp,new_type_type,new_type_length
   real(kind=4)::real_mem,real_mem_tot
 
   if(verbose.and.myid==1)write(*,*)'Entering init_amr'
@@ -18,10 +18,13 @@ subroutine init_amr
   dtnew=0.0D0
 
   ! Set up cache size
-  ncachemax=100000 !0.1*ngridmax
+  ncachemax=10000 !ngridmax
 
   ! Allocate main oct array
   allocate(grid(1:ngridmax+ncachemax))
+  do igrid=1,ngridmax+ncachemax
+     grid(igrid)%lev=0
+  end do
 
   ! Allocate cache-related arrays
   allocate(dirty(1:ncachemax))

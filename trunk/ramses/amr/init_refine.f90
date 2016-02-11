@@ -153,7 +153,7 @@ subroutine init_refine_adaptive
   end do
 
   init=.false.
-
+  
 end subroutine init_refine_adaptive
 !################################################################
 !################################################################

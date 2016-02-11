@@ -40,7 +40,9 @@ subroutine courant_fine(ilevel)
         ! Gather leaf cells
         if(.NOT. grid(igrid)%refined(ind))then
            ! Gather hydro variables
-           uu(1:nvar)=grid(igrid)%uold(ind,1:nvar)
+           do ivar=1,nvar
+              uu(ivar)=grid(igrid)%uold(ind,ivar)
+           end do
            ! Compute total mass
            mass_loc=mass_loc+uu(1)*vol
            ! Compute total energy
@@ -131,7 +133,9 @@ subroutine check_cons(ilevel)
         ! Gather leaf cells
         if(.NOT. grid(igrid)%refined(ind))then
            ! Gather hydro variables
-           uu(1:nvar)=grid(igrid)%uold(ind,1:nvar)
+           do ivar=1,nvar
+              uu(ivar)=grid(igrid)%uold(ind,ivar)
+           end do
            ! Compute total mass
            mass_loc=mass_loc+uu(1)*vol
            ! Compute total energy

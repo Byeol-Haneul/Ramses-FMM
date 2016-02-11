@@ -4,6 +4,7 @@
 !#########################################################################
 subroutine load_balance(ilevel)
   use amr_commons
+  use hydro_commons
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h' 
@@ -37,7 +38,7 @@ subroutine load_balance(ilevel)
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok_free,ok_all,ok
-  type(oct)::oct_tmp
+  type(oct)::grid_tmp
 
 
 #ifndef WITHOUTMPI
@@ -70,64 +71,68 @@ subroutine load_balance(ilevel)
   ! Compute new Hilbert tick marks
   do ilev=ilevel+1,nlevelmax
 
-     noct_cpu=0
-     noct_cpu(myid)=noct(ilev)
-     call MPI_ALLREDUCE(noct_cpu,noct_cum,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-     noct_cpu=noct_cum
-     do icpu=2,ncpu
-        noct_cum(icpu)=noct_cum(icpu-1)+noct_cpu(icpu)
-     end do
-
-     xtarget=dble(noct_cum(ncpu))/dble(ncpu)
-
-     ileft=0
-     iright=-1
-     bound_key_target=0
-     do icpu=1,ncpu
-        ntarget_cum(icpu)=int(dble(icpu)*xtarget)
-        if(myid>1)then
-           nleft=noct_cum(myid-1)
-        else
-           nleft=0
-        endif
-        nright=noct_cum(myid)
-        IF(nright.GT.nleft)then
-           if(ntarget_cum(icpu).GT.nleft.AND.ntarget_cum(icpu).LE.nright)then
-              if(ileft==0)ileft=icpu
-              iright=MAX(icpu,iright)
-           endif
-        endif
-     end do
-
-     if(iright.GE.ileft)then
-        if(myid.GT.1)then
-           nstart=noct_cum(myid-1)
-        else
-           nstart=0
-        endif
-        istart=ileft
-        do ioct=head(ilev),tail(ilev)
-           nstart=nstart+1
-           if(nstart.GE.ntarget_cum(istart))then
-              bound_key_target(istart)=grid(ioct)%hkey+1
-              istart=istart+1
-           endif
-           if(istart.GT.iright)exit
+     if(noct_tot(ilev)>0)then
+        
+        noct_cpu=0
+        noct_cpu(myid)=noct(ilev)
+        call MPI_ALLREDUCE(noct_cpu,noct_cum,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+        noct_cpu=noct_cum
+        do icpu=2,ncpu
+           noct_cum(icpu)=noct_cum(icpu-1)+noct_cpu(icpu)
         end do
+        
+        xtarget=dble(noct_cum(ncpu))/dble(ncpu)
+        
+        ileft=0
+        iright=-1
+        bound_key_target=0
+        do icpu=1,ncpu
+           ntarget_cum(icpu)=int(dble(icpu)*xtarget)
+           if(myid>1)then
+              nleft=noct_cum(myid-1)
+           else
+              nleft=0
+           endif
+           nright=noct_cum(myid)
+           IF(nright.GT.nleft)then
+              if(ntarget_cum(icpu).GT.nleft.AND.ntarget_cum(icpu).LE.nright)then
+                 if(ileft==0)ileft=icpu
+                 iright=MAX(icpu,iright)
+              endif
+           endif
+        end do
+        
+        if(iright.GE.ileft)then
+           if(myid.GT.1)then
+              nstart=noct_cum(myid-1)
+           else
+              nstart=0
+           endif
+           istart=ileft
+           do ioct=head(ilev),tail(ilev)
+              nstart=nstart+1
+              if(nstart.GE.ntarget_cum(istart))then
+                 bound_key_target(istart)=grid(ioct)%hkey+1
+                 istart=istart+1
+              endif
+              if(istart.GT.iright)exit
+           end do
+        endif
+        
+        call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+        bound_key_target=bound_key_target_tot
+        
+        bound_key_target(0)=0
+        do icpu=1,ncpu
+           bound_key_target(icpu)=max(bound_key_target(icpu),bound_key_target(icpu-1))
+        end do
+        bound_key_target(ncpu)=ckey_max(ilev)**ndim
+        
+        do icpu=0,ncpu
+           bound_key_level(icpu,ilev)=bound_key_target(icpu)
+        end do
+
      endif
-
-     call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
-     bound_key_target=bound_key_target_tot
-
-     bound_key_target(0)=0
-     do icpu=1,ncpu
-        bound_key_target(icpu)=max(bound_key_target(icpu),bound_key_target(icpu-1))
-     end do
-     bound_key_target(ncpu)=bound_key_level(ncpu,ilev)
-
-     do icpu=0,ncpu
-        bound_key_level(icpu,ilev)=bound_key_target(icpu)
-     end do
 
   end do
   deallocate(noct_cpu,noct_cum,ntarget_cum)
@@ -199,8 +204,6 @@ subroutine load_balance(ilevel)
 
   end do
 
-!  if(myid==1)write(*,*)'Dispatch completed'
-
   !-----------------------------------------------------
   ! Step 3: sort new octs and empty slots according to
   ! their level (using counting sort algorithm).
@@ -211,9 +214,10 @@ subroutine load_balance(ilevel)
   ! Count number of octs per bucket
   noct_level=0
   noct_zero=0
+
   do ioct=tail(ilevel)+1,ifree-1
      true_level=grid(ioct)%lev
-     if(true_level.NE.0)then
+     if(true_level>0)then
         noct_level(true_level)=noct_level(true_level)+1
      else
         noct_zero=noct_zero+1
@@ -234,7 +238,7 @@ subroutine load_balance(ilevel)
   indx_zero=head_zero
   do ioct=tail(ilevel)+1,ifree-1
      true_level=grid(ioct)%lev
-     if(true_level.NE.0)then
+     if(true_level>0)then
         swap_table(indx_level(true_level))=ioct
         indx_level(true_level)=indx_level(true_level)+1
      else
@@ -242,7 +246,6 @@ subroutine load_balance(ilevel)
         indx_zero=indx_zero+1
      end if
   end do
-
 
   !-----------------------------------------------------
   ! Step 4: sort octs level by level according to their
@@ -295,7 +298,6 @@ subroutine load_balance(ilevel)
      endif
   end do
 
-
   !-----------------------------------------------------
   ! Step 5: Apply permutations directly in main memory
   ! Remember: swap_table(inew)=iold means:
@@ -307,8 +309,10 @@ subroutine load_balance(ilevel)
      if(j.NE.swap_table(j))then
         hash_key(0)=grid(j)%lev
         hash_key(1:ndim)=grid(j)%ckey(1:ndim)
-        if(grid(j)%lev>0)call hash_free(grid_dict,hash_key)
-        oct_tmp=grid(j)
+        if(grid(j)%lev>0)then
+           call hash_free(grid_dict,hash_key)
+        endif
+        grid_tmp=grid(j)
         i=j
         inew=swap_table(j)
         do while(inew.NE.j)
@@ -323,7 +327,7 @@ subroutine load_balance(ilevel)
            i=inew
            inew=swap_table(inew)
         end do
-        grid(i)=oct_tmp
+        grid(i)=grid_tmp
         hash_key(0)=grid(i)%lev
         hash_key(1:ndim)=grid(i)%ckey(1:ndim)
         if(grid(i)%lev>0)then
@@ -373,7 +377,6 @@ subroutine load_balance(ilevel)
      end do
   end do
 
-
   !---------------------
   ! Total number of octs
   !---------------------
@@ -401,6 +404,7 @@ subroutine load_balance(ilevel)
 !!$        if(noct_tot(ilev)>0)write(*,999)ilev,noct_tot(ilev),noct_min(ilev),noct_max(ilev),noct_tot(ilev)/ncpu
 !!$     end do
 !!$  end if
+  
 #endif
 
 111 format(' Load balancing for all levels greater than ',I2)
