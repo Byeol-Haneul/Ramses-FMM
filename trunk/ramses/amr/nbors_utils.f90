@@ -383,87 +383,93 @@ subroutine check_mail(comm_id)
      !===========================
      ! Check for incoming request
      !===========================
-     call MPI_Test(request_id,request_received,request_status,info)
-     if(request_received)then
-        
-        ! Assemble a reply and send it back
-        ilevel=recv_request%lev
-        hash_key(0)=ilevel
-        hash_key(1:ndim)=recv_request%ckey(1:ndim)
-        igrid=hash_get(grid_dict,hash_key)
-        grid_cpu=request_status(MPI_SOURCE)+1
-
-        ! If grid does not exist, send a null reply
-        if(igrid.EQ.0)then
-           if(cache_operation_type.EQ.operation_type_flag)then
-              reply_flag(grid_cpu)%type=-1
-           endif
-           if(cache_operation_type.EQ.operation_type_hydro)then
-              reply_hydro(grid_cpu)%type=-1
-           endif
-
-        ! Otherwise, assemble a proper reply with a complete tile
-        else
-           itile=(igrid-head(ilevel))/ntilemax
-           ntile_reply=MIN(tail(ilevel)-itile*ntilemax-head(ilevel)+1,ntilemax)
-
-           ! Store type of reply and number of entries
-           if(cache_operation_type.EQ.operation_type_flag)then
-              reply_flag(grid_cpu)%type=1
-              reply_flag(grid_cpu)%ntile=ntile_reply
-           endif
-           if(cache_operation_type.EQ.operation_type_hydro)then
-              reply_hydro(grid_cpu)%type=1
-              reply_hydro(grid_cpu)%ntile=ntile_reply
-           endif
-
-           ! Store data, depending on reply type
-           do i=1,ntile_reply
-              ipos=head(ilevel)+itile*ntilemax+i-1
-
-              ! Reply of type flag
+     request_received=.true.
+     do while(request_received)
+        call MPI_Test(request_id,request_received,request_status,info)
+        if(request_received)then
+           
+           ! Assemble a reply and send it back
+           ilevel=recv_request%lev
+           hash_key(0)=ilevel
+           hash_key(1:ndim)=recv_request%ckey(1:ndim)
+           igrid=hash_get(grid_dict,hash_key)
+           grid_cpu=request_status(MPI_SOURCE)+1
+           
+           ! If grid does not exist, send a null reply
+           if(igrid.EQ.0)then
               if(cache_operation_type.EQ.operation_type_flag)then
-                 reply_flag(grid_cpu)%lev(i)=grid(ipos)%lev
-                 reply_flag(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
-                 do ind=1,twotondim
-                    reply_flag(grid_cpu)%int4(ind,i)=grid(ipos)%flag1(ind)
-                 end do
+                 reply_flag(grid_cpu)%type=-1
               endif
-
-              ! Reply of type hydro
               if(cache_operation_type.EQ.operation_type_hydro)then
-                 reply_hydro(grid_cpu)%lev(i)=grid(ipos)%lev
-                 reply_hydro(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
-                 do ind=1,twotondim
-                    if(grid(ipos)%refined(ind))then
-                       reply_hydro(grid_cpu)%int4(ind,i)=1
-                    else
-                       reply_hydro(grid_cpu)%int4(ind,i)=0
-                    endif
-                    do ivar=1,nvar
-                       reply_hydro(grid_cpu)%realdp(ind,ivar,i)=grid(ipos)%uold(ind,ivar)
-                    end do
-                 end do
+                 reply_hydro(grid_cpu)%type=-1
               endif
-
-           end do
+              
+              ! Otherwise, assemble a proper reply with a complete tile
+           else
+              itile=(igrid-head(ilevel))/ntilemax
+              ntile_reply=MIN(tail(ilevel)-itile*ntilemax-head(ilevel)+1,ntilemax)
+              
+              ! Store type of reply and number of entries
+              if(cache_operation_type.EQ.operation_type_flag)then
+                 reply_flag(grid_cpu)%type=1
+                 reply_flag(grid_cpu)%ntile=ntile_reply
+              endif
+              if(cache_operation_type.EQ.operation_type_hydro)then
+                 reply_hydro(grid_cpu)%type=1
+                 reply_hydro(grid_cpu)%ntile=ntile_reply
+              endif
+              
+              ! Store data, depending on reply type
+              do i=1,ntile_reply
+                 ipos=head(ilevel)+itile*ntilemax+i-1
+                 
+                 ! Reply of type flag
+                 if(cache_operation_type.EQ.operation_type_flag)then
+                    reply_flag(grid_cpu)%lev(i)=grid(ipos)%lev
+                    reply_flag(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
+                    do ind=1,twotondim
+                       reply_flag(grid_cpu)%int4(ind,i)=grid(ipos)%flag1(ind)
+                    end do
+                 endif
+                 
+                 ! Reply of type hydro
+                 if(cache_operation_type.EQ.operation_type_hydro)then
+                    reply_hydro(grid_cpu)%lev(i)=grid(ipos)%lev
+                    reply_hydro(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
+                    do ind=1,twotondim
+                       if(grid(ipos)%refined(ind))then
+                          reply_hydro(grid_cpu)%int4(ind,i)=1
+                       else
+                          reply_hydro(grid_cpu)%int4(ind,i)=0
+                       endif
+                       do ivar=1,nvar
+                          reply_hydro(grid_cpu)%realdp(ind,ivar,i)=grid(ipos)%uold(ind,ivar)
+                       end do
+                    end do
+                 endif
+                 
+              end do
+           endif
+           
+           ! Test the old SEND to free memory in corresponding MPI buffer
+           ! call MPI_Test(reply_id(grid_cpu),reply_sent,reply_status,info)
+           call MPI_WAIT(reply_id(grid_cpu),reply_status,info)
+           
+           ! Send back the reply
+           if(cache_operation_type.EQ.operation_type_flag)then
+              call MPI_ISEND(reply_flag(grid_cpu),1,new_mpi_int4_msg,&
+                   & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
+           endif
+           if(cache_operation_type.EQ.operation_type_hydro)then
+              call MPI_ISEND(reply_hydro(grid_cpu),1,new_mpi_realdp_msg,&
+                   & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
+           endif
+           
+           ! Post a new RECV for request
+           call MPI_IRECV(recv_request,1,new_mpi_request,&
+                & MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,request_id,info)
         endif
-
-        ! Test the old SEND to free memory in corresponding MPI buffer
-!        call MPI_Test(reply_id(grid_cpu),reply_sent,reply_status,info)
-        call MPI_WAIT(reply_id(grid_cpu),reply_status,info)
-
-        ! Send back the reply
-        if(cache_operation_type.EQ.operation_type_flag)then
-           call MPI_ISEND(reply_flag(grid_cpu),1,new_mpi_int4_msg,grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
-        endif
-        if(cache_operation_type.EQ.operation_type_hydro)then
-           call MPI_ISEND(reply_hydro(grid_cpu),1,new_mpi_realdp_msg,grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
-        endif
-
-        ! Post a new RECV for request
-        call MPI_IRECV(recv_request,1,new_mpi_request,MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,request_id,info)
-     endif
+     end do
 
      !=========================
      ! Check for incoming flush

@@ -5,10 +5,10 @@ subroutine init_amr
 #ifndef WITHOUTMPI
   include 'mpif.h'  
 #endif
-  integer::ilevel,icpu,info,igrid
+  integer::ilevel,icpu,info,igrid,i
   integer::intex,realdpex
   integer(kind=8)::max_key
-  integer,dimension(1:4)::new_type_disp,new_type_type,new_type_length
+  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length,new_type_address
   real(kind=4)::real_mem,real_mem_tot
 
   if(verbose.and.myid==1)write(*,*)'Entering init_amr'
@@ -154,6 +154,116 @@ subroutine init_amr
   ! New type for request
   new_type_disp(1)=0
   new_type_disp(2)=intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_length(1)=1
+  new_type_length(2)=ndim
+  call MPI_TYPE_STRUCT(2,new_type_length,new_type_disp,new_type_type,new_mpi_request,info)
+  call MPI_TYPE_COMMIT(new_mpi_request,info)
+
+  return
+
+  ! Alignmement-aware MPI types below (NOT USED SO FAR)
+
+  ! New type for int4_msg
+  call MPI_ADDRESS(reply_flag(1)      ,new_type_address(1),info)
+  call MPI_ADDRESS(reply_flag(1)%type ,new_type_address(2),info)
+  call MPI_ADDRESS(reply_flag(1)%ntile,new_type_address(3),info)
+  call MPI_ADDRESS(reply_flag(1)%lev  ,new_type_address(4),info)
+  call MPI_ADDRESS(reply_flag(1)%ckey ,new_type_address(5),info)
+  call MPI_ADDRESS(reply_flag(1)%int4 ,new_type_address(6),info)
+  do i=1,5
+     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
+  end do
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_type(4)=MPI_INTEGER
+  new_type_type(5)=MPI_INTEGER
+  new_type_length(1)=1
+  new_type_length(2)=1
+  new_type_length(3)=ntilemax
+  new_type_length(4)=ntilemax*ndim
+  new_type_length(5)=ntilemax*twotondim
+  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_int4_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_int4_msg,info)
+
+  ! New type for int4_flush
+  call MPI_ADDRESS(send_flush_flag(1)       ,new_type_address(1),info)
+  call MPI_ADDRESS(send_flush_flag(1)%nflush,new_type_address(2),info)
+  call MPI_ADDRESS(send_flush_flag(1)%lev   ,new_type_address(3),info)
+  call MPI_ADDRESS(send_flush_flag(1)%ckey  ,new_type_address(4),info)
+  call MPI_ADDRESS(send_flush_flag(1)%int4  ,new_type_address(5),info)
+  do i=1,4
+     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
+  end do
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_type(4)=MPI_INTEGER
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax
+  new_type_length(3)=nflushmax*ndim
+  new_type_length(4)=nflushmax*twotondim
+  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_int4_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_int4_flush,info)
+
+  ! New type for realdp_msg
+  call MPI_ADDRESS(reply_hydro(1)       ,new_type_address(1),info)
+  call MPI_ADDRESS(reply_hydro(1)%type  ,new_type_address(2),info)
+  call MPI_ADDRESS(reply_hydro(1)%ntile ,new_type_address(3),info)
+  call MPI_ADDRESS(reply_hydro(1)%lev   ,new_type_address(4),info)
+  call MPI_ADDRESS(reply_hydro(1)%ckey  ,new_type_address(5),info)
+  call MPI_ADDRESS(reply_hydro(1)%int4  ,new_type_address(6),info)
+  call MPI_ADDRESS(reply_hydro(1)%realdp,new_type_address(7),info)
+  do i=1,6
+     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
+  end do
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_type(4)=MPI_INTEGER
+  new_type_type(5)=MPI_INTEGER
+  new_type_type(6)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=1
+  new_type_length(2)=1
+  new_type_length(3)=ntilemax
+  new_type_length(4)=ntilemax*ndim
+  new_type_length(5)=ntilemax*twotondim
+  new_type_length(6)=ntilemax*twotondim*nvar
+  call MPI_TYPE_STRUCT(6,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_realdp_msg,info)
+
+  ! New type for realdp_flush
+  call MPI_ADDRESS(send_flush_hydro(1)       ,new_type_address(1),info)
+  call MPI_ADDRESS(send_flush_hydro(1)%nflush,new_type_address(2),info)
+  call MPI_ADDRESS(send_flush_hydro(1)%lev   ,new_type_address(3),info)
+  call MPI_ADDRESS(send_flush_hydro(1)%ckey  ,new_type_address(4),info)
+  call MPI_ADDRESS(send_flush_hydro(1)%int4  ,new_type_address(5),info)
+  call MPI_ADDRESS(send_flush_hydro(1)%realdp,new_type_address(6),info)
+  do i=1,5
+     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
+  end do
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_type(4)=MPI_INTEGER
+  new_type_type(5)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax
+  new_type_length(3)=nflushmax*ndim
+  new_type_length(4)=nflushmax*twotondim
+  new_type_length(5)=nflushmax*twotondim*nvar
+  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_realdp_flush,info)
+
+  ! New type for request
+  call MPI_ADDRESS(recv_request     ,new_type_address(1),info)
+  call MPI_ADDRESS(recv_request%lev ,new_type_address(2),info)
+  call MPI_ADDRESS(recv_request%ckey,new_type_address(3),info)
+  do i=1,2
+     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
+  end do
   new_type_type(1)=MPI_INTEGER
   new_type_type(2)=MPI_INTEGER
   new_type_length(1)=1
