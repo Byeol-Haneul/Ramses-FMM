@@ -33,10 +33,31 @@ subroutine init_flow_fine(ilevel)
   real(dp),dimension(1:nvector,1:ndim),save::xx
   real(dp),dimension(1:nvector,1:nvar),save::uu
   real(dp)::dx
+  logical::ok_file1,ok_file2,ok_file
+  character(LEN=80)::filename
 
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
+  !--------------------------------------
+  ! Compute initial conditions from files
+  !--------------------------------------
+  filename=TRIM(initfile(ilevel))//'/ic_d'
+  INQUIRE(file=filename,exist=ok_file1)
+  if(multiple)then
+     filename=TRIM(initfile(ilevel))//'/dir_deltab/ic_deltab.00001'
+     INQUIRE(file=filename,exist=ok_file2)
+  else
+     filename=TRIM(initfile(ilevel))//'/ic_deltab'
+     INQUIRE(file=filename,exist=ok_file2)
+  endif
+  ok_file=ok_file1.or.ok_file2
+  if(ok_file)then
+     call init_grafic(ilevel)
+  else
+  !----------------------------------------------------
+  ! Compute initial conditions from subroutine condinit
+  !----------------------------------------------------
   ! Mesh size at level ilevel in code units
   dx=boxlen/2**ilevel
   ! Loop over grids by vector sweeps
@@ -63,6 +84,7 @@ subroutine init_flow_fine(ilevel)
      ! End loop over cells
   end do
   ! End loop over grids
+  endif
 
 111 format('   Entering init_flow_fine for level ',I2)
 
@@ -190,3 +212,307 @@ subroutine region_condinit(x,q,dx,nn)
 
   return
 end subroutine region_condinit
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_grafic(ilevel)
+  use amr_commons
+  use hydro_commons
+!  use cooling_module
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  integer::ilevel
+  !--------------------------------------
+  ! Compute initial conditions from files
+  ! with the grafic format.
+  !--------------------------------------
+  integer::i,igrid,ilun
+  integer::ind,idim,ivar,ix,iy,iz,nx_loc
+  integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
+  integer::buf_count,info,nvar_in
+
+  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(dp)::dx,rr,vx,vy=0,vz=0,ek,ei,pp,xx1,xx2,xx3,dx_loc,xval
+
+  real(dp),allocatable,dimension(:,:,:)::init_array
+  real(kind=4),allocatable,dimension(:,:)  ::init_plane
+
+  logical::error,ok_file3
+  character(LEN=80)::filename
+  character(LEN=5)::nchar,ncharvar
+
+  integer,parameter::tag=1107
+  integer::dummy_io,info2
+
+  ! Conversion factor from user units to cgs units
+  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+
+  ! Mesh size at level ilevel in normalised units
+  dx=0.5D0**ilevel
+    
+  ! Mesh size at level ilevel in code units
+  dx_loc=boxlen*dx
+
+  !-------------------------------------------------------------------------
+  ! First step: compute level boundaries in terms of initial condition array
+  !-------------------------------------------------------------------------
+  i1_min=n1(ilevel)+1; i1_max=0
+  i2_min=n2(ilevel)+1; i2_max=0
+  i3_min=n3(ilevel)+1; i3_max=0
+  do igrid=head(ilevel),tail(ilevel)
+     do ind=1,twotondim
+        ! Coordinates in normalised units (between 0 and 1)
+        xx1=(2*grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx
+        xx2=(2*grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx
+        xx3=(2*grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx
+        ! Scale to integer coordinates in the frame of the file
+        xx1=(xx1*(dxini(ilevel)/dx)-xoff1(ilevel))/dxini(ilevel)
+        xx2=(xx2*(dxini(ilevel)/dx)-xoff2(ilevel))/dxini(ilevel)
+        xx3=(xx3*(dxini(ilevel)/dx)-xoff3(ilevel))/dxini(ilevel)
+        ! Compute min and max
+        i1_min=MIN(i1_min,int(xx1)+1); i1_max=MAX(i1_max,int(xx1)+1)
+        i2_min=MIN(i2_min,int(xx2)+1); i2_max=MAX(i2_max,int(xx2)+1)
+        i3_min=MIN(i3_min,int(xx3)+1); i3_max=MAX(i3_max,int(xx3)+1)
+     end do
+  end do
+  if(noct(ilevel)>0)then
+     error=.false.
+     if(i1_min<1.or.i1_max>n1(ilevel))error=.true.
+     if(i2_min<1.or.i2_max>n2(ilevel))error=.true.
+     if(i3_min<1.or.i3_max>n3(ilevel))error=.true.
+     if(error) then
+        write(*,*)'Some grid are outside initial conditions sub-volume'
+        write(*,*)'for ilevel=',ilevel
+        write(*,*)i1_min,i1_max
+        write(*,*)i2_min,i2_max
+        write(*,*)i3_min,i3_max
+        write(*,*)n1(ilevel),n2(ilevel),n3(ilevel)
+        call clean_stop
+     end if
+  endif
+
+  !------------------------------------------
+  ! Second step: read initial condition files
+  !------------------------------------------
+  ! Allocate initial conditions array
+  if(noct(ilevel)>0)allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
+  allocate(init_plane(1:n1(ilevel),1:n2(ilevel)))
+  ! Loop over input variables
+  do ivar=1,nvar
+     if(cosmo)then
+        ! Read baryons initial overdensity and displacement at a=aexp
+        if(multiple)then
+           call title(myid,nchar)
+           if(ivar==1)filename=TRIM(initfile(ilevel))//'/dir_deltab/ic_deltab.'//TRIM(nchar)
+           if(ivar==2)filename=TRIM(initfile(ilevel))//'/dir_velcx/ic_velcx.'//TRIM(nchar)
+           if(ivar==3)filename=TRIM(initfile(ilevel))//'/dir_velcy/ic_velcy.'//TRIM(nchar)
+           if(ivar==4)filename=TRIM(initfile(ilevel))//'/dir_velcz/ic_velcz.'//TRIM(nchar)
+           if(ivar==5)filename=TRIM(initfile(ilevel))//'/dir_tempb/ic_tempb.'//TRIM(nchar)
+        else
+           if(ivar==1)filename=TRIM(initfile(ilevel))//'/ic_deltab'
+           if(ivar==2)filename=TRIM(initfile(ilevel))//'/ic_velcx'
+           if(ivar==3)filename=TRIM(initfile(ilevel))//'/ic_velcy'
+           if(ivar==4)filename=TRIM(initfile(ilevel))//'/ic_velcz'
+           if(ivar==5)filename=TRIM(initfile(ilevel))//'/ic_tempb'
+        endif
+     else
+        ! Read primitive variables
+        if(ivar==1)filename=TRIM(initfile(ilevel))//'/ic_d'
+        if(ivar==2)filename=TRIM(initfile(ilevel))//'/ic_u'
+        if(ivar==3)filename=TRIM(initfile(ilevel))//'/ic_v'
+        if(ivar==4)filename=TRIM(initfile(ilevel))//'/ic_w'
+        if(ivar==5)filename=TRIM(initfile(ilevel))//'/ic_p'
+     endif
+     call title(ivar,ncharvar)
+     if(ivar>5)then
+        call title(ivar-5,ncharvar)
+        filename=TRIM(initfile(ilevel))//'/ic_pvar_'//TRIM(ncharvar)
+     endif
+     
+     INQUIRE(file=filename,exist=ok_file3)
+     if(ok_file3)then
+        ! Reading the existing file   
+        if(myid==1)write(*,*)'Reading file '//TRIM(filename)
+        if(multiple)then
+           ilun=ncpu+myid+10
+           
+           ! Wait for the token
+#ifndef WITHOUTMPI
+           if(IOGROUPSIZE>0) then
+              if (mod(myid-1,IOGROUPSIZE)/=0) then
+                 call MPI_RECV(dummy_io,1,MPI_INTEGER,myid-1-1,tag,&
+                      & MPI_COMM_WORLD,MPI_STATUS_IGNORE,info2)
+              end if
+           endif
+#endif
+           
+           open(ilun,file=filename,form='unformatted')
+           rewind ilun
+           read(ilun) ! skip first line
+           do i3=1,n3(ilevel)
+              read(ilun) ((init_plane(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
+              if(noct(ilevel)>0)then
+                 if(i3.ge.i3_min.and.i3.le.i3_max)then
+                    init_array(i1_min:i1_max,i2_min:i2_max,i3) = &
+                         & init_plane(i1_min:i1_max,i2_min:i2_max)
+                 end if
+              endif
+           end do
+           close(ilun)
+           ! Send the token
+#ifndef WITHOUTMPI
+           if(IOGROUPSIZE>0) then
+              if(mod(myid,IOGROUPSIZE)/=0 .and.(myid.lt.ncpu))then
+                 dummy_io=1
+                 call MPI_SEND(dummy_io,1,MPI_INTEGER,myid-1+1,tag, &
+                      & MPI_COMM_WORLD,info2)
+              end if
+           endif
+#endif
+        else
+           if(myid==1)then
+              open(10,file=filename,form='unformatted')
+              rewind 10
+              read(10) ! skip first line
+           endif
+           do i3=1,n3(ilevel)
+              if(myid==1)then
+                 read(10) ((init_plane(i1,i2),i1=1,n1(ilevel)),i2=1,n2(ilevel))
+              else
+                 init_plane=0.0
+              endif
+              buf_count=n1(ilevel)*n2(ilevel)
+#ifndef WITHOUTMPI
+              call MPI_BCAST(init_plane,buf_count,MPI_REAL,0,MPI_COMM_WORLD,info)
+#endif
+              if(noct(ilevel)>0)then
+                 if(i3.ge.i3_min.and.i3.le.i3_max)then
+                    init_array(i1_min:i1_max,i2_min:i2_max,i3) = &
+                         & init_plane(i1_min:i1_max,i2_min:i2_max)
+                 end if
+              endif
+           end do
+           if(myid==1)close(10)
+        endif
+     else
+        ! If file doesn't exist, initialize variable to default value 
+        ! In most cases, this is zero (you can change that if necessary)
+        if(myid==1)write(*,*)'File '//TRIM(filename)//' not found'
+        if(myid==1)write(*,*)'Initialize corresponding variable to default value'
+        if(noct(ilevel)>0)then
+           init_array=0d0
+!!$           ! Default value for metals
+!!$           if(cosmo.and.ivar==imetal.and.metal)init_array=z_ave*0.02 ! from solar units
+!!$           ! Default value for ionization fraction
+!!$           if(cosmo)xval=sqrt(omega_m)/(h0/100.*omega_b) ! From the book of Peebles p. 173
+!!$           if(cosmo.and.ivar==ixion.and.aton)init_array=1.2d-5*xval
+        endif
+     endif
+     
+     if(noct(ilevel)>0)then
+        
+        ! For cosmo runs, rescale initial conditions to code units
+        if(cosmo)then
+           ! Compute approximate average temperature in K
+!           if(.not. cooling)T2_start=1.356d-2/aexp**2
+           T2_start=1.356d-2/aexp**2
+           if(ivar==1)init_array=(1.0+dfact(ilevel)*init_array)*omega_b/omega_m
+           if(ivar==2)init_array=dfact(ilevel)*vfact(1)*dx_loc/dxini(ilevel)*init_array/vfact(ilevel)
+           if(ivar==3)init_array=dfact(ilevel)*vfact(1)*dx_loc/dxini(ilevel)*init_array/vfact(ilevel)
+           if(ivar==4)init_array=dfact(ilevel)*vfact(1)*dx_loc/dxini(ilevel)*init_array/vfact(ilevel)
+           if(ivar==ndim+2)init_array=(1.0+init_array)*T2_start/scale_T2
+        endif
+        
+        ! Loop over cells
+        do igrid=head(ilevel),tail(ilevel)
+           do ind=1,twotondim
+              ! Coordinates in normalised units (between 0 and 1)
+              xx1=(2*grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx
+              xx2=(2*grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx
+              xx3=(2*grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx
+              ! Scale to integer coordinates in the frame of the file
+              xx1=(xx1*(dxini(ilevel)/dx)-xoff1(ilevel))/dxini(ilevel)
+              xx2=(xx2*(dxini(ilevel)/dx)-xoff2(ilevel))/dxini(ilevel)
+              xx3=(xx3*(dxini(ilevel)/dx)-xoff3(ilevel))/dxini(ilevel)
+              ! Compute integer coordinates in the frame of the file
+              i1=int(xx1)+1
+              i2=int(xx2)+1
+              i3=int(xx3)+1
+              ! Scatter to corresponding primitive variable
+              grid(igrid)%uold(ind,ivar)=init_array(i1,i2,i3)
+           end do
+        end do
+        ! End loop over cells
+
+     endif
+  end do
+  ! End loop over input variables
+
+  ! Deallocate initial conditions array
+  if(noct(ilevel)>0)deallocate(init_array)
+  deallocate(init_plane) 
+
+  !----------------------------------------------------------------
+  ! For cosmology runs: compute pressure, prevent negative density
+  !----------------------------------------------------------------
+  if(cosmo)then
+     ! Loop over grids
+     do igrid=head(ilevel),tail(ilevel)
+        ! Loop over cells
+        do ind=1,twotondim
+           ! Prevent negative densities
+           rr=max(grid(igrid)%uold(ind,1),0.1*omega_b/omega_m)
+           grid(igrid)%uold(ind,1)=rr
+           ! Compute pressure from temperature and density
+           grid(igrid)%uold(ind,ndim+2)=grid(igrid)%uold(ind,1)*grid(igrid)%uold(ind,ndim+2)
+        end do
+        ! End loop over cells
+     end do
+     ! End loop over grids
+  end if
+
+  !---------------------------------------------------
+  ! Third step: compute initial conservative variables
+  !---------------------------------------------------
+  ! Loop over grids
+  do igrid=head(ilevel),tail(ilevel)
+     ! Loop over cells
+     do ind=1,twotondim
+        ! Compute total energy density
+        rr=grid(igrid)%uold(ind,1)
+        vx=grid(igrid)%uold(ind,2)
+#if NDIM>1
+        vy=grid(igrid)%uold(ind,3)
+#endif
+#if NDIM>2
+        vz=grid(igrid)%uold(ind,4)
+#endif
+        pp=grid(igrid)%uold(ind,ndim+2)
+        ek=0.5d0*rr*(vx**2+vy**2+vz**2)
+        ei=pp/(gamma-1.0)
+        grid(igrid)%uold(ind,ndim+2)=ei+ek
+        ! Compute momentum density
+        do idim=1,ndim
+           rr=grid(igrid)%uold(ind,1)
+           grid(igrid)%uold(ind,idim+1)=rr*grid(igrid)%uold(ind,idim+1)
+        end do
+#if NVAR>NDIM+2
+        ! Compute passive variable density
+        do ivar=ndim+3,nvar
+           rr=grid(igrid)%uold(ind,1)
+           grid(igrid)%uold(ind,ivar)=rr*grid(igrid)%uold(ind,ivar)
+        enddo
+#endif
+     end do
+     ! End loop over cells
+  end do
+  ! End loop over grids
+
+end subroutine init_grafic
+!################################################################
+!################################################################
+!################################################################
+!################################################################

@@ -41,7 +41,6 @@ subroutine init_refine_basegrid
      ! Insert new grid in main array
      igrid=igrid+1
      if(igrid==1)head(levelmin)=1
-!     write(*,'("PE ",5(I6,1X))')myid,igrid,ikey,ix(1),iy(1)
      tail(levelmin)=igrid
      noct(levelmin)=noct(levelmin)+1
      noct_used=noct_used+1
@@ -64,7 +63,6 @@ subroutine init_refine_basegrid
 #if NDIM>2
      hash_key(3)=iz(1)
 #endif
-!     if(myid==1)write(*,*)igrid,hash_key
      call hash_set(grid_dict,hash_key,igrid)
   end do
 
@@ -126,7 +124,6 @@ subroutine init_refine_adaptive
   use poisson_commons
   implicit none
   integer::ilevel,i,ivar, ilev
-  logical :: use_histograms 
 
   if(myid==1)write(*,*)'Building initial adaptive grid'
 
@@ -155,6 +152,310 @@ subroutine init_refine_adaptive
   init=.false.
   
 end subroutine init_refine_adaptive
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_refine_restart
+  !--------------------------------------------------------------
+  ! This routine builds from a RAMSES restart file
+  ! the initial AMR grid.
+  !--------------------------------------------------------------
+  use amr_commons
+  use hilbert
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  integer::ilevel,ncpu_file,levelmin_file,nlevelmax_file
+  integer::icpu,iskip_amr,iskip_hydro,ilun,info
+  integer::i,ind,istart,iend,noct_tmp,ilev,ioct
+  integer::igrid,igrid_level,nleft,nright,ileft,iright
+  integer::levelmin_max,nlevelmax_min
+  character(LEN=80)::file_params,file_amr,file_hydro
+  character(LEN=5)::nchar,ncharcpu
+
+  integer,dimension(:),allocatable::noct_file,noct_skip,ntarget_cum,noct_cum
+  integer(kind=8),allocatable,dimension(:)::bound_key_target
+  integer(kind=8),allocatable,dimension(:)::bound_key_target_tot
+
+  integer(kind=4), dimension(1:nvector),save::dummy_state
+  integer(kind=8), dimension(1:nvector),save::hk0,hk1,hk2
+  integer(kind=8), dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8), dimension(0:ndim)::hash_key
+  integer(kind=8),dimension(1:nlevelmax)::key_ref
+  integer(kind=8)::coarse_key
+  integer,dimension(1:nlevelmax)::n_same,npatch
+
+  integer,dimension(1:ndim)::ckey
+  logical,dimension(1:twotondim)::refined
+  real(dp),dimension(1:twotondim,1:nvar)::uold
+
+  if(myid==1)write(*,*)'Building adaptive grid from restart file',nrestart
+
+  ! Read parameters from restart file
+  call title(nrestart,nchar)
+  file_params='output_'//TRIM(nchar)//'/params.out'
+  call input_params(file_params,ncpu_file,levelmin_file,nlevelmax_file)
+  if(myid==1)write(*,'(" Restart file has ",I8," cpu(s)")')ncpu_file
+
+  ! Compute the proper level interval
+  levelmin_max=MAX(levelmin,levelmin_file)
+  nlevelmax_min=MIN(nlevelmax,nlevelmax_file)
+  if(myid==1)write(*,'(" Read level ",I4," to level ",I4)')levelmin_max,nlevelmax_min
+
+  ! Allocate local variables
+  allocate(noct_file(1:ncpu_file))
+  allocate(noct_cum(1:ncpu_file))
+  allocate(noct_skip(1:ncpu_file))
+  allocate(ntarget_cum(1:ncpu))
+  allocate(bound_key_target(0:ncpu))
+  allocate(bound_key_target_tot(0:ncpu))
+
+  !--------------------------
+  ! Loop over relevant levels
+  !--------------------------
+  igrid=0
+  do ilevel=levelmin_max,nlevelmax_min
+     igrid_level=0
+
+     !------------------------------
+     ! Count number of octs in files
+     !------------------------------
+     if(myid==1)then
+        noct_cum=0
+        do icpu=1,ncpu_file
+           call title(icpu,ncharcpu)
+           file_amr='output_'//TRIM(nchar)//'/amr.out'//TRIM(ncharcpu)
+           ilun=10
+           noct_skip(icpu)=0
+           open(unit=ilun,file=file_amr,access="stream"&
+                & ,action="read",form='unformatted')
+           do i=levelmin_file,ilevel-1
+              read(ilun,POS=13+4*(i-levelmin_file))noct_tmp
+              noct_skip(icpu)=noct_skip(icpu)+noct_tmp
+           end do
+           read(ilun,POS=13+4*(ilevel-levelmin_file))noct_file(icpu)
+           if(icpu>1)then
+              noct_cum(icpu)=noct_cum(icpu-1)+noct_file(icpu)
+           else
+              noct_cum(icpu)=noct_file(icpu)
+           endif
+           close(ilun)
+        end do
+     endif
+#ifndef WITHOUTMPI
+     call MPI_BCAST(noct_cum,ncpu_file,MPI_INTEGER,0,MPI_COMM_WORLD,info)
+     call MPI_BCAST(noct_file,ncpu_file,MPI_INTEGER,0,MPI_COMM_WORLD,info)
+     call MPI_BCAST(noct_skip,ncpu_file,MPI_INTEGER,0,MPI_COMM_WORLD,info)
+#endif
+
+     !----------------------------
+     ! New numbers of octs per cpu
+     !----------------------------
+     do icpu=1,ncpu
+        ntarget_cum(icpu)=int(dble(icpu)*dble(noct_cum(ncpu_file))/dble(ncpu))
+     end do
+
+     ! Compute interval of octs for current process
+     if(myid>1)then
+        nleft=ntarget_cum(myid-1)
+     else
+        nleft=0
+     endif
+     nright=ntarget_cum(myid)
+
+     !-----------------------------------------------------
+     ! Compute interval of file to open for current process
+     !-----------------------------------------------------
+     ileft=0
+     iright=-1
+     bound_key_target=0
+     if(nright.GT.nleft)then
+        do icpu=1,ncpu_file
+           if(icpu>1)then
+              if(noct_cum(icpu).GT.nleft.AND.noct_cum(icpu-1).LT.nright)then
+                 if(ileft==0)ileft=icpu
+                 iright=MAX(icpu,iright)
+              endif
+           else
+              if(noct_cum(icpu).GT.nleft)then
+                 if(ileft==0)ileft=icpu
+                 iright=MAX(icpu,iright)
+              endif
+           endif
+        end do
+     endif
+
+     !----------------------------
+     ! Read octs data in files
+     !----------------------------
+     ! Loop over relevant files (if any)
+     do icpu=ileft,iright
+        if(icpu>1)then
+           istart=MAX(nleft-noct_cum(icpu-1),0)+1
+           iend=MIN(nright-noct_cum(icpu-1),noct_file(icpu))
+        else
+           istart=nleft+1
+           iend=MIN(nright,noct_file(icpu))
+        endif
+        call title(icpu,ncharcpu)
+        ! Prepare reading the AMR file
+        file_amr='output_'//TRIM(nchar)//'/amr.out'//TRIM(ncharcpu)
+        open(unit=10,file=file_amr,access="stream"&
+             & ,action="read",form='unformatted')
+        iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+&
+             & (4*ndim+4*twotondim)*noct_skip(icpu)
+        ! Prepare reading the HYDRO file
+        file_hydro='output_'//TRIM(nchar)//'/hydro.out'//TRIM(ncharcpu)
+        open(unit=11,file=file_hydro,access="stream"&
+             & ,action="read",form='unformatted')
+        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+&
+             & (8*twotondim*nvar)*noct_skip(icpu)
+        ! Loop over useful octs in file
+        do i=istart,iend
+
+           ! Read values from files
+           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1))ckey
+           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim)refined
+           read(11,POS=iskip_hydro+(8*twotondim*nvar)*(i-1))uold
+           
+           ! Create new oct in memory
+           igrid=igrid+1
+           igrid_level=igrid_level+1
+           if(igrid_level==1)head(ilevel)=igrid
+           tail(ilevel)=igrid
+           noct(ilevel)=noct(ilevel)+1
+
+           ! Fill values from files
+           grid(igrid)%lev=ilevel
+           grid(igrid)%ckey=ckey
+           grid(igrid)%refined=refined
+           grid(igrid)%uold=uold
+
+           ! Set flag1 to preserve refinements
+           do ind=1,twotondim
+              if(grid(igrid)%refined(ind))then
+                 grid(igrid)%flag1(ind)=1
+              else
+                 grid(igrid)%flag1(ind)=0
+              endif
+           end do
+
+           ! Insert in hash table
+           hash_key(0)=ilevel
+           hash_key(1:ndim)=ckey
+           call hash_set(grid_dict,hash_key,igrid)
+
+           ! Compute Hilbert keys of new octs
+#if NDIM==1
+           ix(1)=ckey(1)
+           call hilbert1d(ix,hk0,1)
+#endif
+#if NDIM==2
+           ix(1)=ckey(1)
+           iy(1)=ckey(2)
+           call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
+#endif
+#if NDIM==3
+           ix(1)=ckey(1)
+           iy(1)=ckey(2)
+           iz(1)=ckey(3)
+           call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
+#endif
+           grid(igrid)%hkey=hk0(1)
+           bound_key_target(myid)=hk0(1)+1
+        end do
+        close(10)
+        close(11)
+     end do
+
+     !--------------------------------
+     ! Set up new domain decomposition
+     !--------------------------------
+#ifndef WITHOUTMPI
+     call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+     bound_key_target=bound_key_target_tot
+#endif
+     bound_key_target(0)=0
+     do icpu=1,ncpu
+        bound_key_target(icpu)=max(bound_key_target(icpu),bound_key_target(icpu-1))
+     end do
+     bound_key_target(ncpu)=ckey_max(ilevel)**ndim
+     
+     do icpu=0,ncpu
+        bound_key_level(icpu,ilevel)=bound_key_target(icpu)
+     end do
+     
+  end do
+  ! End loop over levels
+
+  !-----------------------------
+  ! Clean up final AMR structure
+  !-----------------------------
+  do ilevel=levelmin+1,nlevelmax
+     head(ilevel)=head(ilevel-1)+noct(ilevel-1)
+     tail(ilevel)=head(ilevel)+noct(ilevel)-1
+  end do
+  noct_used=tail(nlevelmax)
+
+  ! Deallocate local arrays
+  deallocate(noct_file)
+  deallocate(noct_cum)
+  deallocate(noct_skip)
+  deallocate(ntarget_cum)
+  deallocate(bound_key_target)
+  deallocate(bound_key_target_tot)
+
+  !-----------
+  ! Super-octs
+  !-----------
+  do ilev=1,nlevelmax
+     npatch(ilev)=twotondim**ilev
+  end do
+  do ilev=levelmin,nlevelmax
+     n_same=0
+     key_ref=-1
+     do ioct=head(ilev),tail(ilev)
+        grid(ioct)%superoct=1
+        coarse_key=grid(ioct)%hkey
+        do i=1,MIN(ilev-1,nsuperoct)
+           coarse_key=coarse_key/twotondim
+           if(coarse_key.EQ.key_ref(i))then
+              n_same(i)=n_same(i)+1
+           else
+              n_same(i)=1
+              key_ref(i)=coarse_key
+           endif
+           if(n_same(i).EQ.npatch(i))then
+              grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
+           endif
+        end do
+     end do
+  end do
+
+  !---------------------
+  ! Total number of octs
+  !---------------------
+  do ilev=levelmin,nlevelmax
+     noct_tot(ilev)=noct(ilev)
+     noct_min(ilev)=noct(ilev)
+     noct_max(ilev)=noct(ilev)
+#ifndef WITHOUTMPI
+     call MPI_ALLREDUCE(noct(ilev),noct_tot(ilev),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(noct(ilev),noct_min(ilev),1,MPI_INTEGER,MPI_MIN,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(noct(ilev),noct_max(ilev),1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+#endif
+  end do
+
+  noct_used_max=noct_used
+  noct_used_tot=noct_used
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(noct_used,noct_used_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+#endif
+
+end subroutine init_refine_restart
 !################################################################
 !################################################################
 !################################################################

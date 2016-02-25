@@ -23,6 +23,8 @@ subroutine adaptive_loop
   if(nrestart==0)then
      call init_refine_basegrid ! Build initial coarsest grid
      call init_refine_adaptive ! Build initial adaptive grid
+  else
+     call init_refine_restart  ! Build AMR grid from restart file
   endif
 
 #ifndef WITHOUTMPI

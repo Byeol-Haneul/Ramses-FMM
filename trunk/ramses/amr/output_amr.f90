@@ -39,12 +39,27 @@ subroutine dump_all
      call MPI_BARRIER(MPI_COMM_WORLD,info)
 #endif
      ! Only master process
-     ! Output header: must be called by each process !
      if(myid==1)then
         if(pic)then
-           filename=TRIM(filedir)//'header.txt'
+           filename=TRIM(filedir)//'part_header.txt'
            call output_header(filename)
         endif
+        if(hydro)then
+           filename=TRIM(filedir)//'hydro_file_descriptor.txt'
+           call file_descriptor_hydro(filename)
+        end if
+#ifdef TOTO
+        if(cooling)then
+           filename=TRIM(filedir)//'cooling.out'
+           call output_cool(filename)
+        end if
+        if(sink)then
+           filename=TRIM(filedir)//'sink.info'
+           call output_sink(filename)
+           filename=TRIM(filedir)//'sink.csv'
+           call output_sink_csv(filename)
+        endif
+#endif
         filename=TRIM(filedir)//'info.txt'
         call output_info(filename)
         filename=TRIM(filedir)//'makefile.txt'
@@ -56,23 +71,23 @@ subroutine dump_all
         filename=TRIM(filedir)//'compilation.txt'
         call output_compil(filename)
         filename=TRIM(filedir)//'params.out'
-        call backup_params(filename)
+        call output_params(filename)
      endif
      ! For each process
      filename=TRIM(filedir)//'amr.out'
-     call backup_amr(filename)
+     call output_amr(filename)
      if(hydro)then
         filename=TRIM(filedir)//'hydro.out'
-        call backup_hydro(filename)
+        call output_hydro(filename)
      end if
 #ifdef TOTO
      if(pic)then
         filename=TRIM(filedir)//'part.out'
-        call backup_part(filename)
+        call output_part(filename)
      end if
      if(poisson)then
         filename=TRIM(filedir)//'grav.out'
-        call backup_poisson(filename)
+        call output_poisson(filename)
      end if
      if (gadget_output) then
         filename=TRIM(filedir)//'gsnapshot_'//TRIM(nchar)
@@ -130,7 +145,7 @@ end subroutine output_compil
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine backup_params(filename)
+subroutine output_params(filename)
   use amr_commons
   use hydro_commons
   use pm_commons
@@ -141,21 +156,21 @@ subroutine backup_params(filename)
   integer::ilevel,ibound,istart,i,igrid,idim,ind,iskip
   character(LEN=80)::fileloc
 
-  if(verbose)write(*,*)'Entering backup_params'
+  if(verbose)write(*,*)'Entering output_params'
 
   !-----------------------------------
   ! Output run parameters in file
   !-----------------------------------  
   ilun=10
   fileloc=TRIM(filename)
-  open(unit=ilun,file=fileloc,form='unformatted')
+  open(unit=ilun,file=fileloc,access="stream"&
+       & ,action="write",form='unformatted')
   ! Write grid variables
   write(ilun)ncpu
   write(ilun)ndim
   write(ilun)levelmin
   write(ilun)nlevelmax
   write(ilun)boxlen
-  write(ilun)noct_used_tot
   ! Write time variables
   write(ilun)noutput,iout,ifout
   write(ilun)tout(1:noutput)
@@ -168,17 +183,80 @@ subroutine backup_params(filename)
   write(ilun)const,mass_tot_0,rho_tot
   write(ilun)omega_m,omega_l,omega_k,omega_b,h0,aexp_ini,boxlen_ini
   write(ilun)aexp,hexp,aexp_old,epot_tot_int,epot_tot_old
+  write(ilun)mass_sph
   ! Write cpu boundaries
   do ilevel=levelmin,nlevelmax
      write(ilun)bound_key_level(0:ncpu,ilevel)
   end do
   close(ilun)
-end subroutine backup_params
+
+end subroutine output_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine backup_amr(filename)
+subroutine input_params(filename,ncpu_file,levelmin_file,nlevelmax_file)
+  use amr_commons
+  use hydro_commons
+  use pm_commons
+  implicit none
+  character(LEN=80)::filename
+  integer::ncpu_file,levelmin_file,nlevelmax_file
+  !-----------------------------------
+  ! Read run parameters from file.
+  ! Note that ncpu, levelmin and nlevelmax
+  ! are allowed to vary at restart.
+  !-----------------------------------  
+  integer::ilun
+  integer::ndim_file,noutput_file
+  integer::noutput_min,nlevelmax_min
+  real(dp)::mass_sph_file
+  character(LEN=80)::fileloc
+
+  if(verbose)write(*,*)'Entering input_params'
+
+  ilun=10+myid
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,access="stream"&
+       & ,action="read",form='unformatted')
+  ! Read grid variables
+  read(ilun)ncpu_file
+  read(ilun)ndim_file
+  read(ilun)levelmin_file
+  read(ilun)nlevelmax_file
+  ! Overwrite boxlen with value from file
+  read(ilun)boxlen
+  ! Read time variables
+  read(ilun)noutput_file,iout,ifout
+  noutput_min=MIN(noutput,noutput_file)
+  read(ilun)tout(1:noutput_min)
+  read(ilun)aout(1:noutput_min)
+  read(ilun)t
+  nlevelmax_min=MIN(nlevelmax,nlevelmax_file)
+  read(ilun)dtold(1:nlevelmax_min)
+  read(ilun)dtnew(1:nlevelmax_min)
+  read(ilun)nstep,nstep_coarse
+  ! Read various constants
+  read(ilun)const,mass_tot_0,rho_tot
+  read(ilun)omega_m,omega_l,omega_k,omega_b,h0,aexp_ini,boxlen_ini
+  read(ilun)aexp,hexp,aexp_old,epot_tot_int,epot_tot_old
+  read(ilun)mass_sph_file
+  close(ilun)
+  ! For cosmo runs only, as mass_sph is not set in the namelist
+  if(cosmo)mass_sph=mass_sph_file
+  ! Check dimensions
+  if(ndim.NE.ndim_file)then
+     if(myid==1)then
+        write(*,*)'Incorrect number of space dimensions in restart file'
+     endif
+     call clean_stop
+  endif
+end subroutine input_params
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine output_amr(filename)
   use amr_commons
   use hydro_commons
   use pm_commons
@@ -187,7 +265,7 @@ subroutine backup_amr(filename)
   !-----------------------------------
   ! Output amr grid in file
   !-----------------------------------  
-  integer::ilun
+  integer::ilun,mypos
   integer::ilevel,ibound,istart,i,igrid,idim,ind,iskip
   integer,allocatable,dimension(:)::ind_grid,iig
   real(dp),allocatable,dimension(:)::xdp
@@ -197,24 +275,26 @@ subroutine backup_amr(filename)
   character(LEN=5)::nchar
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::scale
-  if(verbose)write(*,*)'Entering backup_amr'
+  if(verbose)write(*,*)'Entering output_amr'
   ilun=myid+10
   call title(myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
-  open(unit=ilun,file=fileloc,form='unformatted')
+  open(unit=ilun,file=fileloc,access="stream"&
+       & ,action="write",form='unformatted')
   write(ilun)ndim
   write(ilun)levelmin
   write(ilun)nlevelmax
-  write(ilun)noct_used
   do ilevel=levelmin,nlevelmax
      write(ilun)noct(ilevel)
+  end do
+  do ilevel=levelmin,nlevelmax
      do igrid=head(ilevel),tail(ilevel)
         write(ilun)grid(igrid)%ckey
         write(ilun)grid(igrid)%refined
      end do
   end do
   close(ilun)  
-end subroutine backup_amr
+end subroutine output_amr
 !#########################################################################
 !#########################################################################
 !#########################################################################
