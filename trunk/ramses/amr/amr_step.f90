@@ -53,6 +53,50 @@ recursive subroutine amr_step(ilevel,icount)
 !!$     endif
 !!$  end if
 
+  !--------------------
+  ! Poisson source term
+  !--------------------
+  if(poisson)then
+                               call timer('poisson','start')
+     ! Save old potential for time-extrapolation at level boundaries
+     call save_phi_old(ilevel)
+     ! Compute total mass density at level ilevel
+     call rho_fine(ilevel,icount)
+  endif
+
+  !---------------
+  ! Gravity solver
+  !---------------
+  if(poisson)then
+                               call timer('poisson','start')
+     ! Remove gravity source term with half time step and old force
+     if(hydro)then
+        call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
+     endif
+
+     ! Compute gravitational potential
+     call phi_fine_cg(ilevel,icount)
+!!$     if(ilevel>levelmin)then
+!!$        if(ilevel .ge. cg_levelmin) then
+!!$           call phi_fine_cg(ilevel,icount)
+!!$        else
+!!$           call multigrid_fine(ilevel,icount)
+!!$        end if
+!!$     else
+!!$        call multigrid_fine(levelmin,icount)
+!!$     end if
+     ! Initial old potential
+     if (nstep==0)call save_phi_old(ilevel)
+
+     ! Compute gravitational acceleration
+     call force_fine(ilevel,icount)
+
+     if(hydro)then
+        ! Add gravity source term with half time step and new force
+        call synchro_hydro_fine(ilevel,+0.5*dtnew(ilevel))
+     end if
+
+  end if
   !----------------------
   ! Compute new time step
   !----------------------

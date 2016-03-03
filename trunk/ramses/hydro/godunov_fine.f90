@@ -357,7 +357,7 @@ subroutine godfine1(ind_grid,ilevel,&
               if(ichild==0)then
 
                  ! Get parent father cell
-                 parent_cell=get_parent_cell(hash_nbor,.true.,.true.)           
+                 parent_cell=get_parent_cell(hash_nbor,.true.,.true.)
                  if(parent_cell==0)then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',myid,hash_nbor

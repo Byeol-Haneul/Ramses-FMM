@@ -307,18 +307,22 @@ subroutine init_refine_restart
         iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+&
              & (4*ndim+4*twotondim)*noct_skip(icpu)
         ! Prepare reading the HYDRO file
-        file_hydro='output_'//TRIM(nchar)//'/hydro.out'//TRIM(ncharcpu)
-        open(unit=11,file=file_hydro,access="stream"&
-             & ,action="read",form='unformatted')
-        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+&
-             & (8*twotondim*nvar)*noct_skip(icpu)
+        if(hydro)then
+           file_hydro='output_'//TRIM(nchar)//'/hydro.out'//TRIM(ncharcpu)
+           open(unit=11,file=file_hydro,access="stream"&
+                & ,action="read",form='unformatted')
+           iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+&
+                & (8*twotondim*nvar)*noct_skip(icpu)
+        endif
         ! Loop over useful octs in file
         do i=istart,iend
 
            ! Read values from files
            read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1))ckey
            read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim)refined
-           read(11,POS=iskip_hydro+(8*twotondim*nvar)*(i-1))uold
+           if(hydro)then
+              read(11,POS=iskip_hydro+(8*twotondim*nvar)*(i-1))uold
+           endif
            
            ! Create new oct in memory
            igrid=igrid+1
@@ -331,7 +335,9 @@ subroutine init_refine_restart
            grid(igrid)%lev=ilevel
            grid(igrid)%ckey=ckey
            grid(igrid)%refined=refined
-           grid(igrid)%uold=uold
+           if(hydro)then
+              grid(igrid)%uold=uold
+           endif
 
            ! Set flag1 to preserve refinements
            do ind=1,twotondim
@@ -367,7 +373,9 @@ subroutine init_refine_restart
            bound_key_target(myid)=hk0(1)+1
         end do
         close(10)
-        close(11)
+        if(hydro)then
+           close(11)
+        endif
      end do
 
      !--------------------------------

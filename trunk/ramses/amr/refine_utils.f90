@@ -449,16 +449,16 @@ subroutine make_new_oct(iparent,icell,ilevel)
 
   ! Inject parent hydro variables into new children ones
   if(.not.init)then
+#ifdef HYDRO
      ! Interpolate hydro variables
-#ifdef SOLVERhydro
      do ivar=1,nvar
         do ind=1,twotondim
            grid(ichild)%uold(ind,ivar)=grid(iparent)%uold(icell,ivar)
         enddo
      end do
 #endif
-     ! Interpolate gravity variables
 #ifdef GRAV
+     ! Interpolate gravity variables
      do ind=1,twotondim
         grid(ichild)%f(ind,1:ndim)=grid(iparent)%f(icell,1:ndim)
         grid(ichild)%phi(ind)=grid(iparent)%phi(icell)

@@ -2,30 +2,163 @@
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine lock_cache(child_grid)
+subroutine get_threetondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_commons
+  use hash
   implicit none
-  integer::child_grid
-  integer::icache
-  if(child_grid>ngridmax)then
-     icache=child_grid-ngridmax
-     locked(icache)=.true.
-  endif
-end subroutine lock_cache
+  logical::flush_cache,fetch_cache
+  integer(kind=8),dimension(0:ndim)::hash_key
+  integer,dimension(1:threetondim)::igrid_nbor,ind_nbor
+  !
+  ! This routine computes and acquire the 3**ndim neighboring father cells 
+  ! for the input hash_key. The output arrays are the father cells
+  ! parent oct indices and their associated cell indices within the oct.
+  ! The corresponding data can be accessed using: grid(igrid)%data(ind).
+  ! If the grid index is zero, it means that this oct does not exist.
+  ! Note that the 2**ndim grids are all locked if remote.
+  !
+  integer,dimension(1:twotondim),save::igrid_twotondim_nbor
+  integer(kind=8),dimension(0:ndim)::hash_nbor,hash_ref,hash_father
+  integer(kind=8),dimension(1:ndim)::ii
+  integer,dimension(1:3,1:8),save::shift_oct=reshape(&
+       & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
+       &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
+  integer::i1,j1,k1
+  integer,save::i1min=-1
+  integer,save::i1max=+1
+  integer,save::j1min=0*(1-ndim/2)-1*(ndim/2)
+  integer,save::j1max=0*(1-ndim/2)+1*(ndim/2)
+  integer,save::k1min=0*(1-ndim/3)-1*(ndim/3)
+  integer,save::k1max=0*(1-ndim/3)+1*(ndim/3)
+  integer::ind,ipos,idim,get_grid,ilevel,i_nbor
+
+  ilevel=hash_key(0)
+  hash_nbor(0)=ilevel
+  hash_father(0)=ilevel-1
+
+  ! Gather twotondim neighboring father grids
+  do i_nbor=1,twotondim
+     hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,i_nbor)
+     ! Periodic boundary conditons
+     do idim=1,ndim
+        if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+        if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+     enddo
+     hash_father(1:ndim)=hash_nbor(1:ndim)/2
+     ! Store lower left neighbor coordinates 
+     if(i_nbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
+     ! Get grid into memory and lock it if remote 
+     ipos=get_grid(hash_father,flush_cache,fetch_cache)
+     call lock_cache(ipos)
+     igrid_twotondim_nbor(i_nbor)=ipos
+  end do
+     
+  ! Deal with neighboring father cells
+  i_nbor=0
+  do k1=k1min,k1max
+     do j1=j1min,j1max
+        do i1=i1min,i1max           
+           i_nbor=i_nbor+1
+#if NDIM>0
+           hash_nbor(1)=hash_key(1)+i1
+#endif
+#if NDIM>1
+           hash_nbor(2)=hash_key(2)+j1
+#endif
+#if NDIM>2
+           hash_nbor(3)=hash_key(3)+k1
+#endif
+           ! Periodic boundary conditons
+           do idim=1,ndim
+              if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+              if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+           enddo
+           ! Compute neighboring cell index
+           hash_father(1:ndim)=hash_nbor(1:ndim)/2
+           ii(1:ndim)=hash_nbor(1:ndim)-2*hash_father(1:ndim)
+           ind=1
+           do idim=1,ndim
+              ind=ind+2**(idim-1)*ii(idim)
+           end do
+           ind_nbor(i_nbor)=ind
+           ! Compute neighboring grid index
+           ii(1:ndim)=hash_father(1:ndim)-hash_ref(1:ndim)
+           ind=1
+           do idim=1,ndim
+              ind=ind+2**(idim-1)*ii(idim)
+           end do
+           igrid_nbor(i_nbor)=igrid_twotondim_nbor(ind)
+        end do
+     end do
+  end do
+
+end subroutine get_threetondim_nbor_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unlock_cache(child_grid)
+subroutine get_twondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_commons
+  use hash
   implicit none
-  integer::child_grid
-  integer::icache
-  if(child_grid>ngridmax)then
-     icache=child_grid-ngridmax
-     locked(icache)=.false.
-  endif
-end subroutine unlock_cache
+  logical::flush_cache,fetch_cache
+  integer(kind=8),dimension(0:ndim)::hash_key
+  integer,dimension(0:twondim)::igrid_nbor,ind_nbor
+  !
+  ! This routine computes and acquires the 2xndim neighboring father cells 
+  ! for the input hash_key. The output arrays are the father cells
+  ! parent oct indices and their associated cell indices within the oct.
+  ! The corresponding data can be accessed using: grid(igrid)%data(ind).
+  ! The first element (0) stands for the central father cell.
+  ! If the grid index is zero, it means that this oct does not exist.
+  ! Note that the parent grids are all locked if remote.
+  !
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer(kind=8),dimension(0:ndim)::hash_father
+  integer(kind=8),dimension(1:ndim)::ii
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  integer::ind,ipos,idim,get_grid,ilevel,i_nbor
+
+  ilevel=hash_key(0)
+  hash_nbor(0)=ilevel
+  hash_father(0)=ilevel-1
+
+  ! Deal with central parent cell first
+  hash_father(1:ndim)=hash_key(1:ndim)/2
+  ii(1:ndim)=hash_key(1:ndim)-2*hash_father(1:ndim)
+  ind=1
+  do idim=1,ndim
+     ind=ind+2**(idim-1)*ii(idim)
+  end do
+  ! Get grid into memory and lock it if remote 
+  ipos=get_grid(hash_father,flush_cache,fetch_cache)
+  call lock_cache(ipos)
+  igrid_nbor(0)=ipos
+  ind_nbor(0)=ind
+  
+  ! Deal with neighboring father cells
+  do i_nbor=1,twondim
+     hash_nbor(1:ndim)=hash_key(1:ndim)+shift(1:ndim,i_nbor)
+     ! Periodic boundary conditons
+     do idim=1,ndim
+        if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+        if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+     enddo
+     hash_father(1:ndim)=hash_nbor(1:ndim)/2
+     ii(1:ndim)=hash_nbor(1:ndim)-2*hash_father(1:ndim)
+     ind=1
+     do idim=1,ndim
+        ind=ind+2**(idim-1)*ii(idim)
+     end do
+     ! Get grid into memory and lock it if remote 
+     ipos=get_grid(hash_father,flush_cache,fetch_cache)
+     call lock_cache(ipos)
+     igrid_nbor(i_nbor)=ipos
+     ind_nbor(i_nbor)=ind
+  end do
+
+end subroutine get_twondim_nbor_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
@@ -52,6 +185,34 @@ integer function get_parent_cell(hash_key,flush_cache,fetch_cache) result(parent
   parent_cell=0
   if(ipos>0)parent_cell=(ipos-1)*twotondim+ind
 end function get_parent_cell
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine lock_cache(child_grid)
+  use amr_commons
+  implicit none
+  integer::child_grid
+  integer::icache
+  if(child_grid>ngridmax)then
+     icache=child_grid-ngridmax
+     locked(icache)=.true.
+  endif
+end subroutine lock_cache
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine unlock_cache(child_grid)
+  use amr_commons
+  implicit none
+  integer::child_grid
+  integer::icache
+  if(child_grid>ngridmax)then
+     icache=child_grid-ngridmax
+     locked(icache)=.false.
+  endif
+end subroutine unlock_cache
 !##############################################################
 !##############################################################
 !##############################################################
@@ -71,12 +232,14 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
   integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
   integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer(kind=8),dimension(0:ndim)::hash_child
-  integer::i,ind,ivar,ichild,ilevel,info,icpu,grid_cpu,ntile_response,icounter
+  integer::i,ind,idim,ivar,ichild,ilevel,info,icpu,grid_cpu,ntile_response,icounter
   integer::send_request_id
   type(request),save::send_request
   integer::response_id
   type(int4_msg),save::response_flag
   type(realdp_msg),save::response_hydro
+  type(small_realdp_msg),save::response_poisson
+  type(large_realdp_msg),save::response_refine
   logical::failed_request,send_request_completed
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::send_request_status
@@ -160,6 +323,14 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
         call MPI_IRECV(response_hydro,1,new_mpi_realdp_msg,&
              & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
      endif
+     if(cache_operation_type.EQ.operation_type_poisson)then
+        call MPI_IRECV(response_poisson,1,new_mpi_small_realdp_msg,&
+             & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
+     endif
+     if(cache_operation_type.EQ.operation_type_refine)then
+        call MPI_IRECV(response_refine,1,new_mpi_large_realdp_msg,&
+             & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
+     endif
      call MPI_ISEND(send_request,1,new_mpi_request,&
           & grid_cpu-1,request_tag,MPI_COMM_WORLD,send_request_id,info)
 
@@ -177,6 +348,14 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
      if(cache_operation_type.EQ.operation_type_hydro)then
         failed_request=response_hydro%type==-1
         ntile_response=response_hydro%ntile
+     endif
+     if(cache_operation_type.EQ.operation_type_poisson)then
+        failed_request=response_poisson%type==-1
+        ntile_response=response_poisson%ntile
+     endif
+     if(cache_operation_type.EQ.operation_type_refine)then
+        failed_request=response_refine%type==-1
+        ntile_response=response_refine%ntile
      endif
 
      ! If grid does not exist, store -1 in the cache
@@ -230,6 +409,14 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
               hash_child(0)=response_hydro%lev(i)
               hash_child(1:ndim)=response_hydro%ckey(1:ndim,i)
            endif
+           if(cache_operation_type.EQ.operation_type_poisson)then
+              hash_child(0)=response_poisson%lev(i)
+              hash_child(1:ndim)=response_poisson%ckey(1:ndim,i)
+           endif
+           if(cache_operation_type.EQ.operation_type_refine)then
+              hash_child(0)=response_refine%lev(i)
+              hash_child(1:ndim)=response_refine%ckey(1:ndim,i)
+           endif
            ichild=ngridmax+free_cache
 
            if(hash_get(grid_dict,hash_child).EQ.0)then
@@ -252,9 +439,13 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
               grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
               
               ! Depends on the type of cache operations
+
+              ! Operations of type "flag"
               if(cache_operation_type.EQ.operation_type_flag)then
                  grid(ichild)%flag1(1:twotondim)=response_flag%int4(1:twotondim,i)
               endif
+
+              ! Operation of type "hydro"
               if(cache_operation_type.EQ.operation_type_hydro)then
                  do ind=1,twotondim
                     if(response_hydro%int4(ind,i)==1)then
@@ -262,9 +453,49 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
                     else
                        grid(ichild)%refined(ind)=.false.
                     end if
+#ifdef HYDRO
                     do ivar=1,nvar
                        grid(ichild)%uold(ind,ivar)=response_hydro%realdp(ind,ivar,i)
                     end do
+#endif
+                 end do
+              endif
+
+              ! Operations of type "poisson"
+              if(cache_operation_type.EQ.operation_type_poisson)then
+#ifdef GRAV
+                 if(cache_operation.EQ.operation_conjgrad)then
+                    do ind=1,twotondim
+                       grid(ichild)%f(ind,2)=response_poisson%realdp(ind,i)
+                    end do
+                 else
+                    do ind=1,twotondim
+                       grid(ichild)%phi(ind)=response_poisson%realdp(ind,i)
+                    end do
+                 endif
+#endif
+              endif
+
+              ! Operations of type "refine"
+              if(cache_operation_type.EQ.operation_type_refine)then
+                 do ind=1,twotondim
+                    if(response_refine%int4(ind,i)==1)then
+                       grid(ichild)%refined(ind)=.true.
+                    else
+                       grid(ichild)%refined(ind)=.false.
+                    end if
+#ifdef HYDRO
+                    do ivar=1,nvar
+                       grid(ichild)%uold(ind,ivar)=response_refine%realdp_hydro(ind,ivar,i)
+                    end do
+#endif
+#ifdef GRAV
+                    do idim=1,ndim
+                       grid(ichild)%f(ind,idim)=response_refine%realdp_poisson(ind,idim,i)
+                    end do
+                    grid(ichild)%phi(ind)=response_refine%realdp_poisson(ind,ndim+1,i)
+                    grid(ichild)%phi_old(ind)=response_refine%realdp_poisson(ind,ndim+2,i)
+#endif
                  end do
               endif
               
@@ -334,16 +565,28 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
         grid(child_grid)%flag1(1:twotondim)=0
      endif
 
+#ifdef HYDRO
      ! Initialisation rule for hydro upload
      if(cache_operation.EQ.operation_upload)then           
         grid(child_grid)%uold(1:twotondim,1:nvar)=0.0
      endif
+     ! Initialisation rule for hydro multipole
+     if(cache_operation.EQ.operation_multipole)then           
+        grid(child_grid)%unew(1:twotondim,1:ndim+1)=0.0
+     endif
+#endif
+
+#ifdef GRAV
+     ! Initialisation rule for mass deposition
+     if(cache_operation.EQ.operation_rho)then           
+        grid(child_grid)%rho(1:twotondim)=0.0
+     endif
+#endif
 
      ! Go to next free cache line
      free_cache=free_cache+1
      ncache=ncache+1
      if(free_cache.GT.ncachemax)then
-!        write(*,*)'cache 2 full'
         free_cache=1
      endif
      if(ncache.GT.ncachemax)ncache=ncachemax
@@ -364,7 +607,7 @@ subroutine check_mail(comm_id)
 #endif
   integer::comm_id
   !
-  integer::i,ind,ivar,info,ipos,igrid,ichild,grid_cpu,ilevel,itile,ntile_reply
+  integer::i,ind,ivar,idim,info,ipos,igrid,ichild,grid_cpu,ilevel,itile,ntile_reply
   logical::comm_completed,request_received,flush_received=.false.,reply_sent
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status,comm_status
@@ -403,6 +646,12 @@ subroutine check_mail(comm_id)
               if(cache_operation_type.EQ.operation_type_hydro)then
                  reply_hydro(grid_cpu)%type=-1
               endif
+              if(cache_operation_type.EQ.operation_type_poisson)then
+                 reply_poisson(grid_cpu)%type=-1
+              endif
+              if(cache_operation_type.EQ.operation_type_refine)then
+                 reply_refine(grid_cpu)%type=-1
+              endif
               
               ! Otherwise, assemble a proper reply with a complete tile
            else
@@ -417,6 +666,14 @@ subroutine check_mail(comm_id)
               if(cache_operation_type.EQ.operation_type_hydro)then
                  reply_hydro(grid_cpu)%type=1
                  reply_hydro(grid_cpu)%ntile=ntile_reply
+              endif
+              if(cache_operation_type.EQ.operation_type_poisson)then
+                 reply_poisson(grid_cpu)%type=1
+                 reply_poisson(grid_cpu)%ntile=ntile_reply
+              endif
+              if(cache_operation_type.EQ.operation_type_refine)then
+                 reply_refine(grid_cpu)%type=1
+                 reply_refine(grid_cpu)%ntile=ntile_reply
               endif
               
               ! Store data, depending on reply type
@@ -442,12 +699,56 @@ subroutine check_mail(comm_id)
                        else
                           reply_hydro(grid_cpu)%int4(ind,i)=0
                        endif
+#ifdef HYDRO
                        do ivar=1,nvar
                           reply_hydro(grid_cpu)%realdp(ind,ivar,i)=grid(ipos)%uold(ind,ivar)
                        end do
+#endif
                     end do
                  endif
                  
+                 ! Reply of type poisson
+                 if(cache_operation_type.EQ.operation_type_poisson)then
+                    reply_poisson(grid_cpu)%lev(i)=grid(ipos)%lev
+                    reply_poisson(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
+#ifdef GRAV
+                    if(cache_operation.EQ.operation_conjgrad)then
+                       do ind=1,twotondim
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%f(ind,2)
+                       end do
+                    else
+                       do ind=1,twotondim
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%phi(ind)
+                       end do
+                    endif
+#endif
+                 endif
+                 
+                 ! Reply of type refine
+                 if(cache_operation_type.EQ.operation_type_refine)then
+                    reply_refine(grid_cpu)%lev(i)=grid(ipos)%lev
+                    reply_refine(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
+                    do ind=1,twotondim
+                       if(grid(ipos)%refined(ind))then
+                          reply_refine(grid_cpu)%int4(ind,i)=1
+                       else
+                          reply_refine(grid_cpu)%int4(ind,i)=0
+                       endif
+#ifdef HYDRO
+                       do ivar=1,nvar
+                          reply_refine(grid_cpu)%realdp_hydro(ind,ivar,i)=grid(ipos)%uold(ind,ivar)
+                       end do
+#endif
+#ifdef GRAV
+                       do idim=1,ndim
+                          reply_refine(grid_cpu)%realdp_poisson(ind,idim,i)=grid(ipos)%f(ind,idim)
+                       end do
+                       reply_refine(grid_cpu)%realdp_poisson(ind,ndim+1,i)=grid(ipos)%phi(ind)
+                       reply_refine(grid_cpu)%realdp_poisson(ind,ndim+2,i)=grid(ipos)%phi_old(ind)
+#endif
+                    end do
+                 endif
+
               end do
            endif
            
@@ -462,6 +763,14 @@ subroutine check_mail(comm_id)
            endif
            if(cache_operation_type.EQ.operation_type_hydro)then
               call MPI_ISEND(reply_hydro(grid_cpu),1,new_mpi_realdp_msg,&
+                   & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
+           endif
+           if(cache_operation_type.EQ.operation_type_poisson)then
+              call MPI_ISEND(reply_poisson(grid_cpu),1,new_mpi_small_realdp_msg,&
+                   & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
+           endif
+           if(cache_operation_type.EQ.operation_type_refine)then
+              call MPI_ISEND(reply_refine(grid_cpu),1,new_mpi_large_realdp_msg,&
                    & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
            endif
            
@@ -519,6 +828,7 @@ subroutine check_mail(comm_id)
               hash_child(0)=recv_flush_hydro%lev(i)
               hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
               ichild=hash_get(grid_dict,hash_child)
+#ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
                     if(grid(ichild)%refined(ind))then
@@ -527,6 +837,26 @@ subroutine check_mail(comm_id)
                     endif
                  end do
               end do
+#endif
+           end do
+        endif
+
+        ! Combiner rules for hydro multipole
+        if(cache_operation.EQ.operation_multipole)then
+           do i=1,recv_flush_hydro%nflush
+              hash_child(0)=recv_flush_hydro%lev(i)
+              hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
+              ichild=hash_get(grid_dict,hash_child)
+#ifdef HYDRO
+              do ivar=1,ndim+1
+                 do ind=1,twotondim
+                    if(grid(ichild)%refined(ind))then
+                       grid(ichild)%unew(ind,ivar)=grid(ichild)%unew(ind,ivar)&
+                            & +recv_flush_hydro%realdp(ind,ivar,i)
+                    endif
+                 end do
+              end do
+#endif
            end do
         endif
 
@@ -536,22 +866,39 @@ subroutine check_mail(comm_id)
               hash_child(0)=recv_flush_hydro%lev(i)
               hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
               ichild=hash_get(grid_dict,hash_child)
+#ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
                     grid(ichild)%unew(ind,ivar)=grid(ichild)%unew(ind,ivar)&
                          & +recv_flush_hydro%realdp(ind,ivar,i)
                  end do
               end do
+#endif
+           end do
+        endif
+
+        ! Combiner rules for mass deposition
+        if(cache_operation.EQ.operation_rho)then
+           do i=1,recv_flush_poisson%nflush
+              hash_child(0)=recv_flush_poisson%lev(i)
+              hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
+              ichild=hash_get(grid_dict,hash_child)
+#ifdef GRAV
+              do ind=1,twotondim
+                 grid(ichild)%rho(ind)=grid(ichild)%rho(ind)&
+                      & +recv_flush_poisson%realdp(ind,i)
+              end do
+#endif
            end do
         endif
 
         ! Combiner rules for refinements
         if(cache_operation.EQ.operation_refine)then
 
-           do i=1,recv_flush_hydro%nflush
-              ilevel=recv_flush_hydro%lev(i)
+           do i=1,recv_flush_refine%nflush
+              ilevel=recv_flush_refine%lev(i)
               hash_child(0)=ilevel
-              hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
+              hash_child(1:ndim)=recv_flush_refine%ckey(1:ndim,i)
 
               ! Compute Hilbert keys of new octs
 #if NDIM==1
@@ -592,21 +939,33 @@ subroutine check_mail(comm_id)
               call hash_set(grid_dict,hash_child,ichild)
 
               ! Flush hydro variables
-              do ivar=1,nvar
-                 do ind=1,twotondim
-                    grid(ichild)%uold(ind,ivar)=recv_flush_hydro%realdp(ind,ivar,i)
+#ifdef HYDRO
+              do ind=1,twotondim
+                 do ivar=1,nvar
+                    grid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
                  end do
               end do
+#endif
+              ! Flush gravity variables
+#ifdef GRAV
+              do ind=1,twotondim
+                 do idim=1,ndim
+                    grid(ichild)%f(ind,idim)=recv_flush_refine%realdp_poisson(ind,idim,i)
+                 end do
+                 grid(ichild)%phi(ind)=recv_flush_refine%realdp_poisson(ind,ndim+1,i)
+                 grid(ichild)%phi_old(ind)=recv_flush_refine%realdp_poisson(ind,ndim+2,i)
+              end do
+#endif
            end do
         endif
 
-        ! Combiner rules for refinements
+        ! Combiner rules for load balance
         if(cache_operation.EQ.operation_loadbalance)then
 
-           do i=1,recv_flush_hydro%nflush
-              ilevel=recv_flush_hydro%lev(i)
+           do i=1,recv_flush_refine%nflush
+              ilevel=recv_flush_refine%lev(i)
               hash_child(0)=ilevel
-              hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
+              hash_child(1:ndim)=recv_flush_refine%ckey(1:ndim,i)
 
               ! Compute Hilbert keys of new octs
 #if NDIM==1
@@ -639,20 +998,30 @@ subroutine check_mail(comm_id)
               grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
               grid(ichild)%hkey=hk0(1)
               do ind=1,twotondim
-                 if(recv_flush_hydro%int4(ind,i)==1)then
+                 if(recv_flush_refine%int4(ind,i)==1)then
                     grid(ichild)%refined(ind)=.true.
                  else
                     grid(ichild)%refined(ind)=.false.
                  endif
                  ! Flush hydro variables
+#ifdef HYDRO
                  do ivar=1,nvar
-                    grid(ichild)%uold(ind,ivar)=recv_flush_hydro%realdp(ind,ivar,i)
+                    grid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
                  end do
+#endif                 
+                 ! Flush gravity variables
+#ifdef GRAV
+                 do idim=1,ndim
+                    grid(ichild)%f(ind,idim)=recv_flush_refine%realdp_poisson(ind,idim,i)
+                 end do
+                 grid(ichild)%phi(ind)=recv_flush_refine%realdp_poisson(ind,ndim+1,i)
+                 grid(ichild)%phi_old(ind)=recv_flush_refine%realdp_poisson(ind,ndim+2,i)
+#endif
               end do
               grid(ichild)%flag1(1:twotondim)=0
               grid(ichild)%flag2(1:twotondim)=0
               grid(ichild)%superoct=1
-              
+
               ! Insert new grid in hash table
               call hash_set(grid_dict,hash_child,ichild)
 
@@ -666,6 +1035,14 @@ subroutine check_mail(comm_id)
         endif
         if(cache_operation_type.EQ.operation_type_hydro)then
            call MPI_IRECV(recv_flush_hydro,1,new_mpi_realdp_flush,&
+                & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+        endif
+        if(cache_operation_type.EQ.operation_type_poisson)then
+           call MPI_IRECV(recv_flush_poisson,1,new_mpi_small_realdp_flush,&
+                & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+        endif
+        if(cache_operation_type.EQ.operation_type_refine)then
+           call MPI_IRECV(recv_flush_refine,1,new_mpi_large_realdp_flush,&
                 & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
         endif
         endif
@@ -695,7 +1072,7 @@ subroutine destage(igrid)
 #endif
   integer::igrid
   !
-  integer::ind,ivar,ipos,info,icache,iflush,grid_cpu
+  integer::ind,ivar,idim,ipos,info,icache,iflush,grid_cpu
   integer::send_flush_id
   integer(kind=8),dimension(0:ndim)::hash_key
   !
@@ -770,11 +1147,35 @@ subroutine destage(igrid)
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,nvar
               send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
            end do
         end do
+#endif
+     endif
+
+     if(cache_operation.EQ.operation_multipole)then
+        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
+           ! Post send
+           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id)
+           send_flush_hydro(grid_cpu)%nflush=0
+        endif
+        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
+        iflush=send_flush_hydro(grid_cpu)%nflush
+        send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef HYDRO
+        do ind=1,twotondim
+           do ivar=1,ndim+1
+              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%unew(ind,ivar)
+           end do
+        end do
+#endif
      endif
 
      if(cache_operation.EQ.operation_godunov)then
@@ -790,55 +1191,77 @@ subroutine destage(igrid)
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,nvar
               send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%unew(ind,ivar)
            end do
         end do
+#endif
      endif
 
      if(cache_operation.EQ.operation_refine)then
-        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
+        if(send_flush_refine(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+           call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_hydro(grid_cpu)%nflush=0
+           send_flush_refine(grid_cpu)%nflush=0
         endif
-        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
-        iflush=send_flush_hydro(grid_cpu)%nflush
-        send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
-        send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+        send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
+        iflush=send_flush_refine(grid_cpu)%nflush
+        send_flush_refine(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_refine(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,nvar
-              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
+              send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
            end do
         end do
+#endif
+#ifdef GRAV
+        do ind=1,twotondim
+           do idim=1,ndim
+              send_flush_refine(grid_cpu)%realdp_poisson(ind,idim,iflush)=grid(igrid)%f(ind,idim)
+           end do
+           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+1,iflush)=grid(igrid)%phi(ind)
+           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+2,iflush)=grid(igrid)%phi_old(ind)
+        end do
+#endif
      endif
 
      if(cache_operation.EQ.operation_loadbalance)then
-        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
+        if(send_flush_refine(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+           call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id)
-           send_flush_hydro(grid_cpu)%nflush=0
+           send_flush_refine(grid_cpu)%nflush=0
         endif
-        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
-        iflush=send_flush_hydro(grid_cpu)%nflush
-        send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
-        send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+        send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
+        iflush=send_flush_refine(grid_cpu)%nflush
+        send_flush_refine(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_refine(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
         do ind=1,twotondim
            if(grid(igrid)%refined(ind))then
-              send_flush_hydro(grid_cpu)%int4(ind,iflush)=1
+              send_flush_refine(grid_cpu)%int4(ind,iflush)=1
            else
-              send_flush_hydro(grid_cpu)%int4(ind,iflush)=0
+              send_flush_refine(grid_cpu)%int4(ind,iflush)=0
            endif
+#ifdef HYDRO
            do ivar=1,nvar
-              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
+              send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
            end do
+#endif
+#ifdef GRAV
+           do idim=1,ndim
+              send_flush_refine(grid_cpu)%realdp_poisson(ind,idim,iflush)=grid(igrid)%f(ind,idim)
+           end do
+           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+1,iflush)=grid(igrid)%phi(ind)
+           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+2,iflush)=grid(igrid)%phi_old(ind)
+#endif
         end do
      endif
 
@@ -911,6 +1334,26 @@ subroutine close_cache
            send_flush_hydro(icpu)%nflush=0
         endif
      endif
+     if(cache_operation_type.EQ.operation_type_poisson)then
+        if(send_flush_poisson(icpu)%nflush>0)then
+           ! Post send
+           call MPI_ISSEND(send_flush_poisson(icpu),1,new_mpi_small_realdp_flush,&
+                & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id)
+           send_flush_poisson(icpu)%nflush=0
+        endif
+     endif
+     if(cache_operation_type.EQ.operation_type_refine)then
+        if(send_flush_refine(icpu)%nflush>0)then
+           ! Post send
+           call MPI_ISSEND(send_flush_refine(icpu),1,new_mpi_large_realdp_flush,&
+                & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id)
+           send_flush_refine(icpu)%nflush=0
+        endif
+     endif
   end do
   
     ! CHECK-IN CHECK-OUT
@@ -976,18 +1419,31 @@ subroutine open_cache
   do icpu=1,ncpu
      send_flush_flag(icpu)%nflush=0
      send_flush_hydro(icpu)%nflush=0
+     send_flush_poisson(icpu)%nflush=0
+     send_flush_refine(icpu)%nflush=0
   end do
 
+  ! Default operation type
   cache_operation_type=operation_type_flag
+
+  ! Operations of type "flag"
   if(cache_operation.EQ.operation_initflag)cache_operation_type=operation_type_flag
   if(cache_operation.EQ.operation_smooth  )cache_operation_type=operation_type_flag
   if(cache_operation.EQ.operation_derefine)cache_operation_type=operation_type_flag
 
-  if(cache_operation.EQ.operation_hydro   )cache_operation_type=operation_type_hydro
-  if(cache_operation.EQ.operation_upload  )cache_operation_type=operation_type_hydro
-  if(cache_operation.EQ.operation_godunov )cache_operation_type=operation_type_hydro
-  if(cache_operation.EQ.operation_refine  )cache_operation_type=operation_type_hydro
-  if(cache_operation.EQ.operation_loadbalance)cache_operation_type=operation_type_hydro
+  ! Operations of type "hydro"
+  if(cache_operation.EQ.operation_hydro    )cache_operation_type=operation_type_hydro
+  if(cache_operation.EQ.operation_upload   )cache_operation_type=operation_type_hydro
+  if(cache_operation.EQ.operation_godunov  )cache_operation_type=operation_type_hydro
+  if(cache_operation.EQ.operation_multipole)cache_operation_type=operation_type_hydro
+
+  ! Operations of type "poisson"
+  if(cache_operation.EQ.operation_phi)cache_operation_type=operation_type_poisson
+  if(cache_operation.EQ.operation_rho)cache_operation_type=operation_type_poisson
+
+  ! Operations of type "refine"
+  if(cache_operation.EQ.operation_refine     )cache_operation_type=operation_type_refine
+  if(cache_operation.EQ.operation_loadbalance)cache_operation_type=operation_type_refine
 
   ! Post the first RECV for request
   call MPI_IRECV(recv_request,1,new_mpi_request,&
@@ -1000,6 +1456,14 @@ subroutine open_cache
   endif
   if(cache_operation_type.EQ.operation_type_hydro)then
      call MPI_IRECV(recv_flush_hydro,1,new_mpi_realdp_flush,&
+          & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+  endif
+  if(cache_operation_type.EQ.operation_type_poisson)then
+     call MPI_IRECV(recv_flush_poisson,1,new_mpi_small_realdp_flush,&
+          & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+  endif
+  if(cache_operation_type.EQ.operation_type_refine)then
+     call MPI_IRECV(recv_flush_refine,1,new_mpi_large_realdp_flush,&
           & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
   endif
 

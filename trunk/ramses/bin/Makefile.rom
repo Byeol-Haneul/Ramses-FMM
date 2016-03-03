@@ -16,7 +16,7 @@ GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -DNVAR=$(NVAR) \
-          -DSOLVER$(SOLVER)
+          -DHYDRO -DGRAV
 #############################################################################
 # Fortran compiler options and directives
 
@@ -124,11 +124,11 @@ AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o upda
        	 mem_compare.o refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o
 
 # Particle-Mesh objects
-PMOBJ = init_part.o 
+PMOBJ = init_part.o rho_fine.o rho_ana.o
 # Poisson solver objects
-POISSONOBJ = init_poisson.o newdt_fine.o
+POISSONOBJ = init_poisson.o newdt_fine.o output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o
 # Hydro objects
-HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o output_hydro.o
+HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o output_hydro.o synchro_hydro_fine.o
 
 # All objects
 AMRLIB = $(AMROBJ) $(HYDROOBJ) $(PMOBJ) $(POISSONOBJ)
