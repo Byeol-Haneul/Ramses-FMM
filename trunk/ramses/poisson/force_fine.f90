@@ -21,7 +21,7 @@ subroutine force_fine(ilevel,icount)
  
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
-  
+#ifdef GRAV  
   !-------------------------------------
   ! Compute analytical gravity force
   !-------------------------------------
@@ -96,7 +96,7 @@ subroutine force_fine(ilevel,icount)
 #endif
      epot_tot=epot_tot+epot_loc
      rho_max(ilevel)=rho_loc
-  
+#endif  
 111 format('   Entering force_fine for level ',I2)
 
 end subroutine force_fine
@@ -128,7 +128,7 @@ subroutine gradient_phi(ilevel,icount)
   real(dp)::dx,a,b,aa,bb,cc,dd,tfrac
   real(dp)::phi1,phi2,phi3,phi4
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
-
+#ifdef GRAV
   ! Mesh size at level ilevel in code units
   dx=boxlen/2**ilevel
 
@@ -181,8 +181,7 @@ subroutine gradient_phi(ilevel,icount)
      tfrac=0.0
   end if
 
-  cache_operation=operation_phi
-  call open_cache
+  call open_cache(operation_phi,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -204,7 +203,7 @@ subroutine gradient_phi(ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
            if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        igridn=get_grid(hash_nbor,.false.,.true.)
+        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -214,7 +213,8 @@ subroutine gradient_phi(ilevel,icount)
 
         ! Otherwise interpolate from coarser level
         else
-           call get_threetondim_nbor_parent_cell(hash_nbor,igrid_nbor,ind_nbor,.false.,.true.)
+           ! Get 3**ndim parent cell using read-only cache
+           call get_threetondim_nbor_parent_cell(hash_nbor,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
            call interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
               call unlock_cache(igrid_nbor(ind))
@@ -254,8 +254,8 @@ subroutine gradient_phi(ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache
-
+  call close_cache(grid_dict)
+#endif
 end subroutine gradient_phi
 
 

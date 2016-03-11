@@ -61,8 +61,7 @@ subroutine refine_fine(ilevel)
   ifree=noct_used+1
   do ilev=ilevel,nlevelmax-1
 
-     cache_operation=operation_refine
-     call open_cache
+     call open_cache(operation_refine,domain_decompos_amr)
 
      do ioct=head(ilev),tail(ilev)
         do ind=1,twotondim
@@ -77,7 +76,7 @@ subroutine refine_fine(ilevel)
         end do
      end do
 
-     call close_cache
+     call close_cache(grid_dict)
 
   end do
 #ifndef WITHOUTMPI
@@ -94,13 +93,13 @@ subroutine refine_fine(ilevel)
   nkill=0  
   do ilev=ilevel+1,nlevelmax
 
-     cache_operation=operation_derefine
-     call open_cache
+     call open_cache(operation_derefine,domain_decompos_amr)
 
      hash_key(0)=ilev
      do ioct=head(ilev),tail(ilev)
         hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
-        parent_cell=get_parent_cell(hash_key,.true.,.true.)
+        ! Get parent cell using a read-write cache
+        parent_cell=get_parent_cell(hash_key,grid_dict,.true.,.true.)
         igrid=(parent_cell-1)/twotondim+1
         icell=parent_cell-(igrid-1)*twotondim
         ok   = grid(igrid)%flag1(icell)==0 .and. &
@@ -116,7 +115,7 @@ subroutine refine_fine(ilevel)
         end if
      end do
 
-     call close_cache
+     call close_cache(grid_dict)
 
   end do
 #ifndef WITHOUTMPI
@@ -360,7 +359,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
   if(mail_counter==32)then
-     call check_mail(MPI_REQUEST_NULL)
+     call check_mail(MPI_REQUEST_NULL,grid_dict)
      mail_counter=0
   endif
   mail_counter=mail_counter+1
@@ -418,7 +417,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
      end do
 
      ! If next cache line is occupied, free it.
-     if(occupied(free_cache))call destage(ngridmax+free_cache)
+     if(occupied(free_cache))call destage(ngridmax+free_cache,grid_dict)
      ! Set grid index to a virtual grid in local cache memory
      ichild=ngridmax+free_cache
      occupied(free_cache)=.true.

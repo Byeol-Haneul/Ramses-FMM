@@ -1,781 +1,675 @@
-! ------------------------------------------------------------------------
-! Multigrid Poisson solver for refined AMR levels
-! ------------------------------------------------------------------------
-! This file contains all MG-coarse-level related routines
-!
-! Used variables:
-!                       finest(AMR)level     coarse(MG)levels
-!     -----------------------------------------------------------------
-!     potential            phi            active_mg(myid,ilevel)%u(:,1)
-!     physical RHS         rho            active_mg(myid,ilevel)%u(:,2)
-!     residual             f(:,1)         active_mg(myid,ilevel)%u(:,3)
-!     BC-modified RHS      f(:,2)                  N/A
-!     mask                 f(:,3)         active_mg(myid,ilevel)%u(:,4)
-!
-! ------------------------------------------------------------------------
 
-
-! ------------------------------------------------------------------------
-! Mask restriction (top-down, OBSOLETE, UNUSED)
-! ------------------------------------------------------------------------
-
-subroutine restrict_mask_coarse(ifinelevel,allmasked)
-   use amr_commons
-   use poisson_commons
-   implicit none
-   integer, intent(in) :: ifinelevel
-   logical, intent(out) :: allmasked
-
-   integer :: ind_c_cell, ind_f_cell, cpu_amr
-   
-   integer :: iskip_c_amr, iskip_c_mg
-   integer :: igrid_c_amr, igrid_c_mg
-   integer :: icell_c_amr, icell_c_mg
-
-   integer :: iskip_f_mg
-   integer :: igrid_f_amr, igrid_f_mg
-   integer :: icell_f_mg
-
-   real(dp) :: ngpmask
-   real(dp) :: dtwotondim = (twotondim)
-
-   integer :: icoarselevel
-   icoarselevel=ifinelevel-1
-   allmasked=.true.
-
-   ! Loop over coarse cells of the myid active comm
-   do ind_c_cell=1,twotondim
-      iskip_c_amr=ncoarse+(ind_c_cell-1)*ngridmax
-      iskip_c_mg =(ind_c_cell-1)*active_mg(myid,icoarselevel)%ngrid
-
-      ! Loop over coarse grids of myid
-      do igrid_c_mg=1,active_mg(myid,icoarselevel)%ngrid
-         igrid_c_amr=active_mg(myid,icoarselevel)%igrid(igrid_c_mg)
-         icell_c_amr=iskip_c_amr+igrid_c_amr
-         icell_c_mg =iskip_c_mg +igrid_c_mg
-         igrid_f_amr=son(icell_c_amr)
-         cpu_amr=cpu_map(icell_c_amr)
-         if(igrid_f_amr==0) then
-            ! Cell is not refined
-            ngpmask      = -1.0d0
-         else
-            ! Cell is refined
-            ! Check if son grid is in MG hierarchy
-            igrid_f_mg=lookup_mg(igrid_f_amr)
-            if(igrid_f_mg<=0) then
-               ! Child oct is not in multigrid hierarchy
-               ngpmask=-1.0d0
-            else
-               ! Child oct is within MG hierarchy
-               ! Loop over fine cells and gather ngpmask
-               ngpmask=0.0d0
-               do ind_f_cell=1,twotondim
-                  ! Extract fine mask value in the corresponding MG comm
-                  iskip_f_mg=(ind_f_cell-1)*active_mg(cpu_amr,ifinelevel)%ngrid
-                  icell_f_mg=iskip_f_mg+igrid_f_mg
-                  ngpmask=ngpmask+active_mg(cpu_amr,ifinelevel)%u(icell_f_mg,4)
-               end do
-               ngpmask=ngpmask/dtwotondim
-            end if
-         end if
-         ! Store cell mask
-         active_mg(myid,icoarselevel)%u(icell_c_mg,4)=ngpmask
-         allmasked=allmasked .and. (ngpmask<=0.0)
-      end do
-   end do
-
-end subroutine restrict_mask_coarse
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
 
 ! ------------------------------------------------------------------------
 ! Mask restriction (bottom-up)
 ! ------------------------------------------------------------------------
 
-subroutine restrict_mask_coarse_reverse(ifinelevel)
-   use amr_commons
-   use poisson_commons
-   implicit none
-   integer, intent(in) :: ifinelevel
+subroutine restrict_mask(ifinelevel,allmasked)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  integer, intent(in) :: ifinelevel
+  logical, intent(inout) :: allmasked
 
-   integer :: ind_c_cell, ind_f_cell, cpu_amr
-   
-   integer :: iskip_c_mg
-   integer :: igrid_c_amr, igrid_c_mg
-   integer :: icell_c_amr, icell_c_mg
+  integer(kind=8),dimension(0:ndim) :: hash_key
+  integer :: ichild,ind,igrid,icell  
+  real(dp) :: ngpmask
+  real(dp) :: dtwotondim = (twotondim)
+  logical :: allmasked_tot
+  
+  hash_key(0)=ifinelevel
+  
+  call open_cache(operation_restrict_mask,domain_decompos_mg)
+  
+  ! Loop over grids
+  do ichild=head_mg(ifinelevel),tail_mg(ifinelevel)
 
-   integer :: iskip_f_mg
-   integer :: igrid_f_amr, igrid_f_mg
-   integer :: icell_f_mg
+     ! Loop over cells
+     do ind=1,twotondim        
 
-   real(dp) :: ngpmask
-   real(dp) :: dtwotondim = (twotondim)
+        hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
 
-   integer :: icoarselevel
-   icoarselevel=ifinelevel-1
+        ! Get parent cell using write-only cache
+        parent_cell=get_parent_cell(hash_key,mg_dict,.true.,.false.)
+        igrid=(parent_cell-1)/twotondim+1
+        icell=parent_cell-(igrid-1)*twotondim
 
-   ! Loop over fine cells of the myid active comm
-   do ind_f_cell=1,twotondim
-      iskip_f_mg =(ind_f_cell-1)*active_mg(myid,ifinelevel)%ngrid
+        ! Convert mask value to volume fraction
+        ngpmask=(1d0+grid(ichild)%f(ind,3))/2d0/dtwotondim
+        grid(igrid)%f(icell,3)=grid(igrid)%f(icell,3)+ngpmask
 
-      ! Loop over fine grids of myid
-      do igrid_f_mg=1,active_mg(myid,ifinelevel)%ngrid
-         icell_f_mg=iskip_f_mg+igrid_f_mg
-         igrid_f_amr=active_mg(myid,ifinelevel)%igrid(igrid_f_mg)
-         ! Get coarse grid AMR index and CPU id
-         icell_c_amr=father(igrid_f_amr)
-         ind_c_cell=(icell_c_amr-ncoarse-1)/ngridmax+1
-         igrid_c_amr=icell_c_amr-ncoarse-(ind_c_cell-1)*ngridmax
-         cpu_amr=cpu_map(father(igrid_c_amr))
-         ! Convert to MG index, get MG coarse cell id
-         igrid_c_mg=lookup_mg(igrid_c_amr)
-         iskip_c_mg=(ind_c_cell-1)*active_mg(cpu_amr,icoarselevel)%ngrid
-         icell_c_mg=iskip_c_mg+igrid_c_mg
-         ! Stack cell volume fraction in coarse cell
-         ngpmask=(1d0+active_mg(myid,ifinelevel)%u(icell_f_mg,4))/2d0/dtwotondim
-         active_mg(cpu_amr,icoarselevel)%u(icell_c_mg,4)=&
-            active_mg(cpu_amr,icoarselevel)%u(icell_c_mg,4)+ngpmask
-      end do
-   end do
+     end do
+  end do
 
-end subroutine restrict_mask_coarse_reverse
+  call close_cache(mg_dict)
+
+  ! Convert volume fraction back to to mask value for coarse level
+  do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
+     do ind=1,twotondim
+        grid(igrid)%f(ind,3)=2d0*grid(igrid)%f(ind,3)-1d0
+     end do
+  end do
+  
+  ! Check mask state at coarse level
+  mask_max=-1.0
+  do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
+     do ind=1,twotondim
+        mask_max=MAX(mask_max,grid(igrid)%f(ind,3))
+     end do
+  end do
+  allmasked=(mask_max<=0d0)
+  
+  ! Allreduce on mask state
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(allmasked, allmasked_tot, 1, MPI_LOGICAL, MPI_LAND, MPI_COMM_WORLD, info)
+  allmasked=allmasked_tot
+#endif
+
+end subroutine restrict_mask
+
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
 
 ! ------------------------------------------------------------------------
 ! Residual computation
 ! ------------------------------------------------------------------------
 
-subroutine cmp_residual_mg_coarse(ilevel)
-   ! Computes the residual for pure MG levels, and stores it into active_mg(myid,ilevel)%u(:,3)
-   use amr_commons
-   use poisson_commons
-   implicit none
-   integer, intent(in) :: ilevel
+subroutine cmp_residual_mg(hash_dict, ilevel)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  integer, intent(in) :: ilevel
+  type(hash_table) :: hash_dict
 
-   integer, dimension(1:3,1:2,1:8) :: iii, jjj
+  ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
+    
+  integer, dimension(1:3,1:2,1:8) :: iii, jjj
+  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dist_nbor
+  integer(kind=8),dimension(0:ndim) :: hash_nbor
+  real(dp) :: dx, oneoverdx2, phi_c, dis_c, nb_sum
+  integer  :: igrid, ind, inbor, idim
+  real(dp) :: dtwondim = (twondim)
+  
+  ! Set constants
+  dx = boxlen/2**ilevel
+  oneoverdx2 = 1.0d0/(dx*dx)
+  
+  iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
+  iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
+  iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
+  iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
+  iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
+  iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
+  
+  call open_cache(operation_mg,domain_decompos_mg)
 
-   real(dp) :: dx, oneoverdx2, phi_c, nb_sum
-   integer  :: ngrid
-   integer  :: ind, igrid_mg, idim, inbor
-   integer  :: icell_mg, iskip_mg, igrid_nbor_mg, icell_nbor_mg
-   integer  :: igrid_amr, iskip_amr, cpu_nbor_amr 
-   integer  :: igshift, igrid_nbor_amr
+  hash_nbor(0)=ilevel
 
-   real(dp) :: dtwondim = (twondim)
+  ! Loop over grids
+  do igrid=head_mg(ilevel),tail_mg(ilevel)
 
-   ! Set constants
-   dx  = 0.5d0**ilevel
-   oneoverdx2 = 1.0d0/(dx*dx)
+     ! Get central oct potential
+     do ind=1,twotondim
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
+     end do
 
-   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
-   iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
-   iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
-   iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
-   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
-   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
+     ! Get neighboring octs potential
+     do inbor=1,twondim
 
-   ngrid=active_mg(myid,ilevel)%ngrid
+        ! Get neighboring grid
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
 
-   ! Loop over cells myid
-   do ind=1,twotondim
-      iskip_mg  = (ind-1)*ngrid
-      iskip_amr = ncoarse+(ind-1)*ngridmax
+        ! Periodic boundary conditons
+        do idim=1,ndim
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+        enddo
 
-      ! Loop over active grids myid
-      do igrid_mg=1,ngrid
-         igrid_amr = active_mg(myid,ilevel)%igrid(igrid_mg)
-         icell_mg = igrid_mg + iskip_mg
+        ! Get neighbouring grid using read-only cache
+        igridn=get_grid(hash_nbor,hash_dict,.false.,.true.)
 
-         phi_c = active_mg(myid,ilevel)%u(icell_mg,1)
-         nb_sum=0.0d0  ! Sum of phi on neighbors
+        ! If grid exists, then copy into array
+        if(igridn>0)then
+           do ind=1,twotondim
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
+           end do
 
-         ! SCAN FLAG TEST
-         if(.not. btest(active_mg(myid,ilevel)%f(icell_mg,1),0)) then ! NO SCAN
-            do inbor=1,2
-               do idim=1,ndim
-                  ! Get neighbor grid
-                  igshift = iii(idim,inbor,ind)
-                  if(igshift==0) then
-                     igrid_nbor_amr = igrid_amr
-                     cpu_nbor_amr   = myid
-                  else
-                     igrid_nbor_amr = son(nbor(igrid_amr,igshift))
-                     cpu_nbor_amr   = cpu_map(nbor(igrid_amr,igshift))
-                  end if
-                  igrid_nbor_mg = lookup_mg(igrid_nbor_amr) 
-                  ! Add up
-                  icell_nbor_mg = igrid_nbor_mg + &
-                      (jjj(idim,inbor,ind)-1)*active_mg(cpu_nbor_amr,ilevel)%ngrid
-                  nb_sum = nb_sum + &
-                      active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,1)
-               end do
-            end do
-         else ! PERFORM SCAN
-            if(active_mg(myid,ilevel)%u(icell_mg,4)<=0.0) then
-               active_mg(myid,ilevel)%u(icell_mg,3)=0.0
-               cycle
-            end if
-            do idim=1,ndim
-               do inbor=1,2
-                  ! Get neighbor grid
-                  igshift = iii(idim,inbor,ind)
-                  if(igshift==0) then
-                     igrid_nbor_amr = igrid_amr
-                     cpu_nbor_amr   = myid
-                  else
-                     igrid_nbor_amr = son(nbor(igrid_amr,igshift))
-                     cpu_nbor_amr   = cpu_map(nbor(igrid_amr,igshift))
-                  end if
+        ! Otherwise set to zero and outside
+        else
+           do ind=1,twotondim
+              phi_nbor(ind,inbor)=0.0
+              dis_nbor(ind,inbor)=-1.0
+           end do
+        endif
 
-                  if(igrid_nbor_amr==0) then
-                     ! No neighbor cell !
-                     ! Virtual phi value on unrefnd neighbor cell : -phi_c/mask_c
-                     ! (simulates mask=-1.0 for the nonexistent refined cell)
-                     nb_sum = nb_sum - phi_c/active_mg(myid,ilevel)%u(icell_mg,4)
-                  else
-                     ! Fetch neighbor cell
-                     igrid_nbor_mg  = lookup_mg(igrid_nbor_amr)
-                     if(igrid_nbor_mg<=0) then
-                        nb_sum=nb_sum-phi_c/active_mg(myid,ilevel)%u(icell_mg,4)
-                        cycle
-                     end if
+     end do
+     ! End loop over neighboring octs
 
-                     icell_nbor_mg  = igrid_nbor_mg + &
-                       (jjj(idim,inbor,ind)-1)*active_mg(cpu_nbor_amr,ilevel)%ngrid
-                     if(active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,4)<=0.0) then
-                        ! Neighbor cell is masked : compute its virtual phi with the mask
-                        nb_sum = nb_sum + phi_c * &
-                           (active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,4)/active_mg(myid,ilevel)%u(icell_mg,4))
-                     else
-                        ! Neighbor cell is active, use its true potential
-                        nb_sum = nb_sum + active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,1)
-                     end if
-                  end if
-               end do
-            end do
-         end if ! END SCAN TEST
+     ! Loop over cells
+     do ind=1,twotondim
 
-         ! Store ***MINUS THE RESIDUAL***
-         active_mg(myid,ilevel)%u(icell_mg,3) = &
-          -oneoverdx2*( nb_sum - dtwondim*phi_c )+active_mg(myid,ilevel)%u(icell_mg,2)
-      end do
-   end do
+        ! Compute residual using 6 neighbors potential
+        phi_c=grid(igrid)%phi(ind)
+        dis_c=grid(igrid)%f(ind,3)
 
-end subroutine cmp_residual_mg_coarse
+        nb_sum=0.0
 
-! ##################################################################
-! ##################################################################
+        if(.not. btest(grid(igrid)%flag2(ind),0))then ! No scan needed
 
-subroutine cmp_uvar_norm2_coarse(ivar, ilevel, norm2)
-   use amr_commons
-   use poisson_commons
-   implicit none
+           ! Loop over neighbours
+           do inbor=1,2
+              do idim=1,ndim
+                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
+                 nb_sum=nb_sum+phi_nbor(id,ig)
+              end do
+           end do
 
-   integer,  intent(in)  :: ilevel, ivar
-   real(dp), intent(out) :: norm2
+        else ! Scan is required
 
-   real(dp) :: dx2
-   integer  :: ngrid
-   integer  :: ind, igrid_mg, icell_mg, iskip_mg
+           ! If cell is outside, set residual to zero
+           if(dis_c<=0.0)then
+              grid(igrid)%f(ind,1)=0.0
+              cycle
+           else
 
-   ! Set constants
-   dx2  = (0.5d0**ilevel)**ndim
-   ngrid=active_mg(myid,ilevel)%ngrid
+              ! Loop over neighbours
+              do inbor=1,2
+                 do idim=1,ndim
+                    id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
+                    if(dis_nbor(id,ig)<=0.0)then
+                       nb_sum=nb_sum+phi_c/dis_c*dis_nbor(id,ig)
+                    else
+                       nb_sum=nb_sum+phi_nbor(id,ig)
+                    endif
+                 end do
+              end do
 
-   norm2 = 0.0d0
-   ! Loop over cells
-   do ind=1,twotondim
-      iskip_mg = (ind-1)*ngrid
-      ! Loop over active grids
-      do igrid_mg=1,ngrid
-         icell_mg = iskip_mg + igrid_mg
-         if(active_mg(myid,ilevel)%u(icell_mg,4)<=0.0 .and. ivar/=4) cycle
-         norm2 = norm2 + active_mg(myid,ilevel)%u(icell_mg,ivar)**2
-      end do
-   end do
-   norm2 = dx2*norm2
-end subroutine cmp_uvar_norm2_coarse
+           endif
 
-! ##################################################################
-! ##################################################################
+        endif
 
-subroutine cmp_fvar_norm2_coarse(ivar, ilevel, norm2)
-   use amr_commons
-   use poisson_commons
-   implicit none
+        ! Store residual in f(ind,1)
+        grid(igrid)%f(ind,1)=-oneoverdx2*( nb_sum - dtwondim*phi_c )+grid(igrid)%f(ind,2)
 
-   integer,  intent(in)  :: ilevel, ivar
-   real(dp), intent(out) :: norm2
+     end do
+     ! End loop over cells
 
-   real(dp) :: dx2
-   integer  :: ngrid
-   integer  :: ind, igrid_mg, icell_mg, iskip_mg
+  end do
+  ! End loop over grids
 
-   ! Set constants
-   dx2  = (0.5d0**ilevel)**ndim
-   ngrid=active_mg(myid,ilevel)%ngrid
+  call close_cache(hash_dict)
 
-   norm2 = 0.0d0
-   ! Loop over cells
-   do ind=1,twotondim
-      iskip_mg = (ind-1)*ngrid
-      ! Loop over active grids
-      do igrid_mg=1,ngrid
-         icell_mg = iskip_mg + igrid_mg
-         if(active_mg(myid,ilevel)%u(icell_mg,4)<=0.0) cycle
-         norm2 = norm2 + active_mg(myid,ilevel)%f(icell_mg,ivar)**2
-      end do
-   end do
-   norm2 = dx2*norm2
-end subroutine cmp_fvar_norm2_coarse
+end subroutine cmp_residual_mg
+
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
 
 ! ------------------------------------------------------------------------
-! Gauss-Seidel smoothing
+! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
 
-subroutine gauss_seidel_mg_coarse(ilevel,safe,redstep)
-   use amr_commons
-   use pm_commons
-   use poisson_commons
-   implicit none
-   integer, intent(in) :: ilevel
-   logical, intent(in) :: safe
-   logical, intent(in) :: redstep
+subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  integer, intent(in) :: ilevel
+  logical, intent(in) :: safe
+  logical, intent(in) :: redstep
+  type(hash_table) :: hash_dict
 
-   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-   integer, dimension(1:3,1:4)     :: ired, iblack
+  ! Perform a Gauss-Seidel update of grid(igrid)%phi(ind).
+  ! The domain mask is also needed.
+  
+  integer, dimension(1:3,1:2,1:8) :: iii, jjj
+  integer, dimension(1:3,1:4)     :: ired, iblack
+  
+  real(dp) :: dx2, nb_sum, weight
+  integer  :: igrid, ind, ind0, idim, inbor, igridn
+  real(dp) :: dtwondim = (twondim)
+  
+  ! Set constants
+  dx2  = (boxlen/2**ilevel)**2
+  
+  ired  (1,1:4)=(/1,0,0,0/)
+  iblack(1,1:4)=(/2,0,0,0/)
+  ired  (2,1:4)=(/1,4,0,0/)
+  iblack(2,1:4)=(/2,3,0,0/)
+  ired  (3,1:4)=(/1,4,6,7/)
+  iblack(3,1:4)=(/2,3,5,8/)
+  
+  iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
+  iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
+  iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
+  iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
+  iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
+  iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
+  
+  call open_cache(operation_mg,domain_decompos_mg)
 
-   real(dp) :: dx2, nb_sum, weight
-   integer  :: ngrid
-   integer  :: ind, ind0, igrid_mg, idim, inbor
-   integer  :: igrid_amr, cpu_nbor_amr 
-   integer  :: iskip_mg, igrid_nbor_mg, icell_mg, icell_nbor_mg
-   integer  :: igshift, igrid_nbor_amr
-   real(dp) :: dtwondim = (twondim)
+  hash_nbor(0)=ilevel
 
-   ! Set constants
-   dx2  = (0.5d0**ilevel)**2
+  ! Loop over grids
+  do igrid=head_mg(ilevel),tail_mg(ilevel)
+     
+     ! Loop over cells, with red/black ordering
+     do ind0=1,twotondim/2      ! Only half of the cells for a red or black sweep
+        if(redstep) then
+           ind = ired  (ndim,ind0)
+        else
+           ind = iblack(ndim,ind0)
+        end if
 
-   ired  (1,1:4)=(/1,0,0,0/)
-   iblack(1,1:4)=(/2,0,0,0/)
-   ired  (2,1:4)=(/1,4,0,0/)
-   iblack(2,1:4)=(/2,3,0,0/)
-   ired  (3,1:4)=(/1,4,6,7/)
-   iblack(3,1:4)=(/2,3,5,8/)
+        ! Get central oct potential and distance
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
 
-   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
-   iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
-   iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
-   iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
-   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
-   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
+     end do
 
-   ngrid=active_mg(myid,ilevel)%ngrid
+     ! Get neighboring octs potential
+     do inbor=1,twondim
 
-   ! Loop over cells, with red/black ordering
-   do ind0=1,twotondim/2      ! Only half of the cells for a red or black sweep
-      if(redstep) then
-         ind = ired  (ndim,ind0)
-      else
-         ind = iblack(ndim,ind0)
-      end if
+        ! Get neighboring grid
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
 
-      iskip_mg  = (ind-1)*ngrid
+        ! Periodic boundary conditons
+        do idim=1,ndim
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+        enddo
 
-      ! Loop over active grids
-      do igrid_mg=1,ngrid
-         igrid_amr = active_mg(myid,ilevel)%igrid(igrid_mg)
-         icell_mg  = iskip_mg  + igrid_mg
+        ! Get neighbouring grid using a read-only cache
+        igridn=get_grid(hash_nbor,hash_dict,.false.,.true.)
 
-         nb_sum=0.0d0                       ! Sum of phi on neighbors
-         ! Read scan flag
-         if(.not. btest(active_mg(myid,ilevel)%f(icell_mg,1),0)) then
-            ! Use max-speed "dumb" Gauss-Seidel for "inner" cells
-            ! Those cells are active, have all their neighbors active
-            ! and all neighbors are in the AMR+MG trees
-            do inbor=1,2
-               do idim=1,ndim
-                  ! Get neighbor grid shift
-                  igshift = iii(idim,inbor,ind)
-                  ! Get neighbor grid
-                  if(igshift==0) then
-                     igrid_nbor_amr = igrid_amr
-                     cpu_nbor_amr   = myid
-                  else
-                     igrid_nbor_amr = son(nbor(igrid_amr,igshift))
-                     cpu_nbor_amr   = cpu_map(nbor(igrid_amr,igshift))
-                  end if
-                  ! Get neighbor cpu
-                  igrid_nbor_mg  = lookup_mg(igrid_nbor_amr)
-                  icell_nbor_mg  = igrid_nbor_mg + &
-                      (jjj(idim,inbor,ind)-1)*active_mg(cpu_nbor_amr,ilevel)%ngrid
-                  nb_sum = nb_sum + &
-                      active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,1)
-               end do
-            end do
-            ! Update the potential, solving for potential on icell_amr
-            active_mg(myid,ilevel)%u(icell_mg,1)=(nb_sum-dx2*active_mg(myid,ilevel)%u(icell_mg,2))/dtwondim
-         else
-            ! Use the finer "solve" Gauss-Seidel near boundaries,
-            ! with all necessary checks
+        ! If grid exists, then copy into array
+        if(igridn>0)then
+           do ind=1,twotondim
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
+           end do
 
-            if(active_mg(myid,ilevel)%u(icell_mg,4)<=0.0) cycle
-            if(safe .and. active_mg(myid,ilevel)%u(icell_mg,4)<1.0) cycle
+        ! Otherwise set to zero and outside
+        else
+           do ind=1,twotondim
+              phi_nbor(ind,inbor)=0.0
+              dis_nbor(ind,inbor)=-1.0
+           end do
+        endif
 
-            weight=0.0d0                       ! Central weight for "Solve G-S"
+     end do
+     ! End loop over neighboring octs
 
-            do inbor=1,2
-               do idim=1,ndim
-                  ! Get neighbor grid shift
-                  igshift = iii(idim,inbor,ind)
+     ! Loop over cells, with red/black ordering
+     do ind0=1,twotondim/2      ! Only half of the cells for a red or black sweep
+        if(redstep) then
+           ind = ired  (ndim,ind0)
+        else
+           ind = iblack(ndim,ind0)
+        end if
 
-                  ! Get neighbor grid
-                  if(igshift==0) then
-                     igrid_nbor_amr = igrid_amr
-                     cpu_nbor_amr   = myid
-                  else
-                     igrid_nbor_amr = son(nbor(igrid_amr,igshift))
-                     cpu_nbor_amr   = cpu_map(nbor(igrid_amr,igshift))
-                  end if
+        ! Compute residual using 6 neighbors potential
+        phi_c=grid(igrid)%phi(ind)
+        dis_c=grid(igrid)%f(ind,3)
 
-                  if(igrid_nbor_amr==0) then
-                     ! No neighbor cell, set mask=-1 on nonexistent neighbor cell
-                     weight = weight - 1.0d0/active_mg(myid,ilevel)%u(icell_mg,4)
-                  else
-                     ! Fetch neighbor cell
-                     igrid_nbor_mg  = lookup_mg(igrid_nbor_amr)
-                     if(igrid_nbor_mg<=0) then
-                        ! No MG neighbor
-                        weight = weight - 1.0d0/active_mg(myid,ilevel)%u(icell_mg,4)
-                     else
-                        icell_nbor_mg  = igrid_nbor_mg  + (jjj(idim,inbor,ind)-1)*active_mg(cpu_nbor_amr,ilevel)%ngrid
+        nb_sum=0.0
 
-                        if(active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,4)<=0.0) then
-                           ! Neighbor cell is masked
-                           weight = weight + &
-                                 active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,4)/active_mg(myid,ilevel)%u(icell_mg,4)
-                        else
-                           ! Neighbor cell is active, increment neighbor sum
-                           nb_sum = nb_sum + active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,1)
-                        end if
-                     end if
-                  end if
-               end do
-            end do
-            ! Update the potential, solving for potential on icell_amr
-            active_mg(myid,ilevel)%u(icell_mg,1) = (nb_sum - dx2*active_mg(myid,ilevel)%u(icell_mg,2)) &
-                     / (dtwondim - weight)
-         end if
-      end do
-   end do
-end subroutine gauss_seidel_mg_coarse
+        if(.not. btest(grid(igrid)%flag2(ind),0))then ! No scan needed
 
-! ------------------------------------------------------------------------
-! Residual restriction (top-down, OBSOLETE, UNUSED)
-! ------------------------------------------------------------------------
+           ! Loop over neighbours
+           do inbor=1,2
+              do idim=1,ndim
+                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
+                 nb_sum=nb_sum+phi_nbor(id,ig)
+              end do
+           end do
 
-subroutine restrict_residual_coarse(ifinelevel)
-   ! Restrict coarser (MG) residual at level ifinelevel using NGP into coarser residual at level
-   ! ifinelevel-1
-   ! Restricted residual is stored into the RHS at the coarser level
-   use amr_commons
-   use pm_commons
-   use poisson_commons
-   implicit none
-   integer, intent(in) :: ifinelevel
+           ! Update the potential, solving for potential on icell_amr
+           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/dtwondim
 
-   real(dp) :: val, w
-   integer  :: icoarselevel, cpu_amr
-   integer  :: ngrid_c, ind_c, iskip_c_amr, iskip_c_mg, igrid_c_amr, icell_c_amr, icell_c_mg, igrid_c_mg
-   integer  :: ind_f, igrid_f_amr, igrid_f_mg, icell_f_mg
+        else ! Scan is required
 
-   icoarselevel=ifinelevel-1
+           ! If cell is outside, don't update phi
+           if(dis_c<=0.0)cycle
+           if(safe .and. dis_c<1.0)cycle
 
-   ! Loop over coarse MG cells
-   ngrid_c=active_mg(myid,icoarselevel)%ngrid
-   do ind_c=1,twotondim
-      iskip_c_amr = ncoarse + (ind_c-1)*ngridmax
-      iskip_c_mg  = (ind_c-1)*ngrid_c
+           weight=0.0d0   ! Central weight for "Solve G-S"
 
-      do igrid_c_mg=1,ngrid_c
-         igrid_c_amr = active_mg(myid,icoarselevel)%igrid(igrid_c_mg)
-         icell_c_amr = igrid_c_amr + iskip_c_amr
-         cpu_amr     = cpu_map(icell_c_amr)
-         icell_c_mg  = igrid_c_mg  + iskip_c_mg
+           ! Loop over neighbours
+           do inbor=1,2
+              do idim=1,ndim
+                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
+                 if(dis_nbor(id,ig)<=0.0)then
+                    weight=weight+dis_nbor(id,ig)/dis_c
+                 else
+                    nb_sum=nb_sum+phi_nbor(id,ig)
+                 endif
+              end do
+           end do
 
-         ! Get AMR child grid
-         igrid_f_amr = son(icell_c_amr)
-         if(igrid_f_amr==0) then
-            active_mg(myid,icoarselevel)%u(icell_c_mg,2) = 0.0d0    ! Nullify residual (coarser RHS)
-            cycle
-         end if
+           ! Update the potential
+           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/(dtwondim - weight)
 
-         ! Get child MG grid id
-         igrid_f_mg = lookup_mg(igrid_f_amr)
-         if(igrid_f_mg<=0) then
-            ! Son grid is not in MG hierarchy
-            active_mg(myid,icoarselevel)%u(icell_c_mg,2) = 0.0d0    ! Nullify residual (coarser RHS)
-            cycle
-         end if
+        endif
 
-         ! Loop over child (fine MG) cells
-         val = 0.0d0
-         w = 0d0
-         do ind_f=1,twotondim
-            icell_f_mg = igrid_f_mg + (ind_f-1)*active_mg(cpu_amr,ifinelevel)%ngrid
+     end do
+     ! End loop over cells
 
-            if (active_mg(cpu_amr,ifinelevel)%u(icell_f_mg,4)<=0.0) cycle
-            val = val + active_mg(cpu_amr,ifinelevel)%u(icell_f_mg,3)
-            w = w + 1d0
-         end do
-         ! Store restricted residual into RHS of coarse level
-         if(w>0) then
-            active_mg(myid,icoarselevel)%u(icell_c_mg,2) = val/w
-         else
-            active_mg(myid,icoarselevel)%u(icell_c_mg,2) = 0d0
-         end if
-      end do
-   end do
-end subroutine restrict_residual_coarse
+  end do
+  ! End loop over grids
 
+  call close_cache(hash_dict)
 
+ end subroutine gauss_seidel_mg
+
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
 
 ! ------------------------------------------------------------------------
-! Residual restriction (bottom-up)
+! Residual restriction
 ! ------------------------------------------------------------------------
 
-subroutine restrict_residual_coarse_reverse(ifinelevel)
-   use amr_commons
-   use poisson_commons
-   implicit none
-   integer, intent(in) :: ifinelevel
+subroutine restrict_residual(ifinelevel)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  integer, intent(in) :: ifinelevel
 
-   integer :: ind_c_cell, ind_f_cell, cpu_amr
-   
-   integer :: iskip_c_mg
-   integer :: igrid_c_amr, igrid_c_mg
-   integer :: icell_c_amr, icell_c_mg
+  ! Restrict the residual of the fine level (stored in grid(ichild)%f(ind,1))
+  ! into the rhs of the coarse level (stored in grid(igrid)%f(icell,2))
+  ! For interior coarse cell only (we need the mask stored in grid(igrid)%f(icell,3))
+  
+  integer :: ichild, ind, get_parent_cell
+  integer :: igrid, icell, parent_cell
+  real(dp) :: dtwotondim = (twotondim)
+  integer(kind=8),dimension(0:ndim) :: hash_key
+  
+  hash_key(0)=ifinelevel
 
-   integer :: iskip_f_mg
-   integer :: igrid_f_amr, igrid_f_mg
-   integer :: icell_f_mg
+  call open_cache(operation_restrict_res,domain_decompos_mg)
+  
+  ! Loop over grids
+  do ichild=head_mg(ifinelevel),tail_mg(ifinelevel)
+     
+     ! Loop over cells
+     do ind=1,twotondim        
+        
+        hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
+        
+        ! Get parent cell using read-write cache
+        parent_cell=get_parent_cell(hash_key,mg_dict,.true.,.true.)
+        igrid=(parent_cell-1)/twotondim+1
+        icell=parent_cell-(igrid-1)*twotondim
+        
+        ! Is coarse cell masked?
+        if(grid(igrid)%f(icell,3)<=0d0)cycle
+        
+        ! Stack fine cell residual in coarse cell rhs
+        grid(igrid)%f(icell,2)=grid(igrid)%f(icell,2)+grid(ichild)%f(ind,1)/dtwotondim
+        
+     end do
+  end do
+  
+  call close_cache(mg_dict)
 
-   real(dp) :: res
-   real(dp) :: dtwotondim = (twotondim)
+end subroutine restrict_residual
 
-   integer :: icoarselevel
-   icoarselevel=ifinelevel-1
-
-   ! Loop over fine cells of the myid active comm
-   do ind_f_cell=1,twotondim
-      iskip_f_mg =(ind_f_cell-1)*active_mg(myid,ifinelevel)%ngrid
-
-      ! Loop over fine grids of myid
-      do igrid_f_mg=1,active_mg(myid,ifinelevel)%ngrid
-         icell_f_mg=iskip_f_mg+igrid_f_mg
-         ! Is fine cell masked?
-         if(active_mg(myid,ifinelevel)%u(icell_f_mg,4)<=0d0) cycle
-
-         ! Get coarse grid AMR index and CPU id
-         igrid_f_amr=active_mg(myid,ifinelevel)%igrid(igrid_f_mg)
-         icell_c_amr=father(igrid_f_amr)
-         ind_c_cell=(icell_c_amr-ncoarse-1)/ngridmax+1
-         igrid_c_amr=icell_c_amr-ncoarse-(ind_c_cell-1)*ngridmax
-         cpu_amr=cpu_map(father(igrid_c_amr))
-
-         ! Convert to MG index, get MG coarse cell id
-         igrid_c_mg=lookup_mg(igrid_c_amr)
-         iskip_c_mg=(ind_c_cell-1)*active_mg(cpu_amr,icoarselevel)%ngrid
-         icell_c_mg=iskip_c_mg+igrid_c_mg
-
-         ! Is coarse cell masked?
-         if(active_mg(cpu_amr,icoarselevel)%u(icell_c_mg,4)<=0d0) cycle
-
-         ! Stack fine cell residual in coarse cell rhs
-         res=active_mg(myid,ifinelevel)%u(icell_f_mg,3)/dtwotondim
-         active_mg(cpu_amr,icoarselevel)%u(icell_c_mg,2)=&
-            active_mg(cpu_amr,icoarselevel)%u(icell_c_mg,2)+res
-      end do
-   end do
-
-end subroutine restrict_residual_coarse_reverse
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
 
 ! ------------------------------------------------------------------------
 ! Interpolation and correction
 ! ------------------------------------------------------------------------
 
-subroutine interpolate_and_correct_coarse(ifinelevel)
+subroutine interpolate_and_correct(ifinelevel)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  integer, intent(in) :: ifinelevel
+  
+  ! Interpolate the solution of the coarse level (stored in grid(igrid)%phi(icell))
+  ! and corrct the solutionn of the fine level (stored in grid(ichild)%phi(ind))
+  
+  integer(kind=8),dimension(0:ndim) :: hash_key
+  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
+  integer  :: ichild, ind
+  real(dp) :: a, b, c, d, coeff
+  real(dp), dimension(1:8)     :: bbb
+  integer,  dimension(1:8,1:8) :: ccc
+  integer::ind,ind_average,ind_father
+  integer::igrid_nbr,ind_nbr,igrid_cen,ind_cen
+  real(dp),dimension(1:twotondim)::corr
+  
+  ! Local constants
+  a = 1.0D0/4.0D0**ndim
+  b = 3.0D0*a
+  c = 9.0D0*a
+  d = 27.D0*a
+  
+  bbb(:)  =(/a ,b ,b ,c ,b ,c ,c ,d/)
+  
+  ccc(:,1)=(/1 ,2 ,4 ,5 ,10,11,13,14/)
+  ccc(:,2)=(/3 ,2 ,6 ,5 ,12,11,15,14/)
+  ccc(:,3)=(/7 ,8 ,4 ,5 ,16,17,13,14/)
+  ccc(:,4)=(/9 ,8 ,6 ,5 ,18,17,15,14/)
+  ccc(:,5)=(/19,20,22,23,10,11,13,14/)
+  ccc(:,6)=(/21,20,24,23,12,11,15,14/)
+  ccc(:,7)=(/25,26,22,23,16,17,13,14/)
+  ccc(:,8)=(/27,26,24,23,18,17,15,14/)
+  
+  call open_cache(operation_phi,domain_decompos_mg)
+
+  hash_key(0)=ifinelevel
+
+  ! Loop over grids
+  do ichild=head_mg(ifinelevel),tail(ifinelevel)
+
+     ! For fine level, correction is interpolated from coarser level solution
+     hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
+     
+     ! Get 3**ndim neighbouring parent cell using a read-only cache
+     call get_threetondim_nbor_parent_cell(hash_key,mg_dict,igrid_nbor,ind_nbor,.false.,.true.)
+     
+     ! Loop over cells
+     do ind=1,twotondim
+
+        ! Fine cell is masked as "outside": no correction
+        if(grid(ichild)%f(ind,3)<=0.0)cycle
+
+        ! Set correction to zero
+        corr(ind)=0d0
+
+        ! Loop over relevant parent cells
+        do ind_average=1,twotondim
+           ind_father=ccc(ind_average,ind)
+           coeff=bbb(ind_average)
+           igrid_nbr=igrid_nbor(ind_father)
+           ind_nbr=ind_nbor(ind_father)
+           if (igrid_nbr>0) then
+              corr(ind)=corr(ind)+coeff*grid(igrid_nbr)%phi(ind_nbr)
+           endif
+        end do
+
+     end do
+     ! End loop over cells
+     
+     do ind=1,threetondim
+        call unlock_cache(igrid_nbor(ind))
+     end do
+     
+     ! Add correction to fine level solution
+     do ind=1,twotondim
+        grid(ichild)%phi(ind)=grid(ichild)%phi(ind)+corr(ind)
+     end do
+
+  end do
+  ! End loop over grids
+
+  call close_cache(grid_dict)
+
+ end subroutine interpolate_and_correct
+
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
+
+! ------------------------------------------------------------------------
+! Flag settings used to speed-up the sweeps
+! ------------------------------------------------------------------------
+
+subroutine set_scan_flag(hash_dict,ilevel)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  
+  integer, intent(in) :: ilevel
+  type(hash_table) :: hash_dict
+  !
+  integer :: ind, igrid, igridn, inbor, idim
+  integer, dimension(1:3,1:2,1:8)::iii, jjj
+  real(dp),dimension(1:twotondim,0:twondim)::dis_nbor
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  
+  iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
+  iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
+  iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
+  iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
+  iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
+  iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
+  
+  call open_cache(operation_scan,domain_decompos_mg)
+
+  hash_nbor(0)=ilevel
+
+  ! Loop over grids
+  do igrid=head_mg(ilevel),tail_mg(ilevel)
+
+     ! Get central oct potential
+     do ind=1,twotondim
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
+     end do
+
+     ! Get neighboring octs potential
+     do inbor=1,twondim
+
+        ! Get neighboring grid
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
+
+        ! Periodic boundary conditons
+        do idim=1,ndim
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+        enddo
+
+        ! Get neighbouring grid using read-only cache
+        igridn=get_grid(hash_nbor,hash_dict,.false.,.true.)
+
+        ! If grid exists, then copy into array
+        if(igridn>0)then
+           do ind=1,twotondim
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
+           end do
+
+        ! Otherwise set to "outside"
+        else
+           do ind=1,twotondim
+              dis_nbor(ind,inbor)=-1.0
+           end do
+        endif
+
+     end do
+     ! End loop over neighboring octs
+
+     ! Loop over cells
+     do ind=1,twotondim
+
+        ! Compute residual using 6 neighbors potential
+        dis_c=grid(igrid)%f(ind,3)
+
+        ! If cell is entirely inside, set flag tentatively to 0 (no scan needed)
+        if(dis_c==1.0)then
+           grid(igrid)%flag2(ind)=0
+
+           ! Loop over neighbours
+           do inbor=1,2
+              do idim=1,ndim
+                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
+                 ! If one neighbour is outside, then scan needed
+                 if(dis_nbor(id,ig)<=0.0)then
+                    grid(igrid)%flag2(ind)=max(grid(igrid)%flag2(ind),1)
+                 endif
+              end do
+           end do
+
+         ! If cell is even partially outside, then scan needed
+        else
+           grid(igrid)%flag2(ind)=1           
+        endif
+
+     end do
+     ! End loop over cells
+
+  end do
+  ! End loop over grids
+
+  call close_cache(hash_dict)
+
+end subroutine set_scan_flag
+
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
+
+! ------------------------------------------------------------------------
+! Compute norm of residual 
+! ------------------------------------------------------------------------
+
+subroutine cmp_residual_norm2(ilevel, norm2)
    use amr_commons
    use poisson_commons
    implicit none
-   integer, intent(in) :: ifinelevel
 
-   integer  :: i, ind_father, ind_average, ind_f, iskip_f_amr, ngrid_f, istart, nbatch
-   integer  :: icell_c_amr, igrid_c_amr, igrid_c_mg, icell_c_mg, iskip_f_mg, icell_f_mg
-   integer  :: icoarselevel, ind_c, cpu_c_amr
+   integer,  intent(in)  :: ilevel
+   real(kind=8), intent(out) :: norm2
 
-   real(dp) :: a, b, c, d, coeff
-   real(dp), dimension(1:8)     :: bbb
-   integer,  dimension(1:8,1:8) :: ccc
+   real(kind=8) :: dx2
+   integer  :: ind, igrid
 
-   integer,  dimension(1:nvector), save                :: igrid_f_amr, icell_amr, cpu_amr
-   integer,  dimension(1:nvector,1:threetondim), save  :: nbors_father_cells
-   integer,  dimension(1:nvector,1:twotondim), save    :: nbors_father_grids
-   real(dp), dimension(1:nvector), save                :: corr
+   ! Set constants
+   dx2  = (boxlen/2**ilevel)**2
+   norm2 = 0.0d0
 
-   ! Local constants
-   a = 1.0D0/4.0D0**ndim
-   b = 3.0D0*a
-   c = 9.0D0*a
-   d = 27.D0*a
-   icoarselevel=ifinelevel-1
-
-   bbb(:)  =(/a ,b ,b ,c ,b ,c ,c ,d/)
-
-   ccc(:,1)=(/1 ,2 ,4 ,5 ,10,11,13,14/)
-   ccc(:,2)=(/3 ,2 ,6 ,5 ,12,11,15,14/)
-   ccc(:,3)=(/7 ,8 ,4 ,5 ,16,17,13,14/)
-   ccc(:,4)=(/9 ,8 ,6 ,5 ,18,17,15,14/)
-   ccc(:,5)=(/19,20,22,23,10,11,13,14/)
-   ccc(:,6)=(/21,20,24,23,12,11,15,14/)
-   ccc(:,7)=(/25,26,22,23,16,17,13,14/)
-   ccc(:,8)=(/27,26,24,23,18,17,15,14/)
-
-   ! Loop over fine grids by vector sweeps
-   ngrid_f=active_mg(myid,ifinelevel)%ngrid
-   do istart=1,ngrid_f,nvector
-
-      ! Gather nvector grids
-      nbatch=MIN(nvector,ngrid_f-istart+1)
-      do i=1,nbatch
-         igrid_f_amr(i)=active_mg(myid,ifinelevel)%igrid(istart+i-1)
-      end do
-
-      ! Compute father (coarse) cell index
-      do i=1,nbatch
-         icell_amr(i)=father(igrid_f_amr(i))
-         cpu_amr(i)  =cpu_map(icell_amr(i))
-      end do
-
-      ! Gather 3x3x3 neighboring parent cells
-      call get3cubefather(icell_amr,nbors_father_cells,nbors_father_grids,nbatch,ifinelevel)
-
-      ! Update solution for fine grid cells
-      do ind_f=1,twotondim
-         iskip_f_amr = ncoarse+(ind_f-1)*ngridmax
-         iskip_f_mg  = (ind_f-1)*ngrid_f
-
-         do i=1,nbatch
-            ! Compute fine cell indices
-            icell_amr(i) = iskip_f_amr + igrid_f_amr(i)
-         end do
-         corr=0.0d0
-
-         ! Loop over relevant parent cells
-         do ind_average=1,twotondim
-            ind_father = ccc(ind_average,ind_f)
-            coeff      = bbb(ind_average)
-            do i=1,nbatch
-               icell_f_mg  = iskip_f_mg + istart+i-1
-               if(active_mg(cpu_amr(i),ifinelevel)%u(icell_f_mg,4)<=0.0) then
-                  corr(i)=0.0d0        ! Fine cell is masked : no correction
-                  cycle
-               end if
-               icell_c_amr = nbors_father_cells(i,ind_father)
-               ind_c       = (icell_c_amr-ncoarse)/ngridmax + 1
-               igrid_c_amr = icell_c_amr - ncoarse - (ind_c-1)*ngridmax
-               igrid_c_mg  = lookup_mg(igrid_c_amr)
-               cpu_c_amr   = cpu_map(father(igrid_c_amr))
-               if(igrid_c_mg<=0) cycle
-
-               icell_c_mg  = (ind_c-1)*active_mg(cpu_c_amr,icoarselevel)%ngrid + igrid_c_mg
-               corr(i)=corr(i)+coeff*active_mg(cpu_c_amr,icoarselevel)%u(icell_c_mg,1)
-            end do
-         end do
-
-         ! Correct potential
-         do i=1,nbatch
-            icell_f_mg  = iskip_f_mg + istart+i-1
-            active_mg(cpu_amr(i),ifinelevel)%u(icell_f_mg,1) = active_mg(cpu_amr(i),ifinelevel)%u(icell_f_mg,1) + corr(i)
-         end do
-
+   ! Loop over grids
+   do igrid=head_mg(ilevel),tail_mg(ilevel)
+      
+      ! Loop over cells
+      do ind=1,twotondim
+         if(grid(igrid)%f(ind,3)<=0.0)cycle      ! Do not count masked cells
+         norm2 = norm2 + grid(igrid)%f(ind,1)**2
       end do
       ! End loop over cells
 
    end do
    ! End loop over grids
-end subroutine interpolate_and_correct_coarse
+
+   norm2 = dx2*norm2
+
+end subroutine cmp_residual_norm2
 
 
-! ------------------------------------------------------------------------
-! Flag setting
-! ------------------------------------------------------------------------
-
-subroutine set_scan_flag_coarse(ilevel)
-   use amr_commons
-   use poisson_commons
-   implicit none
-
-   integer, intent(in) :: ilevel
-
-   integer :: ind, ngrid, scan_flag
-   integer :: igrid_mg, inbor, idim, igshift
-   integer :: igrid_amr, igrid_nbor_amr, cpu_nbor_amr, icell_nbor_amr
-
-   integer :: iskip_mg, icell_mg, igrid_nbor_mg, icell_nbor_mg
-
-   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-
-   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
-   iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
-   iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
-   iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
-   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
-   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
-
-   ngrid = active_mg(myid,ilevel)%ngrid
-   if(ngrid==0) return
-
-   ! Loop over cells and set coarse SCAN flag
-   do ind=1,twotondim
-      iskip_mg  = (ind-1)*ngrid
-      do igrid_mg=1,ngrid
-         igrid_amr = active_mg(myid,ilevel)%igrid(igrid_mg)
-         icell_mg  = iskip_mg  + igrid_mg
-
-         if(active_mg(myid,ilevel)%u(icell_mg,4)==1d0) then
-            scan_flag=0       ! Init flag to 'no scan needed'
-            scan_flag_loop: do inbor=1,2
-               do idim=1,ndim
-                  igshift = iii(idim,inbor,ind)
-                  if(igshift==0) then
-                     igrid_nbor_amr = igrid_amr
-                     cpu_nbor_amr   = myid
-                  else
-                     igrid_nbor_amr = son(nbor(igrid_amr,igshift))
-                     cpu_nbor_amr   = cpu_map(nbor(igrid_amr,igshift))
-                  end if
-
-                  if(igrid_nbor_amr==0) then
-                     scan_flag=1
-                     exit scan_flag_loop
-                  else
-                     igrid_nbor_mg = lookup_mg(igrid_nbor_amr)
-                     if(igrid_nbor_mg<=0) then
-                        scan_flag=1
-                        exit scan_flag_loop
-                     else
-                        icell_nbor_mg  = igrid_nbor_mg  + &
-                                 (jjj(idim,inbor,ind)-1)*active_mg(cpu_nbor_amr,ilevel)%ngrid
-                        if(active_mg(cpu_nbor_amr,ilevel)%u(icell_nbor_mg,4)<=0.0) then
-                           scan_flag=1
-                           exit scan_flag_loop
-                        end if
-                     end if
-                  end if
-               end do
-            end do scan_flag_loop
-         else
-            scan_flag=1
-         end if
-         active_mg(myid,ilevel)%f(icell_mg,1)=scan_flag
-      end do
-   end do
-end subroutine set_scan_flag_coarse

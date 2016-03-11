@@ -39,36 +39,6 @@ subroutine rho_fine(ilevel,icount)
      end do
   endif
 
-!!$  !--------------------------
-!!$  ! Initialize phi to zero
-!!$  !--------------------------
-!!$  do igrid=head(ilevel),tail(ilevel)
-!!$     do ind=1,twotondim
-!!$        grid(igrid)%phi(ind)=0.0D0
-!!$     end do
-!!$  end do
-!!$  
-!!$  !-------------------------------------------------------------------------
-!!$  ! Initialize "number density" field to baryon number density in array phi.
-!!$  !-------------------------------------------------------------------------
-!!$  if(m_refine(ilevel)>-1.0d0)then
-!!$     d_scale=max(mass_sph/dx_loc**ndim,smallr)
-!!$     do igrid=head(ilevel),tail(ilevel)
-!!$        do ind=1,twotondim
-!!$#ifdef HYDRO
-!!$           if(ivar_refine>0)then
-!!$              scalar=grid(igrid)%uold(ind,ivar_refine)/grid(igrid)%uold(ind,1)
-!!$              if(scalar>var_cut_refine)then
-!!$                 grid(igrid)%phi(ind)=grid(igrid)%rho(ind)/d_scale
-!!$              endif
-!!$           else
-!!$              grid(igrid)%phi(ind)=grid(igrid)%rho(ind)/d_scale
-!!$           endif
-!!$#endif
-!!$        end do
-!!$     end do
-!!$  endif
-
   !--------------------------------------------------------------
   ! Compute multipole contribution from all cpus and set rho_tot
   !--------------------------------------------------------------
@@ -80,24 +50,9 @@ subroutine rho_fine(ilevel,icount)
 #endif
      rho_tot=multipole(1)/boxlen**ndim
      if(debug)write(*,*)'rho_average=',rho_tot
-!!! rho_tot=0d0
+!!! rho_tot=0d0 ! For non-periodic BC
   endif
   
-!!$  !-----------------------------------------
-!!$  ! Compute quasi Lagrangian refinement map
-!!$  !-----------------------------------------
-!!$  if(m_refine(ilevel)>-1.0d0)then
-!!$     do igrid=head(ilevel),tail(ilevel)
-!!$        do ind=1,twotondim
-!!$           if(grid(igrid)%phi(ind)>=m_refine(ilevel))then
-!!$              grid(igrid)%cpu_map2(ind)=1
-!!$           else
-!!$              grid(igrid)%cpu_map2(ind)=0
-!!$           end if
-!!$        end do
-!!$     end do
-!!$  end if
-
 111 format('   Entering rho_fine for level ',I2)
   
 end subroutine rho_fine
@@ -134,7 +89,7 @@ subroutine multipole_fine(ilevel)
   vol_loc=dx_loc**ndim
 
 #ifdef HYDRO
-  ! Initialize fields to zero
+  ! Initialize multipole fields to zero
   do igrid=head(ilevel),tail(ilevel)
      do ind=1,twotondim
         do idim=1,ndim+1
@@ -143,8 +98,9 @@ subroutine multipole_fine(ilevel)
      end do
   end do
 #endif
+
   !-------------------------------------------------------
-  ! Compute contribution to mass multipoles in leaf cells
+  ! Compute contribution of leaf cells to mass multipoles
   !-------------------------------------------------------
   do igrid=head(ilevel),tail(ilevel)
      ! Loop over cells
@@ -183,15 +139,17 @@ subroutine multipole_fine(ilevel)
   end do
   ! End loop over grids
 
+  !-------------------------------------------------------
   ! Perform octree restriction from level ilevel+1
-  cache_operation=operation_multipole
-  call open_cache
+  !-------------------------------------------------------
+  call open_cache(operation_multipole,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ioct=head(ilevel+1),tail(ilevel+1)
      hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
-     parent_cell=get_parent_cell(hash_key,.true.,.false.)
+     ! Get parent cell using a write-only cache
+     parent_cell=get_parent_cell(hash_key,grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
 #ifdef HYDRO
@@ -207,7 +165,7 @@ subroutine multipole_fine(ilevel)
 #endif
   end do
 
-  call close_cache
+  call close_cache(grid_dict)
 
 111 format('   Entering multipole_fine for level',i2)
 
@@ -237,13 +195,14 @@ subroutine cic_from_multipole(ilevel)
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
+#ifdef GRAV
   ! Initialize density field to zero
   do igrid=head(ilevel),tail(ilevel)
      do ind=1,twotondim
         grid(igrid)%rho(ind)=0.0D0
      end do
   end do
-  
+#endif  
   if(hydro)call cic_cell(ilevel)
 
 111 format('   Entering cic_from_multipole for level',i2)
@@ -253,12 +212,11 @@ end subroutine cic_from_multipole
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cic_cell(ind_grid,ngrid,ilevel)
+subroutine cic_cell(ilevel)
   use amr_commons
   use poisson_commons, ONLY:multipole
   implicit none
-  integer::ngrid,ilevel
-  integer,dimension(1:nvector)::ind_grid
+  integer::ilevel
   !
   !
   real(dp),dimension(1:ndim),save::x,dd,dg
@@ -275,21 +233,19 @@ subroutine cic_cell(ind_grid,ngrid,ilevel)
   ! Use hash table directly for cells (not for grids)
   hash_key=ilevel+1
 
-  cache_operation=operation_rho
-  call open_cache
+  call open_cache(operation_rho,domain_decompos_amr)
 
   ! Loop over grids
   do igrid=head(ilevel),tail(ilevel)
      ! Loop over cells
      do ind=1,twotondim
+
 #ifdef HYDRO        
         ! Compute pseudo particle mass
         mmm=grid(igrid)%unew(ind,1)
 
         ! Compute pseudo particle (centre of mass) position
-        do idim=1,ndim
-           x(idim)=grid(igrid)%unew(ind,idim+1)/mmm
-        end do
+        x(1:ndim)=grid(igrid)%unew(ind,2:ndim+1)/mmm
         
         ! Compute total multipole
         if(ilevel==levelmin)then
@@ -362,21 +318,23 @@ subroutine cic_cell(ind_grid,ngrid,ilevel)
         hash_key(1:3,8)=(/id(1),id(2),id(3)/)
 #endif     
         ! Compute parent cell address
+#ifdef GRAV
         do i_nbor=1,twotondim
-           parent_cell=get_parent_cell(hash_key(1:ndim,i_nbor),.true.,.false.)
+           ! Get parent cell using write-only cache
+           parent_cell=get_parent_cell(hash_key(1:ndim,i_nbor),grid_dict,.true.,.false.)
            if(parent_cell>0)then
               ioct=(parent_cell-1)/twotondim+1
               icell=parent_cell-(ioct-1)*twotondim
               grid(ioct)%rho(icell)=grid(ioct)%rho(icell)+mmm*vol(i_nbor)/vol_loc
            end if
         end do
-     
+#endif     
      end do
      ! End loop over cells
   end do
   ! End loop over grids
 
-  call close_cache
+  call close_cache(grid_dict)
 
 end subroutine cic_cell
 !##############################################################################

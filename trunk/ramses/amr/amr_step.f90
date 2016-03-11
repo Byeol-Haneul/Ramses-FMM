@@ -58,8 +58,6 @@ recursive subroutine amr_step(ilevel,icount)
   !--------------------
   if(poisson)then
                                call timer('poisson','start')
-     ! Save old potential for time-extrapolation at level boundaries
-     call save_phi_old(ilevel)
      ! Compute total mass density at level ilevel
      call rho_fine(ilevel,icount)
   endif
@@ -74,6 +72,9 @@ recursive subroutine amr_step(ilevel,icount)
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
 
+     ! Save old potential for time-extrapolation at level boundaries
+     call save_phi_old(ilevel)
+
      ! Compute gravitational potential
      call phi_fine_cg(ilevel,icount)
 !!$     if(ilevel>levelmin)then
@@ -85,6 +86,7 @@ recursive subroutine amr_step(ilevel,icount)
 !!$     else
 !!$        call multigrid_fine(levelmin,icount)
 !!$     end if
+
      ! Initial old potential
      if (nstep==0)call save_phi_old(ilevel)
 
@@ -141,13 +143,27 @@ recursive subroutine amr_step(ilevel,icount)
      ! Hyperbolic solver
                                call timer('hydro - godunov','start')
      call godunov_fine(ilevel)
+     ! Add gravity source terms to unew with half time step
+                               call timer('poisson','start')
+     if(poisson)call add_gravity_source_terms(ilevel)
+
      ! Set uold equal to unew
                                call timer('hydro - set uold','start')
      call set_uold(ilevel)
+     ! Add gravity source terms to uold with half time step
+     ! to complete the time step (will be removed later)
+                               call timer('poisson','start')
+     if(poisson)call synchro_hydro_fine(ilevel,+0.5*dtnew(ilevel))
      ! Restriction operator
-                               call timer('hydro upload fine','start')
+                               call timer('hydro - upload','start')
      call upload_fine(ilevel)
   endif
+
+  !----------------------------
+  ! Compute cooling/heating
+  !----------------------------
+                               call timer('cooling','start')
+  if(cooling)call cooling_fine(ilevel)
 
   !-----------------------
   ! Compute refinement map

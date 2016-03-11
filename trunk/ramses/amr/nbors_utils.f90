@@ -2,12 +2,13 @@
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine get_threetondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
+subroutine get_threetondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_commons
   use hash
   implicit none
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
+  type(hash_table)::hash_dict
   integer,dimension(1:threetondim)::igrid_nbor,ind_nbor
   !
   ! This routine computes and acquire the 3**ndim neighboring father cells 
@@ -48,7 +49,7 @@ subroutine get_threetondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,flush_c
      ! Store lower left neighbor coordinates 
      if(i_nbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
      ! Get grid into memory and lock it if remote 
-     ipos=get_grid(hash_father,flush_cache,fetch_cache)
+     ipos=get_grid(hash_father,hash_dict,flush_cache,fetch_cache)
      call lock_cache(ipos)
      igrid_twotondim_nbor(i_nbor)=ipos
   end do
@@ -97,12 +98,13 @@ end subroutine get_threetondim_nbor_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine get_twondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
+subroutine get_twondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_commons
   use hash
   implicit none
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
+  type(hash_table)::hash_dict
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
   !
   ! This routine computes and acquires the 2xndim neighboring father cells 
@@ -132,7 +134,7 @@ subroutine get_twondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,flush_cache
      ind=ind+2**(idim-1)*ii(idim)
   end do
   ! Get grid into memory and lock it if remote 
-  ipos=get_grid(hash_father,flush_cache,fetch_cache)
+  ipos=get_grid(hash_father,hash_dict,flush_cache,fetch_cache)
   call lock_cache(ipos)
   igrid_nbor(0)=ipos
   ind_nbor(0)=ind
@@ -152,7 +154,7 @@ subroutine get_twondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,flush_cache
         ind=ind+2**(idim-1)*ii(idim)
      end do
      ! Get grid into memory and lock it if remote 
-     ipos=get_grid(hash_father,flush_cache,fetch_cache)
+     ipos=get_grid(hash_father,hash_dict,flush_cache,fetch_cache)
      call lock_cache(ipos)
      igrid_nbor(i_nbor)=ipos
      ind_nbor(i_nbor)=ind
@@ -163,12 +165,16 @@ end subroutine get_twondim_nbor_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
-integer function get_parent_cell(hash_key,flush_cache,fetch_cache) result(parent_cell)
+integer function get_parent_cell(hash_key,hash_dict,flush_cache,fetch_cache) result(parent_cell)
   use amr_commons
   use hash
   implicit none
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
+  type(hash_table)::hash_dict
+  !
+  ! This routine acquires the parent cell of the grid 
+  ! corresponding to the input hash key.
   !
   integer(kind=8),dimension(0:ndim)::hash_father
   integer(kind=8),dimension(1:ndim)::ii
@@ -181,7 +187,7 @@ integer function get_parent_cell(hash_key,flush_cache,fetch_cache) result(parent
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
-  ipos=get_grid(hash_father,flush_cache,fetch_cache)
+  ipos=get_grid(hash_father,hash_dict,flush_cache,fetch_cache)
   parent_cell=0
   if(ipos>0)parent_cell=(ipos-1)*twotondim+ind
 end function get_parent_cell
@@ -217,7 +223,7 @@ end subroutine unlock_cache
 !##############################################################
 !##############################################################
 !##############################################################
-integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
+integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(child_grid)
   use amr_commons
   use hilbert
   use hash
@@ -227,6 +233,10 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
 #endif
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
+  type(hash_table)::hash_dict
+  !
+  ! This routine acquires the grid 
+  ! corresponding to the input hash key.
   !
   integer(kind=4),dimension(1:nvector),save::dummy_state
   integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
@@ -240,24 +250,27 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
   type(realdp_msg),save::response_hydro
   type(small_realdp_msg),save::response_poisson
   type(large_realdp_msg),save::response_refine
+  type(twin_realdp_msg),save::response_mg
   logical::failed_request,send_request_completed
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::send_request_status
 #endif
-  !
+ 
 #ifndef WITHOUTMPI
+
   ! If counter is good, check on incoming messages and perform actions
   if(mail_counter==32)then
-     call check_mail(MPI_REQUEST_NULL)
+     call check_mail(MPI_REQUEST_NULL,hash_dict)
      mail_counter=0
   endif
   mail_counter=mail_counter+1
 #endif
 
   ! Access hash table
-  child_grid=hash_get(grid_dict,hash_key)
+  child_grid=hash_get(hash_dict,hash_key)
 
 #ifndef WITHOUTMPI
+
   ! If grid index is positive, then return
   if(child_grid>0)then
      return
@@ -291,15 +304,15 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
 #endif
 
   ! Check if grid sits inside processor boundaries
-  if(    hk0(1).ge.bound_key_level(myid-1,ilevel).AND. &
-       & hk0(1).lt.bound_key_level(myid  ,ilevel))then
+  if(    hk0(1).ge.bound_hilbert_key(myid-1,ilevel).AND. &
+       & hk0(1).lt.bound_hilbert_key(myid  ,ilevel))then
      return
   endif
 
   ! Determine parent processor
   do icpu=1,ncpu
-     if(    hk0(1).ge.bound_key_level(icpu-1,ilevel).AND. &
-          & hk0(1).lt.bound_key_level(icpu  ,ilevel))then
+     if(    hk0(1).ge.bound_hilbert_key(icpu-1,ilevel).AND. &
+          & hk0(1).lt.bound_hilbert_key(icpu  ,ilevel))then
         grid_cpu=icpu
         exit
      end if
@@ -307,6 +320,8 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
 
   !============================================
   ! We have a fetch and possibly a flush cache
+  ! Fetch alone means read-only cache operations.
+  ! Both together means read-write cache.
   !============================================
   if(fetch_cache)then
 
@@ -331,14 +346,17 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
         call MPI_IRECV(response_refine,1,new_mpi_large_realdp_msg,&
              & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
      endif
+     if(cache_operation_type.EQ.operation_type_mg)then
+        call MPI_IRECV(response_mg,1,new_mpi_twin_realdp_msg,&
+             & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
+     endif
      call MPI_ISEND(send_request,1,new_mpi_request,&
           & grid_cpu-1,request_tag,MPI_COMM_WORLD,send_request_id,info)
 
      ! While waiting for reply, check on incoming messages and perform actions
-     call check_mail(response_id)
+     call check_mail(response_id,hash_dict)
 
-     ! Test for ISEND completion to free memory in corresponding MPI buffer
-!     call MPI_TEST(send_request_id,send_request_completed,send_request_status,info)
+     ! Wait for ISEND completion to free memory in corresponding MPI buffer
      call MPI_WAIT(send_request_id,send_request_status,info)
      
      if(cache_operation_type.EQ.operation_type_flag)then
@@ -357,6 +375,10 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
         failed_request=response_refine%type==-1
         ntile_response=response_refine%ntile
      endif
+     if(cache_operation_type.EQ.operation_type_mg)then
+        failed_request=response_mg%type==-1
+        ntile_response=response_mg%ntile
+     endif
 
      ! If grid does not exist, store -1 in the cache
      ! The output grid index is still zero
@@ -366,9 +388,9 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
         if(occupied_null(free_null))then
            hash_child(0)=lev_null(free_null)
            hash_child(1:ndim)=ckey_null(1:ndim,free_null)
-           call hash_free(grid_dict,hash_child)
+           call hash_free(hash_dict,hash_child)
         endif
-        call hash_set(grid_dict,hash_key,-1)
+        call hash_set(hash_dict,hash_key,-1)
         occupied_null(free_null)=.true.
         lev_null(free_null)=ilevel
         ckey_null(1:ndim,free_null)=hash_key(1:ndim)
@@ -378,7 +400,6 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
         nnull=nnull+1
         if(free_null.GT.ncachemax)then
            free_null=1
-!           write(*,*)'cache null full'
         endif
         if(nnull.GT.ncachemax)nnull=ncachemax
 
@@ -417,13 +438,17 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
               hash_child(0)=response_refine%lev(i)
               hash_child(1:ndim)=response_refine%ckey(1:ndim,i)
            endif
+           if(cache_operation_type.EQ.operation_type_mg)then
+              hash_child(0)=response_mg%lev(i)
+              hash_child(1:ndim)=response_mg%ckey(1:ndim,i)
+           endif
            ichild=ngridmax+free_cache
 
-           if(hash_get(grid_dict,hash_child).EQ.0)then
+           if(hash_get(hash_dict,hash_child).EQ.0)then
 
-              if(occupied(free_cache))call destage(ngridmax+free_cache)
+              if(occupied(free_cache))call destage(ngridmax+free_cache,hash_dict)
 
-              call hash_set(grid_dict,hash_child,ichild)
+              call hash_set(hash_dict,hash_child,ichild)
               
               occupied(free_cache)=.true.
               parent_cpu(free_cache)=grid_cpu
@@ -464,7 +489,15 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
               ! Operations of type "poisson"
               if(cache_operation_type.EQ.operation_type_poisson)then
 #ifdef GRAV
-                 if(cache_operation.EQ.operation_conjgrad)then
+                 if(cache_operation.EQ.operation_restrict_res)then
+                    do ind=1,twotondim
+                       grid(ichild)%f(ind,3)=response_poisson%realdp(ind,i)
+                    end do
+                 else if(cache_operation.EQ.operation_scan)then
+                    do ind=1,twotondim
+                       grid(ichild)%f(ind,3)=response_poisson%realdp(ind,i)
+                    end do
+                 else if(cache_operation.EQ.operation_cg)then
                     do ind=1,twotondim
                        grid(ichild)%f(ind,2)=response_poisson%realdp(ind,i)
                     end do
@@ -499,7 +532,18 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
                  end do
               endif
               
+              ! Operations of type "multigrid"
+              if(cache_operation_type.EQ.operation_type_mg)then
+                 do ind=1,twotondim
+#ifdef GRAV
+                    grid(ichild)%phi(ind)=response_mg%realdp_phi(ind,i)
+                    grid(ichild)%f(ind,3)=response_mg%realdp_dis(ind,i)
+#endif
+                 end do
+              endif
+              
               ! If we also have a flush cache...
+              ! This is only for combined read-write cache operations
               if(flush_cache)then
                  dirty(free_cache)=.true.
                  
@@ -507,16 +551,22 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
                  ! Set initialisation rule for combiner operations
                  !================================================
                  
+#ifdef HYDRO                 
                  ! Initialisation rule for Godunov update
                  if(cache_operation.EQ.operation_godunov)then           
                     grid(ichild)%unew(1:twotondim,1:nvar)=0.0
                  endif
-                 
+#endif                 
                  ! Initialisation rule for derefine
                  if(cache_operation.EQ.operation_derefine)then           
                     grid(ichild)%refined(1:twotondim)=.true.
                  endif
-                 
+#ifdef GRAV                 
+                 ! Initialisation rule for restrict multigrid residual
+                 if(cache_operation.EQ.operation_restrict_res)then           
+                    grid(ichild)%f(1:twotondim,2)=0.0
+                 endif
+#endif                 
               endif
 
               ! Go to next free cache line
@@ -531,9 +581,9 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
         end do
      endif
 
-     !=================================
-     ! If we have only a flush cache
-     !=================================
+     !=================================================
+     ! If we have only a flush cache (write-only cache) 
+     !=================================================
   else if(flush_cache)then   
 
      ! If next cache line is occupied, free it.
@@ -543,11 +593,11 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
            if(free_cache>ncachemax)free_cache=1
         end do
      end if
-     if(occupied(free_cache))call destage(ngridmax+free_cache)
+     if(occupied(free_cache))call destage(ngridmax+free_cache,hash_dict)
 
      ! Set grid index to a virtual grid in local memory
      child_grid=ngridmax+free_cache
-     call hash_set(grid_dict,hash_key,child_grid)
+     call hash_set(hash_dict,hash_key,child_grid)
 
      ! Store the grid coordinates
      grid(child_grid)%lev=hash_key(0)
@@ -570,6 +620,7 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
      if(cache_operation.EQ.operation_upload)then           
         grid(child_grid)%uold(1:twotondim,1:nvar)=0.0
      endif
+
      ! Initialisation rule for hydro multipole
      if(cache_operation.EQ.operation_multipole)then           
         grid(child_grid)%unew(1:twotondim,1:ndim+1)=0.0
@@ -580,6 +631,11 @@ integer function get_grid(hash_key,flush_cache,fetch_cache) result(child_grid)
      ! Initialisation rule for mass deposition
      if(cache_operation.EQ.operation_rho)then           
         grid(child_grid)%rho(1:twotondim)=0.0
+     endif
+
+     ! Initialisation rule for MG mask restriction
+     if(cache_operation.EQ.operation_restrict_mask)then           
+        grid(child_grid)%f(1:twotondim,3)=0.0
      endif
 #endif
 
@@ -598,13 +654,15 @@ end function get_grid
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine check_mail(comm_id)
+subroutine check_mail(comm_id,hash_dict)
   use amr_commons
   use hilbert
+  use hash
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+  type(hash_table)::hash_dict
   integer::comm_id
   !
   integer::i,ind,ivar,idim,info,ipos,igrid,ichild,grid_cpu,ilevel,itile,ntile_reply
@@ -635,7 +693,7 @@ subroutine check_mail(comm_id)
            ilevel=recv_request%lev
            hash_key(0)=ilevel
            hash_key(1:ndim)=recv_request%ckey(1:ndim)
-           igrid=hash_get(grid_dict,hash_key)
+           igrid=hash_get(hash_dict,hash_key)
            grid_cpu=request_status(MPI_SOURCE)+1
            
            ! If grid does not exist, send a null reply
@@ -651,6 +709,9 @@ subroutine check_mail(comm_id)
               endif
               if(cache_operation_type.EQ.operation_type_refine)then
                  reply_refine(grid_cpu)%type=-1
+              endif
+              if(cache_operation_type.EQ.operation_type_mg)then
+                 reply_mg(grid_cpu)%type=-1
               endif
               
               ! Otherwise, assemble a proper reply with a complete tile
@@ -674,6 +735,10 @@ subroutine check_mail(comm_id)
               if(cache_operation_type.EQ.operation_type_refine)then
                  reply_refine(grid_cpu)%type=1
                  reply_refine(grid_cpu)%ntile=ntile_reply
+              endif
+              if(cache_operation_type.EQ.operation_type_mg)then
+                 reply_mg(grid_cpu)%type=1
+                 reply_mg(grid_cpu)%ntile=ntile_reply
               endif
               
               ! Store data, depending on reply type
@@ -712,7 +777,15 @@ subroutine check_mail(comm_id)
                     reply_poisson(grid_cpu)%lev(i)=grid(ipos)%lev
                     reply_poisson(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
 #ifdef GRAV
-                    if(cache_operation.EQ.operation_conjgrad)then
+                    if(cache_operation.EQ.operation_restrict_res)then
+                       do ind=1,twotondim
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%f(ind,3)
+                       end do
+                    else if(cache_operation.EQ.operation_scan)then
+                       do ind=1,twotondim
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%f(ind,3)
+                       end do
+                    else if(cache_operation.EQ.operation_cg)then
                        do ind=1,twotondim
                           reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%f(ind,2)
                        end do
@@ -749,11 +822,22 @@ subroutine check_mail(comm_id)
                     end do
                  endif
 
+                 ! Reply of type multigrid
+                 if(cache_operation_type.EQ.operation_type_mg)then
+                    reply_mg(grid_cpu)%lev(i)=grid(ipos)%lev
+                    reply_mg(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
+                    do ind=1,twotondim
+#ifdef GRAV
+                       reply_mg(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%f(ind,3)
+                       reply_mg(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%phi(ind)
+#endif
+                    end do
+                 endif
+
               end do
            endif
            
-           ! Test the old SEND to free memory in corresponding MPI buffer
-           ! call MPI_Test(reply_id(grid_cpu),reply_sent,reply_status,info)
+           ! Wait for the old SEND to free memory in corresponding MPI buffer
            call MPI_WAIT(reply_id(grid_cpu),reply_status,info)
            
            ! Send back the reply
@@ -771,6 +855,10 @@ subroutine check_mail(comm_id)
            endif
            if(cache_operation_type.EQ.operation_type_refine)then
               call MPI_ISEND(reply_refine(grid_cpu),1,new_mpi_large_realdp_msg,&
+                   & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
+           endif
+           if(cache_operation_type.EQ.operation_type_mg)then
+              call MPI_ISEND(reply_mg(grid_cpu),1,new_mpi_twin_realdp_msg,&
                    & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
            endif
            
@@ -792,24 +880,28 @@ subroutine check_mail(comm_id)
         ! Combine received data to local memory using combiner rules
         !===========================================================
 
+        !------------------------------------------------------
         ! Combiner rules for initflag
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_initflag)then
            do i=1,recv_flush_flag%nflush
               hash_child(0)=recv_flush_flag%lev(i)
               hash_child(1:ndim)=recv_flush_flag%ckey(1:ndim,i)
-              ichild=hash_get(grid_dict,hash_child)
+              ichild=hash_get(hash_dict,hash_child)
               do ind=1,twotondim
                  grid(ichild)%flag1(ind)=MAX(grid(ichild)%flag1(ind),recv_flush_flag%int4(ind,i))
               end do
            end do
         endif
 
+        !------------------------------------------------------
         ! Combiner rules for derefine
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_derefine)then
            do i=1,recv_flush_flag%nflush
               hash_child(0)=recv_flush_flag%lev(i)
               hash_child(1:ndim)=recv_flush_flag%ckey(1:ndim,i)
-              ichild=hash_get(grid_dict,hash_child)
+              ichild=hash_get(hash_dict,hash_child)
               if(ichild>0)then ! Since we are in the process of derefining,
                  do ind=1,twotondim ! we need to check if the grid is still here.
                     if(grid(ichild)%refined(ind))then
@@ -822,12 +914,14 @@ subroutine check_mail(comm_id)
            end do
         endif
 
+        !------------------------------------------------------
         ! Combiner rules for hydro upload
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_upload)then
            do i=1,recv_flush_hydro%nflush
               hash_child(0)=recv_flush_hydro%lev(i)
               hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
-              ichild=hash_get(grid_dict,hash_child)
+              ichild=hash_get(hash_dict,hash_child)
 #ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
@@ -841,12 +935,14 @@ subroutine check_mail(comm_id)
            end do
         endif
 
+        !------------------------------------------------------
         ! Combiner rules for hydro multipole
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_multipole)then
            do i=1,recv_flush_hydro%nflush
               hash_child(0)=recv_flush_hydro%lev(i)
               hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
-              ichild=hash_get(grid_dict,hash_child)
+              ichild=hash_get(hash_dict,hash_child)
 #ifdef HYDRO
               do ivar=1,ndim+1
                  do ind=1,twotondim
@@ -860,12 +956,14 @@ subroutine check_mail(comm_id)
            end do
         endif
 
+        !------------------------------------------------------
         ! Combiner rules for godunov update
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_godunov)then
            do i=1,recv_flush_hydro%nflush
               hash_child(0)=recv_flush_hydro%lev(i)
               hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
-              ichild=hash_get(grid_dict,hash_child)
+              ichild=hash_get(hash_dict,hash_child)
 #ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
@@ -877,12 +975,14 @@ subroutine check_mail(comm_id)
            end do
         endif
 
+        !------------------------------------------------------
         ! Combiner rules for mass deposition
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_rho)then
            do i=1,recv_flush_poisson%nflush
               hash_child(0)=recv_flush_poisson%lev(i)
               hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
-              ichild=hash_get(grid_dict,hash_child)
+              ichild=hash_get(hash_dict,hash_child)
 #ifdef GRAV
               do ind=1,twotondim
                  grid(ichild)%rho(ind)=grid(ichild)%rho(ind)&
@@ -892,7 +992,43 @@ subroutine check_mail(comm_id)
            end do
         endif
 
+        !------------------------------------------------------
+        ! Combiner rules for MG mask restriction
+        !------------------------------------------------------
+        if(cache_operation.EQ.operation_restrict_mask)then
+           do i=1,recv_flush_poisson%nflush
+              hash_child(0)=recv_flush_poisson%lev(i)
+              hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
+              ichild=hash_get(hash_dict,hash_child)
+#ifdef GRAV
+              do ind=1,twotondim
+                 grid(ichild)%f(ind,3)=grid(ichild)%f(ind,3)&
+                      & +recv_flush_poisson%realdp(ind,i)
+              end do
+#endif
+           end do
+        endif
+
+        !------------------------------------------------------
+        ! Combiner rules for MG residual restriction
+        !------------------------------------------------------
+        if(cache_operation.EQ.operation_restrict_res)then
+           do i=1,recv_flush_poisson%nflush
+              hash_child(0)=recv_flush_poisson%lev(i)
+              hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
+              ichild=hash_get(hash_dict,hash_child)
+#ifdef GRAV
+              do ind=1,twotondim
+                 grid(ichild)%f(ind,2)=grid(ichild)%f(ind,2)&
+                      & +recv_flush_poisson%realdp(ind,i)
+              end do
+#endif
+           end do
+        endif
+
+        !------------------------------------------------------
         ! Combiner rules for refinements
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_refine)then
 
            do i=1,recv_flush_refine%nflush
@@ -936,7 +1072,7 @@ subroutine check_mail(comm_id)
               grid(ichild)%superoct=1
               
               ! Insert new grid in hash table
-              call hash_set(grid_dict,hash_child,ichild)
+              call hash_set(hash_dict,hash_child,ichild)
 
               ! Flush hydro variables
 #ifdef HYDRO
@@ -959,7 +1095,9 @@ subroutine check_mail(comm_id)
            end do
         endif
 
+        !------------------------------------------------------
         ! Combiner rules for load balance
+        !------------------------------------------------------
         if(cache_operation.EQ.operation_loadbalance)then
 
            do i=1,recv_flush_refine%nflush
@@ -1023,12 +1161,81 @@ subroutine check_mail(comm_id)
               grid(ichild)%superoct=1
 
               ! Insert new grid in hash table
-              call hash_set(grid_dict,hash_child,ichild)
+              call hash_set(hash_dict,hash_child,ichild)
 
            end do
         endif
 
+        !------------------------------------------------------
+        ! Combiner rules for building multigrid hierarchy
+        !------------------------------------------------------
+        if(cache_operation.EQ.operation_build_mg)then
+
+           do i=1,recv_flush_poisson%nflush
+              ilevel=recv_flush_poisson%lev(i)
+              hash_child(0)=ilevel
+              hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
+
+              ! MG oct could have been activated before,
+              ! so we need to check if it exists
+              ichild=hash_get(hash_dict,hash_child)
+
+              ! If it doesn't exist then create it
+              if(ichild==0)then 
+                 
+              ! Compute Hilbert keys of new octs
+#if NDIM==1
+              ix(1)=hash_child(1)
+              call hilbert1d(ix,hk0,1)
+#endif
+#if NDIM==2
+              ix(1)=hash_child(1)
+              iy(1)=hash_child(2)
+              call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
+#endif
+#if NDIM==3
+              ix(1)=hash_child(1)
+              iy(1)=hash_child(2)
+              iz(1)=hash_child(3)
+              call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
+#endif
+              ! Set grid index to a virtual grid in local main memory
+              ichild=ifree
+
+              ! Go to next main memory free line
+              ifree=ifree+1
+              if(ifree.GT.ngridmax)then
+                 write(*,*)'No more free memory'
+                 write(*,*)'Increase ngridmax'
+                 call clean_abort
+              endif
+
+              grid(ichild)%lev=hash_child(0)
+              grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
+              grid(ichild)%hkey=hk0(1)
+              grid(ichild)%refined(1:twotondim)=.false.
+              grid(ichild)%flag1(1:twotondim)=0
+              grid(ichild)%flag2(1:twotondim)=0
+              grid(ichild)%superoct=1
+#ifdef GRAV
+              ! Initialize gravity variables
+              do ind=1,twotondim
+                 grid(ichild)%f(ind,1:ndim)=0.0
+                 grid(ichild)%phi(ind)=0.0
+                 grid(ichild)%phi_old(ind)=0.0
+              end do
+#endif
+              ! Insert new grid in hash table
+              call hash_set(hash_dict,hash_child,ichild)
+              
+              endif
+
+           end do
+        endif
+
+        !=================================
         ! Post a new RECV for flush
+        !=================================
         if(cache_operation_type.EQ.operation_type_flag)then
            call MPI_IRECV(recv_flush_flag,1,new_mpi_int4_flush,&
                 & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
@@ -1043,6 +1250,10 @@ subroutine check_mail(comm_id)
         endif
         if(cache_operation_type.EQ.operation_type_refine)then
            call MPI_IRECV(recv_flush_refine,1,new_mpi_large_realdp_flush,&
+                & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+        endif
+        if(cache_operation_type.EQ.operation_type_mg)then
+           call MPI_IRECV(recv_flush_mg,1,new_mpi_twin_realdp_flush,&
                 & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
         endif
         endif
@@ -1063,13 +1274,14 @@ end subroutine check_mail
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine destage(igrid)
+subroutine destage(igrid,hash_dict)
   use amr_commons
   use hash
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+  type(hash_table)::hash_dict
   integer::igrid
   !
   integer::ind,ivar,idim,ipos,info,icache,iflush,grid_cpu
@@ -1080,14 +1292,14 @@ subroutine destage(igrid)
 
   hash_key(0)=grid(igrid)%lev
   hash_key(1:ndim)=grid(igrid)%ckey(1:ndim)
-  ipos=hash_get(grid_dict,hash_key)
+  ipos=hash_get(hash_dict,hash_key)
 
-  if(hash_get(grid_dict,hash_key).EQ.0)then
+  if(hash_get(hash_dict,hash_key).EQ.0)then
      write(*,*)'PE ',myid,' trying to free non existing grid'
      stop
   endif
 
-  call hash_free(grid_dict,hash_key)
+  call hash_free(hash_dict,hash_key)
 
   ! Check if the destage requires a flush
   icache=igrid-ngridmax
@@ -1096,13 +1308,16 @@ subroutine destage(igrid)
      grid_cpu=parent_cpu(icache)
      dirty(icache)=.false.
   
+     !------------------------------------------------------
+     ! Filling the flush buffer for initflag
+     !------------------------------------------------------
      if(cache_operation.EQ.operation_initflag)then
         if(send_flush_flag(grid_cpu)%nflush==nflushmax)then
            ! Post send
            call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_flag(grid_cpu)%nflush=0
         endif
         send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
@@ -1112,13 +1327,16 @@ subroutine destage(igrid)
         send_flush_flag(grid_cpu)%int4(1:twotondim,iflush)=grid(igrid)%flag1(1:twotondim)
      endif
      
+     !------------------------------------------------------
+     ! Filling the flush buffer for derefine
+     !------------------------------------------------------
      if(cache_operation.EQ.operation_derefine)then
         if(send_flush_flag(grid_cpu)%nflush==nflushmax)then
            ! Post send
            call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_flag(grid_cpu)%nflush=0
         endif
         send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
@@ -1134,13 +1352,16 @@ subroutine destage(igrid)
         end do
      endif
      
+     !------------------------------------------------------
+     ! Filling the flush buffer for hydro upload
+     !------------------------------------------------------
      if(cache_operation.EQ.operation_upload)then
         if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
            ! Post send
            call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_hydro(grid_cpu)%nflush=0
         endif
         send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
@@ -1156,13 +1377,16 @@ subroutine destage(igrid)
 #endif
      endif
 
+     !------------------------------------------------------
+     ! Filling the flush buffer for multipole
+     !------------------------------------------------------
      if(cache_operation.EQ.operation_multipole)then
         if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
            ! Post send
            call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_hydro(grid_cpu)%nflush=0
         endif
         send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
@@ -1178,13 +1402,16 @@ subroutine destage(igrid)
 #endif
      endif
 
+     !------------------------------------------------------
+     ! Filling the flush buffer for Godunov solver
+     !------------------------------------------------------
      if(cache_operation.EQ.operation_godunov)then
         if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
            ! Post send
            call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_hydro(grid_cpu)%nflush=0
         endif
         send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
@@ -1200,13 +1427,16 @@ subroutine destage(igrid)
 #endif
      endif
 
+     !------------------------------------------------------
+     ! Filling the flush buffer for refining the AMR grid
+     !------------------------------------------------------
      if(cache_operation.EQ.operation_refine)then
         if(send_flush_refine(grid_cpu)%nflush==nflushmax)then
            ! Post send
            call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_refine(grid_cpu)%nflush=0
         endif
         send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
@@ -1231,13 +1461,16 @@ subroutine destage(igrid)
 #endif
      endif
 
+     !------------------------------------------------------
+     ! Filling the flush buffer for load balancing
+     !------------------------------------------------------
      if(cache_operation.EQ.operation_loadbalance)then
         if(send_flush_refine(grid_cpu)%nflush==nflushmax)then
            ! Post send
            call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_refine(grid_cpu)%nflush=0
         endif
         send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
@@ -1265,6 +1498,93 @@ subroutine destage(igrid)
         end do
      endif
 
+     !------------------------------------------------------
+     ! Filling the flush buffer for gravity mass deposition
+     !------------------------------------------------------
+     if(cache_operation.EQ.operation_rho)then
+        if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
+           ! Post send
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id,hash_dict)
+           send_flush_poisson(grid_cpu)%nflush=0
+        endif
+        send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
+        iflush=send_flush_poisson(grid_cpu)%nflush
+        send_flush_poisson(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_poisson(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef GRAV
+        do ind=1,twotondim
+           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grid(igrid)%rho(ind)
+        end do
+#endif
+     endif
+
+     !------------------------------------------------------
+     ! Filling the flush buffer for MG mask restriction
+     !------------------------------------------------------
+     if(cache_operation.EQ.operation_restrict_mask)then
+        if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
+           ! Post send
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id,hash_dict)
+           send_flush_poisson(grid_cpu)%nflush=0
+        endif
+        send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
+        iflush=send_flush_poisson(grid_cpu)%nflush
+        send_flush_poisson(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_poisson(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef GRAV
+        do ind=1,twotondim
+           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grid(igrid)%f(ind,3)
+        end do
+#endif
+     endif
+
+     !------------------------------------------------------
+     ! Filling the flush buffer for MG residual restriction
+     !------------------------------------------------------
+     if(cache_operation.EQ.operation_restrict_res)then
+        if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
+           ! Post send
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id,hash_dict)
+           send_flush_poisson(grid_cpu)%nflush=0
+        endif
+        send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
+        iflush=send_flush_poisson(grid_cpu)%nflush
+        send_flush_poisson(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_poisson(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef GRAV
+        do ind=1,twotondim
+           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grid(igrid)%f(ind,2)
+        end do
+#endif
+     endif
+
+     !------------------------------------------------------
+     ! Filling the flush buffer for MG hierarchy built 
+     !------------------------------------------------------
+     if(cache_operation.EQ.operation_build_mg)then
+        if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
+           ! Post send
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+                & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id,hash_dict)
+           send_flush_poisson(grid_cpu)%nflush=0
+        endif
+        send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
+        iflush=send_flush_poisson(grid_cpu)%nflush
+        send_flush_poisson(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_poisson(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+     endif
+
   endif
 #endif
 end subroutine destage
@@ -1272,12 +1592,14 @@ end subroutine destage
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine close_cache
+subroutine close_cache(hash_dict)
   use amr_commons
+  use hash
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+  type(hash_table)::hash_dict
   !
   integer::info,icache,igrid,icpu
   integer::send_flush_id,ndebug
@@ -1294,7 +1616,7 @@ subroutine close_cache
   do icache=1,ncache
      igrid=ngridmax+icache
      locked(icache)=.false.
-     if(occupied(icache))call destage(igrid)
+     if(occupied(icache))call destage(igrid,hash_dict)
      occupied(icache)=.false.
      dirty(icache)=.false.
   end do
@@ -1305,7 +1627,7 @@ subroutine close_cache
      if(occupied_null(icache))then
         hash_child(0)=lev_null(icache)
         hash_child(1:ndim)=ckey_null(1:ndim,icache)
-        call hash_free(grid_dict,hash_child)
+        call hash_free(hash_dict,hash_child)
      endif
      occupied_null(icache)=.false.
   end do
@@ -1320,7 +1642,7 @@ subroutine close_cache
            call MPI_ISSEND(send_flush_flag(icpu),1,new_mpi_int4_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_flag(icpu)%nflush=0
         endif
      endif     
@@ -1330,7 +1652,7 @@ subroutine close_cache
            call MPI_ISSEND(send_flush_hydro(icpu),1,new_mpi_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_hydro(icpu)%nflush=0
         endif
      endif
@@ -1340,7 +1662,7 @@ subroutine close_cache
            call MPI_ISSEND(send_flush_poisson(icpu),1,new_mpi_small_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_poisson(icpu)%nflush=0
         endif
      endif
@@ -1350,8 +1672,18 @@ subroutine close_cache
            call MPI_ISSEND(send_flush_refine(icpu),1,new_mpi_large_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(send_flush_id)
+           call check_mail(send_flush_id,hash_dict)
            send_flush_refine(icpu)%nflush=0
+        endif
+     endif
+     if(cache_operation_type.EQ.operation_type_mg)then
+        if(send_flush_mg(icpu)%nflush>0)then
+           ! Post send
+           call MPI_ISSEND(send_flush_mg(icpu),1,new_mpi_twin_realdp_flush,&
+                & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id,hash_dict)
+           send_flush_mg(icpu)%nflush=0
         endif
      endif
   end do
@@ -1359,26 +1691,25 @@ subroutine close_cache
     ! CHECK-IN CHECK-OUT
   if(myid.NE.1)then
      call MPI_ISEND(dummy_int,1,MPI_INTEGER,0,close_tag,MPI_COMM_WORLD,close_id,info)
-     call check_mail(close_id)
+     call check_mail(close_id,hash_dict)
      call MPI_IRECV(dummy_int,1,MPI_INTEGER,0,close_tag,MPI_COMM_WORLD,close_id,info)
-     call check_mail(close_id)
+     call check_mail(close_id,hash_dict)
   else
      do icpu=2,ncpu
         call MPI_IRECV(dummy_int,1,MPI_INTEGER,&
-!             & icpu-1,close_tag,MPI_COMM_WORLD,close_id,info)
              & MPI_ANY_SOURCE,close_tag,MPI_COMM_WORLD,close_id,info)
-        call check_mail(close_id)
+        call check_mail(close_id,hash_dict)
      end do
      do icpu=2,ncpu
         call MPI_ISEND(dummy_int,1,MPI_INTEGER,&
              & icpu-1,close_tag,MPI_COMM_WORLD,close_id,info)
-        call check_mail(close_id)
+        call check_mail(close_id,hash_dict)
      end do
   endif
 
   ! Barrier to get the last flush message
   call MPI_BARRIER(MPI_COMM_WORLD,info)
-  call check_mail(MPI_REQUEST_NULL)
+  call check_mail(MPI_REQUEST_NULL,hash_dict)
 
   ! Finally CANCEL THE 2 RECV
   call MPI_CANCEL(request_id,info)
@@ -1400,12 +1731,14 @@ end subroutine close_cache
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine open_cache
+subroutine open_cache(cache_operation_init,domain_decompos_init)
   use amr_commons
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+  integer::cache_operation_init
+  integer::domain_decompos_init
   !
   integer::info,icpu
   !
@@ -1417,33 +1750,52 @@ subroutine open_cache
   mail_counter=0
 
   do icpu=1,ncpu
+     send_flush_mg(icpu)%nflush=0
      send_flush_flag(icpu)%nflush=0
      send_flush_hydro(icpu)%nflush=0
      send_flush_poisson(icpu)%nflush=0
      send_flush_refine(icpu)%nflush=0
   end do
 
+  ! Domain decomposition to use
+  if(domain_decompos_init==domain_decompos_amr)then
+     bound_hilbert_key=bound_key_level
+  endif
+  if(domain_decompos_init==domain_decompos_mg )then
+     bound_hilbert_key=bound_key_mg
+  endif
+
+  ! Cache operation to perform
+  cache_operation=cache_operation_init
+
   ! Default operation type
   cache_operation_type=operation_type_flag
 
   ! Operations of type "flag"
   if(cache_operation.EQ.operation_initflag)cache_operation_type=operation_type_flag
-  if(cache_operation.EQ.operation_smooth  )cache_operation_type=operation_type_flag
+  if(cache_operation.EQ.operation_smooth)cache_operation_type=operation_type_flag
   if(cache_operation.EQ.operation_derefine)cache_operation_type=operation_type_flag
 
   ! Operations of type "hydro"
-  if(cache_operation.EQ.operation_hydro    )cache_operation_type=operation_type_hydro
-  if(cache_operation.EQ.operation_upload   )cache_operation_type=operation_type_hydro
-  if(cache_operation.EQ.operation_godunov  )cache_operation_type=operation_type_hydro
+  if(cache_operation.EQ.operation_hydro)cache_operation_type=operation_type_hydro
+  if(cache_operation.EQ.operation_upload)cache_operation_type=operation_type_hydro
+  if(cache_operation.EQ.operation_godunov)cache_operation_type=operation_type_hydro
   if(cache_operation.EQ.operation_multipole)cache_operation_type=operation_type_hydro
 
   ! Operations of type "poisson"
   if(cache_operation.EQ.operation_phi)cache_operation_type=operation_type_poisson
   if(cache_operation.EQ.operation_rho)cache_operation_type=operation_type_poisson
+  if(cache_operation.EQ.operation_build_mg)cache_operation_type=operation_type_poisson
+  if(cache_operation.EQ.operation_restrict_mask)cache_operation_type=operation_type_poisson
+  if(cache_operation.EQ.operation_restrict_res)cache_operation_type=operation_type_poisson
+  if(cache_operation.EQ.operation_scan)cache_operation_type=operation_type_poisson
 
   ! Operations of type "refine"
-  if(cache_operation.EQ.operation_refine     )cache_operation_type=operation_type_refine
+  if(cache_operation.EQ.operation_refine)cache_operation_type=operation_type_refine
   if(cache_operation.EQ.operation_loadbalance)cache_operation_type=operation_type_refine
+
+  ! Operations of type "mg"
+  if(cache_operation.EQ.operation_mg)cache_operation_type=operation_type_mg
 
   ! Post the first RECV for request
   call MPI_IRECV(recv_request,1,new_mpi_request,&
@@ -1464,6 +1816,10 @@ subroutine open_cache
   endif
   if(cache_operation_type.EQ.operation_type_refine)then
      call MPI_IRECV(recv_flush_refine,1,new_mpi_large_realdp_flush,&
+          & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+  endif
+  if(cache_operation_type.EQ.operation_type_mg)then
+     call MPI_IRECV(recv_flush_mg,1,new_mpi_twin_realdp_flush,&
           & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
   endif
 

@@ -41,6 +41,7 @@ module hydro_commons
   logical ,dimension(:,:,:),allocatable::okloc
   integer ,dimension(:,:,:),allocatable::childloc
   integer ,dimension(:,:,:),allocatable::parentloc
+  integer ,dimension(:,:,:,:),allocatable::nborloc
 
   ! Work space for hydro kernel
   integer,parameter::nx_2=4
@@ -68,6 +69,7 @@ module hydro_commons
   logical ,dimension(:,:,:),allocatable::okloc_2
   integer ,dimension(:,:,:),allocatable::childloc_2
   integer ,dimension(:,:,:),allocatable::parentloc_2
+  integer ,dimension(:,:,:,:),allocatable::nborloc_2
 
   ! Work space for hydro kernel
   integer,parameter::nx_4=8
@@ -95,6 +97,7 @@ module hydro_commons
   logical ,dimension(:,:,:),allocatable::okloc_4
   integer ,dimension(:,:,:),allocatable::childloc_4
   integer ,dimension(:,:,:),allocatable::parentloc_4
+  integer ,dimension(:,:,:,:),allocatable::nborloc_4
 
   ! Work space for hydro kernel
   integer,parameter::nx_8=16
@@ -122,6 +125,7 @@ module hydro_commons
   logical ,dimension(:,:,:),allocatable::okloc_8
   integer ,dimension(:,:,:),allocatable::childloc_8
   integer ,dimension(:,:,:),allocatable::parentloc_8
+  integer ,dimension(:,:,:,:),allocatable::nborloc_8
 
   ! Work space for hydro kernel
   integer,parameter::nx_16=32
@@ -149,6 +153,7 @@ module hydro_commons
   logical ,dimension(:,:,:),allocatable::okloc_16
   integer ,dimension(:,:,:),allocatable::childloc_16
   integer ,dimension(:,:,:),allocatable::parentloc_16
+  integer ,dimension(:,:,:,:),allocatable::nborloc_16
 
   ! Work space for hydro kernel
   integer,parameter::nx_32=64
@@ -176,6 +181,7 @@ module hydro_commons
   logical ,dimension(:,:,:),allocatable::okloc_32
   integer ,dimension(:,:,:),allocatable::childloc_32
   integer ,dimension(:,:,:),allocatable::parentloc_32
+  integer ,dimension(:,:,:,:),allocatable::nborloc_32
 
 end module hydro_commons
 

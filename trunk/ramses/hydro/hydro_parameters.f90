@@ -26,6 +26,7 @@ module hydro_parameters
 #if NVAR>NDIM+2+NENER
   real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0.0
 #endif
+
   ! Refinement parameters for hydro
   real(dp)::err_grad_d=-1.0  ! Density gradient
   real(dp)::err_grad_u=-1.0  ! Velocity gradient
@@ -54,6 +55,7 @@ module hydro_parameters
 #if NVAR>NDIM+2+NENER
   real(dp),dimension(1:MAXREGION,1:NVAR-NDIM-2-NENER)::var_region=0.0
 #endif
+
   ! Hydro solver parameters
   integer ::niter_riemann=10
   integer ::slope_type=1
@@ -65,6 +67,9 @@ module hydro_parameters
   real(dp)::smallr=1.d-10
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
+
+  ! Other hydro solver parameters
+  real(dp)::T2_star
 
   ! Interpolation parameters
   integer ::interpol_var=0

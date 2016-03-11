@@ -1,5 +1,6 @@
 module poisson_commons 
   use amr_commons
+  use hash
   use poisson_parameters
 
   ! Multigrid lookup table for amr -> mg index mapping
@@ -7,6 +8,9 @@ module poisson_commons
 
   ! Minimum MG level
   integer :: levelmin_mg
+
+  ! MG hash table
+  type(hash_table)::mg_dict
 
   ! Multigrid safety switch
   logical, allocatable, dimension(:) :: safe_mode

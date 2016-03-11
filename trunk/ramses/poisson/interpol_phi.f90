@@ -17,7 +17,7 @@ subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   integer::ind,ind_average,ind_father
   integer::igrid_nbr,ind_nbr,igrid_cen,ind_cen
   real(dp)::coeff,add
-
+#ifdef GRAV
   ! Store central cell
   igrid_cen=igrid_nbor(threetondim/2+1)
   ind_cen=ind_nbor(threetondim/2+1)
@@ -41,7 +41,7 @@ subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         phi_int(ind)=phi_int(ind)+add
      end do
   end do
-
+#endif
  end subroutine interpol_phi
 !###########################################################
 !###########################################################
@@ -53,6 +53,7 @@ subroutine save_phi_old(ilevel)
   integer ilevel
   ! Save the old potential for time extrapolation in case of subcycling
   integer::ind,igrid
+#ifdef GRAV
   ! Loop over level grids
   do igrid=head(ilevel),tail(ilevel)
      ! Loop over cells
@@ -61,6 +62,7 @@ subroutine save_phi_old(ilevel)
         grid(igrid)%phi_old(ind)=grid(igrid)%phi(ind)
      end do
   end do
+#endif
 end subroutine save_phi_old
 !###########################################################
 !###########################################################

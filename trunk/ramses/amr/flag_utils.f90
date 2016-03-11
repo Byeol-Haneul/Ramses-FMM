@@ -124,14 +124,13 @@ subroutine init_flag(ilevel)
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------
-  cache_operation=operation_initflag
-  call open_cache
+  call open_cache(operation_initflag,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ichild=head(ilevel+1),tail(ilevel+1)
      hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
-     parent_cell=get_parent_cell(hash_key,.true.,.false.)
+     parent_cell=get_parent_cell(hash_key,grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
      ok=.false.
@@ -146,7 +145,7 @@ subroutine init_flag(ilevel)
      endif
   end do
 
-  call close_cache
+  call close_cache(grid_dict)
 
 end subroutine init_flag
 !###############################################################
@@ -228,8 +227,7 @@ subroutine smooth_fine(ilevel)
         end do
      end do
 
-     cache_operation=operation_smooth
-     call open_cache
+     call open_cache(operation_smooth,domain_decompos_amr)
 
      ! Count neighbors and set flag2 accordingly
      do igrid=head(ilevel),tail(ilevel)
@@ -243,7 +241,7 @@ subroutine smooth_fine(ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
               if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
            enddo
-           igridn(i_nbor)=get_grid(hash_nbor,.false.,.true.)
+           igridn(i_nbor)=get_grid(hash_nbor,grid_dict,.false.,.true.)
            call lock_cache(igridn(i_nbor))
         end do
 
@@ -271,7 +269,7 @@ subroutine smooth_fine(ilevel)
      end do
      ! End loop over grids
 
-    call close_cache
+    call close_cache(grid_dict)
 
      ! Set flag1=1 for cells with flag2=1
      do igrid=head(ilevel),tail(ilevel)
@@ -323,8 +321,7 @@ subroutine ensure_ref_rules(ilevel)
   k1max=2
 #endif
 
-  cache_operation=operation_smooth
-  call open_cache
+  call open_cache(operation_smooth,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
   do igrid=head(ilevel),tail(ilevel)
@@ -353,7 +350,7 @@ subroutine ensure_ref_rules(ilevel)
               enddo
 
               ! Get neighboring grid index
-              ichild=get_grid(hash_nbor,.false.,.true.)
+              ichild=get_grid(hash_nbor,grid_dict,.false.,.true.)
               ok=ok.and.(ichild>0)
 
            end do
@@ -368,7 +365,7 @@ subroutine ensure_ref_rules(ilevel)
 
   end do
 
-  call close_cache 
+  call close_cache(grid_dict)
 
 end subroutine ensure_ref_rules 
 !############################################################

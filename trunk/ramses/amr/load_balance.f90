@@ -27,7 +27,6 @@ subroutine load_balance(ilevel)
   integer::noct_zero,head_zero,indx_zero
   integer::ncreate_tot,nkill_tot
   integer::parent_cell,skip_bit,true_level
-  integer::get_parent_cell
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nlevelmax)::key_ref
@@ -39,7 +38,6 @@ subroutine load_balance(ilevel)
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok_free,ok_all,ok
   type(oct)::grid_tmp
-
 
 #ifndef WITHOUTMPI
   if(ncpu==1)return
@@ -153,8 +151,7 @@ subroutine load_balance(ilevel)
   ifree=noct_used+1
   do ilev=ilevel+1,nlevelmax
 
-     cache_operation=operation_loadbalance
-     call open_cache
+     call open_cache(operation_loadbalance,domain_decompos_amr)
 
      hash_key(0)=ilev
      do ioct=head(ilev),tail(ilev)
@@ -172,7 +169,7 @@ subroutine load_balance(ilevel)
            end do
 
            ! If next cache line is occupied, free it.
-           if(occupied(free_cache))call destage(ngridmax+free_cache)
+           if(occupied(free_cache))call destage(ngridmax+free_cache,grid_dict)
            ! Set grid index to a virtual grid in local cache memory
            ichild=ngridmax+free_cache
            occupied(free_cache)=.true.
@@ -200,7 +197,7 @@ subroutine load_balance(ilevel)
 
      end do
 
-     call close_cache
+     call close_cache(grid_dict)
 
   end do
 

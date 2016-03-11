@@ -1,5 +1,6 @@
 subroutine init_amr
   use amr_commons
+  use poisson_commons
   use hash
   implicit none
 #ifndef WITHOUTMPI
@@ -41,16 +42,22 @@ subroutine init_amr
   occupied_null=.false.
   free_null=1; nnull=0
 
-  ! Allocate oct hash table
+  ! Allocate hash table for AMR data
   if(verbose.and.myid==1)write(*,*)'Initialize empty hash'
   call init_empty_hash(grid_dict,2*(ngridmax+ncachemax))
+
+  ! Allocate another smaller hash table for multigrid data
+  if(poisson)then
+     call init_empty_hash(mg_dict,2*(ngridmax+ncachemax)/7)
+  endif
 
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
-  allocate(bound_key_level(0:ncpu,levelmin:nlevelmax))
-  allocate(ckey_max(levelmin:nlevelmax))
-  do ilevel=levelmin,nlevelmax
+  allocate(bound_key_level(0:ncpu,1:nlevelmax))
+  allocate(bound_hilbert_key(0:ncpu,1:nlevelmax))
+  allocate(ckey_max(1:nlevelmax))
+  do ilevel=1,nlevelmax
      ckey_max(ilevel)=2**(ilevel-1)
      max_key=2**((ilevel-1)*ndim)
      do icpu=1,ncpu-1
@@ -80,16 +87,22 @@ subroutine init_amr
 #ifndef WITHOUTMPI  
   ! Allocate all communication and cache-related variables
   allocate(reply_id(1:ncpu))
+  allocate(reply_mg(1:ncpu))
   allocate(reply_flag(1:ncpu))
   allocate(reply_hydro(1:ncpu))
   allocate(reply_poisson(1:ncpu))
+  allocate(reply_refine(1:ncpu))
+  allocate(send_flush_mg(1:ncpu))
   allocate(send_flush_flag(1:ncpu))
   allocate(send_flush_hydro(1:ncpu))
   allocate(send_flush_poisson(1:ncpu))
+  allocate(send_flush_refine(1:ncpu))
   do icpu=1,ncpu
+     send_flush_mg(icpu)%nflush=0
      send_flush_flag(icpu)%nflush=0
      send_flush_hydro(icpu)%nflush=0
      send_flush_poisson(icpu)%nflush=0
+     send_flush_refine(icpu)%nflush=0
   end do
 
   ! Create and commit MPI derived types
@@ -167,6 +180,22 @@ subroutine init_amr
   call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_small_realdp_msg,info)
   call MPI_TYPE_COMMIT(new_mpi_small_realdp_msg,info)
 
+  ! New type for twin_realdp_msg
+  new_type_disp(1)=0
+  new_type_disp(2)=2*intex
+  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
+  new_type_disp(4)=(2+ntilemax*(1+ndim))*intex+ntilemax*twotondim*realdpex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=2
+  new_type_length(2)=ntilemax*(1+ndim)
+  new_type_length(3)=ntilemax*(twotondim)
+  new_type_length(4)=ntilemax*(twotondim)
+  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_twin_realdp_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_twin_realdp_msg,info)
+
   ! New type for large_realdp_msg
   new_type_disp(1)=0
   new_type_disp(2)=2*intex
@@ -209,6 +238,22 @@ subroutine init_amr
   new_type_length(3)=nflushmax*twotondim
   call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_small_realdp_flush,info)
   call MPI_TYPE_COMMIT(new_mpi_small_realdp_flush,info)
+
+  ! New type for twin_realdp_flush
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
+  new_type_disp(4)=(1+nflushmax*(1+ndim))*intex+nflushmax*twotondim*realdpex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax*(1+ndim)
+  new_type_length(3)=nflushmax*twotondim
+  new_type_length(4)=nflushmax*twotondim
+  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_twin_realdp_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_twin_realdp_flush,info)
 
   ! New type for large_realdp_flush
   new_type_disp(1)=0

@@ -38,6 +38,8 @@ subroutine read_hydro_params(nml_ok)
        & ,ibound_min,ibound_max,jbound_min,jbound_max &
        & ,kbound_min,kbound_max &
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
+  namelist/physics_params/cooling,units_density,units_time,units_length &
+       & ,T2_star
 
   ! Read namelist file
   rewind(1)
@@ -59,6 +61,8 @@ subroutine read_hydro_params(nml_ok)
     call clean_stop
   end if
   rewind(1)
+  read(1,NML=physics_params,END=105)
+105 continue
 
   !--------------------------------------------------
   ! Check for non-thermal energies

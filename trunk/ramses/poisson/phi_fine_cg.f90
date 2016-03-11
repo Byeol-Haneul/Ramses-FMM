@@ -31,9 +31,9 @@ subroutine phi_fine_cg(ilevel,icount)
   if(verbose)write(*,111)ilevel
 
   ! Set constants
-  dx2=(0.5D0**ilevel)**2
-  fourpi=4.D0*ACOS(-1.0D0)*boxlen
-  if(cosmo)fourpi=1.5D0*omega_m*aexp*boxlen
+  dx2=(boxlen/2**ilevel)**2
+  fourpi=4.D0*ACOS(-1.0D0)
+  if(cosmo)fourpi=1.5D0*omega_m*aexp
   oneoversix=1.0D0/dble(twondim)
   fact=oneoversix*fourpi*dx2
   fact2=fact*fact
@@ -47,11 +47,13 @@ subroutine phi_fine_cg(ilevel,icount)
   ! Compute right-hand side norm
   !===============================
   rhs_norm=0.d0
+#ifdef GRAV
   do igrid=head(ilevel),tail(ilevel)
      do ind=1,twotondim
         rhs_norm=rhs_norm+fact2*(grid(igrid)%rho(ind)-rho_tot)**2
      end do
   end do
+#endif
   ! Compute global norms
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(rhs_norm,rhs_norm_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
@@ -78,11 +80,13 @@ subroutine phi_fine_cg(ilevel,icount)
      ! Compute residual norm
      !====================================
      r2=0.0d0
+#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            r2=r2+grid(igrid)%f(ind,1)**2
         end do
      end do
+#endif
      ! Compute global norm
 #ifndef WITHOUTMPI
      call MPI_ALLREDUCE(r2,r2_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
@@ -101,11 +105,13 @@ subroutine phi_fine_cg(ilevel,icount)
      !====================================
      ! Recurrence on p
      !====================================
+#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            grid(igrid)%f(ind,2)=grid(igrid)%f(ind,1)+beta_cg*grid(igrid)%f(ind,2)
         end do
      end do
+#endif
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
@@ -116,11 +122,13 @@ subroutine phi_fine_cg(ilevel,icount)
      ! Compute p.Ap scalar product
      !====================================
      pAp=0.0d0
+#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            pAp=pAp+grid(igrid)%f(ind,2)*grid(igrid)%f(ind,3)
         end do
      end do
+#endif
      ! Compute global sum
 #ifndef WITHOUTMPI
      call MPI_ALLREDUCE(pAp,pAp_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
@@ -135,20 +143,24 @@ subroutine phi_fine_cg(ilevel,icount)
      !====================================
      ! Recurrence on x
      !====================================
+#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            grid(igrid)%phi(ind)=grid(igrid)%phi(ind)+alpha_cg*grid(igrid)%f(ind,2)
         end do
      end do
+#endif
 
      !====================================
      ! Recurrence on r
      !====================================
+#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            grid(igrid)%f(ind,1)=grid(igrid)%f(ind,1)-alpha_cg*grid(igrid)%f(ind,3)
         end do
      end do
+#endif
 
      ! Compute error
      error=DSQRT(r2/dble(twotondim*noct_tot(ilevel)))
@@ -159,7 +171,7 @@ subroutine phi_fine_cg(ilevel,icount)
   ! End main iteration loop
 
   if(myid==1)write(*,115)ilevel,iter,error/rhs_norm,error/error_ini
-  if(iter >= itermax)then
+  if(iter>=itermax)then
      if(myid==1)write(*,*)'Poisson failed to converge...'
   end if
 
@@ -179,7 +191,7 @@ subroutine cmp_residual_cg(ilevel,icount)
   integer::ilevel,icount
   !------------------------------------------------------------------
   ! This routine computes the residual for the Conjugate Gradient
-  ! Poisson solver. The residual is stored in f(i,1).
+  ! Poisson solver. The residual is stored in f(i,1) and f(i,2).
   !------------------------------------------------------------------
   integer::get_grid
   integer::i_nbor,igrid,idim,ind,igridn
@@ -196,9 +208,9 @@ subroutine cmp_residual_cg(ilevel,icount)
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
 
   ! Set constants
-  dx2=(0.5D0**ilevel)**2
-  fourpi=4.D0*ACOS(-1.0D0)*boxlen
-  if(cosmo)fourpi=1.5D0*omega_m*aexp*boxlen
+  dx2=(boxlen/2**ilevel)**2
+  fourpi=4.D0*ACOS(-1.0D0)
+  if(cosmo)fourpi=1.5D0*omega_m*aexp
   oneoversix=1.0D0/dble(twondim)
   fact=oneoversix*fourpi*dx2
 
@@ -238,18 +250,19 @@ subroutine cmp_residual_cg(ilevel,icount)
      tfrac=0.0
   end if
 
-  cache_operation=operation_phi
-  call open_cache
+  call open_cache(operation_phi,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
   ! Loop over grids
   do igrid=head(ilevel),tail(ilevel)
 
+#ifdef GRAV
      ! Get central oct potential
      do ind=1,twotondim
         phi_nbor(ind,0)=grid(igrid)%phi(ind)
      end do
+#endif
 
      ! Get neighboring octs potential
      do i_nbor=1,twondim
@@ -262,17 +275,22 @@ subroutine cmp_residual_cg(ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
            if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        igridn=get_grid(hash_nbor,.false.,.true.)
+
+        ! Get neighbouring grid using a read-only cache
+        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
+#ifdef GRAV
            do ind=1,twotondim
               phi_nbor(ind,i_nbor)=grid(igridn)%phi(ind)
            end do
+#endif
 
         ! Otherwise interpolate from coarser level
         else
-           call get_threetondim_nbor_parent_cell(hash_nbor,igrid_nbor,ind_nbor,.false.,.true.)
+           ! Get 3**ndim neighbouring paremt cell using a read-only cache
+           call get_threetondim_nbor_parent_cell(hash_nbor,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
            call interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
               call unlock_cache(igrid_nbor(ind))
@@ -286,19 +304,27 @@ subroutine cmp_residual_cg(ilevel,icount)
      do ind=1,twotondim
 
         ! Compute residual using 6 neighbors potential
+#ifdef GRAV
         residu=grid(igrid)%phi(ind)
+#endif
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
            residu=residu-oneoversix*(phi_nbor(id1,ig1)+phi_nbor(id2,ig2))
         end do
+#ifdef GRAV
         residu=residu+fact*(grid(igrid)%rho(ind)-rho_tot)
+#endif
 
         ! Store results in f(ind,1)
+#ifdef GRAV
         grid(igrid)%f(ind,1)=residu
+#endif
 
         ! Store results in f(ind,2)
+#ifdef GRAV
         grid(igrid)%f(ind,2)=residu
+#endif
 
      end do
      ! End loop over cells
@@ -306,7 +332,7 @@ subroutine cmp_residual_cg(ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache
+  call close_cache(grid_dict)
 
 end subroutine cmp_residual_cg
 !###########################################################
@@ -344,8 +370,7 @@ subroutine cmp_Ap_cg(ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
 
-  cache_operation=operation_conjgrad
-  call open_cache
+  call open_cache(operation_cg,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -353,9 +378,11 @@ subroutine cmp_Ap_cg(ilevel)
   do igrid=head(ilevel),tail(ilevel)
 
      ! Get central oct potential
+#ifdef GRAV
      do ind=1,twotondim
         phi_nbor(ind,0)=grid(igrid)%phi(ind)
      end do
+#endif
 
      ! Get neighboring octs potential
      do i_nbor=1,twondim
@@ -368,13 +395,17 @@ subroutine cmp_Ap_cg(ilevel)
            if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
            if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        igridn=get_grid(hash_nbor,.false.,.true.)
+
+        ! Get neighbouring grid using read-only cache
+        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
+#ifdef GRAV
            do ind=1,twotondim
               phi_nbor(ind,i_nbor)=grid(igridn)%f(ind,2)
            end do
+#endif
         else
            do ind=1,twotondim
               phi_nbor(ind,i_nbor)=0.0
@@ -388,7 +419,9 @@ subroutine cmp_Ap_cg(ilevel)
      do ind=1,twotondim
 
         ! Compute Ap using neighbors potential
+#ifdef GRAV
         residu=-grid(igrid)%f(ind,2)
+#endif
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
@@ -396,7 +429,9 @@ subroutine cmp_Ap_cg(ilevel)
         end do
 
         ! Store results in f(ind,3)
+#ifdef GRAV
         grid(igrid)%f(ind,3)=residu
+#endif
 
      end do
      ! End loop over cells
@@ -404,7 +439,7 @@ subroutine cmp_Ap_cg(ilevel)
   end do
   ! End loop over grids
 
-  call close_cache
+  call close_cache(grid_dict)
 
 end subroutine cmp_Ap_cg
 !###########################################################
@@ -457,8 +492,7 @@ subroutine make_initial_phi(ilevel,icount)
      tfrac=0.0
   end if
 
-  cache_operation=operation_phi
-  call open_cache
+  call open_cache(operation_phi,domain_decompos_amr)
 
   hash_key(0)=ilevel
 
@@ -467,6 +501,7 @@ subroutine make_initial_phi(ilevel,icount)
 
      ! By default, initial phi is equal to zero
 
+#ifdef GRAV
      ! Loop over cells
      do ind=1,twotondim
         grid(igrid)%phi(ind)=0.0d0
@@ -475,32 +510,39 @@ subroutine make_initial_phi(ilevel,icount)
         end do
      end do
      ! End loop over cells
+#endif
 
      ! For fine levels, initial phi is interpolated from coarser level
      if(ilevel.GT.levelmin)then
         
         hash_key(1:ndim)=grid(igrid)%ckey(1:ndim)
-        call get_threetondim_nbor_parent_cell(hash_key,igrid_nbor,ind_nbor,.false.,.true.)
+        ! Get 3**ndim neghbouring parent cell using read-only cache
+        call get_threetondim_nbor_parent_cell(hash_key,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
         call interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
            call unlock_cache(igrid_nbor(ind))
         end do
 
+#ifdef GRAV
         ! Loop over cells
         do ind=1,twotondim
            grid(igrid)%phi(ind)=phi_int(ind)
         end do
         ! End loop over cells
+#endif
 
      end if
 
   end do
   ! End loop over grids
 
-  call close_cache
+  call close_cache(grid_dict)
 
 end subroutine make_initial_phi
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+
+
+
