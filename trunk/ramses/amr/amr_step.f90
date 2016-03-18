@@ -57,7 +57,7 @@ recursive subroutine amr_step(ilevel,icount)
   ! Poisson source term
   !--------------------
   if(poisson)then
-                               call timer('poisson','start')
+                               call timer('poisson - rho','start')
      ! Compute total mass density at level ilevel
      call rho_fine(ilevel,icount)
   endif
@@ -66,26 +66,26 @@ recursive subroutine amr_step(ilevel,icount)
   ! Gravity solver
   !---------------
   if(poisson)then
-                               call timer('poisson','start')
+                               call timer('poisson - synchro','start')
      ! Remove gravity source term with half time step and old force
      if(hydro)then
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
 
+                               call timer('poisson - solver','start')
      ! Save old potential for time-extrapolation at level boundaries
      call save_phi_old(ilevel)
 
      ! Compute gravitational potential
-     call phi_fine_cg(ilevel,icount)
-!!$     if(ilevel>levelmin)then
-!!$        if(ilevel .ge. cg_levelmin) then
-!!$           call phi_fine_cg(ilevel,icount)
-!!$        else
-!!$           call multigrid_fine(ilevel,icount)
-!!$        end if
-!!$     else
-!!$        call multigrid_fine(levelmin,icount)
-!!$     end if
+     if(ilevel>levelmin)then
+        if(ilevel .ge. cg_levelmin) then
+           call phi_fine_cg(ilevel,icount)
+        else
+           call multigrid(ilevel,icount)
+        end if
+     else
+        call multigrid(levelmin,icount)
+     end if
 
      ! Initial old potential
      if (nstep==0)call save_phi_old(ilevel)
@@ -94,6 +94,7 @@ recursive subroutine amr_step(ilevel,icount)
      call force_fine(ilevel,icount)
 
      if(hydro)then
+                               call timer('poisson - synchro','start')
         ! Add gravity source term with half time step and new force
         call synchro_hydro_fine(ilevel,+0.5*dtnew(ilevel))
      end if
@@ -144,7 +145,7 @@ recursive subroutine amr_step(ilevel,icount)
                                call timer('hydro - godunov','start')
      call godunov_fine(ilevel)
      ! Add gravity source terms to unew with half time step
-                               call timer('poisson','start')
+                               call timer('poisson - synchro','start')
      if(poisson)call add_gravity_source_terms(ilevel)
 
      ! Set uold equal to unew
@@ -152,7 +153,7 @@ recursive subroutine amr_step(ilevel,icount)
      call set_uold(ilevel)
      ! Add gravity source terms to uold with half time step
      ! to complete the time step (will be removed later)
-                               call timer('poisson','start')
+                               call timer('poisson - synchro','start')
      if(poisson)call synchro_hydro_fine(ilevel,+0.5*dtnew(ilevel))
      ! Restriction operator
                                call timer('hydro - upload','start')

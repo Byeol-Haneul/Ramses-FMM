@@ -163,7 +163,10 @@ subroutine userflag_fine(ilevel)
   ! -------------------------------------------------------------------
   if(ilevel==nlevelmax)return
   if(noct_tot(ilevel)==0)return
- 
+  
+  ! Refinement rules for the gravity solver
+  if(poisson)call poisson_flag(ilevel)
+
   ! Refinement rules for the hydro solver
   if(hydro)call hydro_flag(ilevel)
 

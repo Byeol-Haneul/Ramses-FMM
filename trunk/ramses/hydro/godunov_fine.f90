@@ -35,8 +35,8 @@ subroutine godunov_fine(ilevel)
              & if1,if2,jf1,jf2,kf1,kf2)
      CASE(2**ndim)
         call godfine1(igrid,ilevel,&
-             & uloc_2,gloc_2,qloc_2,cloc_2,nborloc_2,&
-             & okloc_2,childloc_2,parentloc_2,&
+             & uloc_2,gloc_2,qloc_2,cloc_2,&
+             & okloc_2,childloc_2,parentloc_2,nborloc_2,&
              & flux_2,tmp_2,dq_2,qm_2,qp_2,fx_2,tx_2,divu_2,&
              & iu1_2,iu2_2,ju1_2,ju2_2,ku1_2,ku2_2,&
              & io1_2,io2_2,jo1_2,jo2_2,ko1_2,ko2_2,&
@@ -152,11 +152,6 @@ subroutine set_uold(ilevel)
 
   dx=boxlen/2**ilevel
 
-  ! Add gravity source terms to unew
-  if(poisson)then
-     call add_gravity_source_terms(ilevel)
-  end if
-
   ! Set uold to unew
   do i=head(ilevel),tail(ilevel)
      do ind=1,twotondim
@@ -256,7 +251,7 @@ subroutine godfine1(ind_grid,ilevel,&
   oneontwotondim = 1.d0/dble(twotondim)
 
   ! Mesh spacing in that level
-  dx=0.5D0**ilevel*boxlen
+  dx=boxlen/2**ilevel
 
   ! Integer constants
   i1min=io1; i1max=io2; j1min=jo1; j1max=jo2; k1min=ko1; k1max=ko2
@@ -369,6 +364,7 @@ subroutine godfine1(ind_grid,ilevel,&
               ! Get neighboring grid index with read-only cache
               ichild=get_grid(hash_nbor,grid_dict,.false.,.true.)
               parent_cell=0
+              igrid_nbor=0
               if(ichild>0)then
                  call lock_cache(ichild)
               else
@@ -398,10 +394,6 @@ subroutine godfine1(ind_grid,ilevel,&
                     ! Interpolate
                     call interpol_hydro(u1,u2)
 
-                    ! Store neighbouring grids index
-                    do inbor=1,twondim
-                       nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
-                    end do
                  endif
 
               endif
@@ -409,6 +401,11 @@ subroutine godfine1(ind_grid,ilevel,&
               ! Store grid index
               childloc(i1,j1,k1)=ichild
               parentloc(i1,j1,k1)=parent_cell
+              if(interpol_type>0)then
+                 do inbor=1,twondim
+                    nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
+                 end do
+              endif
 
               ! Loop over 2x2x2 cells
               do k2=k2min,k2max
@@ -432,6 +429,7 @@ subroutine godfine1(ind_grid,ilevel,&
                           do ivar=1,nvar
                              uloc(i3,j3,k3,ivar)=grid(ichild)%uold(ind_son,ivar)
                           end do
+
 #ifdef GRAV
                           ! Gather gravitational acceleration
                           do idim=1,ndim
@@ -444,17 +442,18 @@ subroutine godfine1(ind_grid,ilevel,&
                        ! If neighboring grid doesn't exist, interpolate
                        else
 
-                          if(interpol_type==0)then
-                             ! Gather hydro variables
-                             do ivar=1,nvar
-                                uloc(i3,j3,k3,ivar)=grid(igrid)%uold(icell,ivar)
-                             end do
-                          else
-                             ! Gather interpolated hydro variables
+                          ! Gather hydro variables
+                          do ivar=1,nvar
+                             uloc(i3,j3,k3,ivar)=grid(igrid)%uold(icell,ivar)
+                          end do
+
+                          ! Gather interpolated hydro variables
+                          if(interpol_type>0)then
                              do ivar=1,nvar
                                 uloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
                              end do
                           endif
+
 #ifdef GRAV
                           ! Gather gravitational acceleration
                           do idim=1,ndim
@@ -745,7 +744,9 @@ subroutine godfine1(ind_grid,ilevel,&
               if(interpol_type>0)then
                  do inbor=1,twondim
                     igrid=nborloc(i1,j1,k1,inbor)
-                    call unlock_cache(igrid)
+                    if(igrid>0)then
+                       call unlock_cache(igrid)
+                    endif
                  end do
               endif
            endif

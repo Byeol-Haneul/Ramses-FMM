@@ -80,7 +80,7 @@ subroutine hydro_flag(ilevel)
            end do
            call hydro_refine(uug,uum,uud,ok)
         end do
-     
+        
         do i_nbor=1,twondim
            igridp=(indn(i_nbor)-1)/twotondim+1
            call unlock_cache(igridp)
@@ -102,4 +102,3 @@ end subroutine hydro_flag
 !#####################################################################
 !#####################################################################
 !#####################################################################
-

@@ -225,7 +225,7 @@ subroutine compute_limiter_minmod(a,w)
   !---------------
   ! MinMod slope
   !---------------
-  integer::i,idim
+  integer::idim
   real(dp)::diff_left,diff_right,minmod
 
   do idim=1,ndim

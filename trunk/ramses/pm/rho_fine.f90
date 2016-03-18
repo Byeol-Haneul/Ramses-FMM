@@ -42,16 +42,16 @@ subroutine rho_fine(ilevel,icount)
   !--------------------------------------------------------------
   ! Compute multipole contribution from all cpus and set rho_tot
   !--------------------------------------------------------------
-  if(ilevel==levelmin)then
 #ifndef WITHOUTMPI
+  if(ilevel==levelmin)then
      multipole_in=multipole
      call MPI_ALLREDUCE(multipole_in,multipole_out,ndim+1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
      multipole=multipole_out
-#endif
-     rho_tot=multipole(1)/boxlen**ndim
-     if(debug)write(*,*)'rho_average=',rho_tot
-!!! rho_tot=0d0 ! For non-periodic BC
   endif
+#endif
+  rho_tot=multipole(1)/boxlen**ndim
+  if(debug)write(*,*)'rho_average=',rho_tot
+!!! rho_tot=0d0 ! For non-periodic BC
   
 111 format('   Entering rho_fine for level ',I2)
   
@@ -80,6 +80,7 @@ subroutine multipole_fine(ilevel)
   real(dp),dimension(1:ndim),save::xx
   real(kind=8)::dx_loc,vol_loc,mmm,dd,average
   integer(kind=8),dimension(0:ndim)::hash_key
+  logical::leaf_cell
 
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
@@ -106,8 +107,10 @@ subroutine multipole_fine(ilevel)
      ! Loop over cells
      do ind=1,twotondim
 
+        leaf_cell=grid(igrid)%refined(ind).EQV..FALSE.
+
         ! For leaf cells only
-        if(.NOT.grid(igrid)%refined(ind))then
+        if(leaf_cell)then
 
            ! Cell coordinates
            do idim=1,ndim
@@ -142,6 +145,9 @@ subroutine multipole_fine(ilevel)
   !-------------------------------------------------------
   ! Perform octree restriction from level ilevel+1
   !-------------------------------------------------------
+  if(ilevel==nlevelmax)return
+  if(noct_tot(ilevel+1)==0)return
+
   call open_cache(operation_multipole,domain_decompos_amr)
 
   ! Loop over finer level grids
@@ -203,6 +209,7 @@ subroutine cic_from_multipole(ilevel)
      end do
   end do
 #endif  
+
   if(hydro)call cic_cell(ilevel)
 
 111 format('   Entering cic_from_multipole for level',i2)
@@ -231,7 +238,7 @@ subroutine cic_cell(ilevel)
   vol_loc=dx_loc**ndim
 
   ! Use hash table directly for cells (not for grids)
-  hash_key=ilevel+1
+  hash_key(0,:)=ilevel+1
 
   call open_cache(operation_rho,domain_decompos_amr)
 
@@ -270,8 +277,8 @@ subroutine cic_cell(ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(ig(idim)<0)ig(idim)=ckey_max(ilevel)-1
-           if(id(idim)==ckey_max(ilevel))id(idim)=0
+           if(ig(idim)<0)ig(idim)=ckey_max(ilevel+1)-1
+           if(id(idim)==ckey_max(ilevel+1))id(idim)=0
         enddo
 
         ! Compute cloud volumes
@@ -321,7 +328,7 @@ subroutine cic_cell(ilevel)
 #ifdef GRAV
         do i_nbor=1,twotondim
            ! Get parent cell using write-only cache
-           parent_cell=get_parent_cell(hash_key(1:ndim,i_nbor),grid_dict,.true.,.false.)
+           parent_cell=get_parent_cell(hash_key(0:ndim,i_nbor),grid_dict,.true.,.false.)
            if(parent_cell>0)then
               ioct=(parent_cell-1)/twotondim+1
               icell=parent_cell-(ioct-1)*twotondim

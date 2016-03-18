@@ -12,12 +12,16 @@ subroutine restrict_mask(ifinelevel,allmasked)
   use amr_commons
   use poisson_commons
   implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
   integer, intent(in) :: ifinelevel
   logical, intent(inout) :: allmasked
 
   integer(kind=8),dimension(0:ndim) :: hash_key
-  integer :: ichild,ind,igrid,icell  
-  real(dp) :: ngpmask
+  integer :: ichild,ind,igrid,icell,info
+  integer :: parent_cell, get_parent_cell
+  real(dp) :: ngpmask, mask_max
   real(dp) :: dtwotondim = (twotondim)
   logical :: allmasked_tot
   
@@ -89,11 +93,14 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
 
   ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
+  integer :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dist_nbor
+  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
   real(dp) :: dx, oneoverdx2, phi_c, dis_c, nb_sum
-  integer  :: igrid, ind, inbor, idim
+  integer  :: igrid, ind, inbor, idim, igridn, id, ig
   real(dp) :: dtwondim = (twondim)
   
   ! Set constants
@@ -230,12 +237,17 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   ! Perform a Gauss-Seidel update of grid(igrid)%phi(ind).
   ! The domain mask is also needed.
   
+  integer :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  integer, dimension(1:3,1:4)     :: ired, iblack
-  
-  real(dp) :: dx2, nb_sum, weight
-  integer  :: igrid, ind, ind0, idim, inbor, igridn
+  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  integer(kind=8),dimension(0:ndim) :: hash_nbor
+  real(dp) :: dx, oneoverdx2, phi_c, dis_c, dx2, nb_sum, weight
+  integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0
   real(dp) :: dtwondim = (twondim)
+
+  integer, dimension(1:3,1:4)     :: ired, iblack
   
   ! Set constants
   dx2  = (boxlen/2**ilevel)**2
@@ -448,7 +460,7 @@ subroutine interpolate_and_correct(ifinelevel)
   real(dp) :: a, b, c, d, coeff
   real(dp), dimension(1:8)     :: bbb
   integer,  dimension(1:8,1:8) :: ccc
-  integer::ind,ind_average,ind_father
+  integer::ind_average,ind_father
   integer::igrid_nbr,ind_nbr,igrid_cen,ind_cen
   real(dp),dimension(1:twotondim)::corr
   
@@ -538,12 +550,14 @@ subroutine set_scan_flag(hash_dict,ilevel)
   integer, intent(in) :: ilevel
   type(hash_table) :: hash_dict
   !
-  integer :: ind, igrid, igridn, inbor, idim
+  integer :: get_grid
+  integer :: ind, igrid, igridn, inbor, idim, id, ig
   integer, dimension(1:3,1:2,1:8)::iii, jjj
   real(dp),dimension(1:twotondim,0:twondim)::dis_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  real(dp)::dis_c
   
   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
   iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)

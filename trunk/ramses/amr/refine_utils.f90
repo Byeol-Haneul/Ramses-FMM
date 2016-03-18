@@ -349,12 +349,15 @@ subroutine make_new_oct(iparent,icell,ilevel)
   ! The parent cell is labeled with the parent oct index iparent
   ! and the cell index icell (from 1 to 8).
   !--------------------------------------------------------------
-  integer::icpu,idim,ivar,ichild,ind,nstride,grid_cpu
+  integer::icpu,idim,ivar,ichild,ind,inbor,nstride,grid_cpu
   integer(kind=4), dimension(1:nvector),save::dummy_state
   integer(kind=8), dimension(1:nvector),save::hk0,hk1,hk2
   integer(kind=8), dimension(1:nvector),save::ix,iy,iz
   integer(kind=8), dimension(1:ndim),save::cart_key
   integer(kind=8), dimension(0:ndim)::hash_key
+  integer,dimension(0:twondim)::igrid_nbor,ind_nbor
+  real(dp),dimension(0:twondim  ,1:nvar)::u1
+  real(dp),dimension(1:twotondim,1:nvar)::u2
 
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
@@ -448,21 +451,53 @@ subroutine make_new_oct(iparent,icell,ilevel)
 
   ! Inject parent hydro variables into new children ones
   if(.not.init)then
+     
 #ifdef HYDRO
+     
      ! Interpolate hydro variables
      do ivar=1,nvar
         do ind=1,twotondim
            grid(ichild)%uold(ind,ivar)=grid(iparent)%uold(icell,ivar)
         enddo
      end do
+     
+     ! In case one wants to interpolate using high-order schemes
+     if(interpol_type>0)then
+        
+        ! Get 2ndim neighboring father cells with read-only cache
+        call get_twondim_nbor_parent_cell(hash_key,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+        do inbor=0,twondim
+           do ivar=1,nvar
+              u1(inbor,ivar)=grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
+           end do
+        end do
+        do inbor=1,twondim
+           call unlock_cache(igrid_nbor(inbor))
+        end do
+        
+        ! Interpolate
+        call interpol_hydro(u1,u2)
+        
+        ! Store hydro variables
+        do ivar=1,nvar
+           do ind=1,twotondim
+              grid(ichild)%uold(ind,ivar)=u2(ind,ivar)
+           enddo
+        end do
+        
+     endif
+     
 #endif
+
 #ifdef GRAV
-     ! Interpolate gravity variables
+
+     ! Interpolate (straight injection) gravity variables
      do ind=1,twotondim
         grid(ichild)%f(ind,1:ndim)=grid(iparent)%f(icell,1:ndim)
         grid(ichild)%phi(ind)=grid(iparent)%phi(icell)
         grid(ichild)%phi_old(ind)=grid(iparent)%phi_old(icell)
      enddo
+
 #endif
   endif
 

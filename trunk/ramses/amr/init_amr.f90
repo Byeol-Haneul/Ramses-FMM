@@ -54,10 +54,10 @@ subroutine init_amr
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
-  allocate(bound_key_level(0:ncpu,1:nlevelmax))
-  allocate(bound_hilbert_key(0:ncpu,1:nlevelmax))
-  allocate(ckey_max(1:nlevelmax))
-  do ilevel=1,nlevelmax
+  allocate(bound_key_level(0:ncpu,1:nlevelmax+1))
+  allocate(bound_hilbert_key(0:ncpu,1:nlevelmax+1))
+  allocate(ckey_max(1:nlevelmax+1))
+  do ilevel=1,nlevelmax+1
      ckey_max(ilevel)=2**(ilevel-1)
      max_key=2**((ilevel-1)*ndim)
      do icpu=1,ncpu-1

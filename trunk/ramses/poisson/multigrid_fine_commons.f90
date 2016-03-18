@@ -40,14 +40,14 @@ subroutine multigrid(ilevel,icount)
   integer, parameter  :: MAXITER  = 10
   real(dp), parameter :: SAFE_FACTOR = 0.5
   
-  integer  :: ifine, i, iter, info, icpu
+  integer  :: igrid, ifine, i, iter, info, icpu
   real(kind=8) :: res_norm2, i_res_norm2, i_res_norm2_tot, res_norm2_tot
   real(kind=8) :: err, last_err
   
   logical :: allmasked
   
   if(gravity_type>0)return
-  if(noct_tot(1,ilevel)==0)return
+  if(noct_tot(ilevel)==0)return
   
   if(verbose) print '(A,I2)','Entering fine multigrid at level ',ilevel
   
@@ -202,7 +202,7 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
   integer, intent(in) :: ifinelevel
   logical, intent(in) :: safe
   
-  integer :: i, icpu, info, icycle, ncycle
+  integer :: i, igrid, icpu, info, icycle, ncycle
   
   if(ifinelevel<=levelmin_mg) then
      ! Solve 'directly' :
@@ -273,14 +273,21 @@ subroutine init_mg(ilevel)
   include "mpif.h"
 #endif
   integer::ilevel
+
+  integer::ilev,icpu
   
+  allocate(head_mg(1:ilevel))
+  allocate(tail_mg(1:ilevel))
+  allocate(noct_mg(1:ilevel))
+  allocate(noct_tot_mg(1:ilevel))
+
   ! Allocate and compute multigrid Hilbert key tick marks
   allocate(bound_key_mg(0:ncpu,1:ilevel))
   do icpu=0,ncpu
      bound_key_mg(icpu,ilevel)=bound_key_level(icpu,ilevel)
-  end do
-  do ilev=ilevel-1,1,-1
-     bound_key_mg(ilev)=bound_key_mg(ilev+1)/2
+     do ilev=ilevel-1,1,-1
+        bound_key_mg(icpu,ilev)=bound_key_mg(icpu,ilev+1)/2
+     end do
   end do
   
   ! First level of multigrid hierarchy is current AMR level
@@ -306,31 +313,24 @@ end subroutine init_mg
 subroutine build_mg(ifinelevel)
   use amr_commons
   use poisson_commons
+  use hilbert
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
 #endif
   
-  integer, intent(in) :: ifinelevel
+  integer,intent(in)::ifinelevel
   
-  integer :: icoarselevel
-  integer :: ngrids, cur_grid, cur_cpu, cur_cell, newgrids
-  integer :: i, nbatch, ind, icpu, istart, info
-  
-  integer :: nact_tot, nreq_tot, nreq_tot2
-  integer, dimension(1:ncpu) :: nreq, nreq2
-  
-  integer, dimension(1:nvector), save :: ind_cell_father
-  integer, dimension(1:nvector,1:twotondim),   save :: nbors_father_grids
-  integer, dimension(1:nvector,1:threetondim), save :: nbors_father_cells
-  
-  type(communicator), dimension(1:ncpu) :: comm_send, comm_receive
-  type(communicator), dimension(1:ncpu) :: comm_send2, comm_receive2
-  
-  integer, dimension(1:ncpu) :: indx, recvbuf, recvbuf2
-  integer, dimension(1:ncpu) :: reqsend, reqrecv
-  integer :: countrecv, countsend
-  
+  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
+  integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
+  integer,dimension(1:ndim)::cart_key
+  integer,dimension(1:3,1:8),save::shift_oct=reshape(&
+       & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
+       &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
+  integer(kind=4),dimension(1:nvector),save::dummy_state
+  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
+  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
+
   icoarselevel=ifinelevel-1
   ifree=noct_used+1
   head_mg(icoarselevel)=ifree
@@ -350,8 +350,8 @@ subroutine build_mg(ifinelevel)
         hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
         ! Periodic boundary conditons
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ifinelevel)-1
+           if(hash_nbor(idim)==ckey_max(ifinelevel))hash_nbor(idim)=0
         enddo
         hash_father(1:ndim)=hash_nbor(1:ndim)/2
         
@@ -380,18 +380,18 @@ subroutine build_mg(ifinelevel)
 #if NDIM==2
            ix(1)=cart_key(1)
            iy(1)=cart_key(2)
-           call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
+           call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,icoarselevel-1,1)
 #endif
 #if NDIM==3
            ix(1)=cart_key(1)
            iy(1)=cart_key(2)
            iz(1)=cart_key(3)
-           call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
+           call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,icoarselevel-1,1)
 #endif
            
            ! Check if grid sits inside processor boundaries
-           if(    hk0(1).ge.bound_key_mg(myid-1,ilevel).AND. &
-                & hk0(1).lt.bound_key_mg(myid  ,ilevel))then
+           if(    hk0(1).ge.bound_key_mg(myid-1,icoarselevel).AND. &
+                & hk0(1).lt.bound_key_mg(myid  ,icoarselevel))then
               
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
@@ -406,8 +406,8 @@ subroutine build_mg(ifinelevel)
               ! Otherwise, determine parent processor and use the cache
            else
               do icpu=1,ncpu
-                 if(    hk0(1).ge.bound_key_mg(icpu-1,ilevel).AND. &
-                      & hk0(1).lt.bound_key_mg(icpu  ,ilevel))then
+                 if(    hk0(1).ge.bound_key_mg(icpu-1,icoarselevel).AND. &
+                      & hk0(1).lt.bound_key_mg(icpu  ,icoarselevel))then
                     grid_cpu=icpu
                  end if
               end do
@@ -426,7 +426,7 @@ subroutine build_mg(ifinelevel)
               if(ncache.GT.ncachemax)ncache=ncachemax
            endif
            
-           grid(ichild)%lev=ilevel
+           grid(ichild)%lev=icoarselevel
            grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
            grid(ichild)%hkey=hk0(1)
            grid(ichild)%refined(1:twotondim)=.true.
@@ -457,7 +457,6 @@ subroutine build_mg(ifinelevel)
   tail_mg(icoarselevel)=ifree-1
   noct_mg(icoarselevel)=tail_mg(icoarselevel)-head_mg(icoarselevel)+1
   noct_used=tail_mg(icoarselevel)
-  
   noct_tot_mg(icoarselevel)=noct_mg(icoarselevel)
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(noct_mg(icoarselevel),noct_tot_mg(icoarselevel),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
@@ -480,6 +479,7 @@ subroutine cleanup_mg
    implicit none
 
    ! Deallocate processor boundary array
+   deallocate(head_mg,tail_mg,noct_mg,noct_tot_mg)
    deallocate(bound_key_mg)
 
   ! Reset the MG hash table
@@ -550,20 +550,19 @@ subroutine make_bc_rhs(ilevel,icount)
   integer, intent(in) :: ilevel,icount
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  
+  integer::igrid,idim,ind,igridn,inbor,ig,id
+  integer::get_grid
+  integer,dimension(1:8,1:8)::ccc
+  real(dp)::aa,bb,cc,dd,tfrac
+  real(dp),dimension(1:8)::bbb
+  integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
+  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
+  real(dp),dimension(1:twotondim),save::phi_int
+  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+
   real(dp) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
-  
-  ! Arrays for vectorized interpol_phi
-  real(dp), dimension(1:nvector,1:twotondim) :: phi_int
-  integer,  dimension(1:nvector) :: ind_cell
-  
-  integer  :: ngrid
-  integer  :: ind, igrid_mg, idim, inbor
-  integer  :: igrid_amr, icell_amr, iskip_amr
-  integer  :: igshift, igrid_nbor_amr, icell_nbor_amr
-  integer  :: ifathercell_nbor_amr
-  
-  integer  :: nx_loc
   real(dp) :: scale, fourpi
   
   ! Set constants

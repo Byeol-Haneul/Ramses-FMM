@@ -32,6 +32,8 @@ subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         ind_nbr=ind_nbor(ind_father)
         if (igrid_nbr==0) then 
            write(*,*)'no all neighbors present in interpol_phi...'
+           write(*,*)igrid_nbor
+           stop
            add=coeff*(grid(igrid_cen)%phi(ind_cen)+&
                 & (grid(igrid_cen)%phi(ind_cen)-grid(igrid_cen)%phi_old(ind_cen))*tfrac)
         else

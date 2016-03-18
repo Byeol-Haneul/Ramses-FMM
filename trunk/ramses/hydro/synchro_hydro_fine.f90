@@ -27,19 +27,19 @@ subroutine synchro_hydro_fine(ilevel,dteff)
         ! Remove kinetic energy from total energy
         ener=grid(igrid)%uold(ind,neul)
         do idim=1,ndim
-           ener=ener-0.5*grid(igrid)%uold(ind,idim+1)**2/grid(igrid)%uold(ind,1)
+           ener=ener-0.5*grid(igrid)%uold(ind,idim+1)**2/max(grid(igrid)%uold(ind,1),smallr)
         end do
   
         ! Update momentum
 #ifdef GRAV
         do idim=1,ndim
            grid(igrid)%uold(ind,idim+1)=grid(igrid)%uold(ind,idim+1)+&
-                & grid(igrid)%uold(ind,1)*grid(igrid)%f(ind,idim)*dteff
+                & max(grid(igrid)%uold(ind,1),smallr)*grid(igrid)%f(ind,idim)*dteff
         end do
 #endif
         ! Update total energy
         do idim=1,ndim
-           ener=ener+0.5*grid(igrid)%uold(ind,idim+1)**2/grid(igrid)%uold(ind,1)
+           ener=ener+0.5*grid(igrid)%uold(ind,idim+1)**2/max(grid(igrid)%uold(ind,1),smallr)
         end do
         grid(igrid)%uold(ind,neul)=ener
 
@@ -69,6 +69,7 @@ subroutine add_gravity_source_terms(ilevel)
   integer::igrid,ivar,ind
   real(dp)::d,u,v,w,e_kin,e_prim,d_old,fact
 
+  if(.not. poisson)return
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 

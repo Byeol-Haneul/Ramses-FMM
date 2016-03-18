@@ -39,7 +39,7 @@ subroutine read_hydro_params(nml_ok)
        & ,kbound_min,kbound_max &
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
   namelist/physics_params/cooling,units_density,units_time,units_length &
-       & ,T2_star
+       & ,T2_star,g_star,isothermal
 
   ! Read namelist file
   rewind(1)

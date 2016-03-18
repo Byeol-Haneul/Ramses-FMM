@@ -70,6 +70,8 @@ module hydro_parameters
 
   ! Other hydro solver parameters
   real(dp)::T2_star
+  real(dp)::g_star
+  logical::isothermal
 
   ! Interpolation parameters
   integer ::interpol_var=0

@@ -12,6 +12,10 @@ module poisson_commons
   ! MG hash table
   type(hash_table)::mg_dict
 
+  ! MG grid
+  integer,allocatable,dimension(:)::head_mg,tail_mg,noct_mg,noct_tot_mg
+  integer::ifree_mg
+
   ! Multigrid safety switch
   logical, allocatable, dimension(:) :: safe_mode
 

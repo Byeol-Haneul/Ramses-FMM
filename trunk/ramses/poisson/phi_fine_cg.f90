@@ -41,6 +41,7 @@ subroutine phi_fine_cg(ilevel,icount)
   !===============================
   ! Compute initial phi
   !===============================
+                               call timer('poisson - initi phi','start')
   call make_initial_phi(ilevel,icount)
 
   !===============================
@@ -65,8 +66,10 @@ subroutine phi_fine_cg(ilevel,icount)
   ! Compute r = b - Ax and store it into f(i,1)
   ! Also set p = r and store it into f(i,2)
   !==============================================
+                               call timer('poisson - residual','start')
   call cmp_residual_cg(ilevel,icount)
 
+                               call timer('poisson - solviter','start')
   !====================================
   ! Main iteration loop
   !====================================
@@ -92,6 +95,7 @@ subroutine phi_fine_cg(ilevel,icount)
      call MPI_ALLREDUCE(r2,r2_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
      r2=r2_all
 #endif
+
      !====================================
      ! Compute beta factor
      !====================================
@@ -351,7 +355,7 @@ subroutine cmp_Ap_cg(ilevel)
   ! Poisson Solver and store the result into f(i,3).
   !------------------------------------------------------------------
   integer::get_grid
-  integer::i_nbor,igrid,idim,ind,igridn
+  integer::inbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   real(dp)::oneoversix,residu
   integer,dimension(1:3,1:2,1:8)::iii,jjj
@@ -380,15 +384,15 @@ subroutine cmp_Ap_cg(ilevel)
      ! Get central oct potential
 #ifdef GRAV
      do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        phi_nbor(ind,0)=grid(igrid)%f(ind,2)
      end do
 #endif
 
      ! Get neighboring octs potential
-     do i_nbor=1,twondim
+     do inbor=1,twondim
 
         ! Get neighboring grid
-        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
 
         ! Periodic boundary conditons
         do idim=1,ndim
@@ -403,12 +407,12 @@ subroutine cmp_Ap_cg(ilevel)
         if(igridn>0)then
 #ifdef GRAV
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=grid(igridn)%f(ind,2)
+              phi_nbor(ind,inbor)=grid(igridn)%f(ind,2)
            end do
 #endif
         else
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=0.0
+              phi_nbor(ind,inbor)=0.0
            end do
         endif
 

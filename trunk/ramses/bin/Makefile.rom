@@ -126,7 +126,7 @@ AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o upda
 # Particle-Mesh objects
 PMOBJ = newdt_fine.o init_part.o rho_fine.o rho_ana.o
 # Poisson solver objects
-POISSONOBJ = init_poisson.o output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o
+POISSONOBJ = init_poisson.o output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
 # Hydro objects
 HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o output_hydro.o synchro_hydro_fine.o cooling_fine.o
 

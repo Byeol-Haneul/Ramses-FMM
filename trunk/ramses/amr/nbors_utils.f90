@@ -31,15 +31,15 @@ subroutine get_threetondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nb
   integer,save::j1max=0*(1-ndim/2)+1*(ndim/2)
   integer,save::k1min=0*(1-ndim/3)-1*(ndim/3)
   integer,save::k1max=0*(1-ndim/3)+1*(ndim/3)
-  integer::ind,ipos,idim,get_grid,ilevel,i_nbor
+  integer::ind,ipos,idim,get_grid,ilevel,inbor
 
   ilevel=hash_key(0)
-  hash_nbor(0)=ilevel
-  hash_father(0)=ilevel-1
+
+  hash_father(0)=hash_key(0)-1
 
   ! Gather twotondim neighboring father grids
-  do i_nbor=1,twotondim
-     hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,i_nbor)
+  do inbor=1,twotondim
+     hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
      ! Periodic boundary conditons
      do idim=1,ndim
         if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
@@ -47,19 +47,19 @@ subroutine get_threetondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nb
      enddo
      hash_father(1:ndim)=hash_nbor(1:ndim)/2
      ! Store lower left neighbor coordinates 
-     if(i_nbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
+     if(inbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
      ! Get grid into memory and lock it if remote 
      ipos=get_grid(hash_father,hash_dict,flush_cache,fetch_cache)
      call lock_cache(ipos)
-     igrid_twotondim_nbor(i_nbor)=ipos
+     igrid_twotondim_nbor(inbor)=ipos
   end do
      
   ! Deal with neighboring father cells
-  i_nbor=0
+  inbor=0
   do k1=k1min,k1max
      do j1=j1min,j1max
         do i1=i1min,i1max           
-           i_nbor=i_nbor+1
+           inbor=inbor+1
 #if NDIM>0
            hash_nbor(1)=hash_key(1)+i1
 #endif
@@ -81,14 +81,18 @@ subroutine get_threetondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nb
            do idim=1,ndim
               ind=ind+2**(idim-1)*ii(idim)
            end do
-           ind_nbor(i_nbor)=ind
+           ind_nbor(inbor)=ind
            ! Compute neighboring grid index
            ii(1:ndim)=hash_father(1:ndim)-hash_ref(1:ndim)
+           ! Periodic boundary conditons
+           do idim=1,ndim
+              if(ii(idim)<0)ii(idim)=ii(idim)+ckey_max(ilevel-1)
+           enddo
            ind=1
            do idim=1,ndim
               ind=ind+2**(idim-1)*ii(idim)
            end do
-           igrid_nbor(i_nbor)=igrid_twotondim_nbor(ind)
+           igrid_nbor(inbor)=igrid_twotondim_nbor(ind)
         end do
      end do
   end do
@@ -120,19 +124,19 @@ subroutine get_twondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,f
   integer(kind=8),dimension(1:ndim)::ii
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer::ind,ipos,idim,get_grid,ilevel,i_nbor
+  integer::ind,ipos,idim,get_grid,ilevel,inbor
 
   ilevel=hash_key(0)
-  hash_nbor(0)=ilevel
-  hash_father(0)=ilevel-1
 
   ! Deal with central parent cell first
+  hash_father(0)=hash_key(0)-1
   hash_father(1:ndim)=hash_key(1:ndim)/2
   ii(1:ndim)=hash_key(1:ndim)-2*hash_father(1:ndim)
   ind=1
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
+
   ! Get grid into memory and lock it if remote 
   ipos=get_grid(hash_father,hash_dict,flush_cache,fetch_cache)
   call lock_cache(ipos)
@@ -140,8 +144,9 @@ subroutine get_twondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,f
   ind_nbor(0)=ind
   
   ! Deal with neighboring father cells
-  do i_nbor=1,twondim
-     hash_nbor(1:ndim)=hash_key(1:ndim)+shift(1:ndim,i_nbor)
+  do inbor=1,twondim
+     hash_nbor(1:ndim)=hash_key(1:ndim)+shift(1:ndim,inbor)
+
      ! Periodic boundary conditons
      do idim=1,ndim
         if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
@@ -153,11 +158,12 @@ subroutine get_twondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,f
      do idim=1,ndim
         ind=ind+2**(idim-1)*ii(idim)
      end do
+
      ! Get grid into memory and lock it if remote 
      ipos=get_grid(hash_father,hash_dict,flush_cache,fetch_cache)
      call lock_cache(ipos)
-     igrid_nbor(i_nbor)=ipos
-     ind_nbor(i_nbor)=ind
+     igrid_nbor(inbor)=ipos
+     ind_nbor(inbor)=ind
   end do
 
 end subroutine get_twondim_nbor_parent_cell
@@ -960,15 +966,15 @@ subroutine check_mail(comm_id,hash_dict)
         ! Combiner rules for godunov update
         !------------------------------------------------------
         if(cache_operation.EQ.operation_godunov)then
-           do i=1,recv_flush_hydro%nflush
-              hash_child(0)=recv_flush_hydro%lev(i)
-              hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
+           do i=1,recv_flush_refine%nflush
+              hash_child(0)=recv_flush_refine%lev(i)
+              hash_child(1:ndim)=recv_flush_refine%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
 #ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
                     grid(ichild)%unew(ind,ivar)=grid(ichild)%unew(ind,ivar)&
-                         & +recv_flush_hydro%realdp(ind,ivar,i)
+                         & +recv_flush_refine%realdp_hydro(ind,ivar,i)
                  end do
               end do
 #endif
@@ -1406,22 +1412,22 @@ subroutine destage(igrid,hash_dict)
      ! Filling the flush buffer for Godunov solver
      !------------------------------------------------------
      if(cache_operation.EQ.operation_godunov)then
-        if(send_flush_hydro(grid_cpu)%nflush==nflushmax)then
+        if(send_flush_refine(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
+           call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id,hash_dict)
-           send_flush_hydro(grid_cpu)%nflush=0
+           send_flush_refine(grid_cpu)%nflush=0
         endif
-        send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
-        iflush=send_flush_hydro(grid_cpu)%nflush
-        send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
-        send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+        send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
+        iflush=send_flush_refine(grid_cpu)%nflush
+        send_flush_refine(grid_cpu)%lev(iflush)=grid(igrid)%lev
+        send_flush_refine(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
 #ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,nvar
-              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%unew(ind,ivar)
+              send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=grid(igrid)%unew(ind,ivar)
            end do
         end do
 #endif
@@ -1504,7 +1510,7 @@ subroutine destage(igrid,hash_dict)
      if(cache_operation.EQ.operation_rho)then
         if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id,hash_dict)
@@ -1527,7 +1533,7 @@ subroutine destage(igrid,hash_dict)
      if(cache_operation.EQ.operation_restrict_mask)then
         if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id,hash_dict)
@@ -1550,7 +1556,7 @@ subroutine destage(igrid,hash_dict)
      if(cache_operation.EQ.operation_restrict_res)then
         if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id,hash_dict)
@@ -1573,7 +1579,7 @@ subroutine destage(igrid,hash_dict)
      if(cache_operation.EQ.operation_build_mg)then
         if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
            ! Post send
-           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_large_realdp_flush,&
+           call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
            call check_mail(send_flush_id,hash_dict)
@@ -1779,10 +1785,10 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
   ! Operations of type "hydro"
   if(cache_operation.EQ.operation_hydro)cache_operation_type=operation_type_hydro
   if(cache_operation.EQ.operation_upload)cache_operation_type=operation_type_hydro
-  if(cache_operation.EQ.operation_godunov)cache_operation_type=operation_type_hydro
   if(cache_operation.EQ.operation_multipole)cache_operation_type=operation_type_hydro
 
   ! Operations of type "poisson"
+  if(cache_operation.EQ.operation_cg)cache_operation_type=operation_type_poisson
   if(cache_operation.EQ.operation_phi)cache_operation_type=operation_type_poisson
   if(cache_operation.EQ.operation_rho)cache_operation_type=operation_type_poisson
   if(cache_operation.EQ.operation_build_mg)cache_operation_type=operation_type_poisson
@@ -1791,6 +1797,7 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
   if(cache_operation.EQ.operation_scan)cache_operation_type=operation_type_poisson
 
   ! Operations of type "refine"
+  if(cache_operation.EQ.operation_godunov)cache_operation_type=operation_type_refine
   if(cache_operation.EQ.operation_refine)cache_operation_type=operation_type_refine
   if(cache_operation.EQ.operation_loadbalance)cache_operation_type=operation_type_refine
 
