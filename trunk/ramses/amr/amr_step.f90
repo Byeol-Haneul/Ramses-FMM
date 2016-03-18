@@ -77,14 +77,15 @@ recursive subroutine amr_step(ilevel,icount)
      call save_phi_old(ilevel)
 
      ! Compute gravitational potential
-     if(ilevel>levelmin)then
-        if(ilevel .ge. cg_levelmin) then
+     if(ilevel > levelmin)then
+        if(ilevel >= cg_levelmin) then
            call phi_fine_cg(ilevel,icount)
         else
-           call multigrid(ilevel,icount)
+!           call multigrid(ilevel,icount)
         end if
      else
-        call multigrid(levelmin,icount)
+        call phi_fine_cg(ilevel,icount)
+!        call multigrid(levelmin,icount)
      end if
 
      ! Initial old potential
