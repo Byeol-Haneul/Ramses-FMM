@@ -834,8 +834,8 @@ subroutine check_mail(comm_id,hash_dict)
                     reply_mg(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
                     do ind=1,twotondim
 #ifdef GRAV
-                       reply_mg(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%f(ind,3)
-                       reply_mg(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%phi(ind)
+                       reply_mg(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
+                       reply_mg(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%phi(ind)
 #endif
                     end do
                  endif
@@ -1025,8 +1025,10 @@ subroutine check_mail(comm_id,hash_dict)
               ichild=hash_get(hash_dict,hash_child)
 #ifdef GRAV
               do ind=1,twotondim
-                 grid(ichild)%f(ind,2)=grid(ichild)%f(ind,2)&
-                      & +recv_flush_poisson%realdp(ind,i)
+                 if(grid(ichild)%f(ind,3)>0.0)then
+                    grid(ichild)%f(ind,2)=grid(ichild)%f(ind,2)&
+                         & +recv_flush_poisson%realdp(ind,i)
+                 endif
               end do
 #endif
            end do

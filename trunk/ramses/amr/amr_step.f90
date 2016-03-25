@@ -81,11 +81,11 @@ recursive subroutine amr_step(ilevel,icount)
         if(ilevel >= cg_levelmin) then
            call phi_fine_cg(ilevel,icount)
         else
-!           call multigrid(ilevel,icount)
+           call multigrid(ilevel,icount)
         end if
      else
-        call phi_fine_cg(ilevel,icount)
-!        call multigrid(levelmin,icount)
+!        call phi_fine_cg(ilevel,icount)
+        call multigrid(levelmin,icount)
      end if
 
      ! Initial old potential

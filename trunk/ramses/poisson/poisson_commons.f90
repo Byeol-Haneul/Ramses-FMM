@@ -3,6 +3,19 @@ module poisson_commons
   use hash
   use poisson_parameters
 
+  ! Conjugate Gradient communicator
+  integer::send_tot,recv_tot
+  integer,dimension(:),allocatable::send_cnt,recv_cnt,send_oft,recv_oft
+  integer,dimension(:),allocatable::grid_recv_buf
+  integer,dimension(:,:),allocatable::nbor_indx
+  real(dp),dimension(:),allocatable::phi_send_buf,phi_recv_buf
+  real(dp),dimension(:,:),allocatable::phi_remote
+  ! Temporary workspace
+  integer,dimension(:),allocatable::nremote
+  integer,dimension(:,:),allocatable::nalltoall,nalltoall_tot
+  integer,dimension(:),allocatable::x_send_buf,y_send_buf,z_send_buf
+  integer,dimension(:),allocatable::x_recv_buf,y_recv_buf,z_recv_buf
+
   ! Multigrid lookup table for amr -> mg index mapping
   integer, allocatable, dimension(:) :: lookup_mg   ! Lookup table
 

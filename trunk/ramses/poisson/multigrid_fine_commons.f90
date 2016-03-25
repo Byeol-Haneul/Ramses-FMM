@@ -37,7 +37,7 @@ subroutine multigrid(ilevel,icount)
   
   integer, intent(in) :: ilevel,icount
   
-  integer, parameter  :: MAXITER  = 10
+  integer, parameter  :: MAXITER  = 100
   real(dp), parameter :: SAFE_FACTOR = 0.5
   
   integer  :: igrid, ifine, i, iter, info, icpu
@@ -49,25 +49,30 @@ subroutine multigrid(ilevel,icount)
   if(gravity_type>0)return
   if(noct_tot(ilevel)==0)return
   
-  if(verbose) print '(A,I2)','Entering fine multigrid at level ',ilevel
+  if(verbose) print '(A,I2)','Entering multigrid at level ',ilevel
   
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
   call make_initial_phi(ilevel,icount)  ! Initial guess
+  if(verbose)write(*,*)'initial phi done'
   call make_mask  (ilevel)              ! Fill the fine level mask
+  if(verbose)write(*,*)'initial mask done'
   call make_bc_rhs(ilevel,icount)       ! Fill BC-modified RHS
+  if(verbose)write(*,*)'initial rhs done'
   
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
   call init_mg(ilevel)
+  if(verbose)write(*,*)'init MG done'
   
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
      call build_mg(ifine)
+     if(verbose)write(*,*)'build MG done',ifine
   end do
   
   ! ---------------------------------------------------------------------
@@ -82,6 +87,7 @@ subroutine multigrid(ilevel,icount)
         exit
      end if
   end do
+  if(verbose)write(*,*)'restrict mask done'
 
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
@@ -90,6 +96,7 @@ subroutine multigrid(ilevel,icount)
    do ifine=ilevel-1,levelmin_mg,-1
       call set_scan_flag(mg_dict,ifine)
    end do
+  if(verbose)write(*,*)'set scan flag done'
   
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
@@ -101,14 +108,18 @@ subroutine multigrid(ilevel,icount)
 
      iter=iter+1
 
+     if(verbose)write(*,*)'starting iter ',iter
+
      ! Pre-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg(grid_dict,ilevel,.true. )  ! Red step
-        call gauss_seidel_mg(grid_dict,ilevel,.false.)  ! Black step
+        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
      end do
+     if(verbose)write(*,*)'set gauss seidel done'
      
      ! Compute new residual
      call cmp_residual_mg(grid_dict,ilevel)
+     if(verbose)write(*,*)'residual done'
 
      ! Compute initial residual norm
      if(iter==1) then
@@ -119,10 +130,11 @@ subroutine multigrid(ilevel,icount)
 #endif
      end if
      
-     ! Restrict residual to coarser level
-     call restrict_residual(ilevel)
-     
      if(ilevel>1) then
+
+        ! Restrict residual to coarser level
+        call restrict_residual(ilevel)
+        if(verbose)write(*,*)'restrict residual done'
 
         ! Reset correction from upper level before solve
 #ifdef GRAV
@@ -133,15 +145,17 @@ subroutine multigrid(ilevel,icount)
         
         ! Multigrid-solve the upper level
         call recursive_multigrid(ilevel-1, safe_mode(ilevel))
+        if(verbose)write(*,*)'recursive MG done'
         
         ! Interpolate coarse solution and correct fine solution
         call interpolate_and_correct(ilevel)
+        if(verbose)write(*,*)'interpolate correct done'
      end if
      
      ! Post-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg(grid_dict,ilevel,.true. )  ! Red step
-        call gauss_seidel_mg(grid_dict,ilevel,.false.)  ! Black step
+        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
      end do
      
      ! Update fine residual
@@ -204,12 +218,15 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
   
   integer :: i, igrid, icpu, info, icycle, ncycle
   
+  if(verbose)write(*,*)'entering recursive mg',ifinelevel
+
   if(ifinelevel<=levelmin_mg) then
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
         call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
         call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do
+     if(verbose)write(*,*)'coarsest solve complete, returning',ifinelevel
      return
   end if
   
@@ -226,12 +243,15 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
         call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
         call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do
+     if(verbose)write(*,*)'gausse seidel complete',ifinelevel
      
      ! Compute residual and restrict into upper level RHS
      call cmp_residual_mg(mg_dict,ifinelevel)
+     if(verbose)write(*,*)'residual complete',ifinelevel
      
      ! Restrict residual to coarser level
      call restrict_residual(ifinelevel)
+     if(verbose)write(*,*)'restrict complete',ifinelevel
      
      ! Reset correction from upper level before solve
 #ifdef GRAV
@@ -245,12 +265,14 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
      
      ! Interpolate coarse solution and correct back into fine solution
      call interpolate_and_correct(ifinelevel)
+     if(verbose)write(*,*)'interpolate complete',ifinelevel
      
      ! Post-smoothing
      do i=1,ngs_coarse
         call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
         call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do
+     if(verbose)write(*,*)'second gauss seidel complete',ifinelevel
      
   end do
   

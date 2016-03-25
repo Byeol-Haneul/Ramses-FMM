@@ -80,14 +80,14 @@ subroutine dump_all
         filename=TRIM(filedir)//'hydro.out'
         call output_hydro(filename)
      end if
+     if(poisson)then
+        filename=TRIM(filedir)//'grav.out'
+        call output_poisson(filename)
+     end if
 #ifdef TOTO
      if(pic)then
         filename=TRIM(filedir)//'part.out'
         call output_part(filename)
-     end if
-     if(poisson)then
-        filename=TRIM(filedir)//'grav.out'
-        call output_poisson(filename)
      end if
      if (gadget_output) then
         filename=TRIM(filedir)//'gsnapshot_'//TRIM(nchar)

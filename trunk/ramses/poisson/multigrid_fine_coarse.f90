@@ -247,17 +247,13 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0
   real(dp) :: dtwondim = (twondim)
 
-  integer, dimension(1:3,1:4)     :: ired, iblack
+  integer, dimension(1:4) :: ired, iblack
   
   ! Set constants
   dx2  = (boxlen/2**ilevel)**2
   
-  ired  (1,1:4)=(/1,0,0,0/)
-  iblack(1,1:4)=(/2,0,0,0/)
-  ired  (2,1:4)=(/1,4,0,0/)
-  iblack(2,1:4)=(/2,3,0,0/)
-  ired  (3,1:4)=(/1,4,6,7/)
-  iblack(3,1:4)=(/2,3,5,8/)
+  ired  (1:4)=(/1,4,6,7/)
+  iblack(1:4)=(/2,3,5,8/)
   
   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
   iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
@@ -273,13 +269,8 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   ! Loop over grids
   do igrid=head_mg(ilevel),tail_mg(ilevel)
      
-     ! Loop over cells, with red/black ordering
-     do ind0=1,twotondim/2      ! Only half of the cells for a red or black sweep
-        if(redstep) then
-           ind = ired  (ndim,ind0)
-        else
-           ind = iblack(ndim,ind0)
-        end if
+     ! Loop over cells
+     do ind=1,twotondim
 
         ! Get central oct potential and distance
         phi_nbor(ind,0)=grid(igrid)%phi(ind)
@@ -323,9 +314,9 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
      ! Loop over cells, with red/black ordering
      do ind0=1,twotondim/2      ! Only half of the cells for a red or black sweep
         if(redstep) then
-           ind = ired  (ndim,ind0)
+           ind = ired  (ind0)
         else
-           ind = iblack(ndim,ind0)
+           ind = iblack(ind0)
         end if
 
         ! Compute residual using 6 neighbors potential
@@ -481,12 +472,14 @@ subroutine interpolate_and_correct(ifinelevel)
   ccc(:,7)=(/25,26,22,23,16,17,13,14/)
   ccc(:,8)=(/27,26,24,23,18,17,15,14/)
   
+  if(verbose)write(*,*)'entering interpolate  and correct ',ifinelevel
+
   call open_cache(operation_phi,domain_decompos_mg)
 
   hash_key(0)=ifinelevel
 
   ! Loop over grids
-  do ichild=head_mg(ifinelevel),tail(ifinelevel)
+  do ichild=head_mg(ifinelevel),tail_mg(ifinelevel)
 
      ! For fine level, correction is interpolated from coarser level solution
      hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
@@ -529,7 +522,7 @@ subroutine interpolate_and_correct(ifinelevel)
   end do
   ! End loop over grids
 
-  call close_cache(grid_dict)
+  call close_cache(mg_dict)
 
  end subroutine interpolate_and_correct
 
