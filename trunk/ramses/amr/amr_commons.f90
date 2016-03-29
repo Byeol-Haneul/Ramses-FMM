@@ -90,6 +90,9 @@ module amr_commons
   integer,allocatable,dimension(:)::ckey_max
   integer::noct_used,noct_used_max,noct_used_tot
 
+  integer,allocatable,dimension(:)::head_cache
+  integer,allocatable,dimension(:)::tail_cache
+
   ! Hilbert key
   integer(kind=8),allocatable,dimension(:,:)::bound_key_level,bound_hilbert_key,bound_key_mg
 

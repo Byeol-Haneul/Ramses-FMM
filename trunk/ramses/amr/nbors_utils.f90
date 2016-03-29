@@ -722,8 +722,8 @@ subroutine check_mail(comm_id,hash_dict)
               
               ! Otherwise, assemble a proper reply with a complete tile
            else
-              itile=(igrid-head(ilevel))/ntilemax
-              ntile_reply=MIN(tail(ilevel)-itile*ntilemax-head(ilevel)+1,ntilemax)
+              itile=(igrid-head_cache(ilevel))/ntilemax
+              ntile_reply=MIN(tail_cache(ilevel)-itile*ntilemax-head_cache(ilevel)+1,ntilemax)
               
               ! Store type of reply and number of entries
               if(cache_operation_type.EQ.operation_type_flag)then
@@ -749,7 +749,7 @@ subroutine check_mail(comm_id,hash_dict)
               
               ! Store data, depending on reply type
               do i=1,ntile_reply
-                 ipos=head(ilevel)+itile*ntilemax+i-1
+                 ipos=head_cache(ilevel)+itile*ntilemax+i-1
                  
                  ! Reply of type flag
                  if(cache_operation_type.EQ.operation_type_flag)then
@@ -1576,7 +1576,7 @@ subroutine destage(igrid,hash_dict)
      endif
 
      !------------------------------------------------------
-     ! Filling the flush buffer for MG hierarchy built 
+     ! Filling the flush buffer for MG hierarchy build
      !------------------------------------------------------
      if(cache_operation.EQ.operation_build_mg)then
         if(send_flush_poisson(grid_cpu)%nflush==nflushmax)then
@@ -1741,6 +1741,7 @@ end subroutine close_cache
 !##############################################################
 subroutine open_cache(cache_operation_init,domain_decompos_init)
   use amr_commons
+  use poisson_commons
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -1768,9 +1769,13 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
   ! Domain decomposition to use
   if(domain_decompos_init==domain_decompos_amr)then
      bound_hilbert_key=bound_key_level
+     head_cache(levelmin:nlevelmax)=head
+     tail_cache(levelmin:nlevelmax)=tail
   endif
   if(domain_decompos_init==domain_decompos_mg )then
      bound_hilbert_key=bound_key_mg
+     head_cache(1:nlevelmax)=head_mg
+     tail_cache(1:nlevelmax)=tail_mg
   endif
 
   ! Cache operation to perform

@@ -71,6 +71,8 @@ subroutine init_amr
   if(verbose.and.myid==1)write(*,*)'Initialize oct decomposition'
   allocate(head(levelmin:nlevelmax))
   allocate(tail(levelmin:nlevelmax))
+  allocate(head_cache(1:nlevelmax))
+  allocate(tail_cache(1:nlevelmax))
   allocate(noct(levelmin:nlevelmax))
   allocate(noct_min(levelmin:nlevelmax))
   allocate(noct_max(levelmin:nlevelmax))

@@ -25,6 +25,13 @@ subroutine restrict_mask(ifinelevel,allmasked)
   real(dp) :: dtwotondim = (twotondim)
   logical :: allmasked_tot
   
+  ! Initialize volume fraction to zero at coarse level
+  do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
+     do ind=1,twotondim
+        grid(igrid)%f(ind,3)=0d0
+     end do
+  end do
+  
   hash_key(0)=ifinelevel
   
   call open_cache(operation_restrict_mask,domain_decompos_mg)
@@ -228,6 +235,7 @@ end subroutine cmp_residual_mg
 subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   use amr_commons
   use poisson_commons
+  use hilbert
   implicit none
   integer, intent(in) :: ilevel
   logical, intent(in) :: safe
@@ -238,13 +246,17 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   ! The domain mask is also needed.
   
   integer :: get_grid
+  integer(kind=4),dimension(1:nvector),save::dummy_state
+  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
+  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
   real(dp) :: dx, oneoverdx2, phi_c, dis_c, dx2, nb_sum, weight
-  integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0
+  integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0, ipos
+  integer :: icpu, grid_cpu
   real(dp) :: dtwondim = (twondim)
 
   integer, dimension(1:4) :: ired, iblack
@@ -302,6 +314,7 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
 
         ! Otherwise set to zero and outside
         else
+           
            do ind=1,twotondim
               phi_nbor(ind,inbor)=0.0
               dis_nbor(ind,inbor)=-1.0
@@ -313,6 +326,7 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
 
      ! Loop over cells, with red/black ordering
      do ind0=1,twotondim/2      ! Only half of the cells for a red or black sweep
+
         if(redstep) then
            ind = ired  (ind0)
         else
@@ -325,20 +339,20 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
 
         nb_sum=0.0
 
-        if(.not. btest(grid(igrid)%flag2(ind),0))then ! No scan needed
-
-           ! Loop over neighbours
-           do inbor=1,2
-              do idim=1,ndim
-                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
-                 nb_sum=nb_sum+phi_nbor(id,ig)
-              end do
-           end do
-
-           ! Update the potential, solving for potential on icell_amr
-           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/dtwondim
-
-        else ! Scan is required
+!!$        if(.not. btest(grid(igrid)%flag2(ind),0))then ! No scan needed
+!!$
+!!$           ! Loop over neighbours
+!!$           do inbor=1,2
+!!$              do idim=1,ndim
+!!$                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
+!!$                 nb_sum=nb_sum+phi_nbor(id,ig)
+!!$              end do
+!!$           end do
+!!$
+!!$           ! Update the potential, solving for potential on icell_amr
+!!$           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/dtwondim
+!!$
+!!$        else ! Scan is required
 
            ! If cell is outside, don't update phi
            if(dis_c<=0.0)cycle
@@ -361,9 +375,9 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
            ! Update the potential
            grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/(dtwondim - weight)
 
-        endif
+!!$        endif
 
-     end do
+        end do
      ! End loop over cells
 
   end do
@@ -397,6 +411,13 @@ subroutine restrict_residual(ifinelevel)
   real(dp) :: dtwotondim = (twotondim)
   integer(kind=8),dimension(0:ndim) :: hash_key
   
+  ! Set rhs to zero in coarse cells
+  do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
+     do ind=1,twotondim
+        grid(igrid)%f(ind,2)=0.0
+     end do
+  end do
+
   hash_key(0)=ifinelevel
 
   call open_cache(operation_restrict_res,domain_decompos_mg)
@@ -407,6 +428,9 @@ subroutine restrict_residual(ifinelevel)
      ! Loop over cells
      do ind=1,twotondim        
         
+        ! Is fine cell masked?
+        if(grid(ichild)%f(ind,3)<=0d0)cycle
+
         hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
         
         ! Get parent cell using read-write cache
@@ -446,9 +470,9 @@ subroutine interpolate_and_correct(ifinelevel)
   ! and corrct the solutionn of the fine level (stored in grid(ichild)%phi(ind))
   
   integer(kind=8),dimension(0:ndim) :: hash_key
-  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
+  integer,dimension(1:threetondim) :: igrid_nbor,ind_nbor
   integer  :: ichild, ind
-  real(dp) :: a, b, c, d, coeff
+  real(dp) :: aa, bb, cc, dd, coeff
   real(dp), dimension(1:8)     :: bbb
   integer,  dimension(1:8,1:8) :: ccc
   integer::ind_average,ind_father
@@ -456,12 +480,11 @@ subroutine interpolate_and_correct(ifinelevel)
   real(dp),dimension(1:twotondim)::corr
   
   ! Local constants
-  a = 1.0D0/4.0D0**ndim
-  b = 3.0D0*a
-  c = 9.0D0*a
-  d = 27.D0*a
-  
-  bbb(:)  =(/a ,b ,b ,c ,b ,c ,c ,d/)
+  aa = 1.0D0/4.0D0**ndim
+  bb = 3.0D0*aa
+  cc = 9.0D0*aa
+  dd = 27.D0*aa 
+  bbb(:)  =(/aa ,bb ,bb ,cc ,bb ,cc ,cc ,dd/)
   
   ccc(:,1)=(/1 ,2 ,4 ,5 ,10,11,13,14/)
   ccc(:,2)=(/3 ,2 ,6 ,5 ,12,11,15,14/)
@@ -490,11 +513,11 @@ subroutine interpolate_and_correct(ifinelevel)
      ! Loop over cells
      do ind=1,twotondim
 
-        ! Fine cell is masked as "outside": no correction
-        if(grid(ichild)%f(ind,3)<=0.0)cycle
-
         ! Set correction to zero
         corr(ind)=0d0
+
+        ! Fine cell is masked as "outside": no correction
+        if(grid(ichild)%f(ind,3)<=0.0)cycle
 
         ! Loop over relevant parent cells
         do ind_average=1,twotondim
@@ -678,5 +701,41 @@ subroutine cmp_residual_norm2(ilevel, norm2)
    norm2 = dx2*norm2
 
 end subroutine cmp_residual_norm2
+
+subroutine cmp_ivar_norm2(ilevel, ivar, norm2)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  
+  integer,  intent(in)  :: ilevel, ivar
+  real(kind=8), intent(out) :: norm2
+  
+  real(kind=8) :: dx2
+  integer  :: ind, igrid
+  
+  ! Set constants
+  dx2  = (boxlen/2**ilevel)**ndim
+  norm2 = 0.0d0
+  
+  ! Loop over grids
+  do igrid=head_mg(ilevel),tail_mg(ilevel)
+     
+     ! Loop over cells
+     do ind=1,twotondim
+        if(grid(igrid)%f(ind,3)<=0.0)cycle      ! Do not count masked cells
+        if(ivar>0)then
+           norm2 = norm2 + grid(igrid)%f(ind,ivar)**2
+        else
+           norm2 = norm2 + grid(igrid)%phi(ind)**2
+        endif
+     end do
+     ! End loop over cells
+     
+  end do
+  ! End loop over grids
+  
+  norm2 = dx2*norm2
+  
+end subroutine cmp_ivar_norm2
 
 
