@@ -339,20 +339,20 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
 
         nb_sum=0.0
 
-!!$        if(.not. btest(grid(igrid)%flag2(ind),0))then ! No scan needed
-!!$
-!!$           ! Loop over neighbours
-!!$           do inbor=1,2
-!!$              do idim=1,ndim
-!!$                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
-!!$                 nb_sum=nb_sum+phi_nbor(id,ig)
-!!$              end do
-!!$           end do
-!!$
-!!$           ! Update the potential, solving for potential on icell_amr
-!!$           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/dtwondim
-!!$
-!!$        else ! Scan is required
+        if(.not. btest(grid(igrid)%flag2(ind),0))then ! No scan needed
+
+           ! Loop over neighbours
+           do inbor=1,2
+              do idim=1,ndim
+                 id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
+                 nb_sum=nb_sum+phi_nbor(id,ig)
+              end do
+           end do
+
+           ! Update the potential, solving for potential on icell_amr
+           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/dtwondim
+
+        else ! Scan is required
 
            ! If cell is outside, don't update phi
            if(dis_c<=0.0)cycle
@@ -375,9 +375,9 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
            ! Update the potential
            grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/(dtwondim - weight)
 
-!!$        endif
+        endif
 
-        end do
+     end do
      ! End loop over cells
 
   end do
