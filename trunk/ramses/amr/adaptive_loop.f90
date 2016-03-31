@@ -7,7 +7,7 @@ subroutine adaptive_loop
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  integer::ilevel,idim,ivar,info
+  integer::ilevel,info
   real(kind=8)::tt1,tt2
   real(kind=4)::real_mem,real_mem_tot
 

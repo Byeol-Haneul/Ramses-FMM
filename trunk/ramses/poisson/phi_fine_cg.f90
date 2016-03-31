@@ -2,6 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef GRAV
 subroutine phi_fine_cg(ilevel,icount)
   use amr_commons
   use pm_commons
@@ -47,13 +48,11 @@ subroutine phi_fine_cg(ilevel,icount)
   ! Compute right-hand side norm
   !===============================
   rhs_norm=0.d0
-#ifdef GRAV
   do igrid=head(ilevel),tail(ilevel)
      do ind=1,twotondim
         rhs_norm=rhs_norm+fact2*(grid(igrid)%rho(ind)-rho_tot)**2
      end do
   end do
-#endif
   ! Compute global norms
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(rhs_norm,rhs_norm_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
@@ -82,13 +81,11 @@ subroutine phi_fine_cg(ilevel,icount)
      ! Compute residual norm
      !====================================
      r2=0.0d0
-#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            r2=r2+grid(igrid)%f(ind,1)**2
         end do
      end do
-#endif
      ! Compute global norm
 #ifndef WITHOUTMPI
      call MPI_ALLREDUCE(r2,r2_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
@@ -108,13 +105,11 @@ subroutine phi_fine_cg(ilevel,icount)
      !====================================
      ! Recurrence on p
      !====================================
-#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            grid(igrid)%f(ind,2)=grid(igrid)%f(ind,1)+beta_cg*grid(igrid)%f(ind,2)
         end do
      end do
-#endif
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
@@ -126,13 +121,11 @@ subroutine phi_fine_cg(ilevel,icount)
      ! Compute p.Ap scalar product
      !====================================
      pAp=0.0d0
-#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            pAp=pAp+grid(igrid)%f(ind,2)*grid(igrid)%f(ind,3)
         end do
      end do
-#endif
      ! Compute global sum
 #ifndef WITHOUTMPI
      call MPI_ALLREDUCE(pAp,pAp_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
@@ -147,24 +140,20 @@ subroutine phi_fine_cg(ilevel,icount)
      !====================================
      ! Recurrence on x
      !====================================
-#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            grid(igrid)%phi(ind)=grid(igrid)%phi(ind)+alpha_cg*grid(igrid)%f(ind,2)
         end do
      end do
-#endif
 
      !====================================
      ! Recurrence on r
      !====================================
-#ifdef GRAV
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
            grid(igrid)%f(ind,1)=grid(igrid)%f(ind,1)-alpha_cg*grid(igrid)%f(ind,3)
         end do
      end do
-#endif
 
      ! Compute error
      error=DSQRT(r2/dble(twotondim*noct_tot(ilevel)))
@@ -263,12 +252,10 @@ subroutine cmp_residual_cg(ilevel,icount)
   ! Loop over grids
   do igrid=head(ilevel),tail(ilevel)
 
-#ifdef GRAV
      ! Get central oct potential
      do ind=1,twotondim
         phi_nbor(ind,0)=grid(igrid)%phi(ind)
      end do
-#endif
 
      ! Get neighboring octs potential
      do i_nbor=1,twondim
@@ -287,11 +274,9 @@ subroutine cmp_residual_cg(ilevel,icount)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
-#ifdef GRAV
            do ind=1,twotondim
               phi_nbor(ind,i_nbor)=grid(igridn)%phi(ind)
            end do
-#endif
 
         ! Otherwise interpolate from coarser level
         else
@@ -310,27 +295,19 @@ subroutine cmp_residual_cg(ilevel,icount)
      do ind=1,twotondim
 
         ! Compute residual using 6 neighbors potential
-#ifdef GRAV
         residu=grid(igrid)%phi(ind)
-#endif
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
            residu=residu-oneoversix*(phi_nbor(id1,ig1)+phi_nbor(id2,ig2))
         end do
-#ifdef GRAV
         residu=residu+fact*(grid(igrid)%rho(ind)-rho_tot)
-#endif
 
         ! Store results in f(ind,1)
-#ifdef GRAV
         grid(igrid)%f(ind,1)=residu
-#endif
 
         ! Store results in f(ind,2)
-#ifdef GRAV
         grid(igrid)%f(ind,2)=residu
-#endif
 
      end do
      ! End loop over cells
@@ -384,11 +361,9 @@ subroutine cmp_Ap_cg(ilevel)
   do igrid=head(ilevel),tail(ilevel)
 
      ! Get central oct potential
-#ifdef GRAV
      do ind=1,twotondim
         phi_nbor(ind,0)=grid(igrid)%f(ind,2)
      end do
-#endif
 
      ! Get neighboring octs potential
      do inbor=1,twondim
@@ -407,11 +382,9 @@ subroutine cmp_Ap_cg(ilevel)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
-#ifdef GRAV
            do ind=1,twotondim
               phi_nbor(ind,inbor)=grid(igridn)%f(ind,2)
            end do
-#endif
         else
            do ind=1,twotondim
               phi_nbor(ind,inbor)=0.0
@@ -425,9 +398,7 @@ subroutine cmp_Ap_cg(ilevel)
      do ind=1,twotondim
 
         ! Compute Ap using neighbors potential
-#ifdef GRAV
         residu=-grid(igrid)%f(ind,2)
-#endif
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
@@ -435,9 +406,7 @@ subroutine cmp_Ap_cg(ilevel)
         end do
 
         ! Store results in f(ind,3)
-#ifdef GRAV
         grid(igrid)%f(ind,3)=residu
-#endif
 
      end do
      ! End loop over cells
@@ -532,28 +501,14 @@ subroutine cmp_Ap_cg_fast(ilevel)
      end do
   end do
 
-!!$  do ind=1,twotondim
-!!$     do i=1,recv_tot
-!!$        igrid=grid_recv_buf(i)
-!!$        phi_recv_buf(i)=grid(igrid)%f(ind,2)
-!!$     end do
-!!$     call MPI_ALLTOALLV(phi_recv_buf,recv_cnt,recv_oft,MPI_DOUBLE_PRECISION, &
-!!$          &             phi_send_buf,send_cnt,send_oft,MPI_DOUBLE_PRECISION,MPI_COMM_WORLD,info)
-!!$     do i=1,send_tot
-!!$        phi_remote(i,ind)=phi_send_buf(i)
-!!$     end do
-!!$  end do
-    
                                call timer('poisson - solver','start')
   ! Loop over grids
   do igrid=head(ilevel),tail(ilevel)
 
      ! Get central oct potential
-#ifdef GRAV
      do ind=1,twotondim
         phi_nbor(ind,0)=grid(igrid)%f(ind,2)
      end do
-#endif
 
      ! Get neighboring octs potential
      do inbor=1,twondim
@@ -563,11 +518,9 @@ subroutine cmp_Ap_cg_fast(ilevel)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
-#ifdef GRAV
            do ind=1,twotondim
               phi_nbor(ind,inbor)=grid(igridn)%f(ind,2)
            end do
-#endif
         else if (igridn==0) then
            do ind=1,twotondim
               phi_nbor(ind,inbor)=0.0
@@ -585,9 +538,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
      do ind=1,twotondim
 
         ! Compute Ap using neighbors potential
-#ifdef GRAV
         residu=-grid(igrid)%f(ind,2)
-#endif
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
@@ -595,9 +546,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
         end do
 
         ! Store results in f(ind,3)
-#ifdef GRAV
         grid(igrid)%f(ind,3)=residu
-#endif
 
      end do
      ! End loop over cells
@@ -665,7 +614,6 @@ subroutine make_initial_phi(ilevel,icount)
 
      ! By default, initial phi is equal to zero
 
-#ifdef GRAV
      ! Loop over cells
      do ind=1,twotondim
         grid(igrid)%phi(ind)=0.0d0
@@ -674,7 +622,6 @@ subroutine make_initial_phi(ilevel,icount)
         end do
      end do
      ! End loop over cells
-#endif
 
      ! For fine levels, initial phi is interpolated from coarser level
      if(ilevel.GT.levelmin)then
@@ -687,13 +634,11 @@ subroutine make_initial_phi(ilevel,icount)
            call unlock_cache(igrid_nbor(ind))
         end do
 
-#ifdef GRAV
         ! Loop over cells
         do ind=1,twotondim
            grid(igrid)%phi(ind)=phi_int(ind)
         end do
         ! End loop over cells
-#endif
 
      end if
 
@@ -977,5 +922,5 @@ subroutine clean_cg
   deallocate(recv_oft)
 
 end subroutine clean_cg
-
+#endif
 

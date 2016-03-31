@@ -13,13 +13,6 @@ recursive subroutine amr_step(ilevel,icount)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  integer::i,idim,ivar,info, ilev, j
-  logical::ok_defrag
-  logical,save::first_step=.true., use_histograms
-  real(dp)::told,tnew,dthilbert,dtrho
-  real(dp), dimension(1:nvector, 1:3)::pos
-  integer, dimension(1:nvector)::cell_level, cell_index, cc
-  integer::k, nmax
 
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,999)icount,ilevel
@@ -65,10 +58,12 @@ recursive subroutine amr_step(ilevel,icount)
   !---------------
   ! Gravity solver
   !---------------
+#ifdef GRAV
   if(poisson)then
-                               call timer('poisson - synchro','start')
+
      ! Remove gravity source term with half time step and old force
      if(hydro)then
+                               call timer('poisson - synchro','start')
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
 
@@ -84,7 +79,6 @@ recursive subroutine amr_step(ilevel,icount)
            call multigrid(ilevel,icount)
         end if
      else
-!        call phi_fine_cg(ilevel,icount)
         call multigrid(levelmin,icount)
      end if
 
@@ -94,13 +88,14 @@ recursive subroutine amr_step(ilevel,icount)
      ! Compute gravitational acceleration
      call force_fine(ilevel,icount)
 
+     ! Add gravity source term with half time step and new force
      if(hydro)then
                                call timer('poisson - synchro','start')
-        ! Add gravity source term with half time step and new force
         call synchro_hydro_fine(ilevel,+0.5*dtnew(ilevel))
      end if
 
   end if
+#endif
   !----------------------
   ! Compute new time step
   !----------------------
