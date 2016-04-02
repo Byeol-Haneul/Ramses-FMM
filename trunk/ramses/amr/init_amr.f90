@@ -2,6 +2,7 @@ subroutine init_amr
   use amr_commons
   use poisson_commons
   use hash
+  use hilbert
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'  
@@ -54,17 +55,45 @@ subroutine init_amr
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
-  allocate(bound_key_level(0:ncpu,1:nlevelmax+1))
-  allocate(bound_hilbert_key(0:ncpu,1:nlevelmax+1))
+  allocate(bound_key_level(1:nhilbert,0:ncpu,1:nlevelmax+1))
+  allocate(bound_hilbert_key(1:nhilbert,0:ncpu,1:nlevelmax+1))
+  bound_key_level=0
+  bound_hilbert_key=0
   allocate(ckey_max(1:nlevelmax+1))
-  do ilevel=1,nlevelmax+1
+  allocate(hkey_max(1:nhilbert,1:nlevelmax+1))
+  hkey_max=0
+
+  ! Make sure that the coarsest level uses only one Hilbert integer
+  if(levelmin>(levels_per_key(ndim)+1))then
+     write(*,*)'levelmin is way too large !'
+     write(*,*)'are you crazy ?'
+     stop
+  endif
+
+  ! Set bounds for Hilbert keys for coarse levels
+  do ilevel=1,levelmin
      ckey_max(ilevel)=2**(ilevel-1)
      max_key=2**((ilevel-1)*ndim)
+     hkey_max(1,ilevel)=max_key
      do icpu=1,ncpu-1
-        bound_key_level(icpu,ilevel) = (icpu*max_key)/ncpu
+        bound_key_level(1,icpu,ilevel) = (icpu*max_key)/ncpu
      end do
-     bound_key_level(0,ilevel) = 0
-     bound_key_level(ncpu,ilevel) = max_key
+     bound_key_level(1,0,ilevel) = 0
+     bound_key_level(1,ncpu,ilevel) = max_key
+  end do
+
+  ! Set bounds for Hilbert keys for fine levels
+  do ilevel=levelmin+1,nlevelmax+1
+     ckey_max(ilevel) = 2**(ilevel-1)
+!!$     key_in(1:nhilbert) = hkey_max(1:nhilbert,ilevel-1)
+!!$     hkey_max(1:nhilbert,ilevel) = refine_key(key_in,ilevel-2)
+     hkey_max(1:nhilbert,ilevel) = refine_key(hkey_max(1:nhilbert,ilevel-1),ilevel-2)
+     ! Multiply the bounds by twotondim
+     do icpu=0,ncpu
+!!$        key_in(1:nhilbert) = bound_key_level(1:nhilbert,icpu,ilevel-1)
+!!$        bound_key_level(1:nhilbert,icpu,ilevel) = refine_key(key_in,ilevel-2)
+        bound_key_level(1:nhilbert,icpu,ilevel) = refine_key(bound_key_level(1:nhilbert,icpu,ilevel-1),ilevel-2)
+     end do
   end do
 
   ! Allocate head, tail and numbers for each level
@@ -296,116 +325,6 @@ subroutine init_amr
   new_type_length(2)=ndim
   call MPI_TYPE_STRUCT(2,new_type_length,new_type_disp,new_type_type,new_mpi_request,info)
   call MPI_TYPE_COMMIT(new_mpi_request,info)
-
-!!$  return
-!!$
-!!$  ! Alignmement-aware MPI types below (NOT USED SO FAR)
-!!$
-!!$  ! New type for int4_msg
-!!$  call MPI_ADDRESS(reply_flag(1)      ,new_type_address(1),info)
-!!$  call MPI_ADDRESS(reply_flag(1)%type ,new_type_address(2),info)
-!!$  call MPI_ADDRESS(reply_flag(1)%ntile,new_type_address(3),info)
-!!$  call MPI_ADDRESS(reply_flag(1)%lev  ,new_type_address(4),info)
-!!$  call MPI_ADDRESS(reply_flag(1)%ckey ,new_type_address(5),info)
-!!$  call MPI_ADDRESS(reply_flag(1)%int4 ,new_type_address(6),info)
-!!$  do i=1,5
-!!$     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
-!!$  end do
-!!$  new_type_type(1)=MPI_INTEGER
-!!$  new_type_type(2)=MPI_INTEGER
-!!$  new_type_type(3)=MPI_INTEGER
-!!$  new_type_type(4)=MPI_INTEGER
-!!$  new_type_type(5)=MPI_INTEGER
-!!$  new_type_length(1)=1
-!!$  new_type_length(2)=1
-!!$  new_type_length(3)=ntilemax
-!!$  new_type_length(4)=ntilemax*ndim
-!!$  new_type_length(5)=ntilemax*twotondim
-!!$  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_int4_msg,info)
-!!$  call MPI_TYPE_COMMIT(new_mpi_int4_msg,info)
-!!$
-!!$  ! New type for int4_flush
-!!$  call MPI_ADDRESS(send_flush_flag(1)       ,new_type_address(1),info)
-!!$  call MPI_ADDRESS(send_flush_flag(1)%nflush,new_type_address(2),info)
-!!$  call MPI_ADDRESS(send_flush_flag(1)%lev   ,new_type_address(3),info)
-!!$  call MPI_ADDRESS(send_flush_flag(1)%ckey  ,new_type_address(4),info)
-!!$  call MPI_ADDRESS(send_flush_flag(1)%int4  ,new_type_address(5),info)
-!!$  do i=1,4
-!!$     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
-!!$  end do
-!!$  new_type_type(1)=MPI_INTEGER
-!!$  new_type_type(2)=MPI_INTEGER
-!!$  new_type_type(3)=MPI_INTEGER
-!!$  new_type_type(4)=MPI_INTEGER
-!!$  new_type_length(1)=1
-!!$  new_type_length(2)=nflushmax
-!!$  new_type_length(3)=nflushmax*ndim
-!!$  new_type_length(4)=nflushmax*twotondim
-!!$  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_int4_flush,info)
-!!$  call MPI_TYPE_COMMIT(new_mpi_int4_flush,info)
-!!$
-!!$  ! New type for realdp_msg
-!!$  call MPI_ADDRESS(reply_hydro(1)       ,new_type_address(1),info)
-!!$  call MPI_ADDRESS(reply_hydro(1)%type  ,new_type_address(2),info)
-!!$  call MPI_ADDRESS(reply_hydro(1)%ntile ,new_type_address(3),info)
-!!$  call MPI_ADDRESS(reply_hydro(1)%lev   ,new_type_address(4),info)
-!!$  call MPI_ADDRESS(reply_hydro(1)%ckey  ,new_type_address(5),info)
-!!$  call MPI_ADDRESS(reply_hydro(1)%int4  ,new_type_address(6),info)
-!!$  call MPI_ADDRESS(reply_hydro(1)%realdp,new_type_address(7),info)
-!!$  do i=1,6
-!!$     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
-!!$  end do
-!!$  new_type_type(1)=MPI_INTEGER
-!!$  new_type_type(2)=MPI_INTEGER
-!!$  new_type_type(3)=MPI_INTEGER
-!!$  new_type_type(4)=MPI_INTEGER
-!!$  new_type_type(5)=MPI_INTEGER
-!!$  new_type_type(6)=MPI_DOUBLE_PRECISION
-!!$  new_type_length(1)=1
-!!$  new_type_length(2)=1
-!!$  new_type_length(3)=ntilemax
-!!$  new_type_length(4)=ntilemax*ndim
-!!$  new_type_length(5)=ntilemax*twotondim
-!!$  new_type_length(6)=ntilemax*twotondim*nvar
-!!$  call MPI_TYPE_STRUCT(6,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_msg,info)
-!!$  call MPI_TYPE_COMMIT(new_mpi_realdp_msg,info)
-!!$
-!!$  ! New type for realdp_flush
-!!$  call MPI_ADDRESS(send_flush_hydro(1)       ,new_type_address(1),info)
-!!$  call MPI_ADDRESS(send_flush_hydro(1)%nflush,new_type_address(2),info)
-!!$  call MPI_ADDRESS(send_flush_hydro(1)%lev   ,new_type_address(3),info)
-!!$  call MPI_ADDRESS(send_flush_hydro(1)%ckey  ,new_type_address(4),info)
-!!$  call MPI_ADDRESS(send_flush_hydro(1)%int4  ,new_type_address(5),info)
-!!$  call MPI_ADDRESS(send_flush_hydro(1)%realdp,new_type_address(6),info)
-!!$  do i=1,5
-!!$     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
-!!$  end do
-!!$  new_type_type(1)=MPI_INTEGER
-!!$  new_type_type(2)=MPI_INTEGER
-!!$  new_type_type(3)=MPI_INTEGER
-!!$  new_type_type(4)=MPI_INTEGER
-!!$  new_type_type(5)=MPI_DOUBLE_PRECISION
-!!$  new_type_length(1)=1
-!!$  new_type_length(2)=nflushmax
-!!$  new_type_length(3)=nflushmax*ndim
-!!$  new_type_length(4)=nflushmax*twotondim
-!!$  new_type_length(5)=nflushmax*twotondim*nvar
-!!$  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_flush,info)
-!!$  call MPI_TYPE_COMMIT(new_mpi_realdp_flush,info)
-!!$
-!!$  ! New type for request
-!!$  call MPI_ADDRESS(recv_request     ,new_type_address(1),info)
-!!$  call MPI_ADDRESS(recv_request%lev ,new_type_address(2),info)
-!!$  call MPI_ADDRESS(recv_request%ckey,new_type_address(3),info)
-!!$  do i=1,2
-!!$     new_type_disp(i)=new_type_address(i+1)-new_type_address(i)
-!!$  end do
-!!$  new_type_type(1)=MPI_INTEGER
-!!$  new_type_type(2)=MPI_INTEGER
-!!$  new_type_length(1)=1
-!!$  new_type_length(2)=ndim
-!!$  call MPI_TYPE_STRUCT(2,new_type_length,new_type_disp,new_type_type,new_mpi_request,info)
-!!$  call MPI_TYPE_COMMIT(new_mpi_request,info)
 
 #endif
 

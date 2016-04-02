@@ -19,6 +19,7 @@ end subroutine refine_all
 !###############################################################
 subroutine refine_fine(ilevel)
   use amr_commons
+  use hilbert
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -36,12 +37,12 @@ subroutine refine_fine(ilevel)
   integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct,iold,iold_true
   integer::noct_zero,head_zero,indx_zero,info
   integer::ncreate_tot,nkill_tot
-  integer::parent_cell,skip_bit,true_level
+  integer::parent_cell,skip_bit,ikey,true_level
   integer::get_parent_cell
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:nlevelmax)::key_ref
-  integer(kind=8)::coarse_key
+  integer(kind=8),dimension(1:nhilbert,1:nlevelmax)::key_ref
+  integer(kind=8),dimension(1:nhilbert)::coarse_key
   integer,dimension(1:nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
   integer,dimension(:),allocatable::swap_table,swap_tmp
@@ -174,45 +175,56 @@ subroutine refine_fine(ilevel)
   ! Loop over levels
   do ilev=ilevel+1,nlevelmax
      if(noct_level(ilev)>0)then
+
         ! Allocate temporary swap table just for the level
         allocate(swap_tmp(head_level(ilev):head_level(ilev)+noct_level(ilev)-1))
+
         ! Loop over useful bits at that level
         do ibit=ilev,1,-1
-           skip_bit=ndim*(ilev-ibit) ! Carefull: this works only up to 63 bits !!
+
+           ! Get bit and key to read from
+           skip_bit=ndim*(ilev-ibit)
+           ikey = skip_bit / bits_per_int(ndim) + 1
+           skip_bit = mod(skip_bit, bits_per_int(ndim))
+
            ! Count octs in buckets
            bucket_count=0
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               ioct=swap_table(inew)
-              if(    grid(ioct)%hkey.lt.bound_key_level(myid-1,ilev).OR. &
-                   & grid(ioct)%hkey.ge.bound_key_level(myid  ,ilev))then
-                 write(*,*)'PE ',myid,'######### ',ioct
-                 write(*,*)grid(ioct)%hkey
-                 write(*,*)grid(ioct)%lev
-                 write(*,*)grid(ioct)%ckey
-                 write(*,*)bound_key_level(myid-1,ilev)
-                 write(*,*)bound_key_level(myid  ,ilev)
-                 stop
-              endif
-              ibucket=ibits(grid(ioct)%hkey,skip_bit,ndim)
+!!$              if(    gt_keys(bound_key_level(1:nhilbert,myid-1,ilev),grid(ioct)%hkey(1:nhilbert)).OR. &
+!!$                   & ge_keys(grid(ioct)%hkey(1:nhilbert),bound_key_level(1:nhilbert,myid,ilev)))then
+!!$                 write(*,*)'PE ',myid,'######### ',ioct
+!!$                 write(*,*)grid(ioct)%hkey
+!!$                 write(*,*)grid(ioct)%lev
+!!$                 write(*,*)grid(ioct)%ckey
+!!$                 write(*,*)bound_key_level(1:nhilbert,myid-1,ilev)
+!!$                 write(*,*)bound_key_level(1:nhilbert,myid  ,ilev)
+!!$                 stop
+!!$              endif
+              ibucket=ibits(grid(ioct)%hkey(ikey),skip_bit,ndim)
               bucket_count(ibucket)=bucket_count(ibucket)+1
            end do
+
            ! Compute offsets
            bucket_offset(0)=head_level(ilev)
            do ibucket=1,twotondim-1
               bucket_offset(ibucket)=bucket_offset(ibucket-1)+bucket_count(ibucket-1)
            end do
+
            ! Sort according to Hilbert key
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               ioct=swap_table(inew)
-              ibucket=ibits(grid(ioct)%hkey,skip_bit,ndim)
+              ibucket=ibits(grid(ioct)%hkey(ikey),skip_bit,ndim)
               swap_tmp(bucket_offset(ibucket))=ioct
               bucket_offset(ibucket)=bucket_offset(ibucket)+1
            end do
+
            ! Store permutations in swap table
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               swap_table(inew)=swap_tmp(inew)
            end do           
         end do
+
         ! Deallocate tmp swap array
         deallocate(swap_tmp)
      endif
@@ -276,17 +288,18 @@ subroutine refine_fine(ilevel)
   end do
   do ilev=ilevel+1,nlevelmax
      n_same=0
-     key_ref=-1
+     key_ref=0
+     key_ref(1,1:nlevelmax)=-1
      do ioct=head(ilev),tail(ilev)
         grid(ioct)%superoct=1
-        coarse_key=grid(ioct)%hkey
+        coarse_key(1:nhilbert)=grid(ioct)%hkey(1:nhilbert)
         do i=1,MIN(ilev-1,nsuperoct)
-           coarse_key=coarse_key/twotondim
-           if(coarse_key.EQ.key_ref(i))then
+           coarse_key(1:nhilbert)=coarsen_key(coarse_key(1:nhilbert),ilev-1) ! ilev-1 used to speed up only
+           if(eq_keys(coarse_key(1:nhilbert),key_ref(1:nhilbert,i)))then
               n_same(i)=n_same(i)+1
            else
               n_same(i)=1
-              key_ref(i)=coarse_key
+              key_ref(1:nhilbert,i)=coarse_key(1:nhilbert)
            endif
            if(n_same(i).EQ.npatch(i))then
               grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
@@ -351,8 +364,8 @@ subroutine make_new_oct(iparent,icell,ilevel)
   !--------------------------------------------------------------
   integer::icpu,idim,ivar,ichild,ind,inbor,nstride,grid_cpu
   integer(kind=4), dimension(1:nvector),save::dummy_state
-  integer(kind=8), dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8), dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8), dimension(1:nvector,1:ndim),save::ix
   integer(kind=8), dimension(1:ndim),save::cart_key
   integer(kind=8), dimension(0:ndim)::hash_key
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
@@ -378,26 +391,12 @@ subroutine make_new_oct(iparent,icell,ilevel)
   end do
 
   ! Compute Hilbert keys of new octs
-#if NDIM==1
-  ix(1)=cart_key(1)
-  call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-  ix(1)=cart_key(1)
-  iy(1)=cart_key(2)
-  call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-  ix(1)=cart_key(1)
-  iy(1)=cart_key(2)
-  iz(1)=cart_key(3)
-  call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
+  ix(1,1:ndim)=cart_key(1:ndim)
+  call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
   ! Check if grid sits inside processor boundaries
-  if(    hk0(1).ge.bound_key_level(myid-1,ilevel).AND. &
-       & hk0(1).lt.bound_key_level(myid  ,ilevel))then
-
+  if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,myid-1,ilevel)).AND. &
+       & gt_keys(bound_key_level(1:nhilbert,myid,ilevel),hk(1,1:nhilbert)))then
 
      ! Set grid index to a virtual grid in local main memory
      ichild=ifree
@@ -413,8 +412,8 @@ subroutine make_new_oct(iparent,icell,ilevel)
   ! Otherwise, determine parent processor and use the cache
   else
      do icpu=1,ncpu
-        if(    hk0(1).ge.bound_key_level(icpu-1,ilevel).AND. &
-             & hk0(1).lt.bound_key_level(icpu  ,ilevel))then
+        if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
+             & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
            grid_cpu=icpu
         end if
      end do
@@ -435,7 +434,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
 
   grid(ichild)%lev=ilevel
   grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
-  grid(ichild)%hkey=hk0(1)
+  grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
   grid(ichild)%refined(1:twotondim)=.false.
   grid(ichild)%flag1(1:twotondim)=0
   grid(ichild)%flag2(1:twotondim)=0

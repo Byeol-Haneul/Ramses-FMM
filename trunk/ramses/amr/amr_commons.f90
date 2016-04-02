@@ -55,7 +55,7 @@ module amr_commons
   type oct
      integer(kind=4)::lev
      integer(kind=4),dimension(1:ndim)::ckey
-     integer(kind=8)::hkey
+     integer(kind=8),dimension(1:nhilbert)::hkey
      integer(kind=4),dimension(1:twotondim)::flag1
      integer(kind=4),dimension(1:twotondim)::flag2
      logical,dimension(1:twotondim)::refined
@@ -88,13 +88,14 @@ module amr_commons
   integer,allocatable,dimension(:)::noct_max
   integer,allocatable,dimension(:)::noct_tot
   integer,allocatable,dimension(:)::ckey_max
+  integer(kind=8),allocatable,dimension(:,:)::hkey_max
   integer::noct_used,noct_used_max,noct_used_tot
 
   integer,allocatable,dimension(:)::head_cache
   integer,allocatable,dimension(:)::tail_cache
 
   ! Hilbert key
-  integer(kind=8),allocatable,dimension(:,:)::bound_key_level,bound_hilbert_key,bound_key_mg
+  integer(kind=8),allocatable,dimension(:,:,:)::bound_key_level,bound_hilbert_key,bound_key_mg
 
   ! Software cache parameters
   integer::cache_operation

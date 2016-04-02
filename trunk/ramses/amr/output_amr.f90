@@ -185,8 +185,9 @@ subroutine output_params(filename)
   write(ilun)aexp,hexp,aexp_old,epot_tot_int,epot_tot_old
   write(ilun)mass_sph
   ! Write cpu boundaries
+  write(ilun)nhilbert
   do ilevel=levelmin,nlevelmax
-     write(ilun)bound_key_level(0:ncpu,ilevel)
+     write(ilun)bound_key_level(1:nhilbert,0:ncpu,ilevel)
   end do
   close(ilun)
 

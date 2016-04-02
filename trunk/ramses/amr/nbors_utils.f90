@@ -245,8 +245,8 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
   ! corresponding to the input hash key.
   !
   integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
   integer(kind=8),dimension(0:ndim)::hash_child
   integer::i,ind,idim,ivar,ichild,ilevel,info,icpu,grid_cpu,ntile_response,icounter
   integer::send_request_id
@@ -293,32 +293,19 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
 
   ! Compute the Hilbert key
   ilevel=hash_key(0)
-#if NDIM==1
-  ix(1)=hash_key(1)
-  call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-  ix(1)=hash_key(1)
-  iy(1)=hash_key(2)
-  call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-  ix(1)=hash_key(1)
-  iy(1)=hash_key(2)
-  iz(1)=hash_key(3)
-  call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
+  ix(1,1:ndim)=hash_key(1:ndim)
+  call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
   ! Check if grid sits inside processor boundaries
-  if(    hk0(1).ge.bound_hilbert_key(myid-1,ilevel).AND. &
-       & hk0(1).lt.bound_hilbert_key(myid  ,ilevel))then
+  if(    ge_keys(hk(1,1:nhilbert),bound_hilbert_key(1:nhilbert,myid-1,ilevel)).AND. &
+       & gt_keys(bound_hilbert_key(1:nhilbert,myid,ilevel),hk(1,1:nhilbert)))then
      return
   endif
 
   ! Determine parent processor
   do icpu=1,ncpu
-     if(    hk0(1).ge.bound_hilbert_key(icpu-1,ilevel).AND. &
-          & hk0(1).lt.bound_hilbert_key(icpu  ,ilevel))then
+     if(    ge_keys(hk(1,1:nhilbert),bound_hilbert_key(1:nhilbert,icpu-1,ilevel)).AND. &
+          & gt_keys(bound_hilbert_key(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
         grid_cpu=icpu
         exit
      end if
@@ -677,8 +664,8 @@ subroutine check_mail(comm_id,hash_dict)
   integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status,comm_status
 #endif
   integer(kind=4), dimension(1:nvector),save::dummy_state
-  integer(kind=8), dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8), dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8), dimension(1:nvector,1:ndim),save::ix
   integer(kind=8),dimension(0:ndim)::hash_key,hash_child
   !
 #ifndef WITHOUTMPI
@@ -1045,21 +1032,9 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(1:ndim)=recv_flush_refine%ckey(1:ndim,i)
 
               ! Compute Hilbert keys of new octs
-#if NDIM==1
-              ix(1)=hash_child(1)
-              call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-              ix(1)=hash_child(1)
-              iy(1)=hash_child(2)
-              call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-              ix(1)=hash_child(1)
-              iy(1)=hash_child(2)
-              iz(1)=hash_child(3)
-              call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
+              ix(1,1:ndim)=hash_child(1:ndim)
+              call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
 
@@ -1073,7 +1048,7 @@ subroutine check_mail(comm_id,hash_dict)
 
               grid(ichild)%lev=hash_child(0)
               grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
-              grid(ichild)%hkey=hk0(1)
+              grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
               grid(ichild)%refined(1:twotondim)=.false.
               grid(ichild)%flag1(1:twotondim)=0
               grid(ichild)%flag2(1:twotondim)=0
@@ -1114,21 +1089,9 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(1:ndim)=recv_flush_refine%ckey(1:ndim,i)
 
               ! Compute Hilbert keys of new octs
-#if NDIM==1
-              ix(1)=hash_child(1)
-              call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-              ix(1)=hash_child(1)
-              iy(1)=hash_child(2)
-              call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-              ix(1)=hash_child(1)
-              iy(1)=hash_child(2)
-              iz(1)=hash_child(3)
-              call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
+              ix(1,1:ndim)=hash_child(1:ndim)
+              call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
 
@@ -1142,7 +1105,7 @@ subroutine check_mail(comm_id,hash_dict)
 
               grid(ichild)%lev=hash_child(0)
               grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
-              grid(ichild)%hkey=hk0(1)
+              grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
               do ind=1,twotondim
                  if(recv_flush_refine%int4(ind,i)==1)then
                     grid(ichild)%refined(ind)=.true.
@@ -1192,21 +1155,9 @@ subroutine check_mail(comm_id,hash_dict)
               if(ichild==0)then 
                  
               ! Compute Hilbert keys of new octs
-#if NDIM==1
-              ix(1)=hash_child(1)
-              call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-              ix(1)=hash_child(1)
-              iy(1)=hash_child(2)
-              call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-              ix(1)=hash_child(1)
-              iy(1)=hash_child(2)
-              iz(1)=hash_child(3)
-              call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
+              ix(1,1:ndim)=hash_child(1:ndim)
+              call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
 
@@ -1220,7 +1171,7 @@ subroutine check_mail(comm_id,hash_dict)
 
               grid(ichild)%lev=hash_child(0)
               grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
-              grid(ichild)%hkey=hk0(1)
+              grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
               grid(ichild)%refined(1:twotondim)=.false.
               grid(ichild)%flag1(1:twotondim)=0
               grid(ichild)%flag2(1:twotondim)=0

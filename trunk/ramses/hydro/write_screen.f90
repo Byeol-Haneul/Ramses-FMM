@@ -19,7 +19,7 @@ subroutine write_screen(ilevel)
         do ind=1,2
            write(*,'(I4,1X,I8,1X,I4,1X,I4,1X,I4,1X,L,1X,2(I4,1X),6(1PE10.3))')&
                 & igrid,grid(igrid)%ckey(1),ind,grid(igrid)%flag1(ind),grid(igrid)%lev,grid(igrid)%refined(ind),&
-                & grid(igrid)%hkey,grid(igrid)%superoct, &
+                & grid(igrid)%hkey(1),grid(igrid)%superoct, &
                 & (2*grid(igrid)%ckey(1)+ind-0.5)/(2.*ckey_max(ilevel)),&
                 & grid(igrid)%uold(ind,1),grid(igrid)%uold(ind,2)/grid(igrid)%uold(ind,1),grid(igrid)%uold(ind,3)
         end do

@@ -280,6 +280,7 @@ end subroutine recursive_multigrid
 subroutine init_mg(ilevel)
   use amr_commons
   use poisson_commons
+  use hilbert
   implicit none  
 #ifndef WITHOUTMPI
   include "mpif.h"
@@ -294,11 +295,11 @@ subroutine init_mg(ilevel)
   allocate(noct_tot_mg(1:nlevelmax))
 
   ! Allocate and compute multigrid Hilbert key tick marks
-  allocate(bound_key_mg(0:ncpu,1:nlevelmax+1))
+  allocate(bound_key_mg(1:nhilbert,0:ncpu,1:nlevelmax+1))
   do icpu=0,ncpu
-     bound_key_mg(icpu,ilevel)=bound_key_level(icpu,ilevel)
+     bound_key_mg(1:nhilbert,icpu,ilevel)=bound_key_level(1:nhilbert,icpu,ilevel)
      do ilev=ilevel-1,1,-1
-        bound_key_mg(icpu,ilev)=bound_key_mg(icpu,ilev+1)/twotondim
+        bound_key_mg(1:nhilbert,icpu,ilev)=coarsen_key(bound_key_mg(1:nhilbert,icpu,ilev+1),ilev)
      end do
   end do
 
@@ -340,8 +341,8 @@ subroutine build_mg(ifinelevel)
        & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
        &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
   integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
 
   icoarselevel=ifinelevel-1
   ifree=noct_used+1
@@ -386,25 +387,12 @@ subroutine build_mg(ifinelevel)
            cart_key(1:ndim)=hash_father(1:ndim)
            
            ! Compute Hilbert keys of new octs
-#if NDIM==1
-           ix(1)=cart_key(1)
-           call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-           ix(1)=cart_key(1)
-           iy(1)=cart_key(2)
-           call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,icoarselevel-1,1)
-#endif
-#if NDIM==3
-           ix(1)=cart_key(1)
-           iy(1)=cart_key(2)
-           iz(1)=cart_key(3)
-           call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,icoarselevel-1,1)
-#endif
+           ix(1,1:ndim)=cart_key(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,icoarselevel-1,1)
            
            ! Check if grid sits inside processor boundaries
-           if(    hk0(1).ge.bound_key_mg(myid-1,icoarselevel).AND. &
-                & hk0(1).lt.bound_key_mg(myid  ,icoarselevel))then
+           if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,myid-1,icoarselevel)).AND. &
+                & gt_keys(bound_key_mg(1:nhilbert,myid,icoarselevel),hk(1,1:nhilbert)))then
               
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
@@ -419,8 +407,8 @@ subroutine build_mg(ifinelevel)
               ! Otherwise, determine parent processor and use the cache
            else
               do icpu=1,ncpu
-                 if(    hk0(1).ge.bound_key_mg(icpu-1,icoarselevel).AND. &
-                      & hk0(1).lt.bound_key_mg(icpu  ,icoarselevel))then
+                 if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,icoarselevel)).AND. &
+                      & gt_keys(bound_key_mg(1:nhilbert,icpu,icoarselevel),hk(1,1:nhilbert)))then
                     grid_cpu=icpu
                  end if
               end do
@@ -441,7 +429,7 @@ subroutine build_mg(ifinelevel)
            
            grid(ichild)%lev=icoarselevel
            grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
-           grid(ichild)%hkey=hk0(1)
+           grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
            grid(ichild)%refined(1:twotondim)=.true.
            grid(ichild)%flag1(1:twotondim)=0
            grid(ichild)%flag2(1:twotondim)=0

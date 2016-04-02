@@ -68,7 +68,7 @@ subroutine init_file
   ! Initial conditions are supposed to be made by 
   ! Bertschinger's grafic version 2.0 code.
   !------------------------------------------------------
-  integer:: ilevel,nx_loc,ny_loc,nz_loc
+  integer:: ilevel
   real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
   character(LEN=80)::filename
   logical::ok
@@ -103,19 +103,16 @@ subroutine init_file
   end do
 
   ! Check compatibility with run parameters
-  nx_loc=icoarse_max-icoarse_min+1
-  ny_loc=jcoarse_max-jcoarse_min+1
-  nz_loc=kcoarse_max-kcoarse_min+1
-  if(         nx_loc.ne.n1(levelmin)/2**levelmin &
-       & .or. ny_loc.ne.n2(levelmin)/2**levelmin &
-       & .or. nz_loc.ne.n3(levelmin)/2**levelmin) then 
+  if(         n1(levelmin).NE.2**levelmin &
+       & .or. n2(levelmin).NE.2**levelmin &
+       & .or. n3(levelmin).NE.2**levelmin) then 
      write(*,*)'coarser grid is not compatible with initial conditions file'
      write(*,*)'Found    n1=',n1(levelmin),&
           &            ' n2=',n2(levelmin),&
           &            ' n3=',n3(levelmin)
-     write(*,*)'Expected n1=',nx_loc*2**levelmin &
-          &           ,' n2=',ny_loc*2**levelmin &
-          &           ,' n3=',nz_loc*2**levelmin
+     write(*,*)'Expected n1=',2**levelmin &
+          &           ,' n2=',2**levelmin &
+          &           ,' n3=',2**levelmin
      call clean_stop
   end if
 

@@ -16,11 +16,11 @@ subroutine init_refine_basegrid
   !------------------------------------------
   integer::ilevel,i,j,k,igrid,ipos,ioct,ilev,info
   integer(kind=8)::ikey
-  integer(kind=8),dimension(1:nvector)::hk0,hk1,hk2
-  integer(kind=8),dimension(1:nvector)::ix=0,iy=0,iz=0
+  integer(kind=8),dimension(1:nvector,1:nhilbert)::hk=0
+  integer(kind=8),dimension(1:nvector,1:ndim)::ix=0
   integer(kind=8),dimension(0:ndim)::hash_key,hash_test
-  integer(kind=8),dimension(1:nlevelmax)::key_ref
-  integer(kind=8)::coarse_key
+  integer(kind=8),dimension(1:nhilbert,1:nlevelmax)::key_ref
+  integer(kind=8),dimension(1:nhilbert)::coarse_key
   integer,dimension(1:nlevelmax)::n_same,npatch
 
   if(myid==1)write(*,*)'Building initial base grid'
@@ -28,16 +28,10 @@ subroutine init_refine_basegrid
 
   ! Loop over the base level grid
   igrid=0
-  do ikey=bound_key_level(myid-1,levelmin),bound_key_level(myid,levelmin)-1
-     hk0(1)=ikey
+  do ikey=bound_key_level(1,myid-1,levelmin),bound_key_level(1,myid,levelmin)-1
+     hk(1,1)=ikey
      ! Compute Cartesian index from Hilbert index
-     If(ndim==1)then
-        call hilbert1d_reverse(ix,hk0,1)
-     else if(ndim==2)then
-        call hilbert2d_reverse(ix,iy,hk1,hk0,levelmin-1,1)
-     else if (ndim==3)then
-        call hilbert3d_reverse(ix,iy,iz,hk2,hk1,hk0,levelmin-1,1)
-     end if
+     call hilbert_reverse(ix,hk,levelmin-1,1)
      ! Insert new grid in main array
      igrid=igrid+1
      if(igrid==1)head(levelmin)=1
@@ -45,24 +39,12 @@ subroutine init_refine_basegrid
      noct(levelmin)=noct(levelmin)+1
      noct_used=noct_used+1
      grid(igrid)%lev=levelmin
-     grid(igrid)%ckey(1)=ix(1)
-#if NDIM>1
-     grid(igrid)%ckey(2)=iy(1)
-#endif
-#if NDIM>2
-     grid(igrid)%ckey(3)=iz(1)
-#endif
-     grid(igrid)%hkey=hk0(1)
+     grid(igrid)%ckey(1:ndim)=ix(1,1:ndim)
+     grid(igrid)%hkey(1:nhilbert)=hk(1,1:nhilbert)
      grid(igrid)%refined(1:twotondim)=.false.
      ! Insert new grid in hash table
      hash_key(0)=levelmin
-     hash_key(1)=ix(1)
-#if NDIM>1
-     hash_key(2)=iy(1)
-#endif
-#if NDIM>2
-     hash_key(3)=iz(1)
-#endif
+     hash_key(1:ndim)=ix(1,1:ndim)
      call hash_set(grid_dict,hash_key,igrid)
   end do
 
@@ -74,17 +56,18 @@ subroutine init_refine_basegrid
   end do
   ilev=levelmin
   n_same=0
-  key_ref=-1
+  key_ref=0
+  key_ref(1,1:nlevelmax)=-1
   do ioct=head(ilev),tail(ilev)
      grid(ioct)%superoct=1
-     coarse_key=grid(ioct)%hkey
+     coarse_key(1:nhilbert)=grid(ioct)%hkey(1:nhilbert)
      do i=1,MIN(ilev-1,nsuperoct)
-        coarse_key=coarse_key/twotondim
-        if(coarse_key.EQ.key_ref(i))then
+        coarse_key(1:nhilbert)=coarsen_key(coarse_key(1:nhilbert),ilev-1) ! ilev-1 used to speed up only
+        if(eq_keys(coarse_key(1:nhilbert),key_ref(1:nhilbert,i)))then
            n_same(i)=n_same(i)+1
         else
            n_same(i)=1
-           key_ref(i)=coarse_key
+           key_ref(1:nhilbert,i)=coarse_key(1:nhilbert)
         endif
         if(n_same(i).EQ.npatch(i))then
            grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
@@ -176,15 +159,15 @@ subroutine init_refine_restart
   character(LEN=5)::nchar,ncharcpu
 
   integer,dimension(:),allocatable::noct_file,noct_skip,ntarget_cum,noct_cum
-  integer(kind=8),allocatable,dimension(:)::bound_key_target
-  integer(kind=8),allocatable,dimension(:)::bound_key_target_tot
+  integer(kind=8),allocatable,dimension(:,:)::bound_key_target
+  integer(kind=8),allocatable,dimension(:,:)::bound_key_target_tot
 
   integer(kind=4), dimension(1:nvector),save::dummy_state
-  integer(kind=8), dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8), dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8), dimension(1:nvector,1:ndim),save::ix
   integer(kind=8), dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:nlevelmax)::key_ref
-  integer(kind=8)::coarse_key
+  integer(kind=8),dimension(1:nhilbert,1:nlevelmax)::key_ref
+  integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key,zero_key
   integer,dimension(1:nlevelmax)::n_same,npatch
 
   integer,dimension(1:ndim)::ckey
@@ -209,8 +192,13 @@ subroutine init_refine_restart
   allocate(noct_cum(1:ncpu_file))
   allocate(noct_skip(1:ncpu_file))
   allocate(ntarget_cum(1:ncpu))
-  allocate(bound_key_target(0:ncpu))
-  allocate(bound_key_target_tot(0:ncpu))
+  allocate(bound_key_target(1:nhilbert,0:ncpu))
+  allocate(bound_key_target_tot(1:nhilbert,0:ncpu))
+
+  ! Set some constants
+  zero_key=0
+  one_key=0
+  one_key(1)=1
 
   !--------------------------
   ! Loop over relevant levels
@@ -354,23 +342,10 @@ subroutine init_refine_restart
            call hash_set(grid_dict,hash_key,igrid)
 
            ! Compute Hilbert keys of new octs
-#if NDIM==1
-           ix(1)=ckey(1)
-           call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-           ix(1)=ckey(1)
-           iy(1)=ckey(2)
-           call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-           ix(1)=ckey(1)
-           iy(1)=ckey(2)
-           iz(1)=ckey(3)
-           call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-           grid(igrid)%hkey=hk0(1)
-           bound_key_target(myid)=hk0(1)+1
+           ix(1,1:ndim)=ckey(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+           grid(igrid)%hkey(1:nhilbert)=hk(1,1:nhilbert)
+           bound_key_target(1:nhilbert,myid)=hk(1,1:nhilbert)+one_key
         end do
         close(10)
         if(hydro)then
@@ -382,17 +357,18 @@ subroutine init_refine_restart
      ! Set up new domain decomposition
      !--------------------------------
 #ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,nhilbert*(ncpu+1),MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
      bound_key_target=bound_key_target_tot
 #endif
-     bound_key_target(0)=0
+     bound_key_target(1:nhilbert,0)=zero_key
      do icpu=1,ncpu
-        bound_key_target(icpu)=max(bound_key_target(icpu),bound_key_target(icpu-1))
+        if(gt_keys(bound_key_target(1:nhilbert,icpu-1),bound_key_target(1:nhilbert,icpu)))then
+           bound_key_target(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu-1)
+        endif
      end do
-     bound_key_target(ncpu)=ckey_max(ilevel)**ndim
-     
+     bound_key_target(1:nhilbert,ncpu)=hkey_max(1:nhilbert,ilevel)
      do icpu=0,ncpu
-        bound_key_level(icpu,ilevel)=bound_key_target(icpu)
+        bound_key_level(1:nhilbert,icpu,ilevel)=bound_key_target(1:nhilbert,icpu)
      end do
      
   end do
@@ -423,17 +399,18 @@ subroutine init_refine_restart
   end do
   do ilev=levelmin,nlevelmax
      n_same=0
-     key_ref=-1
+     key_ref=0
+     key_ref(1,1:nlevelmax)=-1
      do ioct=head(ilev),tail(ilev)
         grid(ioct)%superoct=1
-        coarse_key=grid(ioct)%hkey
+        coarse_key(1:nhilbert)=grid(ioct)%hkey(1:nhilbert)
         do i=1,MIN(ilev-1,nsuperoct)
-           coarse_key=coarse_key/twotondim
-           if(coarse_key.EQ.key_ref(i))then
+           coarse_key(1:nhilbert)=coarsen_key(coarse_key(1:nhilbert),ilev-1) ! ilev-1 used to speed up only
+           if(eq_keys(coarse_key(1:nhilbert),key_ref(1:nhilbert,i)))then
               n_same(i)=n_same(i)+1
            else
               n_same(i)=1
-              key_ref(i)=coarse_key
+              key_ref(1:nhilbert,i)=coarse_key(1:nhilbert)
            endif
            if(n_same(i).EQ.npatch(i))then
               grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)

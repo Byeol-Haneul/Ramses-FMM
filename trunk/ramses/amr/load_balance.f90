@@ -5,6 +5,7 @@
 subroutine load_balance(ilevel)
   use amr_commons
   use hydro_commons
+  use hilbert
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h' 
@@ -19,19 +20,19 @@ subroutine load_balance(ilevel)
   integer::ilev,ioct
   integer,dimension(:),allocatable::noct_cpu,noct_cum
   integer,dimension(:),allocatable::ntarget_cum
-  integer(kind=8),allocatable,dimension(:)::bound_key_target
-  integer(kind=8),allocatable,dimension(:)::bound_key_target_tot
+  integer(kind=8),allocatable,dimension(:,:)::bound_key_target
+  integer(kind=8),allocatable,dimension(:,:)::bound_key_target_tot
   real(dp)::xtarget
 
   integer::icell,j,ibit,ibucket,inew,iold,iold_true
   integer::noct_zero,head_zero,indx_zero
   integer::ncreate_tot,nkill_tot
-  integer::parent_cell,skip_bit,true_level
+  integer::parent_cell,skip_bit,ikey,true_level
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:nlevelmax)::key_ref
-  integer(kind=8), dimension(1:ndim)::cart_key
-  integer(kind=8)::coarse_key
+  integer(kind=8),dimension(1:ndim)::cart_key
+  integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key,zero_key
+  integer(kind=8),dimension(1:nhilbert,1:nlevelmax)::key_ref
   integer,dimension(1:nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
   integer,dimension(:),allocatable::swap_table,swap_tmp
@@ -44,19 +45,10 @@ subroutine load_balance(ilevel)
   if(ilevel==nlevelmax)return
   if(verbose)write(*,111)ilevel
   
-!!$  if(verbose)then
-!!$     write(*,*)'Input mesh structure'
-!!$     do ilev=levelmin,nlevelmax
-!!$        if(noct_tot(ilev)>0)write(*,999)ilev,noct_tot(ilev),noct_min(ilev),noct_max(ilev),noct_tot(ilev)/ncpu
-!!$     end do
-!!$  end if
-
-!!$  if(myid==1)then
-!!$     write(*,*)'Old Hilbert tick marks'
-!!$     do ilev=ilevel,nlevelmax
-!!$        write(*,'(40(I6,1X))')(bound_key_level(icpu,ilev),icpu=0,ncpu)
-!!$     end do
-!!$  end if
+  ! Constants
+  zero_key=0
+  one_key=0
+  one_key(1)=1
 
   !-----------------------------------------------------
   ! Step 1: determine the new Hilbert tick marks
@@ -64,8 +56,9 @@ subroutine load_balance(ilevel)
   allocate(noct_cpu(1:ncpu))
   allocate(noct_cum(1:ncpu))
   allocate(ntarget_cum(1:ncpu))
-  allocate(bound_key_target(0:ncpu))
-  allocate(bound_key_target_tot(0:ncpu))
+  allocate(bound_key_target(1:nhilbert,0:ncpu))
+  allocate(bound_key_target_tot(1:nhilbert,0:ncpu))
+
   ! Compute new Hilbert tick marks
   do ilev=ilevel+1,nlevelmax
 
@@ -110,24 +103,25 @@ subroutine load_balance(ilevel)
            do ioct=head(ilev),tail(ilev)
               nstart=nstart+1
               if(nstart.GE.ntarget_cum(istart))then
-                 bound_key_target(istart)=grid(ioct)%hkey+1
+                 bound_key_target(1:nhilbert,istart)=grid(ioct)%hkey(1:nhilbert)+one_key
                  istart=istart+1
               endif
               if(istart.GT.iright)exit
            end do
         endif
         
-        call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,ncpu+1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+        call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,nhilbert*(ncpu+1),MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
         bound_key_target=bound_key_target_tot
         
-        bound_key_target(0)=0
+        bound_key_target(1:nhilbert,0)=zero_key
         do icpu=1,ncpu
-           bound_key_target(icpu)=max(bound_key_target(icpu),bound_key_target(icpu-1))
+           if(gt_keys(bound_key_target(1:nhilbert,icpu-1),bound_key_target(1:nhilbert,icpu)))then
+              bound_key_target(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu-1)
+           endif
         end do
-        bound_key_target(ncpu)=ckey_max(ilev)**ndim
-        
+        bound_key_target(1:nhilbert,ncpu)=hkey_max(1:nhilbert,ilev)
         do icpu=0,ncpu
-           bound_key_level(icpu,ilev)=bound_key_target(icpu)
+           bound_key_level(1:nhilbert,icpu,ilev)=bound_key_target(1:nhilbert,icpu)
         end do
 
      endif
@@ -136,13 +130,6 @@ subroutine load_balance(ilevel)
   deallocate(noct_cpu,noct_cum,ntarget_cum)
   deallocate(bound_key_target)
   deallocate(bound_key_target_tot)
-
-!!$  if(myid==1)then
-!!$     write(*,*)'New Hilbert tick marks'
-!!$     do ilev=ilevel+1,nlevelmax
-!!$        write(*,'(40(I6,1X))')(bound_key_level(icpu,ilev),icpu=0,ncpu)
-!!$     end do
-!!$  end if
 
   !-----------------------------------------------------
   ! Step 2: dispatch octs and empty slots according to
@@ -157,13 +144,13 @@ subroutine load_balance(ilevel)
      do ioct=head(ilev),tail(ilev)
 
         ! Check if grid sits outside future processor boundaries
-        if(    grid(ioct)%hkey.lt.bound_key_level(myid-1,ilev).OR. &
-             & grid(ioct)%hkey.ge.bound_key_level(myid  ,ilev))then
+        if(    gt_keys(bound_key_level(1:nhilbert,myid-1,ilev),grid(ioct)%hkey(1:nhilbert)).OR. &
+             & ge_keys(grid(ioct)%hkey(1:nhilbert),bound_key_level(1:nhilbert,myid,ilev)))then
            
            ! Determine the future processor
            do icpu=1,ncpu
-              if(    grid(ioct)%hkey.ge.bound_key_level(icpu-1,ilev).AND. &
-                   & grid(ioct)%hkey.lt.bound_key_level(icpu  ,ilev))then
+              if(    ge_keys(grid(ioct)%hkey(1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilev)).AND. &
+                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilev),grid(ioct)%hkey(1:nhilbert)))then
                  grid_cpu=icpu
               end if
            end do
@@ -251,45 +238,56 @@ subroutine load_balance(ilevel)
   ! Loop over levels
   do ilev=ilevel+1,nlevelmax
      if(noct_level(ilev)>0)then
+
         ! Allocate temporary swap table just for the level
         allocate(swap_tmp(head_level(ilev):head_level(ilev)+noct_level(ilev)-1))
+
         ! Loop over useful bits at that level
         do ibit=ilev,1,-1
-           skip_bit=ndim*(ilev-ibit) ! Carefull: this works only up to 63 bits !!
+
+           ! Get bit and key to read from
+           skip_bit=ndim*(ilev-ibit)
+           ikey = skip_bit / bits_per_int(ndim) + 1
+           skip_bit = mod(skip_bit, bits_per_int(ndim))
+
            ! Count octs in buckets
            bucket_count=0
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               ioct=swap_table(inew)
-              if(    grid(ioct)%hkey.lt.bound_key_level(myid-1,ilev).OR. &
-                   & grid(ioct)%hkey.ge.bound_key_level(myid  ,ilev))then
-                 write(*,*)'PE ',myid,'######### ',ioct
-                 write(*,*)grid(ioct)%hkey
-                 write(*,*)grid(ioct)%lev
-                 write(*,*)grid(ioct)%ckey
-                 write(*,*)bound_key_level(myid-1,ilev)
-                 write(*,*)bound_key_level(myid  ,ilev)
-                 stop
-              endif
-              ibucket=ibits(grid(ioct)%hkey,skip_bit,ndim)
+!!$              if(    gt_keys(bound_key_level(1:nhilbert,myid-1,ilev),grid(ioct)%hkey(1:nhilbert)).OR. &
+!!$                   & ge_keys(grid(ioct)%hkey(1:nhilbert),bound_key_level(1:nhilbert,myid,ilev)))then
+!!$                 write(*,*)'PE ',myid,'######### ',ioct
+!!$                 write(*,*)grid(ioct)%hkey
+!!$                 write(*,*)grid(ioct)%lev
+!!$                 write(*,*)grid(ioct)%ckey
+!!$                 write(*,*)bound_key_level(1:nhilbert,myid-1,ilev)
+!!$                 write(*,*)bound_key_level(1:nhilbert,myid  ,ilev)
+!!$                 stop
+!!$              endif
+              ibucket=ibits(grid(ioct)%hkey(ikey),skip_bit,ndim)
               bucket_count(ibucket)=bucket_count(ibucket)+1
            end do
+
            ! Compute offsets
            bucket_offset(0)=head_level(ilev)
            do ibucket=1,twotondim-1
               bucket_offset(ibucket)=bucket_offset(ibucket-1)+bucket_count(ibucket-1)
            end do
+
            ! Sort according to Hilbert key
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               ioct=swap_table(inew)
-              ibucket=ibits(grid(ioct)%hkey,skip_bit,ndim)
+              ibucket=ibits(grid(ioct)%hkey(ikey),skip_bit,ndim)
               swap_tmp(bucket_offset(ibucket))=ioct
               bucket_offset(ibucket)=bucket_offset(ibucket)+1
            end do
+
            ! Store permutations in swap table
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               swap_table(inew)=swap_tmp(inew)
            end do
         end do
+
         ! Deallocate tmp swap array
         deallocate(swap_tmp)
      endif
@@ -355,17 +353,18 @@ subroutine load_balance(ilevel)
   end do
   do ilev=ilevel+1,nlevelmax
      n_same=0
-     key_ref=-1
+     key_ref=0
+     key_ref(1,1:nlevelmax)=-1
      do ioct=head(ilev),tail(ilev)
         grid(ioct)%superoct=1
-        coarse_key=grid(ioct)%hkey
+        coarse_key(1:nhilbert)=grid(ioct)%hkey(1:nhilbert)
         do i=1,MIN(ilev-1,nsuperoct)
-           coarse_key=coarse_key/twotondim
-           if(coarse_key.EQ.key_ref(i))then
+           coarse_key(1:nhilbert)=coarsen_key(coarse_key(1:nhilbert),ilev-1) ! ilev-1 used to speed up only
+           if(eq_keys(coarse_key(1:nhilbert),key_ref(1:nhilbert,i)))then
               n_same(i)=n_same(i)+1
            else
               n_same(i)=1
-              key_ref(i)=coarse_key
+              key_ref(1:nhilbert,i)=coarse_key(1:nhilbert)
            endif
            if(n_same(i).EQ.npatch(i))then
               grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
@@ -395,13 +394,6 @@ subroutine load_balance(ilevel)
   call MPI_ALLREDUCE(noct_used,noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 #endif
 
-!!$  if(verbose)then
-!!$     write(*,*)'Output mesh structure'
-!!$     do ilev=levelmin,nlevelmax
-!!$        if(noct_tot(ilev)>0)write(*,999)ilev,noct_tot(ilev),noct_min(ilev),noct_max(ilev),noct_tot(ilev)/ncpu
-!!$     end do
-!!$  end if
-  
 #endif
 
 111 format(' Load balancing for all levels greater than ',I2)

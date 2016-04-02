@@ -37,9 +37,16 @@ module amr_parameters
   integer,parameter::threetondim=3**ndim
   integer,parameter::twondim=2*ndim
 
+  ! Number of 64-bit integers needed to store one Hilbert key
+#ifndef NHILBERT
+  integer, parameter :: nhilbert = 1
+#else
+  integer, parameter :: nhilbert = NHILBERT
+#endif
+
   ! Vectorization parameter
 #ifndef NVECTOR
-  integer,parameter::nvector=500  ! Size of vector sweeps
+  integer,parameter::nvector=32  ! Size of vector sweeps
 #else
   integer,parameter::nvector=NVECTOR
 #endif
@@ -159,27 +166,8 @@ module amr_parameters
   real(dp),dimension(1:MAXREGION)   ::length_z=1.E10
   real(dp),dimension(1:MAXREGION)   ::exp_region=2.0
 
-  ! Boundary conditions parameters
-  integer,parameter::MAXBOUND=100
-  logical                           ::simple_boundary=.false.
-  integer                           ::nboundary=0
-  integer                           ::icoarse_min=0
-  integer                           ::icoarse_max=0
-  integer                           ::jcoarse_min=0
-  integer                           ::jcoarse_max=0
-  integer                           ::kcoarse_min=0
-  integer                           ::kcoarse_max=0
-  integer ,dimension(1:MAXBOUND)    ::boundary_type=0
-  integer ,dimension(1:MAXBOUND)    ::ibound_min=0
-  integer ,dimension(1:MAXBOUND)    ::ibound_max=0
-  integer ,dimension(1:MAXBOUND)    ::jbound_min=0
-  integer ,dimension(1:MAXBOUND)    ::jbound_max=0
-  integer ,dimension(1:MAXBOUND)    ::kbound_min=0
-  integer ,dimension(1:MAXBOUND)    ::kbound_max=0
-  logical                           ::no_inflow=.false.
-
-  !Number of processes sharing one token
-  !Only one process can write at a time in an I/O group
+  ! Number of processes sharing one token
+  ! Only one process can write at a time in an I/O group
   integer::IOGROUPSIZE=0           ! Main snapshot
   integer::IOGROUPSIZECONE=0       ! Lightcone
   integer::IOGROUPSIZEREP=0        ! Subfolder size

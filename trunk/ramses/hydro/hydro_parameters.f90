@@ -13,20 +13,6 @@ module hydro_parameters
   integer,parameter::nvar=NVAR
 #endif
 
-  ! Imposed boundary condition variables
-  real(dp),dimension(1:MAXBOUND,1:nvar)::boundary_var
-  real(dp),dimension(1:MAXBOUND)::d_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND)::p_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND)::u_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND)::v_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND)::w_bound=0.0d0
-#if NENER>0
-  real(dp),dimension(1:MAXBOUND,1:NENER)::prad_bound=0.0
-#endif
-#if NVAR>NDIM+2+NENER
-  real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0.0
-#endif
-
   ! Refinement parameters for hydro
   real(dp)::err_grad_d=-1.0  ! Density gradient
   real(dp)::err_grad_u=-1.0  ! Velocity gradient

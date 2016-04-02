@@ -675,8 +675,8 @@ subroutine build_cg(ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
+  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
 
   allocate(nremote(1:ncpu))  
   allocate(nbor_indx(head(ilevel):tail(ilevel),1:twondim))
@@ -711,25 +711,13 @@ subroutine build_cg(ilevel)
            cart_key(1:ndim)=hash_nbor(1:ndim)
            
            ! Compute Hilbert keys of new octs
-#if NDIM==1
-           ix(1)=cart_key(1)
-           call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-           ix(1)=cart_key(1)
-           iy(1)=cart_key(2)
-           call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-           ix(1)=cart_key(1)
-           iy(1)=cart_key(2)
-           iz(1)=cart_key(3)
-           call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif           
+           ix(1,1:ndim)=cart_key(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
            ! Determine parent processor and increment counter
            do icpu=1,ncpu
-              if(    hk0(1).ge.bound_key_level(icpu-1,ilevel).AND. &
-                   & hk0(1).lt.bound_key_level(icpu  ,ilevel))then
+              if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
+                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
                  grid_cpu=icpu
               end if
            end do
@@ -812,25 +800,13 @@ subroutine build_cg(ilevel)
            cart_key(1:ndim)=hash_nbor(1:ndim)
 
            ! Compute Hilbert keys of new octs
-#if NDIM==1
-           ix(1)=cart_key(1)
-           call hilbert1d(ix,hk0,1)
-#endif
-#if NDIM==2
-           ix(1)=cart_key(1)
-           iy(1)=cart_key(2)
-           call hilbert2d(ix,iy,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
-#if NDIM==3
-           ix(1)=cart_key(1)
-           iy(1)=cart_key(2)
-           iz(1)=cart_key(3)
-           call hilbert3d(ix,iy,iz,hk2,hk1,hk0,dummy_state,0,ilevel-1,1)
-#endif
+           ix(1,1:ndim)=cart_key(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
            ! Determine parent processor and increment counter
            do icpu=1,ncpu
-              if(    hk0(1).ge.bound_key_level(icpu-1,ilevel).AND. &
-                   & hk0(1).lt.bound_key_level(icpu  ,ilevel))then
+              if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
+                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
                  grid_cpu=icpu
               end if
            end do
