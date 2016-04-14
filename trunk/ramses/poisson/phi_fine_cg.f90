@@ -168,7 +168,7 @@ subroutine phi_fine_cg(ilevel,icount)
      if(myid==1)write(*,*)'Poisson failed to converge...'
   end if
 
-  call clean_cg(ilevel)
+  call clean_cg
 
 111 format('   Entering phi_fine_cg for level ',I2)
 112 format('   ==> Step=',i5,' Error=',2(1pe10.3,1x))
