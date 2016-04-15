@@ -459,6 +459,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
 
+#ifndef WITHOUTMPI
                                call timer('poisson - solver - mpi','start')
   ! Update boundary conditions
   countrecv=0
@@ -501,6 +502,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
      end do
   end do
 
+#endif
                                call timer('poisson - solver','start')
   ! Loop over grids
   do igrid=head(ilevel),tail(ilevel)
@@ -677,6 +679,8 @@ subroutine build_cg(ilevel)
   integer(kind=4),dimension(1:nvector),save::dummy_state
   integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
   integer(kind=8),dimension(1:nvector,1:ndim),save::ix
+
+#ifndef WITHOUTMPI
 
   allocate(nremote(1:ncpu))  
   allocate(nbor_indx(head(ilevel):tail(ilevel),1:twondim))
@@ -871,6 +875,7 @@ subroutine build_cg(ilevel)
   allocate(phi_send_buf(1:send_tot*twotondim))
   allocate(phi_recv_buf(1:recv_tot*twotondim))
   allocate(phi_remote(1:send_tot,1:twotondim))
+#endif
 
 end subroutine build_cg
 
@@ -886,6 +891,8 @@ subroutine clean_cg
   use amr_commons
   use poisson_commons
   implicit none
+
+#ifndef WITHOUTMPI
   
   deallocate(nbor_indx)
   deallocate(phi_remote)
@@ -896,6 +903,8 @@ subroutine clean_cg
   deallocate(send_oft)
   deallocate(recv_cnt)
   deallocate(recv_oft)
+
+#endif
 
 end subroutine clean_cg
 #endif
