@@ -1,60 +1,50 @@
 program amr2map
+  use amr_commons
+  use hydro_commons
+  use hilbert
   !--------------------------------------------------------------------------
-  ! Ce programme calcule la carte de densite projetee pour les
-  ! variables hydro d'une simulation RAMSES. 
-  ! Version F90 par R. Teyssier le 01/04/01.
+  ! This code projects RAMSES data onto a map.
+  ! This is based in the MINI-RAMSES prototype.
+  ! R. Teyssier, Zurich, 15/04/16.
   !--------------------------------------------------------------------------
   implicit none
-  integer::ndim,n,i,j,k,twotondim,ncoarse,type=0,domax=0
-  integer::ivar,nvar,ncpu,ncpuh,lmax=0,levelmin
-  integer::nx,ny,nz,ilevel,iidim,idim,jdim,kdim,icell
-  integer::nlevelmax,ilevel1,ngrid1
-  integer::nlevelmaxs,nlevel,iout
-  integer::ind,ipos,ngrida,ngridh,ilevela,ilevelh
-  integer::ngridmax,nstep_coarse,icpu,ncpu_read
-  integer::nhx,nhy,ihx,ihy,ivar1,ivar2
-  real::gamma,smallr,smallc,gammah
-  real::boxlen,boxlen2
-  real(kind=8)::t,aexp
-  real::hexp,t2,aexp2,hexp2
-  real::omega_m,omega_l,omega_k,omega_b
-  real::omega_m2,omega_l2,omega_k2,omega_b2
-  real::scale_l,scale_d,scale_t
-  real(kind=8)::metmax=0d0
+  integer::n,i,j,k,type=0,domax=0
+  integer::ivar,lmax=0
+  integer::ilevel,idim,jdim,kdim,ldim,icell
+  integer::nlevelmaxs,nlevel
+  integer::ind,icpu,ncpu_read
 
   integer::nx_sample=0,ny_sample=0
-  integer::ngrid,imin,imax,jmin,jmax,kmin,kmax
-  integer::ncpu2,npart2,ndim2,nlevelmax2,nstep_coarse2
-  integer::nx2,ny2,nz2,ngridmax2,nvarh,ndimh,nlevelmaxh
-  integer::nx_full,ny_full,lmin,nboundary,ngrid_current
+  integer::imin,imax,jmin,jmax,kmin,kmax
+  integer::nstride,nx_full,ny_full,lmin
   integer::ix,iy,iz,ndom,impi,bit_length,maxdom
+  integer::iskip_amr,iskip_hydro,noct_skip,noct_file,noct_tmp
   integer,dimension(1:8)::idom,jdom,kdom,cpu_min,cpu_max
-  real(KIND=8),dimension(1:8)::bounding,bounding_min,bounding_max
-  real(KIND=8)::dkey,order_min,dmax,ddx,dxline,ddy,dex,dey,weight
-  real(KIND=8)::xmin=0,xmax=1,ymin=0,ymax=1,zmin=0,zmax=1
-  real(KIND=8)::xxmin,xxmax,yymin,yymax,zzmin,zzmax,dx,dy,xx,yy
-  real(KIND=8),dimension(:,:),allocatable::x,xg
-  real(KIND=8),dimension(:,:,:),allocatable::var
-  real(KIND=4),dimension(:,:),allocatable::toto
-  real(KIND=8),dimension(:)  ,allocatable::rho,map
-  logical,dimension(:)  ,allocatable::ref
-  integer,dimension(:)  ,allocatable::isp
-  integer,dimension(:,:),allocatable::son,ngridfile,ngridlevel,ngridbound
-  real(KIND=8),dimension(1:8,1:3)::xc
-  real(KIND=8),dimension(1:3)::xbound=(/0d0,0d0,0d0/)
-  character(LEN=5)::nchar,ncharcpu
-  character(LEN=80)::ordering
-  character(LEN=80)::GMGM
-  character(LEN=128)::nomfich,repository,outfich,filetype='bin'
-  logical::ok,ok_part,ok_cell,do_max
-  real(kind=8),dimension(:),allocatable::bound_key
-  logical,dimension(:),allocatable::cpu_read
-  integer,dimension(:),allocatable::cpu_list
-  character(LEN=1)::proj='z'
 
-  type level
+  real(KIND=8)::dxline,weight
+  real(KIND=8)::xmin=0,xmax=1,ymin=0,ymax=1,zmin=0,zmax=1
+  real(KIND=8)::xxmin,xxmax,yymin,yymax,zzmin,zzmax
+  real(KIND=8)::dx,dy,dz,xx,yy,zz
+  real(KIND=8)::rho,map
+  real(KIND=8)::metmax=0d0
+
+  character(LEN=1)::proj='z'
+  character(LEN=5)::nchar,ncharcpu
+  character(LEN=128)::nomfich,repository,outfich,mapfiletype='bin'
+  character(LEN=128)::file_amr,file_hydro
+  logical::ok,ok_part,ok_cell,do_max
+  logical::check_ramses_exist
+
+  real(KIND=4),dimension(:,:),allocatable::toto
+  real(KIND=8),dimension(:),allocatable::bound_key
+  integer,dimension(:),allocatable::cpu_list
+
+  integer,dimension(1:ndim)::ckey,cart_key
+  logical,dimension(1:twotondim)::refined
+  real(dp),dimension(1:twotondim,1:nvar)::uold
+
+  type level  
      integer::ilevel
-     integer::ngrid
      real(KIND=8),dimension(:,:),pointer::map
      real(KIND=8),dimension(:,:),pointer::rho
      integer::imin
@@ -63,510 +53,223 @@ program amr2map
      integer::jmax
   end type level
 
-  type(level),dimension(1:100)::grid
+  type(level),dimension(1:100)::mapgrid
 
+  write(*,*)'Starting amr2map'
+
+  ! Read amr2map parameters
   call read_params
 
-  !-----------------------------------------------
-  ! Lecture du fichier hydro au format RAMSES
-  !-----------------------------------------------
-  ipos=INDEX(repository,'output_')
-  nchar=repository(ipos+7:ipos+13)
-  nomfich=TRIM(repository)//'/hydro_'//TRIM(nchar)//'.out00001'
-  inquire(file=nomfich, exist=ok) ! verify input file 
-  if ( .not. ok ) then
-     print *,TRIM(nomfich)//' not found.'
-     stop
-  endif
-  nomfich=TRIM(repository)//'/amr_'//TRIM(nchar)//'.out00001'
-  inquire(file=nomfich, exist=ok) ! verify input file 
-  if ( .not. ok ) then
-     print *,TRIM(nomfich)//' not found.'
+  ! Check that all files exist
+  if(.NOT. check_ramses_exist(repository))then
+     write(*,*)'Repository '//TRIM(repository)//' incomplete.'
+     write(*,*)'Stopping.'
      stop
   endif
 
-  nomfich=TRIM(repository)//'/amr_'//TRIM(nchar)//'.out00001'
-  open(unit=10,file=nomfich,status='old',form='unformatted')
-  read(10)ncpu
-  read(10)ndim
-  read(10)nx,ny,nz
-  read(10)nlevelmax
-  read(10)ngridmax
-  read(10)nboundary
-  read(10)ngrid_current
-  read(10)boxlen
-  close(10)
-  twotondim=2**ndim
-  xbound=(/dble(nx/2),dble(ny/2),dble(nz/2)/)
+  ! Read RAMSES params
+  call read_ramses_params(repository)
+  write(*,*)'time=',t
 
-  allocate(ngridfile(1:ncpu+nboundary,1:nlevelmax))
-  allocate(ngridlevel(1:ncpu,1:nlevelmax))
-  if(nboundary>0)allocate(ngridbound(1:nboundary,1:nlevelmax))
-
-  nomfich=TRIM(repository)//'/info_'//TRIM(nchar)//'.txt'
-  inquire(file=nomfich, exist=ok) ! verify input file
-  if ( .not. ok ) then
-     print *,TRIM(nomfich)//' not found.'
-     stop
-  endif
-  open(unit=10,file=nomfich,form='formatted',status='old')
-  read(10,*)
-  read(10,*)
-!  read(10,'("levelmin    =",I11)')levelmin
-  read(10,'(A13,I11)')GMGM,levelmin
-  read(10,*)
-  read(10,*)
-  read(10,*)
-  read(10,*)
-
-  read(10,*)
-!  read(10,'("time        =",E23.15)')t
-  read(10,'(A13,E23.15)')GMGM,t
-  read(10,'(A13,E23.15)')GMGM,aexp
-  read(10,*)
-  read(10,*)
-  read(10,*)
-  read(10,*)
-  read(10,*)
-!  read(10,'("unit_l      =",E23.15)')scale_l
-  read(10,'(A13,E23.15)')GMGM,scale_l
-!  read(10,'("unit_d      =",E23.15)')scale_d
-  read(10,'(A13,E23.15)')GMGM,scale_d
-!  read(10,'("unit_t      =",E23.15)')scale_t
-  read(10,'(A13,E23.15)')GMGM,scale_t
-  read(10,*)
-
-!  read(10,'("ordering type=",A80)'),ordering
-  read(10,'(A14,A80)')GMGM,ordering
-  write(*,'(" ordering type=",A20)'),TRIM(ordering)
-  read(10,*)
-  allocate(cpu_list(1:ncpu))
-  if(TRIM(ordering).eq.'hilbert')then
-     allocate(bound_key(0:ncpu))
-     allocate(cpu_read(1:ncpu))
-     cpu_read=.false.
-     do impi=1,ncpu
-        read(10,'(I8,1X,E23.15,1X,E23.15)')i,bound_key(impi-1),bound_key(impi)
-     end do
-  endif
-  close(10)
-
-  !-----------------------
-  ! Map parameters
-  !-----------------------
+  !------------------------------
+  ! Set up geometry parameters
+  !------------------------------
   if(lmax==0)then
      lmax=nlevelmax
   endif
-  write(*,*)'time=',t
   write(*,*)'Working resolution =',2**lmax
-  do_max=.false.
-  if(domax==1)do_max=.true.
   zzmax=1.0
   zzmin=0.0
   if(ndim>2)then
-  if (proj=='x')then
-     idim=2
-     jdim=3
-     kdim=1
-     xxmin=ymin ; xxmax=ymax
-     yymin=zmin ; yymax=zmax
-     zzmin=xmin ; zzmax=xmax
-  else if (proj=='y') then
-     idim=1
-     jdim=3
-     kdim=2
-     xxmin=xmin ; xxmax=xmax
-     yymin=zmin ; yymax=zmax
-     zzmin=ymin ; zzmax=ymax
+     if (proj=='x')then
+        idim=2
+        jdim=3
+        kdim=1
+        xxmin=ymin ; xxmax=ymax
+        yymin=zmin ; yymax=zmax
+        zzmin=xmin ; zzmax=xmax
+     else if (proj=='y') then
+        idim=1
+        jdim=3
+        kdim=2
+        xxmin=xmin ; xxmax=xmax
+        yymin=zmin ; yymax=zmax
+        zzmin=ymin ; zzmax=ymax
+     else
+        idim=1
+        jdim=2
+        kdim=3
+        xxmin=xmin ; xxmax=xmax
+        yymin=ymin ; yymax=ymax
+        zzmin=zmin ; zzmax=zmax
+     end if
   else
      idim=1
      jdim=2
-     kdim=3
-     xxmin=xmin ; xxmax=xmax
-     yymin=ymin ; yymax=ymax
-     zzmin=zmin ; zzmax=zmax
-  end if
-  else
-     idim=1
-     jdim=2
      xxmin=xmin ; xxmax=xmax
      yymin=ymin ; yymax=ymax
   end if
 
-  if(TRIM(ordering).eq.'hilbert')then
-
-     dmax=max(xmax-xmin,ymax-ymin,zmax-zmin)
-     do ilevel=1,lmax
-        dx=0.5d0**ilevel
-        if(dx.lt.dmax)exit
-     end do
-     lmin=ilevel
-     bit_length=lmin-1
-     maxdom=2**bit_length
-     imin=0; imax=0; jmin=0; jmax=0; kmin=0; kmax=0
-     if(bit_length>0)then
-        imin=int(xmin*dble(maxdom))
-        imax=imin+1
-        jmin=int(ymin*dble(maxdom))
-        jmax=jmin+1
-        kmin=int(zmin*dble(maxdom))
-        kmax=kmin+1
-     endif
-     
-     dkey=(dble(2**(nlevelmax+1)/dble(maxdom)))**ndim
-     ndom=1
-     if(bit_length>0)ndom=8
-     idom(1)=imin; idom(2)=imax
-     idom(3)=imin; idom(4)=imax
-     idom(5)=imin; idom(6)=imax
-     idom(7)=imin; idom(8)=imax
-     jdom(1)=jmin; jdom(2)=jmin
-     jdom(3)=jmax; jdom(4)=jmax
-     jdom(5)=jmin; jdom(6)=jmin
-     jdom(7)=jmax; jdom(8)=jmax
-     kdom(1)=kmin; kdom(2)=kmin
-     kdom(3)=kmin; kdom(4)=kmin
-     kdom(5)=kmax; kdom(6)=kmax
-     kdom(7)=kmax; kdom(8)=kmax
-     
-     do i=1,ndom
-        if(bit_length>0)then
-           call hilbert3d(idom(i),jdom(i),kdom(i),bounding(1),bit_length,1)
-           order_min=bounding(1)
-        else
-           order_min=0.0d0
-        endif
-        bounding_min(i)=(order_min)*dkey
-        bounding_max(i)=(order_min+1.0D0)*dkey
-     end do
-
-     cpu_min=0; cpu_max=0
-     do impi=1,ncpu
-        do i=1,ndom
-           if (   bound_key(impi-1).le.bounding_min(i).and.&
-                & bound_key(impi  ).gt.bounding_min(i))then
-              cpu_min(i)=impi
-           endif
-           if (   bound_key(impi-1).lt.bounding_max(i).and.&
-                & bound_key(impi  ).ge.bounding_max(i))then
-              cpu_max(i)=impi
-           endif
-        end do
-     end do
-     
-     ncpu_read=0
-     do i=1,ndom
-        do j=cpu_min(i),cpu_max(i)
-           if(.not. cpu_read(j))then
-              ncpu_read=ncpu_read+1
-              cpu_list(ncpu_read)=j
-              cpu_read(j)=.true.
-           endif
-        enddo
-     enddo
-  else
-     ncpu_read=ncpu
-     do j=1,ncpu
-        cpu_list(j)=j
-     end do
-  end  if
-
   !-----------------------------
-  ! Compute hierarchy
+  ! Allocate map hierarchy
   !-----------------------------
-  do ilevel=1,lmax
+  do ilevel=levelmin,lmax
      nx_full=2**ilevel
      ny_full=2**ilevel
      imin=int(xxmin*dble(nx_full))+1
      imax=int(xxmax*dble(nx_full))+1
      jmin=int(yymin*dble(ny_full))+1
      jmax=int(yymax*dble(ny_full))+1
-     allocate(grid(ilevel)%map(imin:imax,jmin:jmax))
-     allocate(grid(ilevel)%rho(imin:imax,jmin:jmax))
-     grid(ilevel)%map(:,:)=0.0
-     grid(ilevel)%rho(:,:)=0.0
-     grid(ilevel)%imin=imin
-     grid(ilevel)%imax=imax
-     grid(ilevel)%jmin=jmin
-     grid(ilevel)%jmax=jmax
+     allocate(mapgrid(ilevel)%map(imin:imax,jmin:jmax))
+     allocate(mapgrid(ilevel)%rho(imin:imax,jmin:jmax))
+     mapgrid(ilevel)%map(:,:)=0.0
+     mapgrid(ilevel)%rho(:,:)=0.0
+     mapgrid(ilevel)%imin=imin
+     mapgrid(ilevel)%imax=imax
+     mapgrid(ilevel)%jmin=jmin
+     mapgrid(ilevel)%jmax=jmax
   end do
 
   !-----------------------------------------------
   ! Compute projected variables
   !----------------------------------------------
+  allocate(cpu_list(1:ncpu))
 
-  ! Loop over processor files
-  do k=1,ncpu_read
-     icpu=cpu_list(k)
-     call title(icpu,ncharcpu)
+  ! Loop over levels 
+  do ilevel=levelmin,lmax
 
-     ! Open AMR file and skip header
-     nomfich=TRIM(repository)//'/amr_'//TRIM(nchar)//'.out'//TRIM(ncharcpu)
-     open(unit=10,file=nomfich,status='old',form='unformatted')
-     write(*,*)'Processing file '//TRIM(nomfich)
-     do i=1,21
-        read(10)
-     end do
-     ! Read grid numbers
-     read(10)ngridlevel
-     ngridfile(1:ncpu,1:nlevelmax)=ngridlevel
-     read(10)
-     if(nboundary>0)then
-        do i=1,2
-           read(10)
+     dx=0.5**ilevel
+     zmax=1.0/dx
+     dxline=1
+     if(ndim==3)dxline=dx
+
+     write(*,*)'ilevel=',ilevel,dx,zmax
+
+     ! Get cpu list within bounding box
+     call cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,ncpu,cpu_list)
+     
+     ! Loop over processor files
+     do k=1,ncpu_read
+        icpu=cpu_list(k)
+        call title(icpu,ncharcpu)
+
+        ! Prepare reading the AMR file
+        file_amr=TRIM(repository)//'/amr.out'//TRIM(ncharcpu)
+        noct_skip=0
+        open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
+        do i=levelmin,ilevel-1
+           read(10,POS=13+4*(i-levelmin))noct_tmp
+           noct_skip=noct_skip+noct_tmp
         end do
-        read(10)ngridbound
-        ngridfile(ncpu+1:ncpu+nboundary,1:nlevelmax)=ngridbound
-     endif
-     read(10)
-! ROM: comment the single follwing line for old stuff
-     read(10)
-     if(TRIM(ordering).eq.'bisection')then
-        do i=1,5
-           read(10)
-        end do
-     else
-        read(10)
-     endif
-     read(10)
-     read(10)
-     read(10)
+        read(10,POS=13+4*(ilevel-levelmin))noct_file
+        iskip_amr=13+4*(nlevelmax-levelmin+1)+(4*ndim+4*twotondim)*noct_skip
 
-     ! Open HYDRO file and skip header
-     nomfich=TRIM(repository)//'/hydro_'//TRIM(nchar)//'.out'//TRIM(ncharcpu)
-     open(unit=11,file=nomfich,status='old',form='unformatted')
-     read(11)
-     read(11)nvarh
-     read(11)
-     read(11)
-     read(11)
-     read(11)
+        ! Prepare reading the HYDRO file
+        file_hydro=TRIM(repository)//'/hydro.out'//TRIM(ncharcpu)
+        open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
+        iskip_hydro=17+4*(nlevelmax-levelmin+1)+(8*twotondim*nvar)*noct_skip
 
-     ! Loop over levels
-     do ilevel=1,lmax
+        ! Loop over useful octs in file
+        do i=1,noct_file
 
-        ! Geometry
-        dx=0.5**ilevel
-        dxline=1
-        if(ndim==3)dxline=dx
-        nx_full=2**ilevel
-        ny_full=2**ilevel
-        do ind=1,twotondim
-           iz=(ind-1)/4
-           iy=(ind-1-4*iz)/2
-           ix=(ind-1-2*iy-4*iz)
-           xc(ind,1)=(dble(ix)-0.5D0)*dx
-           xc(ind,2)=(dble(iy)-0.5D0)*dx
-           xc(ind,3)=(dble(iz)-0.5D0)*dx
-        end do
+           ! Read values from files
+           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1))ckey
+           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim)refined
+           read(11,POS=iskip_hydro+(8*twotondim*nvar)*(i-1))uold
 
-        ! Allocate work arrays
-        ngrida=ngridfile(icpu,ilevel)
-        grid(ilevel)%ngrid=ngrida
-        if(ngrida>0)then
-           allocate(xg(1:ngrida,1:ndim))
-           allocate(son(1:ngrida,1:twotondim))
-           allocate(var(1:ngrida,1:twotondim,1:nvarh))
-           allocate(x  (1:ngrida,1:ndim))
-           allocate(rho(1:ngrida))
-           allocate(map(1:ngrida))
-           allocate(ref(1:ngrida))
-        endif
-
-        ! Loop over domains
-        do j=1,nboundary+ncpu
-
-           ! Read AMR data
-           if(ngridfile(j,ilevel)>0)then
-              read(10) ! Skip grid index
-              read(10) ! Skip next index
-              read(10) ! Skip prev index
-              ! Read grid center
-              do iidim=1,ndim
-                 if(j.eq.icpu)then
-                    read(10)xg(:,iidim)
-                 else
-                    read(10)
-                 endif
-              end do
-              read(10) ! Skip father index
-              do ind=1,2*ndim
-                 read(10) ! Skip nbor index
-              end do
-              ! Read son index
-              do ind=1,twotondim
-                 if(j.eq.icpu)then
-                    read(10)son(:,ind)
-                 else
-                    read(10)
-                 end if
-              end do
-              ! Skip cpu map
-              do ind=1,twotondim
-                 read(10)
-              end do
-              ! Skip refinement map
-              do ind=1,twotondim
-                 read(10)
-              end do
-           endif
-
-           ! Read HYDRO data
-           read(11)
-           read(11)
-           if(ngridfile(j,ilevel)>0)then
-              ! Read hydro variables
-              do ind=1,twotondim
-                 do ivar=1,nvarh
-                    if(j.eq.icpu)then
-                       read(11)var(:,ind,ivar)
-                    else
-                       read(11)
-                    end if
-                 end do
-              end do
-           end if
-        end do
-
-        ! Compute map
-        if(ngrida>0)then
-
-           ! Loop over cells
+           ! Loop over 2**ndim cells
            do ind=1,twotondim
 
-              ! Compute cell center
-              do i=1,ngrida
-                 x(i,1)=(xg(i,1)+xc(ind,1)-xbound(1))
-                 x(i,2)=(xg(i,2)+xc(ind,2)-xbound(2))
-                 if(ndim>2)x(i,3)=(xg(i,3)+xc(ind,3)-xbound(3))
+              ! Compute Cartesian key
+              do ldim=1,ndim
+                 nstride=2**(ldim-1)
+                 cart_key(ldim)=2*ckey(ldim)+MOD((ind-1)/nstride,2)
               end do
-              ! Check if cell is refined
-              do i=1,ngrida
-                 ref(i)=son(i,ind)>0.and.ilevel<lmax
-              end do
-              ! Extract variable
-              rho = var(:,ind,1)
+
+              ok_cell=.not.refined(ind).OR.ilevel.eq.lmax
+
+              ! Get variable to map out
+              rho=uold(ind,1)
               select case (type)
-              case (-1)
+              case (-1) ! Cpu map
                  map = icpu
-              case (0)
+              case (0) ! Refinement map
                  map = ilevel
-              case (1) ! Density
+              case (1) ! Density map
                  if(do_max)then
-                    map = var(:,ind,1)
+                    map = uold(ind,1)
                  else
-                    map = var(:,ind,1)**2
+                    map = uold(ind,1)**2
                  endif
               case (2) ! Mass weighted x-velocity
-                 map = var(:,ind,2)*var(:,ind,1)
+                 map = uold(ind,2)*uold(ind,1)
               case (3) ! Mass weighted y-velocity
-                 map = var(:,ind,3)*var(:,ind,1)
+                 map = uold(ind,3)*uold(ind,1)
               case (4) ! Mass weighted z-velocity
-                 map = var(:,ind,4)*var(:,ind,1)
-              case (5) ! Pressure
+                 map = uold(ind,4)*uold(ind,1)
+              case (5) ! Temperature
                  if(do_max)then
-                    map = var(:,ind,5)/var(:,ind,1)                    
+                    map = uold(ind,5)/uold(ind,1)
                  else
-                    map = var(:,ind,5)
+                    map = uold(ind,5)
                  endif
-              case (6) ! Passive scalar
+              case default ! Passive scalar
                  if(do_max)then
-                    map = var(:,ind,6)
+                    map = uold(ind,type)
                  else
-                    map = var(:,ind,6)*var(:,ind,1)
+                    map = uold(ind,type)*uold(ind,1)
                  endif
-                 metmax=max(metmax,maxval(var(:,ind,6)))
-              case (7)
-                 if(do_max)then
-                    map = var(:,ind,7)
-                 else
-                    map = var(:,ind,7)*var(:,ind,1)
-                 endif
-                 metmax=max(metmax,maxval(var(:,ind,7)))
-              case (8)
-                 if(do_max)then
-                    map = (1d0-var(:,ind,8)-var(:,ind,9))
-                 else
-                    map = (1d0-var(:,ind,8)-var(:,ind,9))*var(:,ind,1)
-                 endif
-                 metmax=max(metmax,maxval(var(:,ind,7)))
-              case (9)
-                 if(do_max)then
-                    map = var(:,ind,9)
-                 else
-                    map = var(:,ind,9)*var(:,ind,1)
-                 endif
-                 metmax=max(metmax,maxval(var(:,ind,7)))
-              case (10)
-                 if(do_max)then
-                    map = var(:,ind,10)
-                 else
-                    map = var(:,ind,10)*var(:,ind,1)
-                 endif
-                 metmax=max(metmax,maxval(var(:,ind,7)))
-              case (11)
-                 if(do_max)then
-                    map = var(:,ind,11)
-                 else
-                    map = var(:,ind,11)*var(:,ind,1)
-                 endif
-                 metmax=max(metmax,maxval(var(:,ind,7)))
-!!$              case (8) !T/mu map
-!!$                 map = var(:,ind,5)*(scale_l/scale_t)**2/var(:,ind,1)/1.38d-16*1.66d-24
-!!$                 do_max=.true.
-!!$              case (9)
-!!$                 if(do_max)then
-!!$                    map = 0.125*((var(:,ind,5)+var(:,ind,8))**2+(var(:,ind,6)+var(:,ind,9))**2+(var(:,ind,7)+var(:,ind,10))**2)
-!!$                 else
-!!$                    map = 0.125*((var(:,ind,5)+var(:,ind,8))**2+(var(:,ind,6)+var(:,ind,9))**2+(var(:,ind,7)+var(:,ind,10))**2)
-!!$                 endif
+                 metmax=max(metmax,uold(ind,type))
               end select
-              ! Store data map
-              do i=1,ngrida
-                 ok_cell= .not.ref(i)
-                 if(ok_cell)then
-                    ix=int(x(i,idim)*dble(nx_full))+1
-                    iy=int(x(i,jdim)*dble(ny_full))+1
-                    if(ndim==3)then
-                       weight=(min(x(i,kdim)+dx/2.,zzmax)-max(x(i,kdim)-dx/2.,zzmin))/dx
-                       weight=min(1.0d0,max(weight,0.0d0))
+
+              if(ok_cell)then
+                 ix=cart_key(idim)+1
+                 iy=cart_key(jdim)+1
+                 zz=(cart_key(kdim)+0.5)*dx
+
+                 if(ndim==3)then
+                    weight=(min(zz+dx/2.,zzmax)-max(zz-dx/2.,zzmin))/dx
+                    weight=min(1.0d0,max(weight,0.0d0))
+                 else
+                    weight=1.0
+                 endif
+
+                 if(    ix>=mapgrid(ilevel)%imin.and.&
+                      & iy>=mapgrid(ilevel)%jmin.and.&
+                      & ix<=mapgrid(ilevel)%imax.and.&
+                      & iy<=mapgrid(ilevel)%jmax)then
+
+                    if(do_max)then
+                       mapgrid(ilevel)%map(ix,iy)=max(mapgrid(ilevel)%map(ix,iy),map)
+                       mapgrid(ilevel)%rho(ix,iy)=max(mapgrid(ilevel)%rho(ix,iy),rho)
                     else
-                       weight=1.0
+                       mapgrid(ilevel)%map(ix,iy)=mapgrid(ilevel)%map(ix,iy)+map*dxline*weight/(zzmax-zzmin)
+                       mapgrid(ilevel)%rho(ix,iy)=mapgrid(ilevel)%rho(ix,iy)+rho*dxline*weight/(zzmax-zzmin)
                     endif
-                    if(    ix>=grid(ilevel)%imin.and.&
-                         & iy>=grid(ilevel)%jmin.and.&
-                         & ix<=grid(ilevel)%imax.and.&
-                         & iy<=grid(ilevel)%jmax)then
-                       if(do_max)then
-                          grid(ilevel)%map(ix,iy)=max(grid(ilevel)%map(ix,iy),map(i))
-                          grid(ilevel)%rho(ix,iy)=max(grid(ilevel)%rho(ix,iy),rho(i))
-                       else
-                          grid(ilevel)%map(ix,iy)=grid(ilevel)%map(ix,iy)+map(i)*dxline*weight/(zzmax-zzmin)
-                          grid(ilevel)%rho(ix,iy)=grid(ilevel)%rho(ix,iy)+rho(i)*dxline*weight/(zzmax-zzmin)
-                       endif
-                    endif
-                 end if
-              end do
+                 endif
+              end if
 
            end do
-           ! End loop over cell
+           ! End loop over cells
 
-           deallocate(xg,son,var,ref,rho,map,x)
-        end if
+        end do
+        ! End loop over octs
+
+        ! Close file
+        close(10)
+        close(11)
 
      end do
-     ! End loop over levels
-
-     close(10)
-     close(11)
-
+     ! End loop over cpu
+     
   end do
-  ! End loop over cpu
+  ! End loop over levels
 
+  write(*,*)'Data read and projected.'
   if(type==6.or.type==7)then
      write(*,*)metmax
   endif
-
+  
   nx_full=2**lmax
   ny_full=2**lmax
   imin=int(xxmin*dble(nx_full))+1
@@ -578,41 +281,42 @@ program amr2map
      xmin=((ix-0.5)/2**lmax)
      do iy=jmin,jmax
         ymin=((iy-0.5)/2**lmax)
-        do ilevel=1,lmax-1
+        do ilevel=levelmin,lmax-1
            ndom=2**ilevel
            i=int(xmin*ndom)+1
            j=int(ymin*ndom)+1
            if(do_max) then
-              grid(lmax)%map(ix,iy)=max(grid(lmax)%map(ix,iy), &
-                   & grid(ilevel)%map(i,j))
-              grid(lmax)%rho(ix,iy)=max(grid(lmax)%rho(ix,iy), &
-                   & grid(ilevel)%rho(i,j))
+              mapgrid(lmax)%map(ix,iy)=max(mapgrid(lmax)%map(ix,iy), &
+                   & mapgrid(ilevel)%map(i,j))
+              mapgrid(lmax)%rho(ix,iy)=max(mapgrid(lmax)%rho(ix,iy), &
+                   & mapgrid(ilevel)%rho(i,j))
            else
-              grid(lmax)%map(ix,iy)=grid(lmax)%map(ix,iy) + &
-                   & grid(ilevel)%map(i,j)
-              grid(lmax)%rho(ix,iy)=grid(lmax)%rho(ix,iy) + &
-                   & grid(ilevel)%rho(i,j)
+              mapgrid(lmax)%map(ix,iy)=mapgrid(lmax)%map(ix,iy) + &
+                   & mapgrid(ilevel)%map(i,j)
+              mapgrid(lmax)%rho(ix,iy)=mapgrid(lmax)%rho(ix,iy) + &
+                   & mapgrid(ilevel)%rho(i,j)
            endif
         end do
      end do
   end do
 
-  write(*,*)'Norm=',sum(grid(lmax)%rho(imin:imax,jmin:jmax))/(imax-imin+1)/(jmax-jmin+1)
+  write(*,*)'Norm=',sum(mapgrid(lmax)%rho(imin:imax,jmin:jmax))/(imax-imin+1)/(jmax-jmin+1)
 
   ! Output file
   nomfich=TRIM(outfich)
-  write(*,*)'Ecriture des donnees du fichier '//TRIM(nomfich)
+  write(*,*)'Writing map in '//TRIM(nomfich)
 
-  if (filetype=='bin')then
+  if (mapfiletype=='bin')then
+     write(*,*)'unformatted binary file'
      open(unit=20,file=nomfich,form='unformatted')
      if(nx_sample==0)then
         write(20)t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
         write(20)imax-imin+1,jmax-jmin+1
         allocate(toto(imax-imin+1,jmax-jmin+1))
         if(do_max)then
-           toto=grid(lmax)%map(imin:imax,jmin:jmax)
+           toto=mapgrid(lmax)%map(imin:imax,jmin:jmax)
         else
-           toto=grid(lmax)%map(imin:imax,jmin:jmax)/grid(lmax)%rho(imin:imax,jmin:jmax)
+           toto=mapgrid(lmax)%map(imin:imax,jmin:jmax)/mapgrid(lmax)%rho(imin:imax,jmin:jmax)
         endif
         write(20)toto
      else
@@ -627,9 +331,9 @@ program amr2map
               iy=int(dble(j)/dble(ny_sample)*dble(jmax-jmin+1))+jmin
               iy=min(iy,jmax)
               if(do_max)then
-                 toto(i,j)=grid(lmax)%map(ix,iy)
+                 toto(i,j)=mapgrid(lmax)%map(ix,iy)
               else
-                 toto(i,j)=grid(lmax)%map(ix,iy)/grid(lmax)%rho(ix,iy)
+                 toto(i,j)=mapgrid(lmax)%map(ix,iy)/mapgrid(lmax)%rho(ix,iy)
               endif
            end do
         end do
@@ -637,7 +341,8 @@ program amr2map
      endif
      close(20)
   endif
-  if (filetype=='ascii')then
+  if (mapfiletype=='ascii')then
+     write(*,*)'formatted text file'
      open(unit=20,file=nomfich,form='formatted')
      if(nx_sample==0)then
         do j=jmin,jmax
@@ -645,14 +350,14 @@ program amr2map
               xx=xxmin+(dble(i-imin)+0.5)/dble(imax-imin+1)*(xxmax-xxmin)
               yy=yymin+(dble(j-jmin)+0.5)/dble(jmax-jmin+1)*(yymax-yymin)
               if(do_max)then
-                 write(20,*)xx,yy,grid(lmax)%map(i,j)
+                 write(20,*)xx,yy,mapgrid(lmax)%map(i,j)
               else
-                 write(20,*)xx,yy,grid(lmax)%map(i,j)/grid(lmax)%rho(i,j)
+                 write(20,*)xx,yy,mapgrid(lmax)%map(i,j)/mapgrid(lmax)%rho(i,j)
               endif
            end do
            write(20,*) " "
         end do
-     else
+     else  
         if(ny_sample==0)ny_sample=nx_sample
         allocate(toto(0:nx_sample,0:ny_sample))
         do i=0,nx_sample
@@ -662,9 +367,9 @@ program amr2map
               iy=int(dble(j)/dble(ny_sample)*dble(jmax-jmin+1))+jmin
               iy=min(iy,jmax)
               if(do_max)then
-                 toto(i,j)=grid(lmax)%map(ix,iy)
+                 toto(i,j)=mapgrid(lmax)%map(ix,iy)
               else
-                 toto(i,j)=grid(lmax)%map(ix,iy)/grid(lmax)%rho(ix,iy)
+                 toto(i,j)=mapgrid(lmax)%map(ix,iy)/mapgrid(lmax)%rho(ix,iy)
            endif
            end do
         end do
@@ -759,7 +464,7 @@ contains
        case ('-typ')
           read (arg,*) type
        case ('-fil')
-          read (arg,*) filetype
+          read (arg,*) mapfiletype
        case ('-max')
           read (arg,*) domax
        case default
@@ -767,6 +472,9 @@ contains
        end select
     end do
     
+    do_max=.false.
+    if(domax==1)do_max=.true.
+
     return
     
   end subroutine read_params
@@ -805,96 +513,219 @@ subroutine title(n,nchar)
 
 
 end subroutine title
-
 !================================================================
 !================================================================
 !================================================================
 !================================================================
-subroutine hilbert3d(x,y,z,order,bit_length,npoint)
+function check_ramses_exist(repository)
   implicit none
+  character(LEN=128)::repository
+  logical::check_ramses_exist
+  !-----------------------------------------------
+  ! Check that RAMSES files are there
+  !-----------------------------------------------
+  integer::ipos
+  character(LEN=5)::char
+  character(LEN=128)::nomfich
+  logical::ok
 
-  integer     ,INTENT(IN)                     ::bit_length,npoint
-  integer     ,INTENT(IN) ,dimension(1:npoint)::x,y,z
-  real(kind=8),INTENT(OUT),dimension(1:npoint)::order
-
-  logical,dimension(0:3*bit_length-1)::i_bit_mask
-  logical,dimension(0:1*bit_length-1)::x_bit_mask,y_bit_mask,z_bit_mask
-  integer,dimension(0:7,0:1,0:11)::state_diagram
-  integer::i,ip,cstate,nstate,b0,b1,b2,sdigit,hdigit
-
-  if(bit_length>bit_size(bit_length))then
-     write(*,*)'Maximum bit length=',bit_size(bit_length)
-     write(*,*)'stop in hilbert3d'
-     stop
+  check_ramses_exist=.true.
+  ipos=INDEX(repository,'output_')
+  nomfich=TRIM(repository)//'/hydro.out00001'
+  inquire(file=nomfich, exist=ok) ! verify input file 
+  if ( .not. ok ) then
+     print *,TRIM(nomfich)//' not found.'
+     check_ramses_exist=.false.
+  endif
+  nomfich=TRIM(repository)//'/amr.out00001'
+  inquire(file=nomfich, exist=ok) ! verify input file 
+  if ( .not. ok ) then
+     print *,TRIM(nomfich)//' not found.'
+     check_ramses_exist=.false.
+  endif
+  nomfich=TRIM(repository)//'/params.out'
+  inquire(file=nomfich, exist=ok) ! verify input file
+  if ( .not. ok ) then
+     print *,TRIM(nomfich)//' not found.'
+     check_ramses_exist=.false.
   endif
 
-  state_diagram = RESHAPE( (/   1, 2, 3, 2, 4, 5, 3, 5,&
-                            &   0, 1, 3, 2, 7, 6, 4, 5,&
-                            &   2, 6, 0, 7, 8, 8, 0, 7,&
-                            &   0, 7, 1, 6, 3, 4, 2, 5,&
-                            &   0, 9,10, 9, 1, 1,11,11,&
-                            &   0, 3, 7, 4, 1, 2, 6, 5,&
-                            &   6, 0, 6,11, 9, 0, 9, 8,&
-                            &   2, 3, 1, 0, 5, 4, 6, 7,&
-                            &  11,11, 0, 7, 5, 9, 0, 7,&
-                            &   4, 3, 5, 2, 7, 0, 6, 1,&
-                            &   4, 4, 8, 8, 0, 6,10, 6,&
-                            &   6, 5, 1, 2, 7, 4, 0, 3,&
-                            &   5, 7, 5, 3, 1, 1,11,11,&
-                            &   4, 7, 3, 0, 5, 6, 2, 1,&
-                            &   6, 1, 6,10, 9, 4, 9,10,&
-                            &   6, 7, 5, 4, 1, 0, 2, 3,&
-                            &  10, 3, 1, 1,10, 3, 5, 9,&
-                            &   2, 5, 3, 4, 1, 6, 0, 7,&
-                            &   4, 4, 8, 8, 2, 7, 2, 3,&
-                            &   2, 1, 5, 6, 3, 0, 4, 7,&
-                            &   7, 2,11, 2, 7, 5, 8, 5,&
-                            &   4, 5, 7, 6, 3, 2, 0, 1,&
-                            &  10, 3, 2, 6,10, 3, 4, 4,&
-                            &   6, 1, 7, 0, 5, 2, 4, 3 /), &
-                            & (/8 ,2, 12 /) )
+end function check_ramses_exist
+!================================================================
+!================================================================
+!================================================================
+!================================================================
+subroutine read_ramses_params(repository)
+  use amr_commons
+  use hydro_commons
+  use poisson_commons
+  implicit none
+  character(LEN=128)::repository
+  !-----------------------------------------------
+  ! Read RAMSES parameters file
+  !-----------------------------------------------
+  character(LEN=128)::nomfich
+  integer::ilun,ilevel,ndim2,nhilbert2
 
-  do ip=1,npoint
+  nomfich=TRIM(repository)//'/params.out'
 
-     ! convert to binary
-     do i=0,bit_length-1
-        x_bit_mask(i)=btest(x(ip),i)
-        y_bit_mask(i)=btest(y(ip),i)
-        z_bit_mask(i)=btest(z(ip),i)
-     enddo
+  ilun=10
+  open(unit=ilun,file=nomfich,access="stream",action="read",form='unformatted')
+  ! Read grid variables
+  read(ilun)ncpu
+  read(ilun)ndim2
+  if(ndim.NE.ndim2)then
+     write(*,*)'Recompile'
+     stop
+  endif
+  read(ilun)levelmin
+  read(ilun)nlevelmax
+  ! Overwrite boxlen with value from file
+  read(ilun)boxlen
+  ! Read time variables
+  read(ilun)noutput,iout,ifout
+  read(ilun)tout(1:noutput)
+  read(ilun)aout(1:noutput)
+  read(ilun)t
+  read(ilun)dtold(1:nlevelmax)
+  read(ilun)dtnew(1:nlevelmax)
+  read(ilun)nstep,nstep_coarse
+  ! Read various constants
+  read(ilun)const,mass_tot_0,rho_tot
+  read(ilun)omega_m,omega_l,omega_k,omega_b,h0,aexp_ini,boxlen_ini
+  read(ilun)aexp,hexp,aexp_old,epot_tot_int,epot_tot_old
+  read(ilun)mass_sph
+  read(ilun)nhilbert2
+  if(nhilbert.NE.nhilbert2)then
+     write(*,*)'Recompile'
+     stop
+  endif
+  allocate(bound_key_level(1:nhilbert,0:ncpu,1:nlevelmax+1))
+  do ilevel=levelmin,nlevelmax
+     read(ilun)bound_key_level(1:nhilbert,0:ncpu,ilevel)
+  end do
+  close(ilun)
 
-     ! interleave bits
-     do i=0,bit_length-1
-        i_bit_mask(3*i+2)=x_bit_mask(i)
-        i_bit_mask(3*i+1)=y_bit_mask(i)
-        i_bit_mask(3*i  )=z_bit_mask(i)
-     end do
+end subroutine read_ramses_params
+!================================================================
+!================================================================
+!================================================================
+!================================================================
+subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,ncpu,cpu_list)
+  use amr_parameters
+  use hilbert
+  implicit none
+  real(dp)::xmin,xmax,ymin,ymax,zmin,zmax
+  integer::ilevel,ncpu_read,ncpu
+  integer,dimension(1:ncpu)::cpu_list
+  !----------------------------------------------
+  ! Set up Hilbert key for optimal file reading
+  !----------------------------------------------
+  logical,dimension(1:ncpu)::cpu_read
+  integer(kind=4),dimension(1:nvector),save::dummy_state
+  integer(kind=8),dimension(1:nvector,1:ndim)::ix
+  integer(kind=8),dimension(1:nvector,1:nhilbert)::hk
+  integer(kind=8),dimension(1:nhilbert)::one_key,order_min,order_max
+  integer(kind=8),dimension(1:nhilbert,1:8)::bounding_min,bounding_max
+  integer,dimension(1:8)::idom,jdom,kdom,cpu_min,cpu_max
+  real(dp)::dmax,dx,maxdom
+  integer::i,j,ilev,lmin,imin,imax,jmin,jmax,kmin,kmax,bit_length,ndom
 
-     ! build Hilbert ordering using state diagram
-     cstate=0
-     do i=bit_length-1,0,-1
-        b2=0 ; if(i_bit_mask(3*i+2))b2=1
-        b1=0 ; if(i_bit_mask(3*i+1))b1=1
-        b0=0 ; if(i_bit_mask(3*i  ))b0=1
-        sdigit=b2*4+b1*2+b0
-        nstate=state_diagram(sdigit,0,cstate)
-        hdigit=state_diagram(sdigit,1,cstate)
-        i_bit_mask(3*i+2)=btest(hdigit,2)
-        i_bit_mask(3*i+1)=btest(hdigit,1)
-        i_bit_mask(3*i  )=btest(hdigit,0)
-        cstate=nstate
-     enddo
+  ncpu_read=ncpu
+  do i=1,ncpu
+     cpu_list(i)=i
+  end do
+  return
 
-     ! save Hilbert key as double precision real
-     order(ip)=0.
-     do i=0,3*bit_length-1
-        b0=0 ; if(i_bit_mask(i))b0=1
-        order(ip)=order(ip)+dble(b0)*dble(2)**i
-     end do
-
+  dmax=max(xmax-xmin,ymax-ymin,zmax-zmin)
+  do ilev=1,nlevelmax
+     dx=0.5d0**ilev
+     if(dx.lt.dmax)exit
+  end do
+  lmin=ilev
+  bit_length=lmin-1
+  maxdom=2**bit_length
+  imin=0; imax=0; jmin=0; jmax=0; kmin=0; kmax=0
+  if(bit_length>0)then
+     imin=int(xmin*dble(maxdom))
+     imax=imin+1
+     jmin=int(ymin*dble(maxdom))
+     jmax=jmin+1
+     kmin=int(zmin*dble(maxdom))
+     kmax=kmin+1
+  endif
+  
+  ndom=1
+  if(bit_length>0)ndom=8
+  idom(1)=imin; idom(2)=imax
+  idom(3)=imin; idom(4)=imax
+  idom(5)=imin; idom(6)=imax
+  idom(7)=imin; idom(8)=imax
+  jdom(1)=jmin; jdom(2)=jmin
+  jdom(3)=jmax; jdom(4)=jmax
+  jdom(5)=jmin; jdom(6)=jmin
+  jdom(7)=jmax; jdom(8)=jmax
+  kdom(1)=kmin; kdom(2)=kmin
+  kdom(3)=kmin; kdom(4)=kmin
+  kdom(5)=kmax; kdom(6)=kmax
+  kdom(7)=kmax; kdom(8)=kmax
+  
+  one_key=0
+  one_key(1)=1
+  do i=1,ndom
+     if(bit_length>0)then
+        ix(1,1)=idom(i)
+        if(ndim>1)ix(1,2)=jdom(i)
+        if(ndim>2)ix(1,3)=kdom(i)
+        call hilbert_key(ix,hk,dummy_state,0,bit_length,1)
+        order_min(1:nhilbert)=hk(1,1:nhilbert)
+     else
+        order_min(1:nhilbert)=0
+     endif
+     bounding_min(1:nhilbert,i)=order_min
+     bounding_max(1:nhilbert,i)=order_min+one_key
   end do
 
-end subroutine hilbert3d
+  if(ilevel>bit_length)then
+     do ilev=bit_length+1,ilevel
+        do i=1,ndom
+           bounding_min(1:nhilbert,i)=refine_key(bounding_min(1:nhilbert,i),ilevel)
+        end do
+     end do
+  else if(ilevel<bit_length)then
+     do ilev=bit_length-1,ilevel,-1
+        do i=1,ndom
+           bounding_min(1:nhilbert,i)=coarsen_key(bounding_min(1:nhilbert,i),bit_length)
+        end do
+     end do
+  end if
+
+!!$  cpu_min=0; cpu_max=0
+!!$  do impi=1,ncpu
+!!$     do i=1,ndom
+!!$        if(    ge_keys(bounding_min(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel)).and. &
+!!$             & gt_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_min(1:nhilbert,i)))then
+!!$           cpu_min(i)=impi
+!!$        endif
+!!$        if(    gt_keys(bounding_max(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel)).and. &
+!!$             & ge_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_max(1:nhilbert,i)))then
+!!$           cpu_max(i)=impi
+!!$        endif
+!!$     end do
+!!$  end do
+  
+  ncpu_read=0
+  do i=1,ndom
+     do j=cpu_min(i),cpu_max(i)
+        if(.not. cpu_read(j))then
+           ncpu_read=ncpu_read+1
+           cpu_list(ncpu_read)=j
+           cpu_read(j)=.true.
+        endif
+     enddo
+  enddo
+
+end subroutine cmp_cpu_list
 !================================================================
 !================================================================
 !================================================================

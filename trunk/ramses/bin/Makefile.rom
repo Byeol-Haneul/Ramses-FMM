@@ -141,6 +141,8 @@ ramses:	$(MODOBJ) $(AMRLIB) ramses.o
 	$(F90) $(MODOBJ) $(AMRLIB) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
 	rm write_makefile.f90
 	rm write_patch.f90
+amr2map:   amr_parameters.o amr_commons.o hydro_parameters.o hydro_commons.o amr2map.f90
+	 $(F90) amr_parameters.o amr_commons.o hydro_parameters.o hydro_commons.o amr2map.f90 -o amr2map
 ramses_aton: $(MODOBJ) $(ATON_MODOBJ) $(AMRLIB) $(ATON_OBJ) ramses.o
 	$(F90) $(MODOBJ) $(ATON_MODOBJ) $(AMRLIB) $(ATON_OBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS) $(LIBCUDA)
 	rm write_makefile.f90

@@ -85,13 +85,9 @@ subroutine init_amr
   ! Set bounds for Hilbert keys for fine levels
   do ilevel=levelmin+1,nlevelmax+1
      ckey_max(ilevel) = 2**(ilevel-1)
-!!$     key_in(1:nhilbert) = hkey_max(1:nhilbert,ilevel-1)
-!!$     hkey_max(1:nhilbert,ilevel) = refine_key(key_in,ilevel-2)
      hkey_max(1:nhilbert,ilevel) = refine_key(hkey_max(1:nhilbert,ilevel-1),ilevel-2)
      ! Multiply the bounds by twotondim
      do icpu=0,ncpu
-!!$        key_in(1:nhilbert) = bound_key_level(1:nhilbert,icpu,ilevel-1)
-!!$        bound_key_level(1:nhilbert,icpu,ilevel) = refine_key(key_in,ilevel-2)
         bound_key_level(1:nhilbert,icpu,ilevel) = refine_key(bound_key_level(1:nhilbert,icpu,ilevel-1),ilevel-2)
      end do
   end do
