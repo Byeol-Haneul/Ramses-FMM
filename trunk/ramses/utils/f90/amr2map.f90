@@ -576,6 +576,8 @@ subroutine read_ramses_params(repository)
   read(ilun)ndim2
   if(ndim.NE.ndim2)then
      write(*,*)'Recompile'
+     write(*,*)'ndim=',ndim
+     write(*,*)'ndim in file=',ndim2
      stop
   endif
   read(ilun)levelmin
@@ -598,6 +600,8 @@ subroutine read_ramses_params(repository)
   read(ilun)nhilbert2
   if(nhilbert.NE.nhilbert2)then
      write(*,*)'Recompile'
+     write(*,*)'nhilbert=',nhilbert
+     write(*,*)'nhilbert in file=',nhilbert2
      stop
   endif
   allocate(bound_key_level(1:nhilbert,0:ncpu,1:nlevelmax+1))
