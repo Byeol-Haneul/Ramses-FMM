@@ -146,7 +146,7 @@ program amr2map
      write(*,*)'ilevel=',ilevel,dx,zmax
 
      ! Get cpu list within bounding box
-     call cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,ncpu,cpu_list)
+     call cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
      
      ! Loop over processor files
      do k=1,ncpu_read
@@ -611,12 +611,12 @@ end subroutine read_ramses_params
 !================================================================
 !================================================================
 !================================================================
-subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,ncpu,cpu_list)
-  use amr_parameters
+subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
+  use amr_commons
   use hilbert
   implicit none
   real(dp)::xmin,xmax,ymin,ymax,zmin,zmax
-  integer::ilevel,ncpu_read,ncpu
+  integer::ilevel,ncpu_read
   integer,dimension(1:ncpu)::cpu_list
   !----------------------------------------------
   ! Set up Hilbert key for optimal file reading
@@ -629,7 +629,8 @@ subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,ncpu,cpu_
   integer(kind=8),dimension(1:nhilbert,1:8)::bounding_min,bounding_max
   integer,dimension(1:8)::idom,jdom,kdom,cpu_min,cpu_max
   real(dp)::dmax,dx,maxdom
-  integer::i,j,ilev,lmin,imin,imax,jmin,jmax,kmin,kmax,bit_length,ndom
+  integer::i,j,ilev,lmin,imin,imax,jmin,jmax,kmin,kmax,bit_length,ndom,impi
+  logical::ok1,ok2
 
   ncpu_read=ncpu
   do i=1,ncpu
@@ -642,7 +643,7 @@ subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,ncpu,cpu_
      dx=0.5d0**ilev
      if(dx.lt.dmax)exit
   end do
-  lmin=ilev
+  lmin=MIN(ilev,ilevel)
   bit_length=lmin-1
   maxdom=2**bit_length
   imin=0; imax=0; jmin=0; jmax=0; kmin=0; kmax=0
@@ -686,33 +687,29 @@ subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,ncpu,cpu_
      bounding_max(1:nhilbert,i)=order_min+one_key
   end do
 
-  if(ilevel>bit_length)then
+  if(ilevel>bit_length+1)then
      do ilev=bit_length+1,ilevel
         do i=1,ndom
            bounding_min(1:nhilbert,i)=refine_key(bounding_min(1:nhilbert,i),ilevel)
         end do
      end do
-  else if(ilevel<bit_length)then
-     do ilev=bit_length-1,ilevel,-1
-        do i=1,ndom
-           bounding_min(1:nhilbert,i)=coarsen_key(bounding_min(1:nhilbert,i),bit_length)
-        end do
-     end do
-  end if
+  endif
 
-!!$  cpu_min=0; cpu_max=0
-!!$  do impi=1,ncpu
-!!$     do i=1,ndom
-!!$        if(    ge_keys(bounding_min(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel)).and. &
-!!$             & gt_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_min(1:nhilbert,i)))then
-!!$           cpu_min(i)=impi
-!!$        endif
-!!$        if(    gt_keys(bounding_max(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel)).and. &
-!!$             & ge_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_max(1:nhilbert,i)))then
-!!$           cpu_max(i)=impi
-!!$        endif
-!!$     end do
-!!$  end do
+  cpu_min=0; cpu_max=0
+  do impi=1,ncpu
+     do i=1,ndom
+        ok1=ge_keys(bounding_min(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel))
+        ok2=gt_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_min(1:nhilbert,i))
+        if(ok1.and.ok2)then
+           cpu_min(i)=impi
+        endif
+        ok1=gt_keys(bounding_max(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel))
+        ok2=ge_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_max(1:nhilbert,i))
+        if(ok1.and.ok2)then
+           cpu_max(i)=impi
+        endif
+     end do
+  end do
   
   ncpu_read=0
   do i=1,ndom
