@@ -502,6 +502,9 @@ subroutine cmp_Ap_cg_fast(ilevel)
      end do
   end do
 
+  ! Wait for full completion of sends
+  call MPI_WAITALL(countsend,reqsend,statuses,info)
+
 #endif
                                call timer('poisson - solver','start')
   ! Loop over grids
