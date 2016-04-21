@@ -84,22 +84,22 @@ subroutine multigrid(ilevel,icount)
         exit
      end if
   end do
-
+  
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
-   call set_scan_flag(grid_dict,ilevel)
-   do ifine=ilevel-1,levelmin_mg,-1
-      call set_scan_flag(mg_dict,ifine)
-   end do
+  call set_scan_flag(grid_dict,ilevel)
+  do ifine=ilevel-1,levelmin_mg,-1
+     call set_scan_flag(mg_dict,ifine)
+  end do
   
   ! ---------------------------------------------------------------------
   ! Build communication buffer (for optimisation)
   ! ---------------------------------------------------------------------
-   call build_comm_mg(grid_dict,ilevel)
-   do ifine=ilevel-1,levelmin_mg,-1
-      call build_comm_mg(mg_dict,ifine)
-   end do
+  call build_comm_mg(grid_dict,ilevel)
+  do ifine=ilevel-1,levelmin_mg,-1
+     call build_comm_mg(mg_dict,ifine)
+  end do
   
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
@@ -199,10 +199,10 @@ subroutine multigrid(ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Clean communication buffer
   ! ---------------------------------------------------------------------
-   call clean_comm_mg(ilevel)
-   do ifine=ilevel-1,levelmin_mg,-1
-      call clean_comm_mg(ifine)
-   end do
+  call clean_comm_mg(ilevel)
+  do ifine=ilevel-1,levelmin_mg,-1
+     call clean_comm_mg(ifine)
+  end do
   
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete

@@ -55,8 +55,9 @@ module hydro_parameters
   character(LEN=10)::riemann='llf'
 
   ! Other hydro solver parameters
-  real(dp)::T2_star
-  real(dp)::g_star
+  real(dp)::T2_star=10.
+  real(dp)::g_star=1.0
+  real(dp)::n_star=1d100
   logical::isothermal
 
   ! Interpolation parameters

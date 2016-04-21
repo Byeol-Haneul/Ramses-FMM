@@ -83,6 +83,8 @@ subroutine init_file
         INQUIRE(file=filename,exist=ok)
         if(.not.ok)then
            if(myid==1)then
+
+              write(*,*)TRIM(initfile(ilevel))
               write(*,*)'File '//TRIM(filename)//' does not exist'
            end if
            call clean_stop

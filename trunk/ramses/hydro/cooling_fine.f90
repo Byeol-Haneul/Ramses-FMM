@@ -35,7 +35,7 @@ subroutine cooling_fine(ilevel)
            nH=d*scale_nH
            
            ! Set isothermal temperature in Kelvins. 
-           T2=T2_star
+           T2=T2_star*(1.0+(nH/n_star)**(g_star-1.0))
            
            eint=d*(T2/scale_T2/(gamma-1.0))
            etot=ekin+eint

@@ -34,7 +34,7 @@ subroutine read_hydro_params(nml_ok)
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type
   namelist/physics_params/cooling,units_density,units_time,units_length &
-       & ,T2_star,g_star,isothermal
+       & ,T2_star,g_star,n_star,isothermal
 
   ! Read namelist file
   rewind(1)

@@ -311,6 +311,9 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
      end do
   end do
 
+  ! Wait for full completion of sends
+  call MPI_WAITALL(countsend,reqsend,statuses,info)
+
 #endif
 
   ! Loop over grids
@@ -664,6 +667,9 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
         buffer_mg(ilevel)%phi_remote(i,ind)=buffer_mg(ilevel)%phi_send_buf(istart)
      end do
   end do
+
+  ! Wait for full completion of sends
+  call MPI_WAITALL(countsend,reqsend,statuses,info)
 
 #endif
 
