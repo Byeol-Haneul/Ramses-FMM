@@ -94,6 +94,14 @@ subroutine multigrid(ilevel,icount)
    end do
   
   ! ---------------------------------------------------------------------
+  ! Build communication buffer (for optimisation)
+  ! ---------------------------------------------------------------------
+   call build_comm_mg(grid_dict,ilevel)
+   do ifine=ilevel-1,levelmin_mg,-1
+      call build_comm_mg(mg_dict,ifine)
+   end do
+  
+  ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
   ! ---------------------------------------------------------------------
   
@@ -106,13 +114,16 @@ subroutine multigrid(ilevel,icount)
                                call timer('poisson - mg - gs','start')
      ! Pre-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
      end do
      
                                call timer('poisson - mg - res','start')
      ! Compute new residual
-     call cmp_residual_mg(grid_dict,ilevel)
+!!$     call cmp_residual_mg(grid_dict,ilevel)
+     call cmp_residual_mg_fast(grid_dict,ilevel)
 
      ! Compute initial residual norm
      if(iter==1) then
@@ -146,13 +157,16 @@ subroutine multigrid(ilevel,icount)
                                call timer('poisson - mg - gs','start')
      ! Post-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
      end do
      
                                call timer('poisson - mg - res','start')
      ! Update fine residual
-     call cmp_residual_mg(grid_dict,ilevel)
+!!$     call cmp_residual_mg(grid_dict,ilevel)
+     call cmp_residual_mg_fast(grid_dict,ilevel)
 
      ! Compute residual norm
      call cmp_residual_norm2(ilevel,res_norm2)
@@ -181,6 +195,14 @@ subroutine multigrid(ilevel,icount)
   
   if(myid==1) print '(A,I5,A,I5,A,1pE10.3)','   ==> Level=',ilevel,' Step=',iter,' Error=',err
   if(myid==1 .and. iter==MAXITER) print *,'WARN: Fine multigrid Poisson failed to converge...'
+  
+  ! ---------------------------------------------------------------------
+  ! Clean communication buffer
+  ! ---------------------------------------------------------------------
+   call clean_comm_mg(ilevel)
+   do ifine=ilevel-1,levelmin_mg,-1
+      call clean_comm_mg(ifine)
+   end do
   
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
@@ -216,8 +238,10 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
      ! Solve 'directly' :
                                call timer('poisson - mg - gs','start')
      do i=1,2*ngs_coarse
-        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
+!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
+        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do
      return
   end if
@@ -233,13 +257,16 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
                                call timer('poisson - mg - gs','start')
      ! Pre-smoothing
      do i=1,ngs_coarse
-        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
+!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
+        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do     
 
                                call timer('poisson - mg - res','start')
      ! Compute residual and restrict into upper level RHS
-     call cmp_residual_mg(mg_dict,ifinelevel)
+!!$     call cmp_residual_mg(mg_dict,ifinelevel)
+     call cmp_residual_mg_fast(mg_dict,ifinelevel)
      
                                call timer('poisson - mg - restrict','start')
      ! Restrict residual to coarser level
@@ -260,8 +287,10 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
                                call timer('poisson - mg - gs','start')
      ! Post-smoothing
      do i=1,ngs_coarse
-        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
+!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
+        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do
      
   end do
@@ -702,5 +731,308 @@ end subroutine make_bc_rhs
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
+
+! ---------------------------------------------------------------------
+! ---------------------------------------------------------------------
+  
+subroutine build_comm_mg(hash_dict,ilevel)
+  use amr_commons
+  use poisson_commons
+  use hilbert
+  implicit none
+#ifndef WITHOUTMPI
+  include "mpif.h"
+  integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
+#endif
+  !
+  integer,intent(in)::ilevel
+  type(hash_table)::hash_dict
+  !
+  integer::get_grid
+  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
+  integer::i,igridn,iremote
+  integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
+  integer,dimension(1:ndim)::cart_key
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  integer(kind=4),dimension(1:nvector),save::dummy_state
+  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
+  integer::istart,nbuffer,countrecv,countsend,tag=101
+  integer,dimension(ncpu)::reqsend,reqrecv
+
+#ifndef WITHOUTMPI
+
+  allocate(nremote(1:ncpu))  
+  allocate(buffer_mg(ilevel)%nbor_indx(head_mg(ilevel):tail_mg(ilevel),1:twondim))
+
+  hash_nbor(0)=ilevel
+  
+  nremote=0
+  call open_cache(operation_mg,domain_decompos_mg)
+  
+  ! Loop over grids
+  do igrid=head_mg(ilevel),tail_mg(ilevel)
+     
+     ! Gather twondim neighboring grids
+     do inbor=1,twondim
+
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
+
+        ! Periodic boundary conditons
+        do idim=1,ndim
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+        enddo
+        
+        ! Get neighbouring grid using read-only cache
+        igridn=get_grid(hash_nbor,hash_dict,.false.,.true.)
+        
+        ! If grid exists, determine if remote
+        if(igridn<=ngridmax)then
+           buffer_mg(ilevel)%nbor_indx(igrid,inbor)=igridn
+        else
+           ! Compute Cartesian keys of new oct
+           cart_key(1:ndim)=hash_nbor(1:ndim)
+           
+           ! Compute Hilbert keys of new octs
+           ix(1,1:ndim)=cart_key(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
+           ! Determine parent processor and increment counter
+           do icpu=1,ncpu
+              if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,ilevel)).AND. &
+                   & gt_keys(bound_key_mg(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
+                 grid_cpu=icpu
+              end if
+           end do
+           nremote(grid_cpu)=nremote(grid_cpu)+1
+        end if
+
+     end do
+     ! End loop over neighbors
+     
+  end do
+  ! End loop over grids
+  
+  call close_cache(hash_dict)
+
+  ! Build communicator
+  allocate(nalltoall(1:ncpu,1:ncpu))
+  allocate(nalltoall_tot(1:ncpu,1:ncpu))
+  nalltoall=0; nalltoall_tot=0
+  do icpu=1,ncpu
+     nalltoall(myid,icpu)=nremote(icpu)
+  end do
+  call MPI_ALLREDUCE(nalltoall,nalltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  nalltoall=nalltoall_tot
+  deallocate(nalltoall_tot)
+  allocate(buffer_mg(ilevel)%send_cnt(1:ncpu))
+  allocate(buffer_mg(ilevel)%send_oft(1:ncpu))
+  allocate(buffer_mg(ilevel)%recv_cnt(1:ncpu))
+  allocate(buffer_mg(ilevel)%recv_oft(1:ncpu))
+
+  buffer_mg(ilevel)%send_cnt=0; buffer_mg(ilevel)%send_oft=0; buffer_mg(ilevel)%send_tot=0
+  buffer_mg(ilevel)%recv_cnt=0; buffer_mg(ilevel)%recv_oft=0; buffer_mg(ilevel)%recv_tot=0
+  do icpu=1,ncpu
+     buffer_mg(ilevel)%send_cnt(icpu)=nalltoall(myid,icpu)
+     buffer_mg(ilevel)%recv_cnt(icpu)=nalltoall(icpu,myid)
+     buffer_mg(ilevel)%send_tot=buffer_mg(ilevel)%send_tot+buffer_mg(ilevel)%send_cnt(icpu)
+     buffer_mg(ilevel)%recv_tot=buffer_mg(ilevel)%recv_tot+buffer_mg(ilevel)%recv_cnt(icpu)
+     if(icpu<ncpu)then
+        buffer_mg(ilevel)%send_oft(icpu+1)=buffer_mg(ilevel)%send_oft(icpu)+nalltoall(myid,icpu)
+        buffer_mg(ilevel)%recv_oft(icpu+1)=buffer_mg(ilevel)%recv_oft(icpu)+nalltoall(icpu,myid)
+     endif
+  end do
+  deallocate(nalltoall)
+
+#if NDIM>0
+  allocate(x_send_buf(1:buffer_mg(ilevel)%send_tot))
+#endif
+#if NDIM>1
+  allocate(y_send_buf(1:buffer_mg(ilevel)%send_tot))
+#endif
+#if NDIM>2
+  allocate(z_send_buf(1:buffer_mg(ilevel)%send_tot))
+#endif
+
+  hash_nbor(0)=ilevel
+
+  nremote=0
+  call open_cache(operation_mg,domain_decompos_mg)
+
+  ! Loop over grids
+  do igrid=head_mg(ilevel),tail_mg(ilevel)
+
+     ! Gather twondim neighboring grids
+     do inbor=1,twondim
+
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
+
+        ! Periodic boundary conditons
+        do idim=1,ndim
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+        enddo
+
+        ! Get neighbouring grid using read-only cache
+        igridn=get_grid(hash_nbor,hash_dict,.false.,.true.)
+
+        ! If grid is remote
+        if(igridn>ngridmax)then
+
+           ! Compute Cartesian keys of new oct
+           cart_key(1:ndim)=hash_nbor(1:ndim)
+
+           ! Compute Hilbert keys of new octs
+           ix(1,1:ndim)=cart_key(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
+           ! Determine parent processor and increment counter
+           do icpu=1,ncpu
+              if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,ilevel)).AND. &
+                   & gt_keys(bound_key_mg(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
+                 grid_cpu=icpu
+              end if
+           end do
+           nremote(grid_cpu)=nremote(grid_cpu)+1
+           iremote=buffer_mg(ilevel)%send_oft(grid_cpu)+nremote(grid_cpu)
+#if NDIM>0
+           x_send_buf(iremote)=cart_key(1)
+#endif
+#if NDIM>1
+           y_send_buf(iremote)=cart_key(2)
+#endif
+#if NDIM>2
+           z_send_buf(iremote)=cart_key(3)
+#endif
+           ! Store negative index
+           buffer_mg(ilevel)%nbor_indx(igrid,inbor)=-iremote
+        end if
+
+     end do
+     ! End loop over neighbors
+
+  end do
+  ! End loop over grids
+
+  call close_cache(hash_dict)
+
+  deallocate(nremote)
+
+#if NDIM>0
+  allocate(x_recv_buf(1:buffer_mg(ilevel)%recv_tot))
+  call MPI_ALLTOALLV(x_send_buf,buffer_mg(ilevel)%send_cnt,buffer_mg(ilevel)%send_oft,MPI_INTEGER, &
+       &             x_recv_buf,buffer_mg(ilevel)%recv_cnt,buffer_mg(ilevel)%recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  deallocate(x_send_buf)
+#endif
+#if NDIM>1
+  allocate(y_recv_buf(1:buffer_mg(ilevel)%recv_tot))
+  call MPI_ALLTOALLV(y_send_buf,buffer_mg(ilevel)%send_cnt,buffer_mg(ilevel)%send_oft,MPI_INTEGER, &
+       &             y_recv_buf,buffer_mg(ilevel)%recv_cnt,buffer_mg(ilevel)%recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  deallocate(y_send_buf)
+#endif
+#if NDIM>2
+  allocate(z_recv_buf(1:buffer_mg(ilevel)%recv_tot))
+  call MPI_ALLTOALLV(z_send_buf,buffer_mg(ilevel)%send_cnt,buffer_mg(ilevel)%send_oft,MPI_INTEGER, &
+       &             z_recv_buf,buffer_mg(ilevel)%recv_cnt,buffer_mg(ilevel)%recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  deallocate(z_send_buf)
+#endif
+
+  allocate(buffer_mg(ilevel)%grid_recv_buf(1:buffer_mg(ilevel)%recv_tot))
+
+  hash_key(0)=ilevel
+  do i=1,buffer_mg(ilevel)%recv_tot
+     hash_key(1)=x_recv_buf(i)
+     hash_key(2)=y_recv_buf(i)
+     hash_key(3)=z_recv_buf(i)
+     ipos=hash_get(hash_dict,hash_key)
+     buffer_mg(ilevel)%grid_recv_buf(i)=ipos
+  end do
+  deallocate(x_recv_buf)
+  deallocate(y_recv_buf)
+  deallocate(z_recv_buf)
+
+  allocate(buffer_mg(ilevel)%phi_send_buf(1:buffer_mg(ilevel)%send_tot*twotondim))
+  allocate(buffer_mg(ilevel)%phi_recv_buf(1:buffer_mg(ilevel)%recv_tot*twotondim))
+  allocate(buffer_mg(ilevel)%phi_remote(1:buffer_mg(ilevel)%send_tot,1:twotondim))
+  allocate(buffer_mg(ilevel)%dis_remote(1:buffer_mg(ilevel)%send_tot,1:twotondim))
+
+  ! Update boundary conditions for distance function
+  countrecv=0
+  do icpu=1,ncpu
+     nbuffer=buffer_mg(ilevel)%send_cnt(icpu)
+     if(nbuffer>0)then
+        countrecv=countrecv+1
+        istart=buffer_mg(ilevel)%send_oft(icpu)*twotondim+1
+        call MPI_IRECV(buffer_mg(ilevel)%phi_send_buf(istart),nbuffer*twotondim, &
+             & MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+     endif
+  end do
+
+  do ind=1,twotondim
+     do i=1,buffer_mg(ilevel)%recv_tot
+        igrid=buffer_mg(ilevel)%grid_recv_buf(i)
+        istart=(i-1)*twotondim+ind
+        buffer_mg(ilevel)%phi_recv_buf(istart)=grid(igrid)%f(ind,3)
+     end do
+  end do
+
+  countsend=0
+  do icpu=1,ncpu
+     nbuffer=buffer_mg(ilevel)%recv_cnt(icpu)
+     if(nbuffer>0) then
+        countsend=countsend+1
+        istart=buffer_mg(ilevel)%recv_oft(icpu)*twotondim+1
+        call MPI_ISEND(buffer_mg(ilevel)%phi_recv_buf(istart),nbuffer*twotondim, &
+            & MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+     end if
+  end do
+
+  ! Wait for full completion of receives
+  call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+  do ind=1,twotondim
+     do i=1,buffer_mg(ilevel)%send_tot
+        istart=(i-1)*twotondim+ind
+        buffer_mg(ilevel)%dis_remote(i,ind)=buffer_mg(ilevel)%phi_send_buf(istart)
+     end do
+  end do
+
+#endif
+
+end subroutine build_comm_mg
+
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
+
+! ------------------------------------------------------------------------
+! ------------------------------------------------------------------------
+
+subroutine clean_comm_mg(ilevel)
+  use amr_commons
+  use poisson_commons
+  implicit none
+  integer::ilevel
+
+#ifndef WITHOUTMPI
+  
+  deallocate(buffer_mg(ilevel)%nbor_indx)
+  deallocate(buffer_mg(ilevel)%phi_remote)
+  deallocate(buffer_mg(ilevel)%dis_remote)
+  deallocate(buffer_mg(ilevel)%phi_send_buf)
+  deallocate(buffer_mg(ilevel)%phi_recv_buf)
+  deallocate(buffer_mg(ilevel)%grid_recv_buf)
+  deallocate(buffer_mg(ilevel)%send_cnt)
+  deallocate(buffer_mg(ilevel)%send_oft)
+  deallocate(buffer_mg(ilevel)%recv_cnt)
+  deallocate(buffer_mg(ilevel)%recv_oft)
+
+#endif
+
+end subroutine clean_comm_mg
+
 #endif
 
