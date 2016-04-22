@@ -35,7 +35,7 @@ subroutine read_params
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
        & ,deltax_frame,deltay_frame,deltaz_frame,movie &
-       & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars
+       & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars,movie_vars_txt
 
   ! MPI initialization
 #ifndef WITHOUTMPI
@@ -203,6 +203,8 @@ subroutine read_params
   call read_hydro_params(nml_ok)
 
   close(1)
+
+  if (movie)call set_movie_vars
 
   !-----------------
   ! Max size checks

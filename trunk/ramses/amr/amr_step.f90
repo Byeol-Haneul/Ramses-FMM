@@ -36,15 +36,15 @@ recursive subroutine amr_step(ilevel,icount)
   endif
   
   !----------------------------
-  ! Output frame to movie dump (without synced levels)
+  ! Output frame to movie dump
   !----------------------------
-!!$  if(movie) then
-!!$     if(imov.le.imovout)then 
-!!$        if(aexp>=amovout(imov).or.t>=tmovout(imov))then
-!!$           call output_frame()
-!!$        endif
-!!$     endif
-!!$  end if
+  if(movie) then
+     if(imov.le.imovout)then 
+        if(aexp>=amovout(imov).or.t>=tmovout(imov))then
+           call output_frame()
+        endif
+     endif
+  end if
 
   !--------------------
   ! Poisson source term
