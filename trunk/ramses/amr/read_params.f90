@@ -31,7 +31,7 @@ subroutine read_params
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax
+       & ,cg_levelmin,cic_levelmax,fast_solver
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
        & ,deltax_frame,deltay_frame,deltaz_frame,movie &

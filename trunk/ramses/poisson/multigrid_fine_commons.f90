@@ -52,7 +52,6 @@ subroutine multigrid(ilevel,icount)
   
   if(verbose) print '(A,I2)','Entering multigrid at level ',ilevel
   
-                               call timer('poisson - mg - init','start')
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
@@ -96,10 +95,12 @@ subroutine multigrid(ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Build communication buffer (for optimisation)
   ! ---------------------------------------------------------------------
-  call build_comm_mg(grid_dict,ilevel)
-  do ifine=ilevel-1,levelmin_mg,-1
-     call build_comm_mg(mg_dict,ifine)
-  end do
+  if(fast_solver)then
+     call build_comm_mg(grid_dict,ilevel)
+     do ifine=ilevel-1,levelmin_mg,-1
+        call build_comm_mg(mg_dict,ifine)
+     end do
+  endif
   
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
@@ -111,19 +112,23 @@ subroutine multigrid(ilevel,icount)
 
      iter=iter+1
 
-                               call timer('poisson - mg - gs','start')
      ! Pre-smoothing
      do i=1,ngs_fine
-!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
-        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        if(fast_solver)then
+           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        else
+           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        endif
      end do
      
-                               call timer('poisson - mg - res','start')
      ! Compute new residual
-!!$     call cmp_residual_mg(grid_dict,ilevel)
-     call cmp_residual_mg_fast(grid_dict,ilevel)
+     if(fast_solver)then                               
+        call cmp_residual_mg_fast(grid_dict,ilevel)
+     else
+        call cmp_residual_mg(grid_dict,ilevel)
+     endif
 
      ! Compute initial residual norm
      if(iter==1) then
@@ -136,7 +141,6 @@ subroutine multigrid(ilevel,icount)
      
      if(ilevel>1) then
 
-                               call timer('poisson - mg - restrict','start')
         ! Restrict residual to coarser level
         call restrict_residual(ilevel)
 
@@ -148,25 +152,29 @@ subroutine multigrid(ilevel,icount)
         ! Multigrid-solve the upper level
         call recursive_multigrid(ilevel-1, safe_mode(ilevel))
         
-                               call timer('poisson - mg - interpolate','start')
         ! Interpolate coarse solution and correct fine solution
         call interpolate_and_correct(ilevel)
 
      end if
      
-                               call timer('poisson - mg - gs','start')
      ! Post-smoothing
      do i=1,ngs_fine
-!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-!!$        call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
-        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        if(fast_solver)then
+           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        else
+           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
+           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
+        endif
      end do
      
                                call timer('poisson - mg - res','start')
      ! Update fine residual
-!!$     call cmp_residual_mg(grid_dict,ilevel)
-     call cmp_residual_mg_fast(grid_dict,ilevel)
+     if(fast_solver)then
+        call cmp_residual_mg_fast(grid_dict,ilevel)
+     else
+        call cmp_residual_mg(grid_dict,ilevel)
+     endif
 
      ! Compute residual norm
      call cmp_residual_norm2(ilevel,res_norm2)
@@ -199,10 +207,12 @@ subroutine multigrid(ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Clean communication buffer
   ! ---------------------------------------------------------------------
-  call clean_comm_mg(ilevel)
-  do ifine=ilevel-1,levelmin_mg,-1
-     call clean_comm_mg(ifine)
-  end do
+  if(fast_solver)then
+     call clean_comm_mg(ilevel)
+     do ifine=ilevel-1,levelmin_mg,-1
+        call clean_comm_mg(ifine)
+     end do
+  endif
   
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
@@ -236,12 +246,14 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
   
   if(ifinelevel<=levelmin_mg) then
      ! Solve 'directly' :
-                               call timer('poisson - mg - gs','start')
      do i=1,2*ngs_coarse
-!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        if(fast_solver)then
+           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
+           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        else
+           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
+           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        endif
      end do
      return
   end if
@@ -254,21 +266,24 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
   
   do icycle=1,ncycle
      
-                               call timer('poisson - mg - gs','start')
      ! Pre-smoothing
      do i=1,ngs_coarse
-!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        if(fast_solver)then
+           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
+           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        else
+           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
+           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        endif
      end do     
 
-                               call timer('poisson - mg - res','start')
      ! Compute residual and restrict into upper level RHS
-!!$     call cmp_residual_mg(mg_dict,ifinelevel)
-     call cmp_residual_mg_fast(mg_dict,ifinelevel)
-     
-                               call timer('poisson - mg - restrict','start')
+     if(fast_solver)then
+        call cmp_residual_mg_fast(mg_dict,ifinelevel)
+     else
+        call cmp_residual_mg(mg_dict,ifinelevel)
+     endif
+
      ! Restrict residual to coarser level
      call restrict_residual(ifinelevel)
      
@@ -280,17 +295,18 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
      ! Multigrid-solve the upper level
      call recursive_multigrid(ifinelevel-1, safe)
      
-                               call timer('poisson - mg - interpolate','start')
      ! Interpolate coarse solution and correct back into fine solution
      call interpolate_and_correct(ifinelevel)
      
-                               call timer('poisson - mg - gs','start')
      ! Post-smoothing
      do i=1,ngs_coarse
-!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-!!$        call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        if(fast_solver)then
+           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
+           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        else
+           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
+           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
+        endif
      end do
      
   end do

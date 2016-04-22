@@ -27,4 +27,7 @@ module poisson_parameters
   !   2 is slower but can give much better convergence in some cases
   integer, parameter :: ncycles_coarse_safe = 1
 
+  ! Fast solver with MPI pre-fetch (memory intensive)
+  logical :: fast_solver = .false.
+
 end module poisson_parameters
