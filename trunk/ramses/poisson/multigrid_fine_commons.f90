@@ -1015,6 +1015,9 @@ subroutine build_comm_mg(hash_dict,ilevel)
      end do
   end do
 
+  ! Wait for full completion of sends
+  call MPI_WAITALL(countsend,reqsend,statuses,info)
+
 #endif
 
 end subroutine build_comm_mg

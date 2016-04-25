@@ -202,11 +202,11 @@ program amr2map
                     map = uold(ind,1)**2
                  endif
               case (2) ! Mass weighted x-velocity
-                 map = uold(ind,2)*uold(ind,1)
+                 map = uold(ind,2)
               case (3) ! Mass weighted y-velocity
-                 map = uold(ind,3)*uold(ind,1)
+                 map = uold(ind,3)
               case (4) ! Mass weighted z-velocity
-                 map = uold(ind,4)*uold(ind,1)
+                 map = uold(ind,4)
               case (5) ! Temperature
                  if(do_max)then
                     map = uold(ind,5)/uold(ind,1)
@@ -215,9 +215,9 @@ program amr2map
                  endif
               case default ! Passive scalar
                  if(do_max)then
-                    map = uold(ind,type)
+                    map = uold(ind,type)/uold(ind,1)
                  else
-                    map = uold(ind,type)*uold(ind,1)
+                    map = uold(ind,type)
                  endif
                  metmax=max(metmax,uold(ind,type))
               end select
