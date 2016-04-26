@@ -406,7 +406,7 @@ subroutine getmem(outmem)
 101  close(1)
   if (read_status < 0)then
      outmem=dble(0.)
-     if (myid==1)write(*,*)'Problem in checking free memory'
+     write(*,*)'Problem in checking free memory'
   else
      ind=300
      j=0

@@ -308,7 +308,6 @@ subroutine output_info(filename)
   character(LEN=80)::filename
 
   integer::ilun,icpu,idom
-  real(dp)::scale
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   character(LEN=80)::fileloc
   character(LEN=5)::nchar
@@ -334,7 +333,7 @@ subroutine output_info(filename)
   write(ilun,*)
 
   ! Write physical parameters
-  write(ilun,'("boxlen      =",E23.15)')scale
+  write(ilun,'("boxlen      =",E23.15)')boxlen
   write(ilun,'("time        =",E23.15)')t
   write(ilun,'("aexp        =",E23.15)')aexp
   write(ilun,'("H0          =",E23.15)')h0
@@ -365,7 +364,7 @@ subroutine output_header(filename)
   character(LEN=80)::filename
 
   integer::info,ilun
-  integer(i8b)::tmp_long,npart_tot
+  integer(i8b)::tmp_long
   character(LEN=80)::fileloc
 
   if(verbose)write(*,*)'Entering output_header'
@@ -378,7 +377,7 @@ subroutine output_header(filename)
   
   ! Write header information
   write(ilun,*)'Total number of particles'
-  write(ilun,*)npart_tot
+  write(ilun,*)npart
   
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
