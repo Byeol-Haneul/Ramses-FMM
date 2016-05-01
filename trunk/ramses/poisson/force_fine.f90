@@ -182,7 +182,7 @@ subroutine gradient_phi(ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(operation_phi,domain_decompos_amr)
+  call open_cache(operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 

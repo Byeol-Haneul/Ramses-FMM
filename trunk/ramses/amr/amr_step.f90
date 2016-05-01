@@ -7,7 +7,7 @@ recursive subroutine amr_step(ilevel,icount)
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  integer::ilevel,icount
+  integer::ilevel,icount,ilev
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
@@ -26,6 +26,7 @@ recursive subroutine amr_step(ilevel,icount)
                                call timer('load balance','start')
      call load_balance(ilevel)
   endif
+
   !------------------------
   ! Output results to files
   !------------------------
@@ -51,6 +52,8 @@ recursive subroutine amr_step(ilevel,icount)
   !--------------------
   if(poisson)then
                                call timer('poisson - rho','start')
+     ! Save old potential for time-extrapolation at level boundaries
+     call save_phi_old(ilevel)
      ! Compute total mass density at level ilevel
      call rho_fine(ilevel,icount)
   endif
@@ -68,9 +71,6 @@ recursive subroutine amr_step(ilevel,icount)
      endif
 
                                call timer('poisson - solver','start')
-     ! Save old potential for time-extrapolation at level boundaries
-     call save_phi_old(ilevel)
-
      ! Compute gravitational potential
      if(ilevel > levelmin)then
         if(ilevel >= cg_levelmin) then
@@ -96,6 +96,7 @@ recursive subroutine amr_step(ilevel,icount)
 
   end if
 #endif
+
   !----------------------
   ! Compute new time step
   !----------------------

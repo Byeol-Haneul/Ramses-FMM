@@ -257,6 +257,7 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
   type(small_realdp_msg),save::response_poisson
   type(large_realdp_msg),save::response_refine
   type(twin_realdp_msg),save::response_mg
+  type(three_realdp_msg),save::response_interpol
   logical::failed_request,send_request_completed
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::send_request_status
@@ -343,6 +344,10 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
         call MPI_IRECV(response_mg,1,new_mpi_twin_realdp_msg,&
              & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
      endif
+     if(cache_operation_type.EQ.operation_type_interpol)then
+        call MPI_IRECV(response_interpol,1,new_mpi_three_realdp_msg,&
+             & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
+     endif
      call MPI_ISEND(send_request,1,new_mpi_request,&
           & grid_cpu-1,request_tag,MPI_COMM_WORLD,send_request_id,info)
 
@@ -371,6 +376,10 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
      if(cache_operation_type.EQ.operation_type_mg)then
         failed_request=response_mg%type==-1
         ntile_response=response_mg%ntile
+     endif
+     if(cache_operation_type.EQ.operation_type_interpol)then
+        failed_request=response_interpol%type==-1
+        ntile_response=response_interpol%ntile
      endif
 
      ! If grid does not exist, store -1 in the cache
@@ -434,6 +443,10 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
            if(cache_operation_type.EQ.operation_type_mg)then
               hash_child(0)=response_mg%lev(i)
               hash_child(1:ndim)=response_mg%ckey(1:ndim,i)
+           endif
+           if(cache_operation_type.EQ.operation_type_interpol)then
+              hash_child(0)=response_interpol%lev(i)
+              hash_child(1:ndim)=response_interpol%ckey(1:ndim,i)
            endif
            ichild=ngridmax+free_cache
 
@@ -531,6 +544,17 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
 #ifdef GRAV
                     grid(ichild)%phi(ind)=response_mg%realdp_phi(ind,i)
                     grid(ichild)%f(ind,3)=response_mg%realdp_dis(ind,i)
+#endif
+                 end do
+              endif
+              
+              ! Operations of type "interpol"
+              if(cache_operation_type.EQ.operation_type_interpol)then
+                 do ind=1,twotondim
+#ifdef GRAV
+                    grid(ichild)%phi(ind)=response_interpol%realdp_phi(ind,i)
+                    grid(ichild)%phi_old(ind)=response_interpol%realdp_phi_old(ind,i)
+                    grid(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
 #endif
                  end do
               endif
@@ -706,6 +730,9 @@ subroutine check_mail(comm_id,hash_dict)
               if(cache_operation_type.EQ.operation_type_mg)then
                  reply_mg(grid_cpu)%type=-1
               endif
+              if(cache_operation_type.EQ.operation_type_interpol)then
+                 reply_interpol(grid_cpu)%type=-1
+              endif
               
               ! Otherwise, assemble a proper reply with a complete tile
            else
@@ -732,6 +759,10 @@ subroutine check_mail(comm_id,hash_dict)
               if(cache_operation_type.EQ.operation_type_mg)then
                  reply_mg(grid_cpu)%type=1
                  reply_mg(grid_cpu)%ntile=ntile_reply
+              endif
+              if(cache_operation_type.EQ.operation_type_interpol)then
+                 reply_interpol(grid_cpu)%type=1
+                 reply_interpol(grid_cpu)%ntile=ntile_reply
               endif
               
               ! Store data, depending on reply type
@@ -827,6 +858,19 @@ subroutine check_mail(comm_id,hash_dict)
                     end do
                  endif
 
+                 ! Reply of type interpol
+                 if(cache_operation_type.EQ.operation_type_interpol)then
+                    reply_interpol(grid_cpu)%lev(i)=grid(ipos)%lev
+                    reply_interpol(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
+                    do ind=1,twotondim
+#ifdef GRAV
+                       reply_interpol(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
+                       reply_interpol(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%phi(ind)
+                       reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grid(ipos)%phi_old(ind)
+#endif
+                    end do
+                 endif
+
               end do
            endif
            
@@ -852,6 +896,10 @@ subroutine check_mail(comm_id,hash_dict)
            endif
            if(cache_operation_type.EQ.operation_type_mg)then
               call MPI_ISEND(reply_mg(grid_cpu),1,new_mpi_twin_realdp_msg,&
+                   & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
+           endif
+           if(cache_operation_type.EQ.operation_type_interpol)then
+              call MPI_ISEND(reply_interpol(grid_cpu),1,new_mpi_three_realdp_msg,&
                    & grid_cpu-1,msg_tag,MPI_COMM_WORLD,reply_id(grid_cpu),info)
            endif
            
@@ -1213,6 +1261,10 @@ subroutine check_mail(comm_id,hash_dict)
         endif
         if(cache_operation_type.EQ.operation_type_mg)then
            call MPI_IRECV(recv_flush_mg,1,new_mpi_twin_realdp_flush,&
+                & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+        endif
+        if(cache_operation_type.EQ.operation_type_interpol)then
+           call MPI_IRECV(recv_flush_interpol,1,new_mpi_three_realdp_flush,&
                 & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
         endif
         endif
@@ -1645,6 +1697,16 @@ subroutine close_cache(hash_dict)
            send_flush_mg(icpu)%nflush=0
         endif
      endif
+     if(cache_operation_type.EQ.operation_type_interpol)then
+        if(send_flush_interpol(icpu)%nflush>0)then
+           ! Post send
+           call MPI_ISSEND(send_flush_interpol(icpu),1,new_mpi_three_realdp_flush,&
+                & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(send_flush_id,hash_dict)
+           send_flush_interpol(icpu)%nflush=0
+        endif
+     endif
   end do
   
     ! CHECK-IN CHECK-OUT
@@ -1710,6 +1772,7 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
   mail_counter=0
 
   do icpu=1,ncpu
+     send_flush_interpol(icpu)%nflush=0
      send_flush_mg(icpu)%nflush=0
      send_flush_flag(icpu)%nflush=0
      send_flush_hydro(icpu)%nflush=0
@@ -1762,6 +1825,9 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
   ! Operations of type "mg"
   if(cache_operation.EQ.operation_mg)cache_operation_type=operation_type_mg
 
+  ! Operations of type "interpol"
+  if(cache_operation.EQ.operation_interpol)cache_operation_type=operation_type_interpol
+
   ! Post the first RECV for request
   call MPI_IRECV(recv_request,1,new_mpi_request,&
        & MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,request_id,info)
@@ -1785,6 +1851,10 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
   endif
   if(cache_operation_type.EQ.operation_type_mg)then
      call MPI_IRECV(recv_flush_mg,1,new_mpi_twin_realdp_flush,&
+          & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
+  endif
+  if(cache_operation_type.EQ.operation_type_interpol)then
+     call MPI_IRECV(recv_flush_interpol,1,new_mpi_three_realdp_flush,&
           & MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,flush_id,info)
   endif
 
