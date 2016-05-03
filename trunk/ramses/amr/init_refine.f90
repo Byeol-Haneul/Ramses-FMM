@@ -14,7 +14,7 @@ subroutine init_refine_basegrid
   !------------------------------------------
   ! This routine builds the coarse level grid
   !------------------------------------------
-  integer::ilevel,i,j,k,igrid,ipos,ioct,ilev,info
+  integer::ilevel,i,j,k,igrid,ioct,ilev,info
   integer(kind=8)::ikey
   integer(kind=8),dimension(1:nvector,1:nhilbert)::hk=0
   integer(kind=8),dimension(1:nvector,1:ndim)::ix=0
@@ -169,6 +169,7 @@ subroutine init_refine_restart
   integer(kind=8),dimension(1:nhilbert,1:nlevelmax)::key_ref
   integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key,zero_key
   integer,dimension(1:nlevelmax)::n_same,npatch
+  integer(kind=8)::ipos
 
   integer,dimension(1:ndim)::ckey
   logical,dimension(1:twotondim)::refined
@@ -220,10 +221,12 @@ subroutine init_refine_restart
            open(unit=ilun,file=file_amr,access="stream"&
                 & ,action="read",form='unformatted')
            do i=levelmin_file,ilevel-1
-              read(ilun,POS=13+4*(i-levelmin_file))noct_tmp
+              ipos=13+4*(i-levelmin_file)
+              read(ilun,POS=ipos)noct_tmp
               noct_skip(icpu)=noct_skip(icpu)+noct_tmp
            end do
-           read(ilun,POS=13+4*(ilevel-levelmin_file))noct_file(icpu)
+           ipos=13+4*(ilevel-levelmin_file)
+           read(ilun,POS=ipos)noct_file(icpu)
            if(icpu>1)then
               noct_cum(icpu)=noct_cum(icpu-1)+noct_file(icpu)
            else
@@ -306,10 +309,13 @@ subroutine init_refine_restart
         do i=istart,iend
 
            ! Read values from files
-           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1))ckey
-           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim)refined
+           ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)
+           read(10,POS=ipos)ckey
+           ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim
+           read(10,POS=ipos)refined
            if(hydro)then
-              read(11,POS=iskip_hydro+(8*twotondim*nvar)*(i-1))uold
+              ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
+              read(11,POS=ipos)uold
            endif
            
            ! Create new oct in memory

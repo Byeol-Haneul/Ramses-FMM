@@ -20,6 +20,7 @@ program amr2map
   integer::ix,iy,iz,ndom,impi,bit_length,maxdom
   integer::iskip_amr,iskip_hydro,noct_skip,noct_file,noct_tmp
   integer,dimension(1:8)::idom,jdom,kdom,cpu_min,cpu_max
+  integer(kind=8)::ipos
 
   real(KIND=8)::dxline,weight
   real(KIND=8)::xmin=0,xmax=1,ymin=0,ymax=1,zmin=0,zmax=1
@@ -158,10 +159,12 @@ program amr2map
         noct_skip=0
         open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
         do i=levelmin,ilevel-1
-           read(10,POS=13+4*(i-levelmin))noct_tmp
+           ipos=13+4*(i-levelmin)
+           read(10,POS=ipos)noct_tmp
            noct_skip=noct_skip+noct_tmp
         end do
-        read(10,POS=13+4*(ilevel-levelmin))noct_file
+        ipos=13+4*(ilevel-levelmin)
+        read(10,POS=ipos)noct_file
         iskip_amr=13+4*(nlevelmax-levelmin+1)+(4*ndim+4*twotondim)*noct_skip
 
         ! Prepare reading the HYDRO file
@@ -173,9 +176,12 @@ program amr2map
         do i=1,noct_file
 
            ! Read values from files
-           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1))ckey
-           read(10,POS=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim)refined
-           read(11,POS=iskip_hydro+(8*twotondim*nvar)*(i-1))uold
+           ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)
+           read(10,POS=ipos)ckey
+           ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim
+           read(10,POS=ipos)refined
+           ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
+           read(11,POS=ipos)uold
 
            ! Loop over 2**ndim cells
            do ind=1,twotondim
