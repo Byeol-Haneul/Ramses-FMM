@@ -202,7 +202,7 @@ subroutine input_params(filename,ncpu_file,levelmin_file,nlevelmax_file)
   use pm_commons
   implicit none
   character(LEN=80)::filename
-  integer::ncpu_file,levelmin_file,nlevelmax_file
+  integer::ncpu_file,levelmin_file,nlevelmax_file,i
   !-----------------------------------
   ! Read run parameters from file.
   ! Note that ncpu, levelmin and nlevelmax
@@ -252,6 +252,21 @@ subroutine input_params(filename,ncpu_file,levelmin_file,nlevelmax_file)
      endif
      call clean_stop
   endif
+  ! Compute movie frame number if applicable
+  if(imovout>0) then
+     do i=2,imovout
+        if(aendmov>0)then
+           if(aexp>amovout(i-1).and.aexp<amovout(i)) then
+              imov=i
+           endif
+        else
+           if(t>tmovout(i-1).and.t<tmovout(i)) then
+              imov=i
+           endif
+        endif
+     enddo
+  endif
+
 end subroutine input_params
 !#########################################################################
 !#########################################################################
