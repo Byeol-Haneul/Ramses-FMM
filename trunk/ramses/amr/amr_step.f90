@@ -88,6 +88,10 @@ recursive subroutine amr_step(ilevel,icount)
      ! Compute gravitational acceleration
      call force_fine(ilevel,icount)
 
+     ! Perform second kick for particles
+                               call timer('particles','start')
+     call kick_drift_part(ilevel,action_kick_only)
+
      ! Add gravity source term with half time step and new force
      if(hydro)then
                                call timer('poisson - synchro','start')
@@ -162,6 +166,12 @@ recursive subroutine amr_step(ilevel,icount)
   !----------------------------
                                call timer('cooling','start')
   if(cooling)call cooling_fine(ilevel)
+
+  !-------------------------------------------
+  ! Perform first kick and drift for particles
+  !-------------------------------------------
+                               call timer('particles','start')
+  call kick_drift_part(ilevel,action_kick_drift)
 
   !-----------------------
   ! Compute refinement map

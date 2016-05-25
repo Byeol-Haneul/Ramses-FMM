@@ -896,11 +896,13 @@ subroutine check_mail(comm_id,hash_dict)
                     reply_interpol(grid_cpu)%lev(i)=grid(ipos)%lev
                     reply_interpol(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
                     if(cache_operation.EQ.operation_kick)then
+                       do ind=1,twotondim
 #ifdef GRAV
                           reply_interpol(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%f(ind,1)
                           reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grid(ipos)%f(ind,2)
                           reply_interpol(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
 #endif
+                       end do
                     else
                        do ind=1,twotondim
 #ifdef GRAV
