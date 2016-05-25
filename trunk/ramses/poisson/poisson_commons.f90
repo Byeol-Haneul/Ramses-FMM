@@ -3,9 +3,6 @@ module poisson_commons
   use hash
   use poisson_parameters
 
-  ! Multigrid lookup table for amr -> mg index mapping
-  integer, allocatable, dimension(:) :: lookup_mg   ! Lookup table
-
   ! Minimum MG level
   integer :: levelmin_mg
 

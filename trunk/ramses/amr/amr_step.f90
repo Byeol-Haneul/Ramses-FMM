@@ -51,11 +51,10 @@ recursive subroutine amr_step(ilevel,icount)
   ! Poisson source term
   !--------------------
   if(poisson)then
+     if(ilevel==levelmin.or.icount>1)then
                                call timer('poisson - rho','start')
-     ! Save old potential for time-extrapolation at level boundaries
-     call save_phi_old(ilevel)
-     ! Compute total mass density at level ilevel
-     call rho_fine(ilevel,icount)
+        call rho_fine(ilevel)
+     endif
   endif
 
   !---------------
@@ -70,8 +69,10 @@ recursive subroutine amr_step(ilevel,icount)
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
 
-                               call timer('poisson - solver','start')
      ! Compute gravitational potential
+                               call timer('poisson - solver','start')
+     ! Save old potential for time-extrapolation at level boundaries
+     call save_phi_old(ilevel)
      if(ilevel > levelmin)then
         if(ilevel >= cg_levelmin) then
            call phi_fine_cg(ilevel,icount)
@@ -81,7 +82,6 @@ recursive subroutine amr_step(ilevel,icount)
      else
         call multigrid(levelmin,icount)
      end if
-
      ! Initial old potential
      if (nstep==0)call save_phi_old(ilevel)
 

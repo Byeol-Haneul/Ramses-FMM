@@ -473,7 +473,19 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
 
               ! Operations of type "flag"
               if(cache_operation_type.EQ.operation_type_flag)then
-                 grid(ichild)%flag1(1:twotondim)=response_flag%int4(1:twotondim,i)
+
+                 if(cache_operation.EQ.operation_split)then
+                    do ind=1,twotondim
+                       if(response_flag%int4(ind,i)==1)then
+                          grid(ichild)%refined(ind)=.true.
+                       else
+                          grid(ichild)%refined(ind)=.false.
+                       end if
+                    end do
+                 else
+                    grid(ichild)%flag1(1:twotondim)=response_flag%int4(1:twotondim,i)
+                 endif
+
               endif
 
               ! Operation of type "hydro"
@@ -550,13 +562,23 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
               
               ! Operations of type "interpol"
               if(cache_operation_type.EQ.operation_type_interpol)then
-                 do ind=1,twotondim
+                 if(cache_operation.EQ.operation_kick)then
+                    do ind=1,twotondim
 #ifdef GRAV
-                    grid(ichild)%phi(ind)=response_interpol%realdp_phi(ind,i)
-                    grid(ichild)%phi_old(ind)=response_interpol%realdp_phi_old(ind,i)
-                    grid(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
+                       grid(ichild)%f(ind,1)=response_interpol%realdp_phi(ind,i)
+                       grid(ichild)%f(ind,2)=response_interpol%realdp_phi_old(ind,i)
+                       grid(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
 #endif
-                 end do
+                    end do
+                 else
+                    do ind=1,twotondim
+#ifdef GRAV
+                       grid(ichild)%phi(ind)=response_interpol%realdp_phi(ind,i)
+                       grid(ichild)%phi_old(ind)=response_interpol%realdp_phi_old(ind,i)
+                       grid(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
+#endif
+                    end do
+                 endif
               endif
               
               ! If we also have a flush cache...
@@ -773,9 +795,20 @@ subroutine check_mail(comm_id,hash_dict)
                  if(cache_operation_type.EQ.operation_type_flag)then
                     reply_flag(grid_cpu)%lev(i)=grid(ipos)%lev
                     reply_flag(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
-                    do ind=1,twotondim
-                       reply_flag(grid_cpu)%int4(ind,i)=grid(ipos)%flag1(ind)
-                    end do
+
+                    if(cache_operation.EQ.operation_split)then
+                       do ind=1,twotondim
+                          if(grid(ipos)%refined(ind))then
+                             reply_flag(grid_cpu)%int4(ind,i)=1
+                          else
+                             reply_flag(grid_cpu)%int4(ind,i)=0
+                          endif
+                       end do
+                    else
+                       do ind=1,twotondim
+                          reply_flag(grid_cpu)%int4(ind,i)=grid(ipos)%flag1(ind)
+                       end do
+                    endif
                  endif
                  
                  ! Reply of type hydro
@@ -862,13 +895,21 @@ subroutine check_mail(comm_id,hash_dict)
                  if(cache_operation_type.EQ.operation_type_interpol)then
                     reply_interpol(grid_cpu)%lev(i)=grid(ipos)%lev
                     reply_interpol(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
-                    do ind=1,twotondim
+                    if(cache_operation.EQ.operation_kick)then
 #ifdef GRAV
-                       reply_interpol(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
-                       reply_interpol(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%phi(ind)
-                       reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grid(ipos)%phi_old(ind)
+                          reply_interpol(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%f(ind,1)
+                          reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grid(ipos)%f(ind,2)
+                          reply_interpol(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
 #endif
-                    end do
+                    else
+                       do ind=1,twotondim
+#ifdef GRAV
+                          reply_interpol(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%phi(ind)
+                          reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grid(ipos)%phi_old(ind)
+                          reply_interpol(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
+#endif
+                       end do
+                    endif
                  endif
 
               end do
@@ -1802,6 +1843,7 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
   if(cache_operation.EQ.operation_initflag)cache_operation_type=operation_type_flag
   if(cache_operation.EQ.operation_smooth)cache_operation_type=operation_type_flag
   if(cache_operation.EQ.operation_derefine)cache_operation_type=operation_type_flag
+  if(cache_operation.EQ.operation_split)cache_operation_type=operation_type_flag
 
   ! Operations of type "hydro"
   if(cache_operation.EQ.operation_hydro)cache_operation_type=operation_type_hydro
@@ -1827,6 +1869,7 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
 
   ! Operations of type "interpol"
   if(cache_operation.EQ.operation_interpol)cache_operation_type=operation_type_interpol
+  if(cache_operation.EQ.operation_kick)cache_operation_type=operation_type_interpol
 
   ! Post the first RECV for request
   call MPI_IRECV(recv_request,1,new_mpi_request,&

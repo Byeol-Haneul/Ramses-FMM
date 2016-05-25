@@ -222,7 +222,6 @@ contains
           end if
        end do
 
-
        sdigit=0
        do idim = 1, ndim
           add_digit = 2 ** (ndim - idim)
@@ -320,54 +319,199 @@ contains
   !================================================================
   !================================================================
 
-  subroutine hilbert_for_particle(offset, nparts, initial_level, final_level)
-    use amr_parameters, only: nvector, boxlen, dp, ndim, nhilbert
-    use pm_commons,     only: part_hkey, current_state, xp
+!!$  subroutine hilbert_for_particle(offset, nparts, initial_level, final_level)
+!!$    use amr_parameters, only: nvector, boxlen, dp, ndim, nhilbert
+!!$    use pm_commons,     only: part_hkey, current_state, xp
+!!$    implicit none
+!!$
+!!$    integer, intent(in) :: initial_level, final_level
+!!$    integer, intent(in) :: offset, nparts
+!!$
+!!$    ! Description:
+!!$    ! This subroutine computes 3D hilbert keys for particles 
+!!$    ! It assumes that the particles are stored as contiguous 
+!!$    ! arrays in memory and that positions, 3-integer hilbert keys
+!!$    ! and next_state are allocated as particle-based quantities.
+!!$
+!!$    ! Iputs: 
+!!$    ! - Starting offset in particle arrays and number of particles
+!!$    !   to process (np)
+!!$    ! - Level of already computed hilbert key 
+!!$    ! - Desired level of hilbert key on exit
+!!$
+!!$    ! Example: 
+!!$    ! call hilbert_for_particle(0, npart_levelmin, nlevelmax-1, nlevelmax) 
+!!$    ! will compute the last 3 bits of the hilbert key for the
+!!$    ! levelmin particles (resulting in a total of 3 * nlevelmax bits)
+!!$
+!!$    ! Local variables
+!!$    integer :: ibit, ip, ind_part, idim, np, ioft
+!!$    integer(kind=8), dimension(1:nvector, 1:ndim) :: ix
+!!$    real(dp) :: ckey_factor
+!!$    
+!!$    ! Compute particle position to cartesian key factor
+!!$    ckey_factor = 2.0**final_level / dble(boxlen)
+!!$
+!!$    do ioft = offset, offset + nparts - 1, nvector
+!!$       np = min(nvector, offset + nparts - ioft)
+!!$
+!!$       ! compute cartesian keys
+!!$       do idim = 1, ndim
+!!$          do ip = 1, np
+!!$             ix(ip, idim) = floor(xp(ioft + ip, idim) * ckey_factor, kind=8)
+!!$          end do
+!!$       end do
+!!$
+!!$       ! Passing in array slices is ok (no copying) if the dummy argument has assumed shape and the interface is explicit!
+!!$       call hilbert_key(ix, part_hkey(ioft + 1: ioft + np, 1:nhilbert), current_state(ioft + 1: ioft + np), initial_level, final_level, np)
+!!$    end do
+!!$
+!!$  end subroutine hilbert_for_particle
+
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+
+  recursive subroutine sort_hilbert(head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
+    use amr_commons, only: boxlen, dp, ndim, twotondim, myid
+    use pm_commons,  only: workp, sortp, xp
     implicit none
 
-    integer, intent(in) :: initial_level, final_level
-    integer, intent(in) :: offset, nparts
+    integer, intent(in) :: ilevel, final_level
+    integer, intent(in) :: head_part, tail_part
+    integer, dimension(1:ndim), intent(in) :: ix_coarse
+    integer, intent(in) :: cstate_coarse
 
     ! Description:
-    ! This subroutine computes 3D hilbert keys for particles 
-    ! It assumes that the particles are stored as contiguous 
+    ! This subroutine sort particles along the Hilbert key at the resolution
+    ! set by final_level. It should be called first with ilevel=1
     ! arrays in memory and that positions, 3-integer hilbert keys
     ! and next_state are allocated as particle-based quantities.
 
     ! Iputs: 
-    ! - Starting offset in particle arrays and number of particles
-    !   to process (np)
-    ! - Level of already computed hilbert key 
-    ! - Desired level of hilbert key on exit
+    ! - Head_part and tail_part are head and tail of particle distribution to work on.
+    ! - Array sortp must be initialized with sortp(i)=i between head_part and tail_part.
+    ! - Cartesian key of coarse cell in which these particles are contained.
+    ! - State of the coarse cell for Hilbert ordering
+    ! - Current and final level
 
     ! Example: 
-    ! call hilbert_for_particle(0, npart_levelmin, nlevelmax-1, nlevelmax) 
-    ! will compute the last 3 bits of the hilbert key for the
-    ! levelmin particles (resulting in a total of 3 * nlevelmax bits)
+    ! ix=(/0,0,0/)
+    ! call sort_hilbert(1, npart, ix, 0, 1, nlevelmax) 
+    ! will sort all particles according to their Hilbert key at levelmax.
+    ! On output, array sortp is modified.
 
     ! Local variables
-    integer :: ibit, ip, ind_part, idim, np, ioft
-    integer(kind=8), dimension(1:nvector, 1:ndim) :: ix
+    integer :: ibit, ip, ind_part, idim, np, ioft, ipart, new_ipart
+    integer :: ckey_max, cstate_fine, ind_cart_part, head_fine, tail_fine
     real(dp) :: ckey_factor
-    
+    integer, dimension(1:ndim) :: ix_fine, ix_ref, ix_part
+    integer, dimension(0:twotondim-1,1:ndim) :: ix, ix_child
+    integer, dimension(0:twotondim-1) :: nstate, sdigit, ind, ind_cart, ind_hilbert
+    integer, dimension(0:twotondim-1) :: numb_part, offset
+
     ! Compute particle position to cartesian key factor
-    ckey_factor = 2.0**final_level / dble(boxlen)
+    ckey_max = 2**ilevel
+    ckey_factor = 2.0**ilevel / dble(boxlen)
 
-    do ioft = offset, offset + nparts - 1, nvector
-       np = min(nvector, offset + nparts - ioft)
-
-       ! compute cartesian keys
-       do idim = 1, ndim
-          do ip = 1, np
-             ix(ip, idim) = floor(xp(ioft + ip, idim) * ckey_factor, kind=8)
-          end do
-       end do
-
-       ! Passing in array slices is ok (no copying) if the dummy argument has assumed shape and the interface is explicit!
-       call hilbert_key(ix, part_hkey(ioft + 1: ioft + np, 1:nhilbert), current_state(ioft + 1: ioft + np), initial_level, final_level, np)
+    ! Initial Cartesian offset for fine cells
+    do idim = 1, ndim
+       ix_ref(idim) = ISHFT(ix_coarse(idim),1)
+    end do
+    
+    ! Compute the Hilbert index for fine cells
+    do ip = 0, twotondim-1
+       sdigit(ip) = ip
     end do
 
-  end subroutine hilbert_for_particle
+    ! Compute lookup index in state diagrams
+    do ip = 0, twotondim-1
+       ind(ip) = cstate_coarse * twotondim + sdigit(ip)
+    end do
+
+    ! Save next state
+    do ip = 0, twotondim-1
+       nstate(ip) = next_state_diagram_reverse(ind(ip))
+    end do
+
+    ! Add one integer key digit each
+    do idim = 1, ndim
+       do ip = 0, twotondim-1
+          ix(ip, idim) = one_digit_diagram(ind(ip), idim)
+       end do
+    end do
+
+    ! Compute Cartesian index for children cells
+    ind_cart = 0
+    do idim = 1, ndim
+       do ip = 0, twotondim-1
+          ix_child(ip, idim) = ix_ref(idim) + ix(ip, idim)
+          ind_cart(ip) = ind_cart(ip) + ix(ip, idim) * 2**(idim-1)
+       end do
+    end do
+
+    ! Compute mapping from Cartesian to Hilbert order
+    ind_hilbert = 0
+    do ip = 0, twotondim-1
+       ind_hilbert(ind_cart(ip))=ip
+    end do
+
+    ! Count particles per children cell
+    numb_part = 0
+    do ipart = head_part, tail_part
+       ind_part = sortp(ipart)
+       ind_cart_part = 0
+       do idim = 1,ndim
+          ix_part(idim) = int(xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
+          ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
+       end do
+       ip = ind_hilbert(ind_cart_part)
+       numb_part(ip) = numb_part(ip) + 1
+    end do
+    
+    offset = head_part-1
+    do ip = 1, twotondim-1
+       offset(ip) = offset(ip-1) + numb_part(ip-1)
+    end do
+
+    ! Compute new sortp array
+    numb_part = 0
+    do ipart = head_part, tail_part
+       ind_part = sortp(ipart)
+       ind_cart_part = 0
+       do idim = 1,ndim
+          ix_part(idim) = int(xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
+          ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
+       end do
+       ip = ind_hilbert(ind_cart_part)
+       numb_part(ip) = numb_part(ip) + 1
+       new_ipart = offset(ip) + numb_part(ip)
+       workp(new_ipart) = ind_part
+    end do
+    do ipart = head_part,tail_part
+       sortp(ipart) = workp(ipart)
+    end do
+
+    ! Recursive call
+    if(ilevel < final_level)then
+       do ip = 0, twotondim-1
+          if(numb_part(ip) > 0)then
+             head_fine = offset(ip) + 1
+             tail_fine = offset(ip) + numb_part(ip)
+             ix_fine(1:ndim) = ix_child(ip,1:ndim)
+             cstate_fine = nstate(ip)
+             call sort_hilbert(head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
+          endif
+       end do
+    endif
+
+  end subroutine sort_hilbert
+  
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
 
   function ge_keys(key_a, key_b)
     implicit none
@@ -472,6 +616,11 @@ contains
 #endif
   end function eq_keys
   
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+
   function refine_key(key_in,key_level)
     use amr_parameters, only: ndim, nhilbert
     implicit none
@@ -492,6 +641,11 @@ contains
     end do
     
   end function refine_key
+
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
 
   function coarsen_key(key_in,key_level)
     use amr_parameters, only: ndim, nhilbert

@@ -2,277 +2,247 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine kick_drift(ilevel) ! FORMERLY KNOWN AS MOVE_FINE
-  use pm_commons,      only: part_level_offset, xp, vp, ap, idp, nx, ny, nz, boxlen, npart, npartmax
-  use amr_parameters,  only: dp, ndim, tracer, hydro, static, verbose
-  use amr_commons,     only: ncpu, dtnew, myid
+subroutine kick_drift_part(ilevel,action_part)
+  use amr_commons
+  use pm_commons
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h' 
-#endif
-
-  integer, intent(in) :: ilevel
-  integer :: offset, nparts, idim, ipart, i, j, info
-  logical,dimension(1:ndim)::period
+  integer::ilevel
+  integer::action_part
+  !
+  !
+  real(dp),dimension(1:ndim),save::x,dd,dg
+  integer,dimension(1:ndim),save::ig,id
+  real(dp),dimension(1:twotondim),save::vol
+  integer,dimension(1:ndim,1:twotondim),save::ckey
+  integer,dimension(1:twotondim),save::igrid,icell
+  integer(kind=8),dimension(0:ndim),save::hash_nbor
+  integer::i,ipart,inbor,ind,idim
+  integer::parent_cell,get_parent_cell
+  real(kind=8)::dx_loc,vol_loc,dteff
+  real(dp),dimension(1:ndim),save::ff
+  logical::ok_level
   
-  ! TODO: make this nicer!
-  period(1)=(nx==1)
-#if NDIM>1
-  if(ndim>1)period(2)=(ny==1)
-#endif
-#if NDIM>2
-  if(ndim>2)period(3)=(nz==1)
-#endif
+  if(noct_tot(ilevel)==0)return
+  if(verbose)write(*,111)ilevel
 
-  if(verbose)write(*,'("Test: " (I2))')ilevel 
-  
-  offset = part_level_offset(ilevel)
-  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
-  
-  call compute_particle_acceleration(ilevel, tracer .and. hydro)
+  ! Mesh spacing in that level
+  dx_loc=boxlen/2**ilevel 
+  vol_loc=dx_loc**ndim
 
-     ! do i=1,npartmax
-     !    do j=1,npart
-     !       if (idp(j)==i)then
-     !          write(*,'(A,X,I8,3(X,F12.8),X,I2)'),"ap:",i,ap(j,:), ilevel
-     !       end if
-     !    end do
-     !    call MPI_BARRIER(MPI_COMM_WORLD,info)
-     ! end do
-  
-  ! Accelerate and move all parts 
-  do idim = 1, ndim
+  ! Open read-only cache
+  call open_cache(operation_kick,domain_decompos_amr)
 
-     ! Update velocity     
-     if(static .or. tracer)then
-        do ipart = offset + 1, offset + nparts 
-           vp(ipart, idim) = ap(ipart, idim)
-        end do
-     else
-        do ipart = offset + 1, offset + nparts 
-           vp(ipart, idim) = vp(ipart, idim) &
-                + ap(ipart, idim) * 0.5D0 * dtnew(ilevel)
-        end do
-     end if
-
-     ! Update position
-     if(.not. static)then
-        do ipart = offset + 1, offset + nparts 
-           xp(ipart, idim) = xp(ipart, idim) &
-                + vp(ipart, idim) * dtnew(ilevel)
-        end do
-     end if
-
-     ! Take care of boundary conditions
-     ! TODO: non-periodic boundaries!!
-     do ipart = offset + 1, offset + nparts
-        if (xp(ipart, idim) > boxlen)then
-           xp(ipart, idim) = xp(ipart, idim) - boxlen
-        end if
-        if(xp(ipart, idim) < 0.d0)then
-           xp(ipart, idim) = xp(ipart, idim) + boxlen
-        end if
+  ! Loop over particles
+  do ipart=headp(ilevel),tailp(ilevel)
+     
+     ! Rescale particle position at level ilevel
+     do idim=1,ndim
+        x(idim)=xp(ipart,idim)/dx_loc
      end do
-  end do
-end subroutine kick_drift
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine second_kick(ilevel) !FORMERLY KNOWN AS SYNCHRO FINE
-  use pm_commons,      only: part_level_offset, xp, vp, ap, levelp, idp
-  use amr_parameters,  only: dp, nvector, ndim, tracer, hydro, static, twotondim, poisson, verbose
-  use hydro_commons,   only: uold
-  use poisson_commons, only: f
-  use amr_commons,     only: dtnew, dtold, myid, levelmin, nlevelmax
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h' 
-  integer :: info
+     
+     ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
+     do idim=1,ndim
+        dd(idim)=x(idim)+0.5D0
+        id(idim)=dd(idim)
+        dd(idim)=dd(idim)-id(idim)
+        dg(idim)=1.0D0-dd(idim)
+        ig(idim)=id(idim)-1
+     end do
+     
+     ! Periodic boundary conditions
+     do idim=1,ndim
+        if(ig(idim)<0)ig(idim)=ckey_max(ilevel+1)-1
+        if(id(idim)==ckey_max(ilevel+1))id(idim)=0
+     enddo
+     
+     ! Compute cells Cartesian key
+#if NDIM==1
+     ckey(1,1)=ig(1)
+     ckey(1,2)=id(1)
 #endif
-
-
-
-  integer, intent(in) :: ilevel
-
-
-
-  real(dp), dimension(1:nvector),              save :: dteff
-  integer :: offset, nparts, ioft, ind, idim, ip, np
-
-  if(verbose)write(*,'("Entering second_kick, level " I2)')ilevel 
-  
-  offset = part_level_offset(ilevel)
-  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
-
-  call compute_particle_acceleration(ilevel, tracer .and. hydro)
-
-  ! Compute individual time steps
-  do ioft = offset, offset + nparts - 1, nvector
-     np = min(nvector, offset + nparts - ioft)
-
-     do ip = 1, np
-        if(levelp(ioft + ip) >= ilevel)then
-           dteff(ip) = dtnew(levelp(ioft + ip))
+#if NDIM==2
+     ckey(1:2,1)=(/ig(1),ig(2)/)
+     ckey(1:2,2)=(/id(1),ig(2)/)
+     ckey(1:2,3)=(/ig(1),id(2)/)
+     ckey(1:2,4)=(/id(1),id(2)/)
+#endif
+#if NDIM==3
+     ckey(1:3,1)=(/ig(1),ig(2),ig(3)/)
+     ckey(1:3,2)=(/id(1),ig(2),ig(3)/)
+     ckey(1:3,3)=(/ig(1),id(2),ig(3)/)
+     ckey(1:3,4)=(/id(1),id(2),ig(3)/)
+     ckey(1:3,5)=(/ig(1),ig(2),id(3)/)
+     ckey(1:3,6)=(/id(1),ig(2),id(3)/)
+     ckey(1:3,7)=(/ig(1),id(2),id(3)/)
+     ckey(1:3,8)=(/id(1),id(2),id(3)/)
+#endif
+     
+     ! Get parent cell at level ilevel using read-only cache
+     ok_level=.true.
+     igrid=0; icell=0
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        parent_cell=get_parent_cell(hash_nbor,grid_dict,.false.,.true.)
+        if(parent_cell>0)then
+           igrid(ind)=(parent_cell-1)/twotondim+1
+           icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
+           call lock_cache(igrid(ind))
         else
-           dteff(ip) = dtold(levelp(ioft + ip))
+           ok_level=.false.
+           exit
+        end if
+     end do
+     do ind=1,twotondim
+        call unlock_cache(igrid(ind))
+     end do
+
+     ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
+     if(.not. ok_level)then
+
+        ! Rescale particle position at level ilevel
+        do idim=1,ndim
+           x(idim)=x(idim)/2.0d0
+        end do
+        
+        ! CIC at level ilevel-1 (dd: right cloud boundary; dg: left cloud boundary)
+        do idim=1,ndim
+           dd(idim)=x(idim)+0.5D0
+           id(idim)=dd(idim)
+           dd(idim)=dd(idim)-id(idim)
+           dg(idim)=1.0D0-dd(idim)
+           ig(idim)=id(idim)-1
+        end do
+        
+        ! Periodic boundary conditions
+        do idim=1,ndim
+           if(ig(idim)<0)ig(idim)=ckey_max(ilevel)-1
+           if(id(idim)==ckey_max(ilevel))id(idim)=0
+        enddo
+        
+        ! Compute cells Cartesian key
+#if NDIM==1
+        ckey(1,1)=ig(1)
+        ckey(1,2)=id(1)
+#endif
+#if NDIM==2
+        ckey(1:2,1)=(/ig(1),ig(2)/)
+        ckey(1:2,2)=(/id(1),ig(2)/)
+        ckey(1:2,3)=(/ig(1),id(2)/)
+        ckey(1:2,4)=(/id(1),id(2)/)
+#endif
+#if NDIM==3
+        ckey(1:3,1)=(/ig(1),ig(2),ig(3)/)
+        ckey(1:3,2)=(/id(1),ig(2),ig(3)/)
+        ckey(1:3,3)=(/ig(1),id(2),ig(3)/)
+        ckey(1:3,4)=(/id(1),id(2),ig(3)/)
+        ckey(1:3,5)=(/ig(1),ig(2),id(3)/)
+        ckey(1:3,6)=(/id(1),ig(2),id(3)/)
+        ckey(1:3,7)=(/ig(1),id(2),id(3)/)
+        ckey(1:3,8)=(/id(1),id(2),id(3)/)
+#endif
+        
+        ! Get parent cell at level ilevel-1 using read-only cache
+        ok_level=.true.
+        hash_nbor(0)=ilevel
+        igrid=0; icell=0
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey(1:ndim,ind)
+           parent_cell=get_parent_cell(hash_nbor,grid_dict,.false.,.true.)
+           if(parent_cell>0)then
+              igrid(ind)=(parent_cell-1)/twotondim+1
+              icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
+              call lock_cache(igrid(ind))
+           else
+              ok_level=.false.
+              exit
+           end if
+        end do
+        do ind=1,twotondim
+           call unlock_cache(igrid(ind))
+        end do
+     end if
+        
+     ! Compute cloud volumes
+#if NDIM==1
+     vol(1)=dg(1)
+     vol(2)=dd(1)
+#endif
+#if NDIM==2
+     vol(1)=dg(1)*dg(2)
+     vol(2)=dd(1)*dg(2)
+     vol(3)=dg(1)*dd(2)
+     vol(4)=dd(1)*dd(2)
+#endif
+#if NDIM==3
+     vol(1)=dg(1)*dg(2)*dg(3)
+     vol(2)=dd(1)*dg(2)*dg(3)
+     vol(3)=dg(1)*dd(2)*dg(3)
+     vol(4)=dd(1)*dd(2)*dg(3)
+     vol(5)=dg(1)*dg(2)*dd(3)
+     vol(6)=dd(1)*dg(2)*dd(3)
+     vol(7)=dg(1)*dd(2)*dd(3)
+     vol(8)=dd(1)*dd(2)*dd(3)
+#endif
+     
+     ! Gather 3-force
+     ff(1:ndim)=0.0
+     if(ok_level)then
+        do ind=1,twotondim
+#ifdef GRAV
+           ff(1:ndim)=ff(1:ndim)+grid(igrid(ind))%f(icell(ind),1:ndim)*vol(ind)
+#endif
+        end do
+     endif
+
+     ! Perform kick, or drift, or both
+     if(action_part==action_kick_drift)then
+
+        ! Update velocity
+        vp(ipart,1:ndim)=vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dtnew(ilevel)
+        
+        ! Update position
+        xp(ipart,1:ndim)=xp(ipart,1:ndim)+vp(ipart,1:ndim)*dtnew(ilevel)
+
+     else if(action_part.EQ.action_kick_only)then
+
+        ! Compute proper time step for second kick
+        if (levelp(ipart)>=ilevel)then
+           dteff=dtnew(levelp(ipart))
+        else
+           dteff=dtold(levelp(ipart))
         endif
-     end do
 
-     ! Update particles level
-     do ip = 1, np
-        levelp(ioft + ip) = ilevel
-     end do
-     
-     do idim = 1, ndim
-        do ip = 1, np
-           vp(ioft + ip, idim) = vp(ioft + ip, idim) &
-                + ap(ioft + ip, idim) * 0.5D0 * dteff(ip)
-        end do
-     end do
+        ! Update level
+        levelp(ipart)=ilevel
+
+        ! Update velocity
+        vp(ipart,1:ndim)=vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+        
+     endif
+
   end do
-
-end subroutine second_kick
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine compute_particle_acceleration(ilevel, read_gas_velocity)
-  use pm_commons,      only: part_level_offset, xp, ap, idp, &
-                             part_hkey, npart
-  use amr_parameters,  only: dp, nvector, ndim, twotondim, poisson, verbose
-  use hydro_commons,   only: uold
-  use poisson_commons, only: f
-  use amr_commons,     only: dtnew, ncpu, myid, t, son
-#ifndef WITHOUTMPI
-  use particle_communication, only: build_communicator, part_data_to_domain_dp, domain_data_to_part_dp
-#endif
-  use hilbert,     only: hilbert_for_particle 
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h' 
-  integer :: info
-#endif
-
-
-
-
-  integer, intent(in) :: ilevel
-  logical, intent(in) :: read_gas_velocity
+  ! End loop over particles
   
-  real(dp), allocatable, dimension(:,:) :: xp_remote, ap_remote
-  integer,  dimension(1:ncpu, 1:4)       :: communicator
-  integer,  dimension(1:nvector, 1:twotondim), save :: cell_index
-  real(dp), dimension(1:nvector, 1:twotondim), save :: vol
-  real(dp), dimension(1:nvector, 1:ndim), save :: xpart
-  
-  integer :: offset, nparts, ioft, np, ip, ind, idim, ipart, local_oft, npart_recv, nparts_local
+  call close_cache(grid_dict)
 
-  ! TODO: better naming (np, nparts, npart)
-  offset = part_level_offset(ilevel)
-  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
-
-  if(verbose)write(*,'("Entering compute_particle_acceleration, level " I2)')ilevel 
-
- ! do ipart = offset+1, offset+nparts
- !    if (idp(ipart)==1)then
- !       print*,'found 1', myid, ipart, xp(ipart,1), part_hkey(ipart,0), ilevel, offset, nparts
- !       print*,'found 1 coords', myid, ipart, xp(ipart,1:3)
- !    end if
- ! end do
-  !call compute_particle_histogram(offset, nparts)
-!  call hilbert_for_particle(offset, nparts, 0, ilevel) 
-!  call check_sorted(offset,nparts)
-
-#ifndef WITHOUTMPI
-  call build_communicator(communicator, npart_recv, &
-       nparts, nparts_local, local_oft, &
-       part_hkey(offset + 1 : offset + nparts, 2), &
-       part_hkey(offset + 1 : offset + nparts, 1), &
-       part_hkey(offset + 1 : offset + nparts, 0), & 
-       ilevel)
-
-  allocate(xp_remote(1:npart_recv, 1:3), ap_remote(1:npart_recv, 1:3))
-  call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 1), xp_remote(:, 1))
-  call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 2), xp_remote(:, 2))
-  call part_data_to_domain_dp(communicator, xp(offset + 1 : offset + nparts, 3), xp_remote(:, 3))
-
-  
- ! Deal with remote particles
-  do ioft = 0, npart_recv - 1, nvector
-     np = min(nvector, npart_recv - ioft)
-
-     ! TODO:avoid this copy by changing cic such that 3 arrays (xcoords, ycoords, zcoords) are passed in instead of 1 2d array
-     do idim = 1, ndim
-        xpart(1:np, idim) = xp_remote(ioft + 1: ioft + np, idim)
+  ! Periodic boundary conditions
+  if(action_part==action_kick_drift)then
+     do ipart=headp(ilevel),tailp(ilevel)
+        do idim=1,ndim
+           if(xp(ipart,idim)>boxlen)then
+              xp(ipart,idim)=xp(ipart,idim)-boxlen
+           end if
+           if(xp(ipart,idim)<0.d0)then
+              xp(ipart,idim)=xp(ipart,idim)+boxlen
+           end if
+        end do
      end do
+  end if
 
-     call cic(xpart, cell_index, vol, np, ilevel, 2)
+111 format('   Entering kick_and_drift_part for level',i2)
 
-     ap_remote(ioft + 1: ioft + np, 1: ndim) = 0.0D0
-     if(read_gas_velocity)then
-        do idim = 1, ndim
-           do ind = 1, twotondim              
-              do ip = 1, np
-                 ap_remote(ioft + ip, idim) = ap_remote(ioft + ip, idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
-              end do
-           end do
-        end do
-     endif
-     
-     if(poisson)then
-        do idim = 1,ndim
-           do ind = 1,twotondim
-              do ip = 1,np
-                 ap_remote(ioft + ip, idim) = ap_remote(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-              end do
-           end do
-        end do
-     endif
-  end do
-  call domain_data_to_part_dp(communicator, ap_remote(:,3), ap(offset + 1 : offset + nparts, 3))
-  call domain_data_to_part_dp(communicator, ap_remote(:,2), ap(offset + 1 : offset + nparts, 2))
-  call domain_data_to_part_dp(communicator, ap_remote(:,1), ap(offset + 1 : offset + nparts, 1))
-  deallocate(xp_remote, ap_remote)
-
-#endif
-  ! Deal with local particles
-  do ioft = offset + local_oft, offset + local_oft + nparts_local - 1, nvector
-     np = min(nvector, offset + local_oft + nparts_local - ioft)
-     do idim = 1, ndim
-        xpart(1:np, idim) = xp(ioft + 1: ioft + np, idim)
-     end do
-     call cic(xpart, cell_index, vol, np, ilevel, 2)
-     
-     ! TODO: get rid of big ap array!!!!!!!!
-     ap(ioft + 1: ioft + np, 1: ndim) = 0.0D0
-     if(read_gas_velocity)then
-        do idim = 1, ndim
-           do ind = 1, twotondim              
-              do ip = 1, np
-                 ap(ioft + ip, idim) = ap(ioft + ip, idim) + uold(cell_index(ip,ind),idim+1) * vol(ip,ind)
-              end do
-           end do
-        end do
-     endif
-     
-     if(poisson)then
-        do idim = 1,ndim
-           do ind = 1,twotondim
-              do ip = 1,np
-                  ap(ioft + ip, idim) =  ap(ioft + ip, idim) + f(cell_index(ip,ind),idim) * vol(ip,ind)
-               end do
-           end do
-        end do
-     endif
-  end do
-
-#ifdef OUTPUT_PARTICLE_POTENTIAL
-  ! Just a reminder that this option is not built in yet
-  print*,"stopping because of OUTPUT_PARTICLE_POTENTIAL"
-  call clean_stop
-#endif
-end subroutine compute_particle_acceleration
+end subroutine kick_drift_part
 !#########################################################################
 !#########################################################################
 !#########################################################################

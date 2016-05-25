@@ -19,13 +19,14 @@ subroutine adaptive_loop
   call init_time               ! Initialize time variables
   if(hydro)call init_hydro     ! Initialize hydro variables
   if(poisson)call init_poisson ! Initialize poisson variables
-  if(pic)call init_part        ! Initialize particle variables
+  if(pic)call init_part_file   ! Initialize particle variables from files
   if(nrestart==0)then
      call init_refine_basegrid ! Build initial coarsest grid
      call init_refine_adaptive ! Build initial adaptive grid
   else
      call init_refine_restart  ! Build AMR grid from restart file
   endif
+  if(pic)call init_part_grid   ! Initialize particle from the AMR grid
 
 #ifndef WITHOUTMPI
   tt2=MPI_WTIME(info)

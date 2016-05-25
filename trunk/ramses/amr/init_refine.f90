@@ -90,6 +90,7 @@ subroutine init_refine_basegrid
 #endif
 
   if(hydro)call init_flow_fine(levelmin)
+  if(pic)call rho_fine(levelmin)
   
 end subroutine init_refine_basegrid
 !################################################################
@@ -121,6 +122,8 @@ subroutine init_refine_adaptive
            call upload_fine(ilevel)
         endif
      end do
+
+     call rho_fine(levelmin)
 
      do ilevel=nlevelmax,levelmin,-1
         call flag_fine(ilevel,2)

@@ -104,6 +104,7 @@ module amr_commons
   integer::operation_phi=9,operation_rho=10,operation_multipole=11,operation_cg=12
   integer::operation_build_mg=13,operation_restrict_mask=14,operation_mg=15
   integer::operation_restrict_res=16,operation_scan=17,operation_interpol=18
+  integer::operation_split=19,operation_kick=20
   integer::cache_operation_type
   integer::operation_type_flag=1,operation_type_hydro=2,operation_type_poisson=3  
   integer::operation_type_refine=4,operation_type_mg=5,operation_type_interpol=6

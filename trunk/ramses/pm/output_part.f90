@@ -22,80 +22,49 @@ subroutine backup_part(filename)
   open(unit=ilun,file=TRIM(fileloc),form='unformatted')
   rewind(ilun)
   ! Write header
-  write(ilun)ncpu
   write(ilun)ndim
   write(ilun)npart
-  write(ilun)dummyint
-  write(ilun)dummyint
-  write(ilun)dummyint
-  write(ilun)dummyint
-  write(ilun)dummyint
   ! Write position
   allocate(xdp(1:npart))
   do idim=1,ndim
-     ipart=0
      do i=1,npart
-        if(levelp(i)>0)then
-           ipart=ipart+1
-           xdp(ipart)=xp(i,idim)
-         end if
+        xdp(i)=xp(i,idim)
      end do
      write(ilun)xdp
   end do
   ! Write velocity
   do idim=1,ndim
-     ipart=0
      do i=1,npart
-        if(levelp(i)>0)then
-           ipart=ipart+1
-           xdp(ipart)=vp(i,idim)
-        end if
+        xdp(i)=vp(i,idim)
      end do
      write(ilun)xdp
   end do
   ! Write mass
-  ipart=0
   do i=1,npart
-     if(levelp(i)>0)then
-        ipart=ipart+1
-        xdp(ipart)=mp(i)
-     end if
+     xdp(i)=mp(i)
   end do
   write(ilun)xdp
   deallocate(xdp)
   ! Write identity
   allocate(ii8(1:npart))
-  ipart=0
   do i=1,npart
-     if(levelp(i)>0)then
-        ipart=ipart+1
-        ii8(ipart)=idp(i)
-     end if
+     ii8(i)=idp(i)
   end do
   write(ilun)ii8
   deallocate(ii8)
   ! Write level
   allocate(ll(1:npart))
-  ipart=0
   do i=1,npart
-     if(levelp(i)>0)then
-        ipart=ipart+1
-        ll(ipart)=levelp(i)
-     end if
+     ll(i)=levelp(i)
   end do
   write(ilun)ll
   deallocate(ll)
 
 #ifdef OUTPUT_PARTICLE_POTENTIAL
-  call stop
-  ! Write potential (added by AP)
+  ! Write potential (optional)
   allocate(xdp(1:npart))
-  ipart=0
-  do i=1, npart
-     if(levelp(i)>0) then
-        ipart=ipart+1
-        xdp(ipart)=ptcl_phi(i)
-     end if
+  do i=1,npart
+     xdp(i)=ptcl_phi(i)
   end do
   write(ilun)xdp
   deallocate(xdp)

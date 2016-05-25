@@ -90,7 +90,7 @@ subroutine force_fine(ilevel,icount)
 
 #ifndef WITHOUTMPI
      call MPI_ALLREDUCE(epot_loc,epot_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(rho_loc ,rho_all ,1,MPI_DOUBLE_PRECISION,MPI_MAX,MPI_COMM_WORLD,info)
+     call MPI_ALLREDUCE(rho_loc,rho_all,1,MPI_DOUBLE_PRECISION,MPI_MAX,MPI_COMM_WORLD,info)
      epot_loc=epot_all
      rho_loc=rho_all
 #endif

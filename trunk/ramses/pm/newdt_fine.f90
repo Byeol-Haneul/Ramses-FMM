@@ -1,3 +1,7 @@
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
 subroutine newdt_fine(ilevel)
   use pm_commons
   use amr_commons
@@ -27,8 +31,6 @@ subroutine newdt_fine(ilevel)
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
-  threepi2=3.0d0*ACOS(-1.0d0)**2
-
   ! Save old time step
   dtold(ilevel)=dtnew(ilevel)
 
@@ -37,6 +39,7 @@ subroutine newdt_fine(ilevel)
   if(poisson.and.gravity_type<=0)then
      fourpi=4.0d0*ACOS(-1.0d0)
      if(cosmo)fourpi=1.5d0*omega_m*aexp
+     threepi2=3.0d0*ACOS(-1.0d0)**2
      tff=sqrt(threepi2/8./fourpi/rho_max(ilevel))
      dtnew(ilevel)=MIN(dtnew(ilevel),courant_factor*tff)
   end if
@@ -44,6 +47,10 @@ subroutine newdt_fine(ilevel)
      dtnew(ilevel)=MIN(dtnew(ilevel),0.1/hexp)
   end if
 
+  ! Particle-based Courant condition
+  if(pic)call newdt_part(ilevel)
+
+  ! Hydro-based Courant condition
   if(hydro)call courant_fine(ilevel)
   
 111 format('   Entering newdt_fine for level ',I2)
@@ -53,32 +60,30 @@ end subroutine newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
-#ifdef TOTO
-subroutine newdt_part(ilevel, dt_loc, ekin_loc)
-  use amr_commons, only: dp, icoarse_min, icoarse_max, boxlen, ndim
-  use pm_commons, only: vp, mp, part_level_offset
+subroutine newdt_part(ilevel)
+  use amr_commons
+  use pm_commons
   use hydro_commons, only: courant_factor
   implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
   integer      :: ilevel
-  real(kind=8) :: dt_loc, ekin_loc
-  ! TODO: add description here
   !
-  integer  :: ipart, idim, nx_loc, offset, nparts
-  real(dp) :: dx, dx_loc, scale, dtpart, v2max
+  real(kind=8) :: dt_loc, ekin_loc, dt_all, ekin_all
+  integer  :: ipart, idim, info
+  real(dp) :: dx_loc, dtpart, v2max
 
-  offset = part_level_offset(ilevel)
-  nparts = part_level_offset(ilevel + 1) - part_level_offset(ilevel)
-  
+  dt_all=dtnew(ilevel); dt_loc=dt_all
+  ekin_all=0.0; ekin_loc=0.0
+
   ! Compute cell spacing
-  dx = 0.5D0**ilevel
-  nx_loc = (icoarse_max - icoarse_min + 1)
-  scale = boxlen / dble(nx_loc)
-  dx_loc = dx * scale
+  dx_loc = boxlen/2**ilevel
 
   ! Compute minimum time step due to particle velocities
   v2max = 0.d0
   do idim = 1, ndim
-     do ipart = offset + 1, offset + nparts
+     do ipart = headp(ilevel), tailp(ilevel)
         v2max = MAX(v2max, vp(ipart, idim)**2)
      end do
   end do
@@ -88,15 +93,30 @@ subroutine newdt_part(ilevel, dt_loc, ekin_loc)
      dt_loc = MIN(dt_loc, dtpart)
   end if
 
-  ! Compute kinetic energy (WHY IS THIS ACTUALLY DONE HERE???)
+  ! Compute kinetic energy
   do idim = 1, ndim
-     do ipart = offset + 1, offset + nparts
+     do ipart = headp(ilevel), tailp(ilevel)
         ekin_loc = ekin_loc + 0.5D0 * mp(ipart) * vp(ipart, idim)**2
      end do
   end do
     
-end subroutine newdt_part
+  ! Reduction for time step and kinetic energy
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(ekin_loc,ekin_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
 #endif
+#ifdef WITHOUTMPI
+  dt_all=dt_loc
+  ekin_all=ekin_loc
+#endif
+  ekin_tot=ekin_tot+ekin_all
+  dtnew(ilevel)=MIN(dtnew(ilevel),dt_all)
+
+end subroutine newdt_part
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
 
 
 

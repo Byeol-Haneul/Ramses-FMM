@@ -280,7 +280,7 @@ subroutine cmp_residual_cg(ilevel,icount)
 
         ! Otherwise interpolate from coarser level
         else
-           ! Get 3**ndim neighbouring paremt cell using a read-only cache
+           ! Get 3**ndim neighbouring parent cell using a read-only cache
            call get_threetondim_nbor_parent_cell(hash_nbor,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
            call interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim

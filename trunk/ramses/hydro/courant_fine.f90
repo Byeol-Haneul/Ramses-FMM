@@ -63,7 +63,7 @@ subroutine courant_fine(ilevel)
            ! Compute total internal energy
            eint_loc=eint_loc+uu(ndim+2)*vol
            do ivar=1,ndim
-              eint_loc=eint_loc-0.5d0*uu(1+ivar)**2/uu(1)*vol
+              eint_loc=eint_loc-0.5d0*uu(1+ivar)**2/max(uu(1),smallr)*vol
            end do
 #if NENER>0
            do ivar=1,nener
@@ -163,7 +163,7 @@ subroutine check_cons(ilevel)
            ! Compute total internal energy
            eint_loc=eint_loc+uu(ndim+2)*vol
            do ivar=1,ndim
-              eint_loc=eint_loc-0.5d0*uu(1+ivar)**2/uu(1)*vol
+              eint_loc=eint_loc-0.5d0*uu(1+ivar)**2/max(uu(1),smallr)*vol
            end do
 #if NENER>0
            do ivar=1,nener
