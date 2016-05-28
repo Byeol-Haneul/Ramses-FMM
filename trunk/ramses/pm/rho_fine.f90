@@ -46,12 +46,20 @@ subroutine rho_fine(ilevel)
   !-------------------------------------------------------
   if(pic)then
      do i=ilevel,nlevelmax
+                               call timer('rho','start')
         call cic_part(i)
+                               call timer('particles - split','start')
         call split_part(i)
+                               call timer('rho','start')
      end do
-     do i=ilevel,nlevelmax
-        if(tailp(i).GE.headp(i))write(*,*)i,headp(i),tailp(i)
-     end do
+!!$     if(ilevel==levelmin)then
+!!$        do i=ilevel,nlevelmax
+!!$           if(tailp(i).GE.headp(i))then
+!!$              write(*,'("PE ",I4," Level ",I6," npart ",I6)')&
+!!$                   & myid,i,tailp(i)-headp(i)+1
+!!$           endif
+!!$        end do
+!!$     endif
   endif
 
   !--------------------------------------------------------------
@@ -406,6 +414,7 @@ subroutine cic_part(ilevel)
      end do
   endif
 
+                               call timer('particles - sort','start')
   ! Sort particle according to current level Hilbert key
   do i=headp(ilevel),tailp(nlevelmax)
      sortp(i)=i
@@ -413,6 +422,7 @@ subroutine cic_part(ilevel)
   ix=0
   call sort_hilbert(headp(ilevel),tailp(nlevelmax),ix,0,1,ilevel-1)
 
+                               call timer('rho','start')
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
   call open_cache(operation_rho,domain_decompos_amr)

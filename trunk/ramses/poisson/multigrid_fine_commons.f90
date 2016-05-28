@@ -168,7 +168,6 @@ subroutine multigrid(ilevel,icount)
         endif
      end do
      
-                               call timer('poisson - mg - res','start')
      ! Update fine residual
      if(fast_solver)then
         call cmp_residual_mg_fast(grid_dict,ilevel)

@@ -52,7 +52,7 @@ recursive subroutine amr_step(ilevel,icount)
   !--------------------
   if(poisson)then
      if(ilevel==levelmin.or.icount>1)then
-                               call timer('poisson - rho','start')
+                               call timer('rho','start')
         call rho_fine(ilevel)
      endif
   endif
@@ -62,17 +62,16 @@ recursive subroutine amr_step(ilevel,icount)
   !---------------
 #ifdef GRAV
   if(poisson)then
-
+                               call timer('poisson','start')
      ! Remove gravity source term with half time step and old force
      if(hydro)then
-                               call timer('poisson - synchro','start')
         call synchro_hydro_fine(ilevel,-0.5*dtnew(ilevel))
      endif
 
-     ! Compute gravitational potential
-                               call timer('poisson - solver','start')
      ! Save old potential for time-extrapolation at level boundaries
      call save_phi_old(ilevel)
+
+     ! Compute new gravitational potential
      if(ilevel > levelmin)then
         if(ilevel >= cg_levelmin) then
            call phi_fine_cg(ilevel,icount)
@@ -82,6 +81,7 @@ recursive subroutine amr_step(ilevel,icount)
      else
         call multigrid(levelmin,icount)
      end if
+
      ! Initial old potential
      if (nstep==0)call save_phi_old(ilevel)
 
@@ -89,12 +89,12 @@ recursive subroutine amr_step(ilevel,icount)
      call force_fine(ilevel,icount)
 
      ! Perform second kick for particles
-                               call timer('particles','start')
+                               call timer('particles - kickonly','start')
      call kick_drift_part(ilevel,action_kick_only)
 
      ! Add gravity source term with half time step and new force
      if(hydro)then
-                               call timer('poisson - synchro','start')
+                               call timer('poisson','start')
         call synchro_hydro_fine(ilevel,+0.5*dtnew(ilevel))
      end if
 
@@ -170,7 +170,7 @@ recursive subroutine amr_step(ilevel,icount)
   !-------------------------------------------
   ! Perform first kick and drift for particles
   !-------------------------------------------
-                               call timer('particles','start')
+                               call timer('particles - kickdrift','start')
   call kick_drift_part(ilevel,action_kick_drift)
 
   !-----------------------
@@ -182,6 +182,7 @@ recursive subroutine amr_step(ilevel,icount)
   !-------------------------------
   ! Update coarser level time-step
   !-------------------------------
+                               call timer('recursive call','start')
   if(ilevel>levelmin)then
      if(nsubcycle(ilevel-1)==1)dtnew(ilevel-1)=dtnew(ilevel)
      if(icount==2)dtnew(ilevel-1)=dtold(ilevel)+dtnew(ilevel)

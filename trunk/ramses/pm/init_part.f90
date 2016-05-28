@@ -135,7 +135,7 @@ subroutine init_part_file
         if(TRIM(initfile(levelmin)).NE.' ')then
            
            filename=TRIM(initfile(levelmin))//'/ic_part'
-           if(myid==1)write(*,*)' Opening file '//TRIM(filename)
+           if(myid==1)write(*,*)'Opening file '//TRIM(filename)
            open(10,file=filename,form='formatted')
 
            ! Figure out starting index for each cpu
@@ -149,7 +149,7 @@ subroutine init_part_file
            end do
 101        continue
            npart_tot=jpart
-           if(myid==1)write(*,*)' Found npart_tot=',npart_tot
+           if(myid==1)write(*,*)'Found npart_tot=',npart_tot
            do icpu=1,ncpu+1
               start_ind(icpu)=1+((icpu-1)*jpart)/ncpu
            end do
@@ -188,15 +188,12 @@ subroutine init_part_file
            
         end if
         npart=jpart_loc
-        if(myid==1)write(*,*)' Read npart=',npart
         
         ! Put all particles in levelmin
         headp=npart+1
         tailp=npart
         headp(levelmin)=1
         tailp(levelmin)=npart
-        
-        if(debug)write(*,*)'npart=',npart,'/',npart_tot
         
      case ('gadget')
         write(*,*) 'Gadget format not supported '

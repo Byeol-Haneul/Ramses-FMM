@@ -1,4 +1,4 @@
-subroutine backup_part(filename)
+subroutine output_part(filename)
   use amr_commons
   use pm_commons
   implicit none
@@ -72,5 +72,5 @@ subroutine backup_part(filename)
 
   close(ilun)
 
-end subroutine backup_part
+end subroutine output_part
 

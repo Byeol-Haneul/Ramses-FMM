@@ -84,11 +84,11 @@ subroutine dump_all
         filename=TRIM(filedir)//'grav.out'
         call output_poisson(filename)
      end if
-#ifdef TOTO
      if(pic)then
         filename=TRIM(filedir)//'part.out'
         call output_part(filename)
      end if
+#ifdef TOTO
      if (gadget_output) then
         filename=TRIM(filedir)//'gsnapshot_'//TRIM(nchar)
         call savegadget(filename)
@@ -392,7 +392,7 @@ subroutine output_header(filename)
   
   ! Write header information
   write(ilun,*)'Total number of particles'
-  write(ilun,*)npart
+  write(ilun,*)npart_tot
   
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
