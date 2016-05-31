@@ -214,6 +214,12 @@ subroutine init_part_file
 #endif
   if(myid==1)write(*,*)'mass minimum=',mp_min
 
+  ! Compute maximum number of particles in all processors
+  npart_max=npart
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(npart,npart_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+#endif
+
 end subroutine init_part_file
 
 !#########################################################################

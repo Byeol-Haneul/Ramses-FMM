@@ -45,7 +45,7 @@ subroutine force_fine(ilevel,icount)
            ! Scatter variables to main memory
            do idim=1,ndim
               do i=1,ngrid
-                 grid(igrid+i-1)%uold(ind,idim)=ff(i,idim)
+                 grid(igrid+i-1)%f(ind,idim)=ff(i,idim)
               end do
            end do
         end do

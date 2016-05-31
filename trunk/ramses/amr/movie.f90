@@ -309,14 +309,15 @@ subroutine output_frame()
 #if NDIM>2                 
                        dvol=dvol*dz_cell
 #endif
+
+#ifdef HYDRO
                        dens(ii,jj)=dens(ii,jj)+dvol*max(grid(igrid)%uold(ind,1),smallr)
-                       vol(ii,jj)=vol(ii,jj)+dvol
-                       
+                       vol(ii,jj)=vol(ii,jj)+dvol                       
                        data_frame(ii,jj,1)=data_frame(ii,jj,1)+dvol*max(grid(igrid)%uold(ind,1),smallr)**2
-                       
                        do kk=2,NVAR
                           if(movie_vars(kk).eq.1) data_frame(ii,jj,kk)=data_frame(ii,jj,kk)+dvol*grid(igrid)%uold(ind,kk)
                        end do
+#endif
                           
 #ifdef RT
                        if(rt) then
@@ -331,15 +332,16 @@ subroutine output_frame()
 #endif
 
                        if (movie_vars(0).eq.1)then
+#ifdef HYDRO
                           ! Get temperature
                           ekk=0.0d0
                           do idim=1,3
                              ekk=ekk+0.5*grid(igrid)%uold(ind,idim+1)**2/max(grid(igrid)%uold(ind,1),smallr)
                           enddo
                           temp=(gamma-1.0)*(grid(igrid)%uold(ind,ndim+2)-ekk) !pressure
-                          temp=max(temp/max(grid(igrid)%uold(ind,1),smallr),smallc**2)*scale_T2 !temperature in K
-                          
+                          temp=max(temp/max(grid(igrid)%uold(ind,1),smallr),smallc**2)*scale_T2 !temperature in K                          
                           data_frame(ii,jj,0)=data_frame(ii,jj,0)+dvol*max(grid(igrid)%uold(ind,1),smallr)*temp !mass weighted temperature
+#endif
                        end if
                           
 #ifdef SOLVERmhd

@@ -27,6 +27,14 @@ recursive subroutine amr_step(ilevel,icount)
      call load_balance(ilevel)
   endif
 
+  !------------------------------
+  ! Balance particles across cpus
+  !------------------------------
+  if(ilevel==levelmin)then
+                               call timer('particles','start')
+     call balance_part(ilevel)
+  endif
+
   !------------------------
   ! Output results to files
   !------------------------
@@ -54,10 +62,6 @@ recursive subroutine amr_step(ilevel,icount)
      if(ilevel==levelmin.or.icount>1)then
                                call timer('rho','start')
         call rho_fine(ilevel)
-        if(ilevel==levelmin)then
-                               call timer('part balance','start')
-           call balance_part(ilevel)
-        endif
      endif
   endif
 
@@ -93,7 +97,7 @@ recursive subroutine amr_step(ilevel,icount)
      call force_fine(ilevel,icount)
 
      ! Perform second kick for particles
-                               call timer('particles - kickonly','start')
+                               call timer('particles','start')
      call kick_drift_part(ilevel,action_kick_only)
 
      ! Add gravity source term with half time step and new force
@@ -174,7 +178,7 @@ recursive subroutine amr_step(ilevel,icount)
   !-------------------------------------------
   ! Perform first kick and drift for particles
   !-------------------------------------------
-                               call timer('particles - kickdrift','start')
+                               call timer('particles','start')
   call kick_drift_part(ilevel,action_kick_drift)
 
   !-----------------------

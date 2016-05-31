@@ -10,6 +10,8 @@ subroutine write_screen(ilevel)
   !
   integer::igrid,ilevel,ind
 
+#ifdef HYDRO
+
   if(ndim>1)return
 
   if(noct_tot(ilevel)>0)then
@@ -26,6 +28,8 @@ subroutine write_screen(ilevel)
      end do
      write(*,*)'================================'
   endif
+
+#endif
 
 111 format(2(1pe12.5,1x))
 112 format(i3,1x,1pe10.3,1x,8(1pe10.3,1x))

@@ -332,9 +332,11 @@ subroutine init_refine_restart
            grid(igrid)%lev=ilevel
            grid(igrid)%ckey=ckey
            grid(igrid)%refined=refined
+#ifdef HYDRO
            if(hydro)then
               grid(igrid)%uold=uold
            endif
+#endif
 
            ! Set flag1 to preserve refinements
            do ind=1,twotondim

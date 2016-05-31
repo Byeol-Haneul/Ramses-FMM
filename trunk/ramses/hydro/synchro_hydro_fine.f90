@@ -15,6 +15,8 @@ subroutine synchro_hydro_fine(ilevel,dteff)
   integer::idim,neul=ndim+2
   real(dp)::ener
 
+#ifdef HYDRO
+
   if(.not. poisson)return
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel,dteff
@@ -48,6 +50,8 @@ subroutine synchro_hydro_fine(ilevel,dteff)
   end do
   ! End loop over grids
 
+#endif
+
 111 format('   Entering synchro_hydro_fine for level',i2,' and time step dt=',1PE12.5)
 
 end subroutine synchro_hydro_fine
@@ -68,6 +72,8 @@ subroutine add_gravity_source_terms(ilevel)
   !--------------------------------------------------------------
   integer::igrid,ivar,ind
   real(dp)::d,u,v,w,e_kin,e_prim,d_old,fact
+
+#ifdef HYDRO
 
   if(.not. poisson)return
   if(noct_tot(ilevel)==0)return
@@ -104,6 +110,8 @@ subroutine add_gravity_source_terms(ilevel)
         grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin
      end do
   end do
+
+#endif
 
 111 format('   Entering add_gravity_source_terms for level ',i2)
 

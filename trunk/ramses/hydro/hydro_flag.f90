@@ -20,6 +20,8 @@ subroutine hydro_flag(ilevel)
   real(dp),dimension(1:nvar),save::uug,uum,uud
   logical::ok
 
+#ifdef HYDRO
+
   if(ilevel==nlevelmax)return
   if(noct_tot(ilevel)==0)return
 
@@ -96,6 +98,8 @@ subroutine hydro_flag(ilevel)
   ! End loop over grids
 
   call close_cache(grid_dict)
+
+#endif
 
 end subroutine hydro_flag
 !#####################################################################

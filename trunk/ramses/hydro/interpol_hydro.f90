@@ -16,6 +16,7 @@ subroutine upload_fine(ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad
 
+#ifdef HYDRO
   if(ilevel==nlevelmax)return
   if(noct_tot(ilevel)==0)return
   if(noct_tot(ilevel+1)==0)return
@@ -87,6 +88,8 @@ subroutine upload_fine(ilevel)
 
   call close_cache(grid_dict)
 
+#endif
+
 111 format('   Entering upload_fine for level',i2)
 
 end subroutine upload_fine
@@ -125,6 +128,8 @@ subroutine interpol_hydro(u1,u2)
   real(dp),dimension(1:ndim)::w
   real(dp)::ekin,mom
   real(dp)::erad
+
+#ifdef HYDRO
 
   ! Volume fraction of a fine cell realtive to a coarse cell
   oneover_twotondim=1.D0/dble(twotondim)
@@ -243,6 +248,8 @@ subroutine interpol_hydro(u1,u2)
         u2(ind,ndim+2)=u2(ind,ndim+2)+ekin+erad
      end do
   end if
+
+#endif
   
 end subroutine interpol_hydro
 !###########################################################

@@ -435,7 +435,7 @@ subroutine balance_part(ilevel)
   integer,dimension(ncpu)::reqsend,reqrecv
 
   real(kind=8),dimension(:),allocatable::x_recv_buf,x_send_buf
-  integer,dimension(:),allocatable::l_recv_buf,l_send_buf
+  integer(i8b),dimension(:),allocatable::l_recv_buf,l_send_buf
   integer,dimension(:),allocatable::i_recv_buf,i_send_buf
 
   real(dp),dimension(1:ndim),save::xp_tmp,vp_tmp
@@ -443,10 +443,10 @@ subroutine balance_part(ilevel)
   integer::levelp_tmp
   integer(i8b)::idp_tmp
 
+#ifndef WITHOUTMPI
+  if(ncpu==1)return
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
-
-  if(myid==1)write(*,*)'Entering balance_part'
 
   !#############################
   ! Allocate work space
@@ -456,9 +456,6 @@ subroutine balance_part(ilevel)
   allocate(recv_oft(1:ncpu))
   allocate(send_oft(1:ncpu))
   allocate(offset_cpu(1:ncpu))
-
-  if(myid==1)write(*,*)'Before allocation'
-  write(*,'(12(I6,1x))')myid,npart,(tailp(ilev)-headp(ilev)+1,ilev=ilevel,nlevelmax)
 
   !#####################################
   ! Compute number of particles to send
@@ -864,27 +861,18 @@ subroutine balance_part(ilevel)
 !  if(myid==1)write(*,*)'Swap done'
 !  write(*,*)'SWAP ',myid,headp(ilevel),tailp(nlevelmax)
 
-  !#############################
-  ! Sort particles across levels
-  !#############################
+  !##################################
+  ! Put all particles in level ilevel
+  !##################################
   tailp(ilevel)=npart
   do ilev=ilevel+1,nlevelmax
      headp(ilev)=npart+1
      tailp(ilev)=npart
   end do
-  do ilev=ilevel,nlevelmax
-     ! Sort particle according to current level Hilbert key
-     do ipart=headp(ilev),tailp(nlevelmax)
-        sortp(ipart)=ipart
-     end do
-     ix=0
-     call sort_hilbert(headp(ilev),tailp(nlevelmax),ix,0,1,ilev-1)
-     ! Split particles between coarse and fine levels
-     call split_part(ilev)
-  end do
 
-  if(myid==1)write(*,*)'After balancing'
-  write(*,'(12(I6,1x))')myid,npart,(tailp(ilev)-headp(ilev)+1,ilev=ilevel,nlevelmax)
+  call MPI_ALLREDUCE(npart,npart_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
+
+#endif
 
 111 format('   Entering balance_part for level',i2)
 

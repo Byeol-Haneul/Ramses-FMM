@@ -98,6 +98,8 @@ subroutine set_unew(ilevel)
   integer::i,ivar,irad,ind,icpu,iskip
   real(dp)::d,u,v,w,e
 
+#ifdef HYDRO
+
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
@@ -125,6 +127,8 @@ subroutine set_unew(ilevel)
      end do
   end do
 
+#endif
+
 111 format('   Entering set_unew for level ',i2)
 
 end subroutine set_unew
@@ -146,6 +150,8 @@ subroutine set_uold(ilevel)
   integer::i,ivar,irad,ind,iskip,nx_loc,ind_cell
   real(dp)::scale,d,u,v,w
   real(dp)::e_kin,e_cons,e_prim,e_trunc,div,dx,fact,d_old
+
+#ifdef HYDRO
 
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
@@ -182,6 +188,8 @@ subroutine set_uold(ilevel)
 #endif
      end do
   end do
+
+#endif
 
 111 format('   Entering set_uold for level ',i2)
 
@@ -247,6 +255,8 @@ subroutine godfine1(ind_grid,ilevel,&
   real(dp),dimension(0:twondim  ,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
   logical::okx=.true.,oky=.true.,okz=.true.
+
+#ifdef HYDRO
 
   oneontwotondim = 1.d0/dble(twotondim)
 
@@ -753,5 +763,7 @@ subroutine godfine1(ind_grid,ilevel,&
         end do
      end do
   end do
+
+#endif
 
 end subroutine godfine1

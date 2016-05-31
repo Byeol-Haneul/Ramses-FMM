@@ -48,7 +48,7 @@ subroutine rho_fine(ilevel)
      do i=ilevel,nlevelmax
                                call timer('rho','start')
         call cic_part(i)
-                               call timer('particles - split','start')
+                               call timer('particles','start')
         call split_part(i)
                                call timer('rho','start')
      end do
@@ -414,7 +414,7 @@ subroutine cic_part(ilevel)
      end do
   endif
 
-                               call timer('particles - sort','start')
+                               call timer('particles','start')
   ! Sort particle according to current level Hilbert key
   do i=headp(ilevel),tailp(nlevelmax)
      sortp(i)=i

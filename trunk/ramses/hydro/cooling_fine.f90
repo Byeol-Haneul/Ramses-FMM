@@ -13,6 +13,8 @@ subroutine cooling_fine(ilevel)
   real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2
   real(dp)::d,nH,T2,ekin,etot,eint
 
+#ifdef HYDRO
+
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
@@ -45,6 +47,8 @@ subroutine cooling_fine(ilevel)
 
      end do
   end do
+
+#endif
 
 111 format('   Entering cooling_fine for level',i2)
 
