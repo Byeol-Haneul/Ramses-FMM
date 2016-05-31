@@ -19,7 +19,8 @@ subroutine output_part(filename)
 
   call title(myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
-  open(unit=ilun,file=TRIM(fileloc),form='unformatted')
+  open(unit=ilun,file=TRIM(fileloc),access="stream"&
+       & ,action="write",form='unformatted')
   rewind(ilun)
   ! Write header
   write(ilun)ndim

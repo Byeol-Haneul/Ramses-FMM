@@ -15,7 +15,8 @@ subroutine output_poisson(filename)
   ilun=ncpu+myid+10
   call title(myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
-  open(unit=ilun,file=fileloc,form='unformatted')
+  open(unit=ilun,file=fileloc,access="stream"&
+       & ,action="write",form='unformatted')
   write(ilun)ndim
   write(ilun)ndim+1
   write(ilun)levelmin

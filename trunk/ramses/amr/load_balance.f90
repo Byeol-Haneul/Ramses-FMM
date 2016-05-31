@@ -618,7 +618,7 @@ subroutine balance_part(ilevel)
   ! Set new number of particles in local processor
   !###################################################################
   npart=headp(ilevel)-1+count_loc+recv_cnt_tot
-  tail(nlevelmax)=npart
+  tailp(nlevelmax)=npart
 
   !###################################################################
   ! Swap particles positions, velocities and masses between processors
