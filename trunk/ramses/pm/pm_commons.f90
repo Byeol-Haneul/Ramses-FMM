@@ -8,10 +8,10 @@ module pm_commons
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   real(dp),allocatable,dimension(:)         ::ptcl_phi ! Potential
 #endif
-  integer ,allocatable,dimension(:)         ::sortp    ! Sorted indices
-  integer ,allocatable,dimension(:)         ::workp    ! Work space
   integer ,allocatable,dimension(:)         ::levelp   ! Current level of particle
   integer(i8b),allocatable,dimension(:)     ::idp      ! Particle unique identifier
+  integer ,allocatable,dimension(:)         ::sortp    ! Sorted indices
+  integer ,allocatable,dimension(:)         ::workp    ! Work space
 
   integer ,allocatable,dimension(:)         ::headp    ! Particle levels head
   integer ,allocatable,dimension(:)         ::tailp    ! Particle levels tail
