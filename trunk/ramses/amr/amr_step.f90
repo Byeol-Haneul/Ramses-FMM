@@ -54,6 +54,10 @@ recursive subroutine amr_step(ilevel,icount)
      if(ilevel==levelmin.or.icount>1)then
                                call timer('rho','start')
         call rho_fine(ilevel)
+        if(ilevel==levelmin)then
+                               call timer('part balance','start')
+           call balance_part(ilevel)
+        endif
      endif
   endif
 
