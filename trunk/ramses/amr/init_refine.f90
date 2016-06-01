@@ -154,11 +154,11 @@ subroutine init_refine_restart
   include 'mpif.h'
 #endif
   integer::ilevel,ncpu_file,levelmin_file,nlevelmax_file
-  integer::icpu,iskip_amr,iskip_hydro,ilun,info
+  integer::icpu,iskip_amr,iskip_hydro,iskip_grav,ilun,info
   integer::i,ind,istart,iend,noct_tmp,ilev,ioct
   integer::igrid,igrid_level,nleft,nright,ileft,iright
   integer::levelmin_max,nlevelmax_min
-  character(LEN=80)::file_params,file_amr,file_hydro
+  character(LEN=80)::file_params,file_amr,file_hydro,file_grav
   character(LEN=5)::nchar,ncharcpu
 
   integer,dimension(:),allocatable::noct_file,noct_skip,ntarget_cum,noct_cum
@@ -177,6 +177,8 @@ subroutine init_refine_restart
   integer,dimension(1:ndim)::ckey
   logical,dimension(1:twotondim)::refined
   real(dp),dimension(1:twotondim,1:nvar)::uold
+  real(dp),dimension(1:twotondim,1:ndim)::f
+  real(dp),dimension(1:twotondim)::phi
 
   if(myid==1)write(*,*)'Building adaptive grid from restart file',nrestart
 
@@ -308,6 +310,14 @@ subroutine init_refine_restart
            iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+&
                 & (8*twotondim*nvar)*noct_skip(icpu)
         endif
+        ! Prepare reading the GRAV file
+        if(poisson)then
+           file_grav='output_'//TRIM(nchar)//'/grav.out'//TRIM(ncharcpu)
+           open(unit=11,file=file_grav,access="stream"&
+                & ,action="read",form='unformatted')
+           iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+&
+                & (8*twotondim*(ndim+1))*noct_skip(icpu)
+        endif
         ! Loop over useful octs in file
         do i=istart,iend
 
@@ -319,6 +329,12 @@ subroutine init_refine_restart
            if(hydro)then
               ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
               read(11,POS=ipos)uold
+           endif
+           if(poisson)then
+              ipos=iskip_grav+(8*twotondim*(ndim+1))*(i-1)
+              read(11,POS=ipos)phi
+              ipos=ipos+8*twotondim
+              read(11,POS=ipos)f              
            endif
            
            ! Create new oct in memory
@@ -335,6 +351,12 @@ subroutine init_refine_restart
 #ifdef HYDRO
            if(hydro)then
               grid(igrid)%uold=uold
+           endif
+#endif
+#ifdef GRAV
+           if(poisson)then
+              grid(igrid)%phi=phi
+              grid(igrid)%f=f
            endif
 #endif
 

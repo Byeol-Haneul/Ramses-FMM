@@ -6,7 +6,7 @@ module pm_commons
   real(dp),allocatable,dimension(:,:)       ::vp       ! Velocities
   real(dp),allocatable,dimension(:)         ::mp       ! Masses
 #ifdef OUTPUT_PARTICLE_POTENTIAL
-  real(dp),allocatable,dimension(:)         ::ptcl_phi ! Potential
+  real(dp),allocatable,dimension(:)         ::phip     ! Potential
 #endif
   integer ,allocatable,dimension(:)         ::levelp   ! Current level of particle
   integer(i8b),allocatable,dimension(:)     ::idp      ! Particle unique identifier

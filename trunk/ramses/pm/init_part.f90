@@ -40,7 +40,9 @@ subroutine init_part_file
 
   if(verbose)write(*,*)'Entering init_part'
 
+  !------------------------------
   ! Allocate particle variables
+  !------------------------------
   allocate(xp    (npartmax,ndim))
   allocate(vp    (npartmax,ndim))
   allocate(mp    (npartmax))
@@ -49,7 +51,7 @@ subroutine init_part_file
   allocate(sortp (npartmax))
   allocate(workp (npartmax))
 #ifdef OUTPUT_PARTICLE_POTENTIAL
-  allocate(ptcl_phi(npartmax))
+  allocate(phip  (npartmax))
 #endif
   
   ! Allocate pointers to particle levels
@@ -60,9 +62,9 @@ subroutine init_part_file
   headp=1
   tailp=0
   
-  !--------------------
-  ! Read part.tmp file
-  !--------------------
+  !----------------------------------------
+  ! In case of restart, read RAMSES file
+  !----------------------------------------
 
   if(nrestart>0)then
 

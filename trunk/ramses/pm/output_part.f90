@@ -65,7 +65,7 @@ subroutine output_part(filename)
   ! Write potential (optional)
   allocate(xdp(1:npart))
   do i=1,npart
-     xdp(i)=ptcl_phi(i)
+     xdp(i)=phip(i)
   end do
   write(ilun)xdp
   deallocate(xdp)
