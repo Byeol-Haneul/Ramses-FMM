@@ -13,6 +13,7 @@ recursive subroutine amr_step(ilevel,icount)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
+  logical,save::first_step=.true.
 
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,999)icount,ilevel
@@ -29,10 +30,15 @@ recursive subroutine amr_step(ilevel,icount)
 
   !------------------------------
   ! Balance particles across cpus
+  ! Careful rho must have been called once !
   !------------------------------
-  if(ilevel==levelmin)then
+  if(first_step)then
+     first_step=.false.
+  else
+     if(ilevel==levelmin)then
                                call timer('particles','start')
-     call balance_part(ilevel)
+        call balance_part(ilevel)
+     endif
   endif
 
   !------------------------

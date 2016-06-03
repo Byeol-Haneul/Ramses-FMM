@@ -445,6 +445,7 @@ subroutine build_mg(ifinelevel)
               ifree=ifree+1
               if(ifree.GT.ngridmax)then
                  write(*,*)'No more free memory'
+                 write(*,*)'for multigrid...'
                  write(*,*)'Increase ngridmax'
                  call clean_abort
               end if

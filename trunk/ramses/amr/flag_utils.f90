@@ -30,7 +30,6 @@ subroutine flag_fine(ilevel,icount)
   !--------------------------------------------------------
   integer::iexpand,nflag_tot,info
   
-
   if(ilevel==nlevelmax)return
   if(ilevel<levelmin)return
   if(noct_tot(ilevel)==0)return

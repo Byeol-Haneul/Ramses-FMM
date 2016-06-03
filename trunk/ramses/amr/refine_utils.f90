@@ -405,6 +405,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
      ifree=ifree+1
      if(ifree.GT.ngridmax)then
         write(*,*)'No more free memory'
+        write(*,*)'while refining...'
         write(*,*)'Increase ngridmax'
         call clean_abort
      end if

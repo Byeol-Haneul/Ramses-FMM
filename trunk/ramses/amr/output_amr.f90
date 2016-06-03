@@ -394,6 +394,9 @@ subroutine output_header(filename)
   write(ilun,*)'Total number of particles'
   write(ilun,*)npart_tot
   
+  write(ilun,*)'Total number of files'
+  write(ilun,*)ncpu
+  
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
   write(ilun,'(a)',advance='no')'pos vel mass iord level '
@@ -403,6 +406,40 @@ subroutine output_header(filename)
   close(ilun)
 
 end subroutine output_header
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine input_header(filename,npart_tot_file,ncpu_file)
+  use amr_commons
+  use hydro_commons
+  use pm_commons
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  character(LEN=80)::filename
+  integer(i8b)::npart_tot_file
+  integer::ncpu_file
+
+  integer::info,ilun
+  integer(i8b)::tmp_long
+  character(LEN=80)::fileloc
+
+  if(verbose)write(*,*)'Entering input_header'
+  
+  ilun=myid+10
+  
+  ! Write header information
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')  
+  read(ilun,*)
+  read(ilun,*)npart_tot_file
+  read(ilun,*)
+  read(ilun,*)ncpu_file
+  close(ilun)
+
+end subroutine input_header
 !#########################################################################
 !#########################################################################
 !#########################################################################

@@ -419,7 +419,6 @@ subroutine init_grafic(ilevel)
         ! For cosmo runs, rescale initial conditions to code units
         if(cosmo)then
            ! Compute approximate average temperature in K
-!           if(.not. cooling)T2_start=1.356d-2/aexp**2
            T2_start=1.356d-2/aexp**2
            if(ivar==1)init_array=(1.0+dfact(ilevel)*init_array)*omega_b/omega_m
            if(ivar==2)init_array=dfact(ilevel)*vfact(1)*dx_loc/dxini(ilevel)*init_array/vfact(ilevel)

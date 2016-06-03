@@ -1133,6 +1133,7 @@ subroutine check_mail(comm_id,hash_dict)
               ifree=ifree+1
               if(ifree.GT.ngridmax)then
                  write(*,*)'No more free memory'
+                 write(*,*)'while refining...'
                  write(*,*)'Increase ngridmax'
                  call clean_abort
               endif
@@ -1190,6 +1191,7 @@ subroutine check_mail(comm_id,hash_dict)
               ifree=ifree+1
               if(ifree.GT.ngridmax)then
                  write(*,*)'No more free memory'
+                 write(*,*)'while load balancing...'
                  write(*,*)'Increase ngridmax'
                  call clean_abort
               endif
@@ -1256,6 +1258,7 @@ subroutine check_mail(comm_id,hash_dict)
               ifree=ifree+1
               if(ifree.GT.ngridmax)then
                  write(*,*)'No more free memory'
+                 write(*,*)'for multigrid...'
                  write(*,*)'Increase ngridmax'
                  call clean_abort
               endif
