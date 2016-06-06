@@ -78,9 +78,7 @@ subroutine init_part_file
      fileloc='output_'//TRIM(nchar)//'/part_header.txt'
      call input_header(fileloc,npart_tot_file,ncpu_file)
      if(myid==1)then
-        write(*,*)'Restarting from file'
-        write(*,*)TRIM(fileloc)
-        write(*,*)npart_tot_file
+     if(myid==1)write(*,'(" Restart snapshot has ",I8," particles")')npart_tot_file
      endif
 
      ! Compute new local particle number
@@ -321,12 +319,11 @@ subroutine init_part_file
         
   ! Compute minimum dark matter particle mass
   mp_min=MINVAL(mp(1:npart))
-  write(*,*)myid,mp_min
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(mp_min,mp_min_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)  
   mp_min=mp_min_all
 #endif
-  if(myid==1)write(*,*)'mass minimum=',mp_min
+  if(myid==1)write(*,*)'Minimum particle mass=',mp_min
   
   ! Compute maximum number of particles in all processors
   npart_max=npart
@@ -684,7 +681,7 @@ subroutine init_part_grid
   call MPI_ALLREDUCE(mp_min,mp_min_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
   mp_min=mp_min_all
 #endif
-  if(myid==1)write(*,*)'mass minimum=',mp_min
+  if(myid==1)write(*,*)'Minimum particle mass=',mp_min
 
   ! Compute maximum and total number of particles
   npart_max=npart

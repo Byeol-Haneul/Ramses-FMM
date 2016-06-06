@@ -12,6 +12,9 @@ subroutine init_amr
   integer(kind=8)::max_key
   integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length,new_type_address
   real(kind=4)::real_mem,real_mem_tot
+  character(len=5)::nchar
+  character(len=80)::file_params
+  integer::ncpu_file,levelmin_file,nlevelmax_file
 
   if(verbose.and.myid==1)write(*,*)'Entering init_amr'
 
@@ -110,6 +113,15 @@ subroutine init_amr
   noct_max=0   ! Maximum number of oct across all cpus
   noct_used=0  ! Number of oct used across all levels
   noct_used_tot=0  ! Total number of oct used (all cpus)
+
+  if(nrestart>0)then
+     ! Read parameters from restart file
+     call title(nrestart,nchar)
+     file_params='output_'//TRIM(nchar)//'/params.out'
+     call input_params(file_params,ncpu_file,levelmin_file,nlevelmax_file)
+     if(myid==1)write(*,'(" Restarting from output number ",I8)')nrestart
+     if(myid==1)write(*,'(" Restart snapshot has ",I8," files")')ncpu_file
+  endif
 
 #ifndef WITHOUTMPI  
   ! Allocate all communication and cache-related variables

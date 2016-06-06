@@ -1068,10 +1068,12 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
 #ifdef GRAV
-              do ind=1,twotondim
-                 grid(ichild)%rho(ind)=grid(ichild)%rho(ind)&
-                      & +recv_flush_poisson%realdp(ind,i)
-              end do
+              if(ichild>0)then
+                 do ind=1,twotondim
+                    grid(ichild)%rho(ind)=grid(ichild)%rho(ind)&
+                         & +recv_flush_poisson%realdp(ind,i)
+                 end do
+              endif
 #endif
            end do
         endif

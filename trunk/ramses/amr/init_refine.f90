@@ -180,18 +180,18 @@ subroutine init_refine_restart
   real(dp),dimension(1:twotondim,1:ndim)::f
   real(dp),dimension(1:twotondim)::phi
 
-  if(myid==1)write(*,*)'Building adaptive grid from restart file',nrestart
+  if(verbose)write(*,*)'Building adaptive grid from restart file',nrestart
 
   ! Read parameters from restart file
   call title(nrestart,nchar)
   file_params='output_'//TRIM(nchar)//'/params.out'
   call input_params(file_params,ncpu_file,levelmin_file,nlevelmax_file)
-  if(myid==1)write(*,'(" Restart file has ",I8," cpu(s)")')ncpu_file
+  if(myid==1)write(*,'(" Restart snapshot has levelmin=",I4)')levelmin_file
+  if(myid==1)write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
 
   ! Compute the proper level interval
   levelmin_max=MAX(levelmin,levelmin_file)
   nlevelmax_min=MIN(nlevelmax,nlevelmax_file)
-  if(myid==1)write(*,'(" Read level ",I4," to level ",I4)')levelmin_max,nlevelmax_min
 
   ! Allocate local variables
   allocate(noct_file(1:ncpu_file))
