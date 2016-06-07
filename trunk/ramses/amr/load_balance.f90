@@ -419,6 +419,7 @@ subroutine balance_part(ilevel)
   ! their Hilbert key and for a given domain decomposition.
   ! It assumes that particles are sorted according to their levels
   ! and within the level, according to their Hilbert key.
+  ! It can only be called after routine rho has been called.
   !
   integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk_ref
   integer(kind=8), dimension(1:nvector,1:ndim),save::ix_ref
@@ -426,7 +427,7 @@ subroutine balance_part(ilevel)
 
   integer,dimension(1:ndim),save::ix
   integer::i,istart,info,ipart,jpart,idim,grid_cpu
-  integer::ilev,icpu,count_loc,recv_cnt_tot,send_cnt_tot
+  integer::ilev,icpu,jcpu,count_loc,recv_cnt_tot,send_cnt_tot
   integer::nbuffer,countrecv,countsend,tag=101
   real(kind=8)::dx_loc
 
@@ -438,6 +439,16 @@ subroutine balance_part(ilevel)
   integer(i8b),dimension(:),allocatable::l_recv_buf,l_send_buf
   integer,dimension(:),allocatable::i_recv_buf,i_send_buf
 
+  integer(kind=8)::unbalance
+  integer(kind=8),allocatable,dimension(:,:,:)::bound_key_part
+  integer(kind=8),allocatable,dimension(:,:)::bound_key_target,bound_key_new
+  integer(kind=8),allocatable,dimension(:,:)::bound_key_left,bound_key_right
+  integer,dimension(1:ncpu)::npart_proc,npart_proc_tot
+  integer::npart_lev,npart_lev_tot,iter
+  integer,dimension(0:ncpu)::npart_cum,npart_cum_tot
+  integer,dimension(1:ncpu)::npart_cpu,npart_cpu_tot
+  real(dp)::xpart_target,xcum_target
+
   real(dp),dimension(1:ndim),save::xp_tmp,vp_tmp
   real(dp)::mp_tmp
   integer::levelp_tmp
@@ -447,6 +458,142 @@ subroutine balance_part(ilevel)
   if(ncpu==1)return
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
+
+  !####################################################
+  ! Default for particle domains are grid domains
+  !####################################################
+  allocate(bound_key_part(1:nhilbert,0:ncpu,1:nlevelmax+1))
+  bound_key_part=bound_key_level
+
+  !###############################################
+  ! Determine particle domains if needed
+  !###############################################
+  if(part_memory)then
+     
+     !#############################
+     ! Allocate temporary work space
+     !#############################
+     allocate(bound_key_target(1:nhilbert,0:ncpu))
+     allocate(bound_key_new(1:nhilbert,0:ncpu))
+     allocate(bound_key_left(1:nhilbert,0:ncpu))
+     allocate(bound_key_right(1:nhilbert,0:ncpu))
+     
+     ! Loop over levels
+     do ilev=ilevel,nlevelmax
+        dx_loc=boxlen/2**ilev
+     
+        ! Compute number of particles
+        npart_lev=tailp(ilev)-headp(ilev)+1
+        npart_lev_tot=0
+        call MPI_ALLREDUCE(npart_lev,npart_lev_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+        if(npart_lev_tot.EQ.0)cycle
+        xpart_target=dble(npart_lev_tot)/dble(ncpu)
+
+        npart_cpu=0
+        npart_cpu(myid)=npart_lev
+        call MPI_ALLREDUCE(npart_cpu,npart_cpu_tot,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+        npart_cpu=npart_cpu_tot
+
+        npart_cum=0
+        do icpu=1,ncpu
+           npart_cum(icpu)=npart_cum(icpu-1)+npart_cpu(icpu)
+        end do
+
+        iter=0
+        if(myid==1)write(*,*)"====================================="
+        if(myid==1)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
+        if(myid==1)write(*,'(16(I10,1X))')npart_cpu
+        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
+        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
+
+        !#########################################################
+        ! Sort particle according to current level Hilbert key
+        !#########################################################
+        do i=headp(ilev),tailp(ilev)
+           sortp(i)=i
+        end do
+        ix=0
+        call sort_hilbert(headp(ilev),tailp(ilev),ix,0,1,ilev-1)
+
+        ! Compute first guess domain decomposition
+        bound_key_target(1:nhilbert,0:ncpu)=bound_key_part(1:nhilbert,0:ncpu,ilev)
+        bound_key_new=bound_key_target
+        bound_key_left=0
+        do icpu=0,ncpu
+           bound_key_right(1:nhilbert,icpu)=hkey_max(1:nhilbert,ilev)
+        end do
+
+        unbalance=10
+        iter=0
+
+        !#########################################################
+        ! Find new Hilbert tick marks by dichotomy
+        !#########################################################
+        do while (unbalance.GT.1)
+           iter=iter+1
+           
+           ! Compute number of particles above tick marks
+           npart_cum=0
+
+           ! Loop over particles in Hilbert order
+           do i=headp(ilev),tailp(ilev)
+              ipart=sortp(i)
+
+              ! Compute Hilbert key of particle parent grid
+              ix_ref(1,1:ndim) = int(xp(ipart,1:ndim)/(2*dx_loc))
+              call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
+              
+              ! Determine in which processor the grid sits
+              do icpu=1,ncpu
+                 if(gt_keys(bound_key_target(1:nhilbert,icpu),hk_ref(1,1:nhilbert)))then
+                    npart_cum(icpu)=npart_cum(icpu)+1
+                 end if
+              end do
+
+           end do
+
+           ! Compute global histogram
+           call MPI_ALLREDUCE(npart_cum,npart_cum_tot,ncpu+1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+           npart_cum=npart_cum_tot
+           if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
+
+           unbalance=0
+           do icpu=1,ncpu-1
+              xcum_target=dble(icpu)*xpart_target
+              if(npart_cum(icpu)>xcum_target)then
+                 bound_key_new(1:nhilbert,icpu)=(bound_key_left(1:nhilbert,icpu)+bound_key_target(1:nhilbert,icpu))/2
+                 bound_key_right(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
+              else
+                 bound_key_new(1:nhilbert,icpu)=(bound_key_right(1:nhilbert,icpu)+bound_key_target(1:nhilbert,icpu))/2
+                 bound_key_left(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
+              endif
+              unbalance=MAX(unbalance,ABS(bound_key_right(1,icpu)-bound_key_left(1,icpu)))
+           end do
+                            
+           bound_key_target=bound_key_new
+           
+        end do
+        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
+        !#########################################################
+        ! Store new Hilbert tick marks after convergence
+        !#########################################################
+        bound_key_part(1:nhilbert,0:ncpu,ilev)=bound_key_target(1:nhilbert,0:ncpu)
+
+     end do
+
+     !#############################
+     ! Deallocate work space
+     !#############################
+     deallocate(bound_key_target)
+     deallocate(bound_key_new)
+     deallocate(bound_key_left)
+     deallocate(bound_key_right)
+     
+  endif
+
+  !#################################
+  ! Balance particles across cpus
+  !#################################
 
   !#############################
   ! Allocate work space
@@ -481,12 +628,12 @@ subroutine balance_part(ilevel)
            call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
 
            ! Check if grid sits outside future processor boundaries
-           if(    gt_keys(bound_key_level(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
-                & ge_keys(hk_ref(1,1:nhilbert),bound_key_level(1:nhilbert,myid,ilev)))then              
+           if(    gt_keys(bound_key_part(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
+                & ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,myid,ilev)))then              
               ! Determine the future processor
               do icpu=1,ncpu
-                 if(    ge_keys(hk_ref(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilev)).AND. &
-                      & gt_keys(bound_key_level(1:nhilbert,icpu,ilev),hk_ref(1,1:nhilbert)))then
+                 if(    ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,icpu-1,ilev)).AND. &
+                      & gt_keys(bound_key_part(1:nhilbert,icpu,ilev),hk_ref(1,1:nhilbert)))then
                     grid_cpu=icpu
                  end if
               end do
@@ -552,12 +699,12 @@ subroutine balance_part(ilevel)
            call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
 
            ! Check if grid sits outside future processor boundaries
-           if(    gt_keys(bound_key_level(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
-                & ge_keys(hk_ref(1,1:nhilbert),bound_key_level(1:nhilbert,myid,ilev)))then
+           if(    gt_keys(bound_key_part(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
+                & ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,myid,ilev)))then
               ! Determine the future processor
               do icpu=1,ncpu
-                 if(    ge_keys(hk_ref(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilev)).AND. &
-                      & gt_keys(bound_key_level(1:nhilbert,icpu,ilev),hk_ref(1,1:nhilbert)))then
+                 if(    ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,icpu-1,ilev)).AND. &
+                      & gt_keys(bound_key_part(1:nhilbert,icpu,ilev),hk_ref(1,1:nhilbert)))then
                     grid_cpu=icpu
                  end if
               end do
@@ -857,6 +1004,7 @@ subroutine balance_part(ilevel)
   deallocate(recv_oft)
   deallocate(send_oft)
   deallocate(offset_cpu)
+  deallocate(bound_key_part)
 
 !  if(myid==1)write(*,*)'Swap done'
 !  write(*,*)'SWAP ',myid,headp(ilevel),tailp(nlevelmax)
