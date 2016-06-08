@@ -16,7 +16,7 @@ module pm_commons
   integer ,allocatable,dimension(:)         ::headp    ! Particle levels head
   integer ,allocatable,dimension(:)         ::tailp    ! Particle levels tail
 
-  real(dp)                                  ::mp_min   ! Minimum particle mass
+  real(dp)::mp_min=-1.0   ! Minimum particle mass
 
   integer :: action_kick_only = 1
   integer :: action_kick_drift = 2  

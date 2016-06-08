@@ -309,7 +309,10 @@ subroutine init_part_file
      end select
   end if
 
-  if(npart==0)return
+  if(npart==0)then
+     mp_min=-1.0
+     return
+  endif
 
   ! Put all particles in levelmin
   headp=npart+1
