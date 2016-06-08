@@ -1,7 +1,7 @@
-*** Makefile	2015-12-09 21:50:16.894484655 +0100
---- ../../bin/Makefile	2015-12-09 21:03:59.439454728 +0100
+*** Makefile	2016-06-08 22:15:29.906386333 +0200
+--- ../../bin/Makefile	2016-06-08 22:11:33.844449379 +0200
 ***************
-*** 8,14 ****
+*** 9,15 ****
   NVAR = 5
   NENER = 0
   SOLVER = hydro
@@ -9,7 +9,7 @@
   EXEC = ramses
   #############################################################################
   GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
---- 8,14 ----
+--- 9,15 ----
   NVAR = 5
   NENER = 0
   SOLVER = hydro
@@ -18,19 +18,19 @@
   #############################################################################
   GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 ***************
-*** 102,108 ****
-           load_balance.o title.o units.o movie.o murmur3.o
+*** 109,115 ****
+  	 mem_compare.o refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o movie.o
+  
   # Particle-Mesh objects
-  PMOBJ = init_part.o output_part.o rho_fine.o synchro_fine.o move_fine.o newdt_fine.o particle_tree.o \
-!         add_list.o remove_list.o cic.o output_part_ascii.o
+! PMOBJ = newdt_fine.o init_part.o rho_fine.o move_fine.o rho_ana.o output_part.o output_part_ascii.o
+  
   # Poisson solver objects
-  POISSONOBJ = init_poisson.o phi_fine_cg.o interpol_phi.o force_fine.o multigrid_coarse.o multigrid_fine_commons.o \
-               multigrid_fine_fine.o multigrid_fine_coarse.o gravana.o boundary_potential.o rho_ana.o output_poisson.o
---- 102,108 ----
-           load_balance.o title.o units.o movie.o murmur3.o
+  POISSONOBJ = init_poisson.o output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
+--- 109,115 ----
+  	 mem_compare.o refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o movie.o
+  
   # Particle-Mesh objects
-  PMOBJ = init_part.o output_part.o rho_fine.o synchro_fine.o move_fine.o newdt_fine.o particle_tree.o \
-!         add_list.o remove_list.o cic.o
+! PMOBJ = newdt_fine.o init_part.o rho_fine.o move_fine.o rho_ana.o output_part.o
+  
   # Poisson solver objects
-  POISSONOBJ = init_poisson.o phi_fine_cg.o interpol_phi.o force_fine.o multigrid_coarse.o multigrid_fine_commons.o \
-               multigrid_fine_fine.o multigrid_fine_coarse.o gravana.o boundary_potential.o rho_ana.o output_poisson.o
+  POISSONOBJ = init_poisson.o output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o

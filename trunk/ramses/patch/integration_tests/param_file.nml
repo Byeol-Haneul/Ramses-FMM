@@ -13,7 +13,7 @@ nstepmax=10
 levelmin=3
 levelmax=6
 ngridtot=5000
-nparttot=1020
+nparttot=2000
 boxlen=60.0
 /
 
