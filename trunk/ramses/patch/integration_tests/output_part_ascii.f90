@@ -21,11 +21,11 @@ subroutine part_to_ascii
      close(12)
   end if
      
-#ifndef WITHOUTMPI
-  call MPI_BARRIER(MPI_COMM_WORLD, info)
-#endif
 
   do i = 1, ncpu * npartmax
+#ifndef WITHOUTMPI
+     call MPI_BARRIER(MPI_COMM_WORLD, info)
+#endif
      do j = 1, npartmax
         if (idp(j) == i)then
            open(12, file="particles.txt", status="old", position="append", action="write", form="formatted")
