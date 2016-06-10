@@ -502,9 +502,9 @@ subroutine balance_part(ilevel)
         iter=0
         if(myid==1)write(*,*)"====================================="
         if(myid==1)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
-        if(myid==1)write(*,'(16(I10,1X))')npart_cpu
-        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
-        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
+!        if(myid==1)write(*,'(16(I10,1X))')npart_cpu
+!        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
+!        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
 
         !#########################################################
         ! Sort particle according to current level Hilbert key
@@ -555,7 +555,6 @@ subroutine balance_part(ilevel)
            ! Compute global histogram
            call MPI_ALLREDUCE(npart_cum,npart_cum_tot,ncpu+1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
            npart_cum=npart_cum_tot
-           if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
 
            unbalance=0
            do icpu=1,ncpu-1
@@ -573,6 +572,7 @@ subroutine balance_part(ilevel)
            bound_key_target=bound_key_new
            
         end do
+        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
         if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
         !#########################################################
         ! Store new Hilbert tick marks after convergence
@@ -580,6 +580,7 @@ subroutine balance_part(ilevel)
         bound_key_part(1:nhilbert,0:ncpu,ilev)=bound_key_target(1:nhilbert,0:ncpu)
 
      end do
+     if(myid==1)write(*,*)"====================================="
 
      !#############################
      ! Deallocate work space

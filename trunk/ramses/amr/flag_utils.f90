@@ -46,7 +46,8 @@ subroutine flag_fine(ilevel,icount)
   
   ! Step 2: make one cubic buffer around flagged cells,
   ! in order to enforce numerical rule.
-  call smooth_fine(ilevel)
+  call build_smooth(ilevel)
+  call smooth_fine_fast(ilevel)
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
   if(verbose)write(*,*) '  ==> end step 2',nflag_tot
@@ -66,8 +67,9 @@ subroutine flag_fine(ilevel,icount)
 
   ! Step 4: make nexpand cubic buffers around flagged cells.
   do iexpand=1,nexpand(ilevel)
-     call smooth_fine(ilevel)
+     call smooth_fine_fast(ilevel)
   end do
+  call clean_smooth
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
   if(verbose)write(*,*) '  ==> end step 4',nflag_tot
@@ -286,10 +288,192 @@ subroutine smooth_fine(ilevel)
         end do
      end do     
 
-   end do
+  end do
   ! End loop over steps
-
+  
 end subroutine smooth_fine
+!############################################################
+!############################################################
+!############################################################
+!############################################################
+subroutine smooth_fine_fast(ilevel)
+  use amr_commons
+  use poisson_commons
+  implicit none
+#ifndef WITHOUTMPI
+  include "mpif.h"
+  integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
+#endif
+  integer::ilevel
+  ! -------------------------------------------------------------------
+  ! Dilatation operator.
+  ! This routine makes one cell width cubic buffer around flag1 cells 
+  ! at level ilevel by following these 3 steps:
+  ! step 1: flag1 cells with at least 1 flag1 neighbors (if ndim > 0) 
+  ! step 2: flag1 cells with at least 2 flag1 neighbors (if ndim > 1) 
+  ! step 3: flag1 cells with at least 2 flag1 neighbors (if ndim > 2) 
+  ! Array flag2 is used as temporary workspace.
+  ! -------------------------------------------------------------------
+  integer::ismooth,count_nbor,ig,id,ih,in
+  integer::i,iskip,ngrid
+  integer::igrid,idim,ind,inbor,igrid_nbor,icell_nbor
+  integer::icpu,nbuffer,istart,info
+  integer::parent_cell,get_parent_cell,get_grid
+  integer,dimension(1:3),save::n_nbor=(/1,2,2/)
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::igridn
+  integer,dimension(1:twotondim,0:twondim),save::flag_nbor
+  integer::countrecv,countsend,tag=101
+  integer,dimension(ncpu)::reqsend,reqrecv
+
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,&
+       &   0,-1,0,0,1,0,&
+       &   0,0,-1,0,0,1/),(/3,6/))
+  integer,dimension(1:8,1:6),save::ggg=reshape(&
+       & (/1,0,1,0,1,0,1,0,&
+       &   0,2,0,2,0,2,0,2,&
+       &   3,3,0,0,3,3,0,0,&
+       &   0,0,4,4,0,0,4,4,&
+       &   5,5,5,5,0,0,0,0,&
+       &   0,0,0,0,6,6,6,6/),(/8,6/))
+  integer,dimension(1:8,1:6),save::hhh=reshape(&
+       & (/2,1,4,3,6,5,8,7,&
+       &   2,1,4,3,6,5,8,7,&
+       &   3,4,1,2,7,8,5,6,&
+       &   3,4,1,2,7,8,5,6,&
+       &   5,6,7,8,1,2,3,4,&
+       &   5,6,7,8,1,2,3,4/),(/8,6/))
+
+  if(ilevel==nlevelmax)return
+  if(noct_tot(ilevel)==0)return
+
+  hash_nbor(0)=ilevel
+
+  ! Loop over steps
+  do ismooth=1,ndim
+
+     ! Initialize flag2 to 0
+     do igrid=head(ilevel),tail(ilevel)
+        do ind=1,twotondim
+           grid(igrid)%flag2(ind)=0
+        end do
+     end do
+
+#ifndef WITHOUTMPI
+
+     ! Update boundary conditions
+     countrecv=0
+     do icpu=1,ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=send_oft(icpu)*twotondim+1
+           call MPI_IRECV(flag_send_buf(istart),nbuffer*twotondim, &
+                & MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+     
+     do ind=1,twotondim
+        do i=1,recv_tot
+           igrid=grid_recv_buf(i)
+           istart=(i-1)*twotondim+ind
+           flag_recv_buf(istart)=grid(igrid)%flag1(ind)
+        end do
+     end do
+     
+     countsend=0
+     do icpu=1,ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=recv_oft(icpu)*twotondim+1
+           call MPI_ISEND(flag_recv_buf(istart),nbuffer*twotondim, &
+                & MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+     
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+     
+     do ind=1,twotondim
+        do i=1,send_tot
+           istart=(i-1)*twotondim+ind
+           flag_remote(i,ind)=flag_send_buf(istart)
+        end do
+     end do
+     
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+     
+#endif
+
+     ! Count neighbors and set flag2 accordingly
+     do igrid=head(ilevel),tail(ilevel)
+
+        ! Get central oct flag1
+        do ind=1,twotondim
+           flag_nbor(ind,0)=grid(igrid)%flag1(ind)
+        end do
+
+        ! Get neighboring octs flag1
+        do inbor=1,twondim
+           
+           ! Get neighbouring grid using read-only cache
+           igridn=nbor_indx(igrid,inbor)
+           
+           ! If grid exists, then copy into array
+           if(igridn>0)then
+              do ind=1,twotondim
+                 flag_nbor(ind,inbor)=grid(igridn)%flag1(ind)
+              end do
+           else if (igridn==0) then
+              do ind=1,twotondim
+                 flag_nbor(ind,inbor)=0
+              end do
+           else
+              do ind=1,twotondim
+                 flag_nbor(ind,inbor)=flag_remote(-igridn,ind)
+              end do
+           endif
+
+        end do
+        ! End loop over neighboring octs
+
+        ! Count neighbors and set flag2 accordingly        
+        do ind=1,twotondim
+           count_nbor=0
+           do in=1,twondim
+              ig=ggg(ind,in)
+              id=hhh(ind,in)
+              count_nbor=count_nbor+flag_nbor(id,ig)
+           end do
+           ! flag2 cell if necessary
+           if(count_nbor>=n_nbor(ismooth))then
+              grid(igrid)%flag2(ind)=1
+           endif
+        end do
+
+     end do
+     ! End loop over grids
+
+     ! Set flag1=1 for cells with flag2=1
+     do igrid=head(ilevel),tail(ilevel)
+        do ind=1,twotondim
+           if(grid(igrid)%flag1(ind)==1)grid(igrid)%flag2(ind)=0
+        end do
+        do ind=1,twotondim
+           if(grid(igrid)%flag2(ind)==1)then
+              grid(igrid)%flag1(ind)=1
+              nflag=nflag+1
+           endif
+        end do
+     end do     
+
+  end do
+  ! End loop over steps
+  
+end subroutine smooth_fine_fast
 !############################################################
 !############################################################
 !############################################################
@@ -374,3 +558,257 @@ end subroutine ensure_ref_rules
 !############################################################
 !############################################################
 !############################################################
+
+! ---------------------------------------------------------------------
+! ---------------------------------------------------------------------
+  
+subroutine build_smooth(ilevel)
+  use amr_commons
+  use poisson_commons
+  use hilbert
+  implicit none
+#ifndef WITHOUTMPI
+  include "mpif.h"
+#endif
+  
+  integer,intent(in)::ilevel
+  !
+  integer::get_grid
+  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
+  integer::i,igridn,iremote
+  integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
+  integer,dimension(1:ndim)::cart_key
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  integer(kind=4),dimension(1:nvector),save::dummy_state
+  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
+
+#ifndef WITHOUTMPI
+
+  allocate(nremote(1:ncpu))  
+  allocate(nbor_indx(head(ilevel):tail(ilevel),1:twondim))
+
+  hash_nbor(0)=ilevel
+  
+  nremote=0
+  call open_cache(operation_smooth,domain_decompos_amr)
+  
+  ! Loop over grids
+  do igrid=head(ilevel),tail(ilevel)
+     
+     ! Gather twondim neighboring grids
+     do inbor=1,twondim
+
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
+
+        ! Periodic boundary conditons
+        do idim=1,ndim
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+        enddo
+        
+        ! Get neighbouring grid using read-only cache
+        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
+        
+        ! If grid exists, determine if remote
+        if(igridn<=ngridmax)then
+           nbor_indx(igrid,inbor)=igridn
+        else
+           ! Compute Cartesian keys of new oct
+           cart_key(1:ndim)=hash_nbor(1:ndim)
+           
+           ! Compute Hilbert keys of new octs
+           ix(1,1:ndim)=cart_key(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
+           ! Determine parent processor and increment counter
+           do icpu=1,ncpu
+              if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
+                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
+                 grid_cpu=icpu
+              end if
+           end do
+           nremote(grid_cpu)=nremote(grid_cpu)+1
+        end if
+
+     end do
+     ! End loop over neighbors
+     
+  end do
+  ! End loop over grids
+  
+  call close_cache(grid_dict)
+
+  ! Build communicator
+  allocate(nalltoall(1:ncpu,1:ncpu))
+  allocate(nalltoall_tot(1:ncpu,1:ncpu))
+  nalltoall=0; nalltoall_tot=0
+  do icpu=1,ncpu
+     nalltoall(myid,icpu)=nremote(icpu)
+  end do
+  call MPI_ALLREDUCE(nalltoall,nalltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  nalltoall=nalltoall_tot
+  deallocate(nalltoall_tot)
+  allocate(send_cnt(1:ncpu))
+  allocate(send_oft(1:ncpu))
+  allocate(recv_cnt(1:ncpu))
+  allocate(recv_oft(1:ncpu))
+
+  send_cnt=0; send_oft=0; send_tot=0
+  recv_cnt=0; recv_oft=0; recv_tot=0
+  do icpu=1,ncpu
+     send_cnt(icpu)=nalltoall(myid,icpu)
+     recv_cnt(icpu)=nalltoall(icpu,myid)
+     send_tot=send_tot+send_cnt(icpu)
+     recv_tot=recv_tot+recv_cnt(icpu)
+     if(icpu<ncpu)then
+        send_oft(icpu+1)=send_oft(icpu)+nalltoall(myid,icpu)
+        recv_oft(icpu+1)=recv_oft(icpu)+nalltoall(icpu,myid)
+     endif
+  end do
+  deallocate(nalltoall)
+
+#if NDIM>0
+  allocate(x_send_buf(1:send_tot))
+#endif
+#if NDIM>1
+  allocate(y_send_buf(1:send_tot))
+#endif
+#if NDIM>2
+  allocate(z_send_buf(1:send_tot))
+#endif
+
+  hash_nbor(0)=ilevel
+
+  nremote=0
+  call open_cache(operation_smooth,domain_decompos_amr)
+
+  ! Loop over grids
+  do igrid=head(ilevel),tail(ilevel)
+
+     ! Gather twondim neighboring grids
+     do inbor=1,twondim
+
+        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
+
+        ! Periodic boundary conditons
+        do idim=1,ndim
+           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
+           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
+        enddo
+
+        ! Get neighbouring grid using read-only cache
+        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
+
+        ! If grid is remote
+        if(igridn>ngridmax)then
+
+           ! Compute Cartesian keys of new oct
+           cart_key(1:ndim)=hash_nbor(1:ndim)
+
+           ! Compute Hilbert keys of new octs
+           ix(1,1:ndim)=cart_key(1:ndim)
+           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+
+           ! Determine parent processor and increment counter
+           do icpu=1,ncpu
+              if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
+                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
+                 grid_cpu=icpu
+              end if
+           end do
+           nremote(grid_cpu)=nremote(grid_cpu)+1
+           iremote=send_oft(grid_cpu)+nremote(grid_cpu)
+#if NDIM>0
+           x_send_buf(iremote)=cart_key(1)
+#endif
+#if NDIM>1
+           y_send_buf(iremote)=cart_key(2)
+#endif
+#if NDIM>2
+           z_send_buf(iremote)=cart_key(3)
+#endif
+           ! Store negative index
+           nbor_indx(igrid,inbor)=-iremote
+        end if
+
+     end do
+     ! End loop over neighbors
+
+  end do
+  ! End loop over grids
+
+  call close_cache(grid_dict)
+
+  deallocate(nremote)
+
+#if NDIM>0
+  allocate(x_recv_buf(1:recv_tot))
+  call MPI_ALLTOALLV(x_send_buf,send_cnt,send_oft,MPI_INTEGER, &
+       &             x_recv_buf,recv_cnt,recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  deallocate(x_send_buf)
+#endif
+#if NDIM>1
+  allocate(y_recv_buf(1:recv_tot))
+  call MPI_ALLTOALLV(y_send_buf,send_cnt,send_oft,MPI_INTEGER, &
+       &             y_recv_buf,recv_cnt,recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  deallocate(y_send_buf)
+#endif
+#if NDIM>2
+  allocate(z_recv_buf(1:recv_tot))
+  call MPI_ALLTOALLV(z_send_buf,send_cnt,send_oft,MPI_INTEGER, &
+       &             z_recv_buf,recv_cnt,recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  deallocate(z_send_buf)
+#endif
+
+  allocate(grid_recv_buf(1:recv_tot))
+
+  hash_key(0)=ilevel
+  do i=1,recv_tot
+     hash_key(1)=x_recv_buf(i)
+     hash_key(2)=y_recv_buf(i)
+     hash_key(3)=z_recv_buf(i)
+     ipos=hash_get(grid_dict,hash_key)
+     grid_recv_buf(i)=ipos
+  end do
+  deallocate(x_recv_buf)
+  deallocate(y_recv_buf)
+  deallocate(z_recv_buf)
+
+  allocate(flag_send_buf(1:send_tot*twotondim))
+  allocate(flag_recv_buf(1:recv_tot*twotondim))
+  allocate(flag_remote(1:send_tot,1:twotondim))
+#endif
+
+end subroutine build_smooth
+
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
+
+! ------------------------------------------------------------------------
+! ------------------------------------------------------------------------
+
+subroutine clean_smooth
+  use amr_commons
+  use poisson_commons
+  implicit none
+
+#ifndef WITHOUTMPI
+  
+  deallocate(nbor_indx)
+  deallocate(flag_remote)
+  deallocate(flag_send_buf)
+  deallocate(flag_recv_buf)
+  deallocate(grid_recv_buf)
+  deallocate(send_cnt)
+  deallocate(send_oft)
+  deallocate(recv_cnt)
+  deallocate(recv_oft)
+
+#endif
+
+end subroutine clean_smooth
+

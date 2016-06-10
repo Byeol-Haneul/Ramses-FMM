@@ -37,13 +37,14 @@ recursive subroutine amr_step(ilevel,icount)
   else
      if(ilevel==levelmin)then
                                call timer('particles','start')
-        call balance_part(ilevel)
+        if(pic)call balance_part(ilevel)
      endif
   endif
 
   !------------------------
   ! Output results to files
   !------------------------
+                               call timer('output','start')
   if(ilevel==levelmin)then
      if(mod(nstep_coarse,foutput)==0.or.aexp>=aout(iout).or.t>=tout(iout))then
         call dump_all
@@ -104,7 +105,7 @@ recursive subroutine amr_step(ilevel,icount)
 
      ! Perform second kick for particles
                                call timer('particles','start')
-     call kick_drift_part(ilevel,action_kick_only)
+     if(pic)call kick_drift_part(ilevel,action_kick_only)
 
      ! Add gravity source term with half time step and new force
      if(hydro)then
@@ -185,7 +186,7 @@ recursive subroutine amr_step(ilevel,icount)
   ! Perform first kick and drift for particles
   !-------------------------------------------
                                call timer('particles','start')
-  call kick_drift_part(ilevel,action_kick_drift)
+  if(pic)call kick_drift_part(ilevel,action_kick_drift)
 
   !-----------------------
   ! Compute refinement map

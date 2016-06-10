@@ -26,6 +26,8 @@ module poisson_commons
   integer,dimension(:,:),allocatable::nbor_indx
   real(dp),dimension(:),allocatable::phi_send_buf,phi_recv_buf
   real(dp),dimension(:,:),allocatable::phi_remote
+  integer,dimension(:),allocatable::flag_send_buf,flag_recv_buf
+  integer,dimension(:,:),allocatable::flag_remote
 
   ! Temporary workspace
   integer,dimension(:),allocatable::nremote

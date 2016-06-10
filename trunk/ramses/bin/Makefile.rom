@@ -9,15 +9,15 @@ NPRE = 8
 NVAR = 5
 NENER = 0
 SOLVER = hydro
-PATCH = 
-EXEC = ramses_vtune
+PATCH = /zbox/data/teyssier/mini-ramses/coeur
+EXEC = ramses
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -DNVAR=$(NVAR) \
-	  -DNHILBERT=$(NHILBERT) -DGRAV
+	  -DNHILBERT=$(NHILBERT) -DHYDRO -DGRAV
 #############################################################################
 # Fortran compiler options and directives
 
@@ -60,7 +60,7 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 #F90 = mpif90
 #FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
 F90 = mpif90 -f90=ifort
-FFLAGS = -cpp -g -O3 -debug inline-debug-info -shared-intel -shared-libgcc $(DEFINES) -DNOSYSTEM
+FFLAGS = -cpp -fast -O3 -debug inline-debug-info -shared-intel -shared-libgcc $(DEFINES) -DNOSYSTEM
 #FFLAGS = -cpp -g -O0 -debug inline-debug-info -shared-intel -shared-libgcc -traceback -fpe0 -ftrapuv -check all $(DEFINES) -DNOSYSTEM
 # -DWITHOUTMPI
 # -check all -ftrapuv

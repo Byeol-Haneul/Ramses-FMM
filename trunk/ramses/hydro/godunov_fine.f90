@@ -105,11 +105,9 @@ subroutine set_unew(ilevel)
 
   ! Set unew to uold for myid cells
   do i=head(ilevel),tail(ilevel)
-     do ind=1,twotondim
-        do ivar=1,nvar
-           grid(i)%unew(ind,ivar) = grid(i)%uold(ind,ivar)
-        end do
+     grid(i)%unew = grid(i)%uold
 #ifdef DUALENER
+     do ind=1,twotondim
         grid(i)%divu(ind) = 0.0
         d=max(grid(i)%uold(ind,1),smallr)
         u=0.0; v=0.0; w=0.0
@@ -123,8 +121,8 @@ subroutine set_unew(ilevel)
         end do
 #endif          
         grid(i)%enew(ind) = e
-#endif
      end do
+#endif
   end do
 
 #endif
@@ -160,11 +158,9 @@ subroutine set_uold(ilevel)
 
   ! Set uold to unew
   do i=head(ilevel),tail(ilevel)
-     do ind=1,twotondim
-        do ivar=1,nvar
-           grid(i)%uold(ind,ivar) = grid(i)%unew(ind,ivar)
-        end do
+     grid(i)%uold=grid(i)%unew
 #ifdef DUALENER
+     do ind=1,twotondim
         ! Correct total energy if internal energy is too small
         d=max(grid(i)%uold(ind,1),smallr)
         u=0.0; v=0.0; w=0.0
@@ -185,8 +181,8 @@ subroutine set_uold(ilevel)
         if(e_cons<e_trunc)then
            grid(i)%uold(ind,ndim+2)=e_prim+e_kin
         end if
-#endif
      end do
+#endif
   end do
 
 #endif
