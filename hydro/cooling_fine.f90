@@ -13,8 +13,6 @@ subroutine cooling_fine(ilevel)
   real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2
   real(dp)::d,nH,T2,ekin,etot,eint
 
-#ifdef HYDRO
-
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
@@ -26,11 +24,11 @@ subroutine cooling_fine(ilevel)
 
         if(.NOT. grid(igrid)%refined(ind))then
 
-           d=max(grid(igrid)%uold(ind,1),smallr)
-           etot=grid(igrid)%uold(ind,ndim+2)
+           d=max(fluid(igrid)%uold(ind,1),smallr)
+           etot=fluid(igrid)%uold(ind,ndim+2)
            ekin=0.0
            do idim=1,ndim
-              ekin=ekin+0.5*grid(igrid)%uold(ind,idim+1)**2/d
+              ekin=ekin+0.5*fluid(igrid)%uold(ind,idim+1)**2/d
            end do
            eint=etot-ekin
            T2=(gamma-1.0)*(eint/d)*scale_T2
@@ -41,14 +39,12 @@ subroutine cooling_fine(ilevel)
            
            eint=d*(T2/scale_T2/(gamma-1.0))
            etot=ekin+eint
-           grid(igrid)%uold(ind,ndim+2)=etot
+           fluid(igrid)%uold(ind,ndim+2)=etot
 
         endif
 
      end do
   end do
-
-#endif
 
 111 format('   Entering cooling_fine for level',i2)
 

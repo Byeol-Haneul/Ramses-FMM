@@ -1,5 +1,6 @@
 subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   use amr_commons
+  use poisson_commons, only: grav
   implicit none
   integer,dimension(1:threetondim)::igrid_nbor,ind_nbor
   integer,dimension(1:8,1:8)::ccc
@@ -17,7 +18,7 @@ subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   integer::ind,ind_average,ind_father
   integer::igrid_nbr,ind_nbr,igrid_cen,ind_cen
   real(dp)::coeff,add
-#ifdef GRAV
+
   ! Store central cell
   igrid_cen=igrid_nbor(threetondim/2+1)
   ind_cen=ind_nbor(threetondim/2+1)
@@ -34,16 +35,16 @@ subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
            write(*,*)'no all neighbors present in interpol_phi...'
            write(*,*)igrid_nbor
            stop
-           add=coeff*(grid(igrid_cen)%phi(ind_cen)+&
-                & (grid(igrid_cen)%phi(ind_cen)-grid(igrid_cen)%phi_old(ind_cen))*tfrac)
+           add=coeff*(grav(igrid_cen)%phi(ind_cen)+&
+                & (grav(igrid_cen)%phi(ind_cen)-grav(igrid_cen)%phi_old(ind_cen))*tfrac)
         else
-           add=coeff*(grid(igrid_nbr)%phi(ind_nbr)+&
-                & (grid(igrid_nbr)%phi(ind_nbr)-grid(igrid_nbr)%phi_old(ind_nbr))*tfrac)
+           add=coeff*(grav(igrid_nbr)%phi(ind_nbr)+&
+                & (grav(igrid_nbr)%phi(ind_nbr)-grav(igrid_nbr)%phi_old(ind_nbr))*tfrac)
         endif
         phi_int(ind)=phi_int(ind)+add
      end do
   end do
-#endif
+
  end subroutine interpol_phi
 !###########################################################
 !###########################################################
@@ -51,20 +52,21 @@ subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
 !###########################################################
 subroutine save_phi_old(ilevel)
   use amr_commons
+  use poisson_commons, ONLY: grav
   implicit none
   integer ilevel
   ! Save the old potential for time extrapolation in case of subcycling
   integer::ind,igrid
-#ifdef GRAV
+
   ! Loop over level grids
   do igrid=head(ilevel),tail(ilevel)
      ! Loop over cells
      do ind=1,twotondim
         ! Save phi      
-        grid(igrid)%phi_old(ind)=grid(igrid)%phi(ind)
+        grav(igrid)%phi_old(ind)=grav(igrid)%phi(ind)
      end do
   end do
-#endif
+
 end subroutine save_phi_old
 !###########################################################
 !###########################################################

@@ -112,21 +112,21 @@ subroutine multipole_fine(ilevel)
   dx_loc=boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
-#ifdef HYDRO
   ! Initialize multipole fields to zero
   do igrid=head(ilevel),tail(ilevel)
      do ind=1,twotondim
         do idim=1,ndim+1
-           grid(igrid)%unew(ind,idim)=0.0D0
+           fluid(igrid)%unew(ind,idim)=0.0D0
         end do
      end do
   end do
-#endif
 
   !-------------------------------------------------------
   ! Compute contribution of leaf cells to mass multipoles
   !-------------------------------------------------------
+  ! Loop over grids
   do igrid=head(ilevel),tail(ilevel)
+
      ! Loop over cells
      do ind=1,twotondim
 
@@ -140,28 +140,29 @@ subroutine multipole_fine(ilevel)
               nstride=2**(idim-1)
               xx(idim)=(2*grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx_loc
            end do
-#ifdef HYDRO
+
            ! Add gas mass
-           mmm=max(grid(igrid)%uold(ind,1),smallr)*vol_loc
-           grid(igrid)%unew(ind,1)=grid(igrid)%unew(ind,1)+mmm
+           mmm=max(fluid(igrid)%uold(ind,1),smallr)*vol_loc
+           fluid(igrid)%unew(ind,1)=fluid(igrid)%unew(ind,1)+mmm
            do idim=1,ndim
-              grid(igrid)%unew(ind,idim+1)=grid(igrid)%unew(ind,idim+1)+mmm*xx(idim)
+              fluid(igrid)%unew(ind,idim+1)=fluid(igrid)%unew(ind,idim+1)+mmm*xx(idim)
            end do
-#endif
+
            ! Add analytical density profile
            if(gravity_type < 0)then           
               call rho_ana(xx,dd,dx_loc)
               mmm=max(dd,smallr)*vol_loc
-#ifdef HYDRO
-              grid(igrid)%unew(ind,1)=grid(igrid)%unew(ind,1)+mmm
+              fluid(igrid)%unew(ind,1)=fluid(igrid)%unew(ind,1)+mmm
               do idim=1,ndim
-                 grid(igrid)%unew(ind,idim+1)=grid(igrid)%unew(ind,idim+1)+mmm*xx(idim)
+                 fluid(igrid)%unew(ind,idim+1)=fluid(igrid)%unew(ind,idim+1)+mmm*xx(idim)
               end do
-#endif
            end if
+
         endif
+
      end do
      ! End loop over cells
+
   end do
   ! End loop over grids
 
@@ -181,17 +182,17 @@ subroutine multipole_fine(ilevel)
      parent_cell=get_parent_cell(hash_key,grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
-#ifdef HYDRO
+
      ! Average conservative variables
      do ivar=1,ndim+1
         average=0.0d0
         do ind=1,twotondim
-           average=average+grid(ioct)%unew(ind,ivar)
+           average=average+fluid(ioct)%unew(ind,ivar)
         end do
         ! Scatter result to cell
-        grid(igrid)%unew(icell,ivar)=average
+        fluid(igrid)%unew(icell,ivar)=average
      end do
-#endif
+
   end do
 
   call close_cache(grid_dict)
@@ -224,14 +225,12 @@ subroutine cic_from_multipole(ilevel)
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
-#ifdef GRAV
   ! Initialize density field to zero
   do igrid=head(ilevel),tail(ilevel)
      do ind=1,twotondim
-        grid(igrid)%rho(ind)=0.0D0
+        grav(igrid)%rho(ind)=0.0D0
      end do
   end do
-#endif  
 
   if(hydro)call cic_cell(ilevel)
 
@@ -244,7 +243,8 @@ end subroutine cic_from_multipole
 !###########################################################
 subroutine cic_cell(ilevel)
   use amr_commons
-  use poisson_commons, ONLY:multipole
+  use hydro_commons, ONLY: fluid
+  use poisson_commons, ONLY: multipole, grav
   implicit none
   integer::ilevel
   !
@@ -273,20 +273,19 @@ subroutine cic_cell(ilevel)
      ! Loop over cells
      do ind=1,twotondim
 
-#ifdef HYDRO        
         ! Compute pseudo particle mass
-        mmm=grid(igrid)%unew(ind,1)
+        mmm=fluid(igrid)%unew(ind,1)
 
         ! Compute pseudo particle (centre of mass) position
-        x(1:ndim)=grid(igrid)%unew(ind,2:ndim+1)/mmm
+        x(1:ndim)=fluid(igrid)%unew(ind,2:ndim+1)/mmm
         
         ! Compute total multipole
         if(ilevel==levelmin)then
            do idim=1,ndim+1
-              multipole(idim)=multipole(idim)+grid(igrid)%unew(ind,idim)
+              multipole(idim)=multipole(idim)+fluid(igrid)%unew(ind,idim)
            end do
         endif
-#endif
+
         ! Rescale particle position at level ilevel
         do idim=1,ndim
            x(idim)=x(idim)/dx_loc
@@ -351,7 +350,6 @@ subroutine cic_cell(ilevel)
         ckey(1:3,8)=(/id(1),id(2),id(3)/)
 #endif     
 
-#ifdef GRAV
         ! Update mass density
         do inbor=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,inbor)
@@ -360,10 +358,10 @@ subroutine cic_cell(ilevel)
            if(parent_cell>0)then
               ioct=(parent_cell-1)/twotondim+1
               icell=parent_cell-(ioct-1)*twotondim
-              grid(ioct)%rho(icell)=grid(ioct)%rho(icell)+mmm*vol(inbor)/vol_loc
+              grav(ioct)%rho(icell)=grav(ioct)%rho(icell)+mmm*vol(inbor)/vol_loc
            end if
         end do
-#endif     
+
      end do
      ! End loop over cells
 
@@ -380,7 +378,7 @@ end subroutine cic_cell
 subroutine cic_part(ilevel)
   use amr_commons
   use pm_commons
-  use poisson_commons, ONLY:multipole
+  use poisson_commons, ONLY:multipole, grav
   use hilbert
   implicit none
   integer::ilevel
@@ -495,7 +493,6 @@ subroutine cic_part(ilevel)
      ckey(1:3,8)=(/id(1),id(2),id(3)/)
 #endif
 
-#ifdef GRAV
      ! Update mass density
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
@@ -505,10 +502,9 @@ subroutine cic_part(ilevel)
            igrid=(parent_cell-1)/twotondim+1
            icell=parent_cell-(igrid-1)*twotondim
            vol2=mp(ipart)*vol(ind)/vol_loc
-           grid(igrid)%rho(icell)=grid(igrid)%rho(icell)+vol2
+           grav(igrid)%rho(icell)=grav(igrid)%rho(icell)+vol2
         endif
      end do
-#endif
 
   end do
   ! End loop over particles

@@ -8,8 +8,6 @@ subroutine output_hydro(filename)
   character(LEN=5)::nchar
   character(LEN=80)::fileloc
 
-#ifdef HYDRO
-
   if(verbose)write(*,*)'Entering output_hydro'
   ilun=ncpu+myid+10     
   call title(myid,nchar)
@@ -25,13 +23,11 @@ subroutine output_hydro(filename)
   enddo
   do ilevel=levelmin,nlevelmax
      do igrid=head(ilevel),tail(ilevel)
-        write(ilun)grid(igrid)%uold
+        write(ilun)fluid(igrid)%uold
      end do
   enddo
   close(ilun)
 
-#endif
-     
 end subroutine output_hydro
 !###################################################
 !###################################################

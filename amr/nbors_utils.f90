@@ -231,6 +231,8 @@ end subroutine unlock_cache
 !##############################################################
 integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(child_grid)
   use amr_commons
+  use hydro_commons
+  use poisson_commons
   use hilbert
   use hash
   implicit none
@@ -496,35 +498,31 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
                     else
                        grid(ichild)%refined(ind)=.false.
                     end if
-#ifdef HYDRO
                     do ivar=1,nvar
-                       grid(ichild)%uold(ind,ivar)=response_hydro%realdp(ind,ivar,i)
+                       fluid(ichild)%uold(ind,ivar)=response_hydro%realdp(ind,ivar,i)
                     end do
-#endif
                  end do
               endif
 
               ! Operations of type "poisson"
               if(cache_operation_type.EQ.operation_type_poisson)then
-#ifdef GRAV
                  if(cache_operation.EQ.operation_restrict_res)then
                     do ind=1,twotondim
-                       grid(ichild)%f(ind,3)=response_poisson%realdp(ind,i)
+                       grav(ichild)%f(ind,3)=response_poisson%realdp(ind,i)
                     end do
                  else if(cache_operation.EQ.operation_scan)then
                     do ind=1,twotondim
-                       grid(ichild)%f(ind,3)=response_poisson%realdp(ind,i)
+                       grav(ichild)%f(ind,3)=response_poisson%realdp(ind,i)
                     end do
                  else if(cache_operation.EQ.operation_cg)then
                     do ind=1,twotondim
-                       grid(ichild)%f(ind,2)=response_poisson%realdp(ind,i)
+                       grav(ichild)%f(ind,2)=response_poisson%realdp(ind,i)
                     end do
                  else
                     do ind=1,twotondim
-                       grid(ichild)%phi(ind)=response_poisson%realdp(ind,i)
+                       grav(ichild)%phi(ind)=response_poisson%realdp(ind,i)
                     end do
                  endif
-#endif
               endif
 
               ! Operations of type "refine"
@@ -535,28 +533,28 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
                     else
                        grid(ichild)%refined(ind)=.false.
                     end if
-#ifdef HYDRO
-                    do ivar=1,nvar
-                       grid(ichild)%uold(ind,ivar)=response_refine%realdp_hydro(ind,ivar,i)
-                    end do
-#endif
+                    if(hydro)then
+                       do ivar=1,nvar
+                          fluid(ichild)%uold(ind,ivar)=response_refine%realdp_hydro(ind,ivar,i)
+                       end do
+                    endif
+                    if(poisson)then
 #ifdef GRAV
-                    do idim=1,ndim
-                       grid(ichild)%f(ind,idim)=response_refine%realdp_poisson(ind,idim,i)
-                    end do
-                    grid(ichild)%phi(ind)=response_refine%realdp_poisson(ind,ndim+1,i)
-                    grid(ichild)%phi_old(ind)=response_refine%realdp_poisson(ind,ndim+2,i)
+                       do idim=1,ndim
+                          grav(ichild)%f(ind,idim)=response_refine%realdp_poisson(ind,idim,i)
+                       end do
+                       grav(ichild)%phi(ind)=response_refine%realdp_poisson(ind,ndim+1,i)
+                       grav(ichild)%phi_old(ind)=response_refine%realdp_poisson(ind,ndim+2,i)
 #endif
+                    endif
                  end do
               endif
               
               ! Operations of type "multigrid"
               if(cache_operation_type.EQ.operation_type_mg)then
                  do ind=1,twotondim
-#ifdef GRAV
-                    grid(ichild)%phi(ind)=response_mg%realdp_phi(ind,i)
-                    grid(ichild)%f(ind,3)=response_mg%realdp_dis(ind,i)
-#endif
+                    grav(ichild)%phi(ind)=response_mg%realdp_phi(ind,i)
+                    grav(ichild)%f(ind,3)=response_mg%realdp_dis(ind,i)
                  end do
               endif
               
@@ -564,19 +562,15 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
               if(cache_operation_type.EQ.operation_type_interpol)then
                  if(cache_operation.EQ.operation_kick)then
                     do ind=1,twotondim
-#ifdef GRAV
-                       grid(ichild)%f(ind,1)=response_interpol%realdp_phi(ind,i)
-                       grid(ichild)%f(ind,2)=response_interpol%realdp_phi_old(ind,i)
-                       grid(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
-#endif
+                       grav(ichild)%f(ind,1)=response_interpol%realdp_phi(ind,i)
+                       grav(ichild)%f(ind,2)=response_interpol%realdp_phi_old(ind,i)
+                       grav(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
                     end do
                  else
                     do ind=1,twotondim
-#ifdef GRAV
-                       grid(ichild)%phi(ind)=response_interpol%realdp_phi(ind,i)
-                       grid(ichild)%phi_old(ind)=response_interpol%realdp_phi_old(ind,i)
-                       grid(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
-#endif
+                       grav(ichild)%phi(ind)=response_interpol%realdp_phi(ind,i)
+                       grav(ichild)%phi_old(ind)=response_interpol%realdp_phi_old(ind,i)
+                       grav(ichild)%f(ind,3)=response_interpol%realdp_dis(ind,i)
                     end do
                  endif
               endif
@@ -590,22 +584,21 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
                  ! Set initialisation rule for combiner operations
                  !================================================
                  
-#ifdef HYDRO                 
                  ! Initialisation rule for Godunov update
                  if(cache_operation.EQ.operation_godunov)then           
-                    grid(ichild)%unew(1:twotondim,1:nvar)=0.0
+                    fluid(ichild)%unew(1:twotondim,1:nvar)=0.0
                  endif
-#endif                 
+
                  ! Initialisation rule for derefine
                  if(cache_operation.EQ.operation_derefine)then           
                     grid(ichild)%refined(1:twotondim)=.true.
                  endif
-#ifdef GRAV                 
+
                  ! Initialisation rule for restrict multigrid residual
                  if(cache_operation.EQ.operation_restrict_res)then           
-                    grid(ichild)%f(1:twotondim,2)=0.0
+                    grav(ichild)%f(1:twotondim,2)=0.0
                  endif
-#endif                 
+
               endif
 
               ! Go to next free cache line
@@ -654,29 +647,25 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
         grid(child_grid)%flag1(1:twotondim)=0
      endif
 
-#ifdef HYDRO
      ! Initialisation rule for hydro upload
      if(cache_operation.EQ.operation_upload)then           
-        grid(child_grid)%uold(1:twotondim,1:nvar)=0.0
+        fluid(child_grid)%uold(1:twotondim,1:nvar)=0.0
      endif
 
      ! Initialisation rule for hydro multipole
      if(cache_operation.EQ.operation_multipole)then           
-        grid(child_grid)%unew(1:twotondim,1:ndim+1)=0.0
+        fluid(child_grid)%unew(1:twotondim,1:ndim+1)=0.0
      endif
-#endif
 
-#ifdef GRAV
      ! Initialisation rule for mass deposition
      if(cache_operation.EQ.operation_rho)then           
-        grid(child_grid)%rho(1:twotondim)=0.0
+        grav(child_grid)%rho(1:twotondim)=0.0
      endif
 
      ! Initialisation rule for MG mask restriction
      if(cache_operation.EQ.operation_restrict_mask)then           
-        grid(child_grid)%f(1:twotondim,3)=0.0
+        grav(child_grid)%f(1:twotondim,3)=0.0
      endif
-#endif
 
      ! Go to next free cache line
      free_cache=free_cache+1
@@ -695,6 +684,8 @@ end function get_grid
 !##############################################################
 subroutine check_mail(comm_id,hash_dict)
   use amr_commons
+  use hydro_commons
+  use poisson_commons
   use hilbert
   use hash
   implicit none
@@ -821,11 +812,9 @@ subroutine check_mail(comm_id,hash_dict)
                        else
                           reply_hydro(grid_cpu)%int4(ind,i)=0
                        endif
-#ifdef HYDRO
                        do ivar=1,nvar
-                          reply_hydro(grid_cpu)%realdp(ind,ivar,i)=grid(ipos)%uold(ind,ivar)
+                          reply_hydro(grid_cpu)%realdp(ind,ivar,i)=fluid(ipos)%uold(ind,ivar)
                        end do
-#endif
                     end do
                  endif
                  
@@ -833,25 +822,23 @@ subroutine check_mail(comm_id,hash_dict)
                  if(cache_operation_type.EQ.operation_type_poisson)then
                     reply_poisson(grid_cpu)%lev(i)=grid(ipos)%lev
                     reply_poisson(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
-#ifdef GRAV
                     if(cache_operation.EQ.operation_restrict_res)then
                        do ind=1,twotondim
-                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%f(ind,3)
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grav(ipos)%f(ind,3)
                        end do
                     else if(cache_operation.EQ.operation_scan)then
                        do ind=1,twotondim
-                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%f(ind,3)
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grav(ipos)%f(ind,3)
                        end do
                     else if(cache_operation.EQ.operation_cg)then
                        do ind=1,twotondim
-                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%f(ind,2)
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grav(ipos)%f(ind,2)
                        end do
                     else
                        do ind=1,twotondim
-                          reply_poisson(grid_cpu)%realdp(ind,i)=grid(ipos)%phi(ind)
+                          reply_poisson(grid_cpu)%realdp(ind,i)=grav(ipos)%phi(ind)
                        end do
                     endif
-#endif
                  endif
                  
                  ! Reply of type refine
@@ -864,18 +851,20 @@ subroutine check_mail(comm_id,hash_dict)
                        else
                           reply_refine(grid_cpu)%int4(ind,i)=0
                        endif
-#ifdef HYDRO
-                       do ivar=1,nvar
-                          reply_refine(grid_cpu)%realdp_hydro(ind,ivar,i)=grid(ipos)%uold(ind,ivar)
-                       end do
-#endif
+                       if(hydro)then
+                          do ivar=1,nvar
+                             reply_refine(grid_cpu)%realdp_hydro(ind,ivar,i)=fluid(ipos)%uold(ind,ivar)
+                          end do
+                       endif
+                       if(poisson)then
 #ifdef GRAV
-                       do idim=1,ndim
-                          reply_refine(grid_cpu)%realdp_poisson(ind,idim,i)=grid(ipos)%f(ind,idim)
-                       end do
-                       reply_refine(grid_cpu)%realdp_poisson(ind,ndim+1,i)=grid(ipos)%phi(ind)
-                       reply_refine(grid_cpu)%realdp_poisson(ind,ndim+2,i)=grid(ipos)%phi_old(ind)
+                          do idim=1,ndim
+                             reply_refine(grid_cpu)%realdp_poisson(ind,idim,i)=grav(ipos)%f(ind,idim)
+                          end do
+                          reply_refine(grid_cpu)%realdp_poisson(ind,ndim+1,i)=grav(ipos)%phi(ind)
+                          reply_refine(grid_cpu)%realdp_poisson(ind,ndim+2,i)=grav(ipos)%phi_old(ind)
 #endif
+                       endif
                     end do
                  endif
 
@@ -884,10 +873,8 @@ subroutine check_mail(comm_id,hash_dict)
                     reply_mg(grid_cpu)%lev(i)=grid(ipos)%lev
                     reply_mg(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
                     do ind=1,twotondim
-#ifdef GRAV
-                       reply_mg(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
-                       reply_mg(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%phi(ind)
-#endif
+                       reply_mg(grid_cpu)%realdp_dis(ind,i)=grav(ipos)%f(ind,3)
+                       reply_mg(grid_cpu)%realdp_phi(ind,i)=grav(ipos)%phi(ind)
                     end do
                  endif
 
@@ -897,19 +884,15 @@ subroutine check_mail(comm_id,hash_dict)
                     reply_interpol(grid_cpu)%ckey(1:ndim,i)=grid(ipos)%ckey(1:ndim)
                     if(cache_operation.EQ.operation_kick)then
                        do ind=1,twotondim
-#ifdef GRAV
-                          reply_interpol(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%f(ind,1)
-                          reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grid(ipos)%f(ind,2)
-                          reply_interpol(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
-#endif
+                          reply_interpol(grid_cpu)%realdp_phi(ind,i)=grav(ipos)%f(ind,1)
+                          reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grav(ipos)%f(ind,2)
+                          reply_interpol(grid_cpu)%realdp_dis(ind,i)=grav(ipos)%f(ind,3)
                        end do
                     else
                        do ind=1,twotondim
-#ifdef GRAV
-                          reply_interpol(grid_cpu)%realdp_phi(ind,i)=grid(ipos)%phi(ind)
-                          reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grid(ipos)%phi_old(ind)
-                          reply_interpol(grid_cpu)%realdp_dis(ind,i)=grid(ipos)%f(ind,3)
-#endif
+                          reply_interpol(grid_cpu)%realdp_phi(ind,i)=grav(ipos)%phi(ind)
+                          reply_interpol(grid_cpu)%realdp_phi_old(ind,i)=grav(ipos)%phi_old(ind)
+                          reply_interpol(grid_cpu)%realdp_dis(ind,i)=grav(ipos)%f(ind,3)
                        end do
                     endif
                  endif
@@ -1006,16 +989,14 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(0)=recv_flush_hydro%lev(i)
               hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
-#ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
                     if(grid(ichild)%refined(ind))then
-                       grid(ichild)%uold(ind,ivar)=grid(ichild)%uold(ind,ivar)&
+                       fluid(ichild)%uold(ind,ivar)=fluid(ichild)%uold(ind,ivar)&
                             & +recv_flush_hydro%realdp(ind,ivar,i)
                     endif
                  end do
               end do
-#endif
            end do
         endif
 
@@ -1027,16 +1008,14 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(0)=recv_flush_hydro%lev(i)
               hash_child(1:ndim)=recv_flush_hydro%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
-#ifdef HYDRO
               do ivar=1,ndim+1
                  do ind=1,twotondim
                     if(grid(ichild)%refined(ind))then
-                       grid(ichild)%unew(ind,ivar)=grid(ichild)%unew(ind,ivar)&
+                       fluid(ichild)%unew(ind,ivar)=fluid(ichild)%unew(ind,ivar)&
                             & +recv_flush_hydro%realdp(ind,ivar,i)
                     endif
                  end do
               end do
-#endif
            end do
         endif
 
@@ -1048,14 +1027,12 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(0)=recv_flush_refine%lev(i)
               hash_child(1:ndim)=recv_flush_refine%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
-#ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
-                    grid(ichild)%unew(ind,ivar)=grid(ichild)%unew(ind,ivar)&
+                    fluid(ichild)%unew(ind,ivar)=fluid(ichild)%unew(ind,ivar)&
                          & +recv_flush_refine%realdp_hydro(ind,ivar,i)
                  end do
               end do
-#endif
            end do
         endif
 
@@ -1067,14 +1044,12 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(0)=recv_flush_poisson%lev(i)
               hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
-#ifdef GRAV
               if(ichild>0)then
                  do ind=1,twotondim
-                    grid(ichild)%rho(ind)=grid(ichild)%rho(ind)&
+                    grav(ichild)%rho(ind)=grav(ichild)%rho(ind)&
                          & +recv_flush_poisson%realdp(ind,i)
                  end do
               endif
-#endif
            end do
         endif
 
@@ -1086,12 +1061,10 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(0)=recv_flush_poisson%lev(i)
               hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
-#ifdef GRAV
               do ind=1,twotondim
-                 grid(ichild)%f(ind,3)=grid(ichild)%f(ind,3)&
+                 grav(ichild)%f(ind,3)=grav(ichild)%f(ind,3)&
                       & +recv_flush_poisson%realdp(ind,i)
               end do
-#endif
            end do
         endif
 
@@ -1103,14 +1076,12 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(0)=recv_flush_poisson%lev(i)
               hash_child(1:ndim)=recv_flush_poisson%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
-#ifdef GRAV
               do ind=1,twotondim
-                 if(grid(ichild)%f(ind,3)>0.0)then
-                    grid(ichild)%f(ind,2)=grid(ichild)%f(ind,2)&
+                 if(grav(ichild)%f(ind,3)>0.0)then
+                    grav(ichild)%f(ind,2)=grav(ichild)%f(ind,2)&
                          & +recv_flush_poisson%realdp(ind,i)
                  endif
               end do
-#endif
            end do
         endif
 
@@ -1151,24 +1122,28 @@ subroutine check_mail(comm_id,hash_dict)
               ! Insert new grid in hash table
               call hash_set(hash_dict,hash_child,ichild)
 
-              ! Flush hydro variables
-#ifdef HYDRO
-              do ind=1,twotondim
-                 do ivar=1,nvar
-                    grid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
+              if(hydro)then
+                 ! Flush hydro variables
+                 do ind=1,twotondim
+                    do ivar=1,nvar
+                       fluid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
+                    end do
                  end do
-              end do
-#endif
+              endif
+
               ! Flush gravity variables
+              if(poisson)then
 #ifdef GRAV
-              do ind=1,twotondim
-                 do idim=1,ndim
-                    grid(ichild)%f(ind,idim)=recv_flush_refine%realdp_poisson(ind,idim,i)
+                 do ind=1,twotondim
+                    do idim=1,ndim
+                       grav(ichild)%f(ind,idim)=recv_flush_refine%realdp_poisson(ind,idim,i)
+                    end do
+                    grav(ichild)%phi(ind)=recv_flush_refine%realdp_poisson(ind,ndim+1,i)
+                    grav(ichild)%phi_old(ind)=recv_flush_refine%realdp_poisson(ind,ndim+2,i)
                  end do
-                 grid(ichild)%phi(ind)=recv_flush_refine%realdp_poisson(ind,ndim+1,i)
-                 grid(ichild)%phi_old(ind)=recv_flush_refine%realdp_poisson(ind,ndim+2,i)
-              end do
 #endif
+              endif
+
            end do
         endif
 
@@ -1207,21 +1182,30 @@ subroutine check_mail(comm_id,hash_dict)
                  else
                     grid(ichild)%refined(ind)=.false.
                  endif
-                 ! Flush hydro variables
-#ifdef HYDRO
+              end do
+              ! Flush hydro variables
+              if(hydro)then
                  do ivar=1,nvar
-                    grid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
+                    do ind=1,twotondim
+                       fluid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
+                    end do
                  end do
-#endif                 
-                 ! Flush gravity variables
+              endif
+
+              ! Flush gravity variables
+              if(poisson)then
 #ifdef GRAV
                  do idim=1,ndim
-                    grid(ichild)%f(ind,idim)=recv_flush_refine%realdp_poisson(ind,idim,i)
+                    do ind=1,twotondim
+                       grav(ichild)%f(ind,idim)=recv_flush_refine%realdp_poisson(ind,idim,i)
+                    end do
+                 enddo
+                 do ind=1,twotondim
+                    grav(ichild)%phi(ind)=recv_flush_refine%realdp_poisson(ind,ndim+1,i)
+                    grav(ichild)%phi_old(ind)=recv_flush_refine%realdp_poisson(ind,ndim+2,i)
                  end do
-                 grid(ichild)%phi(ind)=recv_flush_refine%realdp_poisson(ind,ndim+1,i)
-                 grid(ichild)%phi_old(ind)=recv_flush_refine%realdp_poisson(ind,ndim+2,i)
 #endif
-              end do
+              endif
               grid(ichild)%flag1(1:twotondim)=0
               grid(ichild)%flag2(1:twotondim)=0
               grid(ichild)%superoct=1
@@ -1272,14 +1256,14 @@ subroutine check_mail(comm_id,hash_dict)
               grid(ichild)%flag1(1:twotondim)=0
               grid(ichild)%flag2(1:twotondim)=0
               grid(ichild)%superoct=1
-#ifdef GRAV
+
               ! Initialize gravity variables
               do ind=1,twotondim
-                 grid(ichild)%f(ind,1:ndim)=0.0
-                 grid(ichild)%phi(ind)=0.0
-                 grid(ichild)%phi_old(ind)=0.0
+                 grav(ichild)%f(ind,1:ndim)=0.0
+                 grav(ichild)%phi(ind)=0.0
+                 grav(ichild)%phi_old(ind)=0.0
               end do
-#endif
+
               ! Insert new grid in hash table
               call hash_set(hash_dict,hash_child,ichild)
               
@@ -1335,6 +1319,8 @@ end subroutine check_mail
 !##############################################################
 subroutine destage(igrid,hash_dict)
   use amr_commons
+  use hydro_commons
+  use poisson_commons
   use hash
   implicit none
 #ifndef WITHOUTMPI
@@ -1427,13 +1413,11 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-#ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,nvar
-              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
+              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=fluid(igrid)%uold(ind,ivar)
            end do
         end do
-#endif
      endif
 
      !------------------------------------------------------
@@ -1452,13 +1436,11 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_hydro(grid_cpu)%nflush
         send_flush_hydro(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_hydro(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-#ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,ndim+1
-              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=grid(igrid)%unew(ind,ivar)
+              send_flush_hydro(grid_cpu)%realdp(ind,ivar,iflush)=fluid(igrid)%unew(ind,ivar)
            end do
         end do
-#endif
      endif
 
      !------------------------------------------------------
@@ -1477,13 +1459,11 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_refine(grid_cpu)%nflush
         send_flush_refine(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_refine(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-#ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,nvar
-              send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=grid(igrid)%unew(ind,ivar)
+              send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=fluid(igrid)%unew(ind,ivar)
            end do
         end do
-#endif
      endif
 
      !------------------------------------------------------
@@ -1502,22 +1482,24 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_refine(grid_cpu)%nflush
         send_flush_refine(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_refine(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-#ifdef HYDRO
-        do ind=1,twotondim
-           do ivar=1,nvar
-              send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
+        if(hydro)then
+           do ind=1,twotondim
+              do ivar=1,nvar
+                 send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=fluid(igrid)%uold(ind,ivar)
+              end do
            end do
-        end do
-#endif
+        endif
+        if(poisson)then
 #ifdef GRAV
-        do ind=1,twotondim
-           do idim=1,ndim
-              send_flush_refine(grid_cpu)%realdp_poisson(ind,idim,iflush)=grid(igrid)%f(ind,idim)
+           do ind=1,twotondim
+              do idim=1,ndim
+                 send_flush_refine(grid_cpu)%realdp_poisson(ind,idim,iflush)=grav(igrid)%f(ind,idim)
+              end do
+              send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+1,iflush)=grav(igrid)%phi(ind)
+              send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+2,iflush)=grav(igrid)%phi_old(ind)
            end do
-           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+1,iflush)=grid(igrid)%phi(ind)
-           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+2,iflush)=grid(igrid)%phi_old(ind)
-        end do
 #endif
+        endif
      endif
 
      !------------------------------------------------------
@@ -1542,18 +1524,20 @@ subroutine destage(igrid,hash_dict)
            else
               send_flush_refine(grid_cpu)%int4(ind,iflush)=0
            endif
-#ifdef HYDRO
-           do ivar=1,nvar
-              send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=grid(igrid)%uold(ind,ivar)
-           end do
-#endif
+           if(hydro)then
+              do ivar=1,nvar
+                 send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=fluid(igrid)%uold(ind,ivar)
+              end do
+           endif
+           if(poisson)then
 #ifdef GRAV
-           do idim=1,ndim
-              send_flush_refine(grid_cpu)%realdp_poisson(ind,idim,iflush)=grid(igrid)%f(ind,idim)
-           end do
-           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+1,iflush)=grid(igrid)%phi(ind)
-           send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+2,iflush)=grid(igrid)%phi_old(ind)
+              do idim=1,ndim
+                 send_flush_refine(grid_cpu)%realdp_poisson(ind,idim,iflush)=grav(igrid)%f(ind,idim)
+              end do
+              send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+1,iflush)=grav(igrid)%phi(ind)
+              send_flush_refine(grid_cpu)%realdp_poisson(ind,ndim+2,iflush)=grav(igrid)%phi_old(ind)
 #endif
+           endif
         end do
      endif
 
@@ -1573,11 +1557,9 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_poisson(grid_cpu)%nflush
         send_flush_poisson(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_poisson(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-#ifdef GRAV
         do ind=1,twotondim
-           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grid(igrid)%rho(ind)
+           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grav(igrid)%rho(ind)
         end do
-#endif
      endif
 
      !------------------------------------------------------
@@ -1596,11 +1578,9 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_poisson(grid_cpu)%nflush
         send_flush_poisson(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_poisson(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-#ifdef GRAV
         do ind=1,twotondim
-           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grid(igrid)%f(ind,3)
+           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grav(igrid)%f(ind,3)
         end do
-#endif
      endif
 
      !------------------------------------------------------
@@ -1619,11 +1599,9 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_poisson(grid_cpu)%nflush
         send_flush_poisson(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_poisson(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
-#ifdef GRAV
         do ind=1,twotondim
-           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grid(igrid)%f(ind,2)
+           send_flush_poisson(grid_cpu)%realdp(ind,iflush)=grav(igrid)%f(ind,2)
         end do
-#endif
      endif
 
      !------------------------------------------------------

@@ -2,7 +2,6 @@
 !###########################################################
 !###########################################################
 !###########################################################
-#ifdef GRAV
 subroutine phi_fine_cg(ilevel,icount)
   use amr_commons
   use pm_commons
@@ -50,7 +49,7 @@ subroutine phi_fine_cg(ilevel,icount)
   rhs_norm=0.d0
   do igrid=head(ilevel),tail(ilevel)
      do ind=1,twotondim
-        rhs_norm=rhs_norm+fact2*(grid(igrid)%rho(ind)-rho_tot)**2
+        rhs_norm=rhs_norm+fact2*(grav(igrid)%rho(ind)-rho_tot)**2
      end do
   end do
   ! Compute global norms
@@ -83,7 +82,7 @@ subroutine phi_fine_cg(ilevel,icount)
      r2=0.0d0
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
-           r2=r2+grid(igrid)%f(ind,1)**2
+           r2=r2+grav(igrid)%f(ind,1)**2
         end do
      end do
      ! Compute global norm
@@ -107,7 +106,7 @@ subroutine phi_fine_cg(ilevel,icount)
      !====================================
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
-           grid(igrid)%f(ind,2)=grid(igrid)%f(ind,1)+beta_cg*grid(igrid)%f(ind,2)
+           grav(igrid)%f(ind,2)=grav(igrid)%f(ind,1)+beta_cg*grav(igrid)%f(ind,2)
         end do
      end do
 
@@ -123,7 +122,7 @@ subroutine phi_fine_cg(ilevel,icount)
      pAp=0.0d0
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
-           pAp=pAp+grid(igrid)%f(ind,2)*grid(igrid)%f(ind,3)
+           pAp=pAp+grav(igrid)%f(ind,2)*grav(igrid)%f(ind,3)
         end do
      end do
      ! Compute global sum
@@ -142,7 +141,7 @@ subroutine phi_fine_cg(ilevel,icount)
      !====================================
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
-           grid(igrid)%phi(ind)=grid(igrid)%phi(ind)+alpha_cg*grid(igrid)%f(ind,2)
+           grav(igrid)%phi(ind)=grav(igrid)%phi(ind)+alpha_cg*grav(igrid)%f(ind,2)
         end do
      end do
 
@@ -151,7 +150,7 @@ subroutine phi_fine_cg(ilevel,icount)
      !====================================
      do igrid=head(ilevel),tail(ilevel)
         do ind=1,twotondim
-           grid(igrid)%f(ind,1)=grid(igrid)%f(ind,1)-alpha_cg*grid(igrid)%f(ind,3)
+           grav(igrid)%f(ind,1)=grav(igrid)%f(ind,1)-alpha_cg*grav(igrid)%f(ind,3)
         end do
      end do
 
@@ -254,7 +253,7 @@ subroutine cmp_residual_cg(ilevel,icount)
 
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        phi_nbor(ind,0)=grav(igrid)%phi(ind)
      end do
 
      ! Get neighboring octs potential
@@ -275,7 +274,7 @@ subroutine cmp_residual_cg(ilevel,icount)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=grid(igridn)%phi(ind)
+              phi_nbor(ind,i_nbor)=grav(igridn)%phi(ind)
            end do
 
         ! Otherwise interpolate from coarser level
@@ -295,19 +294,19 @@ subroutine cmp_residual_cg(ilevel,icount)
      do ind=1,twotondim
 
         ! Compute residual using 6 neighbors potential
-        residu=grid(igrid)%phi(ind)
+        residu=grav(igrid)%phi(ind)
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
            residu=residu-oneoversix*(phi_nbor(id1,ig1)+phi_nbor(id2,ig2))
         end do
-        residu=residu+fact*(grid(igrid)%rho(ind)-rho_tot)
+        residu=residu+fact*(grav(igrid)%rho(ind)-rho_tot)
 
         ! Store results in f(ind,1)
-        grid(igrid)%f(ind,1)=residu
+        grav(igrid)%f(ind,1)=residu
 
         ! Store results in f(ind,2)
-        grid(igrid)%f(ind,2)=residu
+        grav(igrid)%f(ind,2)=residu
 
      end do
      ! End loop over cells
@@ -362,7 +361,7 @@ subroutine cmp_Ap_cg(ilevel)
 
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%f(ind,2)
+        phi_nbor(ind,0)=grav(igrid)%f(ind,2)
      end do
 
      ! Get neighboring octs potential
@@ -383,7 +382,7 @@ subroutine cmp_Ap_cg(ilevel)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grid(igridn)%f(ind,2)
+              phi_nbor(ind,inbor)=grav(igridn)%f(ind,2)
            end do
         else
            do ind=1,twotondim
@@ -398,7 +397,7 @@ subroutine cmp_Ap_cg(ilevel)
      do ind=1,twotondim
 
         ! Compute Ap using neighbors potential
-        residu=-grid(igrid)%f(ind,2)
+        residu=-grav(igrid)%f(ind,2)
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
@@ -406,7 +405,7 @@ subroutine cmp_Ap_cg(ilevel)
         end do
 
         ! Store results in f(ind,3)
-        grid(igrid)%f(ind,3)=residu
+        grav(igrid)%f(ind,3)=residu
 
      end do
      ! End loop over cells
@@ -477,7 +476,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
      do i=1,recv_tot
         igrid=grid_recv_buf(i)
         istart=(i-1)*twotondim+ind
-        phi_recv_buf(istart)=grid(igrid)%f(ind,2)
+        phi_recv_buf(istart)=grav(igrid)%f(ind,2)
      end do
   end do
 
@@ -512,7 +511,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
 
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%f(ind,2)
+        phi_nbor(ind,0)=grav(igrid)%f(ind,2)
      end do
 
      ! Get neighboring octs potential
@@ -524,7 +523,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grid(igridn)%f(ind,2)
+              phi_nbor(ind,inbor)=grav(igridn)%f(ind,2)
            end do
         else if (igridn==0) then
            do ind=1,twotondim
@@ -543,7 +542,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
      do ind=1,twotondim
 
         ! Compute Ap using neighbors potential
-        residu=-grid(igrid)%f(ind,2)
+        residu=-grav(igrid)%f(ind,2)
         do idim=1,ndim
            id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
            id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
@@ -551,7 +550,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
         end do
 
         ! Store results in f(ind,3)
-        grid(igrid)%f(ind,3)=residu
+        grav(igrid)%f(ind,3)=residu
 
      end do
      ! End loop over cells
@@ -621,9 +620,9 @@ subroutine make_initial_phi(ilevel,icount)
 
      ! Loop over cells
      do ind=1,twotondim
-        grid(igrid)%phi(ind)=0.0d0
+        grav(igrid)%phi(ind)=0.0d0
         do idim=1,ndim
-           grid(igrid)%f(ind,idim)=0.0
+           grav(igrid)%f(ind,idim)=0.0
         end do
      end do
      ! End loop over cells
@@ -641,7 +640,7 @@ subroutine make_initial_phi(ilevel,icount)
 
         ! Loop over cells
         do ind=1,twotondim
-           grid(igrid)%phi(ind)=phi_int(ind)
+           grav(igrid)%phi(ind)=phi_int(ind)
         end do
         ! End loop over cells
 
@@ -910,5 +909,4 @@ subroutine clean_cg
 #endif
 
 end subroutine clean_cg
-#endif
 

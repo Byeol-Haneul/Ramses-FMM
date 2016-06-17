@@ -15,6 +15,19 @@ module hydro_commons
   real(kind=8),parameter ::rhoc    = 1.8800000d-29
   real(kind=8),parameter ::mH      = 1.6600000d-24
 
+  ! Oct HYDRO structure
+  type oct_hydro
+     real(kind=dp),dimension(1:twotondim,1:nvar)::uold
+     real(kind=dp),dimension(1:twotondim,1:nvar)::unew
+#ifdef DUALENER
+     real(kind=dp),dimension(1:twotondim)::divu
+     real(kind=dp),dimension(1:twotondim)::enew
+#endif
+  end type oct_hydro
+
+  ! Persistent array for the fluid variables
+  type(oct_hydro),dimension(:),allocatable::fluid
+
   ! Work space for hydro kernel
   integer,parameter::nx=2
   integer,parameter::iu1=-1,iu2=nx+2
