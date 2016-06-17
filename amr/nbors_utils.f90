@@ -534,9 +534,11 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
                        grid(ichild)%refined(ind)=.false.
                     end if
                     if(hydro)then
+#ifdef HYDRO
                        do ivar=1,nvar
                           fluid(ichild)%uold(ind,ivar)=response_refine%realdp_hydro(ind,ivar,i)
                        end do
+#endif
                     endif
                     if(poisson)then
 #ifdef GRAV
@@ -852,9 +854,11 @@ subroutine check_mail(comm_id,hash_dict)
                           reply_refine(grid_cpu)%int4(ind,i)=0
                        endif
                        if(hydro)then
+#ifdef HYDRO
                           do ivar=1,nvar
                              reply_refine(grid_cpu)%realdp_hydro(ind,ivar,i)=fluid(ipos)%uold(ind,ivar)
                           end do
+#endif
                        endif
                        if(poisson)then
 #ifdef GRAV
@@ -1027,12 +1031,14 @@ subroutine check_mail(comm_id,hash_dict)
               hash_child(0)=recv_flush_refine%lev(i)
               hash_child(1:ndim)=recv_flush_refine%ckey(1:ndim,i)
               ichild=hash_get(hash_dict,hash_child)
+#ifdef HYDRO
               do ivar=1,nvar
                  do ind=1,twotondim
                     fluid(ichild)%unew(ind,ivar)=fluid(ichild)%unew(ind,ivar)&
                          & +recv_flush_refine%realdp_hydro(ind,ivar,i)
                  end do
               end do
+#endif
            end do
         endif
 
@@ -1122,13 +1128,15 @@ subroutine check_mail(comm_id,hash_dict)
               ! Insert new grid in hash table
               call hash_set(hash_dict,hash_child,ichild)
 
+              ! Flush hydro variables
               if(hydro)then
-                 ! Flush hydro variables
+#ifdef HYDRO                 
                  do ind=1,twotondim
                     do ivar=1,nvar
                        fluid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
                     end do
                  end do
+#endif
               endif
 
               ! Flush gravity variables
@@ -1185,11 +1193,13 @@ subroutine check_mail(comm_id,hash_dict)
               end do
               ! Flush hydro variables
               if(hydro)then
+#ifdef HYDRO
                  do ivar=1,nvar
                     do ind=1,twotondim
                        fluid(ichild)%uold(ind,ivar)=recv_flush_refine%realdp_hydro(ind,ivar,i)
                     end do
                  end do
+#endif
               endif
 
               ! Flush gravity variables
@@ -1459,11 +1469,13 @@ subroutine destage(igrid,hash_dict)
         iflush=send_flush_refine(grid_cpu)%nflush
         send_flush_refine(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_refine(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
+#ifdef HYDRO
         do ind=1,twotondim
            do ivar=1,nvar
               send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=fluid(igrid)%unew(ind,ivar)
            end do
         end do
+#endif
      endif
 
      !------------------------------------------------------
@@ -1483,11 +1495,13 @@ subroutine destage(igrid,hash_dict)
         send_flush_refine(grid_cpu)%lev(iflush)=grid(igrid)%lev
         send_flush_refine(grid_cpu)%ckey(1:ndim,iflush)=grid(igrid)%ckey(1:ndim)
         if(hydro)then
+#ifdef HYDRO
            do ind=1,twotondim
               do ivar=1,nvar
                  send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=fluid(igrid)%uold(ind,ivar)
               end do
            end do
+#endif
         endif
         if(poisson)then
 #ifdef GRAV
@@ -1525,9 +1539,11 @@ subroutine destage(igrid,hash_dict)
               send_flush_refine(grid_cpu)%int4(ind,iflush)=0
            endif
            if(hydro)then
+#ifdef HYDRO
               do ivar=1,nvar
                  send_flush_refine(grid_cpu)%realdp_hydro(ind,ivar,iflush)=fluid(igrid)%uold(ind,ivar)
               end do
+#endif
            endif
            if(poisson)then
 #ifdef GRAV
