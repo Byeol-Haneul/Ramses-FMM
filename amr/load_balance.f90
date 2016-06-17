@@ -586,7 +586,7 @@ subroutine balance_part(ilevel)
                  bound_key_new(1:nhilbert,icpu)=ave_key
                  bound_key_left(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
               endif
-              diff_key=difference_keys(bound_key_right(1,icpu),bound_key_left(1,icpu))
+              diff_key=difference_keys(bound_key_right(1:nhilbert,icpu),bound_key_left(1:nhilbert,icpu))
               unbalance=MAX(unbalance,maxval(diff_key))
            end do
                             
