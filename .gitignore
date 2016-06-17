@@ -1,5 +1,5 @@
 # ignore everything in bin except "official" Makefiles
-trunk/ramses/bin/*
+bin/*
 !trunk/ramses/bin/Makefile
 !trunk/ramses/bin/Makefile_unit_tests
 !trunk/ramses/bin/Makefile.rt
