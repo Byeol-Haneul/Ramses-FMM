@@ -8,6 +8,9 @@ subroutine init_poisson
 
   if(verbose)write(*,*)'Entering init_poisson'
 
+  ! Allocate Poisson oct-based data
+  allocate(grav(1:ngridmax+ncachemax))
+
   ! Allocate multigrid parameters
   allocate(buffer_mg(1:nlevelmax))
   allocate(safe_mode(1:nlevelmax))

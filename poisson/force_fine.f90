@@ -21,7 +21,7 @@ subroutine force_fine(ilevel,icount)
  
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
-#ifdef GRAV  
+
   !-------------------------------------
   ! Compute analytical gravity force
   !-------------------------------------
@@ -45,7 +45,7 @@ subroutine force_fine(ilevel,icount)
            ! Scatter variables to main memory
            do idim=1,ndim
               do i=1,ngrid
-                 grid(igrid+i-1)%f(ind,idim)=ff(i,idim)
+                 grav(igrid+i-1)%f(ind,idim)=ff(i,idim)
               end do
            end do
         end do
@@ -79,10 +79,10 @@ subroutine force_fine(ilevel,icount)
         ! Loop over dimensions
         do idim=1,ndim
            if(.not.grid(igrid)%refined(ind))then
-              epot_loc=epot_loc+fact*grid(igrid)%f(ind,idim)**2
+              epot_loc=epot_loc+fact*grav(igrid)%f(ind,idim)**2
            endif
         end do
-        rho_loc=MAX(rho_loc,dble(abs(grid(igrid)%rho(ind))))
+        rho_loc=MAX(rho_loc,dble(abs(grav(igrid)%rho(ind))))
      end do
      ! End loop over cells
   end do
@@ -97,7 +97,6 @@ subroutine force_fine(ilevel,icount)
      epot_tot=epot_tot+epot_loc
      rho_max(ilevel)=rho_loc
 
-#endif  
 111 format('   Entering force_fine for level ',I2)
 
 end subroutine force_fine
@@ -129,7 +128,7 @@ subroutine gradient_phi(ilevel,icount)
   real(dp)::dx,a,b,aa,bb,cc,dd,tfrac
   real(dp)::phi1,phi2,phi3,phi4
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
-#ifdef GRAV
+
   ! Mesh size at level ilevel in code units
   dx=boxlen/2**ilevel
 
@@ -191,7 +190,7 @@ subroutine gradient_phi(ilevel,icount)
      
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        phi_nbor(ind,0)=grav(igrid)%phi(ind)
      end do
 
      ! Get neighboring octs potential
@@ -209,7 +208,7 @@ subroutine gradient_phi(ilevel,icount)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=grid(igridn)%phi(ind)
+              phi_nbor(ind,i_nbor)=grav(igridn)%phi(ind)
            end do
 
         ! Otherwise interpolate from coarser level
@@ -244,7 +243,7 @@ subroutine gradient_phi(ilevel,icount)
            phi4=phi_nbor(id4,ig4)
 
            ! Compute acceleration
-           grid(igrid)%f(ind,idim)=a*(phi1-phi2)-b*(phi3-phi4)
+           grav(igrid)%f(ind,idim)=a*(phi1-phi2)-b*(phi3-phi4)
 
         end do
         ! End loop over dimensions
@@ -256,7 +255,7 @@ subroutine gradient_phi(ilevel,icount)
   ! End loop over grids
 
   call close_cache(grid_dict)
-#endif
+
 end subroutine gradient_phi
 
 

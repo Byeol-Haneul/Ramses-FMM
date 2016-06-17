@@ -107,7 +107,7 @@ subroutine init_refine_adaptive
   use pm_commons
   use poisson_commons
   implicit none
-  integer::ilevel,i,ivar, ilev
+  integer::ilevel,i,ivar,ilev
 
   if(myid==1)write(*,*)'Building initial adaptive grid'
 
@@ -148,6 +148,8 @@ subroutine init_refine_restart
   ! the initial AMR grid.
   !--------------------------------------------------------------
   use amr_commons
+  use hydro_commons
+  use poisson_commons
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -348,17 +350,13 @@ subroutine init_refine_restart
            grid(igrid)%lev=ilevel
            grid(igrid)%ckey=ckey
            grid(igrid)%refined=refined
-#ifdef HYDRO
            if(hydro)then
-              grid(igrid)%uold=uold
+              fluid(igrid)%uold=uold
            endif
-#endif
-#ifdef GRAV
            if(poisson)then
-              grid(igrid)%phi=phi
-              grid(igrid)%f=f
+              grav(igrid)%phi=phi
+              grav(igrid)%f=f
            endif
-#endif
 
            ! Set flag1 to preserve refinements
            do ind=1,twotondim

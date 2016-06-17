@@ -60,25 +60,13 @@ module amr_commons
      integer(kind=4),dimension(1:twotondim)::flag2
      logical,dimension(1:twotondim)::refined
      integer(kind=4)::superoct
-#ifdef GRAV
-     real(kind=dp),dimension(1:twotondim)::rho
-     real(kind=dp),dimension(1:twotondim)::phi
-     real(kind=dp),dimension(1:twotondim)::phi_old
-     real(kind=dp),dimension(1:twotondim,1:ndim)::f
-#endif
-#ifdef HYDRO
-     real(kind=dp),dimension(1:twotondim,1:nvar)::uold
-     real(kind=dp),dimension(1:twotondim,1:nvar)::unew
-#endif
-#ifdef DUALENER
-     real(kind=dp),dimension(1:twotondim)::divu
-     real(kind=dp),dimension(1:twotondim)::enew
-#endif
   end type oct
 
   ! Persistent array for the AMR grid
   type(oct),dimension(:),allocatable::grid
-  type(hash_table)::grid_dict   ! Oct hash table
+  
+  ! Oct hash table
+  type(hash_table)::grid_dict
 
   ! Starting index for each level 
   integer,allocatable,dimension(:)::head

@@ -10,8 +10,6 @@ subroutine write_screen(ilevel)
   !
   integer::igrid,ilevel,ind
 
-#ifdef HYDRO
-
   if(ndim>1)return
 
   if(noct_tot(ilevel)>0)then
@@ -23,13 +21,11 @@ subroutine write_screen(ilevel)
                 & igrid,grid(igrid)%ckey(1),ind,grid(igrid)%flag1(ind),grid(igrid)%lev,grid(igrid)%refined(ind),&
                 & grid(igrid)%hkey(1),grid(igrid)%superoct, &
                 & (2*grid(igrid)%ckey(1)+ind-0.5)/(2.*ckey_max(ilevel)),&
-                & grid(igrid)%uold(ind,1),grid(igrid)%uold(ind,2)/grid(igrid)%uold(ind,1),grid(igrid)%uold(ind,3)
+                & fluid(igrid)%uold(ind,1),fluid(igrid)%uold(ind,2)/fluid(igrid)%uold(ind,1),fluid(igrid)%uold(ind,3)
         end do
      end do
      write(*,*)'================================'
   endif
-
-#endif
 
 111 format(2(1pe12.5,1x))
 112 format(i3,1x,1pe10.3,1x,8(1pe10.3,1x))

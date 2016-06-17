@@ -9,7 +9,8 @@ NPRE = 8
 NVAR = 5
 NENER = 0
 SOLVER = hydro
-PATCH = /zbox/data/teyssier/mini-ramses/coeur
+PATCH =
+#/zbox/data/teyssier/mini-ramses/coeur
 EXEC = ramses
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
@@ -49,8 +50,8 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 #FFLAGS = -x f95-cpp-input $(DEFINES)
 
 # --- MPI, gfortran DEBUG syntax ------------------------------ 
-#F90 = mpif90 -frecord-marker=4 -ffree-line-length-none -fbacktrace -g -O -fbounds-check -Wuninitialized -Wall
-#FFLAGS = -x f95-cpp-input -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan  $(DEFINES)    
+F90 = mpif90 -frecord-marker=4 -ffree-line-length-none -fbacktrace -g -O -fbounds-check -Wuninitialized -Wall
+FFLAGS = -x f95-cpp-input -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan  $(DEFINES)    
 
 # --- MPI, pgf90 syntax ------------------------------
 #F90 = mpif90 -O3
@@ -59,8 +60,8 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 # --- MPI, ifort syntax ------------------------------
 #F90 = mpif90
 #FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
-F90 = mpif90 -f90=ifort
-FFLAGS = -cpp -fast -O3 -debug inline-debug-info -shared-intel -shared-libgcc $(DEFINES) -DNOSYSTEM
+#F90 = mpif90 -f90=ifort
+#FFLAGS = -cpp -fast -O3 -debug inline-debug-info -shared-intel -shared-libgcc $(DEFINES) -DNOSYSTEM
 #FFLAGS = -cpp -g -O0 -debug inline-debug-info -shared-intel -shared-libgcc -traceback -fpe0 -ftrapuv -check all $(DEFINES) -DNOSYSTEM
 # -DWITHOUTMPI
 # -check all -ftrapuv

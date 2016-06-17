@@ -23,7 +23,7 @@ subroutine init_amr
   dtnew=0.0D0
 
   ! Set up cache size
-  ncachemax=10000 !ngridmax
+  ncachemax=10000
 
   ! Allocate main oct array
   allocate(grid(1:ngridmax+ncachemax))
@@ -269,21 +269,18 @@ subroutine init_amr
   new_type_length(2)=ntilemax*(1+ndim)
   new_type_length(3)=ntilemax*twotondim
   msg_size=3
-
-#ifdef HYDRO
-  msg_size=msg_size+1
-  new_type_length(msg_size)=ntilemax*twotondim*nvar
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*nvar*realdpex
-#endif
-
-#ifdef GRAV
-  msg_size=msg_size+1
-  new_type_length(msg_size)=ntilemax*twotondim*(ndim+2)
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*(ndim+2)*realdpex
-#endif
-
+  if(hydro)then
+     msg_size=msg_size+1
+     new_type_length(msg_size)=ntilemax*twotondim*nvar
+     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+     new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*nvar*realdpex
+  endif
+  if(poisson)then
+     msg_size=msg_size+1
+     new_type_length(msg_size)=ntilemax*twotondim*(ndim+2)
+     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+     new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*(ndim+2)*realdpex
+  endif
   call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_msg,info)
   call MPI_TYPE_COMMIT(new_mpi_large_realdp_msg,info)
 
@@ -347,21 +344,18 @@ subroutine init_amr
   new_type_length(2)=nflushmax*(1+ndim)
   new_type_length(3)=nflushmax*twotondim
   msg_size=3
-
-#ifdef HYDRO
-  msg_size=msg_size+1
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_length(msg_size)=nflushmax*twotondim*nvar
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*nvar*realdpex
-#endif
-
-#ifdef GRAV
-  msg_size=msg_size+1
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_length(msg_size)=nflushmax*twotondim*(ndim+2)
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*(ndim+2)*realdpex
-#endif
-
+  if(hydro)then
+     msg_size=msg_size+1
+     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+     new_type_length(msg_size)=nflushmax*twotondim*nvar
+     new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*nvar*realdpex
+  endif
+  if(poisson)then
+     msg_size=msg_size+1
+     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+     new_type_length(msg_size)=nflushmax*twotondim*(ndim+2)
+     new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*(ndim+2)*realdpex
+  endif
   call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_flush,info)
   call MPI_TYPE_COMMIT(new_mpi_large_realdp_flush,info)
 

@@ -16,7 +16,6 @@ subroutine upload_fine(ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad
 
-#ifdef HYDRO
   if(ilevel==nlevelmax)return
   if(noct_tot(ilevel)==0)return
   if(noct_tot(ilevel+1)==0)return
@@ -27,7 +26,7 @@ subroutine upload_fine(ilevel)
      do ivar=1,nvar
         do ind=1,twotondim
            if(grid(ioct)%refined(ind))then
-              grid(ioct)%uold(ind,ivar)=0.0
+              fluid(ioct)%uold(ind,ivar)=0.0
            endif
         end do
      end do
@@ -49,10 +48,10 @@ subroutine upload_fine(ilevel)
      do ivar=1,nvar
         average=0.0d0
         do ind=1,twotondim
-           average=average+grid(ioct)%uold(ind,ivar)
+           average=average+fluid(ioct)%uold(ind,ivar)
         end do
         ! Scatter result to cell
-        grid(igrid)%uold(icell,ivar)=average/dble(twotondim)
+        fluid(igrid)%uold(icell,ivar)=average/dble(twotondim)
      end do
 
      ! Average internal energy instead of total energy
@@ -61,34 +60,32 @@ subroutine upload_fine(ilevel)
         do ind=1,twotondim
            ekin=0.0d0
            do idim=1,ndim
-              ekin=ekin+0.5d0*grid(ioct)%uold(ind,idim+1)**2/max(grid(ioct)%uold(ind,1),smallr)
+              ekin=ekin+0.5d0*fluid(ioct)%uold(ind,idim+1)**2/max(fluid(ioct)%uold(ind,1),smallr)
            end do
            erad=0.0d0
 #if NENER>0
            do irad=1,nener
-              erad=erad+grid(ioct)%uold(ind,ndim+2+irad)
+              erad=erad+fluid(ioct)%uold(ind,ndim+2+irad)
            end do
 #endif
-           average=average+grid(ioct)%uold(ind,ndim+2)-ekin-erad
+           average=average+fluid(ioct)%uold(ind,ndim+2)-ekin-erad
         end do
         ! Scatter result to cell
         ekin=0.0d0
         do idim=1,ndim
-           ekin=ekin+0.5d0*grid(igrid)%uold(icell,idim+1)**2/max(grid(igrid)%uold(icell,1),smallr)
+           ekin=ekin+0.5d0*fluid(igrid)%uold(icell,idim+1)**2/max(fluid(igrid)%uold(icell,1),smallr)
         end do
         erad=0.0d0
 #if NENER>0
         do irad=1,nener
-           erad=erad+grid(igrid)%uold(icell,ndim+2+irad)
+           erad=erad+fluid(igrid)%uold(icell,ndim+2+irad)
         end do
 #endif
-        grid(igrid)%uold(icell,ndim+2)=average/dble(twotondim)+ekin+erad
+        fluid(igrid)%uold(icell,ndim+2)=average/dble(twotondim)+ekin+erad
      endif
   end do
 
   call close_cache(grid_dict)
-
-#endif
 
 111 format('   Entering upload_fine for level',i2)
 
@@ -128,8 +125,6 @@ subroutine interpol_hydro(u1,u2)
   real(dp),dimension(1:ndim)::w
   real(dp)::ekin,mom
   real(dp)::erad
-
-#ifdef HYDRO
 
   ! Volume fraction of a fine cell realtive to a coarse cell
   oneover_twotondim=1.D0/dble(twotondim)
@@ -249,8 +244,6 @@ subroutine interpol_hydro(u1,u2)
      end do
   end if
 
-#endif
-  
 end subroutine interpol_hydro
 !###########################################################
 !###########################################################

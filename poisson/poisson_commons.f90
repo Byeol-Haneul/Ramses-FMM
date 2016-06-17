@@ -3,6 +3,17 @@ module poisson_commons
   use hash
   use poisson_parameters
 
+  ! Oct GRAV structure
+  type oct_grav
+     real(kind=dp),dimension(1:twotondim)::rho
+     real(kind=dp),dimension(1:twotondim)::phi
+     real(kind=dp),dimension(1:twotondim)::phi_old
+     real(kind=dp),dimension(1:twotondim,1:ndim)::f
+  end type oct_grav
+
+  ! Persistent array for the Poisson variables
+  type(oct_grav),dimension(:),allocatable::grav
+
   ! Minimum MG level
   integer :: levelmin_mg
 
