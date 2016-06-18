@@ -14,7 +14,7 @@
 !   64 (or maybe 128 bit) hash of the keys instead. EXPERIMENTAL!!!
 
 module hash
-  use amr_parameters, only: ndim
+  use amr_parameters, only: ndim, nvector
   implicit none
   
   ! General module parameters
@@ -43,7 +43,8 @@ module hash
      integer(kind=8) :: bitmask
      integer, allocatable, dimension(:) :: next_free
      procedure(hfunc), nopass, pointer :: hash_func => null()
-  end type hash_table  
+     logical         :: uses_simple_hash
+  end type hash_table
 
   ! Interface to a general hash function - necessary for the procedure
   ! pointer used above.
@@ -103,9 +104,11 @@ contains
     ! Allocate all hash table arrays and variables.
     ! Chose size (excluding the chaining space) as the smallest
     ! power of two >= the required_size.
+    htable%uses_simple_hash = .false.
     
     if (hash_type == 'simple') then
        htable%hash_func => simple_hash_func
+       htable%uses_simple_hash = .true.
     else if (hash_type == 'murmur') then
        if (ndim .ne. 3)then
           print*, 'murmur3 hash currently only in 3d'
@@ -312,7 +315,72 @@ contains
 
   end function hash_get
   ! =============================================================================
+  subroutine hash_get_vec(htable, keys, values, n)
+    implicit none
+    type(hash_table),                                 intent(in) :: htable
+    integer(kind = 8) , dimension(1:nvector, 0:ndim), intent(in) :: keys
+    integer, dimension(1:nvector)                , intent(inout) :: values
+    integer                                                      :: n
 
+    ! Subroutine to obtain up to nvector values from the hash key at once.
+    ! This subroutine is only valid if the simple hash is used.
+    
+    integer(kind = 8), dimension(1:nvector),        save :: ibucket, full_hash
+    integer(kind = 8), dimension(1:nvector, 0:ndim),save :: bucket_keys
+    logical,           dimension(1:nvector),        save :: ok
+    integer :: i, idim
+
+    if (.not. htable%uses_simple_hash)then
+       print*, 'You are not using simple hash - this is forbidden!'
+       stop
+    end if
+
+    full_hash = 0
+    do idim = 0, ndim
+       do i = 1, n
+          full_hash(i) = full_hash(i) + keys(i, idim) * constants(idim)
+       end do
+    end do
+
+    do i = 1, n
+       ibucket(i) = IAND(full_hash(i), htable%bitmask) + 1
+    end do
+    
+    do idim = 0, ndim
+       do i = 1, n
+          bucket_keys(i, idim) = htable%data(ibucket(i))%key(idim)
+       end do
+    end do
+
+    ok = .true.
+    do idim = 0, ndim
+       do i = 1, n
+          ok(i) = ok(i) .and. (bucket_keys(i, idim) == keys(i, idim))
+       end do
+    end do
+    
+    do i = 1, n
+       if (ok(i)) then
+          values(i) = htable%data(ibucket(i))%value
+       else
+          ! Walk linked list until key is found or to the end is reached
+          do while( htable%data(ibucket(i))%next_ibucket > 0)
+             ibucket(i) = htable%data(ibucket(i))%next_ibucket
+             if (same_keys_fortran(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
+                values(i) = htable%data(ibucket(i))%value
+                ok(i) = .true.
+             end if
+          end do
+          ! Nothing found...
+          if (.not. ok(i))then
+             values(i) = 0 
+          end if
+       end if
+    end do
+  end subroutine hash_get_vec
+
+  ! =============================================================================  
+  
   ! =============================================================================  
   subroutine hash_free(htable, key)
     implicit none
@@ -384,16 +452,17 @@ contains
     same_keys =  memcmp(key1, key2, key_length) == 0_4
   end function same_keys
 
-  ! ALTERNATIVE VERSION - CAN BE USED INSTEAD OF THE C CODE.
-  ! function same_keys(key1, key2)
-  !   logical :: same_keys
-  !   integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2
-  !   logical, dimension(0:ndim), save :: ok
-  !   do i = 0, ndmin
-  !      ok(i) = (key1(i)==key2(i))
-  !   end do
-  !   same_keys = ALL(ok)
-  ! end function same_keys
+!  ALTERNATIVE VERSION - CAN BE USED INSTEAD OF THE C CODE.
+  function same_keys_fortran(key1, key2)
+    logical :: same_keys_fortran
+    integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2
+    logical, dimension(0:ndim), save :: ok
+    integer :: i
+    do i = 0, ndim
+       ok(i) = (key1(i)==key2(i))
+    end do
+    same_keys_fortran = ALL(ok)
+  end function same_keys_fortran
   ! =============================================================================
 
   ! =============================================================================
