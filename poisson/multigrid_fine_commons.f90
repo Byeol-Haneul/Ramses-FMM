@@ -20,7 +20,7 @@
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-
+#ifdef GRAV
 ! ------------------------------------------------------------------------
 ! Main multigrid routine, called by amr_step
 ! ------------------------------------------------------------------------
@@ -146,7 +146,7 @@ subroutine multigrid(ilevel,icount)
 
         ! Reset correction from upper level before solve
         do igrid=head_mg(ilevel-1),tail_mg(ilevel-1)
-           grav(igrid)%phi(1:twotondim)=0.0d0
+           grid(igrid)%phi(1:twotondim)=0.0d0
         end do
         
         ! Multigrid-solve the upper level
@@ -288,7 +288,7 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
      
      ! Reset correction from upper level before solve
      do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
-        grav(igrid)%phi(1:twotondim)=0.0d0
+        grid(igrid)%phi(1:twotondim)=0.0d0
      end do
      
      ! Multigrid-solve the upper level
@@ -482,9 +482,9 @@ subroutine build_mg(ifinelevel)
 
            ! Intitialize gravity variables
            do ind=1,twotondim
-              grav(ichild)%f(ind,1:ndim)=0
-              grav(ichild)%phi(ind)=0
-              grav(ichild)%phi_old(ind)=0
+              grid(ichild)%f(ind,1:ndim)=0
+              grid(ichild)%phi(ind)=0
+              grid(ichild)%phi_old(ind)=0
            enddo
 
            ! Insert new grid in hash table
@@ -559,7 +559,7 @@ subroutine make_mask(ilevel)
    ! Init mask to 1.0 on all fine level cells :
    do igrid=head(ilevel),tail(ilevel)
       do ind=1,twotondim
-         grav(igrid)%f(ind,3)=1.0d0
+         grid(igrid)%f(ind,3)=1.0d0
       end do
    end do
 
@@ -663,8 +663,8 @@ subroutine make_bc_rhs(ilevel,icount)
      
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grav(igrid)%phi(ind)
-        dis_nbor(ind,0)=grav(igrid)%f(ind,3)
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
      end do
      
      ! Get neighboring octs potential
@@ -685,8 +685,8 @@ subroutine make_bc_rhs(ilevel,icount)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grav(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=grav(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
            end do
 
         ! Otherwise interpolate from coarser level
@@ -710,10 +710,10 @@ subroutine make_bc_rhs(ilevel,icount)
      do ind=1,twotondim
         
         ! Init BC-modified RHS to rho - rho_tot :
-        grav(igrid)%f(ind,2) = fourpi*(grav(igrid)%rho(ind) - rho_tot)
+        grid(igrid)%f(ind,2) = fourpi*(grid(igrid)%rho(ind) - rho_tot)
         
         ! Do not process masked cells
-        if(grav(igrid)%f(ind,3)<=0.0) cycle 
+        if(grid(igrid)%f(ind,3)<=0.0) cycle 
         
         ! Separate directions
         do idim=1,ndim
@@ -727,11 +727,11 @@ subroutine make_bc_rhs(ilevel,icount)
 
               ! phi(#) interpolated with mask:
               nb_phi = phi_nbor(id,ig)
-              w = nb_mask/(nb_mask-grav(igrid)%f(ind,3)) ! Linear parameter
-              phi_b = ((1.0d0-w)*nb_phi + w*grav(igrid)%phi(ind))
+              w = nb_mask/(nb_mask-grid(igrid)%f(ind,3)) ! Linear parameter
+              phi_b = ((1.0d0-w)*nb_phi + w*grid(igrid)%phi(ind))
 
               ! Increment correction for current cell
-              grav(igrid)%f(ind,2) = grav(igrid)%f(ind,2) - 2.0d0*oneoverdx2*phi_b
+              grid(igrid)%f(ind,2) = grid(igrid)%f(ind,2) - 2.0d0*oneoverdx2*phi_b
 
            end do
         end do
@@ -990,7 +990,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
      do i=1,buffer_mg(ilevel)%recv_tot
         igrid=buffer_mg(ilevel)%grid_recv_buf(i)
         istart=(i-1)*twotondim+ind
-        buffer_mg(ilevel)%phi_recv_buf(istart)=grav(igrid)%f(ind,3)
+        buffer_mg(ilevel)%phi_recv_buf(istart)=grid(igrid)%f(ind,3)
      end do
   end do
 
@@ -1053,4 +1053,5 @@ subroutine clean_comm_mg(ilevel)
 
 end subroutine clean_comm_mg
 
+#endif
 

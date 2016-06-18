@@ -20,6 +20,8 @@ subroutine courant_fine(ilevel)
   real(dp),dimension(1:nvar)::uu
   real(dp),dimension(1:ndim)::gg
 
+#ifdef HYDRO
+
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
@@ -42,17 +44,18 @@ subroutine courant_fine(ilevel)
 
            ! Gather hydro variables
            do ivar=1,nvar
-              uu(ivar)=fluid(igrid)%uold(ind,ivar)
+              uu(ivar)=grid(igrid)%uold(ind,ivar)
            end do
 
            ! Gather gravitational acceleration
            gg=0.0d0
+#ifdef GRAV
            if(poisson)then
               do idim=1,ndim
-                 gg(idim)=grav(igrid)%f(ind,idim)
+                 gg(idim)=grid(igrid)%f(ind,idim)
               end do
            end if
-
+#endif
            ! Compute total mass
            mass_loc=mass_loc+uu(1)*vol
 
@@ -101,6 +104,8 @@ subroutine courant_fine(ilevel)
   eint_tot=eint_tot+eint_all
   dtnew(ilevel)=MIN(dtnew(ilevel),dt_all)
 
+#endif
+
 111 format('   Entering courant_fine for level ',I2)
 
 end subroutine courant_fine
@@ -137,6 +142,8 @@ subroutine check_cons(ilevel)
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
+#ifdef HYDRO
+
   mass_all=0.0d0; mass_loc=0.0d0
   ekin_all=0.0d0; ekin_loc=0.0d0
   eint_all=0.0d0; eint_loc=0.0d0
@@ -153,7 +160,7 @@ subroutine check_cons(ilevel)
         if(.NOT. grid(igrid)%refined(ind))then
            ! Gather hydro variables
            do ivar=1,nvar
-              uu(ivar)=fluid(igrid)%uold(ind,ivar)
+              uu(ivar)=grid(igrid)%uold(ind,ivar)
            end do
            ! Compute total mass
            mass_loc=mass_loc+uu(1)*vol
@@ -193,6 +200,8 @@ subroutine check_cons(ilevel)
   mass_tot=mass_tot+mass_all
   ekin_tot=ekin_tot+ekin_all
   eint_tot=eint_tot+eint_all
+
+#endif
 
 111 format('   Entering check_cons for level ',I2)
   

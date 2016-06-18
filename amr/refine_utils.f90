@@ -19,8 +19,6 @@ end subroutine refine_all
 !###############################################################
 subroutine refine_fine(ilevel)
   use amr_commons
-  use hydro_commons
-  use poisson_commons
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -51,8 +49,6 @@ subroutine refine_fine(ilevel)
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok_free,ok_all,ok
   type(oct)::oct_tmp
-  type(oct_hydro)::fluid_tmp
-  type(oct_grav)::grav_tmp
 
   if(ilevel==nlevelmax)return
   if(noct_tot(ilevel)==0)return
@@ -247,12 +243,6 @@ subroutine refine_fine(ilevel)
         hash_key(1:ndim)=grid(j)%ckey(1:ndim)
         if(grid(j)%lev>0)call hash_free(grid_dict,hash_key)
         oct_tmp=grid(j)
-        if(hydro)then
-           fluid_tmp=fluid(j)
-        endif
-        if(poisson)then
-           grav_tmp=grav(j)
-        endif
         i=j
         inew=swap_table(j)
         do while(inew.NE.j)
@@ -268,12 +258,6 @@ subroutine refine_fine(ilevel)
            inew=swap_table(inew)
         end do
         grid(i)=oct_tmp
-        if(hydro)then
-           fluid(i)=fluid_tmp
-        endif
-        if(poisson)then
-           grav(i)=grav_tmp
-        endif
         hash_key(0)=grid(i)%lev
         hash_key(1:ndim)=grid(i)%ckey(1:ndim)
         if(grid(i)%lev>0)then
@@ -364,8 +348,6 @@ end subroutine refine_fine
 !###############################################################
 subroutine make_new_oct(iparent,icell,ilevel)
   use amr_commons
-  use hydro_commons
-  use poisson_commons
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -470,54 +452,53 @@ subroutine make_new_oct(iparent,icell,ilevel)
   ! Inject parent hydro variables into new children ones
   if(.not.init)then
      
-     if(hydro)then
+#ifdef HYDRO
      
-        ! Interpolate hydro variables
+     ! Interpolate hydro variables
+     do ivar=1,nvar
+        do ind=1,twotondim
+           grid(ichild)%uold(ind,ivar)=grid(iparent)%uold(icell,ivar)
+        enddo
+     end do
+     
+     ! In case one wants to interpolate using high-order schemes
+     if(interpol_type>0)then
+        
+        ! Get 2ndim neighboring father cells with read-only cache
+        call get_twondim_nbor_parent_cell(hash_key,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+        do inbor=0,twondim
+           do ivar=1,nvar
+              u1(inbor,ivar)=grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
+           end do
+        end do
+        do inbor=1,twondim
+           call unlock_cache(igrid_nbor(inbor))
+        end do
+        
+        ! Interpolate
+        call interpol_hydro(u1,u2)
+        
+        ! Store hydro variables
         do ivar=1,nvar
            do ind=1,twotondim
-              fluid(ichild)%uold(ind,ivar)=fluid(iparent)%uold(icell,ivar)
+              grid(ichild)%uold(ind,ivar)=u2(ind,ivar)
            enddo
         end do
         
-        ! In case one wants to interpolate using high-order schemes
-        if(interpol_type>0)then
-           
-           ! Get 2ndim neighboring father cells with read-only cache
-           call get_twondim_nbor_parent_cell(hash_key,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           do inbor=0,twondim
-              do ivar=1,nvar
-                 u1(inbor,ivar)=fluid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
-              end do
-           end do
-           do inbor=1,twondim
-              call unlock_cache(igrid_nbor(inbor))
-           end do
-           
-           ! Interpolate
-           call interpol_hydro(u1,u2)
-           
-           ! Store hydro variables
-           do ivar=1,nvar
-              do ind=1,twotondim
-                 fluid(ichild)%uold(ind,ivar)=u2(ind,ivar)
-              enddo
-           end do
-           
-        endif
-
      endif
      
-     if(poisson)then
+#endif
 
-        ! Interpolate (straight injection) gravity variables
-        do ind=1,twotondim
-           grav(ichild)%f(ind,1:ndim)=grav(iparent)%f(icell,1:ndim)
-           grav(ichild)%phi(ind)=grav(iparent)%phi(icell)
-           grav(ichild)%phi_old(ind)=grav(iparent)%phi_old(icell)
-        enddo
+#ifdef GRAV
 
-     endif
+     ! Interpolate (straight injection) gravity variables
+     do ind=1,twotondim
+        grid(ichild)%f(ind,1:ndim)=grid(iparent)%f(icell,1:ndim)
+        grid(ichild)%phi(ind)=grid(iparent)%phi(icell)
+        grid(ichild)%phi_old(ind)=grid(iparent)%phi_old(icell)
+     enddo
 
+#endif
   endif
 
 end subroutine make_new_oct

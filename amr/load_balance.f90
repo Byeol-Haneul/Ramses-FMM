@@ -5,7 +5,6 @@
 subroutine load_balance(ilevel)
   use amr_commons
   use hydro_commons
-  use poisson_commons
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -40,8 +39,6 @@ subroutine load_balance(ilevel)
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok_free,ok_all,ok
   type(oct)::grid_tmp
-  type(oct_hydro)::fluid_tmp
-  type(oct_grav)::grav_tmp
 
 #ifndef WITHOUTMPI
   if(ncpu==1)return
@@ -311,12 +308,6 @@ subroutine load_balance(ilevel)
            call hash_free(grid_dict,hash_key)
         endif
         grid_tmp=grid(j)
-        if(hydro)then
-           fluid_tmp=fluid(j)
-        endif
-        if(poisson)then
-           grav_tmp=grav(j)
-        endif
         i=j
         inew=swap_table(j)
         do while(inew.NE.j)
@@ -332,12 +323,6 @@ subroutine load_balance(ilevel)
            inew=swap_table(inew)
         end do
         grid(i)=grid_tmp
-        if(hydro)then
-           fluid(i)=fluid_tmp
-        endif
-        if(poisson)then
-           grav(i)=grav_tmp
-        endif
         hash_key(0)=grid(i)%lev
         hash_key(1:ndim)=grid(i)%ckey(1:ndim)
         if(grid(i)%lev>0)then
@@ -455,10 +440,10 @@ subroutine balance_part(ilevel)
   integer,dimension(:),allocatable::i_recv_buf,i_send_buf
 
   integer(kind=8)::unbalance
+  integer(kind=8),dimension(1:nhilbert)::diff_key
   integer(kind=8),allocatable,dimension(:,:,:)::bound_key_part
   integer(kind=8),allocatable,dimension(:,:)::bound_key_target,bound_key_new
   integer(kind=8),allocatable,dimension(:,:)::bound_key_left,bound_key_right
-  integer(kind=8),dimension(1:nhilbert)::diff_key,ave_key,one_key
   integer,dimension(1:ncpu)::npart_proc,npart_proc_tot
   integer::npart_lev,npart_lev_tot,iter
   integer,dimension(0:ncpu)::npart_cum,npart_cum_tot
@@ -474,8 +459,6 @@ subroutine balance_part(ilevel)
   if(ncpu==1)return
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
-  one_key=0
-  one_key(1)=1
 
   !####################################################
   ! Default for particle domains are grid domains
@@ -578,16 +561,25 @@ subroutine balance_part(ilevel)
            do icpu=1,ncpu-1
               xcum_target=dble(icpu)*xpart_target
               if(npart_cum(icpu)>xcum_target)then
-                 ave_key=average_keys(bound_key_left(1:nhilbert,icpu),bound_key_target(1:nhilbert,icpu))
-                 bound_key_new(1:nhilbert,icpu)=ave_key
+!                 bound_key_new(1:nhilbert,icpu)=(bound_key_left(1:nhilbert,icpu)+bound_key_target(1:nhilbert,icpu))/2
+                 bound_key_new(1:nhilbert,icpu)=average_keys(bound_key_left(1:nhilbert,icpu),bound_key_target(1:nhilbert,icpu))
                  bound_key_right(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
               else
-                 ave_key=average_keys(bound_key_right(1:nhilbert,icpu),bound_key_target(1:nhilbert,icpu))
-                 bound_key_new(1:nhilbert,icpu)=ave_key
+!                 bound_key_new(1:nhilbert,icpu)=(bound_key_right(1:nhilbert,icpu)+bound_key_target(1:nhilbert,icpu))/2
+                 bound_key_new(1:nhilbert,icpu)=average_keys(bound_key_right(1:nhilbert,icpu),bound_key_target(1:nhilbert,icpu))
                  bound_key_left(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
               endif
-              diff_key=difference_keys(bound_key_right(1,icpu),bound_key_left(1,icpu))
-              unbalance=MAX(unbalance,maxval(diff_key))
+!              unbalance=MAX(unbalance,ABS(bound_key_right(1,icpu)-bound_key_left(1,icpu)))
+              diff_key=difference_keys(bound_key_right(1:nhilbert,icpu),bound_key_left(1:nhilbert,icpu))
+#if NHILBERT==1
+              unbalance=MAX(unbalance,ABS(diff_key(1)))
+#endif
+#if NHILBERT==2
+              unbalance=MAX(unbalance,ABS(diff_key(1))+1000*ABS(diff_key(2)))
+#endif
+#if NHILBERT==3
+              unbalance=MAX(unbalance,ABS(diff_key(1))+1000*ABS(diff_key(2))+1000*ABS(diff_key(3)))
+#endif
            end do
                             
            bound_key_target=bound_key_new

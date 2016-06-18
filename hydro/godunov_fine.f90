@@ -98,30 +98,34 @@ subroutine set_unew(ilevel)
   integer::i,ivar,irad,ind,icpu,iskip
   real(dp)::d,u,v,w,e
 
+#ifdef HYDRO
+
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
   ! Set unew to uold for myid cells
   do i=head(ilevel),tail(ilevel)
-     fluid(i)%unew = fluid(i)%uold
+     grid(i)%unew = grid(i)%uold
 #ifdef DUALENER
      do ind=1,twotondim
-        fluid(i)%divu(ind) = 0.0
-        d=max(fluid(i)%uold(ind,1),smallr)
+        grid(i)%divu(ind) = 0.0
+        d=max(grid(i)%uold(ind,1),smallr)
         u=0.0; v=0.0; w=0.0
-        if(ndim>0)u=fluid(i)%uold(ind,2)/d
-        if(ndim>1)v=fluid(i)%uold(ind,3)/d
-        if(ndim>2)w=fluid(i)%uold(ind,4)/d
-        e=fluid(i)%uold(ind,ndim+2)-0.5*d*(u**2+v**2+w**2)
+        if(ndim>0)u=grid(i)%uold(ind,2)/d
+        if(ndim>1)v=grid(i)%uold(ind,3)/d
+        if(ndim>2)w=grid(i)%uold(ind,4)/d
+        e=grid(i)%uold(ind,ndim+2)-0.5*d*(u**2+v**2+w**2)
 #if NENER>0
         do irad=1,nener
-           e=e-fluid(i)%uold(ind,ndim+2+irad)
+           e=e-grid(i)%uold(ind,ndim+2+irad)
         end do
 #endif          
-        fluid(i)%enew(ind) = e
+        grid(i)%enew(ind) = e
      end do
 #endif
   end do
+
+#endif
 
 111 format('   Entering set_unew for level ',i2)
 
@@ -145,6 +149,8 @@ subroutine set_uold(ilevel)
   real(dp)::scale,d,u,v,w
   real(dp)::e_kin,e_cons,e_prim,e_trunc,div,dx,fact,d_old
 
+#ifdef HYDRO
+
   if(noct_tot(ilevel)==0)return
   if(verbose)write(*,111)ilevel
 
@@ -152,32 +158,34 @@ subroutine set_uold(ilevel)
 
   ! Set uold to unew
   do i=head(ilevel),tail(ilevel)
-     fluid(i)%uold=fluid(i)%unew
+     grid(i)%uold=grid(i)%unew
 #ifdef DUALENER
      do ind=1,twotondim
         ! Correct total energy if internal energy is too small
-        d=max(fluid(i)%uold(ind,1),smallr)
+        d=max(grid(i)%uold(ind,1),smallr)
         u=0.0; v=0.0; w=0.0
-        if(ndim>0)u=fluid(i)%uold(ind,2)/d
-        if(ndim>1)v=fluid(i)%uold(ind,3)/d
-        if(ndim>2)w=fluid(i)%uold(ind,4)/d
+        if(ndim>0)u=grid(i)%uold(ind,2)/d
+        if(ndim>1)v=grid(i)%uold(ind,3)/d
+        if(ndim>2)w=grid(i)%uold(ind,4)/d
         e_kin=0.5*d*(u**2+v**2+w**2)
 #if NENER>0
         do irad=1,nener
-           e_kin=e_kin+fluid(i)%uold(ind,ndim+2+irad)
+           e_kin=e_kin+grid(i)%uold(ind,ndim+2+irad)
         end do
 #endif
-        e_cons=fluid(i)%uold(ind,ndim+2)-e_kin
-        e_prim=fluid(i)%enew(ind)
+        e_cons=grid(i)%uold(ind,ndim+2)-e_kin
+        e_prim=grid(i)%enew(ind)
         ! Note: here divu=-div.u*dt
-        div=abs(fluid(i)%divu(ind))*dx/dtnew(ilevel)
+        div=abs(grid(i)%divu(ind))*dx/dtnew(ilevel)
         !           e_trunc=beta_fix*d*max(div,3.0*hexp*dx)**2
         if(e_cons<e_trunc)then
-           fluid(i)%uold(ind,ndim+2)=e_prim+e_kin
+           grid(i)%uold(ind,ndim+2)=e_prim+e_kin
         end if
      end do
 #endif
   end do
+
+#endif
 
 111 format('   Entering set_uold for level ',i2)
 
@@ -194,8 +202,6 @@ subroutine godfine1(ind_grid,ilevel,&
      & io1,io2,jo1,jo2,ko1,ko2,&
      & if1,if2,jf1,jf2,kf1,kf2)
   use amr_commons
-  use hydro_commons, only: fluid
-  use poisson_commons, only: grav
   use hash
   implicit none
   integer::ind_grid,ilevel
@@ -245,6 +251,8 @@ subroutine godfine1(ind_grid,ilevel,&
   real(dp),dimension(0:twondim  ,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
   logical::okx=.true.,oky=.true.,okz=.true.
+
+#ifdef HYDRO
 
   oneontwotondim = 1.d0/dble(twotondim)
 
@@ -324,16 +332,14 @@ subroutine godfine1(ind_grid,ilevel,&
 #endif             
                        ! Gather hydro variables
                        do ivar=1,nvar
-                          uloc(i3,j3,k3,ivar)=fluid(ind_oct)%uold(ind_son,ivar)
+                          uloc(i3,j3,k3,ivar)=grid(ind_oct)%uold(ind_son,ivar)
                        end do
-
+#ifdef GRAV
                        ! Gather gravitational acceleration
-                       if(poisson)then
-                          do idim=1,ndim
-                             gloc(i3,j3,k3,idim)=grav(ind_oct)%f(ind_son,idim)
-                          end do
-                       endif
-
+                       do idim=1,ndim
+                          gloc(i3,j3,k3,idim)=grid(ind_oct)%f(ind_son,idim)
+                       end do
+#endif
                        ! Gather refinement flag
                        okloc(i3,j3,k3)=grid(ind_oct)%refined(ind_son)
                     end do
@@ -368,6 +374,7 @@ subroutine godfine1(ind_grid,ilevel,&
               if(ichild>0)then
                  call lock_cache(ichild)
               else
+
                  ! Get parent father cell with read-write cache
                  parent_cell=get_parent_cell(hash_nbor,grid_dict,.true.,.true.)
                  if(parent_cell==0)then
@@ -386,7 +393,7 @@ subroutine godfine1(ind_grid,ilevel,&
                     call get_twondim_nbor_parent_cell(hash_nbor,grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
-                          u1(inbor,ivar)=fluid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
+                          u1(inbor,ivar)=grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
                        end do
                     end do
 
@@ -426,16 +433,15 @@ subroutine godfine1(ind_grid,ilevel,&
 
                           ! Gather hydro variables
                           do ivar=1,nvar
-                             uloc(i3,j3,k3,ivar)=fluid(ichild)%uold(ind_son,ivar)
+                             uloc(i3,j3,k3,ivar)=grid(ichild)%uold(ind_son,ivar)
                           end do
 
+#ifdef GRAV
                           ! Gather gravitational acceleration
-                          if(poisson)then
-                             do idim=1,ndim
-                                gloc(i3,j3,k3,idim)=grav(ichild)%f(ind_son,idim)
-                             end do
-                          endif
-
+                          do idim=1,ndim
+                             gloc(i3,j3,k3,idim)=grid(ichild)%f(ind_son,idim)
+                          end do
+#endif
                           ! Gather refinement flag
                           okloc(i3,j3,k3)=grid(ichild)%refined(ind_son)
 
@@ -444,7 +450,7 @@ subroutine godfine1(ind_grid,ilevel,&
 
                           ! Gather hydro variables
                           do ivar=1,nvar
-                             uloc(i3,j3,k3,ivar)=fluid(igrid)%uold(icell,ivar)
+                             uloc(i3,j3,k3,ivar)=grid(igrid)%uold(icell,ivar)
                           end do
 
                           ! Gather interpolated hydro variables
@@ -454,13 +460,12 @@ subroutine godfine1(ind_grid,ilevel,&
                              end do
                           endif
 
+#ifdef GRAV
                           ! Gather gravitational acceleration
-                          if(poisson)then
-                             do idim=1,ndim
-                                gloc(i3,j3,k3,idim)=grav(igrid)%f(icell,idim)
-                             end do
-                          endif
-
+                          do idim=1,ndim
+                             gloc(i3,j3,k3,idim)=grid(igrid)%f(icell,idim)
+                          end do
+#endif
                           ! Gather refinement flag
                           okloc(i3,j3,k3)=.false.
                        end if
@@ -554,20 +559,20 @@ subroutine godfine1(ind_grid,ilevel,&
 #endif
                        ! Update conservative variables new state vector
                        do ivar=1,nvar
-                          fluid(ind_oct)%unew(ind_son,ivar)=&
-                               & fluid(ind_oct)%unew(ind_son,ivar)+ &
+                          grid(ind_oct)%unew(ind_son,ivar)=&
+                               & grid(ind_oct)%unew(ind_son,ivar)+ &
                                & (flux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -flux(i3+i0,j3+j0,k3+k0,ivar,idim))
                        end do
 #ifdef DUALENER
                        ! Update velocity divergence
-                       fluid(ind_oct)%divu(ind_son)=&
-                            & fluid(ind_oct)%divu(ind_son)+ &
+                       grid(ind_oct)%divu(ind_son)=&
+                            & grid(ind_oct)%divu(ind_son)+ &
                             & (tmp(i3   ,j3   ,k3   ,1,idim) &
                             & -tmp(i3+i0,j3+j0,k3+k0,1,idim))
                        ! Update internal energy
-                       fluid(ind_oct)%enew(ind_son)=&
-                            & fluid(ind_oct)%enew(ind_son)+ &
+                       grid(ind_oct)%enew(ind_son)=&
+                            & grid(ind_oct)%enew(ind_son)+ &
                             & (tmp(i3   ,j3   ,k3   ,2,idim) &
                             & -tmp(i3+i0,j3+j0,k3+k0,2,idim))
 #endif
@@ -644,15 +649,15 @@ subroutine godfine1(ind_grid,ilevel,&
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nvar
-                             fluid(igrid)%unew(icell,ivar)=fluid(igrid)%unew(icell,ivar) &
+                             grid(igrid)%unew(icell,ivar)=grid(igrid)%unew(icell,ivar) &
                                   & -flux(i3,j3,k3,ivar,idim)*oneontwotondim
                           end do
 #ifdef DUALENER
                           ! Update velocity divergence
-                          fluid(igrid)%divu(icell)=fluid(igrid)%divu(icell) &
+                          grid(igrid)%divu(icell)=grid(igrid)%divu(icell) &
                                & -tmp(i3,j3,k3,1,idim)*oneontwotondim
                           ! Update internal energy
-                          fluid(igrid)%enew(icell)=fluid(igrid)%enew(icell) &
+                          grid(igrid)%enew(icell)=grid(igrid)%enew(icell) &
                                & -tmp(i3,j3,k3,2,idim)*oneontwotondim
 #endif
                        end do
@@ -702,15 +707,15 @@ subroutine godfine1(ind_grid,ilevel,&
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nvar
-                             fluid(igrid)%unew(icell,ivar)=fluid(igrid)%unew(icell,ivar) &
+                             grid(igrid)%unew(icell,ivar)=grid(igrid)%unew(icell,ivar) &
                                   & +flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
                           end do
 #ifdef DUALENER
                           ! Update velocity divergence
-                          fluid(igrid)%divu(icell)=fluid(igrid)%divu(icell) &
+                          grid(igrid)%divu(icell)=grid(igrid)%divu(icell) &
                                & +tmp(i3+i0,j3+j0,k3+k0,1,idim)*oneontwotondim
                           ! Update internal energy
-                          fluid(igrid)%enew(icell)=fluid(igrid)%enew(incell) &
+                          grid(igrid)%enew(icell)=grid(igrid)%enew(incell) &
                                & +tmp(i3+i0,j3+j0,k3+k0,2,idim)*oneontwotondim
 #endif
                        end do
@@ -754,5 +759,7 @@ subroutine godfine1(ind_grid,ilevel,&
         end do
      end do
   end do
+
+#endif
 
 end subroutine godfine1

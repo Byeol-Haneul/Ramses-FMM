@@ -24,12 +24,14 @@ subroutine output_poisson(filename)
   do ilevel=levelmin,nlevelmax
      write(ilun)noct(ilevel)
   enddo
+#ifdef GRAV
   do ilevel=levelmin,nlevelmax
      do igrid=head(ilevel),tail(ilevel)
-        write(ilun)grav(igrid)%phi
-        write(ilun)grav(igrid)%f
+        write(ilun)grid(igrid)%phi
+        write(ilun)grid(igrid)%f
      end do
   enddo
+#endif
   close(ilun)
      
 end subroutine output_poisson

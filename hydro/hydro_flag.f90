@@ -20,6 +20,8 @@ subroutine hydro_flag(ilevel)
   real(dp),dimension(1:nvar),save::uug,uum,uud
   logical::ok
 
+#ifdef HYDRO
+
   if(ilevel==nlevelmax)return
   if(noct_tot(ilevel)==0)return
 
@@ -74,9 +76,9 @@ subroutine hydro_flag(ilevel)
               igridd=(indn(2*idim  )-1)/twotondim+1
               indg=indn(2*idim-1)-(igridg-1)*twotondim
               indd=indn(2*idim  )-(igridd-1)*twotondim
-              uug(ivar)=fluid(igridg)%uold(indg,ivar)
-              uum(ivar)=fluid(igrid )%uold(ind ,ivar)
-              uud(ivar)=fluid(igridd)%uold(indd,ivar)
+              uug(ivar)=grid(igridg)%uold(indg,ivar)
+              uum(ivar)=grid(igrid )%uold(ind ,ivar)
+              uud(ivar)=grid(igridd)%uold(indd,ivar)
            end do
            call hydro_refine(uug,uum,uud,ok)
         end do
@@ -96,6 +98,8 @@ subroutine hydro_flag(ilevel)
   ! End loop over grids
 
   call close_cache(grid_dict)
+
+#endif
 
 end subroutine hydro_flag
 !#####################################################################
