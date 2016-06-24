@@ -16,8 +16,8 @@ subroutine load_balance(ilevel)
   ! This routine performs parallel load balancing.
   !------------------------------------------------
   integer::igrid,i,ind,jlevel,info
-  integer::icpu,grid_cpu,ichild
-  integer::nleft,nright,ileft,iright,istart,nstart
+  integer::icpu,grid_cpu,ichild,idom,jdom,lastdom,domains_matched
+  integer::nleft,nright,ileft,iright,istart,nstart,noverlaps
   integer::ilev,ioct
   integer,dimension(:),allocatable::noct_cpu,noct_cum
   integer,dimension(:),allocatable::ntarget_cum
@@ -32,7 +32,7 @@ subroutine load_balance(ilevel)
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:ndim)::cart_key
-  integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key,zero_key
+  integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key,zero_key,bleft,bright
   integer(kind=8),dimension(1:nhilbert,1:nlevelmax)::key_ref
   integer,dimension(1:nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
@@ -42,6 +42,8 @@ subroutine load_balance(ilevel)
   type(oct)::grid_tmp
   type(oct_hydro)::fluid_tmp
   type(oct_grav)::grav_tmp
+  logical,allocatable,dimension(:,:) :: overlap
+  integer,allocatable,dimension(:)   :: overlaps
 
 #ifndef WITHOUTMPI
   if(ncpu==1)return
@@ -63,7 +65,7 @@ subroutine load_balance(ilevel)
   allocate(bound_key_target_tot(1:nhilbert,0:ncpu))
 
   ! Compute new Hilbert tick marks
-  do ilev=ilevel+1,nlevelmax
+  do ilev=nlevelmax,ilevel+1,-1
 
      if(noct_tot(ilev)>0)then
         
@@ -112,10 +114,10 @@ subroutine load_balance(ilevel)
               if(istart.GT.iright)exit
            end do
         endif
-        
+
         call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,nhilbert*(ncpu+1),MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
         bound_key_target=bound_key_target_tot
-        
+
         bound_key_target(1:nhilbert,0)=zero_key
         do icpu=1,ncpu
            if(gt_keys(bound_key_target(1:nhilbert,icpu-1),bound_key_target(1:nhilbert,icpu)))then
@@ -126,6 +128,111 @@ subroutine load_balance(ilevel)
         do icpu=0,ncpu
            bound_key_level(1:nhilbert,icpu,ilev)=bound_key_target(1:nhilbert,icpu)
         end do
+
+        ! do reshuffling to improve connectivity if not on highest level
+        if (noct_tot(ilev+1)>0 .and. .false.) then
+           allocate(overlap(ndomain,ndomain),overlaps(ndomain))
+           domain2rank(:,ilev)=0
+           rank2domain(:,ilev)=0
+           !
+           do idom=1,ndomain
+              bleft  = refine_key(bound_key_level(1:nhilbert,idom-1,ilev),ilev)
+              bright = refine_key(bound_key_level(1:nhilbert,idom,ilev),ilev)
+              ! Test if domain from ilev+1 overlap with this domain
+              do jdom=1,ndomain
+                 if ( (ge_keys(bleft,bound_key_level(1:nhilbert,jdom-1,ilev+1)) .and. &
+                       ge_keys(bound_key_level(1:nhilbert,jdom,ilev+1),bleft))  .or. &
+                      (ge_keys(bright,bound_key_level(1:nhilbert,jdom-1,ilev+1)) .and. &
+                       ge_keys(bound_key_level(1:nhilbert,jdom,ilev+1),bright))  ) then
+                    overlap(idom,jdom) = .true.
+                 end if
+              enddo
+           enddo
+           !
+           ! Select domain to rank matching based on intervals at ilev+1 that only overlap with one interval at ilev
+           noverlaps = 1
+           domains_matched = 0
+           do while(noverlaps .ne. 0 .and. domains_matched < ndomain)
+             overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev+1
+             noverlaps = 0
+             do jdom=1,ndomain
+                if (overlaps(jdom)==1) then
+                   do idom=1,ndomain
+                      if (overlap(idom,jdom)) then
+                         noverlaps = noverlaps + 1
+                         domain2rank(idom,ilev) = domain2rank(jdom,ilev+1)
+                         rank2domain(domain2rank(idom,ilev),ilev) = idom
+                         domains_matched = domains_matched + 1
+                         overlap(idom,:) = .false.
+                         overlap(:,jdom) = .false.
+                         exit
+                      endif
+                   enddo
+                endif
+             enddo
+           enddo
+           ! We now have selected as many as possible. Match the rest accepting multiple overlaps, taking the first
+           noverlaps = 1
+           do while(noverlaps .gt. 0 .and. domains_matched < ndomain)
+             overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev+1
+             noverlaps = 0
+             do jdom=1,ndomain
+                if (overlaps(jdom) > 0) then
+                   do idom=1,ndomain
+                      if (overlap(idom,jdom)) then
+                         noverlaps = noverlaps + 1
+                         domain2rank(idom,ilev) = domain2rank(jdom,ilev+1)
+                         rank2domain(domain2rank(idom,ilev),ilev) = idom
+                         domains_matched = domains_matched + 1
+                         overlap(idom,:) = .false.
+                         overlap(:,jdom) = .false.
+                         exit
+                      endif
+                   enddo
+                endif
+             enddo           
+           enddo
+           ! We now hopefully have very few left, and put them linearly according to leftover slots in the domain2rank array
+           if (domains_matched < ndomain) then
+              lastdom = 1
+              do icpu=1,ncpu
+                if (rank2domain(icpu,ilev)==0) then
+                   do jdom=lastdom,ndomain
+                      if (domain2rank(jdom,ilev)==0) then
+                         domain2rank(jdom,ilev) = icpu
+                         rank2domain(icpu,ilev) = jdom
+                         lastdom = jdom+1
+                         exit
+                      endif
+                   enddo
+                endif
+              enddo
+           endif
+           !
+           if (myid==1) then
+           !
+           overlap(1,1) = .false.
+           do idom=1,ndomain
+              overlap(1,1) = overlap(1,1) .or. domain2rank(idom,ilev) .ne. idom
+           enddo
+           if (overlap(1,1)) then
+              write (*,*) 'Domains where swapped at level ',ilev
+              write (*,*) 'Domain Rank'
+              do idom=1,ndomain
+                 write (*,'(i6,i5)') idom, domain2rank(idom,ilev)
+              enddo
+           endif
+           !
+           endif
+           !
+           deallocate(overlaps,overlap)
+        else
+           ! This is the highest level with octs; let us give it identity mapping
+           do icpu=1,ncpu
+              rank2domain(icpu,ilev)=icpu
+              domain2rank(icpu,ilev)=icpu
+           enddo
+        endif
 
      endif
 
@@ -151,12 +258,9 @@ subroutine load_balance(ilevel)
              & ge_keys(grid(ioct)%hkey(1:nhilbert),bound_key_level(1:nhilbert,myid,ilev)))then
            
            ! Determine the future processor
-           do icpu=1,ncpu
-              if(    ge_keys(grid(ioct)%hkey(1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilev)).AND. &
-                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilev),grid(ioct)%hkey(1:nhilbert)))then
-                 grid_cpu=icpu
-              end if
-           end do
+           grid_cpu = get_rank(grid(ioct)%hkey(1:nhilbert), &
+                               bound_key_level(1:nhilbert,:,ilev), &
+                               domain2rank(:,ilev))
 
            ! If next cache line is occupied, free it.
            if(occupied(free_cache))call destage(ngridmax+free_cache,grid_dict)
@@ -442,7 +546,7 @@ subroutine balance_part(ilevel)
 
   integer,dimension(1:ndim),save::ix
   integer::i,istart,info,ipart,jpart,idim,grid_cpu
-  integer::ilev,icpu,jcpu,count_loc,recv_cnt_tot,send_cnt_tot
+  integer::ilev,idom,icpu,jcpu,count_loc,recv_cnt_tot,send_cnt_tot
   integer::nbuffer,countrecv,countsend,tag=101
   real(kind=8)::dx_loc
 
@@ -458,6 +562,7 @@ subroutine balance_part(ilevel)
   integer(kind=8),allocatable,dimension(:,:,:)::bound_key_part
   integer(kind=8),allocatable,dimension(:,:)::bound_key_target,bound_key_new
   integer(kind=8),allocatable,dimension(:,:)::bound_key_left,bound_key_right
+  integer,        allocatable,dimension(:,:)::domain2rank_part
   integer(kind=8),dimension(1:nhilbert)::diff_key,ave_key,one_key
   integer,dimension(1:ncpu)::npart_proc,npart_proc_tot
   integer::npart_lev,npart_lev_tot,iter
@@ -482,6 +587,9 @@ subroutine balance_part(ilevel)
   !####################################################
   allocate(bound_key_part(1:nhilbert,0:ncpu,1:nlevelmax+1))
   bound_key_part=bound_key_level
+ 
+  allocate(domain2rank_part(1:ndomain,1:nlevelmax+1))
+  domain2rank_part = domain2rank
 
   !###############################################
   ! Determine particle domains if needed
@@ -562,12 +670,14 @@ subroutine balance_part(ilevel)
               call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
               
               ! Determine in which processor the grid sits
-              do icpu=1,ncpu
-                 if(gt_keys(bound_key_target(1:nhilbert,icpu),hk_ref(1,1:nhilbert)))then
-                    npart_cum(icpu)=npart_cum(icpu)+1
-                 end if
-              end do
+              icpu = get_rank(hk_ref(1,1:nhilbert), &
+                              bound_key_target, &
+                              domain2rank_part(:,ilev))
+              npart_cum(icpu) = npart_cum(icpu) + 1
+           end do
 
+           do icpu=2,ncpu
+              npart_cum(icpu) = npart_cum(icpu) + npart_cum(icpu-1)
            end do
 
            ! Compute global histogram
@@ -653,12 +763,9 @@ subroutine balance_part(ilevel)
            if(    gt_keys(bound_key_part(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
                 & ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,myid,ilev)))then              
               ! Determine the future processor
-              do icpu=1,ncpu
-                 if(    ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,icpu-1,ilev)).AND. &
-                      & gt_keys(bound_key_part(1:nhilbert,icpu,ilev),hk_ref(1,1:nhilbert)))then
-                    grid_cpu=icpu
-                 end if
-              end do
+              grid_cpu = get_rank(hk_ref(1,1:nhilbert), &
+                                  bound_key_part(1:nhilbert,:,ilev), &
+                                  domain2rank_part(:,ilev))
            endif
         endif
 
@@ -724,12 +831,9 @@ subroutine balance_part(ilevel)
            if(    gt_keys(bound_key_part(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
                 & ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,myid,ilev)))then
               ! Determine the future processor
-              do icpu=1,ncpu
-                 if(    ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,icpu-1,ilev)).AND. &
-                      & gt_keys(bound_key_part(1:nhilbert,icpu,ilev),hk_ref(1,1:nhilbert)))then
-                    grid_cpu=icpu
-                 end if
-              end do
+              grid_cpu = get_rank(hk_ref(1,1:nhilbert), &
+                                  bound_key_part(1:nhilbert,:,ilev), &
+                                  domain2rank_part(:,ilev))
            endif
         endif
 

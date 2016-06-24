@@ -82,8 +82,9 @@ module amr_commons
   integer,allocatable,dimension(:)::head_cache
   integer,allocatable,dimension(:)::tail_cache
 
-  ! Hilbert key
+  ! Peano-Hilbert key boundaries for cpu domains
   integer(kind=8),allocatable,dimension(:,:,:)::bound_key_level,bound_hilbert_key,bound_key_mg
+  integer,allocatable,dimension(:,:)::domain2rank,rank2domain
 
   ! Software cache parameters
   integer::cache_operation

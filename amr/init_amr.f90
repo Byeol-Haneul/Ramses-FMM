@@ -58,8 +58,11 @@ subroutine init_amr
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
-  allocate(bound_key_level(1:nhilbert,0:ncpu,1:nlevelmax+1))
-  allocate(bound_hilbert_key(1:nhilbert,0:ncpu,1:nlevelmax+1))
+  ndomain = ncpu
+  allocate(bound_key_level(1:nhilbert,0:ndomain,1:nlevelmax+1))
+  allocate(bound_hilbert_key(1:nhilbert,0:ndomain,1:nlevelmax+1))
+  allocate(rank2domain(1:ncpu,1:nlevelmax+1))
+  allocate(domain2rank(1:ndomain,1:nlevelmax+1))
   bound_key_level=0
   bound_hilbert_key=0
   allocate(ckey_max(1:nlevelmax+1))
@@ -72,6 +75,14 @@ subroutine init_amr
      write(*,*)'are you crazy ?'
      stop
   endif
+ 
+  ! Set the mapping from MPI ranks to P-H domains to be the identity
+  do icpu=1,ncpu
+     rank2domain(icpu,:)=icpu
+  enddo
+  do icpu=1,ndomain
+     domain2rank(icpu,:)=icpu
+  enddo
 
   ! Set bounds for Hilbert keys for coarse levels
   do ilevel=1,levelmin

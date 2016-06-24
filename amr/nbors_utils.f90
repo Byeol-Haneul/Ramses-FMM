@@ -250,6 +250,7 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
   integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
   integer(kind=8),dimension(1:nvector,1:ndim),save::ix
   integer(kind=8),dimension(0:ndim)::hash_child
+  integer(kind=8),dimension(1:nhilbert),save::hks
   integer::i,ind,idim,ivar,ichild,ilevel,info,icpu,grid_cpu,ntile_response,icounter
   integer::send_request_id
   type(request),save::send_request
@@ -300,19 +301,16 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
   call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
   ! Check if grid sits inside processor boundaries
-  if(    ge_keys(hk(1,1:nhilbert),bound_hilbert_key(1:nhilbert,myid-1,ilevel)).AND. &
-       & gt_keys(bound_hilbert_key(1:nhilbert,myid,ilevel),hk(1,1:nhilbert)))then
+  hks = hk(1,1:nhilbert)
+  if(    ge_keys(hks,bound_hilbert_key(1:nhilbert,myid-1,ilevel)).AND. &
+       & gt_keys(bound_hilbert_key(1:nhilbert,myid,ilevel),hks))then
      return
   endif
 
   ! Determine parent processor
-  do icpu=1,ncpu
-     if(    ge_keys(hk(1,1:nhilbert),bound_hilbert_key(1:nhilbert,icpu-1,ilevel)).AND. &
-          & gt_keys(bound_hilbert_key(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-        grid_cpu=icpu
-        exit
-     end if
-  end do
+  grid_cpu = get_rank(hks, &
+                      bound_hilbert_key(:,:,ilevel), &
+                      domain2rank(:,ilevel))
 
   !============================================
   ! We have a fetch and possibly a flush cache

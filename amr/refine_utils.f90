@@ -384,6 +384,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
   integer(kind=4), dimension(1:nvector),save::dummy_state
   integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk
   integer(kind=8), dimension(1:nvector,1:ndim),save::ix
+  integer(kind=8), dimension(1:nhilbert),save::hks
   integer(kind=8), dimension(1:ndim),save::cart_key
   integer(kind=8), dimension(0:ndim)::hash_key
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
@@ -430,12 +431,10 @@ subroutine make_new_oct(iparent,icell,ilevel)
 
   ! Otherwise, determine parent processor and use the cache
   else
-     do icpu=1,ncpu
-        if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
-             & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-           grid_cpu=icpu
-        end if
-     end do
+     hks=hk(1,1:nhilbert)
+     grid_cpu = get_rank(hks,&
+                         bound_key_level(:,:,ilevel), &
+                         domain2rank(:,ilevel))
 
      ! If next cache line is occupied, free it.
      if(occupied(free_cache))call destage(ngridmax+free_cache,grid_dict)
