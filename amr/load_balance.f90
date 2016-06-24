@@ -251,8 +251,7 @@ subroutine load_balance(ilevel)
      do ioct=head(ilev),tail(ilev)
 
         ! Check if grid sits outside future processor boundaries
-        if(    gt_keys(bound_key_level(1:nhilbert,myid-1,ilev),grid(ioct)%hkey(1:nhilbert)).OR. &
-             & ge_keys(grid(ioct)%hkey(1:nhilbert),bound_key_level(1:nhilbert,myid,ilev)))then
+        if (.not. in_rank(grid(ioct)%hkey,bound_key_level(:,:,ilev),rank2domain(:,ilev))) then
            
            ! Determine the future processor
            grid_cpu = get_rank(grid(ioct)%hkey(1:nhilbert), &
@@ -548,7 +547,7 @@ subroutine balance_part(ilevel)
   integer(kind=8),allocatable,dimension(:,:,:)::bound_key_part
   integer(kind=8),allocatable,dimension(:,:)::bound_key_target,bound_key_new
   integer(kind=8),allocatable,dimension(:,:)::bound_key_left,bound_key_right
-  integer,        allocatable,dimension(:,:)::domain2rank_part
+  integer,        allocatable,dimension(:,:)::domain2rank_part,rank2domain_part
   integer,dimension(1:ncpu)::npart_proc,npart_proc_tot
   integer::npart_lev,npart_lev_tot,iter
   integer,dimension(0:ncpu)::npart_cum,npart_cum_tot
@@ -572,7 +571,9 @@ subroutine balance_part(ilevel)
   bound_key_part=bound_key_level
  
   allocate(domain2rank_part(1:ndomain,1:nlevelmax+1))
+  allocate(rank2domain_part(1:ncpu   ,1:nlevelmax+1))
   domain2rank_part = domain2rank
+  rank2domain_part = rank2domain
 
   !###############################################
   ! Determine particle domains if needed
@@ -652,15 +653,11 @@ subroutine balance_part(ilevel)
               ix_ref(1,1:ndim) = int(xp(ipart,1:ndim)/(2*dx_loc))
               call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
               
-              ! Determine in which processor the grid sits
-              icpu = get_rank(hk_ref(1,1:nhilbert), &
-                              bound_key_target, &
-                              domain2rank_part(:,ilev))
-              npart_cum(icpu) = npart_cum(icpu) + 1
-           end do
-
-           do icpu=2,ncpu
-              npart_cum(icpu) = npart_cum(icpu) + npart_cum(icpu-1)
+              do icpu=1,ncpu
+                 if(gt_keys(bound_key_target(1:nhilbert,icpu),hk_ref(1,1:nhilbert)))then
+                    npart_cum(icpu)=npart_cum(icpu)+1
+                 end if
+              enddo
            end do
 
            ! Compute global histogram
@@ -752,8 +749,7 @@ subroutine balance_part(ilevel)
            call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
 
            ! Check if grid sits outside future processor boundaries
-           if(    gt_keys(bound_key_part(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
-                & ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,myid,ilev)))then              
+           if (.not. in_rank(hk_ref(1,1:nhilbert),bound_key_part(:,:,ilev),rank2domain_part(:,ilev))) then
               ! Determine the future processor
               grid_cpu = get_rank(hk_ref(1,1:nhilbert), &
                                   bound_key_part(1:nhilbert,:,ilev), &
@@ -820,8 +816,7 @@ subroutine balance_part(ilevel)
            call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
 
            ! Check if grid sits outside future processor boundaries
-           if(    gt_keys(bound_key_part(1:nhilbert,myid-1,ilev),hk_ref(1,1:nhilbert)).OR. &
-                & ge_keys(hk_ref(1,1:nhilbert),bound_key_part(1:nhilbert,myid,ilev)))then
+           if (.not. in_rank(hk_ref(1,1:nhilbert),bound_key_part(:,:,ilev),rank2domain_part(:,ilev))) then
               ! Determine the future processor
               grid_cpu = get_rank(hk_ref(1,1:nhilbert), &
                                   bound_key_part(1:nhilbert,:,ilev), &

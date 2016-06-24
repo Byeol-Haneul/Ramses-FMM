@@ -396,8 +396,8 @@ subroutine make_new_oct(iparent,icell,ilevel)
   call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
   ! Check if grid sits inside processor boundaries
-  if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,myid-1,ilevel)).AND. &
-       & gt_keys(bound_key_level(1:nhilbert,myid,ilevel),hk(1,1:nhilbert)))then
+  hks=hk(1,1:nhilbert)
+  if (in_rank(hks,bound_key_level(:,:,ilevel),rank2domain(:,ilevel))) then
 
      ! Set grid index to a virtual grid in local main memory
      ichild=ifree
@@ -413,11 +413,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
 
   ! Otherwise, determine parent processor and use the cache
   else
-     hks=hk(1,1:nhilbert)
-     grid_cpu = get_rank(hks,&
-                         bound_key_level(:,:,ilevel), &
-                         domain2rank(:,ilevel))
-
+     grid_cpu = get_rank(hks,bound_key_level(:,:,ilevel),domain2rank(:,ilevel))
      ! If next cache line is occupied, free it.
      if(occupied(free_cache))call destage(ngridmax+free_cache,grid_dict)
      ! Set grid index to a virtual grid in local cache memory

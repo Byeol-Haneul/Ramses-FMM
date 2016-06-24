@@ -515,7 +515,7 @@ contains
   !================================================================
   !================================================================
 
-  function ge_keys(key_a, key_b)
+  pure function ge_keys(key_a, key_b)
     implicit none
     logical::ge_keys
     integer(kind=8), intent(in), dimension(:) :: key_a, key_b
@@ -563,7 +563,7 @@ contains
   !================================================================
   !================================================================
 
-  function average_keys(key_a, key_b)
+  pure function average_keys(key_a, key_b)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension(1:nhilbert) :: average_keys
@@ -580,7 +580,7 @@ contains
   !================================================================
   !================================================================
 
-  function difference_keys(key_a, key_b)
+  pure function difference_keys(key_a, key_b)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension(1:nhilbert) :: difference_keys
@@ -597,7 +597,7 @@ contains
   !================================================================
   !================================================================
 
-  function gt_keys(key_a, key_b)
+  pure function gt_keys(key_a, key_b)
     implicit none
     logical::gt_keys
     integer(kind=8), intent(in), dimension (:):: key_a, key_b
@@ -644,7 +644,7 @@ contains
   !================================================================
   !================================================================
 
-  function eq_keys(key_a, key_b)
+  pure function eq_keys(key_a, key_b)
     implicit none
     logical::eq_keys
     integer(kind=8), intent(in), dimension (:):: key_a, key_b
@@ -668,7 +668,7 @@ contains
   !================================================================
   !================================================================
 
-  function refine_key(key_in,key_level)
+  pure function refine_key(key_in,key_level)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension (1:nhilbert) :: refine_key
@@ -694,7 +694,7 @@ contains
   !================================================================
   !================================================================
 
-  function coarsen_key(key_in,key_level)
+  pure function coarsen_key(key_in,key_level)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension (1:nhilbert) :: coarsen_key
@@ -713,6 +713,25 @@ contains
     end do
     
   end function coarsen_key
+
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+
+  pure function in_rank(key,bound_key,rank_to_domain)
+    use amr_parameters, only : nhilbert
+    use amr_commons,    only : myid, ncpu, ndomain
+    implicit none
+    integer(kind=8), dimension(1:nhilbert),           intent(in) :: key
+    integer(kind=8), dimension(1:nhilbert,0:ndomain), intent(in) :: bound_key
+    integer,         dimension(1:ncpu),               intent(in) :: rank_to_domain
+    logical :: in_rank
+    in_rank = ge_keys(key,bound_key(1:nhilbert,rank_to_domain(myid)-1)).and. &
+              gt_keys(bound_key(1:nhilbert,rank_to_domain(myid)),key)
+
+  end function in_rank
+
 
   !================================================================
   !================================================================
