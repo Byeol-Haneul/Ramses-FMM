@@ -178,7 +178,7 @@ module hilbert
 
   integer(kind=4),parameter,dimension(0:1, 1:1)::one_digit_diagram=reshape((/0, 1/), (/2,1/))
 #endif
-  
+
   private :: hunt
 
 contains
@@ -729,7 +729,8 @@ contains
     integer :: rank, domain
     !
     domain = get_domain(key,bound_key)
-    rank   = domain_to_rank(domain)
+    !rank   = domain_to_rank(domain)
+    rank = domain
     !
   end function get_rank
 
@@ -827,7 +828,7 @@ contains
   !...............................................................................
     n = ndomain
     if (jlo < 0 .or. jlo > n) then                                                ! Input guess not useful. Go immediately to bisection.
-      jlo=0
+      jlo=-1
       jhi=n+1
     else
       inc=1                                                                       ! Set the hunting increment.
@@ -848,7 +849,7 @@ contains
         do
           jlo=jhi-inc
           if (jlo < 0) then                                                       ! Done hunting, since off end of table.
-            jlo=0
+            jlo=-1
             exit
           else
             if (ge_keys(x,xx(:,jlo))) exit
@@ -860,8 +861,8 @@ contains
     end if                                                                        ! Done hunting, value bracketed.
     do                                                                            ! Hunt is done, so begin the final bisection phase:
       if (jhi-jlo <= 1) then
-        if (all(x == xx(:,n))) jlo=n
-        if (all(x == xx(:,0))) jlo=0
+        if (jlo>n .and. eq_keys(x,xx(:,n))) jlo=n
+        if (jlo<0 .and. eq_keys(x,xx(:,0))) jlo=0
         exit
       else
         jm=(jhi+jlo)/2
