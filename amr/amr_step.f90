@@ -75,6 +75,7 @@ recursive subroutine amr_step(ilevel,icount)
   !---------------
   ! Gravity solver
   !---------------
+#ifdef GRAV
   if(poisson)then
                                call timer('poisson','start')
      ! Remove gravity source term with half time step and old force
@@ -113,6 +114,7 @@ recursive subroutine amr_step(ilevel,icount)
      end if
 
   end if
+#endif
 
   !----------------------
   ! Compute new time step

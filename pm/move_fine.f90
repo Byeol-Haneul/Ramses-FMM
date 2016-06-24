@@ -5,7 +5,6 @@
 subroutine kick_drift_part(ilevel,action_part)
   use amr_commons
   use pm_commons
-  use poisson_commons, only: grav
   implicit none
   integer::ilevel
   integer::action_part
@@ -190,7 +189,9 @@ subroutine kick_drift_part(ilevel,action_part)
      ff(1:ndim)=0.0
      if(ok_level)then
         do ind=1,twotondim
-           ff(1:ndim)=ff(1:ndim)+grav(igrid(ind))%f(icell(ind),1:ndim)*vol(ind)
+#ifdef GRAV
+           ff(1:ndim)=ff(1:ndim)+grid(igrid(ind))%f(icell(ind),1:ndim)*vol(ind)
+#endif
         end do
      endif
 

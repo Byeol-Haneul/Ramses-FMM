@@ -3,7 +3,7 @@
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-
+#ifdef GRAV
 ! ------------------------------------------------------------------------
 ! Mask restriction (bottom-up)
 ! ------------------------------------------------------------------------
@@ -28,7 +28,7 @@ subroutine restrict_mask(ifinelevel,allmasked)
   ! Initialize volume fraction to zero at coarse level
   do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
      do ind=1,twotondim
-        grav(igrid)%f(ind,3)=0d0
+        grid(igrid)%f(ind,3)=0d0
      end do
   end do
   
@@ -50,8 +50,8 @@ subroutine restrict_mask(ifinelevel,allmasked)
         icell=parent_cell-(igrid-1)*twotondim
 
         ! Convert mask value to volume fraction
-        ngpmask=(1d0+grav(ichild)%f(ind,3))/2d0/dtwotondim
-        grav(igrid)%f(icell,3)=grav(igrid)%f(icell,3)+ngpmask
+        ngpmask=(1d0+grid(ichild)%f(ind,3))/2d0/dtwotondim
+        grid(igrid)%f(icell,3)=grid(igrid)%f(icell,3)+ngpmask
 
      end do
   end do
@@ -61,7 +61,7 @@ subroutine restrict_mask(ifinelevel,allmasked)
   ! Convert volume fraction back to to mask value for coarse level
   do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
      do ind=1,twotondim
-        grav(igrid)%f(ind,3)=2d0*grav(igrid)%f(ind,3)-1d0
+        grid(igrid)%f(ind,3)=2d0*grid(igrid)%f(ind,3)-1d0
      end do
   end do
   
@@ -69,7 +69,7 @@ subroutine restrict_mask(ifinelevel,allmasked)
   mask_max=-1.0
   do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
      do ind=1,twotondim
-        mask_max=MAX(mask_max,grav(igrid)%f(ind,3))
+        mask_max=MAX(mask_max,grid(igrid)%f(ind,3))
      end do
   end do
   allmasked=(mask_max<=0d0)
@@ -98,7 +98,7 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
   integer, intent(in) :: ilevel
   type(hash_table) :: hash_dict
 
-  ! Computes the residual for MG levels, and stores it into grav(igrid)%f(ind,1)
+  ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
   integer :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
@@ -130,8 +130,8 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
 
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grav(igrid)%phi(ind)
-        dis_nbor(ind,0)=grav(igrid)%f(ind,3)
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
      end do
 
      ! Get neighboring octs potential
@@ -152,8 +152,8 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grav(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=grav(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
            end do
 
         ! Otherwise set to zero and outside
@@ -171,8 +171,8 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
      do ind=1,twotondim
 
         ! Compute residual using 6 neighbors potential
-        phi_c=grav(igrid)%phi(ind)
-        dis_c=grav(igrid)%f(ind,3)
+        phi_c=grid(igrid)%phi(ind)
+        dis_c=grid(igrid)%f(ind,3)
 
         nb_sum=0.0
 
@@ -190,7 +190,7 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
 
            ! If cell is outside, set residual to zero
            if(dis_c<=0.0)then
-              grav(igrid)%f(ind,1)=0.0
+              grid(igrid)%f(ind,1)=0.0
               cycle
            else
 
@@ -211,7 +211,7 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
         endif
 
         ! Store residual in f(ind,1)
-        grav(igrid)%f(ind,1)=-oneoverdx2*( nb_sum - dtwondim*phi_c )+grav(igrid)%f(ind,2)
+        grid(igrid)%f(ind,1)=-oneoverdx2*( nb_sum - dtwondim*phi_c )+grid(igrid)%f(ind,2)
 
      end do
      ! End loop over cells
@@ -243,7 +243,7 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
   integer, intent(in) :: ilevel
   type(hash_table) :: hash_dict
 
-  ! Computes the residual for MG levels, and stores it into grav(igrid)%f(ind,1)
+  ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
   integer :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
@@ -286,7 +286,7 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
      do i=1,buffer_mg(ilevel)%recv_tot
         igrid=buffer_mg(ilevel)%grid_recv_buf(i)
         istart=(i-1)*twotondim+ind
-        buffer_mg(ilevel)%phi_recv_buf(istart)=grav(igrid)%phi(ind)
+        buffer_mg(ilevel)%phi_recv_buf(istart)=grid(igrid)%phi(ind)
      end do
   end do
 
@@ -321,8 +321,8 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
 
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grav(igrid)%phi(ind)
-        dis_nbor(ind,0)=grav(igrid)%f(ind,3)
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
      end do
 
      ! Get neighboring octs potential
@@ -334,8 +334,8 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grav(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=grav(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
            end do
         else if (igridn==0)then
            do ind=1,twotondim
@@ -356,8 +356,8 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
      do ind=1,twotondim
 
         ! Compute residual using 6 neighbors potential
-        phi_c=grav(igrid)%phi(ind)
-        dis_c=grav(igrid)%f(ind,3)
+        phi_c=grid(igrid)%phi(ind)
+        dis_c=grid(igrid)%f(ind,3)
 
         nb_sum=0.0
 
@@ -375,7 +375,7 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
 
            ! If cell is outside, set residual to zero
            if(dis_c<=0.0)then
-              grav(igrid)%f(ind,1)=0.0
+              grid(igrid)%f(ind,1)=0.0
               cycle
            else
 
@@ -396,7 +396,7 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
         endif
 
         ! Store residual in f(ind,1)
-        grav(igrid)%f(ind,1)=-oneoverdx2*( nb_sum - dtwondim*phi_c )+grav(igrid)%f(ind,2)
+        grid(igrid)%f(ind,1)=-oneoverdx2*( nb_sum - dtwondim*phi_c )+grid(igrid)%f(ind,2)
 
      end do
      ! End loop over cells
@@ -425,7 +425,7 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   logical, intent(in) :: redstep
   type(hash_table) :: hash_dict
 
-  ! Perform a Gauss-Seidel update of grav(igrid)%phi(ind).
+  ! Perform a Gauss-Seidel update of grid(igrid)%phi(ind).
   ! The domain mask is also needed.
   
   integer :: get_grid
@@ -467,8 +467,8 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
      do ind=1,twotondim
 
         ! Get central oct potential and distance
-        phi_nbor(ind,0)=grav(igrid)%phi(ind)
-        dis_nbor(ind,0)=grav(igrid)%f(ind,3)
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
 
      end do
 
@@ -490,8 +490,8 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grav(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=grav(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
            end do
 
         ! Otherwise set to zero and outside
@@ -516,8 +516,8 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
         end if
 
         ! Compute residual using 6 neighbors potential
-        phi_c=grav(igrid)%phi(ind)
-        dis_c=grav(igrid)%f(ind,3)
+        phi_c=grid(igrid)%phi(ind)
+        dis_c=grid(igrid)%f(ind,3)
 
         nb_sum=0.0
 
@@ -532,7 +532,7 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
            end do
 
            ! Update the potential, solving for potential on icell_amr
-           grav(igrid)%phi(ind)=(nb_sum-dx2*grav(igrid)%f(ind,2))/dtwondim
+           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/dtwondim
 
         else ! Scan is required
 
@@ -555,7 +555,7 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
            end do
 
            ! Update the potential
-           grav(igrid)%phi(ind)=(nb_sum-dx2*grav(igrid)%f(ind,2))/(dtwondim - weight)
+           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/(dtwondim - weight)
 
         endif
 
@@ -592,7 +592,7 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
   logical, intent(in) :: redstep
   type(hash_table) :: hash_dict
 
-  ! Perform a Gauss-Seidel update of grav(igrid)%phi(ind).
+  ! Perform a Gauss-Seidel update of grid(igrid)%phi(ind).
   ! The domain mask is also needed.
   
   integer :: get_grid
@@ -643,7 +643,7 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
      do i=1,buffer_mg(ilevel)%recv_tot
         igrid=buffer_mg(ilevel)%grid_recv_buf(i)
         istart=(i-1)*twotondim+ind
-        buffer_mg(ilevel)%phi_recv_buf(istart)=grav(igrid)%phi(ind)
+        buffer_mg(ilevel)%phi_recv_buf(istart)=grid(igrid)%phi(ind)
      end do
   end do
 
@@ -680,8 +680,8 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
      do ind=1,twotondim
 
         ! Get central oct potential and distance
-        phi_nbor(ind,0)=grav(igrid)%phi(ind)
-        dis_nbor(ind,0)=grav(igrid)%f(ind,3)
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
 
      end do
 
@@ -694,8 +694,8 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grav(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=grav(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
            end do
         else if (igridn==0)then
            do ind=1,twotondim
@@ -722,8 +722,8 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
         end if
 
         ! Compute residual using 6 neighbors potential
-        phi_c=grav(igrid)%phi(ind)
-        dis_c=grav(igrid)%f(ind,3)
+        phi_c=grid(igrid)%phi(ind)
+        dis_c=grid(igrid)%f(ind,3)
 
         nb_sum=0.0
 
@@ -738,7 +738,7 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
            end do
 
            ! Update the potential, solving for potential on icell_amr
-           grav(igrid)%phi(ind)=(nb_sum-dx2*grav(igrid)%f(ind,2))/dtwondim
+           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/dtwondim
 
         else ! Scan is required
 
@@ -761,7 +761,7 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
            end do
 
            ! Update the potential
-           grav(igrid)%phi(ind)=(nb_sum-dx2*grav(igrid)%f(ind,2))/(dtwondim - weight)
+           grid(igrid)%phi(ind)=(nb_sum-dx2*grid(igrid)%f(ind,2))/(dtwondim - weight)
 
         endif
 
@@ -788,9 +788,9 @@ subroutine restrict_residual(ifinelevel)
   implicit none
   integer, intent(in) :: ifinelevel
 
-  ! Restrict the residual of the fine level (stored in grav(ichild)%f(ind,1))
-  ! into the rhs of the coarse level (stored in grav(igrid)%f(icell,2))
-  ! For interior coarse cell only (we need the mask stored in grav(igrid)%f(icell,3))
+  ! Restrict the residual of the fine level (stored in grid(ichild)%f(ind,1))
+  ! into the rhs of the coarse level (stored in grid(igrid)%f(icell,2))
+  ! For interior coarse cell only (we need the mask stored in grid(igrid)%f(icell,3))
   
   integer :: ichild, ind, get_parent_cell
   integer :: igrid, icell, parent_cell
@@ -800,7 +800,7 @@ subroutine restrict_residual(ifinelevel)
   ! Set rhs to zero in coarse cells
   do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
      do ind=1,twotondim
-        grav(igrid)%f(ind,2)=0.0
+        grid(igrid)%f(ind,2)=0.0
      end do
   end do
 
@@ -815,7 +815,7 @@ subroutine restrict_residual(ifinelevel)
      do ind=1,twotondim        
         
         ! Is fine cell masked?
-        if(grav(ichild)%f(ind,3)<=0d0)cycle
+        if(grid(ichild)%f(ind,3)<=0d0)cycle
 
         hash_key(1:ndim)=grid(ichild)%ckey(1:ndim)
         
@@ -825,10 +825,10 @@ subroutine restrict_residual(ifinelevel)
         icell=parent_cell-(igrid-1)*twotondim
         
         ! Is coarse cell masked?
-        if(grav(igrid)%f(icell,3)<=0d0)cycle
+        if(grid(igrid)%f(icell,3)<=0d0)cycle
         
         ! Stack fine cell residual in coarse cell rhs
-        grav(igrid)%f(icell,2)=grav(igrid)%f(icell,2)+grav(ichild)%f(ind,1)/dtwotondim
+        grid(igrid)%f(icell,2)=grid(igrid)%f(icell,2)+grid(ichild)%f(ind,1)/dtwotondim
         
      end do
   end do
@@ -852,8 +852,8 @@ subroutine interpolate_and_correct(ifinelevel)
   implicit none
   integer, intent(in) :: ifinelevel
   
-  ! Interpolate the solution of the coarse level (stored in grav(igrid)%phi(icell))
-  ! and corrct the solutionn of the fine level (stored in grav(ichild)%phi(ind))
+  ! Interpolate the solution of the coarse level (stored in grid(igrid)%phi(icell))
+  ! and corrct the solutionn of the fine level (stored in grid(ichild)%phi(ind))
   
   integer(kind=8),dimension(0:ndim) :: hash_key
   integer,dimension(1:threetondim) :: igrid_nbor,ind_nbor
@@ -903,7 +903,7 @@ subroutine interpolate_and_correct(ifinelevel)
         corr(ind)=0d0
 
         ! Fine cell is masked as "outside": no correction
-        if(grav(ichild)%f(ind,3)<=0.0)cycle
+        if(grid(ichild)%f(ind,3)<=0.0)cycle
 
         ! Loop over relevant parent cells
         do ind_average=1,twotondim
@@ -912,7 +912,7 @@ subroutine interpolate_and_correct(ifinelevel)
            igrid_nbr=igrid_nbor(ind_father)
            ind_nbr=ind_nbor(ind_father)
            if (igrid_nbr>0) then
-              corr(ind)=corr(ind)+coeff*grav(igrid_nbr)%phi(ind_nbr)
+              corr(ind)=corr(ind)+coeff*grid(igrid_nbr)%phi(ind_nbr)
            endif
         end do
 
@@ -925,7 +925,7 @@ subroutine interpolate_and_correct(ifinelevel)
      
      ! Add correction to fine level solution
      do ind=1,twotondim
-        grav(ichild)%phi(ind)=grav(ichild)%phi(ind)+corr(ind)
+        grid(ichild)%phi(ind)=grid(ichild)%phi(ind)+corr(ind)
      end do
 
   end do
@@ -977,7 +977,7 @@ subroutine set_scan_flag(hash_dict,ilevel)
 
      ! Get central oct potential
      do ind=1,twotondim
-        dis_nbor(ind,0)=grav(igrid)%f(ind,3)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
      end do
 
      ! Get neighboring octs potential
@@ -998,7 +998,7 @@ subroutine set_scan_flag(hash_dict,ilevel)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              dis_nbor(ind,inbor)=grav(igridn)%f(ind,3)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
            end do
 
         ! Otherwise set to "outside"
@@ -1015,7 +1015,7 @@ subroutine set_scan_flag(hash_dict,ilevel)
      do ind=1,twotondim
 
         ! Compute residual using 6 neighbors potential
-        dis_c=grav(igrid)%f(ind,3)
+        dis_c=grid(igrid)%f(ind,3)
 
         ! If cell is entirely inside, set flag tentatively to 0 (no scan needed)
         if(dis_c==1.0)then
@@ -1076,8 +1076,8 @@ subroutine cmp_residual_norm2(ilevel, norm2)
       
       ! Loop over cells
       do ind=1,twotondim
-         if(grav(igrid)%f(ind,3)<=0.0)cycle      ! Do not count masked cells
-         norm2 = norm2 + grav(igrid)%f(ind,1)**2
+         if(grid(igrid)%f(ind,3)<=0.0)cycle      ! Do not count masked cells
+         norm2 = norm2 + grid(igrid)%f(ind,1)**2
       end do
       ! End loop over cells
 
@@ -1108,11 +1108,11 @@ subroutine cmp_ivar_norm2(ilevel, ivar, norm2)
      
      ! Loop over cells
      do ind=1,twotondim
-        if(grav(igrid)%f(ind,3)<=0.0)cycle      ! Do not count masked cells
+        if(grid(igrid)%f(ind,3)<=0.0)cycle      ! Do not count masked cells
         if(ivar>0)then
-           norm2 = norm2 + grav(igrid)%f(ind,ivar)**2
+           norm2 = norm2 + grid(igrid)%f(ind,ivar)**2
         else
-           norm2 = norm2 + grav(igrid)%phi(ind)**2
+           norm2 = norm2 + grid(igrid)%phi(ind)**2
         endif
      end do
      ! End loop over cells
@@ -1123,4 +1123,5 @@ subroutine cmp_ivar_norm2(ilevel, ivar, norm2)
   norm2 = dx2*norm2
   
 end subroutine cmp_ivar_norm2
+#endif
 

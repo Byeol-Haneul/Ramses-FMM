@@ -74,12 +74,14 @@ subroutine init_flow_fine(ilevel)
         end do
         ! Call initial condition routine
         call condinit(xx,uu,dx,ngrid)
+#ifdef HYDRO
         ! Scatter variables to main memory
         do ivar=1,nvar
            do i=1,ngrid
-              fluid(igrid+i-1)%uold(ind,ivar)=uu(i,ivar)
+              grid(igrid+i-1)%uold(ind,ivar)=uu(i,ivar)
            end do
         end do
+#endif
      end do
      ! End loop over cells
   end do
@@ -440,8 +442,10 @@ subroutine init_grafic(ilevel)
               i1=int(xx1)+1
               i2=int(xx2)+1
               i3=int(xx3)+1
+#ifdef HYDRO
               ! Scatter to corresponding primitive variable
-              fluid(igrid)%uold(ind,ivar)=init_array(i1,i2,i3)
+              grid(igrid)%uold(ind,ivar)=init_array(i1,i2,i3)
+#endif
            end do
         end do
         ! End loop over cells
@@ -462,11 +466,13 @@ subroutine init_grafic(ilevel)
      do igrid=head(ilevel),tail(ilevel)
         ! Loop over cells
         do ind=1,twotondim
+#ifdef HYDRO
            ! Prevent negative densities
-           rr=max(fluid(igrid)%uold(ind,1),0.1*omega_b/omega_m)
-           fluid(igrid)%uold(ind,1)=rr
+           rr=max(grid(igrid)%uold(ind,1),0.1*omega_b/omega_m)
+           grid(igrid)%uold(ind,1)=rr
            ! Compute pressure from temperature and density
-           fluid(igrid)%uold(ind,ndim+2)=fluid(igrid)%uold(ind,1)*fluid(igrid)%uold(ind,ndim+2)
+           grid(igrid)%uold(ind,ndim+2)=grid(igrid)%uold(ind,1)*grid(igrid)%uold(ind,ndim+2)
+#endif
         end do
         ! End loop over cells
      end do
@@ -480,30 +486,32 @@ subroutine init_grafic(ilevel)
   do igrid=head(ilevel),tail(ilevel)
      ! Loop over cells
      do ind=1,twotondim
+#ifdef HYDRO
         ! Compute total energy density
-        rr=fluid(igrid)%uold(ind,1)
-        vx=fluid(igrid)%uold(ind,2)
+        rr=grid(igrid)%uold(ind,1)
+        vx=grid(igrid)%uold(ind,2)
 #if NDIM>1
-        vy=fluid(igrid)%uold(ind,3)
+        vy=grid(igrid)%uold(ind,3)
 #endif
 #if NDIM>2
-        vz=fluid(igrid)%uold(ind,4)
+        vz=grid(igrid)%uold(ind,4)
 #endif
-        pp=fluid(igrid)%uold(ind,ndim+2)
+        pp=grid(igrid)%uold(ind,ndim+2)
         ek=0.5d0*rr*(vx**2+vy**2+vz**2)
         ei=pp/(gamma-1.0)
-        fluid(igrid)%uold(ind,ndim+2)=ei+ek
+        grid(igrid)%uold(ind,ndim+2)=ei+ek
         ! Compute momentum density
         do idim=1,ndim
-           rr=fluid(igrid)%uold(ind,1)
-           fluid(igrid)%uold(ind,idim+1)=rr*fluid(igrid)%uold(ind,idim+1)
+           rr=grid(igrid)%uold(ind,1)
+           grid(igrid)%uold(ind,idim+1)=rr*grid(igrid)%uold(ind,idim+1)
         end do
 #if NVAR>NDIM+2
         ! Compute passive variable density
         do ivar=ndim+3,nvar
-           rr=fluid(igrid)%uold(ind,1)
-           fluid(igrid)%uold(ind,ivar)=rr*fluid(igrid)%uold(ind,ivar)
+           rr=grid(igrid)%uold(ind,1)
+           grid(igrid)%uold(ind,ivar)=rr*grid(igrid)%uold(ind,ivar)
         enddo
+#endif
 #endif
      end do
      ! End loop over cells

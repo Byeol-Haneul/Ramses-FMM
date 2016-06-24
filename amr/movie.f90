@@ -310,40 +310,45 @@ subroutine output_frame()
                        dvol=dvol*dz_cell
 #endif
 
-                       dens(ii,jj)=dens(ii,jj)+dvol*max(fluid(igrid)%uold(ind,1),smallr)
+#ifdef HYDRO
+                       dens(ii,jj)=dens(ii,jj)+dvol*max(grid(igrid)%uold(ind,1),smallr)
                        vol(ii,jj)=vol(ii,jj)+dvol                       
-                       data_frame(ii,jj,1)=data_frame(ii,jj,1)+dvol*max(fluid(igrid)%uold(ind,1),smallr)**2
+                       data_frame(ii,jj,1)=data_frame(ii,jj,1)+dvol*max(grid(igrid)%uold(ind,1),smallr)**2
                        do kk=2,NVAR
-                          if(movie_vars(kk).eq.1) data_frame(ii,jj,kk)=data_frame(ii,jj,kk)+dvol*fluid(igrid)%uold(ind,kk)
+                          if(movie_vars(kk).eq.1) data_frame(ii,jj,kk)=data_frame(ii,jj,kk)+dvol*grid(igrid)%uold(ind,kk)
                        end do
+#endif
+                          
 #ifdef RT
                        if(rt) then
                           do kk=1,NGROUPS
                              if(rt_movie_vars(kk).eq.1) then
                                 rt_data_frame(ii,jj,kk) = rt_data_frame(ii,jj,kk) &
-                                     + dvol * rad(igrid)%rtuold(ind, 1+(kk-1)*(ndim+1)) * rt_c_cgs &
-                                     * max(fluid(igrid)%uold(ind,1),smallr) ! mass-weighted
+                                     + dvol * grid(igrid)%rtuold(ind, 1+(kk-1)*(ndim+1)) * rt_c_cgs &
+                                     * max(grid(igrid)%uold(ind,1),smallr) ! mass-weighted
                              endif
                           end do
                        endif
 #endif
 
                        if (movie_vars(0).eq.1)then
+#ifdef HYDRO
                           ! Get temperature
                           ekk=0.0d0
                           do idim=1,3
-                             ekk=ekk+0.5*fluid(igrid)%uold(ind,idim+1)**2/max(fluid(igrid)%uold(ind,1),smallr)
+                             ekk=ekk+0.5*grid(igrid)%uold(ind,idim+1)**2/max(grid(igrid)%uold(ind,1),smallr)
                           enddo
-                          temp=(gamma-1.0)*(fluid(igrid)%uold(ind,ndim+2)-ekk) !pressure
-                          temp=max(temp/max(fluid(igrid)%uold(ind,1),smallr),smallc**2)*scale_T2 !temperature in K
-                          data_frame(ii,jj,0)=data_frame(ii,jj,0)+dvol*max(fluid(igrid)%uold(ind,1),smallr)*temp !mass weighted temperature
+                          temp=(gamma-1.0)*(grid(igrid)%uold(ind,ndim+2)-ekk) !pressure
+                          temp=max(temp/max(grid(igrid)%uold(ind,1),smallr),smallc**2)*scale_T2 !temperature in K                          
+                          data_frame(ii,jj,0)=data_frame(ii,jj,0)+dvol*max(grid(igrid)%uold(ind,1),smallr)*temp !mass weighted temperature
+#endif
                        end if
                           
 #ifdef SOLVERmhd
                        if (movie_vars(NVAR+4).eq.1)then
                           data_frame(ii,jj,NVAR+4)=data_frame(ii,jj,NVAR+4)+ dvol*0.125*(&
-                               &   fluid(igrid)%uold(ind,6)**2 + fluid(igrid)%uold(ind,7)**2  + fluid(igrid)%uold(ind,8)**2 &
-                               & + fluid(igrid)%uold(ind,9)**2 + fluid(igrid)%uold(ind,10)**2 + fluid(igrid)%uold(ind,11)**2)
+                               &   grid(igrid)%uold(ind,6)**2 + grid(igrid)%uold(ind,7)**2  + grid(igrid)%uold(ind,8)**2 &
+                               & + grid(igrid)%uold(ind,9)**2 + grid(igrid)%uold(ind,10)**2 + grid(igrid)%uold(ind,11)**2)
                        end if
 #endif
                           
