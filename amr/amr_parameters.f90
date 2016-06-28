@@ -52,6 +52,9 @@ module amr_parameters
 #endif
   integer::nsuperoct=0 ! Number of superoct levels
 
+  ! MPI variables
+  integer::ncpu,ndomain,myid,overload=1
+
   ! Run control
   logical::verbose =.false.   ! Write everything
   logical::hydro   =.false.   ! Hydro activated

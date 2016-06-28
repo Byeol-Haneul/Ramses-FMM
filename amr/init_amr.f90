@@ -59,15 +59,14 @@ subroutine init_amr
   ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
   ndomain = ncpu
-  allocate(bound_key_level(1:nhilbert,0:ndomain,1:nlevelmax+1))
-  allocate(bound_hilbert_key(1:nhilbert,0:ndomain,1:nlevelmax+1))
-  allocate(rank2domain(1:ncpu,1:nlevelmax+1))
-  allocate(domain2rank(1:ndomain,1:nlevelmax+1))
-  bound_key_level=0
-  bound_hilbert_key=0
+  allocate(domain(1:nlevelmax+1))
   allocate(ckey_max(1:nlevelmax+1))
   allocate(hkey_max(1:nhilbert,1:nlevelmax+1))
   hkey_max=0
+
+  do ilevel=1,nlevelmax+1
+     call domain(ilevel)%create(ndomain)
+  end do
 
   ! Make sure that the coarsest level uses only one Hilbert integer
   if(levelmin>(levels_per_key(ndim)+1))then
@@ -75,14 +74,6 @@ subroutine init_amr
      write(*,*)'are you crazy ?'
      stop
   endif
- 
-  ! Set the mapping from MPI ranks to P-H domains to be the identity
-  do icpu=1,ncpu
-     rank2domain(icpu,:)=icpu
-  enddo
-  do icpu=1,ndomain
-     domain2rank(icpu,:)=icpu
-  enddo
 
   ! Set bounds for Hilbert keys for coarse levels
   do ilevel=1,levelmin
@@ -90,10 +81,10 @@ subroutine init_amr
      max_key=2**((ilevel-1)*ndim)
      hkey_max(1,ilevel)=max_key
      do icpu=1,ncpu-1
-        bound_key_level(1,icpu,ilevel) = (icpu*max_key)/ncpu
+        domain(ilevel)%b(1,icpu) = (icpu*max_key)/ncpu
      end do
-     bound_key_level(1,0,ilevel) = 0
-     bound_key_level(1,ncpu,ilevel) = max_key
+     domain(ilevel)%b(1,0) = 0
+     domain(ilevel)%b(1,ncpu) = max_key
   end do
 
   ! Set bounds for Hilbert keys for fine levels
@@ -102,7 +93,7 @@ subroutine init_amr
      hkey_max(1:nhilbert,ilevel) = refine_key(hkey_max(1:nhilbert,ilevel-1),ilevel-2)
      ! Multiply the bounds by twotondim
      do icpu=0,ncpu
-        bound_key_level(1:nhilbert,icpu,ilevel) = refine_key(bound_key_level(1:nhilbert,icpu,ilevel-1),ilevel-2)
+        domain(ilevel)%b(1:nhilbert,icpu) = refine_key(domain(ilevel-1)%b(1:nhilbert,icpu),ilevel-2)
      end do
   end do
 

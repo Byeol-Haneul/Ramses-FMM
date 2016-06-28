@@ -2,6 +2,7 @@ module amr_commons
   use amr_parameters
   use hydro_parameters
   use hash
+  use domain_m
   
   logical::output_done=.false.                  ! Output just performed
   logical::init=.false.                         ! Set up or run
@@ -30,9 +31,6 @@ module amr_commons
 
   ! Save namelist filename
   CHARACTER(LEN=80)::namelist_file
-
-  ! MPI variables
-  integer::ncpu,ndomain,myid,overload=1
 
   ! Friedman model variables
   integer::n_frw
@@ -95,8 +93,8 @@ module amr_commons
   integer,allocatable,dimension(:)::tail_cache
 
   ! Peano-Hilbert key boundaries for cpu domains
-  integer(kind=8),allocatable,dimension(:,:,:)::bound_key_level,bound_hilbert_key,bound_key_mg
-  integer,allocatable,dimension(:,:)::domain2rank,rank2domain
+  type(domain_t), allocatable, target, dimension(:)::domain,domain_mg
+  type(domain_t), pointer,             dimension(:)::domain_hilbert
 
   ! Software cache parameters
   integer::cache_operation

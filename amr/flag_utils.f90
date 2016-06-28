@@ -625,9 +625,7 @@ subroutine build_smooth(ilevel)
 
            ! Determine parent processor and increment counter
            hks=hk(1,1:nhilbert)
-           grid_cpu = get_rank(hks,& 
-                               bound_key_level(:,:,ilevel), &
-                               domain2rank(:,ilevel))
+           grid_cpu = domain(ilevel)%get_rank(hks)
            nremote(grid_cpu)=nremote(grid_cpu)+1
         end if
 
@@ -712,9 +710,7 @@ subroutine build_smooth(ilevel)
 
            ! Determine parent processor and increment counter
            hks=hk(1,1:nhilbert)
-           grid_cpu = get_rank(hks,& 
-                               bound_key_level(:,:,ilevel), &
-                               domain2rank(:,ilevel))
+           grid_cpu = domain(ilevel)%get_rank(hks)
            nremote(grid_cpu)=nremote(grid_cpu)+1
            iremote=send_oft(grid_cpu)+nremote(grid_cpu)
 #if NDIM>0

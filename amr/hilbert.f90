@@ -179,10 +179,49 @@ module hilbert
   integer(kind=4),parameter,dimension(0:1, 1:1)::one_digit_diagram=reshape((/0, 1/), (/2,1/))
 #endif
 
-  private :: hunt
-
 contains
   
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+
+  ! Compute 3-integer hilbert keys from the cartesian keys ix
+  function hilbert_key_one(ix, level) result(hkey)
+    use amr_parameters, only: nhilbert, ndim, twotondim
+    implicit none
+    integer,                          intent(in) :: level
+    integer(kind=8), dimension(ndim), intent(in) :: ix
+    integer(kind=8), dimension(1:nhilbert) :: hkey
+    ! Local vars
+    integer(kind=4) :: cstate, sdigit, ind
+    integer         :: ibit, ip, add_digit, idim, ikey, nkey_local
+
+    cstate = 0
+    hkey = 0
+    nkey_local = ceiling(1.d0 * level / levels_per_key(ndim))
+
+    do ibit = level - 1, 0, -1
+       do ikey = nkey_local, 2, -1
+          hkey(ikey) = ISHFT(hkey(ikey), left_shift)
+          hkey(ikey) = ISHFT(hkey(ikey), right_shift)
+          hkey(ikey) = hkey(ikey) + ISHFT(hkey(ikey - 1), big_shift)
+       end do
+       hkey(1) = ISHFT(hkey(1), left_shift)
+       hkey(1) = ISHFT(hkey(1), right_shift)
+
+       sdigit=0
+       do idim = 1, ndim
+          add_digit = 2 ** (ndim - idim)
+          if(btest(ix(idim),ibit)) sdigit = sdigit + add_digit
+       end do
+
+       ind = cstate * twotondim + sdigit
+       cstate = next_state_diagram(ind)
+       hkey(1) = hkey(1) + next_digits_diagram(ind)
+    enddo
+  end function hilbert_key_one
+
   !================================================================
   !================================================================
   !================================================================
@@ -376,8 +415,8 @@ contains
   !================================================================
 
   recursive subroutine sort_hilbert(head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
-    use amr_commons, only: boxlen, dp, ndim, twotondim, myid
-    use pm_commons,  only: workp, sortp, xp
+    use amr_parameters, only: boxlen, dp, ndim, twotondim, myid
+    use pm_commons,     only: workp, sortp, xp
     implicit none
 
     integer, intent(in) :: ilevel, final_level
@@ -713,185 +752,5 @@ contains
     end do
     
   end function coarsen_key
-
-  !================================================================
-  !================================================================
-  !================================================================
-  !================================================================
-
-  pure function in_rank(key,bound_key,rank_to_domain)
-    use amr_parameters, only : nhilbert
-    use amr_commons,    only : myid, ncpu, ndomain
-    implicit none
-    integer(kind=8), dimension(1:nhilbert),           intent(in) :: key
-    integer(kind=8), dimension(1:nhilbert,0:ndomain), intent(in) :: bound_key
-    integer,         dimension(1:ncpu),               intent(in) :: rank_to_domain
-    logical :: in_rank
-    in_rank = ge_keys(key,bound_key(1:nhilbert,rank_to_domain(myid)-1)).and. &
-              gt_keys(bound_key(1:nhilbert,rank_to_domain(myid)),key)
-
-  end function in_rank
-
-
-  !================================================================
-  !================================================================
-  !================================================================
-  !================================================================
-
-  function get_rank(key,bound_key,domain_to_rank) result(rank)
-    use amr_parameters, only : nhilbert
-    use amr_commons,    only : ndomain
-    implicit none
-    integer(kind=8), dimension(1:nhilbert),           intent(in) :: key
-    integer(kind=8), dimension(1:nhilbert,0:ndomain), intent(in) :: bound_key
-    integer,         dimension(1:ndomain),            intent(in) :: domain_to_rank
-    integer :: rank, domain
-    !
-    domain = get_domain(key,bound_key)
-    !rank   = domain_to_rank(domain)
-    rank = domain
-    !
-  end function get_rank
-
-  !================================================================
-  !================================================================
-  !================================================================
-  !================================================================
-
-  function get_domain(key,bound_key) result(domain)
-    use amr_parameters, only : nhilbert
-    use amr_commons,    only : ndomain, myid
-    implicit none
-    integer(kind=8), dimension(1:nhilbert),           intent(in) :: key
-    integer(kind=8), dimension(1:nhilbert,0:ndomain), intent(in) :: bound_key
-    integer            :: domain
-    !
-    integer            :: idom
-    integer,      save :: last_domain=1, ncall=0
-    logical,      save :: do_linear=.true.
-    real(kind=8), save :: tlin,thunt
-    real(kind=8)       :: t0
-    real(kind=8), external :: wallclock
-    !
-    ! The first 100 calls we use for timing
-    if (ncall<=100) then
-       if (ncall==0) then
-          tlin=0; thunt=0
-          do_linear = .true.
-          ncall = ncall + 1
-       end if
-       t0 = wallclock()
-    endif
-    !
-    if (do_linear) then                                                          ! do dumb linear search
-       domain=1                                                                  ! default value
-       do idom=1,ndomain-1
-          if (ge_keys(key,bound_key(1:nhilbert,idom))) then
-             domain = idom + 1                                                   ! have to check lower bound
-          else
-             exit
-          endif
-       end do
-    else                                                                         ! use hunt to predictively find the right domain
-       domain = last_domain
-       call hunt(bound_key,key,domain)
-       last_domain = domain                                                      ! hopefully a close guess
-       domain = domain + 1                                                       ! hunt returns lower bound, we need upper
-    end if
-
-    ! The first 100 calls we use for timing
-    if (ncall<=100) then
-       if (do_linear) then
-          tlin  = tlin  + (wallclock() - t0)
-       else
-          thunt = thunt + (wallclock() - t0)
-       end if
-       if (ncall==100) then
-          if (do_linear) then
-             ncall=1; do_linear = .false.                                         ! first round done, now time hunting
-          else
-             do_linear = tlin < thunt                                             ! second round done, use whatever is fastest
-             if (myid==1) then
-                print *, ' Time to do linear search :', real(tlin)
-                print *, ' Time to do hunt search   :', real(thunt)
-                if (do_linear) then
-                   print *, 'Using linear search'
-                else
-                   print *, 'Using hunt search'
-                end if
-             end if
-          end if
-       end if
-    end if
-    !
-    ncall = modulo(ncall + 1,20000000)                                            ! Use 0.1% of the calls for timing
-    !
-  end function get_domain
-
-  !================================================================
-  !================================================================
-  ! Given an array xx(1:nhilbert,0:ndomain), and given a key x(1:nhilbert), return a value jlo such that
-  ! xx(:,jlo) <= x < xx(:,jlo+1). xx must be monotonic increasing. jlo on input is taken
-  ! as the initial guess for jlo on output.
-  !================================================================
-  !================================================================
-
-  subroutine hunt(xx,x,jlo)
-    use amr_parameters, only : nhilbert
-    use amr_commons,    only : ndomain
-    implicit none
-    integer :: jlo
-    integer(kind=8), dimension(1:nhilbert),           intent(in) :: x
-    integer(kind=8), dimension(1:nhilbert,0:ndomain), intent(in) :: xx
-    integer :: n,inc,jhi,jm
-  !...............................................................................
-    n = ndomain
-    if (jlo < 0 .or. jlo > n) then                                                ! Input guess not useful. Go immediately to bisection.
-      jlo=-1
-      jhi=n+1
-    else
-      inc=1                                                                       ! Set the hunting increment.
-      if (ge_keys(x,xx(:,jlo))) then                                              ! Hunt up:
-        do
-          jhi=jlo+inc
-          if (jhi > n) then                                                       ! Done hunting, since off end of table
-            jhi= n+1
-            exit
-          else
-            if (gt_keys(xx(:,jhi),x)) exit
-            jlo=jhi                                                               ! Not done hunting,
-            inc=inc+inc                                                           ! so double the increment
-          end if
-        end do                                                                    ! and try again.
-      else                                                                        ! Hunt down:
-        jhi=jlo
-        do
-          jlo=jhi-inc
-          if (jlo < 0) then                                                       ! Done hunting, since off end of table.
-            jlo=-1
-            exit
-          else
-            if (ge_keys(x,xx(:,jlo))) exit
-            jhi=jlo                                                               ! Not done hunting,
-            inc=inc+inc                                                           ! so double the increment
-          end if
-        end do                                                                    ! and try again.
-      end if
-    end if                                                                        ! Done hunting, value bracketed.
-    do                                                                            ! Hunt is done, so begin the final bisection phase:
-      if (jhi-jlo <= 1) then
-        if (jlo>n .and. eq_keys(x,xx(:,n))) jlo=n
-        if (jlo<0 .and. eq_keys(x,xx(:,0))) jlo=0
-        exit
-      else
-        jm=(jhi+jlo)/2
-        if (ge_keys(x,xx(:,jm))) then
-          jlo=jm
-        else
-          jhi=jm
-        end if
-      end if
-    end do
-  end subroutine hunt
 
 end module hilbert

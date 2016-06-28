@@ -300,15 +300,10 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
 
   ! Check if grid sits inside processor boundaries
   hks = hk(1,1:nhilbert)
-  if(    ge_keys(hks,bound_hilbert_key(1:nhilbert,myid-1,ilevel)).AND. &
-       & gt_keys(bound_hilbert_key(1:nhilbert,myid,ilevel),hks))then
-     return
-  endif
+  if (domain_hilbert(ilevel)%in_rank(hks)) return
 
   ! Determine parent processor
-  grid_cpu = get_rank(hks, &
-                      bound_hilbert_key(:,:,ilevel), &
-                      domain2rank(:,ilevel))
+  grid_cpu = domain_hilbert(ilevel)%get_rank(hks)
 
   !============================================
   ! We have a fetch and possibly a flush cache
@@ -1828,12 +1823,12 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
 
   ! Domain decomposition to use
   if(domain_decompos_init==domain_decompos_amr)then
-     bound_hilbert_key=bound_key_level
+     domain_hilbert => domain
      head_cache(levelmin:nlevelmax)=head
      tail_cache(levelmin:nlevelmax)=tail
   endif
   if(domain_decompos_init==domain_decompos_mg )then
-     bound_hilbert_key=bound_key_mg
+     domain_hilbert => domain_mg
      head_cache(1:nlevelmax)=head_mg
      tail_cache(1:nlevelmax)=tail_mg
   endif
