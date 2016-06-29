@@ -63,7 +63,7 @@ subroutine load_balance(ilevel)
   allocate(bound_key_target_tot(1:nhilbert,0:ndom))
 
   ! Compute new Hilbert tick marks
-  do ilev=nlevelmax,ilevel+1,-1
+  do ilev=ilevel+1,nlevelmax
 
      if(noct_tot(ilev)>0)then
         mydom=domain(ilev)%r2d(myid)
@@ -133,112 +133,106 @@ subroutine load_balance(ilevel)
         bound_key_target(1:nhilbert,ndom)=hkey_max(1:nhilbert,ilev)
         domain(ilev)%b(1:nhilbert,:)=bound_key_target(1:nhilbert,0:ndom)
 
-        !if (noct_tot(ilev+1)>0 .and. .false.) then
-        if (noct_tot(ilev+1)>0) then
-           allocate(overlap(ndom,ndom),overlaps(ndom))
-           domain(ilev)%d2r=0
-           domain(ilev)%r2d=0
-           !
+        !-----------------------------------------------------------------------
+        ! Redefine the rank-to-domain mapping to optimize the connectivity to ilev-1
+        !-----------------------------------------------------------------------
+        allocate(overlap(ndom,ndom),overlaps(ndom))
+        domain(ilev)%d2r=0
+        domain(ilev)%r2d=0
+        !
+        do idom=1,ndom
+           bleft  = coarsen_key(domain(ilev)%b(1:nhilbert,idom-1),ilev-1)
+           bright = coarsen_key(domain(ilev)%b(1:nhilbert,idom),ilev-1)
+           ! Test if domain from ilev-1 overlap with this domain
+           do jdom=1,ndom
+              if ( (ge_keys(bleft,domain(ilev-1)%b(1:nhilbert,jdom-1)) .and. &
+                    ge_keys(domain(ilev-1)%b(1:nhilbert,jdom),bleft))  .or. &
+                   (ge_keys(bright,domain(ilev-1)%b(1:nhilbert,jdom-1)) .and. &
+                    ge_keys(domain(ilev-1)%b(1:nhilbert,jdom),bright))  ) then
+                 overlap(idom,jdom) = .true.
+              else
+                 overlap(idom,jdom) = .false.
+              end if
+           enddo
+        enddo
+        !
+        ! Select domain to rank matching based on intervals at ilev-1 that only overlap with one interval at ilev
+        noverlaps = 1
+        domains_matched = 0
+        do while(noverlaps .ne. 0 .and. domains_matched < ndom)
+          overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev-1
+          noverlaps = 0
+          do jdom=1,ndom
+             if (overlaps(jdom)==1) then
+                do idom=1,ndom
+                   if (overlap(idom,jdom)) then
+                      noverlaps = noverlaps + 1
+                      domain(ilev)%d2r(idom) = domain(ilev-1)%d2r(jdom)
+                      domain(ilev)%r2d(domain(ilev)%d2r(idom)) = idom
+                      domains_matched = domains_matched + 1
+                      overlap(idom,:) = .false.
+                      overlap(:,jdom) = .false.
+                      exit
+                   endif
+                enddo
+             endif
+          enddo
+        enddo
+        ! We now have selected as many as possible. Match the rest accepting multiple overlaps, taking the first
+        noverlaps = 1
+        do while(noverlaps .gt. 0 .and. domains_matched < ndom)
+          overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev-1
+          noverlaps = 0
+          do jdom=1,ndom
+             if (overlaps(jdom) > 0) then
+                do idom=1,ndom
+                   if (overlap(idom,jdom)) then
+                      noverlaps = noverlaps + 1
+                      domain(ilev)%d2r(idom) = domain(ilev-1)%d2r(jdom)
+                      domain(ilev)%r2d(domain(ilev)%d2r(idom)) = idom
+                      domains_matched = domains_matched + 1
+                      overlap(idom,:) = .false.
+                      overlap(:,jdom) = .false.
+                      exit
+                   endif
+                enddo
+             endif
+          enddo
+        enddo
+        ! We now hopefully have very few left, and put them linearly according to leftover slots in the domain2rank array
+        if (domains_matched < ndom) then
+           lastdom = 1
            do idom=1,ndom
-              bleft  = refine_key(domain(ilev)%b(1:nhilbert,idom-1),ilev)
-              bright = refine_key(domain(ilev)%b(1:nhilbert,idom),ilev)
-              ! Test if domain from ilev+1 overlap with this domain
-              do jdom=1,ndom
-                 if ( (ge_keys(bleft,domain(ilev+1)%b(1:nhilbert,jdom-1)) .and. &
-                       ge_keys(domain(ilev+1)%b(1:nhilbert,jdom),bleft))  .or. &
-                      (ge_keys(bright,domain(ilev+1)%b(1:nhilbert,jdom-1)) .and. &
-                       ge_keys(domain(ilev+1)%b(1:nhilbert,jdom),bright))  ) then
-                    overlap(idom,jdom) = .true.
-                 else
-                    overlap(idom,jdom) = .false.
-                 end if
-              enddo
-           enddo
-           !
-           ! Select domain to rank matching based on intervals at ilev+1 that only overlap with one interval at ilev
-           noverlaps = 1
-           domains_matched = 0
-           do while(noverlaps .ne. 0 .and. domains_matched < ndom)
-             overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev+1
-             noverlaps = 0
-             do jdom=1,ndom
-                if (overlaps(jdom)==1) then
-                   do idom=1,ndom
-                      if (overlap(idom,jdom)) then
-                         noverlaps = noverlaps + 1
-                         domain(ilev)%d2r(idom) = domain(ilev+1)%d2r(jdom)
-                         domain(ilev)%r2d(domain(ilev)%d2r(idom)) = idom
-                         domains_matched = domains_matched + 1
-                         overlap(idom,:) = .false.
-                         overlap(:,jdom) = .false.
-                         exit
-                      endif
-                   enddo
-                endif
-             enddo
-           enddo
-           ! We now have selected as many as possible. Match the rest accepting multiple overlaps, taking the first
-           noverlaps = 1
-           do while(noverlaps .gt. 0 .and. domains_matched < ndom)
-             overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev+1
-             noverlaps = 0
-             do jdom=1,ndom
-                if (overlaps(jdom) > 0) then
-                   do idom=1,ndom
-                      if (overlap(idom,jdom)) then
-                         noverlaps = noverlaps + 1
-                         domain(ilev)%d2r(idom) = domain(ilev+1)%d2r(jdom)
-                         domain(ilev)%r2d(domain(ilev)%d2r(idom)) = idom
-                         domains_matched = domains_matched + 1
-                         overlap(idom,:) = .false.
-                         overlap(:,jdom) = .false.
-                         exit
-                      endif
-                   enddo
-                endif
-             enddo           
-           enddo
-           ! We now hopefully have very few left, and put them linearly according to leftover slots in the domain2rank array
-           if (domains_matched < ndomain) then
-              lastdom = 1
-              do idom=1,ndom
-                if (domain(ilev)%r2d(idom)==0) then
-                   do jdom=lastdom,ndom
-                      if (domain(ilev)%d2r(jdom)==0) then
-                         domain(ilev)%d2r(jdom) = idom
-                         domain(ilev)%r2d(idom) = jdom
-                         lastdom = jdom+1
-                         exit
-                      endif
-                   enddo
-                endif
-              enddo
-           endif
-           !
-           if (myid==1) then
-           !
-           overlap(1,1) = .false.
-           do idom=1,ndom
-              overlap(1,1) = overlap(1,1) .or. domain(ilev)%d2r(idom) .ne. idom
-           enddo
-           if (overlap(1,1)) then
-              write (*,*) 'Domains where swapped at level ',ilev
-              write (*,*) 'Domain Rank'
-              do idom=1,ndom
-                 write (*,'(i6,i5)') idom, domain(ilev)%d2r(idom)
-              enddo
-           endif
-           !
-           endif
-           !
-           deallocate(overlaps,overlap)
-        else
-           ! This is the highest level with octs; let us give it identity mapping
-           do idom=1,ndom
-              domain(ilev)%r2d(idom)=idom
-              domain(ilev)%d2r(idom)=idom
+             if (domain(ilev)%r2d(idom)==0) then
+                do jdom=lastdom,ndom
+                   if (domain(ilev)%d2r(jdom)==0) then
+                      domain(ilev)%d2r(jdom) = idom
+                      domain(ilev)%r2d(idom) = jdom
+                      lastdom = jdom+1
+                      exit
+                   endif
+                enddo
+             endif
            enddo
         endif
+        !
+        if (myid==1) then
+        !
+        overlap(1,1) = .false.
+        do idom=1,ndom
+           overlap(1,1) = overlap(1,1) .or. domain(ilev)%d2r(idom) .ne. idom
+        enddo
+        if (overlap(1,1)) then
+           write (*,*) 'Domains where swapped at level ',ilev
+           write (*,*) 'Domain Rank'
+           do idom=1,ndom
+              write (*,'(i6,i5)') idom, domain(ilev)%d2r(idom)
+           enddo
+        endif
+        !
+        endif
+        !
+        deallocate(overlaps,overlap)
 
      endif
 

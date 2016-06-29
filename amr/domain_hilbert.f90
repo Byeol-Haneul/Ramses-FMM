@@ -205,7 +205,7 @@ contains
 
   !================================================================
   !================================================================
-  ! Given an array xx(1:nhilbert,0:ndomain), and given a key x(1:nhilbert), return a value jlo such that
+  ! Given an array xx(1:nhilbert,0:n), and given a key x(1:nhilbert), return a value jlo such that
   ! xx(:,jlo) <= x < xx(:,jlo+1). xx must be monotonic increasing. jlo on input is taken
   ! as the initial guess for jlo on output.
   !================================================================

@@ -58,14 +58,14 @@ subroutine init_amr
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
-  ndomain = ncpu
+
   allocate(domain(1:nlevelmax+1))
   allocate(ckey_max(1:nlevelmax+1))
   allocate(hkey_max(1:nhilbert,1:nlevelmax+1))
   hkey_max=0
 
   do ilevel=1,nlevelmax+1
-     call domain(ilevel)%create(ndomain)
+     call domain(ilevel)%create(ncpu*overload)
   end do
 
   ! Make sure that the coarsest level uses only one Hilbert integer

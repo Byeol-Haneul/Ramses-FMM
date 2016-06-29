@@ -53,7 +53,7 @@ module amr_parameters
   integer::nsuperoct=0 ! Number of superoct levels
 
   ! MPI variables
-  integer::ncpu,ndomain,myid,overload=1
+  integer::ncpu,myid,overload=1
 
   ! Run control
   logical::verbose =.false.   ! Write everything
