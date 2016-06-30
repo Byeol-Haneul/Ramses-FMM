@@ -160,7 +160,7 @@ subroutine load_balance(ilevel)
         noverlaps = 1
         domains_matched = 0
         do while(noverlaps .ne. 0 .and. domains_matched < ndom)
-          overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev-1
+          overlaps = count(overlap,dim=1) ! Count how many intervals overlap with each interval at ilev-1
           noverlaps = 0
           do jdom=1,ndom
              if (overlaps(jdom)==1) then
@@ -178,10 +178,10 @@ subroutine load_balance(ilevel)
              endif
           enddo
         enddo
-        ! We now have selected as many as possible. Match the rest accepting multiple overlaps, taking the first
+        ! Match the rest accepting multiple overlaps, taking the first available match
         noverlaps = 1
         do while(noverlaps .gt. 0 .and. domains_matched < ndom)
-          overlaps = count(overlap,dim=1) ! Check how many intervals overlap with each interval at ilev-1
+          overlaps = count(overlap,dim=1) ! Count how many intervals overlap with each interval at ilev-1
           noverlaps = 0
           do jdom=1,ndom
              if (overlaps(jdom) > 0) then
@@ -199,7 +199,7 @@ subroutine load_balance(ilevel)
              endif
           enddo
         enddo
-        ! We now hopefully have very few left, and put them linearly according to leftover slots in the domain2rank array
+        ! Hopefully very few are left, and are put linearly according to leftover slots in the domain2rank array
         if (domains_matched < ndom) then
            lastdom = 1
            do idom=1,ndom
@@ -215,23 +215,7 @@ subroutine load_balance(ilevel)
              endif
            enddo
         endif
-        !
-        if (myid==1) then
-        !
-        overlap(1,1) = .false.
-        do idom=1,ndom
-           overlap(1,1) = overlap(1,1) .or. domain(ilev)%d2r(idom) .ne. idom
-        enddo
-        if (overlap(1,1)) then
-           write (*,*) 'Domains where swapped at level ',ilev
-           write (*,*) 'Domain Rank'
-           do idom=1,ndom
-              write (*,'(i6,i5)') idom, domain(ilev)%d2r(idom)
-           enddo
-        endif
-        !
-        endif
-        !
+
         deallocate(overlaps,overlap)
 
      endif
