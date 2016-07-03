@@ -100,9 +100,9 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 #############################################################################
 
 # Modules
-MODOBJ = amr_parameters.o hydro_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
-         poisson_commons.o hydro_commons.o gadgetreadfile.o write_makefile.o \
-	 write_patch.o write_gitinfo.o hilbert.o
+MODOBJ = amr_parameters.o hydro_parameters.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
+         amr_commons.o poisson_parameters.o poisson_commons.o hydro_commons.o \
+         gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
 
 # AMR objects
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o update_time.o title.o units.o murmur3.o \

@@ -583,6 +583,7 @@ subroutine build_smooth(ilevel)
   integer(kind=4),dimension(1:nvector),save::dummy_state
   integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
   integer(kind=8),dimension(1:nvector,1:ndim),save::ix
+  integer(kind=8),dimension(1:nhilbert),save::hks
 
 #ifndef WITHOUTMPI
 
@@ -623,12 +624,8 @@ subroutine build_smooth(ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           do icpu=1,ncpu
-              if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
-                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-                 grid_cpu=icpu
-              end if
-           end do
+           hks=hk(1,1:nhilbert)
+           grid_cpu = domain(ilevel)%get_rank(hks)
            nremote(grid_cpu)=nremote(grid_cpu)+1
         end if
 
@@ -712,12 +709,8 @@ subroutine build_smooth(ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           do icpu=1,ncpu
-              if(    ge_keys(hk(1,1:nhilbert),bound_key_level(1:nhilbert,icpu-1,ilevel)).AND. &
-                   & gt_keys(bound_key_level(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-                 grid_cpu=icpu
-              end if
-           end do
+           hks=hk(1,1:nhilbert)
+           grid_cpu = domain(ilevel)%get_rank(hks)
            nremote(grid_cpu)=nremote(grid_cpu)+1
            iremote=send_oft(grid_cpu)+nremote(grid_cpu)
 #if NDIM>0

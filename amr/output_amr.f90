@@ -187,7 +187,7 @@ subroutine output_params(filename)
   ! Write cpu boundaries
   write(ilun)nhilbert
   do ilevel=levelmin,nlevelmax
-     write(ilun)bound_key_level(1:nhilbert,0:ncpu,ilevel)
+     write(ilun)domain(ilevel)%b(1:nhilbert,0:ncpu)
   end do
   close(ilun)
 

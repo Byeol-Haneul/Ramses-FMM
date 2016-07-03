@@ -331,7 +331,7 @@ subroutine init_mg(ilevel)
 #endif
   integer::ilevel
 
-  integer::ilev,icpu
+  integer::ilev,idom
   
   allocate(head_mg(1:nlevelmax))
   allocate(tail_mg(1:nlevelmax))
@@ -339,11 +339,12 @@ subroutine init_mg(ilevel)
   allocate(noct_tot_mg(1:nlevelmax))
 
   ! Allocate and compute multigrid Hilbert key tick marks
-  allocate(bound_key_mg(1:nhilbert,0:ncpu,1:nlevelmax+1))
-  do icpu=0,ncpu
-     bound_key_mg(1:nhilbert,icpu,ilevel)=bound_key_level(1:nhilbert,icpu,ilevel)
-     do ilev=ilevel-1,1,-1
-        bound_key_mg(1:nhilbert,icpu,ilev)=coarsen_key(bound_key_mg(1:nhilbert,icpu,ilev+1),ilev)
+  allocate(domain_mg(1:ilevel))
+  call domain_mg(ilevel)%copy(domain(ilevel))
+  do ilev=ilevel-1,1,-1
+     call domain_mg(ilev)%copy(domain_mg(ilev+1))
+     do idom=0,domain_mg(ilev)%n
+        domain_mg(ilev)%b(1:nhilbert,idom)=coarsen_key(domain_mg(ilev+1)%b(1:nhilbert,idom),ilev)
      end do
   end do
 
@@ -435,8 +436,7 @@ subroutine build_mg(ifinelevel)
            call hilbert_key(ix,hk,dummy_state,0,icoarselevel-1,1)
            
            ! Check if grid sits inside processor boundaries
-           if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,myid-1,icoarselevel)).AND. &
-                & gt_keys(bound_key_mg(1:nhilbert,myid,icoarselevel),hk(1,1:nhilbert)))then
+           if( domain_mg(icoarselevel)%in_rank(hk(1,1:nhilbert))) then
               
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
@@ -451,12 +451,7 @@ subroutine build_mg(ifinelevel)
               end if
               ! Otherwise, determine parent processor and use the cache
            else
-              do icpu=1,ncpu
-                 if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,icoarselevel)).AND. &
-                      & gt_keys(bound_key_mg(1:nhilbert,icpu,icoarselevel),hk(1,1:nhilbert)))then
-                    grid_cpu=icpu
-                 end if
-              end do
+              grid_cpu = domain_mg(icoarselevel)%get_rank(hk(1,1:nhilbert))
               
               ! If next cache line is occupied, free it.
               if(occupied(free_cache))call destage(ngridmax+free_cache,mg_dict)
@@ -523,10 +518,14 @@ subroutine cleanup_mg
    use amr_commons
    use poisson_commons
    implicit none
+   integer :: ilev
 
    ! Deallocate processor boundary array
    deallocate(head_mg,tail_mg,noct_mg,noct_tot_mg)
-   deallocate(bound_key_mg)
+   do ilev=1,size(domain_mg)
+      call domain_mg(ilev)%destroy
+   end do
+   deallocate(domain_mg)
 
   ! Reset the MG hash table
   call reset_entire_hash(mg_dict,.false.)
@@ -816,12 +815,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           do icpu=1,ncpu
-              if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,ilevel)).AND. &
-                   & gt_keys(bound_key_mg(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-                 grid_cpu=icpu
-              end if
-           end do
+           grid_cpu = domain_mg(ilevel)%get_rank(hk(1,1:nhilbert))
            nremote(grid_cpu)=nremote(grid_cpu)+1
         end if
 
@@ -905,12 +899,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           do icpu=1,ncpu
-              if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,ilevel)).AND. &
-                   & gt_keys(bound_key_mg(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-                 grid_cpu=icpu
-              end if
-           end do
+           grid_cpu = domain_mg(ilevel)%get_rank(hk(1,1:nhilbert))
            nremote(grid_cpu)=nremote(grid_cpu)+1
            iremote=buffer_mg(ilevel)%send_oft(grid_cpu)+nremote(grid_cpu)
 #if NDIM>0

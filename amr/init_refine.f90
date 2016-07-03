@@ -28,7 +28,7 @@ subroutine init_refine_basegrid
 
   ! Loop over the base level grid
   igrid=0
-  do ikey=bound_key_level(1,myid-1,levelmin),bound_key_level(1,myid,levelmin)-1
+  do ikey=domain(levelmin)%b(1,myid-1), domain(levelmin)%b(1,myid)-1
      hk(1,1)=ikey
      ! Compute Cartesian index from Hilbert index
      call hilbert_reverse(ix,hk,levelmin-1,1)
@@ -401,7 +401,7 @@ subroutine init_refine_restart
      end do
      bound_key_target(1:nhilbert,ncpu)=hkey_max(1:nhilbert,ilevel)
      do icpu=0,ncpu
-        bound_key_level(1:nhilbert,icpu,ilevel)=bound_key_target(1:nhilbert,icpu)
+        domain(ilevel)%b(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
      end do
      
   end do
