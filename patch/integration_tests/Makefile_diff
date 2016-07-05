@@ -27,7 +27,7 @@
   # Poisson solver objects
   POISSONOBJ = init_poisson.o output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
 --- 109,115 ----
-  	 mem_compare.o refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o movie.o
+  	 refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o movie.o
   
   # Particle-Mesh objects
 ! PMOBJ = newdt_fine.o init_part.o rho_fine.o move_fine.o rho_ana.o output_part.o
