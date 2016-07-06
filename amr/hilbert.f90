@@ -178,9 +178,50 @@ module hilbert
 
   integer(kind=4),parameter,dimension(0:1, 1:1)::one_digit_diagram=reshape((/0, 1/), (/2,1/))
 #endif
-  
+
 contains
   
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+
+  ! Compute 3-integer hilbert keys from the cartesian keys ix
+  function hilbert_key_one(ix, level) result(hkey)
+    use amr_parameters, only: nhilbert, ndim, twotondim
+    implicit none
+    integer,                          intent(in) :: level
+    integer(kind=8), dimension(ndim), intent(in) :: ix
+    integer(kind=8), dimension(1:nhilbert) :: hkey
+    ! Local vars
+    integer(kind=4) :: cstate, sdigit, ind
+    integer         :: ibit, ip, add_digit, idim, ikey, nkey_local
+
+    cstate = 0
+    hkey = 0
+    nkey_local = ceiling(1.d0 * level / levels_per_key(ndim))
+
+    do ibit = level - 1, 0, -1
+       do ikey = nkey_local, 2, -1
+          hkey(ikey) = ISHFT(hkey(ikey), left_shift)
+          hkey(ikey) = ISHFT(hkey(ikey), right_shift)
+          hkey(ikey) = hkey(ikey) + ISHFT(hkey(ikey - 1), big_shift)
+       end do
+       hkey(1) = ISHFT(hkey(1), left_shift)
+       hkey(1) = ISHFT(hkey(1), right_shift)
+
+       sdigit=0
+       do idim = 1, ndim
+          add_digit = 2 ** (ndim - idim)
+          if(btest(ix(idim),ibit)) sdigit = sdigit + add_digit
+       end do
+
+       ind = cstate * twotondim + sdigit
+       cstate = next_state_diagram(ind)
+       hkey(1) = hkey(1) + next_digits_diagram(ind)
+    enddo
+  end function hilbert_key_one
+
   !================================================================
   !================================================================
   !================================================================
@@ -374,8 +415,8 @@ contains
   !================================================================
 
   recursive subroutine sort_hilbert(head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
-    use amr_commons, only: boxlen, dp, ndim, twotondim, myid
-    use pm_commons,  only: workp, sortp, xp
+    use amr_parameters, only: boxlen, dp, ndim, twotondim, myid
+    use pm_commons,     only: workp, sortp, xp
     implicit none
 
     integer, intent(in) :: ilevel, final_level
@@ -513,7 +554,7 @@ contains
   !================================================================
   !================================================================
 
-  function ge_keys(key_a, key_b)
+  pure function ge_keys(key_a, key_b)
     implicit none
     logical::ge_keys
     integer(kind=8), intent(in), dimension(:) :: key_a, key_b
@@ -561,7 +602,7 @@ contains
   !================================================================
   !================================================================
 
-  function average_keys(key_a, key_b)
+  pure function average_keys(key_a, key_b)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension(1:nhilbert) :: average_keys
@@ -578,7 +619,7 @@ contains
   !================================================================
   !================================================================
 
-  function difference_keys(key_a, key_b)
+  pure function difference_keys(key_a, key_b)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension(1:nhilbert) :: difference_keys
@@ -595,7 +636,7 @@ contains
   !================================================================
   !================================================================
 
-  function gt_keys(key_a, key_b)
+  pure function gt_keys(key_a, key_b)
     implicit none
     logical::gt_keys
     integer(kind=8), intent(in), dimension (:):: key_a, key_b
@@ -642,7 +683,7 @@ contains
   !================================================================
   !================================================================
 
-  function eq_keys(key_a, key_b)
+  pure function eq_keys(key_a, key_b)
     implicit none
     logical::eq_keys
     integer(kind=8), intent(in), dimension (:):: key_a, key_b
@@ -666,7 +707,7 @@ contains
   !================================================================
   !================================================================
 
-  function refine_key(key_in,key_level)
+  pure function refine_key(key_in,key_level)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension (1:nhilbert) :: refine_key
@@ -692,7 +733,7 @@ contains
   !================================================================
   !================================================================
 
-  function coarsen_key(key_in,key_level)
+  pure function coarsen_key(key_in,key_level)
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension (1:nhilbert) :: coarsen_key

@@ -1,7 +1,6 @@
 subroutine poisson_flag(ilevel)
   use amr_commons
   use hydro_commons
-  use poisson_commons, ONLY: grav
   use pm_commons, ONLY: mp_min
   use hash
   implicit none
@@ -39,25 +38,31 @@ subroutine poisson_flag(ilevel)
         ok=.false.
 
         ! Flag cells with density beyond the threshold
-        if(hydro.and.mass_sph>0)then
+#ifdef HYDRO
+        if(mass_sph>0)then
            if(m_refine(ilevel)>=0)then
-              ok=(ok .or. fluid(igrid)%uold(ind,1)>=m_refine(ilevel)*d_scale)
+              ok=(ok .or. grid(igrid)%uold(ind,1)>=m_refine(ilevel)*d_scale)
            endif
         endif
+#endif
         
         ! Flag cells with density beyond the threshold
-        if(poisson.and.pic.and.mp_min>0)then
+#ifdef GRAV
+        if(pic.and.mp_min>0)then
            if(m_refine(ilevel)>=0)then
-              ok=(ok .or. grav(igrid)%rho(ind)>=m_refine(ilevel)*dp_scale)
+              ok=(ok .or. grid(igrid)%rho(ind)>=m_refine(ilevel)*dp_scale)
            endif
         endif
+#endif
 
-        if(hydro.and.jeans_refine(ilevel)>=0)then
+        if(jeans_refine(ilevel)>=0)then
            ! Gather hydro variables
+#ifdef HYDRO
            do ivar=1,nvar
-              uu(ivar)=fluid(igrid)%uold(ind,ivar)
+              uu(ivar)=grid(igrid)%uold(ind,ivar)
            end do
            call jeans_length_refine(uu,factG,dx_loc,jeans_refine(ilevel),ok)
+#endif
         endif
         
         ! Count only newly flagged cells

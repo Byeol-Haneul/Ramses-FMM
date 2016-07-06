@@ -23,7 +23,7 @@ subroutine init_amr
   dtnew=0.0D0
 
   ! Set up cache size
-  ncachemax=10000
+  ncachemax=10000 !ngridmax
 
   ! Allocate main oct array
   allocate(grid(1:ngridmax+ncachemax))
@@ -58,13 +58,15 @@ subroutine init_amr
   ! Set initial cpu boundaries
   ! Set maximum Cartesian key per level
   if(verbose.and.myid==1)write(*,*)'Initialize level cpu boundaries'
-  allocate(bound_key_level(1:nhilbert,0:ncpu,1:nlevelmax+1))
-  allocate(bound_hilbert_key(1:nhilbert,0:ncpu,1:nlevelmax+1))
-  bound_key_level=0
-  bound_hilbert_key=0
+
+  allocate(domain(1:nlevelmax+1))
   allocate(ckey_max(1:nlevelmax+1))
   allocate(hkey_max(1:nhilbert,1:nlevelmax+1))
   hkey_max=0
+
+  do ilevel=1,nlevelmax+1
+     call domain(ilevel)%create(ncpu*overload)
+  end do
 
   ! Make sure that the coarsest level uses only one Hilbert integer
   if(levelmin>(levels_per_key(ndim)+1))then
@@ -79,10 +81,10 @@ subroutine init_amr
      max_key=2**((ilevel-1)*ndim)
      hkey_max(1,ilevel)=max_key
      do icpu=1,ncpu-1
-        bound_key_level(1,icpu,ilevel) = (icpu*max_key)/ncpu
+        domain(ilevel)%b(1,icpu) = (icpu*max_key)/ncpu
      end do
-     bound_key_level(1,0,ilevel) = 0
-     bound_key_level(1,ncpu,ilevel) = max_key
+     domain(ilevel)%b(1,0) = 0
+     domain(ilevel)%b(1,ncpu) = max_key
   end do
 
   ! Set bounds for Hilbert keys for fine levels
@@ -91,7 +93,7 @@ subroutine init_amr
      hkey_max(1:nhilbert,ilevel) = refine_key(hkey_max(1:nhilbert,ilevel-1),ilevel-2)
      ! Multiply the bounds by twotondim
      do icpu=0,ncpu
-        bound_key_level(1:nhilbert,icpu,ilevel) = refine_key(bound_key_level(1:nhilbert,icpu,ilevel-1),ilevel-2)
+        domain(ilevel)%b(1:nhilbert,icpu) = refine_key(domain(ilevel-1)%b(1:nhilbert,icpu),ilevel-2)
      end do
   end do
 
@@ -269,18 +271,21 @@ subroutine init_amr
   new_type_length(2)=ntilemax*(1+ndim)
   new_type_length(3)=ntilemax*twotondim
   msg_size=3
-  if(hydro)then
-     msg_size=msg_size+1
-     new_type_length(msg_size)=ntilemax*twotondim*nvar
-     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-     new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*nvar*realdpex
-  endif
-  if(poisson)then
-     msg_size=msg_size+1
-     new_type_length(msg_size)=ntilemax*twotondim*(ndim+2)
-     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-     new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*(ndim+2)*realdpex
-  endif
+
+#ifdef HYDRO
+  msg_size=msg_size+1
+  new_type_length(msg_size)=ntilemax*twotondim*nvar
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*nvar*realdpex
+#endif
+
+#ifdef GRAV
+  msg_size=msg_size+1
+  new_type_length(msg_size)=ntilemax*twotondim*(ndim+2)
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*(ndim+2)*realdpex
+#endif
+
   call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_msg,info)
   call MPI_TYPE_COMMIT(new_mpi_large_realdp_msg,info)
 
@@ -344,18 +349,21 @@ subroutine init_amr
   new_type_length(2)=nflushmax*(1+ndim)
   new_type_length(3)=nflushmax*twotondim
   msg_size=3
-  if(hydro)then
-     msg_size=msg_size+1
-     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-     new_type_length(msg_size)=nflushmax*twotondim*nvar
-     new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*nvar*realdpex
-  endif
-  if(poisson)then
-     msg_size=msg_size+1
-     new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-     new_type_length(msg_size)=nflushmax*twotondim*(ndim+2)
-     new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*(ndim+2)*realdpex
-  endif
+
+#ifdef HYDRO
+  msg_size=msg_size+1
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_length(msg_size)=nflushmax*twotondim*nvar
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*nvar*realdpex
+#endif
+
+#ifdef GRAV
+  msg_size=msg_size+1
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_length(msg_size)=nflushmax*twotondim*(ndim+2)
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*(ndim+2)*realdpex
+#endif
+
   call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_flush,info)
   call MPI_TYPE_COMMIT(new_mpi_large_realdp_flush,info)
 

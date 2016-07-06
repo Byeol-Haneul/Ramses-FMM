@@ -28,7 +28,7 @@ subroutine init_refine_basegrid
 
   ! Loop over the base level grid
   igrid=0
-  do ikey=bound_key_level(1,myid-1,levelmin),bound_key_level(1,myid,levelmin)-1
+  do ikey=domain(levelmin)%b(1,myid-1), domain(levelmin)%b(1,myid)-1
      hk(1,1)=ikey
      ! Compute Cartesian index from Hilbert index
      call hilbert_reverse(ix,hk,levelmin-1,1)
@@ -107,7 +107,7 @@ subroutine init_refine_adaptive
   use pm_commons
   use poisson_commons
   implicit none
-  integer::ilevel,i,ivar,ilev
+  integer::ilevel,i,ivar, ilev
 
   if(myid==1)write(*,*)'Building initial adaptive grid'
 
@@ -148,8 +148,6 @@ subroutine init_refine_restart
   ! the initial AMR grid.
   !--------------------------------------------------------------
   use amr_commons
-  use hydro_commons
-  use poisson_commons
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -350,13 +348,17 @@ subroutine init_refine_restart
            grid(igrid)%lev=ilevel
            grid(igrid)%ckey=ckey
            grid(igrid)%refined=refined
+#ifdef HYDRO
            if(hydro)then
-              fluid(igrid)%uold=uold
+              grid(igrid)%uold=uold
            endif
+#endif
+#ifdef GRAV
            if(poisson)then
-              grav(igrid)%phi=phi
-              grav(igrid)%f=f
+              grid(igrid)%phi=phi
+              grid(igrid)%f=f
            endif
+#endif
 
            ! Set flag1 to preserve refinements
            do ind=1,twotondim
@@ -399,7 +401,7 @@ subroutine init_refine_restart
      end do
      bound_key_target(1:nhilbert,ncpu)=hkey_max(1:nhilbert,ilevel)
      do icpu=0,ncpu
-        bound_key_level(1:nhilbert,icpu,ilevel)=bound_key_target(1:nhilbert,icpu)
+        domain(ilevel)%b(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
      end do
      
   end do

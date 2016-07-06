@@ -20,7 +20,7 @@
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-
+#ifdef GRAV
 ! ------------------------------------------------------------------------
 ! Main multigrid routine, called by amr_step
 ! ------------------------------------------------------------------------
@@ -146,7 +146,7 @@ subroutine multigrid(ilevel,icount)
 
         ! Reset correction from upper level before solve
         do igrid=head_mg(ilevel-1),tail_mg(ilevel-1)
-           grav(igrid)%phi(1:twotondim)=0.0d0
+           grid(igrid)%phi(1:twotondim)=0.0d0
         end do
         
         ! Multigrid-solve the upper level
@@ -288,7 +288,7 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
      
      ! Reset correction from upper level before solve
      do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
-        grav(igrid)%phi(1:twotondim)=0.0d0
+        grid(igrid)%phi(1:twotondim)=0.0d0
      end do
      
      ! Multigrid-solve the upper level
@@ -331,7 +331,7 @@ subroutine init_mg(ilevel)
 #endif
   integer::ilevel
 
-  integer::ilev,icpu
+  integer::ilev,idom
   
   allocate(head_mg(1:nlevelmax))
   allocate(tail_mg(1:nlevelmax))
@@ -339,11 +339,12 @@ subroutine init_mg(ilevel)
   allocate(noct_tot_mg(1:nlevelmax))
 
   ! Allocate and compute multigrid Hilbert key tick marks
-  allocate(bound_key_mg(1:nhilbert,0:ncpu,1:nlevelmax+1))
-  do icpu=0,ncpu
-     bound_key_mg(1:nhilbert,icpu,ilevel)=bound_key_level(1:nhilbert,icpu,ilevel)
-     do ilev=ilevel-1,1,-1
-        bound_key_mg(1:nhilbert,icpu,ilev)=coarsen_key(bound_key_mg(1:nhilbert,icpu,ilev+1),ilev)
+  allocate(domain_mg(1:ilevel))
+  call domain_mg(ilevel)%copy(domain(ilevel))
+  do ilev=ilevel-1,1,-1
+     call domain_mg(ilev)%copy(domain_mg(ilev+1))
+     do idom=0,domain_mg(ilev)%n
+        domain_mg(ilev)%b(1:nhilbert,idom)=coarsen_key(domain_mg(ilev+1)%b(1:nhilbert,idom),ilev)
      end do
   end do
 
@@ -435,8 +436,7 @@ subroutine build_mg(ifinelevel)
            call hilbert_key(ix,hk,dummy_state,0,icoarselevel-1,1)
            
            ! Check if grid sits inside processor boundaries
-           if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,myid-1,icoarselevel)).AND. &
-                & gt_keys(bound_key_mg(1:nhilbert,myid,icoarselevel),hk(1,1:nhilbert)))then
+           if( domain_mg(icoarselevel)%in_rank(hk(1,1:nhilbert))) then
               
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
@@ -451,12 +451,7 @@ subroutine build_mg(ifinelevel)
               end if
               ! Otherwise, determine parent processor and use the cache
            else
-              do icpu=1,ncpu
-                 if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,icoarselevel)).AND. &
-                      & gt_keys(bound_key_mg(1:nhilbert,icpu,icoarselevel),hk(1,1:nhilbert)))then
-                    grid_cpu=icpu
-                 end if
-              end do
+              grid_cpu = domain_mg(icoarselevel)%get_rank(hk(1,1:nhilbert))
               
               ! If next cache line is occupied, free it.
               if(occupied(free_cache))call destage(ngridmax+free_cache,mg_dict)
@@ -482,9 +477,9 @@ subroutine build_mg(ifinelevel)
 
            ! Intitialize gravity variables
            do ind=1,twotondim
-              grav(ichild)%f(ind,1:ndim)=0
-              grav(ichild)%phi(ind)=0
-              grav(ichild)%phi_old(ind)=0
+              grid(ichild)%f(ind,1:ndim)=0
+              grid(ichild)%phi(ind)=0
+              grid(ichild)%phi_old(ind)=0
            enddo
 
            ! Insert new grid in hash table
@@ -523,10 +518,14 @@ subroutine cleanup_mg
    use amr_commons
    use poisson_commons
    implicit none
+   integer :: ilev
 
    ! Deallocate processor boundary array
    deallocate(head_mg,tail_mg,noct_mg,noct_tot_mg)
-   deallocate(bound_key_mg)
+   do ilev=1,size(domain_mg)
+      call domain_mg(ilev)%destroy
+   end do
+   deallocate(domain_mg)
 
   ! Reset the MG hash table
   call reset_entire_hash(mg_dict,.false.)
@@ -559,7 +558,7 @@ subroutine make_mask(ilevel)
    ! Init mask to 1.0 on all fine level cells :
    do igrid=head(ilevel),tail(ilevel)
       do ind=1,twotondim
-         grav(igrid)%f(ind,3)=1.0d0
+         grid(igrid)%f(ind,3)=1.0d0
       end do
    end do
 
@@ -663,8 +662,8 @@ subroutine make_bc_rhs(ilevel,icount)
      
      ! Get central oct potential
      do ind=1,twotondim
-        phi_nbor(ind,0)=grav(igrid)%phi(ind)
-        dis_nbor(ind,0)=grav(igrid)%f(ind,3)
+        phi_nbor(ind,0)=grid(igrid)%phi(ind)
+        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
      end do
      
      ! Get neighboring octs potential
@@ -685,8 +684,8 @@ subroutine make_bc_rhs(ilevel,icount)
         ! If grid exists, then copy into array
         if(igridn>0)then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=grav(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=grav(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
+              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
            end do
 
         ! Otherwise interpolate from coarser level
@@ -710,10 +709,10 @@ subroutine make_bc_rhs(ilevel,icount)
      do ind=1,twotondim
         
         ! Init BC-modified RHS to rho - rho_tot :
-        grav(igrid)%f(ind,2) = fourpi*(grav(igrid)%rho(ind) - rho_tot)
+        grid(igrid)%f(ind,2) = fourpi*(grid(igrid)%rho(ind) - rho_tot)
         
         ! Do not process masked cells
-        if(grav(igrid)%f(ind,3)<=0.0) cycle 
+        if(grid(igrid)%f(ind,3)<=0.0) cycle 
         
         ! Separate directions
         do idim=1,ndim
@@ -727,11 +726,11 @@ subroutine make_bc_rhs(ilevel,icount)
 
               ! phi(#) interpolated with mask:
               nb_phi = phi_nbor(id,ig)
-              w = nb_mask/(nb_mask-grav(igrid)%f(ind,3)) ! Linear parameter
-              phi_b = ((1.0d0-w)*nb_phi + w*grav(igrid)%phi(ind))
+              w = nb_mask/(nb_mask-grid(igrid)%f(ind,3)) ! Linear parameter
+              phi_b = ((1.0d0-w)*nb_phi + w*grid(igrid)%phi(ind))
 
               ! Increment correction for current cell
-              grav(igrid)%f(ind,2) = grav(igrid)%f(ind,2) - 2.0d0*oneoverdx2*phi_b
+              grid(igrid)%f(ind,2) = grid(igrid)%f(ind,2) - 2.0d0*oneoverdx2*phi_b
 
            end do
         end do
@@ -816,12 +815,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           do icpu=1,ncpu
-              if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,ilevel)).AND. &
-                   & gt_keys(bound_key_mg(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-                 grid_cpu=icpu
-              end if
-           end do
+           grid_cpu = domain_mg(ilevel)%get_rank(hk(1,1:nhilbert))
            nremote(grid_cpu)=nremote(grid_cpu)+1
         end if
 
@@ -905,12 +899,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           do icpu=1,ncpu
-              if(    ge_keys(hk(1,1:nhilbert),bound_key_mg(1:nhilbert,icpu-1,ilevel)).AND. &
-                   & gt_keys(bound_key_mg(1:nhilbert,icpu,ilevel),hk(1,1:nhilbert)))then
-                 grid_cpu=icpu
-              end if
-           end do
+           grid_cpu = domain_mg(ilevel)%get_rank(hk(1,1:nhilbert))
            nremote(grid_cpu)=nremote(grid_cpu)+1
            iremote=buffer_mg(ilevel)%send_oft(grid_cpu)+nremote(grid_cpu)
 #if NDIM>0
@@ -990,7 +979,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
      do i=1,buffer_mg(ilevel)%recv_tot
         igrid=buffer_mg(ilevel)%grid_recv_buf(i)
         istart=(i-1)*twotondim+ind
-        buffer_mg(ilevel)%phi_recv_buf(istart)=grav(igrid)%f(ind,3)
+        buffer_mg(ilevel)%phi_recv_buf(istart)=grid(igrid)%f(ind,3)
      end do
   end do
 
@@ -1053,4 +1042,5 @@ subroutine clean_comm_mg(ilevel)
 
 end subroutine clean_comm_mg
 
+#endif
 

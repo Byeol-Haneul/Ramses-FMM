@@ -2,6 +2,7 @@ module amr_commons
   use amr_parameters
   use hydro_parameters
   use hash
+  use domain_m
   
   logical::output_done=.false.                  ! Output just performed
   logical::init=.false.                         ! Set up or run
@@ -31,9 +32,6 @@ module amr_commons
   ! Save namelist filename
   CHARACTER(LEN=80)::namelist_file
 
-  ! MPI variables
-  integer::ncpu,ndomain,myid,overload=1
-
   ! Friedman model variables
   integer::n_frw
   real(dp),allocatable,dimension(:)::aexp_frw,hexp_frw,tau_frw,t_frw
@@ -60,13 +58,25 @@ module amr_commons
      integer(kind=4),dimension(1:twotondim)::flag2
      logical,dimension(1:twotondim)::refined
      integer(kind=4)::superoct
+#ifdef GRAV
+     real(kind=dp),dimension(1:twotondim)::rho
+     real(kind=dp),dimension(1:twotondim)::phi
+     real(kind=dp),dimension(1:twotondim)::phi_old
+     real(kind=dp),dimension(1:twotondim,1:ndim)::f
+#endif
+#ifdef HYDRO
+     real(kind=dp),dimension(1:twotondim,1:nvar)::uold
+     real(kind=dp),dimension(1:twotondim,1:nvar)::unew
+#endif
+#ifdef DUALENER
+     real(kind=dp),dimension(1:twotondim)::divu
+     real(kind=dp),dimension(1:twotondim)::enew
+#endif
   end type oct
 
   ! Persistent array for the AMR grid
   type(oct),dimension(:),allocatable::grid
-  
-  ! Oct hash table
-  type(hash_table)::grid_dict
+  type(hash_table)::grid_dict   ! Oct hash table
 
   ! Starting index for each level 
   integer,allocatable,dimension(:)::head
@@ -82,8 +92,9 @@ module amr_commons
   integer,allocatable,dimension(:)::head_cache
   integer,allocatable,dimension(:)::tail_cache
 
-  ! Hilbert key
-  integer(kind=8),allocatable,dimension(:,:,:)::bound_key_level,bound_hilbert_key,bound_key_mg
+  ! Peano-Hilbert key boundaries for cpu domains
+  type(domain_t), allocatable, target, dimension(:)::domain,domain_mg
+  type(domain_t), pointer,             dimension(:)::domain_hilbert
 
   ! Software cache parameters
   integer::cache_operation

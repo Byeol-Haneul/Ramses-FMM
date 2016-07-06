@@ -10,7 +10,6 @@ NVAR = 5
 NENER = 0
 SOLVER = hydro
 PATCH = 
-#/zbox/data/teyssier/mini-ramses/coeur
 EXEC = ramses
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
@@ -18,13 +17,13 @@ GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -DNVAR=$(NVAR) \
-	  -DNHILBERT=$(NHILBERT) -DHYDRO -DWITHOUTMPI -DGRAV
+	  -DNHILBERT=$(NHILBERT) -DHYDRO -DGRAV
 #############################################################################
 # Fortran compiler options and directives
 
 # --- No MPI, gfortran -------------------------------
-F90 = gfortran -O3 -frecord-marker=4 -fbacktrace -ffree-line-length-none -g
-FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
+#F90 = gfortran -O3 -frecord-marker=4 -fbacktrace -ffree-line-length-none -g
+#FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
 
 # --- No MPI, tau ----------------------------------
 #F90 = tau_f90.sh -optKeepFiles -optPreProcess -optCPPOpts=$(DEFINES) -DWITHOUTMPI
@@ -50,8 +49,8 @@ FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
 #FFLAGS = -x f95-cpp-input $(DEFINES)
 
 # --- MPI, gfortran DEBUG syntax ------------------------------ 
-#F90 = mpif90 -frecord-marker=4 -ffree-line-length-none -fbacktrace -g -O -fbounds-check -Wall
-#FFLAGS = -x f95-cpp-input -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan  $(DEFINES)    
+F90 = mpif90 -frecord-marker=4 -ffree-line-length-none -fbacktrace -g -O -fbounds-check -Wall
+FFLAGS = -x f95-cpp-input -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan  $(DEFINES)    
 
 # --- MPI, pgf90 syntax ------------------------------
 #F90 = mpif90 -O3
@@ -101,9 +100,9 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 #############################################################################
 
 # Modules
-MODOBJ = amr_parameters.o hydro_parameters.o hash.o amr_commons.o pm_parameters.o pm_commons.o poisson_parameters.o \
-         poisson_commons.o hydro_commons.o gadgetreadfile.o write_makefile.o \
-	 write_patch.o write_gitinfo.o hilbert.o
+MODOBJ = amr_parameters.o hydro_parameters.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
+         amr_commons.o poisson_parameters.o poisson_commons.o hydro_commons.o \
+         gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
 
 # AMR objects
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o update_time.o title.o units.o murmur3.o \

@@ -10,9 +10,6 @@ subroutine init_hydro
 
   if(verbose)write(*,*)'Entering init_hydro'
 
-  ! Allocate fluid variables for all octs
-  allocate(fluid(1:ngridmax+ncachemax))
-
   ! Allocate work space for hydro kernel
   allocate(uloc(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar))
   allocate(gloc(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim))
