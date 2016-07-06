@@ -6,7 +6,7 @@ program ramses_unit_tests
 
   call amr_tests(all_ok)
 !  call hydro_tests(all_ok)
-  call pm_tests(all_ok)
+!  call pm_tests(all_ok)
 !  call poisson_tests(all_ok)
 
   

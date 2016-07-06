@@ -5,13 +5,13 @@
 ! - VALUE: Integer (typically grid indices) are stored in the hash table.
 
 ! - HASH FUNCTION: Simple hash function based on multiplication with constants.
-! - interface to murmur3 hash exists but is not
+! - interface to murmur3 hash exists but is not used anymore
 
 ! - COLLISIONS: A linked list is used to deal with collisions.
 
 
 module hash
-  use amr_parameters, only: ndim
+  use amr_parameters, only: ndim, nvector
   implicit none
   
   ! General module parameters
@@ -232,6 +232,76 @@ contains
   end function hash_get
   ! =============================================================================
 
+  ! =============================================================================`
+  subroutine hash_get_vec(htable, keys, values, n)
+    implicit none
+    type(hash_table),                                 intent(in) :: htable
+    integer(kind = 8) , dimension(1:nvector, 0:ndim), intent(in) :: keys
+    integer, dimension(1:nvector)                , intent(inout) :: values
+    integer                                                      :: n
+
+    ! Subroutine to obtain up to nvector values from the hash key at once.
+    ! This subroutine is only valid if the simple hash is used.
+    
+    integer(kind = 8), dimension(1:nvector),        save :: ibucket, full_hash
+    integer(kind = 8), dimension(1:nvector, 0:ndim),save :: bucket_keys
+    logical,           dimension(1:nvector),        save :: ok
+    integer :: i, idim, n_coll
+
+    full_hash = 0
+    do idim = 0, ndim
+       do i = 1, n
+          full_hash(i) = full_hash(i) + keys(i, idim) * constants(idim)
+       end do
+    end do
+
+    do i = 1, n
+       ibucket(i) = IAND(full_hash(i), htable%bitmask) + 1
+    end do
+    
+    do idim = 0, ndim
+       do i = 1, n
+          bucket_keys(i, idim) = htable%data(ibucket(i))%key(idim)
+       end do
+    end do
+
+    ok = .true.
+    do idim = 0, ndim
+       do i = 1, n
+          ok(i) = ok(i) .and. (bucket_keys(i, idim) == keys(i, idim))
+       end do
+    end do
+
+    n_coll = 0
+    do i = 1, n
+       if (ok(i)) then
+          values(i) = htable%data(ibucket(i))%value
+       else
+          n_coll = n_coll + 1
+       endif
+    end do
+
+    if(n_coll == 0)return
+
+    do i = 1, n
+       if (.not. ok(i)) then
+          ! Walk linked list until key is found or to the end is reached
+          do while( htable%data(ibucket(i))%next_ibucket > 0)
+             ibucket(i) = htable%data(ibucket(i))%next_ibucket
+             if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
+                values(i) = htable%data(ibucket(i))%value
+                ok(i) = .true.
+             end if
+          end do
+          ! Nothing found...
+          if (.not. ok(i))then
+             values(i) = 0
+          end if
+       end if
+    end do
+  end subroutine hash_get_vec
+  ! =============================================================================  
+  
   ! =============================================================================  
   subroutine hash_free(htable, key)
     implicit none
