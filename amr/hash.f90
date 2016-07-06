@@ -4,14 +4,11 @@
 
 ! - VALUE: Integer (typically grid indices) are stored in the hash table.
 
-! - HASH FUNCTION: Either the murmur3 (A. Appleby,
-!   https://sites.google.com/site/murmurhash/, currently only in 3d)
-!   or a simpler hash function based on simple multiplication with constants.
+! - HASH FUNCTION: Simple hash function based on multiplication with constants.
+! - interface to murmur3 hash exists but is not used anymore
 
 ! - COLLISIONS: A linked list is used to deal with collisions.
 
-! - UNSAFE_HASH: Avoid comparing 4-integer keys (slow) and compare the full
-!   64 (or maybe 128 bit) hash of the keys instead. EXPERIMENTAL!!!
 
 module hash
   use amr_parameters, only: ndim, nvector
@@ -25,73 +22,29 @@ module hash
   ! cache efficiency.
   type bucket
      sequence
-#ifndef UNSAFE_HASH
      integer(kind=8), dimension(0:ndim) :: key
-#else
-     integer(kind=8) :: full_hash
-#endif 
      integer :: value
      integer :: next_ibucket
   end type bucket     
 
-  ! The actual hash table. Contains a procedure pointer to the desired
-  ! hash function which is set at initialization of the hash table.
+  ! The actual hash table is an array of buckets
   type hash_table
      type(bucket), allocatable, dimension(:)  :: data
      integer         :: total_size, head_free, nfree_chain, nfree
      integer(kind=8) :: size
      integer(kind=8) :: bitmask
      integer, allocatable, dimension(:) :: next_free
-     procedure(hfunc), nopass, pointer :: hash_func => null()
-     logical         :: uses_simple_hash
-  end type hash_table
-
-  ! Interface to a general hash function - necessary for the procedure
-  ! pointer used above.
-  abstract interface
-     pure function hfunc(key)
-       use amr_parameters, only: ndim
-       integer(kind=8), dimension(0:ndim), intent(in) :: key
-       integer(kind=8)                                 :: hfunc
-     end function hfunc
-  end interface
+  end type hash_table  
 
 contains
-
-  ! Note: All these functions and subroutines could actually be contained in the
-  ! hash_table type to optain a more object oriented fashion (Fortran 2003 standard).
   
   ! ============================================================================= 
-  pure function simple_hash_func(key)
+  pure function hash_func(key)
     integer(kind=8), dimension(0:ndim), intent(in) :: key
-    integer(kind=8)                                 :: simple_hash_func
+    integer(kind=8)                                :: hash_func
     
-    simple_hash_func = dot_product(key(0:ndim), constants(0:ndim))
-  end function simple_hash_func
-  ! =============================================================================
-  
-  ! ============================================================================= 
-  pure function murmur3_hash_func(key)
-    integer(kind=8), dimension(0:ndim), intent(in) :: key
-    integer(kind=8)                                 :: murmur3_hash_func
-    integer(kind=4), parameter :: seed=42
-
-    ! Murmur3 hash adapted for a key which is a multiple of 32 bits
-    
-    ! Explicit interface for the c subroutine (needed because the interface must
-    ! be known at compilation time of the module)
-    interface
-       pure subroutine murmurhash3_x64_128(key, key_length, seed, hash_func)
-         use amr_parameters, only: ndim
-         integer(kind=8) , dimension(0:ndim), intent(in) :: key
-         integer, intent(in)                              :: seed, key_length
-         integer(kind=8), intent(inout)                   :: hash_func
-       end subroutine murmurhash3_x64_128
-    end interface
-    
-    call murmurhash3_x64_128(key, key_length, seed, murmur3_hash_func)    
-    
-  end function murmur3_hash_func
+    hash_func = dot_product(key(0:ndim), constants(0:ndim))
+  end function hash_func
   ! =============================================================================
 
   ! =============================================================================
@@ -104,19 +57,10 @@ contains
     ! Allocate all hash table arrays and variables.
     ! Chose size (excluding the chaining space) as the smallest
     ! power of two >= the required_size.
-    htable%uses_simple_hash = .false.
     
-    if (hash_type == 'simple') then
-       htable%hash_func => simple_hash_func
-       htable%uses_simple_hash = .true.
-    else if (hash_type == 'murmur') then
-       if (ndim .ne. 3)then
-          print*, 'murmur3 hash currently only in 3d'
-          stop
-       end if
-       htable%hash_func => murmur3_hash_func
-    else
-       htable%hash_func => simple_hash_func
+    if (hash_type .ne. 'simple') then
+       print*, 'only simple hash is currently supported'
+       stop
     end if
     
     htable%size = 2
@@ -153,7 +97,6 @@ contains
        end if
     end if
     
-
     ! Compute sizes and allocate arrays
     htable%total_size = htable%size / 4 + htable%size
     htable%nfree = htable%size
@@ -185,11 +128,7 @@ contains
     
     ! Reset the content of a bucket
     buck%next_ibucket = -1
-#ifndef UNSAFE_HASH
     buck%key = 0
-#else
-    buck%full_hash = 0
-#endif
   end subroutine reset_bucket
   ! =============================================================================
 
@@ -211,7 +150,7 @@ contains
     end if
 
     ! Compute ibucket
-    full_hash = htable%hash_func(key)
+    full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
     if (htable%data(ibucket)%next_ibucket < 0) then          
@@ -219,11 +158,7 @@ contains
        ! Bucket is empty, simply insert value       
        htable%data(ibucket)%next_ibucket = 0
        htable%data(ibucket)%value       = val
-#ifndef UNSAFE_HASH
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
-#else
-       htable%data(ibucket)%full_hash   = full_hash
-#endif       
        htable%nfree = htable%nfree - 1
        
     else if (htable%nfree_chain>0)then
@@ -231,11 +166,7 @@ contains
        ! Bucket is not empty, walk through linked list
        do while (htable%data(ibucket)%next_ibucket .ne. 0)
           ! Check if key already exists - abort if so
-#ifndef UNSAFE_HASH
           if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
-#else
-          if (htable%data(ibucket)%full_hash == full_hash)then
-#endif
              write(*,*) "trying to insert already existing key: ",key
              write(*,*) "existing key: ", htable%data(ibucket)%key(0:ndim)
              stop
@@ -244,11 +175,7 @@ contains
        end do
 
        ! Check again (at the end of linked list)
-#ifndef UNSAFE_HASH
        if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
-#else
-       if (htable%data(ibucket)%full_hash == full_hash)then
-#endif
           write(*,*) "trying to insert already existing key: ",key
           stop
        end if
@@ -258,11 +185,8 @@ contains
        ibucket = htable%head_free
        htable%data(ibucket)%next_ibucket = 0
        htable%data(ibucket)%value = val
-#ifndef UNSAFE_HASH
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
-#else
-       htable%data(ibucket)%full_hash = full_hash
-#endif
+
        ! remove bucket from head of free linked list
        htable%head_free   = htable%next_free(htable%head_free)
        htable%nfree_chain = htable%nfree_chain - 1
@@ -285,14 +209,10 @@ contains
     ! hash table value for a given key. If no entry exists, return 0
     integer(kind=8) :: ibucket, full_hash
     
-    full_hash = htable%hash_func(key)
+    full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
-#ifndef UNSAFE_HASH
     if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
-#else
-    if (htable%data(ibucket)%full_hash == full_hash)then
-#endif
        hash_get = htable%data(ibucket)%value
        return
     end if
@@ -300,11 +220,7 @@ contains
     ! Walk linked list until key is found or to the end is reached
     do while( htable%data(ibucket)%next_ibucket > 0)
        ibucket = htable%data(ibucket)%next_ibucket
-#ifndef UNSAFE_HASH
        if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
-#else
-       if (htable%data(ibucket)%full_hash == full_hash)then
-#endif
           hash_get = htable%data(ibucket)%value
           return
        end if
@@ -315,6 +231,8 @@ contains
 
   end function hash_get
   ! =============================================================================
+
+  ! =============================================================================`
   subroutine hash_get_vec(htable, keys, values, n)
     implicit none
     type(hash_table),                                 intent(in) :: htable
@@ -328,12 +246,7 @@ contains
     integer(kind = 8), dimension(1:nvector),        save :: ibucket, full_hash
     integer(kind = 8), dimension(1:nvector, 0:ndim),save :: bucket_keys
     logical,           dimension(1:nvector),        save :: ok
-    integer :: i, idim
-
-    if (.not. htable%uses_simple_hash)then
-       print*, 'You are not using simple hash - this is forbidden!'
-       stop
-    end if
+    integer :: i, idim, n_coll
 
     full_hash = 0
     do idim = 0, ndim
@@ -358,27 +271,35 @@ contains
           ok(i) = ok(i) .and. (bucket_keys(i, idim) == keys(i, idim))
        end do
     end do
-    
+
+    n_coll = 0
     do i = 1, n
        if (ok(i)) then
           values(i) = htable%data(ibucket(i))%value
        else
+          n_coll = n_coll + 1
+       endif
+    end do
+
+    if(n_coll == 0)return
+
+    do i = 1, n
+       if (.not. ok(i)) then
           ! Walk linked list until key is found or to the end is reached
           do while( htable%data(ibucket(i))%next_ibucket > 0)
              ibucket(i) = htable%data(ibucket(i))%next_ibucket
-             if (same_keys_fortran(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
+             if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
                 values(i) = htable%data(ibucket(i))%value
                 ok(i) = .true.
              end if
           end do
           ! Nothing found...
           if (.not. ok(i))then
-             values(i) = 0 
+             values(i) = 0
           end if
        end if
     end do
   end subroutine hash_get_vec
-
   ! =============================================================================  
   
   ! =============================================================================  
@@ -391,25 +312,17 @@ contains
 
     integer(kind=8) :: ibucket, previous_ibucket, full_hash
 
-    full_hash = htable%hash_func(key)
+    full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
     ! No collision case
     if (htable%data(ibucket)%next_ibucket == 0) then     
        htable%data(ibucket)%next_ibucket = -1
-#ifndef UNSAFE_HASH
        htable%data(ibucket)%key(0:ndim) = 0
-#else
-       htable%data(ibucket)%full_hash = 0
-#endif       
        htable%nfree = htable%nfree + 1
     else
        ! Collision case
-#ifndef UNSAFE_HASH
        do while (.not. same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))
-#else
-       do while (htable%data(ibucket)%full_hash .ne. full_hash)
-#endif
           previous_ibucket=ibucket
           ibucket=htable%data(ibucket)%next_ibucket
        end do
@@ -417,11 +330,7 @@ contains
           ! It's the first element we need to erase: Move first element from chaning 
           ! space into bucket and do as if the value to remove had been in the chaning space
           htable%data(ibucket)%value = htable%data(htable%data(ibucket)%next_ibucket)%value
-#ifndef UNSAFE_HASH
           htable%data(ibucket)%key = htable%data(htable%data(ibucket)%next_ibucket)%key
-#else
-          htable%data(ibucket)%full_hash = htable%data(htable%data(ibucket)%next_ibucket)%full_hash
-#endif
           previous_ibucket = ibucket
           ibucket = htable%data(ibucket)%next_ibucket
        end if
@@ -433,38 +342,20 @@ contains
     end if
   end subroutine hash_free
   ! =============================================================================
-
+  
   ! =============================================================================
   pure function same_keys(key1, key2)
     logical :: same_keys
-    integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2       
-    
-    ! Function to test the equality of two provided keys
-    ! using the c standar library function memcmp
-    interface
-       pure function memcmp(key1, key2, key_length)
-         use amr_parameters, only: ndim
-         integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2     
-         integer, intent(in) :: key_length
-         integer :: memcmp
-       end function memcmp
-    end interface
-    same_keys =  memcmp(key1, key2, key_length) == 0_4
-  end function same_keys
-
-!  ALTERNATIVE VERSION - CAN BE USED INSTEAD OF THE C CODE.
-  function same_keys_fortran(key1, key2)
-    logical :: same_keys_fortran
     integer(kind=8), dimension(0:ndim), intent(in) :: key1, key2
-    logical, dimension(0:ndim), save :: ok
-    integer :: i
+    logical, dimension(0:ndim)                     :: ok
+    integer                                        :: i
     do i = 0, ndim
        ok(i) = (key1(i)==key2(i))
     end do
-    same_keys_fortran = ALL(ok)
-  end function same_keys_fortran
+    same_keys = ALL(ok)
+  end function same_keys
   ! =============================================================================
-
+  
   ! =============================================================================
   subroutine hash_stats(htable)
     implicit none

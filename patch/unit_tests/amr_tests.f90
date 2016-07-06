@@ -138,7 +138,7 @@ subroutine hash_tests(all_ok)
   integer(kind=8),dimension(0:ndim,1:3000)::key
   integer(kind=8),dimension(1:nvector, 0:ndim)::keys_tmp
   integer,dimension(1:nvector)::vals_tmp
-  character(6):: hash_type='murmur'
+  character(6):: hash_type='simple'
   
   ok=.true.
  
