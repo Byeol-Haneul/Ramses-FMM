@@ -32,6 +32,7 @@ subroutine load_balance(ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:ndim)::cart_key
   integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key,zero_key,bleft,bright
+  integer(kind=8),dimension(1:nhilbert),save::hks
   integer(kind=8),dimension(1:nhilbert,1:nlevelmax)::key_ref
   integer,dimension(1:nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
@@ -241,7 +242,8 @@ subroutine load_balance(ilevel)
         if (.not. domain(ilev)%in_rank(grid(ioct)%hkey)) then
            
            ! Determine the future processor
-           grid_cpu = domain(ilev)%get_rank(grid(ioct)%hkey(1:nhilbert))
+           hks = grid(ioct)%hkey(1:nhilbert)
+           grid_cpu = domain(ilev)%get_rank(hks)
 
            ! If next cache line is occupied, free it.
            if(occupied(free_cache))call destage(ngridmax+free_cache,grid_dict)
@@ -529,6 +531,7 @@ subroutine balance_part(ilevel)
 
   integer(kind=8)::unbalance
   integer(kind=8),dimension(1:nhilbert)::diff_key
+  integer(kind=8),dimension(1:nhilbert),save::hks
   type(domain_t),allocatable,dimension(:)::domain_part
   integer(kind=8),allocatable,dimension(:,:)::bound_key_target,bound_key_new
   integer(kind=8),allocatable,dimension(:,:)::bound_key_left,bound_key_right
@@ -733,7 +736,8 @@ subroutine balance_part(ilevel)
            ! Check if grid sits outside future processor boundaries
            if (.not. domain_part(ilev)%in_rank(hk_ref(1,1:nhilbert))) then
               ! Determine the future processor
-              grid_cpu = domain_part(ilev)%get_rank(hk_ref(1,1:nhilbert))
+              hks = hk_ref(1,1:nhilbert)
+              grid_cpu = domain_part(ilev)%get_rank(hks)
            endif
         endif
 
@@ -798,7 +802,8 @@ subroutine balance_part(ilevel)
            ! Check if grid sits outside future processor boundaries
            if (.not. domain_part(ilev)%in_rank(hk_ref(1,1:nhilbert))) then
               ! Determine the future processor
-              grid_cpu = domain_part(ilev)%get_rank(hk_ref(1,1:nhilbert))
+              hks = hk_ref(1,1:nhilbert)
+              grid_cpu = domain_part(ilev)%get_rank(hks)
            endif
         endif
 
