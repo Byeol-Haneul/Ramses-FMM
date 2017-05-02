@@ -1,32 +1,22 @@
 module poisson_commons 
   use amr_commons
-  use hash
   use poisson_parameters
-
-  ! Minimum MG level
-  integer :: levelmin_mg
-
-  ! MG hash table
-  type(hash_table)::mg_dict
-
-  ! MG grid
-  integer,allocatable,dimension(:)::head_mg,tail_mg,noct_mg,noct_tot_mg
-  integer::ifree_mg
-
-  ! Multigrid safety switch
-  logical, allocatable, dimension(:) :: safe_mode
-
-  ! Multipole coefficients
-  real(dp),dimension(1:ndim+1)::multipole
 
   ! Conjugate Gradient communicator
   integer::send_tot,recv_tot
-  integer,dimension(:),allocatable::send_cnt,recv_cnt,send_oft,recv_oft
-  integer,dimension(:),allocatable::grid_recv_buf
   integer,dimension(:,:),allocatable::nbor_indx
-  real(dp),dimension(:),allocatable::phi_send_buf,phi_recv_buf
   real(dp),dimension(:,:),allocatable::phi_remote
-  integer,dimension(:),allocatable::flag_send_buf,flag_recv_buf
+  real(dp),dimension(:),allocatable::phi_send_buf
+  real(dp),dimension(:),allocatable::phi_recv_buf
+  integer,dimension(:),allocatable::grid_recv_buf
+  integer,dimension(:),allocatable::send_cnt
+  integer,dimension(:),allocatable::send_oft
+  integer,dimension(:),allocatable::recv_cnt
+  integer,dimension(:),allocatable::recv_oft
+
+  ! Mesh smoothing communicator
+  integer,dimension(:),allocatable::flag_send_buf
+  integer,dimension(:),allocatable::flag_recv_buf
   integer,dimension(:,:),allocatable::flag_remote
 
   ! Temporary workspace
@@ -50,6 +40,8 @@ module poisson_commons
      integer ,dimension(:)  ,pointer::recv_cnt
      integer ,dimension(:)  ,pointer::recv_oft
   end type comm_mg
+
+  ! Multigrid communicator array
   type(comm_mg),allocatable,dimension(:)::buffer_mg
 
 end module poisson_commons

@@ -1,21 +1,24 @@
-subroutine init_time
+subroutine init_time(r,g)
   use amr_commons
   use hydro_commons
   use pm_commons
   implicit none
-  integer::i,Nmodel
-  real(kind=8)::T2_sim  
+
+  type(run_t)::r
+  type(global_t)::g
+
+  integer::i
 
   if(verbose)write(*,*)'Entering init_time'
 
   if(nrestart==0)then
      if(cosmo)then
         ! Get cosmological parameters from input files
-        call init_cosmo
+        call init_cosmo(r,g)
      else
         ! Get parameters from input files
         if(initfile(levelmin).ne.' '.and.filetype.eq.'grafic')then
-           call init_file
+           call init_file(r,g)
         endif
         t=0.0
         aexp=1.0
@@ -23,11 +26,6 @@ subroutine init_time
   end if
 
   if(cosmo)then
-
-     ! Allocate look-up tables
-     n_frw=1000
-     allocate(aexp_frw(0:n_frw),hexp_frw(0:n_frw))
-     allocate(tau_frw(0:n_frw),t_frw(0:n_frw))
 
      ! Compute Friedman model look up table
      if(myid==1)write(*,*)'Computing Friedman model'
@@ -56,13 +54,60 @@ subroutine init_time
      texp=t                                                                
   end if                                                                   
 
+  if(r%nrestart==0)then
+     if(r%cosmo)then
+        ! Get cosmological parameters from input files
+!        call init_cosmo(r,g)
+     else
+        ! Get parameters from input files
+        if(r%initfile(levelmin).ne.' '.and.r%filetype.eq.'grafic')then
+!           call init_file(r,g)
+        endif
+        g%t=0.0
+        g%aexp=1.0
+     end if
+  end if
+
+  if(r%cosmo)then
+
+     ! Compute Friedman model look up table
+     if(g%myid==1)write(*,*)'Computing Friedman model'
+     call friedman(dble(g%omega_m),dble(g%omega_l),dble(g%omega_k), &
+          & 1.d-6,dble(g%aexp_ini), &
+          & g%aexp_frw,g%hexp_frw,g%tau_frw,g%t_frw,n_frw)
+
+     ! Compute initial conformal time                                    
+     ! Find neighboring expansion factors                                  
+     i=1
+     do while(g%aexp_frw(i)>g%aexp.and.i<n_frw)
+        i=i+1
+     end do                                                                
+     ! Interploate time                                                    
+     if(r%nrestart==0)then                                                   
+        g%t=g%tau_frw(i)*(g%aexp-g%aexp_frw(i-1))/(g%aexp_frw(i)-g%aexp_frw(i-1))+ &   
+             & g%tau_frw(i-1)*(g%aexp-g%aexp_frw(i))/(g%aexp_frw(i-1)-g%aexp_frw(i)) 
+        g%aexp=g%aexp_frw(i)*(g%t-g%tau_frw(i-1))/(g%tau_frw(i)-g%tau_frw(i-1))+ &     
+             & g%aexp_frw(i-1)*(g%t-g%tau_frw(i))/(g%tau_frw(i-1)-g%tau_frw(i))      
+        g%hexp=g%hexp_frw(i)*(g%t-g%tau_frw(i-1))/(g%tau_frw(i)-g%tau_frw(i-1))+ &     
+             & g%hexp_frw(i-1)*(g%t-g%tau_frw(i))/(g%tau_frw(i-1)-g%tau_frw(i))      
+     end if
+     g%texp=g%t_frw(i)*(g%t-g%tau_frw(i-1))/(g%tau_frw(i)-g%tau_frw(i-1))+ &           
+          & g%t_frw(i-1)*(g%t-g%tau_frw(i))/(g%tau_frw(i-1)-g%tau_frw(i))            
+  else
+     g%texp=g%t
+  end if                                                                   
+
 end subroutine init_time
 
-subroutine init_file
+subroutine init_file(r,g)
   use amr_commons
   use hydro_commons
   use pm_commons
   implicit none
+
+  type(run_t)::r
+  type(global_t)::g
+
   !------------------------------------------------------
   ! Read geometrical parameters in the initial condition files.
   ! Initial conditions are supposed to be made by 
@@ -138,13 +183,16 @@ subroutine init_file
 end subroutine init_file
 
 
-subroutine init_cosmo
+subroutine init_cosmo(r,g)
   use amr_commons
   use hydro_commons
   use pm_commons
   use gadgetreadfilemod
-
   implicit none
+
+  type(run_t)::r
+  type(global_t)::g
+
   !------------------------------------------------------
   ! Read cosmological and geometrical parameters
   ! in the initial condition files.

@@ -13,6 +13,8 @@ module hydro_parameters
   integer,parameter::nvar=NVAR
 #endif
 
+  ! Global hydro variables
+
   ! Refinement parameters for hydro
   real(dp)::err_grad_d=-1.0  ! Density gradient
   real(dp)::err_grad_u=-1.0  ! Velocity gradient

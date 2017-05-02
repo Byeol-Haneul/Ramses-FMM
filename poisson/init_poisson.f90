@@ -9,9 +9,9 @@ subroutine init_poisson
   if(verbose)write(*,*)'Entering init_poisson'
 
   ! Allocate multigrid parameters
-  allocate(buffer_mg(1:nlevelmax))
-  allocate(safe_mode(1:nlevelmax))
-  safe_mode = .false.
+  if(fast_solver)then
+     allocate(buffer_mg(1:nlevelmax))
+  endif
 
 end subroutine init_poisson
 

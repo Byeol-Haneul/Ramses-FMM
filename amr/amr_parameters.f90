@@ -17,7 +17,8 @@ module amr_parameters
   integer,parameter::qdp=kind(1.0_8) ! real*8
 #endif
   integer,parameter::MAXOUT=1000
-  integer,parameter::MAXLEVEL=100
+  integer,parameter::MAXLEVEL=65
+  integer,parameter::MAXREGION=100
   
   ! Define integer types (for particle IDs mostly)
   integer,parameter::i4b=4
@@ -50,7 +51,22 @@ module amr_parameters
 #else
   integer,parameter::nvector=NVECTOR
 #endif
-  integer::nsuperoct=0 ! Number of superoct levels
+
+  ! Expansion factor look-up table size
+  integer,parameter::n_frw=1000
+
+  ! Useful constants
+  real(kind=8),parameter ::twopi   = 6.2831853d0
+  real(kind=8),parameter ::hplanck = 6.6262000d-27
+  real(kind=8),parameter ::eV      = 1.6022000d-12
+  real(kind=8),parameter ::kB      = 1.3806200d-16
+  real(kind=8),parameter ::clight  = 2.9979250d+10
+  real(kind=8),parameter ::Gyr     = 3.1536000d+16
+  real(kind=8),parameter ::rhoc    = 1.8800000d-29
+  real(kind=8),parameter ::mH      = 1.6600000d-24
+
+  ! Number of superoct levels
+  integer::nsuperoct=0
 
   ! MPI variables
   integer::ncpu,myid,overload=1
@@ -71,60 +87,64 @@ module amr_parameters
   integer::levelmin=1         ! Full refinement up to levelmin
   integer::nlevelmax=1        ! Maximum number of level
   integer::ngridmax=0         ! Maximum number of grids
-  integer::ncachemax=0        ! Maximum number of cache lines
-  integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
-  integer::nexpand_bound=1    ! Number of mesh expansion for virtual boundaries
+  integer::ncachemax=10000    ! Maximum number of cache lines
   real(dp)::boxlen=1.0D0      ! Box length along x direction
-  character(len=128)::ordering='hilbert'
-  logical::cost_weighting=.true. ! Activate load balancing according to cpu time
 
   ! Step parameters
   integer::nrestart=0         ! New run or backup file number
   integer::nstepmax=1000000   ! Maximum number of time steps
   integer::ncontrol=1         ! Write control variables
-  integer::fbackup=1000000    ! Backup data to disk
   integer::nremap=0           ! Load balancing frequency (0: never)
 
   ! Output parameters
   integer::iout=1             ! Increment for output times
   integer::ifout=1            ! Increment for output files
-  integer::iback=1            ! Increment for backup files
   integer::noutput=1          ! Total number of outputs
   integer::foutput=1000000    ! Frequency of outputs
   integer::output_mode=0      ! Output mode (for hires runs)
   logical::gadget_output=.false. ! Output in gadget format
+
+  ! Output times
+  real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
+  real(dp),dimension(1:MAXOUT)::tout=0.0       ! Output times
+
+  ! Only one process can write at a time in an I/O group
+  integer::IOGROUPSIZE=0           ! Main snapshot
+  integer::IOGROUPSIZECONE=0       ! Lightcone
+  integer::IOGROUPSIZEREP=0        ! Subfolder size
+  logical::withoutmkdir=.false.    ! If true mkdir should be done before the run
+  logical::print_when_io=.false.   ! If true print when IO
+  logical::synchro_when_io=.false. ! If true synchronize when IO
 
   ! Lightcone parameters
   real(dp)::thetay_cone=12.5
   real(dp)::thetaz_cone=12.5
   real(dp)::zmax_cone=2.0
 
-  ! Cosmology and physical parameters
-  real(dp)::boxlen_ini        ! Box size in h-1 Mpc
-  real(dp)::omega_b=0.0D0     ! Omega Baryon
-  real(dp)::omega_m=1.0D0     ! Omega Matter
-  real(dp)::omega_l=0.0D0     ! Omega Lambda
-  real(dp)::omega_k=0.0D0     ! Omega Curvature
-  real(dp)::h0     =1.0D0     ! Hubble constant in km/s/Mpc
-  real(dp)::aexp   =1.0D0     ! Current expansion factor
-  real(dp)::hexp   =0.0D0     ! Current Hubble parameter
-  real(dp)::texp   =0.0D0     ! Current proper time
-
-  real(dp)::jeans_ncells=-1   ! Jeans polytropic EOS
-  real(dp)::B_ave  =0.0D0     ! Average magnetic field
-  real(dp)::T2_start          ! Starting gas temperature
-  logical ::pressure_fix=.false.
+  ! Cosmology parameters
+  real(dp)::boxlen_ini     ! Box size in h-1 Mpc
+  real(dp)::omega_b=0.0D0  ! Omega Baryon
+  real(dp)::omega_m=1.0D0  ! Omega Matter
+  real(dp)::omega_l=0.0D0  ! Omega Lambda
+  real(dp)::omega_k=0.0D0  ! Omega Curvature
+  real(dp)::h0=1.0D0       ! Hubble constant in km/s/Mpc
+  real(dp)::aexp=1.0D0     ! Current expansion factor
+  real(dp)::hexp=0.0D0     ! Current Hubble parameter
+  real(dp)::texp=0.0D0     ! Current proper time
   logical ::use_proper_time=.false.
 
-  ! Output times
-  real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
-  real(dp),dimension(1:MAXOUT)::tout=0.0       ! Output times
+  ! Physics parameters
+  real(dp)::T2_start          ! Starting gas temperature
+  logical ::pressure_fix=.false.
+  real(kind=8)::X_H = 0.76      ! Hydrogen mass fraction
+  real(kind=8)::Y_He = 0.24      ! Helium mass fraction
 
   ! Movie
   integer::imovout=0             ! Increment for output times
   integer::imov=1                ! Initialize
   real(kind=8)::tendmov=0.,aendmov=0.
-  real(kind=8),allocatable,dimension(:)::amovout,tmovout
+  real(kind=8),dimension(1:10000)::amovout
+  real(kind=8),dimension(1:10000)::tmovout
   logical::movie=.false.
   logical::zoom_only=.false.
   integer::nw_frame=512 ! prev: nx_frame, width of frame in pixels
@@ -142,6 +162,8 @@ module amr_parameters
   character(len=5),dimension(0:NVAR+2)::movie_vars_txt=''
 
   ! Refinement parameters for each level
+  integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion
+  integer ,dimension(1:MAXLEVEL)::nsubcycle=2 ! Subcycling at each level
   real(dp),dimension(1:MAXLEVEL)::m_refine =-1.0 ! Lagrangian threshold
   real(dp),dimension(1:MAXLEVEL)::r_refine =-1.0 ! Radius of refinement region
   real(dp),dimension(1:MAXLEVEL)::x_refine = 0.0 ! Center of refinement region
@@ -154,30 +176,43 @@ module amr_parameters
   real(dp)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
   integer::ivar_refine=-1 ! Variable index for refinement
 
-  ! Initial condition files for each level
-  logical::multiple=.false.
-  character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
-  character(LEN=20)::filetype='ascii'
+  ! Default units
+  real(dp)::units_density=1.0 ! [g/cm^3]
+  real(dp)::units_time=1.0    ! [seconds]
+  real(dp)::units_length=1.0  ! [cm]
+
+  ! Executable identification
+  CHARACTER(LEN=80)::builddate,patchdir
+  CHARACTER(LEN=80)::gitrepo,gitbranch,githash
+
+  ! Save namelist filename
+  CHARACTER(LEN=80)::namelist_file
+
+  ! Friedman model variables
+  real(dp),dimension(0:n_frw)::aexp_frw,hexp_frw,tau_frw,t_frw
+
+  ! Initial conditions parameters from grafic
+  integer::nlevelmax_part
+  real(dp)::aexp_ini=10.
+  real(dp),dimension(1:MAXLEVEL)::dfact=1.0d0,astart
+  real(dp),dimension(1:MAXLEVEL)::vfact
+  real(dp),dimension(1:MAXLEVEL)::xoff1,xoff2,xoff3,dxini
+  integer ,dimension(1:MAXLEVEL)::n1,n2,n3
 
   ! Initial condition regions parameters
-  integer,parameter::MAXREGION=100
-  integer                           ::nregion=0
+  integer::nregion=0
   character(LEN=10),dimension(1:MAXREGION)::region_type='square'
-  real(dp),dimension(1:MAXREGION)   ::x_center=0.
-  real(dp),dimension(1:MAXREGION)   ::y_center=0.
-  real(dp),dimension(1:MAXREGION)   ::z_center=0.
-  real(dp),dimension(1:MAXREGION)   ::length_x=1.E10
-  real(dp),dimension(1:MAXREGION)   ::length_y=1.E10
-  real(dp),dimension(1:MAXREGION)   ::length_z=1.E10
-  real(dp),dimension(1:MAXREGION)   ::exp_region=2.0
+  real(dp),dimension(1:MAXREGION)::x_center=0.
+  real(dp),dimension(1:MAXREGION)::y_center=0.
+  real(dp),dimension(1:MAXREGION)::z_center=0.
+  real(dp),dimension(1:MAXREGION)::length_x=1.E10
+  real(dp),dimension(1:MAXREGION)::length_y=1.E10
+  real(dp),dimension(1:MAXREGION)::length_z=1.E10
+  real(dp),dimension(1:MAXREGION)::exp_region=2.0
 
-  ! Number of processes sharing one token
-  ! Only one process can write at a time in an I/O group
-  integer::IOGROUPSIZE=0           ! Main snapshot
-  integer::IOGROUPSIZECONE=0       ! Lightcone
-  integer::IOGROUPSIZEREP=0        ! Subfolder size
-  logical::withoutmkdir=.false.    !If true mkdir should be done before the run
-  logical::print_when_io=.false.   !If true print when IO
-  logical::synchro_when_io=.false. !If true synchronize when IO
+  ! Initial condition files for each level
+  logical::multiple=.false.
+  character(LEN=20)::filetype='ascii'
+  character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
 
 end module amr_parameters

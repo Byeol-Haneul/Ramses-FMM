@@ -1,4 +1,4 @@
-subroutine adaptive_loop
+subroutine adaptive_loop(run_p,global_v,mesh_v,part_v)
   use amr_commons
   use hydro_commons
   use pm_commons
@@ -7,6 +7,12 @@ subroutine adaptive_loop
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+
+  type(run_t)::run_p
+  type(global_t)::global_v
+  type(mesh_t)::mesh_v
+  type(part_t)::part_v
+
   integer::ilevel,info
   real(kind=8)::tt1,tt2
   real(kind=4)::real_mem,real_mem_tot
@@ -15,7 +21,7 @@ subroutine adaptive_loop
   tt1=MPI_WTIME(info)
 #endif
 
-  call init_amr                ! Initialize grid variables
+  call init_amr(run_p,global_v,mesh_v) ! Initialize grid variables
   call init_time               ! Initialize time variables
   if(hydro)call init_hydro     ! Initialize hydro variables
   if(poisson)call init_poisson ! Initialize poisson variables
