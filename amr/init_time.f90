@@ -1,12 +1,16 @@
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine init_time(r,g)
   use amr_commons
   use hydro_commons
   use pm_commons
   implicit none
-
   type(run_t)::r
   type(global_t)::g
 
+  ! Local variables
   integer::i
 
   if(verbose)write(*,*)'Entering init_time'
@@ -60,7 +64,7 @@ subroutine init_time(r,g)
 !        call init_cosmo(r,g)
      else
         ! Get parameters from input files
-        if(r%initfile(levelmin).ne.' '.and.r%filetype.eq.'grafic')then
+        if(r%initfile(r%levelmin).ne.' '.and.r%filetype.eq.'grafic')then
 !           call init_file(r,g)
         endif
         g%t=0.0
@@ -98,16 +102,17 @@ subroutine init_time(r,g)
   end if                                                                   
 
 end subroutine init_time
-
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine init_file(r,g)
   use amr_commons
   use hydro_commons
   use pm_commons
   implicit none
-
   type(run_t)::r
   type(global_t)::g
-
   !------------------------------------------------------
   ! Read geometrical parameters in the initial condition files.
   ! Initial conditions are supposed to be made by 
@@ -172,40 +177,96 @@ subroutine init_file(r,g)
              & n2(ilevel),&
              & n3(ilevel)
         write(*,'(" dx=",1pe10.3)')dxini(ilevel)
-        write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",&
-             & 1pe10.3)') &
+        write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",1pe10.3)') &
              & xoff1(ilevel),&
              & xoff2(ilevel),&
              & xoff3(ilevel)
      end do
   end if
 
+  ! Reading initial conditions parameters only
+  g%nlevelmax_part=r%levelmin-1
+  do ilevel=r%levelmin,r%nlevelmax
+     if(r%initfile(ilevel).ne.' ')then
+        filename=TRIM(r%initfile(ilevel))//'/ic_d'
+        INQUIRE(file=filename,exist=ok)
+        if(.not.ok)then
+           if(g%myid==1)then
+              write(*,*)TRIM(r%initfile(ilevel))
+              write(*,*)'File '//TRIM(filename)//' does not exist'
+           end if
+           call clean_stop
+        end if
+        open(10,file=filename,form='unformatted')
+        if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
+        rewind 10
+        read(10)g%n1(ilevel),g%n2(ilevel),g%n3(ilevel),dxini0 &
+             & ,xoff10,xoff20,xoff30 &
+             & ,astart0,omega_m0,omega_l0,h00
+        close(10)
+        g%dxini(ilevel)=dxini0
+        g%xoff1(ilevel)=xoff10
+        g%xoff2(ilevel)=xoff20
+        g%xoff3(ilevel)=xoff30
+        g%nlevelmax_part=g%nlevelmax_part+1
+     endif
+  end do
+
+  ! Check compatibility with run parameters
+  if(         g%n1(r%levelmin).NE.2**r%levelmin &
+       & .or. g%n2(r%levelmin).NE.2**r%levelmin &
+       & .or. g%n3(r%levelmin).NE.2**r%levelmin) then 
+     write(*,*)'coarser grid is not compatible with initial conditions file'
+     write(*,*)'Found    n1=',g%n1(r%levelmin),&
+          &            ' n2=',g%n2(r%levelmin),&
+          &            ' n3=',g%n3(r%levelmin)
+     write(*,*)'Expected n1=',2**r%levelmin &
+          &           ,' n2=',2**r%levelmin &
+          &           ,' n3=',2**r%levelmin
+     call clean_stop
+  end if
+
+  ! Write initial conditions parameters
+  if(g%myid==1)then
+     do ilevel=r%levelmin,g%nlevelmax_part
+        write(*,'(" Initial conditions for level =",I4)')ilevel
+        write(*,'(" n1=",I4," n2=",I4," n3=",I4)') &
+             & g%n1(ilevel),&
+             & g%n2(ilevel),&
+             & g%n3(ilevel)
+        write(*,'(" dx=",1pe10.3)')g%dxini(ilevel)
+        write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",1pe10.3)') &
+             & g%xoff1(ilevel),&
+             & g%xoff2(ilevel),&
+             & g%xoff3(ilevel)
+     end do
+  end if
+
 end subroutine init_file
-
-
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine init_cosmo(r,g)
   use amr_commons
   use hydro_commons
   use pm_commons
   use gadgetreadfilemod
   implicit none
-
   type(run_t)::r
   type(global_t)::g
-
   !------------------------------------------------------
   ! Read cosmological and geometrical parameters
   ! in the initial condition files.
   ! Initial conditions are supposed to be made by 
   ! Bertschinger's grafic version 2.0 code.
   !------------------------------------------------------
-  integer:: ilevel
+  integer:: ilevel,i
   real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
   character(LEN=80)::filename
   character(LEN=5)::nchar
   logical::ok
   TYPE(gadgetheadertype) :: gadgetheader 
-  integer::i
 
   if(verbose)write(*,*)'Entering init_cosmo'
 
@@ -216,6 +277,7 @@ subroutine init_cosmo(r,g)
 
   SELECT CASE (filetype)
   case ('grafic', 'ascii')
+
      ! Reading initial conditions parameters only
      aexp=2.0
      nlevelmax_part=levelmin-1
@@ -248,14 +310,12 @@ subroutine init_cosmo(r,g)
            astart(ilevel)=astart0
            omega_m=omega_m0
            omega_l=omega_l0
-           if(hydro)omega_b=0.045
-           !!!if(hydro)omega_b=0.999999*omega_m
+           if(hydro)omega_b=0.045 ! Be careful hard-coded !
            h0=h00
            aexp=MIN(aexp,astart(ilevel))
            nlevelmax_part=nlevelmax_part+1
            ! Compute SPH equivalent mass (initial gas mass resolution)
-           mass_sph=omega_b/omega_m*0.5d0**(ndim*ilevel)
-           
+           mass_sph=omega_b/omega_m*0.5d0**(ndim*ilevel)           
         endif
      end do
 
@@ -285,7 +345,76 @@ subroutine init_cosmo(r,g)
      ! Compute box length in the initial conditions in units of h-1 Mpc
      boxlen_ini=2**levelmin*dxini(levelmin)*(h0/100.)
      
+     ! Reading initial conditions parameters only
+     g%aexp=2.0
+     g%nlevelmax_part=r%levelmin-1
+     do ilevel=r%levelmin,r%nlevelmax
+        if(r%initfile(ilevel).ne.' ')then
+           if(r%multiple)then
+              call title(g%myid,nchar)
+              filename=TRIM(r%initfile(ilevel))//'/dir_deltab/ic_deltab.'//TRIM(nchar)
+           else
+              filename=TRIM(r%initfile(ilevel))//'/ic_deltab'
+           endif
+           INQUIRE(file=filename,exist=ok)
+           if(.not.ok)then
+              if(g%myid==1)then
+                 write(*,*)'File '//TRIM(filename)//' does not exist'
+              end if
+              call clean_stop
+           end if
+           open(10,file=filename,form='unformatted')
+           if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
+           rewind 10
+           read(10)g%n1(ilevel),g%n2(ilevel),g%n3(ilevel),dxini0 &
+                & ,xoff10,xoff20,xoff30 &
+                & ,astart0,omega_m0,omega_l0,h00
+           close(10)
+           g%dxini(ilevel)=dxini0
+           g%xoff1(ilevel)=xoff10
+           g%xoff2(ilevel)=xoff20
+           g%xoff3(ilevel)=xoff30
+           g%astart(ilevel)=astart0
+           g%omega_m=omega_m0
+           g%omega_l=omega_l0
+           if(r%hydro)g%omega_b=0.045 ! Be careful hard-coded !
+           g%h0=h00
+           g%aexp=MIN(g%aexp,g%astart(ilevel))
+           g%nlevelmax_part=g%nlevelmax_part+1
+           ! Compute SPH equivalent mass (initial gas mass resolution)
+           r%mass_sph=g%omega_b/g%omega_m*0.5d0**(ndim*ilevel)           
+        endif
+     end do
+
+     ! Compute initial expansion factor
+     if(g%aexp_ini.lt.1.0)then
+        g%aexp=g%aexp_ini
+     else
+        g%aexp_ini=g%aexp
+     endif
+     
+     ! Check compatibility with run parameters
+     if(.not. r%multiple) then
+        if(         g%n1(r%levelmin).ne.2**r%levelmin &
+             & .or. g%n2(r%levelmin).ne.2**r%levelmin &
+             & .or. g%n3(r%levelmin).ne.2**r%levelmin) then 
+           write(*,*)'coarser grid is not compatible with initial conditions file'
+           write(*,*)'Found    n1=',g%n1(r%levelmin),&
+                &            ' n2=',g%n2(r%levelmin),&
+                &            ' n3=',g%n3(r%levelmin)
+           write(*,*)'Expected n1=',2**r%levelmin &
+                &           ,' n2=',2**r%levelmin &
+                &           ,' n3=',2**r%levelmin
+           call clean_stop
+        endif
+     end if
+     
+     ! Compute box length in the initial conditions in units of h-1 Mpc
+     g%boxlen_ini=2**r%levelmin*g%dxini(r%levelmin)*(g%h0/100.)
+     
   CASE ('gadget')
+
+     ! Reading gadget file header only
      if (verbose) write(*,*)'Reading in gadget format from '//TRIM(initfile(levelmin))
      call gadgetreadheader(TRIM(initfile(levelmin)), 0, gadgetheader, ok)
      if(.not.ok) call clean_stop
@@ -303,6 +432,7 @@ subroutine init_cosmo(r,g)
      endif
      omega_m = gadgetheader%omega0
      omega_l = gadgetheader%omegalambda
+     if(hydro)omega_b=0.045 ! Be careful hard-coded !
      h0 = gadgetheader%hubbleparam * 100.d0
      boxlen_ini = gadgetheader%boxsize
      aexp = gadgetheader%time
@@ -315,6 +445,38 @@ subroutine init_cosmo(r,g)
      xoff2(levelmin)=0
      xoff3(levelmin)=0
      dxini(levelmin) = boxlen_ini/(2**levelmin*(h0/100.0))
+
+     ! Reading gadget file header only
+     if (r%verbose) write(*,*)'Reading in gadget format from '//TRIM(r%initfile(r%levelmin))
+     call gadgetreadheader(TRIM(r%initfile(r%levelmin)), 0, gadgetheader, ok)
+     if(.not.ok) call clean_stop
+     do i=1,6
+        if (i .ne. 2) then
+           if (gadgetheader%nparttotal(i) .ne. 0) then
+              write(*,*) 'Non DM particles present in bin ', i
+              call clean_stop
+           endif
+        endif
+     enddo
+     if (gadgetheader%mass(2) == 0) then
+        write(*,*) 'Particles have different masses, not supported'
+        call clean_stop
+     endif
+     g%omega_m = gadgetheader%omega0
+     g%omega_l = gadgetheader%omegalambda
+     if(hydro)g%omega_b=0.045 ! Be careful hard-coded !
+     g%h0 = gadgetheader%hubbleparam * 100.d0
+     g%boxlen_ini = gadgetheader%boxsize
+     g%aexp = gadgetheader%time
+     g%aexp_ini = g%aexp
+     ! Compute SPH equivalent mass (initial gas mass resolution)
+     r%mass_sph=g%omega_b/g%omega_m*0.5d0**(ndim*r%levelmin)
+     g%nlevelmax_part = r%levelmin
+     g%astart(r%levelmin) = g%aexp
+     g%xoff1(r%levelmin)=0
+     g%xoff2(r%levelmin)=0
+     g%xoff3(r%levelmin)=0
+     g%dxini(r%levelmin) = g%boxlen_ini/(2**r%levelmin*(g%h0/100.0))
 
   CASE DEFAULT
      write(*,*) 'Unsupported input format '//filetype
@@ -370,6 +532,55 @@ subroutine init_cosmo(r,g)
   ! Scale displacement in Mpc to code velocity (v=dx/dtau)
   ! in coarse cell units per conformal time
   vfact(1)=aexp*fpeebl(aexp)*sqrt(omega_m/aexp+omega_l*aexp*aexp+omega_k)
+  ! This scale factor is different from vfact in grafic by h0/aexp
+
+  ! Write cosmological parameters
+  if(g%myid==1)then
+     write(*,'(" Cosmological parameters:")')
+     write(*,'(" aexp=",1pe10.3," H0=",1pe10.3," km s-1 Mpc-1")')g%aexp,g%h0
+     write(*,'(" omega_m=",F7.3," omega_l=",F7.3)')g%omega_m,g%omega_l
+     write(*,'(" box size=",1pe10.3," h-1 Mpc")')g%boxlen_ini
+  end if
+  g%omega_k=1.d0-g%omega_l-g%omega_m
+           
+  ! Compute linear scaling factor between aexp and astart(ilevel)
+  do ilevel=r%levelmin,g%nlevelmax_part
+     g%dfact(ilevel)=d1a(g%aexp)/d1a(g%astart(ilevel))
+     g%vfact(ilevel)=g%astart(ilevel)*fpeebl(g%astart(ilevel)) & ! Same scale factor as in grafic1
+          & *sqrt(g%omega_m/g%astart(ilevel)+g%omega_l*g%astart(ilevel)*g%astart(ilevel)+g%omega_k) &
+          & /g%astart(ilevel)*g%h0
+  end do
+
+  ! Write initial conditions parameters
+  do ilevel=r%levelmin,g%nlevelmax_part
+     if(g%myid==1)then
+        write(*,'(" Initial conditions for level =",I4)')ilevel
+        write(*,'(" dx=",1pe10.3," h-1 Mpc")')g%dxini(ilevel)*g%h0/100.
+     endif
+     if(.not.r%multiple)then
+        if(g%myid==1)then
+           write(*,'(" n1=",I4," n2=",I4," n3=",I4)') &
+                & g%n1(ilevel),&
+                & g%n2(ilevel),&
+                & g%n3(ilevel)
+           write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",1pe10.3," h-1 Mpc")') &
+                & g%xoff1(ilevel)*g%h0/100.,&
+                & g%xoff2(ilevel)*g%h0/100.,&
+                & g%xoff3(ilevel)*g%h0/100.
+        endif
+     else
+        write(*,'(" myid=",I4," n1=",I4," n2=",I4," n3=",I4)') &
+             & g%myid,g%n1(ilevel),g%n2(ilevel),g%n3(ilevel)
+        write(*,'(" myid=",I4," xoff=",1pe10.3," yoff=",1pe10.3," zoff=",1pe10.3," h-1 Mpc")') &
+             & g%myid,g%xoff1(ilevel)*g%h0/100.,&
+             & g%xoff2(ilevel)*g%h0/100.,&
+             & g%xoff3(ilevel)*g%h0/100.
+     endif
+  end do
+
+  ! Scale displacement in Mpc to code velocity (v=dx/dtau)
+  ! in coarse cell units per conformal time
+  g%vfact(1)=g%aexp*fpeebl(g%aexp)*sqrt(g%omega_m/g%aexp+g%omega_l*g%aexp*g%aexp+g%omega_k)
   ! This scale factor is different from vfact in grafic by h0/aexp
 
 contains

@@ -96,6 +96,7 @@ subroutine multigrid(ilevel,icount)
   ! Build communication buffer (for optimisation)
   ! ---------------------------------------------------------------------
   if(fast_solver)then
+     allocate(buffer_mg(1:nlevelmax))
      call build_comm_mg(grid_dict,ilevel)
      do ifine=ilevel-1,levelmin_mg,-1
         call build_comm_mg(mg_dict,ifine)
@@ -211,6 +212,7 @@ subroutine multigrid(ilevel,icount)
      do ifine=ilevel-1,levelmin_mg,-1
         call clean_comm_mg(ifine)
      end do
+     deallocate(buffer_mg)
   endif
   
   ! ---------------------------------------------------------------------

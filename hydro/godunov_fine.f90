@@ -26,53 +26,17 @@ subroutine godunov_fine(ilevel)
   do while(igrid.LE.tail(ilevel))
      SELECT CASE (grid(igrid)%superoct)
      CASE(1)
-        call godfine1(igrid,ilevel,&
-             & uloc,gloc,qloc,cloc,&
-             & okloc,childloc,parentloc,nborloc,&
-             & flux,tmp,dq,qm,qp,fx,tx,divu,&
-             & iu1,iu2,ju1,ju2,ku1,ku2,&
-             & io1,io2,jo1,jo2,ko1,ko2,&
-             & if1,if2,jf1,jf2,kf1,kf2)
+        call godfine1(igrid,ilevel,hydro_w%kernel_1)
      CASE(2**ndim)
-        call godfine1(igrid,ilevel,&
-             & uloc_2,gloc_2,qloc_2,cloc_2,&
-             & okloc_2,childloc_2,parentloc_2,nborloc_2,&
-             & flux_2,tmp_2,dq_2,qm_2,qp_2,fx_2,tx_2,divu_2,&
-             & iu1_2,iu2_2,ju1_2,ju2_2,ku1_2,ku2_2,&
-             & io1_2,io2_2,jo1_2,jo2_2,ko1_2,ko2_2,&
-             & if1_2,if2_2,jf1_2,jf2_2,kf1_2,kf2_2)
+        call godfine1(igrid,ilevel,hydro_w%kernel_2)
      CASE(4**ndim)
-        call godfine1(igrid,ilevel,&
-             & uloc_4,gloc_4,qloc_4,cloc_4,&
-             & okloc_4,childloc_4,parentloc_4,nborloc_4,&
-             & flux_4,tmp_4,dq_4,qm_4,qp_4,fx_4,tx_4,divu_4,&
-             & iu1_4,iu2_4,ju1_4,ju2_4,ku1_4,ku2_4,&
-             & io1_4,io2_4,jo1_4,jo2_4,ko1_4,ko2_4,&
-             & if1_4,if2_4,jf1_4,jf2_4,kf1_4,kf2_4)
+        call godfine1(igrid,ilevel,hydro_w%kernel_4)
      CASE(8**ndim)
-        call godfine1(igrid,ilevel,&
-             & uloc_8,gloc_8,qloc_8,cloc_8,&
-             & okloc_8,childloc_8,parentloc_8,nborloc_8,&
-             & flux_8,tmp_8,dq_8,qm_8,qp_8,fx_8,tx_8,divu_8,&
-             & iu1_8,iu2_8,ju1_8,ju2_8,ku1_8,ku2_8,&
-             & io1_8,io2_8,jo1_8,jo2_8,ko1_8,ko2_8,&
-             & if1_8,if2_8,jf1_8,jf2_8,kf1_8,kf2_8)
+        call godfine1(igrid,ilevel,hydro_w%kernel_8)
      CASE(16**ndim)
-        call godfine1(igrid,ilevel,&
-             & uloc_16,gloc_16,qloc_16,cloc_16,&
-             & okloc_16,childloc_16,parentloc_16,nborloc_16,&
-             & flux_16,tmp_16,dq_16,qm_16,qp_16,fx_16,tx_16,divu_16,&
-             & iu1_16,iu2_16,ju1_16,ju2_16,ku1_16,ku2_16,&
-             & io1_16,io2_16,jo1_16,jo2_16,ko1_16,ko2_16,&
-             & if1_16,if2_16,jf1_16,jf2_16,kf1_16,kf2_16)
+        call godfine1(igrid,ilevel,hydro_w%kernel_16)
      CASE(32**ndim)
-        call godfine1(igrid,ilevel,&
-             & uloc_32,gloc_32,qloc_32,cloc_32,&
-             & okloc_32,childloc_32,parentloc_32,nborloc_32,&
-             & flux_32,tmp_32,dq_32,qm_32,qp_32,fx_32,tx_32,divu_32,&
-             & iu1_32,iu2_32,ju1_32,ju2_32,ku1_32,ku2_32,&
-             & io1_32,io2_32,jo1_32,jo2_32,ko1_32,ko2_32,&
-             & if1_32,if2_32,jf1_32,jf2_32,kf1_32,kf2_32)
+        call godfine1(igrid,ilevel,hydro_w%kernel_32)
      END SELECT
      igrid=igrid+grid(igrid)%superoct
   end do
@@ -194,36 +158,17 @@ end subroutine set_uold
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godfine1(ind_grid,ilevel,&
-     & uloc,gloc,qloc,cloc,&
-     & okloc,childloc,parentloc,nborloc,&
-     & flux,tmp,dq,qm,qp,fx,tx,divu,&
-     & iu1,iu2,ju1,ju2,ku1,ku2,&
-     & io1,io2,jo1,jo2,ko1,ko2,&
-     & if1,if2,jf1,jf2,kf1,kf2)
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine godfine1(ind_grid,ilevel,h)
   use amr_commons
+  use hydro_commons
   use hash
   implicit none
   integer::ind_grid,ilevel
-  integer::iu1,iu2,ju1,ju2,ku1,ku2
-  integer::io1,io2,jo1,jo2,ko1,ko2
-  integer::if1,if2,jf1,jf2,kf1,kf2
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uloc
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gloc
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::qloc
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2)::cloc
-  logical ,dimension(iu1:iu2,ju1:ju2,ku1:ku2)::okloc
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nvar,1:ndim)::flux
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:2   ,1:ndim)::tmp
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::divu
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qm
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qp
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::fx
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:2   )::tx
-  integer ,dimension(io1:io2,jo1:jo2,ko1:ko2)::childloc
-  integer ,dimension(io1:io2,jo1:jo2,ko1:ko2)::parentloc
-  integer ,dimension(io1:io2,jo1:jo2,ko1:ko2,1:twondim)::nborloc
+  type(hydro_kernel_t)::h
   !-------------------------------------------------------------------
   ! This routine gathers first hydro variables from neighboring grids
   ! to set initial conditions in a 6x6x6 grid. It interpolate from
@@ -260,19 +205,19 @@ subroutine godfine1(ind_grid,ilevel,&
   dx=boxlen/2**ilevel
 
   ! Integer constants
-  i1min=io1; i1max=io2; j1min=jo1; j1max=jo2; k1min=ko1; k1max=ko2
+  i1min=h%io1; i1max=h%io2; j1min=h%jo1; j1max=h%jo2; k1min=h%ko1; k1max=h%ko2
 #if NDIM>0
-  i2max=1; i3min=iu1+2; i3max=iu2-2
+  i2max=1; i3min=h%iu1+2; i3max=h%iu2-2
 #endif
 #if NDIM>1
-  j2max=1; j3min=ju1+2; j3max=ju2-2
+  j2max=1; j3min=h%ju1+2; j3max=h%ju2-2
 #endif
 #if NDIM>2
-  k2max=1; k3min=ku1+2; k3max=ku2-2
+  k2max=1; k3min=h%ku1+2; k3max=h%ku2-2
 #endif
 
   ! Reset gravitational acceleration
-  gloc=0.0
+  h%gloc=0.0
 
   !---------------------
   ! Gather hydro stencil
@@ -312,8 +257,8 @@ subroutine godfine1(ind_grid,ilevel,&
 #if NDIM>2
               kk1=ckey(3)+1
 #endif
-              childloc(ii1,jj1,kk1)=ind_oct
-              parentloc(ii1,jj1,kk1)=0
+              h%childloc(ii1,jj1,kk1)=ind_oct
+              h%parentloc(ii1,jj1,kk1)=0
 
               ! Loop over 2x2x2 cells
               do k2=k2min,k2max
@@ -332,16 +277,16 @@ subroutine godfine1(ind_grid,ilevel,&
 #endif             
                        ! Gather hydro variables
                        do ivar=1,nvar
-                          uloc(i3,j3,k3,ivar)=grid(ind_oct)%uold(ind_son,ivar)
+                          h%uloc(i3,j3,k3,ivar)=grid(ind_oct)%uold(ind_son,ivar)
                        end do
 #ifdef GRAV
                        ! Gather gravitational acceleration
                        do idim=1,ndim
-                          gloc(i3,j3,k3,idim)=grid(ind_oct)%f(ind_son,idim)
+                          h%gloc(i3,j3,k3,idim)=grid(ind_oct)%f(ind_son,idim)
                        end do
 #endif
                        ! Gather refinement flag
-                       okloc(i3,j3,k3)=grid(ind_oct)%refined(ind_son)
+                       h%okloc(i3,j3,k3)=grid(ind_oct)%refined(ind_son)
                     end do
                  end do
               end do
@@ -405,11 +350,11 @@ subroutine godfine1(ind_grid,ilevel,&
               endif
 
               ! Store grid index
-              childloc(i1,j1,k1)=ichild
-              parentloc(i1,j1,k1)=parent_cell
+              h%childloc(i1,j1,k1)=ichild
+              h%parentloc(i1,j1,k1)=parent_cell
               if(interpol_type>0)then
                  do inbor=1,twondim
-                    nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
+                    h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
                  end do
               endif
 
@@ -433,41 +378,41 @@ subroutine godfine1(ind_grid,ilevel,&
 
                           ! Gather hydro variables
                           do ivar=1,nvar
-                             uloc(i3,j3,k3,ivar)=grid(ichild)%uold(ind_son,ivar)
+                             h%uloc(i3,j3,k3,ivar)=grid(ichild)%uold(ind_son,ivar)
                           end do
 
 #ifdef GRAV
                           ! Gather gravitational acceleration
                           do idim=1,ndim
-                             gloc(i3,j3,k3,idim)=grid(ichild)%f(ind_son,idim)
+                             h%gloc(i3,j3,k3,idim)=grid(ichild)%f(ind_son,idim)
                           end do
 #endif
                           ! Gather refinement flag
-                          okloc(i3,j3,k3)=grid(ichild)%refined(ind_son)
+                          h%okloc(i3,j3,k3)=grid(ichild)%refined(ind_son)
 
                        ! If neighboring grid doesn't exist, interpolate
                        else
 
                           ! Gather hydro variables
                           do ivar=1,nvar
-                             uloc(i3,j3,k3,ivar)=grid(igrid)%uold(icell,ivar)
+                             h%uloc(i3,j3,k3,ivar)=grid(igrid)%uold(icell,ivar)
                           end do
 
                           ! Gather interpolated hydro variables
                           if(interpol_type>0)then
                              do ivar=1,nvar
-                                uloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
+                                h%uloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
                              end do
                           endif
 
 #ifdef GRAV
                           ! Gather gravitational acceleration
                           do idim=1,ndim
-                             gloc(i3,j3,k3,idim)=grid(igrid)%f(icell,idim)
+                             h%gloc(i3,j3,k3,idim)=grid(igrid)%f(icell,idim)
                           end do
 #endif
                           ! Gather refinement flag
-                          okloc(i3,j3,k3)=.false.
+                          h%okloc(i3,j3,k3)=.false.
                        end if
 
                     end do
@@ -483,11 +428,11 @@ subroutine godfine1(ind_grid,ilevel,&
   !-----------------------------------------------
   ! Compute flux using second-order Godunov method
   !-----------------------------------------------
-  call unsplit(uloc,gloc,qloc,cloc,&
-       & flux,tmp,dq,qm,qp,fx,tx,divu,&
+  call unsplit(h%uloc,h%gloc,h%qloc,h%cloc,&
+       & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
        & dx,dx,dx,dtnew(ilevel),&
-       & iu1,iu2,ju1,ju2,ku1,ku2,&
-       & if1,if2,jf1,jf2,kf1,kf2)
+       & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
+       & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
   
   !------------------------------------------------
   ! Reset flux along direction at refined interface    
@@ -501,14 +446,14 @@ subroutine godfine1(ind_grid,ilevel,&
         do j3=j3min,j3max+j0
            do i3=i3min,i3max+i0
               do ivar=1,nvar
-                 if(okloc(i3-i0,j3-j0,k3-k0) .or. okloc(i3,j3,k3))then
-                    flux(i3,j3,k3,ivar,idim)=0.0d0
+                 if(h%okloc(i3-i0,j3-j0,k3-k0) .or. h%okloc(i3,j3,k3))then
+                    h%flux(i3,j3,k3,ivar,idim)=0.0d0
                  end if
               end do
 #ifdef DUALENER
               do ivar=1,2
-                 if(okloc(i3-i0,j3-j0,k3-k0) .or. okloc(i3,j3,k3))then
-                    tmp(i3,j3,k3,ivar,idim)=0.0d0
+                 if(h%okloc(i3-i0,j3-j0,k3-k0) .or. h%okloc(i3,j3,k3))then
+                    h%tmp(i3,j3,k3,ivar,idim)=0.0d0
                  end if
               end do
 #endif
@@ -541,7 +486,7 @@ subroutine godfine1(ind_grid,ilevel,&
         do j1=j1min+jj0,j1max-jj0
            do i1=i1min+ii0,i1max-ii0
               ! Get oct index
-              ind_oct=childloc(i1,j1,k1)
+              ind_oct=h%childloc(i1,j1,k1)
               ! Loop over cells
               do k2=k2min,k2max
                  do j2=j2min,j2max
@@ -561,20 +506,20 @@ subroutine godfine1(ind_grid,ilevel,&
                        do ivar=1,nvar
                           grid(ind_oct)%unew(ind_son,ivar)=&
                                & grid(ind_oct)%unew(ind_son,ivar)+ &
-                               & (flux(i3   ,j3   ,k3   ,ivar,idim) &
-                               & -flux(i3+i0,j3+j0,k3+k0,ivar,idim))
+                               & (h%flux(i3   ,j3   ,k3   ,ivar,idim) &
+                               & -h%flux(i3+i0,j3+j0,k3+k0,ivar,idim))
                        end do
 #ifdef DUALENER
                        ! Update velocity divergence
                        grid(ind_oct)%divu(ind_son)=&
                             & grid(ind_oct)%divu(ind_son)+ &
-                            & (tmp(i3   ,j3   ,k3   ,1,idim) &
-                            & -tmp(i3+i0,j3+j0,k3+k0,1,idim))
+                            & (h%tmp(i3   ,j3   ,k3   ,1,idim) &
+                            & -h%tmp(i3+i0,j3+j0,k3+k0,1,idim))
                        ! Update internal energy
                        grid(ind_oct)%enew(ind_son)=&
                             & grid(ind_oct)%enew(ind_son)+ &
-                            & (tmp(i3   ,j3   ,k3   ,2,idim) &
-                            & -tmp(i3+i0,j3+j0,k3+k0,2,idim))
+                            & (h%tmp(i3   ,j3   ,k3   ,2,idim) &
+                            & -h%tmp(i3+i0,j3+j0,k3+k0,2,idim))
 #endif
                     end do
                  end do
@@ -626,11 +571,11 @@ subroutine godfine1(ind_grid,ilevel,&
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              ind_oct=childloc(i1,j1,k1)
+              ind_oct=h%childloc(i1,j1,k1)
               ! Check that parent cell is not refined
               if(ind_oct==0)then
                  ! Get parent cell index
-                 parent_cell=parentloc(i1,j1,k1)
+                 parent_cell=h%parentloc(i1,j1,k1)
                  igrid=(parent_cell-1)/twotondim+1
                  icell=parent_cell-(igrid-1)*twotondim
                  ! Loop over inner cell left faces
@@ -650,15 +595,15 @@ subroutine godfine1(ind_grid,ilevel,&
                           ! Conservative update of new state variables
                           do ivar=1,nvar
                              grid(igrid)%unew(icell,ivar)=grid(igrid)%unew(icell,ivar) &
-                                  & -flux(i3,j3,k3,ivar,idim)*oneontwotondim
+                                  & -h%flux(i3,j3,k3,ivar,idim)*oneontwotondim
                           end do
 #ifdef DUALENER
                           ! Update velocity divergence
                           grid(igrid)%divu(icell)=grid(igrid)%divu(icell) &
-                               & -tmp(i3,j3,k3,1,idim)*oneontwotondim
+                               & -h%tmp(i3,j3,k3,1,idim)*oneontwotondim
                           ! Update internal energy
                           grid(igrid)%enew(icell)=grid(igrid)%enew(icell) &
-                               & -tmp(i3,j3,k3,2,idim)*oneontwotondim
+                               & -h%tmp(i3,j3,k3,2,idim)*oneontwotondim
 #endif
                        end do
                     end do
@@ -684,11 +629,11 @@ subroutine godfine1(ind_grid,ilevel,&
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              ind_oct=childloc(i1,j1,k1)
+              ind_oct=h%childloc(i1,j1,k1)
               ! Check that parent cell is not refined
               if(ind_oct==0)then
                  ! Get parent cell index
-                 parent_cell=parentloc(i1,j1,k1)
+                 parent_cell=h%parentloc(i1,j1,k1)
                  igrid=(parent_cell-1)/twotondim+1
                  icell=parent_cell-(igrid-1)*twotondim
                  ! Loop over inner cell right faces
@@ -708,15 +653,15 @@ subroutine godfine1(ind_grid,ilevel,&
                           ! Conservative update of new state variables
                           do ivar=1,nvar
                              grid(igrid)%unew(icell,ivar)=grid(igrid)%unew(icell,ivar) &
-                                  & +flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
+                                  & +h%flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
                           end do
 #ifdef DUALENER
                           ! Update velocity divergence
                           grid(igrid)%divu(icell)=grid(igrid)%divu(icell) &
-                               & +tmp(i3+i0,j3+j0,k3+k0,1,idim)*oneontwotondim
+                               & +h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*oneontwotondim
                           ! Update internal energy
                           grid(igrid)%enew(icell)=grid(igrid)%enew(incell) &
-                               & +tmp(i3+i0,j3+j0,k3+k0,2,idim)*oneontwotondim
+                               & +h%tmp(i3+i0,j3+j0,k3+k0,2,idim)*oneontwotondim
 #endif
                        end do
                     end do
@@ -736,20 +681,20 @@ subroutine godfine1(ind_grid,ilevel,&
      do j1=j1min,j1max
         do i1=i1min,i1max     
            ! Get oct index
-           ind_oct=childloc(i1,j1,k1)
+           ind_oct=h%childloc(i1,j1,k1)
            ! Check that parent cell is not refined
            if(ind_oct>0)then
               call unlock_cache(ind_oct)
            else
               ! Get parent cell index
-              parent_cell=parentloc(i1,j1,k1)
+              parent_cell=h%parentloc(i1,j1,k1)
               igrid=(parent_cell-1)/twotondim+1
               icell=parent_cell-(igrid-1)*twotondim
               call unlock_cache(igrid)
               ! Get neighbouring parent oct index
               if(interpol_type>0)then
                  do inbor=1,twondim
-                    igrid=nborloc(i1,j1,k1,inbor)
+                    igrid=h%nborloc(i1,j1,k1,inbor)
                     if(igrid>0)then
                        call unlock_cache(igrid)
                     endif
