@@ -1,12 +1,16 @@
-subroutine read_params
+subroutine read_params(run_p,global_v)
   use amr_commons
-  use pm_parameters
+  use pm_commons
   use poisson_parameters
   use hydro_parameters
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+
+  type(run_t)::run_p
+  type(global_t)::global_v
+
   !--------------------------------------------------
   ! Local variables
   !--------------------------------------------------
@@ -24,9 +28,9 @@ subroutine read_params
   ! Namelist definitions
   !--------------------------------------------------
   namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
-       & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap,ordering &
-       & ,static,geom,overload,cost_weighting,nsuperoct
-  namelist/output_params/noutput,foutput,fbackup,aout,tout,output_mode &
+       & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
+       & ,static,geom,overload,nsuperoct
+  namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen
@@ -34,7 +38,7 @@ subroutine read_params
        & ,cg_levelmin,cic_levelmax,fast_solver
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
-       & ,deltax_frame,deltay_frame,deltaz_frame,movie &
+       & ,deltax_frame,deltay_frame,deltaz_frame,movie,zoom_only &
        & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars,movie_vars_txt
 
   ! MPI initialization
@@ -153,11 +157,9 @@ subroutine read_params
      end do
   endif
   noutput=MIN(noutput,MAXOUT)
+  tmovout=1d100
+  amovout=1d100
   if(imovout>0) then
-     allocate(tmovout(1:imovout))
-     allocate(amovout(1:imovout))
-     tmovout=1d100
-     amovout=1d100
      if(tendmov>0)then
         do i=1,imovout
            tmovout(i)=tendmov*dble(i)/dble(imovout)
@@ -257,6 +259,146 @@ subroutine read_params
 #ifndef WITHOUTMPI
   call MPI_BARRIER(MPI_COMM_WORLD,ierr)
 #endif
+
+  ! Fill in all run parameters in corresponding structure
+
+  run_p%cosmo=cosmo
+  run_p%pic=pic
+  run_p%poisson=poisson
+  run_p%hydro=hydro
+  run_p%verbose=verbose
+  run_p%debug=debug
+  run_p%nrestart=nrestart
+  run_p%ncontrol=ncontrol
+  run_p%nstepmax=nstepmax
+  run_p%nsubcycle=nsubcycle
+  run_p%nremap=nremap
+  run_p%static=static
+  run_p%geom=geom
+  run_p%overload=overload
+  run_p%nsuperoct=nsuperoct
+
+  run_p%noutput=noutput
+  run_p%foutput=foutput
+  run_p%aout=aout
+  run_p%tout=tout
+  run_p%output_mode=output_mode
+  run_p%gadget_output=gadget_output
+
+  run_p%levelmin=levelmin
+  run_p%nlevelmax=nlevelmax
+  run_p%ngridmax=ngridmax
+  run_p%ncachemax=ncachemax
+  run_p%npartmax=npartmax
+  run_p%nexpand=nexpand
+  run_p%boxlen=boxlen
+
+  run_p%epsilon=epsilon
+  run_p%gravity_type=gravity_type
+  run_p%gravity_params=gravity_params
+  run_p%cic_levelmax=cic_levelmax
+  run_p%cg_levelmin=cg_levelmin
+  run_p%fast_solver=fast_solver
+
+  run_p%nw_frame=nw_frame
+  run_p%nh_frame=nh_frame
+  run_p%levelmax_frame=levelmax_frame
+  run_p%ivar_frame=ivar_frame
+  run_p%xcentre_frame=xcentre_frame
+  run_p%ycentre_frame=ycentre_frame
+  run_p%zcentre_frame=zcentre_frame
+  run_p%deltax_frame=deltax_frame
+  run_p%deltay_frame=deltay_frame
+  run_p%deltaz_frame=deltaz_frame
+  run_p%movie=movie
+  run_p%zoom_only=zoom_only
+  run_p%imovout=imovout
+  run_p%imov=imov
+  run_p%tendmov=tendmov
+  run_p%aendmov=aendmov
+  run_p%amovout=amovout
+  run_p%tmovout=tmovout
+  run_p%proj_axis=proj_axis
+  run_p%movie_vars=movie_vars
+  run_p%movie_vars_txt=movie_vars_txt
+
+  run_p%gamma=gamma
+  run_p%courant_factor=courant_factor
+  run_p%smallc=smallc
+  run_p%smallr=smallr
+  run_p%niter_riemann=niter_riemann
+  run_p%slope_type=slope_type
+  run_p%difmag=difmag
+  run_p%gamma_rad=gamma_rad
+  run_p%pressure_fix=pressure_fix
+  run_p%scheme=scheme
+  run_p%riemann=riemann
+
+  run_p%cooling=cooling
+  run_p%units_density=units_density
+  run_p%units_time=units_time
+  run_p%units_length=units_length
+  run_p%T2_star=T2_star
+  run_p%g_star=g_star
+  run_p%n_star=n_star
+  run_p%isothermal=isothermal
+
+  run_p%m_refine=m_refine
+  run_p%r_refine=r_refine
+  run_p%x_refine=x_refine
+  run_p%y_refine=y_refine
+  run_p%z_refine=z_refine
+  run_p%exp_refine=exp_refine
+  run_p%a_refine=a_refine
+  run_p%b_refine=b_refine
+  run_p%jeans_refine=jeans_refine
+  run_p%var_cut_refine=var_cut_refine
+  run_p%mass_cut_refine=mass_cut_refine
+  run_p%ivar_refine=ivar_refine
+
+  run_p%interpol_var=interpol_var
+  run_p%interpol_type=interpol_type
+  run_p%err_grad_d=err_grad_d
+  run_p%err_grad_u=err_grad_u
+  run_p%err_grad_p=err_grad_p
+  run_p%floor_d=floor_d
+  run_p%floor_u=floor_u
+  run_p%floor_p=floor_p
+  run_p%mass_sph=mass_sph
+#if NENER>0
+  run_p%err_grad_prad=err_grad_prad
+#endif
+#if NVAR>NDIM+2+NENER
+  run_p%err_grad_var=err_grad_var
+#endif
+
+  run_p%filetype=filetype
+  run_p%initfile=initfile
+  run_p%multiple=multiple
+  run_p%nregion=nregion
+  run_p%region_type=region_type
+  run_p%x_center=x_center
+  run_p%y_center=y_center
+  run_p%z_center=z_center
+  run_p%length_x=length_x
+  run_p%length_y=length_y
+  run_p%length_z=length_z
+  run_p%exp_region=exp_region
+  run_p%d_region=d_region
+  run_p%d_region=u_region
+  run_p%d_region=v_region
+  run_p%d_region=w_region
+  run_p%d_region=p_region
+#if NENER>0
+  run_p%prad_region=prad_region
+#endif
+#if NVAR>NDIM+2+NENER
+  run_p%var_region=var_region
+#endif
+
+  global_v%ncpu=ncpu
+  global_v%myid=myid
+  
 
 end subroutine read_params
 

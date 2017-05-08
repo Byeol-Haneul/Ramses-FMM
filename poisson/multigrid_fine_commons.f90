@@ -96,6 +96,7 @@ subroutine multigrid(ilevel,icount)
   ! Build communication buffer (for optimisation)
   ! ---------------------------------------------------------------------
   if(fast_solver)then
+     allocate(buffer_mg(1:nlevelmax))
      call build_comm_mg(grid_dict,ilevel)
      do ifine=ilevel-1,levelmin_mg,-1
         call build_comm_mg(mg_dict,ifine)
@@ -211,6 +212,7 @@ subroutine multigrid(ilevel,icount)
      do ifine=ilevel-1,levelmin_mg,-1
         call clean_comm_mg(ifine)
      end do
+     deallocate(buffer_mg)
   endif
   
   ! ---------------------------------------------------------------------
@@ -388,6 +390,7 @@ subroutine build_mg(ifinelevel)
   integer(kind=4),dimension(1:nvector),save::dummy_state
   integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
   integer(kind=8),dimension(1:nvector,1:ndim),save::ix
+  integer(kind=8),dimension(1:nhilbert),save::hks
 
   icoarselevel=ifinelevel-1
   ifree=noct_used+1
@@ -436,7 +439,8 @@ subroutine build_mg(ifinelevel)
            call hilbert_key(ix,hk,dummy_state,0,icoarselevel-1,1)
            
            ! Check if grid sits inside processor boundaries
-           if( domain_mg(icoarselevel)%in_rank(hk(1,1:nhilbert))) then
+           hks = hk(1,1:nhilbert)
+           if( domain_mg(icoarselevel)%in_rank(hks)) then
               
               ! Set grid index to a virtual grid in local main memory
               ichild=ifree
@@ -451,7 +455,8 @@ subroutine build_mg(ifinelevel)
               end if
               ! Otherwise, determine parent processor and use the cache
            else
-              grid_cpu = domain_mg(icoarselevel)%get_rank(hk(1,1:nhilbert))
+              hks = hk(1,1:nhilbert)
+              grid_cpu = domain_mg(icoarselevel)%get_rank(hks)
               
               ! If next cache line is occupied, free it.
               if(occupied(free_cache))call destage(ngridmax+free_cache,mg_dict)
@@ -772,6 +777,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=4),dimension(1:nvector),save::dummy_state
   integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
+  integer(kind=8),dimension(1:nhilbert),save::hks
   integer(kind=8),dimension(1:nvector,1:ndim),save::ix
   integer::istart,nbuffer,countrecv,countsend,tag=101
   integer,dimension(ncpu)::reqsend,reqrecv
@@ -815,7 +821,8 @@ subroutine build_comm_mg(hash_dict,ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           grid_cpu = domain_mg(ilevel)%get_rank(hk(1,1:nhilbert))
+           hks = hk(1,1:nhilbert)
+           grid_cpu = domain_mg(ilevel)%get_rank(hks)
            nremote(grid_cpu)=nremote(grid_cpu)+1
         end if
 
@@ -899,7 +906,8 @@ subroutine build_comm_mg(hash_dict,ilevel)
            call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
 
            ! Determine parent processor and increment counter
-           grid_cpu = domain_mg(ilevel)%get_rank(hk(1,1:nhilbert))
+           hks = hk(1,1:nhilbert)
+           grid_cpu = domain_mg(ilevel)%get_rank(hks)
            nremote(grid_cpu)=nremote(grid_cpu)+1
            iremote=buffer_mg(ilevel)%send_oft(grid_cpu)+nremote(grid_cpu)
 #if NDIM>0

@@ -9,7 +9,6 @@
 
 ! - COLLISIONS: A linked list is used to deal with collisions.
 
-
 module hash
   use amr_parameters, only: ndim, nvector
   implicit none

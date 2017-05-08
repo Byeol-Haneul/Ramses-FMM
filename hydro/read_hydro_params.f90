@@ -21,15 +21,21 @@ subroutine read_hydro_params(nml_ok)
 #if NENER>0
        & ,prad_region &
 #endif
+#if NVAR>NDIM+2+NENER
+       & ,var_region &
+#endif
        & ,d_region,u_region,v_region,w_region,p_region
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
-       & ,niter_riemann,slope_type,difmag &
-#if NENER>0
-       & ,gamma_rad &
-#endif
+       & ,niter_riemann,slope_type,difmag,gamma_rad &
        & ,pressure_fix,scheme,riemann
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
+#if NENER>0
+       & ,err_grad_prad &
+#endif
+#if NVAR>NDIM+2+NENER
+       & ,err_grad_var &
+#endif
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type

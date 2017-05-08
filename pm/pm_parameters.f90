@@ -1,10 +1,11 @@
 module pm_parameters
   use amr_parameters, ONLY: dp
-  integer  :: npartmax=0                  ! Maximum number of allocatable particles
-  integer  :: npart=0                     ! Actual number of particles in processor
-  integer  :: npart_tot=0                 ! Total number of particles in all processors
-  integer  :: npart_max=0                 ! Maximum number of particles in all processors
 
-  logical :: part_memory=.true.           ! Optimize particle memory distribution
+  real(dp) :: mp_min=-1.0 ! Minimum particle mass
+
+  logical :: part_memory=.true. ! Optimize particle memory distribution
+
+  integer :: action_kick_only = 1
+  integer :: action_kick_drift = 2  
 
 end module pm_parameters
