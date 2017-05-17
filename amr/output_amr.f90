@@ -101,6 +101,93 @@ end subroutine dump_all
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine dump_all_2(r,g,m,p)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+
+  ! Local variables
+  character(LEN=5)::nchar
+  character(LEN=80)::filename,filedir,filecmd
+  integer::i,itest,info,irec,ierr
+
+  if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
+  if(g%nstep_coarse==0.and.r%nrestart>0)return
+  if(r%verbose)write(*,*)'Entering dump_all'
+
+  do i=r%levelmin,r%nlevelmax
+     call write_screen_2(r,g,m,i)
+  end do
+
+  call title(g%ifout,nchar)
+  g%ifout=g%ifout+1
+  if(g%t>=r%tout(g%iout).or.g%aexp>=r%aout(g%iout))g%iout=g%iout+1
+  g%output_done=.true.
+
+  if(ndim>1)then
+     filedir='output_threadsafe_'//TRIM(nchar)//'/'
+     filecmd='mkdir -p '//TRIM(filedir)
+#ifdef NOSYSTEM
+     call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',info)
+#else
+     call system(filecmd)
+#endif
+#ifndef WITHOUTMPI
+     call MPI_BARRIER(MPI_COMM_WORLD,info)
+#endif
+     ! Only master process
+     if(g%myid==1)then
+        if(r%pic)then
+           filename=TRIM(filedir)//'part_header.txt'
+           call output_header_2(r,g,filename)
+        endif
+        if(r%hydro)then
+           filename=TRIM(filedir)//'hydro_file_descriptor.txt'
+           call file_descriptor_hydro_2(r,g,filename)
+        end if
+        filename=TRIM(filedir)//'info.txt'
+        call output_info_2(r,g,filename)
+        filename=TRIM(filedir)//'makefile.txt'
+        call output_makefile(filename)
+        filename=TRIM(filedir)//'patches.txt'
+        call output_patch(filename)
+        filename=TRIM(filedir)//'namelist.txt'
+        call output_namelist(filename)
+        filename=TRIM(filedir)//'compilation.txt'
+        call output_compil(filename)
+        filename=TRIM(filedir)//'params.out'
+        call output_params_2(r,g,m,filename)
+     endif
+     ! For each process
+     filename=TRIM(filedir)//'amr.out'
+     call output_amr_2(r,g,m,filename)
+     if(r%hydro)then
+        filename=TRIM(filedir)//'hydro.out'
+        call output_hydro_2(r,g,m,filename)
+     end if
+     if(r%poisson)then
+        filename=TRIM(filedir)//'grav.out'
+        call output_poisson_2(r,g,m,filename)
+     end if
+     if(r%pic)then
+        filename=TRIM(filedir)//'part.out'
+        call output_part_2(r,g,p,filename)
+     end if
+  end if
+
+end subroutine dump_all_2
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 subroutine output_namelist(filename)
   use amr_commons
   use pm_commons
@@ -196,6 +283,60 @@ end subroutine output_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine output_params_2(r,g,m,filename)
+  use amr_parameters, only: ndim,nhilbert
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  character(LEN=80)::filename
+
+  ! Local variables
+  integer::ilun
+  integer::ilevel,ibound,istart,i,igrid,idim,ind,iskip
+  character(LEN=80)::fileloc
+
+  if(r%verbose)write(*,*)'Entering output_params'
+
+  !-----------------------------------
+  ! Output run parameters in file
+  !-----------------------------------  
+  ilun=10
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,access="stream"&
+       & ,action="write",form='unformatted')
+  ! Write grid variables
+  write(ilun)g%ncpu
+  write(ilun)ndim
+  write(ilun)r%levelmin
+  write(ilun)r%nlevelmax
+  write(ilun)r%boxlen
+  ! Write time variables
+  write(ilun)r%noutput,g%iout,g%ifout
+  write(ilun)r%tout(1:r%noutput)
+  write(ilun)r%aout(1:r%noutput)
+  write(ilun)g%t
+  write(ilun)g%dtold(1:r%nlevelmax)
+  write(ilun)g%dtnew(1:r%nlevelmax)
+  write(ilun)g%nstep,g%nstep_coarse
+  ! Write various constants
+  write(ilun)g%const,g%mass_tot_0,g%rho_tot
+  write(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
+  write(ilun)g%aexp,g%hexp,g%aexp_old,g%epot_tot_int,g%epot_tot_old
+  write(ilun)r%mass_sph
+  ! Write cpu boundaries
+  write(ilun)nhilbert
+  do ilevel=r%levelmin,r%nlevelmax
+     write(ilun)m%domain(ilevel)%b(1:nhilbert,0:g%ncpu)
+  end do
+  close(ilun)
+
+end subroutine output_params_2
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 subroutine input_params(filename,ncpu_file,levelmin_file,nlevelmax_file)
   use amr_commons
   use hydro_commons
@@ -272,6 +413,83 @@ end subroutine input_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine input_params_2(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
+  use amr_parameters, only: ndim,nhilbert,dp
+  use amr_commons, only: run_t,global_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  character(LEN=80)::filename
+  integer::ncpu_file,levelmin_file,nlevelmax_file,i
+  !-----------------------------------
+  ! Read run parameters from file.
+  ! Note that ncpu, levelmin and nlevelmax
+  ! are allowed to vary at restart.
+  !-----------------------------------  
+  integer::ilun
+  integer::ndim_file,noutput_file
+  integer::noutput_min,nlevelmax_min
+  real(dp)::mass_sph_file
+  character(LEN=80)::fileloc
+
+  if(r%verbose)write(*,*)'Entering input_params'
+
+  ilun=10+g%myid
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,access="stream"&
+       & ,action="read",form='unformatted')
+  ! Read grid variables
+  read(ilun)ncpu_file
+  read(ilun)ndim_file
+  read(ilun)levelmin_file
+  read(ilun)nlevelmax_file
+  ! Overwrite boxlen with value from file
+  read(ilun)r%boxlen
+  ! Read time variables
+  read(ilun)noutput_file,g%iout,g%ifout
+  noutput_min=MIN(r%noutput,noutput_file)
+  read(ilun)r%tout(1:noutput_min)
+  read(ilun)r%aout(1:noutput_min)
+  read(ilun)g%t
+  nlevelmax_min=MIN(r%nlevelmax,nlevelmax_file)
+  read(ilun)g%dtold(1:nlevelmax_min)
+  read(ilun)g%dtnew(1:nlevelmax_min)
+  read(ilun)g%nstep,g%nstep_coarse
+  ! Read various constants
+  read(ilun)g%const,g%mass_tot_0,g%rho_tot
+  read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
+  read(ilun)g%aexp,g%hexp,g%aexp_old,g%epot_tot_int,g%epot_tot_old
+  read(ilun)mass_sph_file
+  close(ilun)
+  ! For cosmo runs only, as mass_sph is not set in the namelist
+  if(r%cosmo)r%mass_sph=mass_sph_file
+  ! Check dimensions
+  if(ndim.NE.ndim_file)then
+     if(g%myid==1)then
+        write(*,*)'Incorrect number of space dimensions in restart file'
+     endif
+     call clean_stop
+  endif
+  ! Compute movie frame number if applicable
+  if(r%imovout>0) then
+     do i=2,r%imovout
+        if(r%aendmov>0)then
+           if(g%aexp>r%amovout(i-1).and.g%aexp<r%amovout(i)) then
+              r%imov=i
+           endif
+        else
+           if(g%t>r%tmovout(i-1).and.g%t<r%tmovout(i)) then
+              r%imov=i
+           endif
+        endif
+     enddo
+  endif
+
+end subroutine input_params_2
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 subroutine output_amr(filename)
   use amr_commons
   use hydro_commons
@@ -311,6 +529,44 @@ subroutine output_amr(filename)
   end do
   close(ilun)  
 end subroutine output_amr
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine output_amr_2(r,g,m,filename)
+  use amr_parameters, only: ndim,sp,dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  character(LEN=80)::filename
+  !-----------------------------------
+  ! Output amr grid in file
+  !-----------------------------------  
+  integer::ilun,ilevel,igrid
+  character(LEN=80)::fileloc
+  character(LEN=5)::nchar
+  if(r%verbose)write(*,*)'Entering output_amr'
+  ilun=g%myid+10
+  call title(g%myid,nchar)
+  fileloc=TRIM(filename)//TRIM(nchar)
+  open(unit=ilun,file=fileloc,access="stream"&
+       & ,action="write",form='unformatted')
+  write(ilun)ndim
+  write(ilun)r%levelmin
+  write(ilun)r%nlevelmax
+  do ilevel=r%levelmin,r%nlevelmax
+     write(ilun)m%noct(ilevel)
+  end do
+  do ilevel=r%levelmin,r%nlevelmax
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        write(ilun)m%grid(igrid)%ckey
+        write(ilun)m%grid(igrid)%refined
+     end do
+  end do
+  close(ilun)  
+end subroutine output_amr_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -368,6 +624,61 @@ end subroutine output_info
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine output_info_2(r,g,filename)
+  use amr_parameters, only: ndim,sp,dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  character(LEN=80)::filename
+
+  integer::ilun
+  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  character(LEN=80)::fileloc
+  character(LEN=5)::nchar
+
+  if(r%verbose)write(*,*)'Entering output_info'
+
+  ilun=11
+
+  ! Conversion factor from user units to cgs units
+  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+
+  ! Open file
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')
+  
+  ! Write run parameters
+  write(ilun,'("ncpu        =",I11)')g%ncpu
+  write(ilun,'("ndim        =",I11)')ndim
+  write(ilun,'("levelmin    =",I11)')r%levelmin
+  write(ilun,'("levelmax    =",I11)')r%nlevelmax
+  write(ilun,'("ngridmax    =",I11)')r%ngridmax
+  write(ilun,'("nstep_coarse=",I11)')g%nstep_coarse
+  write(ilun,*)
+
+  ! Write physical parameters
+  write(ilun,'("boxlen      =",E23.15)')r%boxlen
+  write(ilun,'("time        =",E23.15)')g%t
+  write(ilun,'("aexp        =",E23.15)')g%aexp
+  write(ilun,'("H0          =",E23.15)')g%h0
+  write(ilun,'("omega_m     =",E23.15)')g%omega_m
+  write(ilun,'("omega_l     =",E23.15)')g%omega_l
+  write(ilun,'("omega_k     =",E23.15)')g%omega_k
+  write(ilun,'("omega_b     =",E23.15)')g%omega_b
+  write(ilun,'("unit_l      =",E23.15)')scale_l
+  write(ilun,'("unit_d      =",E23.15)')scale_d
+  write(ilun,'("unit_t      =",E23.15)')scale_t
+  write(ilun,*)
+  
+  close(ilun)
+
+end subroutine output_info_2
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 subroutine output_header(filename)
   use amr_commons
   use hydro_commons
@@ -410,6 +721,48 @@ end subroutine output_header
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine output_header_2(r,g,m,p,filename)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  character(LEN=80)::filename
+
+  ! Local variables
+  integer::info,ilun
+  character(LEN=80)::fileloc
+
+  if(r%verbose)write(*,*)'Entering output_header'
+  
+  ilun=g%myid+10
+  
+  ! Open file
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')
+  
+  ! Write header information
+  write(ilun,*)'Total number of particles'
+  write(ilun,*)p%npart_tot
+  
+  write(ilun,*)'Total number of files'
+  write(ilun,*)g%ncpu
+  
+  ! Keep track of what particle fields are present
+  write(ilun,*)'Particle fields'
+  write(ilun,'(a)',advance='no')'pos vel mass iord level '
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  write(ilun,'(a)',advance='no')'phi '
+#endif
+  close(ilun)
+
+end subroutine output_header_2
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 subroutine input_header(filename,npart_tot_file,ncpu_file)
   use amr_commons
   use hydro_commons
@@ -440,6 +793,37 @@ subroutine input_header(filename,npart_tot_file,ncpu_file)
   close(ilun)
 
 end subroutine input_header
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine input_header_2(r,g,filename,npart_tot_file,ncpu_file)
+  use amr_parameters, only: i8b
+  use amr_commons, only: run_t,global_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  character(LEN=80)::filename
+  integer(i8b)::npart_tot_file
+  integer::ncpu_file
+
+  integer::ilun
+  character(LEN=80)::fileloc
+
+  if(r%verbose)write(*,*)'Entering input_header'
+  
+  ilun=g%myid+10
+  
+  ! Write header information
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')  
+  read(ilun,*)
+  read(ilun,*)npart_tot_file
+  read(ilun,*)
+  read(ilun,*)ncpu_file
+  close(ilun)
+
+end subroutine input_header_2
 !#########################################################################
 !#########################################################################
 !#########################################################################

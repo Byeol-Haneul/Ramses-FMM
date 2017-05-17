@@ -1,4 +1,8 @@
-subroutine init_amr(r,g,m)
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+subroutine init_amr
   use amr_commons
   use poisson_commons
   use hash
@@ -7,16 +11,8 @@ subroutine init_amr(r,g,m)
 #ifndef WITHOUTMPI
   include 'mpif.h'  
 #endif
-
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-
-  integer::ilevel,icpu,info,igrid,i
-  integer::intex,realdpex,msg_size
+  integer::ilevel,icpu,igrid,i
   integer(kind=8)::max_key
-  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length,new_type_address
-  real(kind=4)::real_mem,real_mem_tot
   character(len=5)::nchar
   character(len=80)::file_params
   integer::ncpu_file,levelmin_file,nlevelmax_file
@@ -26,17 +22,11 @@ subroutine init_amr(r,g,m)
   ! Initial time step for each level
   dtold=0.0D0
   dtnew=0.0D0
-  g%dtold=0.0D0
-  g%dtnew=0.0D0
 
   ! Allocate main oct array
   allocate(grid(1:ngridmax+ncachemax))
   do igrid=1,ngridmax+ncachemax
      grid(igrid)%lev=0
-  end do
-  allocate(m%grid(1:r%ngridmax+r%ncachemax))
-  do igrid=1,r%ngridmax+r%ncachemax
-     m%grid(igrid)%lev=0
   end do
 
   ! Allocate cache-related arrays
@@ -48,35 +38,20 @@ subroutine init_amr(r,g,m)
   locked=.false.
   occupied=.false.
   free_cache=1; ncache=0
-  allocate(m%dirty(1:r%ncachemax))
-  allocate(m%locked(1:r%ncachemax))
-  allocate(m%occupied(1:r%ncachemax))
-  allocate(m%parent_cpu(1:r%ncachemax))
-  m%dirty=.false.
-  m%locked=.false.
-  m%occupied=.false.
-  m%free_cache=1; m%ncache=0
 
   allocate(lev_null(1:ncachemax))
   allocate(ckey_null(1:ndim,1:ncachemax))
   allocate(occupied_null(1:ncachemax))
   occupied_null=.false.
   free_null=1; nnull=0
-  allocate(m%lev_null(1:r%ncachemax))
-  allocate(m%ckey_null(1:ndim,1:r%ncachemax))
-  allocate(m%occupied_null(1:r%ncachemax))
-  m%occupied_null=.false.
-  m%free_null=1; m%nnull=0
 
   ! Allocate hash table for AMR data
   if(verbose.and.myid==1)write(*,*)'Initialize empty hash'
   call init_empty_hash(grid_dict,2*(ngridmax+ncachemax),'simple')
-  call init_empty_hash(m%grid_dict,2*(r%ngridmax+r%ncachemax),'simple')
 
   ! Allocate another smaller hash table for multigrid data
   if(poisson)then
      call init_empty_hash(mg_dict,2*(ngridmax+ncachemax)/7,'simple')
-     call init_empty_hash(m%mg_dict,2*(r%ngridmax+r%ncachemax)/7,'simple')
   endif
 
   ! Set initial cpu boundaries
@@ -86,17 +61,10 @@ subroutine init_amr(r,g,m)
   allocate(ckey_max(1:nlevelmax+1))
   allocate(hkey_max(1:nhilbert,1:nlevelmax+1))
   hkey_max=0
-  allocate(m%ckey_max(1:r%nlevelmax+1))
-  allocate(m%hkey_max(1:nhilbert,1:r%nlevelmax+1))
-  m%hkey_max=0
 
   allocate(domain(1:nlevelmax+1))
   do ilevel=1,nlevelmax+1
      call domain(ilevel)%create(ncpu*overload)
-  end do
-  allocate(m%domain(1:r%nlevelmax+1))
-  do ilevel=1,r%nlevelmax+1
-     call m%domain(ilevel)%create(g%ncpu*r%overload)
   end do
 
   ! Make sure that the coarsest level uses only one Hilbert integer
@@ -117,16 +85,6 @@ subroutine init_amr(r,g,m)
      domain(ilevel)%b(1,0) = 0
      domain(ilevel)%b(1,ncpu) = max_key
   end do
-  do ilevel=1,r%levelmin
-     m%ckey_max(ilevel)=2**(ilevel-1)
-     max_key=2**((ilevel-1)*ndim)
-     m%hkey_max(1,ilevel)=max_key
-     do icpu=1,g%ncpu-1
-        m%domain(ilevel)%b(1,icpu) = (icpu*max_key)/g%ncpu
-     end do
-     m%domain(ilevel)%b(1,0) = 0
-     m%domain(ilevel)%b(1,ncpu) = max_key
-  end do
 
   ! Set bounds for Hilbert keys for fine levels
   do ilevel=levelmin+1,nlevelmax+1
@@ -135,14 +93,6 @@ subroutine init_amr(r,g,m)
      ! Multiply the bounds by twotondim
      do icpu=0,ncpu
         domain(ilevel)%b(1:nhilbert,icpu) = refine_key(domain(ilevel-1)%b(1:nhilbert,icpu),ilevel-2)
-     end do
-  end do
-  do ilevel=r%levelmin+1,r%nlevelmax+1
-     m%ckey_max(ilevel) = 2**(ilevel-1)
-     m%hkey_max(1:nhilbert,ilevel) = refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel-2)
-     ! Multiply the bounds by twotondim
-     do icpu=0,g%ncpu
-        m%domain(ilevel)%b(1:nhilbert,icpu) = refine_key(m%domain(ilevel-1)%b(1:nhilbert,icpu),ilevel-2)
      end do
   end do
 
@@ -164,6 +114,122 @@ subroutine init_amr(r,g,m)
   noct_max=0   ! Maximum number of oct across all cpus
   noct_used=0  ! Number of oct used across all levels
   noct_used_tot=0  ! Total number of oct used (all cpus)
+
+  if(nrestart>0)then
+     ! Read parameters from restart file
+     call title(nrestart,nchar)
+     file_params='output_'//TRIM(nchar)//'/params.out'
+     call input_params(file_params,ncpu_file,levelmin_file,nlevelmax_file)
+     if(myid==1)write(*,'(" Restarting from output number ",I8)')nrestart
+     if(myid==1)write(*,'(" Restart snapshot has ",I8," files")')ncpu_file
+  endif
+
+end subroutine init_amr
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+subroutine init_amr_2(r,g,m)
+  use amr_parameters, ONLY: nhilbert
+  use amr_commons, ONLY: run_t, global_t, mesh_t
+  use hash
+  use hilbert
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'  
+#endif
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+
+  ! Local variables
+  integer::ilevel,icpu,igrid,i
+  integer(kind=8)::max_key
+  character(len=5)::nchar
+  character(len=80)::file_params
+  integer::ncpu_file,levelmin_file,nlevelmax_file
+
+  if(r%verbose.and.g%myid==1)write(*,*)'Entering init_amr'
+
+  ! Initial time step for each level
+  g%dtold=0.0D0
+  g%dtnew=0.0D0
+
+  ! Allocate main oct array
+  allocate(m%grid(1:r%ngridmax+r%ncachemax))
+  do igrid=1,r%ngridmax+r%ncachemax
+     m%grid(igrid)%lev=0
+  end do
+
+  ! Allocate cache-related arrays
+  allocate(m%dirty(1:r%ncachemax))
+  allocate(m%locked(1:r%ncachemax))
+  allocate(m%occupied(1:r%ncachemax))
+  allocate(m%parent_cpu(1:r%ncachemax))
+  m%dirty=.false.
+  m%locked=.false.
+  m%occupied=.false.
+  m%free_cache=1; m%ncache=0
+
+  allocate(m%lev_null(1:r%ncachemax))
+  allocate(m%ckey_null(1:ndim,1:r%ncachemax))
+  allocate(m%occupied_null(1:r%ncachemax))
+  m%occupied_null=.false.
+  m%free_null=1; m%nnull=0
+
+  ! Allocate hash table for AMR data
+  if(r%verbose.and.g%myid==1)write(*,*)'Initialize empty hash'
+  call init_empty_hash(m%grid_dict,2*(r%ngridmax+r%ncachemax),'simple')
+
+  ! Allocate another smaller hash table for multigrid data
+  if(r%poisson)then
+     call init_empty_hash(m%mg_dict,2*(r%ngridmax+r%ncachemax)/7,'simple')
+  endif
+
+  ! Set initial cpu boundaries
+  ! Set maximum Cartesian key per level
+  if(r%verbose.and.g%myid==1)write(*,*)'Initialize level cpu boundaries'
+
+  allocate(m%ckey_max(1:r%nlevelmax+1))
+  allocate(m%hkey_max(1:nhilbert,1:r%nlevelmax+1))
+  m%hkey_max=0
+
+  allocate(m%domain(1:r%nlevelmax+1))
+  do ilevel=1,r%nlevelmax+1
+     call m%domain(ilevel)%create(g%ncpu*r%overload)
+  end do
+
+  ! Make sure that the coarsest level uses only one Hilbert integer
+  if(r%levelmin>(levels_per_key(ndim)+1))then
+     write(*,*)'levelmin is way too large !'
+     write(*,*)'are you crazy ?'
+     stop
+  endif
+
+  ! Set bounds for Hilbert keys for coarse levels
+  do ilevel=1,r%levelmin
+     m%ckey_max(ilevel)=2**(ilevel-1)
+     max_key=2**((ilevel-1)*ndim)
+     m%hkey_max(1,ilevel)=max_key
+     do icpu=1,g%ncpu-1
+        m%domain(ilevel)%b(1,icpu) = (icpu*max_key)/g%ncpu
+     end do
+     m%domain(ilevel)%b(1,0) = 0
+     m%domain(ilevel)%b(1,g%ncpu) = max_key
+  end do
+
+  ! Set bounds for Hilbert keys for fine levels
+  do ilevel=r%levelmin+1,r%nlevelmax+1
+     m%ckey_max(ilevel) = 2**(ilevel-1)
+     m%hkey_max(1:nhilbert,ilevel) = refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel-2)
+     ! Multiply the bounds by twotondim
+     do icpu=0,g%ncpu
+        m%domain(ilevel)%b(1:nhilbert,icpu) = refine_key(m%domain(ilevel-1)%b(1:nhilbert,icpu),ilevel-2)
+     end do
+  end do
+
+  ! Allocate head, tail and numbers for each level
+  if(r%verbose.and.g%myid==1)write(*,*)'Initialize oct decomposition'
   allocate(m%head(r%levelmin:r%nlevelmax))
   allocate(m%tail(r%levelmin:r%nlevelmax))
   allocate(m%head_cache(1:r%nlevelmax))
@@ -181,14 +247,32 @@ subroutine init_amr(r,g,m)
   m%noct_used=0  ! Number of oct used across all levels
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
 
-  if(nrestart>0)then
+  if(r%nrestart>0)then
      ! Read parameters from restart file
-     call title(nrestart,nchar)
+     call title(r%nrestart,nchar)
      file_params='output_'//TRIM(nchar)//'/params.out'
-     call input_params(file_params,ncpu_file,levelmin_file,nlevelmax_file)
-     if(myid==1)write(*,'(" Restarting from output number ",I8)')nrestart
-     if(myid==1)write(*,'(" Restart snapshot has ",I8," files")')ncpu_file
+     call input_params_2(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+     if(g%myid==1)write(*,'(" Restarting from output number ",I8)')r%nrestart
+     if(g%myid==1)write(*,'(" Restart snapshot has ",I8," files")')ncpu_file
   endif
+
+end subroutine init_amr_2
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+subroutine init_cache
+  use amr_commons
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'  
+#endif
+
+  integer::icpu,info
+  integer::intex,realdpex,msg_size
+  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length,new_type_address
+
+  if(verbose.and.myid==1)write(*,*)'Entering init_cache'
 
 #ifndef WITHOUTMPI  
   ! Allocate all communication and cache-related variables
@@ -444,7 +528,7 @@ subroutine init_amr(r,g,m)
 
 #endif
 
-end subroutine init_amr
+end subroutine init_cache
 
 
 
