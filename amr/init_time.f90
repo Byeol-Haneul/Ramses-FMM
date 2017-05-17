@@ -2,13 +2,11 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_time(r,g)
+subroutine init_time
   use amr_commons
   use hydro_commons
   use pm_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
 
   ! Local variables
   integer::i
@@ -18,11 +16,11 @@ subroutine init_time(r,g)
   if(nrestart==0)then
      if(cosmo)then
         ! Get cosmological parameters from input files
-        call init_cosmo(r,g)
+        call init_cosmo
      else
         ! Get parameters from input files
         if(initfile(levelmin).ne.' '.and.filetype.eq.'grafic')then
-           call init_file(r,g)
+           call init_file
         endif
         t=0.0
         aexp=1.0
@@ -58,14 +56,31 @@ subroutine init_time(r,g)
      texp=t                                                                
   end if                                                                   
 
+end subroutine init_time
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine init_time_2(r,g)
+  use amr_parameters, only: n_frw
+  use amr_commons, only: run_t,global_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+
+  ! Local variables
+  integer::i
+
+  if(r%verbose)write(*,*)'Entering init_time'
+
   if(r%nrestart==0)then
      if(r%cosmo)then
         ! Get cosmological parameters from input files
-!        call init_cosmo(r,g)
+        call init_cosmo_2(r,g)
      else
         ! Get parameters from input files
         if(r%initfile(r%levelmin).ne.' '.and.r%filetype.eq.'grafic')then
-!           call init_file(r,g)
+           call init_file_2(r,g)
         endif
         g%t=0.0
         g%aexp=1.0
@@ -101,18 +116,16 @@ subroutine init_time(r,g)
      g%texp=g%t
   end if                                                                   
 
-end subroutine init_time
+end subroutine init_time_2
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_file(r,g)
+subroutine init_file
   use amr_commons
   use hydro_commons
   use pm_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
   !------------------------------------------------------
   ! Read geometrical parameters in the initial condition files.
   ! Initial conditions are supposed to be made by 
@@ -184,6 +197,29 @@ subroutine init_file(r,g)
      end do
   end if
 
+end subroutine init_file
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine init_file_2(r,g)
+  use amr_parameters, only: sp
+  use amr_commons, only: run_t,global_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  !------------------------------------------------------
+  ! Read geometrical parameters in the initial condition files.
+  ! Initial conditions are supposed to be made by 
+  ! Bertschinger's grafic version 2.0 code.
+  !------------------------------------------------------
+  integer:: ilevel
+  real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
+  character(LEN=80)::filename
+  logical::ok
+
+  if(r%verbose)write(*,*)'Entering init_file'
+
   ! Reading initial conditions parameters only
   g%nlevelmax_part=r%levelmin-1
   do ilevel=r%levelmin,r%nlevelmax
@@ -242,19 +278,17 @@ subroutine init_file(r,g)
      end do
   end if
 
-end subroutine init_file
+end subroutine init_file_2
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_cosmo(r,g)
+subroutine init_cosmo
   use amr_commons
   use hydro_commons
   use pm_commons
   use gadgetreadfilemod
   implicit none
-  type(run_t)::r
-  type(global_t)::g
   !------------------------------------------------------
   ! Read cosmological and geometrical parameters
   ! in the initial condition files.
@@ -263,6 +297,7 @@ subroutine init_cosmo(r,g)
   !------------------------------------------------------
   integer:: ilevel,i
   real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
+  real(dp)::d1a,fpeebl
   character(LEN=80)::filename
   character(LEN=5)::nchar
   logical::ok
@@ -345,6 +380,132 @@ subroutine init_cosmo(r,g)
      ! Compute box length in the initial conditions in units of h-1 Mpc
      boxlen_ini=2**levelmin*dxini(levelmin)*(h0/100.)
      
+  CASE ('gadget')
+
+     ! Reading gadget file header only
+     if (verbose) write(*,*)'Reading in gadget format from '//TRIM(initfile(levelmin))
+     call gadgetreadheader(TRIM(initfile(levelmin)), 0, gadgetheader, ok)
+     if(.not.ok) call clean_stop
+     do i=1,6
+        if (i .ne. 2) then
+           if (gadgetheader%nparttotal(i) .ne. 0) then
+              write(*,*) 'Non DM particles present in bin ', i
+              call clean_stop
+           endif
+        endif
+     enddo
+     if (gadgetheader%mass(2) == 0) then
+        write(*,*) 'Particles have different masses, not supported'
+        call clean_stop
+     endif
+     omega_m = gadgetheader%omega0
+     omega_l = gadgetheader%omegalambda
+     if(hydro)omega_b=0.045 ! Be careful hard-coded !
+     h0 = gadgetheader%hubbleparam * 100.d0
+     boxlen_ini = gadgetheader%boxsize
+     aexp = gadgetheader%time
+     aexp_ini = aexp
+     ! Compute SPH equivalent mass (initial gas mass resolution)
+     mass_sph=omega_b/omega_m*0.5d0**(ndim*levelmin)
+     nlevelmax_part = levelmin
+     astart(levelmin) = aexp
+     xoff1(levelmin)=0
+     xoff2(levelmin)=0
+     xoff3(levelmin)=0
+     dxini(levelmin) = boxlen_ini/(2**levelmin*(h0/100.0))
+
+  CASE DEFAULT
+     write(*,*) 'Unsupported input format '//filetype
+     call clean_stop
+  END SELECT
+
+  ! Write cosmological parameters
+  if(myid==1)then
+     write(*,'(" Cosmological parameters:")')
+     write(*,'(" aexp=",1pe10.3," H0=",1pe10.3," km s-1 Mpc-1")')aexp,h0
+     write(*,'(" omega_m=",F7.3," omega_l=",F7.3)')omega_m,omega_l
+     write(*,'(" box size=",1pe10.3," h-1 Mpc")')boxlen_ini
+  end if
+  omega_k=1.d0-omega_l-omega_m
+           
+  ! Compute linear scaling factor between aexp and astart(ilevel)
+  do ilevel=levelmin,nlevelmax_part
+     dfact(ilevel)=d1a(aexp,omega_m,omega_l)/d1a(astart(ilevel),omega_m,omega_l)
+     vfact(ilevel)=astart(ilevel)*fpeebl(astart(ilevel),omega_m,omega_l) & ! Same scale factor as in grafic1
+          & *sqrt(omega_m/astart(ilevel)+omega_l*astart(ilevel)*astart(ilevel)+omega_k) &
+          & /astart(ilevel)*h0
+  end do
+
+  ! Write initial conditions parameters
+  do ilevel=levelmin,nlevelmax_part
+     if(myid==1)then
+        write(*,'(" Initial conditions for level =",I4)')ilevel
+        write(*,'(" dx=",1pe10.3," h-1 Mpc")')dxini(ilevel)*h0/100.
+     endif
+     if(.not.multiple)then
+        if(myid==1)then
+           write(*,'(" n1=",I4," n2=",I4," n3=",I4)') &
+                & n1(ilevel),&
+                & n2(ilevel),&
+                & n3(ilevel)
+           write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",&
+                & 1pe10.3," h-1 Mpc")') &
+                & xoff1(ilevel)*h0/100.,&
+                & xoff2(ilevel)*h0/100.,&
+                & xoff3(ilevel)*h0/100.
+        endif
+     else
+        write(*,'(" myid=",I4," n1=",I4," n2=",I4," n3=",I4)') &
+             & myid,n1(ilevel),n2(ilevel),n3(ilevel)
+        write(*,'(" myid=",I4," xoff=",1pe10.3," yoff=",1pe10.3," zoff=",&
+             & 1pe10.3," h-1 Mpc")') &
+             & myid,xoff1(ilevel)*h0/100.,&
+             & xoff2(ilevel)*h0/100.,&
+             & xoff3(ilevel)*h0/100.
+     endif
+  end do
+
+  ! Scale displacement in Mpc to code velocity (v=dx/dtau)
+  ! in coarse cell units per conformal time
+  vfact(1)=aexp*fpeebl(aexp,omega_m,omega_l)*sqrt(omega_m/aexp+omega_l*aexp*aexp+omega_k)
+  ! This scale factor is different from vfact in grafic by h0/aexp
+
+end subroutine init_cosmo
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine init_cosmo_2(r,g)
+  use amr_parameters, only: sp,dp,ndim
+  use amr_commons, only: run_t,global_t
+  use gadgetreadfilemod
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  !------------------------------------------------------
+  ! Read cosmological and geometrical parameters
+  ! in the initial condition files.
+  ! Initial conditions are supposed to be made by 
+  ! Bertschinger's grafic version 2.0 code.
+  !------------------------------------------------------
+  integer:: ilevel,i
+  real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
+  real(dp)::d1a,fpeebl
+  character(LEN=80)::filename
+  character(LEN=5)::nchar
+  logical::ok
+  TYPE(gadgetheadertype) :: gadgetheader 
+
+  if(r%verbose)write(*,*)'Entering init_cosmo'
+
+  if(r%initfile(r%levelmin)==' ')then
+     write(*,*)'You need to specifiy at least one level of initial condition'
+     call clean_stop
+  end if
+
+  SELECT CASE (r%filetype)
+  case ('grafic', 'ascii')
+
      ! Reading initial conditions parameters only
      g%aexp=2.0
      g%nlevelmax_part=r%levelmin-1
@@ -415,38 +576,6 @@ subroutine init_cosmo(r,g)
   CASE ('gadget')
 
      ! Reading gadget file header only
-     if (verbose) write(*,*)'Reading in gadget format from '//TRIM(initfile(levelmin))
-     call gadgetreadheader(TRIM(initfile(levelmin)), 0, gadgetheader, ok)
-     if(.not.ok) call clean_stop
-     do i=1,6
-        if (i .ne. 2) then
-           if (gadgetheader%nparttotal(i) .ne. 0) then
-              write(*,*) 'Non DM particles present in bin ', i
-              call clean_stop
-           endif
-        endif
-     enddo
-     if (gadgetheader%mass(2) == 0) then
-        write(*,*) 'Particles have different masses, not supported'
-        call clean_stop
-     endif
-     omega_m = gadgetheader%omega0
-     omega_l = gadgetheader%omegalambda
-     if(hydro)omega_b=0.045 ! Be careful hard-coded !
-     h0 = gadgetheader%hubbleparam * 100.d0
-     boxlen_ini = gadgetheader%boxsize
-     aexp = gadgetheader%time
-     aexp_ini = aexp
-     ! Compute SPH equivalent mass (initial gas mass resolution)
-     mass_sph=omega_b/omega_m*0.5d0**(ndim*levelmin)
-     nlevelmax_part = levelmin
-     astart(levelmin) = aexp
-     xoff1(levelmin)=0
-     xoff2(levelmin)=0
-     xoff3(levelmin)=0
-     dxini(levelmin) = boxlen_ini/(2**levelmin*(h0/100.0))
-
-     ! Reading gadget file header only
      if (r%verbose) write(*,*)'Reading in gadget format from '//TRIM(r%initfile(r%levelmin))
      call gadgetreadheader(TRIM(r%initfile(r%levelmin)), 0, gadgetheader, ok)
      if(.not.ok) call clean_stop
@@ -464,7 +593,7 @@ subroutine init_cosmo(r,g)
      endif
      g%omega_m = gadgetheader%omega0
      g%omega_l = gadgetheader%omegalambda
-     if(hydro)g%omega_b=0.045 ! Be careful hard-coded !
+     if(r%hydro)g%omega_b=0.045 ! Be careful hard-coded !
      g%h0 = gadgetheader%hubbleparam * 100.d0
      g%boxlen_ini = gadgetheader%boxsize
      g%aexp = gadgetheader%time
@@ -479,60 +608,9 @@ subroutine init_cosmo(r,g)
      g%dxini(r%levelmin) = g%boxlen_ini/(2**r%levelmin*(g%h0/100.0))
 
   CASE DEFAULT
-     write(*,*) 'Unsupported input format '//filetype
+     write(*,*) 'Unsupported input format '//r%filetype
      call clean_stop
   END SELECT
-
-  ! Write cosmological parameters
-  if(myid==1)then
-     write(*,'(" Cosmological parameters:")')
-     write(*,'(" aexp=",1pe10.3," H0=",1pe10.3," km s-1 Mpc-1")')aexp,h0
-     write(*,'(" omega_m=",F7.3," omega_l=",F7.3)')omega_m,omega_l
-     write(*,'(" box size=",1pe10.3," h-1 Mpc")')boxlen_ini
-  end if
-  omega_k=1.d0-omega_l-omega_m
-           
-  ! Compute linear scaling factor between aexp and astart(ilevel)
-  do ilevel=levelmin,nlevelmax_part
-     dfact(ilevel)=d1a(aexp)/d1a(astart(ilevel))
-     vfact(ilevel)=astart(ilevel)*fpeebl(astart(ilevel)) & ! Same scale factor as in grafic1
-          & *sqrt(omega_m/astart(ilevel)+omega_l*astart(ilevel)*astart(ilevel)+omega_k) &
-          & /astart(ilevel)*h0
-  end do
-
-  ! Write initial conditions parameters
-  do ilevel=levelmin,nlevelmax_part
-     if(myid==1)then
-        write(*,'(" Initial conditions for level =",I4)')ilevel
-        write(*,'(" dx=",1pe10.3," h-1 Mpc")')dxini(ilevel)*h0/100.
-     endif
-     if(.not.multiple)then
-        if(myid==1)then
-           write(*,'(" n1=",I4," n2=",I4," n3=",I4)') &
-                & n1(ilevel),&
-                & n2(ilevel),&
-                & n3(ilevel)
-           write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",&
-                & 1pe10.3," h-1 Mpc")') &
-                & xoff1(ilevel)*h0/100.,&
-                & xoff2(ilevel)*h0/100.,&
-                & xoff3(ilevel)*h0/100.
-        endif
-     else
-        write(*,'(" myid=",I4," n1=",I4," n2=",I4," n3=",I4)') &
-             & myid,n1(ilevel),n2(ilevel),n3(ilevel)
-        write(*,'(" myid=",I4," xoff=",1pe10.3," yoff=",1pe10.3," zoff=",&
-             & 1pe10.3," h-1 Mpc")') &
-             & myid,xoff1(ilevel)*h0/100.,&
-             & xoff2(ilevel)*h0/100.,&
-             & xoff3(ilevel)*h0/100.
-     endif
-  end do
-
-  ! Scale displacement in Mpc to code velocity (v=dx/dtau)
-  ! in coarse cell units per conformal time
-  vfact(1)=aexp*fpeebl(aexp)*sqrt(omega_m/aexp+omega_l*aexp*aexp+omega_k)
-  ! This scale factor is different from vfact in grafic by h0/aexp
 
   ! Write cosmological parameters
   if(g%myid==1)then
@@ -545,8 +623,8 @@ subroutine init_cosmo(r,g)
            
   ! Compute linear scaling factor between aexp and astart(ilevel)
   do ilevel=r%levelmin,g%nlevelmax_part
-     g%dfact(ilevel)=d1a(g%aexp)/d1a(g%astart(ilevel))
-     g%vfact(ilevel)=g%astart(ilevel)*fpeebl(g%astart(ilevel)) & ! Same scale factor as in grafic1
+     g%dfact(ilevel)=d1a(g%aexp,g%omega_m,g%omega_l)/d1a(g%astart(ilevel),g%omega_m,g%omega_l)
+     g%vfact(ilevel)=g%astart(ilevel)*fpeebl(g%astart(ilevel),g%omega_m,g%omega_l) & ! Same scale factor as in grafic1
           & *sqrt(g%omega_m/g%astart(ilevel)+g%omega_l*g%astart(ilevel)*g%astart(ilevel)+g%omega_k) &
           & /g%astart(ilevel)*g%h0
   end do
@@ -580,121 +658,11 @@ subroutine init_cosmo(r,g)
 
   ! Scale displacement in Mpc to code velocity (v=dx/dtau)
   ! in coarse cell units per conformal time
-  g%vfact(1)=g%aexp*fpeebl(g%aexp)*sqrt(g%omega_m/g%aexp+g%omega_l*g%aexp*g%aexp+g%omega_k)
+  g%vfact(1)=g%aexp*fpeebl(g%aexp,g%omega_m,g%omega_l)*sqrt(g%omega_m/g%aexp+g%omega_l*g%aexp*g%aexp+g%omega_k)
   ! This scale factor is different from vfact in grafic by h0/aexp
 
-contains
-
-  !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-  function fy(a)
-    implicit none
-    !      Computes the integrand
-    real(dp)::fy
-    real(dp)::y,a
-    
-    y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
-    fy=1.d0/y**1.5d0
-    
-    return
-  end function fy
-  !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-  function d1a(a)
-    implicit none
-    real(dp)::d1a
-    !     Computes the linear growing mode D1 in a Friedmann-Robertson-Walker
-    !     universe. See Peebles LSSU sections 11 and 14.
-    real(dp)::a,y12,y,eps
-    
-    eps=1.0d-6
-    if(a .le. 0.0d0)then
-       write(*,*)'a=',a
-       call clean_stop
-    end if
-    y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
-    if(y .lt. 0.0D0)then
-       write(*,*)'y=',y
-       call clean_stop
-    end if
-    y12=y**0.5d0
-    d1a=y12/a*rombint(eps,a,eps)
-    
-    return
-  end function d1a
-  !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-  function fpeebl(a)
-    implicit none
-    real(dp) :: fpeebl,a
-    !     Computes the growth factor f=d\log D1/d\log a.
-    real(dp) :: fact,y,eps
-    
-    eps=1.0d-6
-    y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
-    fact=rombint(eps,a,eps)
-    fpeebl=(omega_l*a*a-0.5d0*omega_m/a)/y - 1.d0 + a*fy(a)/fact
-    return
-  end function fpeebl
-  !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-  function rombint(a,b,tol)
-    implicit none
-    real(dp)::rombint
-    !
-    !     Rombint returns the integral from a to b of f(x)dx using Romberg 
-    !     integration. The method converges provided that f(x) is continuous 
-    !     in (a,b). The function f must be double precision and must be 
-    !     declared external in the calling routine.  
-    !     tol indicates the desired relative accuracy in the integral.
-    !
-    integer::maxiter=16,maxj=5
-    real(dp),dimension(100):: g
-    real(dp)::a,b,tol,fourj
-    real(dp)::h,error,gmax,g0,g1
-    integer::nint,i,j,k,jmax
-
-    h=0.5d0*(b-a)
-    gmax=h*(fy(a)+fy(b))
-    g(1)=gmax
-    nint=1
-    error=1.0d20
-    i=0
-10  i=i+1
-    if(.not.  (i>maxiter.or.(i>5.and.abs(error)<tol)))then
-       !	Calculate next trapezoidal rule approximation to integral.
-       
-       g0=0.0d0
-       do k=1,nint
-          g0=g0+fy(a+(k+k-1)*h)
-       end do
-       g0=0.5d0*g(1)+h*g0
-       h=0.5d0*h
-       nint=nint+nint
-       jmax=min(i,maxj)
-       fourj=1.0d0
-       
-       do j=1,jmax
-          ! Use Richardson extrapolation.
-          fourj=4.0d0*fourj
-          g1=g0+(g0-g(j))/(fourj-1.0d0)
-          g(j)=g0
-          g0=g1
-       enddo
-       if (abs(g0).gt.tol) then
-          error=1.0d0-gmax/g0
-       else
-          error=gmax
-       end if
-       gmax=g0
-       g(jmax+1)=g0
-       go to 10
-    end if
-    rombint=g0
-    if (i>maxiter.and.abs(error)>tol) &
-         &    write(*,*) 'Rombint failed to converge; integral, error=', &
-         &    rombint,error
-    return
-  end function rombint
-     
-end subroutine init_cosmo
-
+end subroutine init_cosmo_2
+!cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
      & axp_out,hexp_out,tau_out,t_out,ntable)
   use amr_parameters
@@ -793,7 +761,7 @@ subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
   hexp_out(ntable)=dadtau(axp_tau,O_mat_0,O_vac_0,O_k_0)/axp_tau
 
 end subroutine friedman
-
+!cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 function dadtau(axp_tau,O_mat_0,O_vac_0,O_k_0) 
   use amr_parameters
   real(kind=8)::dadtau,axp_tau,O_mat_0,O_vac_0,O_k_0
@@ -804,7 +772,7 @@ function dadtau(axp_tau,O_mat_0,O_vac_0,O_k_0)
   dadtau = sqrt(dadtau)
   return
 end function dadtau
-
+!cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 function dadt(axp_t,O_mat_0,O_vac_0,O_k_0)
   use amr_parameters
   real(kind=8)::dadt,axp_t,O_mat_0,O_vac_0,O_k_0
@@ -815,7 +783,117 @@ function dadt(axp_t,O_mat_0,O_vac_0,O_k_0)
   dadt = sqrt(dadt)
   return
 end function dadt
-
+!cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+function fy(a,omega_m,omega_l)
+  use amr_parameters, only: dp
+  implicit none
+  !      Computes the integrand
+  real(dp)::fy
+  real(dp)::y,a,omega_m,omega_l
+  
+  y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
+  fy=1.d0/y**1.5d0
+  
+  return
+end function fy
+!cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+function d1a(a,omega_m,omega_l)
+  use amr_parameters, only: dp
+  implicit none
+  real(dp)::d1a
+  !     Computes the linear growing mode D1 in a Friedmann-Robertson-Walker
+  !     universe. See Peebles LSSU sections 11 and 14.
+  real(dp)::a,omega_m,omega_l,y12,y,eps,rombint
+  
+  eps=1.0d-6
+  if(a .le. 0.0d0)then
+     write(*,*)'a=',a
+     call clean_stop
+  end if
+  y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
+  if(y .lt. 0.0D0)then
+     write(*,*)'y=',y
+     call clean_stop
+  end if
+  y12=y**0.5d0
+  d1a=y12/a*rombint(eps,a,eps,omega_m,omega_l)
+  
+  return
+end function d1a
+!cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+function fpeebl(a,omega_m,omega_l)
+  use amr_parameters, only: dp
+  implicit none
+  real(dp) :: fpeebl,a,omega_m,omega_l,rombint,fy
+  !     Computes the growth factor f=d\log D1/d\log a.
+  real(dp) :: fact,y,eps
+  
+  eps=1.0d-6
+  y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
+  fact=rombint(eps,a,eps,omega_m,omega_l)
+  fpeebl=(omega_l*a*a-0.5d0*omega_m/a)/y - 1.d0 + a*fy(a,omega_m,omega_l)/fact
+  return
+end function fpeebl
+!cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+function rombint(a,b,tol,omega_m,omega_l)
+  use amr_parameters, only: dp
+  implicit none
+  real(dp)::rombint
+  !
+  !     Rombint returns the integral from a to b of f(x)dx using Romberg 
+  !     integration. The method converges provided that f(x) is continuous 
+  !     in (a,b). The function f must be double precision and must be 
+  !     declared external in the calling routine.  
+  !     tol indicates the desired relative accuracy in the integral.
+  !
+  integer::maxiter=16,maxj=5
+  real(dp),dimension(100):: g
+  real(dp)::a,b,tol,fourj,omega_m,omega_l
+  real(dp)::h,error,gmax,g0,g1,fy
+  integer::nint,i,j,k,jmax
+  
+  h=0.5d0*(b-a)
+  gmax=h*(fy(a,omega_m,omega_l)+fy(b,omega_m,omega_l))
+  g(1)=gmax
+  nint=1
+  error=1.0d20
+  i=0
+10 i=i+1
+  if(.not.  (i>maxiter.or.(i>5.and.abs(error)<tol)))then
+     !	Calculate next trapezoidal rule approximation to integral.
+     
+     g0=0.0d0
+     do k=1,nint
+        g0=g0+fy(a+(k+k-1)*h,omega_m,omega_l)
+     end do
+     g0=0.5d0*g(1)+h*g0
+     h=0.5d0*h
+     nint=nint+nint
+     jmax=min(i,maxj)
+     fourj=1.0d0
+     
+     do j=1,jmax
+        ! Use Richardson extrapolation.
+        fourj=4.0d0*fourj
+        g1=g0+(g0-g(j))/(fourj-1.0d0)
+        g(j)=g0
+        g0=g1
+     enddo
+     if (abs(g0).gt.tol) then
+        error=1.0d0-gmax/g0
+     else
+        error=gmax
+     end if
+     gmax=g0
+     g(jmax+1)=g0
+     go to 10
+  end if
+  rombint=g0
+  if (i>maxiter.and.abs(error)>tol) &
+       &    write(*,*) 'Rombint failed to converge; integral, error=', &
+       &    rombint,error
+  return
+end function rombint
 
 
 

@@ -93,6 +93,99 @@ end subroutine hydro_refine
 !###########################################################
 !###########################################################
 !###########################################################
+subroutine hydro_refine_2(r,ug,um,ud,ok)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t
+  use hydro_parameters, only: nvar,nener
+  use const
+  implicit none
+  ! dummy arguments
+  type(run_t)::r
+  real(dp)::ug(1:nvar)
+  real(dp)::um(1:nvar)
+  real(dp)::ud(1:nvar)
+  logical ::ok
+  
+  integer::k,idim,irad
+  real(dp)::eking,ekinm,ekind
+  real(dp)::dg,dm,dd,pg,pm,pd,vg,vm,vd,cg,cm,cd,error
+  
+  ! Convert to primitive variables
+  ug(1) = max(ug(1),r%smallr)
+  um(1) = max(um(1),r%smallr)
+  ud(1) = max(ud(1),r%smallr)
+
+  ! Velocity
+  do idim = 1,ndim
+     ug(idim+1) = ug(idim+1)/ug(1)
+     um(idim+1) = um(idim+1)/um(1)
+     ud(idim+1) = ud(idim+1)/ud(1)
+  end do
+
+  ! Pressure
+  eking = zero
+  ekinm = zero
+  ekind = zero
+  do idim = 1,ndim
+     eking = eking + half*ug(1)*ug(idim+1)**2
+     ekinm = ekinm + half*um(1)*um(idim+1)**2
+     ekind = ekind + half*ud(1)*ud(idim+1)**2
+  end do
+#if NENER>0
+  do irad = 1,nener
+     eking = eking + ug(ndim+2+irad)
+     ekinm = ekinm + um(ndim+2+irad)
+     ekind = ekind + ud(ndim+2+irad)
+  end do
+#endif
+  ug(ndim+2) = (r%gamma-one)*(ug(ndim+2)-eking)
+  um(ndim+2) = (r%gamma-one)*(um(ndim+2)-ekinm)
+  ud(ndim+2) = (r%gamma-one)*(ud(ndim+2)-ekind)
+
+  ! Passive scalars
+#if NVAR > NDIM + 2
+  do idim = ndim+3,nvar
+     ug(idim) = ug(idim)/ug(1)
+     um(idim) = um(idim)/um(1)
+     ud(idim) = ud(idim)/ud(1)
+  end do
+#endif
+
+  ! Compute errors
+  if(r%err_grad_d >= 0.)then
+     dg=ug(1); dm=um(1); dd=ud(1)
+     error=2.0d0*MAX( &
+          & ABS((dd-dm)/(dd+dm+r%floor_d)) , &
+          & ABS((dm-dg)/(dm+dg+r%floor_d)) )
+     ok = ok .or. error > r%err_grad_d
+  end if
+
+  if(r%err_grad_p >= 0.)then
+     pg=ug(ndim+2); pm=um(ndim+2); pd=ud(ndim+2)
+     error=2.0d0*MAX( &
+          & ABS((pd-pm)/(pd+pm+r%floor_p)), &
+          & ABS((pm-pg)/(pm+pg+r%floor_p)) )
+     ok = ok .or. error > r%err_grad_p
+  end if
+
+  if(r%err_grad_u >= 0.)then
+     do idim = 1,ndim
+        vg=ug(idim+1); vm=um(idim+1); vd=ud(idim+1)
+        cg=sqrt(max(r%gamma*ug(ndim+2)/ug(1),r%floor_u**2))
+        cm=sqrt(max(r%gamma*um(ndim+2)/um(1),r%floor_u**2))
+        cd=sqrt(max(r%gamma*ud(ndim+2)/ud(1),r%floor_u**2))
+        error=2.0d0*MAX( &
+             & ABS((vd-vm)/(cd+cm+ABS(vd)+ABS(vm)+r%floor_u)) , &
+             & ABS((vm-vg)/(cm+cg+ABS(vm)+ABS(vg)+r%floor_u)) )
+        ok = ok .or. error > r%err_grad_u
+     end do
+  end if
+
+end subroutine hydro_refine_2
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine cmpdt(uu,gg,dx,dt)
   use amr_parameters
   use hydro_parameters

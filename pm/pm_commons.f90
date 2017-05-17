@@ -7,6 +7,8 @@ module pm_commons
   integer :: npart_tot=0 ! Total number of particles in all processors
   integer :: npart_max=0 ! Maximum number of particles in all processors
 
+  real(dp) :: mp_min=-1.0 ! Minimum particle mass
+
   ! Particle dependent arrays
   real(dp),allocatable,dimension(:,:)   ::xp       ! Positions
   real(dp),allocatable,dimension(:,:)   ::vp       ! Velocities
@@ -25,7 +27,6 @@ module pm_commons
 
   type part_t
 
-     integer :: npartmax=0  ! Maximum number of allocatable particles
      integer :: npart=0     ! Actual number of particles in processor
      integer :: npart_tot=0 ! Total number of particles in all processors
      integer :: npart_max=0 ! Maximum number of particles in all processors

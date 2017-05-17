@@ -336,6 +336,167 @@ subroutine update_time(ilevel)
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
  
 end subroutine update_time
+!=======================================================================
+subroutine update_time_2(r,g,m,p,ilevel)
+  use amr_parameters, only: dp,n_frw
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif  
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  integer::ilevel
+
+  ! Local variables
+  real(dp)::dt,econs,mcons
+  real(kind=8)::ttend
+  real(kind=8),save::ttstart=0
+  integer::i,itest,info
+
+  ! Local constants
+  dt=g%dtnew(ilevel)
+  itest=0
+
+#ifndef WITHOUTMPI
+  if(g%myid==1)then
+     if(ttstart.eq.0.0)ttstart=MPI_WTIME(info)
+  endif
+#endif
+
+  !-------------------------------------------------------------
+  ! At this point, IF nstep_coarse has JUST changed, all levels
+  ! are synchronised, and all new refinements have been done.
+  !-------------------------------------------------------------
+  if(g%nstep_coarse .ne. g%nstep_coarse_old)then
+
+     !--------------------------
+     ! Check mass conservation
+     !--------------------------
+     if(g%mass_tot_0==0.0D0)then
+        g%mass_tot_0=g%mass_tot
+        mcons=0.0D0
+     else
+        mcons=(g%mass_tot-g%mass_tot_0)/g%mass_tot_0
+     end if
+
+     !----------------------------
+     ! Check energy conservation
+     !----------------------------
+     if(g%epot_tot_old.ne.0)then
+        g%epot_tot_int=g%epot_tot_int + &
+             & 0.5D0*(g%epot_tot_old+g%epot_tot)*log(g%aexp/g%aexp_old)
+     end if
+     g%epot_tot_old=g%epot_tot
+     g%aexp_old=g%aexp
+     if(g%const==0.0D0)then
+        g%const=g%epot_tot+g%ekin_tot  ! initial total energy
+        econs=0.0D0
+     else
+        econs=(g%ekin_tot+g%epot_tot-g%epot_tot_int-g%const) / &
+             &(-(g%epot_tot-g%epot_tot_int-g%const)+g%ekin_tot)
+     end if
+
+     if(mod(g%nstep_coarse,r%ncontrol)==0.or.g%output_done)then
+        if(g%myid==1)then
+           
+           !-------------------------------
+           ! Output AMR structure to screen
+           !-------------------------------
+           write(*,*)'Mesh structure'
+           do i=r%levelmin,r%nlevelmax
+              if(m%noct_tot(i)>0)write(*,999)i,m%noct_tot(i),m%noct_min(i),m%noct_max(i),m%noct_tot(i)/g%ncpu
+           end do
+           !----------------------------------------------
+           ! Output mass and energy conservation to screen
+           !----------------------------------------------
+           if(r%cooling.or.r%pressure_fix)then
+              write(*,778)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot,g%eint_tot
+           else
+              write(*,777)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot
+           end if
+           if(r%pic)then
+              write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax)),&
+                   & real(100.0D0*dble(p%npart_max)/dble(r%npartmax+1))
+           else
+              write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax))
+           endif
+           itest=1
+        end if
+        g%output_done=.false.
+     end if
+
+     !---------------
+     ! Exit program
+     !---------------
+     if(g%t>=r%tout(r%noutput).or.g%aexp>=r%aout(r%noutput).or. &
+          & g%nstep_coarse>=r%nstepmax)then
+        if(g%myid==1)then
+           write(*,*)'Run completed'
+           do i=r%levelmin,r%nlevelmax
+              call write_screen_2(r,g,m,i)
+           end do           
+#ifndef WITHOUTMPI
+           ttend=MPI_WTIME(info)
+           write(*,*)'Total elapsed time:',ttend-ttstart
+#endif
+        endif
+        call clean_stop
+     end if
+
+  end if
+  g%nstep_coarse_old=g%nstep_coarse
+
+  !----------------------------
+  ! Output controls to screen
+  !----------------------------
+  if(mod(g%nstep,r%ncontrol)==0)then
+     if(g%myid==1.and.itest==0)then
+        if(r%pic)then
+           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax)),&
+                & real(100.0D0*dble(p%npart_max)/dble(r%npartmax+1))
+        else
+           write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax))
+        endif
+     end if
+  end if
+
+  !------------------------
+  ! Update time variables
+  !------------------------
+  g%t=g%t+dt
+  g%nstep=g%nstep+1
+  if(r%cosmo)then
+     ! Find neighboring times
+     i=1
+     do while(g%tau_frw(i)>g%t.and.i<n_frw)
+        i=i+1
+     end do
+     ! Interpolate expansion factor
+     g%aexp = g%aexp_frw(i  )*(g%t-g%tau_frw(i-1))/(g%tau_frw(i  )-g%tau_frw(i-1))+ &
+            & g%aexp_frw(i-1)*(g%t-g%tau_frw(i  ))/(g%tau_frw(i-1)-g%tau_frw(i  ))
+     g%hexp = g%hexp_frw(i  )*(g%t-g%tau_frw(i-1))/(g%tau_frw(i  )-g%tau_frw(i-1))+ &
+            & g%hexp_frw(i-1)*(g%t-g%tau_frw(i  ))/(g%tau_frw(i-1)-g%tau_frw(i  ))
+     g%texp =    g%t_frw(i  )*(g%t-g%tau_frw(i-1))/(g%tau_frw(i  )-g%tau_frw(i-1))+ &
+            &    g%t_frw(i-1)*(g%t-g%tau_frw(i  ))/(g%tau_frw(i-1)-g%tau_frw(i  ))
+  else
+     g%aexp = 1.0
+     g%hexp = 0.0
+     g%texp = g%t
+  end if
+
+777 format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2, &
+         & ' epot=',1pe9.2,' ekin=',1pe9.2)
+778 format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2, &
+         & ' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2)
+888 format(' Fine step=',i6,' t=',1pe12.5,' dt=',1pe10.3, &
+         & ' a=',1pe10.3,' mem=',0pF4.1,'% ',0pF4.1,'%')
+999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
+ 
+end subroutine update_time_2
   
 subroutine clean_stop
   use amr_commons
