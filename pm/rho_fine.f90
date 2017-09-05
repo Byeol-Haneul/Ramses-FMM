@@ -1284,7 +1284,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
   end do
   ! End loop over particles
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache_2(r,g,m,m%grid_dict)
   
   p%tailp(ilevel)=p%headp(ilevel)+npart_coarse-1
   p%headp(ilevel+1)=p%tailp(ilevel)+1

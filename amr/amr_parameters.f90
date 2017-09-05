@@ -64,6 +64,8 @@ module amr_parameters
   real(kind=8),parameter ::Gyr     = 3.1536000d+16
   real(kind=8),parameter ::rhoc    = 1.8800000d-29
   real(kind=8),parameter ::mH      = 1.6600000d-24
+  real(kind=8),parameter ::X_H     = 0.76 ! Hydrogen mass fraction
+  real(kind=8),parameter ::Y_He    = 0.24 ! Helium mass fraction
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -136,8 +138,6 @@ module amr_parameters
   ! Physics parameters
   real(dp)::T2_start          ! Starting gas temperature
   logical ::pressure_fix=.false.
-  real(kind=8)::X_H = 0.76      ! Hydrogen mass fraction
-  real(kind=8)::Y_He = 0.24      ! Helium mass fraction
 
   ! Movie
   integer::imovout=0             ! Increment for output times

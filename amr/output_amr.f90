@@ -147,7 +147,7 @@ subroutine dump_all_2(r,g,m,p)
      if(g%myid==1)then
         if(r%pic)then
            filename=TRIM(filedir)//'part_header.txt'
-           call output_header_2(r,g,filename)
+           call output_header_2(r,g,m,p,filename)
         endif
         if(r%hydro)then
            filename=TRIM(filedir)//'hydro_file_descriptor.txt'
@@ -643,7 +643,7 @@ subroutine output_info_2(r,g,filename)
   ilun=11
 
   ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Open file
   fileloc=TRIM(filename)

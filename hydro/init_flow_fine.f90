@@ -638,7 +638,7 @@ subroutine init_grafic_2(r,g,m,ilevel)
   integer::dummy_io,info2
 
   ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Mesh size at level ilevel in normalised units
   dx=0.5D0**ilevel

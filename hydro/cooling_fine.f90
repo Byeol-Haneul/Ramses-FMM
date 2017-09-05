@@ -86,7 +86,7 @@ subroutine cooling_fine_2(r,g,m,ilevel)
   if(r%verbose)write(*,111)ilevel
 
   ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
