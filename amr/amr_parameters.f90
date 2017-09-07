@@ -79,7 +79,6 @@ module amr_parameters
   logical::pic     =.false.   ! Particle In Cell activated
   logical::poisson =.false.   ! Poisson solver activated
   logical::cosmo   =.false.   ! Cosmology activated
-  logical::cooling =.false.   ! Cooling and heating activated
   logical::debug   =.false.   ! Debug mode activated
   logical::static  =.false.   ! Static mode activated
   logical::tracer  =.false.   ! Tracer particles activated

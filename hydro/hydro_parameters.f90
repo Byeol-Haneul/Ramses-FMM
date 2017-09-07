@@ -59,7 +59,8 @@ module hydro_parameters
   real(dp)::g_star=1.0
   real(dp)::n_star=1d100
   logical::isothermal
-
+  logical::cooling
+  
   ! Interpolation parameters
   integer ::interpol_var=0
   integer ::interpol_type=1

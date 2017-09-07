@@ -65,6 +65,6 @@ subroutine units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_T2 = mH/kB * scale_v**2
 
   ! scale_nH converts rho in user units into nH in H/cc
-  scale_nH = X_H/mH * scale_d
+  scale_nH = 1./mH * scale_d
 
 end subroutine units_2
