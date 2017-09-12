@@ -2,6 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine godunov_fine(ilevel)
   use amr_commons
   use hydro_commons
@@ -46,10 +47,12 @@ subroutine godunov_fine(ilevel)
 111 format('   Entering godunov_fine for level ',i2)
 
 end subroutine godunov_fine
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine set_unew(ilevel)
   use amr_commons
   use hydro_commons
@@ -94,10 +97,12 @@ subroutine set_unew(ilevel)
 111 format('   Entering set_unew for level ',i2)
 
 end subroutine set_unew
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine set_uold(ilevel)
   use amr_commons
   use hydro_commons
@@ -154,10 +159,12 @@ subroutine set_uold(ilevel)
 111 format('   Entering set_uold for level ',i2)
 
 end subroutine set_uold
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine godfine1(ind_grid,ilevel,h)
   use amr_commons
   use hydro_commons
@@ -704,6 +711,7 @@ subroutine godfine1(ind_grid,ilevel,h)
 #endif
 
 end subroutine godfine1
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -1039,7 +1047,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
                  parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.true.,.true.)
                  if(parent_cell==0)then
                     write(*,*)'GODUNOV: parent_cell should exist'
-                    write(*,*)'PE ',myid,hash_nbor
+                    write(*,*)'PE ',g%myid,hash_nbor
                     stop
                  endif
                  igrid=(parent_cell-1)/twotondim+1
@@ -1058,7 +1066,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
                     end do
 
                     ! Interpolate
-                    call interpol_hydro(u1,u2)
+                    call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
 
                  endif
 
@@ -1067,7 +1075,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
               ! Store grid index
               h%childloc(i1,j1,k1)=ichild
               h%parentloc(i1,j1,k1)=parent_cell
-              if(interpol_type>0)then
+              if(r%interpol_type>0)then
                  do inbor=1,twondim
                     h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
                  end do
@@ -1114,7 +1122,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
                           end do
 
                           ! Gather interpolated hydro variables
-                          if(interpol_type>0)then
+                          if(r%interpol_type>0)then
                              do ivar=1,nvar
                                 h%uloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
                              end do
@@ -1147,7 +1155,8 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
        & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
        & dx,dx,dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
-       & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
+       & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2,&
+       & r%gamma,r%gamma_rad,r%smallr,r%smallc,r%slope_type,r%riemann,r%difmag)
   
   !------------------------------------------------
   ! Reset flux along direction at refined interface    
@@ -1245,7 +1254,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
   end do
 
   ! If sitting in coarsest level, exit. 
-  if(ilevel>levelmin)then
+  if(ilevel>r%levelmin)then
 
   !--------------------------------------
   ! Conservative update at level ilevel-1
@@ -1407,7 +1416,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
               icell=parent_cell-(igrid-1)*twotondim
               call unlock_cache_2(r,g,m,igrid)
               ! Get neighbouring parent oct index
-              if(interpol_type>0)then
+              if(r%interpol_type>0)then
                  do inbor=1,twondim
                     igrid=h%nborloc(i1,j1,k1,inbor)
                     if(igrid>0)then

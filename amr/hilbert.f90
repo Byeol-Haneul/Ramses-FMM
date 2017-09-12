@@ -413,7 +413,7 @@ contains
   !================================================================
   !================================================================
   !================================================================
-
+#ifdef TOTO
   recursive subroutine sort_hilbert(head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
     use amr_parameters, only: boxlen, dp, ndim, twotondim, myid
     use pm_commons,     only: workp, sortp, xp
@@ -548,7 +548,7 @@ contains
     endif
 
   end subroutine sort_hilbert
-  
+#endif  
   !================================================================
   !================================================================
   !================================================================

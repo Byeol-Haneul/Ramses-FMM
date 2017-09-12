@@ -2,6 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine init_part_file
   use amr_commons
   use pm_commons
@@ -337,6 +338,7 @@ subroutine init_part_file
 #endif
 
 end subroutine init_part_file
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -619,7 +621,7 @@ subroutine init_part_file_2(r,g,p)
                     if(jpart_loc>r%npartmax)then
                        write(*,*)'Maximum number of particles incorrect'
                        write(*,*)'npartmax should be greater than',start_ind(2)
-                       call clean_stop
+                       call clean_stop(g)
                     endif
                     p%xp(jpart_loc,1)=xx1+r%boxlen/2.0
                     p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
@@ -641,11 +643,11 @@ subroutine init_part_file_2(r,g,p)
         
      case ('gadget')
         write(*,*) 'Gadget format not supported '
-        call clean_stop
+        call clean_stop(g)
         
      case DEFAULT
         write(*,*) 'Unsupported format file ' // r%filetype
-        call clean_stop
+        call clean_stop(g)
         
      end select
   end if
@@ -682,6 +684,7 @@ end subroutine init_part_file_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine init_part_grid
   use amr_commons
   use pm_commons
@@ -1034,6 +1037,7 @@ subroutine init_part_grid
 #endif
 
 end subroutine init_part_grid
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -1120,7 +1124,7 @@ subroutine init_part_grid_2(r,g,m,p)
               if(ipart>r%npartmax)then
                  write(*,*)'Maximum number of particles incorrect'
                  write(*,*)'npartmax should be greater than',ipart
-                 call clean_stop
+                 call clean_stop(g)
               endif
               if(ndim>0)p%xp(ipart,1)=xx1
               if(ndim>1)p%xp(ipart,2)=xx2
@@ -1144,7 +1148,7 @@ subroutine init_part_grid_2(r,g,m,p)
            write(*,*)i2_min,i2_max
            write(*,*)i3_min,i3_max
            write(*,*)g%n1(ilevel),g%n2(ilevel),g%n3(ilevel)
-           call clean_stop
+           call clean_stop(g)
         end if
      endif
      

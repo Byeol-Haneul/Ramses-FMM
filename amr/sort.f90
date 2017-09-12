@@ -408,7 +408,7 @@ contains
 
     if (final_level > key_level) then
        write(*,*)'you are trying to sort the hilbert keys to a too high level'
-       call clean_stop
+       stop
     end if
 
     call msd_counting_sort_3digits(offset, np, initial_level + 1, key_level)
@@ -495,7 +495,7 @@ contains
 
     if (final_level > key_level) then
        write(*,*)'you are trying to sort the hilbert keys to a too high level'
-       call clean_stop
+       stop
     end if
  
 

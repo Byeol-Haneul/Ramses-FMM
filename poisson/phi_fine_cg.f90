@@ -3,6 +3,7 @@
 !###########################################################
 !###########################################################
 #ifdef GRAV
+#ifdef TOTO
 subroutine phi_fine_cg(ilevel,icount)
   use amr_commons
   use pm_commons
@@ -175,10 +176,12 @@ subroutine phi_fine_cg(ilevel,icount)
 115 format('   ==> Level=',i5,' Step=',i5,' Error=',2(1pe10.3,1x))
 
 end subroutine phi_fine_cg
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine cmp_residual_cg(ilevel,icount)
   use amr_commons
   use poisson_commons
@@ -318,10 +321,12 @@ subroutine cmp_residual_cg(ilevel,icount)
   call close_cache(grid_dict)
 
 end subroutine cmp_residual_cg
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine cmp_Ap_cg(ilevel)
   use amr_commons
   use pm_commons
@@ -417,6 +422,7 @@ subroutine cmp_Ap_cg(ilevel)
   call close_cache(grid_dict)
 
 end subroutine cmp_Ap_cg
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -655,7 +661,7 @@ subroutine cmp_residual_cg_2(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop
+     call clean_stop(g)
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -843,6 +849,7 @@ end subroutine cmp_Ap_cg_2
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine cmp_Ap_cg_fast(ilevel)
   use amr_commons
   use pm_commons
@@ -982,10 +989,12 @@ subroutine cmp_Ap_cg_fast(ilevel)
   ! End loop over grids
 
 end subroutine cmp_Ap_cg_fast
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine make_initial_phi(ilevel,icount)
   use amr_commons
   use pm_commons
@@ -1075,6 +1084,7 @@ subroutine make_initial_phi(ilevel,icount)
   call close_cache(grid_dict)
 
 end subroutine make_initial_phi
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -1118,7 +1128,7 @@ subroutine make_initial_phi_2(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop
+     call clean_stop(g)
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -1175,7 +1185,7 @@ end subroutine make_initial_phi_2
 !###########################################################
 !###########################################################
 !###########################################################
-
+#ifdef TOTO
 ! ---------------------------------------------------------------------
 ! ---------------------------------------------------------------------
   
@@ -1389,7 +1399,7 @@ subroutine build_cg(ilevel)
 #endif
 
 end subroutine build_cg
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1397,7 +1407,7 @@ end subroutine build_cg
 
 ! ------------------------------------------------------------------------
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine clean_cg
   use amr_commons
   use poisson_commons
@@ -1418,5 +1428,6 @@ subroutine clean_cg
 #endif
 
 end subroutine clean_cg
+#endif
 #endif
 

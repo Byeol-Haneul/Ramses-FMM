@@ -1,15 +1,15 @@
-subroutine read_params(run_p,global_v)
-  use amr_commons
-  use pm_commons
-  use poisson_parameters
+subroutine read_params(r,g)
+  use amr_parameters
   use hydro_parameters
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
 
-  type(run_t)::run_p
-  type(global_t)::global_v
+  type(run_t)::r
+  type(global_t)::g
 
   !--------------------------------------------------
   ! Local variables
@@ -21,8 +21,235 @@ subroutine read_params(run_p,global_v)
   integer(kind=8)::nparttot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
-  logical::nml_ok
   real(kind=4)::real_mem,real_mem_tot
+  logical::nml_ok
+
+  !--------------------------------------------------
+  ! Namelist variables
+  !--------------------------------------------------
+  ! Maximum number of allocatable particles
+  integer::npartmax=0 
+
+  ! Number of superoct levels
+  integer::nsuperoct=0
+  
+  ! MPI domain overloading
+  integer::overload=1
+
+  ! MPI variables
+  integer::myid, ncpu
+
+  ! Run control
+  logical::verbose =.false.   ! Write everything
+  logical::hydro   =.false.   ! Hydro activated
+  logical::pic     =.false.   ! Particle In Cell activated
+  logical::poisson =.false.   ! Poisson solver activated
+  logical::cosmo   =.false.   ! Cosmology activated
+  logical::debug   =.false.   ! Debug mode activated
+  logical::static  =.false.   ! Static mode activated
+  logical::tracer  =.false.   ! Tracer particles activated
+
+  ! Mesh parameters
+  integer::geom=1             ! 1: cartesian, 2: cylindrical, 3: spherical
+  integer::levelmin=1         ! Full refinement up to levelmin
+  integer::nlevelmax=1        ! Maximum number of level
+  integer::ngridmax=0         ! Maximum number of grids
+  integer::ncachemax=10000    ! Maximum number of cache lines
+  real(dp)::boxlen=1.0D0      ! Box length along x direction
+
+  ! Step parameters
+  integer::nrestart=0         ! New run or backup file number
+  integer::nstepmax=1000000   ! Maximum number of time steps
+  integer::ncontrol=1         ! Write control variables
+  integer::nremap=0           ! Load balancing frequency (0: never)
+
+  ! Output parameters
+  integer::iout=1             ! Increment for output times
+  integer::ifout=1            ! Increment for output files
+  integer::noutput=1          ! Total number of outputs
+  integer::foutput=1000000    ! Frequency of outputs
+  integer::output_mode=0      ! Output mode (for hires runs)
+  logical::gadget_output=.false. ! Output in gadget format
+
+  ! Output times
+  real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
+  real(dp),dimension(1:MAXOUT)::tout=0.0       ! Output times
+
+  ! Only one process can write at a time in an I/O group
+  integer::IOGROUPSIZE=0           ! Main snapshot
+  integer::IOGROUPSIZECONE=0       ! Lightcone
+  integer::IOGROUPSIZEREP=0        ! Subfolder size
+  logical::withoutmkdir=.false.    ! If true mkdir should be done before the run
+  logical::print_when_io=.false.   ! If true print when IO
+  logical::synchro_when_io=.false. ! If true synchronize when IO
+
+  ! Lightcone parameters
+  real(dp)::thetay_cone=12.5
+  real(dp)::thetaz_cone=12.5
+  real(dp)::zmax_cone=2.0
+
+  ! Cosmology parameters
+  real(dp)::boxlen_ini     ! Box size in h-1 Mpc
+  real(dp)::omega_b=0.0D0  ! Omega Baryon
+  real(dp)::omega_m=1.0D0  ! Omega Matter
+  real(dp)::omega_l=0.0D0  ! Omega Lambda
+  real(dp)::omega_k=0.0D0  ! Omega Curvature
+  real(dp)::h0=1.0D0       ! Hubble constant in km/s/Mpc
+  real(dp)::aexp=1.0D0     ! Current expansion factor
+  real(dp)::hexp=0.0D0     ! Current Hubble parameter
+  real(dp)::texp=0.0D0     ! Current proper time
+  logical ::use_proper_time=.false.
+
+  ! Physics parameters
+  real(dp)::T2_start          ! Starting gas temperature
+  logical ::pressure_fix=.false.
+
+  ! Movie
+  integer::imovout=0             ! Increment for output times
+  integer::imov=1                ! Initialize
+  real(kind=8)::tendmov=0.,aendmov=0.
+  real(kind=8),dimension(1:10000)::amovout
+  real(kind=8),dimension(1:10000)::tmovout
+  logical::movie=.false.
+  logical::zoom_only=.false.
+  integer::nw_frame=512 ! prev: nx_frame, width of frame in pixels
+  integer::nh_frame=512 ! prev: ny_frame, height of frame in pixels
+  integer::levelmax_frame=0
+  integer::ivar_frame=1
+  real(kind=8),dimension(1:20)::xcentre_frame=0d0
+  real(kind=8),dimension(1:20)::ycentre_frame=0d0
+  real(kind=8),dimension(1:20)::zcentre_frame=0d0
+  real(kind=8),dimension(1:10)::deltax_frame=0d0
+  real(kind=8),dimension(1:10)::deltay_frame=0d0
+  real(kind=8),dimension(1:10)::deltaz_frame=0d0
+  character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
+  integer,dimension(0:NVAR+2)::movie_vars=0
+  character(len=5),dimension(0:NVAR+2)::movie_vars_txt=''
+
+  ! Refinement parameters for each level
+  integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion
+  integer ,dimension(1:MAXLEVEL)::nsubcycle=2 ! Subcycling at each level
+  real(dp),dimension(1:MAXLEVEL)::m_refine =-1.0 ! Lagrangian threshold
+  real(dp),dimension(1:MAXLEVEL)::r_refine =-1.0 ! Radius of refinement region
+  real(dp),dimension(1:MAXLEVEL)::x_refine = 0.0 ! Center of refinement region
+  real(dp),dimension(1:MAXLEVEL)::y_refine = 0.0 ! Center of refinement region
+  real(dp),dimension(1:MAXLEVEL)::z_refine = 0.0 ! Center of refinement region
+  real(dp),dimension(1:MAXLEVEL)::exp_refine = 2.0 ! Exponent for distance
+  real(dp),dimension(1:MAXLEVEL)::a_refine = 1.0 ! Ellipticity (Y/X)
+  real(dp),dimension(1:MAXLEVEL)::b_refine = 1.0 ! Ellipticity (Z/X)
+  real(dp)::var_cut_refine=-1.0 ! Threshold for variable-based refinement
+  real(dp)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
+  integer::ivar_refine=-1 ! Variable index for refinement
+
+  ! Default units
+  real(dp)::units_density=1.0 ! [g/cm^3]
+  real(dp)::units_time=1.0    ! [seconds]
+  real(dp)::units_length=1.0  ! [cm]
+
+  ! Friedman model variables
+  real(dp),dimension(0:n_frw)::aexp_frw,hexp_frw,tau_frw,t_frw
+
+  ! Initial conditions parameters from grafic
+  integer::nlevelmax_part
+  real(dp)::aexp_ini=10.
+  real(dp),dimension(1:MAXLEVEL)::dfact=1.0d0,astart
+  real(dp),dimension(1:MAXLEVEL)::vfact
+  real(dp),dimension(1:MAXLEVEL)::xoff1,xoff2,xoff3,dxini
+  integer ,dimension(1:MAXLEVEL)::n1,n2,n3
+
+  ! Initial condition regions parameters
+  integer::nregion=0
+  character(LEN=10),dimension(1:MAXREGION)::region_type='square'
+  real(dp),dimension(1:MAXREGION)::x_center=0.
+  real(dp),dimension(1:MAXREGION)::y_center=0.
+  real(dp),dimension(1:MAXREGION)::z_center=0.
+  real(dp),dimension(1:MAXREGION)::length_x=1.E10
+  real(dp),dimension(1:MAXREGION)::length_y=1.E10
+  real(dp),dimension(1:MAXREGION)::length_z=1.E10
+  real(dp),dimension(1:MAXREGION)::exp_region=2.0
+
+  ! Initial condition files for each level
+  logical::multiple=.false.
+  character(LEN=20)::filetype='ascii'
+  character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
+
+  ! Refinement parameters for hydro
+  real(dp)::err_grad_d=-1.0  ! Density gradient
+  real(dp)::err_grad_u=-1.0  ! Velocity gradient
+  real(dp)::err_grad_p=-1.0  ! Pressure gradient
+  real(dp)::floor_d=1.d-10   ! Density floor
+  real(dp)::floor_u=1.d-10   ! Velocity floor
+  real(dp)::floor_p=1.d-10   ! Pressure floor
+  real(dp)::mass_sph=0.0D0   ! mass_sph
+#if NENER>0
+  real(dp),dimension(1:NENER)::err_grad_prad=-1.0
+#endif
+#if NVAR>NDIM+2+NENER
+  real(dp),dimension(1:NVAR-NDIM-2)::err_grad_var=-1.0
+#endif
+  real(dp),dimension(1:MAXLEVEL)::jeans_refine=-1.0
+
+  ! Initial conditions hydro variables
+  real(dp),dimension(1:MAXREGION)::d_region=0.
+  real(dp),dimension(1:MAXREGION)::u_region=0.
+  real(dp),dimension(1:MAXREGION)::v_region=0.
+  real(dp),dimension(1:MAXREGION)::w_region=0.
+  real(dp),dimension(1:MAXREGION)::p_region=0.
+#if NENER>0
+  real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
+#endif
+#if NVAR>NDIM+2+NENER
+  real(dp),dimension(1:MAXREGION,1:NVAR-NDIM-2-NENER)::var_region=0.0
+#endif
+
+  ! Hydro solver parameters
+  integer ::niter_riemann=10
+  integer ::slope_type=1
+  real(dp)::gamma=1.4d0
+  real(dp),dimension(1:512)::gamma_rad=1.33333333334d0
+  real(dp)::courant_factor=0.5d0
+  real(dp)::difmag=0.0d0
+  real(dp)::smallc=1.d-10
+  real(dp)::smallr=1.d-10
+  character(LEN=10)::scheme='muscl'
+  character(LEN=10)::riemann='llf'
+
+  ! Other hydro solver parameters
+  real(dp)::T2_star=10.
+  real(dp)::g_star=1.0
+  real(dp)::n_star=1d100
+  logical::isothermal
+  logical::cooling
+  
+  ! Interpolation parameters
+  integer ::interpol_var=0
+  integer ::interpol_type=1
+
+  ! Passive variables index
+  integer::imetal=6
+  integer::idelay=6
+  integer::ixion=6
+  integer::ichem=6
+
+  ! Convergence criterion for Poisson solvers
+  real(dp)::epsilon=1.0D-4
+
+  ! Type of force computation
+  integer ::gravity_type=0
+
+  ! Gravity parameters
+  real(dp),dimension(1:10)::gravity_params=0.0
+
+  ! Maximum level for CIC dark matter interpolation
+  integer :: cic_levelmax=0
+
+  ! Min level for CG solver
+  ! level < cg_levelmin uses fine multigrid
+  ! level >=cg_levelmin uses conjugate gradient
+  integer :: cg_levelmin=999
+
+  ! Fast solver with MPI pre-fetch (memory intensive)
+  logical :: fast_solver = .false.
 
   !--------------------------------------------------
   ! Namelist definitions
@@ -40,7 +267,33 @@ subroutine read_params(run_p,global_v)
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
        & ,deltax_frame,deltay_frame,deltaz_frame,movie,zoom_only &
        & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars,movie_vars_txt
-
+  namelist/init_params/filetype,initfile,multiple,nregion,region_type &
+       & ,x_center,y_center,z_center,aexp_ini &
+       & ,length_x,length_y,length_z,exp_region &
+#if NENER>0
+       & ,prad_region &
+#endif
+#if NVAR>NDIM+2+NENER
+       & ,var_region &
+#endif
+       & ,d_region,u_region,v_region,w_region,p_region
+  namelist/hydro_params/gamma,courant_factor,smallr,smallc &
+       & ,niter_riemann,slope_type,difmag,gamma_rad &
+       & ,pressure_fix,scheme,riemann
+  namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
+       & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
+#if NENER>0
+       & ,err_grad_prad &
+#endif
+#if NVAR>NDIM+2+NENER
+       & ,err_grad_var &
+#endif
+       & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
+       & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
+       & ,interpol_var,interpol_type
+  namelist/physics_params/cooling,units_density,units_time,units_length &
+       & ,T2_star,g_star,n_star,isothermal
+  
   ! MPI initialization
 #ifndef WITHOUTMPI
   call MPI_INIT(ierr)
@@ -52,6 +305,11 @@ subroutine read_params(run_p,global_v)
   ncpu=1
   myid=1
 #endif
+  
+  ! Store in global variable
+  g%ncpu=ncpu
+  g%myid=myid
+  
   !--------------------------------------------------
   ! Advertise RAMSES
   !--------------------------------------------------
@@ -73,7 +331,7 @@ subroutine read_params(run_p,global_v)
   if(nvar<ndim+2)then
      write(*,*)'You should have: nvar>=ndim+2'
      write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
-     call clean_stop
+     call clean_stop(g)
   endif
 
   ! Write information about git version
@@ -85,7 +343,7 @@ subroutine read_params(run_p,global_v)
      write(*,*)'You should type: ramses3d input.nml [nrestart]'
      write(*,*)'File input.nml should contain a parameter namelist'
      write(*,*)'nrestart is optional'
-     call clean_stop
+     call clean_stop(g)
   END IF
   CALL getarg(1,infile)
   endif
@@ -111,7 +369,7 @@ subroutine read_params(run_p,global_v)
      if(myid==1)then
         write(*,*)'File '//TRIM(infile)//' does not exist'
      endif
-     call clean_stop
+     call clean_stop(g)
   end if
 
   open(1,file=infile)
@@ -131,7 +389,7 @@ subroutine read_params(run_p,global_v)
   !-------------------------------------------------
   ! Read optional nrestart command-line argument
   !-------------------------------------------------
-  if (myid==1 .and. narg == 2) then
+  if (myid==1 .and. narg==2) then
     CALL getarg(2,cmdarg)
     read(cmdarg,*) nrestart
   endif
@@ -172,6 +430,7 @@ subroutine read_params(run_p,global_v)
      endif
      if(tendmov==0.and.aendmov==0)movie=.false.
   endif
+  
   !--------------------------------------------------
   ! Check for errors in the namelist so far
   !--------------------------------------------------
@@ -203,22 +462,33 @@ subroutine read_params(run_p,global_v)
   endif
   if(myid>1)verbose=.false.
 
-  call read_hydro_params(nml_ok)
-
+  !----------------------------
+  ! Read hydro parameters 
+  !----------------------------
+  rewind(1)
+  read(1,NML=init_params,END=101)
+  goto 102
+101 write(*,*)' You need to set up namelist &INIT_PARAMS in parameter file'
+  call clean_stop(g)
+102 rewind(1)
+  if(nlevelmax>levelmin)read(1,NML=refine_params)
+  rewind(1)
+  if(hydro)read(1,NML=hydro_params)
+  rewind(1)
+  read(1,NML=physics_params,END=105)
+105 continue
   close(1)
-
-  if (movie)call set_movie_vars
-
+  
   !-----------------
   ! Max size checks
   !-----------------
   if(nlevelmax>MAXLEVEL)then
      write(*,*) 'Error: nlevelmax>MAXLEVEL'
-     call clean_stop
+     call clean_stop(g)
   end if
   if(nregion>MAXREGION)then
      write(*,*) 'Error: nregion>MAXREGION'
-     call clean_stop
+     call clean_stop(g)
   end if
   
   !-----------------------------------
@@ -236,6 +506,7 @@ subroutine read_params(run_p,global_v)
      m_refine  (i)=m_refine  (i-levelmin+1)
      exp_refine(i)=exp_refine(i-levelmin+1)
      initfile  (i)=initfile  (i-levelmin+1)
+     jeans_refine(i)=jeans_refine(i-levelmin+1)
   end do
   do i=1,levelmin-1
      nexpand   (i)= 1
@@ -249,12 +520,24 @@ subroutine read_params(run_p,global_v)
      m_refine  (i)=-1.0
      exp_refine(i)= 2.0
      initfile  (i)= ' '
+     jeans_refine(i)=-1.0
   end do
-     
+
+  !--------------------------------------------------
+  ! Check for non-thermal energies
+  !--------------------------------------------------
+#if NENER>0
+  if(nvar<(ndim+2+nener))then
+     if(myid==1)write(*,*)'Error: non-thermal energy need nvar >= ndim+2+nener'
+     if(myid==1)write(*,*)'Modify NENER and recompile'
+     nml_ok=.false.
+  endif
+#endif
+  
   if(.not. nml_ok)then
      if(myid==1)write(*,*)'Too many errors in the namelist'
      if(myid==1)write(*,*)'Aborting...'
-     call clean_stop
+     call clean_stop(g)
   end if
 
 #ifndef WITHOUTMPI
@@ -263,143 +546,141 @@ subroutine read_params(run_p,global_v)
 
   ! Fill in all run parameters in corresponding structure
 
-  run_p%cosmo=cosmo
-  run_p%pic=pic
-  run_p%poisson=poisson
-  run_p%hydro=hydro
-  run_p%verbose=verbose
-  run_p%debug=debug
-  run_p%nrestart=nrestart
-  run_p%ncontrol=ncontrol
-  run_p%nstepmax=nstepmax
-  run_p%nsubcycle=nsubcycle
-  run_p%nremap=nremap
-  run_p%static=static
-  run_p%geom=geom
-  run_p%overload=overload
-  run_p%nsuperoct=nsuperoct
+  r%cosmo=cosmo
+  r%pic=pic
+  r%poisson=poisson
+  r%hydro=hydro
+  r%verbose=verbose
+  r%debug=debug
+  r%nrestart=nrestart
+  r%ncontrol=ncontrol
+  r%nstepmax=nstepmax
+  r%nsubcycle=nsubcycle
+  r%nremap=nremap
+  r%static=static
+  r%geom=geom
+  r%overload=overload
+  r%nsuperoct=nsuperoct
 
-  run_p%noutput=noutput
-  run_p%foutput=foutput
-  run_p%aout=aout
-  run_p%tout=tout
-  run_p%output_mode=output_mode
-  run_p%gadget_output=gadget_output
+  r%noutput=noutput
+  r%foutput=foutput
+  r%aout=aout
+  r%tout=tout
+  r%output_mode=output_mode
+  r%gadget_output=gadget_output
 
-  run_p%levelmin=levelmin
-  run_p%nlevelmax=nlevelmax
-  run_p%ngridmax=ngridmax
-  run_p%ncachemax=ncachemax
-  run_p%npartmax=npartmax
-  run_p%nexpand=nexpand
-  run_p%boxlen=boxlen
+  r%levelmin=levelmin
+  r%nlevelmax=nlevelmax
+  r%ngridmax=ngridmax
+  r%ncachemax=ncachemax
+  r%npartmax=npartmax
+  r%nexpand=nexpand
+  r%boxlen=boxlen
 
-  run_p%epsilon=epsilon
-  run_p%gravity_type=gravity_type
-  run_p%gravity_params=gravity_params
-  run_p%cic_levelmax=cic_levelmax
-  run_p%cg_levelmin=cg_levelmin
-  run_p%fast_solver=fast_solver
+  r%epsilon=epsilon
+  r%gravity_type=gravity_type
+  r%gravity_params=gravity_params
+  r%cic_levelmax=cic_levelmax
+  r%cg_levelmin=cg_levelmin
+  r%fast_solver=fast_solver
 
-  run_p%nw_frame=nw_frame
-  run_p%nh_frame=nh_frame
-  run_p%levelmax_frame=levelmax_frame
-  run_p%ivar_frame=ivar_frame
-  run_p%xcentre_frame=xcentre_frame
-  run_p%ycentre_frame=ycentre_frame
-  run_p%zcentre_frame=zcentre_frame
-  run_p%deltax_frame=deltax_frame
-  run_p%deltay_frame=deltay_frame
-  run_p%deltaz_frame=deltaz_frame
-  run_p%movie=movie
-  run_p%zoom_only=zoom_only
-  run_p%imovout=imovout
-  run_p%imov=imov
-  run_p%tendmov=tendmov
-  run_p%aendmov=aendmov
-  run_p%amovout=amovout
-  run_p%tmovout=tmovout
-  run_p%proj_axis=proj_axis
-  run_p%movie_vars=movie_vars
-  run_p%movie_vars_txt=movie_vars_txt
+  r%nw_frame=nw_frame
+  r%nh_frame=nh_frame
+  r%levelmax_frame=levelmax_frame
+  r%ivar_frame=ivar_frame
+  r%xcentre_frame=xcentre_frame
+  r%ycentre_frame=ycentre_frame
+  r%zcentre_frame=zcentre_frame
+  r%deltax_frame=deltax_frame
+  r%deltay_frame=deltay_frame
+  r%deltaz_frame=deltaz_frame
+  r%movie=movie
+  r%zoom_only=zoom_only
+  r%imovout=imovout
+  r%imov=imov
+  r%tendmov=tendmov
+  r%aendmov=aendmov
+  r%amovout=amovout
+  r%tmovout=tmovout
+  r%proj_axis=proj_axis
+  r%movie_vars_txt=movie_vars_txt
+  if(r%movie)call set_movie_vars_2(r)
 
-  run_p%gamma=gamma
-  run_p%courant_factor=courant_factor
-  run_p%smallc=smallc
-  run_p%smallr=smallr
-  run_p%niter_riemann=niter_riemann
-  run_p%slope_type=slope_type
-  run_p%difmag=difmag
-  run_p%gamma_rad=gamma_rad
-  run_p%pressure_fix=pressure_fix
-  run_p%scheme=scheme
-  run_p%riemann=riemann
+  r%gamma=gamma
+  r%courant_factor=courant_factor
+  r%smallc=smallc
+  r%smallr=smallr
+  r%niter_riemann=niter_riemann
+  r%slope_type=slope_type
+  r%difmag=difmag
+  r%gamma_rad=gamma_rad(1:nener)
+  r%pressure_fix=pressure_fix
+  r%scheme=scheme
+  if(riemann=='llf')r%riemann=solver_llf
+  if(riemann=='hll')r%riemann=solver_hll
+  if(riemann=='hllc')r%riemann=solver_hllc
 
-  run_p%cooling=cooling
-  run_p%units_density=units_density
-  run_p%units_time=units_time
-  run_p%units_length=units_length
-  run_p%T2_star=T2_star
-  run_p%g_star=g_star
-  run_p%n_star=n_star
-  run_p%isothermal=isothermal
+  r%cooling=cooling
+  r%units_density=units_density
+  r%units_time=units_time
+  r%units_length=units_length
+  r%T2_star=T2_star
+  r%g_star=g_star
+  r%n_star=n_star
+  r%isothermal=isothermal
 
-  run_p%m_refine=m_refine
-  run_p%r_refine=r_refine
-  run_p%x_refine=x_refine
-  run_p%y_refine=y_refine
-  run_p%z_refine=z_refine
-  run_p%exp_refine=exp_refine
-  run_p%a_refine=a_refine
-  run_p%b_refine=b_refine
-  run_p%jeans_refine=jeans_refine
-  run_p%var_cut_refine=var_cut_refine
-  run_p%mass_cut_refine=mass_cut_refine
-  run_p%ivar_refine=ivar_refine
+  r%m_refine=m_refine
+  r%r_refine=r_refine
+  r%x_refine=x_refine
+  r%y_refine=y_refine
+  r%z_refine=z_refine
+  r%exp_refine=exp_refine
+  r%a_refine=a_refine
+  r%b_refine=b_refine
+  r%jeans_refine=jeans_refine
+  r%var_cut_refine=var_cut_refine
+  r%mass_cut_refine=mass_cut_refine
+  r%ivar_refine=ivar_refine
 
-  run_p%interpol_var=interpol_var
-  run_p%interpol_type=interpol_type
-  run_p%err_grad_d=err_grad_d
-  run_p%err_grad_u=err_grad_u
-  run_p%err_grad_p=err_grad_p
-  run_p%floor_d=floor_d
-  run_p%floor_u=floor_u
-  run_p%floor_p=floor_p
-  run_p%mass_sph=mass_sph
+  r%interpol_var=interpol_var
+  r%interpol_type=interpol_type
+  r%err_grad_d=err_grad_d
+  r%err_grad_u=err_grad_u
+  r%err_grad_p=err_grad_p
+  r%floor_d=floor_d
+  r%floor_u=floor_u
+  r%floor_p=floor_p
+  r%mass_sph=mass_sph
 #if NENER>0
-  run_p%err_grad_prad=err_grad_prad
+  r%err_grad_prad=err_grad_prad
 #endif
 #if NVAR>NDIM+2+NENER
-  run_p%err_grad_var=err_grad_var
+  r%err_grad_var=err_grad_var
 #endif
 
-  run_p%filetype=filetype
-  run_p%initfile=initfile
-  run_p%multiple=multiple
-  run_p%nregion=nregion
-  run_p%region_type=region_type
-  run_p%x_center=x_center
-  run_p%y_center=y_center
-  run_p%z_center=z_center
-  run_p%length_x=length_x
-  run_p%length_y=length_y
-  run_p%length_z=length_z
-  run_p%exp_region=exp_region
-  run_p%d_region=d_region
-  run_p%d_region=u_region
-  run_p%d_region=v_region
-  run_p%d_region=w_region
-  run_p%d_region=p_region
+  r%filetype=filetype
+  r%initfile=initfile
+  r%multiple=multiple
+  r%nregion=nregion
+  r%region_type=region_type
+  r%x_center=x_center
+  r%y_center=y_center
+  r%z_center=z_center
+  r%length_x=length_x
+  r%length_y=length_y
+  r%length_z=length_z
+  r%exp_region=exp_region
+  r%d_region=d_region
+  r%d_region=u_region
+  r%d_region=v_region
+  r%d_region=w_region
+  r%d_region=p_region
 #if NENER>0
-  run_p%prad_region=prad_region
+  r%prad_region=prad_region
 #endif
 #if NVAR>NDIM+2+NENER
-  run_p%var_region=var_region
+  r%var_region=var_region
 #endif
-
-  global_v%ncpu=ncpu
-  global_v%myid=myid
-  
 
 end subroutine read_params
 

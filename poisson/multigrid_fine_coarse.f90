@@ -7,7 +7,7 @@
 ! ------------------------------------------------------------------------
 ! Mask restriction (bottom-up)
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine restrict_mask(ifinelevel,allmasked)
   use amr_commons
   use poisson_commons
@@ -81,7 +81,7 @@ subroutine restrict_mask(ifinelevel,allmasked)
 #endif
 
 end subroutine restrict_mask
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -175,7 +175,7 @@ end subroutine restrict_mask_2
 ! ------------------------------------------------------------------------
 ! Residual computation
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine cmp_residual_mg(hash_dict, ilevel)
   use amr_commons
   use poisson_commons
@@ -307,7 +307,7 @@ subroutine cmp_residual_mg(hash_dict, ilevel)
   call close_cache(hash_dict)
 
 end subroutine cmp_residual_mg
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -462,7 +462,7 @@ end subroutine cmp_residual_mg_2
 ! ------------------------------------------------------------------------
 ! Residual computation using fast communication method
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine cmp_residual_mg_fast(hash_dict, ilevel)
   use amr_commons
   use poisson_commons
@@ -636,7 +636,7 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
   ! End loop over grids
 
 end subroutine cmp_residual_mg_fast
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -645,7 +645,7 @@ end subroutine cmp_residual_mg_fast
 ! ------------------------------------------------------------------------
 ! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   use amr_commons
   use poisson_commons
@@ -799,7 +799,7 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   call close_cache(hash_dict)
 
 end subroutine gauss_seidel_mg
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -975,7 +975,7 @@ end subroutine gauss_seidel_mg_2
 ! ------------------------------------------------------------------------
 ! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
   use amr_commons
   use poisson_commons
@@ -1170,7 +1170,7 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
   ! End loop over grids
 
 end subroutine gauss_seidel_mg_fast
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1179,7 +1179,7 @@ end subroutine gauss_seidel_mg_fast
 ! ------------------------------------------------------------------------
 ! Residual restriction
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine restrict_residual(ifinelevel)
   use amr_commons
   use poisson_commons
@@ -1234,7 +1234,7 @@ subroutine restrict_residual(ifinelevel)
   call close_cache(mg_dict)
 
 end subroutine restrict_residual
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1312,7 +1312,7 @@ end subroutine restrict_residual_2
 ! ------------------------------------------------------------------------
 ! Interpolation and correction
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine interpolate_and_correct(ifinelevel)
   use amr_commons
   use poisson_commons
@@ -1401,7 +1401,7 @@ subroutine interpolate_and_correct(ifinelevel)
   call close_cache(mg_dict)
 
  end subroutine interpolate_and_correct
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1513,7 +1513,7 @@ end subroutine interpolate_and_correct_2
 ! ------------------------------------------------------------------------
 ! Flag settings used to speed-up the sweeps
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine set_scan_flag(hash_dict,ilevel)
   use amr_commons
   use poisson_commons
@@ -1616,7 +1616,7 @@ subroutine set_scan_flag(hash_dict,ilevel)
   call close_cache(hash_dict)
 
 end subroutine set_scan_flag
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1741,7 +1741,7 @@ end subroutine set_scan_flag_2
 ! ------------------------------------------------------------------------
 ! Compute norm of residual 
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine cmp_residual_norm2(ilevel, norm2)
    use amr_commons
    use poisson_commons
@@ -1773,7 +1773,7 @@ subroutine cmp_residual_norm2(ilevel, norm2)
    norm2 = dx2*norm2
 
 end subroutine cmp_residual_norm2
-
+#endif
 subroutine cmp_residual_norm2_2(r,g,m,ilevel, norm2)
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -1807,7 +1807,7 @@ subroutine cmp_residual_norm2_2(r,g,m,ilevel, norm2)
   norm2 = dx2*norm2
   
 end subroutine cmp_residual_norm2_2
-
+#ifdef TOTO
 subroutine cmp_ivar_norm2(ilevel, ivar, norm2)
   use amr_commons
   use poisson_commons
@@ -1843,5 +1843,6 @@ subroutine cmp_ivar_norm2(ilevel, ivar, norm2)
   norm2 = dx2*norm2
   
 end subroutine cmp_ivar_norm2
+#endif
 #endif
 

@@ -2,6 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   use amr_commons
   implicit none
@@ -49,11 +50,13 @@ subroutine interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   end do
 #endif
  end subroutine interpol_phi
+#endif
+ !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-!###########################################################
-subroutine save_phi_old(ilevel)
+#ifdef TOTO
+ subroutine save_phi_old(ilevel)
   use amr_commons
   implicit none
   integer ilevel
@@ -70,6 +73,7 @@ subroutine save_phi_old(ilevel)
   end do
 #endif
 end subroutine save_phi_old
+#endif
 !###########################################################
 !###########################################################
 !###########################################################

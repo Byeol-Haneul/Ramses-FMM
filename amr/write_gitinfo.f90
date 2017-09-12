@@ -1,5 +1,5 @@
 subroutine write_gitinfo
-  use amr_commons, ONLY:builddate,patchdir,gitrepo,gitbranch,githash
+  use amr_parameters, ONLY:builddate,patchdir,gitrepo,gitbranch,githash
 
   builddate = BUILDDATE
   patchdir  = PATCH

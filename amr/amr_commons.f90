@@ -30,61 +30,6 @@ module amr_commons
 #endif
   end type oct
 
-  ! Global variables
-
-  logical::output_done=.false.                  ! Output just performed
-  logical::init=.false.                         ! Set up or run
-  integer::nstep=0                              ! Time step
-  integer::nstep_coarse=0                       ! Coarse step
-  integer::nstep_coarse_old=0                   ! Old coarse step
-  integer::nflag,ncreate,nkill                  ! Refinements
-
-  real(dp)::emag_tot=0.0D0                      ! Total magnetic energy
-  real(dp)::ekin_tot=0.0D0                      ! Total kinetic energy
-  real(dp)::eint_tot=0.0D0                      ! Total internal energy
-  real(dp)::epot_tot=0.0D0                      ! Total potential energy
-  real(dp)::epot_tot_old=0.0D0                  ! Old potential energy
-  real(dp)::epot_tot_int=0.0D0                  ! Time integrated potential
-  real(dp)::const=0.0D0                         ! Energy conservation
-  real(dp)::aexp_old=1.0D0                      ! Old expansion factor
-  real(dp)::rho_tot=0.0D0                       ! Mean density in the box
-  real(dp)::t=0.0D0                             ! Time variable
-  real(dp)::mass_tot=0.0D0                      ! Total gass mass
-  real(dp)::mass_tot_0=0.0D0                    ! Initial total gas mass
-
-  ! Level related arrays
-  real(dp),dimension(1:MAXLEVEL)::dtold,dtnew ! Time step at each level
-  real(dp),dimension(1:MAXLEVEL)::rho_max     ! Maximum density at each level
-
-  integer,allocatable,dimension(:)::head      ! Starting index for each level 
-  integer,allocatable,dimension(:)::tail      ! Final index for each level 
-  integer,allocatable,dimension(:)::noct      ! Number of octs for each level
-  integer,allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
-  integer,allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
-  integer,allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
-  integer,allocatable,dimension(:)::ckey_max  ! Max. Cartesian key per level
-  integer(kind=8),allocatable,dimension(:,:)::hkey_max ! Max. Hilbert key
-  integer,allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
-  integer,allocatable,dimension(:)::tail_cache ! Final index in the cache for each level
-  integer::noct_used,noct_used_max,noct_used_tot ! Total used octs
-
-  ! Persistent array for the AMR grid
-  type(oct),dimension(:),allocatable::grid
-  type(hash_table)::grid_dict   ! Oct hash table
-
-  ! Software cache array for the AMR grid
-  logical,allocatable,dimension(:)::dirty
-  logical,allocatable,dimension(:)::occupied
-  logical,allocatable,dimension(:)::locked
-  integer,allocatable,dimension(:)::parent_cpu
-  integer::free_cache,ncache,ifree
-
-  ! Software cache array for failed requests
-  logical,allocatable,dimension(:)::occupied_null
-  integer,allocatable,dimension(:)::lev_null
-  integer,allocatable,dimension(:,:)::ckey_null
-  integer::free_null,nnull
-
   type run_t
 
      ! Run control
@@ -160,10 +105,10 @@ module amr_commons
      integer ::niter_riemann=10
      integer ::slope_type=1
      real(dp)::difmag=0.0d0
-     real(dp),dimension(1:512)::gamma_rad=1.33333333334d0
+     real(dp),dimension(1:nener)::gamma_rad=1.33333333334d0
      logical ::pressure_fix=.false.
      character(LEN=10)::scheme='muscl'
-     character(LEN=10)::riemann='llf'
+     integer::riemann=1
      
      ! Physics parameters
      logical::cooling =.false.   ! Cooling and heating activated
@@ -174,6 +119,12 @@ module amr_commons
      real(dp)::g_star=1.0
      real(dp)::n_star=1d100
      logical::isothermal
+
+     ! Cosmological parameters
+     real(dp)::omega_b=0.0D0  ! Omega Baryon
+     real(dp)::omega_m=1.0D0  ! Omega Matter
+     real(dp)::omega_l=0.0D0  ! Omega Lambda
+     real(dp)::omega_k=0.0D0  ! Omega Curvature
 
      ! Refinement parameters for each level
      real(dp),dimension(1:MAXLEVEL)::m_refine = -1.0 ! Lagrangian threshold
@@ -244,7 +195,7 @@ module amr_commons
   type global_t
 
      ! MPI variables
-     integer::ncpu,myid
+     integer::ncpu, myid
 
      integer::iout=1             ! Increment for output times
      integer::ifout=1            ! Increment for output files
@@ -390,14 +341,11 @@ module amr_commons
 contains
 
   subroutine print_run_parameters(run_p)
-    use amr_parameters, ONLY: myid
     class(run_t)::run_p
     type(run_t)::run_params
     namelist /run_parameters/ run_params
-    if(myid==1)then
-       run_params = run_p
-       write(*,NML=run_parameters)
-    endif
+    run_params = run_p
+    write(*,NML=run_parameters)
   end subroutine print_run_parameters
 
 end module amr_commons

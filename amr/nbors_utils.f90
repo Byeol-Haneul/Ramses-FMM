@@ -2,6 +2,7 @@
 !###############################################################
 !###############################################################
 !###############################################################
+#ifdef TOTO
 subroutine get_threetondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_commons
   use hash
@@ -98,6 +99,7 @@ subroutine get_threetondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nb
   end do
 
 end subroutine get_threetondim_nbor_parent_cell
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
@@ -206,6 +208,7 @@ end subroutine get_threetondim_nbor_parent_cell_2
 !###############################################################
 !###############################################################
 !###############################################################
+#ifdef TOTO
 subroutine get_twondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_commons
   use hash
@@ -271,6 +274,7 @@ subroutine get_twondim_nbor_parent_cell(hash_key,hash_dict,igrid_nbor,ind_nbor,f
   end do
 
 end subroutine get_twondim_nbor_parent_cell
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
@@ -348,6 +352,7 @@ end subroutine get_twondim_nbor_parent_cell_2
 !###############################################################
 !###############################################################
 !###############################################################
+#ifdef TOTO
 integer function get_parent_cell(hash_key,hash_dict,flush_cache,fetch_cache) result(parent_cell)
   use amr_commons
   use hash
@@ -374,6 +379,7 @@ integer function get_parent_cell(hash_key,hash_dict,flush_cache,fetch_cache) res
   parent_cell=0
   if(ipos>0)parent_cell=(ipos-1)*twotondim+ind
 end function get_parent_cell
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
@@ -412,6 +418,7 @@ end function get_parent_cell_2
 !###############################################################
 !###############################################################
 !###############################################################
+#ifdef TOTO
 subroutine lock_cache(child_grid)
   use amr_commons
   implicit none
@@ -422,6 +429,7 @@ subroutine lock_cache(child_grid)
      locked(icache)=.true.
   endif
 end subroutine lock_cache
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
@@ -443,6 +451,7 @@ end subroutine lock_cache_2
 !###############################################################
 !###############################################################
 !###############################################################
+#ifdef TOTO
 subroutine unlock_cache(child_grid)
   use amr_commons
   implicit none
@@ -453,6 +462,7 @@ subroutine unlock_cache(child_grid)
      locked(icache)=.false.
   endif
 end subroutine unlock_cache
+#endif
 !##############################################################
 !##############################################################
 !##############################################################
@@ -474,6 +484,7 @@ end subroutine unlock_cache_2
 !##############################################################
 !##############################################################
 !##############################################################
+#ifdef TOTO
 integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(child_grid)
   use amr_commons
   use hilbert
@@ -927,6 +938,7 @@ integer function get_grid(hash_key,hash_dict,flush_cache,fetch_cache) result(chi
 
 #endif
 end function get_grid
+#endif
 !##############################################################
 !##############################################################
 !##############################################################
@@ -1394,6 +1406,7 @@ end function get_grid_2
 !##############################################################
 !##############################################################
 !##############################################################
+#ifdef TOTO
 subroutine check_mail(comm_id,hash_dict)
   use amr_commons
   use hilbert
@@ -2030,6 +2043,7 @@ subroutine check_mail(comm_id,hash_dict)
   end do
 #endif
 end subroutine check_mail
+#endif
 !##############################################################
 !##############################################################
 !##############################################################
@@ -2680,6 +2694,7 @@ end subroutine check_mail_2
 !##############################################################
 !##############################################################
 !##############################################################
+#ifdef TOTO
 subroutine destage(igrid,hash_dict)
   use amr_commons
   use hash
@@ -2994,6 +3009,7 @@ subroutine destage(igrid,hash_dict)
   endif
 #endif
 end subroutine destage
+#endif
 !##############################################################
 !##############################################################
 !##############################################################
@@ -3322,6 +3338,7 @@ end subroutine destage_2
 !##############################################################
 !##############################################################
 !##############################################################
+#ifdef TOTO
 subroutine close_cache(hash_dict)
   use amr_commons
   use hash
@@ -3467,6 +3484,7 @@ subroutine close_cache(hash_dict)
 
 #endif
 end subroutine close_cache
+#endif
 !##############################################################
 !##############################################################
 !##############################################################
@@ -3626,6 +3644,7 @@ end subroutine close_cache_2
 !##############################################################
 !##############################################################
 !##############################################################
+#ifdef TOTO
 subroutine open_cache(cache_operation_init,domain_decompos_init)
   use amr_commons
   use poisson_commons
@@ -3737,6 +3756,7 @@ subroutine open_cache(cache_operation_init,domain_decompos_init)
 #endif
 
 end subroutine open_cache
+#endif
 !##############################################################
 !##############################################################
 !##############################################################

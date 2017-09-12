@@ -1,3 +1,4 @@
+#ifdef TOTO
 subroutine poisson_flag(ilevel)
   use amr_commons
   use hydro_commons
@@ -75,6 +76,7 @@ subroutine poisson_flag(ilevel)
   ! End loop over grids
 
 end subroutine poisson_flag
+#endif
 !#####################################################################
 !#####################################################################
 !#####################################################################
@@ -163,6 +165,7 @@ end subroutine poisson_flag_2
 !#####################################################################
 !#####################################################################
 !#####################################################################
+#ifdef TOTO
 subroutine jeans_length_refine(uu,factG,size_cell,n_jeans,ok)
   use amr_parameters
   use hydro_commons
@@ -204,6 +207,7 @@ subroutine jeans_length_refine(uu,factG,size_cell,n_jeans,ok)
   ok = ok .or. ( n_jeans*size_cell >= lamb_jeans )
 
 end subroutine jeans_length_refine
+#endif
 !#####################################################################
 !#####################################################################
 !#####################################################################

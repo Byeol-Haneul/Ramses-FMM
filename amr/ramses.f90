@@ -1,6 +1,6 @@
 program ramses
-  use amr_commons
-  use pm_commons
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
   implicit none  
 
   type(run_t)::r

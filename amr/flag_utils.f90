@@ -2,6 +2,7 @@
 !################################################################
 !################################################################
 !################################################################
+#ifdef TOTO
 subroutine flag
   use amr_commons
   implicit none
@@ -14,10 +15,12 @@ subroutine flag
   if(verbose)write(*,*)'Complete flag'
 
 end subroutine flag
+#endif
 !################################################################
 !################################################################
 !################################################################
 !################################################################
+#ifdef TOTO
 subroutine flag_fine(ilevel,icount)
   use amr_commons
   implicit none
@@ -97,10 +100,12 @@ subroutine flag_fine(ilevel,icount)
 112 format('   ==> Flag ',i6,' cells')
 
 end subroutine flag_fine
+#endif
 !################################################################
 !################################################################
 !################################################################
 !################################################################
+#ifdef TOTO
 subroutine init_flag(ilevel)
   use amr_commons
   implicit none
@@ -151,10 +156,12 @@ subroutine init_flag(ilevel)
   call close_cache(grid_dict)
 
 end subroutine init_flag
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
+#ifdef TOTO
 subroutine userflag_fine(ilevel)
   use amr_commons
   use hydro_commons
@@ -174,10 +181,12 @@ subroutine userflag_fine(ilevel)
   if(hydro)call hydro_flag(ilevel)
 
 end subroutine userflag_fine
+#endif
 !############################################################
 !############################################################
 !############################################################
 !############################################################
+#ifdef TOTO
 subroutine smooth_fine(ilevel)
   use amr_commons
   implicit none
@@ -294,10 +303,12 @@ subroutine smooth_fine(ilevel)
   ! End loop over steps
   
 end subroutine smooth_fine
+#endif
 !############################################################
 !############################################################
 !############################################################
 !############################################################
+#ifdef TOTO
 subroutine ensure_ref_rules(ilevel)
   use amr_commons
   implicit none
@@ -374,6 +385,7 @@ subroutine ensure_ref_rules(ilevel)
   call close_cache(grid_dict)
 
 end subroutine ensure_ref_rules 
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -751,6 +763,7 @@ end subroutine ensure_ref_rules_2
 !############################################################
 !############################################################
 !############################################################
+#ifdef TOTO
 subroutine smooth_fine_fast(ilevel)
   use amr_commons
   use poisson_commons
@@ -929,10 +942,12 @@ subroutine smooth_fine_fast(ilevel)
   ! End loop over steps
   
 end subroutine smooth_fine_fast
+#endif
 !############################################################
 !############################################################
 !############################################################
 !############################################################
+#ifdef TOTO
 subroutine build_smooth(ilevel)
   use amr_commons
   use poisson_commons
@@ -1146,10 +1161,10 @@ subroutine build_smooth(ilevel)
 #endif
 
 end subroutine build_smooth
-
+#endif
 ! ------------------------------------------------------------------------
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine clean_smooth
   use amr_commons
   use poisson_commons
@@ -1170,4 +1185,4 @@ subroutine clean_smooth
 #endif
 
 end subroutine clean_smooth
-
+#endif

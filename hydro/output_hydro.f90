@@ -1,3 +1,4 @@
+#ifdef TOTO
 subroutine output_hydro(filename)
   use amr_commons
   use hydro_commons
@@ -33,6 +34,7 @@ subroutine output_hydro(filename)
 #endif
      
 end subroutine output_hydro
+#endif
 !###################################################
 !###################################################
 !###################################################
@@ -80,6 +82,7 @@ end subroutine output_hydro_2
 !###################################################
 !###################################################
 !###################################################
+#ifdef TOTO
 subroutine file_descriptor_hydro(filename)
   use amr_commons
   use hydro_commons
@@ -132,6 +135,7 @@ subroutine file_descriptor_hydro(filename)
   close(ilun)
 
 end subroutine file_descriptor_hydro
+#endif
 !###################################################
 !###################################################
 !###################################################

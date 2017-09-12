@@ -1,3 +1,4 @@
+#ifdef TOTO
 subroutine units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   use amr_commons
   use hydro_commons
@@ -30,7 +31,7 @@ subroutine units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_nH = X_H/mH * scale_d
 
 end subroutine units
-
+#endif
 subroutine units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   use amr_parameters, only: dp,ndim,kB,mH,X_H,rhoc
   use amr_commons, only: run_t,global_t,mesh_t
