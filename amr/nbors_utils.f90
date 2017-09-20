@@ -1049,6 +1049,8 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
         call MPI_IRECV(response_interpol,1,new_mpi_three_realdp_msg,&
              & grid_cpu-1,msg_tag,MPI_COMM_WORLD,response_id,info)  
      endif
+
+     ! Post SEND for the request
      call MPI_ISEND(send_request,1,new_mpi_request,&
           & grid_cpu-1,request_tag,MPI_COMM_WORLD,send_request_id,info)
 

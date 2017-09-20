@@ -11,8 +11,6 @@ program ramses
   ! Read run parameters
   call read_params(run_p,global_v)
 
-!  call run_p%print
-
   ! Start time integration
   call adaptive_loop(run_p,global_v,mesh_v,part_v)
 
