@@ -1,3 +1,4 @@
+#ifdef TOTO
 recursive subroutine amr_step(ilevel,icount)
   use amr_commons
   use pm_commons
@@ -206,14 +207,15 @@ recursive subroutine amr_step(ilevel,icount)
 999 format(' Entering amr_step',i1,' for level',i2)
 
 end subroutine amr_step
+#endif
 !#####################################################
 !#####################################################
 !#####################################################
 !#####################################################
 recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
-  use pm_parameters
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use pm_parameters
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'

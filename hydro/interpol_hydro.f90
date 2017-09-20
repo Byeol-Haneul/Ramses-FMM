@@ -2,6 +2,7 @@
 !########################################################### 
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine upload_fine(ilevel)
   use amr_commons
   use hydro_commons
@@ -93,6 +94,7 @@ subroutine upload_fine(ilevel)
 111 format('   Entering upload_fine for level',i2)
 
 end subroutine upload_fine
+#endif
 !###########################################################
 !########################################################### 
 !###########################################################
@@ -197,12 +199,12 @@ end subroutine upload_fine_2
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine interpol_hydro(u1,u2)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
+subroutine interpol_hydro(u1,u2,interpol_var,interpol_type,smallr)
+  use amr_parameters, only: dp, ndim,twotondim,twondim
+  use hydro_parameters, only: nvar
   implicit none
-  integer::nn
+  integer::interpol_var,interpol_type
+  real(dp)::smallr
   real(dp),dimension(0:twondim  ,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
   !----------------------------------------------------------
@@ -289,7 +291,7 @@ subroutine interpol_hydro(u1,u2)
      if(interpol_type==4)then
         if (interpol_var .ne. 2)then
            write(*,*)'interpol_type=4 is designed for interpol_var=2'
-           call clean_stop
+           stop
         end if
         if (ivar>1 .and. (ivar <= 1+ndim))then
            call compute_central(a,w)
@@ -352,13 +354,12 @@ subroutine interpol_hydro(u1,u2)
 #endif
   
 end subroutine interpol_hydro
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
+!##########################################################################
+!##########################################################################
+!##########################################################################
+!##########################################################################
 subroutine compute_limiter_minmod(a,w)
-  use amr_commons
-  use hydro_commons
+  use amr_parameters, only: dp, ndim,twondim,twotondim
   implicit none
   real(dp),dimension(0:twondim)::a
   real(dp),dimension(1:ndim)::w
@@ -386,8 +387,7 @@ end subroutine compute_limiter_minmod
 !###########################################################
 !###########################################################
 subroutine compute_limiter_central(a,w)
-  use amr_commons
-  use hydro_commons
+  use amr_parameters, only: dp, ndim,twondim,twotondim
   implicit none
   real(dp),dimension(0:twondim)::a
   real(dp),dimension(1:ndim)::w
@@ -486,8 +486,7 @@ end subroutine compute_limiter_central
 !###########################################################
 !###########################################################
 subroutine compute_central(a,w)
-  use amr_commons
-  use hydro_commons
+  use amr_parameters, only: dp, ndim,twondim,twotondim
   implicit none
   real(dp),dimension(0:twondim)::a
   real(dp),dimension(1:ndim)::w

@@ -2,6 +2,7 @@
 !###############################################
 !###############################################
 !###############################################
+#ifdef TOTO
 subroutine init_amr
   use amr_commons
   use poisson_commons
@@ -125,6 +126,7 @@ subroutine init_amr
   endif
 
 end subroutine init_amr
+#endif
 !###############################################
 !###############################################
 !###############################################
@@ -196,7 +198,7 @@ subroutine init_amr_2(r,g,m)
 
   allocate(m%domain(1:r%nlevelmax+1))
   do ilevel=1,r%nlevelmax+1
-     call m%domain(ilevel)%create(g%ncpu*r%overload)
+     call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu*r%overload)
   end do
 
   ! Make sure that the coarsest level uses only one Hilbert integer
@@ -261,6 +263,7 @@ end subroutine init_amr_2
 !###############################################
 !###############################################
 !###############################################
+#ifdef TOTO
 subroutine init_cache
   use amr_commons
   implicit none
@@ -529,6 +532,285 @@ subroutine init_cache
 #endif
 
 end subroutine init_cache
+#endif
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+subroutine init_cache_2(r,g)
+  use amr_parameters, ONLY: nhilbert
+  use amr_commons, ONLY: run_t, global_t
+  use cache_commons
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'  
+#endif
+  type(run_t)::r
+  type(global_t)::g
+
+  integer::icpu,info,ncpu
+  integer::intex,realdpex,msg_size
+  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length,new_type_address
+
+  if(r%verbose.and.g%myid==1)write(*,*)'Entering init_cache'
+
+  ncpu=g%ncpu
+  
+#ifndef WITHOUTMPI  
+  ! Allocate all communication and cache-related variables
+  allocate(reply_id(1:ncpu))
+  allocate(reply_interpol(1:ncpu))
+  allocate(reply_mg(1:ncpu))
+  allocate(reply_flag(1:ncpu))
+  allocate(reply_hydro(1:ncpu))
+  allocate(reply_poisson(1:ncpu))
+  allocate(reply_refine(1:ncpu))
+  allocate(send_flush_interpol(1:ncpu))
+  allocate(send_flush_mg(1:ncpu))
+  allocate(send_flush_flag(1:ncpu))
+  allocate(send_flush_hydro(1:ncpu))
+  allocate(send_flush_poisson(1:ncpu))
+  allocate(send_flush_refine(1:ncpu))
+  do icpu=1,ncpu
+     send_flush_interpol(icpu)%nflush=0
+     send_flush_mg(icpu)%nflush=0
+     send_flush_flag(icpu)%nflush=0
+     send_flush_hydro(icpu)%nflush=0
+     send_flush_poisson(icpu)%nflush=0
+     send_flush_refine(icpu)%nflush=0
+  end do
+
+  ! Create and commit MPI derived types
+  call MPI_TYPE_EXTENT(MPI_INTEGER,intex,info)
+  call MPI_TYPE_EXTENT(MPI_DOUBLE_PRECISION,realdpex,info)
+
+  ! New type for int4_msg
+  new_type_disp(1)=0
+  new_type_disp(2)=2*intex
+  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_length(1)=2
+  new_type_length(2)=ntilemax*(1+ndim)
+  new_type_length(3)=ntilemax*(twotondim)
+  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_int4_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_int4_msg,info)
+
+  ! New type for int4_flush
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax*(1+ndim)
+  new_type_length(3)=nflushmax*(twotondim)
+  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_int4_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_int4_flush,info)
+
+  ! New type for realdp_msg
+  new_type_disp(1)=0
+  new_type_disp(2)=2*intex
+  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
+  new_type_disp(4)=(2+ntilemax*(1+ndim)+ntilemax*(twotondim))*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=2
+  new_type_length(2)=ntilemax*(1+ndim)
+  new_type_length(3)=ntilemax*(twotondim)
+  new_type_length(4)=ntilemax*(twotondim*nvar)
+  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_realdp_msg,info)
+
+  ! New type for realdp_flush
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
+  new_type_disp(4)=(1+nflushmax*(1+ndim)+nflushmax*(twotondim))*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax*(1+ndim)
+  new_type_length(3)=nflushmax*(twotondim)
+  new_type_length(4)=nflushmax*(twotondim*nvar)
+  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_realdp_flush,info)
+
+  ! New type for small_realdp_msg
+  new_type_disp(1)=0
+  new_type_disp(2)=2*intex
+  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=2
+  new_type_length(2)=ntilemax*(1+ndim)
+  new_type_length(3)=ntilemax*(twotondim)
+  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_small_realdp_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_small_realdp_msg,info)
+
+  ! New type for twin_realdp_msg
+  new_type_disp(1)=0
+  new_type_disp(2)=2*intex
+  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
+  new_type_disp(4)=(2+ntilemax*(1+ndim))*intex+ntilemax*twotondim*realdpex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=2
+  new_type_length(2)=ntilemax*(1+ndim)
+  new_type_length(3)=ntilemax*(twotondim)
+  new_type_length(4)=ntilemax*(twotondim)
+  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_twin_realdp_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_twin_realdp_msg,info)
+
+  ! New type for three_realdp_msg
+  new_type_disp(1)=0
+  new_type_disp(2)=2*intex
+  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
+  new_type_disp(4)=(2+ntilemax*(1+ndim))*intex+ntilemax*twotondim*realdpex
+  new_type_disp(5)=(2+ntilemax*(1+ndim))*intex+2*ntilemax*twotondim*realdpex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_type(5)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=2
+  new_type_length(2)=ntilemax*(1+ndim)
+  new_type_length(3)=ntilemax*(twotondim)
+  new_type_length(4)=ntilemax*(twotondim)
+  new_type_length(5)=ntilemax*(twotondim)
+  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_three_realdp_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_three_realdp_msg,info)
+
+  ! New type for large_realdp_msg
+  new_type_disp(1)=0
+  new_type_disp(2)=2*intex
+  new_type_disp(3)=new_type_disp(2)+ntilemax*(1+ndim)*intex
+  new_type_disp(4)=new_type_disp(3)+ntilemax*twotondim*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_length(1)=2
+  new_type_length(2)=ntilemax*(1+ndim)
+  new_type_length(3)=ntilemax*twotondim
+  msg_size=3
+
+#ifdef HYDRO
+  msg_size=msg_size+1
+  new_type_length(msg_size)=ntilemax*twotondim*nvar
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*nvar*realdpex
+#endif
+
+#ifdef GRAV
+  msg_size=msg_size+1
+  new_type_length(msg_size)=ntilemax*twotondim*(ndim+2)
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*(ndim+2)*realdpex
+#endif
+
+  call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_msg,info)
+  call MPI_TYPE_COMMIT(new_mpi_large_realdp_msg,info)
+
+  ! New type for small_realdp_flush
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax*(1+ndim)
+  new_type_length(3)=nflushmax*twotondim
+  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_small_realdp_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_small_realdp_flush,info)
+
+  ! New type for twin_realdp_flush
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
+  new_type_disp(4)=(1+nflushmax*(1+ndim))*intex+nflushmax*twotondim*realdpex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax*(1+ndim)
+  new_type_length(3)=nflushmax*twotondim
+  new_type_length(4)=nflushmax*twotondim
+  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_twin_realdp_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_twin_realdp_flush,info)
+
+  ! New type for three_realdp_flush
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
+  new_type_disp(4)=(1+nflushmax*(1+ndim))*intex+nflushmax*twotondim*realdpex
+  new_type_disp(5)=(1+nflushmax*(1+ndim))*intex+2*nflushmax*twotondim*realdpex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_DOUBLE_PRECISION
+  new_type_type(4)=MPI_DOUBLE_PRECISION
+  new_type_type(5)=MPI_DOUBLE_PRECISION
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax*(1+ndim)
+  new_type_length(3)=nflushmax*twotondim
+  new_type_length(4)=nflushmax*twotondim
+  new_type_length(5)=nflushmax*twotondim
+  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_three_realdp_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_three_realdp_flush,info)
+
+  ! New type for large_realdp_flush
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_disp(3)=new_type_disp(2)+nflushmax*(1+ndim)*intex
+  new_type_disp(4)=new_type_disp(3)+nflushmax*twotondim*intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_type(3)=MPI_INTEGER
+  new_type_length(1)=1
+  new_type_length(2)=nflushmax*(1+ndim)
+  new_type_length(3)=nflushmax*twotondim
+  msg_size=3
+
+#ifdef HYDRO
+  msg_size=msg_size+1
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_length(msg_size)=nflushmax*twotondim*nvar
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*nvar*realdpex
+#endif
+
+#ifdef GRAV
+  msg_size=msg_size+1
+  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
+  new_type_length(msg_size)=nflushmax*twotondim*(ndim+2)
+  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*(ndim+2)*realdpex
+#endif
+
+  call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_flush,info)
+  call MPI_TYPE_COMMIT(new_mpi_large_realdp_flush,info)
+
+  ! New type for request
+  new_type_disp(1)=0
+  new_type_disp(2)=intex
+  new_type_type(1)=MPI_INTEGER
+  new_type_type(2)=MPI_INTEGER
+  new_type_length(1)=1
+  new_type_length(2)=ndim
+  call MPI_TYPE_STRUCT(2,new_type_length,new_type_disp,new_type_type,new_mpi_request,info)
+  call MPI_TYPE_COMMIT(new_mpi_request,info)
+
+#endif
+
+end subroutine init_cache_2
 
 
 

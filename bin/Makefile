@@ -115,7 +115,7 @@ PMOBJ = newdt_fine.o init_part.o rho_fine.o move_fine.o rho_ana.o output_part.o
 POISSONOBJ = output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
 
 # Hydro objects
-HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o output_hydro.o synchro_hydro_fine.o cooling_fine.o
+HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o output_hydro.o synchro_hydro_fine.o cooling_fine.o
 
 # All objects
 AMRLIB = $(AMROBJ) $(HYDROOBJ) $(PMOBJ) $(POISSONOBJ)

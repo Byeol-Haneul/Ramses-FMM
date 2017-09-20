@@ -19,14 +19,18 @@
 !  ndim        => (const)  number of dimensions
 ! ----------------------------------------------------------------
 subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
-     & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
-  use amr_parameters
-  use const             
-  use hydro_parameters
+     & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,&
+     & gamma,gamma_rad,smallr,smallc,slope_type,riemann,difmag)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
+  use const
   implicit none 
 
   ! Input parameters
   real(dp)::dx,dy,dz,dt
+  real(dp)::gamma,smallr,smallc,difmag
+  real(dp),dimension(1:nener)::gamma_rad
+  integer::slope_type,riemann
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
 
@@ -65,31 +69,27 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   klo=MIN(1,ku1+2); khi=MAX(1,ku2-2)
 
   ! Translate to primative variables, compute sound speeds  
-  call ctoprim(uin,qin,cin,gravin,dt,&
-     & iu1,iu2,ju1,ju2,ku1,ku2)
+  call ctoprim(uin,qin,cin,gravin,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
 
   ! Compute TVD slopes
-  call uslope(qin,dq,dx,dt,&
-       & iu1,iu2,ju1,ju2,ku1,ku2)
+  call uslope(qin,dq,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
 
   ! Compute 3D traced-states in all three directions
 #if NDIM==1
-  call trace1d(qin,dq,qm,qp,dx,dt,&
-       & iu1,iu2,ju1,ju2,ku1,ku2)
+  call trace1d(qin,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
 #endif
 #if NDIM==2
-  call trace2d(qin,dq,qm,qp,dx,dy,dt,&
-       & iu1,iu2,ju1,ju2,ku1,ku2)
+  call trace2d(qin,dq,qm,qp,dx,dy,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
 #endif
 #if NDIM==3
-  call trace3d(qin,dq,qm,qp,dx,dy,dz,dt,&
-       & iu1,iu2,ju1,ju2,ku1,ku2)
+  call trace3d(qin,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
 #endif
 
   ! Solve for 1D flux in X direction
   call cmpflxm(qm,iu1+1,iu2+1,ju1  ,ju2  ,ku1  ,ku2  , &
        &       qp,iu1  ,iu2  ,ju1  ,ju2  ,ku1  ,ku2  , &
-       &          if1  ,if2  ,jlo  ,jhi  ,klo  ,khi  , 2,3,4,fx,tx)
+       &          if1  ,if2  ,jlo  ,jhi  ,klo  ,khi  , &
+       &       2,3,4,fx,tx,gamma,gamma_rad,smallr,smallc,riemann)
   ! Save flux in output array
   do ivar=1,nvar
      do k=klo,khi
@@ -114,7 +114,8 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #if NDIM>1
   call cmpflxm(qm,iu1  ,iu2  ,ju1+1,ju2+1,ku1  ,ku2  , &
        &       qp,iu1  ,iu2  ,ju1  ,ju2  ,ku1  ,ku2  , &
-       &          ilo  ,ihi  ,jf1  ,jf2  ,klo  ,khi  , 3,2,4,fx,tx)
+       &          ilo  ,ihi  ,jf1  ,jf2  ,klo  ,khi  , &
+       &       3,2,4,fx,tx,gamma,gamma_rad,smallr,smallc,riemann)
   ! Save flux in output array
   do ivar=1,nvar
      do k=klo,khi
@@ -140,7 +141,8 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #if NDIM>2
   call cmpflxm(qm,iu1  ,iu2  ,ju1  ,ju2  ,ku1+1,ku2+1, &
        &       qp,iu1  ,iu2  ,ju1  ,ju2  ,ku1  ,ku2  , &
-       &          ilo  ,ihi  ,jlo  ,jhi  ,kf1  ,kf2  , 4,2,3,fx,tx)
+       &          ilo  ,ihi  ,jlo  ,jhi  ,kf1  ,kf2  , &
+       &       4,2,3,fx,tx,gamma,gamma_rad,smallr,smallc,riemann)
   ! Save flux in output array
   do ivar=1,nvar
      do k=kf1,kf2
@@ -168,7 +170,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
           & if1,if2,jf1,jf2,kf1,kf2)
      call consup(uin,flux,divu,dt,&
           & iu1,iu2,ju1,ju2,ku1,ku2,&
-          & if1,if2,jf1,jf2,kf1,kf2)
+          & if1,if2,jf1,jf2,kf1,kf2,difmag)
   endif
 
 end subroutine unsplit
@@ -176,16 +178,16 @@ end subroutine unsplit
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine trace1d(q,dq,qm,qp,dx,dt,&
-     & iu1,iu2,ju1,ju2,ku1,ku2)
-  use amr_parameters
-  use hydro_parameters
+subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
   use const
   implicit none
 
   real(dp)::dx, dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-
+  real(dp)::gamma,smallr,smallc
+  real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qm 
@@ -240,8 +242,7 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,&
 #if NENER>0
            do irad=1,nener
               su0 = su0 - (dex(irad))/r
-              se0(irad) = -u*dex(irad) &
-                   & - (dux)*gamma_rad(irad)*e(irad)
+              se0(irad) = -u*dex(irad) - (dux)*gamma_rad(irad)*e(irad)
            end do
 #endif
            
@@ -249,7 +250,6 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,&
            qp(i,j,k,ir,1) = r - half*drx + sr0*dtdx*half
            qp(i,j,k,iu,1) = u - half*dux + su0*dtdx*half
            qp(i,j,k,ip,1) = p - half*dpx + sp0*dtdx*half
-           !              qp(i,j,k,ir,1) = max(smallr, qp(i,j,k,ir,1))
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=r
 #if NENER>0
            do irad=1,nener
@@ -261,7 +261,6 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,&
            qm(i,j,k,ir,1) = r + half*drx + sr0*dtdx*half
            qm(i,j,k,iu,1) = u + half*dux + su0*dtdx*half
            qm(i,j,k,ip,1) = p + half*dpx + sp0*dtdx*half
-           !              qm(i,j,k,ir,1) = max(smallr, qm(i,j,k,ir,1))
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=r
 #if NENER>0
            do irad=1,nener
@@ -297,16 +296,16 @@ end subroutine trace1d
 !###########################################################
 !###########################################################
 #if NDIM>1
-subroutine trace2d(q,dq,qm,qp,dx,dy,dt,&
-     & iu1,iu2,ju1,ju2,ku1,ku2)
-  use amr_parameters
-  use hydro_parameters
+subroutine trace2d(q,dq,qm,qp,dx,dy,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+  use amr_parameters, only:dp, ndim
+  use hydro_parameters, only: nvar, nener
   use const
   implicit none
 
   real(dp)::dx, dy, dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-
+  real(dp)::gamma,smallr,smallc
+  real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qm 
@@ -387,7 +386,6 @@ subroutine trace2d(q,dq,qm,qp,dx,dy,dt,&
            qp(i,j,k,iu,1) = u - half*dux + su0*dtdx*half
            qp(i,j,k,iv,1) = v - half*dvx + sv0*dtdx*half
            qp(i,j,k,ip,1) = p - half*dpx + sp0*dtdx*half
-           !              qp(i,j,k,ir,1) = max(smallr, qp(i,j,k,ir,1))
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=r
 #if NENER>0
            do irad=1,nener
@@ -400,7 +398,6 @@ subroutine trace2d(q,dq,qm,qp,dx,dy,dt,&
            qm(i,j,k,iu,1) = u + half*dux + su0*dtdx*half
            qm(i,j,k,iv,1) = v + half*dvx + sv0*dtdx*half
            qm(i,j,k,ip,1) = p + half*dpx + sp0*dtdx*half
-           !              qm(i,j,k,ir,1) = max(smallr, qm(i,j,k,ir,1))
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=r
 #if NENER>0
            do irad=1,nener
@@ -413,7 +410,6 @@ subroutine trace2d(q,dq,qm,qp,dx,dy,dt,&
            qp(i,j,k,iu,2) = u - half*duy + su0*dtdy*half
            qp(i,j,k,iv,2) = v - half*dvy + sv0*dtdy*half
            qp(i,j,k,ip,2) = p - half*dpy + sp0*dtdy*half
-           !              qp(i,j,k,ir,2) = max(smallr, qp(i,j,k,ir,2))
            if(qp(i,j,k,ir,2)<smallr)qp(i,j,k,ir,2)=r
 #if NENER>0
            do irad=1,nener
@@ -426,7 +422,6 @@ subroutine trace2d(q,dq,qm,qp,dx,dy,dt,&
            qm(i,j,k,iu,2) = u + half*duy + su0*dtdy*half
            qm(i,j,k,iv,2) = v + half*dvy + sv0*dtdy*half
            qm(i,j,k,ip,2) = p + half*dpy + sp0*dtdy*half
-           !              qm(i,j,k,ir,2) = max(smallr, qm(i,j,k,ir,2))
            if(qm(i,j,k,ir,2)<smallr)qm(i,j,k,ir,2)=r
 #if NENER>0
            do irad=1,nener
@@ -467,16 +462,16 @@ end subroutine trace2d
 !###########################################################
 !###########################################################
 #if NDIM>2
-subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
-     & iu1,iu2,ju1,ju2,ku1,ku2)
-  use amr_parameters
-  use hydro_parameters
+subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
   use const
   implicit none
 
   real(dp)::dx, dy, dz, dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-
+  real(dp)::gamma,smallr,smallc
+  real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qm 
@@ -576,7 +571,6 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
            qp(i,j,k,iu,1) = u - half*dux + su0*dtdx*half
            qp(i,j,k,iv,1) = v - half*dvx + sv0*dtdx*half
            qp(i,j,k,iw,1) = w - half*dwx + sw0*dtdx*half
-           !              qp(i,j,k,ir,1) = max(smallr, qp(i,j,k,ir,1))
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=r
 #if NENER>0
            do irad=1,nener
@@ -590,7 +584,6 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
            qm(i,j,k,iu,1) = u + half*dux + su0*dtdx*half
            qm(i,j,k,iv,1) = v + half*dvx + sv0*dtdx*half
            qm(i,j,k,iw,1) = w + half*dwx + sw0*dtdx*half
-           !              qm(i,j,k,ir,1) = max(smallr, qm(i,j,k,ir,1))
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=r
 #if NENER>0
            do irad=1,nener
@@ -604,7 +597,6 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
            qp(i,j,k,iu,2) = u - half*duy + su0*dtdy*half
            qp(i,j,k,iv,2) = v - half*dvy + sv0*dtdy*half
            qp(i,j,k,iw,2) = w - half*dwy + sw0*dtdy*half
-           !              qp(i,j,k,ir,2) = max(smallr, qp(i,j,k,ir,2))
            if(qp(i,j,k,ir,2)<smallr)qp(i,j,k,ir,2)=r
 #if NENER>0
            do irad=1,nener
@@ -618,7 +610,6 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
            qm(i,j,k,iu,2) = u + half*duy + su0*dtdy*half
            qm(i,j,k,iv,2) = v + half*dvy + sv0*dtdy*half
            qm(i,j,k,iw,2) = w + half*dwy + sw0*dtdy*half
-           !              qm(i,j,k,ir,2) = max(smallr, qm(i,j,k,ir,2))
            if(qm(i,j,k,ir,2)<smallr)qm(i,j,k,ir,2)=r
 #if NENER>0
            do irad=1,nener
@@ -632,7 +623,6 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
            qp(i,j,k,iu,3) = u - half*duz + su0*dtdz*half
            qp(i,j,k,iv,3) = v - half*dvz + sv0*dtdz*half
            qp(i,j,k,iw,3) = w - half*dwz + sw0*dtdz*half
-           !              qp(i,j,k,ir,3) = max(smallr, qp(i,j,k,ir,3))
            if(qp(i,j,k,ir,3)<smallr)qp(i,j,k,ir,3)=r
 #if NENER>0
            do irad=1,nener
@@ -646,7 +636,6 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,&
            qm(i,j,k,iu,3) = u + half*duz + su0*dtdz*half
            qm(i,j,k,iv,3) = v + half*dvz + sv0*dtdz*half
            qm(i,j,k,iw,3) = w + half*dwz + sw0*dtdz*half
-           !              qm(i,j,k,ir,3) = max(smallr, qm(i,j,k,ir,3))
            if(qm(i,j,k,ir,3)<smallr)qm(i,j,k,ir,3)=r
 #if NENER>0
            do irad=1,nener
@@ -693,9 +682,9 @@ end subroutine trace3d
 subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
      &             qp,ip1,ip2,jp1,jp2,kp1,kp2, &
      &                ilo,ihi,jlo,jhi,klo,khi, ln,lt1,lt2, &
-     &            flx,tmp)
-  use amr_parameters
-  use hydro_parameters
+     &            flx,tmp,gamma,gamma_rad,smallr,smallc,riemann)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener, solver_llf,solver_hll,solver_hllc
   use const
   implicit none
 
@@ -703,6 +692,9 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
   integer ::im1,im2,jm1,jm2,km1,km2
   integer ::ip1,ip2,jp1,jp2,kp1,kp2
   integer ::ilo,ihi,jlo,jhi,klo,khi
+  real(dp)::gamma,smallr,smallc
+  real(dp),dimension(1:nener)::gamma_rad
+  integer::riemann
   real(dp),dimension(im1:im2,jm1:jm2,km1:km2,1:nvar,1:ndim)::qm
   real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nvar,1:ndim)::qp 
   real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nvar)::flx
@@ -751,12 +743,12 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
            end do
 #endif          
            ! Solve Riemann problem
-           if(riemann.eq.'llf')then
-              call riemann_llf(qleft,qright,fgdnv)
-           else if (riemann.eq.'hllc')then
-              call riemann_hllc(qleft,qright,fgdnv)
-           else if (riemann.eq.'hll')then
-              call riemann_hll(qleft,qright,fgdnv)
+           if(riemann.eq.solver_llf)then
+              call riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+           else if (riemann.eq.solver_hllc)then
+              call riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+           else if (riemann.eq.solver_hll)then
+              call riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
            else
               write(*,*)'unknown Riemann solver'
               stop
@@ -801,15 +793,16 @@ end subroutine cmpflxm
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine ctoprim(uin,q,c,gravin,dt,&
-     & iu1,iu2,ju1,ju2,ku1,ku2)
-  use amr_parameters
-  use hydro_parameters
+subroutine ctoprim(uin,q,c,gravin,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
   use const
   implicit none
 
   real(dp)::dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
+  real(dp)::smallr,smallc,gamma
+  real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gravin
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
@@ -901,15 +894,15 @@ end subroutine ctoprim
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine uslope(q,dq,dx,dt,&
-     & iu1,iu2,ju1,ju2,ku1,ku2)
-  use amr_parameters
-  use hydro_parameters
+subroutine uslope(q,dq,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar
   use const
   implicit none
 
   real(dp)::dx,dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
+  integer::slope_type
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::dq
 

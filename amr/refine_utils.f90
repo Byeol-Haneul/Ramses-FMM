@@ -1,3 +1,4 @@
+#ifdef TOTO
 subroutine refine_all
   use amr_commons
   implicit none
@@ -325,6 +326,7 @@ subroutine refine_fine(ilevel)
 113 format('   ==> Kill ',i6,' sub-grids')
 
 end subroutine refine_fine
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
@@ -647,6 +649,7 @@ end subroutine refine_fine_2
 !###############################################################
 !###############################################################
 !###############################################################
+#ifdef TOTO
 subroutine make_new_oct(iparent,icell,ilevel)
   use amr_commons
   use hilbert
@@ -798,6 +801,7 @@ subroutine make_new_oct(iparent,icell,ilevel)
   endif
 
 end subroutine make_new_oct
+#endif
 !###############################################################
 !###############################################################
 !###############################################################
@@ -934,7 +938,7 @@ subroutine make_new_oct_2(r,g,m,iparent,icell,ilevel)
         end do
         
         ! Interpolate
-        call interpol_hydro(u1,u2)
+        call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
         
         ! Store hydro variables
         do ivar=1,nvar

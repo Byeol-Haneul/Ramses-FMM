@@ -2,6 +2,7 @@
 !##############################################################################
 !##############################################################################
 !##############################################################################
+#ifdef TOTO
 subroutine rho_fine(ilevel)
   use amr_commons
   use pm_commons
@@ -71,10 +72,12 @@ subroutine rho_fine(ilevel)
 111 format('   Entering rho_fine for level ',I2)
   
 end subroutine rho_fine
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine multipole_fine(ilevel)
   use amr_commons
   use hydro_commons
@@ -142,7 +145,7 @@ subroutine multipole_fine(ilevel)
 #endif
            ! Add analytical density profile
            if(gravity_type < 0)then           
-              call rho_ana(xx,dd,dx_loc)
+              call rho_ana(xx,dd,dx_loc,gravity_params)
               mmm=max(dd,smallr)*vol_loc
 #ifdef HYDRO
               grid(igrid)%unew(ind,1)=grid(igrid)%unew(ind,1)+mmm
@@ -191,10 +194,12 @@ subroutine multipole_fine(ilevel)
 111 format('   Entering multipole_fine for level',i2)
 
 end subroutine multipole_fine
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine cic_from_multipole(ilevel)
   use amr_commons
   use hydro_commons
@@ -230,10 +235,12 @@ subroutine cic_from_multipole(ilevel)
 111 format('   Entering cic_from_multipole for level',i2)
 
 end subroutine cic_from_multipole
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine cic_cell(ilevel)
   use amr_commons
   use poisson_commons, ONLY:multipole
@@ -365,10 +372,12 @@ subroutine cic_cell(ilevel)
   call close_cache(grid_dict)
 
 end subroutine cic_cell
+#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
+#ifdef TOTO
 subroutine cic_part(ilevel)
   use amr_commons
   use pm_commons
@@ -510,10 +519,12 @@ subroutine cic_part(ilevel)
 111 format('   Entering cic_part for level',i2)
 
 end subroutine cic_part
+#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
+#ifdef TOTO
 subroutine split_part(ilevel)
   use amr_commons
   use pm_commons
@@ -657,6 +668,7 @@ subroutine split_part(ilevel)
 111 format('   Entering split_part for level',i2)
 
 end subroutine split_part
+#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -812,7 +824,7 @@ subroutine multipole_fine_2(r,g,m,ilevel)
 #endif
            ! Add analytical density profile
            if(r%gravity_type < 0)then
-              call rho_ana(xx,dd,dx_loc)
+              call rho_ana(xx,dd,dx_loc,r%gravity_params)
               mmm=max(dd,r%smallr)*vol_loc
 #ifdef HYDRO
               m%grid(igrid)%unew(ind,1)=m%grid(igrid)%unew(ind,1)+mmm
@@ -1284,7 +1296,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
   end do
   ! End loop over particles
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache_2(r,g,m,m%grid_dict)
   
   p%tailp(ilevel)=p%headp(ilevel)+npart_coarse-1
   p%headp(ilevel+1)=p%tailp(ilevel)+1

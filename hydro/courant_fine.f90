@@ -2,6 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine courant_fine(ilevel)
   use amr_commons
   use hydro_commons
@@ -113,6 +114,7 @@ subroutine courant_fine(ilevel)
 111 format('   Entering courant_fine for level ',I2)
 
 end subroutine courant_fine
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -195,7 +197,7 @@ subroutine courant_fine_2(r,g,m,ilevel)
            end do
 #endif
            ! Compute CFL time-step
-           call cmpdt(uu,gg,dx,dt_lev)
+           call cmpdt_2(r,uu,gg,dx,dt_lev)
            dt_loc=min(dt_loc,dt_lev)
         endif
 
@@ -235,6 +237,7 @@ end subroutine courant_fine_2
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine check_cons(ilevel)
   use amr_commons
   use hydro_commons
@@ -331,6 +334,7 @@ subroutine check_cons(ilevel)
 111 format('   Entering check_cons for level ',I2)
   
 end subroutine check_cons
+#endif
 !###########################################################
 !###########################################################
 !###########################################################

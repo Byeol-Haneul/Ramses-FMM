@@ -2,6 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine load_balance(ilevel)
   use amr_commons
   use hydro_commons
@@ -490,6 +491,7 @@ subroutine load_balance(ilevel)
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
 end subroutine load_balance
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -981,6 +983,7 @@ end subroutine load_balance_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine balance_part(ilevel)
   use amr_commons
   use pm_commons
@@ -1085,11 +1088,8 @@ subroutine balance_part(ilevel)
         end do
 
         iter=0
-        if(myid==1)write(*,*)"====================================="
-        if(myid==1)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
-!        if(myid==1)write(*,'(16(I10,1X))')npart_dom
-!        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(idom)*xpart_target),idom=0,ndom)
-!        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
+        if(myid==1.and.verbose)write(*,*)"====================================="
+        if(myid==1.and.verbose)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
 
         !#########################################################
         ! Sort particle according to current level Hilbert key
@@ -1164,15 +1164,15 @@ subroutine balance_part(ilevel)
            bound_key_target=bound_key_new
            
         end do
-        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
-        if(myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(idom)*xpart_target),idom=0,ndom)
+        if(myid==1.and.verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
+        if(myid==1.and.verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(idom)*xpart_target),idom=0,ndom)
         !#########################################################
         ! Store new Hilbert tick marks after convergence
         !#########################################################
         domain_part(ilev)%b(1:nhilbert,0:ndom)=bound_key_target(1:nhilbert,0:ndom)
 
      end do
-     if(myid==1)write(*,*)"====================================="
+     if(myid==1.and.verbose)write(*,*)"====================================="
 
      !#############################
      ! Deallocate work space
@@ -1241,16 +1241,12 @@ subroutine balance_part(ilevel)
   end do
   ! End loop over levels
 
-!  if(myid==1)write(*,*)'Counting done'
-!  write(*,'(34(I6,1x))')myid,count_loc,send_cnt
-
   !#####################################
   ! Compute number of particles to receive
   !#####################################
   call MPI_ALLTOALL(send_cnt(1),1,MPI_INTEGER,recv_cnt(1),1,MPI_INTEGER,MPI_COMM_WORLD,info)
   send_cnt_tot=SUM(send_cnt)
   recv_cnt_tot=SUM(recv_cnt)
-!  write(*,'("R ",34(I6,1x))')myid,recv_cnt
 
   !#####################################
   ! Compute offsets
@@ -1340,9 +1336,6 @@ subroutine balance_part(ilevel)
         levelp(jpart)=levelp_tmp
      end do
   end do
-
-!  if(myid==1)write(*,*)'Swap done'
-!  write(*,*)'S ',myid,count_loc,send_cnt_tot,recv_cnt_tot
 
   !###################################################################
   ! Set new number of particles in local processor
@@ -1592,9 +1585,6 @@ subroutine balance_part(ilevel)
   end do
   deallocate(domain_part)
 
-!  if(myid==1)write(*,*)'Swap done'
-!  write(*,*)'SWAP ',myid,headp(ilevel),tailp(nlevelmax)
-
   !##################################
   ! Put all particles in level ilevel
   !##################################
@@ -1611,6 +1601,7 @@ subroutine balance_part(ilevel)
 111 format('   Entering balance_part for level',i2)
 
 end subroutine balance_part
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -1728,8 +1719,8 @@ subroutine balance_part_2(r,g,m,p,ilevel)
         end do
 
         iter=0
-        if(g%myid==1)write(*,*)"====================================="
-        if(g%myid==1)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
+        if(g%myid==1.and.r%verbose)write(*,*)"====================================="
+        if(g%myid==1.and.r%verbose)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
 
         !#########################################################
         ! Sort particle according to current level Hilbert key
@@ -1804,15 +1795,15 @@ subroutine balance_part_2(r,g,m,p,ilevel)
            bound_key_target=bound_key_new
            
         end do
-        if(g%myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
-        if(g%myid==1)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(idom)*xpart_target),idom=0,ndom)
+        if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
+        if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(idom)*xpart_target),idom=0,ndom)
         !#########################################################
         ! Store new Hilbert tick marks after convergence
         !#########################################################
         domain_part(ilev)%b(1:nhilbert,0:ndom)=bound_key_target(1:nhilbert,0:ndom)
 
      end do
-     if(g%myid==1)write(*,*)"====================================="
+     if(g%myid==1.and.r%verbose)write(*,*)"====================================="
 
      !#############################
      ! Deallocate work space

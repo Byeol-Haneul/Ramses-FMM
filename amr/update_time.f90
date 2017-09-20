@@ -78,28 +78,29 @@ subroutine timer (label, cmd)
   end if
 end subroutine
 !=======================================================================
-subroutine finalize_timer
-  use amr_parameters
-  use amr_commons
+subroutine finalize_timer(g)
+  use amr_commons, only: global_t
   use timer_m
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+  type(global_t)::g
+  
   real(kind=8) :: total, gtotal, avtime, rmstime
-  real(kind=8), dimension(ncpu) :: vtime
-  integer,      dimension(ncpu) :: all_ntimer
-  logical,      dimension(ncpu) :: gprint_timer
+  real(kind=8), dimension(g%ncpu) :: vtime
+  integer,      dimension(g%ncpu) :: all_ntimer
+  logical,      dimension(g%ncpu) :: gprint_timer
   integer      :: imn, imx, mpi_err, icpu
   logical      :: o, print_timer
 !-----------------------------------------------------------------------
-  o = myid == 1
+  o = g%myid == 1
   total = 1e-9
-  if (o .and. ncpu==1) write (*,'(/a,i7,a)') '     seconds         %    STEP (rank=',myid,')'
+  if (o .and. g%ncpu==1) write (*,'(/a,i7,a)') '     seconds         %    STEP (rank=',g%myid,')'
   do itimer = 1,ntimer
      total = total + time(itimer)
   end do
-  if (ncpu==1) then
+  if (g%ncpu==1) then
      do itimer = 1,ntimer
         if (o .and. time(itimer)/total > 0.001) write (*,'(f12.3,4x,f6.1,4x,a24)') &
           time(itimer), 100.*time(itimer)/total,labels(itimer)
@@ -107,7 +108,7 @@ subroutine finalize_timer
      if (o) write (*,'(f12.3,4x,f6.1,4x,a)') total, 100., 'TOTAL'
   end if
 #ifndef WITHOUTMPI
-  if (ncpu > 1) then
+  if (g%ncpu > 1) then
      ! Check that timers are consistent across ranks
      call MPI_BARRIER(MPI_COMM_WORLD,mpi_err)
      call MPI_GATHER(ntimer,1,MPI_INTEGER,all_ntimer,1,MPI_INTEGER,0,MPI_COMM_WORLD,mpi_err)
@@ -125,7 +126,7 @@ subroutine finalize_timer
         endif
         ! Find first occurence of a rank with a different number of timers -- if it exists
         gprint_timer=.false.
-        do icpu=1,ncpu
+        do icpu=1,g%ncpu
            if (all_ntimer(icpu) .ne. ntimer) then
               gprint_timer(icpu) = .true.
               exit
@@ -136,7 +137,7 @@ subroutine finalize_timer
      call MPI_SCATTER(gprint_timer,1,MPI_LOGICAL,print_timer,1,MPI_LOGICAL,0,MPI_COMM_WORLD,mpi_err)
      if (print_timer) then
         write (*,*)
-        write (*,*) 'Labels of timer on rank==',myid
+        write (*,*) 'Labels of timer on rank==',g%myid
         write (*,*) '--------------------------------------------------------------------'
         do itimer=1,ntimer
            write(*,'(i3,1x,a)') itimer, labels(itimer)
@@ -146,7 +147,7 @@ subroutine finalize_timer
 
      call MPI_BARRIER(MPI_COMM_WORLD,mpi_err)
      call MPI_ALLREDUCE(total,gtotal,1,MPI_REAL8,MPI_SUM,MPI_COMM_WORLD,mpi_err)
-     gtotal = gtotal / ncpu
+     gtotal = gtotal / g%ncpu
 
      if (o) write (*,*) '--------------------------------------------------------------------'
      if (o) write (*,'(/a)') '     minimum       average       maximum' // &
@@ -155,10 +156,10 @@ subroutine finalize_timer
         call MPI_GATHER(real(time(itimer),kind=8),1,MPI_REAL8,vtime,1,MPI_REAL8,0,MPI_COMM_WORLD,mpi_err)
         if (o) then
            if (maxval(vtime)/gtotal > 0.001) then
-              avtime  = sum(vtime) / ncpu ! average time used
+              avtime  = sum(vtime) / g%ncpu ! average time used
               imn     = minloc(vtime,1)
               imx     = maxloc(vtime,1)
-              rmstime = sqrt(sum((vtime - avtime)**2)/ncpu)
+              rmstime = sqrt(sum((vtime - avtime)**2)/g%ncpu)
               write (*,'(5(f12.3,2x),f6.1,2x,2i4,4x,a24)') &
                  vtime(imn), avtime, vtime(imx), rmstime, rmstime/avtime, 100.*avtime/gtotal, imn, imx, labels(itimer)
            endif
@@ -181,6 +182,7 @@ subroutine reset_timer
    end do
 end subroutine
 !=======================================================================
+#ifdef TOTO
 subroutine update_time(ilevel)
   use amr_commons
   use pm_commons
@@ -336,6 +338,7 @@ subroutine update_time(ilevel)
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
  
 end subroutine update_time
+#endif
 !=======================================================================
 subroutine update_time_2(r,g,m,p,ilevel)
   use amr_parameters, only: dp,n_frw
@@ -444,7 +447,7 @@ subroutine update_time_2(r,g,m,p,ilevel)
            write(*,*)'Total elapsed time:',ttend-ttstart
 #endif
         endif
-        call clean_stop
+        call clean_stop(g)
      end if
 
   end if
@@ -498,15 +501,16 @@ subroutine update_time_2(r,g,m,p,ilevel)
  
 end subroutine update_time_2
   
-subroutine clean_stop
-  use amr_commons
+subroutine clean_stop(g)
+  use amr_commons, only: global_t
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
+  type(global_t)::g
   integer::info
 
-  call finalize_timer
+  call finalize_timer(g)
 
 #ifndef WITHOUTMPI
   call MPI_FINALIZE(info)
@@ -582,7 +586,7 @@ subroutine getmem(outmem)
   end if
 
 end subroutine getmem
-
+#ifdef TOTO
 subroutine cmpmem(outmem)
   use amr_commons
   use hydro_commons
@@ -623,71 +627,8 @@ subroutine cmpmem(outmem)
 
   write(*,*)'Estimated memory=',(outmem_dp*8.+outmem_int*4.+outmem_qdp*8.)/1024./1024.
 
-
 end subroutine cmpmem
-!------------------------------------------------------------------------
-SUBROUTINE getProperTime(tau,tproper)
-! Calculate proper time tproper corresponding to conformal time tau (both
-! in code units).
-!------------------------------------------------------------------------
-  use amr_commons
-  implicit none
-  real(dp)::tau, tproper
-  integer::i
-  if(.not. cosmo .or. tau .eq. 0.d0) then ! this might happen quite often
-     tproper = tau
-     return
-  endif
-  i = 1
-  do while( tau_frw(i) > tau .and. i < n_frw )
-     i = i+1
-  end do
-  tproper = t_frw(i  )*(tau-tau_frw(i-1))/(tau_frw(i  )-tau_frw(i-1))+ &
-          & t_frw(i-1)*(tau-tau_frw(i  ))/(tau_frw(i-1)-tau_frw(i  ))
-END SUBROUTINE getProperTime
-!------------------------------------------------------------------------
-SUBROUTINE getAgeGyr(t_birth_proper, age)
-! Calculate proper time passed, in Gyrs, since proper time t_birth_proper 
-! (given in code units) until the current time.
-!------------------------------------------------------------------------
-  use amr_commons
-  use pm_commons
-  implicit none
-  real(dp):: t_birth_proper, age
-  real(dp), parameter:: yr = 3.15569d+07
-  real(dp),save:: scale_t_Gyr
-  logical::scale_init=.false.
-  real(dp):: scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
-  if( .not. scale_init) then 
-     ! The timescale has not been initialized
-     call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-     scale_t_Gyr = (scale_t/aexp**2)/yr/1.e9
-     scale_init=.true.
-  endif
-  age = (texp - t_birth_proper) * scale_t_Gyr
-END SUBROUTINE getAgeGyr
-!------------------------------------------------------------------------
-SUBROUTINE getAgeSec(t_birth_proper, age)
-! Calculate proper time passed, in sec, since proper time t_birth_proper 
-! (given in code units) until the current time.
-!------------------------------------------------------------------------
-  use amr_commons
-  use pm_commons
-  implicit none
-  real(dp):: t_birth_proper, age
-  real(dp),save:: scale_t_sec
-  logical::scale_init=.false.
-  real(dp):: scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
-  if( .not. scale_init) then 
-     ! The timescale has not been initialized
-     call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-     scale_t_sec = (scale_t/aexp**2)
-     scale_init=.true.
-  endif
-  age = (texp - t_birth_proper) * scale_t_sec
-END SUBROUTINE getAgeSec
-!------------------------------------------------------------------------
-
+#endif
 
 
 

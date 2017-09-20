@@ -2,6 +2,7 @@
 !=======================================================================
 !=======================================================================
 !=======================================================================
+#ifdef TOTO
 subroutine output_frame()
   use amr_commons
   use pm_commons
@@ -574,7 +575,7 @@ subroutine output_frame()
   nh_frame = nh_temp
  enddo
 end subroutine output_frame
-
+#endif
 !=======================================================================
 !=======================================================================
 !=======================================================================
@@ -659,7 +660,7 @@ subroutine output_frame_2(r,g,m,p)
   endif
   
   infofile = trim(moviedir)//'info_'//trim(istep_str)//'.txt'
-  if(g%myid==1)call output_info(infofile)
+  if(g%myid==1)call output_info_2(r,g,infofile)
   
   moviefiles(0) = trim(moviedir)//'temp_'//trim(istep_str)//'.map'
   moviefiles(1) = trim(moviedir)//'dens_'//trim(istep_str)//'.map'
@@ -692,7 +693,7 @@ subroutine output_frame_2(r,g,m,p)
   endif
 
   ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Compute frame boundaries
   if(r%proj_axis(proj_ind:proj_ind).eq.'x')then
@@ -939,7 +940,7 @@ subroutine output_frame_2(r,g,m,p)
  enddo
 
 end subroutine output_frame_2
-
+#ifdef TOTO
 subroutine set_movie_vars()
   use amr_commons
   ! This routine sets the movie vars from textual form
@@ -980,3 +981,46 @@ subroutine set_movie_vars()
   if(ANY(movie_vars_txt=='stars')) movie_vars(NVAR+2)=1
 #endif
 end subroutine set_movie_vars
+#endif
+subroutine set_movie_vars_2(r)
+  use amr_commons, only: run_t
+  ! This routine sets the movie vars from textual form
+  type(run_t)::r
+  
+  integer::ll
+  character(LEN=5)::dummy
+
+  if(ANY(r%movie_vars_txt=='temp '))r%movie_vars(0)=1
+  if(ANY(r%movie_vars_txt=='dens '))r%movie_vars(1)=1
+  if(ANY(r%movie_vars_txt=='vx   '))r%movie_vars(2)=1
+  if(ANY(r%movie_vars_txt=='vy   '))r%movie_vars(3)=1
+#if NDIM>2
+  if(ANY(r%movie_vars_txt=='vz   '))r%movie_vars(4)=1
+#endif
+#if NDIM==2
+  if(ANY(r%movie_vars_txt=='pres '))r%movie_vars(4)=1
+#endif
+#if NDIM>2
+  if(ANY(r%movie_vars_txt=='pres '))r%movie_vars(5)=1
+#endif
+#if NVAR>5
+  do ll=6,NVAR
+    write(dummy,'(I3.1)') ll
+    if(ANY(r%movie_vars_txt=='var'//trim(adjustl(dummy))//' '))r%movie_vars(ll)=1
+ end do
+#endif
+#ifdef SOLVERmhd
+  if(ANY(r%movie_vars_txt=='bxl  '))r%movie_vars(6)=1
+  if(ANY(r%movie_vars_txt=='byl  '))r%movie_vars(7)=1
+  if(ANY(r%movie_vars_txt=='bzl  '))r%movie_vars(8)=1
+  if(ANY(r%movie_vars_txt=='bxr  '))r%movie_vars(NVAR+1)=1
+  if(ANY(r%movie_vars_txt=='byr  '))r%movie_vars(NVAR+2)=1
+  if(ANY(r%movie_vars_txt=='bzr  '))r%movie_vars(NVAR+3)=1
+  if(ANY(r%movie_vars_txt=='pmag '))r%movie_vars(NVAR+4)=1
+  if(ANY(r%movie_vars_txt=='dm   '))r%movie_vars(NVAR+5)=1
+  if(ANY(r%movie_vars_txt=='stars'))r%movie_vars(NVAR+6)=1
+#else
+  if(ANY(r%movie_vars_txt=='dm   '))r%movie_vars(NVAR+1)=1
+  if(ANY(r%movie_vars_txt=='stars'))r%movie_vars(NVAR+2)=1
+#endif
+end subroutine set_movie_vars_2

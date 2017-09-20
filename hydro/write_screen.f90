@@ -1,3 +1,4 @@
+#ifdef TOTO
 subroutine write_screen(ilevel)
   use amr_commons
   use hydro_commons
@@ -38,7 +39,7 @@ subroutine write_screen(ilevel)
 115 format(' Output ',i5,' parts')
 
 end subroutine write_screen
-
+#endif
 subroutine write_screen_2(r,g,m,ilevel)
   use amr_parameters, only: dp,ndim
   use amr_commons, only: run_t,global_t,mesh_t

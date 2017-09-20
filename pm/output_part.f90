@@ -1,3 +1,4 @@
+#ifdef TOTO
 subroutine output_part(filename)
   use amr_commons
   use pm_commons
@@ -74,6 +75,7 @@ subroutine output_part(filename)
   close(ilun)
 
 end subroutine output_part
+#endif
 !#######################################################
 !#######################################################
 !#######################################################

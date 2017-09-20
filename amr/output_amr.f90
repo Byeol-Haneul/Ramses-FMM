@@ -2,6 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine dump_all
   use amr_commons
   use pm_commons
@@ -97,6 +98,7 @@ subroutine dump_all
   end if
 
 end subroutine dump_all
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -147,7 +149,7 @@ subroutine dump_all_2(r,g,m,p)
      if(g%myid==1)then
         if(r%pic)then
            filename=TRIM(filedir)//'part_header.txt'
-           call output_header_2(r,g,filename)
+           call output_header_2(r,g,m,p,filename)
         endif
         if(r%hydro)then
            filename=TRIM(filedir)//'hydro_file_descriptor.txt'
@@ -232,6 +234,7 @@ end subroutine output_compil
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine output_params(filename)
   use amr_commons
   use hydro_commons
@@ -279,6 +282,7 @@ subroutine output_params(filename)
   close(ilun)
 
 end subroutine output_params
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -337,6 +341,7 @@ end subroutine output_params_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine input_params(filename,ncpu_file,levelmin_file,nlevelmax_file)
   use amr_commons
   use hydro_commons
@@ -409,6 +414,7 @@ subroutine input_params(filename,ncpu_file,levelmin_file,nlevelmax_file)
   endif
 
 end subroutine input_params
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -468,7 +474,7 @@ subroutine input_params_2(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
      if(g%myid==1)then
         write(*,*)'Incorrect number of space dimensions in restart file'
      endif
-     call clean_stop
+     call clean_stop(g)
   endif
   ! Compute movie frame number if applicable
   if(r%imovout>0) then
@@ -490,6 +496,7 @@ end subroutine input_params_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine output_amr(filename)
   use amr_commons
   use hydro_commons
@@ -529,6 +536,7 @@ subroutine output_amr(filename)
   end do
   close(ilun)  
 end subroutine output_amr
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -571,6 +579,7 @@ end subroutine output_amr_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine output_info(filename)
   use amr_commons
   use hydro_commons
@@ -620,6 +629,7 @@ subroutine output_info(filename)
   close(ilun)
 
 end subroutine output_info
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -643,7 +653,7 @@ subroutine output_info_2(r,g,filename)
   ilun=11
 
   ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Open file
   fileloc=TRIM(filename)
@@ -679,6 +689,7 @@ end subroutine output_info_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine output_header(filename)
   use amr_commons
   use hydro_commons
@@ -717,6 +728,7 @@ subroutine output_header(filename)
   close(ilun)
 
 end subroutine output_header
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -763,6 +775,7 @@ end subroutine output_header_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifdef TOTO
 subroutine input_header(filename,npart_tot_file,ncpu_file)
   use amr_commons
   use hydro_commons
@@ -793,6 +806,7 @@ subroutine input_header(filename,npart_tot_file,ncpu_file)
   close(ilun)
 
 end subroutine input_header
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -902,7 +916,7 @@ subroutine savegadget(filename)
            ipart=ipart+1
            if (ipart .gt. npart) then
                 write(*,*) myid, "Ipart=",ipart, "exceeds", npart
-                call clean_stop
+                stop
            endif
            pos(idim, ipart)=xp(i,idim) * boxlen_ini
            vel(idim, ipart)=vp(i,idim) * gadgetvfact

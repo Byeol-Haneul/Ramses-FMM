@@ -1,18 +1,18 @@
 program ramses
-  use amr_commons
-  use pm_commons
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
   implicit none  
 
-  type(run_t)::run_p
-  type(global_t)::global_v
-  type(mesh_t)::mesh_v
-  type(part_t)::part_v
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
   
   ! Read run parameters
-  call read_params(run_p,global_v)
+  call read_params(r,g)
 
   ! Start time integration
-  call adaptive_loop(run_p,global_v,mesh_v,part_v)
+  call adaptive_loop(r,g,m,p)
 
 end program ramses
 

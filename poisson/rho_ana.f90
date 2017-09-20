@@ -2,11 +2,10 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine rho_ana(x,d,dx)
-  use amr_parameters
-  use hydro_parameters
-  use poisson_parameters
+subroutine rho_ana(x,d,dx,gravity_params)
+  use amr_parameters, only: dp, ndim
   implicit none
+  real(dp),dimension(1:10)::gravity_params
   real(dp)::dx                  ! Cell size
   real(dp)::d                   ! Density
   real(dp),dimension(1:ndim)::x ! Cell center position.

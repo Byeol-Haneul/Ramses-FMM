@@ -2,6 +2,7 @@
 !#########################################################
 !#########################################################
 !#########################################################
+#ifdef TOTO
 subroutine force_fine(ilevel,icount)
   use amr_commons
   use poisson_commons
@@ -41,7 +42,7 @@ subroutine force_fine(ilevel,icount)
               end do
            end do
            ! Call analytical gravity routine
-           call gravana(xx,ff,dx,ngrid)
+           call gravana(xx,ff,dx,ngrid,gravity_type,gravity_params)
            ! Scatter variables to main memory
            do idim=1,ndim
               do i=1,ngrid
@@ -101,10 +102,12 @@ subroutine force_fine(ilevel,icount)
 111 format('   Entering force_fine for level ',I2)
 
 end subroutine force_fine
+#endif
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
+#ifdef TOTO
 subroutine gradient_phi(ilevel,icount)
   use amr_commons
   use poisson_commons
@@ -258,6 +261,7 @@ subroutine gradient_phi(ilevel,icount)
   call close_cache(grid_dict)
 #endif
 end subroutine gradient_phi
+#endif
 !#########################################################
 !#########################################################
 !#########################################################
@@ -304,7 +308,7 @@ subroutine force_fine_2(r,g,m,ilevel,icount)
               end do
            end do
            ! Call analytical gravity routine
-           call gravana(xx,ff,dx,ngrid)
+           call gravana(xx,ff,dx,ngrid,r%gravity_type,r%gravity_params)
            ! Scatter variables to main memory
            do idim=1,ndim
               do i=1,ngrid
@@ -442,7 +446,7 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop
+     call clean_stop(g)
   endif
 
   ! Compute fraction of time steps for interpolation

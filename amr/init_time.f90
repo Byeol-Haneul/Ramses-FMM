@@ -2,6 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine init_time
   use amr_commons
   use hydro_commons
@@ -57,6 +58,7 @@ subroutine init_time
   end if                                                                   
 
 end subroutine init_time
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -121,6 +123,7 @@ end subroutine init_time_2
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine init_file
   use amr_commons
   use hydro_commons
@@ -198,6 +201,7 @@ subroutine init_file
   end if
 
 end subroutine init_file
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -231,7 +235,7 @@ subroutine init_file_2(r,g)
               write(*,*)TRIM(r%initfile(ilevel))
               write(*,*)'File '//TRIM(filename)//' does not exist'
            end if
-           call clean_stop
+           call clean_stop(g)
         end if
         open(10,file=filename,form='unformatted')
         if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -259,7 +263,7 @@ subroutine init_file_2(r,g)
      write(*,*)'Expected n1=',2**r%levelmin &
           &           ,' n2=',2**r%levelmin &
           &           ,' n3=',2**r%levelmin
-     call clean_stop
+     call clean_stop(g)
   end if
 
   ! Write initial conditions parameters
@@ -283,6 +287,7 @@ end subroutine init_file_2
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine init_cosmo
   use amr_commons
   use hydro_commons
@@ -471,6 +476,7 @@ subroutine init_cosmo
   ! This scale factor is different from vfact in grafic by h0/aexp
 
 end subroutine init_cosmo
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -500,7 +506,7 @@ subroutine init_cosmo_2(r,g)
 
   if(r%initfile(r%levelmin)==' ')then
      write(*,*)'You need to specifiy at least one level of initial condition'
-     call clean_stop
+     call clean_stop(g)
   end if
 
   SELECT CASE (r%filetype)
@@ -522,7 +528,7 @@ subroutine init_cosmo_2(r,g)
               if(g%myid==1)then
                  write(*,*)'File '//TRIM(filename)//' does not exist'
               end if
-              call clean_stop
+              call clean_stop(g)
            end if
            open(10,file=filename,form='unformatted')
            if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -566,7 +572,7 @@ subroutine init_cosmo_2(r,g)
            write(*,*)'Expected n1=',2**r%levelmin &
                 &           ,' n2=',2**r%levelmin &
                 &           ,' n3=',2**r%levelmin
-           call clean_stop
+           call clean_stop(g)
         endif
      end if
      
@@ -578,18 +584,18 @@ subroutine init_cosmo_2(r,g)
      ! Reading gadget file header only
      if (r%verbose) write(*,*)'Reading in gadget format from '//TRIM(r%initfile(r%levelmin))
      call gadgetreadheader(TRIM(r%initfile(r%levelmin)), 0, gadgetheader, ok)
-     if(.not.ok) call clean_stop
+     if(.not.ok) call clean_stop(g)
      do i=1,6
         if (i .ne. 2) then
            if (gadgetheader%nparttotal(i) .ne. 0) then
               write(*,*) 'Non DM particles present in bin ', i
-              call clean_stop
+              call clean_stop(g)
            endif
         endif
      enddo
      if (gadgetheader%mass(2) == 0) then
         write(*,*) 'Particles have different masses, not supported'
-        call clean_stop
+        call clean_stop(g)
      endif
      g%omega_m = gadgetheader%omega0
      g%omega_l = gadgetheader%omegalambda
@@ -609,7 +615,7 @@ subroutine init_cosmo_2(r,g)
 
   CASE DEFAULT
      write(*,*) 'Unsupported input format '//r%filetype
-     call clean_stop
+     call clean_stop(g)
   END SELECT
 
   ! Write cosmological parameters
@@ -620,7 +626,13 @@ subroutine init_cosmo_2(r,g)
      write(*,'(" box size=",1pe10.3," h-1 Mpc")')g%boxlen_ini
   end if
   g%omega_k=1.d0-g%omega_l-g%omega_m
-           
+
+  ! Save cosmological parameters into run parameters
+  r%omega_b=g%omega_b
+  r%omega_m=g%omega_m
+  r%omega_l=g%omega_l
+  r%omega_k=g%omega_k
+  
   ! Compute linear scaling factor between aexp and astart(ilevel)
   do ilevel=r%levelmin,g%nlevelmax_part
      g%dfact(ilevel)=d1a(g%aexp,g%omega_m,g%omega_l)/d1a(g%astart(ilevel),g%omega_m,g%omega_l)
@@ -693,7 +705,7 @@ subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
      write(*,*)'O_mat_0,O_vac_0,O_k_0=',O_mat_0,O_vac_0,O_k_0
      write(*,*)'The sum must be equal to 1.0, but '
      write(*,*)'O_mat_0+O_vac_0+O_k_0=',O_mat_0+O_vac_0+O_k_0
-     call clean_stop
+     stop
   end if
 
   axp_tau = 1.0D0
@@ -808,12 +820,12 @@ function d1a(a,omega_m,omega_l)
   eps=1.0d-6
   if(a .le. 0.0d0)then
      write(*,*)'a=',a
-     call clean_stop
+     stop
   end if
   y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
   if(y .lt. 0.0D0)then
      write(*,*)'y=',y
-     call clean_stop
+     stop
   end if
   y12=y**0.5d0
   d1a=y12/a*rombint(eps,a,eps,omega_m,omega_l)

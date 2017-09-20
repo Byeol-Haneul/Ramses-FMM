@@ -24,7 +24,7 @@
 ! ------------------------------------------------------------------------
 ! Main multigrid routine, called by amr_step
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine multigrid(ilevel,icount)
   use amr_commons
   use poisson_commons
@@ -220,7 +220,7 @@ subroutine multigrid(ilevel,icount)
   call cleanup_mg
   
 end subroutine multigrid
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -391,7 +391,7 @@ end subroutine multigrid_2
 ! ------------------------------------------------------------------------
 ! Recursive multigrid routine for coarse MG levels
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 recursive subroutine recursive_multigrid(ifinelevel, safe)
   use amr_commons
   use poisson_commons
@@ -473,7 +473,7 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
   end do
   
 end subroutine recursive_multigrid
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -553,7 +553,7 @@ end subroutine recursive_multigrid_2
 ! ------------------------------------------------------------------------
 ! Multigrid workspace initialisation
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine init_mg(ilevel)
   use amr_commons
   use poisson_commons
@@ -591,7 +591,7 @@ subroutine init_mg(ilevel)
   ifree_mg=noct_used+1
   
 end subroutine init_mg
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -646,7 +646,7 @@ end subroutine init_mg_2
 ! ---------------------------------------------------------------------
 ! Coarse grid MG activation for local grids
 ! ---------------------------------------------------------------------
-  
+#ifdef TOTO  
 subroutine build_mg(ifinelevel)
   use amr_commons
   use poisson_commons
@@ -786,7 +786,7 @@ subroutine build_mg(ifinelevel)
 #endif
 
 end subroutine build_mg
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -944,7 +944,7 @@ end subroutine build_mg_2
 ! ------------------------------------------------------------------------
 ! Multigrid cleanup
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine cleanup_mg
    use amr_commons
    use poisson_commons
@@ -966,7 +966,7 @@ subroutine cleanup_mg
   noct_used=ifree-1
 
 end subroutine cleanup_mg
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1009,7 +1009,7 @@ end subroutine cleanup_mg_2
 ! ------------------------------------------------------------------------
 ! Initialize mask at fine level into f(:,3)
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine make_mask(ilevel)
   use amr_commons
   use pm_commons
@@ -1027,7 +1027,7 @@ subroutine make_mask(ilevel)
   end do
   
 end subroutine make_mask
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1077,7 +1077,7 @@ end subroutine make_mask_2
 ! Sets BC-modified RHS    into f(:,2)
 !
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine make_bc_rhs(ilevel,icount)
 
   use amr_commons
@@ -1233,7 +1233,7 @@ subroutine make_bc_rhs(ilevel,icount)
   call close_cache(grid_dict)
 
 end subroutine make_bc_rhs
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1301,7 +1301,7 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop
+     call clean_stop(g)
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -1407,7 +1407,7 @@ end subroutine make_bc_rhs_2
 
 ! ---------------------------------------------------------------------
 ! ---------------------------------------------------------------------
-  
+#ifdef TOTO
 subroutine build_comm_mg(hash_dict,ilevel)
   use amr_commons
   use poisson_commons
@@ -1671,7 +1671,7 @@ subroutine build_comm_mg(hash_dict,ilevel)
 #endif
 
 end subroutine build_comm_mg
-
+#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1679,7 +1679,7 @@ end subroutine build_comm_mg
 
 ! ------------------------------------------------------------------------
 ! ------------------------------------------------------------------------
-
+#ifdef TOTO
 subroutine clean_comm_mg(ilevel)
   use amr_commons
   use poisson_commons
@@ -1702,6 +1702,6 @@ subroutine clean_comm_mg(ilevel)
 #endif
 
 end subroutine clean_comm_mg
-
+#endif
 #endif
 

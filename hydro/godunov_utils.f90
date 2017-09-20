@@ -2,6 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine hydro_refine(ug,um,ud,ok)
   use amr_parameters
   use hydro_parameters
@@ -89,6 +90,7 @@ subroutine hydro_refine(ug,um,ud,ok)
   end if
 
 end subroutine hydro_refine
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
@@ -186,6 +188,7 @@ end subroutine hydro_refine_2
 !###########################################################
 !###########################################################
 !###########################################################
+#ifdef TOTO
 subroutine cmpdt(uu,gg,dx,dt)
   use amr_parameters
   use hydro_parameters
@@ -265,17 +268,105 @@ subroutine cmpdt(uu,gg,dx,dt)
   dt = min(dt,dtcell)
 
 end subroutine cmpdt
+#endif
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann_llf(qleft,qright,fgdnv)
-  use amr_parameters
-  use hydro_parameters
+subroutine cmpdt_2(r,uu,gg,dx,dt)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
+  use amr_commons, only: run_t
+  use const
+  implicit none
+  type(run_t)::r
+  real(dp)::dx,dt
+  real(dp),dimension(1:nvar)::uu
+  real(dp),dimension(1:ndim)::gg
+  
+  real(dp)::dtcell,smallp
+  integer::idim,irad
+  
+  smallp = r%smallc**2/r%gamma
+
+  ! Convert to primitive variables
+  uu(1)=max(uu(1),r%smallr)
+  ! Velocity
+  do idim = 1,ndim
+     uu(idim+1) = uu(idim+1)/uu(1)
+  end do
+  ! Internal energy
+  do idim = 1,ndim
+     uu(ndim+2) = uu(ndim+2)-half*uu(1)*uu(idim+1)**2
+  end do
+#if NENER>0
+  do irad = 1,nener
+     uu(ndim+2) = uu(ndim+2)-uu(ndim+2+irad)
+  end do
+#endif
+
+  ! Debug
+  if(r%debug)then
+     if(uu(ndim+2).le.0.or.uu(1).le.r%smallr)then
+        write(*,*)'stop in cmpdt'
+        write(*,*)'dx   =',dx
+        write(*,*)'rho  =',uu(1)
+        write(*,*)'P    =',uu(ndim+2)
+        write(*,*)'vel  =',uu(2:ndim+1)
+        stop
+     end if
+  end if
+
+  ! Compute pressure
+  uu(ndim+2) = max((r%gamma-one)*uu(ndim+2),uu(1)*smallp)
+#if NENER>0
+  do irad = 1,nener
+     uu(ndim+2+irad) = (r%gamma_rad(irad)-one)*uu(ndim+2+irad)
+  end do
+#endif
+
+  ! Compute sound speed
+  uu(ndim+2) = r%gamma*uu(ndim+2)
+#if NENER>0
+  do irad = 1,nener
+     uu(ndim+2) = uu(ndim+2) + r%gamma_rad(irad)*uu(ndim+2+irad)
+  end do
+#endif  
+  uu(ndim+2)=sqrt(uu(ndim+2)/uu(1))
+
+  ! Compute wave speed
+  uu(ndim+2)=dble(ndim)*uu(ndim+2)
+  do idim = 1,ndim
+     uu(ndim+2)=uu(ndim+2)+abs(uu(idim+1))
+  end do
+
+  ! Compute gravity strength ratio
+  uu(1)=zero
+  do idim = 1,ndim
+     uu(1)=uu(1)+abs(gg(idim))
+  end do
+  uu(1)=uu(1)*dx/uu(ndim+2)**2
+  uu(1)=MAX(uu(1),0.0001_dp)
+
+  ! Compute maximum time step for each authorized cell
+  dt = r%courant_factor*dx/r%smallc
+  dtcell = dx/uu(ndim+2)*(sqrt(one+two*r%courant_factor*uu(1))-one)/uu(1)
+  dt = min(dt,dtcell)
+
+end subroutine cmpdt_2
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
   use const
   implicit none
 
   ! dummy arguments
+  real(dp)::gamma,smallr,smallc,difmag
+  real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(1:nvar)::qleft,qright
   real(dp),dimension(1:nvar+1)::fgdnv
 
@@ -415,12 +506,16 @@ end subroutine riemann_llf
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann_hll(qleft,qright,fgdnv)
-  USE amr_parameters
-  USE const
-  USE hydro_parameters
+subroutine riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
+  use const
+  implicit none
   ! 1D HLL Riemann solver
-  IMPLICIT NONE
+
+  ! dummy arguments
+  real(dp)::gamma,smallr,smallc,difmag
+  real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(1:nvar)::qleft,qright
   real(dp),dimension(1:nvar+1)::fgdnv
 
@@ -559,13 +654,16 @@ end subroutine riemann_hll
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann_hllc(qleft,qright,fgdnv)
-  use amr_parameters
-  use hydro_parameters
+subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar, nener
   use const
   implicit none
-
   ! HLLC Riemann solver (Toro)
+
+  ! dummy arguments
+  real(dp)::gamma,smallr,smallc,difmag
+  real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(1:nvar)::qleft,qright
   real(dp),dimension(1:nvar+1)::fgdnv
 

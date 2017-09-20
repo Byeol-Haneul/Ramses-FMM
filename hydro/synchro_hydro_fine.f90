@@ -2,6 +2,7 @@
 !################################################################
 !################################################################
 !################################################################
+#ifdef TOTO
 subroutine synchro_hydro_fine(ilevel,dteff)
   use amr_commons
   use hydro_commons
@@ -55,10 +56,12 @@ subroutine synchro_hydro_fine(ilevel,dteff)
 111 format('   Entering synchro_hydro_fine for level',i2,' and time step dt=',1PE12.5)
 
 end subroutine synchro_hydro_fine
+#endif
 !################################################################
 !################################################################
 !################################################################
 !################################################################
+#ifdef TOTO
 subroutine add_gravity_source_terms(ilevel)
   use amr_commons
   use hydro_commons
@@ -116,6 +119,7 @@ subroutine add_gravity_source_terms(ilevel)
 111 format('   Entering add_gravity_source_terms for level ',i2)
 
 end subroutine add_gravity_source_terms
+#endif
 !################################################################
 !################################################################
 !################################################################
