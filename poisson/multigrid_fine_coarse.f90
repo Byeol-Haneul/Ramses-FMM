@@ -660,15 +660,12 @@ subroutine gauss_seidel_mg(hash_dict,ilevel,safe,redstep)
   ! The domain mask is also needed.
   
   integer :: get_grid
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
-  real(dp) :: dx, oneoverdx2, phi_c, dis_c, dx2, nb_sum, weight
+  real(dp) :: phi_c, dis_c, dx2, nb_sum, weight
   integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0, ipos
   real(dp) :: dtwondim = (twondim)
 
@@ -827,16 +824,13 @@ subroutine gauss_seidel_mg_2(r,g,m,hash_dict,ilevel,safe,redstep)
   ! The domain mask is also needed.
   
   integer :: get_grid_2
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
-  real(dp) :: dx, oneoverdx2, phi_c, dis_c, dx2, nb_sum, weight
-  integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0, ipos
+  real(dp) :: phi_c, dis_c, dx2, nb_sum, weight
+  integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0
   real(dp) :: dtwondim = (twondim)
 
   integer, dimension(1:4) :: ired, iblack
@@ -994,15 +988,12 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
   ! The domain mask is also needed.
   
   integer :: get_grid
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector),save::hk0,hk1,hk2
-  integer(kind=8),dimension(1:nvector),save::ix,iy,iz
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
-  real(dp) :: dx, oneoverdx2, phi_c, dis_c, dx2, nb_sum, weight
+  real(dp) :: oneoverdx2, phi_c, dis_c, dx2, nb_sum, weight
   integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0, ipos
   real(dp) :: dtwondim = (twondim)
   integer  :: icpu,info,i,istart,nbuffer,countrecv,countsend,tag=101
@@ -1329,7 +1320,7 @@ subroutine interpolate_and_correct(ifinelevel)
   real(dp), dimension(1:8)     :: bbb
   integer,  dimension(1:8,1:8) :: ccc
   integer::ind_average,ind_father
-  integer::igrid_nbr,ind_nbr,igrid_cen,ind_cen
+  integer::igrid_nbr,ind_nbr
   real(dp),dimension(1:twotondim)::corr
   
   ! Local constants
@@ -1432,7 +1423,7 @@ subroutine interpolate_and_correct_2(r,g,m,ifinelevel)
   real(dp), dimension(1:8)     :: bbb
   integer,  dimension(1:8,1:8) :: ccc
   integer::ind_average,ind_father
-  integer::igrid_nbr,ind_nbr,igrid_cen,ind_cen
+  integer::igrid_nbr,ind_nbr
   real(dp),dimension(1:twotondim)::corr
   
   ! Local constants
@@ -1774,12 +1765,11 @@ subroutine cmp_residual_norm2(ilevel, norm2)
 
 end subroutine cmp_residual_norm2
 #endif
-subroutine cmp_residual_norm2_2(r,g,m,ilevel, norm2)
+subroutine cmp_residual_norm2_2(r,m,ilevel, norm2)
   use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t,mesh_t
   implicit none
   type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
   integer,  intent(in)  :: ilevel
   real(kind=8), intent(out) :: norm2
