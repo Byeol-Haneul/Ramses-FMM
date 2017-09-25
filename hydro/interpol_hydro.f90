@@ -2,103 +2,6 @@
 !########################################################### 
 !###########################################################
 !###########################################################
-#ifdef TOTO
-subroutine upload_fine(ilevel)
-  use amr_commons
-  use hydro_commons
-  implicit none
-  integer::ilevel
-  !----------------------------------------------------------------------
-  ! This routine performs a restriction operation (averaging down)
-  ! for the hydro variables.
-  !----------------------------------------------------------------------
-  integer::ioct,parent_cell,get_parent_cell
-  integer::ind,ivar,igrid,icell,idim
-  integer(kind=8),dimension(0:ndim)::hash_key
-  real(dp)::average,ekin,erad
-
-#ifdef HYDRO
-  if(ilevel==nlevelmax)return
-  if(noct_tot(ilevel)==0)return
-  if(noct_tot(ilevel+1)==0)return
-  if(verbose)write(*,111)ilevel
- 
-  ! Set conservative variable to zero in refined cells
-  do ioct=head(ilevel),tail(ilevel)
-     do ivar=1,nvar
-        do ind=1,twotondim
-           if(grid(ioct)%refined(ind))then
-              grid(ioct)%uold(ind,ivar)=0.0
-           endif
-        end do
-     end do
-  end do
-
-  call open_cache(operation_upload,domain_decompos_amr)
-
-  ! Loop over finer level grids
-  hash_key(0)=ilevel+1
-  do ioct=head(ilevel+1),tail(ilevel+1)
-
-     ! Get cell and grid index
-     hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
-     parent_cell=get_parent_cell(hash_key,grid_dict,.true.,.false.)
-     igrid=(parent_cell-1)/twotondim+1
-     icell=parent_cell-(igrid-1)*twotondim
-
-     ! Average conservative variables
-     do ivar=1,nvar
-        average=0.0d0
-        do ind=1,twotondim
-           average=average+grid(ioct)%uold(ind,ivar)
-        end do
-        ! Scatter result to cell
-        grid(igrid)%uold(icell,ivar)=average/dble(twotondim)
-     end do
-
-     ! Average internal energy instead of total energy
-     if(interpol_var==1 .or. interpol_var==2)then
-        average=0.0d0
-        do ind=1,twotondim
-           ekin=0.0d0
-           do idim=1,ndim
-              ekin=ekin+0.5d0*grid(ioct)%uold(ind,idim+1)**2/max(grid(ioct)%uold(ind,1),smallr)
-           end do
-           erad=0.0d0
-#if NENER>0
-           do irad=1,nener
-              erad=erad+grid(ioct)%uold(ind,ndim+2+irad)
-           end do
-#endif
-           average=average+grid(ioct)%uold(ind,ndim+2)-ekin-erad
-        end do
-        ! Scatter result to cell
-        ekin=0.0d0
-        do idim=1,ndim
-           ekin=ekin+0.5d0*grid(igrid)%uold(icell,idim+1)**2/max(grid(igrid)%uold(icell,1),smallr)
-        end do
-        erad=0.0d0
-#if NENER>0
-        do irad=1,nener
-           erad=erad+grid(igrid)%uold(icell,ndim+2+irad)
-        end do
-#endif
-        grid(igrid)%uold(icell,ndim+2)=average/dble(twotondim)+ekin+erad
-     endif
-  end do
-
-  call close_cache(grid_dict)
-
-#endif
-
-111 format('   Entering upload_fine for level',i2)
-
-end subroutine upload_fine
-#endif
-!###########################################################
-!########################################################### 
-!###########################################################
-!###########################################################
 subroutine upload_fine_2(r,g,m,ilevel)
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -113,6 +16,9 @@ subroutine upload_fine_2(r,g,m,ilevel)
   ! This routine performs a restriction operation (averaging down)
   ! for the hydro variables.
   !----------------------------------------------------------------------
+#if NENER>0
+  integer::irad
+#endif
   integer::ioct,parent_cell,get_parent_cell_2
   integer::ind,ivar,igrid,icell,idim
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -223,7 +129,10 @@ subroutine interpol_hydro(u1,u2,interpol_var,interpol_type,smallr)
   !                 type 3 for velocity and type 2 for density and
   !                 internal energy.
   !----------------------------------------------------------
-  integer::i,j,ivar,irad,idim,ind,ix,iy,iz,ind2
+#if NENER>0
+  integer::irad
+#endif
+  integer::j,ivar,idim,ind,ix,iy,iz
   real(dp)::oneover_twotondim
   real(dp),dimension(1:8,1:3)::xc
   real(dp),dimension(0:twondim)::a
@@ -394,7 +303,7 @@ subroutine compute_limiter_central(a,w)
   !---------------------------
   ! Monotonized Central slope
   !---------------------------
-  integer::i,j,idim,ind,ix,iy,iz
+  integer::j,idim,ind,ix,iy,iz
   real(dp),dimension(1:twotondim,1:3)::xc
   real(dp)::xxc
   real(dp),dimension(1:twotondim)::ac

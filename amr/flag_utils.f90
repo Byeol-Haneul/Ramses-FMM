@@ -374,7 +374,7 @@ end subroutine ensure_ref_rules_2
 !############################################################
 !############################################################
 !############################################################
-#ifdef TOTO
+#ifdef FAST
 subroutine smooth_fine_fast(ilevel)
   use amr_commons
   use poisson_commons
@@ -558,7 +558,7 @@ end subroutine smooth_fine_fast
 !############################################################
 !############################################################
 !############################################################
-#ifdef TOTO
+#ifdef FAST
 subroutine build_smooth(ilevel)
   use amr_commons
   use poisson_commons
@@ -775,7 +775,7 @@ end subroutine build_smooth
 #endif
 ! ------------------------------------------------------------------------
 ! ------------------------------------------------------------------------
-#ifdef TOTO
+#ifdef FAST
 subroutine clean_smooth
   use amr_commons
   use poisson_commons

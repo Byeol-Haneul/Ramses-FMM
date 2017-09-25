@@ -6,7 +6,6 @@ real(kind=8) function wallclock()
   integer            :: tcur
   integer            :: count_rate
 #else
-  integer            :: info
   real(kind=8), save :: tstart
   real(kind=8)       :: tcur
 #endif
@@ -64,7 +63,6 @@ subroutine timer (label, cmd)
   implicit none
   character(len=*) label, cmd
   real(kind=8) wallclock, current
-  integer ierr
 !-----------------------------------------------------------------------
   current = wallclock()                                                 ! current time
   if (itimer > 0) then                                                  ! if timer is active ..
@@ -169,6 +167,7 @@ subroutine finalize_timer(g)
   endif
 #endif
 end subroutine
+
 !=======================================================================
 subroutine reset_timer
    use timer_m
@@ -181,7 +180,11 @@ subroutine reset_timer
       time(itimer)=0.0
    end do
 end subroutine
-!=======================================================================
+
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine update_time_2(r,g,m,p,ilevel)
   use amr_parameters, only: dp,n_frw
   use amr_commons, only: run_t,global_t,mesh_t
@@ -376,7 +379,8 @@ end subroutine clean_abort
 
 subroutine writemem(usedmem)
   real::usedmem
-  integer::getpagesize
+!  integer::getpagesize
+  integer::ipagesize
 
 #ifdef NOSYSTEM
 !  call PXFSYSCONF(_SC_PAGESIZE,ipagesize,ierror)
@@ -403,8 +407,8 @@ end subroutine writemem
 
 subroutine getmem(outmem)
   real::outmem
-  character(len=300) :: dir, dir2,  cmd, file
-  integer::read_status
+  character(len=300) :: dir, dir2, file
+  integer::ind,j,nmem,read_status
   file='/proc/self/stat'
   open(unit=1,file=file,form='formatted',err=101)
   read(1,'(A300)',IOSTAT=read_status)dir
@@ -428,49 +432,6 @@ subroutine getmem(outmem)
   end if
 
 end subroutine getmem
-#ifdef TOTO
-subroutine cmpmem(outmem)
-  use amr_commons
-  use hydro_commons
-  implicit none
-
-  real::outmem,outmem_int,outmem_dp,outmem_qdp
-  outmem_int=0.0
-  outmem_dp=0.0
-  outmem_qdp=0.0
-
-  outmem_dp =outmem_dp +ngridmax*ndim      ! xg
-  outmem_int=outmem_int+ngridmax*twondim   ! nbor
-  outmem_int=outmem_int+ngridmax           ! father
-  outmem_int=outmem_int+ngridmax           ! next
-  outmem_int=outmem_int+ngridmax           ! prev
-  outmem_int=outmem_int+ngridmax*twotondim ! son 
-  outmem_int=outmem_int+ngridmax*twotondim ! flag1
-  outmem_int=outmem_int+ngridmax*twotondim ! flag2
-  outmem_int=outmem_int+ngridmax*twotondim ! cpu_map1
-  outmem_int=outmem_int+ngridmax*twotondim ! cpu_map2
-  outmem_qdp=outmem_qdp+ngridmax*twotondim ! hilbert_key
-
-  ! Add communicator variable here
-
-  if(hydro)then
-     
-  outmem_dp =outmem_dp +ngridmax*twotondim*nvar ! uold
-  outmem_dp =outmem_dp +ngridmax*twotondim*nvar ! unew
-
-  if(pressure_fix)then
-
-  outmem_dp =outmem_dp +ngridmax*twotondim ! uold
-  outmem_dp =outmem_dp +ngridmax*twotondim ! uold
-
-  endif
-
-  endif
-
-  write(*,*)'Estimated memory=',(outmem_dp*8.+outmem_int*4.+outmem_qdp*8.)/1024./1024.
-
-end subroutine cmpmem
-#endif
 
 
 

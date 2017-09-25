@@ -933,10 +933,14 @@ subroutine uslope(q,dq,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
   ! local arrays
   integer::i, j, k,  n
   real(dp)::dsgn, dlim, dcen, dlft, drgt, slop
+#if NDIM==2
   real(dp)::dfll,dflm,dflr,dfml,dfmm,dfmr,dfrl,dfrm,dfrr
+#endif
+#if NDIM==3
   real(dp)::dflll,dflml,dflrl,dfmll,dfmml,dfmrl,dfrll,dfrml,dfrrl
   real(dp)::dfllm,dflmm,dflrm,dfmlm,dfmmm,dfmrm,dfrlm,dfrmm,dfrrm
   real(dp)::dfllr,dflmr,dflrr,dfmlr,dfmmr,dfmrr,dfrlr,dfrmr,dfrrr
+#endif
   real(dp)::vmin,vmax,dfx,dfy,dfz,dff
   integer::ilo,ihi,jlo,jhi,klo,khi
   
@@ -1003,7 +1007,7 @@ subroutine uslope(q,dq,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
                     dq(i,j,k,n,1) = 0.0
                  end if
               else
-                 write(*,*)'Unknown slope type'
+                 write(*,*)'Unknown slope type',dx,dt
                  stop
               end if
            end do
@@ -1077,7 +1081,7 @@ subroutine uslope(q,dq,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
         end do
      end do
   else
-     write(*,*)'Unknown slope type'
+     write(*,*)'Unknown slope type',dx,dt
      stop
   endif
 #endif
@@ -1222,7 +1226,7 @@ subroutine uslope(q,dq,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
         end do
      end do
   else
-     write(*,*)'Unknown slope type'
+     write(*,*)'Unknown slope type',dx,dt
      stop
   endif     
 #endif

@@ -47,7 +47,6 @@ subroutine read_params(r,g)
   logical::cosmo   =.false.   ! Cosmology activated
   logical::debug   =.false.   ! Debug mode activated
   logical::static  =.false.   ! Static mode activated
-  logical::tracer  =.false.   ! Tracer particles activated
 
   ! Mesh parameters
   integer::geom=1             ! 1: cartesian, 2: cylindrical, 3: spherical
@@ -64,8 +63,6 @@ subroutine read_params(r,g)
   integer::nremap=0           ! Load balancing frequency (0: never)
 
   ! Output parameters
-  integer::iout=1             ! Increment for output times
-  integer::ifout=1            ! Increment for output files
   integer::noutput=1          ! Total number of outputs
   integer::foutput=1000000    ! Frequency of outputs
   integer::output_mode=0      ! Output mode (for hires runs)
@@ -75,33 +72,7 @@ subroutine read_params(r,g)
   real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
   real(dp),dimension(1:MAXOUT)::tout=0.0       ! Output times
 
-  ! Only one process can write at a time in an I/O group
-  integer::IOGROUPSIZE=0           ! Main snapshot
-  integer::IOGROUPSIZECONE=0       ! Lightcone
-  integer::IOGROUPSIZEREP=0        ! Subfolder size
-  logical::withoutmkdir=.false.    ! If true mkdir should be done before the run
-  logical::print_when_io=.false.   ! If true print when IO
-  logical::synchro_when_io=.false. ! If true synchronize when IO
-
-  ! Lightcone parameters
-  real(dp)::thetay_cone=12.5
-  real(dp)::thetaz_cone=12.5
-  real(dp)::zmax_cone=2.0
-
-  ! Cosmology parameters
-  real(dp)::boxlen_ini     ! Box size in h-1 Mpc
-  real(dp)::omega_b=0.0D0  ! Omega Baryon
-  real(dp)::omega_m=1.0D0  ! Omega Matter
-  real(dp)::omega_l=0.0D0  ! Omega Lambda
-  real(dp)::omega_k=0.0D0  ! Omega Curvature
-  real(dp)::h0=1.0D0       ! Hubble constant in km/s/Mpc
-  real(dp)::aexp=1.0D0     ! Current expansion factor
-  real(dp)::hexp=0.0D0     ! Current Hubble parameter
-  real(dp)::texp=0.0D0     ! Current proper time
-  logical ::use_proper_time=.false.
-
   ! Physics parameters
-  real(dp)::T2_start          ! Starting gas temperature
   logical ::pressure_fix=.false.
 
   ! Movie
@@ -146,16 +117,8 @@ subroutine read_params(r,g)
   real(dp)::units_time=1.0    ! [seconds]
   real(dp)::units_length=1.0  ! [cm]
 
-  ! Friedman model variables
-  real(dp),dimension(0:n_frw)::aexp_frw,hexp_frw,tau_frw,t_frw
-
   ! Initial conditions parameters from grafic
-  integer::nlevelmax_part
   real(dp)::aexp_ini=10.
-  real(dp),dimension(1:MAXLEVEL)::dfact=1.0d0,astart
-  real(dp),dimension(1:MAXLEVEL)::vfact
-  real(dp),dimension(1:MAXLEVEL)::xoff1,xoff2,xoff3,dxini
-  integer ,dimension(1:MAXLEVEL)::n1,n2,n3
 
   ! Initial condition regions parameters
   integer::nregion=0
@@ -224,12 +187,6 @@ subroutine read_params(r,g)
   ! Interpolation parameters
   integer ::interpol_var=0
   integer ::interpol_type=1
-
-  ! Passive variables index
-  integer::imetal=6
-  integer::idelay=6
-  integer::ixion=6
-  integer::ichem=6
 
   ! Convergence criterion for Poisson solvers
   real(dp)::epsilon=1.0D-4
