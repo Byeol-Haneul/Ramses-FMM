@@ -11,6 +11,7 @@ subroutine load_balance_2(r,g,m,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h' 
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -19,7 +20,7 @@ subroutine load_balance_2(r,g,m,ilevel)
   !------------------------------------------------
   ! This routine performs parallel load balancing.
   !------------------------------------------------
-  integer::i,info
+  integer::i
   integer::grid_cpu,ichild,idom,jdom,mydom,ndom,lastdom,domains_matched
   integer::nleft,nright,ileft,iright,istart,nstart,noverlaps
   integer::ilev,ioct
@@ -509,6 +510,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
   ! It can only be called after routine rho has been called.
   !
 #ifndef WITHOUTMPI
+  integer::info
   integer,dimension(MPI_STATUS_SIZE,g%ncpu)::statuses
 #endif
   integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk_ref
@@ -516,7 +518,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
   integer(kind=4), dimension(1:nvector),save::dummy_state
 
   integer,dimension(1:ndim),save::ix
-  integer::i,istart,info,ipart,jpart,idim,grid_cpu
+  integer::i,istart,ipart,jpart,idim,grid_cpu
   integer::ilev,idom,icpu,mydom,ndom,count_loc,recv_cnt_tot,send_cnt_tot
   integer::nbuffer,countrecv,countsend,tag=101
   real(kind=8)::dx_loc

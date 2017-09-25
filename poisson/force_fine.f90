@@ -8,6 +8,7 @@ subroutine force_fine_2(r,g,m,ilevel,icount)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -17,7 +18,7 @@ subroutine force_fine_2(r,g,m,ilevel,icount)
   ! This routine computes the gravitational acceleration,
   ! the maximum density rho_max, and the potential energy
   !----------------------------------------------------------
-  integer::igrid,ind,i,ngrid,info,idim,nstride
+  integer::igrid,ind,i,ngrid,idim,nstride
   real(dp)::dx,fact,fourpi
   real(kind=8)::rho_loc,rho_all,epot_loc,epot_all
   real(dp),dimension(1:nvector,1:ndim),save::xx,ff

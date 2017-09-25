@@ -205,7 +205,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
   !-------------------------------------------------------------------
   integer::get_grid_2,get_parent_cell_2
   integer::ivar,idim,ind_son,ind_oct
-  integer::igrid,icell,inbor,ichild,parent_cell
+  integer::igrid,icell=0,inbor,ichild,parent_cell
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -321,13 +321,13 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
            else
               ! Compute neighboring grid Cartesian index
 #if NDIM>0
-              hash_nbor(1)=ckey_corner(1)+i1-1.0
+              hash_nbor(1)=ckey_corner(1)+i1-1
 #endif
 #if NDIM>1
-              hash_nbor(2)=ckey_corner(2)+j1-1.0
+              hash_nbor(2)=ckey_corner(2)+j1-1
 #endif
 #if NDIM>2
-              hash_nbor(3)=ckey_corner(3)+k1-1.0
+              hash_nbor(3)=ckey_corner(3)+k1-1
 #endif
               ! Periodic boundary conditons
               do idim=1,ndim

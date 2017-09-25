@@ -27,6 +27,8 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
+  real(kind=8)::i_res_norm2_tot, res_norm2_tot
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -36,8 +38,8 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
   integer, parameter  :: MAXITER  = 10
   real(dp), parameter :: SAFE_FACTOR = 0.5
   
-  integer  :: igrid, ifine, i, iter, info
-  real(kind=8) :: res_norm2, i_res_norm2, i_res_norm2_tot, res_norm2_tot
+  integer  :: igrid, ifine, i, iter
+  real(kind=8) :: res_norm2, i_res_norm2
   real(kind=8) :: err, last_err
   
   logical :: allmasked
@@ -319,15 +321,16 @@ subroutine build_mg_2(r,g,m,ifinelevel)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   integer,intent(in)::ifinelevel
   
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,grid_cpu,ind,info
+  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,grid_cpu,ind
   integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
-  integer,dimension(1:ndim)::cart_key
+  integer(kind=4),dimension(1:ndim)::cart_key
   integer,dimension(1:3,1:8),save::shift_oct=reshape(&
        & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
        &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
@@ -376,7 +379,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
         if(ipos==0)then
            
            ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=hash_father(1:ndim)
+           cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
            
            ! Compute Hilbert keys of new octs
            ix(1,1:ndim)=cart_key(1:ndim)

@@ -209,6 +209,7 @@ subroutine init_grafic_2(r,g,m,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::dummy_io,info,info2
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -221,7 +222,7 @@ subroutine init_grafic_2(r,g,m,ilevel)
   integer::igrid,ilun
   integer::ind,idim,ivar
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
-  integer::buf_count,info
+  integer::buf_count
 
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx,rr,vx,vy=0,vz=0,ek,ei,pp,xx1,xx2,xx3,dx_loc
@@ -234,7 +235,9 @@ subroutine init_grafic_2(r,g,m,ilevel)
   character(LEN=5)::nchar,ncharvar
 
   integer,parameter::tag=1107
-  integer::dummy_io,info2
+
+  ! Allocate IC grid default size
+  allocate(init_array(1:1,1:1,1:1))
 
   ! Conversion factor from user units to cgs units
   call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
@@ -287,7 +290,10 @@ subroutine init_grafic_2(r,g,m,ilevel)
   ! Second step: read initial condition files
   !------------------------------------------
   ! Allocate initial conditions array
-  if(m%noct(ilevel)>0)allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
+  if(m%noct(ilevel)>0)then
+     deallocate(init_array)
+     allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
+  endif
   allocate(init_plane(1:g%n1(ilevel),1:g%n2(ilevel)))
   ! Loop over input variables
   do ivar=1,nvar
