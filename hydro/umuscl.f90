@@ -61,7 +61,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::divu
 
   ! Local scalar variables
-  integer::i,j,k,l,ivar
+  integer::i,j,k,ivar
   integer::ilo,ihi,jlo,jhi,klo,khi
 
   ilo=MIN(1,iu1+2); ihi=MAX(1,iu2-2)
@@ -194,15 +194,20 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qp 
 
   ! Local variables
-  integer ::i, j, k,  n
+  integer ::i, j, k
   integer ::ilo,ihi,jlo,jhi,klo,khi
-  integer ::ir, iu, ip, irad
+  integer ::ir, iu, ip
   real(dp)::dtdx
-  real(dp)::r, u, p, a
-  real(dp)::drx, dux, dpx, dax
-  real(dp)::sr0, su0, sp0, sa0
+  real(dp)::r, u, p
+  real(dp)::drx, dux, dpx
+  real(dp)::sr0, su0, sp0
 #if NENER>0
+  integer ::irad
   real(dp),dimension(1:nener)::e, dex, se0
+#endif
+#if NVAR>NDIM+2+NENER
+  integer ::n
+  real(dp)::a, dax, sa0
 #endif
   
   dtdx = dt/dx
@@ -272,7 +277,7 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
      end do
   end do
 
-#if NVAR > NDIM + 2 + NENER
+#if NVAR>NDIM+2+NENER
   ! Passive scalars
   do n = ndim+nener+3, nvar
      do k = klo, khi
@@ -312,16 +317,21 @@ subroutine trace2d(q,dq,qm,qp,dx,dy,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,s
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qp 
 
   ! declare local variables
-  integer ::i, j, k,  n
+  integer ::i, j, k
   integer ::ilo,ihi,jlo,jhi,klo,khi
-  integer ::ir, iu, iv, ip, irad
+  integer ::ir, iu, iv, ip
   real(dp)::dtdx, dtdy
-  real(dp)::r, u, v, p, a
-  real(dp)::drx, dux, dvx, dpx, dax
-  real(dp)::dry, duy, dvy, dpy, day
-  real(dp)::sr0, su0, sv0, sp0, sa0
+  real(dp)::r, u, v, p
+  real(dp)::drx, dux, dvx, dpx
+  real(dp)::dry, duy, dvy, dpy
+  real(dp)::sr0, su0, sv0, sp0
 #if NENER>0
+  integer ::irad
   real(dp),dimension(1:nener)::e, dex, dey, se0
+#endif
+#if NVAR>NDIM+2+NENER
+  integer ::n
+  real(dp)::a, dax, day, sa0
 #endif
   
   dtdx = dt/dx
@@ -433,7 +443,7 @@ subroutine trace2d(q,dq,qm,qp,dx,dy,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,s
      end do
   end do
 
-#if NVAR > NDIM + 2 + NENER
+#if NVAR>NDIM+2+NENER
   ! passive scalars
   do n = ndim+nener+3, nvar
      do k = klo, khi
@@ -478,17 +488,22 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar,1:ndim)::qp 
 
   ! declare local variables
-  integer ::i, j, k,  n
+  integer ::i, j, k
   integer ::ilo,ihi,jlo,jhi,klo,khi
-  integer ::ir, iu, iv, iw, ip, irad
+  integer ::ir, iu, iv, iw, ip
   real(dp)::dtdx, dtdy, dtdz
-  real(dp)::r, u, v, w, p, a
-  real(dp)::drx, dux, dvx, dwx, dpx, dax
-  real(dp)::dry, duy, dvy, dwy, dpy, day
-  real(dp)::drz, duz, dvz, dwz, dpz, daz
-  real(dp)::sr0, su0, sv0, sw0, sp0, sa0
+  real(dp)::r, u, v, w, p
+  real(dp)::drx, dux, dvx, dwx, dpx
+  real(dp)::dry, duy, dvy, dwy, dpy
+  real(dp)::drz, duz, dvz, dwz, dpz
+  real(dp)::sr0, su0, sv0, sw0, sp0
 #if NENER>0
+  integer ::irad
   real(dp),dimension(1:nener)::e, dex, dey, dez, se0
+#endif
+#if NVAR>NDIM+2+NENER
+  integer ::n
+  real(dp)::a, dax, day, daz, sa0
 #endif
   
   dtdx = dt/dx
@@ -647,7 +662,7 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
      end do
   end do
 
-#if NVAR > NDIM + 2 + NENER
+#if NVAR>NDIM+2+NENER
   ! Passive scalars
   do n = ndim+nener+3, nvar
      do k = klo, khi
@@ -701,11 +716,14 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
   real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:2)::tmp
   
   ! local variables
-  integer ::i, j, k, n,  idim, xdim
+  integer ::i, j, k, xdim
   real(dp)::entho
   real(dp),dimension(1:nvar),save::qleft,qright
   real(dp),dimension(1:nvar+1),save::fgdnv
-
+#if NVAR>NDIM+2
+  integer ::n
+#endif
+  
   entho=one/(gamma-one)
   xdim=ln-1
 
@@ -735,7 +753,7 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
            qleft (5) = qm(i,j,k,lt2,xdim)
            qright(5) = qp(i,j,k,lt2,xdim)
 #endif           
-#if NVAR > NDIM + 2
+#if NVAR>NDIM+2
            ! Other advected quantities
            do n = ndim+3, nvar
               qleft (n) = qm(i,j,k,n,xdim)
@@ -773,7 +791,7 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
            ! Total energy
            flx(i,j,k,ndim+2) = fgdnv(3)
 
-#if NVAR > NDIM + 2
+#if NVAR>NDIM+2
            ! Other advected quantities
            do n = ndim+3, nvar
               flx(i,j,k,n) = fgdnv(n)
@@ -808,9 +826,15 @@ subroutine ctoprim(uin,q,c,gravin,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,sma
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::q  
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2)::c  
 
-  integer ::i, j, k,  n, idim, irad
   real(dp)::eint, smalle, dtxhalf, oneoverrho
   real(dp)::eken, erad
+  integer ::i, j, k
+#if NENER>0
+  integer ::irad
+#endif
+#if NVAR>NDIM+2+NENER
+  integer ::n
+#endif
 
   smalle = smallc**2/gamma/(gamma-one)
   dtxhalf = dt*half
@@ -875,7 +899,7 @@ subroutine ctoprim(uin,q,c,gravin,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,sma
      end do
   end do
 
-#if NVAR > NDIM + 2 + NENER
+#if NVAR>NDIM+2+NENER
   ! Passive scalar
   do n = ndim+nener+3, nvar
      do k = ku1, ku2

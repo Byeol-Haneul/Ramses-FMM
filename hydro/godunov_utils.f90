@@ -2,99 +2,6 @@
 !###########################################################
 !###########################################################
 !###########################################################
-#ifdef TOTO
-subroutine hydro_refine(ug,um,ud,ok)
-  use amr_parameters
-  use hydro_parameters
-  use const
-  implicit none
-  ! dummy arguments
-  real(dp)::ug(1:nvar)
-  real(dp)::um(1:nvar)
-  real(dp)::ud(1:nvar)
-  logical ::ok
-  
-  integer::k,idim,irad
-  real(dp)::eking,ekinm,ekind
-  real(dp)::dg,dm,dd,pg,pm,pd,vg,vm,vd,cg,cm,cd,error
-  
-  ! Convert to primitive variables
-  ug(1) = max(ug(1),smallr)
-  um(1) = max(um(1),smallr)
-  ud(1) = max(ud(1),smallr)
-
-  ! Velocity
-  do idim = 1,ndim
-     ug(idim+1) = ug(idim+1)/ug(1)
-     um(idim+1) = um(idim+1)/um(1)
-     ud(idim+1) = ud(idim+1)/ud(1)
-  end do
-
-  ! Pressure
-  eking = zero
-  ekinm = zero
-  ekind = zero
-  do idim = 1,ndim
-     eking = eking + half*ug(1)*ug(idim+1)**2
-     ekinm = ekinm + half*um(1)*um(idim+1)**2
-     ekind = ekind + half*ud(1)*ud(idim+1)**2
-  end do
-#if NENER>0
-  do irad = 1,nener
-     eking = eking + ug(ndim+2+irad)
-     ekinm = ekinm + um(ndim+2+irad)
-     ekind = ekind + ud(ndim+2+irad)
-  end do
-#endif
-  ug(ndim+2) = (gamma-one)*(ug(ndim+2)-eking)
-  um(ndim+2) = (gamma-one)*(um(ndim+2)-ekinm)
-  ud(ndim+2) = (gamma-one)*(ud(ndim+2)-ekind)
-
-  ! Passive scalars
-#if NVAR > NDIM + 2
-  do idim = ndim+3,nvar
-     ug(idim) = ug(idim)/ug(1)
-     um(idim) = um(idim)/um(1)
-     ud(idim) = ud(idim)/ud(1)
-  end do
-#endif
-
-  ! Compute errors
-  if(err_grad_d >= 0.)then
-     dg=ug(1); dm=um(1); dd=ud(1)
-     error=2.0d0*MAX( &
-          & ABS((dd-dm)/(dd+dm+floor_d)) , &
-          & ABS((dm-dg)/(dm+dg+floor_d)) )
-     ok = ok .or. error > err_grad_d
-  end if
-
-  if(err_grad_p >= 0.)then
-     pg=ug(ndim+2); pm=um(ndim+2); pd=ud(ndim+2)
-     error=2.0d0*MAX( &
-          & ABS((pd-pm)/(pd+pm+floor_p)), &
-          & ABS((pm-pg)/(pm+pg+floor_p)) )
-     ok = ok .or. error > err_grad_p
-  end if
-
-  if(err_grad_u >= 0.)then
-     do idim = 1,ndim
-        vg=ug(idim+1); vm=um(idim+1); vd=ud(idim+1)
-        cg=sqrt(max(gamma*ug(ndim+2)/ug(1),floor_u**2))
-        cm=sqrt(max(gamma*um(ndim+2)/um(1),floor_u**2))
-        cd=sqrt(max(gamma*ud(ndim+2)/ud(1),floor_u**2))
-        error=2.0d0*MAX( &
-             & ABS((vd-vm)/(cd+cm+ABS(vd)+ABS(vm)+floor_u)) , &
-             & ABS((vm-vg)/(cm+cg+ABS(vm)+ABS(vg)+floor_u)) )
-        ok = ok .or. error > err_grad_u
-     end do
-  end if
-
-end subroutine hydro_refine
-#endif
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
 subroutine hydro_refine_2(r,ug,um,ud,ok)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t
@@ -108,7 +15,10 @@ subroutine hydro_refine_2(r,ug,um,ud,ok)
   real(dp)::ud(1:nvar)
   logical ::ok
   
-  integer::k,idim,irad
+  integer::idim
+#if NENER>0
+  integer::irad
+#endif
   real(dp)::eking,ekinm,ekind
   real(dp)::dg,dm,dd,pg,pm,pd,vg,vm,vd,cg,cm,cd,error
   
@@ -145,7 +55,7 @@ subroutine hydro_refine_2(r,ug,um,ud,ok)
   ud(ndim+2) = (r%gamma-one)*(ud(ndim+2)-ekind)
 
   ! Passive scalars
-#if NVAR > NDIM + 2
+#if NVAR>NDIM + 2
   do idim = ndim+3,nvar
      ug(idim) = ug(idim)/ug(1)
      um(idim) = um(idim)/um(1)
@@ -188,91 +98,6 @@ end subroutine hydro_refine_2
 !###########################################################
 !###########################################################
 !###########################################################
-#ifdef TOTO
-subroutine cmpdt(uu,gg,dx,dt)
-  use amr_parameters
-  use hydro_parameters
-  use const
-  implicit none
-  real(dp)::dx,dt
-  real(dp),dimension(1:nvar)::uu
-  real(dp),dimension(1:ndim)::gg
-  
-  real(dp)::dtcell,smallp
-  integer::idim,irad
-  
-  smallp = smallc**2/gamma
-
-  ! Convert to primitive variables
-  uu(1)=max(uu(1),smallr)
-  ! Velocity
-  do idim = 1,ndim
-     uu(idim+1) = uu(idim+1)/uu(1)
-  end do
-  ! Internal energy
-  do idim = 1,ndim
-     uu(ndim+2) = uu(ndim+2)-half*uu(1)*uu(idim+1)**2
-  end do
-#if NENER>0
-  do irad = 1,nener
-     uu(ndim+2) = uu(ndim+2)-uu(ndim+2+irad)
-  end do
-#endif
-
-  ! Debug
-  if(debug)then
-     if(uu(ndim+2).le.0.or.uu(1).le.smallr)then
-        write(*,*)'stop in cmpdt'
-        write(*,*)'dx   =',dx
-        write(*,*)'rho  =',uu(1)
-        write(*,*)'P    =',uu(ndim+2)
-        write(*,*)'vel  =',uu(2:ndim+1)
-        stop
-     end if
-  end if
-
-  ! Compute pressure
-  uu(ndim+2) = max((gamma-one)*uu(ndim+2),uu(1)*smallp)
-#if NENER>0
-  do irad = 1,nener
-     uu(ndim+2+irad) = (gamma_rad(irad)-one)*uu(ndim+2+irad)
-  end do
-#endif
-
-  ! Compute sound speed
-  uu(ndim+2) = gamma*uu(ndim+2)
-#if NENER>0
-  do irad = 1,nener
-     uu(ndim+2) = uu(ndim+2) + gamma_rad(irad)*uu(ndim+2+irad)
-  end do
-#endif  
-  uu(ndim+2)=sqrt(uu(ndim+2)/uu(1))
-
-  ! Compute wave speed
-  uu(ndim+2)=dble(ndim)*uu(ndim+2)
-  do idim = 1,ndim
-     uu(ndim+2)=uu(ndim+2)+abs(uu(idim+1))
-  end do
-
-  ! Compute gravity strength ratio
-  uu(1)=zero
-  do idim = 1,ndim
-     uu(1)=uu(1)+abs(gg(idim))
-  end do
-  uu(1)=uu(1)*dx/uu(ndim+2)**2
-  uu(1)=MAX(uu(1),0.0001_dp)
-
-  ! Compute maximum time step for each authorized cell
-  dt = courant_factor*dx/smallc
-  dtcell = dx/uu(ndim+2)*(sqrt(one+two*courant_factor*uu(1))-one)/uu(1)
-  dt = min(dt,dtcell)
-
-end subroutine cmpdt
-#endif
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
 subroutine cmpdt_2(r,uu,gg,dx,dt)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nvar, nener
@@ -285,7 +110,10 @@ subroutine cmpdt_2(r,uu,gg,dx,dt)
   real(dp),dimension(1:ndim)::gg
   
   real(dp)::dtcell,smallp
-  integer::idim,irad
+  integer::idim
+#if NENER>0
+  integer::irad
+#endif
   
   smallp = r%smallc**2/r%gamma
 
@@ -365,17 +193,14 @@ subroutine riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   implicit none
 
   ! dummy arguments
-  real(dp)::gamma,smallr,smallc,difmag
+  real(dp)::gamma,smallr,smallc
   real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(1:nvar)::qleft,qright
   real(dp),dimension(1:nvar+1)::fgdnv
 
-  ! local arrays
   real(dp),dimension(1:nvar+1)::fleft,fright
   real(dp),dimension(1:nvar+1)::uleft,uright
   real(dp)::cmax
-
-  ! local variables
   integer::n
   real(dp)::smallp, entho
   real(dp)::rl   ,ul   ,pl   ,cl
@@ -440,7 +265,7 @@ subroutine riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   end do
 #endif
   ! Transverse velocities
-#if NDIM > 1
+#if NDIM>1
   do n = 4, ndim+2
      uleft (n) = qleft (1)*qleft (n)
      uright(n) = qright(1)*qright(n)
@@ -454,7 +279,7 @@ subroutine riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   end do
 #endif
   ! Other passively advected quantities
-#if NVAR > 2+NDIM+NENER
+#if NVAR>2+NDIM+NENER
   do n = 3+ndim+nener, nvar
      uleft (n) = qleft (1)*qleft (n)
      uright(n) = qright(1)*qright(n)
@@ -514,7 +339,7 @@ subroutine riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   ! 1D HLL Riemann solver
 
   ! dummy arguments
-  real(dp)::gamma,smallr,smallc,difmag
+  real(dp)::gamma,smallr,smallc
   real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(1:nvar)::qleft,qright
   real(dp),dimension(1:nvar+1)::fgdnv
@@ -587,7 +412,7 @@ subroutine riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   end do
 #endif
   ! Transverse velocities
-#if NDIM > 1
+#if NDIM>1
   do n = 4, ndim+2
      uleft (n) = qleft (1)*qleft (n)
      uright(n) = qright(1)*qright(n)
@@ -601,7 +426,7 @@ subroutine riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   end do
 #endif
   ! Other passively advected quantities
-#if NVAR > 2+NDIM+NENER
+#if NVAR>2+NDIM+NENER
   do n = 3+ndim+nener, nvar
      uleft (n) = qleft (1)*qleft (n)
      uright(n) = qright(1)*qright(n)
@@ -662,7 +487,7 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   ! HLLC Riemann solver (Toro)
 
   ! dummy arguments
-  real(dp)::gamma,smallr,smallc,difmag
+  real(dp)::gamma,smallr,smallc
   real(dp),dimension(1:nener)::gamma_rad
   real(dp),dimension(1:nvar)::qleft,qright
   real(dp),dimension(1:nvar+1)::fgdnv
@@ -678,10 +503,11 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   REAL(dp)::ro,uo,ptoto,etoto,eo
   REAL(dp)::smallp
 #if NENER>0
+  INTEGER::irad
   REAL(dp),dimension(1:nener)::eradl,eradr,erado
   REAL(dp),dimension(1:nener)::eradstarl,eradstarr
 #endif
-  INTEGER ::irad, ivar
+  INTEGER::ivar
 
   ! constants
   smallp = smallc**2/gamma
@@ -844,7 +670,7 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   fgdnv(2) = ro*uo*uo+Ptoto
   fgdnv(3) = (etoto+Ptoto)*uo
   ! Transverse velocities
-#if NDIM > 1
+#if NDIM>1
   do ivar = 4,ndim+2
      if(ustar>0)then
         fgdnv(ivar) = ro*uo*qleft (ivar)
@@ -860,7 +686,7 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   end do
 #endif
   ! Other passively advected quantities
-#if NVAR > 2+NDIM+NENER
+#if NVAR>2+NDIM+NENER
   do ivar = 3+ndim+nener,nvar
      if(ustar>0)then
         fgdnv(ivar) = ro*uo*qleft (ivar)

@@ -18,14 +18,14 @@ subroutine dump_all_2(r,g,m,p)
   ! Local variables
   character(LEN=5)::nchar
   character(LEN=80)::filename,filedir,filecmd
-  integer::i,itest,info,irec,ierr
+  integer::i,info
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
   if(r%verbose)write(*,*)'Entering dump_all'
 
   do i=r%levelmin,r%nlevelmax
-     call write_screen_2(r,g,m,i)
+     call write_screen_2(m,i)
   end do
 
   call title(g%ifout,nchar)
@@ -48,7 +48,7 @@ subroutine dump_all_2(r,g,m,p)
      if(g%myid==1)then
         if(r%pic)then
            filename=TRIM(filedir)//'part_header.txt'
-           call output_header_2(r,g,m,p,filename)
+           call output_header_2(r,g,p,filename)
         endif
         if(r%hydro)then
            filename=TRIM(filedir)//'hydro_file_descriptor.txt'
@@ -143,8 +143,7 @@ subroutine output_params_2(r,g,m,filename)
   character(LEN=80)::filename
 
   ! Local variables
-  integer::ilun
-  integer::ilevel,ibound,istart,i,igrid,idim,ind,iskip
+  integer::ilun,ilevel
   character(LEN=80)::fileloc
 
   if(r%verbose)write(*,*)'Entering output_params'
@@ -304,17 +303,15 @@ end subroutine output_amr_2
 !#########################################################################
 subroutine output_info_2(r,g,filename)
   use amr_parameters, only: ndim,sp,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t,global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  type(mesh_t)::m
   character(LEN=80)::filename
 
   integer::ilun
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   character(LEN=80)::fileloc
-  character(LEN=5)::nchar
 
   if(r%verbose)write(*,*)'Entering output_info'
 
@@ -357,18 +354,17 @@ end subroutine output_info_2
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_header_2(r,g,m,p,filename)
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine output_header_2(r,g,p,filename)
+  use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  type(mesh_t)::m
   type(part_t)::p
   character(LEN=80)::filename
 
   ! Local variables
-  integer::info,ilun
+  integer::ilun
   character(LEN=80)::fileloc
 
   if(r%verbose)write(*,*)'Entering output_header'
