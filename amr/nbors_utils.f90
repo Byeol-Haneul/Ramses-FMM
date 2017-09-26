@@ -268,6 +268,7 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
   ! This routine acquires the grid 
   ! corresponding to the input hash key.
   !-----------------------------------------
+#ifndef WITHOUTMPI
   integer(kind=4),dimension(1:nvector),save::dummy_state
   integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
   integer(kind=8),dimension(1:nvector,1:ndim),save::ix
@@ -284,12 +285,10 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
   type(twin_realdp_msg),save::response_mg
   type(three_realdp_msg),save::response_interpol
   logical::failed_request
-#ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::send_request_status
 #endif
  
 #ifndef WITHOUTMPI
-
   ! If counter is good, check on incoming messages and perform actions
   if(mail_counter==32)then
      call check_mail_2(r,g,m,MPI_REQUEST_NULL,hash_dict)
