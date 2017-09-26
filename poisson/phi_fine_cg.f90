@@ -11,7 +11,7 @@ subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
 #ifndef WITHOUTMPI
   include 'mpif.h'
   integer::info
-  real(kind=8)::r2_all,p2p_all,rhs_norm_all
+  real(kind=8)::r2_all,pAp_all,rhs_norm_all
 #endif
   type(run_t)::r
   type(global_t)::g

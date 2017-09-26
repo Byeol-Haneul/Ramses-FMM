@@ -82,6 +82,10 @@ subroutine finalize_timer(g)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+#endif
+  type(global_t)::g
+  real(kind=8) :: total
+#ifndef WITHOUTMPI
   real(kind=8), dimension(g%ncpu) :: vtime
   integer,      dimension(g%ncpu) :: all_ntimer
   logical,      dimension(g%ncpu) :: gprint_timer
@@ -89,8 +93,6 @@ subroutine finalize_timer(g)
   real(kind=8) :: gtotal, avtime, rmstime
   logical      :: print_timer
 #endif
-  type(global_t)::g
-  real(kind=8) :: total
 
   logical      :: o
 !-----------------------------------------------------------------------
