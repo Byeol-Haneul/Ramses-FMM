@@ -17,6 +17,8 @@ subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
+  logical::allmasked_tot
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -25,11 +27,10 @@ subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
   logical, intent(inout) :: allmasked
 
   integer(kind=8),dimension(0:ndim) :: hash_key
-  integer :: ichild,ind,igrid,icell,info
+  integer :: ichild,ind,igrid,icell
   integer :: parent_cell, get_parent_cell_2
   real(dp) :: ngpmask, mask_max
   real(dp) :: dtwotondim = (twotondim)
-  logical :: allmasked_tot
   
   ! Initialize volume fraction to zero at coarse level
   do igrid=m%head_mg(ifinelevel-1),m%tail_mg(ifinelevel-1)
@@ -253,6 +254,7 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
   integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
 #endif
   integer, intent(in) :: ilevel
@@ -269,7 +271,7 @@ subroutine cmp_residual_mg_fast(hash_dict, ilevel)
   real(dp) :: dx, oneoverdx2, phi_c, dis_c, nb_sum
   integer  :: igrid, ind, inbor, idim, igridn, id, ig
   real(dp) :: dtwondim = (twondim)
-  integer  :: icpu,info,i,istart,nbuffer,countrecv,countsend,tag=101
+  integer  :: icpu,i,istart,nbuffer,countrecv,countsend,tag=101
   integer,dimension(ncpu) :: reqsend,reqrecv  
 
   ! Set constants
@@ -605,6 +607,7 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
   integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
 #endif
   integer, intent(in) :: ilevel
@@ -624,7 +627,7 @@ subroutine gauss_seidel_mg_fast(hash_dict,ilevel,safe,redstep)
   real(dp) :: oneoverdx2, phi_c, dis_c, dx2, nb_sum, weight
   integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0, ipos
   real(dp) :: dtwondim = (twondim)
-  integer  :: icpu,info,i,istart,nbuffer,countrecv,countsend,tag=101
+  integer  :: icpu,i,istart,nbuffer,countrecv,countsend,tag=101
   integer,dimension(ncpu) :: reqsend,reqrecv  
 
   integer, dimension(1:4) :: ired, iblack

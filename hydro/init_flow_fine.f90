@@ -90,7 +90,10 @@ subroutine region_condinit_2(r,g,x,q,dx,nn)
   real(dp),dimension(1:nvector,1:nvar)::q
   real(dp),dimension(1:nvector,1:ndim)::x
 
-  integer::i,ivar,k
+#if NVAR>NDIM+2
+  integer::ivar
+#endif
+  integer::i,k
   real(dp)::vol,rad,weight,xn,yn,zn,en
 
   ! Set some (tiny) default values in case n_region=0
@@ -103,9 +106,11 @@ subroutine region_condinit_2(r,g,x,q,dx,nn)
   q(1:nn,4)=0.0d0
 #endif
   q(1:nn,ndim+2)=r%smallr*r%smallc**2/r%gamma
+#if NVAR>NDIM+2
   do ivar=ndim+3,nvar
      q(1:nn,ivar)=0.0d0
-  end do
+  enddo
+#endif
 
   ! Loop over initial conditions regions
   do k=1,r%nregion
@@ -209,6 +214,7 @@ subroutine init_grafic_2(r,g,m,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::dummy_io,info,info2
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -221,7 +227,7 @@ subroutine init_grafic_2(r,g,m,ilevel)
   integer::igrid,ilun
   integer::ind,idim,ivar
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
-  integer::buf_count,info
+  integer::buf_count
 
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx,rr,vx,vy=0,vz=0,ek,ei,pp,xx1,xx2,xx3,dx_loc
@@ -234,7 +240,9 @@ subroutine init_grafic_2(r,g,m,ilevel)
   character(LEN=5)::nchar,ncharvar
 
   integer,parameter::tag=1107
-  integer::dummy_io,info2
+
+  ! Allocate IC grid default size
+  allocate(init_array(1:1,1:1,1:1))
 
   ! Conversion factor from user units to cgs units
   call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
@@ -287,7 +295,10 @@ subroutine init_grafic_2(r,g,m,ilevel)
   ! Second step: read initial condition files
   !------------------------------------------
   ! Allocate initial conditions array
-  if(m%noct(ilevel)>0)allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
+  if(m%noct(ilevel)>0)then
+     deallocate(init_array)
+     allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
+  endif
   allocate(init_plane(1:g%n1(ilevel),1:g%n2(ilevel)))
   ! Loop over input variables
   do ivar=1,nvar
@@ -505,6 +516,8 @@ subroutine init_grafic_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
+  if(allocated(init_array))deallocate(init_array)
+     
 end subroutine init_grafic_2
 !################################################################
 !################################################################

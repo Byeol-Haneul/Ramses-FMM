@@ -9,6 +9,8 @@ subroutine init_part_file_2(r,g,p)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  real(dp)::mp_min_all
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -20,11 +22,10 @@ subroutine init_part_file_2(r,g,p)
   ! grafic initial conditions are performed after the AMR grid 
   ! has been constructed.
   !------------------------------------------------------------
-  integer::ipart,jpart,jpart_loc,ipart_old,idim
-  integer::i,ilun,info,icpu
+  integer::ipart,jpart,jpart_loc=0,ipart_old,idim
+  integer::i,ilun,icpu
   integer::indglob
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
-  real(dp)::mp_min_all
   integer::ncpu_file
   integer::ileft,iright,nrest,ipos
   integer(i8b)::npart_tot_file
@@ -345,6 +346,8 @@ subroutine init_part_grid_2(r,g,m,p)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  real(kind=8)::mp_min_all
+  integer::dummy_io,info,info2
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -356,13 +359,12 @@ subroutine init_part_grid_2(r,g,m,p)
   !------------------------------------------------------------
   integer::ipart,ipart_old,ilevel,idim
   integer::igrid
-  integer::ind,ilun,info
+  integer::ind,ilun
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
   integer::buf_count
   integer,parameter::tagg=1109,tagg2=1110,tagg3=1111
-  integer::dummy_io,info2
   real(dp)::dx,dx_loc,xx1,xx2,xx3
-  real(kind=8)::dispmax=0.0,mp_min_all
+  real(kind=8)::dispmax=0.0
   real(kind=4),allocatable,dimension(:,:)::init_plane,init_plane_x
   real(dp),allocatable,dimension(:,:,:)::init_array,init_array_x
   character(LEN=80)::filename,filename_x
@@ -372,6 +374,10 @@ subroutine init_part_grid_2(r,g,m,p)
   if(r%verbose)write(*,*)'Entering init_part_from_grid'
   if(TRIM(r%filetype).NE.'grafic')return
   if(r%nrestart>0)return
+
+  ! Allocate default IC grid
+  allocate(init_array(1:1,1:1,1:1))
+  allocate(init_array_x(1:1,1:1,1:1))
 
   !----------------------------------------------------
   ! Reading initial conditions GRAFIC2 multigrid arrays
@@ -451,6 +457,7 @@ subroutine init_part_grid_2(r,g,m,p)
      !---------------------------------------------------------------------
      ! Allocate initial conditions array
      if(m%noct(ilevel)>0)then
+        deallocate(init_array,init_array_x)
         allocate(init_array(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
         allocate(init_array_x(i1_min:i1_max,i2_min:i2_max,i3_min:i3_max))
         init_array=0d0
@@ -691,6 +698,9 @@ subroutine init_part_grid_2(r,g,m,p)
   call MPI_ALLREDUCE(p%npart,p%npart_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
   call MPI_ALLREDUCE(p%npart,p%npart_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
 #endif
+
+  if(allocated(init_array))deallocate(init_array)
+  if(allocated(init_array_x))deallocate(init_array_x)
 
 end subroutine init_part_grid_2
 !#########################################################################

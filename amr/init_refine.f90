@@ -11,6 +11,7 @@ subroutine init_refine_basegrid_2(r,g,m,p)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -19,7 +20,7 @@ subroutine init_refine_basegrid_2(r,g,m,p)
   !------------------------------------------
   ! This routine builds the coarse level grid
   !------------------------------------------
-  integer::i,igrid,ioct,ilev,info
+  integer::i,igrid,ioct,ilev
   integer(kind=8)::ikey
   integer(kind=8),dimension(1:nvector,1:nhilbert)::hk=0
   integer(kind=8),dimension(1:nvector,1:ndim)::ix=0
@@ -44,7 +45,7 @@ subroutine init_refine_basegrid_2(r,g,m,p)
      m%noct(r%levelmin)=m%noct(r%levelmin)+1
      m%noct_used=m%noct_used+1
      m%grid(igrid)%lev=r%levelmin
-     m%grid(igrid)%ckey(1:ndim)=ix(1,1:ndim)
+     m%grid(igrid)%ckey(1:ndim)=int(ix(1,1:ndim),kind=4)
      m%grid(igrid)%hkey(1:nhilbert)=hk(1,1:nhilbert)
      m%grid(igrid)%refined(1:twotondim)=.false.
      ! Insert new grid in hash table
@@ -124,7 +125,9 @@ subroutine init_refine_adaptive_2(r,g,m,p)
   do i=r%levelmin,r%nlevelmax+1
 
      call refine_fine_2(r,g,m,r%levelmin)
+#ifndef WITHOUTMPI
      call load_balance_2(r,g,m,r%levelmin)
+#endif
 
      do ilevel=r%nlevelmax,r%levelmin,-1
         if(r%hydro)then
@@ -165,6 +168,7 @@ subroutine init_refine_restart_2(r,g,m)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -172,7 +176,7 @@ subroutine init_refine_restart_2(r,g,m)
 
   ! Local variables
   integer::ilevel,ncpu_file,levelmin_file,nlevelmax_file
-  integer::icpu,iskip_amr,iskip_hydro,iskip_grav,ilun,info
+  integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,ilun
   integer::i,ind,istart,iend,noct_tmp,ilev,ioct
   integer::igrid,igrid_level,nleft,nright,ileft,iright
   integer::levelmin_max,nlevelmax_min

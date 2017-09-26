@@ -392,7 +392,7 @@ subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
   end do
 
 !  write(*,666)-t
-  666 format(' Age of the Universe (in unit of 1/H0)=',1pe10.3)
+!  666 format(' Age of the Universe (in unit of 1/H0)=',1pe10.3)
 
   nskip=nstep/ntable
   

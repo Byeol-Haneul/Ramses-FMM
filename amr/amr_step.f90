@@ -9,6 +9,7 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  logical,save::first_step=.true.
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -20,7 +21,6 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  logical,save::first_step=.true.
 
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,999)icount,ilevel
@@ -31,14 +31,17 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
   if(ilevel==r%levelmin.or.icount>1)then
                                call timer('refine','start')
      call refine_fine_2(r,g,m,ilevel)
+#ifndef WITHOUTMPI
                                call timer('load balance','start')
      call load_balance_2(r,g,m,ilevel)
+#endif
   endif
 
   !------------------------------
   ! Balance particles across cpus
   ! Careful rho must have been called once !
   !------------------------------
+#ifndef WITHOUTMPI
   if(first_step)then
      first_step=.false.
   else
@@ -47,6 +50,7 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
         if(r%pic)call balance_part_2(r,g,m,p,ilevel)
      endif
   endif
+#endif
 
   !------------------------
   ! Output results to files

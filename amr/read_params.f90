@@ -6,6 +6,8 @@ subroutine read_params(r,g)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::ierr
+  real(kind=4)::real_mem,real_mem_tot
 #endif
 
   type(run_t)::r
@@ -14,14 +16,13 @@ subroutine read_params(r,g)
   !--------------------------------------------------
   ! Local variables
   !--------------------------------------------------
-  integer::i,narg,iargc,ierr,levelmax
+  integer::i,narg,iargc,levelmax
   character(LEN=80)::infile
   character(LEN=80)::cmdarg
   integer(kind=8)::ngridtot=0
   integer(kind=8)::nparttot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
-  real(kind=4)::real_mem,real_mem_tot
   logical::nml_ok
 
   !--------------------------------------------------
@@ -411,11 +412,11 @@ subroutine read_params(r,g)
         if(myid==1)write(*,*)'Allocate some space for refinements !!!'
         nml_ok=.false.
      else
-        ngridmax=ngridtot/int(ncpu,kind=8)
+        ngridmax=int(ngridtot/int(ncpu,kind=8),kind=4)
      endif
   end if
   if(npartmax==0)then
-     npartmax=nparttot/int(ncpu,kind=8)
+     npartmax=int(nparttot/int(ncpu,kind=8),kind=4)
   endif
   if(myid>1)verbose=.false.
 

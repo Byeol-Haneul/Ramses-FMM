@@ -10,6 +10,8 @@ subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
+  real(kind=8)::r2_all,p2p_all,rhs_norm_all
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -24,11 +26,11 @@ subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
   ! x  : stored in phi
   ! b  : stored in rho
   !=========================================================
-  integer::igrid,info,ind,iter,itermax
+  integer::igrid,ind,iter,itermax
   real(dp)::error,error_ini
   real(dp)::dx2,fourpi,oneoversix,fact,fact2
-  real(dp)::r2_old,alpha_cg,beta_cg
-  real(kind=8)::r2,pAp,rhs_norm,r2_all,pAp_all,rhs_norm_all
+  real(dp)::r2_old=0,alpha_cg,beta_cg
+  real(kind=8)::r2,pAp,rhs_norm
 
   if(r%gravity_type>0)return
   if(m%noct_tot(ilevel)==0)return
@@ -530,6 +532,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
   integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
 #endif
   integer::ilevel
@@ -539,7 +542,7 @@ subroutine cmp_Ap_cg_fast(ilevel)
   !------------------------------------------------------------------
   integer::get_grid
   integer::inbor,igrid,idim,ind,igridn
-  integer::id1,id2,ig1,ig2,i,info
+  integer::id1,id2,ig1,ig2,i
   integer::icpu,nbuffer,istart
   real(dp)::oneoversix,residu
   integer,dimension(1:3,1:2,1:8)::iii,jjj
@@ -674,12 +677,13 @@ subroutine build_cg(ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
 #endif
   
   integer,intent(in)::ilevel
   !
   integer::get_grid
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
+  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind
   integer::i,igridn,iremote
   integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
   integer,dimension(1:ndim)::cart_key

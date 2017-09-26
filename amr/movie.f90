@@ -10,13 +10,16 @@ subroutine output_frame_2(r,g,m,p)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
+  real(kind=8),dimension(:,:),allocatable::dens_all,vol_all
+  real(kind=8),dimension(:,:,:),allocatable::data_frame_all
 #endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+
   ! Local variables
-  integer::info
   integer,parameter::tag=100
 
   character(len=5) :: istep_str
@@ -34,13 +37,13 @@ subroutine output_frame_2(r,g,m,p)
   real(dp)::dx_cell,dy_cell,dz_cell,dvol
   logical::ok
   real(dp),dimension(1:ndim)::xx
-  real(kind=8),dimension(:,:,:),allocatable::data_frame,data_frame_all
-  real(kind=8),dimension(:,:),allocatable::dens,dens_all,vol,vol_all
+  real(kind=8),dimension(:,:,:),allocatable::data_frame
+  real(kind=8),dimension(:,:),allocatable::dens,vol
   real(kind=4),dimension(:,:),allocatable::data_single
   real(kind=8)::temp,ekk
   integer::igrid,idim,ilevel
   integer::proj_ind,nh_temp,nw_temp
-  real(kind=4)::ratio
+  real(kind=8)::ratio
 
   logical::opened
 
@@ -134,9 +137,9 @@ subroutine output_frame_2(r,g,m,p)
   
   ratio = delx/dely
   if(ratio.gt.1)then
-     r%nw_frame=nh_temp*ratio
+     r%nw_frame=int(nh_temp*ratio)
   else
-     r%nh_frame=nw_temp/ratio
+     r%nh_frame=int(nw_temp/ratio)
   endif
   
   xleft_frame=xcen-delx/2.
@@ -319,7 +322,7 @@ subroutine output_frame_2(r,g,m,p)
      do kk=0, NVAR+2
        if (r%movie_vars(kk).eq.1)then
          open(ilun,file=TRIM(moviefiles(kk)),form='unformatted')
-         data_single=data_frame(:,:,kk)
+         data_single=real(data_frame(:,:,kk),kind=4)
          rewind(ilun)  
          if(r%tendmov>0)then
             write(ilun)g%t,delx,dely,delz

@@ -63,6 +63,7 @@ subroutine newdt_part_2(r,g,p,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -70,7 +71,7 @@ subroutine newdt_part_2(r,g,p,ilevel)
   integer::ilevel
   !
   real(kind=8) :: dt_loc, ekin_loc, dt_all, ekin_all
-  integer  :: ipart, idim, info
+  integer  :: ipart, idim
   real(dp) :: dx_loc, dtpart, v2max
 
   dt_all=g%dtnew(ilevel); dt_loc=dt_all

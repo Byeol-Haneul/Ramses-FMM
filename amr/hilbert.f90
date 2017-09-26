@@ -309,7 +309,7 @@ contains
     ! pointer to one of the three hkey arrays
     integer                               :: ip, ibit1, ikey, ilevel, idim
     integer(kind=4), dimension(1:nvector) :: cstate, nstate, ind
-    integer(kind=8), dimension(1:nvector) :: sdigit
+    integer(kind=4), dimension(1:nvector) :: sdigit
 
     ! Build the cartesian key using the state diagrams
     cstate = 0; ix = 0
@@ -328,7 +328,7 @@ contains
 
        ! read the next ndim bits from the hilbert key
        do ip = 1, npoint
-          sdigit(ip) = ibits(hkey(ip, ikey), ibit1, ndim)
+          sdigit(ip) = int(ibits(hkey(ip, ikey), ibit1, ndim),kind=4)
        end do
 
        ! Compute lookup index in state diagrams

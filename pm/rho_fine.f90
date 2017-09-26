@@ -9,6 +9,9 @@ subroutine rho_fine_2(r,g,m,p,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
+  real(kind=8),dimension(1:ndim+1)::multipole_in
+  real(kind=8),dimension(1:ndim+1)::multipole_out
 #endif
   integer::ilevel
   type(run_t)::r
@@ -22,9 +25,8 @@ subroutine rho_fine_2(r,g,m,p,ilevel)
   ! On output, particles are sorted according to the level they sit in
   ! and inside their level, they are sorted in grid Hilbert order.
   !------------------------------------------------------------------
-  integer::i,info
+  integer::i
   real(dp)::dx_loc
-  real(kind=8),dimension(1:ndim+1)::multipole_in,multipole_out
 
   if(.not. r%poisson)return
   if(m%noct_tot(ilevel)==0)return
@@ -299,7 +301,7 @@ subroutine cic_cell_2(r,g,m,ilevel)
         ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
         do idim=1,ndim
            dd(idim)=x(idim)+0.5D0
-           id(idim)=dd(idim)
+           id(idim)=int(dd(idim))
            dd(idim)=dd(idim)-id(idim)
            dg(idim)=1.0D0-dd(idim)
            ig(idim)=id(idim)-1
@@ -448,7 +450,7 @@ subroutine cic_part_2(r,g,m,p,ilevel)
      ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
      do idim=1,ndim
         dd(idim)=x(idim)+0.5D0
-        id(idim)=dd(idim)
+        id(idim)=int(dd(idim))
         dd(idim)=dd(idim)-id(idim)
         dg(idim)=1.0D0-dd(idim)
         ig(idim)=id(idim)-1
@@ -569,6 +571,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
 
   ! Loop over particles
   ix_ref=-1
+  igrid=0
   npart_coarse=0
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
      ipart=p%sortp(i)
@@ -595,7 +598,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
         
         ! Shift particle position to to 2x2x2 grid corner
         do idim=1,ndim
-           ii(idim)=x(idim)-2*ix_ref(idim)
+           ii(idim)=int(x(idim)-2*ix_ref(idim))
         end do
         
         ! Compute parent cell

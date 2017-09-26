@@ -50,7 +50,7 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
      ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
      do idim=1,ndim
         dd(idim)=x(idim)+0.5D0
-        id(idim)=dd(idim)
+        id(idim)=int(dd(idim))
         dd(idim)=dd(idim)-id(idim)
         dg(idim)=1.0D0-dd(idim)
         ig(idim)=id(idim)-1
@@ -115,7 +115,7 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
         ! CIC at level ilevel-1 (dd: right cloud boundary; dg: left cloud boundary)
         do idim=1,ndim
            dd(idim)=x(idim)+0.5D0
-           id(idim)=dd(idim)
+           id(idim)=int(dd(idim))
            dd(idim)=dd(idim)-id(idim)
            dg(idim)=1.0D0-dd(idim)
            ig(idim)=id(idim)-1

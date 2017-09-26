@@ -25,7 +25,12 @@ subroutine condinit_2(r,g,x,u,dx,nn)
   ! scalars in the hydro solver.
   ! U(:,:) and Q(:,:) are in user units.
   !================================================================
+#if NVAR>NDIM+2+NENER
   integer::ivar
+#endif
+#if NENER>0
+  integer::irad
+#endif
   real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
 
   ! Call built-in initial condition generator
@@ -59,9 +64,9 @@ subroutine condinit_2(r,g,x,u,dx,nn)
 #if NENER>0
   ! radiative pressure -> radiative energy
   ! radiative energy -> total fluid energy
-  do ivar=1,nener
-     u(1:nn,ndim+2+ivar)=q(1:nn,ndim+2+ivar)/(r%gamma_rad(ivar)-1.0d0)
-     u(1:nn,ndim+2)=u(1:nn,ndim+2)+u(1:nn,ndim+2+ivar)
+  do irad=1,nener
+     u(1:nn,ndim+2+irad)=q(1:nn,ndim+2+irad)/(r%gamma_rad(irad)-1.0d0)
+     u(1:nn,ndim+2)=u(1:nn,ndim+2)+u(1:nn,ndim+2+irad)
   enddo
 #endif
 #if NVAR>NDIM+2+NENER

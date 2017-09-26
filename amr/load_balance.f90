@@ -2,6 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifndef WITHOUTMPI
 subroutine load_balance_2(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,nhilbert,dp
   use amr_commons, only: run_t,global_t,mesh_t,oct
@@ -11,6 +12,7 @@ subroutine load_balance_2(r,g,m,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h' 
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -19,7 +21,7 @@ subroutine load_balance_2(r,g,m,ilevel)
   !------------------------------------------------
   ! This routine performs parallel load balancing.
   !------------------------------------------------
-  integer::i,info
+  integer::i
   integer::grid_cpu,ichild,idom,jdom,mydom,ndom,lastdom,domains_matched
   integer::nleft,nright,ileft,iright,istart,nstart,noverlaps
   integer::ilev,ioct
@@ -481,10 +483,12 @@ subroutine load_balance_2(r,g,m,ilevel)
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
 end subroutine load_balance_2
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifndef WITHOUTMPI
 subroutine balance_part_2(r,g,m,p,ilevel)
   use amr_parameters, only: nhilbert,nvector,ndim,i8b,dp
   use pm_parameters, only: part_memory
@@ -509,6 +513,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
   ! It can only be called after routine rho has been called.
   !
 #ifndef WITHOUTMPI
+  integer::info
   integer,dimension(MPI_STATUS_SIZE,g%ncpu)::statuses
 #endif
   integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk_ref
@@ -516,7 +521,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
   integer(kind=4), dimension(1:nvector),save::dummy_state
 
   integer,dimension(1:ndim),save::ix
-  integer::i,istart,info,ipart,jpart,idim,grid_cpu
+  integer::i,istart,ipart,jpart,idim,grid_cpu
   integer::ilev,idom,icpu,mydom,ndom,count_loc,recv_cnt_tot,send_cnt_tot
   integer::nbuffer,countrecv,countsend,tag=101
   real(kind=8)::dx_loc
@@ -1110,6 +1115,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
 111 format('   Entering balance_part for level',i2)
 
 end subroutine balance_part_2
+#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################
