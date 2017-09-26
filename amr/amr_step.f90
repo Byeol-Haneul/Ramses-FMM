@@ -87,11 +87,11 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
                                call timer('poisson','start')
      ! Remove gravity source term with half time step and old force
      if(r%hydro)then
-        call synchro_hydro_fine_2(r,g,m,ilevel,-0.5*g%dtnew(ilevel))
+        call synchro_hydro_fine_2(r,m,ilevel,-0.5*g%dtnew(ilevel))
      endif
 
      ! Save old potential for time-extrapolation at level boundaries
-     call save_phi_old_2(r,g,m,ilevel)
+     call save_phi_old_2(m,ilevel)
 
      ! Compute new gravitational potential
      if(ilevel > r%levelmin)then
@@ -105,7 +105,7 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
      end if
 
      ! Initial old potential
-     if (g%nstep==0)call save_phi_old_2(r,g,m,ilevel)
+     if (g%nstep==0)call save_phi_old_2(m,ilevel)
 
      ! Compute gravitational acceleration
      call force_fine_2(r,g,m,ilevel,icount)
@@ -117,7 +117,7 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
      ! Add gravity source term with half time step and new force
      if(r%hydro)then
                                call timer('poisson','start')
-        call synchro_hydro_fine_2(r,g,m,ilevel,+0.5*g%dtnew(ilevel))
+        call synchro_hydro_fine_2(r,m,ilevel,+0.5*g%dtnew(ilevel))
      end if
 
   end if
@@ -177,7 +177,7 @@ recursive subroutine amr_step_2(r,g,m,p,ilevel,icount)
      ! Add gravity source terms to uold with half time step
      ! to complete the time step (will be removed later)
                                call timer('poisson - synchro','start')
-     if(r%poisson)call synchro_hydro_fine_2(r,g,m,ilevel,+0.5*g%dtnew(ilevel))
+     if(r%poisson)call synchro_hydro_fine_2(r,m,ilevel,+0.5*g%dtnew(ilevel))
      ! Restriction operator
                                call timer('hydro - upload','start')
      call upload_fine_2(r,g,m,ilevel)
