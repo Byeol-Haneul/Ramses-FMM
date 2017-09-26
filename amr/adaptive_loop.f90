@@ -4,6 +4,9 @@ subroutine adaptive_loop(r,g,m,p)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
+  real(kind=8)::tt1,tt2
+  real(kind=4)::real_mem_tot
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -11,9 +14,8 @@ subroutine adaptive_loop(r,g,m,p)
   type(part_t)::p
 
   ! Local variables
-  integer::ilevel,info
-  real(kind=8)::tt1,tt2
-  real(kind=4)::real_mem,real_mem_tot
+  integer::ilevel
+  real(kind=4)::real_mem
 
 #ifndef WITHOUTMPI
   tt1=MPI_WTIME(info)

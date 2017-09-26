@@ -37,6 +37,7 @@ contains
     logical :: in_rank
     integer :: isub, myid, ncpu
     !
+    in_rank=.false.
     myid = domain%myid
     ncpu = domain%ncpu
     do isub = 0,domain%overload-1
@@ -154,7 +155,7 @@ contains
     integer,      save :: last_domain=1, ncall=0
     logical,      save :: do_linear=.true.
     real(kind=8), save :: tlin,thunt
-    real(kind=8)       :: t0
+    real(kind=8)       :: t0=0.
     real(kind=8), external :: wallclock
     !
     myid = domain%myid

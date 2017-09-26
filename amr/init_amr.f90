@@ -141,13 +141,14 @@ subroutine init_cache_2(r,g)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'  
+  integer::icpu,info
+  integer::intex,realdpex,msg_size
+  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length
 #endif
   type(run_t)::r
   type(global_t)::g
 
-  integer::icpu,info,ncpu
-  integer::intex,realdpex,msg_size
-  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length
+  integer::ncpu
 
   if(r%verbose.and.g%myid==1)write(*,*)'Entering init_cache'
 

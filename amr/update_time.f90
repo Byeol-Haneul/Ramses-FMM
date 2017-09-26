@@ -82,15 +82,17 @@ subroutine finalize_timer(g)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
-#endif
-  type(global_t)::g
-  
-  real(kind=8) :: total, gtotal, avtime, rmstime
   real(kind=8), dimension(g%ncpu) :: vtime
   integer,      dimension(g%ncpu) :: all_ntimer
   logical,      dimension(g%ncpu) :: gprint_timer
   integer      :: imn, imx, mpi_err, icpu
-  logical      :: o, print_timer
+  real(kind=8) :: gtotal, avtime, rmstime
+  logical      :: print_timer
+#endif
+  type(global_t)::g
+  real(kind=8) :: total
+
+  logical      :: o
 !-----------------------------------------------------------------------
   o = g%myid == 1
   total = 1e-9
@@ -192,6 +194,9 @@ subroutine update_time_2(r,g,m,p,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
+  real(kind=8)::ttend
+  real(kind=8),save::ttstart=0
 #endif  
   type(run_t)::r
   type(global_t)::g
@@ -201,9 +206,7 @@ subroutine update_time_2(r,g,m,p,ilevel)
 
   ! Local variables
   real(dp)::dt,econs,mcons
-  real(kind=8)::ttend
-  real(kind=8),save::ttstart=0
-  integer::i,itest,info
+  integer::i,itest
 
   ! Local constants
   dt=g%dtnew(ilevel)
@@ -351,9 +354,9 @@ subroutine clean_stop(g)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
 #endif
   type(global_t)::g
-  integer::info
 
   call finalize_timer(g)
 
@@ -368,8 +371,8 @@ subroutine clean_abort
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
-#endif
   integer::info
+#endif
 #ifndef WITHOUTMPI
      call MPI_ABORT(MPI_COMM_WORLD,1,info)
 #else
@@ -389,7 +392,7 @@ subroutine writemem(usedmem)
 !  ipagesize = getpagesize()
   ipagesize=4096
 #endif
-  usedmem=dble(usedmem)*dble(ipagesize)
+  usedmem=usedmem*ipagesize
 
   if(usedmem>1024.**3.)then
      write(*,999)usedmem/1024.**3.
@@ -414,7 +417,7 @@ subroutine getmem(outmem)
   read(1,'(A300)',IOSTAT=read_status)dir
 101  close(1)
   if (read_status < 0)then
-     outmem=dble(0.)
+     outmem=0.
      write(*,*)'Problem in checking free memory'
   else
      ind=300
@@ -428,7 +431,7 @@ subroutine getmem(outmem)
      ind=index(dir,' ')
      dir2=dir(1:ind)
      read(dir2,'(I12)')nmem
-     outmem=dble(nmem)
+     outmem=nmem
   end if
 
 end subroutine getmem

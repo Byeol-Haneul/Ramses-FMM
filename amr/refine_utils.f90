@@ -11,6 +11,8 @@ subroutine refine_fine_2(r,g,m,ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
+  integer::ncreate_tot,nkill_tot
 #endif
   integer::ilevel
   type(run_t)::r
@@ -26,8 +28,7 @@ subroutine refine_fine_2(r,g,m,ilevel)
   ! numerical rules are checked before refining any cell.
   !---------------------------------------------------------
   integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
-  integer::noct_zero,head_zero,indx_zero,info
-  integer::ncreate_tot,nkill_tot
+  integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
   integer::parent_cell,get_parent_cell_2
   integer::ind_cell,ind_parent
@@ -182,7 +183,7 @@ subroutine refine_fine_2(r,g,m,ilevel)
            bucket_count=0
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               ioct=swap_table(inew)
-              ibucket=ibits(m%grid(ioct)%hkey(ikey),skip_bit,ndim)
+              ibucket=int(ibits(m%grid(ioct)%hkey(ikey),skip_bit,ndim),kind=4)
               bucket_count(ibucket)=bucket_count(ibucket)+1
            end do
 
@@ -195,7 +196,7 @@ subroutine refine_fine_2(r,g,m,ilevel)
            ! Sort according to Hilbert key
            do inew=head_level(ilev),head_level(ilev)+noct_level(ilev)-1
               ioct=swap_table(inew)
-              ibucket=ibits(m%grid(ioct)%hkey(ikey),skip_bit,ndim)
+              ibucket=int(ibits(m%grid(ioct)%hkey(ikey),skip_bit,ndim),kind=4)
               swap_tmp(bucket_offset(ibucket))=ioct
               bucket_offset(ibucket)=bucket_offset(ibucket)+1
            end do
@@ -288,7 +289,6 @@ subroutine refine_fine_2(r,g,m,ilevel)
         end do
      end do
   end do
-222 continue
 
   !---------------------
   ! Total number of octs
@@ -313,7 +313,6 @@ subroutine refine_fine_2(r,g,m,ilevel)
 
 111 format('   Entering refine_fine for level ',I2)
 112 format('   ==> Make ',i6,' sub-grids')
-113 format('   ==> Kill ',i6,' sub-grids')
 
 end subroutine refine_fine_2
 !###############################################################
@@ -410,7 +409,7 @@ subroutine make_new_oct_2(r,g,m,iparent,icell,ilevel)
   endif
 
   m%grid(ichild)%lev=ilevel
-  m%grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
+  m%grid(ichild)%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
   m%grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
   m%grid(ichild)%refined(1:twotondim)=.false.
   m%grid(ichild)%flag1(1:twotondim)=0
