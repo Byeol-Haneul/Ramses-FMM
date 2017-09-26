@@ -2,6 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifndef WITHOUTMPI
 subroutine load_balance_2(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,nhilbert,dp
   use amr_commons, only: run_t,global_t,mesh_t,oct
@@ -482,10 +483,12 @@ subroutine load_balance_2(r,g,m,ilevel)
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
 end subroutine load_balance_2
+#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifndef WITHOUTMPI
 subroutine balance_part_2(r,g,m,p,ilevel)
   use amr_parameters, only: nhilbert,nvector,ndim,i8b,dp
   use pm_parameters, only: part_memory
@@ -1112,6 +1115,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
 111 format('   Entering balance_part for level',i2)
 
 end subroutine balance_part_2
+#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################

@@ -699,6 +699,9 @@ subroutine init_part_grid_2(r,g,m,p)
   call MPI_ALLREDUCE(p%npart,p%npart_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
 #endif
 
+  if(allocated(init_array))deallocate(init_array)
+  if(allocated(init_array_x))deallocate(init_array_x)
+
 end subroutine init_part_grid_2
 !#########################################################################
 !#########################################################################

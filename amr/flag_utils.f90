@@ -7,6 +7,7 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::nflag_tot,info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -15,7 +16,7 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
   !--------------------------------------------------------
   ! This routine builds the refinement map at level ilevel.
   !--------------------------------------------------------
-  integer::iexpand,nflag_tot,info
+  integer::iexpand
   
   if(ilevel==r%nlevelmax)return
   if(ilevel<r%levelmin)return
@@ -74,7 +75,6 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
   end if
 
 111 format('   Entering flag_fine for level ',I2)
-112 format('   ==> Flag ',i6,' cells')
 
 end subroutine flag_fine_2
 !################################################################
@@ -337,13 +337,13 @@ subroutine ensure_ref_rules_2(r,g,m,ilevel)
 
               ! Compute neighboring grid Cartesian index
 #if NDIM>0
-              hash_nbor(1)=m%grid(igrid)%ckey(1)+i1-1.0
+              hash_nbor(1)=m%grid(igrid)%ckey(1)+i1-1
 #endif
 #if NDIM>1
-              hash_nbor(2)=m%grid(igrid)%ckey(2)+j1-1.0
+              hash_nbor(2)=m%grid(igrid)%ckey(2)+j1-1
 #endif
 #if NDIM>2
-              hash_nbor(3)=m%grid(igrid)%ckey(3)+k1-1.0
+              hash_nbor(3)=m%grid(igrid)%ckey(3)+k1-1
 #endif
               ! Periodic boundary conditons
               do idim=1,ndim
@@ -381,6 +381,7 @@ subroutine smooth_fine_fast(ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
   integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
 #endif
   integer::ilevel
@@ -396,7 +397,7 @@ subroutine smooth_fine_fast(ilevel)
   integer::ismooth,count_nbor,ig,id,ih,in
   integer::i,iskip,ngrid
   integer::igrid,idim,ind,inbor,igrid_nbor,icell_nbor
-  integer::icpu,nbuffer,istart,info
+  integer::icpu,nbuffer,istart
   integer::get_grid
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
   integer(kind=8),dimension(0:ndim)::hash_nbor
@@ -566,12 +567,13 @@ subroutine build_smooth(ilevel)
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
+  integer::info
 #endif
   
   integer,intent(in)::ilevel
   !
   integer::get_grid
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
+  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind
   integer::i,igridn,iremote
   integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
   integer,dimension(1:ndim)::cart_key

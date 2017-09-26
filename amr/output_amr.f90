@@ -9,6 +9,7 @@ subroutine dump_all_2(r,g,m,p)
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
+  integer::info
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -18,7 +19,10 @@ subroutine dump_all_2(r,g,m,p)
   ! Local variables
   character(LEN=5)::nchar
   character(LEN=80)::filename,filedir,filecmd
-  integer::i,info
+  integer::i
+#ifdef NOSYSTEM
+  integer::ierr
+#endif
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -37,7 +41,7 @@ subroutine dump_all_2(r,g,m,p)
      filedir='output_threadsafe_'//TRIM(nchar)//'/'
      filecmd='mkdir -p '//TRIM(filedir)
 #ifdef NOSYSTEM
-     call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',info)
+     call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',ierr)
 #else
      call system(filecmd)
 #endif

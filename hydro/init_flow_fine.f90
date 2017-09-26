@@ -90,7 +90,10 @@ subroutine region_condinit_2(r,g,x,q,dx,nn)
   real(dp),dimension(1:nvector,1:nvar)::q
   real(dp),dimension(1:nvector,1:ndim)::x
 
-  integer::i,ivar,k
+#if NVAR>NDIM+2
+  integer::ivar
+#endif
+  integer::i,k
   real(dp)::vol,rad,weight,xn,yn,zn,en
 
   ! Set some (tiny) default values in case n_region=0
@@ -103,9 +106,11 @@ subroutine region_condinit_2(r,g,x,q,dx,nn)
   q(1:nn,4)=0.0d0
 #endif
   q(1:nn,ndim+2)=r%smallr*r%smallc**2/r%gamma
+#if NVAR>NDIM+2
   do ivar=ndim+3,nvar
      q(1:nn,ivar)=0.0d0
-  end do
+  enddo
+#endif
 
   ! Loop over initial conditions regions
   do k=1,r%nregion
@@ -511,6 +516,8 @@ subroutine init_grafic_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
+  if(allocated(init_array))deallocate(init_array)
+     
 end subroutine init_grafic_2
 !################################################################
 !################################################################
