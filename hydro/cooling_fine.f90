@@ -2,7 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cooling_fine_2(r,g,m,ilevel)
+subroutine cooling_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -27,7 +27,7 @@ subroutine cooling_fine_2(r,g,m,ilevel)
   if(r%verbose)write(*,111)ilevel
 
   ! Conversion factor from user units to cgs units
-  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
@@ -60,7 +60,7 @@ subroutine cooling_fine_2(r,g,m,ilevel)
 
 111 format('   Entering cooling_fine for level',i2)
 
-end subroutine cooling_fine_2
+end subroutine cooling_fine
 !###########################################################
 !###########################################################
 !###########################################################

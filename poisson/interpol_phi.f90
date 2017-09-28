@@ -2,7 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine interpol_phi_2(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
+subroutine interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   use amr_parameters, only: ndim,dp,twotondim,threetondim
   use amr_commons, only: mesh_t
   implicit none
@@ -50,12 +50,12 @@ subroutine interpol_phi_2(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
      end do
   end do
 #endif
-end subroutine interpol_phi_2
+end subroutine interpol_phi
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine save_phi_old_2(m,ilevel)
+subroutine save_phi_old(m,ilevel)
   use amr_parameters, only: ndim,dp,twotondim,threetondim
   use amr_commons, only: mesh_t
   implicit none
@@ -73,7 +73,7 @@ subroutine save_phi_old_2(m,ilevel)
      end do
   end do
 #endif
-end subroutine save_phi_old_2
+end subroutine save_phi_old
 !###########################################################
 !###########################################################
 !###########################################################

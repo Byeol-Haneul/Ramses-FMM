@@ -2,7 +2,7 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_basegrid_2(r,g,m,p)
+subroutine init_refine_basegrid(r,g,m,p)
   use amr_parameters, only: nvector,nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -95,15 +95,15 @@ subroutine init_refine_basegrid_2(r,g,m,p)
   call MPI_ALLREDUCE(m%noct_used,m%noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 #endif
 
-  if(r%hydro)call init_flow_fine_2(r,g,m,r%levelmin)
-  if(r%pic)call rho_fine_2(r,g,m,p,r%levelmin)
+  if(r%hydro)call init_flow_fine(r,g,m,r%levelmin)
+  if(r%pic)call rho_fine(r,g,m,p,r%levelmin)
   
-end subroutine init_refine_basegrid_2
+end subroutine init_refine_basegrid
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_adaptive_2(r,g,m,p)
+subroutine init_refine_adaptive(r,g,m,p)
   !--------------------------------------------------------------
   ! This routine builds additional refinements to the
   ! the initial AMR grid for filetype ne 'grafic'
@@ -124,38 +124,38 @@ subroutine init_refine_adaptive_2(r,g,m,p)
 
   do i=r%levelmin,r%nlevelmax+1
 
-     call refine_fine_2(r,g,m,r%levelmin)
+     call refine_fine(r,g,m,r%levelmin)
 #ifndef WITHOUTMPI
-     call load_balance_2(r,g,m,r%levelmin)
+     call load_balance(r,g,m,r%levelmin)
 #endif
 
      do ilevel=r%nlevelmax,r%levelmin,-1
         if(r%hydro)then
-           call init_flow_fine_2(r,g,m,ilevel)
-           call upload_fine_2(r,g,m,ilevel)
+           call init_flow_fine(r,g,m,ilevel)
+           call upload_fine(r,g,m,ilevel)
         endif
      end do
 
-     call rho_fine_2(r,g,m,p,r%levelmin)
+     call rho_fine(r,g,m,p,r%levelmin)
 
      do ilevel=r%nlevelmax,r%levelmin,-1
-        call flag_fine_2(r,g,m,ilevel,2)
+        call flag_fine(r,g,m,ilevel,2)
      end do
 
   end do
 
   do ilevel=r%levelmin,r%nlevelmax
-     call write_screen_2(m,ilevel)
+     call write_screen(m,ilevel)
   end do
 
   g%init=.false.
   
-end subroutine init_refine_adaptive_2
+end subroutine init_refine_adaptive
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_restart_2(r,g,m)
+subroutine init_refine_restart(r,g,m)
   !--------------------------------------------------------------
   ! This routine builds from a RAMSES restart file
   ! the initial AMR grid.
@@ -207,7 +207,7 @@ subroutine init_refine_restart_2(r,g,m)
   ! Read parameters from restart file
   call title(r%nrestart,nchar)
   file_params='output_'//TRIM(nchar)//'/params.out'
-  call input_params_2(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+  call input_params(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
   if(g%myid==1)write(*,'(" Restart snapshot has levelmin=",I4)')levelmin_file
   if(g%myid==1)write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
 
@@ -495,7 +495,7 @@ subroutine init_refine_restart_2(r,g,m)
   call MPI_ALLREDUCE(m%noct_used,m%noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 #endif
 
-end subroutine init_refine_restart_2
+end subroutine init_refine_restart
 !################################################################
 !################################################################
 !################################################################

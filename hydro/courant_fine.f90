@@ -2,7 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine courant_fine_2(r,g,m,ilevel)
+subroutine courant_fine(r,g,m,ilevel)
   use amr_parameters, only: dp,nvector,ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -80,7 +80,7 @@ subroutine courant_fine_2(r,g,m,ilevel)
            end do
 #endif
            ! Compute CFL time-step
-           call cmpdt_2(r,uu,gg,dx,dt_lev)
+           call cmpdt(r,uu,gg,dx,dt_lev)
            dt_loc=min(dt_loc,dt_lev)
         endif
 
@@ -115,7 +115,7 @@ subroutine courant_fine_2(r,g,m,ilevel)
 
 111 format('   Entering courant_fine for level ',I2)
 
-end subroutine courant_fine_2
+end subroutine courant_fine
 !###########################################################
 !###########################################################
 !###########################################################

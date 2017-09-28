@@ -2,7 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_time_2(r,g)
+subroutine init_time(r,g)
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t
   implicit none
@@ -17,11 +17,11 @@ subroutine init_time_2(r,g)
   if(r%nrestart==0)then
      if(r%cosmo)then
         ! Get cosmological parameters from input files
-        call init_cosmo_2(r,g)
+        call init_cosmo(r,g)
      else
         ! Get parameters from input files
         if(r%initfile(r%levelmin).ne.' '.and.r%filetype.eq.'grafic')then
-           call init_file_2(r,g)
+           call init_file(r,g)
         endif
         g%t=0.0
         g%aexp=1.0
@@ -57,12 +57,12 @@ subroutine init_time_2(r,g)
      g%texp=g%t
   end if                                                                   
 
-end subroutine init_time_2
+end subroutine init_time
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_file_2(r,g)
+subroutine init_file(r,g)
   use amr_parameters, only: sp
   use amr_commons, only: run_t,global_t
   implicit none
@@ -138,12 +138,12 @@ subroutine init_file_2(r,g)
      end do
   end if
 
-end subroutine init_file_2
+end subroutine init_file
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_cosmo_2(r,g)
+subroutine init_cosmo(r,g)
   use amr_parameters, only: sp,dp,ndim
   use amr_commons, only: run_t,global_t
   use gadgetreadfilemod
@@ -335,7 +335,7 @@ subroutine init_cosmo_2(r,g)
   g%vfact(1)=g%aexp*fpeebl(g%aexp,g%omega_m,g%omega_l)*sqrt(g%omega_m/g%aexp+g%omega_l*g%aexp*g%aexp+g%omega_k)
   ! This scale factor is different from vfact in grafic by h0/aexp
 
-end subroutine init_cosmo_2
+end subroutine init_cosmo
 !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
      & axp_out,hexp_out,tau_out,t_out,ntable)

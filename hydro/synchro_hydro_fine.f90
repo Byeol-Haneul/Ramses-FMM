@@ -2,7 +2,7 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine synchro_hydro_fine_2(r,m,ilevel,dteff)
+subroutine synchro_hydro_fine(r,m,ilevel,dteff)
   use amr_parameters, only: ndim,dp,twotondim
   use amr_commons, only: run_t,mesh_t
   implicit none
@@ -56,12 +56,12 @@ subroutine synchro_hydro_fine_2(r,m,ilevel,dteff)
 
 111 format('   Entering synchro_hydro_fine for level',i2,' and time step dt=',1PE12.5)
 
-end subroutine synchro_hydro_fine_2
+end subroutine synchro_hydro_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine add_gravity_source_terms_2(r,g,m,ilevel)
+subroutine add_gravity_source_terms(r,g,m,ilevel)
   use amr_parameters, only: ndim,dp,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -119,7 +119,7 @@ subroutine add_gravity_source_terms_2(r,g,m,ilevel)
 
 111 format('   Entering add_gravity_source_terms for level ',i2)
 
-end subroutine add_gravity_source_terms_2
+end subroutine add_gravity_source_terms
 !###########################################################
 !###########################################################
 !###########################################################

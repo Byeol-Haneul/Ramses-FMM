@@ -189,7 +189,7 @@ end subroutine
 !################################################################
 !################################################################
 !################################################################
-subroutine update_time_2(r,g,m,p,ilevel)
+subroutine update_time(r,g,m,p,ilevel)
   use amr_parameters, only: dp,n_frw
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -290,7 +290,7 @@ subroutine update_time_2(r,g,m,p,ilevel)
         if(g%myid==1)then
            write(*,*)'Run completed'
            do i=r%levelmin,r%nlevelmax
-              call write_screen_2(m,i)
+              call write_screen(m,i)
            end do           
 #ifndef WITHOUTMPI
            ttend=MPI_WTIME(info)
@@ -349,7 +349,7 @@ subroutine update_time_2(r,g,m,p,ilevel)
          & ' a=',1pe10.3,' mem=',0pF4.1,'% ',0pF4.1,'%')
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
  
-end subroutine update_time_2
+end subroutine update_time
   
 subroutine clean_stop(g)
   use amr_commons, only: global_t

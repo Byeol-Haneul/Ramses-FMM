@@ -1,4 +1,4 @@
-subroutine init_flow_fine_2(r,g,m,ilevel)
+subroutine init_flow_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,nvector
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -36,7 +36,7 @@ subroutine init_flow_fine_2(r,g,m,ilevel)
   endif
   ok_file=ok_file1.or.ok_file2
   if(ok_file)then
-     call init_grafic_2(r,g,m,ilevel)
+     call init_grafic(r,g,m,ilevel)
   else
   !----------------------------------------------------
   ! Compute initial conditions from subroutine condinit
@@ -56,7 +56,7 @@ subroutine init_flow_fine_2(r,g,m,ilevel)
            end do
         end do
         ! Call initial condition routine
-        call condinit_2(r,g,xx,uu,dx,ngrid)
+        call condinit(r,g,xx,uu,dx,ngrid)
 #ifdef HYDRO
         ! Scatter variables to main memory
         do ivar=1,nvar
@@ -73,12 +73,12 @@ subroutine init_flow_fine_2(r,g,m,ilevel)
 
 111 format('   Entering init_flow_fine for level ',I2)
 
-end subroutine init_flow_fine_2
+end subroutine init_flow_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine region_condinit_2(r,g,x,q,dx,nn)
+subroutine region_condinit(r,g,x,q,dx,nn)
   use amr_parameters, only:dp, nvector, ndim
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
@@ -202,12 +202,12 @@ subroutine region_condinit_2(r,g,x,q,dx,nn)
   end do
 
   return
-end subroutine region_condinit_2
+end subroutine region_condinit
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine init_grafic_2(r,g,m,ilevel)
+subroutine init_grafic(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,nvector
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -245,7 +245,7 @@ subroutine init_grafic_2(r,g,m,ilevel)
   allocate(init_array(1:1,1:1,1:1))
 
   ! Conversion factor from user units to cgs units
-  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Mesh size at level ilevel in normalised units
   dx=0.5D0**ilevel
@@ -518,7 +518,7 @@ subroutine init_grafic_2(r,g,m,ilevel)
 
   if(allocated(init_array))deallocate(init_array)
      
-end subroutine init_grafic_2
+end subroutine init_grafic
 !################################################################
 !################################################################
 !################################################################

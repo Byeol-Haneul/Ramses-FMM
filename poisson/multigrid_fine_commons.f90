@@ -20,7 +20,7 @@
 ! Main multigrid routine, called by amr_step
 ! ------------------------------------------------------------------------
 
-subroutine multigrid_2(r,g,m,ilevel,icount)
+subroutine multigrid(r,g,m,ilevel,icount)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
   use amr_commons, only: run_t,global_t,mesh_t  
@@ -52,20 +52,20 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
-  call make_initial_phi_2(r,g,m,ilevel,icount)  ! Initial guess
-  call make_mask_2(m,ilevel)                ! Fill the fine level mask
-  call make_bc_rhs_2(r,g,m,ilevel,icount)       ! Fill BC-modified RHS
+  call make_initial_phi(r,g,m,ilevel,icount)  ! Initial guess
+  call make_mask(m,ilevel)                ! Fill the fine level mask
+  call make_bc_rhs(r,g,m,ilevel,icount)       ! Fill BC-modified RHS
 
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
-  call init_mg_2(r,m,ilevel)
+  call init_mg(r,m,ilevel)
   
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
-     call build_mg_2(r,g,m,ifine)
+     call build_mg(r,g,m,ifine)
   end do
   
   ! ---------------------------------------------------------------------
@@ -74,7 +74,7 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
   g%levelmin_mg=1
   do ifine=ilevel,2,-1
      ! Restrict and communicate mask
-     call restrict_mask_2(r,g,m,ifine,allmasked)
+     call restrict_mask(r,g,m,ifine,allmasked)
      if(allmasked) then ! Coarser level is fully masked: stop here
         g%levelmin_mg=ifine
         exit
@@ -84,9 +84,9 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
-  call set_scan_flag_2(r,g,m,m%grid_dict,ilevel)
+  call set_scan_flag(r,g,m,m%grid_dict,ilevel)
   do ifine=ilevel-1,g%levelmin_mg,-1
-     call set_scan_flag_2(r,g,m,m%mg_dict,ifine)
+     call set_scan_flag(r,g,m,m%mg_dict,ifine)
   end do
   
   ! ---------------------------------------------------------------------
@@ -101,16 +101,16 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
 
      ! Pre-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
+        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
+        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
      end do
      
      ! Compute new residual
-     call cmp_residual_mg_2(r,g,m,m%grid_dict,ilevel)
+     call cmp_residual_mg(r,g,m,m%grid_dict,ilevel)
 
      ! Compute initial residual norm
      if(iter==1) then
-        call cmp_residual_norm2_2(r,m,ilevel,i_res_norm2)
+        call cmp_residual_norm2(r,m,ilevel,i_res_norm2)
 #ifndef WITHOUTMPI
         call MPI_ALLREDUCE(i_res_norm2,i_res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
         i_res_norm2=i_res_norm2_tot
@@ -120,7 +120,7 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
      if(ilevel>1) then
 
         ! Restrict residual to coarser level
-        call restrict_residual_2(r,g,m,ilevel)
+        call restrict_residual(r,g,m,ilevel)
 
         ! Reset correction from upper level before solve
         do igrid=m%head_mg(ilevel-1),m%tail_mg(ilevel-1)
@@ -128,24 +128,24 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
         end do
         
         ! Multigrid-solve the upper level
-        call recursive_multigrid_2(r,g,m,ilevel-1, g%safe_mode(ilevel))
+        call recursive_multigrid(r,g,m,ilevel-1, g%safe_mode(ilevel))
         
         ! Interpolate coarse solution and correct fine solution
-        call interpolate_and_correct_2(r,g,m,ilevel)
+        call interpolate_and_correct(r,g,m,ilevel)
 
      end if
      
      ! Post-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
+        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
+        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
      end do
      
      ! Update fine residual
-     call cmp_residual_mg_2(r,g,m,m%grid_dict,ilevel)
+     call cmp_residual_mg(r,g,m,m%grid_dict,ilevel)
 
      ! Compute residual norm
-     call cmp_residual_norm2_2(r,m,ilevel,res_norm2)
+     call cmp_residual_norm2(r,m,ilevel,res_norm2)
 #ifndef WITHOUTMPI
      call MPI_ALLREDUCE(res_norm2,res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
      res_norm2=res_norm2_tot
@@ -175,9 +175,9 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-  call cleanup_mg_2(m)
+  call cleanup_mg(m)
   
-end subroutine multigrid_2
+end subroutine multigrid
 
 ! ########################################################################
 ! ########################################################################
@@ -188,7 +188,7 @@ end subroutine multigrid_2
 ! Recursive multigrid routine for coarse MG levels
 ! ------------------------------------------------------------------------
 
-recursive subroutine recursive_multigrid_2(r,g,m,ifinelevel, safe)
+recursive subroutine recursive_multigrid(r,g,m,ifinelevel, safe)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
   use amr_commons, only: run_t,global_t,mesh_t
@@ -207,8 +207,8 @@ recursive subroutine recursive_multigrid_2(r,g,m,ifinelevel, safe)
   if(ifinelevel<=g%levelmin_mg) then
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
+        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
+        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do
      return
   end if
@@ -223,15 +223,15 @@ recursive subroutine recursive_multigrid_2(r,g,m,ifinelevel, safe)
      
      ! Pre-smoothing
      do i=1,ngs_coarse
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
+        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
+        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     call cmp_residual_mg_2(r,g,m,m%mg_dict,ifinelevel)
+     call cmp_residual_mg(r,g,m,m%mg_dict,ifinelevel)
 
      ! Restrict residual to coarser level
-     call restrict_residual_2(r,g,m,ifinelevel)
+     call restrict_residual(r,g,m,ifinelevel)
      
      ! Reset correction from upper level before solve
      do igrid=m%head_mg(ifinelevel-1),m%tail_mg(ifinelevel-1)
@@ -239,20 +239,20 @@ recursive subroutine recursive_multigrid_2(r,g,m,ifinelevel, safe)
      end do
      
      ! Multigrid-solve the upper level
-     call recursive_multigrid_2(r,g,m,ifinelevel-1, safe)
+     call recursive_multigrid(r,g,m,ifinelevel-1, safe)
      
      ! Interpolate coarse solution and correct back into fine solution
-     call interpolate_and_correct_2(r,g,m,ifinelevel)
+     call interpolate_and_correct(r,g,m,ifinelevel)
      
      ! Post-smoothing
      do i=1,ngs_coarse
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
+        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
+        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
      end do
      
   end do
   
-end subroutine recursive_multigrid_2
+end subroutine recursive_multigrid
 
 ! ########################################################################
 ! ########################################################################
@@ -263,7 +263,7 @@ end subroutine recursive_multigrid_2
 ! Multigrid workspace initialisation
 ! ------------------------------------------------------------------------
 
-subroutine init_mg_2(r,m,ilevel)
+subroutine init_mg(r,m,ilevel)
   use amr_parameters, only: dp,nhilbert
   use amr_commons, only: run_t,mesh_t
   use hilbert
@@ -301,7 +301,7 @@ subroutine init_mg_2(r,m,ilevel)
   ! Save first free element in AMR grid array to restore state
   m%ifree_mg=m%noct_used+1
   
-end subroutine init_mg_2
+end subroutine init_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -312,7 +312,7 @@ end subroutine init_mg_2
 ! Coarse grid MG activation for local grids
 ! ---------------------------------------------------------------------
 
-subroutine build_mg_2(r,g,m,ifinelevel)
+subroutine build_mg(r,g,m,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -345,7 +345,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
   
   hash_father(0)=icoarselevel
   
-  call open_cache_2(r,g,m,operation_build_mg,domain_decompos_mg)
+  call open_cache(r,g,m,operation_build_mg,domain_decompos_mg)
   
   ! Loop over fine grids
   do igrid=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -358,7 +358,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
 #ifndef WITHOUTMPI
         ! If counter is good, check on incoming messages and perform actions
         if(mail_counter==32)then
-           call check_mail_2(r,g,m,MPI_REQUEST_NULL,m%mg_dict)
+           call check_mail(r,g,m,MPI_REQUEST_NULL,m%mg_dict)
            mail_counter=0
         endif
         mail_counter=mail_counter+1
@@ -406,7 +406,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
               grid_cpu = m%domain_mg(icoarselevel)%get_rank(hks)
               
               ! If next cache line is occupied, free it.
-              if(m%occupied(m%free_cache))call destage_2(r,g,m,r%ngridmax+m%free_cache,m%mg_dict)
+              if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%mg_dict)
               ! Set grid index to a virtual grid in local cache memory
               ichild=r%ngridmax+m%free_cache
               m%occupied(m%free_cache)=.true.
@@ -444,7 +444,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
   end do
   ! End loop over grids
   
-  call close_cache_2(r,g,m,m%mg_dict)
+  call close_cache(r,g,m,m%mg_dict)
   
   ! Multigrid oct statistics
   m%tail_mg(icoarselevel)=m%ifree-1
@@ -455,7 +455,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
   call MPI_ALLREDUCE(m%noct_mg(icoarselevel),m%noct_tot_mg(icoarselevel),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
 #endif
 
-end subroutine build_mg_2
+end subroutine build_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -466,7 +466,7 @@ end subroutine build_mg_2
 ! Multigrid cleanup
 ! ------------------------------------------------------------------------
 
-subroutine cleanup_mg_2(m)
+subroutine cleanup_mg(m)
   use amr_commons, only: mesh_t
   use hash
   implicit none
@@ -491,7 +491,7 @@ subroutine cleanup_mg_2(m)
   m%ifree=m%ifree_mg
   m%noct_used=m%ifree-1
 
-end subroutine cleanup_mg_2
+end subroutine cleanup_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -502,7 +502,7 @@ end subroutine cleanup_mg_2
 ! Initialize mask at fine level into f(:,3)
 ! ------------------------------------------------------------------------
 
-subroutine make_mask_2(m,ilevel)
+subroutine make_mask(m,ilevel)
   use amr_parameters, only: twotondim
   use amr_commons, only: mesh_t
   implicit none
@@ -521,7 +521,7 @@ subroutine make_mask_2(m,ilevel)
      end do
   end do
   
-end subroutine make_mask_2
+end subroutine make_mask
 
 ! ########################################################################
 ! ########################################################################
@@ -545,7 +545,7 @@ end subroutine make_mask_2
 !
 ! ------------------------------------------------------------------------
 
-subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
+subroutine make_bc_rhs(r,g,m,ilevel,icount)
   use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -560,7 +560,7 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   integer::igrid,idim,ind,igridn,inbor,ig,id
-  integer::get_grid_2
+  integer::get_grid
   integer,dimension(1:8,1:8)::ccc
   real(dp)::aa,bb,cc,dd,tfrac
   real(dp),dimension(1:8)::bbb
@@ -616,7 +616,7 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache_2(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -642,7 +642,7 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -655,10 +655,10 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
         else
 
            ! Get 3**ndim neighbouring parent cells using read-only cache
-           call get_threetondim_nbor_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi_2(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
+           call get_threetondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
            do ind=1,threetondim
-              call unlock_cache_2(r,g,m,igrid_nbor(ind))
+              call unlock_cache(r,g,m,igrid_nbor(ind))
            end do
            do ind=1,twotondim
               dis_nbor(ind,inbor)=-1.0
@@ -701,9 +701,9 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
      end do
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
-end subroutine make_bc_rhs_2
+end subroutine make_bc_rhs
 
 ! ########################################################################
 ! ########################################################################

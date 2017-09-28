@@ -2,7 +2,7 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine flag_fine_2(r,g,m,ilevel,icount)
+subroutine flag_fine(r,g,m,ilevel,icount)
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
 #ifndef WITHOUTMPI
@@ -24,7 +24,7 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
   if(r%verbose)write(*,111)ilevel
 
   ! Step 1: initialize refinement map to minimal refinement rules
-  call init_flag_2(r,g,m,ilevel)
+  call init_flag(r,g,m,ilevel)
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(g%nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
   if(r%verbose)write(*,*) '  ==> end step 1',nflag_tot
@@ -36,7 +36,7 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
   ! in order to enforce numerical rule.
 !  call build_smooth(ilevel)
 !  call smooth_fine_fast(ilevel)
-  call smooth_fine_2(r,g,m,ilevel)
+  call smooth_fine(r,g,m,ilevel)
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(g%nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
   if(r%verbose)write(*,*) '  ==> end step 2',nflag_tot
@@ -46,7 +46,7 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
 
   ! Step 3: if cell satisfies user-defined physical citeria,
   ! then flag cell for refinement.
-  call userflag_fine_2(r,g,m,ilevel)
+  call userflag_fine(r,g,m,ilevel)
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(g%nflag,nflag_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
   if(r%verbose)write(*,*) '  ==> end step 3',nflag_tot
@@ -57,7 +57,7 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
   ! Step 4: make nexpand cubic buffers around flagged cells.
   do iexpand=1,r%nexpand(ilevel)
 !     call smooth_fine_fast(ilevel)
-     call smooth_fine_2(r,g,m,ilevel)
+     call smooth_fine(r,g,m,ilevel)
   end do
 !  call clean_smooth
 #ifndef WITHOUTMPI
@@ -70,18 +70,18 @@ subroutine flag_fine_2(r,g,m,ilevel,icount)
   ! In case of adaptive time step ONLY, check for refinement rules.
   if(ilevel>r%levelmin)then
      if(icount<r%nsubcycle(ilevel-1))then
-        call ensure_ref_rules_2(r,g,m,ilevel)
+        call ensure_ref_rules(r,g,m,ilevel)
      end if
   end if
 
 111 format('   Entering flag_fine for level ',I2)
 
-end subroutine flag_fine_2
+end subroutine flag_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flag_2(r,g,m,ilevel)
+subroutine init_flag(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -96,7 +96,7 @@ subroutine init_flag_2(r,g,m,ilevel)
   ! refinement rules.
   !-------------------------------------------
   integer::igrid,ichild,icell,ind
-  integer::parent_cell,get_parent_cell_2
+  integer::parent_cell,get_parent_cell
   logical::ok
   integer(kind=8),dimension(0:ndim)::hash_key
 
@@ -112,13 +112,13 @@ subroutine init_flag_2(r,g,m,ilevel)
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------
-  call open_cache_2(r,g,m,operation_initflag,domain_decompos_amr)
+  call open_cache(r,g,m,operation_initflag,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ichild=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     parent_cell=get_parent_cell_2(r,g,m,hash_key,m%grid_dict,.true.,.false.)
+     parent_cell=get_parent_cell(r,g,m,hash_key,m%grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
      ok=.false.
@@ -133,14 +133,14 @@ subroutine init_flag_2(r,g,m,ilevel)
      endif
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
-end subroutine init_flag_2
+end subroutine init_flag
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine userflag_fine_2(r,g,m,ilevel)
+subroutine userflag_fine(r,g,m,ilevel)
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
@@ -155,17 +155,17 @@ subroutine userflag_fine_2(r,g,m,ilevel)
   if(m%noct_tot(ilevel)==0)return
   
   ! Refinement rules for the gravity solver
-  if(r%poisson)call poisson_flag_2(r,g,m,ilevel)
+  if(r%poisson)call poisson_flag(r,g,m,ilevel)
 
   ! Refinement rules for the hydro solver
-  if(r%hydro)call hydro_flag_2(r,g,m,ilevel)
+  if(r%hydro)call hydro_flag(r,g,m,ilevel)
 
-end subroutine userflag_fine_2
+end subroutine userflag_fine
 !############################################################
 !############################################################
 !############################################################
 !############################################################
-subroutine smooth_fine_2(r,g,m,ilevel)
+subroutine smooth_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,twondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -185,7 +185,7 @@ subroutine smooth_fine_2(r,g,m,ilevel)
   ! -------------------------------------------------------------------
   integer::ismooth,count_nbor,ig,in
   integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
-  integer::get_grid_2
+  integer::get_grid
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::igridn
@@ -224,7 +224,7 @@ subroutine smooth_fine_2(r,g,m,ilevel)
         end do
      end do
 
-     call open_cache_2(r,g,m,operation_smooth,domain_decompos_amr)
+     call open_cache(r,g,m,operation_smooth,domain_decompos_amr)
 
      ! Count neighbors and set flag2 accordingly
      do igrid=m%head(ilevel),m%tail(ilevel)
@@ -238,8 +238,8 @@ subroutine smooth_fine_2(r,g,m,ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
               if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
            enddo
-           igridn(i_nbor)=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
-           call lock_cache_2(r,g,m,igridn(i_nbor))
+           igridn(i_nbor)=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+           call lock_cache(r,g,m,igridn(i_nbor))
         end do
 
         ! Count neighbors and set flag2 accordingly        
@@ -260,13 +260,13 @@ subroutine smooth_fine_2(r,g,m,ilevel)
         end do
 
         do i_nbor=1,twondim
-           call unlock_cache_2(r,g,m,igridn(i_nbor))
+           call unlock_cache(r,g,m,igridn(i_nbor))
         end do
 
      end do
      ! End loop over grids
 
-    call close_cache_2(r,g,m,m%grid_dict)
+    call close_cache(r,g,m,m%grid_dict)
 
      ! Set flag1=1 for cells with flag2=1
      do igrid=m%head(ilevel),m%tail(ilevel)
@@ -284,12 +284,12 @@ subroutine smooth_fine_2(r,g,m,ilevel)
   end do
   ! End loop over steps
   
-end subroutine smooth_fine_2
+end subroutine smooth_fine
 !############################################################
 !############################################################
 !############################################################
 !############################################################
-subroutine ensure_ref_rules_2(r,g,m,ilevel)
+subroutine ensure_ref_rules(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -304,7 +304,7 @@ subroutine ensure_ref_rules_2(r,g,m,ilevel)
   ! strict refinement rule. 
   ! Used in case of adaptive time steps only.
   !-----------------------------------------------------------------
-  integer::get_grid_2
+  integer::get_grid
   integer::idim,ind,igrid,ichild
   integer::i1,j1,k1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -323,7 +323,7 @@ subroutine ensure_ref_rules_2(r,g,m,ilevel)
   k1max=2
 #endif
 
-  call open_cache_2(r,g,m,operation_smooth,domain_decompos_amr)
+  call open_cache(r,g,m,operation_smooth,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -352,7 +352,7 @@ subroutine ensure_ref_rules_2(r,g,m,ilevel)
               enddo
 
               ! Get neighboring grid index
-              ichild=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+              ichild=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
               ok=ok.and.(ichild>0)
 
            end do
@@ -367,9 +367,9 @@ subroutine ensure_ref_rules_2(r,g,m,ilevel)
 
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
-end subroutine ensure_ref_rules_2
+end subroutine ensure_ref_rules
 !############################################################
 !############################################################
 !############################################################

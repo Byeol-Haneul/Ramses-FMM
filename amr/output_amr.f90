@@ -2,7 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine dump_all_2(r,g,m,p)
+subroutine dump_all(r,g,m,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -29,7 +29,7 @@ subroutine dump_all_2(r,g,m,p)
   if(r%verbose)write(*,*)'Entering dump_all'
 
   do i=r%levelmin,r%nlevelmax
-     call write_screen_2(m,i)
+     call write_screen(m,i)
   end do
 
   call title(g%ifout,nchar)
@@ -52,14 +52,14 @@ subroutine dump_all_2(r,g,m,p)
      if(g%myid==1)then
         if(r%pic)then
            filename=TRIM(filedir)//'part_header.txt'
-           call output_header_2(r,g,p,filename)
+           call output_header(r,g,p,filename)
         endif
         if(r%hydro)then
            filename=TRIM(filedir)//'hydro_file_descriptor.txt'
-           call file_descriptor_hydro_2(r,filename)
+           call file_descriptor_hydro(r,filename)
         end if
         filename=TRIM(filedir)//'info.txt'
-        call output_info_2(r,g,filename)
+        call output_info(r,g,filename)
         filename=TRIM(filedir)//'makefile.txt'
         call output_makefile(filename)
         filename=TRIM(filedir)//'patches.txt'
@@ -69,26 +69,26 @@ subroutine dump_all_2(r,g,m,p)
         filename=TRIM(filedir)//'compilation.txt'
         call output_compil(filename)
         filename=TRIM(filedir)//'params.out'
-        call output_params_2(r,g,m,filename)
+        call output_params(r,g,m,filename)
      endif
      ! For each process
      filename=TRIM(filedir)//'amr.out'
-     call output_amr_2(r,g,m,filename)
+     call output_amr(r,g,m,filename)
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.out'
-        call output_hydro_2(r,g,m,filename)
+        call output_hydro(r,g,m,filename)
      end if
      if(r%poisson)then
         filename=TRIM(filedir)//'grav.out'
-        call output_poisson_2(r,g,m,filename)
+        call output_poisson(r,g,m,filename)
      end if
      if(r%pic)then
         filename=TRIM(filedir)//'part.out'
-        call output_part_2(r,g,p,filename)
+        call output_part(r,g,p,filename)
      end if
   end if
 
-end subroutine dump_all_2
+end subroutine dump_all
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -137,7 +137,7 @@ end subroutine output_compil
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_params_2(r,g,m,filename)
+subroutine output_params(r,g,m,filename)
   use amr_parameters, only: ndim,nhilbert
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -185,12 +185,12 @@ subroutine output_params_2(r,g,m,filename)
   end do
   close(ilun)
 
-end subroutine output_params_2
+end subroutine output_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_params_2(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
+subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   use amr_parameters, only: ndim,nhilbert,dp
   use amr_commons, only: run_t,global_t
   implicit none
@@ -262,12 +262,12 @@ subroutine input_params_2(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
      enddo
   endif
 
-end subroutine input_params_2
+end subroutine input_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_amr_2(r,g,m,filename)
+subroutine output_amr(r,g,m,filename)
   use amr_parameters, only: ndim,sp,dp
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -300,12 +300,12 @@ subroutine output_amr_2(r,g,m,filename)
      end do
   end do
   close(ilun)  
-end subroutine output_amr_2
+end subroutine output_amr
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_info_2(r,g,filename)
+subroutine output_info(r,g,filename)
   use amr_parameters, only: ndim,sp,dp
   use amr_commons, only: run_t,global_t
   implicit none
@@ -322,7 +322,7 @@ subroutine output_info_2(r,g,filename)
   ilun=11
 
   ! Conversion factor from user units to cgs units
-  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Open file
   fileloc=TRIM(filename)
@@ -353,12 +353,12 @@ subroutine output_info_2(r,g,filename)
   
   close(ilun)
 
-end subroutine output_info_2
+end subroutine output_info
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_header_2(r,g,p,filename)
+subroutine output_header(r,g,p,filename)
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -394,12 +394,12 @@ subroutine output_header_2(r,g,p,filename)
 #endif
   close(ilun)
 
-end subroutine output_header_2
+end subroutine output_header
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_header_2(r,g,filename,npart_tot_file,ncpu_file)
+subroutine input_header(r,g,filename,npart_tot_file,ncpu_file)
   use amr_parameters, only: i8b
   use amr_commons, only: run_t,global_t
   implicit none
@@ -425,7 +425,7 @@ subroutine input_header_2(r,g,filename,npart_tot_file,ncpu_file)
   read(ilun,*)ncpu_file
   close(ilun)
 
-end subroutine input_header_2
+end subroutine input_header
 !#########################################################################
 !#########################################################################
 !#########################################################################

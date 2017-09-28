@@ -2,7 +2,7 @@
 !=======================================================================
 !=======================================================================
 !=======================================================================
-subroutine output_frame_2(r,g,m,p)
+subroutine output_frame(r,g,m,p)
   use amr_parameters, only: dp,ndim,nvector,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -76,7 +76,7 @@ subroutine output_frame_2(r,g,m,p)
   endif
   
   infofile = trim(moviedir)//'info_'//trim(istep_str)//'.txt'
-  if(g%myid==1)call output_info_2(r,g,infofile)
+  if(g%myid==1)call output_info(r,g,infofile)
   
   moviefiles(0) = trim(moviedir)//'temp_'//trim(istep_str)//'.map'
   moviefiles(1) = trim(moviedir)//'dens_'//trim(istep_str)//'.map'
@@ -109,7 +109,7 @@ subroutine output_frame_2(r,g,m,p)
   endif
 
   ! Conversion factor from user units to cgs units
-  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Compute frame boundaries
   if(r%proj_axis(proj_ind:proj_ind).eq.'x')then
@@ -355,12 +355,12 @@ subroutine output_frame_2(r,g,m,p)
 
  enddo
 
-end subroutine output_frame_2
+end subroutine output_frame
 !=======================================================================
 !=======================================================================
 !=======================================================================
 !=======================================================================
-subroutine set_movie_vars_2(r)
+subroutine set_movie_vars(r)
   use amr_commons, only: run_t
   ! This routine sets the movie vars from textual form
   type(run_t)::r
@@ -403,4 +403,4 @@ subroutine set_movie_vars_2(r)
   if(ANY(r%movie_vars_txt=='dm   '))r%movie_vars(NVAR+1)=1
   if(ANY(r%movie_vars_txt=='stars'))r%movie_vars(NVAR+2)=1
 #endif
-end subroutine set_movie_vars_2
+end subroutine set_movie_vars

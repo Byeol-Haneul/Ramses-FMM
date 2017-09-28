@@ -2,7 +2,7 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine force_fine_2(r,g,m,ilevel,icount)
+subroutine force_fine(r,g,m,ilevel,icount)
   use amr_parameters, only: ndim,twotondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -61,7 +61,7 @@ subroutine force_fine_2(r,g,m,ilevel,icount)
   ! Compute gradient of potential
   !------------------------------
   else
-     call gradient_phi_2(r,g,m,ilevel,icount)
+     call gradient_phi(r,g,m,ilevel,icount)
   endif
 
   !----------------------------------------------
@@ -104,12 +104,12 @@ subroutine force_fine_2(r,g,m,ilevel,icount)
 #endif  
 111 format('   Entering force_fine for level ',I2)
 
-end subroutine force_fine_2
+end subroutine force_fine
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gradient_phi_2(r,g,m,ilevel,icount)
+subroutine gradient_phi(r,g,m,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -126,7 +126,7 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
   ! in the current level grids, using a
   ! 5 nodes kernel (5 points FDA).
   !-------------------------------------------------
-  integer::get_grid_2
+  integer::get_grid
   integer::i_nbor,igrid,idim,ind,igridn
   integer::id1,id2,id3,id4
   integer::ig1,ig2,ig3,ig4
@@ -193,7 +193,7 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache_2(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -215,7 +215,7 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
            if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        igridn=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -226,10 +226,10 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim parent cell using read-only cache
-           call get_threetondim_nbor_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi_2(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call get_threetondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache_2(r,g,m,igrid_nbor(ind))
+              call unlock_cache(r,g,m,igrid_nbor(ind))
            end do
         endif
 
@@ -266,9 +266,9 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 #endif
-end subroutine gradient_phi_2
+end subroutine gradient_phi
 !#########################################################
 !#########################################################
 !#########################################################

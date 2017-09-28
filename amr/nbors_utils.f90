@@ -2,7 +2,7 @@
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine get_threetondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
+subroutine get_threetondim_nbor_parent_cell(r,g,m,hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_parameters, only: ndim,twotondim,threetondim
   use amr_commons, only: run_t,global_t,mesh_t
   use hash
@@ -35,7 +35,7 @@ subroutine get_threetondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbo
   integer,save::j1max=0*(1-ndim/2)+1*(ndim/2)
   integer,save::k1min=0*(1-ndim/3)-1*(ndim/3)
   integer,save::k1max=0*(1-ndim/3)+1*(ndim/3)
-  integer::ind,ipos,idim,get_grid_2,ilevel,inbor
+  integer::ind,ipos,idim,get_grid,ilevel,inbor
 
   ilevel=hash_key(0)
 
@@ -53,8 +53,8 @@ subroutine get_threetondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbo
      ! Store lower left neighbor coordinates 
      if(inbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
      ! Get grid into memory and lock it if remote 
-     ipos=get_grid_2(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
-     call lock_cache_2(r,g,m,ipos)
+     ipos=get_grid(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
+     call lock_cache(r,g,m,ipos)
      igrid_twotondim_nbor(inbor)=ipos
   end do
      
@@ -101,12 +101,12 @@ subroutine get_threetondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbo
      end do
   end do
 
-end subroutine get_threetondim_nbor_parent_cell_2
+end subroutine get_threetondim_nbor_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine get_twondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
+subroutine get_twondim_nbor_parent_cell(r,g,m,hash_key,hash_dict,igrid_nbor,ind_nbor,flush_cache,fetch_cache)
   use amr_parameters, only: ndim,twotondim,twondim
   use amr_commons, only: run_t,global_t,mesh_t
   use hash
@@ -132,7 +132,7 @@ subroutine get_twondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbor,in
   integer(kind=8),dimension(1:ndim)::ii
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer::ind,ipos,idim,get_grid_2,ilevel,inbor
+  integer::ind,ipos,idim,get_grid,ilevel,inbor
 
   ilevel=hash_key(0)
 
@@ -146,8 +146,8 @@ subroutine get_twondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbor,in
   end do
 
   ! Get grid into memory and lock it if remote 
-  ipos=get_grid_2(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
-  call lock_cache_2(r,g,m,ipos)
+  ipos=get_grid(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
+  call lock_cache(r,g,m,ipos)
   igrid_nbor(0)=ipos
   ind_nbor(0)=ind
   
@@ -168,18 +168,18 @@ subroutine get_twondim_nbor_parent_cell_2(r,g,m,hash_key,hash_dict,igrid_nbor,in
      end do
 
      ! Get grid into memory and lock it if remote 
-     ipos=get_grid_2(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
-     call lock_cache_2(r,g,m,ipos)
+     ipos=get_grid(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
+     call lock_cache(r,g,m,ipos)
      igrid_nbor(inbor)=ipos
      ind_nbor(inbor)=ind
   end do
 
-end subroutine get_twondim_nbor_parent_cell_2
+end subroutine get_twondim_nbor_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-integer function get_parent_cell_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) result(parent_cell)
+integer function get_parent_cell(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) result(parent_cell)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use hash
@@ -196,7 +196,7 @@ integer function get_parent_cell_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_ca
   !
   integer(kind=8),dimension(0:ndim)::hash_father
   integer(kind=8),dimension(1:ndim)::ii
-  integer::ind,ipos,idim,get_grid_2
+  integer::ind,ipos,idim,get_grid
 
   hash_father(0)=hash_key(0)-1
   hash_father(1:ndim)=hash_key(1:ndim)/2
@@ -205,15 +205,15 @@ integer function get_parent_cell_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_ca
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
-  ipos=get_grid_2(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
+  ipos=get_grid(r,g,m,hash_father,hash_dict,flush_cache,fetch_cache)
   parent_cell=0
   if(ipos>0)parent_cell=(ipos-1)*twotondim+ind
-end function get_parent_cell_2
+end function get_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine lock_cache_2(r,g,m,child_grid)
+subroutine lock_cache(r,g,m,child_grid)
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
@@ -225,12 +225,12 @@ subroutine lock_cache_2(r,g,m,child_grid)
      icache=child_grid-r%ngridmax
      m%locked(icache)=.true.
   endif
-end subroutine lock_cache_2
+end subroutine lock_cache
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine unlock_cache_2(r,g,m,child_grid)
+subroutine unlock_cache(r,g,m,child_grid)
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
@@ -242,12 +242,12 @@ subroutine unlock_cache_2(r,g,m,child_grid)
      icache=child_grid-r%ngridmax
      m%locked(icache)=.false.
   endif
-end subroutine unlock_cache_2
+end subroutine unlock_cache
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) result(child_grid)
+integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) result(child_grid)
   use amr_parameters, only: ndim,nvector,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -291,7 +291,7 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
   if(mail_counter==32)then
-     call check_mail_2(r,g,m,MPI_REQUEST_NULL,hash_dict)
+     call check_mail(r,g,m,MPI_REQUEST_NULL,hash_dict)
      mail_counter=0
   endif
   mail_counter=mail_counter+1
@@ -370,7 +370,7 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
           & grid_cpu-1,request_tag,MPI_COMM_WORLD,send_request_id,info)
 
      ! While waiting for reply, check on incoming messages and perform actions
-     call check_mail_2(r,g,m,response_id,hash_dict)
+     call check_mail(r,g,m,response_id,hash_dict)
 
      ! Wait for ISEND completion to free memory in corresponding MPI buffer
      call MPI_WAIT(send_request_id,send_request_status,info)
@@ -470,7 +470,7 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
 
            if(hash_get(hash_dict,hash_child).EQ.0)then
 
-              if(m%occupied(m%free_cache))call destage_2(r,g,m,r%ngridmax+m%free_cache,hash_dict)
+              if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,hash_dict)
 
               call hash_set(hash_dict,hash_child,ichild)
               
@@ -650,7 +650,7 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
            if(m%free_cache>r%ncachemax)m%free_cache=1
         end do
      end if
-     if(m%occupied(m%free_cache))call destage_2(r,g,m,r%ngridmax+m%free_cache,hash_dict)
+     if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,hash_dict)
 
      ! Set grid index to a virtual grid in local memory
      child_grid=r%ngridmax+m%free_cache
@@ -706,12 +706,12 @@ integer function get_grid_2(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) re
   endif
 
 #endif
-end function get_grid_2
+end function get_grid
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine check_mail_2(r,g,m,comm_id,hash_dict)
+subroutine check_mail(r,g,m,comm_id,hash_dict)
   use amr_parameters, only: ndim,nvector,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -1352,12 +1352,12 @@ subroutine check_mail_2(r,g,m,comm_id,hash_dict)
      endif
   end do
 #endif
-end subroutine check_mail_2
+end subroutine check_mail
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine destage_2(r,g,m,igrid,hash_dict)
+subroutine destage(r,g,m,igrid,hash_dict)
   use amr_parameters, only: ndim,nvector,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -1406,7 +1406,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_flag(grid_cpu)%nflush=0
         endif
         send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
@@ -1425,7 +1425,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_flag(grid_cpu),1,new_mpi_int4_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_flag(grid_cpu)%nflush=0
         endif
         send_flush_flag(grid_cpu)%nflush=send_flush_flag(grid_cpu)%nflush+1
@@ -1450,7 +1450,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_hydro(grid_cpu)%nflush=0
         endif
         send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
@@ -1475,7 +1475,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_hydro(grid_cpu),1,new_mpi_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_hydro(grid_cpu)%nflush=0
         endif
         send_flush_hydro(grid_cpu)%nflush=send_flush_hydro(grid_cpu)%nflush+1
@@ -1500,7 +1500,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_refine(grid_cpu)%nflush=0
         endif
         send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
@@ -1525,7 +1525,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_refine(grid_cpu)%nflush=0
         endif
         send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
@@ -1559,7 +1559,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_refine(grid_cpu),1,new_mpi_large_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_refine(grid_cpu)%nflush=0
         endif
         send_flush_refine(grid_cpu)%nflush=send_flush_refine(grid_cpu)%nflush+1
@@ -1596,7 +1596,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_poisson(grid_cpu)%nflush=0
         endif
         send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
@@ -1619,7 +1619,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_poisson(grid_cpu)%nflush=0
         endif
         send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
@@ -1642,7 +1642,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_poisson(grid_cpu)%nflush=0
         endif
         send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
@@ -1665,7 +1665,7 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
            call MPI_ISSEND(send_flush_poisson(grid_cpu),1,new_mpi_small_realdp_flush,&
                 & grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_poisson(grid_cpu)%nflush=0
         endif
         send_flush_poisson(grid_cpu)%nflush=send_flush_poisson(grid_cpu)%nflush+1
@@ -1676,12 +1676,12 @@ subroutine destage_2(r,g,m,igrid,hash_dict)
 
   endif
 #endif
-end subroutine destage_2
+end subroutine destage
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine close_cache_2(r,g,m,hash_dict)
+subroutine close_cache(r,g,m,hash_dict)
   use amr_parameters, only: ndim,nvector,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -1710,7 +1710,7 @@ subroutine close_cache_2(r,g,m,hash_dict)
   do icache=1,m%ncache
      igrid=r%ngridmax+icache
      m%locked(icache)=.false.
-     if(m%occupied(icache))call destage_2(r,g,m,igrid,hash_dict)
+     if(m%occupied(icache))call destage(r,g,m,igrid,hash_dict)
      m%occupied(icache)=.false.
      m%dirty(icache)=.false.
   end do
@@ -1736,7 +1736,7 @@ subroutine close_cache_2(r,g,m,hash_dict)
            call MPI_ISSEND(send_flush_flag(icpu),1,new_mpi_int4_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_flag(icpu)%nflush=0
         endif
      endif     
@@ -1746,7 +1746,7 @@ subroutine close_cache_2(r,g,m,hash_dict)
            call MPI_ISSEND(send_flush_hydro(icpu),1,new_mpi_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_hydro(icpu)%nflush=0
         endif
      endif
@@ -1756,7 +1756,7 @@ subroutine close_cache_2(r,g,m,hash_dict)
            call MPI_ISSEND(send_flush_poisson(icpu),1,new_mpi_small_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_poisson(icpu)%nflush=0
         endif
      endif
@@ -1766,7 +1766,7 @@ subroutine close_cache_2(r,g,m,hash_dict)
            call MPI_ISSEND(send_flush_refine(icpu),1,new_mpi_large_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_refine(icpu)%nflush=0
         endif
      endif
@@ -1776,7 +1776,7 @@ subroutine close_cache_2(r,g,m,hash_dict)
            call MPI_ISSEND(send_flush_mg(icpu),1,new_mpi_twin_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_mg(icpu)%nflush=0
         endif
      endif
@@ -1786,7 +1786,7 @@ subroutine close_cache_2(r,g,m,hash_dict)
            call MPI_ISSEND(send_flush_interpol(icpu),1,new_mpi_three_realdp_flush,&
                 & icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
            ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail_2(r,g,m,send_flush_id,hash_dict)
+           call check_mail(r,g,m,send_flush_id,hash_dict)
            send_flush_interpol(icpu)%nflush=0
         endif
      endif
@@ -1795,25 +1795,25 @@ subroutine close_cache_2(r,g,m,hash_dict)
     ! CHECK-IN CHECK-OUT
   if(g%myid.NE.1)then
      call MPI_ISEND(dummy_int,1,MPI_INTEGER,0,close_tag,MPI_COMM_WORLD,close_id,info)
-     call check_mail_2(r,g,m,close_id,hash_dict)
+     call check_mail(r,g,m,close_id,hash_dict)
      call MPI_IRECV(dummy_int,1,MPI_INTEGER,0,close_tag,MPI_COMM_WORLD,close_id,info)
-     call check_mail_2(r,g,m,close_id,hash_dict)
+     call check_mail(r,g,m,close_id,hash_dict)
   else
      do icpu=2,g%ncpu
         call MPI_IRECV(dummy_int,1,MPI_INTEGER,&
              & MPI_ANY_SOURCE,close_tag,MPI_COMM_WORLD,close_id,info)
-        call check_mail_2(r,g,m,close_id,hash_dict)
+        call check_mail(r,g,m,close_id,hash_dict)
      end do
      do icpu=2,g%ncpu
         call MPI_ISEND(dummy_int,1,MPI_INTEGER,&
              & icpu-1,close_tag,MPI_COMM_WORLD,close_id,info)
-        call check_mail_2(r,g,m,close_id,hash_dict)
+        call check_mail(r,g,m,close_id,hash_dict)
      end do
   endif
 
   ! Barrier to get the last flush message
   call MPI_BARRIER(MPI_COMM_WORLD,info)
-  call check_mail_2(r,g,m,MPI_REQUEST_NULL,hash_dict)
+  call check_mail(r,g,m,MPI_REQUEST_NULL,hash_dict)
 
   ! Finally CANCEL THE 2 RECV
   call MPI_CANCEL(request_id,info)
@@ -1830,12 +1830,12 @@ subroutine close_cache_2(r,g,m,hash_dict)
   call MPI_BARRIER(MPI_COMM_WORLD,info)
 
 #endif
-end subroutine close_cache_2
+end subroutine close_cache
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine open_cache_2(r,g,m,cache_operation_init,domain_decompos_init)
+subroutine open_cache(r,g,m,cache_operation_init,domain_decompos_init)
   use amr_parameters, only: ndim,nvector,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -1951,7 +1951,7 @@ subroutine open_cache_2(r,g,m,cache_operation_init,domain_decompos_init)
 
 #endif
 
-end subroutine open_cache_2
+end subroutine open_cache
 !##############################################################
 !##############################################################
 !##############################################################

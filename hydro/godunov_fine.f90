@@ -2,7 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godunov_fine_2(r,g,m,ilevel)
+subroutine godunov_fine(r,g,m,ilevel)
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
   use hydro_commons
@@ -23,38 +23,38 @@ subroutine godunov_fine_2(r,g,m,ilevel)
   if(r%static)return
   if(r%verbose)write(*,111)ilevel
 
-  call open_cache_2(r,g,m,operation_godunov,domain_decompos_amr)
+  call open_cache(r,g,m,operation_godunov,domain_decompos_amr)
 
   ! Loop over active grids by vector sweeps
   igrid=m%head(ilevel)
   do while(igrid.LE.m%tail(ilevel))
      SELECT CASE (m%grid(igrid)%superoct)
      CASE(1)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_1)
+        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_1)
      CASE(2**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_2)
+        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_2)
      CASE(4**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_4)
+        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_4)
      CASE(8**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_8)
+        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_8)
      CASE(16**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_16)
+        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_16)
      CASE(32**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_32)
+        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_32)
      END SELECT
      igrid=igrid+m%grid(igrid)%superoct
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
 111 format('   Entering godunov_fine for level ',i2)
 
-end subroutine godunov_fine_2
+end subroutine godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine set_unew_2(r,g,m,ilevel)
+subroutine set_unew(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -107,12 +107,12 @@ subroutine set_unew_2(r,g,m,ilevel)
 
 111 format('   Entering set_unew for level ',i2)
 
-end subroutine set_unew_2
+end subroutine set_unew
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine set_uold_2(r,g,m,ilevel)
+subroutine set_uold(r,g,m,ilevel)
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -176,12 +176,12 @@ subroutine set_uold_2(r,g,m,ilevel)
 
 111 format('   Entering set_uold for level ',i2)
 
-end subroutine set_uold_2
+end subroutine set_uold
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
+subroutine godfine1(r,g,m,ind_grid,ilevel,h)
   use amr_parameters, only: ndim,twondim,twotondim,dp
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -203,7 +203,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
   ! and stored in array unew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
-  integer::get_grid_2,get_parent_cell_2
+  integer::get_grid,get_parent_cell
   integer::ivar,idim,ind_son,ind_oct
   integer::igrid,icell=0,inbor,ichild,parent_cell
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
@@ -336,15 +336,15 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
               enddo
               
               ! Get neighboring grid index with read-only cache
-              ichild=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+              ichild=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
               parent_cell=0
               igrid_nbor=0
               if(ichild>0)then
-                 call lock_cache_2(r,g,m,ichild)
+                 call lock_cache(r,g,m,ichild)
               else
 
                  ! Get parent father cell with read-write cache
-                 parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.true.,.true.)
+                 parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.true.,.true.)
                  if(parent_cell==0)then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
@@ -352,13 +352,13 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
                  endif
                  igrid=(parent_cell-1)/twotondim+1
                  icell=parent_cell-(igrid-1)*twotondim
-                 call lock_cache_2(r,g,m,igrid)
+                 call lock_cache(r,g,m,igrid)
 
                  ! In case one wants to interpolate using high-order schemes
                  if(r%interpol_type>0)then
 
                     ! Get 2ndim neighboring father cells with read-write cache
-                    call get_twondim_nbor_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
+                    call get_twondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
                           u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
@@ -708,19 +708,19 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
            ind_oct=h%childloc(i1,j1,k1)
            ! Check that parent cell is not refined
            if(ind_oct>0)then
-              call unlock_cache_2(r,g,m,ind_oct)
+              call unlock_cache(r,g,m,ind_oct)
            else
               ! Get parent cell index
               parent_cell=h%parentloc(i1,j1,k1)
               igrid=(parent_cell-1)/twotondim+1
               icell=parent_cell-(igrid-1)*twotondim
-              call unlock_cache_2(r,g,m,igrid)
+              call unlock_cache(r,g,m,igrid)
               ! Get neighbouring parent oct index
               if(r%interpol_type>0)then
                  do inbor=1,twondim
                     igrid=h%nborloc(i1,j1,k1,inbor)
                     if(igrid>0)then
-                       call unlock_cache_2(r,g,m,igrid)
+                       call unlock_cache(r,g,m,igrid)
                     endif
                  end do
               endif
@@ -731,7 +731,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
 
 #endif
 
-end subroutine godfine1_2
+end subroutine godfine1
 !###########################################################
 !###########################################################
 !###########################################################

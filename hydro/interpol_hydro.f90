@@ -2,7 +2,7 @@
 !########################################################### 
 !###########################################################
 !###########################################################
-subroutine upload_fine_2(r,g,m,ilevel)
+subroutine upload_fine(r,g,m,ilevel)
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use hydro_parameters, only: nvar,nener
@@ -19,7 +19,7 @@ subroutine upload_fine_2(r,g,m,ilevel)
 #if NENER>0
   integer::irad
 #endif
-  integer::ioct,parent_cell,get_parent_cell_2
+  integer::ioct,parent_cell,get_parent_cell
   integer::ind,ivar,igrid,icell,idim
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad
@@ -41,7 +41,7 @@ subroutine upload_fine_2(r,g,m,ilevel)
      end do
   end do
 
-  call open_cache_2(r,g,m,operation_upload,domain_decompos_amr)
+  call open_cache(r,g,m,operation_upload,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
@@ -49,7 +49,7 @@ subroutine upload_fine_2(r,g,m,ilevel)
 
      ! Get cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     parent_cell=get_parent_cell_2(r,g,m,hash_key,m%grid_dict,.true.,.false.)
+     parent_cell=get_parent_cell(r,g,m,hash_key,m%grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
 
@@ -94,13 +94,13 @@ subroutine upload_fine_2(r,g,m,ilevel)
      endif
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
 #endif
 
 111 format('   Entering upload_fine for level',i2)
 
-end subroutine upload_fine_2
+end subroutine upload_fine
 !##########################################################################
 !##########################################################################
 !##########################################################################

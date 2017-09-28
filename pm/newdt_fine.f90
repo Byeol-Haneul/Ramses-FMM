@@ -2,7 +2,7 @@
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine newdt_fine_2(r,g,m,p,ilevel)
+subroutine newdt_fine(r,g,m,p,ilevel)
   use amr_parameters, only: dp,nvector
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -44,19 +44,19 @@ subroutine newdt_fine_2(r,g,m,p,ilevel)
   end if
 
   ! Particle-based Courant condition
-  if(r%pic)call newdt_part_2(r,g,p,ilevel)
+  if(r%pic)call newdt_part(r,g,p,ilevel)
 
   ! Hydro-based Courant condition
-  if(r%hydro)call courant_fine_2(r,g,m,ilevel)
+  if(r%hydro)call courant_fine(r,g,m,ilevel)
   
 111 format('   Entering newdt_fine for level ',I2)
 
-end subroutine newdt_fine_2
+end subroutine newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine newdt_part_2(r,g,p,ilevel)
+subroutine newdt_part(r,g,p,ilevel)
   use amr_parameters, only: dp,nvector,ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
@@ -112,7 +112,7 @@ subroutine newdt_part_2(r,g,p,ilevel)
   g%ekin_tot=g%ekin_tot+ekin_all
   g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt_all)
 
-end subroutine newdt_part_2
+end subroutine newdt_part
 !#####################################################################
 !#####################################################################
 !#####################################################################

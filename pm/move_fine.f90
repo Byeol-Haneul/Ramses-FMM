@@ -2,7 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
+subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
   use amr_parameters, only: dp,ndim,twotondim
   use pm_parameters
   use amr_commons, only: run_t,global_t,mesh_t
@@ -24,7 +24,7 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
   integer,dimension(1:twotondim),save::igrid,icell
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::ipart,ind,idim
-  integer::parent_cell,get_parent_cell_2
+  integer::parent_cell,get_parent_cell
   real(kind=8)::dx_loc,vol_loc,dteff
   real(dp),dimension(1:ndim),save::ff
   logical::ok_level
@@ -37,7 +37,7 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache_2(r,g,m,operation_kick,domain_decompos_amr)
+  call open_cache(r,g,m,operation_kick,domain_decompos_amr)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -90,18 +90,18 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
         if(parent_cell>0)then
            igrid(ind)=(parent_cell-1)/twotondim+1
            icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
-           call lock_cache_2(r,g,m,igrid(ind))
+           call lock_cache(r,g,m,igrid(ind))
         else
            ok_level=.false.
            exit
         end if
      end do
      do ind=1,twotondim
-        call unlock_cache_2(r,g,m,igrid(ind))
+        call unlock_cache(r,g,m,igrid(ind))
      end do
 
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
@@ -155,18 +155,18 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
         igrid=0; icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+           parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
            if(parent_cell>0)then
               igrid(ind)=(parent_cell-1)/twotondim+1
               icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
-              call lock_cache_2(r,g,m,igrid(ind))
+              call lock_cache(r,g,m,igrid(ind))
            else
               ok_level=.false.
               exit
            end if
         end do
         do ind=1,twotondim
-           call unlock_cache_2(r,g,m,igrid(ind))
+           call unlock_cache(r,g,m,igrid(ind))
         end do
      end if
         
@@ -231,7 +231,7 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
   end do
   ! End loop over particles
   
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
   ! Periodic boundary conditions
   if(action_part==action_kick_drift)then
@@ -249,7 +249,7 @@ subroutine kick_drift_part_2(r,g,m,p,ilevel,action_part)
 
 111 format('   Entering kick_and_drift_part for level',i2)
 
-end subroutine kick_drift_part_2
+end subroutine kick_drift_part
 !#########################################################################
 !#########################################################################
 !#########################################################################

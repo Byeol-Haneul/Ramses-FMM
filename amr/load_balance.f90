@@ -3,7 +3,7 @@
 !#########################################################################
 !#########################################################################
 #ifndef WITHOUTMPI
-subroutine load_balance_2(r,g,m,ilevel)
+subroutine load_balance(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,nhilbert,dp
   use amr_commons, only: run_t,global_t,mesh_t,oct
   use hilbert
@@ -236,7 +236,7 @@ subroutine load_balance_2(r,g,m,ilevel)
   m%ifree=m%noct_used+1
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache_2(r,g,m,operation_loadbalance,domain_decompos_amr)
+     call open_cache(r,g,m,operation_loadbalance,domain_decompos_amr)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
@@ -249,7 +249,7 @@ subroutine load_balance_2(r,g,m,ilevel)
            grid_cpu = m%domain(ilev)%get_rank(hks)
 
            ! If next cache line is occupied, free it.
-           if(m%occupied(m%free_cache))call destage_2(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
+           if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
            ! Set grid index to a virtual grid in local cache memory
            ichild=r%ngridmax+m%free_cache
            m%occupied(m%free_cache)=.true.
@@ -277,7 +277,7 @@ subroutine load_balance_2(r,g,m,ilevel)
 
      end do
 
-     call close_cache_2(r,g,m,m%grid_dict)
+     call close_cache(r,g,m,m%grid_dict)
 
   end do
 
@@ -482,14 +482,14 @@ subroutine load_balance_2(r,g,m,ilevel)
 111 format(' Load balancing for all levels greater than ',I2)
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
-end subroutine load_balance_2
+end subroutine load_balance
 #endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 #ifndef WITHOUTMPI
-subroutine balance_part_2(r,g,m,p,ilevel)
+subroutine balance_part(r,g,m,p,ilevel)
   use amr_parameters, only: nhilbert,nvector,ndim,i8b,dp
   use pm_parameters, only: part_memory
   use amr_commons, only: run_t,global_t,mesh_t
@@ -612,7 +612,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
            p%sortp(i)=i
         end do
         ix=0
-        call sort_hilbert_2(r,g,p,p%headp(ilev),p%tailp(ilev),ix,0,1,ilev-1)
+        call sort_hilbert(r,g,p,p%headp(ilev),p%tailp(ilev),ix,0,1,ilev-1)
 
         ! Compute first guess domain decomposition
         bound_key_target(1:nhilbert,0:ndom)=domain_part(ilev)%b(1:nhilbert,0:ndom)
@@ -1114,7 +1114,7 @@ subroutine balance_part_2(r,g,m,p,ilevel)
 
 111 format('   Entering balance_part for level',i2)
 
-end subroutine balance_part_2
+end subroutine balance_part
 #endif
 !##############################################################################
 !##############################################################################

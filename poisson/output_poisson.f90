@@ -2,7 +2,7 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine output_poisson_2(r,g,m,filename)
+subroutine output_poisson(r,g,m,filename)
   use amr_parameters, only: ndim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -39,7 +39,7 @@ subroutine output_poisson_2(r,g,m,filename)
 #endif
   close(ilun)
      
-end subroutine output_poisson_2
+end subroutine output_poisson
 
 
 

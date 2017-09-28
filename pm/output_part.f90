@@ -2,7 +2,7 @@
 !#######################################################
 !#######################################################
 !#######################################################
-subroutine output_part_2(r,g,p,filename)
+subroutine output_part(r,g,p,filename)
   use amr_parameters, only: ndim,dp,i8b
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t
@@ -80,5 +80,5 @@ subroutine output_part_2(r,g,p,filename)
 
   close(ilun)
 
-end subroutine output_part_2
+end subroutine output_part
 

@@ -562,7 +562,7 @@ subroutine read_params(r,g)
   r%tmovout=tmovout
   r%proj_axis=proj_axis
   r%movie_vars_txt=movie_vars_txt
-  if(r%movie)call set_movie_vars_2(r)
+  if(r%movie)call set_movie_vars(r)
 
   r%gamma=gamma
   r%courant_factor=courant_factor

@@ -2,7 +2,7 @@
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine rho_fine_2(r,g,m,p,ilevel)
+subroutine rho_fine(r,g,m,p,ilevel)
   use amr_parameters, only: dp,ndim
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -41,9 +41,9 @@ subroutine rho_fine_2(r,g,m,p,ilevel)
   !-------------------------------------------------------
   do i=r%nlevelmax,ilevel,-1
      ! Compute mass multipole
-     if(r%hydro)call multipole_fine_2(r,g,m,i)
+     if(r%hydro)call multipole_fine(r,g,m,i)
      ! Perform CIC using pseudo-particle
-     call cic_from_multipole_2(r,g,m,i)
+     call cic_from_multipole(r,g,m,i)
   end do
 
   !-------------------------------------------------------
@@ -52,9 +52,9 @@ subroutine rho_fine_2(r,g,m,p,ilevel)
   if(r%pic)then
      do i=ilevel,r%nlevelmax
                                call timer('rho','start')
-        call cic_part_2(r,g,m,p,i)
+        call cic_part(r,g,m,p,i)
                                call timer('particles','start')
-        call split_part_2(r,g,m,p,i)
+        call split_part(r,g,m,p,i)
                                call timer('rho','start')
      end do
   endif
@@ -75,12 +75,12 @@ subroutine rho_fine_2(r,g,m,p,ilevel)
   
 111 format('   Entering rho_fine for level ',I2)
   
-end subroutine rho_fine_2
+end subroutine rho_fine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine multipole_fine_2(r,g,m,ilevel)
+subroutine multipole_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,dp,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -99,7 +99,7 @@ subroutine multipole_fine_2(r,g,m,ilevel)
   ! routine is not even called.
   !-------------------------------------------------------------------
   integer::igrid,ind,idim,ivar,nstride,ioct,icell
-  integer::parent_cell,get_parent_cell_2
+  integer::parent_cell,get_parent_cell
   real(dp),dimension(1:ndim),save::xx
   real(kind=8)::dx_loc,vol_loc,mmm,dd,average
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -171,14 +171,14 @@ subroutine multipole_fine_2(r,g,m,ilevel)
   if(ilevel==r%nlevelmax)return
   if(m%noct_tot(ilevel+1)==0)return
 
-  call open_cache_2(r,g,m,operation_multipole,domain_decompos_amr)
+  call open_cache(r,g,m,operation_multipole,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ioct=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     parent_cell=get_parent_cell_2(r,g,m,hash_key,m%grid_dict,.true.,.false.)
+     parent_cell=get_parent_cell(r,g,m,hash_key,m%grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
 #ifdef HYDRO
@@ -194,16 +194,16 @@ subroutine multipole_fine_2(r,g,m,ilevel)
 #endif
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
 111 format('   Entering multipole_fine for level',i2)
 
-end subroutine multipole_fine_2
+end subroutine multipole_fine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cic_from_multipole_2(r,g,m,ilevel)
+subroutine cic_from_multipole(r,g,m,ilevel)
   use amr_parameters, only: twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -235,16 +235,16 @@ subroutine cic_from_multipole_2(r,g,m,ilevel)
   end do
 #endif  
 
-  if(r%hydro)call cic_cell_2(r,g,m,ilevel)
+  if(r%hydro)call cic_cell(r,g,m,ilevel)
 
 111 format('   Entering cic_from_multipole for level',i2)
 
-end subroutine cic_from_multipole_2
+end subroutine cic_from_multipole
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cic_cell_2(r,g,m,ilevel)
+subroutine cic_cell(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -261,7 +261,7 @@ subroutine cic_cell_2(r,g,m,ilevel)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::inbor,igrid,ind,idim
-  integer::ioct,icell,parent_cell,get_parent_cell_2
+  integer::ioct,icell,parent_cell,get_parent_cell
   real(kind=8)::dx_loc,vol_loc,mmm
   
   ! Mesh spacing in that level
@@ -271,7 +271,7 @@ subroutine cic_cell_2(r,g,m,ilevel)
   ! Use hash table directly for cells (not for grids)
   hash_nbor(0)=ilevel+1
 
-  call open_cache_2(r,g,m,operation_rho,domain_decompos_amr)
+  call open_cache(r,g,m,operation_rho,domain_decompos_amr)
 
   ! Loop over grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -362,7 +362,7 @@ subroutine cic_cell_2(r,g,m,ilevel)
         do inbor=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,inbor)
            ! Get parent cell using write-only cache
-           parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.true.,.false.)
+           parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.true.,.false.)
            if(parent_cell>0)then
               ioct=(parent_cell-1)/twotondim+1
               icell=parent_cell-(ioct-1)*twotondim
@@ -376,14 +376,14 @@ subroutine cic_cell_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
-end subroutine cic_cell_2
+end subroutine cic_cell
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine cic_part_2(r,g,m,p,ilevel)
+subroutine cic_part(r,g,m,p,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -403,7 +403,7 @@ subroutine cic_part_2(r,g,m,p,ilevel)
   integer,dimension(1:ndim,1:twotondim),save::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::i,ipart,igrid,ind,idim
-  integer::icell,parent_cell,get_parent_cell_2
+  integer::icell,parent_cell,get_parent_cell
   real(kind=8)::dx_loc,vol_loc,vol2
   
   if(m%noct_tot(ilevel)==0)return
@@ -431,12 +431,12 @@ subroutine cic_part_2(r,g,m,p,ilevel)
      p%sortp(i)=i
   end do
   ix=0
-  call sort_hilbert_2(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
                                call timer('rho','start')
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
-  call open_cache_2(r,g,m,operation_rho,domain_decompos_amr)
+  call open_cache(r,g,m,operation_rho,domain_decompos_amr)
 
   ! Loop over particles in Hilbert order
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
@@ -511,7 +511,7 @@ subroutine cic_part_2(r,g,m,p,ilevel)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
-        parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.true.,.false.)
+        parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.true.,.false.)
         if(parent_cell>0)then
            igrid=(parent_cell-1)/twotondim+1
            icell=parent_cell-(igrid-1)*twotondim
@@ -524,16 +524,16 @@ subroutine cic_part_2(r,g,m,p,ilevel)
   end do
   ! End loop over particles
   
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
 111 format('   Entering cic_part for level',i2)
 
-end subroutine cic_part_2
+end subroutine cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine split_part_2(r,g,m,p,ilevel)
+subroutine split_part(r,g,m,p,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,i8b
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -550,7 +550,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
   real(dp),dimension(1:ndim),save::x,xp_tmp,vp_tmp
   integer,dimension(1:ndim),save::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim),save::hash_key
-  integer::i,ipart,jpart,igrid,idim,icell,get_grid_2
+  integer::i,ipart,jpart,igrid,idim,icell,get_grid
   integer::npart_coarse,npart_fine
   real(kind=8)::dx_loc,vol_loc
   real(dp)::mp_tmp
@@ -567,7 +567,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
 
   ! Open read-only cache for array refined
   hash_key(0)=ilevel
-  call open_cache_2(r,g,m,operation_split,domain_decompos_amr)
+  call open_cache(r,g,m,operation_split,domain_decompos_amr)
 
   ! Loop over particles
   ix_ref=-1
@@ -580,7 +580,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
      ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
      if(.NOT. ALL(ix.EQ.ix_ref))then
         hash_key(1:ndim)=ix(1:ndim)
-        igrid=get_grid_2(r,g,m,hash_key,m%grid_dict,.false.,.true.)
+        igrid=get_grid(r,g,m,hash_key,m%grid_dict,.false.,.true.)
         ix_ref=ix
      endif
 
@@ -623,7 +623,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
   end do
   ! End loop over particles
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
   
   p%tailp(ilevel)=p%headp(ilevel)+npart_coarse-1
   p%headp(ilevel+1)=p%tailp(ilevel)+1
@@ -682,12 +682,12 @@ subroutine split_part_2(r,g,m,p,ilevel)
 
 111 format('   Entering split_part for level',i2)
 
-end subroutine split_part_2
+end subroutine split_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-recursive subroutine sort_hilbert_2(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
+recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
   use amr_parameters, only: dp, ndim, twotondim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
@@ -820,10 +820,10 @@ recursive subroutine sort_hilbert_2(r,g,p,head_part, tail_part, ix_coarse, cstat
            tail_fine = offset(ip) + numb_part(ip)
            ix_fine(1:ndim) = ix_child(ip,1:ndim)
            cstate_fine = nstate(ip)
-           call sort_hilbert_2(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
+           call sort_hilbert(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
         endif
      end do
   endif
   
-end subroutine sort_hilbert_2
+end subroutine sort_hilbert
 

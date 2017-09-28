@@ -2,7 +2,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine hydro_refine_2(r,ug,um,ud,ok)
+subroutine hydro_refine(r,ug,um,ud,ok)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t
   use hydro_parameters, only: nvar,nener
@@ -93,12 +93,12 @@ subroutine hydro_refine_2(r,ug,um,ud,ok)
      end do
   end if
 
-end subroutine hydro_refine_2
+end subroutine hydro_refine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cmpdt_2(r,uu,gg,dx,dt)
+subroutine cmpdt(r,uu,gg,dx,dt)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t
@@ -181,7 +181,7 @@ subroutine cmpdt_2(r,uu,gg,dx,dt)
   dtcell = dx/uu(ndim+2)*(sqrt(one+two*r%courant_factor*uu(1))-one)/uu(1)
   dt = min(dt,dtcell)
 
-end subroutine cmpdt_2
+end subroutine cmpdt
 !###########################################################
 !###########################################################
 !###########################################################

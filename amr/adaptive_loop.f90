@@ -22,30 +22,30 @@ subroutine adaptive_loop(r,g,m,p)
 #endif
 
   ! Initialize grid variables
-  call init_amr_2(r,g,m)
+  call init_amr(r,g,m)
 
   ! Initialize software cache
-  call init_cache_2(r,g)
+  call init_cache(r,g)
 
   ! Initialize time variables
-  call init_time_2(r,g)
+  call init_time(r,g)
 
   ! Initialize hydro kernel workspace
   if(r%hydro)call init_hydro(r)
 
   ! Initialize particle variables from files
-  if(r%pic)call init_part_file_2(r,g,p)
+  if(r%pic)call init_part_file(r,g,p)
 
   ! Build initial AMR grid
   if(r%nrestart==0)then
-     call init_refine_basegrid_2(r,g,m,p) ! Build coarsest grid
-     call init_refine_adaptive_2(r,g,m,p) ! Build adaptive grid
+     call init_refine_basegrid(r,g,m,p) ! Build coarsest grid
+     call init_refine_adaptive(r,g,m,p) ! Build adaptive grid
   else
-     call init_refine_restart_2(r,g,m) ! Build AMR grid from restart file
+     call init_refine_restart(r,g,m) ! Build AMR grid from restart file
   endif
 
   ! Initialize particle from the AMR grid
-  if(r%pic)call init_part_grid_2(r,g,m,p)
+  if(r%pic)call init_part_grid(r,g,m,p)
 
   ! Timing since startup
 #ifndef WITHOUTMPI
@@ -85,7 +85,7 @@ subroutine adaptive_loop(r,g,m,p)
      g%eint_tot=0.0D0  ! Reset total internal energy
 
      ! Call base level
-     call amr_step_2(r,g,m,p,r%levelmin,1)
+     call amr_step(r,g,m,p,r%levelmin,1)
 
      ! New coarse time-step
      g%nstep_coarse=g%nstep_coarse+1

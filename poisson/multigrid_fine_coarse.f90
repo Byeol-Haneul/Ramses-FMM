@@ -8,7 +8,7 @@
 ! Mask restriction (bottom-up)
 ! ------------------------------------------------------------------------
 
-subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
+subroutine restrict_mask(r,g,m,ifinelevel,allmasked)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -28,7 +28,7 @@ subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
 
   integer(kind=8),dimension(0:ndim) :: hash_key
   integer :: ichild,ind,igrid,icell
-  integer :: parent_cell, get_parent_cell_2
+  integer :: parent_cell, get_parent_cell
   real(dp) :: ngpmask, mask_max
   real(dp) :: dtwotondim = (twotondim)
   
@@ -41,7 +41,7 @@ subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
   
   hash_key(0)=ifinelevel
   
-  call open_cache_2(r,g,m,operation_restrict_mask,domain_decompos_mg)
+  call open_cache(r,g,m,operation_restrict_mask,domain_decompos_mg)
   
   ! Loop over grids
   do ichild=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -52,7 +52,7 @@ subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
 
         ! Get parent cell using write-only cache
-        parent_cell=get_parent_cell_2(r,g,m,hash_key,m%mg_dict,.true.,.false.)
+        parent_cell=get_parent_cell(r,g,m,hash_key,m%mg_dict,.true.,.false.)
         igrid=(parent_cell-1)/twotondim+1
         icell=parent_cell-(igrid-1)*twotondim
 
@@ -63,7 +63,7 @@ subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
      end do
   end do
 
-  call close_cache_2(r,g,m,m%mg_dict)
+  call close_cache(r,g,m,m%mg_dict)
 
   ! Convert volume fraction back to to mask value for coarse level
   do igrid=m%head_mg(ifinelevel-1),m%tail_mg(ifinelevel-1)
@@ -87,7 +87,7 @@ subroutine restrict_mask_2(r,g,m,ifinelevel,allmasked)
   allmasked=allmasked_tot
 #endif
 
-end subroutine restrict_mask_2
+end subroutine restrict_mask
 
 ! ########################################################################
 ! ########################################################################
@@ -98,7 +98,7 @@ end subroutine restrict_mask_2
 ! Residual computation
 ! ------------------------------------------------------------------------
 
-subroutine cmp_residual_mg_2(r,g,m,hash_dict, ilevel)
+subroutine cmp_residual_mg(r,g,m,hash_dict, ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -116,7 +116,7 @@ subroutine cmp_residual_mg_2(r,g,m,hash_dict, ilevel)
 
   ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
-  integer :: get_grid_2
+  integer :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
@@ -137,7 +137,7 @@ subroutine cmp_residual_mg_2(r,g,m,hash_dict, ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache_2(r,g,m,operation_mg,domain_decompos_mg)
+  call open_cache(r,g,m,operation_mg,domain_decompos_mg)
 
   hash_nbor(0)=ilevel
 
@@ -163,7 +163,7 @@ subroutine cmp_residual_mg_2(r,g,m,hash_dict, ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid_2(r,g,m,hash_nbor,hash_dict,.false.,.true.)
+        igridn=get_grid(r,g,m,hash_nbor,hash_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -235,9 +235,9 @@ subroutine cmp_residual_mg_2(r,g,m,hash_dict, ilevel)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,hash_dict)
+  call close_cache(r,g,m,hash_dict)
 
-end subroutine cmp_residual_mg_2
+end subroutine cmp_residual_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -432,7 +432,7 @@ end subroutine cmp_residual_mg_fast
 ! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
 
-subroutine gauss_seidel_mg_2(r,g,m,hash_dict,ilevel,safe,redstep)
+subroutine gauss_seidel_mg(r,g,m,hash_dict,ilevel,safe,redstep)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -453,7 +453,7 @@ subroutine gauss_seidel_mg_2(r,g,m,hash_dict,ilevel,safe,redstep)
   ! Perform a Gauss-Seidel update of grid(igrid)%phi(ind).
   ! The domain mask is also needed.
   
-  integer :: get_grid_2
+  integer :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
@@ -478,7 +478,7 @@ subroutine gauss_seidel_mg_2(r,g,m,hash_dict,ilevel,safe,redstep)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache_2(r,g,m,operation_mg,domain_decompos_mg)
+  call open_cache(r,g,m,operation_mg,domain_decompos_mg)
 
   hash_nbor(0)=ilevel
 
@@ -507,7 +507,7 @@ subroutine gauss_seidel_mg_2(r,g,m,hash_dict,ilevel,safe,redstep)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        igridn=get_grid_2(r,g,m,hash_nbor,hash_dict,.false.,.true.)
+        igridn=get_grid(r,g,m,hash_nbor,hash_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -587,9 +587,9 @@ subroutine gauss_seidel_mg_2(r,g,m,hash_dict,ilevel,safe,redstep)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,hash_dict)
+  call close_cache(r,g,m,hash_dict)
 
-end subroutine gauss_seidel_mg_2
+end subroutine gauss_seidel_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -802,7 +802,7 @@ end subroutine gauss_seidel_mg_fast
 ! Residual restriction
 ! ------------------------------------------------------------------------
 
-subroutine restrict_residual_2(r,g,m,ifinelevel)
+subroutine restrict_residual(r,g,m,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -821,7 +821,7 @@ subroutine restrict_residual_2(r,g,m,ifinelevel)
   ! into the rhs of the coarse level (stored in grid(igrid)%f(icell,2))
   ! For interior coarse cell only (we need the mask stored in grid(igrid)%f(icell,3))
   
-  integer :: ichild, ind, get_parent_cell_2
+  integer :: ichild, ind, get_parent_cell
   integer :: igrid, icell, parent_cell
   real(dp) :: dtwotondim = (twotondim)
   integer(kind=8),dimension(0:ndim) :: hash_key
@@ -835,7 +835,7 @@ subroutine restrict_residual_2(r,g,m,ifinelevel)
 
   hash_key(0)=ifinelevel
 
-  call open_cache_2(r,g,m,operation_restrict_res,domain_decompos_mg)
+  call open_cache(r,g,m,operation_restrict_res,domain_decompos_mg)
   
   ! Loop over grids
   do ichild=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -849,7 +849,7 @@ subroutine restrict_residual_2(r,g,m,ifinelevel)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
         
         ! Get parent cell using read-write cache
-        parent_cell=get_parent_cell_2(r,g,m,hash_key,m%mg_dict,.true.,.true.)
+        parent_cell=get_parent_cell(r,g,m,hash_key,m%mg_dict,.true.,.true.)
         igrid=(parent_cell-1)/twotondim+1
         icell=parent_cell-(igrid-1)*twotondim
         
@@ -862,9 +862,9 @@ subroutine restrict_residual_2(r,g,m,ifinelevel)
      end do
   end do
   
-  call close_cache_2(r,g,m,m%mg_dict)
+  call close_cache(r,g,m,m%mg_dict)
 
-end subroutine restrict_residual_2
+end subroutine restrict_residual
 
 ! ########################################################################
 ! ########################################################################
@@ -875,7 +875,7 @@ end subroutine restrict_residual_2
 ! Interpolation and correction
 ! ------------------------------------------------------------------------
 
-subroutine interpolate_and_correct_2(r,g,m,ifinelevel)
+subroutine interpolate_and_correct(r,g,m,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -921,7 +921,7 @@ subroutine interpolate_and_correct_2(r,g,m,ifinelevel)
   
   if(r%verbose)write(*,*)'entering interpolate  and correct ',ifinelevel
 
-  call open_cache_2(r,g,m,operation_phi,domain_decompos_mg)
+  call open_cache(r,g,m,operation_phi,domain_decompos_mg)
 
   hash_key(0)=ifinelevel
 
@@ -932,7 +932,7 @@ subroutine interpolate_and_correct_2(r,g,m,ifinelevel)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
      
      ! Get 3**ndim neighbouring parent cell using a read-only cache
-     call get_threetondim_nbor_parent_cell_2(r,g,m,hash_key,m%mg_dict,igrid_nbor,ind_nbor,.false.,.true.)
+     call get_threetondim_nbor_parent_cell(r,g,m,hash_key,m%mg_dict,igrid_nbor,ind_nbor,.false.,.true.)
      
      ! Loop over cells
      do ind=1,twotondim
@@ -958,7 +958,7 @@ subroutine interpolate_and_correct_2(r,g,m,ifinelevel)
      ! End loop over cells
      
      do ind=1,threetondim
-        call unlock_cache_2(r,g,m,igrid_nbor(ind))
+        call unlock_cache(r,g,m,igrid_nbor(ind))
      end do
      
      ! Add correction to fine level solution
@@ -969,9 +969,9 @@ subroutine interpolate_and_correct_2(r,g,m,ifinelevel)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%mg_dict)
+  call close_cache(r,g,m,m%mg_dict)
 
-end subroutine interpolate_and_correct_2
+end subroutine interpolate_and_correct
 
 ! ########################################################################
 ! ########################################################################
@@ -982,7 +982,7 @@ end subroutine interpolate_and_correct_2
 ! Flag settings used to speed-up the sweeps
 ! ------------------------------------------------------------------------
 
-subroutine set_scan_flag_2(r,g,m,hash_dict,ilevel)
+subroutine set_scan_flag(r,g,m,hash_dict,ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -998,7 +998,7 @@ subroutine set_scan_flag_2(r,g,m,hash_dict,ilevel)
   integer, intent(in) :: ilevel
   type(hash_table) :: hash_dict
   !
-  integer :: get_grid_2
+  integer :: get_grid
   integer :: ind, igrid, igridn, inbor, idim, id, ig
   integer, dimension(1:3,1:2,1:8)::iii, jjj
   real(dp),dimension(1:twotondim,0:twondim)::dis_nbor
@@ -1014,7 +1014,7 @@ subroutine set_scan_flag_2(r,g,m,hash_dict,ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache_2(r,g,m,operation_scan,domain_decompos_mg)
+  call open_cache(r,g,m,operation_scan,domain_decompos_mg)
 
   hash_nbor(0)=ilevel
 
@@ -1039,7 +1039,7 @@ subroutine set_scan_flag_2(r,g,m,hash_dict,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid_2(r,g,m,hash_nbor,hash_dict,.false.,.true.)
+        igridn=get_grid(r,g,m,hash_nbor,hash_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -1089,9 +1089,9 @@ subroutine set_scan_flag_2(r,g,m,hash_dict,ilevel)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,hash_dict)
+  call close_cache(r,g,m,hash_dict)
 
-end subroutine set_scan_flag_2
+end subroutine set_scan_flag
 
 ! ########################################################################
 ! ########################################################################
@@ -1102,7 +1102,7 @@ end subroutine set_scan_flag_2
 ! Compute norm of residual 
 ! ------------------------------------------------------------------------
 
-subroutine cmp_residual_norm2_2(r,m,ilevel, norm2)
+subroutine cmp_residual_norm2(r,m,ilevel, norm2)
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,mesh_t
   implicit none
@@ -1133,7 +1133,7 @@ subroutine cmp_residual_norm2_2(r,m,ilevel, norm2)
   
   norm2 = dx2*norm2
   
-end subroutine cmp_residual_norm2_2
+end subroutine cmp_residual_norm2
 
 #endif
 

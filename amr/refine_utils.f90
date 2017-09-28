@@ -2,7 +2,7 @@
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine refine_fine_2(r,g,m,ilevel)
+subroutine refine_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: run_t,global_t,mesh_t, oct
   use cache_commons
@@ -30,7 +30,7 @@ subroutine refine_fine_2(r,g,m,ilevel)
   integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
-  integer::parent_cell,get_parent_cell_2
+  integer::parent_cell,get_parent_cell
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
@@ -54,7 +54,7 @@ subroutine refine_fine_2(r,g,m,ilevel)
   m%ifree=m%noct_used+1
   do ilev=ilevel,r%nlevelmax-1
 
-     call open_cache_2(r,g,m,operation_refine,domain_decompos_amr)
+     call open_cache(r,g,m,operation_refine,domain_decompos_amr)
 
      do ioct=m%head(ilev),m%tail(ilev)
         do ind=1,twotondim
@@ -63,13 +63,13 @@ subroutine refine_fine_2(r,g,m,ilevel)
            if(ok)then
               ind_parent=ioct
               ind_cell=ind
-              call make_new_oct_2(r,g,m,ind_parent,ind_cell,ilev+1)
+              call make_new_oct(r,g,m,ind_parent,ind_cell,ilev+1)
               g%ncreate=g%ncreate+1
            endif
         end do
      end do
 
-     call close_cache_2(r,g,m,m%grid_dict)
+     call close_cache(r,g,m,m%grid_dict)
 
   end do
 #ifndef WITHOUTMPI
@@ -86,13 +86,13 @@ subroutine refine_fine_2(r,g,m,ilevel)
   g%nkill=0
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache_2(r,g,m,operation_derefine,domain_decompos_amr)
+     call open_cache(r,g,m,operation_derefine,domain_decompos_amr)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
-        parent_cell=get_parent_cell_2(r,g,m,hash_key,m%grid_dict,.true.,.true.)
+        parent_cell=get_parent_cell(r,g,m,hash_key,m%grid_dict,.true.,.true.)
         igrid=(parent_cell-1)/twotondim+1
         icell=parent_cell-(igrid-1)*twotondim
         ok   = m%grid(igrid)%flag1(icell)==0 .and. &
@@ -108,7 +108,7 @@ subroutine refine_fine_2(r,g,m,ilevel)
         end if
      end do
 
-     call close_cache_2(r,g,m,m%grid_dict)
+     call close_cache(r,g,m,m%grid_dict)
 
   end do
 #ifndef WITHOUTMPI
@@ -314,12 +314,12 @@ subroutine refine_fine_2(r,g,m,ilevel)
 111 format('   Entering refine_fine for level ',I2)
 112 format('   ==> Make ',i6,' sub-grids')
 
-end subroutine refine_fine_2
+end subroutine refine_fine
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine make_new_oct_2(r,g,m,iparent,icell,ilevel)
+subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
   use amr_parameters, only: ndim,nhilbert,twotondim,twondim,nvector
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t, oct
@@ -356,7 +356,7 @@ subroutine make_new_oct_2(r,g,m,iparent,icell,ilevel)
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
   if(mail_counter==32)then
-     call check_mail_2(r,g,m,MPI_REQUEST_NULL,m%grid_dict)
+     call check_mail(r,g,m,MPI_REQUEST_NULL,m%grid_dict)
      mail_counter=0
   endif
   mail_counter=mail_counter+1
@@ -395,7 +395,7 @@ subroutine make_new_oct_2(r,g,m,iparent,icell,ilevel)
   else
      grid_cpu = m%domain(ilevel)%get_rank(hks)
      ! If next cache line is occupied, free it.
-     if(m%occupied(m%free_cache))call destage_2(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
+     if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
      ! Set grid index to a virtual grid in local cache memory
      ichild=r%ngridmax+m%free_cache
      m%occupied(m%free_cache)=.true.
@@ -440,14 +440,14 @@ subroutine make_new_oct_2(r,g,m,iparent,icell,ilevel)
      if(r%interpol_type>0)then
         
         ! Get 2ndim neighboring father cells with read-only cache
-        call get_twondim_nbor_parent_cell_2(r,g,m,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+        call get_twondim_nbor_parent_cell(r,g,m,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
         do inbor=0,twondim
            do ivar=1,nvar
               u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
            end do
         end do
         do inbor=1,twondim
-           call unlock_cache_2(r,g,m,igrid_nbor(inbor))
+           call unlock_cache(r,g,m,igrid_nbor(inbor))
         end do
         
         ! Interpolate
@@ -476,7 +476,7 @@ subroutine make_new_oct_2(r,g,m,iparent,icell,ilevel)
 #endif
   endif
 
-end subroutine make_new_oct_2
+end subroutine make_new_oct
 !###############################################################
 !###############################################################
 !###############################################################

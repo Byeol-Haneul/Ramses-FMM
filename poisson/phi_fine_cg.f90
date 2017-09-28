@@ -3,7 +3,7 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
+subroutine phi_fine_cg(r,g,m,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -47,7 +47,7 @@ subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
   !===============================
   ! Compute initial phi
   !===============================
-  call make_initial_phi_2(r,g,m,ilevel,icount)
+  call make_initial_phi(r,g,m,ilevel,icount)
 
   !===============================
   ! Compute right-hand side norm
@@ -69,7 +69,7 @@ subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
   ! Compute r = b - Ax and store it into f(i,1)
   ! Also set p = r and store it into f(i,2)
   !==============================================
-  call cmp_residual_cg_2(r,g,m,ilevel,icount)
+  call cmp_residual_cg(r,g,m,ilevel,icount)
 
   !====================================
   ! Main iteration loop
@@ -117,7 +117,7 @@ subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
      !==============================================
-     call cmp_Ap_cg_2(r,g,m,ilevel)
+     call cmp_Ap_cg(r,g,m,ilevel)
 
      !====================================
      ! Compute p.Ap scalar product
@@ -174,12 +174,12 @@ subroutine phi_fine_cg_2(r,g,m,ilevel,icount)
 112 format('   ==> Step=',i5,' Error=',2(1pe10.3,1x))
 115 format('   ==> Level=',i5,' Step=',i5,' Error=',2(1pe10.3,1x))
 
-end subroutine phi_fine_cg_2
+end subroutine phi_fine_cg
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cmp_residual_cg_2(r,g,m,ilevel,icount)
+subroutine cmp_residual_cg(r,g,m,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -192,7 +192,7 @@ subroutine cmp_residual_cg_2(r,g,m,ilevel,icount)
   ! This routine computes the residual for the Conjugate Gradient
   ! Poisson solver. The residual is stored in f(i,1) and f(i,2).
   !------------------------------------------------------------------
-  integer::get_grid_2
+  integer::get_grid
   integer::i_nbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   integer,dimension(1:8,1:8)::ccc
@@ -249,7 +249,7 @@ subroutine cmp_residual_cg_2(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache_2(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -274,7 +274,7 @@ subroutine cmp_residual_cg_2(r,g,m,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        igridn=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -285,10 +285,10 @@ subroutine cmp_residual_cg_2(r,g,m,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
-           call get_threetondim_nbor_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi_2(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call get_threetondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache_2(r,g,m,igrid_nbor(ind))
+              call unlock_cache(r,g,m,igrid_nbor(ind))
            end do
         endif
 
@@ -319,14 +319,14 @@ subroutine cmp_residual_cg_2(r,g,m,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
-end subroutine cmp_residual_cg_2
+end subroutine cmp_residual_cg
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cmp_Ap_cg_2(r,g,m,ilevel)
+subroutine cmp_Ap_cg(r,g,m,ilevel)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -339,7 +339,7 @@ subroutine cmp_Ap_cg_2(r,g,m,ilevel)
   ! This routine computes Ap for the Conjugate Gradient
   ! Poisson Solver and store the result into f(i,3).
   !------------------------------------------------------------------
-  integer::get_grid_2
+  integer::get_grid
   integer::inbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   real(dp)::oneoversix,residu
@@ -359,7 +359,7 @@ subroutine cmp_Ap_cg_2(r,g,m,ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
 
-  call open_cache_2(r,g,m,operation_cg,domain_decompos_amr)
+  call open_cache(r,g,m,operation_cg,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -384,7 +384,7 @@ subroutine cmp_Ap_cg_2(r,g,m,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -420,14 +420,14 @@ subroutine cmp_Ap_cg_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
-end subroutine cmp_Ap_cg_2
+end subroutine cmp_Ap_cg
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine make_initial_phi_2(r,g,m,ilevel,icount)
+subroutine make_initial_phi(r,g,m,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -476,7 +476,7 @@ subroutine make_initial_phi_2(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache_2(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
 
   hash_key(0)=ilevel
 
@@ -499,10 +499,10 @@ subroutine make_initial_phi_2(r,g,m,ilevel,icount)
         
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
-        call get_threetondim_nbor_parent_cell_2(r,g,m,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-        call interpol_phi_2(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
+        call get_threetondim_nbor_parent_cell(r,g,m,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+        call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
-           call unlock_cache_2(r,g,m,igrid_nbor(ind))
+           call unlock_cache(r,g,m,igrid_nbor(ind))
         end do
 
         ! Loop over cells
@@ -516,9 +516,9 @@ subroutine make_initial_phi_2(r,g,m,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(r,g,m,m%grid_dict)
 
-end subroutine make_initial_phi_2
+end subroutine make_initial_phi
 !###########################################################
 !###########################################################
 !###########################################################

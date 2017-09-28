@@ -2,7 +2,7 @@
 !###################################################
 !###################################################
 !###################################################
-subroutine output_hydro_2(r,g,m,filename)
+subroutine output_hydro(r,g,m,filename)
   use amr_parameters, only: ndim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -40,12 +40,12 @@ subroutine output_hydro_2(r,g,m,filename)
 
 #endif
      
-end subroutine output_hydro_2
+end subroutine output_hydro
 !###################################################
 !###################################################
 !###################################################
 !###################################################
-subroutine file_descriptor_hydro_2(r,filename)
+subroutine file_descriptor_hydro(r,filename)
   use amr_parameters, only: ndim
   use hydro_parameters, only: nvar,nener
   use amr_commons, only: run_t
@@ -95,7 +95,7 @@ subroutine file_descriptor_hydro_2(r,filename)
 
   close(ilun)
 
-end subroutine file_descriptor_hydro_2
+end subroutine file_descriptor_hydro
 
 
 

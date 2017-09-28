@@ -2,7 +2,7 @@
 !================================================================
 !================================================================
 !================================================================
-subroutine condinit_2(r,g,x,u,dx,nn)
+subroutine condinit(r,g,x,u,dx,nn)
   use amr_parameters, only: dp, ndim, nvector
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
@@ -35,12 +35,12 @@ subroutine condinit_2(r,g,x,u,dx,nn)
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 
   ! Call built-in initial condition generator
-  call region_condinit_2(r,g,x,q,dx,nn)
+  call region_condinit(r,g,x,q,dx,nn)
 
   ! Add here, if you wish, some user-defined initial conditions
   ! ........
 
-  call units_2(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m=scale_d*scale_l**3
 
  ! constants
@@ -128,4 +128,4 @@ subroutine condinit_2(r,g,x,u,dx,nn)
   end do
 #endif
 
-end subroutine condinit_2
+end subroutine condinit

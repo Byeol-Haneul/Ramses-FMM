@@ -2,7 +2,7 @@
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine poisson_flag_2(r,g,m,ilevel)
+subroutine poisson_flag(r,g,m,ilevel)
   use amr_parameters, only: dp,ndim,twotondim,twopi
   use amr_commons, only: run_t,global_t,mesh_t
   use hydro_parameters, only: nvar
@@ -68,7 +68,7 @@ subroutine poisson_flag_2(r,g,m,ilevel)
            do ivar=1,nvar
               uu(ivar)=m%grid(igrid)%uold(ind,ivar)
            end do
-           call jeans_length_refine_2(r,uu,factG,dx_loc,r%jeans_refine(ilevel),ok)
+           call jeans_length_refine(r,uu,factG,dx_loc,r%jeans_refine(ilevel),ok)
 #endif
         endif
         
@@ -81,12 +81,12 @@ subroutine poisson_flag_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-end subroutine poisson_flag_2
+end subroutine poisson_flag
 !#####################################################################
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine jeans_length_refine_2(r,uu,factG,size_cell,n_jeans,ok)
+subroutine jeans_length_refine(r,uu,factG,size_cell,n_jeans,ok)
   use amr_parameters, only: ndim,dp,twopi
   use amr_commons, only: run_t
   use hydro_parameters, only: nvar
@@ -128,7 +128,7 @@ subroutine jeans_length_refine_2(r,uu,factG,size_cell,n_jeans,ok)
   ! than n_jeans times the size of the pixel
   ok = ok .or. ( n_jeans*size_cell >= lamb_jeans )
 
-end subroutine jeans_length_refine_2
+end subroutine jeans_length_refine
 !#####################################################################
 !#####################################################################
 !#####################################################################

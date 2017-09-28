@@ -2,7 +2,7 @@
 !###############################################
 !###############################################
 !###############################################
-subroutine init_amr_2(r,g,m)
+subroutine init_amr(r,g,m)
   use amr_parameters, ONLY: nhilbert
   use amr_commons, ONLY: run_t, global_t, mesh_t
   use hash
@@ -124,17 +124,17 @@ subroutine init_amr_2(r,g,m)
      ! Read parameters from restart file
      call title(r%nrestart,nchar)
      file_params='output_'//TRIM(nchar)//'/params.out'
-     call input_params_2(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+     call input_params(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
      if(g%myid==1)write(*,'(" Restarting from output number ",I8)')r%nrestart
      if(g%myid==1)write(*,'(" Restart snapshot has ",I8," files")')ncpu_file
   endif
 
-end subroutine init_amr_2
+end subroutine init_amr
 !###############################################
 !###############################################
 !###############################################
 !###############################################
-subroutine init_cache_2(r,g)
+subroutine init_cache(r,g)
   use amr_parameters, ONLY: nhilbert
   use amr_commons, ONLY: run_t, global_t
   use cache_commons
@@ -408,7 +408,7 @@ subroutine init_cache_2(r,g)
 
 #endif
 
-end subroutine init_cache_2
+end subroutine init_cache
 
 
 

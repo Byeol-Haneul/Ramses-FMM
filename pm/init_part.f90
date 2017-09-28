@@ -2,7 +2,7 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine init_part_file_2(r,g,p)
+subroutine init_part_file(r,g,p)
   use amr_parameters, only: ndim,dp,i8b
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
@@ -76,7 +76,7 @@ subroutine init_part_file_2(r,g,p)
      ! Read particle files header
      call title(r%nrestart,nchar)
      fileloc='output_'//TRIM(nchar)//'/part_header.txt'
-     call input_header_2(r,g,fileloc,npart_tot_file,ncpu_file)
+     call input_header(r,g,fileloc,npart_tot_file,ncpu_file)
      if(g%myid==1)write(*,'(" Restart snapshot has ",I8," particles")')npart_tot_file
 
      ! Compute new local particle number
@@ -334,12 +334,12 @@ subroutine init_part_file_2(r,g,p)
   call MPI_ALLREDUCE(p%npart,p%npart_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
 #endif
 
-end subroutine init_part_file_2
+end subroutine init_part_file
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine init_part_grid_2(r,g,m,p)
+subroutine init_part_grid(r,g,m,p)
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -702,7 +702,7 @@ subroutine init_part_grid_2(r,g,m,p)
   if(allocated(init_array))deallocate(init_array)
   if(allocated(init_array_x))deallocate(init_array_x)
 
-end subroutine init_part_grid_2
+end subroutine init_part_grid
 !#########################################################################
 !#########################################################################
 !#########################################################################

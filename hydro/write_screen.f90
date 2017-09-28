@@ -1,4 +1,4 @@
-subroutine write_screen_2(m,ilevel)
+subroutine write_screen(m,ilevel)
   use amr_parameters, only: dp,ndim
   use amr_commons, only: mesh_t
   implicit none
@@ -34,4 +34,4 @@ subroutine write_screen_2(m,ilevel)
 
 #endif
 
-end subroutine write_screen_2
+end subroutine write_screen
