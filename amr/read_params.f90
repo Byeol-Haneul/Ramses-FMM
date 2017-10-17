@@ -1,17 +1,13 @@
-subroutine read_params(r,g)
+subroutine read_params(r,g,m,p)
   use amr_parameters
   use hydro_parameters
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::ierr
-  real(kind=4)::real_mem,real_mem_tot
-#endif
-
   type(run_t)::r
   type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
 
   !--------------------------------------------------
   ! Local variables
@@ -25,6 +21,9 @@ subroutine read_params(r,g)
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
 
+  integer,dimension(:),allocatable::input_array
+  integer,dimension(:),allocatable::output_array
+
   !--------------------------------------------------
   ! Namelist variables
   !--------------------------------------------------
@@ -36,9 +35,6 @@ subroutine read_params(r,g)
   
   ! MPI domain overloading
   integer::overload=1
-
-  ! MPI variables
-  integer::myid, ncpu
 
   ! Run control
   logical::verbose =.false.   ! Write everything
@@ -252,26 +248,9 @@ subroutine read_params(r,g)
   namelist/physics_params/cooling,units_density,units_time,units_length &
        & ,T2_star,g_star,n_star,isothermal
   
-  ! MPI initialization
-#ifndef WITHOUTMPI
-  call MPI_INIT(ierr)
-  call MPI_COMM_RANK(MPI_COMM_WORLD,myid,ierr)
-  call MPI_COMM_SIZE(MPI_COMM_WORLD,ncpu,ierr)
-  myid=myid+1 ! Careful with this...
-#endif
-#ifdef WITHOUTMPI
-  ncpu=1
-  myid=1
-#endif
-  
-  ! Store in global variable
-  g%ncpu=ncpu
-  g%myid=myid
-  
   !--------------------------------------------------
   ! Advertise RAMSES
   !--------------------------------------------------
-  if(myid==1)then
   write(*,*)'_/_/_/       _/_/     _/    _/    _/_/_/   _/_/_/_/    _/_/_/  '
   write(*,*)'_/    _/    _/  _/    _/_/_/_/   _/    _/  _/         _/    _/ '
   write(*,*)'_/    _/   _/    _/   _/ _/ _/   _/        _/         _/       '
@@ -283,9 +262,9 @@ subroutine read_params(r,g)
   write(*,*)'       written by Romain Teyssier (University of Zurich)       '
   write(*,*)'               (c) CEA 1999-2007, UZH 2008-2014                '
   write(*,*)' '
-  write(*,'(" Working with nproc = ",I4," for ndim = ",I1)')ncpu,ndim
+
   ! Check nvar is not too small
-  write(*,'(" Using solver = hydro with nvar = ",I2)')nvar
+  write(*,'(" Using solver = hydro with nvar = ",I2," and ndim = ",I1)')nvar,ndim
   if(nvar<ndim+2)then
      write(*,*)'You should have: nvar>=ndim+2'
      write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
@@ -304,19 +283,6 @@ subroutine read_params(r,g)
      call clean_stop(g)
   END IF
   CALL getarg(1,infile)
-  endif
-#ifndef WITHOUTMPI
-  call MPI_BCAST(infile,80,MPI_CHARACTER,0,MPI_COMM_WORLD,ierr)
-#endif
-
-#ifndef WITHOUTMPI
-  call getmem(real_mem)
-  call MPI_ALLREDUCE(real_mem,real_mem_tot,1,MPI_REAL,MPI_MAX,MPI_COMM_WORLD,ierr)
-  if(myid==1)then
-     write(*,*)'Diagnostic right at start-up'
-     call writemem(real_mem_tot)
-  endif
-#endif
 
   !-------------------------------------------------
   ! Read the namelist
@@ -324,9 +290,7 @@ subroutine read_params(r,g)
   namelist_file=TRIM(infile)
   INQUIRE(file=infile,exist=nml_ok)
   if(.not. nml_ok)then
-     if(myid==1)then
-        write(*,*)'File '//TRIM(infile)//' does not exist'
-     endif
+     write(*,*)'File '//TRIM(infile)//' does not exist'
      call clean_stop(g)
   end if
 
@@ -347,14 +311,10 @@ subroutine read_params(r,g)
   !-------------------------------------------------
   ! Read optional nrestart command-line argument
   !-------------------------------------------------
-  if (myid==1 .and. narg==2) then
+  if (narg==2) then
     CALL getarg(2,cmdarg)
     read(cmdarg,*) nrestart
   endif
-
-#ifndef WITHOUTMPI
-  call MPI_BCAST(nrestart,1,MPI_INTEGER,0,MPI_COMM_WORLD,ierr)
-#endif
 
   !-------------------------------------------------
   ! Compute time step for outputs
@@ -397,28 +357,27 @@ subroutine read_params(r,g)
   nsuperoct=MIN(nsuperoct,5)
   nml_ok=.true.
   if(levelmin<1)then
-     if(myid==1)write(*,*)'Error in the namelist:'
-     if(myid==1)write(*,*)'levelmin should not be lower than 1 !!!'
+     write(*,*)'Error in the namelist:'
+     write(*,*)'levelmin should not be lower than 1 !!!'
      nml_ok=.false.
   end if
   if(nlevelmax<levelmin)then
-     if(myid==1)write(*,*)'Error in the namelist:'
-     if(myid==1)write(*,*)'levelmax should not be lower than levelmin'
+     write(*,*)'Error in the namelist:'
+     write(*,*)'levelmax should not be lower than levelmin'
      nml_ok=.false.
   end if
   if(ngridmax==0)then
      if(ngridtot==0)then
-        if(myid==1)write(*,*)'Error in the namelist:'
-        if(myid==1)write(*,*)'Allocate some space for refinements !!!'
+        write(*,*)'Error in the namelist:'
+        write(*,*)'Allocate some space for refinements !!!'
         nml_ok=.false.
      else
-        ngridmax=int(ngridtot/int(ncpu,kind=8),kind=4)
+        ngridmax=int(ngridtot/int(g%ncpu,kind=8),kind=4)
      endif
   end if
   if(npartmax==0)then
-     npartmax=int(nparttot/int(ncpu,kind=8),kind=4)
+     npartmax=int(nparttot/int(g%ncpu,kind=8),kind=4)
   endif
-  if(myid>1)verbose=.false.
 
   !----------------------------
   ! Read hydro parameters 
@@ -486,21 +445,17 @@ subroutine read_params(r,g)
   !--------------------------------------------------
 #if NENER>0
   if(nvar<(ndim+2+nener))then
-     if(myid==1)write(*,*)'Error: non-thermal energy need nvar >= ndim+2+nener'
-     if(myid==1)write(*,*)'Modify NENER and recompile'
+     write(*,*)'Error: non-thermal energy need nvar >= ndim+2+nener'
+     write(*,*)'Modify NENER and recompile'
      nml_ok=.false.
   endif
 #endif
   
   if(.not. nml_ok)then
-     if(myid==1)write(*,*)'Too many errors in the namelist'
-     if(myid==1)write(*,*)'Aborting...'
+     write(*,*)'Too many errors in the namelist'
+     write(*,*)'Aborting...'
      call clean_stop(g)
   end if
-
-#ifndef WITHOUTMPI
-  call MPI_BARRIER(MPI_COMM_WORLD,ierr)
-#endif
 
   ! Fill in all run parameters in corresponding structure
 
@@ -640,5 +595,43 @@ subroutine read_params(r,g)
   r%var_region=var_region
 #endif
 
+  call r%print
+
+  allocate(input_array(1:storage_size(r)/32))
+  allocate(output_array(1:1))
+  input_array=transfer(r,input_array)
+  call broadcast_params(r,g,m,p,g%ncpu,storage_size(r)/32,1,input_array,output_array)
+  deallocate(input_array,output_array)
+
 end subroutine read_params
 
+
+recursive subroutine broadcast_params(r,g,m,p,cpu_range,input_size,output_size,input_array,output_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  type(run_t)::r2
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_launch(MDL_BCAST_PARAMS,next_cpu,next_range,input_size,input_array)
+     call broadcast_params(r,g,m,p,next_range,input_size,output_size,input_array,output_array)
+  endif
+
+  r2=transfer(input_array,r)
+
+  call r2%print
+
+end subroutine broadcast_params

@@ -102,11 +102,11 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
          cache_commons.o amr_commons.o poisson_parameters.o poisson_commons.o hydro_commons.o \
-         gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
+	 mdl_commons.o gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
 
 # AMR objects
 AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o update_time.o title.o units.o \
-	 refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o movie.o
+	 refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o movie.o task_manager.o
 
 # Particle-Mesh objects
 PMOBJ = newdt_fine.o init_part.o rho_fine.o move_fine.o rho_ana.o output_part.o
