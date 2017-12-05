@@ -2,92 +2,162 @@
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine rho_fine(r,g,m,p,ilevel)
+subroutine m_rho_fine(r,g,m,p,mdl,ilevel)
   use amr_parameters, only: dp,ndim
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-  real(kind=8),dimension(1:ndim+1)::multipole_in
-  real(kind=8),dimension(1:ndim+1)::multipole_out
-#endif
-  integer::ilevel
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+  type(mdl_t)::mdl
+  integer::ilevel
   !------------------------------------------------------------------
-  ! This routine computes the mass density field to be used as 
-  ! source term in the Poisson solver.
+  ! This master routine computes the mass density field to be used
+  ! as source term in the Poisson solver.
   ! The density field is computed for all levels greater than ilevel.
-  ! On output, particles are sorted according to the level they sit in
-  ! and inside their level, they are sorted in grid Hilbert order.
+  ! On output, particles are sorted according to their grid level of
+  ! refinement, and inside their level, they are sorted according to
+  ! their grid Hilbert order.
   !------------------------------------------------------------------
-  integer::i
-  real(dp)::dx_loc
+  real(kind=8),dimension(1:ndim+1)::multipole_tot
+  integer,dimension(:),allocatable::input_array,output_array
+  integer::i,input_size
 
   if(.not. r%poisson)return
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,111)ilevel
+111 format(' Entering rho_fine for level ',I2)
 
-  ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
-  if(ilevel==r%levelmin)g%multipole=0d0
+  !---------------------------
+  ! Reset multipole to zero
+  !---------------------------
+  if(ilevel==r%levelmin)then
+     multipole_tot=0d0
 
+     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
+     allocate(input_array(1:input_size))
+     input_array=transfer(multipole_tot,input_array)
+     call r_broadcast_multipole(r,g,m,p,mdl,g%ncpu,input_size,0,input_array)
+     deallocate(input_array)
+
+  endif
+  
   !-------------------------------------------------------
   ! Initialize rho to analytical and baryon density field
   !-------------------------------------------------------
+  ! Loop over all finer levels from fine to coarse
   do i=r%nlevelmax,ilevel,-1
-     ! Compute mass multipole
-     if(r%hydro)call multipole_fine(r,g,m,i)
-     ! Perform CIC using pseudo-particle
-     call cic_from_multipole(r,g,m,i)
+
+     ! Compute gas multipole expansion
+     if(r%hydro)then
+
+        ! Set multipoles in all leaf cells
+        if(m%noct_tot(i)>0)then
+           call r_multipole_leaf_cells(r,g,m,p,mdl,g%ncpu,1,0,i)
+        endif
+
+        ! Average down multipoles in all split cells
+        if(i<r%nlevelmax)then
+           if(m%noct_tot(i+1)>0)then
+              call r_multipole_split_cells(r,g,m,p,mdl,g%ncpu,1,0,i)
+           endif
+        endif
+
+     endif
+
+     ! Reset array rho to zero
+     if(m%noct_tot(i)>0)then
+        call r_reset_rho(r,g,m,p,mdl,g%ncpu,1,0,i)
+     endif
+
+     ! Gas mass deposition using pseudo-particles
+     if(r%hydro.AND.m%noct_tot(i)>0)then
+        call r_cic_multipole(r,g,m,p,mdl,g%ncpu,1,0,i)
+     endif
+
   end do
+  ! End loop over finer levels
 
   !-------------------------------------------------------
   ! Compute particle contribution to density field
   !-------------------------------------------------------
   if(r%pic)then
      do i=ilevel,r%nlevelmax
-                               call timer('rho','start')
-        call cic_part(r,g,m,p,i)
-                               call timer('particles','start')
-        call split_part(r,g,m,p,i)
-                               call timer('rho','start')
+        if(m%noct_tot(i)>0)then
+           call r_cic_part(r,g,m,p,mdl,g%ncpu,1,0,i)
+        endif
+        if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
+           call r_split_part(r,g,m,p,mdl,g%ncpu,1,0,i)
+        endif
      end do
   endif
 
-  !--------------------------------------------------------------
-  ! Compute multipole contribution from all cpus and set rho_tot
-  !--------------------------------------------------------------
-#ifndef WITHOUTMPI
+  !---------------------------------------------------------------------
+  ! Collect multipole contribution from all CPU and broadcast rho_tot
+  !---------------------------------------------------------------------
   if(ilevel==r%levelmin)then
-     multipole_in=g%multipole
-     call MPI_ALLREDUCE(multipole_in,multipole_out,ndim+1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     g%multipole=multipole_out
+
+     ! Collect local multipole from all CPU
+     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
+     allocate(output_array(1:input_size))
+     call r_collect_multipole(r,g,m,p,mdl,g%ncpu,1,input_size,ilevel,output_array)
+     multipole_tot=transfer(output_array,multipole_tot)
+     deallocate(output_array)
+
+     ! Broadcast total multipole to all CPU
+     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
+     allocate(input_array(1:input_size))
+     input_array=transfer(multipole_tot,input_array)
+     call r_broadcast_multipole(r,g,m,p,mdl,g%ncpu,(ndim+1)*(storage_size(multipole_tot)/32),0,input_array)     
+     deallocate(input_array)
+
+     if(r%verbose)write(*,*)'rho_average=',g%rho_tot
+  endif  
+  
+end subroutine m_rho_fine
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_multipole_leaf_cells(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_MULTIPOLE_LEAF_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_multipole_leaf_cells(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call multipole_leaf_cells(r,g,m,ilevel)
   endif
-#endif
-  g%rho_tot=g%multipole(1)/r%boxlen**ndim
-  if(r%debug)write(*,*)'rho_average=',g%rho_tot
-!!! rho_tot=0d0 ! For non-periodic BC
-  
-111 format('   Entering rho_fine for level ',I2)
-  
-end subroutine rho_fine
+
+end subroutine r_multipole_leaf_cells
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine multipole_fine(r,g,m,ilevel)
+subroutine multipole_leaf_cells(r,g,m,ilevel)
   use amr_parameters, only: ndim,dp,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -99,14 +169,9 @@ subroutine multipole_fine(r,g,m,ilevel)
   ! routine is not even called.
   !-------------------------------------------------------------------
   integer::igrid,ind,idim,ivar,nstride,ioct,icell
-  integer::parent_cell,get_parent_cell
   real(dp),dimension(1:ndim),save::xx
-  real(kind=8)::dx_loc,vol_loc,mmm,dd,average
-  integer(kind=8),dimension(0:ndim)::hash_key
+  real(kind=8)::dx_loc,vol_loc,mmm,dd
   logical::leaf_cell
-
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
@@ -165,12 +230,66 @@ subroutine multipole_fine(r,g,m,ilevel)
   end do
   ! End loop over grids
 
+end subroutine multipole_leaf_cells
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_multipole_split_cells(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_MULTIPOLE_SPLIT_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_multipole_split_cells(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call multipole_split_cells(r,g,m,ilevel)
+  endif
+
+end subroutine r_multipole_split_cells
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine multipole_split_cells(r,g,m,ilevel)
+  use amr_parameters, only: ndim,dp,twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use cache_commons
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
+  !-------------------------------------------------------------------
+  ! This routine compute the monopole and dipole of the gas mass and
+  ! the analytical profile (if any) within each cell.
+  ! For pure particle runs, this is not necessary and the
+  ! routine is not even called.
+  !-------------------------------------------------------------------
+  integer::igrid,ind,idim,ivar,nstride,ioct,icell
+  integer::parent_cell,get_parent_cell
+  real(kind=8)::average
+  integer(kind=8),dimension(0:ndim)::hash_key
+  logical::leaf_cell
+
   !-------------------------------------------------------
   ! Perform octree restriction from level ilevel+1
   !-------------------------------------------------------
-  if(ilevel==r%nlevelmax)return
-  if(m%noct_tot(ilevel+1)==0)return
-
   call open_cache(r,g,m,operation_multipole,domain_decompos_amr)
 
   ! Loop over finer level grids
@@ -196,20 +315,46 @@ subroutine multipole_fine(r,g,m,ilevel)
 
   call close_cache(r,g,m,m%grid_dict)
 
-111 format('   Entering multipole_fine for level',i2)
+end subroutine multipole_split_cells
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_reset_rho(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
 
-end subroutine multipole_fine
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_RESET_RHO,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_reset_rho(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call reset_rho(r,g,m,ilevel)
+  endif
+
+end subroutine r_reset_rho
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cic_from_multipole(r,g,m,ilevel)
+subroutine reset_rho(r,g,m,ilevel)
   use amr_parameters, only: twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -223,9 +368,6 @@ subroutine cic_from_multipole(r,g,m,ilevel)
   !-------------------------------------------------------------------
   integer::igrid,ind
 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
 #ifdef GRAV
   ! Initialize density field to zero
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -235,16 +377,43 @@ subroutine cic_from_multipole(r,g,m,ilevel)
   end do
 #endif  
 
-  if(r%hydro)call cic_cell(r,g,m,ilevel)
+end subroutine reset_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_cic_multipole(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
 
-111 format('   Entering cic_from_multipole for level',i2)
+  integer::next_range,next_cpu
 
-end subroutine cic_from_multipole
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CIC_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cic_multipole(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call cic_multipole(r,g,m,ilevel)
+  endif
+
+end subroutine r_cic_multipole
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cic_cell(r,g,m,ilevel)
+subroutine cic_multipole(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
@@ -378,7 +547,38 @@ subroutine cic_cell(r,g,m,ilevel)
 
   call close_cache(r,g,m,m%grid_dict)
 
-end subroutine cic_cell
+end subroutine cic_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_cic_part(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CIC_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cic_part(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call cic_part(r,g,m,p,ilevel)
+  endif
+
+end subroutine r_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -406,9 +606,6 @@ subroutine cic_part(r,g,m,p,ilevel)
   integer::icell,parent_cell,get_parent_cell
   real(kind=8)::dx_loc,vol_loc,vol2
   
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
@@ -425,7 +622,6 @@ subroutine cic_part(r,g,m,p,ilevel)
      end do
   endif
 
-                               call timer('particles','start')
   ! Sort particle according to current level Hilbert key
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
      p%sortp(i)=i
@@ -433,7 +629,6 @@ subroutine cic_part(r,g,m,p,ilevel)
   ix=0
   call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
-                               call timer('rho','start')
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
   call open_cache(r,g,m,operation_rho,domain_decompos_amr)
@@ -526,9 +721,38 @@ subroutine cic_part(r,g,m,p,ilevel)
   
   call close_cache(r,g,m,m%grid_dict)
 
-111 format('   Entering cic_part for level',i2)
-
 end subroutine cic_part
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_split_part(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_SPLIT_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_split_part(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call split_part(r,g,m,p,ilevel)
+  endif
+
+end subroutine r_split_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -556,10 +780,6 @@ subroutine split_part(r,g,m,p,ilevel)
   real(dp)::mp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
-
-  if(ilevel.GE.r%nlevelmax)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
@@ -679,8 +899,6 @@ subroutine split_part(r,g,m,p,ilevel)
         p%levelp(jpart)=levelp_tmp
      end do
   end do
-
-111 format('   Entering split_part for level',i2)
 
 end subroutine split_part
 !##############################################################################
@@ -826,4 +1044,82 @@ recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_
   endif
   
 end subroutine sort_hilbert
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+recursive subroutine r_collect_multipole(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8),dimension(1:ndim+1)::multipole,next_multipole
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_COLLECT_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_collect_multipole(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     multipole=transfer(output_array,multipole)
+     next_multipole=transfer(next_output_array,next_multipole)
+     multipole=multipole+next_multipole
+     output_array=transfer(multipole,output_array)
+  else
+     output_array=transfer(g%multipole,output_array)
+  endif
+
+end subroutine r_collect_multipole
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+recursive subroutine r_broadcast_multipole(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_BROADCAST_MULTIPOLE,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_multipole(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     g%multipole=transfer(input_array,g%multipole)
+     g%rho_tot=g%multipole(1)/r%boxlen**ndim
+!!!     g%rho_tot=0d0 ! For non-periodic BC
+  endif
+
+end subroutine r_broadcast_multipole
+!###############################################
+!###############################################
+!###############################################
+!###############################################
 

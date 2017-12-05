@@ -2,18 +2,17 @@
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine newdt_fine(r,g,m,p,ilevel)
+subroutine m_newdt_fine(r,g,m,p,mdl,ilevel)
   use amr_parameters, only: dp,nvector
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+  type(mdl_t)::mdl
   integer::ilevel
   !-----------------------------------------------------------
   ! This routine compute the time step using 3 constraints:
@@ -22,16 +21,25 @@ subroutine newdt_fine(r,g,m,p,ilevel)
   ! 3- 10% maximum variation for aexp 
   ! This routine also compute the particle kinetic energy.
   !-----------------------------------------------------------
-  real(dp)::tff,fourpi,threepi2
-
+  real(dp)::dx,tff,fourpi,threepi2
+  real(kind=8)::mass,ekin,eint,dt,vmax
+  integer,dimension(1:4)::part_array
+  integer,dimension(1:5)::input_array
+  integer,dimension(1:8)::output_array
+  
   if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
+  if(r%verbose)write(*,'("   Entering newdt_fine for level ",I2)')ilevel
 
   ! Save old time step
   g%dtold(ilevel)=g%dtnew(ilevel)
 
+  ! Compute local cell spacing
+  dx=r%boxlen/2**ilevel
+
   ! Maximum time step
-  g%dtnew(ilevel)=r%boxlen/r%smallc
+  g%dtnew(ilevel)=dx/r%smallc
+
+  ! Gravity-based Courant condition
   if(r%poisson.and.r%gravity_type<=0)then
      fourpi=4.0d0*ACOS(-1.0d0)
      if(r%cosmo)fourpi=1.5d0*g%omega_m*g%aexp
@@ -39,80 +47,164 @@ subroutine newdt_fine(r,g,m,p,ilevel)
      tff=sqrt(threepi2/8./fourpi/g%rho_max(ilevel))
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%courant_factor*tff)
   end if
+
+  ! Cosmic-expansion-based Courant condition
   if(r%cosmo)then
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),0.1/g%hexp)
   end if
 
   ! Particle-based Courant condition
-  if(r%pic)call newdt_part(r,g,p,ilevel)
+  if(r%pic)then
+     call r_newdt_part(r,g,m,p,mdl,mdl%ncpu,1,4,ilevel,part_array)
+     ekin=transfer(part_array(1:2),ekin)
+     vmax=transfer(part_array(3:4),vmax)
+     dt=dx/vmax
+     g%ekin_tot=g%ekin_tot+ekin
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt)
+  endif
 
   ! Hydro-based Courant condition
-  if(r%hydro)call courant_fine(r,g,m,ilevel)
+  if(r%hydro)then
+     call r_courant_fine(r,g,m,p,mdl,mdl%ncpu,1,8,ilevel,output_array)
+     mass=transfer(output_array(1:2),mass)
+     ekin=transfer(output_array(3:4),ekin)
+     eint=transfer(output_array(5:6),eint)
+     dt=transfer(output_array(7:8),dt)
+     g%mass_tot=g%mass_tot+mass
+     g%ekin_tot=g%ekin_tot+ekin
+     g%eint_tot=g%eint_tot+eint
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt)
+  endif  
   
-111 format('   Entering newdt_fine for level ',I2)
+  ! Adaptive time step condition
+  if(ilevel>r%levelmin)then
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel-1)/real(r%nsubcycle(ilevel-1)),g%dtnew(ilevel))
+  end if
+  if(r%verbose)write(*,'("   New time step for level ",I2," is ",1PE12.5)')ilevel,g%dtnew(ilevel)
 
-end subroutine newdt_fine
+  ! Broadcast new and old time steps to all CPUs
+  input_array(1)=ilevel
+  input_array(2:3)=transfer(g%dtnew(ilevel),input_array)
+  input_array(4:5)=transfer(g%dtold(ilevel),input_array)
+  call r_broadcast_dt(r,g,m,p,mdl,mdl%ncpu,5,0,input_array)
+  
+end subroutine m_newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine newdt_part(r,g,p,ilevel)
-  use amr_parameters, only: dp,nvector,ndim
+recursive subroutine r_newdt_part(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::ekin,vmax
+  real(kind=8)::next_ekin,next_vmax
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_NEWDT_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_newdt_part(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     ekin=transfer(output_array(1:2),ekin)
+     vmax=transfer(output_array(3:4),vmax)
+     next_ekin=transfer(next_output_array(1:2),next_ekin)
+     next_vmax=transfer(next_output_array(3:4),next_vmax)
+     ekin=ekin+next_ekin
+     vmax=MAX(vmax,next_vmax)
+     output_array(1:2)=transfer(ekin,output_array)
+     output_array(3:4)=transfer(vmax,output_array)
+  else
+     call newdt_part(r,g,m,ilevel,ekin,vmax)
+     output_array(1:2)=transfer(ekin,output_array)
+     output_array(3:4)=transfer(vmax,output_array)
+  endif
+
+end subroutine r_newdt_part
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
+subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
+  use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-#endif
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
   integer::ilevel
-  !
-  real(kind=8) :: dt_loc, ekin_loc, dt_all, ekin_all
-  integer  :: ipart, idim
-  real(dp) :: dx_loc, dtpart, v2max
+  real(kind=8)::ekin,vmax
 
-  dt_all=g%dtnew(ilevel); dt_loc=dt_all
-  ekin_all=0.0; ekin_loc=0.0
+  integer::ipart,idim
 
-  ! Compute cell spacing
-  dx_loc = r%boxlen/2**ilevel
-
-  ! Compute minimum time step due to particle velocities
-  v2max = 0.d0
+  ! Compute maximum particle velocity
+  vmax = 0.0d0
   do idim = 1, ndim
      do ipart = p%headp(ilevel), p%tailp(ilevel)
-        v2max = MAX(v2max, p%vp(ipart, idim)**2)
+        vmax = MAX(vmax, ABS(p%vp(ipart, idim)))
      end do
   end do
   
-  if(v2max > 0.0D0)then
-     dtpart = r%courant_factor * dx_loc / sqrt(v2max)
-     dt_loc = MIN(dt_loc, dtpart)
-  end if
-
   ! Compute kinetic energy
+  ekin = 0.0d0
   do idim = 1, ndim
      do ipart = p%headp(ilevel), p%tailp(ilevel)
-        ekin_loc = ekin_loc + 0.5D0 * p%mp(ipart) * p%vp(ipart, idim)**2
+        ekin = ekin + 0.5D0 * p%mp(ipart) * p%vp(ipart, idim)**2
      end do
   end do
     
-  ! Reduction for time step and kinetic energy
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(ekin_loc,ekin_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
-#ifdef WITHOUTMPI
-  dt_all=dt_loc
-  ekin_all=ekin_loc
-#endif
-  g%ekin_tot=g%ekin_tot+ekin_all
-  g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt_all)
-
 end subroutine newdt_part
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
+recursive subroutine r_broadcast_dt(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hilbert
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel
+  real(kind=8)::dt
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_BROADCAST_DT,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_dt(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     g%dtnew(ilevel)=transfer(input_array(2:3),dt)
+     g%dtold(ilevel)=transfer(input_array(4:5),dt)
+  endif
+
+end subroutine r_broadcast_dt
 !#####################################################################
 !#####################################################################
 !#####################################################################

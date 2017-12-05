@@ -2,63 +2,50 @@
 !#####################################################
 !#####################################################
 !#####################################################
-recursive subroutine amr_step(r,g,m,p,ilevel,icount)
+recursive subroutine m_amr_step(r,g,m,p,mdl,ilevel,icount)
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   use pm_parameters
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  logical,save::first_step=.true.
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+  type(mdl_t)::mdl
   integer::ilevel,icount
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-
+  integer,dimension(1:5)::input_array
+  
   if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,999)icount,ilevel
+  if(r%verbose)write(*,'(" Entering amr_step",i1," for level",i2)')icount,ilevel
 
   !---------------------
   ! Make new refinements
   !---------------------
   if(ilevel==r%levelmin.or.icount>1)then
-                               call timer('refine','start')
-     call refine_fine(r,g,m,ilevel)
-#ifndef WITHOUTMPI
-                               call timer('load balance','start')
-     call load_balance(r,g,m,ilevel)
-#endif
+     call m_refine_fine(r,g,m,p,mdl,ilevel)
   endif
-
+  
   !------------------------------
   ! Balance particles across cpus
-  ! Careful rho must have been called once !
   !------------------------------
 #ifndef WITHOUTMPI
-  if(first_step)then
-     first_step=.false.
-  else
-     if(ilevel==r%levelmin)then
-                               call timer('particles','start')
-        if(r%pic)call balance_part(r,g,m,p,ilevel)
-     endif
+  if(g%ncpu>1.AND.ilevel==r%levelmin)then
+     if(r%pic)call balance_part(r,g,m,p,ilevel)
   endif
 #endif
 
   !------------------------
   ! Output results to files
   !------------------------
-                               call timer('output','start')
   if(ilevel==r%levelmin)then
      if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
-        call dump_all(r,g,m,p)
+        call m_dump_all(r,g,m,p,mdl)
      endif
   endif
   
@@ -68,7 +55,7 @@ recursive subroutine amr_step(r,g,m,p,ilevel,icount)
   if(r%movie) then
      if(r%imov.le.r%imovout)then 
         if(g%aexp>=r%amovout(r%imov).or.g%t>=r%tmovout(r%imov))then
-           call output_frame(r,g,m,p)
+           call m_output_frame(r,g,m,p,mdl)
         endif
      endif
   end if
@@ -78,8 +65,7 @@ recursive subroutine amr_step(r,g,m,p,ilevel,icount)
   !--------------------
   if(r%poisson)then
      if(ilevel==r%levelmin.or.icount>1)then
-                               call timer('rho','start')
-        call rho_fine(r,g,m,p,ilevel)
+        call m_rho_fine(r,g,m,p,mdl,ilevel)
      endif
   endif
 
@@ -88,40 +74,38 @@ recursive subroutine amr_step(r,g,m,p,ilevel,icount)
   !---------------
 #ifdef GRAV
   if(r%poisson)then
-                               call timer('poisson','start')
+
      ! Remove gravity source term with half time step and old force
      if(r%hydro)then
-        call synchro_hydro_fine(r,m,ilevel,-0.5*g%dtnew(ilevel))
+        call m_synchro_hydro_fine(r,g,m,p,mdl,ilevel,-0.5d0*g%dtnew(ilevel))
      endif
 
      ! Save old potential for time-extrapolation at level boundaries
-     call save_phi_old(m,ilevel)
+     call r_save_phi_old(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
 
      ! Compute new gravitational potential
      if(ilevel > r%levelmin)then
         if(ilevel >= r%cg_levelmin) then
            call phi_fine_cg(r,g,m,ilevel,icount)
         else
-           call multigrid(r,g,m,ilevel,icount)
+           call multigrid(r,g,m,p,mdl,ilevel,icount)
         end if
      else
-        call multigrid(r,g,m,r%levelmin,icount)
+        call multigrid(r,g,m,p,mdl,r%levelmin,icount)
      end if
 
      ! Initial old potential
-     if (g%nstep==0)call save_phi_old(m,ilevel)
+     if (g%nstep==0)call r_save_phi_old(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
 
      ! Compute gravitational acceleration
-     call force_fine(r,g,m,ilevel,icount)
+     call m_force_fine(r,g,m,p,mdl,ilevel,icount)
 
      ! Perform second kick for particles
-                               call timer('particles','start')
      if(r%pic)call kick_drift_part(r,g,m,p,ilevel,action_kick_only)
 
      ! Add gravity source term with half time step and new force
      if(r%hydro)then
-                               call timer('poisson','start')
-        call synchro_hydro_fine(r,m,ilevel,+0.5*g%dtnew(ilevel))
+        call m_synchro_hydro_fine(r,g,m,p,mdl,ilevel,+0.5d0*g%dtnew(ilevel))
      end if
 
   end if
@@ -130,94 +114,92 @@ recursive subroutine amr_step(r,g,m,p,ilevel,icount)
   !----------------------
   ! Compute new time step
   !----------------------
-                               call timer('courant','start')
-  call newdt_fine(r,g,m,p,ilevel)
-  if(ilevel>r%levelmin)then
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel-1)/real(r%nsubcycle(ilevel-1)),g%dtnew(ilevel))
-  end if
+  call m_newdt_fine(r,g,m,p,mdl,ilevel)
   
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
-                               call timer('hydro - set unew','start')
-  if(r%hydro)call set_unew(r,g,m,ilevel)
+  if(r%hydro)call r_set_unew(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
 
   !---------------------------
   ! Recursive call to amr_step
   !---------------------------
-                               call timer('recursive call','start')
   if(ilevel<r%nlevelmax)then
      if(m%noct_tot(ilevel+1)>0)then
         if(r%nsubcycle(ilevel)==2)then
-           call amr_step(r,g,m,p,ilevel+1,1)
-           call amr_step(r,g,m,p,ilevel+1,2)
+           call m_amr_step(r,g,m,p,mdl,ilevel+1,1)
+           call m_amr_step(r,g,m,p,mdl,ilevel+1,2)
         else
-           call amr_step(r,g,m,p,ilevel+1,1)
+           call m_amr_step(r,g,m,p,mdl,ilevel+1,1)
         endif
      else 
-        ! Otherwise, update time and finer level time-step
+        ! Otherwise, modify finer level time-step
         g%dtold(ilevel+1)=g%dtnew(ilevel)/dble(r%nsubcycle(ilevel))
         g%dtnew(ilevel+1)=g%dtnew(ilevel)/dble(r%nsubcycle(ilevel))
-        call update_time(r,g,m,p,ilevel)
+
+        ! Broadcast modified time step to all CPUs
+        input_array(1)=ilevel+1
+        input_array(2:3)=transfer(g%dtnew(ilevel+1),input_array)
+        input_array(4:5)=transfer(g%dtold(ilevel+1),input_array)
+        call r_broadcast_dt(r,g,m,p,mdl,mdl%ncpu,5,0,input_array)
+
+        ! Update time variable
+        call m_update_time(r,g,m,p,mdl,ilevel)
      end if
   else
-     call update_time(r,g,m,p,ilevel)
+     call m_update_time(r,g,m,p,mdl,ilevel)
   end if
 
   !-----------
   ! Hydro step
   !-----------
   if(r%hydro)then
+
      ! Hyperbolic solver
-                               call timer('hydro - godunov','start')
-     call godunov_fine(r,g,m,ilevel)
+     if(.not.r%static)call r_godunov_fine(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+
      ! Add gravity source terms to unew with half time step
-                               call timer('poisson - synchro','start')
-     if(r%poisson)call add_gravity_source_terms(r,g,m,ilevel)
+     if(r%poisson)call r_gravity_hydro_fine(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
 
      ! Set uold equal to unew
-                               call timer('hydro - set uold','start')
-     call set_uold(r,g,m,ilevel)
+     call r_set_uold(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+
      ! Add gravity source terms to uold with half time step
-     ! to complete the time step (will be removed later)
-                               call timer('poisson - synchro','start')
-     if(r%poisson)call synchro_hydro_fine(r,m,ilevel,+0.5*g%dtnew(ilevel))
+     ! to complete the time step with old force (will be removed later)
+     if(r%poisson)call m_synchro_hydro_fine(r,g,m,p,mdl,ilevel,+0.5d0*g%dtnew(ilevel))
+
      ! Restriction operator
-                               call timer('hydro - upload','start')
-     call upload_fine(r,g,m,ilevel)
+     call m_upload_fine(r,g,m,p,mdl,ilevel)
   endif
 
   !----------------------------
   ! Compute cooling/heating
   !----------------------------
-                               call timer('cooling','start')
-  if(r%cooling)call cooling_fine(r,g,m,ilevel)
+  if(r%cooling)call r_cooling_fine(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
 
   !-------------------------------------------
   ! Perform first kick and drift for particles
   !-------------------------------------------
-                               call timer('particles','start')
   if(r%pic)call kick_drift_part(r,g,m,p,ilevel,action_kick_drift)
 
   !-----------------------
   ! Compute refinement map
   !-----------------------
-                               call timer('flag','start')
-  if(.not.r%static) call flag_fine(r,g,m,ilevel,icount)
+  if(.not.r%static)call m_flag_fine(r,g,m,p,mdl,ilevel,icount)
 
   !-------------------------------
   ! Update coarser level time-step
   !-------------------------------
-                               call timer('recursive call','start')
   if(ilevel>r%levelmin)then
+     ! Impose adaptive time step constraints
      if(r%nsubcycle(ilevel-1)==1)g%dtnew(ilevel-1)=g%dtnew(ilevel)
      if(icount==2)g%dtnew(ilevel-1)=g%dtold(ilevel)+g%dtnew(ilevel)
+
+     ! Broadcast updated time step to all CPUs
+     input_array(1)=ilevel-1
+     input_array(2:3)=transfer(g%dtnew(ilevel-1),input_array)
+     input_array(4:5)=transfer(g%dtold(ilevel-1),input_array)
+     call r_broadcast_dt(r,g,m,p,mdl,mdl%ncpu,5,0,input_array)
   end if
 
-999 format(' Entering amr_step',i1,' for level',i2)
-
-end subroutine amr_step
-
-
-
-
+end subroutine m_amr_step

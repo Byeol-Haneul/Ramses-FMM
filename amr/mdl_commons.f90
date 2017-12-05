@@ -1,40 +1,96 @@
 module mdl_parameters
 
-  ! MDL integer arrays max sizes
-  integer::MDL_INPUT_MAXSIZE=1
-  integer::MDL_OUTPUT_MAXSIZE=1
-
-  ! Parameter for calback functions indices
-  integer,parameter::MDL_BCAST_PARAMS=1
-
+  ! Parameter for call-back functions indices
+  enum,bind(C)
+     enumerator::MDL_CLEAN_STOP
+     enumerator::MDL_BCAST_PARAMS
+     enumerator::MDL_BCAST_GLOBAL
+     enumerator::MDL_INIT_AMR
+     enumerator::MDL_INIT_TIME
+     enumerator::MDL_INIT_HYDRO
+     enumerator::MDL_INIT_PART
+     enumerator::MDL_INPUT_PART_GRAFIC
+     enumerator::MDL_INPUT_PART_ASCII
+     enumerator::MDL_INPUT_PART_RESTART
+     enumerator::MDL_INIT_FLAG
+     enumerator::MDL_USER_FLAG
+     enumerator::MDL_ENSURE_REF_RULES
+     enumerator::MDL_COLLECT_NOCT
+     enumerator::MDL_NOCT_TOT
+     enumerator::MDL_NOCT_MIN
+     enumerator::MDL_NOCT_MAX
+     enumerator::MDL_GATHER_NOCT_MAX
+     enumerator::MDL_INIT_REFINE_BASEGRID
+     enumerator::MDL_INIT_REFINE_RESTART
+     enumerator::MDL_COLLECT_BOUND_KEY
+     enumerator::MDL_BROADCAST_BOUND_KEY
+     enumerator::MDL_LOAD_BALANCE
+     enumerator::MDL_REFINE_FINE
+     enumerator::MDL_SMOOTH_FINE
+     enumerator::MDL_INPUT_HYDRO_CONDINIT
+     enumerator::MDL_INPUT_HYDRO_GRAFIC
+     enumerator::MDL_UPLOAD_FINE
+     enumerator::MDL_MULTIPOLE_LEAF_CELLS
+     enumerator::MDL_MULTIPOLE_SPLIT_CELLS
+     enumerator::MDL_RESET_RHO
+     enumerator::MDL_CIC_MULTIPOLE
+     enumerator::MDL_CIC_PART
+     enumerator::MDL_SPLIT_PART
+     enumerator::MDL_COLLECT_MULTIPOLE
+     enumerator::MDL_BROADCAST_MULTIPOLE
+     enumerator::MDL_OUTPUT_AMR
+     enumerator::MDL_OUTPUT_HYDRO
+     enumerator::MDL_OUTPUT_POISSON
+     enumerator::MDL_OUTPUT_PART
+     enumerator::MDL_SYNCHRO_HYDRO_FINE
+     enumerator::MDL_SAVE_PHI_OLD
+     enumerator::MDL_FORCE_ANALYTIC
+     enumerator::MDL_GRADIENT_PHI
+     enumerator::MDL_COMPUTE_EPOT
+     enumerator::MDL_COMPUTE_RHOMAX
+     enumerator::MDL_BROADCAST_AEXP
+     enumerator::MDL_COURANT_FINE
+     enumerator::MDL_GODUNOV_FINE
+     enumerator::MDL_SET_UNEW
+     enumerator::MDL_SET_UOLD
+     enumerator::MDL_GRAVITY_HYDRO_FINE
+     enumerator::MDL_COOLING_FINE
+     enumerator::MDL_NEWDT_PART
+     enumerator::MDL_BROADCAST_DT
+     enumerator::MDL_MAKE_INITIAL_PHI
+     enumerator::MDL_INIT_MG
+     enumerator::MDL_BUILD_MG
+     enumerator::MDL_CLEANUP_MG
+     enumerator::MDL_MAKE_MASK
+     enumerator::MDL_MAKE_BC_RHS
+     enumerator::MDL_RESTRICT_MASK
+     enumerator::MDL_CMP_RESIDUAL_MG
+     enumerator::MDL_GAUSS_SEIDEL_MG
+     enumerator::MDL_RESET_CORRECTION
+     enumerator::MDL_RESTRICT_RESIDUAL
+     enumerator::MDL_INTERPOLATE_AND_CORRECT
+     enumerator::MDL_SET_SCAN_FLAG
+     enumerator::MDL_CMP_RESIDUAL_NORM2
+     enumerator::MDL_OUTPUT_FRAME
+  endenum
+  
+  ! Maximum number of cpus
+  integer,parameter::MDL_MAX_CPU=262144
+  
 end module mdl_parameters
 
 module mdl_commons
   
   use mdl_parameters
 
-  interface
-     subroutine ramses_function(r,g,m,p,cpu_range,input_size,output_size,input,output)
-       use amr_commons, only: run_t,global_t,mesh_t
-       use pm_commons, only: part_t
-       use mdl_parameters
-       type(run_t)::r
-       type(global_t)::g
-       type(mesh_t)::m
-       type(part_t)::p
-       integer::cpu_range,input_size,output_size
-       integer,dimension(1:input_size),optional::input
-       integer,dimension(1:output_size),optional::output
-     end subroutine ramses_function
-  end interface
+  type mdl_t
+     
+     integer::myid
+     integer::ncpu
 
-  procedure(ramses_function)::broadcast_params
-
-  type call_back
-     integer::id
-     procedure(ramses_function),pointer,nopass::proc
-  end type call_back
-
-  type(call_back),dimension(1:100)::f
+     integer::MDL_INPUT_MAXSIZE=1
+     integer,dimension(:),allocatable::mpi_input_buffer
+     
+  end type mdl_t
 
 end module mdl_commons

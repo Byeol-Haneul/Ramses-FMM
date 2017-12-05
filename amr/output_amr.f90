@@ -2,103 +2,120 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine dump_all(r,g,m,p)
-  use amr_parameters, only: ndim
+subroutine m_dump_all(r,g,m,p,mdl)
+  use amr_parameters, only: ndim,flen
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+  type(mdl_t)::mdl
 
   ! Local variables
-  character(LEN=5)::nchar
-  character(LEN=80)::filename,filedir,filecmd
   integer::i
 #ifdef NOSYSTEM
   integer::ierr
 #endif
+  character(LEN=5)::nchar
+  character(LEN=flen)::filename,filedir,filecmd
+  integer,dimension(1:flen/4)::input_array
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
   if(r%verbose)write(*,*)'Entering dump_all'
 
+  ! For 1D runs, output data to screen
   do i=r%levelmin,r%nlevelmax
      call write_screen(m,i)
   end do
 
+  ! Increment output counters
   call title(g%ifout,nchar)
   g%ifout=g%ifout+1
   if(g%t>=r%tout(g%iout).or.g%aexp>=r%aout(g%iout))g%iout=g%iout+1
   g%output_done=.true.
 
+  ! For 2D and 3D runs, output data to files
   if(ndim>1)then
-     filedir='output_threadsafe_'//TRIM(nchar)//'/'
+     filedir='output_'//TRIM(nchar)//'/'
      filecmd='mkdir -p '//TRIM(filedir)
 #ifdef NOSYSTEM
      call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',ierr)
 #else
      call system(filecmd)
 #endif
-#ifndef WITHOUTMPI
-     call MPI_BARRIER(MPI_COMM_WORLD,info)
-#endif
+
+     !-----------------------
      ! Only master process
-     if(g%myid==1)then
-        if(r%pic)then
-           filename=TRIM(filedir)//'part_header.txt'
-           call output_header(r,g,p,filename)
-        endif
-        if(r%hydro)then
-           filename=TRIM(filedir)//'hydro_file_descriptor.txt'
-           call file_descriptor_hydro(r,filename)
-        end if
-        filename=TRIM(filedir)//'info.txt'
-        call output_info(r,g,filename)
-        filename=TRIM(filedir)//'makefile.txt'
-        call output_makefile(filename)
-        filename=TRIM(filedir)//'patches.txt'
-        call output_patch(filename)
-        filename=TRIM(filedir)//'namelist.txt'
-        call output_namelist(filename)
-        filename=TRIM(filedir)//'compilation.txt'
-        call output_compil(filename)
-        filename=TRIM(filedir)//'params.out'
-        call output_params(r,g,m,filename)
+     !-----------------------
+
+     if(r%pic)then
+        filename=TRIM(filedir)//'part_header.txt'
+        call output_header(r,g,p,filename)
      endif
-     ! For each process
+     if(r%hydro)then
+        filename=TRIM(filedir)//'hydro_file_descriptor.txt'
+        call file_descriptor_hydro(r,filename)
+     end if
+     filename=TRIM(filedir)//'info.txt'
+     call output_info(r,g,filename)
+     filename=TRIM(filedir)//'makefile.txt'
+     call output_makefile(filename)
+     filename=TRIM(filedir)//'patches.txt'
+     call output_patch(filename)
+     filename=TRIM(filedir)//'namelist.txt'
+     call output_namelist(filename)
+     filename=TRIM(filedir)//'compilation.txt'
+     call output_compil(filename)
+     filename=TRIM(filedir)//'params.out'
+     call output_params(r,g,m,filename)
+
+     !-----------------------
+     ! All slave processes
+     !-----------------------
+
+     ! Output AMR data
      filename=TRIM(filedir)//'amr.out'
-     call output_amr(r,g,m,filename)
+     input_array=transfer(filename,input_array)
+     call r_output_amr(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
+     
+     ! Output HYDRO data
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.out'
-        call output_hydro(r,g,m,filename)
+        input_array=transfer(filename,input_array)
+        call r_output_hydro(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
      end if
+
+     ! Output GRAV data
      if(r%poisson)then
         filename=TRIM(filedir)//'grav.out'
-        call output_poisson(r,g,m,filename)
+        input_array=transfer(filename,input_array)
+        call r_output_poisson(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
      end if
+
+     ! Output PART data
      if(r%pic)then
         filename=TRIM(filedir)//'part.out'
-        call output_part(r,g,p,filename)
+        input_array=transfer(filename,input_array)
+        call r_output_part(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
      end if
   end if
 
-end subroutine dump_all
+end subroutine m_dump_all
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine output_namelist(filename)
+  use amr_parameters, only: flen
   use amr_commons
   use pm_commons
   use hydro_commons
   implicit none
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
   ! Copy namelist file to output directory
   character::nml_char
   integer::ierr
@@ -119,11 +136,12 @@ end subroutine output_namelist
 !#########################################################################
 !#########################################################################
 subroutine output_compil(filename)
+  use amr_parameters, only: flen
   use amr_commons
   use pm_commons
   use hydro_commons
   implicit none
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
   ! Copy compilation details to output directory
   OPEN(UNIT=11, FILE=filename, FORM='formatted')
   write(11,'(" compile date = ",A)')TRIM(builddate)
@@ -138,17 +156,17 @@ end subroutine output_compil
 !#########################################################################
 !#########################################################################
 subroutine output_params(r,g,m,filename)
-  use amr_parameters, only: ndim,nhilbert
+  use amr_parameters, only: ndim,nhilbert,flen
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
 
   ! Local variables
   integer::ilun,ilevel
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering output_params'
 
@@ -191,12 +209,12 @@ end subroutine output_params
 !#########################################################################
 !#########################################################################
 subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
-  use amr_parameters, only: ndim,nhilbert,dp
+  use amr_parameters, only: ndim,nhilbert,dp,flen
   use amr_commons, only: run_t,global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
   integer::ncpu_file,levelmin_file,nlevelmax_file,i
   !-----------------------------------
   ! Read run parameters from file.
@@ -207,7 +225,7 @@ subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   integer::ndim_file,noutput_file
   integer::noutput_min,nlevelmax_min
   real(dp)::mass_sph_file
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering input_params'
 
@@ -267,26 +285,59 @@ end subroutine input_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
+recursive subroutine r_output_amr(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: flen
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  
+  integer::next_range,next_cpu
+  character(LEN=flen)::filename
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_OUTPUT_AMR,next_cpu,next_range,input_size,output_size,input_array)
+     call r_output_amr(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     filename=transfer(input_array,filename)
+     call output_amr(r,g,m,filename)
+  endif
+
+end subroutine r_output_amr
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 subroutine output_amr(r,g,m,filename)
-  use amr_parameters, only: ndim,sp,dp
+  use amr_parameters, only: ndim,sp,dp,flen
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
   !-----------------------------------
   ! Output amr grid in file
   !-----------------------------------  
   integer::ilun,ilevel,igrid
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
   character(LEN=5)::nchar
-  if(r%verbose)write(*,*)'Entering output_amr'
+
   ilun=g%myid+10
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
-  open(unit=ilun,file=fileloc,access="stream"&
-       & ,action="write",form='unformatted')
+  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
   write(ilun)r%levelmin
   write(ilun)r%nlevelmax
@@ -306,16 +357,16 @@ end subroutine output_amr
 !#########################################################################
 !#########################################################################
 subroutine output_info(r,g,filename)
-  use amr_parameters, only: ndim,sp,dp
+  use amr_parameters, only: ndim,sp,dp,flen
   use amr_commons, only: run_t,global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
 
   integer::ilun
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering output_info'
 
@@ -359,17 +410,18 @@ end subroutine output_info
 !#########################################################################
 !#########################################################################
 subroutine output_header(r,g,p,filename)
+  use amr_parameters, only: flen
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
 
   ! Local variables
   integer::ilun
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering output_header'
   
@@ -400,17 +452,17 @@ end subroutine output_header
 !#########################################################################
 !#########################################################################
 subroutine input_header(r,g,filename,npart_tot_file,ncpu_file)
-  use amr_parameters, only: i8b
+  use amr_parameters, only: i8b,flen
   use amr_commons, only: run_t,global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
   integer(i8b)::npart_tot_file
   integer::ncpu_file
 
   integer::ilun
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering input_header'
   
@@ -432,6 +484,7 @@ end subroutine input_header
 !#########################################################################
 #ifdef GADGET
 subroutine savegadget(filename)
+  use amr_parameters, only: flen
   use amr_commons
   use hydro_commons
   use pm_commons
@@ -440,7 +493,7 @@ subroutine savegadget(filename)
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
   TYPE (gadgetheadertype) :: header
   real,allocatable,dimension(:,:)::pos, vel
   integer(i8b),allocatable,dimension(:)::ids

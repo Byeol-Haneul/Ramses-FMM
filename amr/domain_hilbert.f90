@@ -12,7 +12,7 @@ module domain_m
      integer(kind=8), dimension(:,:), allocatable :: b            ! bound key
      integer,         dimension(:),   allocatable :: r2d          ! rank to domain
      integer,         dimension(:),   allocatable :: d2r          ! domain to rank
-  contains
+   contains
      procedure :: copy     => copy_domain
      procedure :: create   => create_domain
      procedure :: destroy  => destroy_domain
@@ -20,8 +20,8 @@ module domain_m
      procedure :: get_rank => get_rank
      procedure, nopass :: pos2key  => hilbert_key_one
      !procedure, nopass :: key2pos  => reverse_hilbert_key_one
-  end type
-
+  end type domain_t
+  
 contains
  
   !================================================================

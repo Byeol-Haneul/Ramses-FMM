@@ -2,7 +2,37 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_time(r,g)
+recursive subroutine r_init_time(r,g,m,p,mdl,cpu_range,input_size,output_size)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_INIT_TIME,next_cpu,next_range,input_size,output_size)
+     call r_init_time(r,g,m,p,mdl,next_range,input_size,output_size)
+  else
+     call init_time(r,g)
+  endif
+
+end subroutine r_init_time
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+  subroutine init_time(r,g)
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t
   implicit none
@@ -11,8 +41,6 @@ subroutine init_time(r,g)
 
   ! Local variables
   integer::i
-
-  if(r%verbose)write(*,*)'Entering init_time'
 
   if(r%nrestart==0)then
      if(r%cosmo)then
@@ -91,7 +119,7 @@ subroutine init_file(r,g)
               write(*,*)TRIM(r%initfile(ilevel))
               write(*,*)'File '//TRIM(filename)//' does not exist'
            end if
-           call clean_stop(g)
+           call mdl_abort
         end if
         open(10,file=filename,form='unformatted')
         if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -119,7 +147,7 @@ subroutine init_file(r,g)
      write(*,*)'Expected n1=',2**r%levelmin &
           &           ,' n2=',2**r%levelmin &
           &           ,' n3=',2**r%levelmin
-     call clean_stop(g)
+     call mdl_abort
   end if
 
   ! Write initial conditions parameters
@@ -168,7 +196,7 @@ subroutine init_cosmo(r,g)
 
   if(r%initfile(r%levelmin)==' ')then
      write(*,*)'You need to specifiy at least one level of initial condition'
-     call clean_stop(g)
+     call mdl_abort
   end if
 
   SELECT CASE (r%filetype)
@@ -190,7 +218,7 @@ subroutine init_cosmo(r,g)
               if(g%myid==1)then
                  write(*,*)'File '//TRIM(filename)//' does not exist'
               end if
-              call clean_stop(g)
+              call mdl_abort
            end if
            open(10,file=filename,form='unformatted')
            if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -234,7 +262,7 @@ subroutine init_cosmo(r,g)
            write(*,*)'Expected n1=',2**r%levelmin &
                 &           ,' n2=',2**r%levelmin &
                 &           ,' n3=',2**r%levelmin
-           call clean_stop(g)
+           call mdl_abort
         endif
      end if
      
@@ -246,18 +274,18 @@ subroutine init_cosmo(r,g)
      ! Reading gadget file header only
      if (r%verbose) write(*,*)'Reading in gadget format from '//TRIM(r%initfile(r%levelmin))
      call gadgetreadheader(TRIM(r%initfile(r%levelmin)), 0, gadgetheader, ok)
-     if(.not.ok) call clean_stop(g)
+     if(.not.ok) call mdl_abort
      do i=1,6
         if (i .ne. 2) then
            if (gadgetheader%nparttotal(i) .ne. 0) then
               write(*,*) 'Non DM particles present in bin ', i
-              call clean_stop(g)
+              call mdl_abort
            endif
         endif
      enddo
      if (gadgetheader%mass(2) == 0) then
         write(*,*) 'Particles have different masses, not supported'
-        call clean_stop(g)
+        call mdl_abort
      endif
      g%omega_m = gadgetheader%omega0
      g%omega_l = gadgetheader%omegalambda
@@ -277,7 +305,7 @@ subroutine init_cosmo(r,g)
 
   CASE DEFAULT
      write(*,*) 'Unsupported input format '//r%filetype
-     call clean_stop(g)
+     call mdl_abort
   END SELECT
 
   ! Write cosmological parameters
@@ -367,7 +395,7 @@ subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
      write(*,*)'O_mat_0,O_vac_0,O_k_0=',O_mat_0,O_vac_0,O_k_0
      write(*,*)'The sum must be equal to 1.0, but '
      write(*,*)'O_mat_0+O_vac_0+O_k_0=',O_mat_0+O_vac_0+O_k_0
-     stop
+     call mdl_abort
   end if
 
   axp_tau = 1.0D0
@@ -482,12 +510,12 @@ function d1a(a,omega_m,omega_l)
   eps=1.0d-6
   if(a .le. 0.0d0)then
      write(*,*)'a=',a
-     stop
+     call mdl_abort
   end if
   y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
   if(y .lt. 0.0D0)then
      write(*,*)'y=',y
-     stop
+     call mdl_abort
   end if
   y12=y**0.5d0
   d1a=y12/a*rombint(eps,a,eps,omega_m,omega_l)

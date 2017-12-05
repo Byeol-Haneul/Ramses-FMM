@@ -135,7 +135,7 @@ subroutine cmpdt(r,uu,gg,dx,dt)
 
   ! Debug
   if(r%debug)then
-     if(uu(ndim+2).le.0.or.uu(1).le.r%smallr)then
+     if(uu(ndim+2).le.0.0D0.or.uu(1).le.r%smallr)then
         write(*,*)'stop in cmpdt'
         write(*,*)'dx   =',dx
         write(*,*)'rho  =',uu(1)

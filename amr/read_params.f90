@@ -1,18 +1,20 @@
-subroutine read_params(r,g,m,p)
+subroutine m_read_params(r,g,m,p,mdl)
   use amr_parameters
   use hydro_parameters
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+  type(mdl_t)::mdl
 
   !--------------------------------------------------
   ! Local variables
   !--------------------------------------------------
-  integer::i,narg,iargc,levelmax
+  integer::i,narg,levelmax
   character(LEN=80)::infile
   character(LEN=80)::cmdarg
   integer(kind=8)::ngridtot=0
@@ -20,9 +22,6 @@ subroutine read_params(r,g,m,p)
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
-
-  integer,dimension(:),allocatable::input_array
-  integer,dimension(:),allocatable::output_array
 
   !--------------------------------------------------
   ! Namelist variables
@@ -268,19 +267,19 @@ subroutine read_params(r,g,m,p)
   if(nvar<ndim+2)then
      write(*,*)'You should have: nvar>=ndim+2'
      write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
-     call clean_stop(g)
+     call mdl_abort
   endif
 
   ! Write information about git version
   call write_gitinfo
 
   ! Read namelist filename from command line argument
-  narg = iargc()
+  narg = command_argument_count()
   IF(narg .LT. 1)THEN
      write(*,*)'You should type: ramses3d input.nml [nrestart]'
      write(*,*)'File input.nml should contain a parameter namelist'
      write(*,*)'nrestart is optional'
-     call clean_stop(g)
+     call mdl_abort
   END IF
   CALL getarg(1,infile)
 
@@ -291,7 +290,7 @@ subroutine read_params(r,g,m,p)
   INQUIRE(file=infile,exist=nml_ok)
   if(.not. nml_ok)then
      write(*,*)'File '//TRIM(infile)//' does not exist'
-     call clean_stop(g)
+     call mdl_abort
   end if
 
   open(1,file=infile)
@@ -386,7 +385,7 @@ subroutine read_params(r,g,m,p)
   read(1,NML=init_params,END=101)
   goto 102
 101 write(*,*)' You need to set up namelist &INIT_PARAMS in parameter file'
-  call clean_stop(g)
+  call mdl_abort
 102 rewind(1)
   if(nlevelmax>levelmin)read(1,NML=refine_params)
   rewind(1)
@@ -401,11 +400,11 @@ subroutine read_params(r,g,m,p)
   !-----------------
   if(nlevelmax>MAXLEVEL)then
      write(*,*) 'Error: nlevelmax>MAXLEVEL'
-     call clean_stop(g)
+     call mdl_abort
   end if
   if(nregion>MAXREGION)then
      write(*,*) 'Error: nregion>MAXREGION'
-     call clean_stop(g)
+     call mdl_abort
   end if
   
   !-----------------------------------
@@ -454,7 +453,7 @@ subroutine read_params(r,g,m,p)
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'
      write(*,*)'Aborting...'
-     call clean_stop(g)
+     call mdl_abort
   end if
 
   ! Fill in all run parameters in corresponding structure
@@ -571,6 +570,7 @@ subroutine read_params(r,g,m,p)
   r%err_grad_var=err_grad_var
 #endif
 
+  if(nrestart>0)filetype='restart'
   r%filetype=filetype
   r%initfile=initfile
   r%multiple=multiple
@@ -595,43 +595,141 @@ subroutine read_params(r,g,m,p)
   r%var_region=var_region
 #endif
 
-  call r%print
-
-  allocate(input_array(1:storage_size(r)/32))
-  allocate(output_array(1:1))
-  input_array=transfer(r,input_array)
-  call broadcast_params(r,g,m,p,g%ncpu,storage_size(r)/32,1,input_array,output_array)
-  deallocate(input_array,output_array)
-
-end subroutine read_params
-
-
-recursive subroutine broadcast_params(r,g,m,p,cpu_range,input_size,output_size,input_array,output_array)
+  ! Broadcast parameters to all CPUs.
+  call m_broadcast_params(r,g,m,p,mdl)
+  
+end subroutine m_read_params
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine m_broadcast_params(r,g,m,p,mdl)
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  !--------------------------------------------------------------------
+  ! This routine is the master procedure to broadcast the run
+  ! parameters to all the CPUs.
+  !--------------------------------------------------------------------
+  integer,dimension(:),allocatable::input_array
+  integer,dimension(:),allocatable::output_array
+
+  ! Broadcast parameters to all CPUs.
+  allocate(input_array(1:storage_size(r)/32))
+  input_array=transfer(r,input_array)
+  allocate(output_array(1:1))
+  output_array=0
+  write(*,*)"BROADCASTING parameters"
+  call r_broadcast_params(r,g,m,p,mdl,g%ncpu,storage_size(r)/32,1,input_array,output_array)
+  write(*,*)"READ_PARAMS completed with output ",output_array(1)
+  deallocate(input_array,output_array)
+
+end subroutine m_broadcast_params
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+recursive subroutine r_broadcast_params(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   use mdl_parameters
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+  type(mdl_t)::mdl
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
   integer::next_range,next_cpu
-  type(run_t)::r2
+  integer,dimension(1:output_size)::next_output
 
   next_range=cpu_range/2
   next_cpu=g%myid+next_range
 
   if(next_range>0)then
-     call mdl_launch(MDL_BCAST_PARAMS,next_cpu,next_range,input_size,input_array)
-     call broadcast_params(r,g,m,p,next_range,input_size,output_size,input_array,output_array)
+     call mdl_send_request(mdl,MDL_BCAST_PARAMS,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_params(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output)
+     output_array(1)=output_array(1)+next_output(1)
+  else
+     r=transfer(input_array,r)
+     output_array(1)=1
   endif
 
-  r2=transfer(input_array,r)
+end subroutine r_broadcast_params
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine m_broadcast_global(r,g,m,p,mdl)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  !--------------------------------------------------------------------
+  ! This routine is the master procedure to broadcast the run
+  ! parameters to all the CPUs.
+  !--------------------------------------------------------------------
+  integer,dimension(:),allocatable::input_array
 
-  call r2%print
+  ! Broadcast parameters to all CPUs.
+  allocate(input_array(1:storage_size(g)/32))
+  input_array=transfer(g,input_array)
+  call r_broadcast_global(r,g,m,p,mdl,g%ncpu,storage_size(g)/32,0,input_array)
+  deallocate(input_array)
 
-end subroutine broadcast_params
+end subroutine m_broadcast_global
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+recursive subroutine r_broadcast_global(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_BCAST_GLOBAL,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_global(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     g=transfer(input_array,g)
+  endif
+
+end subroutine r_broadcast_global
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################

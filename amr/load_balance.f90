@@ -2,8 +2,186 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-#ifndef WITHOUTMPI
-subroutine load_balance(r,g,m,ilevel)
+subroutine m_load_balance(r,g,m,p,mdl,ilevel)
+  use amr_parameters, only: nhilbert
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use hilbert
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::ilevel
+  !--------------------------------------------------------------------
+  ! This routine is the master procedure to load balance the AMR grid
+  ! for all levels strictly larger than ilevel.
+  !--------------------------------------------------------------------
+  integer,dimension(1:g%ncpu)::noct
+  integer,allocatable,dimension(:)::input_array
+  integer,allocatable,dimension(:)::output_array
+  integer(kind=8),dimension(1:nhilbert)::zero_key=0
+  integer(kind=8),dimension(1:nhilbert,0:g%ncpu)::bound_key
+  integer::ilev,icpu,input_size,output_size
+  
+  if(g%ncpu==1)return
+  if(ilevel==r%nlevelmax)return
+
+  if(r%verbose)write(*,111)ilevel
+111 format(' Load balancing for all levels greater than ',I2)
+
+  ! Compute the new domain decomposition
+  do ilev=ilevel+1,r%nlevelmax
+
+     if(m%noct_tot(ilev)>0)then
+        
+        ! Collect number of oct in each cpu for current level
+        call r_collect_noct(r,g,m,p,mdl,g%ncpu,1,g%ncpu,ilev,noct)
+
+        ! Compute input array
+        input_size=g%ncpu+1
+        allocate(input_array(1:input_size))
+        input_array(1)=ilev
+        input_array(2:input_size)=noct(1:g%ncpu)
+
+        ! Allocate output array
+        output_size=2*nhilbert*(g%ncpu+1)
+        allocate(output_array(1:output_size))
+        
+        ! Compute and collect new Hilbert key boundaries for the new domain decomposition
+        call r_collect_bound_key(r,g,m,p,mdl,g%ncpu,g%ncpu+1,output_size,input_array,output_array)
+        bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
+        deallocate(input_array,output_array)
+
+        ! Finalize new domain decomposition
+        bound_key(1:nhilbert,0)=zero_key
+        do icpu=1,g%ncpu
+           if(gt_keys(bound_key(1:nhilbert,icpu-1),bound_key(1:nhilbert,icpu)))then
+              bound_key(1:nhilbert,icpu)=bound_key(1:nhilbert,icpu-1)
+           endif
+        end do
+        bound_key(1:nhilbert,g%ncpu)=m%hkey_max(1:nhilbert,ilev)
+
+        ! Scatter new domain decomposition to all processors
+        input_size=2*nhilbert*(g%ncpu+1)+1
+        allocate(input_array(1:input_size))
+        input_array(1)=ilev
+        input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
+        call r_broadcast_bound_key(r,g,m,p,mdl,g%ncpu,input_size,0,input_array)
+        deallocate(input_array)
+
+     endif
+
+  end do
+  ! End loop over finer levels
+  
+  ! Redistribute the grid across CPU according to the new domains
+  call r_load_balance(r,g,m,p,mdl,g%ncpu,1,0,ilevel)
+
+end subroutine m_load_balance
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+recursive subroutine r_broadcast_bound_key(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: nhilbert
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hilbert
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel
+  integer(kind=8),dimension(1)::dummy
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_BROADCAST_BOUND_KEY,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_bound_key(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     m%domain(ilevel)%b=reshape(transfer(input_array(2:input_size),dummy),[nhilbert,g%ncpu+1])
+  endif
+
+end subroutine r_broadcast_bound_key
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+recursive subroutine r_collect_bound_key(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
+  use amr_parameters, only: nhilbert
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hilbert
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  integer,dimension(:),allocatable::next_output_array
+  
+  integer::ilevel
+  integer,dimension(:),allocatable::noct
+  integer(kind=8),dimension(1)::dummy
+  integer(kind=8),dimension(:,:),allocatable::bound_key
+  integer(kind=8),dimension(:,:),allocatable::next_bound_key
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_COLLECT_BOUND_KEY,next_cpu,next_range,input_size,output_size,input_array)
+     call r_collect_bound_key(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
+     allocate(next_output_array(1:output_size))
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     allocate(bound_key(1:nhilbert,0:g%ncpu))
+     allocate(next_bound_key(1:nhilbert,0:g%ncpu))
+     bound_key=reshape(transfer(output_array,dummy),[nhilbert,g%ncpu+1])
+     next_bound_key=reshape(transfer(next_output_array,dummy),[nhilbert,g%ncpu+1])
+     bound_key=bound_key+next_bound_key
+     output_array=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),output_array)
+     deallocate(bound_key)
+     deallocate(next_bound_key)
+     deallocate(next_output_array)
+  else
+     allocate(noct(1:g%ncpu))
+     allocate(bound_key(1:nhilbert,0:g%ncpu))
+     bound_key=0
+     ilevel=input_array(1)
+     noct(1:g%ncpu)=input_array(2:input_size)
+     call compute_new_bound_key(r,g,m,ilevel,noct,bound_key)
+     output_array=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),output_array)
+     deallocate(bound_key)
+     deallocate(noct)
+  endif
+
+end subroutine r_collect_bound_key
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine compute_new_bound_key(r,g,m,ilevel,noct,bound_key_target)
   use amr_parameters, only: ndim,twotondim,nhilbert,dp
   use amr_commons, only: run_t,global_t,mesh_t,oct
   use hilbert
@@ -18,24 +196,130 @@ subroutine load_balance(r,g,m,ilevel)
   type(global_t)::g
   type(mesh_t)::m
   integer::ilevel
+  integer,dimension(1:g%ncpu)::noct
+  integer(kind=8),dimension(1:nhilbert,0:g%ncpu)::bound_key_target  
+  !----------------------------------------------------
+  ! This routine compute the new Hilbert keys so that
+  ! perfect load balancing is enforced.
+  !----------------------------------------------------
+  integer::idom,ioct
+  integer::nleft,nright,ileft,iright,istart,nstart
+  integer,dimension(1:g%ncpu)::noct_cum
+  integer,dimension(1:g%ncpu)::ntarget_cum
+  integer(kind=8),dimension(1:nhilbert)::one_key
+  real(dp)::xtarget
+
+  ! Hilbert key corresponding to one units
+  one_key=0
+  one_key(1)=1
+
+  ! Compute cumulative grid counts
+  noct_cum(1)=noct(1)
+  do idom=2,g%ncpu
+     noct_cum(idom)=noct_cum(idom-1)+noct(idom)
+  end do
+
+  ! Perfect load balancing
+  xtarget=dble(noct_cum(g%ncpu))/dble(g%ncpu)
+
+  ! Find left and right domains
+  ileft=0
+  iright=-1
+  bound_key_target=0
+  do idom=1,g%ncpu
+     ntarget_cum(idom)=int(dble(idom)*xtarget)
+     if(g%myid>1)then
+        nleft=noct_cum(g%myid-1)
+     else
+        nleft=0
+     endif
+     nright=noct_cum(g%myid)
+     IF(nright.GT.nleft)then
+        if(ntarget_cum(idom).GT.nleft.AND.ntarget_cum(idom).LE.nright)then
+           if(ileft==0)ileft=idom
+           iright=MAX(idom,iright)
+        endif
+     endif
+  end do
+
+  ! Find corresponding Hilbert keys
+  if(iright.GE.ileft)then
+     if(g%myid.GT.1)then
+        nstart=noct_cum(g%myid-1)
+     else
+        nstart=0
+     endif
+     istart=ileft
+     do ioct=m%head(ilevel),m%tail(ilevel)
+        nstart=nstart+1
+        if(nstart.GE.ntarget_cum(istart))then
+           bound_key_target(1:nhilbert,istart)=m%grid(ioct)%hkey(1:nhilbert)+one_key
+           istart=istart+1
+        endif
+        if(istart.GT.iright)exit
+     end do
+  endif
+
+end subroutine compute_new_bound_key
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_load_balance(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_LOAD_BALANCE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_load_balance(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call load_balance(r,g,m,ilevel)
+  endif
+
+end subroutine r_load_balance
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine load_balance(r,g,m,ilevel)
+  use amr_parameters, only: ndim,twotondim,nhilbert,dp
+  use amr_commons, only: run_t,global_t,mesh_t,oct
+  use hilbert
+  use hash
+  use cache_commons
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
   !------------------------------------------------
   ! This routine performs parallel load balancing.
   !------------------------------------------------
   integer::i
-  integer::grid_cpu,ichild,idom,jdom,mydom,ndom,lastdom,domains_matched
+  integer::grid_cpu,ichild,idom,jdom,lastdom,domains_matched
   integer::nleft,nright,ileft,iright,istart,nstart,noverlaps
-  integer::ilev,ioct
-  integer,dimension(:),allocatable::noct_dom,noct_cum
-  integer,dimension(:),allocatable::ntarget_cum
-  integer(kind=8),allocatable,dimension(:,:)::bound_key_target
-  integer(kind=8),allocatable,dimension(:,:)::bound_key_target_tot
-  real(dp)::xtarget
+  integer::ioct,ilev
 
   integer::j,ibit,ibucket,inew
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key,zero_key,bleft,bright
+  integer(kind=8),dimension(1:nhilbert)::coarse_key
   integer(kind=8),dimension(1:nhilbert),save::hks
   integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
   integer,dimension(1:r%nlevelmax)::n_same,npatch
@@ -43,194 +327,9 @@ subroutine load_balance(r,g,m,ilevel)
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   type(oct)::grid_tmp
-  logical,allocatable,dimension(:,:) :: overlap
-  integer,allocatable,dimension(:)   :: overlaps
-
-#ifndef WITHOUTMPI
-  if(g%ncpu==1)return
-  if(ilevel==r%nlevelmax)return
-  if(r%verbose)write(*,111)ilevel
-  
-  ! Constants
-  zero_key=0
-  one_key=0
-  one_key(1)=1
 
   !-----------------------------------------------------
-  ! Step 1: determine the new Hilbert tick marks
-  !-----------------------------------------------------
-  ndom = maxval(m%domain%n)
-  allocate(noct_dom(1:ndom))
-  allocate(noct_cum(1:ndom))
-  allocate(ntarget_cum(1:ndom))
-  allocate(bound_key_target(1:nhilbert,0:ndom))
-  allocate(bound_key_target_tot(1:nhilbert,0:ndom))
-
-  ! Compute new Hilbert tick marks
-  do ilev=ilevel+1,r%nlevelmax
-
-     if(m%noct_tot(ilev)>0)then
-        mydom=m%domain(ilev)%r2d(g%myid)
-        ndom=m%domain(ilev)%n
-        if (ndom .ne. g%ncpu) then
-           if (g%myid==1) write(*,*) &
-              'Load_balance: Not yet support for multiple domains per MPI rank yet. Please rewrite the following section of code'
-           if (g%myid==1) write(*,*) &
-              'Load_balance: You have to scan over the octs in the rank and find out how many belong to each domain'
-           stop
-        end if
-        noct_dom=0
-        noct_dom(mydom)=m%noct(ilev)
-        call MPI_ALLREDUCE(noct_dom,noct_cum,ndom,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-        noct_dom=noct_cum
-        do idom=2,ndom
-           noct_cum(idom)=noct_cum(idom-1)+noct_dom(idom)
-        end do
-        
-        xtarget=dble(noct_cum(ndom))/dble(ndom)
-        
-        ileft=0
-        iright=-1
-        bound_key_target=0
-        do idom=1,ndom
-           ntarget_cum(idom)=int(dble(idom)*xtarget)
-           if(mydom>1)then
-              nleft=noct_cum(mydom-1)
-           else
-              nleft=0
-           endif
-           nright=noct_cum(mydom)
-           IF(nright.GT.nleft)then
-              if(ntarget_cum(idom).GT.nleft.AND.ntarget_cum(idom).LE.nright)then
-                 if(ileft==0)ileft=idom
-                 iright=MAX(idom,iright)
-              endif
-           endif
-        end do
-        
-        if(iright.GE.ileft)then
-           if(mydom.GT.1)then
-              nstart=noct_cum(mydom-1)
-           else
-              nstart=0
-           endif
-           istart=ileft
-           do ioct=m%head(ilev),m%tail(ilev)
-              nstart=nstart+1
-              if(nstart.GE.ntarget_cum(istart))then
-                 bound_key_target(1:nhilbert,istart)=m%grid(ioct)%hkey(1:nhilbert)+one_key
-                 istart=istart+1
-              endif
-              if(istart.GT.iright)exit
-           end do
-        endif
-
-        call MPI_ALLREDUCE(bound_key_target,bound_key_target_tot,nhilbert*(ndom+1),MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
-        bound_key_target=bound_key_target_tot
-
-        bound_key_target(1:nhilbert,0)=zero_key
-        do idom=1,ndom
-           if(gt_keys(bound_key_target(1:nhilbert,idom-1),bound_key_target(1:nhilbert,idom)))then
-              bound_key_target(1:nhilbert,idom)=bound_key_target(1:nhilbert,idom-1)
-           endif
-        end do
-        bound_key_target(1:nhilbert,ndom)=m%hkey_max(1:nhilbert,ilev)
-        m%domain(ilev)%b(1:nhilbert,:)=bound_key_target(1:nhilbert,0:ndom)
-
-        !-----------------------------------------------------------------------
-        ! Redefine the rank-to-domain mapping to optimize the connectivity to ilev-1
-        !-----------------------------------------------------------------------
-        allocate(overlap(ndom,ndom),overlaps(ndom))
-        m%domain(ilev)%d2r=0
-        m%domain(ilev)%r2d=0
-        !
-        do idom=1,ndom
-           bleft  = coarsen_key(m%domain(ilev)%b(1:nhilbert,idom-1),ilev-1)
-           bright = coarsen_key(m%domain(ilev)%b(1:nhilbert,idom),ilev-1)
-           ! Test if domain from ilev-1 overlap with this domain
-           do jdom=1,ndom
-              if ( (ge_keys(bleft,m%domain(ilev-1)%b(1:nhilbert,jdom-1)) .and. &
-                    ge_keys(m%domain(ilev-1)%b(1:nhilbert,jdom),bleft))  .or. &
-                   (ge_keys(bright,m%domain(ilev-1)%b(1:nhilbert,jdom-1)) .and. &
-                    ge_keys(m%domain(ilev-1)%b(1:nhilbert,jdom),bright))  ) then
-                 overlap(idom,jdom) = .true.
-              else
-                 overlap(idom,jdom) = .false.
-              end if
-           enddo
-        enddo
-        !
-        ! Select domain to rank matching based on intervals at ilev-1 that only overlap with one interval at ilev
-        noverlaps = 1
-        domains_matched = 0
-        do while(noverlaps .ne. 0 .and. domains_matched < ndom)
-          overlaps = count(overlap,dim=1) ! Count how many intervals overlap with each interval at ilev-1
-          noverlaps = 0
-          do jdom=1,ndom
-             if (overlaps(jdom)==1) then
-                do idom=1,ndom
-                   if (overlap(idom,jdom)) then
-                      noverlaps = noverlaps + 1
-                      m%domain(ilev)%d2r(idom) = m%domain(ilev-1)%d2r(jdom)
-                      m%domain(ilev)%r2d(m%domain(ilev)%d2r(idom)) = idom
-                      domains_matched = domains_matched + 1
-                      overlap(idom,:) = .false.
-                      overlap(:,jdom) = .false.
-                      exit
-                   endif
-                enddo
-             endif
-          enddo
-        enddo
-        ! Match the rest accepting multiple overlaps, taking the first available match
-        noverlaps = 1
-        do while(noverlaps .gt. 0 .and. domains_matched < ndom)
-          overlaps = count(overlap,dim=1) ! Count how many intervals overlap with each interval at ilev-1
-          noverlaps = 0
-          do jdom=1,ndom
-             if (overlaps(jdom) > 0) then
-                do idom=1,ndom
-                   if (overlap(idom,jdom)) then
-                      noverlaps = noverlaps + 1
-                      m%domain(ilev)%d2r(idom) = m%domain(ilev-1)%d2r(jdom)
-                      m%domain(ilev)%r2d(m%domain(ilev)%d2r(idom)) = idom
-                      domains_matched = domains_matched + 1
-                      overlap(idom,:) = .false.
-                      overlap(:,jdom) = .false.
-                      exit
-                   endif
-                enddo
-             endif
-          enddo
-        enddo
-        ! Hopefully very few are left, and are put linearly according to leftover slots in the domain2rank array
-        if (domains_matched < ndom) then
-           lastdom = 1
-           do idom=1,ndom
-             if (m%domain(ilev)%r2d(idom)==0) then
-                do jdom=lastdom,ndom
-                   if (m%domain(ilev)%d2r(jdom)==0) then
-                      m%domain(ilev)%d2r(jdom) = idom
-                      m%domain(ilev)%r2d(idom) = jdom
-                      lastdom = jdom+1
-                      exit
-                   endif
-                enddo
-             endif
-           enddo
-        endif
-
-        deallocate(overlaps,overlap)
-
-     endif
-
-  end do
-  deallocate(noct_dom,noct_cum,ntarget_cum)
-  deallocate(bound_key_target)
-  deallocate(bound_key_target_tot)
-
-  !-----------------------------------------------------
-  ! Step 2: dispatch octs and empty slots according to
+  ! Step 1: dispatch octs and empty slots according to
   ! the new target Hilbert tick marks
   !-----------------------------------------------------
   m%ifree=m%noct_used+1
@@ -282,7 +381,7 @@ subroutine load_balance(r,g,m,ilevel)
   end do
 
   !-----------------------------------------------------
-  ! Step 3: sort new octs and empty slots according to
+  ! Step 2: sort new octs and empty slots according to
   ! their level (using counting sort algorithm).
   !-----------------------------------------------------
   allocate(noct_level(r%levelmin:r%nlevelmax))
@@ -325,7 +424,7 @@ subroutine load_balance(r,g,m,ilevel)
   end do
 
   !-----------------------------------------------------
-  ! Step 4: sort octs level by level according to their
+  ! Step 3: sort octs level by level according to their
   ! Hilbert key using LSD Radix Sort algorithm.
   !-----------------------------------------------------
   ! Loop over levels
@@ -377,7 +476,7 @@ subroutine load_balance(r,g,m,ilevel)
   end do
 
   !-----------------------------------------------------
-  ! Step 5: Apply permutations directly in main memory
+  ! Step 4: Apply permutations directly in main memory
   ! Remember: swap_table(inew)=iold means:
   ! New data at position inew COMES FROM
   ! Old data at position iold.
@@ -418,7 +517,7 @@ subroutine load_balance(r,g,m,ilevel)
   endif
 
   !-----------------------------------------------------
-  ! Step 6: Clean up final AMR structure
+  ! Step 5: Clean up final AMR structure
   !-----------------------------------------------------
   do ilev=ilevel+1,r%nlevelmax
      m%head(ilev)=head_level(ilev)
@@ -456,34 +555,7 @@ subroutine load_balance(r,g,m,ilevel)
      end do
   end do
 
-  !---------------------
-  ! Total number of octs
-  !---------------------
-  do ilev=ilevel+1,r%nlevelmax
-     m%noct_tot(ilev)=m%noct(ilev)
-     m%noct_min(ilev)=m%noct(ilev)
-     m%noct_max(ilev)=m%noct(ilev)
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(m%noct(ilev),m%noct_tot(ilev),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(m%noct(ilev),m%noct_min(ilev),1,MPI_INTEGER,MPI_MIN,MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(m%noct(ilev),m%noct_max(ilev),1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
-#endif
-  end do
-
-  m%noct_used_max=m%noct_used
-  m%noct_used_tot=m%noct_used
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(m%noct_used,m%noct_used_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(m%noct_used,m%noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
-#endif
-
-#endif
-
-111 format(' Load balancing for all levels greater than ',I2)
-999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
-
 end subroutine load_balance
-#endif
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -505,13 +577,13 @@ subroutine balance_part(r,g,m,p,ilevel)
   type(mesh_t)::m
   type(part_t)::p
   integer::ilevel
-  !
+  !---------------------------------------------------------------------
   ! This routine will dispatch particles across processors according to
   ! their Hilbert key and for a given domain decomposition.
   ! It assumes that particles are sorted according to their levels
   ! and within the level, according to their Hilbert key.
-  ! It can only be called after routine rho has been called.
-  !
+  ! It can be used only if routine rho has been called once before.
+  !---------------------------------------------------------------------
 #ifndef WITHOUTMPI
   integer::info
   integer,dimension(MPI_STATUS_SIZE,g%ncpu)::statuses

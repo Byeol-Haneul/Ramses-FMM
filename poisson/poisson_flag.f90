@@ -21,9 +21,6 @@ subroutine poisson_flag(r,g,m,ilevel)
   integer::igrid,ind,ivar
   logical::ok
 
-  if(ilevel==r%nlevelmax)return
-  if(m%noct_tot(ilevel)==0)return
-
   if(        r%m_refine(ilevel).LE.-1.0 .and.&
        & r%jeans_refine(ilevel).LE.-1.0 )return
 

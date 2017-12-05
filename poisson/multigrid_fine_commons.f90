@@ -20,29 +20,29 @@
 ! Main multigrid routine, called by amr_step
 ! ------------------------------------------------------------------------
 
-subroutine multigrid(r,g,m,ilevel,icount)
+subroutine multigrid(r,g,m,p,mdl,ilevel,icount)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
-  use amr_commons, only: run_t,global_t,mesh_t  
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-  integer::info
-  real(kind=8)::i_res_norm2_tot, res_norm2_tot
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
   integer, intent(in) :: ilevel,icount
   
   integer, parameter  :: MAXITER  = 10
   real(dp), parameter :: SAFE_FACTOR = 0.5
   
-  integer  :: igrid, ifine, i, iter
+  integer  :: igrid, ifine, i, iter, allmasked
+  integer,dimension(1:4) :: input_array
+  integer,dimension(1:4) :: output_array
   real(kind=8) :: res_norm2, i_res_norm2
   real(kind=8) :: err, last_err
-  
-  logical :: allmasked
+  real(kind=8) :: i_res_norm2_tot, res_norm2_tot
   
   if(r%gravity_type>0)return
   if(m%noct_tot(ilevel)==0)return
@@ -52,20 +52,22 @@ subroutine multigrid(r,g,m,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
-  call make_initial_phi(r,g,m,ilevel,icount)  ! Initial guess
-  call make_mask(m,ilevel)                ! Fill the fine level mask
-  call make_bc_rhs(r,g,m,ilevel,icount)       ! Fill BC-modified RHS
+  input_array(1)=ilevel
+  input_array(2)=icount
+  call r_make_initial_phi(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)  ! Initial guess
+  call r_make_mask(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)              ! Fill the fine level mask
+  call r_make_bc_rhs(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)       ! Fill BC-modified RHS
 
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
-  call init_mg(r,m,ilevel)
+  call r_init_mg(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
   
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
-     call build_mg(r,g,m,ifine)
+     call r_build_mg(r,g,m,p,mdl,mdl%ncpu,1,0,ifine)
   end do
   
   ! ---------------------------------------------------------------------
@@ -74,8 +76,8 @@ subroutine multigrid(r,g,m,ilevel,icount)
   g%levelmin_mg=1
   do ifine=ilevel,2,-1
      ! Restrict and communicate mask
-     call restrict_mask(r,g,m,ifine,allmasked)
-     if(allmasked) then ! Coarser level is fully masked: stop here
+     call r_restrict_mask(r,g,m,p,mdl,mdl%ncpu,1,1,ifine,allmasked)
+     if(allmasked==1) then ! Coarser level is fully masked: stop here
         g%levelmin_mg=ifine
         exit
      end if
@@ -84,9 +86,10 @@ subroutine multigrid(r,g,m,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
-  call set_scan_flag(r,g,m,m%grid_dict,ilevel)
-  do ifine=ilevel-1,g%levelmin_mg,-1
-     call set_scan_flag(r,g,m,m%mg_dict,ifine)
+  input_array(1)=ilevel
+  do ifine=ilevel,g%levelmin_mg,-1
+     input_array(2)=ifine
+     call r_set_scan_flag(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
   end do
   
   ! ---------------------------------------------------------------------
@@ -99,64 +102,67 @@ subroutine multigrid(r,g,m,ilevel,icount)
 
      iter=iter+1
 
+     input_array(1)=ilevel
+     input_array(2)=ilevel
+     if(g%safe_mode(ilevel))then
+        input_array(3)=1
+     else
+        input_array(3)=0
+     endif
+     
      ! Pre-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
      end do
      
      ! Compute new residual
-     call cmp_residual_mg(r,g,m,m%grid_dict,ilevel)
+     call r_cmp_residual_mg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
 
      ! Compute initial residual norm
      if(iter==1) then
-        call cmp_residual_norm2(r,m,ilevel,i_res_norm2)
-#ifndef WITHOUTMPI
-        call MPI_ALLREDUCE(i_res_norm2,i_res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-        i_res_norm2=i_res_norm2_tot
-#endif
+        call r_cmp_residual_norm2(r,g,m,p,mdl,mdl%ncpu,1,2,ilevel,output_array)
+        i_res_norm2=transfer(output_array(1:2),i_res_norm2)
      end if
-     
+
      if(ilevel>1) then
 
         ! Restrict residual to coarser level
-        call restrict_residual(r,g,m,ilevel)
+        call r_restrict_residual(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
 
         ! Reset correction from upper level before solve
-        do igrid=m%head_mg(ilevel-1),m%tail_mg(ilevel-1)
-           m%grid(igrid)%phi(1:twotondim)=0.0d0
-        end do
+        call r_reset_correction(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel-1)
         
         ! Multigrid-solve the upper level
-        call recursive_multigrid(r,g,m,ilevel-1, g%safe_mode(ilevel))
+        call recursive_multigrid(r,g,m,p,mdl,ilevel-1, g%safe_mode(ilevel))
         
         ! Interpolate coarse solution and correct fine solution
-        call interpolate_and_correct(r,g,m,ilevel)
+        call r_interpolate_and_correct(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
 
      end if
-     
+
      ! Post-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
      end do
      
      ! Update fine residual
-     call cmp_residual_mg(r,g,m,m%grid_dict,ilevel)
+     call r_cmp_residual_mg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
 
      ! Compute residual norm
-     call cmp_residual_norm2(r,m,ilevel,res_norm2)
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(res_norm2,res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     res_norm2=res_norm2_tot
-#endif
+     call r_cmp_residual_norm2(r,g,m,p,mdl,mdl%ncpu,1,2,ilevel,output_array)
+     res_norm2=transfer(output_array(1:2),res_norm2)
      
      last_err = err
      err = sqrt(res_norm2/(i_res_norm2+1d-20*g%rho_tot**2))
      
      ! Verbosity
-     if(r%verbose) print '(A,I5,A,1pE10.3)','   ==> Step=', &
-          & iter,' Error=',err
+     if(r%verbose) print '(A,I5,A,1pE10.3)','   ==> Step=',iter,' Error=',err
      
      ! Converged?
      if(err<r%epsilon .or. iter>=MAXITER) exit
@@ -169,13 +175,13 @@ subroutine multigrid(r,g,m,ilevel,icount)
      
   end do main_iteration_loop
   
-  if(g%myid==1) print '(A,I5,A,I5,A,1pE10.3)','   ==> Level=',ilevel,' Step=',iter,' Error=',err
-  if(g%myid==1 .and. iter==MAXITER) print *,'WARN: Fine multigrid Poisson failed to converge...'
+  print '(A,I5,A,I5,A,1pE10.3)','   ==> Level=',ilevel,' Step=',iter,' Error=',err
+  if(iter==MAXITER) print *,'WARN: Fine multigrid Poisson failed to converge...'
     
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-  call cleanup_mg(m)
+  call r_cleanup_mg(r,g,m,p,mdl,mdl%ncpu,0,0)
   
 end subroutine multigrid
 
@@ -188,27 +194,40 @@ end subroutine multigrid
 ! Recursive multigrid routine for coarse MG levels
 ! ------------------------------------------------------------------------
 
-recursive subroutine recursive_multigrid(r,g,m,ifinelevel, safe)
+recursive subroutine recursive_multigrid(r,g,m,p,mdl,ifinelevel, safe)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
   use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
   integer, intent(in) :: ifinelevel
   logical, intent(in) :: safe
 
   integer :: i, igrid, icycle, ncycle
+  integer,dimension(1:4) :: input_array
+  
+  ! Set parameter array
+  input_array(1)=ifinelevel+1
+  input_array(2)=ifinelevel
+  if(safe)then
+     input_array(3)=1
+  else
+     input_array(3)=0
+  endif
   
   if(ifinelevel<=g%levelmin_mg) then
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
-        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
      end do
      return
   end if
@@ -218,36 +237,38 @@ recursive subroutine recursive_multigrid(r,g,m,ifinelevel, safe)
   else
      ncycle=1
   endif
-  
+
   do icycle=1,ncycle
      
      ! Pre-smoothing
      do i=1,ngs_coarse
-        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     call cmp_residual_mg(r,g,m,m%mg_dict,ifinelevel)
+     call r_cmp_residual_mg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
 
      ! Restrict residual to coarser level
-     call restrict_residual(r,g,m,ifinelevel)
+     call r_restrict_residual(r,g,m,p,mdl,mdl%ncpu,1,0,ifinelevel)
      
      ! Reset correction from upper level before solve
-     do igrid=m%head_mg(ifinelevel-1),m%tail_mg(ifinelevel-1)
-        m%grid(igrid)%phi(1:twotondim)=0.0d0
-     end do
+     call r_reset_correction(r,g,m,p,mdl,mdl%ncpu,1,0,ifinelevel-1)
      
      ! Multigrid-solve the upper level
-     call recursive_multigrid(r,g,m,ifinelevel-1, safe)
+     call recursive_multigrid(r,g,m,p,mdl,ifinelevel-1, safe)
      
      ! Interpolate coarse solution and correct back into fine solution
-     call interpolate_and_correct(r,g,m,ifinelevel)
+     call r_interpolate_and_correct(r,g,m,p,mdl,mdl%ncpu,1,0,ifinelevel)
      
      ! Post-smoothing
      do i=1,ngs_coarse
-        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
      end do
      
   end do
@@ -263,14 +284,39 @@ end subroutine recursive_multigrid
 ! Multigrid workspace initialisation
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_init_mg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_INIT_MG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_init_mg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call init_mg(r,m,ilevel)
+  endif
+
+end subroutine r_init_mg
+
 subroutine init_mg(r,m,ilevel)
   use amr_parameters, only: dp,nhilbert
   use amr_commons, only: run_t,mesh_t
   use hilbert
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(mesh_t)::m
   integer::ilevel
@@ -280,7 +326,6 @@ subroutine init_mg(r,m,ilevel)
   allocate(m%head_mg(1:r%nlevelmax))
   allocate(m%tail_mg(1:r%nlevelmax))
   allocate(m%noct_mg(1:r%nlevelmax))
-  allocate(m%noct_tot_mg(1:r%nlevelmax))
 
   ! Allocate and compute multigrid Hilbert key tick marks
   allocate(m%domain_mg(1:ilevel))
@@ -296,7 +341,6 @@ subroutine init_mg(r,m,ilevel)
   m%head_mg(ilevel)=m%head(ilevel)
   m%tail_mg(ilevel)=m%tail(ilevel)
   m%noct_mg(ilevel)=m%noct(ilevel)
-  m%noct_tot_mg(ilevel)=m%noct_tot(ilevel)
   
   ! Save first free element in AMR grid array to restore state
   m%ifree_mg=m%noct_used+1
@@ -312,6 +356,34 @@ end subroutine init_mg
 ! Coarse grid MG activation for local grids
 ! ---------------------------------------------------------------------
 
+recursive subroutine r_build_mg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_BUILD_MG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_build_mg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call build_mg(r,g,m,ilevel)
+  endif
+
+end subroutine r_build_mg
+
 subroutine build_mg(r,g,m,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -320,8 +392,7 @@ subroutine build_mg(r,g,m,ifinelevel)
   use hash
   implicit none
 #ifndef WITHOUTMPI
-  include "mpif.h"
-  integer::info
+  include 'mpif.h'
 #endif
   type(run_t)::r
   type(global_t)::g
@@ -450,10 +521,6 @@ subroutine build_mg(r,g,m,ifinelevel)
   m%tail_mg(icoarselevel)=m%ifree-1
   m%noct_mg(icoarselevel)=m%tail_mg(icoarselevel)-m%head_mg(icoarselevel)+1
   m%noct_used=m%tail_mg(icoarselevel)
-  m%noct_tot_mg(icoarselevel)=m%noct_mg(icoarselevel)
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(m%noct_mg(icoarselevel),m%noct_tot_mg(icoarselevel),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
 
 end subroutine build_mg
 
@@ -466,19 +533,45 @@ end subroutine build_mg
 ! Multigrid cleanup
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_cleanup_mg(r,g,m,p,mdl,cpu_range,input_size,output_size)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+
+  integer::next_range,next_cpu
+  integer::igrid
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CLEANUP_MG,next_cpu,next_range,input_size,output_size)
+     call r_cleanup_mg(r,g,m,p,mdl,next_range,input_size,output_size)
+  else
+     call cleanup_mg(m)
+  endif
+
+end subroutine r_cleanup_mg
+
 subroutine cleanup_mg(m)
   use amr_commons, only: mesh_t
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(mesh_t)::m
 
   integer :: ilev
 
    ! Deallocate processor boundary array
-   deallocate(m%head_mg,m%tail_mg,m%noct_mg,m%noct_tot_mg)
+   deallocate(m%head_mg,m%tail_mg,m%noct_mg)
    do ilev=1,size(m%domain_mg)
       call m%domain_mg(ilev)%destroy
    end do
@@ -502,13 +595,38 @@ end subroutine cleanup_mg
 ! Initialize mask at fine level into f(:,3)
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_make_mask(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_MAKE_MASK,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_make_mask(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call make_mask(m,ilevel)
+  endif
+
+end subroutine r_make_mask
+
 subroutine make_mask(m,ilevel)
   use amr_parameters, only: twotondim
   use amr_commons, only: mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(mesh_t)::m
   integer, intent(in) :: ilevel
 
@@ -545,17 +663,46 @@ end subroutine make_mask
 !
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_make_bc_rhs(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,icount
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_MAKE_BC_RHS,next_cpu,next_range,input_size,output_size,input_array)
+     call r_make_bc_rhs(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     icount=input_array(2)
+     call make_bc_rhs(r,g,m,ilevel,icount)
+  endif
+
+end subroutine r_make_bc_rhs
+
 subroutine make_bc_rhs(r,g,m,ilevel,icount)
   use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+
   integer, intent(in) :: ilevel,icount
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj

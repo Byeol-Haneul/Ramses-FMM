@@ -1,6 +1,7 @@
 module amr_commons
   use amr_parameters
   use hydro_parameters
+  use hydro_commons
   use hash
   use domain_m
   use cache_commons
@@ -332,6 +333,9 @@ module amr_commons
      type(domain_t),pointer,dimension(:)::domain,domain_mg
      type(domain_t),pointer,dimension(:)::domain_hilbert
 
+     ! Hydro kernel workspace
+     type(hydro_workspace_t)::hydro_w
+     
   end type mesh_t
 
   ! Peano-Hilbert key boundaries for cpu domains

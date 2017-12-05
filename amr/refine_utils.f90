@@ -1,23 +1,112 @@
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine m_refine_fine(r,g,m,p,mdl,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::ilevel
+  !--------------------------------------------------------------------
+  ! This routine is the master procedure to refine the AMR grid
+  ! from level ilevel to nlevelmax.
+  !--------------------------------------------------------------------
+  integer::ilev
+  integer,dimension(1:2)::noct
+  
+  if(ilevel==r%nlevelmax)return
+  if(m%noct_tot(ilevel)==0)return
+
+  if(r%verbose)write(*,111)ilevel
+111 format(' Entering refine_fine for level ',I2)
+
+  ! Create new octs and destroy unecessary octs
+  call r_refine_fine(r,g,m,p,mdl,g%ncpu,1,2,ilevel,noct)
+
+  if(r%verbose)write(*,112)noct(1)
+112 format(' ==> Make ',i6,' sub-grids')
+
+  if(r%verbose)write(*,113)noct(2)
+113 format(' ==> Kill ',i6,' sub-grids')
+
+  ! Get total, min and max grid count (only in master).
+  do ilev=ilevel+1,r%nlevelmax
+     call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_tot(ilev))
+     call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_min(ilev))
+     call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_max(ilev))
+  end do
+
+  ! Load balance all levels
+  call m_load_balance(r,g,m,p,mdl,ilevel)
+
+  ! Get total, min and max grid count (only in master).
+  do ilev=ilevel+1,r%nlevelmax
+     call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_tot(ilev))
+     call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_min(ilev))
+     call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_max(ilev))
+  end do
+
+end subroutine m_refine_fine
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_refine_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:2)::noct
+
+  integer::next_range,next_cpu
+  integer,dimension(1:2)::next_noct
+  integer::ncreate,nkill
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_REFINE_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_refine_fine(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_noct)
+     noct=noct+next_noct
+  else
+     call refine_fine(r,g,m,ilevel,ncreate,nkill)
+     noct(1)=ncreate
+     noct(2)=nkill
+  endif
+
+end subroutine r_refine_fine
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine refine_fine(r,g,m,ilevel)
+subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: run_t,global_t,mesh_t, oct
   use cache_commons
   use hash
   use hilbert
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-  integer::ncreate_tot,nkill_tot
-#endif
-  integer::ilevel
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+  integer::ilevel
+  integer::ncreate,nkill
   !---------------------------------------------------------
   ! This routine refines cells at level ilevel if cells
   ! are flagged for refinement and are not already refined.
@@ -41,10 +130,6 @@ subroutine refine_fine(r,g,m,ilevel)
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok
   type(oct)::oct_tmp
-
-  if(ilevel==r%nlevelmax)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
 
   !---------------------------------------------------
   ! Step 1: if a cell is flagged for refinement and
@@ -72,13 +157,8 @@ subroutine refine_fine(r,g,m,ilevel)
      call close_cache(r,g,m,m%grid_dict)
 
   end do
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(g%ncreate,ncreate_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  if(r%verbose)write(*,112)ncreate_tot
-#else
-  if(r%verbose)write(*,112)g%ncreate
-#endif
-
+  ncreate=g%ncreate
+  
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
   ! but it is refined, then destroy the child grid.
@@ -111,12 +191,7 @@ subroutine refine_fine(r,g,m,ilevel)
      call close_cache(r,g,m,m%grid_dict)
 
   end do
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(g%nkill,nkill_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  if(r%verbose)write(*,112)nkill_tot
-#else
-  if(r%verbose)write(*,112)g%nkill
-#endif
+  nkill=g%nkill
 
   !-----------------------------------------------------
   ! Step 3: sort new octs and empty slots according to 
@@ -290,30 +365,6 @@ subroutine refine_fine(r,g,m,ilevel)
      end do
   end do
 
-  !---------------------
-  ! Total number of octs
-  !---------------------
-  do ilev=ilevel+1,r%nlevelmax
-     m%noct_tot(ilev)=m%noct(ilev)
-     m%noct_min(ilev)=m%noct(ilev)
-     m%noct_max(ilev)=m%noct(ilev)
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(m%noct(ilev),m%noct_tot(ilev),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(m%noct(ilev),m%noct_min(ilev),1,MPI_INTEGER,MPI_MIN,MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(m%noct(ilev),m%noct_max(ilev),1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
-#endif
-  end do
-
-  m%noct_used_max=m%noct_used
-  m%noct_used_tot=m%noct_used
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(m%noct_used,m%noct_used_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(m%noct_used,m%noct_used_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
-#endif
-
-111 format('   Entering refine_fine for level ',I2)
-112 format('   ==> Make ',i6,' sub-grids')
-
 end subroutine refine_fine
 !###############################################################
 !###############################################################
@@ -388,7 +439,7 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
         write(*,*)'No more free memory'
         write(*,*)'while refining...'
         write(*,*)'Increase ngridmax'
-        call clean_abort
+        call mdl_abort
      end if
 
   ! Otherwise, determine parent processor and use the cache
@@ -424,11 +475,11 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
   ! Set status of parent cell to "refined"
   m%grid(iparent)%refined(icell)=.true.
 
+  !=========================================================
   ! Inject parent hydro variables into new children ones
-  if(.not.g%init)then
-     
+  !=========================================================     
 #ifdef HYDRO
-     
+
      ! Interpolate hydro variables
      do ivar=1,nvar
         do ind=1,twotondim
@@ -460,8 +511,8 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
            enddo
         end do
         
-     endif
-     
+     endif     
+
 #endif
 
 #ifdef GRAV
@@ -474,7 +525,6 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
      enddo
 
 #endif
-  endif
 
 end subroutine make_new_oct
 !###############################################################

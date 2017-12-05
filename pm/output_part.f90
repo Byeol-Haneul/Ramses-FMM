@@ -2,8 +2,42 @@
 !#######################################################
 !#######################################################
 !#######################################################
+recursive subroutine r_output_part(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: flen
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  
+  integer::next_range,next_cpu
+  character(LEN=flen)::filename
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_OUTPUT_PART,next_cpu,next_range,input_size,output_size,input_array)
+     call r_output_part(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     filename=transfer(input_array,filename)
+     call output_part(r,g,p,filename)
+  endif
+
+end subroutine r_output_part
+!#######################################################
+!#######################################################
+!#######################################################
+!#######################################################
 subroutine output_part(r,g,p,filename)
-  use amr_parameters, only: ndim,dp,i8b
+  use amr_parameters, only: ndim,dp,i8b,flen
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
@@ -11,10 +45,10 @@ subroutine output_part(r,g,p,filename)
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
 
   integer::i,idim,ilun
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   real(dp),allocatable,dimension(:)::xdp
   integer(i8b),allocatable,dimension(:)::ii8
@@ -26,8 +60,7 @@ subroutine output_part(r,g,p,filename)
 
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
-  open(unit=ilun,file=TRIM(fileloc),access="stream"&
-       & ,action="write",form='unformatted')
+  open(unit=ilun,file=TRIM(fileloc),access="stream",action="write",form='unformatted')
   rewind(ilun)
   ! Write header
   write(ilun)ndim

@@ -424,7 +424,8 @@ integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) resu
         if(m%nnull.GT.r%ncachemax)m%nnull=r%ncachemax
 
      ! If grid exists, store incoming tile in the cache
-     else    
+     else
+        
         do i=1,ntile_response
 
            ! If next cache line is occupied, free it.
@@ -466,6 +467,7 @@ integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) resu
               hash_child(0)=response_interpol%lev(i)
               hash_child(1:ndim)=response_interpol%ckey(1:ndim,i)
            endif
+           
            ichild=r%ngridmax+m%free_cache
 
            if(hash_get(hash_dict,hash_child).EQ.0)then
@@ -486,7 +488,8 @@ integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) resu
               ! Store the grid coordinates for the entire tile
               m%grid(ichild)%lev=hash_child(0)
               m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
-              
+             
+              ! Unpack response to fetch request
               ! Depends on the type of cache operations
 
               ! Operations of type "flag"
@@ -1161,7 +1164,7 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
                  write(*,*)'No more free memory'
                  write(*,*)'while refining...'
                  write(*,*)'Increase ngridmax'
-                 call clean_abort
+                 call mdl_abort
               endif
 
               m%grid(ichild)%lev=hash_child(0)
@@ -1219,7 +1222,7 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
                  write(*,*)'No more free memory'
                  write(*,*)'while load balancing...'
                  write(*,*)'Increase ngridmax'
-                 call clean_abort
+                 call mdl_abort
               endif
 
               m%grid(ichild)%lev=hash_child(0)
@@ -1286,7 +1289,7 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
                  write(*,*)'No more free memory'
                  write(*,*)'for multigrid...'
                  write(*,*)'Increase ngridmax'
-                 call clean_abort
+                 call mdl_abort
               endif
 
               m%grid(ichild)%lev=hash_child(0)

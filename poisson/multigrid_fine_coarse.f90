@@ -8,6 +8,43 @@
 ! Mask restriction (bottom-up)
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_restrict_mask(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,masked)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel,masked
+  
+  integer::next_range,next_cpu
+  integer::next_masked
+  logical::allmasked
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_RESTRICT_MASK,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_restrict_mask(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,masked)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_masked)
+     masked=masked*next_masked
+  else
+     call restrict_mask(r,g,m,ilevel,allmasked)
+     if(allmasked)then
+        masked=1
+     else
+        masked=0
+     endif
+  endif
+
+end subroutine r_restrict_mask
+
 subroutine restrict_mask(r,g,m,ifinelevel,allmasked)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -15,11 +52,6 @@ subroutine restrict_mask(r,g,m,ifinelevel,allmasked)
   use hilbert
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-  integer::info
-  logical::allmasked_tot
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -81,12 +113,6 @@ subroutine restrict_mask(r,g,m,ifinelevel,allmasked)
   end do
   allmasked=(mask_max<=0d0)
   
-  ! Allreduce on mask state
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(allmasked, allmasked_tot, 1, MPI_LOGICAL, MPI_LAND, MPI_COMM_WORLD, info)
-  allmasked=allmasked_tot
-#endif
-
 end subroutine restrict_mask
 
 ! ########################################################################
@@ -98,6 +124,42 @@ end subroutine restrict_mask
 ! Residual computation
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_cmp_residual_mg(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hash
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,ifine
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CMP_RESIDUAL_MG,next_cpu,next_range,input_size,output_size,input_array)
+     call r_cmp_residual_mg(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     ifine=input_array(2)
+     if(ifine==ilevel)then
+        call cmp_residual_mg(r,g,m,m%grid_dict,ifine)
+     else
+        call cmp_residual_mg(r,g,m,m%mg_dict,ifine)
+     endif
+  endif
+
+end subroutine r_cmp_residual_mg
+
 subroutine cmp_residual_mg(r,g,m,hash_dict, ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -105,9 +167,6 @@ subroutine cmp_residual_mg(r,g,m,hash_dict, ilevel)
   use hilbert
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -432,6 +491,47 @@ end subroutine cmp_residual_mg_fast
 ! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_gauss_seidel_mg(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hash
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,ifine,isafe,iredstep
+  logical::safe,redstep
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_GAUSS_SEIDEL_MG,next_cpu,next_range,input_size,output_size,input_array)
+     call r_gauss_seidel_mg(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     ifine=input_array(2)
+     isafe=input_array(3)
+     iredstep=input_array(4)
+     safe=(isafe==1)
+     redstep=(iredstep==1)
+     if(ifine==ilevel)then
+        call gauss_seidel_mg(r,g,m,m%grid_dict,ifine,safe,redstep)
+     else
+        call gauss_seidel_mg(r,g,m,m%mg_dict,ifine,safe,redstep)
+     endif
+  endif
+
+end subroutine r_gauss_seidel_mg
+
 subroutine gauss_seidel_mg(r,g,m,hash_dict,ilevel,safe,redstep)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -439,9 +539,6 @@ subroutine gauss_seidel_mg(r,g,m,hash_dict,ilevel,safe,redstep)
   use hilbert
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -799,8 +896,73 @@ end subroutine gauss_seidel_mg_fast
 ! ########################################################################
 
 ! ------------------------------------------------------------------------
+! Reset correction
+! ------------------------------------------------------------------------
+
+recursive subroutine r_reset_correction(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+  integer::igrid
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_RESET_CORRECTION,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_reset_correction(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     do igrid=m%head_mg(ilevel),m%tail_mg(ilevel)
+        m%grid(igrid)%phi(1:twotondim)=0.0d0
+     end do
+  endif
+
+end subroutine r_reset_correction
+
+! ------------------------------------------------------------------------
 ! Residual restriction
 ! ------------------------------------------------------------------------
+
+recursive subroutine r_restrict_residual(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_RESTRICT_RESIDUAL,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_restrict_residual(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call restrict_residual(r,g,m,ilevel)
+  endif
+
+end subroutine r_restrict_residual
 
 subroutine restrict_residual(r,g,m,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
@@ -809,9 +971,6 @@ subroutine restrict_residual(r,g,m,ifinelevel)
   use hilbert
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -875,6 +1034,35 @@ end subroutine restrict_residual
 ! Interpolation and correction
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_interpolate_and_correct(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_INTERPOLATE_AND_CORRECT,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_interpolate_and_correct(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call interpolate_and_correct(r,g,m,ilevel)
+  endif
+
+end subroutine r_interpolate_and_correct
+
 subroutine interpolate_and_correct(r,g,m,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -882,9 +1070,6 @@ subroutine interpolate_and_correct(r,g,m,ifinelevel)
   use hilbert
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -919,8 +1104,6 @@ subroutine interpolate_and_correct(r,g,m,ifinelevel)
   ccc(:,7)=(/25,26,22,23,16,17,13,14/)
   ccc(:,8)=(/27,26,24,23,18,17,15,14/)
   
-  if(r%verbose)write(*,*)'entering interpolate  and correct ',ifinelevel
-
   call open_cache(r,g,m,operation_phi,domain_decompos_mg)
 
   hash_key(0)=ifinelevel
@@ -982,6 +1165,42 @@ end subroutine interpolate_and_correct
 ! Flag settings used to speed-up the sweeps
 ! ------------------------------------------------------------------------
 
+recursive subroutine r_set_scan_flag(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hash
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,ifine
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_SET_SCAN_FLAG,next_cpu,next_range,input_size,output_size,input_array)
+     call r_set_scan_flag(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     ifine=input_array(2)
+     if(ifine==ilevel)then
+        call set_scan_flag(r,g,m,m%grid_dict,ifine)
+     else
+        call set_scan_flag(r,g,m,m%mg_dict,ifine)
+     endif
+  endif
+
+end subroutine r_set_scan_flag
+
 subroutine set_scan_flag(r,g,m,hash_dict,ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
   use amr_commons, only: run_t,global_t,mesh_t
@@ -989,9 +1208,6 @@ subroutine set_scan_flag(r,g,m,hash_dict,ilevel)
   use hilbert
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -1101,6 +1317,43 @@ end subroutine set_scan_flag
 ! ------------------------------------------------------------------------
 ! Compute norm of residual 
 ! ------------------------------------------------------------------------
+
+recursive subroutine r_cmp_residual_norm2(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::norm2,next_norm2
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CMP_RESIDUAL_NORM2,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cmp_residual_norm2(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     norm2=transfer(output_array,norm2)
+     next_norm2=transfer(next_output_array,next_norm2)
+     norm2=norm2+next_norm2
+     output_array=transfer(norm2,output_array)
+  else
+     call cmp_residual_norm2(r,m,ilevel,norm2)
+     output_array=transfer(norm2,output_array)
+  endif
+
+end subroutine r_cmp_residual_norm2
 
 subroutine cmp_residual_norm2(r,m,ilevel, norm2)
   use amr_parameters, only: dp,ndim,twotondim

@@ -30,9 +30,6 @@ subroutine hydro_flag(r,g,m,ilevel)
 
 #ifdef HYDRO
 
-  if(ilevel==r%nlevelmax)return
-  if(m%noct_tot(ilevel)==0)return
-
   hash_key(0)=ilevel+1
 
   if(    r%err_grad_d==-1.0.and.&

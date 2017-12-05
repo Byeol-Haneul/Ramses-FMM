@@ -2,14 +2,43 @@
 !###########################################################
 !###########################################################
 !###########################################################
+recursive subroutine r_cooling_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_parameters, only: dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_COOLING_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cooling_fine(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call cooling_fine(r,g,m,ilevel)
+  endif
+
+end subroutine r_cooling_fine
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine cooling_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -22,9 +51,6 @@ subroutine cooling_fine(r,g,m,ilevel)
   real(dp)::d,nH,T2,ekin,etot,eint
 
 #ifdef HYDRO
-
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
 
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
@@ -57,8 +83,6 @@ subroutine cooling_fine(r,g,m,ilevel)
   end do
 
 #endif
-
-111 format('   Entering cooling_fine for level',i2)
 
 end subroutine cooling_fine
 !###########################################################

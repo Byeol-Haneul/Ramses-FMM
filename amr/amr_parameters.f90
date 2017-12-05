@@ -22,7 +22,8 @@ module amr_parameters
 #else
   integer,parameter::i8b=8  ! long int are long int
 #endif
-
+  integer,parameter::flen=80
+  
   ! Number of dimensions
 #ifndef NDIM
   integer,parameter::ndim=1

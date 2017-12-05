@@ -1,81 +1,68 @@
-subroutine adaptive_loop(r,g,m,p)
+subroutine adaptive_loop(r,g,m,p,mdl)
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
+  use mdl_commons, only:mdl_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-  real(kind=8)::tt1,tt2
-  real(kind=4)::real_mem_tot
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
+  type(mdl_t)::mdl
 
   ! Local variables
   integer::ilevel
-  real(kind=4)::real_mem
+  real::tt1,tt2
+  
+  call cpu_time(tt1)
 
-#ifndef WITHOUTMPI
-  tt1=MPI_WTIME(info)
-#endif
+  ! Read run parameters
+  call m_read_params(r,g,m,p,mdl)
 
   ! Initialize grid variables
-  call init_amr(r,g,m)
-
-  ! Initialize software cache
-  call init_cache(r,g)
+  call r_init_amr(r,g,m,p,mdl,mdl%ncpu,0,0)
 
   ! Initialize time variables
-  call init_time(r,g)
+  call r_init_time(r,g,m,p,mdl,mdl%ncpu,0,0)
 
   ! Initialize hydro kernel workspace
-  if(r%hydro)call init_hydro(r)
+  if(r%hydro)call r_init_hydro(r,g,m,p,mdl,mdl%ncpu,0,0)
 
-  ! Initialize particle variables from files
-  if(r%pic)call init_part_file(r,g,p)
+  ! Initialize particle variables
+  if(r%pic)call r_init_part(r,g,m,p,mdl,mdl%ncpu,0,0)
 
+  ! Read initial particle properties from files
+  if(r%pic)call m_input_part(r,g,m,p,mdl)
+  
   ! Build initial AMR grid
   if(r%nrestart==0)then
-     call init_refine_basegrid(r,g,m,p) ! Build coarsest grid
-     call init_refine_adaptive(r,g,m,p) ! Build adaptive grid
+     call m_init_refine_basegrid(r,g,m,p,mdl) ! Build coarse grid
+     call m_init_refine_adaptive(r,g,m,p,mdl) ! Build adaptive grid
   else
-     call init_refine_restart(r,g,m) ! Build AMR grid from restart file
+     call m_init_refine_restart(r,g,m,p,mdl) ! Build AMR grid from restart file
   endif
 
-  ! Initialize particle from the AMR grid
-  if(r%pic)call init_part_grid(r,g,m,p)
+  ! Initialize particle from the AMR grid for zooms
+!  if(r%pic)call init_part_grid(r,g,m,p)
 
   ! Timing since startup
-#ifndef WITHOUTMPI
-  tt2=MPI_WTIME(info)
-  call getmem(real_mem)
-  call MPI_ALLREDUCE(real_mem,real_mem_tot,1,MPI_REAL,MPI_MAX,MPI_COMM_WORLD,info)
-  if(g%myid==1)then
-     write(*,*)'Time elapsed since startup:',tt2-tt1
-     call writemem(real_mem_tot)
-  endif
-#endif
+  call cpu_time(tt2)
+  write(*,*)'Time elapsed since startup:',tt2-tt1
 
   ! Output mesh structure
-  if(g%myid==1)then
-     write(*,*)'Initial mesh structure'
-     do ilevel=r%levelmin,r%nlevelmax
-        if(m%noct_tot(ilevel)>0)write(*,999)ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/g%ncpu
-     end do
-  end if
+  write(*,*)'Initial mesh structure'
+  do ilevel=r%levelmin,r%nlevelmax
+     if(m%noct_tot(ilevel)>0)write(*,999)&
+          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/g%ncpu
+  end do
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
   g%nstep_coarse_old=g%nstep_coarse
 
-  if(g%myid==1)write(*,*)'Starting time integration' 
+  write(*,*)'Starting time integration' 
 
   do ! Main time loop
 
-#ifndef WITHOUTMPI
-     tt1=MPI_WTIME(info)
-#endif
+     call cpu_time(tt1)
 
      if(r%verbose)write(*,*)'Entering amr_step_coarse'
 
@@ -85,28 +72,35 @@ subroutine adaptive_loop(r,g,m,p)
      g%eint_tot=0.0D0  ! Reset total internal energy
 
      ! Call base level
-     call amr_step(r,g,m,p,r%levelmin,1)
+     call m_amr_step(r,g,m,p,mdl,r%levelmin,1)
 
      ! New coarse time-step
      g%nstep_coarse=g%nstep_coarse+1
+
+     call cpu_time(tt2)
+     write(*,*)'Time elapsed since last coarse step:',tt2-tt1
      
-#ifndef WITHOUTMPI
-     tt2=MPI_WTIME(info)
-     if(mod(g%nstep_coarse,r%ncontrol)==0)then
-        call getmem(real_mem)
-        call MPI_ALLREDUCE(real_mem,real_mem_tot,1,MPI_REAL,MPI_MAX,MPI_COMM_WORLD,info)
-        if(g%myid==1)then
-           write(*,*)'Time elapsed since last coarse step:',tt2-tt1
-           call writemem(real_mem_tot)
-        endif
-     endif
-#else
-     if(mod(g%nstep_coarse,r%ncontrol)==0)then
-        call getmem(real_mem)
-        call writemem(real_mem)
-     endif
-#endif
+!!$#ifndef WITHOUTMPI
+!!$     tt2=MPI_WTIME(info)
+!!$     if(mod(g%nstep_coarse,r%ncontrol)==0)then
+!!$        call getmem(real_mem)
+!!$        call MPI_ALLREDUCE(real_mem,real_mem_tot,1,MPI_REAL,MPI_MAX,MPI_COMM_WORLD,info)
+!!$        if(g%myid==1)then
+!!$           write(*,*)'Time elapsed since last coarse step:',tt2-tt1
+!!$           call writemem(real_mem_tot)
+!!$        endif
+!!$     endif
+!!$#else
+!!$     if(mod(g%nstep_coarse,r%ncontrol)==0)then
+!!$        call getmem(real_mem)
+!!$        call writemem(real_mem)
+!!$     endif
+!!$#endif
 
   end do
+
+  call r_clean_stop(r,g,m,p,mdl,mdl%ncpu,0,0)
+
+  return
 
 end subroutine adaptive_loop

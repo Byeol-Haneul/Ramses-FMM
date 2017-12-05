@@ -2,10 +2,40 @@
 !###########################################################
 !###########################################################
 !###########################################################
+recursive subroutine r_godunov_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_GODUNOV_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_godunov_fine(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call godunov_fine(r,g,m,ilevel)
+  endif
+
+end subroutine r_godunov_fine
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine godunov_fine(r,g,m,ilevel)
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
-  use hydro_commons
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -19,10 +49,6 @@ subroutine godunov_fine(r,g,m,ilevel)
   !--------------------------------------------------------------------------
   integer::igrid
 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%static)return
-  if(r%verbose)write(*,111)ilevel
-
   call open_cache(r,g,m,operation_godunov,domain_decompos_amr)
 
   ! Loop over active grids by vector sweeps
@@ -30,26 +56,55 @@ subroutine godunov_fine(r,g,m,ilevel)
   do while(igrid.LE.m%tail(ilevel))
      SELECT CASE (m%grid(igrid)%superoct)
      CASE(1)
-        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_1)
+        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_1)
      CASE(2**ndim)
-        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_2)
+        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_2)
      CASE(4**ndim)
-        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_4)
+        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_4)
      CASE(8**ndim)
-        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_8)
+        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_8)
      CASE(16**ndim)
-        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_16)
+        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_16)
      CASE(32**ndim)
-        call godfine1(r,g,m,igrid,ilevel,hydro_w%kernel_32)
+        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_32)
      END SELECT
      igrid=igrid+m%grid(igrid)%superoct
   end do
 
   call close_cache(r,g,m,m%grid_dict)
 
-111 format('   Entering godunov_fine for level ',i2)
-
 end subroutine godunov_fine
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine r_set_unew(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_SET_UNEW,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_unew(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call set_unew(r,g,m,ilevel)
+  endif
+
+end subroutine r_set_unew
 !###########################################################
 !###########################################################
 !###########################################################
@@ -78,36 +133,62 @@ subroutine set_unew(r,g,m,ilevel)
   
 #ifdef HYDRO
 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
   ! Set unew to uold for myid cells
   do i=m%head(ilevel),m%tail(ilevel)
      m%grid(i)%unew = m%grid(i)%uold
 #ifdef DUALENER
      do ind=1,twotondim
-        m%grid(i)%divu(ind) = 0.0
+        m%grid(i)%divu(ind) = 0.0d0
         d=max(m%grid(i)%uold(ind,1),smallr)
-        u=0.0; v=0.0; w=0.0
+        u=0.0d0; v=0.0d0; w=0.0d0
         if(ndim>0)u=m%grid(i)%uold(ind,2)/d
         if(ndim>1)v=m%grid(i)%uold(ind,3)/d
         if(ndim>2)w=m%grid(i)%uold(ind,4)/d
-        e=m%grid(i)%uold(ind,ndim+2)-0.5*d*(u**2+v**2+w**2)
+        e=m%grid(i)%uold(ind,ndim+2)-0.5d0*d*(u**2+v**2+w**2)
 #if NENER>0
         do irad=1,nener
            e=e-m%grid(i)%uold(ind,ndim+2+irad)
         end do
 #endif          
-        m%grid(i)%enew(ind) = e
+        m%grid(i)%enew(ind)=e
      end do
 #endif
   end do
 
 #endif
 
-111 format('   Entering set_unew for level ',i2)
-
 end subroutine set_unew
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine r_set_uold(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_SET_UOLD,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_uold(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call set_uold(r,g,m,ilevel)
+  endif
+
+end subroutine r_set_uold
 !###########################################################
 !###########################################################
 !###########################################################
@@ -138,9 +219,6 @@ subroutine set_uold(r,g,m,ilevel)
 
 #ifdef HYDRO
 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
   dx=r%boxlen/2**ilevel
 
   ! Set uold to unew
@@ -150,11 +228,11 @@ subroutine set_uold(r,g,m,ilevel)
      do ind=1,twotondim
         ! Correct total energy if internal energy is too small
         d=max(m%grid(i)%uold(ind,1),smallr)
-        u=0.0; v=0.0; w=0.0
+        u=0.0d0; v=0.0d0; w=0.0d0
         if(ndim>0)u=m%grid(i)%uold(ind,2)/d
         if(ndim>1)v=m%grid(i)%uold(ind,3)/d
         if(ndim>2)w=m%grid(i)%uold(ind,4)/d
-        e_kin=0.5*d*(u**2+v**2+w**2)
+        e_kin=0.5d0*d*(u**2+v**2+w**2)
 #if NENER>0
         do irad=1,nener
            e_kin=e_kin+m%grid(i)%uold(ind,ndim+2+irad)
@@ -164,7 +242,7 @@ subroutine set_uold(r,g,m,ilevel)
         e_prim=m%grid(i)%enew(ind)
         ! Note: here divu=-div.u*dt
         div=abs(m%grid(i)%divu(ind))*dx/dtnew(ilevel)
-        e_trunc=r%beta_fix*d*max(div,3.0*g%hexp*dx)**2
+        e_trunc=r%beta_fix*d*max(div,3.0d0*g%hexp*dx)**2
         if(e_cons<e_trunc)then
            m%grid(i)%uold(ind,ndim+2)=e_prim+e_kin
         end if
@@ -173,8 +251,6 @@ subroutine set_uold(r,g,m,ilevel)
   end do
 
 #endif
-
-111 format('   Entering set_uold for level ',i2)
 
 end subroutine set_uold
 !###########################################################
@@ -240,7 +316,7 @@ subroutine godfine1(r,g,m,ind_grid,ilevel,h)
 #endif
 
   ! Reset gravitational acceleration
-  h%gloc=0.0
+  h%gloc=0.0d0
 
   !---------------------
   ! Gather hydro stencil

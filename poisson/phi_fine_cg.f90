@@ -427,6 +427,40 @@ end subroutine cmp_Ap_cg
 !###########################################################
 !###########################################################
 !###########################################################
+recursive subroutine r_make_initial_phi(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,icount
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_MAKE_INITIAL_PHI,next_cpu,next_range,input_size,output_size,input_array)
+     call r_make_initial_phi(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     icount=input_array(2)
+     call make_initial_phi(r,g,m,ilevel,icount)
+  endif
+
+end subroutine r_make_initial_phi
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine make_initial_phi(r,g,m,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
@@ -466,7 +500,7 @@ subroutine make_initial_phi(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop(g)
+     call mdl_abort
   endif
 
   ! Compute fraction of time steps for interpolation
