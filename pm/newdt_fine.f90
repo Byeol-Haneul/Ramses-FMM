@@ -129,7 +129,7 @@ recursive subroutine r_newdt_part(r,g,m,p,mdl,cpu_range,input_size,output_size,i
      output_array(1:2)=transfer(ekin,output_array)
      output_array(3:4)=transfer(vmax,output_array)
   else
-     call newdt_part(r,g,m,ilevel,ekin,vmax)
+     call newdt_part(r,g,p,ilevel,ekin,vmax)
      output_array(1:2)=transfer(ekin,output_array)
      output_array(3:4)=transfer(vmax,output_array)
   endif
