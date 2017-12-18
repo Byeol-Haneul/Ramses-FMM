@@ -111,3 +111,73 @@ end subroutine hydro_flag
 !#####################################################################
 !#####################################################################
 !#####################################################################
+subroutine pack_fetch_hydro(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        msg%int4(ind)=1
+     else
+        msg%int4(ind)=0
+     endif
+  end do
+  
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_hydro
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
+subroutine unpack_fetch_hydro(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     if(msg%int4(ind)==1)then
+        grid%refined(ind)=.true.
+     else
+        grid%refined(ind)=.false.
+     endif
+  end do
+  
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondin
+        grid%uold(ind,ivar)=msg%realdp(ind,ivar)
+     end do
+  end do
+#endif
+
+end subroutine unpack_fetch_hydro
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################

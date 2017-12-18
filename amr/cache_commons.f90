@@ -1,7 +1,8 @@
 module cache_commons
   use amr_parameters, only: dp,ndim,twotondim
   use hydro_parameters, only: nvar
-
+  use call_back
+  
   ! Communication-related objects
   integer::mail_counter=0
   integer::request_id,flush_id
@@ -35,6 +36,49 @@ module cache_commons
      integer(kind=4)::lev
      integer(kind=4),dimension(1:ndim)::ckey
   end type request
+
+  ! Message size
+  integer::size_msg_array
+  integer::size_request_array
+  integer::size_flush_array
+  integer::size_fetch_array
+
+  ! Combiner rules
+  integer::combiner_rule
+  integer,parameter::COMBINER_EXIST=1
+  integer,parameter::COMBINER_CREATE=2
+  
+  ! Message array
+  integer(kind=4),dimension(:),allocatable::send_fetch_array
+  integer(kind=4),dimension(:),allocatable::send_flush_array
+  integer(kind=4),dimension(:),allocatable::recv_flush_array
+  integer(kind=4),dimension(:),allocatable::recv_request_array
+  
+  ! Message element type
+  type msg_int4
+     integer(kind=4),dimension(1:twotondim)::int4
+  end type msg_int4
+  type msg_realdp
+     integer(kind=4),dimension(1:twotondim)::int4
+     real(kind=dp),dimension(1:twotondim,1:nvar)::realdp
+  end type msg_realdp
+  type msg_small_realdp
+     real(kind=dp),dimension(1:twotondim)::realdp
+  end type msg_small_realdp
+  type msg_twin_realdp
+     real(kind=dp),dimension(1:twotondim)::realdp_phi
+     real(kind=dp),dimension(1:twotondim)::realdp_dis
+  end type msg_twin_realdp
+  type msg_three_realdp
+     real(kind=dp),dimension(1:twotondim)::realdp_phi
+     real(kind=dp),dimension(1:twotondim)::realdp_phi_old
+     real(kind=dp),dimension(1:twotondim)::realdp_dis
+  end type msg_three_realdp
+  type msg_large_realdp
+     integer(kind=4),dimension(1:twotondim)::int4
+     real(kind=dp),dimension(1:twotondim,1:nvar)::realdp_hydro
+     real(kind=dp),dimension(1:twotondim,1:ndim+2)::realdp_poisson
+  end type msg_large_realdp
 
   ! Response message buffer
   integer,parameter::ntilemax=16
@@ -97,7 +141,7 @@ module cache_commons
 #endif
   end type large_realdp_msg
 
-  ! Fush message buffer
+  ! Flush message buffer
   integer,parameter::nflushmax=128
   type int4_flush
      sequence
@@ -173,4 +217,9 @@ module cache_commons
   type(small_realdp_flush),allocatable,dimension(:)::send_flush_poisson
   type(large_realdp_flush),allocatable,dimension(:)::send_flush_refine
 
+  ! Cache call back functions
+  type(cache_f)::pack_fetch,unpack_fetch
+  type(cache_f)::pack_flush,unpack_flush
+  type(cache_f)::init_flush
+  
 end module cache_commons

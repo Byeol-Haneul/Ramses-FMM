@@ -812,3 +812,79 @@ end subroutine godfine1
 !###########################################################
 !###########################################################
 !###########################################################
+subroutine init_flush_godunov(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind,ivar
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%unew(ind,ivar)=0.0d0
+     enddo
+  enddo
+#endif
+  
+end subroutine init_flush_godunov
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine pack_flush_godunov(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_large_realdp)::msg
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp_hydro(ind,ivar)=grid%unew(ind,ivar)
+     end do
+  end do
+#endif
+  
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_godunov
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine unpack_flush_godunov(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_large_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%unew(ind,ivar)=grid%unew(ind,ivar)+msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+#endif
+  
+end subroutine unpack_flush_godunov
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################

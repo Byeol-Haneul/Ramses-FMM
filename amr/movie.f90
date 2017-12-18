@@ -72,7 +72,7 @@ subroutine m_output_frame(r,g,m,p,mdl)
      allocate(data_single(1:r%nw_frame*r%nh_frame))
      allocate(data_frame (1:r%nw_frame*r%nh_frame))
      allocate(dens       (1:r%nw_frame*r%nh_frame))
-     input_size=1
+     input_size=2
      output_size=2*r%nw_frame*r%nh_frame
      allocate(input_array(1:input_size))
      allocate(output_array(1:output_size))     
@@ -96,12 +96,14 @@ subroutine m_output_frame(r,g,m,p,mdl)
      if(r%hydro) then
         
         ! Compute column density
+        input_array(2)=0
         call r_output_frame(r,g,m,p,mdl,mdl%ncpu,input_size,output_size,input_array,output_array)
         dens=transfer(output_array,dens)
         
         do kk=1,NVAR
            if(r%movie_vars(kk).eq.1)then
               ! Compute mass-weighted projected quantities
+              input_array(2)=kk
               call r_output_frame(r,g,m,p,mdl,mdl%ncpu,input_size,output_size,input_array,output_array)
               data_frame=transfer(output_array,data_frame)
               ! Divide by column density
@@ -168,7 +170,7 @@ recursive subroutine r_output_frame(r,g,m,p,mdl,cpu_range,input_size,output_size
   integer::next_range,next_cpu
   integer,dimension(:),allocatable::next_output_array
   
-  integer::ind_proj
+  integer::ind_proj,ind_var
   real(kind=8),dimension(:),allocatable::map,next_map
 
   next_range=cpu_range/2
@@ -190,9 +192,10 @@ recursive subroutine r_output_frame(r,g,m,p,mdl,cpu_range,input_size,output_size
      deallocate(next_map)
   else
      ind_proj=input_array(1)
+     ind_var=input_array(2)
      allocate(map(1:r%nw_frame*r%nh_frame))
      map=0d0
-     call output_frame(r,g,m,p,ind_proj,r%nw_frame*r%nh_frame,map)
+     call output_frame(r,g,m,p,ind_proj,ind_var,r%nw_frame*r%nh_frame,map)
      output_array=transfer(map,output_array)
      deallocate(map)
   endif
@@ -202,61 +205,7 @@ end subroutine r_output_frame
 !=======================================================================
 !=======================================================================
 !=======================================================================
-!!$recursive subroutine r_output_frame(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
-!!$  use amr_commons, only: run_t,global_t,mesh_t
-!!$  use pm_commons, only: part_t
-!!$  use mdl_commons, only: mdl_t
-!!$  use mdl_parameters
-!!$  implicit none
-!!$  type(run_t)::r
-!!$  type(global_t)::g
-!!$  type(mesh_t)::m
-!!$  type(part_t)::p
-!!$  type(mdl_t)::mdl
-!!$  integer::cpu_range,input_size,output_size
-!!$  integer,dimension(1:input_size)::input_array
-!!$  integer,dimension(1:output_size)::output_array
-!!$
-!!$  integer::next_range,next_cpu
-!!$  integer,dimension(1:output_size)::next_output_array
-!!$
-!!$  integer::ind_proj
-!!$!  real(kind=8),dimension(:),allocatable::map,next_map
-!!$
-!!$  next_range=cpu_range/2
-!!$  next_cpu=g%myid+next_range
-!!$
-!!$  if(next_range>0)then
-!!$!     write(*,*)'call back',MDL_OUTPUT_FRAME
-!!$     call mdl_send_request(mdl,MDL_OUTPUT_FRAME,next_cpu,next_range,input_size,output_size,input_array)
-!!$     call r_output_frame(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
-!!$     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
-!!$!     allocate(map(1:r%nw_frame*r%nh_frame))
-!!$!     allocate(next_map(1:r%nw_frame*r%nh_frame))
-!!$!     map=transfer(output_array,map)
-!!$!     next_map=transfer(next_output_array,next_map)
-!!$!     map=map+next_map
-!!$!     output_array=transfer(map,output_array)
-!!$!     deallocate(next_map)
-!!$!     deallocate(map)
-!!$  else
-!!$!     allocate(map(1:r%nw_frame*r%nh_frame))
-!!$!     map=0.0d0
-!!$     ind_proj=input_array(1)
-!!$!     call output_frame(r,g,m,p,ind_proj,r%nw_frame*r%nh_frame,map)
-!!$     write(*,*)g%myid,ind_proj,output_size
-!!$!     write(*,*)size(map)
-!!$     output_array=0
-!!$!     output_array=transfer(map,output_array)
-!!$!     deallocate(map)
-!!$  endif
-!!$
-!!$end subroutine r_output_frame
-!=======================================================================
-!=======================================================================
-!=======================================================================
-!=======================================================================
-subroutine output_frame(r,g,m,p,ind_proj,map_size,map)
+subroutine output_frame(r,g,m,p,ind_proj,ind_var,map_size,map)
   use amr_parameters, only: dp,ndim,nvector,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -266,13 +215,13 @@ subroutine output_frame(r,g,m,p,ind_proj,map_size,map)
   type(global_t)::g
   type(mesh_t)::m
   type(part_t)::p
-  integer::ind_proj,map_size
+  integer::ind_proj,map_size,ind_var
   real(kind=8),dimension(1:map_size)::map
   
   ! Local variables
   integer::nlevelmax_frame,nstride
   integer::ilun,ind,ind_map
-  integer::imin,imax,jmin,jmax,ii,jj,kk
+  integer::imin,imax,jmin,jmax,ii,jj
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::xcen,ycen,zcen
   real(dp)::xleft_frame,xright_frame,yleft_frame,yright_frame,zleft_frame,zright_frame
@@ -442,13 +391,13 @@ subroutine output_frame(r,g,m,p,ind_proj,map_size,map)
 #endif
                     ind_map=ii+(jj-1)*r%nw_frame
 #ifdef HYDRO
-                    if(kk==0)then
+                    if(ind_var==0)then
                        ! Compute column density map
                        map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)
-                    else if(kk==1)then
+                    else if(ind_var==1)then
                        ! Compute mass-weighted mean density
                        map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)**2
-                    else if(kk==(ndim+2))then
+                    else if(ind_var==(ndim+2))then
                        ! Compute mass-weighted mean temperature
                        ! Kinetic energy
                        ekk=0.0d0
@@ -462,7 +411,7 @@ subroutine output_frame(r,g,m,p,ind_proj,map_size,map)
                        map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)*temp
                     else
                        ! Other variables
-                       map(ind_map)=map(ind_map)+dvol*m%grid(igrid)%uold(ind,kk)
+                       map(ind_map)=map(ind_map)+dvol*m%grid(igrid)%uold(ind,ind_var)
                     end if
 #endif
                  end do

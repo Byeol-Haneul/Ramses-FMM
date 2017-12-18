@@ -101,6 +101,7 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
   use cache_commons
   use hash
   use hilbert
+  use call_back, only: cache_f
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -130,7 +131,7 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok
   type(oct)::oct_tmp
-
+  
   !---------------------------------------------------
   ! Step 1: if a cell is flagged for refinement and
   ! if it is not already refined, create its son grid.
@@ -366,6 +367,243 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
   end do
 
 end subroutine refine_fine
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine pack_fetch_refine(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_large_realdp)::msg
+
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        msg%int4(ind)=1
+     else
+        msg%int4(ind)=0
+     endif
+  end do
+  
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+#endif
+  
+#ifdef GRAV
+  do idim=1,ndim
+     do ind=1,twotondim
+        msg%realdp_poisson(ind,idim)=grid%f(ind,idim)
+     end do
+  end do
+  do ind=1,twotondim
+     msg%realdp_poisson(ind,ndim+1)=grid%phi(ind)
+     msg%realdp_poisson(ind,ndim+2)=grid%phi_old(ind)
+#endif
+  end do
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_refine
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine unpack_fetch_refine(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_large_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     if(msg%int4(ind)==1)then
+        grid%refined(ind)=.true.
+     else
+        grid%refined(ind)=.false.
+     endif
+  end do
+  
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+#endif
+
+#ifdef GRAV
+  do idim=1,ndim
+     do ind=1,twotondim
+        grid%f(ind,idim)=msg%realdp_poisson(ind,idim)
+     end do
+  end do
+  do ind=1,twotondim
+     grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
+     grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+  end do
+#endif
+
+end subroutine unpack_fetch_refine
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine pack_flush_refine(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar,idim
+  type(msg_large_realdp)::msg
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+#endif
+  
+#ifdef GRAV
+  do idim=1,ndim
+     do ind=1,twotondim
+        msg%realdp_poisson(ind,idim)=grid%f(ind,idim)
+     end do
+  end do
+  do ind=1,twotondim
+     msg%realdp_poisson(ind,ndim+1)=grid%phi(ind)
+     msg%realdp_poisson(ind,ndim+2)=grid%phi_old(ind)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_refine
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine unpack_flush_refine(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar,idim
+  type(msg_large_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     grid%refined(ind)=.false.
+  end do
+  
+#ifdef HYDRO
+  do ind=1,twotondim
+     do ivar=1,nvar
+        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+#endif
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     do idim=1,ndim
+        grid%f(ind,idim)=msg%realdp_poisson(ind,idim)
+     end do
+     grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
+     grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+  end do
+#endif
+
+end subroutine unpack_flush_refine
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine init_flush_derefine(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  grid%refined(1:twotondim)=.true.
+  
+end subroutine init_flush_derefine
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine pack_flush_derefine(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  do ind=1,twotondim     
+     if(grid%refined(ind))then
+        msg%int4(ind)=1
+     else
+        msg%int4(ind)=0
+     endif
+  end do
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_derefine
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine unpack_flush_derefine(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  msg=transfer(msg_array,msg)
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        if(msg%int4(ind)==0)then
+           grid%refined(ind)=.false.
+        endif
+     endif
+  end do
+
+end subroutine unpack_flush_derefine
 !###############################################################
 !###############################################################
 !###############################################################

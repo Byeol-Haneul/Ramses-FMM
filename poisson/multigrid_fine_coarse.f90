@@ -115,6 +115,64 @@ subroutine restrict_mask(r,g,m,ifinelevel,allmasked)
   
 end subroutine restrict_mask
 
+subroutine init_flush_restrict_mask(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,3)=0.0d0
+  end do
+#endif
+  
+end subroutine init_flush_restrict_mask
+
+subroutine pack_flush_restrict_mask(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%f(ind,3)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_restrict_mask
+
+subroutine unpack_flush_restrict_mask(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,3)=grid%f(ind,3)+msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_flush_restrict_mask
+
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -297,6 +355,50 @@ subroutine cmp_residual_mg(r,g,m,hash_dict, ilevel)
   call close_cache(r,g,m,hash_dict)
 
 end subroutine cmp_residual_mg
+
+subroutine pack_fetch_mg(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_twin_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_twin_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp_phi(ind)=grid%phi(ind)
+     msg%realdp_dis(ind)=grid%f(ind,3)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_mg
+
+subroutine unpack_fetch_mg(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_twin_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_twin_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%phi(ind)=msg%realdp_phi(ind)
+     grid%f(ind,3)=msg%realdp_dis(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -1025,10 +1127,105 @@ subroutine restrict_residual(r,g,m,ifinelevel)
 
 end subroutine restrict_residual
 
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
+subroutine pack_fetch_restrict_res(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%f(ind,3)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_restrict_res
+
+subroutine unpack_fetch_restrict_res(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,3)=msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_restrict_res
+
+subroutine init_flush_restrict_res(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,2)=0.0d0
+  end do
+#endif
+  
+end subroutine init_flush_restrict_res
+
+subroutine pack_flush_restrict_res(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%f(ind,2)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_restrict_res
+
+subroutine unpack_flush_restrict_res(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,2)=grid%f(ind,2)+msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_flush_restrict_res
 
 ! ------------------------------------------------------------------------
 ! Interpolation and correction
@@ -1155,6 +1352,48 @@ subroutine interpolate_and_correct(r,g,m,ifinelevel)
   call close_cache(r,g,m,m%mg_dict)
 
 end subroutine interpolate_and_correct
+
+subroutine pack_fetch_phi(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%phi(ind)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_phi
+
+subroutine unpack_fetch_phi(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%phi(ind)=msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_phi
 
 ! ########################################################################
 ! ########################################################################
@@ -1308,6 +1547,48 @@ subroutine set_scan_flag(r,g,m,hash_dict,ilevel)
   call close_cache(r,g,m,hash_dict)
 
 end subroutine set_scan_flag
+
+subroutine pack_fetch_scan(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%f(ind,3)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_scan
+
+subroutine unpack_fetch_scan(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,3)=msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_scan
 
 ! ########################################################################
 ! ########################################################################

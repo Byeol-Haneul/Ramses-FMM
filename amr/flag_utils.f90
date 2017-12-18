@@ -154,6 +154,111 @@ end subroutine init_flag
 !################################################################
 !################################################################
 !################################################################
+subroutine pack_fetch_flag(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  do ind=1,twotondim
+     msg%int4(ind)=grid%flag1(ind)
+  end do
+
+  msg_array=transfer(msg,msg_array)
+  
+end subroutine pack_fetch_flag
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine unpack_fetch_flag(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     grid%flag1(ind)=msg%int4(ind)
+  end do
+  
+end subroutine unpack_fetch_flag
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine init_flush_initflag(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind
+  
+  do ind=1,twotondim
+     grid%flag1(ind)=0
+  end do
+
+end subroutine init_flush_initflag
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine pack_flush_initflag(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_int4)::msg
+
+  do ind=1,twotondim
+     msg%int4(ind)=grid%flag1(ind)
+  end do
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_initflag
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
+subroutine unpack_flush_initflag(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  msg=transfer(msg_array,msg)
+  
+  do ind=1,twotondim
+     grid%flag1(ind)=MAX(grid%flag1(ind),msg%int4(ind))
+  end do
+
+end subroutine unpack_flush_initflag
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
 recursive subroutine r_user_flag(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct)
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t

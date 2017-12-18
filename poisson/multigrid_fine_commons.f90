@@ -524,6 +524,58 @@ subroutine build_mg(r,g,m,ifinelevel)
 
 end subroutine build_mg
 
+subroutine pack_flush_build_mg(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=0.0d0
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_build_mg
+
+subroutine unpack_flush_build_mg(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::idim,ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+  do ind=1,twotondim
+     grid%refined(ind)=.false.
+  end do
+  
+#ifdef GRAV
+  do idim=1,ndim
+     do ind=1,twotondim
+        grid%f(ind,idim)=0.0d0
+     end do
+  end do
+  do ind=1,twotondim
+     grid%phi(ind)=0.0d0
+     grid%phi_old(ind)=0.0d0
+  end do
+#endif
+
+end subroutine unpack_flush_build_mg
+
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################

@@ -254,3 +254,55 @@ end subroutine kick_drift_part
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine pack_fetch_kick(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_three_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_three_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp_phi(ind)=grid%f(ind,1)
+     msg%realdp_phi_old(ind)=grid%f(ind,2)
+     msg%realdp_dis(ind)=grid%f(ind,3)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_kick
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine unpack_fetch_kick(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_three_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_three_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,1)=msg%realdp_phi(ind)
+     grid%f(ind,2)=msg%realdp_phi_old(ind)
+     grid%f(ind,3)=msg%realdp_dis(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_kick
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################

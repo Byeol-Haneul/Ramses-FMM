@@ -151,9 +151,101 @@ subroutine upload_fine(r,g,m,ilevel)
 
   call close_cache(r,g,m,m%grid_dict)
 
+  ! Set conservative variable to zero in refined cells
+  do ioct=m%head(ilevel),m%tail(ilevel)
+     do ivar=1,nvar
+        do ind=1,twotondim
+           if(m%grid(ioct)%uold(ind,1)==0.0)then
+              write(*,*)'Sorry zero density cell'
+              write(*,*)m%grid(ioct)%uold(ind,1:nvar)
+              write(*,*)m%grid(ioct)%refined(ind)
+              call mdl_abort
+           endif
+        end do
+     end do
+  end do
+
 #endif
 
 end subroutine upload_fine
+!##########################################################################
+!##########################################################################
+!##########################################################################
+!##########################################################################
+subroutine init_flush_upload(grid,msg_size)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind,ivar
+  
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%uold(ind,ivar)=0.0d0
+     end do
+  end do
+#endif
+  
+end subroutine init_flush_upload
+!##########################################################################
+!##########################################################################
+!##########################################################################
+!##########################################################################
+subroutine pack_flush_upload(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_upload
+!##########################################################################
+!##########################################################################
+!##########################################################################
+!##########################################################################
+subroutine unpack_flush_upload(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        if(grid%refined(ind))then
+           grid%uold(ind,ivar)=grid%uold(ind,ivar)+msg%realdp(ind,ivar)
+        endif
+     end do
+  end do
+#endif
+
+end subroutine unpack_flush_upload
 !##########################################################################
 !##########################################################################
 !##########################################################################

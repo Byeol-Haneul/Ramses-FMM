@@ -560,6 +560,99 @@ end subroutine load_balance
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar,idim
+  type(msg_large_realdp)::msg
+
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        msg%int4(ind)=1
+     else
+        msg%int4(ind)=0
+     endif
+  end do
+  
+#ifdef HYDRO
+  do ind=1,twotondim
+     do ivar=1,nvar
+        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+#endif
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     do idim=1,ndim
+        msg%realdp_poisson(ind,idim)=grid%f(ind,idim)
+     end do
+     msg%realdp_poisson(ind,ndim+1)=grid%phi(ind)
+     msg%realdp_poisson(ind,ndim+2)=grid%phi_old(ind)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_loadbalance
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine unpack_flush_loadbalance(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar,idim
+  type(msg_large_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+
+!  write(*,*)'UNPACK REF',msg%int4
+!  write(*,*)'UNPACK RHO',msg%realdp_hydro(1:twotondim,1)
+
+  do ind=1,twotondim
+     if(msg%int4(ind)==1)then
+        grid%refined(ind)=.true.
+     else
+        grid%refined(ind)=.false.
+     endif
+  enddo
+  
+#ifdef HYDRO
+  do ind=1,twotondim
+     do ivar=1,nvar
+        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+#endif
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     do idim=1,ndim
+        grid%f(ind,idim)=msg%realdp_poisson(ind,idim)
+     end do
+     grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
+     grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+  end do
+#endif
+
+end subroutine unpack_flush_loadbalance
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 #ifndef WITHOUTMPI
 subroutine balance_part(r,g,m,p,ilevel)
   use amr_parameters, only: nhilbert,nvector,ndim,i8b,dp

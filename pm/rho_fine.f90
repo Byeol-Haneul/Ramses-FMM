@@ -28,8 +28,7 @@ subroutine m_rho_fine(r,g,m,p,mdl,ilevel)
 
   if(.not. r%poisson)return
   if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-111 format(' Entering rho_fine for level ',I2)
+  if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
 
   !---------------------------
   ! Reset multipole to zero
@@ -56,12 +55,14 @@ subroutine m_rho_fine(r,g,m,p,mdl,ilevel)
 
         ! Set multipoles in all leaf cells
         if(m%noct_tot(i)>0)then
+           if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i        
            call r_multipole_leaf_cells(r,g,m,p,mdl,g%ncpu,1,0,i)
         endif
 
         ! Average down multipoles in all split cells
         if(i<r%nlevelmax)then
            if(m%noct_tot(i+1)>0)then
+              if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i        
               call r_multipole_split_cells(r,g,m,p,mdl,g%ncpu,1,0,i)
            endif
         endif
@@ -73,8 +74,9 @@ subroutine m_rho_fine(r,g,m,p,mdl,ilevel)
         call r_reset_rho(r,g,m,p,mdl,g%ncpu,1,0,i)
      endif
 
-     ! Gas mass deposition using pseudo-particles
+        ! Gas mass deposition using pseudo-particles
      if(r%hydro.AND.m%noct_tot(i)>0)then
+        if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
         call r_cic_multipole(r,g,m,p,mdl,g%ncpu,1,0,i)
      endif
 
@@ -320,6 +322,81 @@ end subroutine multipole_split_cells
 !################################################################
 !################################################################
 !################################################################
+subroutine init_flush_multipole(grid,msg_size)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind,ivar
+  
+#ifdef HYDRO
+  do ivar=1,ndim+1
+     do ind=1,twotondim
+        grid%unew(ind,ivar)=0.0
+     end do
+  end do
+#endif
+  
+end subroutine init_flush_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_multipole(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+#ifdef HYDRO
+  do ivar=1,ndim+1
+     do ind=1,twotondim
+        msg%realdp(ind,ivar)=grid%unew(ind,ivar)
+     end do
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_multipole(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef HYDRO
+  do ivar=1,ndim+1
+     do ind=1,twotondim
+        if(grid%refined(ind))then
+           grid%unew(ind,ivar)=grid%unew(ind,ivar)+msg%realdp(ind,ivar)
+        endif
+     end do
+  end do
+#endif
+
+end subroutine unpack_flush_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 recursive subroutine r_reset_rho(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -453,6 +530,13 @@ subroutine cic_multipole(r,g,m,ilevel)
         mmm=m%grid(igrid)%unew(ind,1)
 
         ! Compute pseudo particle (centre of mass) position
+        if(mmm==0)then
+           write(*,*)'Sorry divide by zero'
+           write(*,*)m%grid(igrid)%unew(ind,1:nvar)
+           write(*,*)m%grid(igrid)%uold(ind,1:nvar)
+           write(*,*)m%grid(igrid)%refined(ind)
+           call mdl_abort
+        endif
         x(1:ndim)=m%grid(igrid)%unew(ind,2:ndim+1)/mmm
         
         ! Compute total multipole
@@ -726,6 +810,73 @@ end subroutine cic_part
 !################################################################
 !################################################################
 !################################################################
+subroutine init_flush_rho(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%rho(ind)=0.0
+  end do
+#endif
+  
+end subroutine init_flush_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_rho(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%rho(ind)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_rho(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%rho(ind)=grid%rho(ind)+msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_flush_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 recursive subroutine r_split_part(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -753,6 +904,57 @@ recursive subroutine r_split_part(r,g,m,p,mdl,cpu_range,input_size,output_size,i
   endif
 
 end subroutine r_split_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine pack_fetch_split(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        msg%int4(ind)=1
+     else
+        msg%int4(ind)=0
+     endif
+  enddo
+  msg_array=transfer(msg,msg_array)
+  
+end subroutine pack_fetch_split
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine unpack_fetch_split(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     if(msg%int4(ind)==1)then
+        grid%refined(ind)=.true.
+     else
+        grid%refined(ind)=.false.
+     endif
+  enddo
+
+end subroutine unpack_fetch_split
 !##############################################################################
 !##############################################################################
 !##############################################################################

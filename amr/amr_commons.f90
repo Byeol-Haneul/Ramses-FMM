@@ -4,7 +4,6 @@ module amr_commons
   use hydro_commons
   use hash
   use domain_m
-  use cache_commons
   
   ! New type for oct structure
   type oct
