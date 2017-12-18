@@ -745,10 +745,7 @@ integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) resu
   integer(kind=8),dimension(0:ndim)::hash_child
   integer(kind=8),dimension(1:nhilbert),save::hks
   integer::i,ind,idim,ivar,iskip,ichild,ilevel,info,grid_cpu,ntile_response,icounter
-  integer::send_request_id,response_id
-  integer,dimension(:),allocatable::send_request_array
-  integer,dimension(:),allocatable::recv_fetch_array
-  
+  integer::send_request_id,response_id  
   logical::failed_request
   integer,dimension(MPI_STATUS_SIZE)::send_request_status
 #endif
@@ -800,9 +797,6 @@ integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) resu
   !============================================
   if(fetch_cache)then
 
-     allocate(send_request_array(1:size_request_array))
-     allocate(recv_fetch_array(1:size_fetch_array))
-     
      ! Send a request to the relevant cpu
      send_request_array(1)=ilevel
      send_request_array(2:ndim+1)=hash_key(1:ndim)
@@ -819,8 +813,6 @@ integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) resu
      ! Wait for ISEND completion to free memory in corresponding MPI buffer
      call MPI_WAIT(send_request_id,send_request_status,info)
 
-     deallocate(send_request_array)
-     
      ! Check header for type of response
      iskip=1
      failed_request=(recv_fetch_array(iskip)==-1)
@@ -930,8 +922,6 @@ integer function get_grid(r,g,m,hash_key,hash_dict,flush_cache,fetch_cache) resu
         end do
         ! End loop over tiles
 
-        deallocate(recv_fetch_array)
-        
      endif
 
      !=================================================
@@ -1678,7 +1668,6 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
   integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk
   integer(kind=8), dimension(1:nvector,1:ndim),save::ix
   integer(kind=8), dimension(0:ndim)::hash_key,hash_child
-  integer,dimension(:),allocatable::msg_array
   !
 #ifndef WITHOUTMPI
   comm_completed=.false.
@@ -1758,8 +1747,6 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
         call MPI_TEST(flush_id,flush_received,flush_status,info)
         if(flush_received)then
            
-           allocate(msg_array(1:size_msg_array))
-
            ! Combine received data to local memory only if grid exists
            if(combiner_rule.eq.COMBINER_EXIST)then
               iskip=1
@@ -1777,8 +1764,7 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
 
                  ! Unpack message content only if grid exists
                  if(ichild>0)then
-                    msg_array=recv_flush_array(iskip:iskip+size_msg_array-1)
-                    call unpack_flush%proc(m%grid(ichild),size_msg_array,msg_array)
+                    call unpack_flush%proc(m%grid(ichild),size_msg_array,recv_flush_array(iskip:iskip+size_msg_array-1))
                  endif
 
                  iskip=iskip+size_msg_array
@@ -1829,8 +1815,7 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
                     call hash_set(hash_dict,hash_child,ichild)
 
                     ! Unpack message content
-                    msg_array=recv_flush_array(iskip:iskip+size_msg_array-1)
-                    call unpack_flush%proc(m%grid(ichild),size_msg_array,msg_array)
+                    call unpack_flush%proc(m%grid(ichild),size_msg_array,recv_flush_array(iskip:iskip+size_msg_array-1))
                     
                  endif
                  
@@ -1840,8 +1825,6 @@ subroutine check_mail(r,g,m,comm_id,hash_dict)
 
            endif
 
-           deallocate(msg_array)
-           
            !=================================
            ! Post a new RECV for flush
            !=================================
@@ -2213,7 +2196,6 @@ subroutine destage(r,g,m,igrid,hash_dict)
   integer::ind,ivar,idim,ipos,info,icache,iflush,grid_cpu
   integer::send_flush_id,iskip,nflush
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer,dimension(:),allocatable::msg_array
   !
 #ifndef WITHOUTMPI
 
@@ -2262,11 +2244,8 @@ subroutine destage(r,g,m,igrid,hash_dict)
      iskip=iskip+ndim+1
 
      ! Pack message content
-     allocate(msg_array(1:size_msg_array))
-     call pack_flush%proc(m%grid(igrid),size_msg_array,msg_array)
-     send_flush_array(iskip:iskip+size_msg_array-1)=msg_array
-     deallocate(msg_array)
-     
+     call pack_flush%proc(m%grid(igrid),size_msg_array,send_flush_array(iskip:iskip+size_msg_array-1))
+
   endif
 #endif
 end subroutine destage
@@ -2527,12 +2506,6 @@ subroutine close_cache(r,g,m,hash_dict)
   ! Barrier to prevent interference with the next cache
   call MPI_BARRIER(MPI_COMM_WORLD,info)
 
-  ! Deallocate communication buffers
-  deallocate(recv_request_array)
-  deallocate(recv_flush_array)
-  deallocate(send_flush_array)
-  deallocate(send_fetch_array)
-  
 #endif
 end subroutine close_cache
 #endif
@@ -2890,22 +2863,17 @@ subroutine open_cache(r,g,m,cache_operation_init,domain_decompos_init)
      unpack_flush%proc => null()
   endif
 
-  ! Allocate communication buffers
+  ! Compute useful size of communication buffers
   size_request_array=1+ndim
   size_flush_array=1+(1+ndim+size_msg_array)*nflushmax
   size_fetch_array=2+(1+ndim+size_msg_array)*ntilemax
 
-  allocate(recv_request_array(1:size_request_array))
-  allocate(recv_flush_array(1:size_flush_array))
-  allocate(send_flush_array(1:g%ncpu*size_flush_array))
-  allocate(send_fetch_array(1:g%ncpu*size_fetch_array))
+  ! Set communication counters to zero
+  do icpu=1,g%ncpu
+     iskip=size_flush_array*(icpu-1)+1
+     send_flush_array(iskip)=0
+  end do
   
-  ! Set communication arrays to zero
-  recv_request_array=0
-  recv_flush_array=0
-  send_flush_array=0
-  send_fetch_array=0
-
   ! Post the first RECV for request
   call MPI_IRECV(recv_request_array,size_request_array,MPI_INTEGER,MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,request_id,info)
   

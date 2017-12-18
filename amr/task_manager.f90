@@ -412,12 +412,16 @@ subroutine init_cache(mdl)
   type(mdl_t)::mdl
   
   integer::ncpu
+  type(msg_large_realdp)::dummy_large_realdp
 
   ncpu=mdl%ncpu
   
 #ifndef WITHOUTMPI  
+
   ! Allocate all communication and cache-related variables
   allocate(reply_id(1:ncpu))
+
+#ifdef OLDCACHE
   allocate(reply_interpol(1:ncpu))
   allocate(reply_mg(1:ncpu))
   allocate(reply_flag(1:ncpu))
@@ -667,6 +671,20 @@ subroutine init_cache(mdl)
   call MPI_TYPE_STRUCT(2,new_type_length,new_type_disp,new_type_type,new_mpi_request,info)
   call MPI_TYPE_COMMIT(new_mpi_request,info)
 
+#else
+  size_request_array=1+ndim
+  size_msg_array=storage_size(dummy_large_realdp)/32
+  size_flush_array=1+(1+ndim+size_msg_array)*nflushmax
+  size_fetch_array=2+(1+ndim+size_msg_array)*ntilemax
+
+  allocate(recv_request_array(1:size_request_array))
+  allocate(send_request_array(1:size_request_array))
+  allocate(recv_fetch_array(1:size_fetch_array))
+  allocate(send_fetch_array(1:ncpu*size_fetch_array))
+  allocate(recv_flush_array(1:size_flush_array))
+  allocate(send_flush_array(1:ncpu*size_flush_array))
+  
+#endif
 #endif
 
 end subroutine init_cache

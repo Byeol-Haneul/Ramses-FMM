@@ -49,10 +49,12 @@ module cache_commons
   integer,parameter::COMBINER_CREATE=2
   
   ! Message array
-  integer(kind=4),dimension(:),allocatable::send_fetch_array
-  integer(kind=4),dimension(:),allocatable::send_flush_array
-  integer(kind=4),dimension(:),allocatable::recv_flush_array
   integer(kind=4),dimension(:),allocatable::recv_request_array
+  integer(kind=4),dimension(:),allocatable::send_request_array
+  integer(kind=4),dimension(:),allocatable::recv_fetch_array
+  integer(kind=4),dimension(:),allocatable::send_fetch_array
+  integer(kind=4),dimension(:),allocatable::recv_flush_array
+  integer(kind=4),dimension(:),allocatable::send_flush_array
   
   ! Message element type
   type msg_int4
