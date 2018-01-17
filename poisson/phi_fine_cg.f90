@@ -3,9 +3,11 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine phi_fine_cg(r,g,m,ilevel,icount)
+subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
   use cache_commons
   implicit none
 #ifndef WITHOUTMPI
@@ -16,6 +18,8 @@ subroutine phi_fine_cg(r,g,m,ilevel,icount)
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
   integer::ilevel,icount
   !=========================================================
   ! Iterative Poisson solver with Conjugate Gradient method 
@@ -27,49 +31,38 @@ subroutine phi_fine_cg(r,g,m,ilevel,icount)
   ! b  : stored in rho
   !=========================================================
   integer::igrid,ind,iter,itermax
-  real(dp)::error,error_ini
-  real(dp)::dx2,fourpi,oneoversix,fact,fact2
-  real(dp)::r2_old=0,alpha_cg,beta_cg
+  real(kind=8)::error,error_ini
+  real(kind=8)::r2_old=0,alpha_cg,beta_cg
   real(kind=8)::r2,pAp,rhs_norm
+  integer,dimension(1:4)::input_array
+  integer,dimension(1:4)::output_array
 
   if(r%gravity_type>0)return
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,111)ilevel
-
-  ! Set constants
-  dx2=(r%boxlen/2**ilevel)**2
-  fourpi=4.D0*ACOS(-1.0D0)
-  if(r%cosmo)fourpi=1.5D0*g%omega_m*g%aexp
-  oneoversix=1.0D0/dble(twondim)
-  fact=oneoversix*fourpi*dx2
-  fact2=fact*fact
+111 format('   Entering phi_fine_cg for level ',I2)
 
   !===============================
   ! Compute initial phi
   !===============================
-  call make_initial_phi(r,g,m,ilevel,icount)
+  input_array(1)=ilevel
+  input_array(2)=icount
+  call r_make_initial_phi(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
 
   !===============================
   ! Compute right-hand side norm
   !===============================
-  rhs_norm=0.d0
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        rhs_norm=rhs_norm+fact2*(m%grid(igrid)%rho(ind)-g%rho_tot)**2
-     end do
-  end do
-  ! Compute global norms
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(rhs_norm,rhs_norm_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  rhs_norm=rhs_norm_all
-#endif
+  call r_cmp_rhs_norm(r,g,m,p,mdl,mdl%ncpu,1,2,input_array,output_array)
+  rhs_norm=transfer(output_array(1:2),rhs_norm)
   rhs_norm=DSQRT(rhs_norm/dble(twotondim*m%noct_tot(ilevel)))
 
   !==============================================
   ! Compute r = b - Ax and store it into f(i,1)
   ! Also set p = r and store it into f(i,2)
   !==============================================
-  call cmp_residual_cg(r,g,m,ilevel,icount)
+  input_array(1)=ilevel
+  input_array(2)=icount
+  call r_cmp_residual_cg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
 
   !====================================
   ! Main iteration loop
@@ -83,17 +76,8 @@ subroutine phi_fine_cg(r,g,m,ilevel,icount)
      !====================================
      ! Compute residual norm
      !====================================
-     r2=0.0d0
-     do igrid=m%head(ilevel),m%tail(ilevel)
-        do ind=1,twotondim
-           r2=r2+m%grid(igrid)%f(ind,1)**2
-        end do
-     end do
-     ! Compute global norm
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(r2,r2_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     r2=r2_all
-#endif
+     call r_cmp_r2_cg(r,g,m,p,mdl,mdl%ncpu,1,2,input_array,output_array)
+     r2=transfer(output_array(1:2),r2)
 
      !====================================
      ! Compute beta factor
@@ -108,31 +92,20 @@ subroutine phi_fine_cg(r,g,m,ilevel,icount)
      !====================================
      ! Recurrence on p
      !====================================
-     do igrid=m%head(ilevel),m%tail(ilevel)
-        do ind=1,twotondim
-           m%grid(igrid)%f(ind,2)=m%grid(igrid)%f(ind,1)+beta_cg*m%grid(igrid)%f(ind,2)
-        end do
-     end do
+     input_array(1)=ilevel
+     input_array(2:3)=transfer(beta_cg,input_array(2:3))
+     call r_recurrence_on_p(r,g,m,p,mdl,mdl%ncpu,3,0,input_array)
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
      !==============================================
-     call cmp_Ap_cg(r,g,m,ilevel)
+     call r_cmp_Ap_cg(r,g,m,p,mdl,mdl%ncpu,1,0,input_array)
 
      !====================================
      ! Compute p.Ap scalar product
      !====================================
-     pAp=0.0d0
-     do igrid=m%head(ilevel),m%tail(ilevel)
-        do ind=1,twotondim
-           pAp=pAp+m%grid(igrid)%f(ind,2)*m%grid(igrid)%f(ind,3)
-        end do
-     end do
-     ! Compute global sum
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(pAp,pAp_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     pAp=pAp_all
-#endif
+     call r_cmp_pAp_cg(r,g,m,p,mdl,mdl%ncpu,1,2,input_array,output_array)
+     pAp=transfer(output_array(1:2),pAp)
 
      !====================================
      ! Compute alpha factor
@@ -140,45 +113,155 @@ subroutine phi_fine_cg(r,g,m,ilevel,icount)
      alpha_cg = r2/pAp
 
      !====================================
-     ! Recurrence on x
+     ! Recurrence on x and r
      !====================================
+     input_array(1)=ilevel
+     input_array(2:3)=transfer(alpha_cg,input_array(2:3))
+     call r_recurrence_x_and_r(r,g,m,p,mdl,mdl%ncpu,3,0,input_array)
+
+     !====================================
+     ! Compute error
+     !====================================
+     error=DSQRT(r2/dble(twotondim*m%noct_tot(ilevel)))
+     if(iter==1)error_ini=error
+     if(r%verbose)write(*,112)iter,error/rhs_norm,error/error_ini
+112  format('   ==> Step=',i5,' Error=',2(1pe10.3,1x))
+
+  end do
+  ! End main iteration loop
+
+  write(*,115)ilevel,iter,error/rhs_norm,error/error_ini
+115 format('   ==> Level=',i5,' Step=',i5,' Error=',2(1pe10.3,1x))
+  if(iter>=itermax)then
+     write(*,*)'Poisson failed to converge...'
+  end if
+
+end subroutine m_phi_fine_cg
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine r_recurrence_on_p(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hash
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ind,igrid,ilevel
+  real(kind=8)::beta_cg
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_RECURRENCE_ON_P,next_cpu,next_range,input_size,output_size,input_array)
+     call r_recurrence_on_p(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     beta_cg=transfer(input_array(2:3),beta_cg)
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        do ind=1,twotondim
+           m%grid(igrid)%f(ind,2)=m%grid(igrid)%f(ind,1)+beta_cg*m%grid(igrid)%f(ind,2)
+        end do
+     end do
+  endif
+
+end subroutine r_recurrence_on_p
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine r_recurrence_x_and_r(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hash
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ind,igrid,ilevel
+  real(kind=8)::alpha_cg
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_RECURRENCE_X_AND_R,next_cpu,next_range,input_size,output_size,input_array)
+     call r_recurrence_x_and_r(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     alpha_cg=transfer(input_array(2:3),alpha_cg)
+     ! Recurrence on x
      do igrid=m%head(ilevel),m%tail(ilevel)
         do ind=1,twotondim
            m%grid(igrid)%phi(ind)=m%grid(igrid)%phi(ind)+alpha_cg*m%grid(igrid)%f(ind,2)
         end do
      end do
-
-     !====================================
      ! Recurrence on r
-     !====================================
      do igrid=m%head(ilevel),m%tail(ilevel)
         do ind=1,twotondim
            m%grid(igrid)%f(ind,1)=m%grid(igrid)%f(ind,1)-alpha_cg*m%grid(igrid)%f(ind,3)
         end do
      end do
+  endif
 
-     ! Compute error
-     error=DSQRT(r2/dble(twotondim*m%noct_tot(ilevel)))
-     if(iter==1)error_ini=error
-     if(r%verbose)write(*,112)iter,error/rhs_norm,error/error_ini
-
-  end do
-  ! End main iteration loop
-
-  if(g%myid==1)write(*,115)ilevel,iter,error/rhs_norm,error/error_ini
-  if(iter>=itermax)then
-     if(g%myid==1)write(*,*)'Poisson failed to converge...'
-  end if
-
-111 format('   Entering phi_fine_cg for level ',I2)
-112 format('   ==> Step=',i5,' Error=',2(1pe10.3,1x))
-115 format('   ==> Level=',i5,' Step=',i5,' Error=',2(1pe10.3,1x))
-
-end subroutine phi_fine_cg
+end subroutine r_recurrence_x_and_r
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
+recursive subroutine r_cmp_residual_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hash
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,icount
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CMP_RESIDUAL_CG,next_cpu,next_range,input_size,output_size,input_array)
+     call r_cmp_residual_cg(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     icount=input_array(2)
+     call cmp_residual_cg(r,g,m,ilevel,icount)
+  endif
+
+end subroutine r_cmp_residual_cg
+
 subroutine cmp_residual_cg(r,g,m,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
@@ -326,6 +409,35 @@ end subroutine cmp_residual_cg
 !###########################################################
 !###########################################################
 !###########################################################
+recursive subroutine r_cmp_Ap_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  use hash
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CMP_AP_CG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cmp_Ap_cg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+     call cmp_Ap_cg(r,g,m,ilevel)
+  endif
+
+end subroutine r_cmp_Ap_cg
+
 subroutine cmp_Ap_cg(r,g,m,ilevel)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: run_t,global_t,mesh_t
@@ -1035,6 +1147,162 @@ subroutine unpack_fetch_cg(grid,msg_size,msg_array)
 #endif
 
 end subroutine unpack_fetch_cg
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
+recursive subroutine r_cmp_rhs_norm(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
+  use amr_parameters, only: twotondim,twondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+! ------------------------------------------------------------------------
+! Compute norm of residual 
+! ------------------------------------------------------------------------
+  integer::next_range,next_cpu
+  integer::ind,igrid,ilevel
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::rhs_norm,next_rhs_norm
+  real(kind=8)::dx2,fourpi,oneoversix,fact,fact2
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CMP_RHS_NORM,next_cpu,next_range,input_size,output_size,input_array)
+     call r_cmp_rhs_norm(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     rhs_norm=transfer(output_array,rhs_norm)
+     next_rhs_norm=transfer(next_output_array,next_rhs_norm)
+     rhs_norm=rhs_norm+next_rhs_norm
+     output_array=transfer(rhs_norm,output_array)
+  else
+     ! Set constants
+     dx2=(r%boxlen/2.0d0**ilevel)**2
+     fourpi=4.D0*ACOS(-1.0D0)
+     if(r%cosmo)fourpi=1.5D0*g%omega_m*g%aexp
+     oneoversix=1.0D0/dble(twondim)
+     fact=oneoversix*fourpi*dx2
+     fact2=fact*fact
+     ilevel=input_array(1)
+     rhs_norm=0.d0
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        do ind=1,twotondim
+           rhs_norm=rhs_norm+fact2*(m%grid(igrid)%rho(ind)-g%rho_tot)**2
+        end do
+     end do
+     output_array=transfer(rhs_norm,output_array)
+  endif
+
+end subroutine r_cmp_rhs_norm
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
+recursive subroutine r_cmp_r2_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+! ------------------------------------------------------------------------
+! Compute norm of residual 
+! ------------------------------------------------------------------------
+  integer::next_range,next_cpu
+  integer::ind,igrid
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::r2,next_r2
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CMP_R2_CG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cmp_r2_cg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     r2=transfer(output_array,r2)
+     next_r2=transfer(next_output_array,next_r2)
+     r2=r2+next_r2
+     output_array=transfer(r2,output_array)
+  else
+     r2=0.0d0
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        do ind=1,twotondim
+           r2=r2+m%grid(igrid)%f(ind,1)**2
+        end do
+     end do
+     output_array=transfer(r2,output_array)
+  endif
+
+end subroutine r_cmp_r2_cg
+! ########################################################################
+! ########################################################################
+! ########################################################################
+! ########################################################################
+recursive subroutine r_cmp_pAp_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+! ------------------------------------------------------------------------
+! Compute norm of residual 
+! ------------------------------------------------------------------------
+  integer::next_range,next_cpu
+  integer::igrid,ind
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::pAp,next_pAp
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_CMP_PAP_CG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cmp_pAp_cg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     pAp=transfer(output_array,pAp)
+     next_pAp=transfer(next_output_array,next_pAp)
+     pAp=pAp+next_pAp
+     output_array=transfer(pAp,output_array)
+  else
+     pAp=0.0d0
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        do ind=1,twotondim
+           pAp=pAp+m%grid(igrid)%f(ind,2)*m%grid(igrid)%f(ind,3)
+        end do
+     end do
+     output_array=transfer(pAp,output_array)
+  endif
+
+end subroutine r_cmp_pAp_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################

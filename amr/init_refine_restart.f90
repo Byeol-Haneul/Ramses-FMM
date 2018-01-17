@@ -29,7 +29,7 @@ subroutine m_init_refine_restart(r,g,m,p,mdl)
   integer,dimension(:),allocatable::noct_file,noct_skip
   integer,dimension(:),allocatable::input_array,output_array
   
-  write(*,*)'Building adaptive grid from restart file',r%nrestart
+  if(r%verbose)write(*,*)'Building adaptive grid from restart file',r%nrestart
 
   ! Set local constants
   zero_key=0
@@ -52,17 +52,24 @@ subroutine m_init_refine_restart(r,g,m,p,mdl)
   nlevelmax_min=MIN(r%nlevelmax,nlevelmax_file)
 
   ! Create base grids if necessary
-  do ilevel=r%levelmin,levelmin_max-1
+  if(levelmin_max>r%levelmin)then
      
-     ! Set a unigrid a coarser levels
-     call r_init_refine_basegrid(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+     do ilevel=r%levelmin,levelmin_max-1
+        
+        ! Set unigrid at coarser levels
+        call r_init_refine_basegrid(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+        
+        ! Get total, min and max grid count (only in master)
+        call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
+        call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
+        call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
+        
+     end do
      
-     ! Get total, min and max grid count (only in master).
-     call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
-     call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
-     call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
-
-  end do
+     ! Get maximum used memory (only in master)
+     call r_noct_used_max(r,g,m,p,mdl,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
+     
+  endif
 
   ! Allocate local variables
   allocate(noct_file(1:ncpu_file))
@@ -87,14 +94,16 @@ subroutine m_init_refine_restart(r,g,m,p,mdl)
         read(ilun,POS=ipos)noct_file(icpu)
         close(ilun)
      end do
-
+     
      ! Allocate input array
-     input_size=2*ncpu_file+2
+     input_size=2*ncpu_file+4
      allocate(input_array(1:input_size))
      input_array(1)=ilevel
      input_array(2)=ncpu_file
-     input_array(3:ncpu_file+2)=noct_file
-     input_array(ncpu_file+3:2*ncpu_file+2)=noct_skip
+     input_array(3)=levelmin_file
+     input_array(4)=nlevelmax_file
+     input_array(5:ncpu_file+4)=noct_file
+     input_array(ncpu_file+5:2*ncpu_file+4)=noct_skip
 
      ! Allocate output array
      output_size=2*nhilbert*(g%ncpu+1)
@@ -102,6 +111,7 @@ subroutine m_init_refine_restart(r,g,m,p,mdl)
 
      ! Call recursive slave routine
      call r_init_refine_restart(r,g,m,p,mdl,mdl%ncpu,input_size,output_size,input_array,output_array)
+
      bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
      deallocate(input_array,output_array)
 
@@ -129,6 +139,9 @@ subroutine m_init_refine_restart(r,g,m,p,mdl)
 
   end do
   ! End loop over relevant levels
+
+  ! Get maximum used memory (only in master)
+  call r_noct_used_max(r,g,m,p,mdl,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
 
   ! Deallocate local variables
   deallocate(noct_file,noct_skip)
@@ -161,6 +174,7 @@ recursive subroutine r_init_refine_restart(r,g,m,p,mdl,cpu_range,input_size,outp
   integer,dimension(:),allocatable::next_output_array
 
   integer::ilevel,ncpu_file
+  integer::levelmin_file,nlevelmax_file
   integer,dimension(:),allocatable::noct_file,nskip_file
   integer(kind=8),dimension(1)::dummy
   integer(kind=8),dimension(:,:),allocatable::bound_key
@@ -186,13 +200,15 @@ recursive subroutine r_init_refine_restart(r,g,m,p,mdl,cpu_range,input_size,outp
   else
      ilevel=input_array(1)
      ncpu_file=input_array(2)
+     levelmin_file=input_array(3)
+     nlevelmax_file=input_array(4)
      allocate(noct_file(1:ncpu_file))
+     noct_file=input_array(5:ncpu_file+4)
      allocate(nskip_file(1:ncpu_file))
+     nskip_file=input_array(ncpu_file+5:2*ncpu_file+4)
      allocate(bound_key(1:nhilbert,0:g%ncpu))
      bound_key=0
-     noct_file=input_array(3:ncpu_file+2)
-     nskip_file=input_array(ncpu_file+3:2*ncpu_file+2)
-     call init_refine_restart(r,g,m,ilevel,ncpu_file,noct_file,nskip_file,bound_key)
+     call init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key)
      output_array=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),output_array)
      deallocate(bound_key)
      deallocate(noct_file,nskip_file)
@@ -203,7 +219,7 @@ end subroutine r_init_refine_restart
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,noct_file,nskip_file,bound_key_target)
+subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key_target)
   !--------------------------------------------------------------
   ! This routine builds from a RAMSES restart file
   ! the initial AMR grid.
@@ -218,24 +234,22 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,noct_file,nskip_file,bound
   type(global_t)::g
   type(mesh_t)::m
   integer::ilevel,ncpu_file
+  integer::levelmin_file,nlevelmax_file
   integer,dimension(1:ncpu_file)::noct_file,nskip_file
   integer(kind=8),dimension(1:nhilbert,0:g%ncpu)::bound_key_target
 
   ! Local variables
-  integer::levelmin_file,nlevelmax_file
   integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,ilun
   integer::i,ind,istart,iend,noct_tmp,ilev,ioct
   integer::igrid,igrid_start,nleft,nright,ileft,iright
-  integer::levelmin_max,nlevelmax_min
   character(LEN=80)::file_params,file_amr,file_hydro,file_grav
   character(LEN=5)::nchar,ncharcpu
 
   integer,dimension(1:ncpu_file)::noct_cum,ntarget_cum
 
-  integer(kind=4), dimension(1:nvector),save::dummy_state
-  integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk
-  integer(kind=8), dimension(1:nvector,1:ndim),save::ix
-  integer(kind=8), dimension(0:ndim)::hash_key
+  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:ndim)::ix
+  integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
   integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key
   integer,dimension(1:r%nlevelmax)::n_same,npatch
@@ -308,6 +322,9 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,noct_file,nskip_file,bound
   !----------------------------
   ! Read octs data in files
   !----------------------------
+  ! Restart filename
+  call title(r%nrestart,nchar)
+
   ! Loop over relevant files (if any)
   do icpu=ileft,iright
      if(icpu>1)then
@@ -318,40 +335,42 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,noct_file,nskip_file,bound
         iend=MIN(nright,noct_file(icpu))
      endif
      call title(icpu,ncharcpu)
+     
      ! Prepare reading the AMR file
      file_amr='output_'//TRIM(nchar)//'/amr.out'//TRIM(ncharcpu)
-     open(unit=10,file=file_amr,access="stream"&
-          & ,action="read",form='unformatted')
-     iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+&
-          & (4*ndim+4*twotondim)*nskip_file(icpu)
+     open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
+     iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+(4*ndim+4*twotondim)*nskip_file(icpu)
+
      ! Prepare reading the HYDRO file
      if(r%hydro)then
         file_hydro='output_'//TRIM(nchar)//'/hydro.out'//TRIM(ncharcpu)
-        open(unit=11,file=file_hydro,access="stream"&
-             & ,action="read",form='unformatted')
-        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+&
-             & (8*twotondim*nvar)*nskip_file(icpu)
+        open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
+        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvar)*nskip_file(icpu)
      endif
+
      ! Prepare reading the GRAV file
      if(r%poisson)then
         file_grav='output_'//TRIM(nchar)//'/grav.out'//TRIM(ncharcpu)
-        open(unit=11,file=file_grav,access="stream"&
-             & ,action="read",form='unformatted')
-        iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+&
-             & (8*twotondim*(ndim+1))*nskip_file(icpu)
+        open(unit=11,file=file_grav,access="stream",action="read",form='unformatted')
+        iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*(ndim+1))*nskip_file(icpu)
      endif
+
      ! Loop over useful octs in file
      do i=istart,iend
         
-        ! Read values from files
+        ! Read values from AMR files
         ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)
         read(10,POS=ipos)ckey
         ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim
         read(10,POS=ipos)refined
+
+        ! Read values from HYDRO files
         if(r%hydro)then
            ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
            read(11,POS=ipos)uold
         endif
+
+        ! Read values from GRAV files
         if(r%poisson)then
            ipos=iskip_grav+(8*twotondim*(ndim+1))*(i-1)
            read(11,POS=ipos)phi
@@ -397,10 +416,10 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,noct_file,nskip_file,bound
         call hash_set(m%grid_dict,hash_key,igrid)
         
         ! Compute Hilbert keys of new octs
-        ix(1,1:ndim)=ckey(1:ndim)
-        call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
-        m%grid(igrid)%hkey(1:nhilbert)=hk(1,1:nhilbert)
-        bound_key_target(1:nhilbert,g%myid)=hk(1,1:nhilbert)+one_key
+        ix(1:ndim)=ckey(1:ndim)
+        hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
+        m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
+        bound_key_target(1:nhilbert,g%myid)=hk(1:nhilbert)+one_key
      end do
      close(10)
      if(r%hydro)then

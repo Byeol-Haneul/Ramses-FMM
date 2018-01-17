@@ -24,22 +24,14 @@ recursive subroutine m_amr_step(r,g,m,p,mdl,ilevel,icount)
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering amr_step",i1," for level",i2)')icount,ilevel
 
-  !---------------------
-  ! Make new refinements
-  !---------------------
+  !------------------------------
+  ! Make new refinements and load
+  ! balance grids and particles.
+  !------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
      call m_refine_fine(r,g,m,p,mdl,ilevel)
   endif
   
-  !------------------------------
-  ! Balance particles across cpus
-  !------------------------------
-#ifndef WITHOUTMPI
-  if(g%ncpu>1.AND.ilevel==r%levelmin)then
-     if(r%pic)call balance_part(r,g,m,p,ilevel)
-  endif
-#endif
-
   !------------------------
   ! Output results to files
   !------------------------
@@ -86,7 +78,7 @@ recursive subroutine m_amr_step(r,g,m,p,mdl,ilevel,icount)
      ! Compute new gravitational potential
      if(ilevel > r%levelmin)then
         if(ilevel >= r%cg_levelmin) then
-           call phi_fine_cg(r,g,m,ilevel,icount)
+           call m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
         else
            call multigrid(r,g,m,p,mdl,ilevel,icount)
         end if
@@ -101,7 +93,7 @@ recursive subroutine m_amr_step(r,g,m,p,mdl,ilevel,icount)
      call m_force_fine(r,g,m,p,mdl,ilevel,icount)
 
      ! Perform second kick for particles
-     if(r%pic)call kick_drift_part(r,g,m,p,ilevel,action_kick_only)
+     if(r%pic)call m_kick_drift_part(r,g,m,p,mdl,ilevel,action_kick_only)
 
      ! Add gravity source term with half time step and new force
      if(r%hydro)then
@@ -180,7 +172,7 @@ recursive subroutine m_amr_step(r,g,m,p,mdl,ilevel,icount)
   !-------------------------------------------
   ! Perform first kick and drift for particles
   !-------------------------------------------
-  if(r%pic)call kick_drift_part(r,g,m,p,ilevel,action_kick_drift)
+  if(r%pic)call m_kick_drift_part(r,g,m,p,mdl,ilevel,action_kick_drift)
 
   !-----------------------
   ! Compute refinement map

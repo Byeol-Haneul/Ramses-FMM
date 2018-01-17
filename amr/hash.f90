@@ -14,7 +14,6 @@ module hash
   implicit none
   
   ! General module parameters
-  integer, parameter :: key_length = (ndim + 1) * 8
   integer, dimension(0:3), parameter :: constants = (/5, -1640531527, 97, 1003313/)
   
   ! Define a bucket as a derived type (sequence statement!) for better

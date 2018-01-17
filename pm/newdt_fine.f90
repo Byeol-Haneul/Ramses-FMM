@@ -34,7 +34,7 @@ subroutine m_newdt_fine(r,g,m,p,mdl,ilevel)
   g%dtold(ilevel)=g%dtnew(ilevel)
 
   ! Compute local cell spacing
-  dx=r%boxlen/2**ilevel
+  dx=r%boxlen/2.0d0**ilevel
 
   ! Maximum time step
   g%dtnew(ilevel)=dx/r%smallc
@@ -58,7 +58,7 @@ subroutine m_newdt_fine(r,g,m,p,mdl,ilevel)
      call r_newdt_part(r,g,m,p,mdl,mdl%ncpu,1,4,ilevel,part_array)
      ekin=transfer(part_array(1:2),ekin)
      vmax=transfer(part_array(3:4),vmax)
-     dt=dx/vmax
+     dt=r%courant_factor * dx/vmax
      g%ekin_tot=g%ekin_tot+ekin
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt)
   endif

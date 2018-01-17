@@ -41,9 +41,6 @@ subroutine adaptive_loop(r,g,m,p,mdl)
      call m_init_refine_restart(r,g,m,p,mdl) ! Build AMR grid from restart file
   endif
 
-  ! Initialize particle from the AMR grid for zooms
-!  if(r%pic)call init_part_grid(r,g,m,p)
-
   ! Timing since startup
   call cpu_time(tt2)
   write(*,*)'Time elapsed since startup:',tt2-tt1
@@ -80,23 +77,6 @@ subroutine adaptive_loop(r,g,m,p,mdl)
      call cpu_time(tt2)
      write(*,*)'Time elapsed since last coarse step:',tt2-tt1
      
-!!$#ifndef WITHOUTMPI
-!!$     tt2=MPI_WTIME(info)
-!!$     if(mod(g%nstep_coarse,r%ncontrol)==0)then
-!!$        call getmem(real_mem)
-!!$        call MPI_ALLREDUCE(real_mem,real_mem_tot,1,MPI_REAL,MPI_MAX,MPI_COMM_WORLD,info)
-!!$        if(g%myid==1)then
-!!$           write(*,*)'Time elapsed since last coarse step:',tt2-tt1
-!!$           call writemem(real_mem_tot)
-!!$        endif
-!!$     endif
-!!$#else
-!!$     if(mod(g%nstep_coarse,r%ncontrol)==0)then
-!!$        call getmem(real_mem)
-!!$        call writemem(real_mem)
-!!$     endif
-!!$#endif
-
   end do
 
   call r_clean_stop(r,g,m,p,mdl,mdl%ncpu,0,0)

@@ -54,8 +54,6 @@ subroutine output_part(r,g,p,filename)
   integer(i8b),allocatable,dimension(:)::ii8
   integer,allocatable,dimension(:)::ll
   
-  if(r%verbose)write(*,*)'Entering backup_part'
-  
   ilun=2*g%ncpu+g%myid+10
 
   call title(g%myid,nchar)

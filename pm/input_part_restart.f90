@@ -177,8 +177,7 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
      ! Open the PART file
      call title(icpu,ncharcpu)
      file_part='output_'//TRIM(nchar)//'/part.out'//TRIM(ncharcpu)
-     open(unit=10,file=TRIM(file_part),access="stream"&
-          & ,action="read",form='unformatted')
+     open(unit=10,file=TRIM(file_part),access="stream",action="read",form='unformatted')
      
      ! Read positions
      allocate(xdp(istart:iend))

@@ -19,6 +19,8 @@ subroutine m_input_part_grafic(r,g,m,p,mdl)
   !--------------------------------------------------------------------
   integer,allocatable,dimension(:)::input_array
 
+  if(r%nrestart>0)return
+
   ! Compute total number of particles in file
   if(TRIM(r%initfile(r%levelmin)).NE.' ')then
      p%npart_tot=g%n1(r%levelmin)*g%n2(r%levelmin)*g%n3(r%levelmin)
@@ -100,7 +102,7 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
   real(kind=8)::dispmax=0.0
   integer,dimension(1:g%ncpu)::npart_loc
   integer(i8b),dimension(1:g%ncpu+1)::start_ind
-  real(kind=4),dimension(1:g%n1(r%levelmin),1:g%n2(r%levelmin))::init_plane,init_plane_x
+  real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
   character(LEN=80)::filename,filename_x
   character(LEN=5)::nchar
   logical::ok,error,keep_part,read_pos=.false.
@@ -113,7 +115,7 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
   !-------------------------------------------
   ! Mesh size at levelmin in normalised units
   !-------------------------------------------
-  dx=1.0/2**r%levelmin
+  dx=0.5d0**r%levelmin
 
   !--------------------------------------
   ! Compute starting index for each cpu
@@ -136,6 +138,7 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
 
   ipart=1
   ipart_grafic=i3_min*plane_size
+
   ! Initialize positions, masses and ids
   do i3=i3_min,i3_max
      do i2=0,g%n2(r%levelmin)-1
@@ -158,6 +161,20 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
   end do
   
   !--------------------------------------
+  ! Allocate temporary arrays
+  !--------------------------------------
+  allocate(init_plane(1:g%n1(r%levelmin),1:g%n2(r%levelmin)))
+  filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscx'
+  INQUIRE(file=filename_x,exist=ok)
+  read_pos=.false.
+  if(ok)then
+     read_pos=.true.
+     allocate(init_plane_x(1:g%n1(r%levelmin),1:g%n2(r%levelmin)))
+  else
+     if(g%myid==1)write(*,*)'File '//TRIM(filename_x)//' not found.'
+  endif
+  
+  !--------------------------------------
   ! Loop over displacements dimensions
   !--------------------------------------
   do idim=1,ndim
@@ -176,15 +193,11 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
      end do
 
      ! If present, read higher order dark matter initial displacement field
-     if(idim==1)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscx'
-     if(idim==2)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscy'
-     if(idim==3)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscz'
-     
-     INQUIRE(file=filename_x,exist=ok)
-     if(.not.ok)then
-        read_pos = .false.
-     else
-        read_pos = .true.
+     if(read_pos)then
+        if(idim==1)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscx'
+        if(idim==2)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscy'
+        if(idim==3)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscz'
+        
         if(g%myid==1)write(*,*)'Reading file '//TRIM(filename_x)
         open(11,file=filename_x,form='unformatted')
         rewind 11
@@ -193,7 +206,7 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
            read(11) ! skip unnecessary planes
         end do
      end if
-     
+
      ! Read useful planes
      ipart=1
      ipart_grafic=i3_min*plane_size
@@ -207,8 +220,8 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
         if(read_pos)then
            init_plane_x = init_plane_x/g%boxlen_ini
         endif
-        do i2=0,g%n2(r%levelmin)-1
-           do i1=0,g%n1(r%levelmin)-1
+        do i2=1,g%n2(r%levelmin)
+           do i1=1,g%n1(r%levelmin)
               keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
               if(keep_part)then
                  p%vp(ipart,idim)=init_plane(i1,i2)
@@ -231,6 +244,10 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
   end do
   ! End loop over dimensions
 
+  ! Deallocate temporary array
+  deallocate(init_plane)
+  if(read_pos)deallocate(init_plane_x)
+  
   ! Move particle according to Zeldovich approximation
   if(.not. read_pos)then
      do ipart=1,p%npart

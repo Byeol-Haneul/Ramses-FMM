@@ -35,14 +35,17 @@ subroutine m_refine_fine(r,g,m,p,mdl,ilevel)
   if(r%verbose)write(*,113)noct(2)
 113 format(' ==> Kill ',i6,' sub-grids')
 
-  ! Get total, min and max grid count (only in master).
+  ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,r%nlevelmax
      call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_tot(ilev))
      call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_min(ilev))
      call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_max(ilev))
   end do
 
-  ! Load balance all levels
+  ! Get maximum used memory (only in master)
+  call r_noct_used_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_used_max)
+
+  ! Load balance all levels across cpus
   call m_load_balance(r,g,m,p,mdl,ilevel)
 
   ! Get total, min and max grid count (only in master).
@@ -52,6 +55,17 @@ subroutine m_refine_fine(r,g,m,p,mdl,ilevel)
      call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_max(ilev))
   end do
 
+  ! Get maximum used memory (only in master)
+  call r_noct_used_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_used_max)
+
+  ! Balance particles across cpus
+  if(g%ncpu>1.AND.ilevel==r%levelmin)then
+     if(r%pic.AND.mod(g%nstep_coarse,10)==1)then
+        if(r%verbose)write(*,*)'Entering balance_part for level',r%levelmin
+        call r_balance_part(r,g,m,p,mdl,g%ncpu,1,0,ilevel)
+     endif
+  endif
+  
 end subroutine m_refine_fine
 !################################################################
 !################################################################
@@ -632,14 +646,12 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
   ! and the cell index icell (from 1 to 8).
   !--------------------------------------------------------------
   integer::idim,ivar,ichild,ind,inbor,nstride,grid_cpu
-  integer(kind=4), dimension(1:nvector),save::dummy_state
-  integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk
-  integer(kind=8), dimension(1:nvector,1:ndim),save::ix
-  integer(kind=8), dimension(1:nhilbert),save::hks
-  integer(kind=8), dimension(1:ndim),save::cart_key
-  integer(kind=8), dimension(0:ndim)::hash_key
+  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:ndim)::ix
+  integer(kind=8),dimension(1:ndim)::cart_key
+  integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
-  real(dp),dimension(0:twondim  ,1:nvar)::u1
+  real(dp),dimension(0:twondim,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
 
 #ifndef WITHOUTMPI
@@ -661,12 +673,11 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
   end do
 
   ! Compute Hilbert keys of new octs
-  ix(1,1:ndim)=cart_key(1:ndim)
-  call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
+  ix(1:ndim)=cart_key(1:ndim)
+  hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
 
   ! Check if grid sits inside processor boundaries
-  hks=hk(1,1:nhilbert)
-  if (m%domain(ilevel)%in_rank(hks)) then
+  if (m%domain(ilevel)%in_rank(hk)) then
 
      ! Set grid index to a virtual grid in local main memory
      ichild=m%ifree
@@ -682,7 +693,7 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
 
   ! Otherwise, determine parent processor and use the cache
   else
-     grid_cpu = m%domain(ilevel)%get_rank(hks)
+     grid_cpu = m%domain(ilevel)%get_rank(hk)
      ! If next cache line is occupied, free it.
      if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
      ! Set grid index to a virtual grid in local cache memory
@@ -699,7 +710,7 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
 
   m%grid(ichild)%lev=ilevel
   m%grid(ichild)%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
-  m%grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
+  m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
   m%grid(ichild)%refined(1:twotondim)=.false.
   m%grid(ichild)%flag1(1:twotondim)=0
   m%grid(ichild)%flag2(1:twotondim)=0

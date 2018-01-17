@@ -320,7 +320,7 @@ subroutine load_balance(r,g,m,ilevel)
   integer::skip_bit,ikey,true_level
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert)::coarse_key
-  integer(kind=8),dimension(1:nhilbert),save::hks
+  integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
   integer,dimension(1:r%nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
@@ -344,8 +344,8 @@ subroutine load_balance(r,g,m,ilevel)
         if (.not. m%domain(ilev)%in_rank(m%grid(ioct)%hkey)) then
            
            ! Determine the future processor
-           hks = m%grid(ioct)%hkey(1:nhilbert)
-           grid_cpu = m%domain(ilev)%get_rank(hks)
+           hk = m%grid(ioct)%hkey(1:nhilbert)
+           grid_cpu = m%domain(ilev)%get_rank(hk)
 
            ! If next cache line is occupied, free it.
            if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
@@ -649,13 +649,46 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array)
 #endif
 
 end subroutine unpack_flush_loadbalance
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_balance_part(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_BALANCE_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_balance_part(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+  else
+#ifndef WITHOUTMPI
+     call balance_part(r,g,m,p,ilevel)
+#endif
+  endif
+
+end subroutine r_balance_part
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 #ifndef WITHOUTMPI
 subroutine balance_part(r,g,m,p,ilevel)
-  use amr_parameters, only: nhilbert,nvector,ndim,i8b,dp
+  use amr_parameters, only: nhilbert,ndim,i8b,dp
   use pm_parameters, only: part_memory
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
@@ -681,12 +714,11 @@ subroutine balance_part(r,g,m,p,ilevel)
   integer::info
   integer,dimension(MPI_STATUS_SIZE,g%ncpu)::statuses
 #endif
-  integer(kind=8), dimension(1:nvector,1:nhilbert),save::hk_ref
-  integer(kind=8), dimension(1:nvector,1:ndim),save::ix_ref
-  integer(kind=4), dimension(1:nvector),save::dummy_state
+  integer(kind=8),dimension(1:nhilbert),save::hk_ref
+  integer(kind=8),dimension(1:ndim),save::ix_ref
 
   integer,dimension(1:ndim),save::ix
-  integer::i,istart,ipart,jpart,idim,grid_cpu
+  integer::i,istart,ipart,jpart,idim,grid_cpu,myid,ncpu
   integer::ilev,idom,icpu,mydom,ndom,count_loc,recv_cnt_tot,send_cnt_tot
   integer::nbuffer,countrecv,countsend,tag=101
   real(kind=8)::dx_loc
@@ -701,13 +733,12 @@ subroutine balance_part(r,g,m,p,ilevel)
 
   integer(kind=8)::unbalance
   integer(kind=8),dimension(1:nhilbert)::diff_key
-  integer(kind=8),dimension(1:nhilbert),save::hks
   type(domain_t),allocatable,dimension(:)::domain_part
   integer(kind=8),allocatable,dimension(:,:)::bound_key_target,bound_key_new
   integer(kind=8),allocatable,dimension(:,:)::bound_key_left,bound_key_right
   integer::npart_lev,npart_lev_tot,iter
   integer,dimension(0:g%ncpu)::npart_cum,npart_cum_tot
-  integer,dimension(1:g%ncpu)::npart_dom,npart_dom_tot
+  integer,dimension(1:g%ncpu)::npart_cpu,npart_cpu_tot
   real(dp)::xpart_target,xcum_target
 
   real(dp),dimension(1:ndim),save::xp_tmp,vp_tmp
@@ -716,9 +747,6 @@ subroutine balance_part(r,g,m,p,ilevel)
   integer(i8b)::idp_tmp
 
 #ifndef WITHOUTMPI
-  if(g%ncpu==1)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
 
   !####################################################
   ! Default for particle domains are grid domains
@@ -736,17 +764,15 @@ subroutine balance_part(r,g,m,p,ilevel)
      !#############################
      ! Allocate temporary work space
      !#############################
-     ndom=maxval(domain_part%n)
-     allocate(bound_key_target(1:nhilbert,0:ndom))
-     allocate(bound_key_new(1:nhilbert,0:ndom))
-     allocate(bound_key_left(1:nhilbert,0:ndom))
-     allocate(bound_key_right(1:nhilbert,0:ndom))
+     ncpu=g%ncpu
+     myid=g%myid
+     allocate(bound_key_new(1:nhilbert,0:ncpu))
+     allocate(bound_key_left(1:nhilbert,0:ncpu))
+     allocate(bound_key_right(1:nhilbert,0:ncpu))
+     allocate(bound_key_target(1:nhilbert,0:ncpu))
      
      ! Loop over levels
      do ilev=ilevel,r%nlevelmax
-        mydom = domain_part(ilev)%r2d(g%myid)
-        ndom  = domain_part(ilev)%n
-
         dx_loc=r%boxlen/2**ilev
      
         ! Compute number of particles
@@ -754,19 +780,18 @@ subroutine balance_part(r,g,m,p,ilevel)
         npart_lev_tot=0
         call MPI_ALLREDUCE(npart_lev,npart_lev_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
         if(npart_lev_tot.EQ.0)cycle
-        xpart_target=dble(npart_lev_tot)/dble(ndom)
+        xpart_target=dble(npart_lev_tot)/dble(ncpu)
 
-        npart_dom=0
-        npart_dom(mydom)=npart_lev
-        call MPI_ALLREDUCE(npart_dom,npart_dom_tot,ndom,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-        npart_dom=npart_dom_tot
+        npart_cpu=0
+        npart_cpu(myid)=npart_lev
+        call MPI_ALLREDUCE(npart_cpu,npart_cpu_tot,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+        npart_cpu=npart_cpu_tot
 
         npart_cum=0
-        do idom=1,ndom
-           npart_cum(idom)=npart_cum(idom-1)+npart_dom(idom)
+        do icpu=1,ncpu
+           npart_cum(icpu)=npart_cum(icpu-1)+npart_cpu(icpu)
         end do
 
-        iter=0
         if(g%myid==1.and.r%verbose)write(*,*)"====================================="
         if(g%myid==1.and.r%verbose)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
 
@@ -780,11 +805,11 @@ subroutine balance_part(r,g,m,p,ilevel)
         call sort_hilbert(r,g,p,p%headp(ilev),p%tailp(ilev),ix,0,1,ilev-1)
 
         ! Compute first guess domain decomposition
-        bound_key_target(1:nhilbert,0:ndom)=domain_part(ilev)%b(1:nhilbert,0:ndom)
+        bound_key_target(1:nhilbert,0:ncpu)=domain_part(ilev)%b(1:nhilbert,0:ncpu)
         bound_key_new=bound_key_target
         bound_key_left=0
-        do idom=0,ndom
-           bound_key_right(1:nhilbert,idom)=m%hkey_max(1:nhilbert,ilev)
+        do icpu=0,ncpu
+           bound_key_right(1:nhilbert,icpu)=m%hkey_max(1:nhilbert,ilev)
         end do
 
         unbalance=10
@@ -804,31 +829,31 @@ subroutine balance_part(r,g,m,p,ilevel)
               ipart=p%sortp(i)
 
               ! Compute Hilbert key of particle parent grid
-              ix_ref(1,1:ndim) = int(p%xp(ipart,1:ndim)/(2*dx_loc))
-              call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
+              ix_ref(1:ndim)=int(p%xp(ipart,1:ndim)/(2*dx_loc))
+              hk_ref(1:nhilbert)=hilbert_key(ix_ref,ilev-1)
               
-              do idom=1,ndom
-                 if(gt_keys(bound_key_target(1:nhilbert,idom),hk_ref(1,1:nhilbert)))then
-                    npart_cum(idom)=npart_cum(idom)+1
+              do icpu=1,ncpu
+                 if(gt_keys(bound_key_target(1:nhilbert,icpu),hk_ref(1:nhilbert)))then
+                    npart_cum(icpu)=npart_cum(icpu)+1
                  end if
               enddo
            end do
 
            ! Compute global histogram
-           call MPI_ALLREDUCE(npart_cum,npart_cum_tot,ndom+1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+           call MPI_ALLREDUCE(npart_cum,npart_cum_tot,ncpu+1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
            npart_cum=npart_cum_tot
 
            unbalance=0
-           do idom=1,ndom-1
-              xcum_target=dble(idom)*xpart_target
-              if(npart_cum(idom)>xcum_target)then
-                 bound_key_new(1:nhilbert,idom)=average_keys(bound_key_left(1:nhilbert,idom),bound_key_target(1:nhilbert,idom))
-                 bound_key_right(1:nhilbert,idom)=bound_key_target(1:nhilbert,idom)
+           do icpu=1,ncpu-1
+              xcum_target=dble(icpu)*xpart_target
+              if(npart_cum(icpu)>xcum_target)then
+                 bound_key_new(1:nhilbert,icpu)=average_keys(bound_key_left(1:nhilbert,icpu),bound_key_target(1:nhilbert,icpu))
+                 bound_key_right(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
               else
-                 bound_key_new(1:nhilbert,idom)=average_keys(bound_key_right(1:nhilbert,idom),bound_key_target(1:nhilbert,idom))
-                 bound_key_left(1:nhilbert,idom)=bound_key_target(1:nhilbert,idom)
+                 bound_key_new(1:nhilbert,icpu)=average_keys(bound_key_right(1:nhilbert,icpu),bound_key_target(1:nhilbert,icpu))
+                 bound_key_left(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
               endif
-              diff_key=difference_keys(bound_key_right(1:nhilbert,idom),bound_key_left(1:nhilbert,idom))
+              diff_key=difference_keys(bound_key_right(1:nhilbert,icpu),bound_key_left(1:nhilbert,icpu))
 #if NHILBERT==1
               unbalance=MAX(unbalance,ABS(diff_key(1)))
 #endif
@@ -844,11 +869,12 @@ subroutine balance_part(r,g,m,p,ilevel)
            
         end do
         if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
-        if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(idom)*xpart_target),idom=0,ndom)
+        if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
+
         !#########################################################
         ! Store new Hilbert tick marks after convergence
         !#########################################################
-        domain_part(ilev)%b(1:nhilbert,0:ndom)=bound_key_target(1:nhilbert,0:ndom)
+        domain_part(ilev)%b(1:nhilbert,0:ncpu)=bound_key_target(1:nhilbert,0:ncpu)
 
      end do
      if(g%myid==1.and.r%verbose)write(*,*)"====================================="
@@ -892,18 +918,17 @@ subroutine balance_part(r,g,m,p,ilevel)
 
         ! Determine in which cpu particle should sit.
         ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
-        if(.NOT. ALL(ix.EQ.ix_ref(1,1:ndim)))then
-           ix_ref(1,1:ndim)=ix(1:ndim)
-           grid_cpu = g%myid
+        if(.NOT. ALL(ix.EQ.ix_ref(1:ndim)))then
+           ix_ref(1:ndim)=ix(1:ndim)
+           grid_cpu=g%myid
 
            ! Compute Hilbert key of particle parent grid
-           call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
+           hk_ref(1:nhilbert)=hilbert_key(ix_ref,ilev-1)
 
            ! Check if grid sits outside future processor boundaries
-           if (.not. domain_part(ilev)%in_rank(hk_ref(1,1:nhilbert))) then
+           if (.not. domain_part(ilev)%in_rank(hk_ref)) then
               ! Determine the future processor
-              hks = hk_ref(1,1:nhilbert)
-              grid_cpu = domain_part(ilev)%get_rank(hks)
+              grid_cpu=domain_part(ilev)%get_rank(hk_ref)
            endif
         endif
 
@@ -954,18 +979,17 @@ subroutine balance_part(r,g,m,p,ilevel)
 
         ! Determine in which cpu particle should sit.
         ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
-        if(.NOT. ALL(ix.EQ.ix_ref(1,1:ndim)))then
-           ix_ref(1,1:ndim)=ix(1:ndim)
+        if(.NOT. ALL(ix.EQ.ix_ref(1:ndim)))then
+           ix_ref(1:ndim)=ix(1:ndim)
            grid_cpu=g%myid
 
            ! Compute Hilbert key of particle parent grid
-           call hilbert_key(ix_ref,hk_ref,dummy_state,0,ilev-1,1)
+           hk_ref(1:nhilbert)=hilbert_key(ix_ref,ilev-1)
 
            ! Check if grid sits outside future processor boundaries
-           if (.not. domain_part(ilev)%in_rank(hk_ref(1,1:nhilbert))) then
+           if (.not. domain_part(ilev)%in_rank(hk_ref)) then
               ! Determine the future processor
-              hks = hk_ref(1,1:nhilbert)
-              grid_cpu = domain_part(ilev)%get_rank(hks)
+              grid_cpu=domain_part(ilev)%get_rank(hk_ref)
            endif
         endif
 
@@ -1276,8 +1300,6 @@ subroutine balance_part(r,g,m,p,ilevel)
   call MPI_ALLREDUCE(p%npart,p%npart_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 
 #endif
-
-111 format('   Entering balance_part for level',i2)
 
 end subroutine balance_part
 #endif

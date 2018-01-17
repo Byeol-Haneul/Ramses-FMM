@@ -49,6 +49,9 @@ subroutine mdl_init
   callback(MDL_BCAST_PARAMS)%proc => r_broadcast_params
   mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(r)/32)
 
+  callback(MDL_BCAST_GLOBAL)%proc => r_broadcast_global
+  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(g)/32)
+
   callback(MDL_INIT_AMR)%proc => r_init_amr
 
   callback(MDL_INIT_TIME)%proc => r_init_time
@@ -66,6 +69,8 @@ subroutine mdl_init
   callback(MDL_INPUT_PART_RESTART)%proc => r_input_part_restart
   mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,MDL_MAX_CPU)
 
+  callback(MDL_NPART_MAX)%proc => r_npart_max
+
   callback(MDL_INIT_FLAG)%proc => r_init_flag
 
   callback(MDL_USER_FLAG)%proc => r_user_flag
@@ -80,6 +85,8 @@ subroutine mdl_init
 
   callback(MDL_NOCT_MAX)%proc => r_noct_max
 
+  callback(MDL_NOCT_USED_MAX)%proc => r_noct_used_max
+
   callback(MDL_GATHER_NOCT_MAX)%proc => r_gather_noct_max
 
   callback(MDL_INIT_REFINE_BASEGRID)%proc => r_init_refine_basegrid
@@ -93,6 +100,8 @@ subroutine mdl_init
   mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,(storage_size(m%domain)+32)/32)
 
   callback(MDL_LOAD_BALANCE)%proc => r_load_balance
+
+  callback(MDL_BALANCE_PART)%proc => r_balance_part
 
   callback(MDL_REFINE_FINE)%proc => r_refine_fine
 
@@ -115,6 +124,12 @@ subroutine mdl_init
   callback(MDL_CIC_PART)%proc => r_cic_part
 
   callback(MDL_SPLIT_PART)%proc => r_split_part
+
+  callback(MDL_KICK_DRIFT_PART)%proc => r_kick_drift_part
+
+  callback(MDL_MASS_MIN_PART)%proc => r_mass_min_part
+
+  callback(MDL_BROADCAST_MP_MIN)%proc => r_broadcast_mp_min
 
   callback(MDL_COLLECT_MULTIPOLE)%proc => r_collect_multipole
 
@@ -170,6 +185,18 @@ subroutine mdl_init
   callback(MDL_BROADCAST_DT)%proc => r_broadcast_dt
   
   callback(MDL_MAKE_INITIAL_PHI)%proc => r_make_initial_phi
+  
+  callback(MDL_RECURRENCE_ON_P)%proc => r_recurrence_on_p
+  
+  callback(MDL_RECURRENCE_X_AND_R)%proc => r_recurrence_x_and_r
+  
+  callback(MDL_CMP_RESIDUAL_CG)%proc => r_cmp_residual_cg
+  
+  callback(MDL_CMP_R2_CG)%proc => r_cmp_r2_cg
+  
+  callback(MDL_CMP_PAP_CG)%proc => r_cmp_pAp_cg
+  
+  callback(MDL_CMP_RHS_NORM)%proc => r_cmp_rhs_norm
   
   callback(MDL_INIT_MG)%proc => r_init_mg
 
@@ -421,270 +448,20 @@ subroutine init_cache(mdl)
   ! Allocate all communication and cache-related variables
   allocate(reply_id(1:ncpu))
 
-#ifdef OLDCACHE
-  allocate(reply_interpol(1:ncpu))
-  allocate(reply_mg(1:ncpu))
-  allocate(reply_flag(1:ncpu))
-  allocate(reply_hydro(1:ncpu))
-  allocate(reply_poisson(1:ncpu))
-  allocate(reply_refine(1:ncpu))
-  allocate(send_flush_interpol(1:ncpu))
-  allocate(send_flush_mg(1:ncpu))
-  allocate(send_flush_flag(1:ncpu))
-  allocate(send_flush_hydro(1:ncpu))
-  allocate(send_flush_poisson(1:ncpu))
-  allocate(send_flush_refine(1:ncpu))
-  do icpu=1,ncpu
-     send_flush_interpol(icpu)%nflush=0
-     send_flush_mg(icpu)%nflush=0
-     send_flush_flag(icpu)%nflush=0
-     send_flush_hydro(icpu)%nflush=0
-     send_flush_poisson(icpu)%nflush=0
-     send_flush_refine(icpu)%nflush=0
-  end do
-
-  ! Create and commit MPI derived types
-  call MPI_TYPE_EXTENT(MPI_INTEGER,intex,info)
-  call MPI_TYPE_EXTENT(MPI_DOUBLE_PRECISION,realdpex,info)
-
-  ! New type for int4_msg
-  new_type_disp(1)=0
-  new_type_disp(2)=2*intex
-  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_INTEGER
-  new_type_length(1)=2
-  new_type_length(2)=ntilemax*(1+ndim)
-  new_type_length(3)=ntilemax*(twotondim)
-  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_int4_msg,info)
-  call MPI_TYPE_COMMIT(new_mpi_int4_msg,info)
-
-  ! New type for int4_flush
-  new_type_disp(1)=0
-  new_type_disp(2)=intex
-  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_INTEGER
-  new_type_length(1)=1
-  new_type_length(2)=nflushmax*(1+ndim)
-  new_type_length(3)=nflushmax*(twotondim)
-  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_int4_flush,info)
-  call MPI_TYPE_COMMIT(new_mpi_int4_flush,info)
-
-  ! New type for realdp_msg
-  new_type_disp(1)=0
-  new_type_disp(2)=2*intex
-  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
-  new_type_disp(4)=(2+ntilemax*(1+ndim)+ntilemax*(twotondim))*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_INTEGER
-  new_type_type(4)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=2
-  new_type_length(2)=ntilemax*(1+ndim)
-  new_type_length(3)=ntilemax*(twotondim)
-  new_type_length(4)=ntilemax*(twotondim*nvar)
-  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_msg,info)
-  call MPI_TYPE_COMMIT(new_mpi_realdp_msg,info)
-
-  ! New type for realdp_flush
-  new_type_disp(1)=0
-  new_type_disp(2)=intex
-  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
-  new_type_disp(4)=(1+nflushmax*(1+ndim)+nflushmax*(twotondim))*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_INTEGER
-  new_type_type(4)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=1
-  new_type_length(2)=nflushmax*(1+ndim)
-  new_type_length(3)=nflushmax*(twotondim)
-  new_type_length(4)=nflushmax*(twotondim*nvar)
-  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_realdp_flush,info)
-  call MPI_TYPE_COMMIT(new_mpi_realdp_flush,info)
-
-  ! New type for small_realdp_msg
-  new_type_disp(1)=0
-  new_type_disp(2)=2*intex
-  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=2
-  new_type_length(2)=ntilemax*(1+ndim)
-  new_type_length(3)=ntilemax*(twotondim)
-  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_small_realdp_msg,info)
-  call MPI_TYPE_COMMIT(new_mpi_small_realdp_msg,info)
-
-  ! New type for twin_realdp_msg
-  new_type_disp(1)=0
-  new_type_disp(2)=2*intex
-  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
-  new_type_disp(4)=(2+ntilemax*(1+ndim))*intex+ntilemax*twotondim*realdpex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_DOUBLE_PRECISION
-  new_type_type(4)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=2
-  new_type_length(2)=ntilemax*(1+ndim)
-  new_type_length(3)=ntilemax*(twotondim)
-  new_type_length(4)=ntilemax*(twotondim)
-  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_twin_realdp_msg,info)
-  call MPI_TYPE_COMMIT(new_mpi_twin_realdp_msg,info)
-
-  ! New type for three_realdp_msg
-  new_type_disp(1)=0
-  new_type_disp(2)=2*intex
-  new_type_disp(3)=(2+ntilemax*(1+ndim))*intex
-  new_type_disp(4)=(2+ntilemax*(1+ndim))*intex+ntilemax*twotondim*realdpex
-  new_type_disp(5)=(2+ntilemax*(1+ndim))*intex+2*ntilemax*twotondim*realdpex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_DOUBLE_PRECISION
-  new_type_type(4)=MPI_DOUBLE_PRECISION
-  new_type_type(5)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=2
-  new_type_length(2)=ntilemax*(1+ndim)
-  new_type_length(3)=ntilemax*(twotondim)
-  new_type_length(4)=ntilemax*(twotondim)
-  new_type_length(5)=ntilemax*(twotondim)
-  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_three_realdp_msg,info)
-  call MPI_TYPE_COMMIT(new_mpi_three_realdp_msg,info)
-
-  ! New type for large_realdp_msg
-  new_type_disp(1)=0
-  new_type_disp(2)=2*intex
-  new_type_disp(3)=new_type_disp(2)+ntilemax*(1+ndim)*intex
-  new_type_disp(4)=new_type_disp(3)+ntilemax*twotondim*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_INTEGER
-  new_type_length(1)=2
-  new_type_length(2)=ntilemax*(1+ndim)
-  new_type_length(3)=ntilemax*twotondim
-  msg_size=3
-
-#ifdef HYDRO
-  msg_size=msg_size+1
-  new_type_length(msg_size)=ntilemax*twotondim*nvar
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*nvar*realdpex
-#endif
-
-#ifdef GRAV
-  msg_size=msg_size+1
-  new_type_length(msg_size)=ntilemax*twotondim*(ndim+2)
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+ntilemax*twotondim*(ndim+2)*realdpex
-#endif
-
-  call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_msg,info)
-  call MPI_TYPE_COMMIT(new_mpi_large_realdp_msg,info)
-
-  ! New type for small_realdp_flush
-  new_type_disp(1)=0
-  new_type_disp(2)=intex
-  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=1
-  new_type_length(2)=nflushmax*(1+ndim)
-  new_type_length(3)=nflushmax*twotondim
-  call MPI_TYPE_STRUCT(3,new_type_length,new_type_disp,new_type_type,new_mpi_small_realdp_flush,info)
-  call MPI_TYPE_COMMIT(new_mpi_small_realdp_flush,info)
-
-  ! New type for twin_realdp_flush
-  new_type_disp(1)=0
-  new_type_disp(2)=intex
-  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
-  new_type_disp(4)=(1+nflushmax*(1+ndim))*intex+nflushmax*twotondim*realdpex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_DOUBLE_PRECISION
-  new_type_type(4)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=1
-  new_type_length(2)=nflushmax*(1+ndim)
-  new_type_length(3)=nflushmax*twotondim
-  new_type_length(4)=nflushmax*twotondim
-  call MPI_TYPE_STRUCT(4,new_type_length,new_type_disp,new_type_type,new_mpi_twin_realdp_flush,info)
-  call MPI_TYPE_COMMIT(new_mpi_twin_realdp_flush,info)
-
-  ! New type for three_realdp_flush
-  new_type_disp(1)=0
-  new_type_disp(2)=intex
-  new_type_disp(3)=(1+nflushmax*(1+ndim))*intex
-  new_type_disp(4)=(1+nflushmax*(1+ndim))*intex+nflushmax*twotondim*realdpex
-  new_type_disp(5)=(1+nflushmax*(1+ndim))*intex+2*nflushmax*twotondim*realdpex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_DOUBLE_PRECISION
-  new_type_type(4)=MPI_DOUBLE_PRECISION
-  new_type_type(5)=MPI_DOUBLE_PRECISION
-  new_type_length(1)=1
-  new_type_length(2)=nflushmax*(1+ndim)
-  new_type_length(3)=nflushmax*twotondim
-  new_type_length(4)=nflushmax*twotondim
-  new_type_length(5)=nflushmax*twotondim
-  call MPI_TYPE_STRUCT(5,new_type_length,new_type_disp,new_type_type,new_mpi_three_realdp_flush,info)
-  call MPI_TYPE_COMMIT(new_mpi_three_realdp_flush,info)
-
-  ! New type for large_realdp_flush
-  new_type_disp(1)=0
-  new_type_disp(2)=intex
-  new_type_disp(3)=new_type_disp(2)+nflushmax*(1+ndim)*intex
-  new_type_disp(4)=new_type_disp(3)+nflushmax*twotondim*intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_type(3)=MPI_INTEGER
-  new_type_length(1)=1
-  new_type_length(2)=nflushmax*(1+ndim)
-  new_type_length(3)=nflushmax*twotondim
-  msg_size=3
-
-#ifdef HYDRO
-  msg_size=msg_size+1
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_length(msg_size)=nflushmax*twotondim*nvar
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*nvar*realdpex
-#endif
-
-#ifdef GRAV
-  msg_size=msg_size+1
-  new_type_type(msg_size)=MPI_DOUBLE_PRECISION
-  new_type_length(msg_size)=nflushmax*twotondim*(ndim+2)
-  new_type_disp(msg_size+1)=new_type_disp(msg_size)+nflushmax*twotondim*(ndim+2)*realdpex
-#endif
-
-  call MPI_TYPE_STRUCT(msg_size,new_type_length,new_type_disp,new_type_type,new_mpi_large_realdp_flush,info)
-  call MPI_TYPE_COMMIT(new_mpi_large_realdp_flush,info)
-
-  ! New type for request
-  new_type_disp(1)=0
-  new_type_disp(2)=intex
-  new_type_type(1)=MPI_INTEGER
-  new_type_type(2)=MPI_INTEGER
-  new_type_length(1)=1
-  new_type_length(2)=ndim
-  call MPI_TYPE_STRUCT(2,new_type_length,new_type_disp,new_type_type,new_mpi_request,info)
-  call MPI_TYPE_COMMIT(new_mpi_request,info)
-
-#else
+  ! Compute largest possible message size
   size_request_array=1+ndim
   size_msg_array=storage_size(dummy_large_realdp)/32
   size_flush_array=1+(1+ndim+size_msg_array)*nflushmax
   size_fetch_array=2+(1+ndim+size_msg_array)*ntilemax
 
+  ! Allocate large enough message communication buffers
   allocate(recv_request_array(1:size_request_array))
   allocate(send_request_array(1:size_request_array))
   allocate(recv_fetch_array(1:size_fetch_array))
-  allocate(send_fetch_array(1:ncpu*size_fetch_array))
   allocate(recv_flush_array(1:size_flush_array))
+  allocate(send_fetch_array(1:ncpu*size_fetch_array))
   allocate(send_flush_array(1:ncpu*size_flush_array))
   
-#endif
 #endif
 
 end subroutine init_cache

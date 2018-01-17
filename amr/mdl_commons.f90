@@ -12,6 +12,7 @@ module mdl_parameters
      enumerator::MDL_INPUT_PART_GRAFIC
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_PART_RESTART
+     enumerator::MDL_NPART_MAX
      enumerator::MDL_INIT_FLAG
      enumerator::MDL_USER_FLAG
      enumerator::MDL_ENSURE_REF_RULES
@@ -19,12 +20,14 @@ module mdl_parameters
      enumerator::MDL_NOCT_TOT
      enumerator::MDL_NOCT_MIN
      enumerator::MDL_NOCT_MAX
+     enumerator::MDL_NOCT_USED_MAX
      enumerator::MDL_GATHER_NOCT_MAX
      enumerator::MDL_INIT_REFINE_BASEGRID
      enumerator::MDL_INIT_REFINE_RESTART
      enumerator::MDL_COLLECT_BOUND_KEY
      enumerator::MDL_BROADCAST_BOUND_KEY
      enumerator::MDL_LOAD_BALANCE
+     enumerator::MDL_BALANCE_PART
      enumerator::MDL_REFINE_FINE
      enumerator::MDL_SMOOTH_FINE
      enumerator::MDL_INPUT_HYDRO_CONDINIT
@@ -36,6 +39,9 @@ module mdl_parameters
      enumerator::MDL_CIC_MULTIPOLE
      enumerator::MDL_CIC_PART
      enumerator::MDL_SPLIT_PART
+     enumerator::MDL_KICK_DRIFT_PART
+     enumerator::MDL_MASS_MIN_PART
+     enumerator::MDL_BROADCAST_MP_MIN
      enumerator::MDL_COLLECT_MULTIPOLE
      enumerator::MDL_BROADCAST_MULTIPOLE
      enumerator::MDL_OUTPUT_AMR
@@ -58,6 +64,13 @@ module mdl_parameters
      enumerator::MDL_NEWDT_PART
      enumerator::MDL_BROADCAST_DT
      enumerator::MDL_MAKE_INITIAL_PHI
+     enumerator::MDL_RECURRENCE_ON_P
+     enumerator::MDL_RECURRENCE_X_AND_R
+     enumerator::MDL_CMP_RESIDUAL_CG
+     enumerator::MDL_CMP_AP_CG
+     enumerator::MDL_CMP_RHS_NORM
+     enumerator::MDL_CMP_R2_CG
+     enumerator::MDL_CMP_PAP_CG
      enumerator::MDL_INIT_MG
      enumerator::MDL_BUILD_MG
      enumerator::MDL_CLEANUP_MG

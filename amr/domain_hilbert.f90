@@ -18,8 +18,7 @@ module domain_m
      procedure :: destroy  => destroy_domain
      procedure :: in_rank  => in_rank
      procedure :: get_rank => get_rank
-     procedure, nopass :: pos2key  => hilbert_key_one
-     !procedure, nopass :: key2pos  => reverse_hilbert_key_one
+     procedure, nopass :: pos2key  => hilbert_key
   end type domain_t
   
 contains
@@ -201,9 +200,9 @@ contains
                 print *, ' Time to do linear search :', real(tlin)
                 print *, ' Time to do hunt search   :', real(thunt)
                 if (do_linear) then
-                   print *, 'Using linear search'
+                   print *, ' Using linear search'
                 else
-                   print *, 'Using hunt search'
+                   print *, ' Using hunt search'
                 end if
              end if
           end if

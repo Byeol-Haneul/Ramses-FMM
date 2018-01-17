@@ -385,7 +385,7 @@ recursive subroutine r_build_mg(r,g,m,p,mdl,cpu_range,input_size,output_size,ile
 end subroutine r_build_mg
 
 subroutine build_mg(r,g,m,ifinelevel)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
+  use amr_parameters, only: dp,nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
   use hilbert
@@ -405,10 +405,8 @@ subroutine build_mg(r,g,m,ifinelevel)
   integer,dimension(1:3,1:8),save::shift_oct=reshape(&
        & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
        &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
-  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
-  integer(kind=8),dimension(1:nhilbert),save::hks
+  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:ndim)::ix
 
   icoarselevel=ifinelevel-1
   m%ifree=m%noct_used+1
@@ -453,12 +451,11 @@ subroutine build_mg(r,g,m,ifinelevel)
            cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
            
            ! Compute Hilbert keys of new octs
-           ix(1,1:ndim)=cart_key(1:ndim)
-           call hilbert_key(ix,hk,dummy_state,0,icoarselevel-1,1)
+           ix(1:ndim)=cart_key(1:ndim)
+           hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
            
            ! Check if grid sits inside processor boundaries
-           hks = hk(1,1:nhilbert)
-           if( m%domain_mg(icoarselevel)%in_rank(hks)) then
+           if( m%domain_mg(icoarselevel)%in_rank(hk)) then
               
               ! Set grid index to a virtual grid in local main memory
               ichild=m%ifree
@@ -471,10 +468,10 @@ subroutine build_mg(r,g,m,ifinelevel)
                  write(*,*)'Increase ngridmax'
                  call clean_abort
               end if
-              ! Otherwise, determine parent processor and use the cache
+
            else
-              hks = hk(1,1:nhilbert)
-              grid_cpu = m%domain_mg(icoarselevel)%get_rank(hks)
+              ! Otherwise, determine parent processor and use the cache
+              grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
               
               ! If next cache line is occupied, free it.
               if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%mg_dict)
@@ -492,7 +489,7 @@ subroutine build_mg(r,g,m,ifinelevel)
            
            m%grid(ichild)%lev=icoarselevel
            m%grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
-           m%grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
+           m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
            m%grid(ichild)%refined(1:twotondim)=.true.
            m%grid(ichild)%flag1(1:twotondim)=0
            m%grid(ichild)%flag2(1:twotondim)=0

@@ -618,24 +618,19 @@ subroutine m_broadcast_params(r,g,m,p,mdl)
   ! parameters to all the CPUs.
   !--------------------------------------------------------------------
   integer,dimension(:),allocatable::input_array
-  integer,dimension(:),allocatable::output_array
 
   ! Broadcast parameters to all CPUs.
   allocate(input_array(1:storage_size(r)/32))
   input_array=transfer(r,input_array)
-  allocate(output_array(1:1))
-  output_array=0
-  write(*,*)"BROADCASTING parameters"
-  call r_broadcast_params(r,g,m,p,mdl,g%ncpu,storage_size(r)/32,1,input_array,output_array)
-  write(*,*)"READ_PARAMS completed with output ",output_array(1)
-  deallocate(input_array,output_array)
+  call r_broadcast_params(r,g,m,p,mdl,g%ncpu,storage_size(r)/32,0,input_array)
+  deallocate(input_array)
 
 end subroutine m_broadcast_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_params(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
+recursive subroutine r_broadcast_params(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
   use mdl_commons, only: mdl_t
@@ -648,29 +643,20 @@ recursive subroutine r_broadcast_params(r,g,m,p,mdl,cpu_range,input_size,output_
   type(mdl_t)::mdl
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
 
   integer::next_range,next_cpu
-  integer,dimension(1:output_size)::next_output
 
   next_range=cpu_range/2
   next_cpu=g%myid+next_range
 
   if(next_range>0)then
      call mdl_send_request(mdl,MDL_BCAST_PARAMS,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_params(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output)
-     output_array(1)=output_array(1)+next_output(1)
+     call r_broadcast_params(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
   else
      r=transfer(input_array,r)
-     output_array(1)=1
   endif
 
 end subroutine r_broadcast_params
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -689,12 +675,14 @@ subroutine m_broadcast_global(r,g,m,p,mdl)
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
   !--------------------------------------------------------------------
+  integer::input_size
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
-  allocate(input_array(1:storage_size(g)/32))
+  input_size=storage_size(g)/32
+  allocate(input_array(1:input_size))
   input_array=transfer(g,input_array)
-  call r_broadcast_global(r,g,m,p,mdl,g%ncpu,storage_size(g)/32,0,input_array)
+  call r_broadcast_global(r,g,m,p,mdl,mdl%ncpu,input_size,0,input_array)
   deallocate(input_array)
 
 end subroutine m_broadcast_global
@@ -726,6 +714,7 @@ recursive subroutine r_broadcast_global(r,g,m,p,mdl,cpu_range,input_size,output_
      call r_broadcast_global(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
   else
      g=transfer(input_array,g)
+     g%myid=mdl%myid
   endif
 
 end subroutine r_broadcast_global

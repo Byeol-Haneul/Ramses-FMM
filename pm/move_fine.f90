@@ -1,7 +1,73 @@
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine m_kick_drift_part(r,g,m,p,mdl,ilevel,action_part)
+  use amr_parameters, only: ndim,dp,twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::ilevel
+  integer::action_part
+  !--------------------------------------------------------------
+  ! Move particles according to kick-drift leap frog scheme.
+  !--------------------------------------------------------------
+  integer,dimension(1:2)::input_array
+  
+  if(m%noct_tot(ilevel)==0)return
+  if(r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
+
+  input_array(1)=ilevel
+  input_array(2)=action_part
+  call r_kick_drift_part(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+  
+end subroutine m_kick_drift_part
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_kick_drift_part(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  use pm_commons, only: part_t
+  use mdl_commons, only: mdl_t
+  use mdl_parameters
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(mdl_t)::mdl
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel
+  integer::action_part
+  
+  next_range=cpu_range/2
+  next_cpu=g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(mdl,MDL_KICK_DRIFT_PART,next_cpu,next_range,input_size,output_size,input_array)
+     call r_kick_drift_part(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     action_part=input_array(2)
+     call kick_drift_part(r,g,m,p,ilevel,action_part)
+  endif
+
+end subroutine r_kick_drift_part
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
   use amr_parameters, only: dp,ndim,twotondim
   use pm_parameters
@@ -29,9 +95,6 @@ subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
   real(dp),dimension(1:ndim),save::ff
   logical::ok_level
   
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
@@ -246,8 +309,6 @@ subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
         end do
      end do
   end if
-
-111 format('   Entering kick_and_drift_part for level',i2)
 
 end subroutine kick_drift_part
 !#########################################################################

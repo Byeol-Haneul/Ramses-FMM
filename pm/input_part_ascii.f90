@@ -21,6 +21,8 @@ subroutine m_input_part_ascii(r,g,m,p,mdl)
   integer(i8b)::npart_tot
   character(LEN=80)::filename
   integer,allocatable,dimension(:)::input_array
+
+  if(r%nrestart>0)return
   
   ! Compute total number of particles in file
   if(TRIM(r%initfile(r%levelmin)).NE.' ')then
