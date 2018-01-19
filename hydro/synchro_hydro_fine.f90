@@ -2,17 +2,11 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine m_synchro_hydro_fine(r,g,m,p,mdl,ilevel,dteff)
+subroutine m_synchro_hydro_fine(s,ilevel,dteff)
   use amr_parameters, only: ndim,dp,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel
   real(dp)::dteff
   !--------------------------------------------------------------
@@ -20,31 +14,25 @@ subroutine m_synchro_hydro_fine(r,g,m,p,mdl,ilevel,dteff)
   !--------------------------------------------------------------
   integer,dimension(1:3)::input_array
   
-  if(.not. r%poisson)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,'("   Entering synchro_hydro_fine for level",i2," and time step dt=",1PE12.5)')ilevel,dteff
+  if(.not. s%r%poisson)return
+  if(s%m%noct_tot(ilevel)==0)return
+  if(s%r%verbose)write(*,'("   Entering synchro_hydro_fine for level",i2," and time step dt=",1PE12.5)')ilevel,dteff
 
   input_array(1)=ilevel
   input_array(2:3)=transfer(dteff,input_array)
-  call r_synchro_hydro_fine(r,g,m,p,mdl,mdl%ncpu,3,0,input_array)
+  call r_synchro_hydro_fine(s,s%mdl%ncpu,3,0,input_array)
   
 end subroutine m_synchro_hydro_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_synchro_hydro_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_synchro_hydro_fine(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -53,15 +41,15 @@ recursive subroutine r_synchro_hydro_fine(r,g,m,p,mdl,cpu_range,input_size,outpu
   real(dp)::dteff
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_SYNCHRO_HYDRO_FINE,next_cpu,next_range,input_size,output_size,input_array)
-     call r_synchro_hydro_fine(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_SYNCHRO_HYDRO_FINE,next_cpu,next_range,input_size,output_size,input_array)
+     call r_synchro_hydro_fine(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      dteff=transfer(input_array(2:3),dteff)
-     call synchro_hydro_fine(r,m,ilevel,dteff)
+     call synchro_hydro_fine(s%r,s%m,ilevel,dteff)
   endif
 
 end subroutine r_synchro_hydro_fine
@@ -122,31 +110,25 @@ end subroutine synchro_hydro_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_gravity_hydro_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_gravity_hydro_fine(s,cpu_range,input_size,output_size,ilevel)
   use amr_parameters, only: dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_GRAVITY_HYDRO_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_gravity_hydro_fine(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_GRAVITY_HYDRO_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_gravity_hydro_fine(s,next_range,input_size,output_size,ilevel)
   else
-     call gravity_hydro_fine(r,g,m,ilevel)
+     call gravity_hydro_fine(s%r,s%g,s%m,ilevel)
   endif
 
 end subroutine r_gravity_hydro_fine

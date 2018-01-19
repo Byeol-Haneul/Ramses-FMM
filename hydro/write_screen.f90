@@ -2,9 +2,6 @@ subroutine write_screen(m,ilevel)
   use amr_parameters, only: dp,ndim
   use amr_commons, only: mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(mesh_t)::m
   integer::ilevel
 

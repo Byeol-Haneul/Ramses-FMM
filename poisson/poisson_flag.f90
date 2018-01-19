@@ -2,15 +2,13 @@
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine poisson_flag(r,g,m,ilevel)
+subroutine poisson_flag(s,ilevel)
   use amr_parameters, only: dp,ndim,twotondim,twopi
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use hydro_parameters, only: nvar
   use hash
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   ! -------------------------------------------------------------------
   ! This routine flag for refinement cells that satisfies
@@ -20,6 +18,8 @@ subroutine poisson_flag(r,g,m,ilevel)
   real(dp),dimension(1:nvar),save::uu
   integer::igrid,ind,ivar
   logical::ok
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
   if(        r%m_refine(ilevel).LE.-1.0 .and.&
        & r%jeans_refine(ilevel).LE.-1.0 )return
@@ -77,6 +77,8 @@ subroutine poisson_flag(r,g,m,ilevel)
      ! End loop over cells
   end do
   ! End loop over grids
+
+  end associate
 
 end subroutine poisson_flag
 !#####################################################################

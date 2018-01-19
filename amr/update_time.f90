@@ -2,17 +2,11 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine m_update_time(r,g,m,p,mdl,ilevel)
+subroutine m_update_time(s,ilevel)
   use amr_parameters, only: dp,n_frw
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only:mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel
 
   ! Local variables
@@ -22,6 +16,8 @@ subroutine m_update_time(r,g,m,p,mdl,ilevel)
   integer::i,itest
   integer,dimension(1:4)::input_array
   
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+
   ! Local constants
   dt=g%dtnew(ilevel)
   itest=0
@@ -153,25 +149,20 @@ subroutine m_update_time(r,g,m,p,mdl,ilevel)
   ! Broadcast aexp and hexp to all CPUs
   input_array(1:2)=transfer(g%aexp,input_array)
   input_array(3:4)=transfer(g%hexp,input_array)
-  call r_broadcast_aexp(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+  call r_broadcast_aexp(s,mdl%ncpu,4,0,input_array)
+
+  end associate
 
 end subroutine m_update_time
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_broadcast_aexp(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_broadcast_aexp(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
-  use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -180,14 +171,14 @@ recursive subroutine r_broadcast_aexp(r,g,m,p,mdl,cpu_range,input_size,output_si
   real(kind=8)::aexp
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_BROADCAST_AEXP,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_aexp(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_BROADCAST_AEXP,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_aexp(s,next_range,input_size,output_size,input_array)
   else
-     g%aexp=transfer(input_array(1:2),aexp)
-     g%hexp=transfer(input_array(3:4),aexp)
+     s%g%aexp=transfer(input_array(1:2),aexp)
+     s%g%hexp=transfer(input_array(3:4),aexp)
   endif
 
 end subroutine r_broadcast_aexp
@@ -195,64 +186,24 @@ end subroutine r_broadcast_aexp
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_clean_stop(r,g,m,p,mdl,cpu_range,input_size,output_size)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_clean_stop(s,cpu_range,input_size,output_size)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=mdl%myid+next_range
+  next_cpu=s%mdl%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_CLEAN_STOP,next_cpu,next_range,input_size,output_size)
-     call r_clean_stop(r,g,m,p,mdl,next_range,input_size,output_size)
+     call mdl_send_request(s%mdl,MDL_CLEAN_STOP,next_cpu,next_range,input_size,output_size)
+     call r_clean_stop(s,next_range,input_size,output_size)
   endif
   
 end subroutine r_clean_stop
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
-subroutine clean_stop(g)
-  use amr_commons, only: global_t
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-#endif
-  type(global_t)::g
-
-  call finalize_timer(g)
-
-#ifndef WITHOUTMPI
-  call MPI_FINALIZE(info)
-#endif
-  stop
-end subroutine clean_stop
-
-subroutine clean_abort
-  use amr_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-#endif
-#ifndef WITHOUTMPI
-  call MPI_ABORT(MPI_COMM_WORLD,1,info)
-#else
-     stop
-#endif
-end subroutine clean_abort
 !##############################################################
 !##############################################################
 !##############################################################

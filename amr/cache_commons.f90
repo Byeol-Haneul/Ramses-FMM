@@ -3,11 +3,7 @@ module cache_commons
   use hydro_parameters, only: nvar
   use call_back
   
-  ! Communication-related objects
-  integer::mail_counter=0
-  integer::request_id,flush_id
-  integer,dimension(:),allocatable::reply_id
-
+  ! Communication-related taghs
   integer::flush_tag=1000,msg_tag=100,request_tag=10
 
   ! Software cache parameters
@@ -23,25 +19,10 @@ module cache_commons
   ! Message size
   integer,parameter::ntilemax=16  ! Fetch message buffer size
   integer,parameter::nflushmax=128  ! Flush message buffer size
-  
-  integer::size_msg_array ! Cache element size
-  integer::size_request_array ! Comm. buffer sizes
-  integer::size_flush_array
-  integer::size_fetch_array
 
   ! Combiner rules
   integer,parameter::COMBINER_EXIST=1
   integer,parameter::COMBINER_CREATE=2
-  
-  integer::combiner_rule
-
-  ! Message arrays
-  integer(kind=4),dimension(:),allocatable::recv_request_array
-  integer(kind=4),dimension(:),allocatable::send_request_array
-  integer(kind=4),dimension(:),allocatable::recv_fetch_array
-  integer(kind=4),dimension(:),allocatable::send_fetch_array
-  integer(kind=4),dimension(:),allocatable::recv_flush_array
-  integer(kind=4),dimension(:),allocatable::send_flush_array
   
   ! Message element type
   type msg_int4

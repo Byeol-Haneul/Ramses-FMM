@@ -2,67 +2,63 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_refine_fine(r,g,m,p,mdl,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+subroutine m_refine_fine(s,ilevel)
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to refine the AMR grid
   ! from level ilevel to nlevelmax.
   !--------------------------------------------------------------------
-  integer::ilev
+  integer::ilev,ncpu
   integer,dimension(1:2)::noct
   
-  if(ilevel==r%nlevelmax)return
-  if(m%noct_tot(ilevel)==0)return
+  if(ilevel==s%r%nlevelmax)return
+  if(s%m%noct_tot(ilevel)==0)return
 
-  if(r%verbose)write(*,111)ilevel
+  if(s%r%verbose)write(*,111)ilevel
 111 format(' Entering refine_fine for level ',I2)
 
+  ncpu=s%mdl%ncpu
+  
   ! Create new octs and destroy unecessary octs
-  call r_refine_fine(r,g,m,p,mdl,g%ncpu,1,2,ilevel,noct)
+  call r_refine_fine(s,ncpu,1,2,ilevel,noct)
 
-  if(r%verbose)write(*,112)noct(1)
+  if(s%r%verbose)write(*,112)noct(1)
 112 format(' ==> Make ',i6,' sub-grids')
 
-  if(r%verbose)write(*,113)noct(2)
+  if(s%r%verbose)write(*,113)noct(2)
 113 format(' ==> Kill ',i6,' sub-grids')
 
   ! Get total, min and max grid count (only in master)
-  do ilev=ilevel+1,r%nlevelmax
-     call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_tot(ilev))
-     call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_min(ilev))
-     call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_max(ilev))
+  do ilev=ilevel+1,s%r%nlevelmax
+     call r_noct_tot(s,ncpu,1,1,ilev,s%m%noct_tot(ilev))
+     call r_noct_min(s,ncpu,1,1,ilev,s%m%noct_min(ilev))
+     call r_noct_max(s,ncpu,1,1,ilev,s%m%noct_max(ilev))
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_used_max)
+  call r_noct_used_max(s,ncpu,1,1,ilevel,s%m%noct_used_max)
 
   ! Load balance all levels across cpus
-  call m_load_balance(r,g,m,p,mdl,ilevel)
+  call m_load_balance(s,ilevel)
 
   ! Get total, min and max grid count (only in master).
-  do ilev=ilevel+1,r%nlevelmax
-     call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_tot(ilev))
-     call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_min(ilev))
-     call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilev,m%noct_max(ilev))
+  do ilev=ilevel+1,s%r%nlevelmax
+     call r_noct_tot(s,ncpu,1,1,ilev,s%m%noct_tot(ilev))
+     call r_noct_min(s,ncpu,1,1,ilev,s%m%noct_min(ilev))
+     call r_noct_max(s,ncpu,1,1,ilev,s%m%noct_max(ilev))
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(r,g,m,p,mdl,mdl%ncpu,1,1,ilevel,m%noct_used_max)
+  call r_noct_used_max(s,ncpu,1,1,ilevel,s%m%noct_used_max)
 
   ! Balance particles across cpus
-  if(g%ncpu>1.AND.ilevel==r%levelmin)then
-     if(r%pic.AND.mod(g%nstep_coarse,10)==1)then
-        if(r%verbose)write(*,*)'Entering balance_part for level',r%levelmin
-        call r_balance_part(r,g,m,p,mdl,g%ncpu,1,0,ilevel)
+  if(ncpu>1.AND.ilevel==s%r%levelmin)then
+     if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
+        if(s%r%verbose)write(*,*)'Entering balance_part for level',s%r%levelmin
+        call r_balance_part(s,ncpu,1,0,ilevel)
      endif
   endif
   
@@ -71,17 +67,11 @@ end subroutine m_refine_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_refine_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_refine_fine(s,cpu_range,input_size,output_size,ilevel,noct)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:2)::noct
@@ -91,15 +81,15 @@ recursive subroutine r_refine_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,
   integer::ncreate,nkill
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_REFINE_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_refine_fine(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct)
+     call mdl_send_request(s%mdl,MDL_REFINE_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_refine_fine(s,next_range,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct)
      noct=noct+next_noct
   else
-     call refine_fine(r,g,m,ilevel,ncreate,nkill)
+     call refine_fine(s,ilevel,ncreate,nkill)
      noct(1)=ncreate
      noct(2)=nkill
   endif
@@ -109,17 +99,15 @@ end subroutine r_refine_fine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
+subroutine refine_fine(s,ilevel,ncreate,nkill)
   use amr_parameters, only: ndim,nhilbert,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t, oct
+  use ramses_commons, only: ramses_t
   use cache_commons
   use hash
   use hilbert
   use call_back, only: cache_f
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   integer::ncreate,nkill
   !---------------------------------------------------------
@@ -137,15 +125,17 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
   integer::parent_cell,get_parent_cell
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
+  integer(kind=8),dimension(1:nhilbert,1:s%r%nlevelmax)::key_ref
   integer(kind=8),dimension(1:nhilbert)::coarse_key
-  integer,dimension(1:r%nlevelmax)::n_same,npatch
+  integer,dimension(1:s%r%nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok
   type(oct)::oct_tmp
   
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
   !---------------------------------------------------
   ! Step 1: if a cell is flagged for refinement and
   ! if it is not already refined, create its son grid.
@@ -154,7 +144,7 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
   m%ifree=m%noct_used+1
   do ilev=ilevel,r%nlevelmax-1
 
-     call open_cache(r,g,m,operation_refine,domain_decompos_amr)
+     call open_cache(s,operation_refine,domain_decompos_amr)
 
      do ioct=m%head(ilev),m%tail(ilev)
         do ind=1,twotondim
@@ -163,13 +153,13 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
            if(ok)then
               ind_parent=ioct
               ind_cell=ind
-              call make_new_oct(r,g,m,ind_parent,ind_cell,ilev+1)
+              call make_new_oct(s,ind_parent,ind_cell,ilev+1)
               g%ncreate=g%ncreate+1
            endif
         end do
      end do
 
-     call close_cache(r,g,m,m%grid_dict)
+     call close_cache(s,m%grid_dict)
 
   end do
   ncreate=g%ncreate
@@ -181,13 +171,13 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
   g%nkill=0
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache(r,g,m,operation_derefine,domain_decompos_amr)
+     call open_cache(s,operation_derefine,domain_decompos_amr)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
-        parent_cell=get_parent_cell(r,g,m,hash_key,m%grid_dict,.true.,.true.)
+        parent_cell=get_parent_cell(s,hash_key,m%grid_dict,.true.,.true.)
         igrid=(parent_cell-1)/twotondim+1
         icell=parent_cell-(igrid-1)*twotondim
         ok   = m%grid(igrid)%flag1(icell)==0 .and. &
@@ -203,7 +193,7 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
         end if
      end do
 
-     call close_cache(r,g,m,m%grid_dict)
+     call close_cache(s,m%grid_dict)
 
   end do
   nkill=g%nkill
@@ -379,6 +369,8 @@ subroutine refine_fine(r,g,m,ilevel,ncreate,nkill)
         end do
      end do
   end do
+
+  end associate
 
 end subroutine refine_fine
 !###############################################################
@@ -622,10 +614,10 @@ end subroutine unpack_flush_derefine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
+subroutine make_new_oct(s,iparent,icell,ilevel)
   use amr_parameters, only: ndim,nhilbert,twotondim,twondim,nvector
   use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t, oct
+  use ramses_commons, only: ramses_t
   use cache_commons
   use hilbert
   use hash
@@ -633,9 +625,7 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   integer::iparent,icell
   !--------------------------------------------------------------
@@ -654,13 +644,15 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
   real(dp),dimension(0:twondim,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
 
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
-  if(mail_counter==32)then
-     call check_mail(r,g,m,MPI_REQUEST_NULL,m%grid_dict)
-     mail_counter=0
+  if(mdl%mail_counter==32)then
+     call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
+     mdl%mail_counter=0
   endif
-  mail_counter=mail_counter+1
+  mdl%mail_counter=mdl%mail_counter+1
 #endif
 
   !=================================
@@ -695,7 +687,7 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
   else
      grid_cpu = m%domain(ilevel)%get_rank(hk)
      ! If next cache line is occupied, free it.
-     if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
+     if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
      ! Set grid index to a virtual grid in local cache memory
      ichild=r%ngridmax+m%free_cache
      m%occupied(m%free_cache)=.true.
@@ -729,52 +721,54 @@ subroutine make_new_oct(r,g,m,iparent,icell,ilevel)
   !=========================================================     
 #ifdef HYDRO
 
-     ! Interpolate hydro variables
+  ! Interpolate hydro variables
+  do ivar=1,nvar
+     do ind=1,twotondim
+        m%grid(ichild)%uold(ind,ivar)=m%grid(iparent)%uold(icell,ivar)
+     enddo
+  end do
+  
+  ! In case one wants to interpolate using high-order schemes
+  if(r%interpol_type>0)then
+     
+     ! Get 2ndim neighboring father cells with read-only cache
+     call get_twondim_nbor_parent_cell(s,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+     do inbor=0,twondim
+        do ivar=1,nvar
+           u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
+        end do
+     end do
+     do inbor=1,twondim
+        call unlock_cache(s,igrid_nbor(inbor))
+     end do
+     
+     ! Interpolate
+     call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
+     
+     ! Store hydro variables
      do ivar=1,nvar
         do ind=1,twotondim
-           m%grid(ichild)%uold(ind,ivar)=m%grid(iparent)%uold(icell,ivar)
+           m%grid(ichild)%uold(ind,ivar)=u2(ind,ivar)
         enddo
      end do
      
-     ! In case one wants to interpolate using high-order schemes
-     if(r%interpol_type>0)then
-        
-        ! Get 2ndim neighboring father cells with read-only cache
-        call get_twondim_nbor_parent_cell(r,g,m,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-        do inbor=0,twondim
-           do ivar=1,nvar
-              u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
-           end do
-        end do
-        do inbor=1,twondim
-           call unlock_cache(r,g,m,igrid_nbor(inbor))
-        end do
-        
-        ! Interpolate
-        call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
-        
-        ! Store hydro variables
-        do ivar=1,nvar
-           do ind=1,twotondim
-              m%grid(ichild)%uold(ind,ivar)=u2(ind,ivar)
-           enddo
-        end do
-        
-     endif     
-
+  endif
+  
 #endif
-
+  
 #ifdef GRAV
-
-     ! Interpolate (straight injection) gravity variables
-     do ind=1,twotondim
-        m%grid(ichild)%f(ind,1:ndim)=m%grid(iparent)%f(icell,1:ndim)
-        m%grid(ichild)%phi(ind)=m%grid(iparent)%phi(icell)
-        m%grid(ichild)%phi_old(ind)=m%grid(iparent)%phi_old(icell)
-     enddo
-
+  
+  ! Interpolate (straight injection) gravity variables
+  do ind=1,twotondim
+     m%grid(ichild)%f(ind,1:ndim)=m%grid(iparent)%f(icell,1:ndim)
+     m%grid(ichild)%phi(ind)=m%grid(iparent)%phi(icell)
+     m%grid(ichild)%phi_old(ind)=m%grid(iparent)%phi_old(icell)
+  enddo
+  
 #endif
 
+  end associate
+     
 end subroutine make_new_oct
 !###############################################################
 !###############################################################

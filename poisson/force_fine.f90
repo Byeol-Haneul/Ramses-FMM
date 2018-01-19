@@ -2,17 +2,11 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine m_force_fine(r,g,m,p,mdl,ilevel,icount)
+subroutine m_force_fine(s,ilevel,icount)
   use amr_parameters, only: ndim,twotondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel,icount
   !----------------------------------------------------------
   ! This routine computes the gravitational acceleration,
@@ -21,33 +15,33 @@ subroutine m_force_fine(r,g,m,p,mdl,ilevel,icount)
   integer,dimension(1:2)::input_array,output_array
   real(kind=8)::rhomax,epot
  
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
+  if(s%m%noct_tot(ilevel)==0)return
+  if(s%r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
 
 #ifdef GRAV  
 
-  if(r%gravity_type>0)then 
+  if(s%r%gravity_type>0)then 
      ! Compute analytical gravity force
-     call r_force_analytic(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+     call r_force_analytic(s,s%mdl%ncpu,1,0,ilevel)
   else
      ! Compute gradient of potential
      input_array(1)=ilevel
      input_array(2)=icount
-     call r_gradient_phi(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+     call r_gradient_phi(s,s%mdl%ncpu,2,0,input_array)
   endif
-  if(r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
+  if(s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
   ! Compute gravity potential energy
-  call r_compute_epot(r,g,m,p,mdl,mdl%ncpu,1,2,ilevel,output_array)
+  call r_compute_epot(s,s%mdl%ncpu,1,2,ilevel,output_array)
   epot=transfer(output_array,epot)
-  g%epot_tot=g%epot_tot+epot
-  if(r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
+  s%g%epot_tot=s%g%epot_tot+epot
+  if(s%r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
 
   ! Compute maximum mass density
-  call r_compute_rhomax(r,g,m,p,mdl,mdl%ncpu,1,2,ilevel,output_array)
+  call r_compute_rhomax(s,s%mdl%ncpu,1,2,ilevel,output_array)
   rhomax=transfer(output_array,rhomax)
-  g%rho_max(ilevel)=rhomax
-  if(r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
+  s%g%rho_max(ilevel)=rhomax
+  if(s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
 
 #endif  
 
@@ -56,30 +50,24 @@ end subroutine m_force_fine
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_force_analytic(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_force_analytic(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_FORCE_ANALYTIC,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_force_analytic(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_FORCE_ANALYTIC,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_force_analytic(s,next_range,input_size,output_size,ilevel)
   else
-     call force_analytic(r,g,m,ilevel)
+     call force_analytic(s%r,s%g,s%m,ilevel)
   endif
 
 end subroutine r_force_analytic
@@ -123,7 +111,7 @@ subroutine force_analytic(r,g,m,ilevel)
         end do
 
         ! Call analytical gravity routine
-        call gravana(xx,ff,dx,ngrid,r%gravity_type,r%gravity_params)
+        call grav_ana(xx,ff,dx,ngrid,r%gravity_type,r%gravity_params)
 
         ! Scatter variables to main memory
         do idim=1,ndim
@@ -145,17 +133,11 @@ end subroutine force_analytic
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_gradient_phi(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_gradient_phi(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -163,15 +145,15 @@ recursive subroutine r_gradient_phi(r,g,m,p,mdl,cpu_range,input_size,output_size
   integer::ilevel,icount
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_GRADIENT_PHI,next_cpu,next_range,input_size,output_size,input_array)
-     call r_gradient_phi(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_GRADIENT_PHI,next_cpu,next_range,input_size,output_size,input_array)
+     call r_gradient_phi(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)
-     call gradient_phi(r,g,m,ilevel,icount)
+     call gradient_phi(s,ilevel,icount)
   endif
 
 end subroutine r_gradient_phi
@@ -179,14 +161,12 @@ end subroutine r_gradient_phi
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gradient_phi(r,g,m,ilevel,icount)
+subroutine gradient_phi(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel,icount
   !-------------------------------------------------
   ! This routine compute the 3-force for all cells
@@ -209,6 +189,8 @@ subroutine gradient_phi(r,g,m,ilevel,icount)
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
 
 #ifdef GRAV
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
@@ -262,7 +244,7 @@ subroutine gradient_phi(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(s,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -284,7 +266,7 @@ subroutine gradient_phi(r,g,m,ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
            if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -295,10 +277,10 @@ subroutine gradient_phi(r,g,m,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim parent cell using read-only cache
-           call get_threetondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
            call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache(r,g,m,igrid_nbor(ind))
+              call unlock_cache(s,igrid_nbor(ind))
            end do
         endif
 
@@ -335,8 +317,10 @@ subroutine gradient_phi(r,g,m,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
+  end associate
+  
 #endif
 
 end subroutine gradient_phi
@@ -344,17 +328,11 @@ end subroutine gradient_phi
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_epot(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_compute_epot(s,cpu_range,input_size,output_size,ilevel,output_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
@@ -364,18 +342,18 @@ recursive subroutine r_compute_epot(r,g,m,p,mdl,cpu_range,input_size,output_size
   real(kind=8)::epot,next_epot
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_COMPUTE_EPOT,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_compute_epot(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(s%mdl,MDL_COMPUTE_EPOT,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_compute_epot(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
      epot=transfer(output_array,epot)
      next_epot=transfer(next_output_array,next_epot)
      epot=epot+next_epot
      output_array=transfer(epot,output_array)
   else
-     call compute_epot(r,g,m,ilevel,epot)
+     call compute_epot(s%r,s%g,s%m,ilevel,epot)
      output_array=transfer(epot,output_array)
   endif
 
@@ -433,17 +411,11 @@ end subroutine compute_epot
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_rhomax(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_compute_rhomax(s,cpu_range,input_size,output_size,ilevel,output_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
@@ -453,18 +425,18 @@ recursive subroutine r_compute_rhomax(r,g,m,p,mdl,cpu_range,input_size,output_si
   real(kind=8)::rhomax,next_rhomax
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_COMPUTE_RHOMAX,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_compute_rhomax(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(s%mdl,MDL_COMPUTE_RHOMAX,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_compute_rhomax(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
      rhomax=transfer(output_array,rhomax)
      next_rhomax=transfer(next_output_array,next_rhomax)
      rhomax=MAX(rhomax,next_rhomax)
      output_array=transfer(rhomax,output_array)
   else
-     call compute_rhomax(r,g,m,ilevel,rhomax)
+     call compute_rhomax(s%r,s%g,s%m,ilevel,rhomax)
      output_array=transfer(rhomax,output_array)
   endif
 

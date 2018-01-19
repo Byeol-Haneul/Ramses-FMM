@@ -2,17 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_input_part_ascii(r,g,m,p,mdl)
+subroutine m_input_part_ascii(s)
   use amr_parameters, only: dp,i8b
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
@@ -22,37 +16,38 @@ subroutine m_input_part_ascii(r,g,m,p,mdl)
   character(LEN=80)::filename
   integer,allocatable,dimension(:)::input_array
 
-  if(r%nrestart>0)return
+  if(s%r%nrestart>0)return
+  if(s%r%verbose)write(*,*)'Entering init_part_ascii'
   
   ! Compute total number of particles in file
-  if(TRIM(r%initfile(r%levelmin)).NE.' ')then
-     filename=TRIM(r%initfile(r%levelmin))//'/ic_part'
+  if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
+     filename=TRIM(s%r%initfile(s%r%levelmin))//'/ic_part'
      write(*,*)'Opening file '//TRIM(filename)
      open(10,file=filename,form='formatted')
      npart_tot=0
      do
         read(10,*,end=101)xx1,xx2,xx3,vv1,vv2,vv3,mm1
-        if(ABS(xx1)<r%boxlen/2..AND.ABS(xx2)<r%boxlen/2..AND.ABS(xx3)<r%boxlen/2.)then
+        if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
            npart_tot=npart_tot+1
         endif
      end do
 101  continue
-     p%npart_tot=npart_tot
-     write(*,*)'Found npart_tot=',p%npart_tot
+     s%p%npart_tot=npart_tot
+     write(*,*)'Found npart_tot=',s%p%npart_tot
      close(10)
   else
-     p%npart_tot=0
+     s%p%npart_tot=0
   endif
 
   ! If no particle found, no need to read
-  if(p%npart_tot==0)then
+  if(s%p%npart_tot==0)then
      return
   endif
 
   ! Call recursive slave routine
   allocate(input_array(1:storage_size(npart_tot)/32))
   input_array=transfer(npart_tot,input_array)
-  call r_input_part_ascii(r,g,m,p,mdl,mdl%ncpu,storage_size(npart_tot)/32,0,input_array)
+  call r_input_part_ascii(s,s%mdl%ncpu,storage_size(npart_tot)/32,0,input_array)
   deallocate(input_array)
 
 end subroutine m_input_part_ascii
@@ -60,18 +55,12 @@ end subroutine m_input_part_ascii
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_ascii(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_ascii(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: i8b
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
@@ -82,14 +71,14 @@ recursive subroutine r_input_part_ascii(r,g,m,p,mdl,cpu_range,input_size,output_
   integer::next_range,next_cpu
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_INPUT_PART_ASCII,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_ascii(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_INPUT_PART_ASCII,next_cpu,next_range,input_size,output_size,input_array)
+     call r_input_part_ascii(s,next_range,input_size,output_size,input_array)
   else
      npart_tot=transfer(input_array,npart_tot)
-     call input_part_ascii(r,g,p,npart_tot)
+     call input_part_ascii(s%r,s%g,s%p,npart_tot)
   endif
 
 end subroutine r_input_part_ascii
@@ -120,8 +109,6 @@ subroutine input_part_ascii(r,g,p,npart_tot)
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   character(LEN=80)::filename
 
-  if(r%verbose)write(*,*)'Entering init_part_ascii'
-
   !--------------------------------------
   ! Compute starting index for each cpu
   !--------------------------------------
@@ -140,7 +127,7 @@ subroutine input_part_ascii(r,g,p,npart_tot)
   jpart_loc=0
   do 
      read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1
-     if(ABS(xx1)<r%boxlen/2..AND.ABS(xx2)<r%boxlen/2..AND.ABS(xx3)<r%boxlen/2.)then
+     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0.AND.ABS(xx3)<r%boxlen/2.0d0)then
         jpart=jpart+1
         indglob=indglob+1
         if(jpart >= start_ind(g%myid) .and. jpart < start_ind(g%myid+1))then

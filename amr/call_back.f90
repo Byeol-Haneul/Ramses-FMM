@@ -1,15 +1,9 @@
 module call_back
   
   interface
-     subroutine ramses_function(r,g,m,p,mdl,cpu_range,input_size,output_size,input,output)
-       use amr_commons, only: run_t,global_t,mesh_t
-       use pm_commons, only: part_t
-       use mdl_commons, only: mdl_t
-       type(run_t)::r
-       type(global_t)::g
-       type(mesh_t)::m
-       type(part_t)::p
-       type(mdl_t)::mdl
+     subroutine ramses_function(s,cpu_range,input_size,output_size,input,output)
+       use ramses_commons, only: ramses_t
+       type(ramses_t)::s
        integer::cpu_range,input_size,output_size
        integer,dimension(1:input_size),optional::input
        integer,dimension(1:output_size),optional::output

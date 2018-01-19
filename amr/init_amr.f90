@@ -2,29 +2,23 @@
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_amr(r,g,m,p,mdl,cpu_range,input_size,output_size)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_init_amr(s,cpu_range,input_size,output_size)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_INIT_AMR,next_cpu,next_range,input_size,output_size)
-     call r_init_amr(r,g,m,p,mdl,next_range,input_size,output_size)
+     call mdl_send_request(s%mdl,MDL_INIT_AMR,next_cpu,next_range,input_size,output_size)
+     call r_init_amr(s,next_range,input_size,output_size)
   else
-     call init_amr(r,g,m)
+     call init_amr(s%r,s%g,s%m)
   endif
 
 end subroutine r_init_amr

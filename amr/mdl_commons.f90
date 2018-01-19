@@ -104,6 +104,28 @@ module mdl_commons
      integer::MDL_INPUT_MAXSIZE=1
      integer,dimension(:),allocatable::mpi_input_buffer
      
+     ! Communication-related objects
+     integer::mail_counter
+     integer::request_id,flush_id
+     integer,dimension(:),allocatable::reply_id
+
+     ! Adopted combiner rule
+     integer::combiner_rule
+
+     ! Message sizes
+     integer::size_msg_array
+     integer::size_request_array
+     integer::size_flush_array
+     integer::size_fetch_array
+
+     ! Message arrays
+     integer(kind=4),dimension(:),allocatable::recv_request_array
+     integer(kind=4),dimension(:),allocatable::send_request_array
+     integer(kind=4),dimension(:),allocatable::recv_fetch_array
+     integer(kind=4),dimension(:),allocatable::send_fetch_array
+     integer(kind=4),dimension(:),allocatable::recv_flush_array
+     integer(kind=4),dimension(:),allocatable::send_flush_array
+     
   end type mdl_t
 
 end module mdl_commons

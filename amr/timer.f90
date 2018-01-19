@@ -46,28 +46,28 @@ module timer_m
   integer,            parameter         :: mtimer=200                    ! max nr of timers
   real(kind=8),       dimension(mtimer) :: start, time
   integer                               :: ntimer=0, itimer
-  character(len=72), dimension(mtimer)  :: labels
+  character(len=72),  dimension(mtimer) :: labels
 contains
-!-----------------------------------------------------------------------
-subroutine findit (label)
-  implicit none
-  character(len=*) label
-  do itimer=1,ntimer
-     if (trim(label) == trim(labels(itimer))) return
-  end do
-  ntimer = ntimer+1
-  itimer = ntimer
-  labels(itimer) = label
-  time(itimer) = 0.
-end subroutine
-end module
+  !-----------------------------------------------------------------------
+  subroutine findit (label)
+    implicit none
+    character(len=*) label
+    do itimer=1,ntimer
+       if (trim(label) == trim(labels(itimer))) return
+    end do
+    ntimer = ntimer+1
+    itimer = ntimer
+    labels(itimer) = label
+    time(itimer) = 0.
+  end subroutine findit
+end module timer_m
 !=======================================================================
 subroutine timer (label, cmd)
   use timer_m
   implicit none
   character(len=*) label, cmd
   real(kind=8) wallclock, current
-!-----------------------------------------------------------------------
+  !-----------------------------------------------------------------------
   current = wallclock()                                                 ! current time
   if (itimer > 0) then                                                  ! if timer is active ..
      time(itimer) = time(itimer) + current - start(itimer)              ! add to it
@@ -78,7 +78,7 @@ subroutine timer (label, cmd)
   else if (cmd == 'stop') then                                          ! stop command
      itimer = 0                                                         ! turn off timer
   end if
-end subroutine
+end subroutine timer
 !=======================================================================
 subroutine finalize_timer(g)
   use amr_commons, only: global_t

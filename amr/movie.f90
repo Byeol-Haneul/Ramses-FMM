@@ -2,18 +2,12 @@
 !=======================================================================
 !=======================================================================
 !=======================================================================
-subroutine m_output_frame(r,g,m,p,mdl)
+subroutine m_output_frame(s)
   use amr_parameters, only: dp,ndim,nvector,twotondim,flen
   use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
 
   ! Local variables
   character(len=1)::temp_string
@@ -26,6 +20,8 @@ subroutine m_output_frame(r,g,m,p,mdl)
   real(kind=8),dimension(:),allocatable::data_frame
   real(kind=8),dimension(:),allocatable::dens
   real(kind=4),dimension(:),allocatable::data_single
+
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
 
   do ind_proj=1,LEN(trim(r%proj_axis)) 
      
@@ -97,14 +93,14 @@ subroutine m_output_frame(r,g,m,p,mdl)
         
         ! Compute column density
         input_array(2)=0
-        call r_output_frame(r,g,m,p,mdl,mdl%ncpu,input_size,output_size,input_array,output_array)
+        call r_output_frame(s,mdl%ncpu,input_size,output_size,input_array,output_array)
         dens=transfer(output_array,dens)
         
         do kk=1,NVAR
            if(r%movie_vars(kk).eq.1)then
               ! Compute mass-weighted projected quantities
               input_array(2)=kk
-              call r_output_frame(r,g,m,p,mdl,mdl%ncpu,input_size,output_size,input_array,output_array)
+              call r_output_frame(s,mdl%ncpu,input_size,output_size,input_array,output_array)
               data_frame=transfer(output_array,data_frame)
               ! Divide by column density
               data_frame=data_frame/dens
@@ -144,25 +140,20 @@ subroutine m_output_frame(r,g,m,p,mdl)
 #endif
 
   enddo
-  
+
+  end associate
+
 end subroutine m_output_frame
 !=======================================================================
 !=======================================================================
 !=======================================================================
 !=======================================================================
-recursive subroutine r_output_frame(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
-  use amr_parameters, only: nhilbert
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_output_frame(s,cpu_range,input_size,output_size,input_array,output_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
@@ -174,15 +165,15 @@ recursive subroutine r_output_frame(r,g,m,p,mdl,cpu_range,input_size,output_size
   real(kind=8),dimension(:),allocatable::map,next_map
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_OUTPUT_FRAME,next_cpu,next_range,input_size,output_size,input_array)
-     call r_output_frame(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
+     call mdl_send_request(s%mdl,MDL_OUTPUT_FRAME,next_cpu,next_range,input_size,output_size,input_array)
+     call r_output_frame(s,next_range,input_size,output_size,input_array,output_array)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
-     allocate(map(1:r%nw_frame*r%nh_frame))
-     allocate(next_map(1:r%nw_frame*r%nh_frame))
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     allocate(map(1:s%r%nw_frame*s%r%nh_frame))
+     allocate(next_map(1:s%r%nw_frame*s%r%nh_frame))
      map=transfer(output_array,map)
      next_map=transfer(next_output_array,next_map)
      map=map+next_map
@@ -193,9 +184,9 @@ recursive subroutine r_output_frame(r,g,m,p,mdl,cpu_range,input_size,output_size
   else
      ind_proj=input_array(1)
      ind_var=input_array(2)
-     allocate(map(1:r%nw_frame*r%nh_frame))
+     allocate(map(1:s%r%nw_frame*s%r%nh_frame))
      map=0d0
-     call output_frame(r,g,m,p,ind_proj,ind_var,r%nw_frame*r%nh_frame,map)
+     call output_frame(s%r,s%g,s%m,ind_proj,ind_var,s%r%nw_frame*s%r%nh_frame,map)
      output_array=transfer(map,output_array)
      deallocate(map)
   endif
@@ -205,16 +196,14 @@ end subroutine r_output_frame
 !=======================================================================
 !=======================================================================
 !=======================================================================
-subroutine output_frame(r,g,m,p,ind_proj,ind_var,map_size,map)
+subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   use amr_parameters, only: dp,ndim,nvector,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-  type(part_t)::p
   integer::ind_proj,map_size,ind_var
   real(kind=8),dimension(1:map_size)::map
   

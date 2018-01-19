@@ -2,17 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_dump_all(r,g,m,p,mdl)
+subroutine m_dump_all(s)
   use amr_parameters, only: ndim,flen
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
 
   ! Local variables
   integer::i
@@ -22,6 +16,8 @@ subroutine m_dump_all(r,g,m,p,mdl)
   character(LEN=5)::nchar
   character(LEN=flen)::filename,filedir,filecmd
   integer,dimension(1:flen/4)::input_array
+
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -80,30 +76,32 @@ subroutine m_dump_all(r,g,m,p,mdl)
      ! Output AMR data
      filename=TRIM(filedir)//'amr.out'
      input_array=transfer(filename,input_array)
-     call r_output_amr(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
+     call r_output_amr(s,mdl%ncpu,flen/4,0,input_array)
      
      ! Output HYDRO data
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.out'
         input_array=transfer(filename,input_array)
-        call r_output_hydro(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
+        call r_output_hydro(s,mdl%ncpu,flen/4,0,input_array)
      end if
 
      ! Output GRAV data
      if(r%poisson)then
         filename=TRIM(filedir)//'grav.out'
         input_array=transfer(filename,input_array)
-        call r_output_poisson(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
+        call r_output_poisson(s,mdl%ncpu,flen/4,0,input_array)
      end if
 
      ! Output PART data
      if(r%pic)then
         filename=TRIM(filedir)//'part.out'
         input_array=transfer(filename,input_array)
-        call r_output_part(r,g,m,p,mdl,g%ncpu,flen/4,0,input_array)
+        call r_output_part(s,mdl%ncpu,flen/4,0,input_array)
      end if
   end if
 
+  end associate
+  
 end subroutine m_dump_all
 !#########################################################################
 !#########################################################################
@@ -263,7 +261,7 @@ subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
      if(g%myid==1)then
         write(*,*)'Incorrect number of space dimensions in restart file'
      endif
-     call clean_stop(g)
+     call mdl_abort
   endif
   ! Compute movie frame number if applicable
   if(r%imovout>0) then
@@ -285,18 +283,12 @@ end subroutine input_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_output_amr(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_output_amr(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: flen
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   
@@ -304,14 +296,14 @@ recursive subroutine r_output_amr(r,g,m,p,mdl,cpu_range,input_size,output_size,i
   character(LEN=flen)::filename
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_OUTPUT_AMR,next_cpu,next_range,input_size,output_size,input_array)
-     call r_output_amr(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_OUTPUT_AMR,next_cpu,next_range,input_size,output_size,input_array)
+     call r_output_amr(s,next_range,input_size,output_size,input_array)
   else
      filename=transfer(input_array,filename)
-     call output_amr(r,g,m,filename)
+     call output_amr(s%r,s%g,s%m,filename)
   endif
 
 end subroutine r_output_amr
@@ -490,9 +482,6 @@ subroutine savegadget(filename)
   use pm_commons
   use gadgetreadfilemod
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   character(LEN=flen)::filename
   TYPE (gadgetheadertype) :: header
   real,allocatable,dimension(:,:)::pos, vel
@@ -503,16 +492,7 @@ subroutine savegadget(filename)
   integer(i8b)::npart_tot, npart_loc
   real, parameter:: RHOcrit = 2.7755d11
 
-#ifndef WITHOUTMPI
-  npart_loc=npart
-#ifndef LONGINT
-  call MPI_ALLREDUCE(npart_loc,npart_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#else
-  call MPI_ALLREDUCE(npart_loc,npart_tot,1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
-#else
   npart_tot=npart
-#endif
 
   allocate(pos(ndim, npart), vel(ndim, npart), ids(npart))
   gadgetvfact = 100.0 * boxlen_ini / aexp / SQRT(aexp)

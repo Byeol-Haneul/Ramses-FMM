@@ -2,17 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_input_part_restart(r,g,m,p,mdl)
+subroutine m_input_part_restart(s)
   use amr_parameters, only: ndim,dp,i8b
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only:mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
@@ -23,12 +17,12 @@ subroutine m_input_part_restart(r,g,m,p,mdl)
   character(LEN=80)::file_head,file_part
   integer,allocatable,dimension(:)::npart_file
   
-  if(r%verbose)write(*,*)'Entering input_part_restart'
+  if(s%r%verbose)write(*,*)'Entering input_part_restart'
 
   ! Read particle files header
-  call title(r%nrestart,nchar)
+  call title(s%r%nrestart,nchar)
   file_head='output_'//TRIM(nchar)//'/part_header.txt'
-  call input_header(r,g,file_head,npart_tot_file,ncpu_file)
+  call input_header(s%r,s%g,file_head,npart_tot_file,ncpu_file)
   write(*,'(" Restart snapshot has ",I8," particles")')npart_tot_file
 
   ! Allocate local array
@@ -51,7 +45,7 @@ subroutine m_input_part_restart(r,g,m,p,mdl)
   endif
 
   ! Call recursive slave routine
-  call r_input_part_restart(r,g,m,p,mdl,mdl%ncpu,ncpu_file,0,npart_file)
+  call r_input_part_restart(s,s%mdl%ncpu,ncpu_file,0,npart_file)
 
   ! Deallocate local array
   deallocate(npart_file)
@@ -61,18 +55,12 @@ end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_restart(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_restart(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
@@ -82,13 +70,13 @@ recursive subroutine r_input_part_restart(r,g,m,p,mdl,cpu_range,input_size,outpu
   integer::next_range,next_cpu
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_INPUT_PART_RESTART,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_restart(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_INPUT_PART_RESTART,next_cpu,next_range,input_size,output_size,input_array)
+     call r_input_part_restart(s,next_range,input_size,output_size,input_array)
   else
-     call input_part_restart(r,g,p,input_size,input_array)
+     call input_part_restart(s%r,s%g,s%p,input_size,input_array)
   endif
 
 end subroutine r_input_part_restart

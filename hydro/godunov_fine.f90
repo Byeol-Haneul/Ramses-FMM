@@ -2,30 +2,24 @@
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_godunov_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_godunov_fine(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_GODUNOV_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_godunov_fine(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_GODUNOV_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_godunov_fine(s,next_range,input_size,output_size,ilevel)
   else
-     call godunov_fine(r,g,m,ilevel)
+     call godunov_fine(s,ilevel)
   endif
 
 end subroutine r_godunov_fine
@@ -33,13 +27,11 @@ end subroutine r_godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godunov_fine(r,g,m,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine godunov_fine(s,ilevel)
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   !--------------------------------------------------------------------------
   ! This routine is a wrapper to the second order Godunov solver.
@@ -49,59 +41,53 @@ subroutine godunov_fine(r,g,m,ilevel)
   !--------------------------------------------------------------------------
   integer::igrid
 
-  call open_cache(r,g,m,operation_godunov,domain_decompos_amr)
+  call open_cache(s,operation_godunov,domain_decompos_amr)
 
   ! Loop over active grids by vector sweeps
-  igrid=m%head(ilevel)
-  do while(igrid.LE.m%tail(ilevel))
-     SELECT CASE (m%grid(igrid)%superoct)
+  igrid=s%m%head(ilevel)
+  do while(igrid.LE.s%m%tail(ilevel))
+     SELECT CASE (s%m%grid(igrid)%superoct)
      CASE(1)
-        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_1)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_1)
      CASE(2**ndim)
-        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_2)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_2)
      CASE(4**ndim)
-        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_4)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_4)
      CASE(8**ndim)
-        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_8)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_8)
      CASE(16**ndim)
-        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_16)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_16)
      CASE(32**ndim)
-        call godfine1(r,g,m,igrid,ilevel,m%hydro_w%kernel_32)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_32)
      END SELECT
-     igrid=igrid+m%grid(igrid)%superoct
+     igrid=igrid+s%m%grid(igrid)%superoct
   end do
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,s%m%grid_dict)
 
 end subroutine godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_unew(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_set_unew(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_SET_UNEW,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_set_unew(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_SET_UNEW,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_unew(s,next_range,input_size,output_size,ilevel)
   else
-     call set_unew(r,g,m,ilevel)
+     call set_unew(s%r,s%g,s%m,ilevel)
   endif
 
 end subroutine r_set_unew
@@ -162,30 +148,24 @@ end subroutine set_unew
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_uold(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_set_uold(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_SET_UOLD,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_set_uold(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_SET_UOLD,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_uold(s,next_range,input_size,output_size,ilevel)
   else
-     call set_uold(r,g,m,ilevel)
+     call set_uold(s%r,s%g,s%m,ilevel)
   endif
 
 end subroutine r_set_uold
@@ -257,16 +237,14 @@ end subroutine set_uold
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godfine1(r,g,m,ind_grid,ilevel,h)
+subroutine godfine1(s,ind_grid,ilevel,h)
   use amr_parameters, only: ndim,twondim,twotondim,dp
   use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use hydro_commons
   use hash
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ind_grid,ilevel
   type(hydro_kernel_t)::h
   !-------------------------------------------------------------------
@@ -298,6 +276,8 @@ subroutine godfine1(r,g,m,ind_grid,ilevel,h)
 
 #ifdef HYDRO
 
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  
   oneontwotondim = 1.d0/dble(twotondim)
 
   ! Mesh spacing in that level
@@ -412,15 +392,15 @@ subroutine godfine1(r,g,m,ind_grid,ilevel,h)
               enddo
               
               ! Get neighboring grid index with read-only cache
-              ichild=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+              ichild=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
               parent_cell=0
               igrid_nbor=0
               if(ichild>0)then
-                 call lock_cache(r,g,m,ichild)
+                 call lock_cache(s,ichild)
               else
 
                  ! Get parent father cell with read-write cache
-                 parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.true.,.true.)
+                 parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.true.,.true.)
                  if(parent_cell==0)then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
@@ -428,13 +408,13 @@ subroutine godfine1(r,g,m,ind_grid,ilevel,h)
                  endif
                  igrid=(parent_cell-1)/twotondim+1
                  icell=parent_cell-(igrid-1)*twotondim
-                 call lock_cache(r,g,m,igrid)
+                 call lock_cache(s,igrid)
 
                  ! In case one wants to interpolate using high-order schemes
                  if(r%interpol_type>0)then
 
                     ! Get 2ndim neighboring father cells with read-write cache
-                    call get_twondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
+                    call get_twondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
                           u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
@@ -784,19 +764,19 @@ subroutine godfine1(r,g,m,ind_grid,ilevel,h)
            ind_oct=h%childloc(i1,j1,k1)
            ! Check that parent cell is not refined
            if(ind_oct>0)then
-              call unlock_cache(r,g,m,ind_oct)
+              call unlock_cache(s,ind_oct)
            else
               ! Get parent cell index
               parent_cell=h%parentloc(i1,j1,k1)
               igrid=(parent_cell-1)/twotondim+1
               icell=parent_cell-(igrid-1)*twotondim
-              call unlock_cache(r,g,m,igrid)
+              call unlock_cache(s,igrid)
               ! Get neighbouring parent oct index
               if(r%interpol_type>0)then
                  do inbor=1,twondim
                     igrid=h%nborloc(i1,j1,k1,inbor)
                     if(igrid>0)then
-                       call unlock_cache(r,g,m,igrid)
+                       call unlock_cache(s,igrid)
                     endif
                  end do
               endif
@@ -805,6 +785,8 @@ subroutine godfine1(r,g,m,ind_grid,ilevel,h)
      end do
   end do
 
+  end associate
+  
 #endif
 
 end subroutine godfine1

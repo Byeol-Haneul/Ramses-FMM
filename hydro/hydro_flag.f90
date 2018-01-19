@@ -2,15 +2,13 @@
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine hydro_flag(r,g,m,ilevel)
+subroutine hydro_flag(s,ilevel)
   use amr_parameters, only: ndim,twotondim,twondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use hydro_parameters, only: nvar
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   ! -------------------------------------------------------------------
   ! This routine flag for refinement cells that satisfies
@@ -30,13 +28,15 @@ subroutine hydro_flag(r,g,m,ilevel)
 
 #ifdef HYDRO
 
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
   hash_key(0)=ilevel+1
 
   if(    r%err_grad_d==-1.0.and.&
        & r%err_grad_p==-1.0.and.&
        & r%err_grad_u==-1.0)return
 
-  call open_cache(r,g,m,operation_hydro,domain_decompos_amr)
+  call open_cache(s,operation_hydro,domain_decompos_amr)
 
   ! Loop over active grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -60,17 +60,17 @@ subroutine hydro_flag(r,g,m,ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel+1)-1
               if(hash_nbor(idim)==m%ckey_max(ilevel+1))hash_nbor(idim)=0
            enddo
-           parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+           parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
            if(parent_cell>0)then
               indn(i_nbor)=parent_cell
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
-              parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+              parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
               indn(i_nbor)=parent_cell
            endif
            igridp=(indn(i_nbor)-1)/twotondim+1
-           call lock_cache(r,g,m,igridp)
+           call lock_cache(s,igridp)
         end do
 
         ! Loop over dimensions
@@ -90,7 +90,7 @@ subroutine hydro_flag(r,g,m,ilevel)
         
         do i_nbor=1,twondim
            igridp=(indn(i_nbor)-1)/twotondim+1
-           call unlock_cache(r,g,m,igridp)
+           call unlock_cache(s,igridp)
         end do
 
         ! Count only newly flagged cells
@@ -102,7 +102,9 @@ subroutine hydro_flag(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
+
+  end associate
 
 #endif
 

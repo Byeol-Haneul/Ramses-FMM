@@ -2,53 +2,49 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine m_flag_fine(r,g,m,p,mdl,ilevel,icount)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+subroutine m_flag_fine(s,ilevel,icount)
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel,icount
   !---------------------------------------------------------------
   ! This master routine builds the refinement map at level ilevel.
   !---------------------------------------------------------------
-  integer::iexpand,nflag_tot
+  integer::iexpand,nflag_tot,ncpu
   
-  if(ilevel==r%nlevelmax)return
-  if(ilevel<r%levelmin)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
+  if(ilevel==s%r%nlevelmax)return
+  if(ilevel<s%r%levelmin)return
+  if(s%m%noct_tot(ilevel)==0)return
+  if(s%r%verbose)write(*,111)ilevel
 111 format('   Entering flag_fine for level ',I2)
 
+  ncpu=s%mdl%ncpu
+  
   ! Step 1: initialize refinement map to minimal refinement rules
-  call r_init_flag(r,g,m,p,mdl,g%ncpu,1,1,ilevel,nflag_tot)
-  if(r%verbose)write(*,*) '  ==> end step 1',nflag_tot
+  call r_init_flag(s,ncpu,1,1,ilevel,nflag_tot)
+  if(s%r%verbose)write(*,*) '  ==> end step 1',nflag_tot
   
   ! Step 2: make one cubic buffer around flagged cells,
   ! in order to enforce numerical rule.
-  call r_smooth_fine(r,g,m,p,mdl,g%ncpu,1,1,ilevel,nflag_tot)
-  if(r%verbose)write(*,*) '  ==> end step 2',nflag_tot
+  call r_smooth_fine(s,ncpu,1,1,ilevel,nflag_tot)
+  if(s%r%verbose)write(*,*) '  ==> end step 2',nflag_tot
 
   ! Step 3: if cell satisfies user-defined physical citeria,
   ! then flag cell for refinement.
-  call r_user_flag(r,g,m,p,mdl,g%ncpu,1,1,ilevel,nflag_tot)
-  if(r%verbose)write(*,*) '  ==> end step 3',nflag_tot
+  call r_user_flag(s,ncpu,1,1,ilevel,nflag_tot)
+  if(s%r%verbose)write(*,*) '  ==> end step 3',nflag_tot
 
   ! Step 4: make nexpand cubic buffers around flagged cells.
-  do iexpand=1,r%nexpand(ilevel)
-     call r_smooth_fine(r,g,m,p,mdl,g%ncpu,1,1,ilevel,nflag_tot)
+  do iexpand=1,s%r%nexpand(ilevel)
+     call r_smooth_fine(s,ncpu,1,1,ilevel,nflag_tot)
   end do
-  if(r%verbose)write(*,*) '  ==> end step 4',nflag_tot
+  if(s%r%verbose)write(*,*) '  ==> end step 4',nflag_tot
 
   ! In case of adaptive time step ONLY, check for refinement rules
   ! and unflag cells that will not be refined.
-  if(ilevel>r%levelmin)then
-     if(icount<r%nsubcycle(ilevel-1))then
-        call r_ensure_ref_rules(r,g,m,p,mdl,g%ncpu,1,0,ilevel)
+  if(ilevel>s%r%levelmin)then
+     if(icount<s%r%nsubcycle(ilevel-1))then
+        call r_ensure_ref_rules(s,ncpu,1,0,ilevel)
      end if
   end if
 
@@ -57,17 +53,11 @@ end subroutine m_flag_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_init_flag(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_init_flag(s,cpu_range,input_size,output_size,ilevel,noct)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel,noct
 
@@ -76,15 +66,15 @@ recursive subroutine r_init_flag(r,g,m,p,mdl,cpu_range,input_size,output_size,il
   integer::nflag
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_INIT_FLAG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_init_flag(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct)
+     call mdl_send_request(s%mdl,MDL_INIT_FLAG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_init_flag(s,next_range,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct)
      noct=noct+next_noct
   else
-     call init_flag(r,g,m,ilevel,nflag)
+     call init_flag(s,ilevel,nflag)
      noct=nflag
   endif
 
@@ -93,14 +83,12 @@ end subroutine r_init_flag
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flag(r,g,m,ilevel,nflag)
+subroutine init_flag(s,ilevel,nflag)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel,nflag
   !-------------------------------------------
   ! This routine initialize the refinement map
@@ -111,6 +99,8 @@ subroutine init_flag(r,g,m,ilevel,nflag)
   integer::parent_cell,get_parent_cell
   logical::ok
   integer(kind=8),dimension(0:ndim)::hash_key
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Initialize flag1 to 0 for ilevel grids
   g%nflag=0
@@ -124,13 +114,13 @@ subroutine init_flag(r,g,m,ilevel,nflag)
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------
-  call open_cache(r,g,m,operation_initflag,domain_decompos_amr)
+  call open_cache(s,operation_initflag,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ichild=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     parent_cell=get_parent_cell(r,g,m,hash_key,m%grid_dict,.true.,.false.)
+     parent_cell=get_parent_cell(s,hash_key,m%grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
      ok=.false.
@@ -145,10 +135,12 @@ subroutine init_flag(r,g,m,ilevel,nflag)
      endif
   end do
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
   nflag=g%nflag
 
+  end associate
+  
 end subroutine init_flag
 !################################################################
 !################################################################
@@ -259,17 +251,11 @@ end subroutine unpack_flush_initflag
 !###############################################################
 !###############################################################
 !###############################################################
-recursive subroutine r_user_flag(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_user_flag(s,cpu_range,input_size,output_size,ilevel,noct)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel,noct
 
@@ -278,15 +264,15 @@ recursive subroutine r_user_flag(r,g,m,p,mdl,cpu_range,input_size,output_size,il
   integer::nflag
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_USER_FLAG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_user_flag(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct)
+     call mdl_send_request(s%mdl,MDL_USER_FLAG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_user_flag(s,next_range,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct)
      noct=noct+next_noct
   else
-     call user_flag(r,g,m,ilevel,nflag)
+     call user_flag(s,ilevel,nflag)
      noct=nflag
   endif
 
@@ -295,12 +281,10 @@ end subroutine r_user_flag
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine user_flag(r,g,m,ilevel,nflag)
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine user_flag(s,ilevel,nflag)
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel,nflag
   ! -------------------------------------------------------------------
   ! This routine flag for refinement cells that satisfies
@@ -308,42 +292,36 @@ subroutine user_flag(r,g,m,ilevel,nflag)
   ! -------------------------------------------------------------------
 
   ! Refinement rules for the gravity solver
-  if(r%poisson)call poisson_flag(r,g,m,ilevel)
+  if(s%r%poisson)call poisson_flag(s,ilevel)
 
   ! Refinement rules for the hydro solver
-  if(r%hydro)call hydro_flag(r,g,m,ilevel)
+  if(s%r%hydro)call hydro_flag(s,ilevel)
 
-  nflag=g%nflag
+  nflag=s%g%nflag
 
 end subroutine user_flag
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_ensure_ref_rules(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_ensure_ref_rules(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_ENSURE_REF_RULES,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_ensure_ref_rules(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_ENSURE_REF_RULES,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_ensure_ref_rules(s,next_range,input_size,output_size,ilevel)
   else
-     call ensure_ref_rules(r,g,m,ilevel)
+     call ensure_ref_rules(s,ilevel)
   endif
 
 end subroutine r_ensure_ref_rules
@@ -351,14 +329,12 @@ end subroutine r_ensure_ref_rules
 !############################################################
 !############################################################
 !############################################################
-subroutine ensure_ref_rules(r,g,m,ilevel)
+subroutine ensure_ref_rules(s,ilevel)
   use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   !-----------------------------------------------------------------
   ! This routine determines if all grids at level ilevel are 
@@ -373,6 +349,8 @@ subroutine ensure_ref_rules(r,g,m,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   logical::ok
 
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
   ! Integer constants
   i1min=0; i1max=0; j1min=0; j1max=0; k1min=0; k1max=0
 #if NDIM>0
@@ -385,7 +363,7 @@ subroutine ensure_ref_rules(r,g,m,ilevel)
   k1max=2
 #endif
 
-  call open_cache(r,g,m,operation_smooth,domain_decompos_amr)
+  call open_cache(s,operation_smooth,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -414,7 +392,7 @@ subroutine ensure_ref_rules(r,g,m,ilevel)
               enddo
 
               ! Get neighboring grid index
-              ichild=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+              ichild=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
               ok=ok.and.(ichild>0)
 
            end do
@@ -429,8 +407,10 @@ subroutine ensure_ref_rules(r,g,m,ilevel)
 
   end do
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
+  end associate
+  
 end subroutine ensure_ref_rules
 !############################################################
 !############################################################

@@ -2,29 +2,25 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_load_balance(r,g,m,p,mdl,ilevel)
+subroutine m_load_balance(s,ilevel)
   use amr_parameters, only: nhilbert
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to load balance the AMR grid
   ! for all levels strictly larger than ilevel.
   !--------------------------------------------------------------------
-  integer,dimension(1:g%ncpu)::noct
+  integer,dimension(1:s%g%ncpu)::noct
   integer,allocatable,dimension(:)::input_array
   integer,allocatable,dimension(:)::output_array
   integer(kind=8),dimension(1:nhilbert)::zero_key=0
-  integer(kind=8),dimension(1:nhilbert,0:g%ncpu)::bound_key
+  integer(kind=8),dimension(1:nhilbert,0:s%g%ncpu)::bound_key
   integer::ilev,icpu,input_size,output_size
+
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
   
   if(g%ncpu==1)return
   if(ilevel==r%nlevelmax)return
@@ -38,7 +34,7 @@ subroutine m_load_balance(r,g,m,p,mdl,ilevel)
      if(m%noct_tot(ilev)>0)then
         
         ! Collect number of oct in each cpu for current level
-        call r_collect_noct(r,g,m,p,mdl,g%ncpu,1,g%ncpu,ilev,noct)
+        call r_collect_noct(s,g%ncpu,1,g%ncpu,ilev,noct)
 
         ! Compute input array
         input_size=g%ncpu+1
@@ -51,7 +47,7 @@ subroutine m_load_balance(r,g,m,p,mdl,ilevel)
         allocate(output_array(1:output_size))
         
         ! Compute and collect new Hilbert key boundaries for the new domain decomposition
-        call r_collect_bound_key(r,g,m,p,mdl,g%ncpu,g%ncpu+1,output_size,input_array,output_array)
+        call r_collect_bound_key(s,g%ncpu,g%ncpu+1,output_size,input_array,output_array)
         bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
         deallocate(input_array,output_array)
 
@@ -69,7 +65,7 @@ subroutine m_load_balance(r,g,m,p,mdl,ilevel)
         allocate(input_array(1:input_size))
         input_array(1)=ilev
         input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
-        call r_broadcast_bound_key(r,g,m,p,mdl,g%ncpu,input_size,0,input_array)
+        call r_broadcast_bound_key(s,g%ncpu,input_size,0,input_array)
         deallocate(input_array)
 
      endif
@@ -78,26 +74,22 @@ subroutine m_load_balance(r,g,m,p,mdl,ilevel)
   ! End loop over finer levels
   
   ! Redistribute the grid across CPU according to the new domains
-  call r_load_balance(r,g,m,p,mdl,g%ncpu,1,0,ilevel)
+  call r_load_balance(s,g%ncpu,1,0,ilevel)
 
+  end associate
+  
 end subroutine m_load_balance
 !###############################################
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_broadcast_bound_key(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_broadcast_bound_key(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: nhilbert
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -106,14 +98,14 @@ recursive subroutine r_broadcast_bound_key(r,g,m,p,mdl,cpu_range,input_size,outp
   integer(kind=8),dimension(1)::dummy
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_BROADCAST_BOUND_KEY,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_bound_key(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_BROADCAST_BOUND_KEY,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_bound_key(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
-     m%domain(ilevel)%b=reshape(transfer(input_array(2:input_size),dummy),[nhilbert,g%ncpu+1])
+     s%m%domain(ilevel)%b=reshape(transfer(input_array(2:input_size),dummy),[nhilbert,s%g%ncpu+1])
   endif
 
 end subroutine r_broadcast_bound_key
@@ -121,19 +113,13 @@ end subroutine r_broadcast_bound_key
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_collect_bound_key(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
+recursive subroutine r_collect_bound_key(s,cpu_range,input_size,output_size,input_array,output_array)
   use amr_parameters, only: nhilbert
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
@@ -148,30 +134,30 @@ recursive subroutine r_collect_bound_key(r,g,m,p,mdl,cpu_range,input_size,output
   integer(kind=8),dimension(:,:),allocatable::next_bound_key
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_COLLECT_BOUND_KEY,next_cpu,next_range,input_size,output_size,input_array)
-     call r_collect_bound_key(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
+     call mdl_send_request(s%mdl,MDL_COLLECT_BOUND_KEY,next_cpu,next_range,input_size,output_size,input_array)
+     call r_collect_bound_key(s,next_range,input_size,output_size,input_array,output_array)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
-     allocate(bound_key(1:nhilbert,0:g%ncpu))
-     allocate(next_bound_key(1:nhilbert,0:g%ncpu))
-     bound_key=reshape(transfer(output_array,dummy),[nhilbert,g%ncpu+1])
-     next_bound_key=reshape(transfer(next_output_array,dummy),[nhilbert,g%ncpu+1])
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     allocate(bound_key(1:nhilbert,0:s%g%ncpu))
+     allocate(next_bound_key(1:nhilbert,0:s%g%ncpu))
+     bound_key=reshape(transfer(output_array,dummy),[nhilbert,s%g%ncpu+1])
+     next_bound_key=reshape(transfer(next_output_array,dummy),[nhilbert,s%g%ncpu+1])
      bound_key=bound_key+next_bound_key
-     output_array=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),output_array)
+     output_array=transfer(reshape(bound_key,[nhilbert*(s%g%ncpu+1)]),output_array)
      deallocate(bound_key)
      deallocate(next_bound_key)
      deallocate(next_output_array)
   else
-     allocate(noct(1:g%ncpu))
-     allocate(bound_key(1:nhilbert,0:g%ncpu))
+     allocate(noct(1:s%g%ncpu))
+     allocate(bound_key(1:nhilbert,0:s%g%ncpu))
      bound_key=0
      ilevel=input_array(1)
-     noct(1:g%ncpu)=input_array(2:input_size)
-     call compute_new_bound_key(r,g,m,ilevel,noct,bound_key)
-     output_array=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),output_array)
+     noct(1:s%g%ncpu)=input_array(2:input_size)
+     call compute_new_bound_key(s%r,s%g,s%m,ilevel,noct,bound_key)
+     output_array=transfer(reshape(bound_key,[nhilbert*(s%g%ncpu+1)]),output_array)
      deallocate(bound_key)
      deallocate(noct)
   endif
@@ -265,30 +251,24 @@ end subroutine compute_new_bound_key
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_load_balance(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_load_balance(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_LOAD_BALANCE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_load_balance(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_LOAD_BALANCE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_load_balance(s,next_range,input_size,output_size,ilevel)
   else
-     call load_balance(r,g,m,ilevel)
+     call load_balance(s,ilevel)
   endif
 
 end subroutine r_load_balance
@@ -296,16 +276,14 @@ end subroutine r_load_balance
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine load_balance(r,g,m,ilevel)
+subroutine load_balance(s,ilevel)
   use amr_parameters, only: ndim,twotondim,nhilbert,dp
-  use amr_commons, only: run_t,global_t,mesh_t,oct
+  use ramses_commons, only: ramses_t
   use hilbert
   use hash
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   !------------------------------------------------
   ! This routine performs parallel load balancing.
@@ -321,12 +299,14 @@ subroutine load_balance(r,g,m,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert)::coarse_key
   integer(kind=8),dimension(1:nhilbert)::hk
-  integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
-  integer,dimension(1:r%nlevelmax)::n_same,npatch
+  integer(kind=8),dimension(1:nhilbert,1:s%r%nlevelmax)::key_ref
+  integer,dimension(1:s%r%nlevelmax)::n_same,npatch
   integer,dimension(:),allocatable::noct_level,head_level,indx_level
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   type(oct)::grid_tmp
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
   !-----------------------------------------------------
   ! Step 1: dispatch octs and empty slots according to
@@ -335,7 +315,7 @@ subroutine load_balance(r,g,m,ilevel)
   m%ifree=m%noct_used+1
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache(r,g,m,operation_loadbalance,domain_decompos_amr)
+     call open_cache(s,operation_loadbalance,domain_decompos_amr)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
@@ -348,7 +328,7 @@ subroutine load_balance(r,g,m,ilevel)
            grid_cpu = m%domain(ilev)%get_rank(hk)
 
            ! If next cache line is occupied, free it.
-           if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%grid_dict)
+           if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
            ! Set grid index to a virtual grid in local cache memory
            ichild=r%ngridmax+m%free_cache
            m%occupied(m%free_cache)=.true.
@@ -376,7 +356,7 @@ subroutine load_balance(r,g,m,ilevel)
 
      end do
 
-     call close_cache(r,g,m,m%grid_dict)
+     call close_cache(s,m%grid_dict)
 
   end do
 
@@ -555,6 +535,8 @@ subroutine load_balance(r,g,m,ilevel)
      end do
   end do
 
+  end associate
+  
 end subroutine load_balance
 !#########################################################################
 !#########################################################################
@@ -653,31 +635,25 @@ end subroutine unpack_flush_loadbalance
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_balance_part(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_balance_part(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_BALANCE_PART,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_balance_part(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_BALANCE_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_balance_part(s,next_range,input_size,output_size,ilevel)
   else
 #ifndef WITHOUTMPI
-     call balance_part(r,g,m,p,ilevel)
+     call balance_part(s,ilevel)
 #endif
   endif
 
@@ -687,21 +663,17 @@ end subroutine r_balance_part
 !#########################################################################
 !#########################################################################
 #ifndef WITHOUTMPI
-subroutine balance_part(r,g,m,p,ilevel)
+subroutine balance_part(s,ilevel)
   use amr_parameters, only: nhilbert,ndim,i8b,dp
   use pm_parameters, only: part_memory
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
   use domain_m, only: domain_t
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
   include "mpif.h"
 #endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
+  type(ramses_t)::s
   integer::ilevel
   !---------------------------------------------------------------------
   ! This routine will dispatch particles across processors according to
@@ -712,7 +684,7 @@ subroutine balance_part(r,g,m,p,ilevel)
   !---------------------------------------------------------------------
 #ifndef WITHOUTMPI
   integer::info
-  integer,dimension(MPI_STATUS_SIZE,g%ncpu)::statuses
+  integer,dimension(MPI_STATUS_SIZE,s%g%ncpu)::statuses
 #endif
   integer(kind=8),dimension(1:nhilbert),save::hk_ref
   integer(kind=8),dimension(1:ndim),save::ix_ref
@@ -725,7 +697,7 @@ subroutine balance_part(r,g,m,p,ilevel)
 
   integer,allocatable,dimension(:)::send_cnt,recv_cnt
   integer,allocatable,dimension(:)::send_oft,recv_oft,offset_cpu
-  integer,dimension(g%ncpu)::reqsend,reqrecv
+  integer,dimension(s%g%ncpu)::reqsend,reqrecv
 
   real(kind=8),dimension(:),allocatable::x_recv_buf,x_send_buf
   integer(i8b),dimension(:),allocatable::l_recv_buf,l_send_buf
@@ -737,8 +709,8 @@ subroutine balance_part(r,g,m,p,ilevel)
   integer(kind=8),allocatable,dimension(:,:)::bound_key_target,bound_key_new
   integer(kind=8),allocatable,dimension(:,:)::bound_key_left,bound_key_right
   integer::npart_lev,npart_lev_tot,iter
-  integer,dimension(0:g%ncpu)::npart_cum,npart_cum_tot
-  integer,dimension(1:g%ncpu)::npart_cpu,npart_cpu_tot
+  integer,dimension(0:s%g%ncpu)::npart_cum,npart_cum_tot
+  integer,dimension(1:s%g%ncpu)::npart_cpu,npart_cpu_tot
   real(dp)::xpart_target,xcum_target
 
   real(dp),dimension(1:ndim),save::xp_tmp,vp_tmp
@@ -748,6 +720,8 @@ subroutine balance_part(r,g,m,p,ilevel)
 
 #ifndef WITHOUTMPI
 
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+  
   !####################################################
   ! Default for particle domains are grid domains
   !####################################################
@@ -1299,6 +1273,8 @@ subroutine balance_part(r,g,m,p,ilevel)
 
   call MPI_ALLREDUCE(p%npart,p%npart_max,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
 
+  end associate
+  
 #endif
 
 end subroutine balance_part

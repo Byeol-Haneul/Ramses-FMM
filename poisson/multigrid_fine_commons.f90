@@ -20,65 +20,61 @@
 ! Main multigrid routine, called by amr_step
 ! ------------------------------------------------------------------------
 
-subroutine multigrid(r,g,m,p,mdl,ilevel,icount)
+subroutine multigrid(s,ilevel,icount)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
-  integer, intent(in) :: ilevel,icount
+  type(ramses_t)::s
+  integer,intent(in) :: ilevel,icount
   
-  integer, parameter  :: MAXITER  = 10
-  real(dp), parameter :: SAFE_FACTOR = 0.5
+  integer,parameter  :: MAXITER  = 10
+  real(dp),parameter :: SAFE_FACTOR = 0.5
   
-  integer  :: igrid, ifine, i, iter, allmasked
+  integer :: ncpu, igrid, ifine, i, iter, allmasked
   integer,dimension(1:4) :: input_array
   integer,dimension(1:4) :: output_array
   real(kind=8) :: res_norm2, i_res_norm2
   real(kind=8) :: err, last_err
   real(kind=8) :: i_res_norm2_tot, res_norm2_tot
   
-  if(r%gravity_type>0)return
-  if(m%noct_tot(ilevel)==0)return
+  if(s%r%gravity_type>0)return
+  if(s%m%noct_tot(ilevel)==0)return
   
-  if(r%verbose) print '(A,I2)','Entering multigrid at level ',ilevel
+  if(s%r%verbose) print '(A,I2)','Entering multigrid at level ',ilevel
+
+  ncpu=s%mdl%ncpu
   
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
   input_array(1)=ilevel
   input_array(2)=icount
-  call r_make_initial_phi(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)  ! Initial guess
-  call r_make_mask(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)              ! Fill the fine level mask
-  call r_make_bc_rhs(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)       ! Fill BC-modified RHS
+  call r_make_initial_phi(s,ncpu,2,0,input_array)  ! Initial guess
+  call r_make_mask(s,ncpu,1,0,ilevel)              ! Fill the fine level mask
+  call r_make_bc_rhs(s,ncpu,2,0,input_array)       ! Fill BC-modified RHS
 
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
-  call r_init_mg(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+  call r_init_mg(s,ncpu,1,0,ilevel)
   
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
-     call r_build_mg(r,g,m,p,mdl,mdl%ncpu,1,0,ifine)
+     call r_build_mg(s,ncpu,1,0,ifine)
   end do
   
   ! ---------------------------------------------------------------------
   ! Restrict mask up
   ! ---------------------------------------------------------------------
-  g%levelmin_mg=1
+  s%g%levelmin_mg=1
   do ifine=ilevel,2,-1
      ! Restrict and communicate mask
-     call r_restrict_mask(r,g,m,p,mdl,mdl%ncpu,1,1,ifine,allmasked)
+     call r_restrict_mask(s,ncpu,1,1,ifine,allmasked)
      if(allmasked==1) then ! Coarser level is fully masked: stop here
-        g%levelmin_mg=ifine
+        s%g%levelmin_mg=ifine
         exit
      end if
   end do
@@ -87,9 +83,9 @@ subroutine multigrid(r,g,m,p,mdl,ilevel,icount)
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
   input_array(1)=ilevel
-  do ifine=ilevel,g%levelmin_mg,-1
+  do ifine=ilevel,s%g%levelmin_mg,-1
      input_array(2)=ifine
-     call r_set_scan_flag(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+     call r_set_scan_flag(s,ncpu,2,0,input_array)
   end do
   
   ! ---------------------------------------------------------------------
@@ -104,7 +100,7 @@ subroutine multigrid(r,g,m,p,mdl,ilevel,icount)
 
      input_array(1)=ilevel
      input_array(2)=ilevel
-     if(g%safe_mode(ilevel))then
+     if(s%g%safe_mode(ilevel))then
         input_array(3)=1
      else
         input_array(3)=0
@@ -113,64 +109,64 @@ subroutine multigrid(r,g,m,p,mdl,ilevel,icount)
      ! Pre-smoothing
      do i=1,ngs_fine
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      
      ! Compute new residual
-     call r_cmp_residual_mg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+     call r_cmp_residual_mg(s,ncpu,2,0,input_array)
 
      ! Compute initial residual norm
      if(iter==1) then
-        call r_cmp_residual_norm2(r,g,m,p,mdl,mdl%ncpu,1,2,ilevel,output_array)
+        call r_cmp_residual_norm2(s,ncpu,1,2,ilevel,output_array)
         i_res_norm2=transfer(output_array(1:2),i_res_norm2)
      end if
 
      if(ilevel>1) then
 
         ! Restrict residual to coarser level
-        call r_restrict_residual(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+        call r_restrict_residual(s,ncpu,1,0,ilevel)
 
         ! Reset correction from upper level before solve
-        call r_reset_correction(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel-1)
+        call r_reset_correction(s,ncpu,1,0,ilevel-1)
         
         ! Multigrid-solve the upper level
-        call recursive_multigrid(r,g,m,p,mdl,ilevel-1, g%safe_mode(ilevel))
+        call recursive_multigrid(s,ilevel-1, s%g%safe_mode(ilevel))
         
         ! Interpolate coarse solution and correct fine solution
-        call r_interpolate_and_correct(r,g,m,p,mdl,mdl%ncpu,1,0,ilevel)
+        call r_interpolate_and_correct(s,ncpu,1,0,ilevel)
 
      end if
 
      ! Post-smoothing
      do i=1,ngs_fine
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      
      ! Update fine residual
-     call r_cmp_residual_mg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+     call r_cmp_residual_mg(s,ncpu,2,0,input_array)
 
      ! Compute residual norm
-     call r_cmp_residual_norm2(r,g,m,p,mdl,mdl%ncpu,1,2,ilevel,output_array)
+     call r_cmp_residual_norm2(s,ncpu,1,2,ilevel,output_array)
      res_norm2=transfer(output_array(1:2),res_norm2)
      
      last_err = err
-     err = sqrt(res_norm2/(i_res_norm2+1d-20*g%rho_tot**2))
+     err = sqrt(res_norm2/(i_res_norm2+1d-20*s%g%rho_tot**2))
      
      ! Verbosity
-     if(r%verbose) print '(A,I5,A,1pE10.3)','   ==> Step=',iter,' Error=',err
+     if(s%r%verbose) print '(A,I5,A,1pE10.3)','   ==> Step=',iter,' Error=',err
      
      ! Converged?
-     if(err<r%epsilon .or. iter>=MAXITER) exit
+     if(err<s%r%epsilon .or. iter>=MAXITER) exit
      
      ! Not converged, check error and possibly enable safe mode for the level
-     if(err > last_err*SAFE_FACTOR .and. (.not. g%safe_mode(ilevel))) then
-        if(r%verbose)print *,'CAUTION: Switching to safe MG mode for level ',ilevel
-        g%safe_mode(ilevel) = .true.
+     if(err > last_err*SAFE_FACTOR .and. (.not. s%g%safe_mode(ilevel))) then
+        if(s%r%verbose)print *,'CAUTION: Switching to safe MG mode for level ',ilevel
+        s%g%safe_mode(ilevel) = .true.
      end if
      
   end do main_iteration_loop
@@ -181,7 +177,7 @@ subroutine multigrid(r,g,m,p,mdl,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-  call r_cleanup_mg(r,g,m,p,mdl,mdl%ncpu,0,0)
+  call r_cleanup_mg(s,ncpu,0,0)
   
 end subroutine multigrid
 
@@ -194,23 +190,19 @@ end subroutine multigrid
 ! Recursive multigrid routine for coarse MG levels
 ! ------------------------------------------------------------------------
 
-recursive subroutine recursive_multigrid(r,g,m,p,mdl,ifinelevel, safe)
+recursive subroutine recursive_multigrid(s,ifinelevel, safe)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
-  integer, intent(in) :: ifinelevel
-  logical, intent(in) :: safe
+  type(ramses_t)::s
+  integer,intent(in) :: ifinelevel
+  logical,intent(in) :: safe
 
-  integer :: i, igrid, icycle, ncycle
+  integer :: ncpu, i, igrid, icycle, ncycle
   integer,dimension(1:4) :: input_array
+
+  ncpu=s%mdl%ncpu
   
   ! Set parameter array
   input_array(1)=ifinelevel+1
@@ -221,13 +213,13 @@ recursive subroutine recursive_multigrid(r,g,m,p,mdl,ifinelevel, safe)
      input_array(3)=0
   endif
   
-  if(ifinelevel<=g%levelmin_mg) then
+  if(ifinelevel<=s%g%levelmin_mg) then
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      return
   end if
@@ -243,32 +235,32 @@ recursive subroutine recursive_multigrid(r,g,m,p,mdl,ifinelevel, safe)
      ! Pre-smoothing
      do i=1,ngs_coarse
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     call r_cmp_residual_mg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+     call r_cmp_residual_mg(s,ncpu,2,0,input_array)
 
      ! Restrict residual to coarser level
-     call r_restrict_residual(r,g,m,p,mdl,mdl%ncpu,1,0,ifinelevel)
+     call r_restrict_residual(s,ncpu,1,0,ifinelevel)
      
      ! Reset correction from upper level before solve
-     call r_reset_correction(r,g,m,p,mdl,mdl%ncpu,1,0,ifinelevel-1)
+     call r_reset_correction(s,ncpu,1,0,ifinelevel-1)
      
      ! Multigrid-solve the upper level
-     call recursive_multigrid(r,g,m,p,mdl,ifinelevel-1, safe)
+     call recursive_multigrid(s,ifinelevel-1, safe)
      
      ! Interpolate coarse solution and correct back into fine solution
-     call r_interpolate_and_correct(r,g,m,p,mdl,mdl%ncpu,1,0,ifinelevel)
+     call r_interpolate_and_correct(s,ncpu,1,0,ifinelevel)
      
      ! Post-smoothing
      do i=1,ngs_coarse
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(r,g,m,p,mdl,mdl%ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      
   end do
@@ -284,30 +276,24 @@ end subroutine recursive_multigrid
 ! Multigrid workspace initialisation
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_init_mg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_init_mg(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_INIT_MG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_init_mg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_INIT_MG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_init_mg(s,next_range,input_size,output_size,ilevel)
   else
-     call init_mg(r,m,ilevel)
+     call init_mg(s%r,s%m,ilevel)
   endif
 
 end subroutine r_init_mg
@@ -356,37 +342,31 @@ end subroutine init_mg
 ! Coarse grid MG activation for local grids
 ! ---------------------------------------------------------------------
 
-recursive subroutine r_build_mg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_build_mg(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_BUILD_MG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_build_mg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_BUILD_MG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_build_mg(s,next_range,input_size,output_size,ilevel)
   else
-     call build_mg(r,g,m,ilevel)
+     call build_mg(s,ilevel)
   endif
 
 end subroutine r_build_mg
 
-subroutine build_mg(r,g,m,ifinelevel)
+subroutine build_mg(s,ifinelevel)
   use amr_parameters, only: dp,nhilbert,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   use hilbert
   use hash
@@ -394,9 +374,7 @@ subroutine build_mg(r,g,m,ifinelevel)
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer,intent(in)::ifinelevel
   
   integer::icoarselevel,igrid,inbor,idim,ipos,ichild,grid_cpu,ind
@@ -408,13 +386,15 @@ subroutine build_mg(r,g,m,ifinelevel)
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
 
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   icoarselevel=ifinelevel-1
   m%ifree=m%noct_used+1
   m%head_mg(icoarselevel)=m%ifree
   
   hash_father(0)=icoarselevel
   
-  call open_cache(r,g,m,operation_build_mg,domain_decompos_mg)
+  call open_cache(s,operation_build_mg,domain_decompos_mg)
   
   ! Loop over fine grids
   do igrid=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -426,11 +406,11 @@ subroutine build_mg(r,g,m,ifinelevel)
 
 #ifndef WITHOUTMPI
         ! If counter is good, check on incoming messages and perform actions
-        if(mail_counter==32)then
-           call check_mail(r,g,m,MPI_REQUEST_NULL,m%mg_dict)
-           mail_counter=0
+        if(mdl%mail_counter==32)then
+           call check_mail(s,MPI_REQUEST_NULL,m%mg_dict)
+           mdl%mail_counter=0
         endif
-        mail_counter=mail_counter+1
+        mdl%mail_counter=mdl%mail_counter+1
 #endif
 
         hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
@@ -466,7 +446,7 @@ subroutine build_mg(r,g,m,ifinelevel)
                  write(*,*)'No more free memory'
                  write(*,*)'for multigrid...'
                  write(*,*)'Increase ngridmax'
-                 call clean_abort
+                 call mdl_abort
               end if
 
            else
@@ -474,7 +454,7 @@ subroutine build_mg(r,g,m,ifinelevel)
               grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
               
               ! If next cache line is occupied, free it.
-              if(m%occupied(m%free_cache))call destage(r,g,m,r%ngridmax+m%free_cache,m%mg_dict)
+              if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%mg_dict)
               ! Set grid index to a virtual grid in local cache memory
               ichild=r%ngridmax+m%free_cache
               m%occupied(m%free_cache)=.true.
@@ -512,13 +492,15 @@ subroutine build_mg(r,g,m,ifinelevel)
   end do
   ! End loop over grids
   
-  call close_cache(r,g,m,m%mg_dict)
+  call close_cache(s,m%mg_dict)
   
   ! Multigrid oct statistics
   m%tail_mg(icoarselevel)=m%ifree-1
   m%noct_mg(icoarselevel)=m%tail_mg(icoarselevel)-m%head_mg(icoarselevel)+1
   m%noct_used=m%tail_mg(icoarselevel)
 
+  end associate
+  
 end subroutine build_mg
 
 subroutine pack_flush_build_mg(grid,msg_size,msg_array)
@@ -582,31 +564,25 @@ end subroutine unpack_flush_build_mg
 ! Multigrid cleanup
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cleanup_mg(r,g,m,p,mdl,cpu_range,input_size,output_size)
+recursive subroutine r_cleanup_mg(s,cpu_range,input_size,output_size)
   use amr_parameters, only: twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
 
   integer::next_range,next_cpu
   integer::igrid
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_CLEANUP_MG,next_cpu,next_range,input_size,output_size)
-     call r_cleanup_mg(r,g,m,p,mdl,next_range,input_size,output_size)
+     call mdl_send_request(s%mdl,MDL_CLEANUP_MG,next_cpu,next_range,input_size,output_size)
+     call r_cleanup_mg(s,next_range,input_size,output_size)
   else
-     call cleanup_mg(m)
+     call cleanup_mg(s%m)
   endif
 
 end subroutine r_cleanup_mg
@@ -644,30 +620,24 @@ end subroutine cleanup_mg
 ! Initialize mask at fine level into f(:,3)
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_make_mask(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_make_mask(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_MAKE_MASK,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_make_mask(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_MAKE_MASK,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_make_mask(s,next_range,input_size,output_size,ilevel)
   else
-     call make_mask(m,ilevel)
+     call make_mask(s%m,ilevel)
   endif
 
 end subroutine r_make_mask
@@ -712,17 +682,11 @@ end subroutine make_mask
 !
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_make_bc_rhs(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_make_bc_rhs(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -730,27 +694,25 @@ recursive subroutine r_make_bc_rhs(r,g,m,p,mdl,cpu_range,input_size,output_size,
   integer::ilevel,icount
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_MAKE_BC_RHS,next_cpu,next_range,input_size,output_size,input_array)
-     call r_make_bc_rhs(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_MAKE_BC_RHS,next_cpu,next_range,input_size,output_size,input_array)
+     call r_make_bc_rhs(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)
-     call make_bc_rhs(r,g,m,ilevel,icount)
+     call make_bc_rhs(s,ilevel,icount)
   endif
 
 end subroutine r_make_bc_rhs
 
-subroutine make_bc_rhs(r,g,m,ilevel,icount)
+subroutine make_bc_rhs(s,ilevel,icount)
   use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
 
   integer, intent(in) :: ilevel,icount
   
@@ -768,6 +730,8 @@ subroutine make_bc_rhs(r,g,m,ilevel,icount)
 
   real(dp) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
   real(dp) :: fourpi
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
   
   ! Set constants
   fourpi = 4.D0*ACOS(-1.0D0)
@@ -802,7 +766,7 @@ subroutine make_bc_rhs(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop(g)
+     call mdl_abort
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -812,7 +776,7 @@ subroutine make_bc_rhs(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(s,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -838,7 +802,7 @@ subroutine make_bc_rhs(r,g,m,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -851,10 +815,10 @@ subroutine make_bc_rhs(r,g,m,ilevel,icount)
         else
 
            ! Get 3**ndim neighbouring parent cells using read-only cache
-           call get_threetondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
            call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
            do ind=1,threetondim
-              call unlock_cache(r,g,m,igrid_nbor(ind))
+              call unlock_cache(s,igrid_nbor(ind))
            end do
            do ind=1,twotondim
               dis_nbor(ind,inbor)=-1.0
@@ -897,8 +861,10 @@ subroutine make_bc_rhs(r,g,m,ilevel,icount)
      end do
   end do
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
+  end associate
+  
 end subroutine make_bc_rhs
 
 ! ########################################################################

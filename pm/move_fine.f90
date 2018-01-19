@@ -2,17 +2,11 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine m_kick_drift_part(r,g,m,p,mdl,ilevel,action_part)
+subroutine m_kick_drift_part(s,ilevel,action_part)
   use amr_parameters, only: ndim,dp,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel
   integer::action_part
   !--------------------------------------------------------------
@@ -20,30 +14,24 @@ subroutine m_kick_drift_part(r,g,m,p,mdl,ilevel,action_part)
   !--------------------------------------------------------------
   integer,dimension(1:2)::input_array
   
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
+  if(s%m%noct_tot(ilevel)==0)return
+  if(s%r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
 
   input_array(1)=ilevel
   input_array(2)=action_part
-  call r_kick_drift_part(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+  call r_kick_drift_part(s,s%mdl%ncpu,2,0,input_array)
   
 end subroutine m_kick_drift_part
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_kick_drift_part(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_kick_drift_part(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -52,15 +40,15 @@ recursive subroutine r_kick_drift_part(r,g,m,p,mdl,cpu_range,input_size,output_s
   integer::action_part
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_KICK_DRIFT_PART,next_cpu,next_range,input_size,output_size,input_array)
-     call r_kick_drift_part(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_KICK_DRIFT_PART,next_cpu,next_range,input_size,output_size,input_array)
+     call r_kick_drift_part(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-     call kick_drift_part(r,g,m,p,ilevel,action_part)
+     call kick_drift_part(s,ilevel,action_part)
   endif
 
 end subroutine r_kick_drift_part
@@ -68,17 +56,13 @@ end subroutine r_kick_drift_part
 !################################################################
 !################################################################
 !################################################################
-subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
+subroutine kick_drift_part(s,ilevel,action_part)
   use amr_parameters, only: dp,ndim,twotondim
   use pm_parameters
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
+  type(ramses_t)::s
   integer::ilevel
   integer::action_part
   !
@@ -95,12 +79,14 @@ subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
   real(dp),dimension(1:ndim),save::ff
   logical::ok_level
   
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
+
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(r,g,m,operation_kick,domain_decompos_amr)
+  call open_cache(s,operation_kick,domain_decompos_amr)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -153,18 +139,18 @@ subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
         if(parent_cell>0)then
            igrid(ind)=(parent_cell-1)/twotondim+1
            icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
-           call lock_cache(r,g,m,igrid(ind))
+           call lock_cache(s,igrid(ind))
         else
            ok_level=.false.
            exit
         end if
      end do
      do ind=1,twotondim
-        call unlock_cache(r,g,m,igrid(ind))
+        call unlock_cache(s,igrid(ind))
      end do
 
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
@@ -218,18 +204,18 @@ subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
         igrid=0; icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           parent_cell=get_parent_cell(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+           parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
            if(parent_cell>0)then
               igrid(ind)=(parent_cell-1)/twotondim+1
               icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
-              call lock_cache(r,g,m,igrid(ind))
+              call lock_cache(s,igrid(ind))
            else
               ok_level=.false.
               exit
            end if
         end do
         do ind=1,twotondim
-           call unlock_cache(r,g,m,igrid(ind))
+           call unlock_cache(s,igrid(ind))
         end do
      end if
         
@@ -294,7 +280,7 @@ subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
   end do
   ! End loop over particles
   
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
   ! Periodic boundary conditions
   if(action_part==action_kick_drift)then
@@ -310,6 +296,8 @@ subroutine kick_drift_part(r,g,m,p,ilevel,action_part)
      end do
   end if
 
+  end associate
+  
 end subroutine kick_drift_part
 !#########################################################################
 !#########################################################################

@@ -1,15 +1,9 @@
-subroutine m_read_params(r,g,m,p,mdl)
+subroutine m_read_params(s)
   use amr_parameters
   use hydro_parameters
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
 
   !--------------------------------------------------
   ! Local variables
@@ -371,11 +365,11 @@ subroutine m_read_params(r,g,m,p,mdl)
         write(*,*)'Allocate some space for refinements !!!'
         nml_ok=.false.
      else
-        ngridmax=int(ngridtot/int(g%ncpu,kind=8),kind=4)
+        ngridmax=int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
      endif
   end if
   if(npartmax==0)then
-     npartmax=int(nparttot/int(g%ncpu,kind=8),kind=4)
+     npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
   endif
 
   !----------------------------
@@ -458,161 +452,155 @@ subroutine m_read_params(r,g,m,p,mdl)
 
   ! Fill in all run parameters in corresponding structure
 
-  r%cosmo=cosmo
-  r%pic=pic
-  r%poisson=poisson
-  r%hydro=hydro
-  r%verbose=verbose
-  r%debug=debug
-  r%nrestart=nrestart
-  r%ncontrol=ncontrol
-  r%nstepmax=nstepmax
-  r%nsubcycle=nsubcycle
-  r%nremap=nremap
-  r%static=static
-  r%geom=geom
-  r%overload=overload
-  r%nsuperoct=nsuperoct
+  s%r%cosmo=cosmo
+  s%r%pic=pic
+  s%r%poisson=poisson
+  s%r%hydro=hydro
+  s%r%verbose=verbose
+  s%r%debug=debug
+  s%r%nrestart=nrestart
+  s%r%ncontrol=ncontrol
+  s%r%nstepmax=nstepmax
+  s%r%nsubcycle=nsubcycle
+  s%r%nremap=nremap
+  s%r%static=static
+  s%r%geom=geom
+  s%r%overload=overload
+  s%r%nsuperoct=nsuperoct
 
-  r%noutput=noutput
-  r%foutput=foutput
-  r%aout=aout
-  r%tout=tout
-  r%output_mode=output_mode
-  r%gadget_output=gadget_output
+  s%r%noutput=noutput
+  s%r%foutput=foutput
+  s%r%aout=aout
+  s%r%tout=tout
+  s%r%output_mode=output_mode
+  s%r%gadget_output=gadget_output
 
-  r%levelmin=levelmin
-  r%nlevelmax=nlevelmax
-  r%ngridmax=ngridmax
-  r%ncachemax=ncachemax
-  r%npartmax=npartmax
-  r%nexpand=nexpand
-  r%boxlen=boxlen
+  s%r%levelmin=levelmin
+  s%r%nlevelmax=nlevelmax
+  s%r%ngridmax=ngridmax
+  s%r%ncachemax=ncachemax
+  s%r%npartmax=npartmax
+  s%r%nexpand=nexpand
+  s%r%boxlen=boxlen
 
-  r%epsilon=epsilon
-  r%gravity_type=gravity_type
-  r%gravity_params=gravity_params
-  r%cic_levelmax=cic_levelmax
-  r%cg_levelmin=cg_levelmin
-  r%fast_solver=fast_solver
+  s%r%epsilon=epsilon
+  s%r%gravity_type=gravity_type
+  s%r%gravity_params=gravity_params
+  s%r%cic_levelmax=cic_levelmax
+  s%r%cg_levelmin=cg_levelmin
+  s%r%fast_solver=fast_solver
 
-  r%nw_frame=nw_frame
-  r%nh_frame=nh_frame
-  r%levelmax_frame=levelmax_frame
-  r%ivar_frame=ivar_frame
-  r%xcentre_frame=xcentre_frame
-  r%ycentre_frame=ycentre_frame
-  r%zcentre_frame=zcentre_frame
-  r%deltax_frame=deltax_frame
-  r%deltay_frame=deltay_frame
-  r%deltaz_frame=deltaz_frame
-  r%movie=movie
-  r%zoom_only=zoom_only
-  r%imovout=imovout
-  r%imov=imov
-  r%tendmov=tendmov
-  r%aendmov=aendmov
-  r%amovout=amovout
-  r%tmovout=tmovout
-  r%proj_axis=proj_axis
-  r%movie_vars_txt=movie_vars_txt
-  if(r%movie)call set_movie_vars(r)
+  s%r%nw_frame=nw_frame
+  s%r%nh_frame=nh_frame
+  s%r%levelmax_frame=levelmax_frame
+  s%r%ivar_frame=ivar_frame
+  s%r%xcentre_frame=xcentre_frame
+  s%r%ycentre_frame=ycentre_frame
+  s%r%zcentre_frame=zcentre_frame
+  s%r%deltax_frame=deltax_frame
+  s%r%deltay_frame=deltay_frame
+  s%r%deltaz_frame=deltaz_frame
+  s%r%movie=movie
+  s%r%zoom_only=zoom_only
+  s%r%imovout=imovout
+  s%r%imov=imov
+  s%r%tendmov=tendmov
+  s%r%aendmov=aendmov
+  s%r%amovout=amovout
+  s%r%tmovout=tmovout
+  s%r%proj_axis=proj_axis
+  s%r%movie_vars_txt=movie_vars_txt
+  if(s%r%movie)call set_movie_vars(s%r)
 
-  r%gamma=gamma
-  r%courant_factor=courant_factor
-  r%smallc=smallc
-  r%smallr=smallr
-  r%niter_riemann=niter_riemann
-  r%slope_type=slope_type
-  r%difmag=difmag
-  r%gamma_rad=gamma_rad(1:nener)
-  r%pressure_fix=pressure_fix
-  r%scheme=scheme
-  if(riemann=='llf')r%riemann=solver_llf
-  if(riemann=='hll')r%riemann=solver_hll
-  if(riemann=='hllc')r%riemann=solver_hllc
+  s%r%gamma=gamma
+  s%r%courant_factor=courant_factor
+  s%r%smallc=smallc
+  s%r%smallr=smallr
+  s%r%niter_riemann=niter_riemann
+  s%r%slope_type=slope_type
+  s%r%difmag=difmag
+  s%r%gamma_rad=gamma_rad(1:nener)
+  s%r%pressure_fix=pressure_fix
+  s%r%scheme=scheme
+  if(riemann=='llf')s%r%riemann=solver_llf
+  if(riemann=='hll')s%r%riemann=solver_hll
+  if(riemann=='hllc')s%r%riemann=solver_hllc
 
-  r%cooling=cooling
-  r%units_density=units_density
-  r%units_time=units_time
-  r%units_length=units_length
-  r%T2_star=T2_star
-  r%g_star=g_star
-  r%n_star=n_star
-  r%isothermal=isothermal
+  s%r%cooling=cooling
+  s%r%units_density=units_density
+  s%r%units_time=units_time
+  s%r%units_length=units_length
+  s%r%T2_star=T2_star
+  s%r%g_star=g_star
+  s%r%n_star=n_star
+  s%r%isothermal=isothermal
 
-  r%m_refine=m_refine
-  r%r_refine=r_refine
-  r%x_refine=x_refine
-  r%y_refine=y_refine
-  r%z_refine=z_refine
-  r%exp_refine=exp_refine
-  r%a_refine=a_refine
-  r%b_refine=b_refine
-  r%jeans_refine=jeans_refine
-  r%var_cut_refine=var_cut_refine
-  r%mass_cut_refine=mass_cut_refine
-  r%ivar_refine=ivar_refine
+  s%r%m_refine=m_refine
+  s%r%r_refine=r_refine
+  s%r%x_refine=x_refine
+  s%r%y_refine=y_refine
+  s%r%z_refine=z_refine
+  s%r%exp_refine=exp_refine
+  s%r%a_refine=a_refine
+  s%r%b_refine=b_refine
+  s%r%jeans_refine=jeans_refine
+  s%r%var_cut_refine=var_cut_refine
+  s%r%mass_cut_refine=mass_cut_refine
+  s%r%ivar_refine=ivar_refine
 
-  r%interpol_var=interpol_var
-  r%interpol_type=interpol_type
-  r%err_grad_d=err_grad_d
-  r%err_grad_u=err_grad_u
-  r%err_grad_p=err_grad_p
-  r%floor_d=floor_d
-  r%floor_u=floor_u
-  r%floor_p=floor_p
-  r%mass_sph=mass_sph
+  s%r%interpol_var=interpol_var
+  s%r%interpol_type=interpol_type
+  s%r%err_grad_d=err_grad_d
+  s%r%err_grad_u=err_grad_u
+  s%r%err_grad_p=err_grad_p
+  s%r%floor_d=floor_d
+  s%r%floor_u=floor_u
+  s%r%floor_p=floor_p
+  s%r%mass_sph=mass_sph
 #if NENER>0
-  r%err_grad_prad=err_grad_prad
+  s%r%err_grad_prad=err_grad_prad
 #endif
 #if NVAR>NDIM+2+NENER
-  r%err_grad_var=err_grad_var
+  s%r%err_grad_var=err_grad_var
 #endif
 
   if(nrestart>0)filetype='restart'
-  r%filetype=filetype
-  r%initfile=initfile
-  r%multiple=multiple
-  r%nregion=nregion
-  r%region_type=region_type
-  r%x_center=x_center
-  r%y_center=y_center
-  r%z_center=z_center
-  r%length_x=length_x
-  r%length_y=length_y
-  r%length_z=length_z
-  r%exp_region=exp_region
-  r%d_region=d_region
-  r%d_region=u_region
-  r%d_region=v_region
-  r%d_region=w_region
-  r%d_region=p_region
+  s%r%filetype=filetype
+  s%r%initfile=initfile
+  s%r%multiple=multiple
+  s%r%nregion=nregion
+  s%r%region_type=region_type
+  s%r%x_center=x_center
+  s%r%y_center=y_center
+  s%r%z_center=z_center
+  s%r%length_x=length_x
+  s%r%length_y=length_y
+  s%r%length_z=length_z
+  s%r%exp_region=exp_region
+  s%r%d_region=d_region
+  s%r%d_region=u_region
+  s%r%d_region=v_region
+  s%r%d_region=w_region
+  s%r%d_region=p_region
 #if NENER>0
-  r%prad_region=prad_region
+  s%r%prad_region=prad_region
 #endif
 #if NVAR>NDIM+2+NENER
-  r%var_region=var_region
+  s%r%var_region=var_region
 #endif
 
   ! Broadcast parameters to all CPUs.
-  call m_broadcast_params(r,g,m,p,mdl)
+  call m_broadcast_params(s)
   
 end subroutine m_read_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_broadcast_params(r,g,m,p,mdl)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+subroutine m_broadcast_params(s)
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   !--------------------------------------------------------------------
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
@@ -620,9 +608,9 @@ subroutine m_broadcast_params(r,g,m,p,mdl)
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
-  allocate(input_array(1:storage_size(r)/32))
-  input_array=transfer(r,input_array)
-  call r_broadcast_params(r,g,m,p,mdl,g%ncpu,storage_size(r)/32,0,input_array)
+  allocate(input_array(1:storage_size(s%r)/32))
+  input_array=transfer(s%r,input_array)
+  call r_broadcast_params(s,s%g%ncpu,storage_size(s%r)/32,0,input_array)
   deallocate(input_array)
 
 end subroutine m_broadcast_params
@@ -630,30 +618,24 @@ end subroutine m_broadcast_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_params(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_broadcast_params(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_BCAST_PARAMS,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_params(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_BCAST_PARAMS,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_params(s,next_range,input_size,output_size,input_array)
   else
-     r=transfer(input_array,r)
+     s%r=transfer(input_array,s%r)
   endif
 
 end subroutine r_broadcast_params
@@ -661,16 +643,10 @@ end subroutine r_broadcast_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_broadcast_global(r,g,m,p,mdl)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+subroutine m_broadcast_global(s)
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   !--------------------------------------------------------------------
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
@@ -679,10 +655,10 @@ subroutine m_broadcast_global(r,g,m,p,mdl)
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
-  input_size=storage_size(g)/32
+  input_size=storage_size(s%g)/32
   allocate(input_array(1:input_size))
-  input_array=transfer(g,input_array)
-  call r_broadcast_global(r,g,m,p,mdl,mdl%ncpu,input_size,0,input_array)
+  input_array=transfer(s%g,input_array)
+  call r_broadcast_global(s,s%mdl%ncpu,input_size,0,input_array)
   deallocate(input_array)
 
 end subroutine m_broadcast_global
@@ -690,31 +666,25 @@ end subroutine m_broadcast_global
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_global(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_broadcast_global(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_BCAST_GLOBAL,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_global(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_BCAST_GLOBAL,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_global(s,next_range,input_size,output_size,input_array)
   else
-     g=transfer(input_array,g)
-     g%myid=mdl%myid
+     s%g=transfer(input_array,s%g)
+     s%g%myid=s%mdl%myid
   endif
 
 end subroutine r_broadcast_global

@@ -2,58 +2,46 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_upload_fine(r,g,m,p,mdl,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+subroutine m_upload_fine(s,ilevel)
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to upload HYDRO variables
   ! from level ilevel+1 to ilevel (averaging down or restriction).
   !--------------------------------------------------------------------
-  if(ilevel==r%nlevelmax)return
-  if(m%noct_tot(ilevel)==0)return
-  if(m%noct_tot(ilevel+1)==0)return
-  if(r%verbose)write(*,111)ilevel
+  if(ilevel==s%r%nlevelmax)return
+  if(s%m%noct_tot(ilevel)==0)return
+  if(s%m%noct_tot(ilevel+1)==0)return
+  if(s%r%verbose)write(*,111)ilevel
 111 format(' Entering upload_fine for level',i2)
 
-  call r_upload_fine(r,g,m,p,mdl,g%ncpu,1,0,ilevel)
+  call r_upload_fine(s,s%g%ncpu,1,0,ilevel)
 
 end subroutine m_upload_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_upload_fine(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_upload_fine(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_UPLOAD_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_upload_fine(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_UPLOAD_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_upload_fine(s,next_range,input_size,output_size,ilevel)
   else
-     call upload_fine(r,g,m,ilevel)
+     call upload_fine(s,ilevel)
   endif
 
 end subroutine r_upload_fine
@@ -61,15 +49,13 @@ end subroutine r_upload_fine
 !########################################################### 
 !###########################################################
 !###########################################################
-subroutine upload_fine(r,g,m,ilevel)
-  use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine upload_fine(s,ilevel)
   use hydro_parameters, only: nvar,nener
+  use amr_parameters, only: dp,ndim,twotondim
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   !----------------------------------------------------------------------
   ! This routine performs a restriction operation (averaging down)
@@ -85,6 +71,8 @@ subroutine upload_fine(r,g,m,ilevel)
 
 #ifdef HYDRO
 
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
   ! Set conservative variable to zero in refined cells
   do ioct=m%head(ilevel),m%tail(ilevel)
      do ivar=1,nvar
@@ -96,7 +84,7 @@ subroutine upload_fine(r,g,m,ilevel)
      end do
   end do
 
-  call open_cache(r,g,m,operation_upload,domain_decompos_amr)
+  call open_cache(s,operation_upload,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
@@ -104,7 +92,7 @@ subroutine upload_fine(r,g,m,ilevel)
 
      ! Get cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     parent_cell=get_parent_cell(r,g,m,hash_key,m%grid_dict,.true.,.false.)
+     parent_cell=get_parent_cell(s,hash_key,m%grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
 
@@ -149,7 +137,7 @@ subroutine upload_fine(r,g,m,ilevel)
      endif
   end do
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
   ! Set conservative variable to zero in refined cells
   do ioct=m%head(ilevel),m%tail(ilevel)
@@ -164,6 +152,8 @@ subroutine upload_fine(r,g,m,ilevel)
         end do
      end do
   end do
+
+  end associate
 
 #endif
 

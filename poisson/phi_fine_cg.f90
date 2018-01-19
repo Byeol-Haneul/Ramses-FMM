@@ -3,23 +3,12 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
+subroutine m_phi_fine_cg(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-  real(kind=8)::r2_all,pAp_all,rhs_norm_all
-#endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::ilevel,icount
   !=========================================================
   ! Iterative Poisson solver with Conjugate Gradient method 
@@ -37,6 +26,8 @@ subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
   integer,dimension(1:4)::input_array
   integer,dimension(1:4)::output_array
 
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+    
   if(r%gravity_type>0)return
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,111)ilevel
@@ -47,12 +38,12 @@ subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
   !===============================
   input_array(1)=ilevel
   input_array(2)=icount
-  call r_make_initial_phi(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+  call r_make_initial_phi(s,mdl%ncpu,2,0,input_array)
 
   !===============================
   ! Compute right-hand side norm
   !===============================
-  call r_cmp_rhs_norm(r,g,m,p,mdl,mdl%ncpu,1,2,input_array,output_array)
+  call r_cmp_rhs_norm(s,mdl%ncpu,1,2,input_array,output_array)
   rhs_norm=transfer(output_array(1:2),rhs_norm)
   rhs_norm=DSQRT(rhs_norm/dble(twotondim*m%noct_tot(ilevel)))
 
@@ -62,7 +53,7 @@ subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
   !==============================================
   input_array(1)=ilevel
   input_array(2)=icount
-  call r_cmp_residual_cg(r,g,m,p,mdl,mdl%ncpu,2,0,input_array)
+  call r_cmp_residual_cg(s,mdl%ncpu,2,0,input_array)
 
   !====================================
   ! Main iteration loop
@@ -76,7 +67,7 @@ subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
      !====================================
      ! Compute residual norm
      !====================================
-     call r_cmp_r2_cg(r,g,m,p,mdl,mdl%ncpu,1,2,input_array,output_array)
+     call r_cmp_r2_cg(s,mdl%ncpu,1,2,input_array,output_array)
      r2=transfer(output_array(1:2),r2)
 
      !====================================
@@ -94,17 +85,17 @@ subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
      !====================================
      input_array(1)=ilevel
      input_array(2:3)=transfer(beta_cg,input_array(2:3))
-     call r_recurrence_on_p(r,g,m,p,mdl,mdl%ncpu,3,0,input_array)
+     call r_recurrence_on_p(s,mdl%ncpu,3,0,input_array)
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
      !==============================================
-     call r_cmp_Ap_cg(r,g,m,p,mdl,mdl%ncpu,1,0,input_array)
+     call r_cmp_Ap_cg(s,mdl%ncpu,1,0,input_array)
 
      !====================================
      ! Compute p.Ap scalar product
      !====================================
-     call r_cmp_pAp_cg(r,g,m,p,mdl,mdl%ncpu,1,2,input_array,output_array)
+     call r_cmp_pAp_cg(s,mdl%ncpu,1,2,input_array,output_array)
      pAp=transfer(output_array(1:2),pAp)
 
      !====================================
@@ -117,7 +108,7 @@ subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
      !====================================
      input_array(1)=ilevel
      input_array(2:3)=transfer(alpha_cg,input_array(2:3))
-     call r_recurrence_x_and_r(r,g,m,p,mdl,mdl%ncpu,3,0,input_array)
+     call r_recurrence_x_and_r(s,mdl%ncpu,3,0,input_array)
 
      !====================================
      ! Compute error
@@ -136,24 +127,19 @@ subroutine m_phi_fine_cg(r,g,m,p,mdl,ilevel,icount)
      write(*,*)'Poisson failed to converge...'
   end if
 
+  end associate
+  
 end subroutine m_phi_fine_cg
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_recurrence_on_p(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_recurrence_on_p(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
-  use hash
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -162,17 +148,17 @@ recursive subroutine r_recurrence_on_p(r,g,m,p,mdl,cpu_range,input_size,output_s
   real(kind=8)::beta_cg
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_RECURRENCE_ON_P,next_cpu,next_range,input_size,output_size,input_array)
-     call r_recurrence_on_p(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_RECURRENCE_ON_P,next_cpu,next_range,input_size,output_size,input_array)
+     call r_recurrence_on_p(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      beta_cg=transfer(input_array(2:3),beta_cg)
-     do igrid=m%head(ilevel),m%tail(ilevel)
+     do igrid=s%m%head(ilevel),s%m%tail(ilevel)
         do ind=1,twotondim
-           m%grid(igrid)%f(ind,2)=m%grid(igrid)%f(ind,1)+beta_cg*m%grid(igrid)%f(ind,2)
+           s%m%grid(igrid)%f(ind,2)=s%m%grid(igrid)%f(ind,1)+beta_cg*s%m%grid(igrid)%f(ind,2)
         end do
      end do
   endif
@@ -182,19 +168,12 @@ end subroutine r_recurrence_on_p
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_recurrence_x_and_r(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_recurrence_x_and_r(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
-  use hash
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -203,24 +182,24 @@ recursive subroutine r_recurrence_x_and_r(r,g,m,p,mdl,cpu_range,input_size,outpu
   real(kind=8)::alpha_cg
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_RECURRENCE_X_AND_R,next_cpu,next_range,input_size,output_size,input_array)
-     call r_recurrence_x_and_r(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_RECURRENCE_X_AND_R,next_cpu,next_range,input_size,output_size,input_array)
+     call r_recurrence_x_and_r(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      alpha_cg=transfer(input_array(2:3),alpha_cg)
      ! Recurrence on x
-     do igrid=m%head(ilevel),m%tail(ilevel)
+     do igrid=s%m%head(ilevel),s%m%tail(ilevel)
         do ind=1,twotondim
-           m%grid(igrid)%phi(ind)=m%grid(igrid)%phi(ind)+alpha_cg*m%grid(igrid)%f(ind,2)
+           s%m%grid(igrid)%phi(ind)=s%m%grid(igrid)%phi(ind)+alpha_cg*s%m%grid(igrid)%f(ind,2)
         end do
      end do
      ! Recurrence on r
-     do igrid=m%head(ilevel),m%tail(ilevel)
+     do igrid=s%m%head(ilevel),s%m%tail(ilevel)
         do ind=1,twotondim
-           m%grid(igrid)%f(ind,1)=m%grid(igrid)%f(ind,1)-alpha_cg*m%grid(igrid)%f(ind,3)
+           s%m%grid(igrid)%f(ind,1)=s%m%grid(igrid)%f(ind,1)-alpha_cg*s%m%grid(igrid)%f(ind,3)
         end do
      end do
   endif
@@ -230,18 +209,11 @@ end subroutine r_recurrence_x_and_r
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_cmp_residual_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_cmp_residual_cg(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
-  use hash
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -249,27 +221,25 @@ recursive subroutine r_cmp_residual_cg(r,g,m,p,mdl,cpu_range,input_size,output_s
   integer::ilevel,icount
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_CMP_RESIDUAL_CG,next_cpu,next_range,input_size,output_size,input_array)
-     call r_cmp_residual_cg(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_CMP_RESIDUAL_CG,next_cpu,next_range,input_size,output_size,input_array)
+     call r_cmp_residual_cg(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)
-     call cmp_residual_cg(r,g,m,ilevel,icount)
+     call cmp_residual_cg(s,ilevel,icount)
   endif
 
 end subroutine r_cmp_residual_cg
 
-subroutine cmp_residual_cg(r,g,m,ilevel,icount)
+subroutine cmp_residual_cg(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel,icount
   !------------------------------------------------------------------
   ! This routine computes the residual for the Conjugate Gradient
@@ -289,6 +259,8 @@ subroutine cmp_residual_cg(r,g,m,ilevel,icount)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
 
+  associate(r=>s%r,g=>s%g,m=>s%m)
+    
   ! Set constants
   dx2=(r%boxlen/2**ilevel)**2
   fourpi=4.D0*ACOS(-1.0D0)
@@ -322,7 +294,7 @@ subroutine cmp_residual_cg(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop(g)
+     call mdl_abort
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -332,7 +304,7 @@ subroutine cmp_residual_cg(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(s,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -357,7 +329,7 @@ subroutine cmp_residual_cg(r,g,m,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -368,10 +340,10 @@ subroutine cmp_residual_cg(r,g,m,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
-           call get_threetondim_nbor_parent_cell(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
            call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache(r,g,m,igrid_nbor(ind))
+              call unlock_cache(s,igrid_nbor(ind))
            end do
         endif
 
@@ -402,50 +374,43 @@ subroutine cmp_residual_cg(r,g,m,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
+
+  end associate
 
 end subroutine cmp_residual_cg
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_cmp_Ap_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_cmp_Ap_cg(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
-  use hash
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_CMP_AP_CG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cmp_Ap_cg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_CMP_AP_CG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cmp_Ap_cg(s,next_range,input_size,output_size,ilevel)
   else
-     call cmp_Ap_cg(r,g,m,ilevel)
+     call cmp_Ap_cg(s,ilevel)
   endif
 
 end subroutine r_cmp_Ap_cg
 
-subroutine cmp_Ap_cg(r,g,m,ilevel)
+subroutine cmp_Ap_cg(s,ilevel)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   !------------------------------------------------------------------
   ! This routine computes Ap for the Conjugate Gradient
@@ -461,6 +426,8 @@ subroutine cmp_Ap_cg(r,g,m,ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
 
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
   ! Set constants
   oneoversix=1.0D0/dble(twondim)
 
@@ -471,7 +438,7 @@ subroutine cmp_Ap_cg(r,g,m,ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
 
-  call open_cache(r,g,m,operation_cg,domain_decompos_amr)
+  call open_cache(s,operation_cg,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -496,7 +463,7 @@ subroutine cmp_Ap_cg(r,g,m,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -532,24 +499,20 @@ subroutine cmp_Ap_cg(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
+
+  end associate
 
 end subroutine cmp_Ap_cg
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_make_initial_phi(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_make_initial_phi(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -557,15 +520,15 @@ recursive subroutine r_make_initial_phi(r,g,m,p,mdl,cpu_range,input_size,output_
   integer::ilevel,icount
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_MAKE_INITIAL_PHI,next_cpu,next_range,input_size,output_size,input_array)
-     call r_make_initial_phi(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_MAKE_INITIAL_PHI,next_cpu,next_range,input_size,output_size,input_array)
+     call r_make_initial_phi(s,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)
-     call make_initial_phi(r,g,m,ilevel,icount)
+     call make_initial_phi(s,ilevel,icount)
   endif
 
 end subroutine r_make_initial_phi
@@ -573,14 +536,12 @@ end subroutine r_make_initial_phi
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine make_initial_phi(r,g,m,ilevel,icount)
+subroutine make_initial_phi(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel,icount
   !
   !
@@ -592,6 +553,8 @@ subroutine make_initial_phi(r,g,m,ilevel,icount)
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
   real(dp),dimension(1:twotondim),save::phi_int
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! CIC method constants
   aa = 1.0D0/4.0D0**ndim
@@ -622,7 +585,7 @@ subroutine make_initial_phi(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(s,operation_interpol,domain_decompos_amr)
 
   hash_key(0)=ilevel
 
@@ -645,10 +608,10 @@ subroutine make_initial_phi(r,g,m,ilevel,icount)
         
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
-        call get_threetondim_nbor_parent_cell(r,g,m,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+        call get_threetondim_nbor_parent_cell(s,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
         call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
-           call unlock_cache(r,g,m,igrid_nbor(ind))
+           call unlock_cache(s,igrid_nbor(ind))
         end do
 
         ! Loop over cells
@@ -662,7 +625,9 @@ subroutine make_initial_phi(r,g,m,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
+
+  end associate
 
 end subroutine make_initial_phi
 
@@ -711,394 +676,6 @@ subroutine unpack_fetch_interpol(grid,msg_size,msg_array)
 #endif
 
 end subroutine unpack_fetch_interpol
-
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-#ifdef FAST
-subroutine cmp_Ap_cg_fast(ilevel)
-  use amr_commons
-  use pm_commons
-  use hydro_commons
-  use poisson_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-  integer::info
-  integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
-#endif
-  integer::ilevel
-  !------------------------------------------------------------------
-  ! This routine computes Ap for the Conjugate Gradient
-  ! Poisson Solver and store the result into f(i,3).
-  !------------------------------------------------------------------
-  integer::get_grid
-  integer::inbor,igrid,idim,ind,igridn
-  integer::id1,id2,ig1,ig2,i
-  integer::icpu,nbuffer,istart
-  real(dp)::oneoversix,residu
-  integer,dimension(1:3,1:2,1:8)::iii,jjj
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
-  integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer,dimension(1:3,1:6),save::shift=reshape(&
-       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer::countrecv,countsend,tag=101
-  integer,dimension(ncpu)::reqsend,reqrecv
-
-  ! Set constants
-  oneoversix=1.0D0/dble(twondim)
-
-  iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
-  iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
-  iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
-  iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
-  iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
-  iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
-
-#ifndef WITHOUTMPI
-                               call timer('poisson - solver - mpi','start')
-  ! Update boundary conditions
-  countrecv=0
-  do icpu=1,ncpu
-     nbuffer=send_cnt(icpu)
-     if(nbuffer>0)then
-        countrecv=countrecv+1
-        istart=send_oft(icpu)*twotondim+1
-        call MPI_IRECV(phi_send_buf(istart),nbuffer*twotondim, &
-             & MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
-     endif
-  end do
-  
-  do ind=1,twotondim
-     do i=1,recv_tot
-        igrid=grid_recv_buf(i)
-        istart=(i-1)*twotondim+ind
-        phi_recv_buf(istart)=grid(igrid)%f(ind,2)
-     end do
-  end do
-
-  countsend=0
-  do icpu=1,ncpu
-     nbuffer=recv_cnt(icpu)
-     if(nbuffer>0) then
-        countsend=countsend+1
-        istart=recv_oft(icpu)*twotondim+1
-        call MPI_ISEND(phi_recv_buf(istart),nbuffer*twotondim, &
-            & MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
-     end if
-  end do
-
-  ! Wait for full completion of receives
-  call MPI_WAITALL(countrecv,reqrecv,statuses,info)
-
-  do ind=1,twotondim
-     do i=1,send_tot
-        istart=(i-1)*twotondim+ind
-        phi_remote(i,ind)=phi_send_buf(istart)
-     end do
-  end do
-
-  ! Wait for full completion of sends
-  call MPI_WAITALL(countsend,reqsend,statuses,info)
-
-#endif
-                               call timer('poisson - solver','start')
-  ! Loop over grids
-  do igrid=head(ilevel),tail(ilevel)
-
-     ! Get central oct potential
-     do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%f(ind,2)
-     end do
-
-     ! Get neighboring octs potential
-     do inbor=1,twondim
-
-        ! Get neighbouring grid using read-only cache
-        igridn=nbor_indx(igrid,inbor)
-
-        ! If grid exists, then copy into array
-        if(igridn>0)then
-           do ind=1,twotondim
-              phi_nbor(ind,inbor)=grid(igridn)%f(ind,2)
-           end do
-        else if (igridn==0) then
-           do ind=1,twotondim
-              phi_nbor(ind,inbor)=0.0
-           end do
-        else
-           do ind=1,twotondim
-              phi_nbor(ind,inbor)=phi_remote(-igridn,ind)
-           end do
-        endif
-
-     end do
-     ! End loop over neighboring octs
-
-     ! Loop over cells
-     do ind=1,twotondim
-
-        ! Compute Ap using neighbors potential
-        residu=-grid(igrid)%f(ind,2)
-        do idim=1,ndim
-           id1=jjj(idim,1,ind); ig1=iii(idim,1,ind)
-           id2=jjj(idim,2,ind); ig2=iii(idim,2,ind)
-           residu=residu+oneoversix*(phi_nbor(id1,ig1)+phi_nbor(id2,ig2))
-        end do
-
-        ! Store results in f(ind,3)
-        grid(igrid)%f(ind,3)=residu
-
-     end do
-     ! End loop over cells
-
-  end do
-  ! End loop over grids
-
-end subroutine cmp_Ap_cg_fast
-#endif
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-#ifdef FAST
-subroutine build_cg(ilevel)
-  use amr_commons
-  use poisson_commons
-  use hilbert
-  implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-  integer::info
-#endif
-  
-  integer,intent(in)::ilevel
-  !
-  integer::get_grid
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind
-  integer::i,igridn,iremote
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
-  integer,dimension(1:ndim)::cart_key
-  integer,dimension(1:3,1:6),save::shift=reshape(&
-       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
-  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
-
-#ifndef WITHOUTMPI
-
-  allocate(nremote(1:ncpu))  
-  allocate(nbor_indx(head(ilevel):tail(ilevel),1:twondim))
-
-  hash_nbor(0)=ilevel
-  
-  nremote=0
-  call open_cache(operation_cg,domain_decompos_amr)
-  
-  ! Loop over grids
-  do igrid=head(ilevel),tail(ilevel)
-     
-     ! Gather twondim neighboring grids
-     do inbor=1,twondim
-
-        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
-
-        ! Periodic boundary conditons
-        do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
-        enddo
-        
-        ! Get neighbouring grid using read-only cache
-        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
-        
-        ! If grid exists, determine if remote
-        if(igridn<=ngridmax)then
-           nbor_indx(igrid,inbor)=igridn
-        else
-           ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=hash_nbor(1:ndim)
-           
-           ! Compute Hilbert keys of new octs
-           ix(1,1:ndim)=cart_key(1:ndim)
-           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
-
-           ! Determine parent processor and increment counter
-           grid_cpu = domain(ilevel)%get_rank(hk(1,1:nhilbert))
-           nremote(grid_cpu)=nremote(grid_cpu)+1
-        end if
-
-     end do
-     ! End loop over neighbors
-     
-  end do
-  ! End loop over grids
-  
-  call close_cache(grid_dict)
-
-  ! Build communicator
-  allocate(nalltoall(1:ncpu,1:ncpu))
-  allocate(nalltoall_tot(1:ncpu,1:ncpu))
-  nalltoall=0; nalltoall_tot=0
-  do icpu=1,ncpu
-     nalltoall(myid,icpu)=nremote(icpu)
-  end do
-  call MPI_ALLREDUCE(nalltoall,nalltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  nalltoall=nalltoall_tot
-  deallocate(nalltoall_tot)
-  allocate(send_cnt(1:ncpu))
-  allocate(send_oft(1:ncpu))
-  allocate(recv_cnt(1:ncpu))
-  allocate(recv_oft(1:ncpu))
-
-  send_cnt=0; send_oft=0; send_tot=0
-  recv_cnt=0; recv_oft=0; recv_tot=0
-  do icpu=1,ncpu
-     send_cnt(icpu)=nalltoall(myid,icpu)
-     recv_cnt(icpu)=nalltoall(icpu,myid)
-     send_tot=send_tot+send_cnt(icpu)
-     recv_tot=recv_tot+recv_cnt(icpu)
-     if(icpu<ncpu)then
-        send_oft(icpu+1)=send_oft(icpu)+nalltoall(myid,icpu)
-        recv_oft(icpu+1)=recv_oft(icpu)+nalltoall(icpu,myid)
-     endif
-  end do
-  deallocate(nalltoall)
-
-#if NDIM>0
-  allocate(x_send_buf(1:send_tot))
-#endif
-#if NDIM>1
-  allocate(y_send_buf(1:send_tot))
-#endif
-#if NDIM>2
-  allocate(z_send_buf(1:send_tot))
-#endif
-
-  hash_nbor(0)=ilevel
-
-  nremote=0
-  call open_cache(operation_cg,domain_decompos_amr)
-
-  ! Loop over grids
-  do igrid=head(ilevel),tail(ilevel)
-
-     ! Gather twondim neighboring grids
-     do inbor=1,twondim
-
-        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
-
-        ! Periodic boundary conditons
-        do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
-        enddo
-
-        ! Get neighbouring grid using read-only cache
-        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
-
-        ! If grid is remote
-        if(igridn>ngridmax)then
-
-           ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=hash_nbor(1:ndim)
-
-           ! Compute Hilbert keys of new octs
-           ix(1,1:ndim)=cart_key(1:ndim)
-           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
-
-           ! Determine parent processor and increment counter
-           grid_cpu = domain(ilevel)%get_rank(hk(1,1:nhilbert))
-           nremote(grid_cpu)=nremote(grid_cpu)+1
-           iremote=send_oft(grid_cpu)+nremote(grid_cpu)
-#if NDIM>0
-           x_send_buf(iremote)=cart_key(1)
-#endif
-#if NDIM>1
-           y_send_buf(iremote)=cart_key(2)
-#endif
-#if NDIM>2
-           z_send_buf(iremote)=cart_key(3)
-#endif
-           ! Store negative index
-           nbor_indx(igrid,inbor)=-iremote
-        end if
-
-     end do
-     ! End loop over neighbors
-
-  end do
-  ! End loop over grids
-
-  call close_cache(grid_dict)
-
-  deallocate(nremote)
-
-#if NDIM>0
-  allocate(x_recv_buf(1:recv_tot))
-  call MPI_ALLTOALLV(x_send_buf,send_cnt,send_oft,MPI_INTEGER, &
-       &             x_recv_buf,recv_cnt,recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
-  deallocate(x_send_buf)
-#endif
-#if NDIM>1
-  allocate(y_recv_buf(1:recv_tot))
-  call MPI_ALLTOALLV(y_send_buf,send_cnt,send_oft,MPI_INTEGER, &
-       &             y_recv_buf,recv_cnt,recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
-  deallocate(y_send_buf)
-#endif
-#if NDIM>2
-  allocate(z_recv_buf(1:recv_tot))
-  call MPI_ALLTOALLV(z_send_buf,send_cnt,send_oft,MPI_INTEGER, &
-       &             z_recv_buf,recv_cnt,recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
-  deallocate(z_send_buf)
-#endif
-
-  allocate(grid_recv_buf(1:recv_tot))
-
-  hash_key(0)=ilevel
-  do i=1,recv_tot
-     hash_key(1)=x_recv_buf(i)
-     hash_key(2)=y_recv_buf(i)
-     hash_key(3)=z_recv_buf(i)
-     ipos=hash_get(grid_dict,hash_key)
-     grid_recv_buf(i)=ipos
-  end do
-  deallocate(x_recv_buf)
-  deallocate(y_recv_buf)
-  deallocate(z_recv_buf)
-
-  allocate(phi_send_buf(1:send_tot*twotondim))
-  allocate(phi_recv_buf(1:recv_tot*twotondim))
-  allocate(phi_remote(1:send_tot,1:twotondim))
-#endif
-
-end subroutine build_cg
-#endif
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
-#ifdef FAST
-subroutine clean_cg
-  use amr_commons
-  use poisson_commons
-  implicit none
-
-#ifndef WITHOUTMPI
-  deallocate(nbor_indx)
-  deallocate(phi_remote)
-  deallocate(phi_send_buf)
-  deallocate(phi_recv_buf)
-  deallocate(grid_recv_buf)
-  deallocate(send_cnt)
-  deallocate(send_oft)
-  deallocate(recv_cnt)
-  deallocate(recv_oft)
-#endif
-
-end subroutine clean_cg
-#endif
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
@@ -1151,24 +728,18 @@ end subroutine unpack_fetch_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_rhs_norm(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
+recursive subroutine r_cmp_rhs_norm(s,cpu_range,input_size,output_size,input_array,output_array)
   use amr_parameters, only: twotondim,twondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
-! ------------------------------------------------------------------------
-! Compute norm of residual 
-! ------------------------------------------------------------------------
+  ! ------------------------------------------------------------------------
+  ! Compute norm of residual 
+  ! ------------------------------------------------------------------------
   integer::next_range,next_cpu
   integer::ind,igrid,ilevel
   integer,dimension(1:output_size)::next_output_array
@@ -1176,29 +747,29 @@ recursive subroutine r_cmp_rhs_norm(r,g,m,p,mdl,cpu_range,input_size,output_size
   real(kind=8)::dx2,fourpi,oneoversix,fact,fact2
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_CMP_RHS_NORM,next_cpu,next_range,input_size,output_size,input_array)
-     call r_cmp_rhs_norm(r,g,m,p,mdl,next_range,input_size,output_size,input_array,output_array)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(s%mdl,MDL_CMP_RHS_NORM,next_cpu,next_range,input_size,output_size,input_array)
+     call r_cmp_rhs_norm(s,next_range,input_size,output_size,input_array,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
      rhs_norm=transfer(output_array,rhs_norm)
      next_rhs_norm=transfer(next_output_array,next_rhs_norm)
      rhs_norm=rhs_norm+next_rhs_norm
      output_array=transfer(rhs_norm,output_array)
   else
      ! Set constants
-     dx2=(r%boxlen/2.0d0**ilevel)**2
+     dx2=(s%r%boxlen/2.0d0**ilevel)**2
      fourpi=4.D0*ACOS(-1.0D0)
-     if(r%cosmo)fourpi=1.5D0*g%omega_m*g%aexp
+     if(s%r%cosmo)fourpi=1.5D0*s%g%omega_m*s%g%aexp
      oneoversix=1.0D0/dble(twondim)
      fact=oneoversix*fourpi*dx2
      fact2=fact*fact
      ilevel=input_array(1)
      rhs_norm=0.d0
-     do igrid=m%head(ilevel),m%tail(ilevel)
+     do igrid=s%m%head(ilevel),s%m%tail(ilevel)
         do ind=1,twotondim
-           rhs_norm=rhs_norm+fact2*(m%grid(igrid)%rho(ind)-g%rho_tot)**2
+           rhs_norm=rhs_norm+fact2*(s%m%grid(igrid)%rho(ind)-s%g%rho_tot)**2
         end do
      end do
      output_array=transfer(rhs_norm,output_array)
@@ -1209,45 +780,39 @@ end subroutine r_cmp_rhs_norm
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_r2_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_cmp_r2_cg(s,cpu_range,input_size,output_size,ilevel,output_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
-! ------------------------------------------------------------------------
-! Compute norm of residual 
-! ------------------------------------------------------------------------
+  ! ------------------------------------------------------------------------
+  ! Compute norm of residual 
+  ! ------------------------------------------------------------------------
   integer::next_range,next_cpu
   integer::ind,igrid
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::r2,next_r2
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_CMP_R2_CG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cmp_r2_cg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(s%mdl,MDL_CMP_R2_CG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cmp_r2_cg(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
      r2=transfer(output_array,r2)
      next_r2=transfer(next_output_array,next_r2)
      r2=r2+next_r2
      output_array=transfer(r2,output_array)
   else
      r2=0.0d0
-     do igrid=m%head(ilevel),m%tail(ilevel)
+     do igrid=s%m%head(ilevel),s%m%tail(ilevel)
         do ind=1,twotondim
-           r2=r2+m%grid(igrid)%f(ind,1)**2
+           r2=r2+s%m%grid(igrid)%f(ind,1)**2
         end do
      end do
      output_array=transfer(r2,output_array)
@@ -1258,45 +823,39 @@ end subroutine r_cmp_r2_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_pAp_cg(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_cmp_pAp_cg(s,cpu_range,input_size,output_size,ilevel,output_array)
   use amr_parameters, only: twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
-! ------------------------------------------------------------------------
-! Compute norm of residual 
-! ------------------------------------------------------------------------
+  ! ------------------------------------------------------------------------
+  ! Compute norm of residual 
+  ! ------------------------------------------------------------------------
   integer::next_range,next_cpu
   integer::igrid,ind
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::pAp,next_pAp
   
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_CMP_PAP_CG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cmp_pAp_cg(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(s%mdl,MDL_CMP_PAP_CG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cmp_pAp_cg(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
      pAp=transfer(output_array,pAp)
      next_pAp=transfer(next_output_array,next_pAp)
      pAp=pAp+next_pAp
      output_array=transfer(pAp,output_array)
   else
      pAp=0.0d0
-     do igrid=m%head(ilevel),m%tail(ilevel)
+     do igrid=s%m%head(ilevel),s%m%tail(ilevel)
         do ind=1,twotondim
-           pAp=pAp+m%grid(igrid)%f(ind,2)*m%grid(igrid)%f(ind,3)
+           pAp=pAp+s%m%grid(igrid)%f(ind,2)*s%m%grid(igrid)%f(ind,3)
         end do
      end do
      output_array=transfer(pAp,output_array)

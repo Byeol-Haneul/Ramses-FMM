@@ -2,42 +2,38 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_input_part_grafic(r,g,m,p,mdl)
+subroutine m_input_part_grafic(s)
   use amr_parameters, only: dp,i8b
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only:mdl_t
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
   integer,allocatable,dimension(:)::input_array
 
-  if(r%nrestart>0)return
+  if(s%r%verbose)write(*,*)'Entering input_part_grafic'
+  if(TRIM(s%r%filetype).NE.'grafic')return
+  if(s%r%nrestart>0)return
 
   ! Compute total number of particles in file
-  if(TRIM(r%initfile(r%levelmin)).NE.' ')then
-     p%npart_tot=g%n1(r%levelmin)*g%n2(r%levelmin)*g%n3(r%levelmin)
-     write(*,*)'Found npart_tot=',p%npart_tot
+  if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
+     s%p%npart_tot=s%g%n1(s%r%levelmin)*s%g%n2(s%r%levelmin)*s%g%n3(s%r%levelmin)
+     write(*,*)'Found npart_tot=',s%p%npart_tot
   else
-     p%npart_tot=0
+     s%p%npart_tot=0
   endif
 
   ! If no particle found, no need to read
-  if(p%npart_tot==0)then
+  if(s%p%npart_tot==0)then
      return
   endif
 
   ! Call recursive slave routine
-  allocate(input_array(1:storage_size(p%npart_tot)/32))
-  input_array=transfer(p%npart_tot,input_array)
-  call r_input_part_grafic(r,g,m,p,mdl,mdl%ncpu,storage_size(p%npart_tot)/32,0,input_array)
+  allocate(input_array(1:storage_size(s%p%npart_tot)/32))
+  input_array=transfer(s%p%npart_tot,input_array)
+  call r_input_part_grafic(s,s%mdl%ncpu,storage_size(s%p%npart_tot)/32,0,input_array)
   deallocate(input_array)
 
 end subroutine m_input_part_grafic
@@ -45,18 +41,12 @@ end subroutine m_input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_grafic(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_grafic(s,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: i8b
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
@@ -67,14 +57,14 @@ recursive subroutine r_input_part_grafic(r,g,m,p,mdl,cpu_range,input_size,output
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_INPUT_PART_GRAFIC,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_grafic(r,g,m,p,mdl,next_range,input_size,output_size,input_array)
+     call mdl_send_request(s%mdl,MDL_INPUT_PART_GRAFIC,next_cpu,next_range,input_size,output_size,input_array)
+     call r_input_part_grafic(s,next_range,input_size,output_size,input_array)
   else
      npart_tot=transfer(input_array,npart_tot)
-     call input_part_grafic(r,g,m,p,npart_tot)
+     call input_part_grafic(s%r,s%g,s%p,npart_tot)
   endif
 
 end subroutine r_input_part_grafic
@@ -82,14 +72,13 @@ end subroutine r_input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_part_grafic(r,g,m,p,npart_tot)
+subroutine input_part_grafic(r,g,p,npart_tot)
   use amr_parameters, only: i8b,dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  type(mesh_t)::m
   type(part_t)::p
   integer(i8b)::npart_tot
   !----------------------------------------------------
@@ -106,11 +95,6 @@ subroutine input_part_grafic(r,g,m,p,npart_tot)
   character(LEN=80)::filename,filename_x
   character(LEN=5)::nchar
   logical::ok,error,keep_part,read_pos=.false.
-
-  if(r%verbose)write(*,*)'Entering input_part_grafic'
-  if(TRIM(r%filetype).NE.'grafic')return
-  if(r%nrestart>0)return
-  if(r%initfile(r%levelmin)==' ')return
 
   !-------------------------------------------
   ! Mesh size at levelmin in normalised units

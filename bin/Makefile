@@ -101,8 +101,8 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
-         cache_commons.o hydro_commons.o amr_commons.o poisson_parameters.o poisson_commons.o \
-	 mdl_commons.o call_back.o gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
+         hydro_commons.o amr_commons.o poisson_parameters.o poisson_commons.o \
+	 mdl_commons.o ramses_commons.o call_back.o cache_commons.o gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
 
 # AMR objects
 AMROBJ = timer.o read_params.o init_amr.o init_time.o init_refine_basegrid.o init_refine_adaptive.o init_refine_restart.o \
@@ -113,7 +113,7 @@ AMROBJ = timer.o read_params.o init_amr.o init_time.o init_refine_basegrid.o ini
 PMOBJ = newdt_fine.o init_part.o input_part.o input_part_restart.o input_part_ascii.o input_part_grafic.o rho_fine.o move_fine.o rho_ana.o output_part.o
 
 # Poisson solver objects
-POISSONOBJ = output_poisson.o force_fine.o gravana.o phi_fine_cg.o upload.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
+POISSONOBJ = output_poisson.o force_fine.o grav_ana.o phi_fine_cg.o upload.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
 
 # Hydro objects
 HYDROOBJ = init_hydro.o init_flow_fine.o input_hydro_condinit.o input_hydro_grafic.o interpol_hydro.o \

@@ -2,7 +2,7 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gravana(x,f,dx,ncell,gravity_type,gravity_params)
+subroutine grav_ana(x,f,dx,ncell,gravity_type,gravity_params)
   use amr_parameters, only: dp, ndim, nvector
   implicit none
   integer::gravity_type
@@ -55,7 +55,7 @@ subroutine gravana(x,f,dx,ncell,gravity_type,gravity_params)
      end do
   end if
 
-end subroutine gravana
+end subroutine grav_ana
 !#########################################################
 !#########################################################
 !#########################################################

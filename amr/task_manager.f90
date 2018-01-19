@@ -4,8 +4,7 @@
 !##############################################################
 subroutine mdl_init
   use amr_parameters, only: flen
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
   use mdl_commons
   use call_back
   implicit none
@@ -14,31 +13,27 @@ subroutine mdl_init
   integer::info
 #endif
   
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   type(call_back_f),dimension(0:100)::callback
   
   ! MPI initialization
 #ifndef WITHOUTMPI
   call MPI_INIT(info)
-  call MPI_COMM_RANK(MPI_COMM_WORLD,mdl%myid,info)
-  call MPI_COMM_SIZE(MPI_COMM_WORLD,mdl%ncpu,info)
-  mdl%myid=mdl%myid+1 ! Careful with this...
-  if(mdl%myid==1)then
-     write(*,'(" Launching MPI with nproc = ",I4)')mdl%ncpu
+  call MPI_COMM_RANK(MPI_COMM_WORLD,s%mdl%myid,info)
+  call MPI_COMM_SIZE(MPI_COMM_WORLD,s%mdl%ncpu,info)
+  s%mdl%myid=s%mdl%myid+1 ! Careful with this...
+  if(s%mdl%myid==1)then
+     write(*,'(" Launching MPI with nproc = ",I4)')s%mdl%ncpu
   endif
 #else
   write(*,'(" Serial execution (no MPI).")')
-  mdl%ncpu=1
-  mdl%myid=1
+  s%mdl%ncpu=1
+  s%mdl%myid=1
 #endif
 
   ! Store cpu info as a global variable
-  g%myid=mdl%myid
-  g%ncpu=mdl%ncpu
+  s%g%myid=s%mdl%myid
+  s%g%ncpu=s%mdl%ncpu
 
   ! Register call-back functions
 
@@ -47,10 +42,10 @@ subroutine mdl_init
   callback(MDL_CLEAN_STOP)%proc => r_clean_stop
 
   callback(MDL_BCAST_PARAMS)%proc => r_broadcast_params
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(r)/32)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,storage_size(s%r)/32)
 
   callback(MDL_BCAST_GLOBAL)%proc => r_broadcast_global
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(g)/32)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,storage_size(s%g)/32)
 
   callback(MDL_INIT_AMR)%proc => r_init_amr
 
@@ -61,13 +56,13 @@ subroutine mdl_init
   callback(MDL_INIT_PART)%proc => r_init_part
 
   callback(MDL_INPUT_PART_GRAFIC)%proc => r_input_part_grafic
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(p%npart_tot)/32)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,storage_size(s%p%npart_tot)/32)
 
   callback(MDL_INPUT_PART_ASCII)%proc => r_input_part_ascii
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(p%npart_tot)/32)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,storage_size(s%p%npart_tot)/32)
 
   callback(MDL_INPUT_PART_RESTART)%proc => r_input_part_restart
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,MDL_MAX_CPU)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,MDL_MAX_CPU)
 
   callback(MDL_NPART_MAX)%proc => r_npart_max
 
@@ -94,10 +89,10 @@ subroutine mdl_init
   callback(MDL_INIT_REFINE_RESTART)%proc => r_init_refine_restart
 
   callback(MDL_COLLECT_BOUND_KEY)%proc => r_collect_bound_key
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,MDL_MAX_CPU+1)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,MDL_MAX_CPU+1)
 
   callback(MDL_BROADCAST_BOUND_KEY)%proc => r_broadcast_bound_key
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,(storage_size(m%domain)+32)/32)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,(storage_size(s%m%domain)+32)/32)
 
   callback(MDL_LOAD_BALANCE)%proc => r_load_balance
 
@@ -134,37 +129,37 @@ subroutine mdl_init
   callback(MDL_COLLECT_MULTIPOLE)%proc => r_collect_multipole
 
   callback(MDL_BROADCAST_MULTIPOLE)%proc => r_broadcast_multipole
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(g%multipole)/32)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,storage_size(s%g%multipole)/32)
 
   callback(MDL_OUTPUT_AMR)%proc => r_output_amr
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,flen/4)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,flen/4)
 
   callback(MDL_OUTPUT_HYDRO)%proc => r_output_hydro
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,flen/4)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,flen/4)
 
   callback(MDL_OUTPUT_POISSON)%proc => r_output_poisson
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,flen/4)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,flen/4)
 
   callback(MDL_OUTPUT_PART)%proc => r_output_part
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,flen/4)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,flen/4)
 
   callback(MDL_SYNCHRO_HYDRO_FINE)%proc => r_synchro_hydro_fine
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,3)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,3)
 
   callback(MDL_SAVE_PHI_OLD)%proc => r_save_phi_old
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,1)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,1)
 
   callback(MDL_FORCE_ANALYTIC)%proc => r_force_analytic
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,1)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,1)
 
   callback(MDL_GRADIENT_PHI)%proc => r_gradient_phi
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,2)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,2)
 
   callback(MDL_COMPUTE_EPOT)%proc => r_compute_epot
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,1)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,1)
 
   callback(MDL_COMPUTE_RHOMAX)%proc => r_compute_rhomax
-  mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,1)
+  s%mdl%MDL_INPUT_MAXSIZE=MAX(s%mdl%MDL_INPUT_MAXSIZE,1)
 
   callback(MDL_BROADCAST_AEXP)%proc => r_broadcast_aexp
 
@@ -227,22 +222,22 @@ subroutine mdl_init
   callback(MDL_OUTPUT_FRAME)%proc => r_output_frame
 
   ! Allocate input and output buffer sizes
-  allocate(mdl%mpi_input_buffer(1:32+mdl%MDL_INPUT_MAXSIZE))
+  allocate(s%mdl%mpi_input_buffer(1:32+s%mdl%MDL_INPUT_MAXSIZE))
 
   ! Initialize software cache
-  call init_cache(mdl)
+  call init_cache(s%mdl)
 
 #endif
   
   ! For slave workers, go into waiting loop
-  if(mdl%myid>1)then
-     call mdl_wait(r,g,m,p,mdl,callback)
+  if(s%mdl%myid>1)then
+     call mdl_wait(s,callback)
   else
-     call adaptive_loop(r,g,m,p,mdl)
+     call adaptive_loop(s)
   endif
 
 #ifndef WITHOUTMPI
-  write(*,*)"MYID ",mdl%myid," TERMINATING AND EXITING"
+  write(*,*)"MYID ",s%mdl%myid," TERMINATING AND EXITING"
 #else
   write(*,*)"TERMINATING AND EXITING"
 #endif  
@@ -256,21 +251,15 @@ end subroutine mdl_init
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine mdl_wait(r,g,m,p,mdl,callback)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+subroutine mdl_wait(s,callback)
+  use ramses_commons, only: ramses_t
   use call_back, only: call_back_f
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
   integer::info
 #endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   type(call_back_f),dimension(0:100)::callback
 
 #ifndef WITHOUTMPI
@@ -283,7 +272,7 @@ subroutine mdl_wait(r,g,m,p,mdl,callback)
   integer,dimension(1:32)::header
   
   ! Post the first RECV for a launch order
-  call MPI_IRECV(mdl%mpi_input_buffer,mdl%MDL_INPUT_MAXSIZE+32,MPI_INTEGER,MPI_ANY_SOURCE,order_tag,MPI_COMM_WORLD,order_id,info)
+  call MPI_IRECV(s%mdl%mpi_input_buffer,s%mdl%MDL_INPUT_MAXSIZE+32,MPI_INTEGER,MPI_ANY_SOURCE,order_tag,MPI_COMM_WORLD,order_id,info)
 
   stop_order_received=.false.
   do while(.NOT. stop_order_received)
@@ -293,7 +282,7 @@ subroutine mdl_wait(r,g,m,p,mdl,callback)
      if(order_received)then
 
         ! Execute call-back functions
-        header=mdl%mpi_input_buffer(1:32)
+        header=s%mdl%mpi_input_buffer(1:32)
         function_id=header(1)
         if(function_id==0)stop_order_received=.true.
 
@@ -307,7 +296,7 @@ subroutine mdl_wait(r,g,m,p,mdl,callback)
         
         if(input_size>0)then
            allocate(input_array(1:input_size))
-           input_array(1:input_size)=mdl%mpi_input_buffer(33:32+input_size)
+           input_array(1:input_size)=s%mdl%mpi_input_buffer(33:32+input_size)
         endif
         
         if(output_size>0)then
@@ -316,7 +305,7 @@ subroutine mdl_wait(r,g,m,p,mdl,callback)
         endif
         
         ! Launch the corresponding call-back function
-        call callback(function_id)%proc(r,g,m,p,mdl,cpu_range,input_size,output_size,input_array,output_array)
+        call callback(function_id)%proc(s,cpu_range,input_size,output_size,input_array,output_array)
         
         ! Deallocate input array
         if(input_size>0)then
@@ -332,7 +321,7 @@ subroutine mdl_wait(r,g,m,p,mdl,callback)
         
         ! Post a new RECV for the next launch order
         if(.NOT. stop_order_received)then
-           call MPI_IRECV(mdl%mpi_input_buffer,mdl%MDL_INPUT_MAXSIZE+32,MPI_INTEGER,MPI_ANY_SOURCE,order_tag,MPI_COMM_WORLD,order_id,info)
+           call MPI_IRECV(s%mdl%mpi_input_buffer,s%mdl%MDL_INPUT_MAXSIZE+32,MPI_INTEGER,MPI_ANY_SOURCE,order_tag,MPI_COMM_WORLD,order_id,info)
         endif
 
      endif
@@ -430,12 +419,6 @@ subroutine init_cache(mdl)
   use mdl_commons, only: mdl_t
   use cache_commons
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'  
-  integer::icpu,info
-  integer::intex,realdpex,msg_size
-  integer,dimension(1:10)::new_type_disp,new_type_type,new_type_length
-#endif
   type(mdl_t)::mdl
   
   integer::ncpu
@@ -446,25 +429,29 @@ subroutine init_cache(mdl)
 #ifndef WITHOUTMPI  
 
   ! Allocate all communication and cache-related variables
-  allocate(reply_id(1:ncpu))
+  allocate(mdl%reply_id(1:ncpu))
 
   ! Compute largest possible message size
-  size_request_array=1+ndim
-  size_msg_array=storage_size(dummy_large_realdp)/32
-  size_flush_array=1+(1+ndim+size_msg_array)*nflushmax
-  size_fetch_array=2+(1+ndim+size_msg_array)*ntilemax
+  mdl%size_request_array=1+ndim
+  mdl%size_msg_array=storage_size(dummy_large_realdp)/32
+  mdl%size_flush_array=1+(1+ndim+mdl%size_msg_array)*nflushmax
+  mdl%size_fetch_array=2+(1+ndim+mdl%size_msg_array)*ntilemax
 
   ! Allocate large enough message communication buffers
-  allocate(recv_request_array(1:size_request_array))
-  allocate(send_request_array(1:size_request_array))
-  allocate(recv_fetch_array(1:size_fetch_array))
-  allocate(recv_flush_array(1:size_flush_array))
-  allocate(send_fetch_array(1:ncpu*size_fetch_array))
-  allocate(send_flush_array(1:ncpu*size_flush_array))
-  
+  allocate(mdl%recv_request_array(1:mdl%size_request_array))
+  allocate(mdl%send_request_array(1:mdl%size_request_array))
+  allocate(mdl%recv_fetch_array(1:mdl%size_fetch_array))
+  allocate(mdl%recv_flush_array(1:mdl%size_flush_array))
+  allocate(mdl%send_fetch_array(1:ncpu*mdl%size_fetch_array))
+  allocate(mdl%send_flush_array(1:ncpu*mdl%size_flush_array))
+
 #endif
 
 end subroutine init_cache
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
 
 
 

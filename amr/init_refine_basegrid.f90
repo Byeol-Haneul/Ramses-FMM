@@ -2,54 +2,42 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_init_refine_basegrid(r,g,m,p,mdl)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+subroutine m_init_refine_basegrid(s)
+  use ramses_commons, only: ramses_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   !--------------------------------------------------------------------
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
   !--------------------------------------------------------------------
 
-  if(r%verbose)write(*,*)'Entering init_refine_basegrid'
+  if(s%r%verbose)write(*,*)'Entering init_refine_basegrid'
 
   ! Call recursive slave routine
-  call r_init_refine_basegrid(r,g,m,p,mdl,mdl%ncpu,1,0,r%levelmin)
+  call r_init_refine_basegrid(s,s%mdl%ncpu,1,0,s%r%levelmin)
 
   ! Get total, min and max grid count (only in master).
-  call r_noct_tot(r,g,m,p,mdl,mdl%ncpu,1,1,r%levelmin,m%noct_tot(r%levelmin))
-  call r_noct_min(r,g,m,p,mdl,mdl%ncpu,1,1,r%levelmin,m%noct_min(r%levelmin))
-  call r_noct_max(r,g,m,p,mdl,mdl%ncpu,1,1,r%levelmin,m%noct_max(r%levelmin))
-  call r_noct_used_max(r,g,m,p,mdl,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
+  call r_noct_tot(s,s%mdl%ncpu,1,1,s%r%levelmin,s%m%noct_tot(s%r%levelmin))
+  call r_noct_min(s,s%mdl%ncpu,1,1,s%r%levelmin,s%m%noct_min(s%r%levelmin))
+  call r_noct_max(s,s%mdl%ncpu,1,1,s%r%levelmin,s%m%noct_max(s%r%levelmin))
+  call r_noct_used_max(s,s%mdl%ncpu,1,1,s%r%levelmin,s%m%noct_used_max)
 
   ! Initialize hydro variables on the base grid
-  if(r%hydro)call m_init_flow_fine(r,g,m,p,mdl,r%levelmin)
+  if(s%r%hydro)call m_init_flow_fine(s,s%r%levelmin)
 
   ! Compute total mass density from gas and particles on the base grid
-  call m_rho_fine(r,g,m,p,mdl,r%levelmin)
+  call m_rho_fine(s,s%r%levelmin)
 
 end subroutine m_init_refine_basegrid
 !###############################################
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_collect_noct(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_collect_noct(s,cpu_range,input_size,output_size,ilevel,noct)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::noct
@@ -58,16 +46,16 @@ recursive subroutine r_collect_noct(r,g,m,p,mdl,cpu_range,input_size,output_size
   integer,dimension(1:output_size)::next_noct
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_COLLECT_NOCT,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_collect_noct(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct)
+     call mdl_send_request(s%mdl,MDL_COLLECT_NOCT,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_collect_noct(s,next_range,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct)
      noct=noct+next_noct
   else
      noct=0
-     noct(g%myid)=m%noct(ilevel)
+     noct(s%g%myid)=s%m%noct(ilevel)
   endif
 
 end subroutine r_collect_noct
@@ -75,17 +63,11 @@ end subroutine r_collect_noct
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_tot(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct_tot)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_noct_tot(s,cpu_range,input_size,output_size,ilevel,noct_tot)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel,noct_tot
 
@@ -93,15 +75,15 @@ recursive subroutine r_noct_tot(r,g,m,p,mdl,cpu_range,input_size,output_size,ile
   integer::next_noct_tot
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_NOCT_TOT,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_noct_tot(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct_tot)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct_tot)
+     call mdl_send_request(s%mdl,MDL_NOCT_TOT,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_noct_tot(s,next_range,input_size,output_size,ilevel,noct_tot)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct_tot)
      noct_tot=noct_tot+next_noct_tot
   else
-     noct_tot=m%noct(ilevel)
+     noct_tot=s%m%noct(ilevel)
   endif
 
 end subroutine r_noct_tot
@@ -109,17 +91,11 @@ end subroutine r_noct_tot
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_max(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct_max)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_noct_max(s,cpu_range,input_size,output_size,ilevel,noct_max)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel,noct_max
 
@@ -127,15 +103,15 @@ recursive subroutine r_noct_max(r,g,m,p,mdl,cpu_range,input_size,output_size,ile
   integer::next_noct_max
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_NOCT_MAX,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_noct_max(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct_max)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct_max)
+     call mdl_send_request(s%mdl,MDL_NOCT_MAX,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_noct_max(s,next_range,input_size,output_size,ilevel,noct_max)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct_max)
      noct_max=MAX(noct_max,next_noct_max)
   else
-     noct_max=m%noct(ilevel)
+     noct_max=s%m%noct(ilevel)
   endif
 
 end subroutine r_noct_max
@@ -143,17 +119,11 @@ end subroutine r_noct_max
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_used_max(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct_used_max)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_noct_used_max(s,cpu_range,input_size,output_size,ilevel,noct_used_max)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel,noct_used_max
 
@@ -161,15 +131,15 @@ recursive subroutine r_noct_used_max(r,g,m,p,mdl,cpu_range,input_size,output_siz
   integer::next_noct_used_max
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_NOCT_USED_MAX,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_noct_used_max(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct_used_max)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct_used_max)
+     call mdl_send_request(s%mdl,MDL_NOCT_USED_MAX,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_noct_used_max(s,next_range,input_size,output_size,ilevel,noct_used_max)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct_used_max)
      noct_used_max=MAX(noct_used_max,next_noct_used_max)
   else
-     noct_used_max=m%noct_used
+     noct_used_max=s%m%noct_used
   endif
 
 end subroutine r_noct_used_max
@@ -177,17 +147,11 @@ end subroutine r_noct_used_max
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_min(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct_min)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_noct_min(s,cpu_range,input_size,output_size,ilevel,noct_min)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel,noct_min
 
@@ -195,15 +159,15 @@ recursive subroutine r_noct_min(r,g,m,p,mdl,cpu_range,input_size,output_size,ile
   integer::next_noct_min
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_NOCT_MIN,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_noct_min(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct_min)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct_min)
+     call mdl_send_request(s%mdl,MDL_NOCT_MIN,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_noct_min(s,next_range,input_size,output_size,ilevel,noct_min)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct_min)
      noct_min=MIN(noct_min,next_noct_min)
   else
-     noct_min=m%noct(ilevel)
+     noct_min=s%m%noct(ilevel)
   endif
 
 end subroutine r_noct_min
@@ -211,17 +175,11 @@ end subroutine r_noct_min
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_gather_noct_max(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel,noct_max)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_gather_noct_max(s,cpu_range,input_size,output_size,ilevel,noct_max)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel,noct_max
 
@@ -229,15 +187,15 @@ recursive subroutine r_gather_noct_max(r,g,m,p,mdl,cpu_range,input_size,output_s
   integer::next_noct_max
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_GATHER_NOCT_MAX,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_gather_noct_max(r,g,m,p,mdl,next_range,input_size,output_size,ilevel,noct_max)
-     call mdl_get_reply(mdl,next_cpu,output_size,next_noct_max)
+     call mdl_send_request(s%mdl,MDL_GATHER_NOCT_MAX,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_gather_noct_max(s,next_range,input_size,output_size,ilevel,noct_max)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct_max)
      noct_max=MAX(noct_max,next_noct_max)
   else
-     noct_max=m%noct(ilevel)
+     noct_max=s%m%noct(ilevel)
   endif
 
 end subroutine r_gather_noct_max
@@ -245,30 +203,24 @@ end subroutine r_gather_noct_max
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_refine_basegrid(r,g,m,p,mdl,cpu_range,input_size,output_size,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
+recursive subroutine r_init_refine_basegrid(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
   use mdl_parameters
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=g%myid+next_range
+  next_cpu=s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(mdl,MDL_INIT_REFINE_BASEGRID,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_init_refine_basegrid(r,g,m,p,mdl,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(s%mdl,MDL_INIT_REFINE_BASEGRID,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_init_refine_basegrid(s,next_range,input_size,output_size,ilevel)
   else
-     call init_refine_basegrid(r,g,m,p,ilevel)
+     call init_refine_basegrid(s%r,s%g,s%m,ilevel)
   endif
 
 end subroutine r_init_refine_basegrid
@@ -276,17 +228,15 @@ end subroutine r_init_refine_basegrid
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_basegrid(r,g,m,p,ilevel)
+subroutine init_refine_basegrid(r,g,m,ilevel)
   use amr_parameters, only: nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
   use hilbert
   use hash, only: hash_set
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-  type(part_t)::p
   integer::ilevel
   !-------------------------------------------------------
   ! This routine builds a fully refined Cartesian grid
