@@ -15,272 +15,66 @@
 !     scan flag            flag2   
 !
 ! ------------------------------------------------------------------------
-
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
 #ifdef GRAV
 ! ------------------------------------------------------------------------
 ! Main multigrid routine, called by amr_step
 ! ------------------------------------------------------------------------
 
-subroutine multigrid(ilevel,icount)
-  use amr_commons
-  use poisson_commons
-  use poisson_parameters
-  
-  implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  
-  integer, intent(in) :: ilevel,icount
-  
-  integer, parameter  :: MAXITER  = 10
-  real(dp), parameter :: SAFE_FACTOR = 0.5
-  
-  integer  :: igrid, ifine, i, iter, info, icpu
-  real(kind=8) :: res_norm2, i_res_norm2, i_res_norm2_tot, res_norm2_tot
-  real(kind=8) :: err, last_err
-  
-  logical :: allmasked
-  
-  if(gravity_type>0)return
-  if(noct_tot(ilevel)==0)return
-  
-  if(verbose) print '(A,I2)','Entering multigrid at level ',ilevel
-  
-  ! ---------------------------------------------------------------------
-  ! Prepare first guess, mask and BCs at finest level
-  ! ---------------------------------------------------------------------
-  call make_initial_phi(ilevel,icount)  ! Initial guess
-  call make_mask(ilevel)                ! Fill the fine level mask
-  call make_bc_rhs(ilevel,icount)       ! Fill BC-modified RHS
-
-  ! ---------------------------------------------------------------------
-  ! Initialize Domain Decomposition and Hash Table for Multigrid
-  ! ---------------------------------------------------------------------
-  call init_mg(ilevel)
-  
-  ! ---------------------------------------------------------------------
-  ! Build Multigrid hierarchy in memory
-  ! ---------------------------------------------------------------------
-  do ifine=ilevel,2,-1
-     call build_mg(ifine)
-  end do
-  
-  ! ---------------------------------------------------------------------
-  ! Restrict mask up
-  ! ---------------------------------------------------------------------
-  levelmin_mg=1
-  do ifine=ilevel,2,-1
-     ! Restrict and communicate mask
-     call restrict_mask(ifine,allmasked)
-     if(allmasked) then ! Coarser level is fully masked: stop here
-        levelmin_mg=ifine
-        exit
-     end if
-  end do
-  
-  ! ---------------------------------------------------------------------
-  ! Set scan flag (for optimisation)
-  ! ---------------------------------------------------------------------
-  call set_scan_flag(grid_dict,ilevel)
-  do ifine=ilevel-1,levelmin_mg,-1
-     call set_scan_flag(mg_dict,ifine)
-  end do
-  
-  ! ---------------------------------------------------------------------
-  ! Build communication buffer (for optimisation)
-  ! ---------------------------------------------------------------------
-  if(fast_solver)then
-     allocate(buffer_mg(1:nlevelmax))
-     call build_comm_mg(grid_dict,ilevel)
-     do ifine=ilevel-1,levelmin_mg,-1
-        call build_comm_mg(mg_dict,ifine)
-     end do
-  endif
-  
-  ! ---------------------------------------------------------------------
-  ! Initiate solve at fine level
-  ! ---------------------------------------------------------------------
-  
-  iter = 0
-  err = 1.0d0
-  main_iteration_loop: do
-
-     iter=iter+1
-
-     ! Pre-smoothing
-     do i=1,ngs_fine
-        if(fast_solver)then
-           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
-        else
-           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
-        endif
-     end do
-     
-     ! Compute new residual
-     if(fast_solver)then                               
-        call cmp_residual_mg_fast(grid_dict,ilevel)
-     else
-        call cmp_residual_mg(grid_dict,ilevel)
-     endif
-
-     ! Compute initial residual norm
-     if(iter==1) then
-        call cmp_residual_norm2(ilevel,i_res_norm2)
-#ifndef WITHOUTMPI
-        call MPI_ALLREDUCE(i_res_norm2,i_res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-        i_res_norm2=i_res_norm2_tot
-#endif
-     end if
-     
-     if(ilevel>1) then
-
-        ! Restrict residual to coarser level
-        call restrict_residual(ilevel)
-
-        ! Reset correction from upper level before solve
-        do igrid=head_mg(ilevel-1),tail_mg(ilevel-1)
-           grid(igrid)%phi(1:twotondim)=0.0d0
-        end do
-        
-        ! Multigrid-solve the upper level
-        call recursive_multigrid(ilevel-1, safe_mode(ilevel))
-        
-        ! Interpolate coarse solution and correct fine solution
-        call interpolate_and_correct(ilevel)
-
-     end if
-     
-     ! Post-smoothing
-     do i=1,ngs_fine
-        if(fast_solver)then
-           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-           call gauss_seidel_mg_fast(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
-        else
-           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.true. )  ! Red step
-           call gauss_seidel_mg(grid_dict,ilevel,safe_mode(ilevel),.false.)  ! Black step
-        endif
-     end do
-     
-     ! Update fine residual
-     if(fast_solver)then
-        call cmp_residual_mg_fast(grid_dict,ilevel)
-     else
-        call cmp_residual_mg(grid_dict,ilevel)
-     endif
-
-     ! Compute residual norm
-     call cmp_residual_norm2(ilevel,res_norm2)
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(res_norm2,res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     res_norm2=res_norm2_tot
-#endif
-     
-     last_err = err
-     err = sqrt(res_norm2/(i_res_norm2+1d-20*rho_tot**2))
-     
-     ! Verbosity
-     if(verbose) print '(A,I5,A,1pE10.3)','   ==> Step=', &
-          & iter,' Error=',err
-     
-     ! Converged?
-     if(err<epsilon .or. iter>=MAXITER) exit
-     
-     ! Not converged, check error and possibly enable safe mode for the level
-     if(err > last_err*SAFE_FACTOR .and. (.not. safe_mode(ilevel))) then
-        if(verbose)print *,'CAUTION: Switching to safe MG mode for level ',ilevel
-        safe_mode(ilevel) = .true.
-     end if
-     
-  end do main_iteration_loop
-  
-  if(myid==1) print '(A,I5,A,I5,A,1pE10.3)','   ==> Level=',ilevel,' Step=',iter,' Error=',err
-  if(myid==1 .and. iter==MAXITER) print *,'WARN: Fine multigrid Poisson failed to converge...'
-  
-  ! ---------------------------------------------------------------------
-  ! Clean communication buffer
-  ! ---------------------------------------------------------------------
-  if(fast_solver)then
-     call clean_comm_mg(ilevel)
-     do ifine=ilevel-1,levelmin_mg,-1
-        call clean_comm_mg(ifine)
-     end do
-     deallocate(buffer_mg)
-  endif
-  
-  ! ---------------------------------------------------------------------
-  ! Cleanup MG levels after solve complete
-  ! ---------------------------------------------------------------------
-  call cleanup_mg
-  
-end subroutine multigrid
-
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
-
-subroutine multigrid_2(r,g,m,ilevel,icount)
+subroutine multigrid(s,ilevel,icount)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
-  use amr_commons, only: run_t,global_t,mesh_t  
+  use ramses_commons, only: ramses_t
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer, intent(in) :: ilevel,icount
+  type(ramses_t)::s
+  integer,intent(in) :: ilevel,icount
   
-  integer, parameter  :: MAXITER  = 10
-  real(dp), parameter :: SAFE_FACTOR = 0.5
+  integer,parameter  :: MAXITER  = 10
+  real(dp),parameter :: SAFE_FACTOR = 0.5
   
-  integer  :: igrid, ifine, i, iter, info, icpu
-  real(kind=8) :: res_norm2, i_res_norm2, i_res_norm2_tot, res_norm2_tot
+  integer :: ncpu, igrid, ifine, i, iter, allmasked
+  integer,dimension(1:4) :: input_array
+  integer,dimension(1:4) :: output_array
+  real(kind=8) :: res_norm2, i_res_norm2
   real(kind=8) :: err, last_err
+  real(kind=8) :: i_res_norm2_tot, res_norm2_tot
   
-  logical :: allmasked
+  if(s%r%gravity_type>0)return
+  if(s%m%noct_tot(ilevel)==0)return
   
-  if(r%gravity_type>0)return
-  if(m%noct_tot(ilevel)==0)return
-  
-  if(r%verbose) print '(A,I2)','Entering multigrid at level ',ilevel
+  if(s%r%verbose) print '(A,I2)','Entering multigrid at level ',ilevel
+
+  ncpu=s%mdl%ncpu
   
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
-  call make_initial_phi_2(r,g,m,ilevel,icount)  ! Initial guess
-  call make_mask_2(r,g,m,ilevel)                ! Fill the fine level mask
-  call make_bc_rhs_2(r,g,m,ilevel,icount)       ! Fill BC-modified RHS
+  input_array(1)=ilevel
+  input_array(2)=icount
+  call r_make_initial_phi(s,ncpu,2,0,input_array)  ! Initial guess
+  call r_make_mask(s,ncpu,1,0,ilevel)              ! Fill the fine level mask
+  call r_make_bc_rhs(s,ncpu,2,0,input_array)       ! Fill BC-modified RHS
 
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
-  call init_mg_2(r,g,m,ilevel)
+  call r_init_mg(s,ncpu,1,0,ilevel)
   
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
-     call build_mg_2(r,g,m,ifine)
+     call r_build_mg(s,ncpu,1,0,ifine)
   end do
   
   ! ---------------------------------------------------------------------
   ! Restrict mask up
   ! ---------------------------------------------------------------------
-  g%levelmin_mg=1
+  s%g%levelmin_mg=1
   do ifine=ilevel,2,-1
      ! Restrict and communicate mask
-     call restrict_mask_2(r,g,m,ifine,allmasked)
-     if(allmasked) then ! Coarser level is fully masked: stop here
-        g%levelmin_mg=ifine
+     call r_restrict_mask(s,ncpu,1,1,ifine,allmasked)
+     if(allmasked==1) then ! Coarser level is fully masked: stop here
+        s%g%levelmin_mg=ifine
         exit
      end if
   end do
@@ -288,9 +82,10 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
-  call set_scan_flag_2(r,g,m,m%grid_dict,ilevel)
-  do ifine=ilevel-1,g%levelmin_mg,-1
-     call set_scan_flag_2(r,g,m,m%mg_dict,ifine)
+  input_array(1)=ilevel
+  do ifine=ilevel,s%g%levelmin_mg,-1
+     input_array(2)=ifine
+     call r_set_scan_flag(s,ncpu,2,0,input_array)
   end do
   
   ! ---------------------------------------------------------------------
@@ -303,85 +98,88 @@ subroutine multigrid_2(r,g,m,ilevel,icount)
 
      iter=iter+1
 
+     input_array(1)=ilevel
+     input_array(2)=ilevel
+     if(s%g%safe_mode(ilevel))then
+        input_array(3)=1
+     else
+        input_array(3)=0
+     endif
+     
      ! Pre-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      
      ! Compute new residual
-     call cmp_residual_mg_2(r,g,m,m%grid_dict,ilevel)
+     call r_cmp_residual_mg(s,ncpu,2,0,input_array)
 
      ! Compute initial residual norm
      if(iter==1) then
-        call cmp_residual_norm2_2(r,g,m,ilevel,i_res_norm2)
-#ifndef WITHOUTMPI
-        call MPI_ALLREDUCE(i_res_norm2,i_res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-        i_res_norm2=i_res_norm2_tot
-#endif
+        call r_cmp_residual_norm2(s,ncpu,1,2,ilevel,output_array)
+        i_res_norm2=transfer(output_array(1:2),i_res_norm2)
      end if
-     
+
      if(ilevel>1) then
 
         ! Restrict residual to coarser level
-        call restrict_residual_2(r,g,m,ilevel)
+        call r_restrict_residual(s,ncpu,1,0,ilevel)
 
         ! Reset correction from upper level before solve
-        do igrid=m%head_mg(ilevel-1),m%tail_mg(ilevel-1)
-           m%grid(igrid)%phi(1:twotondim)=0.0d0
-        end do
+        call r_reset_correction(s,ncpu,1,0,ilevel-1)
         
         ! Multigrid-solve the upper level
-        call recursive_multigrid_2(r,g,m,ilevel-1, g%safe_mode(ilevel))
+        call recursive_multigrid(s,ilevel-1, s%g%safe_mode(ilevel))
         
         ! Interpolate coarse solution and correct fine solution
-        call interpolate_and_correct_2(r,g,m,ilevel)
+        call r_interpolate_and_correct(s,ncpu,1,0,ilevel)
 
      end if
-     
+
      ! Post-smoothing
      do i=1,ngs_fine
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%grid_dict,ilevel,g%safe_mode(ilevel),.false.)  ! Black step
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      
      ! Update fine residual
-     call cmp_residual_mg_2(r,g,m,m%grid_dict,ilevel)
+     call r_cmp_residual_mg(s,ncpu,2,0,input_array)
 
      ! Compute residual norm
-     call cmp_residual_norm2_2(r,g,m,ilevel,res_norm2)
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(res_norm2,res_norm2_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     res_norm2=res_norm2_tot
-#endif
+     call r_cmp_residual_norm2(s,ncpu,1,2,ilevel,output_array)
+     res_norm2=transfer(output_array(1:2),res_norm2)
      
      last_err = err
-     err = sqrt(res_norm2/(i_res_norm2+1d-20*g%rho_tot**2))
+     err = sqrt(res_norm2/(i_res_norm2+1d-20*s%g%rho_tot**2))
      
      ! Verbosity
-     if(r%verbose) print '(A,I5,A,1pE10.3)','   ==> Step=', &
-          & iter,' Error=',err
+     if(s%r%verbose) print '(A,I5,A,1pE10.3)','   ==> Step=',iter,' Error=',err
      
      ! Converged?
-     if(err<r%epsilon .or. iter>=MAXITER) exit
+     if(err<s%r%epsilon .or. iter>=MAXITER) exit
      
      ! Not converged, check error and possibly enable safe mode for the level
-     if(err > last_err*SAFE_FACTOR .and. (.not. g%safe_mode(ilevel))) then
-        if(r%verbose)print *,'CAUTION: Switching to safe MG mode for level ',ilevel
-        g%safe_mode(ilevel) = .true.
+     if(err > last_err*SAFE_FACTOR .and. (.not. s%g%safe_mode(ilevel))) then
+        if(s%r%verbose)print *,'CAUTION: Switching to safe MG mode for level ',ilevel
+        s%g%safe_mode(ilevel) = .true.
      end if
      
   end do main_iteration_loop
   
-  if(g%myid==1) print '(A,I5,A,I5,A,1pE10.3)','   ==> Level=',ilevel,' Step=',iter,' Error=',err
-  if(g%myid==1 .and. iter==MAXITER) print *,'WARN: Fine multigrid Poisson failed to converge...'
+  print '(A,I5,A,I5,A,1pE10.3)','   ==> Level=',ilevel,' Step=',iter,' Error=',err
+  if(iter==MAXITER) print *,'WARN: Fine multigrid Poisson failed to converge...'
     
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-  call cleanup_mg_2(r,g,m)
+  call r_cleanup_mg(s,ncpu,0,0)
   
-end subroutine multigrid_2
+end subroutine multigrid
 
 ! ########################################################################
 ! ########################################################################
@@ -392,29 +190,36 @@ end subroutine multigrid_2
 ! Recursive multigrid routine for coarse MG levels
 ! ------------------------------------------------------------------------
 
-recursive subroutine recursive_multigrid(ifinelevel, safe)
-  use amr_commons
-  use poisson_commons
+recursive subroutine recursive_multigrid(s,ifinelevel, safe)
+  use amr_parameters, only: dp,twotondim
+  use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
+  use ramses_commons, only: ramses_t
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  
-  integer, intent(in) :: ifinelevel
-  logical, intent(in) :: safe
+  type(ramses_t)::s
+  integer,intent(in) :: ifinelevel
+  logical,intent(in) :: safe
 
-  integer :: i, igrid, icpu, info, icycle, ncycle
+  integer :: ncpu, i, igrid, icycle, ncycle
+  integer,dimension(1:4) :: input_array
+
+  ncpu=s%mdl%ncpu
   
-  if(ifinelevel<=levelmin_mg) then
+  ! Set parameter array
+  input_array(1)=ifinelevel+1
+  input_array(2)=ifinelevel
+  if(safe)then
+     input_array(3)=1
+  else
+     input_array(3)=0
+  endif
+  
+  if(ifinelevel<=s%g%levelmin_mg) then
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
-        if(fast_solver)then
-           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
-           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        else
-           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        endif
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      return
   end if
@@ -424,50 +229,38 @@ recursive subroutine recursive_multigrid(ifinelevel, safe)
   else
      ncycle=1
   endif
-  
+
   do icycle=1,ncycle
      
      ! Pre-smoothing
      do i=1,ngs_coarse
-        if(fast_solver)then
-           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
-           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        else
-           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        endif
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     if(fast_solver)then
-        call cmp_residual_mg_fast(mg_dict,ifinelevel)
-     else
-        call cmp_residual_mg(mg_dict,ifinelevel)
-     endif
+     call r_cmp_residual_mg(s,ncpu,2,0,input_array)
 
      ! Restrict residual to coarser level
-     call restrict_residual(ifinelevel)
+     call r_restrict_residual(s,ncpu,1,0,ifinelevel)
      
      ! Reset correction from upper level before solve
-     do igrid=head_mg(ifinelevel-1),tail_mg(ifinelevel-1)
-        grid(igrid)%phi(1:twotondim)=0.0d0
-     end do
+     call r_reset_correction(s,ncpu,1,0,ifinelevel-1)
      
      ! Multigrid-solve the upper level
-     call recursive_multigrid(ifinelevel-1, safe)
+     call recursive_multigrid(s,ifinelevel-1, safe)
      
      ! Interpolate coarse solution and correct back into fine solution
-     call interpolate_and_correct(ifinelevel)
+     call r_interpolate_and_correct(s,ncpu,1,0,ifinelevel)
      
      ! Post-smoothing
      do i=1,ngs_coarse
-        if(fast_solver)then
-           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.true. )  ! Red step
-           call gauss_seidel_mg_fast(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        else
-           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.true. )  ! Red step
-           call gauss_seidel_mg(mg_dict,ifinelevel,safe,.false.)  ! Black step
-        endif
+        input_array(4)=1  ! Red step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
+        input_array(4)=0  ! Black step
+        call r_gauss_seidel_mg(s,ncpu,4,0,input_array)
      end do
      
   end do
@@ -479,134 +272,38 @@ end subroutine recursive_multigrid
 ! ########################################################################
 ! ########################################################################
 
-recursive subroutine recursive_multigrid_2(r,g,m,ifinelevel, safe)
-  use amr_parameters, only: dp,twotondim
-  use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
-  use amr_commons, only: run_t,global_t,mesh_t
-  implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer, intent(in) :: ifinelevel
-  logical, intent(in) :: safe
-
-  integer :: i, igrid, icpu, info, icycle, ncycle
-  
-  if(ifinelevel<=g%levelmin_mg) then
-     ! Solve 'directly' :
-     do i=1,2*ngs_coarse
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
-     end do
-     return
-  end if
-  
-  if(safe) then
-     ncycle=ncycles_coarse_safe
-  else
-     ncycle=1
-  endif
-  
-  do icycle=1,ncycle
-     
-     ! Pre-smoothing
-     do i=1,ngs_coarse
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
-     end do     
-
-     ! Compute residual and restrict into upper level RHS
-     call cmp_residual_mg_2(r,g,m,m%mg_dict,ifinelevel)
-
-     ! Restrict residual to coarser level
-     call restrict_residual_2(r,g,m,ifinelevel)
-     
-     ! Reset correction from upper level before solve
-     do igrid=m%head_mg(ifinelevel-1),m%tail_mg(ifinelevel-1)
-        m%grid(igrid)%phi(1:twotondim)=0.0d0
-     end do
-     
-     ! Multigrid-solve the upper level
-     call recursive_multigrid_2(r,g,m,ifinelevel-1, safe)
-     
-     ! Interpolate coarse solution and correct back into fine solution
-     call interpolate_and_correct_2(r,g,m,ifinelevel)
-     
-     ! Post-smoothing
-     do i=1,ngs_coarse
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.true. )  ! Red step
-        call gauss_seidel_mg_2(r,g,m,m%mg_dict,ifinelevel,safe,.false.)  ! Black step
-     end do
-     
-  end do
-  
-end subroutine recursive_multigrid_2
-
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
-
 ! ------------------------------------------------------------------------
 ! Multigrid workspace initialisation
 ! ------------------------------------------------------------------------
 
-subroutine init_mg(ilevel)
-  use amr_commons
-  use poisson_commons
-  use hilbert
-  implicit none  
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
+recursive subroutine r_init_mg(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
   integer::ilevel
 
-  integer::ilev,idom
-  
-  allocate(head_mg(1:nlevelmax))
-  allocate(tail_mg(1:nlevelmax))
-  allocate(noct_mg(1:nlevelmax))
-  allocate(noct_tot_mg(1:nlevelmax))
+  integer::next_range,next_cpu
 
-  ! Allocate and compute multigrid Hilbert key tick marks
-  allocate(domain_mg(1:ilevel))
-  call domain_mg(ilevel)%copy(domain(ilevel))
-  do ilev=ilevel-1,1,-1
-     call domain_mg(ilev)%copy(domain_mg(ilev+1))
-     do idom=0,domain_mg(ilev)%n
-        domain_mg(ilev)%b(1:nhilbert,idom)=coarsen_key(domain_mg(ilev+1)%b(1:nhilbert,idom),ilev)
-     end do
-  end do
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-  ! First level of multigrid hierarchy is current AMR level
-  head_mg(ilevel)=head(ilevel)
-  tail_mg(ilevel)=tail(ilevel)
-  noct_mg(ilevel)=noct(ilevel)
-  noct_tot_mg(ilevel)=noct_tot(ilevel)
-  
-  ! Save first free element in AMR grid array to restore state
-  ifree_mg=noct_used+1
-  
-end subroutine init_mg
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_INIT_MG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_init_mg(s,next_range,input_size,output_size,ilevel)
+  else
+     call init_mg(s%r,s%m,ilevel)
+  endif
 
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
+end subroutine r_init_mg
 
-subroutine init_mg_2(r,g,m,ilevel)
+subroutine init_mg(r,m,ilevel)
   use amr_parameters, only: dp,nhilbert
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t,mesh_t
   use hilbert
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
   type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
   integer::ilevel
 
@@ -615,7 +312,6 @@ subroutine init_mg_2(r,g,m,ilevel)
   allocate(m%head_mg(1:r%nlevelmax))
   allocate(m%tail_mg(1:r%nlevelmax))
   allocate(m%noct_mg(1:r%nlevelmax))
-  allocate(m%noct_tot_mg(1:r%nlevelmax))
 
   ! Allocate and compute multigrid Hilbert key tick marks
   allocate(m%domain_mg(1:ilevel))
@@ -631,12 +327,11 @@ subroutine init_mg_2(r,g,m,ilevel)
   m%head_mg(ilevel)=m%head(ilevel)
   m%tail_mg(ilevel)=m%tail(ilevel)
   m%noct_mg(ilevel)=m%noct(ilevel)
-  m%noct_tot_mg(ilevel)=m%noct_tot(ilevel)
   
   ! Save first free element in AMR grid array to restore state
   m%ifree_mg=m%noct_used+1
   
-end subroutine init_mg_2
+end subroutine init_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -646,177 +341,52 @@ end subroutine init_mg_2
 ! ---------------------------------------------------------------------
 ! Coarse grid MG activation for local grids
 ! ---------------------------------------------------------------------
-  
-subroutine build_mg(ifinelevel)
-  use amr_commons
-  use poisson_commons
-  use hilbert
+
+recursive subroutine r_build_mg(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  
-  integer,intent(in)::ifinelevel
-  
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
-  integer,dimension(1:ndim)::cart_key
-  integer,dimension(1:3,1:8),save::shift_oct=reshape(&
-       & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
-       &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
-  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
-  integer(kind=8),dimension(1:nhilbert),save::hks
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
 
-  icoarselevel=ifinelevel-1
-  ifree=noct_used+1
-  head_mg(icoarselevel)=ifree
-  
-  hash_father(0)=icoarselevel
-  
-  call open_cache(operation_build_mg,domain_decompos_mg)
-  
-  ! Loop over fine grids
-  do igrid=head_mg(ifinelevel),tail_mg(ifinelevel)
-     
-     hash_key(1:ndim)=grid(igrid)%ckey(1:ndim)
-     
-     ! Gather twotondim neighboring father grids
-     do inbor=1,twotondim
+  integer::next_range,next_cpu
 
-#ifndef WITHOUTMPI
-        ! If counter is good, check on incoming messages and perform actions
-        if(mail_counter==32)then
-           call check_mail(MPI_REQUEST_NULL,mg_dict)
-           mail_counter=0
-        endif
-        mail_counter=mail_counter+1
-#endif
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-        hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
-        ! Periodic boundary conditons
-        do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ifinelevel)-1
-           if(hash_nbor(idim)==ckey_max(ifinelevel))hash_nbor(idim)=0
-        enddo
-        hash_father(1:ndim)=hash_nbor(1:ndim)/2
-        
-        ! Access hash table
-        ipos=hash_get(mg_dict,hash_father)
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_BUILD_MG,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_build_mg(s,next_range,input_size,output_size,ilevel)
+  else
+     call build_mg(s,ilevel)
+  endif
 
-        ! If grid does not exist, create it in memory
-        if(ipos==0)then
-           
-           ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=hash_father(1:ndim)
-           
-           ! Compute Hilbert keys of new octs
-           ix(1,1:ndim)=cart_key(1:ndim)
-           call hilbert_key(ix,hk,dummy_state,0,icoarselevel-1,1)
-           
-           ! Check if grid sits inside processor boundaries
-           hks = hk(1,1:nhilbert)
-           if( domain_mg(icoarselevel)%in_rank(hks)) then
-              
-              ! Set grid index to a virtual grid in local main memory
-              ichild=ifree
-              
-              ! Go to next main memory free line
-              ifree=ifree+1
-              if(ifree.GT.ngridmax)then
-                 write(*,*)'No more free memory'
-                 write(*,*)'for multigrid...'
-                 write(*,*)'Increase ngridmax'
-                 call clean_abort
-              end if
-              ! Otherwise, determine parent processor and use the cache
-           else
-              hks = hk(1,1:nhilbert)
-              grid_cpu = domain_mg(icoarselevel)%get_rank(hks)
-              
-              ! If next cache line is occupied, free it.
-              if(occupied(free_cache))call destage(ngridmax+free_cache,mg_dict)
-              ! Set grid index to a virtual grid in local cache memory
-              ichild=ngridmax+free_cache
-              occupied(free_cache)=.true.
-              parent_cpu(free_cache)=grid_cpu
-              dirty(free_cache)=.true.
-              ! Go to next free cache line
-              free_cache=free_cache+1
-              ncache=ncache+1
-              if(free_cache.GT.ncachemax)free_cache=1
-              if(ncache.GT.ncachemax)ncache=ncachemax
-           endif
-           
-           grid(ichild)%lev=icoarselevel
-           grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
-           grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
-           grid(ichild)%refined(1:twotondim)=.true.
-           grid(ichild)%flag1(1:twotondim)=0
-           grid(ichild)%flag2(1:twotondim)=0
-           grid(ichild)%superoct=1
+end subroutine r_build_mg
 
-           ! Intitialize gravity variables
-           do ind=1,twotondim
-              grid(ichild)%f(ind,1:ndim)=0
-              grid(ichild)%phi(ind)=0
-              grid(ichild)%phi_old(ind)=0
-           enddo
-
-           ! Insert new grid in hash table
-           call hash_set(mg_dict,hash_father,ichild)
-           
-        end if
-     end do
-     ! End loop over coarse neighbors
-     
-  end do
-  ! End loop over grids
-  
-  call close_cache(mg_dict)
-  
-  ! Multigrid oct statistics
-  tail_mg(icoarselevel)=ifree-1
-  noct_mg(icoarselevel)=tail_mg(icoarselevel)-head_mg(icoarselevel)+1
-  noct_used=tail_mg(icoarselevel)
-  noct_tot_mg(icoarselevel)=noct_mg(icoarselevel)
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(noct_mg(icoarselevel),noct_tot_mg(icoarselevel),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
-
-end subroutine build_mg
-
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
-
-subroutine build_mg_2(r,g,m,ifinelevel)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine build_mg(s,ifinelevel)
+  use amr_parameters, only: dp,nhilbert,ndim,twotondim
+  use ramses_commons, only: ramses_t
   use cache_commons
   use hilbert
   use hash
   implicit none
 #ifndef WITHOUTMPI
-  include "mpif.h"
+  include 'mpif.h'
 #endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer,intent(in)::ifinelevel
   
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
+  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,grid_cpu,ind
   integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
-  integer,dimension(1:ndim)::cart_key
+  integer(kind=4),dimension(1:ndim)::cart_key
   integer,dimension(1:3,1:8),save::shift_oct=reshape(&
        & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
        &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
-  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
-  integer(kind=8),dimension(1:nhilbert),save::hks
+  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:ndim)::ix
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   icoarselevel=ifinelevel-1
   m%ifree=m%noct_used+1
@@ -824,7 +394,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
   
   hash_father(0)=icoarselevel
   
-  call open_cache_2(r,g,m,operation_build_mg,domain_decompos_mg)
+  call open_cache(s,operation_build_mg,domain_decompos_mg)
   
   ! Loop over fine grids
   do igrid=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -836,11 +406,11 @@ subroutine build_mg_2(r,g,m,ifinelevel)
 
 #ifndef WITHOUTMPI
         ! If counter is good, check on incoming messages and perform actions
-        if(mail_counter==32)then
-           call check_mail_2(r,g,m,MPI_REQUEST_NULL,m%mg_dict)
-           mail_counter=0
+        if(mdl%mail_counter==32)then
+           call check_mail(s,MPI_REQUEST_NULL,m%mg_dict)
+           mdl%mail_counter=0
         endif
-        mail_counter=mail_counter+1
+        mdl%mail_counter=mdl%mail_counter+1
 #endif
 
         hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
@@ -858,15 +428,14 @@ subroutine build_mg_2(r,g,m,ifinelevel)
         if(ipos==0)then
            
            ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=hash_father(1:ndim)
+           cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
            
            ! Compute Hilbert keys of new octs
-           ix(1,1:ndim)=cart_key(1:ndim)
-           call hilbert_key(ix,hk,dummy_state,0,icoarselevel-1,1)
+           ix(1:ndim)=cart_key(1:ndim)
+           hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
            
            ! Check if grid sits inside processor boundaries
-           hks = hk(1,1:nhilbert)
-           if( m%domain_mg(icoarselevel)%in_rank(hks)) then
+           if( m%domain_mg(icoarselevel)%in_rank(hk)) then
               
               ! Set grid index to a virtual grid in local main memory
               ichild=m%ifree
@@ -877,15 +446,15 @@ subroutine build_mg_2(r,g,m,ifinelevel)
                  write(*,*)'No more free memory'
                  write(*,*)'for multigrid...'
                  write(*,*)'Increase ngridmax'
-                 call clean_abort
+                 call mdl_abort
               end if
-              ! Otherwise, determine parent processor and use the cache
+
            else
-              hks = hk(1,1:nhilbert)
-              grid_cpu = m%domain_mg(icoarselevel)%get_rank(hks)
+              ! Otherwise, determine parent processor and use the cache
+              grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
               
               ! If next cache line is occupied, free it.
-              if(m%occupied(m%free_cache))call destage_2(r,g,m,r%ngridmax+m%free_cache,m%mg_dict)
+              if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%mg_dict)
               ! Set grid index to a virtual grid in local cache memory
               ichild=r%ngridmax+m%free_cache
               m%occupied(m%free_cache)=.true.
@@ -900,7 +469,7 @@ subroutine build_mg_2(r,g,m,ifinelevel)
            
            m%grid(ichild)%lev=icoarselevel
            m%grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
-           m%grid(ichild)%hkey(1:nhilbert)=hk(1,1:nhilbert)
+           m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
            m%grid(ichild)%refined(1:twotondim)=.true.
            m%grid(ichild)%flag1(1:twotondim)=0
            m%grid(ichild)%flag2(1:twotondim)=0
@@ -923,18 +492,68 @@ subroutine build_mg_2(r,g,m,ifinelevel)
   end do
   ! End loop over grids
   
-  call close_cache_2(r,g,m,m%mg_dict)
+  call close_cache(s,m%mg_dict)
   
   ! Multigrid oct statistics
   m%tail_mg(icoarselevel)=m%ifree-1
   m%noct_mg(icoarselevel)=m%tail_mg(icoarselevel)-m%head_mg(icoarselevel)+1
   m%noct_used=m%tail_mg(icoarselevel)
-  m%noct_tot_mg(icoarselevel)=m%noct_mg(icoarselevel)
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(m%noct_mg(icoarselevel),m%noct_tot_mg(icoarselevel),1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+
+  end associate
+  
+end subroutine build_mg
+
+subroutine pack_flush_build_mg(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=0.0d0
+  end do
 #endif
 
-end subroutine build_mg_2
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_build_mg
+
+subroutine unpack_flush_build_mg(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::idim,ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+  do ind=1,twotondim
+     grid%refined(ind)=.false.
+  end do
+  
+#ifdef GRAV
+  do idim=1,ndim
+     do ind=1,twotondim
+        grid%f(ind,idim)=0.0d0
+     end do
+  end do
+  do ind=1,twotondim
+     grid%phi(ind)=0.0d0
+     grid%phi_old(ind)=0.0d0
+  end do
+#endif
+
+end subroutine unpack_flush_build_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -945,48 +564,39 @@ end subroutine build_mg_2
 ! Multigrid cleanup
 ! ------------------------------------------------------------------------
 
-subroutine cleanup_mg
-   use amr_commons
-   use poisson_commons
-   implicit none
-   integer :: ilev
+recursive subroutine r_cleanup_mg(s,cpu_range,input_size,output_size)
+  use amr_parameters, only: twotondim
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
 
-   ! Deallocate processor boundary array
-   deallocate(head_mg,tail_mg,noct_mg,noct_tot_mg)
-   do ilev=1,size(domain_mg)
-      call domain_mg(ilev)%destroy
-   end do
-   deallocate(domain_mg)
-
-  ! Reset the MG hash table
-  call reset_entire_hash(mg_dict,.false.)
+  integer::next_range,next_cpu
+  integer::igrid
   
-  ! Restore AMR grid array into its original state
-  ifree=ifree_mg
-  noct_used=ifree-1
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-end subroutine cleanup_mg
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_CLEANUP_MG,next_cpu,next_range,input_size,output_size)
+     call r_cleanup_mg(s,next_range,input_size,output_size)
+  else
+     call cleanup_mg(s%m)
+  endif
 
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
+end subroutine r_cleanup_mg
 
-subroutine cleanup_mg_2(r,g,m)
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine cleanup_mg(m)
+  use amr_commons, only: mesh_t
   use hash
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
 
   integer :: ilev
 
    ! Deallocate processor boundary array
-   deallocate(m%head_mg,m%tail_mg,m%noct_mg,m%noct_tot_mg)
+   deallocate(m%head_mg,m%tail_mg,m%noct_mg)
    do ilev=1,size(m%domain_mg)
       call m%domain_mg(ilev)%destroy
    end do
@@ -999,7 +609,7 @@ subroutine cleanup_mg_2(r,g,m)
   m%ifree=m%ifree_mg
   m%noct_used=m%ifree-1
 
-end subroutine cleanup_mg_2
+end subroutine cleanup_mg
 
 ! ########################################################################
 ! ########################################################################
@@ -1010,38 +620,32 @@ end subroutine cleanup_mg_2
 ! Initialize mask at fine level into f(:,3)
 ! ------------------------------------------------------------------------
 
-subroutine make_mask(ilevel)
-  use amr_commons
-  use pm_commons
-  use poisson_commons
+recursive subroutine r_make_mask(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
-  integer, intent(in) :: ilevel
-  
-  integer  :: igrid, ind
-  
-  ! Init mask to 1.0 on all fine level cells :
-  do igrid=head(ilevel),tail(ilevel)
-     do ind=1,twotondim
-        grid(igrid)%f(ind,3)=1.0d0
-     end do
-  end do
-  
-end subroutine make_mask
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
 
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
+  integer::next_range,next_cpu
 
-subroutine make_mask_2(r,g,m,ilevel)
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_MAKE_MASK,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_make_mask(s,next_range,input_size,output_size,ilevel)
+  else
+     call make_mask(s%m,ilevel)
+  endif
+
+end subroutine r_make_mask
+
+subroutine make_mask(m,ilevel)
   use amr_parameters, only: twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
   integer, intent(in) :: ilevel
 
@@ -1054,7 +658,7 @@ subroutine make_mask_2(r,g,m,ilevel)
      end do
   end do
   
-end subroutine make_mask_2
+end subroutine make_mask
 
 ! ########################################################################
 ! ########################################################################
@@ -1078,12 +682,38 @@ end subroutine make_mask_2
 !
 ! ------------------------------------------------------------------------
 
-subroutine make_bc_rhs(ilevel,icount)
-
-  use amr_commons
-  use pm_commons
-  use poisson_commons
+recursive subroutine r_make_bc_rhs(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,icount
+  
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_MAKE_BC_RHS,next_cpu,next_range,input_size,output_size,input_array)
+     call r_make_bc_rhs(s,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     icount=input_array(2)
+     call make_bc_rhs(s,ilevel,icount)
+  endif
+
+end subroutine r_make_bc_rhs
+
+subroutine make_bc_rhs(s,ilevel,icount)
+  use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  implicit none
+  type(ramses_t)::s
+
   integer, intent(in) :: ilevel,icount
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
@@ -1092,181 +722,16 @@ subroutine make_bc_rhs(ilevel,icount)
   integer,dimension(1:8,1:8)::ccc
   real(dp)::aa,bb,cc,dd,tfrac
   real(dp),dimension(1:8)::bbb
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
+  integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
-  real(dp),dimension(1:twotondim),save::phi_int
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
 
   real(dp) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
-  real(dp) :: scale, fourpi
-  
-  ! Set constants
-  fourpi = 4.D0*ACOS(-1.0D0)
-  if(cosmo) fourpi = 1.5D0*omega_m*aexp
-  
-  dx  = boxlen/2**ilevel
-  oneoverdx2 = 1.0d0/(dx*dx)
-  
-  iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
-  iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
-  iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
-  iii(2,2,1:8)=(/0,0,4,4,0,0,4,4/); jjj(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
-  iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
-  iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
-  
-  ! CIC method constants
-  aa = 1.0D0/4.0D0**ndim
-  bb = 3.0D0*aa
-  cc = 9.0D0*aa
-  dd = 27.D0*aa
-  bbb(:)  =(/aa ,bb ,bb ,cc ,bb ,cc ,cc ,dd/)
+  real(dp) :: fourpi
 
-  ! Sampling positions in the 3x3x3 father cell cube
-  ccc(:,1)=(/1 ,2 ,4 ,5 ,10,11,13,14/)
-  ccc(:,2)=(/3 ,2 ,6 ,5 ,12,11,15,14/)
-  ccc(:,3)=(/7 ,8 ,4 ,5 ,16,17,13,14/)
-  ccc(:,4)=(/9 ,8 ,6 ,5 ,18,17,15,14/)
-  ccc(:,5)=(/19,20,22,23,10,11,13,14/)
-  ccc(:,6)=(/21,20,24,23,12,11,15,14/)
-  ccc(:,7)=(/25,26,22,23,16,17,13,14/)
-  ccc(:,8)=(/27,26,24,23,18,17,15,14/)
-
-  if (icount .ne. 1 .and. icount .ne. 2)then
-     write(*,*)'icount has bad value'
-     call clean_stop
-  endif
-
-  ! Compute fraction of time steps for interpolation
-  if (dtold(ilevel-1)>0.0)then
-     tfrac=dtnew(ilevel)/dtold(ilevel-1)*(icount-1)
-  else
-     tfrac=0.0
-  end if
-
-  call open_cache(operation_interpol,domain_decompos_amr)
-
-  hash_nbor(0)=ilevel
-
-  ! Loop over grids
-  do igrid=head(ilevel),tail(ilevel)
-     
-     ! Get central oct potential
-     do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%phi(ind)
-        dis_nbor(ind,0)=grid(igrid)%f(ind,3)
-     end do
-     
-     ! Get neighboring octs potential
-     do inbor=1,twondim
-        
-        ! Get neighboring grid
-        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
-        
-        ! Periodic boundary conditons
-        do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
-        enddo
-
-        ! Get neighbouring grid using read-only cache
-        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
-
-        ! If grid exists, then copy into array
-        if(igridn>0)then
-           do ind=1,twotondim
-              phi_nbor(ind,inbor)=grid(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=grid(igridn)%f(ind,3)
-           end do
-
-        ! Otherwise interpolate from coarser level
-        else
-
-           ! Get 3**ndim neighbouring parent cells using read-only cache
-           call get_threetondim_nbor_parent_cell(hash_nbor,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
-           do ind=1,threetondim
-              call unlock_cache(igrid_nbor(ind))
-           end do
-           do ind=1,twotondim
-              dis_nbor(ind,inbor)=-1.0
-           end do
-        endif
-
-     end do
-     ! End loop over neighboring octs
-
-     ! Loop over cells
-     do ind=1,twotondim
-        
-        ! Init BC-modified RHS to rho - rho_tot :
-        grid(igrid)%f(ind,2) = fourpi*(grid(igrid)%rho(ind) - rho_tot)
-        
-        ! Do not process masked cells
-        if(grid(igrid)%f(ind,3)<=0.0) cycle 
-        
-        ! Separate directions
-        do idim=1,ndim
-
-           ! Loop over the 2 neighbors
-           do inbor=1,2
-              id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
-              
-              nb_mask=dis_nbor(id,ig)
-              if(nb_mask>0.0)cycle
-
-              ! phi(#) interpolated with mask:
-              nb_phi = phi_nbor(id,ig)
-              w = nb_mask/(nb_mask-grid(igrid)%f(ind,3)) ! Linear parameter
-              phi_b = ((1.0d0-w)*nb_phi + w*grid(igrid)%phi(ind))
-
-              ! Increment correction for current cell
-              grid(igrid)%f(ind,2) = grid(igrid)%f(ind,2) - 2.0d0*oneoverdx2*phi_b
-
-           end do
-        end do
-
-     end do
-  end do
-
-  call close_cache(grid_dict)
-
-end subroutine make_bc_rhs
-
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
-
-subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
-  use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use cache_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-#endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer, intent(in) :: ilevel,icount
-  
-  integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  integer::igrid,idim,ind,igridn,inbor,ig,id
-  integer::get_grid_2
-  integer,dimension(1:8,1:8)::ccc
-  real(dp)::aa,bb,cc,dd,tfrac
-  real(dp),dimension(1:8)::bbb
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
-  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
-  real(dp),dimension(1:twotondim),save::phi_int
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
-  integer,dimension(1:3,1:6),save::shift=reshape(&
-       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-
-  real(dp) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
-  real(dp) :: scale, fourpi
+  associate(r=>s%r,g=>s%g,m=>s%m)
   
   ! Set constants
   fourpi = 4.D0*ACOS(-1.0D0)
@@ -1301,7 +766,7 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop
+     call mdl_abort
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -1311,7 +776,7 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache_2(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(s,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -1337,7 +802,7 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -1350,10 +815,10 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
         else
 
            ! Get 3**ndim neighbouring parent cells using read-only cache
-           call get_threetondim_nbor_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi_2(r,g,m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
            do ind=1,threetondim
-              call unlock_cache_2(r,g,m,igrid_nbor(ind))
+              call unlock_cache(s,igrid_nbor(ind))
            end do
            do ind=1,twotondim
               dis_nbor(ind,inbor)=-1.0
@@ -1396,312 +861,16 @@ subroutine make_bc_rhs_2(r,g,m,ilevel,icount)
      end do
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
-end subroutine make_bc_rhs_2
-
-! ########################################################################
-! ########################################################################
-! ########################################################################
-! ########################################################################
-
-! ---------------------------------------------------------------------
-! ---------------------------------------------------------------------
+  end associate
   
-subroutine build_comm_mg(hash_dict,ilevel)
-  use amr_commons
-  use poisson_commons
-  use hilbert
-  implicit none
-#ifndef WITHOUTMPI
-  include "mpif.h"
-  integer,dimension(MPI_STATUS_SIZE,ncpu)::statuses
-#endif
-  !
-  integer,intent(in)::ilevel
-  type(hash_table)::hash_dict
-  !
-  integer::get_grid
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,icpu,grid_cpu,ind,info
-  integer::i,igridn,iremote
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
-  integer,dimension(1:ndim)::cart_key
-  integer,dimension(1:3,1:6),save::shift=reshape(&
-       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector,1:nhilbert),save::hk
-  integer(kind=8),dimension(1:nhilbert),save::hks
-  integer(kind=8),dimension(1:nvector,1:ndim),save::ix
-  integer::istart,nbuffer,countrecv,countsend,tag=101
-  integer,dimension(ncpu)::reqsend,reqrecv
-
-#ifndef WITHOUTMPI
-
-  allocate(nremote(1:ncpu))  
-  allocate(buffer_mg(ilevel)%nbor_indx(head_mg(ilevel):tail_mg(ilevel),1:twondim))
-
-  hash_nbor(0)=ilevel
-  
-  nremote=0
-  call open_cache(operation_mg,domain_decompos_mg)
-  
-  ! Loop over grids
-  do igrid=head_mg(ilevel),tail_mg(ilevel)
-     
-     ! Gather twondim neighboring grids
-     do inbor=1,twondim
-
-        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
-
-        ! Periodic boundary conditons
-        do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
-        enddo
-        
-        ! Get neighbouring grid using read-only cache
-        igridn=get_grid(hash_nbor,hash_dict,.false.,.true.)
-        
-        ! If grid exists, determine if remote
-        if(igridn<=ngridmax)then
-           buffer_mg(ilevel)%nbor_indx(igrid,inbor)=igridn
-        else
-           ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=hash_nbor(1:ndim)
-           
-           ! Compute Hilbert keys of new octs
-           ix(1,1:ndim)=cart_key(1:ndim)
-           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
-
-           ! Determine parent processor and increment counter
-           hks = hk(1,1:nhilbert)
-           grid_cpu = domain_mg(ilevel)%get_rank(hks)
-           nremote(grid_cpu)=nremote(grid_cpu)+1
-        end if
-
-     end do
-     ! End loop over neighbors
-     
-  end do
-  ! End loop over grids
-  
-  call close_cache(hash_dict)
-
-  ! Build communicator
-  allocate(nalltoall(1:ncpu,1:ncpu))
-  allocate(nalltoall_tot(1:ncpu,1:ncpu))
-  nalltoall=0; nalltoall_tot=0
-  do icpu=1,ncpu
-     nalltoall(myid,icpu)=nremote(icpu)
-  end do
-  call MPI_ALLREDUCE(nalltoall,nalltoall_tot,ncpu*ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  nalltoall=nalltoall_tot
-  deallocate(nalltoall_tot)
-  allocate(buffer_mg(ilevel)%send_cnt(1:ncpu))
-  allocate(buffer_mg(ilevel)%send_oft(1:ncpu))
-  allocate(buffer_mg(ilevel)%recv_cnt(1:ncpu))
-  allocate(buffer_mg(ilevel)%recv_oft(1:ncpu))
-
-  buffer_mg(ilevel)%send_cnt=0; buffer_mg(ilevel)%send_oft=0; buffer_mg(ilevel)%send_tot=0
-  buffer_mg(ilevel)%recv_cnt=0; buffer_mg(ilevel)%recv_oft=0; buffer_mg(ilevel)%recv_tot=0
-  do icpu=1,ncpu
-     buffer_mg(ilevel)%send_cnt(icpu)=nalltoall(myid,icpu)
-     buffer_mg(ilevel)%recv_cnt(icpu)=nalltoall(icpu,myid)
-     buffer_mg(ilevel)%send_tot=buffer_mg(ilevel)%send_tot+buffer_mg(ilevel)%send_cnt(icpu)
-     buffer_mg(ilevel)%recv_tot=buffer_mg(ilevel)%recv_tot+buffer_mg(ilevel)%recv_cnt(icpu)
-     if(icpu<ncpu)then
-        buffer_mg(ilevel)%send_oft(icpu+1)=buffer_mg(ilevel)%send_oft(icpu)+nalltoall(myid,icpu)
-        buffer_mg(ilevel)%recv_oft(icpu+1)=buffer_mg(ilevel)%recv_oft(icpu)+nalltoall(icpu,myid)
-     endif
-  end do
-  deallocate(nalltoall)
-
-#if NDIM>0
-  allocate(x_send_buf(1:buffer_mg(ilevel)%send_tot))
-#endif
-#if NDIM>1
-  allocate(y_send_buf(1:buffer_mg(ilevel)%send_tot))
-#endif
-#if NDIM>2
-  allocate(z_send_buf(1:buffer_mg(ilevel)%send_tot))
-#endif
-
-  hash_nbor(0)=ilevel
-
-  nremote=0
-  call open_cache(operation_mg,domain_decompos_mg)
-
-  ! Loop over grids
-  do igrid=head_mg(ilevel),tail_mg(ilevel)
-
-     ! Gather twondim neighboring grids
-     do inbor=1,twondim
-
-        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
-
-        ! Periodic boundary conditons
-        do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
-        enddo
-
-        ! Get neighbouring grid using read-only cache
-        igridn=get_grid(hash_nbor,hash_dict,.false.,.true.)
-
-        ! If grid is remote
-        if(igridn>ngridmax)then
-
-           ! Compute Cartesian keys of new oct
-           cart_key(1:ndim)=hash_nbor(1:ndim)
-
-           ! Compute Hilbert keys of new octs
-           ix(1,1:ndim)=cart_key(1:ndim)
-           call hilbert_key(ix,hk,dummy_state,0,ilevel-1,1)
-
-           ! Determine parent processor and increment counter
-           hks = hk(1,1:nhilbert)
-           grid_cpu = domain_mg(ilevel)%get_rank(hks)
-           nremote(grid_cpu)=nremote(grid_cpu)+1
-           iremote=buffer_mg(ilevel)%send_oft(grid_cpu)+nremote(grid_cpu)
-#if NDIM>0
-           x_send_buf(iremote)=cart_key(1)
-#endif
-#if NDIM>1
-           y_send_buf(iremote)=cart_key(2)
-#endif
-#if NDIM>2
-           z_send_buf(iremote)=cart_key(3)
-#endif
-           ! Store negative index
-           buffer_mg(ilevel)%nbor_indx(igrid,inbor)=-iremote
-        end if
-
-     end do
-     ! End loop over neighbors
-
-  end do
-  ! End loop over grids
-
-  call close_cache(hash_dict)
-
-  deallocate(nremote)
-
-#if NDIM>0
-  allocate(x_recv_buf(1:buffer_mg(ilevel)%recv_tot))
-  call MPI_ALLTOALLV(x_send_buf,buffer_mg(ilevel)%send_cnt,buffer_mg(ilevel)%send_oft,MPI_INTEGER, &
-       &             x_recv_buf,buffer_mg(ilevel)%recv_cnt,buffer_mg(ilevel)%recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
-  deallocate(x_send_buf)
-#endif
-#if NDIM>1
-  allocate(y_recv_buf(1:buffer_mg(ilevel)%recv_tot))
-  call MPI_ALLTOALLV(y_send_buf,buffer_mg(ilevel)%send_cnt,buffer_mg(ilevel)%send_oft,MPI_INTEGER, &
-       &             y_recv_buf,buffer_mg(ilevel)%recv_cnt,buffer_mg(ilevel)%recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
-  deallocate(y_send_buf)
-#endif
-#if NDIM>2
-  allocate(z_recv_buf(1:buffer_mg(ilevel)%recv_tot))
-  call MPI_ALLTOALLV(z_send_buf,buffer_mg(ilevel)%send_cnt,buffer_mg(ilevel)%send_oft,MPI_INTEGER, &
-       &             z_recv_buf,buffer_mg(ilevel)%recv_cnt,buffer_mg(ilevel)%recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
-  deallocate(z_send_buf)
-#endif
-
-  allocate(buffer_mg(ilevel)%grid_recv_buf(1:buffer_mg(ilevel)%recv_tot))
-
-  hash_key(0)=ilevel
-  do i=1,buffer_mg(ilevel)%recv_tot
-     hash_key(1)=x_recv_buf(i)
-     hash_key(2)=y_recv_buf(i)
-     hash_key(3)=z_recv_buf(i)
-     ipos=hash_get(hash_dict,hash_key)
-     buffer_mg(ilevel)%grid_recv_buf(i)=ipos
-  end do
-  deallocate(x_recv_buf)
-  deallocate(y_recv_buf)
-  deallocate(z_recv_buf)
-
-  allocate(buffer_mg(ilevel)%phi_send_buf(1:buffer_mg(ilevel)%send_tot*twotondim))
-  allocate(buffer_mg(ilevel)%phi_recv_buf(1:buffer_mg(ilevel)%recv_tot*twotondim))
-  allocate(buffer_mg(ilevel)%phi_remote(1:buffer_mg(ilevel)%send_tot,1:twotondim))
-  allocate(buffer_mg(ilevel)%dis_remote(1:buffer_mg(ilevel)%send_tot,1:twotondim))
-
-  ! Update boundary conditions for distance function
-  countrecv=0
-  do icpu=1,ncpu
-     nbuffer=buffer_mg(ilevel)%send_cnt(icpu)
-     if(nbuffer>0)then
-        countrecv=countrecv+1
-        istart=buffer_mg(ilevel)%send_oft(icpu)*twotondim+1
-        call MPI_IRECV(buffer_mg(ilevel)%phi_send_buf(istart),nbuffer*twotondim, &
-             & MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
-     endif
-  end do
-
-  do ind=1,twotondim
-     do i=1,buffer_mg(ilevel)%recv_tot
-        igrid=buffer_mg(ilevel)%grid_recv_buf(i)
-        istart=(i-1)*twotondim+ind
-        buffer_mg(ilevel)%phi_recv_buf(istart)=grid(igrid)%f(ind,3)
-     end do
-  end do
-
-  countsend=0
-  do icpu=1,ncpu
-     nbuffer=buffer_mg(ilevel)%recv_cnt(icpu)
-     if(nbuffer>0) then
-        countsend=countsend+1
-        istart=buffer_mg(ilevel)%recv_oft(icpu)*twotondim+1
-        call MPI_ISEND(buffer_mg(ilevel)%phi_recv_buf(istart),nbuffer*twotondim, &
-            & MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
-     end if
-  end do
-
-  ! Wait for full completion of receives
-  call MPI_WAITALL(countrecv,reqrecv,statuses,info)
-
-  do ind=1,twotondim
-     do i=1,buffer_mg(ilevel)%send_tot
-        istart=(i-1)*twotondim+ind
-        buffer_mg(ilevel)%dis_remote(i,ind)=buffer_mg(ilevel)%phi_send_buf(istart)
-     end do
-  end do
-
-  ! Wait for full completion of sends
-  call MPI_WAITALL(countsend,reqsend,statuses,info)
-
-#endif
-
-end subroutine build_comm_mg
+end subroutine make_bc_rhs
 
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-
-! ------------------------------------------------------------------------
-! ------------------------------------------------------------------------
-
-subroutine clean_comm_mg(ilevel)
-  use amr_commons
-  use poisson_commons
-  implicit none
-  integer::ilevel
-
-#ifndef WITHOUTMPI
-  
-  deallocate(buffer_mg(ilevel)%nbor_indx)
-  deallocate(buffer_mg(ilevel)%phi_remote)
-  deallocate(buffer_mg(ilevel)%dis_remote)
-  deallocate(buffer_mg(ilevel)%phi_send_buf)
-  deallocate(buffer_mg(ilevel)%phi_recv_buf)
-  deallocate(buffer_mg(ilevel)%grid_recv_buf)
-  deallocate(buffer_mg(ilevel)%send_cnt)
-  deallocate(buffer_mg(ilevel)%send_oft)
-  deallocate(buffer_mg(ilevel)%recv_cnt)
-  deallocate(buffer_mg(ilevel)%recv_oft)
-
-#endif
-
-end subroutine clean_comm_mg
 
 #endif
 

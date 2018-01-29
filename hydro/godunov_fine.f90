@@ -2,10 +2,36 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godunov_fine(ilevel)
-  use amr_commons
-  use hydro_commons
+recursive subroutine r_godunov_fine(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_GODUNOV_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_godunov_fine(s,next_range,input_size,output_size,ilevel)
+  else
+     call godunov_fine(s,ilevel)
+  endif
+
+end subroutine r_godunov_fine
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine godunov_fine(s,ilevel)
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  implicit none
+  type(ramses_t)::s
   integer::ilevel
   !--------------------------------------------------------------------------
   ! This routine is a wrapper to the second order Godunov solver.
@@ -13,137 +39,192 @@ subroutine godunov_fine(ilevel)
   ! hydro solver. On entry, hydro variables are gathered from array uold.
   ! On exit, unew has been updated. 
   !--------------------------------------------------------------------------
-  integer::i,ivar,igrid
+  integer::igrid
 
-  if(noct_tot(ilevel)==0)return
-  if(static)return
-  if(verbose)write(*,111)ilevel
-
-  call open_cache(operation_godunov,domain_decompos_amr)
+  call open_cache(s,operation_godunov,domain_decompos_amr)
 
   ! Loop over active grids by vector sweeps
-  igrid=head(ilevel)
-  do while(igrid.LE.tail(ilevel))
-     SELECT CASE (grid(igrid)%superoct)
+  igrid=s%m%head(ilevel)
+  do while(igrid.LE.s%m%tail(ilevel))
+     SELECT CASE (s%m%grid(igrid)%superoct)
      CASE(1)
-        call godfine1(igrid,ilevel,hydro_w%kernel_1)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_1)
      CASE(2**ndim)
-        call godfine1(igrid,ilevel,hydro_w%kernel_2)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_2)
      CASE(4**ndim)
-        call godfine1(igrid,ilevel,hydro_w%kernel_4)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_4)
      CASE(8**ndim)
-        call godfine1(igrid,ilevel,hydro_w%kernel_8)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_8)
      CASE(16**ndim)
-        call godfine1(igrid,ilevel,hydro_w%kernel_16)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_16)
      CASE(32**ndim)
-        call godfine1(igrid,ilevel,hydro_w%kernel_32)
+        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_32)
      END SELECT
-     igrid=igrid+grid(igrid)%superoct
+     igrid=igrid+s%m%grid(igrid)%superoct
   end do
 
-  call close_cache(grid_dict)
-
-111 format('   Entering godunov_fine for level ',i2)
+  call close_cache(s,s%m%grid_dict)
 
 end subroutine godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine set_unew(ilevel)
-  use amr_commons
-  use hydro_commons
+recursive subroutine r_set_unew(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_SET_UNEW,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_unew(s,next_range,input_size,output_size,ilevel)
+  else
+     call set_unew(s%r,s%g,s%m,ilevel)
+  endif
+
+end subroutine r_set_unew
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine set_unew(r,g,m,ilevel)
+  use amr_parameters, only: ndim,twotondim,dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
   integer::ilevel
   !--------------------------------------------------------------------------
   ! This routine sets array unew to its initial value uold before calling
   ! the hydro scheme. unew is set to zero in virtual boundaries.
   !--------------------------------------------------------------------------
-  integer::i,ivar,irad,ind,icpu,iskip
-  real(dp)::d,u,v,w,e
+  integer::i
 
+#ifdef DUALENER
+#if NENER>0
+  integer::irad
+#endif
+  integer::ind
+  real(dp)::d,u,v,w,e
+#endif
+  
 #ifdef HYDRO
 
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
   ! Set unew to uold for myid cells
-  do i=head(ilevel),tail(ilevel)
-     grid(i)%unew = grid(i)%uold
+  do i=m%head(ilevel),m%tail(ilevel)
+     m%grid(i)%unew = m%grid(i)%uold
 #ifdef DUALENER
      do ind=1,twotondim
-        grid(i)%divu(ind) = 0.0
-        d=max(grid(i)%uold(ind,1),smallr)
-        u=0.0; v=0.0; w=0.0
-        if(ndim>0)u=grid(i)%uold(ind,2)/d
-        if(ndim>1)v=grid(i)%uold(ind,3)/d
-        if(ndim>2)w=grid(i)%uold(ind,4)/d
-        e=grid(i)%uold(ind,ndim+2)-0.5*d*(u**2+v**2+w**2)
+        m%grid(i)%divu(ind) = 0.0d0
+        d=max(m%grid(i)%uold(ind,1),smallr)
+        u=0.0d0; v=0.0d0; w=0.0d0
+        if(ndim>0)u=m%grid(i)%uold(ind,2)/d
+        if(ndim>1)v=m%grid(i)%uold(ind,3)/d
+        if(ndim>2)w=m%grid(i)%uold(ind,4)/d
+        e=m%grid(i)%uold(ind,ndim+2)-0.5d0*d*(u**2+v**2+w**2)
 #if NENER>0
         do irad=1,nener
-           e=e-grid(i)%uold(ind,ndim+2+irad)
+           e=e-m%grid(i)%uold(ind,ndim+2+irad)
         end do
 #endif          
-        grid(i)%enew(ind) = e
+        m%grid(i)%enew(ind)=e
      end do
 #endif
   end do
 
 #endif
 
-111 format('   Entering set_unew for level ',i2)
-
 end subroutine set_unew
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine set_uold(ilevel)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
-  use hash
+recursive subroutine r_set_uold(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_SET_UOLD,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_uold(s,next_range,input_size,output_size,ilevel)
+  else
+     call set_uold(s%r,s%g,s%m,ilevel)
+  endif
+
+end subroutine r_set_uold
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine set_uold(r,g,m,ilevel)
+  use amr_parameters, only: dp,ndim,twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
   integer::ilevel
   !---------------------------------------------------------
   ! This routine sets array uold to its new value unew 
   ! after the hydro step.
   !---------------------------------------------------------
-  integer::i,ivar,irad,ind,iskip,nx_loc,ind_cell
-  real(dp)::scale,d,u,v,w
-  real(dp)::e_kin,e_cons,e_prim,e_trunc,div,dx,fact,d_old
+  integer::i
+  real(dp)::dx
+
+#ifdef DUALENER
+  integer::ind
+#if NENER>0
+  integer::irad
+#endif
+  real(dp)::d,u,v,w
+  real(dp)::e_kin,e_cons,e_prim,e_trunc,div,fact,d_old
+#endif
 
 #ifdef HYDRO
 
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-  dx=boxlen/2**ilevel
+  dx=r%boxlen/2**ilevel
 
   ! Set uold to unew
-  do i=head(ilevel),tail(ilevel)
-     grid(i)%uold=grid(i)%unew
+  do i=m%head(ilevel),m%tail(ilevel)
+     m%grid(i)%uold=m%grid(i)%unew
 #ifdef DUALENER
      do ind=1,twotondim
         ! Correct total energy if internal energy is too small
-        d=max(grid(i)%uold(ind,1),smallr)
-        u=0.0; v=0.0; w=0.0
-        if(ndim>0)u=grid(i)%uold(ind,2)/d
-        if(ndim>1)v=grid(i)%uold(ind,3)/d
-        if(ndim>2)w=grid(i)%uold(ind,4)/d
-        e_kin=0.5*d*(u**2+v**2+w**2)
+        d=max(m%grid(i)%uold(ind,1),smallr)
+        u=0.0d0; v=0.0d0; w=0.0d0
+        if(ndim>0)u=m%grid(i)%uold(ind,2)/d
+        if(ndim>1)v=m%grid(i)%uold(ind,3)/d
+        if(ndim>2)w=m%grid(i)%uold(ind,4)/d
+        e_kin=0.5d0*d*(u**2+v**2+w**2)
 #if NENER>0
         do irad=1,nener
-           e_kin=e_kin+grid(i)%uold(ind,ndim+2+irad)
+           e_kin=e_kin+m%grid(i)%uold(ind,ndim+2+irad)
         end do
 #endif
-        e_cons=grid(i)%uold(ind,ndim+2)-e_kin
-        e_prim=grid(i)%enew(ind)
+        e_cons=m%grid(i)%uold(ind,ndim+2)-e_kin
+        e_prim=m%grid(i)%enew(ind)
         ! Note: here divu=-div.u*dt
-        div=abs(grid(i)%divu(ind))*dx/dtnew(ilevel)
-        e_trunc=beta_fix*d*max(div,3.0*hexp*dx)**2
+        div=abs(m%grid(i)%divu(ind))*dx/dtnew(ilevel)
+        e_trunc=r%beta_fix*d*max(div,3.0d0*g%hexp*dx)**2
         if(e_cons<e_trunc)then
-           grid(i)%uold(ind,ndim+2)=e_prim+e_kin
+           m%grid(i)%uold(ind,ndim+2)=e_prim+e_kin
         end if
      end do
 #endif
@@ -151,18 +232,19 @@ subroutine set_uold(ilevel)
 
 #endif
 
-111 format('   Entering set_uold for level ',i2)
-
 end subroutine set_uold
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godfine1(ind_grid,ilevel,h)
-  use amr_commons
+subroutine godfine1(s,ind_grid,ilevel,h)
+  use amr_parameters, only: ndim,twondim,twotondim,dp
+  use hydro_parameters, only: nvar
+  use ramses_commons, only: ramses_t
   use hydro_commons
   use hash
   implicit none
+  type(ramses_t)::s
   integer::ind_grid,ilevel
   type(hydro_kernel_t)::h
   !-------------------------------------------------------------------
@@ -176,744 +258,26 @@ subroutine godfine1(ind_grid,ilevel,h)
   ! coarser level if necessary.
   !-------------------------------------------------------------------
   integer::get_grid,get_parent_cell
-  integer::i,j,ivar,idim,ind_son,iskip,nbuffer,ibuffer,ipos,ind_oct
-  integer::igrid,icell,inbor,ichild,parent_cell,indf,parent_cell2
+  integer::ivar,idim,ind_son,ind_oct
+  integer::igrid,icell=0,inbor,ichild,parent_cell
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
   integer::ii1min,ii1max,jj1min,jj1max,kk1min,kk1max
   integer::i2min=0,i2max=0,j2min=0,j2max=0,k2min=0,k2max=0
   integer::i3min=1,i3max=1,j3min=1,j3max=1,k3min=1,k3max=1
-  integer,dimension(1:ndim)::ii
   integer,dimension(1:ndim)::ckey_corner,ckey
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
-  real(dp)::dx,scale,oneontwotondim
+  real(dp)::dx,oneontwotondim
   real(dp),dimension(0:twondim  ,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
   logical::okx=.true.,oky=.true.,okz=.true.
 
 #ifdef HYDRO
 
-  oneontwotondim = 1.d0/dble(twotondim)
-
-  ! Mesh spacing in that level
-  dx=boxlen/2**ilevel
-
-  ! Integer constants
-  i1min=h%io1; i1max=h%io2; j1min=h%jo1; j1max=h%jo2; k1min=h%ko1; k1max=h%ko2
-#if NDIM>0
-  i2max=1; i3min=h%iu1+2; i3max=h%iu2-2
-#endif
-#if NDIM>1
-  j2max=1; j3min=h%ju1+2; j3max=h%ju2-2
-#endif
-#if NDIM>2
-  k2max=1; k3min=h%ku1+2; k3max=h%ku2-2
-#endif
-
-  ! Reset gravitational acceleration
-  h%gloc=0.0
-
-  !---------------------
-  ! Gather hydro stencil
-  !---------------------
-  hash_key(0)=grid(ind_grid)%lev
-  hash_nbor(0)=grid(ind_grid)%lev
-  ckey_corner(1:ndim)=(grid(ind_grid)%ckey(1:ndim)/(i1max-1))*(i1max-1)
-  ind_oct=ind_grid
-
-  ! Loop over 3x3x3 neighboring father cells
-  do k1=k1min,k1max
-#if NDIM>2
-     okz=(k1>k1min.and.k1<k1max)
-#endif
-     do j1=j1min,j1max
-#if NDIM>1
-        oky=(j1>j1min.and.j1<j1max)
-#endif
-        do i1=i1min,i1max     
-#if NDIM>0
-           okx=(i1>i1min.and.i1<i1max)
-#endif
-           ! For inner octs only
-           if(okx.and.oky.and.okz)then
-
-              ! Compute relative Cartesian key
-              ckey(1:ndim)=grid(ind_oct)%ckey(1:ndim)-ckey_corner(1:ndim)
-
-              ! Store grid index
-              ii1=1; jj1=1; kk1=1
-#if NDIM>0
-              ii1=ckey(1)+1
-#endif
-#if NDIM>1
-              jj1=ckey(2)+1
-#endif
-#if NDIM>2
-              kk1=ckey(3)+1
-#endif
-              h%childloc(ii1,jj1,kk1)=ind_oct
-              h%parentloc(ii1,jj1,kk1)=0
-
-              ! Loop over 2x2x2 cells
-              do k2=k2min,k2max
-                 do j2=j2min,j2max
-                    do i2=i2min,i2max
-                       ind_son=1+i2+2*j2+4*k2
-                       i3=1; j3=1; k3=1
-#if NDIM>0
-                       i3=1+2*(ii1-1)+i2
-#endif
-#if NDIM>1
-                       j3=1+2*(jj1-1)+j2
-#endif
-#if NDIM>2
-                       k3=1+2*(kk1-1)+k2
-#endif             
-                       ! Gather hydro variables
-                       do ivar=1,nvar
-                          h%uloc(i3,j3,k3,ivar)=grid(ind_oct)%uold(ind_son,ivar)
-                       end do
-#ifdef GRAV
-                       ! Gather gravitational acceleration
-                       do idim=1,ndim
-                          h%gloc(i3,j3,k3,idim)=grid(ind_oct)%f(ind_son,idim)
-                       end do
-#endif
-                       ! Gather refinement flag
-                       h%okloc(i3,j3,k3)=grid(ind_oct)%refined(ind_son)
-                    end do
-                 end do
-              end do
-
-              ! Go to next inner oct
-              ind_oct=ind_oct+1
-
-           ! For boundary octs only
-           else
-              ! Compute neighboring grid Cartesian index
-#if NDIM>0
-              hash_nbor(1)=ckey_corner(1)+i1-1.0
-#endif
-#if NDIM>1
-              hash_nbor(2)=ckey_corner(2)+j1-1.0
-#endif
-#if NDIM>2
-              hash_nbor(3)=ckey_corner(3)+k1-1.0
-#endif
-              ! Periodic boundary conditons
-              do idim=1,ndim
-                 if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-                 if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
-              enddo
-              
-              ! Get neighboring grid index with read-only cache
-              ichild=get_grid(hash_nbor,grid_dict,.false.,.true.)
-              parent_cell=0
-              igrid_nbor=0
-              if(ichild>0)then
-                 call lock_cache(ichild)
-              else
-
-                 ! Get parent father cell with read-write cache
-                 parent_cell=get_parent_cell(hash_nbor,grid_dict,.true.,.true.)
-                 if(parent_cell==0)then
-                    write(*,*)'GODUNOV: parent_cell should exist'
-                    write(*,*)'PE ',myid,hash_nbor
-                    stop
-                 endif
-                 igrid=(parent_cell-1)/twotondim+1
-                 icell=parent_cell-(igrid-1)*twotondim
-                 call lock_cache(igrid)
-
-                 ! In case one wants to interpolate using high-order schemes
-                 if(interpol_type>0)then
-
-                    ! Get 2ndim neighboring father cells with read-write cache
-                    call get_twondim_nbor_parent_cell(hash_nbor,grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
-                    do inbor=0,twondim
-                       do ivar=1,nvar
-                          u1(inbor,ivar)=grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
-                       end do
-                    end do
-
-                    ! Interpolate
-                    call interpol_hydro(u1,u2)
-
-                 endif
-
-              endif
-
-              ! Store grid index
-              h%childloc(i1,j1,k1)=ichild
-              h%parentloc(i1,j1,k1)=parent_cell
-              if(interpol_type>0)then
-                 do inbor=1,twondim
-                    h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
-                 end do
-              endif
-
-              ! Loop over 2x2x2 cells
-              do k2=k2min,k2max
-                 do j2=j2min,j2max
-                    do i2=i2min,i2max                       
-                       ind_son=1+i2+2*j2+4*k2
-                       i3=1; j3=1; k3=1
-#if NDIM>0
-                       i3=1+2*(i1-1)+i2
-#endif
-#if NDIM>1
-                       j3=1+2*(j1-1)+j2
-#endif
-#if NDIM>2
-                       k3=1+2*(k1-1)+k2
-#endif             
-                       ! If neighboring grid exists
-                       if(ichild>0)then
-
-                          ! Gather hydro variables
-                          do ivar=1,nvar
-                             h%uloc(i3,j3,k3,ivar)=grid(ichild)%uold(ind_son,ivar)
-                          end do
-
-#ifdef GRAV
-                          ! Gather gravitational acceleration
-                          do idim=1,ndim
-                             h%gloc(i3,j3,k3,idim)=grid(ichild)%f(ind_son,idim)
-                          end do
-#endif
-                          ! Gather refinement flag
-                          h%okloc(i3,j3,k3)=grid(ichild)%refined(ind_son)
-
-                       ! If neighboring grid doesn't exist, interpolate
-                       else
-
-                          ! Gather hydro variables
-                          do ivar=1,nvar
-                             h%uloc(i3,j3,k3,ivar)=grid(igrid)%uold(icell,ivar)
-                          end do
-
-                          ! Gather interpolated hydro variables
-                          if(interpol_type>0)then
-                             do ivar=1,nvar
-                                h%uloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
-                             end do
-                          endif
-
-#ifdef GRAV
-                          ! Gather gravitational acceleration
-                          do idim=1,ndim
-                             h%gloc(i3,j3,k3,idim)=grid(igrid)%f(icell,idim)
-                          end do
-#endif
-                          ! Gather refinement flag
-                          h%okloc(i3,j3,k3)=.false.
-                       end if
-
-                    end do
-                 end do
-              end do
-              ! End loop over 2x2x2 cells
-           endif
-        end do
-     end do
-  end do
-  ! End over octs
-
-  !-----------------------------------------------
-  ! Compute flux using second-order Godunov method
-  !-----------------------------------------------
-  call unsplit(h%uloc,h%gloc,h%qloc,h%cloc,&
-       & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
-       & dx,dx,dx,dtnew(ilevel),&
-       & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
-       & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
+  associate(r=>s%r,g=>s%g,m=>s%m)
   
-  !------------------------------------------------
-  ! Reset flux along direction at refined interface    
-  !------------------------------------------------
-  do idim=1,ndim
-     i0=0; j0=0; k0=0
-     if(idim==1)i0=1
-     if(idim==2)j0=1
-     if(idim==3)k0=1
-     do k3=k3min,k3max+k0
-        do j3=j3min,j3max+j0
-           do i3=i3min,i3max+i0
-              do ivar=1,nvar
-                 if(h%okloc(i3-i0,j3-j0,k3-k0) .or. h%okloc(i3,j3,k3))then
-                    h%flux(i3,j3,k3,ivar,idim)=0.0d0
-                 end if
-              end do
-#ifdef DUALENER
-              do ivar=1,2
-                 if(h%okloc(i3-i0,j3-j0,k3-k0) .or. h%okloc(i3,j3,k3))then
-                    h%tmp(i3,j3,k3,ivar,idim)=0.0d0
-                 end if
-              end do
-#endif
-           end do
-        end do
-     end do
-  end do
-
-  !--------------------------------------
-  ! Conservative update at level ilevel
-  !--------------------------------------
-  ! Loop over dimensions
-  do idim=1,ndim
-     i0=0; j0=0; k0=0
-     ii0=0; jj0=0; kk0=0
-     if(idim==1)i0=1
-     if(idim==2)j0=1
-     if(idim==3)k0=1
-#if NDIM>0
-     ii0=1
-#endif
-#if NDIM>1
-     jj0=1
-#endif
-#if NDIM>2
-     kk0=1
-#endif
-     ! Loop over inner octs
-     do k1=k1min+kk0,k1max-kk0
-        do j1=j1min+jj0,j1max-jj0
-           do i1=i1min+ii0,i1max-ii0
-              ! Get oct index
-              ind_oct=h%childloc(i1,j1,k1)
-              ! Loop over cells
-              do k2=k2min,k2max
-                 do j2=j2min,j2max
-                    do i2=i2min,i2max
-                       ind_son=1+i2+2*j2+4*k2
-                       i3=1; j3=1; k3=1
-#if NDIM>0
-                       i3=1+2*(i1-1)+i2
-#endif
-#if NDIM>1
-                       j3=1+2*(j1-1)+j2
-#endif
-#if NDIM>2
-                       k3=1+2*(k1-1)+k2
-#endif
-                       ! Update conservative variables new state vector
-                       do ivar=1,nvar
-                          grid(ind_oct)%unew(ind_son,ivar)=&
-                               & grid(ind_oct)%unew(ind_son,ivar)+ &
-                               & (h%flux(i3   ,j3   ,k3   ,ivar,idim) &
-                               & -h%flux(i3+i0,j3+j0,k3+k0,ivar,idim))
-                       end do
-#ifdef DUALENER
-                       ! Update velocity divergence
-                       grid(ind_oct)%divu(ind_son)=&
-                            & grid(ind_oct)%divu(ind_son)+ &
-                            & (h%tmp(i3   ,j3   ,k3   ,1,idim) &
-                            & -h%tmp(i3+i0,j3+j0,k3+k0,1,idim))
-                       ! Update internal energy
-                       grid(ind_oct)%enew(ind_son)=&
-                            & grid(ind_oct)%enew(ind_son)+ &
-                            & (h%tmp(i3   ,j3   ,k3   ,2,idim) &
-                            & -h%tmp(i3+i0,j3+j0,k3+k0,2,idim))
-#endif
-                    end do
-                 end do
-              end do
-           end do
-        end do
-     end do
-  end do
-
-  ! If sitting in coarsest level, exit. 
-  if(ilevel>levelmin)then
-
-  !--------------------------------------
-  ! Conservative update at level ilevel-1
-  !--------------------------------------
-  ! Loop over dimensions
-  do idim=1,ndim
-     i0=0; j0=0; k0=0
-     ii0=0; jj0=0; kk0=0
-     if(idim==1)i0=1
-     if(idim==2)j0=1
-     if(idim==3)k0=1
-#if NDIM>0
-     ii0=1
-#endif
-#if NDIM>1
-     jj0=1
-#endif
-#if NDIM>2
-     kk0=1
-#endif
-     ii1min=i1min+ii0; ii1max=i1max-ii0
-     jj1min=j1min+jj0; jj1max=j1max-jj0
-     kk1min=k1min+kk0; kk1max=k1max-kk0
-     !----------------------
-     ! Left flux at boundary
-     !----------------------     
-     if(idim==1)then
-        ii1min=i1min; ii1max=i1min
-     endif
-     if(idim==2)then
-        jj1min=j1min; jj1max=j1min
-     endif
-     if(idim==3)then
-        kk1min=k1min; kk1max=k1min
-     endif
-     ! Loop over outer octs on left face
-     do k1=kk1min,kk1max
-        do j1=jj1min,jj1max
-           do i1=ii1min,ii1max
-              ! Get oct index
-              ind_oct=h%childloc(i1,j1,k1)
-              ! Check that parent cell is not refined
-              if(ind_oct==0)then
-                 ! Get parent cell index
-                 parent_cell=h%parentloc(i1,j1,k1)
-                 igrid=(parent_cell-1)/twotondim+1
-                 icell=parent_cell-(igrid-1)*twotondim
-                 ! Loop over inner cell left faces
-                 do k2=k2min,k2max-k0
-                    do j2=j2min,j2max-j0
-                       do i2=i2min,i2max-i0
-                          i3=1; j3=1; k3=1
-#if NDIM>0
-                          i3=1+2*(i1+i0-1)+i2
-#endif
-#if NDIM>1
-                          j3=1+2*(j1+j0-1)+j2
-#endif
-#if NDIM>2
-                          k3=1+2*(k1+k0-1)+k2
-#endif
-                          ! Conservative update of new state variables
-                          do ivar=1,nvar
-                             grid(igrid)%unew(icell,ivar)=grid(igrid)%unew(icell,ivar) &
-                                  & -h%flux(i3,j3,k3,ivar,idim)*oneontwotondim
-                          end do
-#ifdef DUALENER
-                          ! Update velocity divergence
-                          grid(igrid)%divu(icell)=grid(igrid)%divu(icell) &
-                               & -h%tmp(i3,j3,k3,1,idim)*oneontwotondim
-                          ! Update internal energy
-                          grid(igrid)%enew(icell)=grid(igrid)%enew(icell) &
-                               & -h%tmp(i3,j3,k3,2,idim)*oneontwotondim
-#endif
-                       end do
-                    end do
-                 end do
-              endif
-           end do
-        end do
-     end do
-     !-----------------------
-     ! Right flux at boundary
-     !-----------------------     
-     if(idim==1)then
-        ii1min=i1max; ii1max=i1max
-     endif
-     if(idim==2)then
-        jj1min=j1max; jj1max=j1max
-     endif
-     if(idim==3)then
-        kk1min=k1max; kk1max=k1max
-     endif
-     ! Loop over outer octs on right face
-     do k1=kk1min,kk1max
-        do j1=jj1min,jj1max
-           do i1=ii1min,ii1max
-              ! Get oct index
-              ind_oct=h%childloc(i1,j1,k1)
-              ! Check that parent cell is not refined
-              if(ind_oct==0)then
-                 ! Get parent cell index
-                 parent_cell=h%parentloc(i1,j1,k1)
-                 igrid=(parent_cell-1)/twotondim+1
-                 icell=parent_cell-(igrid-1)*twotondim
-                 ! Loop over inner cell right faces
-                 do k2=k2min+k0,k2max
-                    do j2=j2min+j0,j2max
-                       do i2=i2min+i0,i2max
-                          i3=1; j3=1; k3=1
-#if NDIM>0
-                          i3=1+2*(i1-i0-1)+i2
-#endif
-#if NDIM>1
-                          j3=1+2*(j1-j0-1)+j2
-#endif
-#if NDIM>2
-                          k3=1+2*(k1-k0-1)+k2
-#endif
-                          ! Conservative update of new state variables
-                          do ivar=1,nvar
-                             grid(igrid)%unew(icell,ivar)=grid(igrid)%unew(icell,ivar) &
-                                  & +h%flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
-                          end do
-#ifdef DUALENER
-                          ! Update velocity divergence
-                          grid(igrid)%divu(icell)=grid(igrid)%divu(icell) &
-                               & +h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*oneontwotondim
-                          ! Update internal energy
-                          grid(igrid)%enew(icell)=grid(igrid)%enew(incell) &
-                               & +h%tmp(i3+i0,j3+j0,k3+k0,2,idim)*oneontwotondim
-#endif
-                       end do
-                    end do
-                 end do
-                 ! End loop over faces
-              endif
-           end do
-        end do
-     end do
-     ! End loop over boundary octs
-  end do
-  ! End loop over dimensions
-  endif
-
-  ! Unlock all octs
-  do k1=k1min,k1max
-     do j1=j1min,j1max
-        do i1=i1min,i1max     
-           ! Get oct index
-           ind_oct=h%childloc(i1,j1,k1)
-           ! Check that parent cell is not refined
-           if(ind_oct>0)then
-              call unlock_cache(ind_oct)
-           else
-              ! Get parent cell index
-              parent_cell=h%parentloc(i1,j1,k1)
-              igrid=(parent_cell-1)/twotondim+1
-              icell=parent_cell-(igrid-1)*twotondim
-              call unlock_cache(igrid)
-              ! Get neighbouring parent oct index
-              if(interpol_type>0)then
-                 do inbor=1,twondim
-                    igrid=h%nborloc(i1,j1,k1,inbor)
-                    if(igrid>0)then
-                       call unlock_cache(igrid)
-                    endif
-                 end do
-              endif
-           endif
-        end do
-     end do
-  end do
-
-#endif
-
-end subroutine godfine1
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine godunov_fine_2(r,g,m,ilevel)
-  use amr_commons, only: run_t,global_t,mesh_t
-  use cache_commons
-  use hydro_commons
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer::ilevel
-  !--------------------------------------------------------------------------
-  ! This routine is a wrapper to the second order Godunov solver.
-  ! Small grids (2x2x2) are gathered from level ilevel and sent to the
-  ! hydro solver. On entry, hydro variables are gathered from array uold.
-  ! On exit, unew has been updated. 
-  !--------------------------------------------------------------------------
-  integer::i,ivar,igrid
-
-  if(m%noct_tot(ilevel)==0)return
-  if(r%static)return
-  if(r%verbose)write(*,111)ilevel
-
-  call open_cache_2(r,g,m,operation_godunov,domain_decompos_amr)
-
-  ! Loop over active grids by vector sweeps
-  igrid=m%head(ilevel)
-  do while(igrid.LE.m%tail(ilevel))
-     SELECT CASE (m%grid(igrid)%superoct)
-     CASE(1)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_1)
-     CASE(2**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_2)
-     CASE(4**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_4)
-     CASE(8**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_8)
-     CASE(16**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_16)
-     CASE(32**ndim)
-        call godfine1_2(r,g,m,igrid,ilevel,hydro_w%kernel_32)
-     END SELECT
-     igrid=igrid+m%grid(igrid)%superoct
-  end do
-
-  call close_cache_2(r,g,m,m%grid_dict)
-
-111 format('   Entering godunov_fine for level ',i2)
-
-end subroutine godunov_fine_2
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine set_unew_2(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer::ilevel
-  !--------------------------------------------------------------------------
-  ! This routine sets array unew to its initial value uold before calling
-  ! the hydro scheme. unew is set to zero in virtual boundaries.
-  !--------------------------------------------------------------------------
-  integer::i,ivar,irad,ind,icpu,iskip
-  real(dp)::d,u,v,w,e
-
-#ifdef HYDRO
-
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
-  ! Set unew to uold for myid cells
-  do i=m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%unew = m%grid(i)%uold
-#ifdef DUALENER
-     do ind=1,twotondim
-        m%grid(i)%divu(ind) = 0.0
-        d=max(m%grid(i)%uold(ind,1),smallr)
-        u=0.0; v=0.0; w=0.0
-        if(ndim>0)u=m%grid(i)%uold(ind,2)/d
-        if(ndim>1)v=m%grid(i)%uold(ind,3)/d
-        if(ndim>2)w=m%grid(i)%uold(ind,4)/d
-        e=m%grid(i)%uold(ind,ndim+2)-0.5*d*(u**2+v**2+w**2)
-#if NENER>0
-        do irad=1,nener
-           e=e-m%grid(i)%uold(ind,ndim+2+irad)
-        end do
-#endif          
-        m%grid(i)%enew(ind) = e
-     end do
-#endif
-  end do
-
-#endif
-
-111 format('   Entering set_unew for level ',i2)
-
-end subroutine set_unew_2
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine set_uold_2(r,g,m,ilevel)
-  use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer::ilevel
-  !---------------------------------------------------------
-  ! This routine sets array uold to its new value unew 
-  ! after the hydro step.
-  !---------------------------------------------------------
-  integer::i,ivar,irad,ind,iskip,nx_loc,ind_cell
-  real(dp)::scale,d,u,v,w
-  real(dp)::e_kin,e_cons,e_prim,e_trunc,div,dx,fact,d_old
-
-#ifdef HYDRO
-
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
-  dx=r%boxlen/2**ilevel
-
-  ! Set uold to unew
-  do i=m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%uold=m%grid(i)%unew
-#ifdef DUALENER
-     do ind=1,twotondim
-        ! Correct total energy if internal energy is too small
-        d=max(m%grid(i)%uold(ind,1),smallr)
-        u=0.0; v=0.0; w=0.0
-        if(ndim>0)u=m%grid(i)%uold(ind,2)/d
-        if(ndim>1)v=m%grid(i)%uold(ind,3)/d
-        if(ndim>2)w=m%grid(i)%uold(ind,4)/d
-        e_kin=0.5*d*(u**2+v**2+w**2)
-#if NENER>0
-        do irad=1,nener
-           e_kin=e_kin+m%grid(i)%uold(ind,ndim+2+irad)
-        end do
-#endif
-        e_cons=m%grid(i)%uold(ind,ndim+2)-e_kin
-        e_prim=m%grid(i)%enew(ind)
-        ! Note: here divu=-div.u*dt
-        div=abs(m%grid(i)%divu(ind))*dx/dtnew(ilevel)
-        e_trunc=r%beta_fix*d*max(div,3.0*g%hexp*dx)**2
-        if(e_cons<e_trunc)then
-           m%grid(i)%uold(ind,ndim+2)=e_prim+e_kin
-        end if
-     end do
-#endif
-  end do
-
-#endif
-
-111 format('   Entering set_uold for level ',i2)
-
-end subroutine set_uold_2
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
-  use amr_parameters, only: ndim,twondim,twotondim,dp
-  use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t
-  use hydro_commons
-  use hash
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer::ind_grid,ilevel
-  type(hydro_kernel_t)::h
-  !-------------------------------------------------------------------
-  ! This routine gathers first hydro variables from neighboring grids
-  ! to set initial conditions in a 6x6x6 grid. It interpolate from
-  ! coarser level missing grid variables. It then calls the
-  ! Godunov solver that computes fluxes. These fluxes are zeroed at 
-  ! coarse-fine boundaries, since contribution from finer levels has
-  ! already been taken into account. Conservative variables are updated 
-  ! and stored in array unew(:), both at the current level and at the 
-  ! coarser level if necessary.
-  !-------------------------------------------------------------------
-  integer::get_grid_2,get_parent_cell_2
-  integer::i,j,ivar,idim,ind_son,iskip,nbuffer,ibuffer,ipos,ind_oct
-  integer::igrid,icell,inbor,ichild,parent_cell,indf,parent_cell2
-  integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
-  integer::ii0,jj0,kk0,ii1,jj1,kk1
-  integer::i1min,i1max,j1min,j1max,k1min,k1max
-  integer::ii1min,ii1max,jj1min,jj1max,kk1min,kk1max
-  integer::i2min=0,i2max=0,j2min=0,j2max=0,k2min=0,k2max=0
-  integer::i3min=1,i3max=1,j3min=1,j3max=1,k3min=1,k3max=1
-  integer,dimension(1:ndim)::ii
-  integer,dimension(1:ndim)::ckey_corner,ckey
-  integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
-  integer,dimension(0:twondim)::igrid_nbor,ind_nbor
-  real(dp)::dx,scale,oneontwotondim
-  real(dp),dimension(0:twondim  ,1:nvar)::u1
-  real(dp),dimension(1:twotondim,1:nvar)::u2
-  logical::okx=.true.,oky=.true.,okz=.true.
-
-#ifdef HYDRO
-
   oneontwotondim = 1.d0/dble(twotondim)
 
   ! Mesh spacing in that level
@@ -932,7 +296,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
 #endif
 
   ! Reset gravitational acceleration
-  h%gloc=0.0
+  h%gloc=0.0d0
 
   !---------------------
   ! Gather hydro stencil
@@ -1013,13 +377,13 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
            else
               ! Compute neighboring grid Cartesian index
 #if NDIM>0
-              hash_nbor(1)=ckey_corner(1)+i1-1.0
+              hash_nbor(1)=ckey_corner(1)+i1-1
 #endif
 #if NDIM>1
-              hash_nbor(2)=ckey_corner(2)+j1-1.0
+              hash_nbor(2)=ckey_corner(2)+j1-1
 #endif
 #if NDIM>2
-              hash_nbor(3)=ckey_corner(3)+k1-1.0
+              hash_nbor(3)=ckey_corner(3)+k1-1
 #endif
               ! Periodic boundary conditons
               do idim=1,ndim
@@ -1028,29 +392,29 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
               enddo
               
               ! Get neighboring grid index with read-only cache
-              ichild=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+              ichild=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
               parent_cell=0
               igrid_nbor=0
               if(ichild>0)then
-                 call lock_cache_2(r,g,m,ichild)
+                 call lock_cache(s,ichild)
               else
 
                  ! Get parent father cell with read-write cache
-                 parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.true.,.true.)
+                 parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.true.,.true.)
                  if(parent_cell==0)then
                     write(*,*)'GODUNOV: parent_cell should exist'
-                    write(*,*)'PE ',myid,hash_nbor
+                    write(*,*)'PE ',g%myid,hash_nbor
                     stop
                  endif
                  igrid=(parent_cell-1)/twotondim+1
                  icell=parent_cell-(igrid-1)*twotondim
-                 call lock_cache_2(r,g,m,igrid)
+                 call lock_cache(s,igrid)
 
                  ! In case one wants to interpolate using high-order schemes
                  if(r%interpol_type>0)then
 
                     ! Get 2ndim neighboring father cells with read-write cache
-                    call get_twondim_nbor_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
+                    call get_twondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
                           u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
@@ -1058,7 +422,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
                     end do
 
                     ! Interpolate
-                    call interpol_hydro(u1,u2)
+                    call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
 
                  endif
 
@@ -1067,7 +431,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
               ! Store grid index
               h%childloc(i1,j1,k1)=ichild
               h%parentloc(i1,j1,k1)=parent_cell
-              if(interpol_type>0)then
+              if(r%interpol_type>0)then
                  do inbor=1,twondim
                     h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
                  end do
@@ -1114,7 +478,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
                           end do
 
                           ! Gather interpolated hydro variables
-                          if(interpol_type>0)then
+                          if(r%interpol_type>0)then
                              do ivar=1,nvar
                                 h%uloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
                              end do
@@ -1147,7 +511,8 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
        & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
        & dx,dx,dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
-       & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
+       & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2,&
+       & r%gamma,r%gamma_rad,r%smallr,r%smallc,r%slope_type,r%riemann,r%difmag)
   
   !------------------------------------------------
   ! Reset flux along direction at refined interface    
@@ -1245,7 +610,7 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
   end do
 
   ! If sitting in coarsest level, exit. 
-  if(ilevel>levelmin)then
+  if(ilevel>r%levelmin)then
 
   !--------------------------------------
   ! Conservative update at level ilevel-1
@@ -1399,19 +764,19 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
            ind_oct=h%childloc(i1,j1,k1)
            ! Check that parent cell is not refined
            if(ind_oct>0)then
-              call unlock_cache_2(r,g,m,ind_oct)
+              call unlock_cache(s,ind_oct)
            else
               ! Get parent cell index
               parent_cell=h%parentloc(i1,j1,k1)
               igrid=(parent_cell-1)/twotondim+1
               icell=parent_cell-(igrid-1)*twotondim
-              call unlock_cache_2(r,g,m,igrid)
+              call unlock_cache(s,igrid)
               ! Get neighbouring parent oct index
-              if(interpol_type>0)then
+              if(r%interpol_type>0)then
                  do inbor=1,twondim
                     igrid=h%nborloc(i1,j1,k1,inbor)
                     if(igrid>0)then
-                       call unlock_cache_2(r,g,m,igrid)
+                       call unlock_cache(s,igrid)
                     endif
                  end do
               endif
@@ -1420,9 +785,87 @@ subroutine godfine1_2(r,g,m,ind_grid,ilevel,h)
      end do
   end do
 
+  end associate
+  
 #endif
 
-end subroutine godfine1_2
+end subroutine godfine1
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine init_flush_godunov(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind,ivar
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%unew(ind,ivar)=0.0d0
+     enddo
+  enddo
+#endif
+  
+end subroutine init_flush_godunov
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine pack_flush_godunov(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_large_realdp)::msg
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp_hydro(ind,ivar)=grid%unew(ind,ivar)
+     end do
+  end do
+#endif
+  
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_godunov
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine unpack_flush_godunov(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_large_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_large_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%unew(ind,ivar)=grid%unew(ind,ivar)+msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+#endif
+  
+end subroutine unpack_flush_godunov
 !###########################################################
 !###########################################################
 !###########################################################

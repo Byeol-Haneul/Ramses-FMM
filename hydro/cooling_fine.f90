@@ -2,73 +2,37 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cooling_fine(ilevel)
-  use amr_commons
-  use hydro_commons
+recursive subroutine r_cooling_fine(s,cpu_range,input_size,output_size,ilevel)
+  use amr_parameters, only: dp
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
   integer::ilevel
-  !-------------------------------------------------------------------
-  ! Compute cooling for fine levels
-  !-------------------------------------------------------------------
-  integer::igrid,ind,idim
-  real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2
-  real(dp)::d,nH,T2,ekin,etot,eint
 
-#ifdef HYDRO
+  integer::next_range,next_cpu
+  
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_COOLING_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cooling_fine(s,next_range,input_size,output_size,ilevel)
+  else
+     call cooling_fine(s%r,s%g,s%m,ilevel)
+  endif
 
-  ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-
-  do igrid=head(ilevel),tail(ilevel)
-     do ind=1,twotondim
-
-        if(.NOT. grid(igrid)%refined(ind))then
-
-           d=max(grid(igrid)%uold(ind,1),smallr)
-           etot=grid(igrid)%uold(ind,ndim+2)
-           ekin=0.0
-           do idim=1,ndim
-              ekin=ekin+0.5*grid(igrid)%uold(ind,idim+1)**2/d
-           end do
-           eint=etot-ekin
-           T2=(gamma-1.0)*(eint/d)*scale_T2
-           nH=d*scale_nH
-           
-           ! Set isothermal temperature in Kelvins. 
-           T2=T2_star*(1.0+(nH/n_star)**(g_star-1.0))
-           
-           eint=d*(T2/scale_T2/(gamma-1.0))
-           etot=ekin+eint
-           grid(igrid)%uold(ind,ndim+2)=etot
-
-        endif
-
-     end do
-  end do
-
-#endif
-
-111 format('   Entering cooling_fine for level',i2)
-
-end subroutine cooling_fine
+end subroutine r_cooling_fine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cooling_fine_2(r,g,m,ilevel)
+subroutine cooling_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -82,11 +46,8 @@ subroutine cooling_fine_2(r,g,m,ilevel)
 
 #ifdef HYDRO
 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
   ! Conversion factor from user units to cgs units
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
@@ -117,9 +78,7 @@ subroutine cooling_fine_2(r,g,m,ilevel)
 
 #endif
 
-111 format('   Entering cooling_fine for level',i2)
-
-end subroutine cooling_fine_2
+end subroutine cooling_fine
 !###########################################################
 !###########################################################
 !###########################################################

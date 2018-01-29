@@ -176,8 +176,6 @@ CONTAINS
     CHARACTER(LEN=256) :: filename
     CHARACTER(LEN=6) :: fileno
     INTEGER :: np
-    logical::ok
-
 
     !     Generate the number to go on the end of the filename
     IF(ifile.LT.10)THEN

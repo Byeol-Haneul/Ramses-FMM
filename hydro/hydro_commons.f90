@@ -30,8 +30,6 @@ module hydro_commons
      type(hydro_kernel_t)::kernel_1,kernel_2,kernel_4,kernel_8,kernel_16,kernel_32
   end type hydro_workspace_t
 
-  type(hydro_workspace_t)::hydro_w
-
 contains
   
   subroutine init_hydro_kernel(h,nn)

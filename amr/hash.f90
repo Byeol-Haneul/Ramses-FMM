@@ -14,7 +14,6 @@ module hash
   implicit none
   
   ! General module parameters
-  integer, parameter :: key_length = (ndim + 1) * 8
   integer, dimension(0:3), parameter :: constants = (/5, -1640531527, 97, 1003313/)
   
   ! Define a bucket as a derived type (sequence statement!) for better
@@ -97,10 +96,10 @@ contains
     end if
     
     ! Compute sizes and allocate arrays
-    htable%total_size = htable%size / 4 + htable%size
-    htable%nfree = htable%size
-    htable%nfree_chain = htable%total_size - htable%size
-    htable%head_free = htable%size + 1
+    htable%total_size = int(htable%size/4,kind=4) + int(htable%size,kind=4)
+    htable%nfree = int(htable%size,kind=4)
+    htable%nfree_chain = htable%total_size - int(htable%size,kind=4)
+    htable%head_free = int(htable%size,kind=4) + 1
     htable%bitmask = htable%size - 1
 
     if (.not. allocated(htable%data))then
@@ -109,10 +108,10 @@ contains
     end if
 
     ! Initialize data
-    do i = 1, htable%total_size
+    do i = 1, int(htable%total_size,kind=4)
        call reset_bucket(htable%data(i))
     end do
-    do i = htable%size + 1, htable%total_size - 1
+    do i = int(htable%size,kind=4) + 1, htable%total_size - 1
        htable%next_free(i) = i + 1
     end do
     htable%next_free(htable%total_size) = 0
@@ -141,7 +140,8 @@ contains
     ! Add a key/value pair to the hash table. If there is already a key/value
     ! pair stored for this key, return an error message.
 
-    integer(kind=8) :: ibucket, full_hash    
+    integer(kind=8) :: full_hash
+    integer(kind=8) :: ibucket
 
     if (val == 0)then
        write(*,*) "trying to insert 0 (0 is used to indicate absence of a value) "
@@ -309,7 +309,7 @@ contains
 
     ! Remove the hash table entry for a given key 
 
-    integer(kind=8) :: ibucket, previous_ibucket, full_hash
+    integer(kind=8) :: ibucket, previous_ibucket=0, full_hash
 
     full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
@@ -336,7 +336,7 @@ contains
        ! fill the hole and reconnect linked list
        htable%data(previous_ibucket)%next_ibucket = htable%data(ibucket)%next_ibucket
        htable%next_free(ibucket) = htable%head_free
-       htable%head_free = ibucket
+       htable%head_free = int(ibucket,kind=4)
        htable%nfree_chain = htable%nfree_chain + 1
     end if
   end subroutine hash_free

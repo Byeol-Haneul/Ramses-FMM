@@ -2,10 +2,13 @@
 !================================================================
 !================================================================
 !================================================================
-subroutine condinit(x,u,dx,nn)
-  use amr_parameters
-  use hydro_parameters
+subroutine condinit(r,g,x,u,dx,nn)
+  use amr_parameters, only: dp, ndim, nvector
+  use hydro_parameters, only: nvar, nener
+  use amr_commons, only: run_t, global_t
   implicit none
+  type(run_t)::r
+  type(global_t)::g
   integer ::nn                            ! Number of cells
   real(dp)::dx                            ! Cell size
   real(dp),dimension(1:nvector,1:nvar)::u ! Conservative variables
@@ -22,11 +25,16 @@ subroutine condinit(x,u,dx,nn)
   ! scalars in the hydro solver.
   ! U(:,:) and Q(:,:) are in user units.
   !================================================================
+#if NVAR>NDIM+2+NENER
   integer::ivar
+#endif
+#if NENER>0
+  integer::irad
+#endif
   real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
 
   ! Call built-in initial condition generator
-  call region_condinit(x,q,dx,nn)
+  call region_condinit(r,g,x,q,dx,nn)
 
   ! Add here, if you wish, some user-defined initial conditions
   ! ........
@@ -52,13 +60,13 @@ subroutine condinit(x,u,dx,nn)
   u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5*q(1:nn,1)*q(1:nn,4)**2
 #endif
   ! thermal pressure -> total fluid energy
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+q(1:nn,ndim+2)/(gamma-1.0d0)
+  u(1:nn,ndim+2)=u(1:nn,ndim+2)+q(1:nn,ndim+2)/(r%gamma-1.0d0)
 #if NENER>0
   ! radiative pressure -> radiative energy
   ! radiative energy -> total fluid energy
-  do ivar=1,nener
-     u(1:nn,ndim+2+ivar)=q(1:nn,ndim+2+ivar)/(gamma_rad(ivar)-1.0d0)
-     u(1:nn,ndim+2)=u(1:nn,ndim+2)+u(1:nn,ndim+2+ivar)
+  do irad=1,nener
+     u(1:nn,ndim+2+irad)=q(1:nn,ndim+2+irad)/(r%gamma_rad(irad)-1.0d0)
+     u(1:nn,ndim+2)=u(1:nn,ndim+2)+u(1:nn,ndim+2+irad)
   enddo
 #endif
 #if NVAR>NDIM+2+NENER

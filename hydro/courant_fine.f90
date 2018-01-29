@@ -2,159 +2,85 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine courant_fine(ilevel)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
+recursive subroutine r_courant_fine(s,cpu_range,input_size,output_size,ilevel,output_array)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
   integer::ilevel
-  !----------------------------------------------------------------------
-  ! Using the Courant-Friedrich-Levy stability condition,               !
-  ! this routine computes the maximum allowed time-step.                !
-  !----------------------------------------------------------------------
-  integer::i,ivar,idim,ind,igrid,iskip
-  integer::info,nleaf,ngrid,nx_loc
-  real(dp)::dt_lev,dx,vol,scale
-  real(kind=8)::mass_loc,ekin_loc,eint_loc,dt_loc
-  real(kind=8)::mass_all,ekin_all,eint_all,dt_all
-  real(kind=8),dimension(3)::comm_buffin,comm_buffout
-  real(dp),dimension(1:nvar)::uu
-  real(dp),dimension(1:ndim)::gg
+  integer,dimension(1:output_size)::output_array
 
-#ifdef HYDRO
+  integer::next_range,next_cpu
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::mass,ekin,eint,dt
+  real(kind=8)::next_mass,next_ekin,next_eint,next_dt
 
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-  mass_all=0.0d0; mass_loc=0.0d0
-  ekin_all=0.0d0; ekin_loc=0.0d0
-  eint_all=0.0d0; eint_loc=0.0d0
-  dt_all=dtnew(ilevel); dt_loc=dt_all
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_COURANT_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_courant_fine(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     mass=transfer(output_array(1:2),mass)
+     ekin=transfer(output_array(3:4),ekin)
+     eint=transfer(output_array(5:6),eint)
+     dt=transfer(output_array(7:8),dt)
+     next_mass=transfer(next_output_array(1:2),next_mass)
+     next_ekin=transfer(next_output_array(3:4),next_ekin)
+     next_eint=transfer(next_output_array(5:6),next_eint)
+     next_dt=transfer(next_output_array(7:8),next_dt)
+     mass=mass+next_mass
+     ekin=ekin+next_ekin
+     eint=eint+next_eint
+     dt=MIN(dt,next_dt)
+     output_array(1:2)=transfer(mass,output_array)
+     output_array(3:4)=transfer(ekin,output_array)
+     output_array(5:6)=transfer(eint,output_array)
+     output_array(7:8)=transfer(dt,output_array)
+  else
+     call courant_fine(s%r,s%g,s%m,ilevel,mass,ekin,eint,dt)
+     output_array(1:2)=transfer(mass,output_array)
+     output_array(3:4)=transfer(ekin,output_array)
+     output_array(5:6)=transfer(eint,output_array)
+     output_array(7:8)=transfer(dt,output_array)
+  endif
 
-  ! Mesh spacing at that level
-  dx=0.5D0**ilevel*boxlen
-  vol=dx**ndim
-
-  ! Loop over active grids by vector sweeps
-  do igrid=head(ilevel),tail(ilevel)
-     ! Loop over cells
-     do ind=1,twotondim                
-
-        ! Gather leaf cells
-        if(.NOT. grid(igrid)%refined(ind))then
-
-           ! Gather hydro variables
-           do ivar=1,nvar
-              uu(ivar)=grid(igrid)%uold(ind,ivar)
-           end do
-
-           ! Gather gravitational acceleration
-           gg=0.0d0
-#ifdef GRAV
-           if(poisson)then
-              do idim=1,ndim
-                 gg(idim)=grid(igrid)%f(ind,idim)
-              end do
-           end if
-#endif
-           ! Compute total mass
-           mass_loc=mass_loc+uu(1)*vol
-
-           ! Compute total energy
-           ekin_loc=ekin_loc+uu(ndim+2)*vol
-
-           ! Compute total internal energy
-           eint_loc=eint_loc+uu(ndim+2)*vol
-           do ivar=1,ndim
-              eint_loc=eint_loc-0.5d0*uu(1+ivar)**2/max(uu(1),smallr)*vol
-           end do
-#if NENER>0
-           do ivar=1,nener
-              eint_loc=eint_loc-uu(ndim+2+ivar)*vol
-           end do
-#endif
-           ! Compute CFL time-step
-           call cmpdt(uu,gg,dx,dt_lev)
-           dt_loc=min(dt_loc,dt_lev)
-        endif
-
-     end do
-     ! End loop over cells
-  end do
-  ! End loop over grids
-
-  ! Compute global quantities
-#ifndef WITHOUTMPI
-  comm_buffin(1)=mass_loc
-  comm_buffin(2)=ekin_loc
-  comm_buffin(3)=eint_loc
-  call MPI_ALLREDUCE(comm_buffin,comm_buffout,3,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
-  mass_all=comm_buffout(1)
-  ekin_all=comm_buffout(2)
-  eint_all=comm_buffout(3)
-#endif
-#ifdef WITHOUTMPI
-  mass_all=mass_loc
-  ekin_all=ekin_loc
-  eint_all=eint_loc
-  dt_all=dt_loc
-#endif
-  mass_tot=mass_tot+mass_all
-  ekin_tot=ekin_tot+ekin_all
-  eint_tot=eint_tot+eint_all
-  dtnew(ilevel)=MIN(dtnew(ilevel),dt_all)
-
-#endif
-
-111 format('   Entering courant_fine for level ',I2)
-
-end subroutine courant_fine
+end subroutine r_courant_fine
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine courant_fine_2(r,g,m,ilevel)
+subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,dt)
   use amr_parameters, only: dp,nvector,ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   integer::ilevel
+  real(kind=8)::mass,ekin,eint,dt
   !----------------------------------------------------------------------
   ! Using the Courant-Friedrich-Levy stability condition,               !
   ! this routine computes the maximum allowed time-step.                !
   !----------------------------------------------------------------------
-  integer::i,ivar,idim,ind,igrid,iskip
-  integer::info,nleaf,ngrid,nx_loc
-  real(dp)::dt_lev,dx,vol,scale
-  real(kind=8)::mass_loc,ekin_loc,eint_loc,dt_loc
-  real(kind=8)::mass_all,ekin_all,eint_all,dt_all
-  real(kind=8),dimension(3)::comm_buffin,comm_buffout
+  integer::ivar,idim,ind,igrid
+  real(dp)::dt_lev,dx,vol
   real(dp),dimension(1:nvar)::uu
   real(dp),dimension(1:ndim)::gg
 
 #ifdef HYDRO
 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
-  mass_all=0.0d0; mass_loc=0.0d0
-  ekin_all=0.0d0; ekin_loc=0.0d0
-  eint_all=0.0d0; eint_loc=0.0d0
-  dt_all=g%dtnew(ilevel); dt_loc=dt_all
-
   ! Mesh spacing at that level
   dx=0.5D0**ilevel*r%boxlen
   vol=dx**ndim
+
+  mass=0.0D0
+  ekin=0.0D0
+  eint=0.0D0
+  dt=dx/r%smallc
 
   ! Loop over active grids by vector sweeps
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -179,24 +105,24 @@ subroutine courant_fine_2(r,g,m,ilevel)
            end if
 #endif
            ! Compute total mass
-           mass_loc=mass_loc+uu(1)*vol
+           mass=mass+uu(1)*vol
 
            ! Compute total energy
-           ekin_loc=ekin_loc+uu(ndim+2)*vol
+           ekin=ekin+uu(ndim+2)*vol
 
            ! Compute total internal energy
-           eint_loc=eint_loc+uu(ndim+2)*vol
+           eint=eint+uu(ndim+2)*vol
            do ivar=1,ndim
-              eint_loc=eint_loc-0.5d0*uu(1+ivar)**2/max(uu(1),r%smallr)*vol
+              eint=eint-0.5D0*uu(1+ivar)**2/max(uu(1),r%smallr)*vol
            end do
 #if NENER>0
            do ivar=1,nener
-              eint_loc=eint_loc-uu(ndim+2+ivar)*vol
+              eint=eint-uu(ndim+2+ivar)*vol
            end do
 #endif
            ! Compute CFL time-step
-           call cmpdt(uu,gg,dx,dt_lev)
-           dt_loc=min(dt_loc,dt_lev)
+           call cmpdt(r,uu,gg,dx,dt_lev)
+           dt=min(dt,dt_lev)
         endif
 
      end do
@@ -204,133 +130,9 @@ subroutine courant_fine_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-  ! Compute global quantities
-#ifndef WITHOUTMPI
-  comm_buffin(1)=mass_loc
-  comm_buffin(2)=ekin_loc
-  comm_buffin(3)=eint_loc
-  call MPI_ALLREDUCE(comm_buffin,comm_buffout,3,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(dt_loc,dt_all,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
-  mass_all=comm_buffout(1)
-  ekin_all=comm_buffout(2)
-  eint_all=comm_buffout(3)
-#endif
-#ifdef WITHOUTMPI
-  mass_all=mass_loc
-  ekin_all=ekin_loc
-  eint_all=eint_loc
-  dt_all=dt_loc
-#endif
-  g%mass_tot=g%mass_tot+mass_all
-  g%ekin_tot=g%ekin_tot+ekin_all
-  g%eint_tot=g%eint_tot+eint_all
-  g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt_all)
-
 #endif
 
-111 format('   Entering courant_fine for level ',I2)
-
-end subroutine courant_fine_2
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine check_cons(ilevel)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  integer::ilevel
-  !----------------------------------------------------------------------
-  ! Check mass and energy conservation
-  ! Copy the following lines in amr_step:
-  ! ekin_tot=0.0D0  ! Reset total kinetic energy
-  ! mass_tot=0.0D0  ! Reset total mass
-  ! do ilev=ilevel,nlevelmax
-  !    call check_cons(ilev)
-  ! end do
-  ! if(myid==1)write(*,*)'after cooling ',ilevel,mass_tot
-  !----------------------------------------------------------------------
-  integer::i,ivar,idim,ind,igrid,iskip
-  integer::info,nleaf,ngrid,nx_loc
-
-  real(dp)::dt_lev,dx,vol,scale
-  real(kind=8)::mass_loc,ekin_loc,eint_loc,dt_loc
-  real(kind=8)::mass_all,ekin_all,eint_all,dt_all
-  real(kind=8),dimension(3)::comm_buffin,comm_buffout
-  real(dp),dimension(1:nvar),save::uu
-  real(dp),dimension(1:ndim),save::gg=0.0
-
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-#ifdef HYDRO
-
-  mass_all=0.0d0; mass_loc=0.0d0
-  ekin_all=0.0d0; ekin_loc=0.0d0
-  eint_all=0.0d0; eint_loc=0.0d0
-
-  ! Mesh spacing at that level
-  dx=0.5D0**ilevel*boxlen
-  vol=dx**ndim
-
-  ! Loop over active grids by vector sweeps
-  do igrid=head(ilevel),tail(ilevel)
-     ! Loop over cells
-     do ind=1,twotondim                
-        ! Gather leaf cells
-        if(.NOT. grid(igrid)%refined(ind))then
-           ! Gather hydro variables
-           do ivar=1,nvar
-              uu(ivar)=grid(igrid)%uold(ind,ivar)
-           end do
-           ! Compute total mass
-           mass_loc=mass_loc+uu(1)*vol
-           ! Compute total energy
-           ekin_loc=ekin_loc+uu(ndim+2)*vol
-           ! Compute total internal energy
-           eint_loc=eint_loc+uu(ndim+2)*vol
-           do ivar=1,ndim
-              eint_loc=eint_loc-0.5d0*uu(1+ivar)**2/max(uu(1),smallr)*vol
-           end do
-#if NENER>0
-           do ivar=1,nener
-              eint_loc=eint_loc-uu(ndim+2+ivar)*vol
-           end do
-#endif
-        endif
-     end do
-     ! End loop over cells
-  end do
-  ! End loop over grids
-
-  ! Compute global quantities
-#ifndef WITHOUTMPI
-  comm_buffin(1)=mass_loc
-  comm_buffin(2)=ekin_loc
-  comm_buffin(3)=eint_loc
-  call MPI_ALLREDUCE(comm_buffin,comm_buffout,3,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  mass_all=comm_buffout(1)
-  ekin_all=comm_buffout(2)
-  eint_all=comm_buffout(3)
-#endif
-#ifdef WITHOUTMPI
-  mass_all=mass_loc
-  ekin_all=ekin_loc
-  eint_all=eint_loc
-#endif
-  mass_tot=mass_tot+mass_all
-  ekin_tot=ekin_tot+ekin_all
-  eint_tot=eint_tot+eint_all
-
-#endif
-
-111 format('   Entering check_cons for level ',I2)
-  
-end subroutine check_cons
+end subroutine courant_fine
 !###########################################################
 !###########################################################
 !###########################################################

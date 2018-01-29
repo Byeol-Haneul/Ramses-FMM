@@ -5,8 +5,8 @@
 subroutine cmpdivu(q,div,dx,dy,dz,&
      & iu1,iu2,ju1,ju2,ku1,ku2,&
      & if1,if2,jf1,jf2,kf1,kf2)
-  use amr_parameters
-  use hydro_parameters
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar
   use const
   implicit none
 
@@ -59,13 +59,13 @@ end subroutine cmpdivu
 !###########################################################
 subroutine consup(uin,flux,div,dt,&
      & iu1,iu2,ju1,ju2,ku1,ku2,&
-     & if1,if2,jf1,jf2,kf1,kf2)
-  use amr_parameters
-  use hydro_parameters
+     & if1,if2,jf1,jf2,kf1,kf2,difmag)
+  use amr_parameters, only: dp, ndim
+  use hydro_parameters, only: nvar
   use const
   implicit none
 
-  real(dp)::dt
+  real(dp)::dt,difmag
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin 

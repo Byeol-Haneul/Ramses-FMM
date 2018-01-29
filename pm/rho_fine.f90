@@ -2,754 +2,156 @@
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine rho_fine(ilevel)
-  use amr_commons
-  use pm_commons
-  use hydro_commons
-  use poisson_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  integer::ilevel
-  !------------------------------------------------------------------
-  ! This routine computes the mass density field to be used as 
-  ! source term in the Poisson solver.
-  ! The density field is computed for all levels greater than ilevel.
-  ! On output, particles are sorted according to the level they sit in
-  ! and inside their level, they are sorted in grid Hilbert order.
-  !------------------------------------------------------------------
-  integer::i,igrid,ind,info
-  real(dp)::dx_loc,d_scale
-  real(kind=8),dimension(1:ndim+1)::multipole_in,multipole_out
-
-  if(.not. poisson)return
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-  ! Mesh spacing in that level
-  dx_loc=boxlen/2**ilevel 
-  if(ilevel==levelmin)multipole=0d0
-
-  !-------------------------------------------------------
-  ! Initialize rho to analytical and baryon density field
-  !-------------------------------------------------------
-  do i=nlevelmax,ilevel,-1
-     ! Compute mass multipole
-     if(hydro)call multipole_fine(i)
-     ! Perform CIC using pseudo-particle
-     call cic_from_multipole(i)
-  end do
-
-  !-------------------------------------------------------
-  ! Compute particle contribution to density field
-  !-------------------------------------------------------
-  if(pic)then
-     do i=ilevel,nlevelmax
-                               call timer('rho','start')
-        call cic_part(i)
-                               call timer('particles','start')
-        call split_part(i)
-                               call timer('rho','start')
-     end do
-  endif
-
-  !--------------------------------------------------------------
-  ! Compute multipole contribution from all cpus and set rho_tot
-  !--------------------------------------------------------------
-#ifndef WITHOUTMPI
-  if(ilevel==levelmin)then
-     multipole_in=multipole
-     call MPI_ALLREDUCE(multipole_in,multipole_out,ndim+1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     multipole=multipole_out
-  endif
-#endif
-  rho_tot=multipole(1)/boxlen**ndim
-  if(debug)write(*,*)'rho_average=',rho_tot
-!!! rho_tot=0d0 ! For non-periodic BC
-  
-111 format('   Entering rho_fine for level ',I2)
-  
-end subroutine rho_fine
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine multipole_fine(ilevel)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  integer::ilevel
-  !-------------------------------------------------------------------
-  ! This routine compute the monopole and dipole of the gas mass and
-  ! the analytical profile (if any) within each cell.
-  ! For pure particle runs, this is not necessary and the
-  ! routine is not even called.
-  !-------------------------------------------------------------------
-  integer::igrid,ind,idim,ivar,nstride,ioct,icell
-  integer::parent_cell,get_parent_cell
-  real(dp),dimension(1:ndim),save::xx
-  real(kind=8)::dx_loc,vol_loc,mmm,dd,average
-  integer(kind=8),dimension(0:ndim)::hash_key
-  logical::leaf_cell
-
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-  ! Mesh spacing in that level
-  dx_loc=boxlen/2**ilevel 
-  vol_loc=dx_loc**ndim
-
-#ifdef HYDRO
-  ! Initialize multipole fields to zero
-  do igrid=head(ilevel),tail(ilevel)
-     do ind=1,twotondim
-        do idim=1,ndim+1
-           grid(igrid)%unew(ind,idim)=0.0D0
-        end do
-     end do
-  end do
-#endif
-
-  !-------------------------------------------------------
-  ! Compute contribution of leaf cells to mass multipoles
-  !-------------------------------------------------------
-  do igrid=head(ilevel),tail(ilevel)
-     ! Loop over cells
-     do ind=1,twotondim
-
-        leaf_cell=grid(igrid)%refined(ind).EQV..FALSE.
-
-        ! For leaf cells only
-        if(leaf_cell)then
-
-           ! Cell coordinates
-           do idim=1,ndim
-              nstride=2**(idim-1)
-              xx(idim)=(2*grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx_loc
-           end do
-#ifdef HYDRO
-           ! Add gas mass
-           mmm=max(grid(igrid)%uold(ind,1),smallr)*vol_loc
-           grid(igrid)%unew(ind,1)=grid(igrid)%unew(ind,1)+mmm
-           do idim=1,ndim
-              grid(igrid)%unew(ind,idim+1)=grid(igrid)%unew(ind,idim+1)+mmm*xx(idim)
-           end do
-#endif
-           ! Add analytical density profile
-           if(gravity_type < 0)then           
-              call rho_ana(xx,dd,dx_loc)
-              mmm=max(dd,smallr)*vol_loc
-#ifdef HYDRO
-              grid(igrid)%unew(ind,1)=grid(igrid)%unew(ind,1)+mmm
-              do idim=1,ndim
-                 grid(igrid)%unew(ind,idim+1)=grid(igrid)%unew(ind,idim+1)+mmm*xx(idim)
-              end do
-#endif
-           end if
-        endif
-     end do
-     ! End loop over cells
-  end do
-  ! End loop over grids
-
-  !-------------------------------------------------------
-  ! Perform octree restriction from level ilevel+1
-  !-------------------------------------------------------
-  if(ilevel==nlevelmax)return
-  if(noct_tot(ilevel+1)==0)return
-
-  call open_cache(operation_multipole,domain_decompos_amr)
-
-  ! Loop over finer level grids
-  hash_key(0)=ilevel+1
-  do ioct=head(ilevel+1),tail(ilevel+1)
-     hash_key(1:ndim)=grid(ioct)%ckey(1:ndim)
-     ! Get parent cell using a write-only cache
-     parent_cell=get_parent_cell(hash_key,grid_dict,.true.,.false.)
-     igrid=(parent_cell-1)/twotondim+1
-     icell=parent_cell-(igrid-1)*twotondim
-#ifdef HYDRO
-     ! Average conservative variables
-     do ivar=1,ndim+1
-        average=0.0d0
-        do ind=1,twotondim
-           average=average+grid(ioct)%unew(ind,ivar)
-        end do
-        ! Scatter result to cell
-        grid(igrid)%unew(icell,ivar)=average
-     end do
-#endif
-  end do
-
-  call close_cache(grid_dict)
-
-111 format('   Entering multipole_fine for level',i2)
-
-end subroutine multipole_fine
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine cic_from_multipole(ilevel)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  integer::ilevel
-  !-------------------------------------------------------------------
-  ! This routine compute array rho (source term for Poisson equation)
-  ! by first reseting array rho to zero, then 
-  ! by depositing the gas multipole mass in each cells using CIC.
-  ! For pure particle runs, the gas mass deposition is not done
-  ! and the routine only set rho to zero.
-  !-------------------------------------------------------------------
-  integer::igrid,ind
-
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-#ifdef GRAV
-  ! Initialize density field to zero
-  do igrid=head(ilevel),tail(ilevel)
-     do ind=1,twotondim
-        grid(igrid)%rho(ind)=0.0D0
-     end do
-  end do
-#endif  
-
-  if(hydro)call cic_cell(ilevel)
-
-111 format('   Entering cic_from_multipole for level',i2)
-
-end subroutine cic_from_multipole
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine cic_cell(ilevel)
-  use amr_commons
-  use poisson_commons, ONLY:multipole
-  implicit none
-  integer::ilevel
-  !
-  !
-  real(dp),dimension(1:ndim),save::x,dd,dg
-  integer,dimension(1:ndim),save::ig,id
-  real(dp),dimension(1:twotondim),save::vol
-  integer,dimension(1:ndim,1:twotondim)::ckey
-  integer(kind=8),dimension(0:ndim),save::hash_nbor
-  integer::inbor,igrid,ind,idim
-  integer::ioct,icell,parent_cell,get_parent_cell
-  real(kind=8)::dx_loc,vol_loc,mmm
-  
-  ! Mesh spacing in that level
-  dx_loc=boxlen/2**ilevel 
-  vol_loc=dx_loc**ndim
-
-  ! Use hash table directly for cells (not for grids)
-  hash_nbor(0)=ilevel+1
-
-  call open_cache(operation_rho,domain_decompos_amr)
-
-  ! Loop over grids
-  do igrid=head(ilevel),tail(ilevel)
-
-     ! Loop over cells
-     do ind=1,twotondim
-
-#ifdef HYDRO        
-        ! Compute pseudo particle mass
-        mmm=grid(igrid)%unew(ind,1)
-
-        ! Compute pseudo particle (centre of mass) position
-        x(1:ndim)=grid(igrid)%unew(ind,2:ndim+1)/mmm
-        
-        ! Compute total multipole
-        if(ilevel==levelmin)then
-           do idim=1,ndim+1
-              multipole(idim)=multipole(idim)+grid(igrid)%unew(ind,idim)
-           end do
-        endif
-#endif
-        ! Rescale particle position at level ilevel
-        do idim=1,ndim
-           x(idim)=x(idim)/dx_loc
-        end do
-     
-        ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
-        do idim=1,ndim
-           dd(idim)=x(idim)+0.5D0
-           id(idim)=dd(idim)
-           dd(idim)=dd(idim)-id(idim)
-           dg(idim)=1.0D0-dd(idim)
-           ig(idim)=id(idim)-1
-        end do
-
-        ! Periodic boundary conditions
-        do idim=1,ndim
-           if(ig(idim)<0)ig(idim)=ckey_max(ilevel+1)-1
-           if(id(idim)==ckey_max(ilevel+1))id(idim)=0
-        enddo
-
-        ! Compute cloud volumes
-#if NDIM==1
-        vol(1)=dg(1)
-        vol(2)=dd(1)
-#endif
-#if NDIM==2
-        vol(1)=dg(1)*dg(2)
-        vol(2)=dd(1)*dg(2)
-        vol(3)=dg(1)*dd(2)
-        vol(4)=dd(1)*dd(2)
-#endif
-#if NDIM==3
-        vol(1)=dg(1)*dg(2)*dg(3)
-        vol(2)=dd(1)*dg(2)*dg(3)
-        vol(3)=dg(1)*dd(2)*dg(3)
-        vol(4)=dd(1)*dd(2)*dg(3)
-        vol(5)=dg(1)*dg(2)*dd(3)
-        vol(6)=dd(1)*dg(2)*dd(3)
-        vol(7)=dg(1)*dd(2)*dd(3)
-        vol(8)=dd(1)*dd(2)*dd(3)
-#endif
-
-        ! Compute cells Cartesian key
-#if NDIM==1
-        ckey(1,1)=ig(1)
-        ckey(1,2)=id(1)
-#endif
-#if NDIM==2
-        ckey(1:2,1)=(/ig(1),ig(2)/)
-        ckey(1:2,2)=(/id(1),ig(2)/)
-        ckey(1:2,3)=(/ig(1),id(2)/)
-        ckey(1:2,4)=(/id(1),id(2)/)
-#endif
-#if NDIM==3
-        ckey(1:3,1)=(/ig(1),ig(2),ig(3)/)
-        ckey(1:3,2)=(/id(1),ig(2),ig(3)/)
-        ckey(1:3,3)=(/ig(1),id(2),ig(3)/)
-        ckey(1:3,4)=(/id(1),id(2),ig(3)/)
-        ckey(1:3,5)=(/ig(1),ig(2),id(3)/)
-        ckey(1:3,6)=(/id(1),ig(2),id(3)/)
-        ckey(1:3,7)=(/ig(1),id(2),id(3)/)
-        ckey(1:3,8)=(/id(1),id(2),id(3)/)
-#endif     
-
-#ifdef GRAV
-        ! Update mass density
-        do inbor=1,twotondim
-           hash_nbor(1:ndim)=ckey(1:ndim,inbor)
-           ! Get parent cell using write-only cache
-           parent_cell=get_parent_cell(hash_nbor,grid_dict,.true.,.false.)
-           if(parent_cell>0)then
-              ioct=(parent_cell-1)/twotondim+1
-              icell=parent_cell-(ioct-1)*twotondim
-              grid(ioct)%rho(icell)=grid(ioct)%rho(icell)+mmm*vol(inbor)/vol_loc
-           end if
-        end do
-#endif     
-     end do
-     ! End loop over cells
-
-  end do
-  ! End loop over grids
-
-  call close_cache(grid_dict)
-
-end subroutine cic_cell
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine cic_part(ilevel)
-  use amr_commons
-  use pm_commons
-  use poisson_commons, ONLY:multipole
-  use hilbert
-  implicit none
-  integer::ilevel
-  !
-  !
-  real(dp),dimension(1:ndim),save::x,dd,dg
-  integer,dimension(1:ndim),save::ig,id,ix
-  real(dp),dimension(1:twotondim),save::vol
-  integer,dimension(1:ndim,1:twotondim),save::ckey
-  integer(kind=8),dimension(0:ndim),save::hash_nbor
-  integer::i,ipart,inbor,igrid,ind,idim
-  integer::ioct,icell,parent_cell,get_parent_cell
-  real(kind=8)::dx_loc,vol_loc,vol2
-  
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-  ! Mesh spacing in that level
-  dx_loc=boxlen/2**ilevel 
-  vol_loc=dx_loc**ndim
-
-  ! Compute contribution to multipole
-  if(ilevel==levelmin)then
-     do i=1,npart
-        multipole(1)=multipole(1)+mp(i)
-     end do
-     do idim=1,ndim
-        do i=1,npart
-           multipole(idim+1)=multipole(idim+1)+mp(i)*xp(i,idim)
-        end do
-     end do
-  endif
-
-                               call timer('particles','start')
-  ! Sort particle according to current level Hilbert key
-  do i=headp(ilevel),tailp(nlevelmax)
-     sortp(i)=i
-  end do
-  ix=0
-  call sort_hilbert(headp(ilevel),tailp(nlevelmax),ix,0,1,ilevel-1)
-
-                               call timer('rho','start')
-  ! Open write-only cache for array rho
-  hash_nbor(0)=ilevel+1
-  call open_cache(operation_rho,domain_decompos_amr)
-
-  ! Loop over particles in Hilbert order
-  do i=headp(ilevel),tailp(nlevelmax)
-     ipart=sortp(i)
-
-     ! Rescale particle position at level ilevel
-     do idim=1,ndim
-        x(idim)=xp(ipart,idim)/dx_loc
-     end do
-     
-     ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
-     do idim=1,ndim
-        dd(idim)=x(idim)+0.5D0
-        id(idim)=dd(idim)
-        dd(idim)=dd(idim)-id(idim)
-        dg(idim)=1.0D0-dd(idim)
-        ig(idim)=id(idim)-1
-     end do
-     
-     ! Periodic boundary conditions
-     do idim=1,ndim
-        if(ig(idim)<0)ig(idim)=ckey_max(ilevel+1)-1
-        if(id(idim)==ckey_max(ilevel+1))id(idim)=0
-     enddo
-
-     ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=dg(1)
-     vol(2)=dd(1)
-#endif
-#if NDIM==2
-     vol(1)=dg(1)*dg(2)
-     vol(2)=dd(1)*dg(2)
-     vol(3)=dg(1)*dd(2)
-     vol(4)=dd(1)*dd(2)
-#endif
-#if NDIM==3
-     vol(1)=dg(1)*dg(2)*dg(3)
-     vol(2)=dd(1)*dg(2)*dg(3)
-     vol(3)=dg(1)*dd(2)*dg(3)
-     vol(4)=dd(1)*dd(2)*dg(3)
-     vol(5)=dg(1)*dg(2)*dd(3)
-     vol(6)=dd(1)*dg(2)*dd(3)
-     vol(7)=dg(1)*dd(2)*dd(3)
-     vol(8)=dd(1)*dd(2)*dd(3)
-#endif
-
-     ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=ig(1)
-     ckey(1,2)=id(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1)=(/ig(1),ig(2)/)
-     ckey(1:2,2)=(/id(1),ig(2)/)
-     ckey(1:2,3)=(/ig(1),id(2)/)
-     ckey(1:2,4)=(/id(1),id(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1)=(/ig(1),ig(2),ig(3)/)
-     ckey(1:3,2)=(/id(1),ig(2),ig(3)/)
-     ckey(1:3,3)=(/ig(1),id(2),ig(3)/)
-     ckey(1:3,4)=(/id(1),id(2),ig(3)/)
-     ckey(1:3,5)=(/ig(1),ig(2),id(3)/)
-     ckey(1:3,6)=(/id(1),ig(2),id(3)/)
-     ckey(1:3,7)=(/ig(1),id(2),id(3)/)
-     ckey(1:3,8)=(/id(1),id(2),id(3)/)
-#endif
-
-#ifdef GRAV
-     ! Update mass density
-     do ind=1,twotondim
-        hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        ! Get parent cell using write-only cache
-        parent_cell=get_parent_cell(hash_nbor,grid_dict,.true.,.false.)
-        if(parent_cell>0)then
-           igrid=(parent_cell-1)/twotondim+1
-           icell=parent_cell-(igrid-1)*twotondim
-           vol2=mp(ipart)*vol(ind)/vol_loc
-           grid(igrid)%rho(icell)=grid(igrid)%rho(icell)+vol2
-        endif
-     end do
-#endif
-
-  end do
-  ! End loop over particles
-  
-  call close_cache(grid_dict)
-
-111 format('   Entering cic_part for level',i2)
-
-end subroutine cic_part
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine split_part(ilevel)
-  use amr_commons
-  use pm_commons
-  use hilbert
-  implicit none
-  integer::ilevel
-  !
-  !
-  real(dp),dimension(1:ndim),save::x,xp_tmp,vp_tmp
-  integer,dimension(1:ndim),save::ii,ix,ix_ref
-  integer(kind=8),dimension(0:ndim),save::hash_key
-  integer::i,ipart,jpart,inbor,igrid,ind,idim,ioct,icell,ipos,get_grid
-  integer::npart_coarse,npart_fine
-  real(kind=8)::dx_loc,vol_loc,vol2
-  real(dp)::mp_tmp
-  integer::levelp_tmp
-  integer(i8b)::idp_tmp
-
-  if(ilevel.GE.nlevelmax)return
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-  ! Mesh spacing in that level
-  dx_loc=boxlen/2**ilevel 
-  vol_loc=dx_loc**ndim
-
-  ! Open read-only cache for array refined
-  hash_key(0)=ilevel
-  call open_cache(operation_split,domain_decompos_amr)
-
-  ! Loop over particles
-  ix_ref=-1
-  npart_coarse=0
-  do i=headp(ilevel),tailp(nlevelmax)
-     ipart=sortp(i)
-
-     ! Acquire grid using read-only cache
-     ix = int(xp(ipart,1:ndim)/(2*dx_loc))
-     if(.NOT. ALL(ix.EQ.ix_ref))then
-        hash_key(1:ndim)=ix(1:ndim)
-        igrid=get_grid(hash_key,grid_dict,.false.,.true.)
-        ix_ref=ix
-     endif
-
-     ! If particle sits outside current level,
-     ! then it is clearly not in a refined cell.
-     ! This can happen during second adaptive step
-     if(igrid==0)then
-        npart_coarse=npart_coarse+1
-        levelp(ipart)=-levelp(ipart)
-     else
-        ! Rescale particle position at level ilevel
-        do idim=1,ndim
-           x(idim)=xp(ipart,idim)/dx_loc
-        end do
-        
-        ! Shift particle position to to 2x2x2 grid corner
-        do idim=1,ndim
-           ii(idim)=x(idim)-2*ix_ref(idim)
-        end do
-        
-        ! Compute parent cell
-#if NDIM==1
-        icell=1+ii(1)
-#endif
-#if NDIM==2
-        icell=1+ii(1)+2*ii(2)
-#endif
-#if NDIM==3
-        icell=1+ii(1)+2*ii(2)+4*ii(3)
-#endif
-        ! Increase counter if cell is not refined
-        if(.NOT.grid(igrid)%refined(icell))then
-           npart_coarse=npart_coarse+1
-           levelp(ipart)=-levelp(ipart)
-        else
-           sortp(i)=-sortp(i)
-        endif
-     endif
-
-  end do
-  ! End loop over particles
-
-  call close_cache(grid_dict)
-  
-  tailp(ilevel)=headp(ilevel)+npart_coarse-1
-  headp(ilevel+1)=tailp(ilevel)+1
-
-  ! Loop over fine level particles
-  ! This preserves the initial ordering after partioning
-  npart_fine=0
-  do ipart=headp(ilevel),tailp(nlevelmax)
-     if(levelp(ipart)>0)then
-        npart_fine=npart_fine+1
-        workp(ipart)=headp(ilevel+1)+npart_fine-1
-     endif
-  end do
-
-  ! Loop over coarse level particles
-  ! This enforces Hilbert ordering after partioning
-  npart_coarse=0
-  do i=headp(ilevel),tailp(nlevelmax)
-     ipart=sortp(i)
-     if(ipart>0)then
-        npart_coarse=npart_coarse+1
-        workp(ipart)=headp(ilevel)+npart_coarse-1
-        levelp(ipart)=-levelp(ipart)
-     endif
-  end do
-
-  ! Swap particles using new index table
-  do ipart=headp(ilevel),tailp(nlevelmax)
-     do while(workp(ipart).NE.ipart)
-        ! Swap new index
-        jpart=workp(ipart)
-        workp(ipart)=workp(jpart)
-        workp(jpart)=jpart
-        ! Swap positions
-        xp_tmp(1:ndim)=xp(ipart,1:ndim)
-        xp(ipart,1:ndim)=xp(jpart,1:ndim)
-        xp(jpart,1:ndim)=xp_tmp(1:ndim)
-        ! Swap velocities
-        vp_tmp(1:ndim)=vp(ipart,1:ndim)
-        vp(ipart,1:ndim)=vp(jpart,1:ndim)
-        vp(jpart,1:ndim)=vp_tmp(1:ndim)
-        ! Swap masses
-        mp_tmp=mp(ipart)
-        mp(ipart)=mp(jpart)
-        mp(jpart)=mp_tmp
-        ! Swap ids
-        idp_tmp=idp(ipart)
-        idp(ipart)=idp(jpart)
-        idp(jpart)=idp_tmp
-        ! Swap levels
-        levelp_tmp=levelp(ipart)
-        levelp(ipart)=levelp(jpart)
-        levelp(jpart)=levelp_tmp
-     end do
-  end do
-
-111 format('   Entering split_part for level',i2)
-
-end subroutine split_part
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-! Below thread safe versions
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine rho_fine_2(r,g,m,p,ilevel)
+subroutine m_rho_fine(s,ilevel)
   use amr_parameters, only: dp,ndim
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
+  type(ramses_t)::s
   integer::ilevel
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
   !------------------------------------------------------------------
-  ! This routine computes the mass density field to be used as 
-  ! source term in the Poisson solver.
+  ! This master routine computes the mass density field to be used
+  ! as source term in the Poisson solver.
   ! The density field is computed for all levels greater than ilevel.
-  ! On output, particles are sorted according to the level they sit in
-  ! and inside their level, they are sorted in grid Hilbert order.
+  ! On output, particles are sorted according to their grid level of
+  ! refinement, and inside their level, they are sorted according to
+  ! their grid Hilbert order.
   !------------------------------------------------------------------
-  integer::i,igrid,ind,info
-  real(dp)::dx_loc,d_scale
-  real(kind=8),dimension(1:ndim+1)::multipole_in,multipole_out
+  real(kind=8),dimension(1:ndim+1)::multipole_tot
+  integer,dimension(:),allocatable::input_array,output_array
+  integer::i,input_size
+
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
 
   if(.not. r%poisson)return
   if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
+  if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
 
-  ! Mesh spacing in that level
-  dx_loc=r%boxlen/2**ilevel 
-  if(ilevel==r%levelmin)g%multipole=0d0
+  !---------------------------
+  ! Reset multipole to zero
+  !---------------------------
+  if(ilevel==r%levelmin)then
+     multipole_tot=0d0
 
+     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
+     allocate(input_array(1:input_size))
+     input_array=transfer(multipole_tot,input_array)
+     call r_broadcast_multipole(s,g%ncpu,input_size,0,input_array)
+     deallocate(input_array)
+
+  endif
+  
   !-------------------------------------------------------
   ! Initialize rho to analytical and baryon density field
   !-------------------------------------------------------
+  ! Loop over all finer levels from fine to coarse
   do i=r%nlevelmax,ilevel,-1
-     ! Compute mass multipole
-     if(r%hydro)call multipole_fine_2(r,g,m,i)
-     ! Perform CIC using pseudo-particle
-     call cic_from_multipole_2(r,g,m,i)
+
+     ! Compute gas multipole expansion
+     if(r%hydro)then
+
+        ! Set multipoles in all leaf cells
+        if(m%noct_tot(i)>0)then
+           if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i        
+           call r_multipole_leaf_cells(s,g%ncpu,1,0,i)
+        endif
+
+        ! Average down multipoles in all split cells
+        if(i<r%nlevelmax)then
+           if(m%noct_tot(i+1)>0)then
+              if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i        
+              call r_multipole_split_cells(s,g%ncpu,1,0,i)
+           endif
+        endif
+
+     endif
+
+     ! Reset array rho to zero
+     if(m%noct_tot(i)>0)then
+        call r_reset_rho(s,g%ncpu,1,0,i)
+     endif
+
+        ! Gas mass deposition using pseudo-particles
+     if(r%hydro.AND.m%noct_tot(i)>0)then
+        if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
+        call r_cic_multipole(s,g%ncpu,1,0,i)
+     endif
+
   end do
+  ! End loop over finer levels
 
   !-------------------------------------------------------
   ! Compute particle contribution to density field
   !-------------------------------------------------------
   if(r%pic)then
      do i=ilevel,r%nlevelmax
-                               call timer('rho','start')
-        call cic_part_2(r,g,m,p,i)
-                               call timer('particles','start')
-        call split_part_2(r,g,m,p,i)
-                               call timer('rho','start')
+        if(m%noct_tot(i)>0)then
+           call r_cic_part(s,g%ncpu,1,0,i)
+        endif
+        if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
+           call r_split_part(s,g%ncpu,1,0,i)
+        endif
      end do
   endif
 
-  !--------------------------------------------------------------
-  ! Compute multipole contribution from all cpus and set rho_tot
-  !--------------------------------------------------------------
-#ifndef WITHOUTMPI
+  !---------------------------------------------------------------------
+  ! Collect multipole contribution from all CPU and broadcast rho_tot
+  !---------------------------------------------------------------------
   if(ilevel==r%levelmin)then
-     multipole_in=g%multipole
-     call MPI_ALLREDUCE(multipole_in,multipole_out,ndim+1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     g%multipole=multipole_out
+
+     ! Collect local multipole from all CPU
+     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
+     allocate(output_array(1:input_size))
+     call r_collect_multipole(s,g%ncpu,1,input_size,ilevel,output_array)
+     multipole_tot=transfer(output_array,multipole_tot)
+     deallocate(output_array)
+
+     ! Broadcast total multipole to all CPU
+     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
+     allocate(input_array(1:input_size))
+     input_array=transfer(multipole_tot,input_array)
+     call r_broadcast_multipole(s,g%ncpu,(ndim+1)*(storage_size(multipole_tot)/32),0,input_array)     
+     deallocate(input_array)
+
+     if(r%verbose)write(*,*)'rho_average=',g%rho_tot
+  endif  
+
+  end associate
+
+end subroutine m_rho_fine
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_multipole_leaf_cells(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_MULTIPOLE_LEAF_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_multipole_leaf_cells(s,next_range,input_size,output_size,ilevel)
+  else
+     call multipole_leaf_cells(s%r,s%g,s%m,ilevel)
   endif
-#endif
-  g%rho_tot=g%multipole(1)/r%boxlen**ndim
-  if(r%debug)write(*,*)'rho_average=',g%rho_tot
-!!! rho_tot=0d0 ! For non-periodic BC
-  
-111 format('   Entering rho_fine for level ',I2)
-  
-end subroutine rho_fine_2
+
+end subroutine r_multipole_leaf_cells
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine multipole_fine_2(r,g,m,ilevel)
+subroutine multipole_leaf_cells(r,g,m,ilevel)
   use amr_parameters, only: ndim,dp,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use cache_commons
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -761,14 +163,9 @@ subroutine multipole_fine_2(r,g,m,ilevel)
   ! routine is not even called.
   !-------------------------------------------------------------------
   integer::igrid,ind,idim,ivar,nstride,ioct,icell
-  integer::parent_cell,get_parent_cell_2
   real(dp),dimension(1:ndim),save::xx
-  real(kind=8)::dx_loc,vol_loc,mmm,dd,average
-  integer(kind=8),dimension(0:ndim)::hash_key
+  real(kind=8)::dx_loc,vol_loc,mmm,dd
   logical::leaf_cell
-
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
@@ -812,7 +209,7 @@ subroutine multipole_fine_2(r,g,m,ilevel)
 #endif
            ! Add analytical density profile
            if(r%gravity_type < 0)then
-              call rho_ana(xx,dd,dx_loc)
+              call rho_ana(xx,dd,dx_loc,r%gravity_params)
               mmm=max(dd,r%smallr)*vol_loc
 #ifdef HYDRO
               m%grid(igrid)%unew(ind,1)=m%grid(igrid)%unew(ind,1)+mmm
@@ -827,20 +224,68 @@ subroutine multipole_fine_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
+end subroutine multipole_leaf_cells
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_multipole_split_cells(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_multipole_split_cells(s,next_range,input_size,output_size,ilevel)
+  else
+     call multipole_split_cells(s,ilevel)
+  endif
+
+end subroutine r_multipole_split_cells
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine multipole_split_cells(s,ilevel)
+  use amr_parameters, only: ndim,dp,twotondim
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  implicit none
+  type(ramses_t)::s
+  integer::ilevel
+  !-------------------------------------------------------------------
+  ! This routine compute the monopole and dipole of the gas mass and
+  ! the analytical profile (if any) within each cell.
+  ! For pure particle runs, this is not necessary and the
+  ! routine is not even called.
+  !-------------------------------------------------------------------
+  integer::igrid,ind,idim,ivar,nstride,ioct,icell
+  integer::parent_cell,get_parent_cell
+  real(kind=8)::average
+  integer(kind=8),dimension(0:ndim)::hash_key
+  logical::leaf_cell
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  
   !-------------------------------------------------------
   ! Perform octree restriction from level ilevel+1
   !-------------------------------------------------------
-  if(ilevel==r%nlevelmax)return
-  if(m%noct_tot(ilevel+1)==0)return
-
-  call open_cache_2(r,g,m,operation_multipole,domain_decompos_amr)
+  call open_cache(s,operation_multipole,domain_decompos_amr)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ioct=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     parent_cell=get_parent_cell_2(r,g,m,hash_key,m%grid_dict,.true.,.false.)
+     parent_cell=get_parent_cell(s,hash_key,m%grid_dict,.true.,.false.)
      igrid=(parent_cell-1)/twotondim+1
      icell=parent_cell-(igrid-1)*twotondim
 #ifdef HYDRO
@@ -856,22 +301,119 @@ subroutine multipole_fine_2(r,g,m,ilevel)
 #endif
   end do
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
-111 format('   Entering multipole_fine for level',i2)
+  end associate
 
-end subroutine multipole_fine_2
+end subroutine multipole_split_cells
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_multipole(grid,msg_size)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
+
+  integer::ind,ivar
+  
+#ifdef HYDRO
+  do ivar=1,ndim+1
+     do ind=1,twotondim
+        grid%unew(ind,ivar)=0.0
+     end do
+  end do
+#endif
+  
+end subroutine init_flush_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_multipole(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+#ifdef HYDRO
+  do ivar=1,ndim+1
+     do ind=1,twotondim
+        msg%realdp(ind,ivar)=grid%unew(ind,ivar)
+     end do
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_multipole(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind,ivar
+  type(msg_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef HYDRO
+  do ivar=1,ndim+1
+     do ind=1,twotondim
+        if(grid%refined(ind))then
+           grid%unew(ind,ivar)=grid%unew(ind,ivar)+msg%realdp(ind,ivar)
+        endif
+     end do
+  end do
+#endif
+
+end subroutine unpack_flush_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_reset_rho(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_RESET_RHO,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_reset_rho(s,next_range,input_size,output_size,ilevel)
+  else
+     call reset_rho(s%r,s%g,s%m,ilevel)
+  endif
+
+end subroutine r_reset_rho
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cic_from_multipole_2(r,g,m,ilevel)
+subroutine reset_rho(r,g,m,ilevel)
   use amr_parameters, only: twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -885,9 +427,6 @@ subroutine cic_from_multipole_2(r,g,m,ilevel)
   !-------------------------------------------------------------------
   integer::igrid,ind
 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
 #ifdef GRAV
   ! Initialize density field to zero
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -897,23 +436,42 @@ subroutine cic_from_multipole_2(r,g,m,ilevel)
   end do
 #endif  
 
-  if(r%hydro)call cic_cell_2(r,g,m,ilevel)
+end subroutine reset_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_cic_multipole(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
 
-111 format('   Entering cic_from_multipole for level',i2)
+  integer::next_range,next_cpu
 
-end subroutine cic_from_multipole_2
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_CIC_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cic_multipole(s,next_range,input_size,output_size,ilevel)
+  else
+     call cic_multipole(s,ilevel)
+  endif
+
+end subroutine r_cic_multipole
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cic_cell_2(r,g,m,ilevel)
+subroutine cic_multipole(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   !
   ! Local variables
@@ -923,9 +481,11 @@ subroutine cic_cell_2(r,g,m,ilevel)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::inbor,igrid,ind,idim
-  integer::ioct,icell,parent_cell,get_parent_cell_2
+  integer::ioct,icell,parent_cell,get_parent_cell
   real(kind=8)::dx_loc,vol_loc,mmm
-  
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+    
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
@@ -933,7 +493,7 @@ subroutine cic_cell_2(r,g,m,ilevel)
   ! Use hash table directly for cells (not for grids)
   hash_nbor(0)=ilevel+1
 
-  call open_cache_2(r,g,m,operation_rho,domain_decompos_amr)
+  call open_cache(s,operation_rho,domain_decompos_amr)
 
   ! Loop over grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -946,6 +506,13 @@ subroutine cic_cell_2(r,g,m,ilevel)
         mmm=m%grid(igrid)%unew(ind,1)
 
         ! Compute pseudo particle (centre of mass) position
+        if(mmm==0)then
+           write(*,*)'Sorry divide by zero'
+           write(*,*)m%grid(igrid)%unew(ind,1:nvar)
+           write(*,*)m%grid(igrid)%uold(ind,1:nvar)
+           write(*,*)m%grid(igrid)%refined(ind)
+           call mdl_abort
+        endif
         x(1:ndim)=m%grid(igrid)%unew(ind,2:ndim+1)/mmm
         
         ! Compute total multipole
@@ -963,7 +530,7 @@ subroutine cic_cell_2(r,g,m,ilevel)
         ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
         do idim=1,ndim
            dd(idim)=x(idim)+0.5D0
-           id(idim)=dd(idim)
+           id(idim)=int(dd(idim))
            dd(idim)=dd(idim)-id(idim)
            dg(idim)=1.0D0-dd(idim)
            ig(idim)=id(idim)-1
@@ -1024,7 +591,7 @@ subroutine cic_cell_2(r,g,m,ilevel)
         do inbor=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,inbor)
            ! Get parent cell using write-only cache
-           parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.true.,.false.)
+           parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.true.,.false.)
            if(parent_cell>0)then
               ioct=(parent_cell-1)/twotondim+1
               icell=parent_cell-(ioct-1)*twotondim
@@ -1038,24 +605,47 @@ subroutine cic_cell_2(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
-end subroutine cic_cell_2
+  end associate
+
+end subroutine cic_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_cic_part(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_CIC_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cic_part(s,next_range,input_size,output_size,ilevel)
+  else
+     call cic_part(s,ilevel)
+  endif
+
+end subroutine r_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine cic_part_2(r,g,m,p,ilevel)
+subroutine cic_part(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
+  type(ramses_t)::s
   integer::ilevel
   !
   ! Local variables
@@ -1064,12 +654,11 @@ subroutine cic_part_2(r,g,m,p,ilevel)
   real(dp),dimension(1:twotondim),save::vol
   integer,dimension(1:ndim,1:twotondim),save::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
-  integer::i,ipart,inbor,igrid,ind,idim
-  integer::ioct,icell,parent_cell,get_parent_cell_2
+  integer::i,ipart,igrid,ind,idim
+  integer::icell,parent_cell,get_parent_cell
   real(kind=8)::dx_loc,vol_loc,vol2
   
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
@@ -1087,18 +676,16 @@ subroutine cic_part_2(r,g,m,p,ilevel)
      end do
   endif
 
-                               call timer('particles','start')
   ! Sort particle according to current level Hilbert key
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
      p%sortp(i)=i
   end do
   ix=0
-  call sort_hilbert_2(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
-                               call timer('rho','start')
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
-  call open_cache_2(r,g,m,operation_rho,domain_decompos_amr)
+  call open_cache(s,operation_rho,domain_decompos_amr)
 
   ! Loop over particles in Hilbert order
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
@@ -1112,7 +699,7 @@ subroutine cic_part_2(r,g,m,p,ilevel)
      ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
      do idim=1,ndim
         dd(idim)=x(idim)+0.5D0
-        id(idim)=dd(idim)
+        id(idim)=int(dd(idim))
         dd(idim)=dd(idim)-id(idim)
         dg(idim)=1.0D0-dd(idim)
         ig(idim)=id(idim)-1
@@ -1173,7 +760,7 @@ subroutine cic_part_2(r,g,m,p,ilevel)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
-        parent_cell=get_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,.true.,.false.)
+        parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.true.,.false.)
         if(parent_cell>0)then
            igrid=(parent_cell-1)/twotondim+1
            icell=parent_cell-(igrid-1)*twotondim
@@ -1186,53 +773,191 @@ subroutine cic_part_2(r,g,m,p,ilevel)
   end do
   ! End loop over particles
   
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
-111 format('   Entering cic_part for level',i2)
+  end associate
+  
+end subroutine cic_part
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_rho(grid,msg_size)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer::msg_size
 
-end subroutine cic_part_2
+  integer::ind
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%rho(ind)=0.0
+  end do
+#endif
+  
+end subroutine init_flush_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_rho(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%rho(ind)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_rho(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_small_realdp)::msg
+
+  msg=transfer(msg_array,msg)
+  
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%rho(ind)=grid%rho(ind)+msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_flush_rho
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_split_part(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_SPLIT_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_split_part(s,next_range,input_size,output_size,ilevel)
+  else
+     call split_part(s,ilevel)
+  endif
+
+end subroutine r_split_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine split_part_2(r,g,m,p,ilevel)
+subroutine pack_fetch_split(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        msg%int4(ind)=1
+     else
+        msg%int4(ind)=0
+     endif
+  enddo
+  msg_array=transfer(msg,msg_array)
+  
+end subroutine pack_fetch_split
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine unpack_fetch_split(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size)::msg_array
+
+  integer::ind
+  type(msg_int4)::msg
+
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     if(msg%int4(ind)==1)then
+        grid%refined(ind)=.true.
+     else
+        grid%refined(ind)=.false.
+     endif
+  enddo
+
+end subroutine unpack_fetch_split
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine split_part(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,i8b
-  use amr_commons, only: run_t,global_t,mesh_t
-  use pm_commons, only: part_t
+  use ramses_commons, only: ramses_t
   use cache_commons
   use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(part_t)::p
+  type(ramses_t)::s
   integer::ilevel
   !
   ! Local variables
   real(dp),dimension(1:ndim),save::x,xp_tmp,vp_tmp
   integer,dimension(1:ndim),save::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim),save::hash_key
-  integer::i,ipart,jpart,inbor,igrid,ind,idim,ioct,icell,ipos,get_grid_2
+  integer::i,ipart,jpart,igrid,idim,icell,get_grid
   integer::npart_coarse,npart_fine
-  real(kind=8)::dx_loc,vol_loc,vol2
+  real(kind=8)::dx_loc,vol_loc
   real(dp)::mp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
 
-  if(ilevel.GE.r%nlevelmax)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+    
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache for array refined
   hash_key(0)=ilevel
-  call open_cache_2(r,g,m,operation_split,domain_decompos_amr)
+  call open_cache(s,operation_split,domain_decompos_amr)
 
   ! Loop over particles
   ix_ref=-1
+  igrid=0
   npart_coarse=0
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
      ipart=p%sortp(i)
@@ -1241,7 +966,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
      ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
      if(.NOT. ALL(ix.EQ.ix_ref))then
         hash_key(1:ndim)=ix(1:ndim)
-        igrid=get_grid_2(r,g,m,hash_key,m%grid_dict,.false.,.true.)
+        igrid=get_grid(s,hash_key,m%grid_dict,.false.,.true.)
         ix_ref=ix
      endif
 
@@ -1259,7 +984,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
         
         ! Shift particle position to to 2x2x2 grid corner
         do idim=1,ndim
-           ii(idim)=x(idim)-2*ix_ref(idim)
+           ii(idim)=int(x(idim)-2*ix_ref(idim))
         end do
         
         ! Compute parent cell
@@ -1284,7 +1009,7 @@ subroutine split_part_2(r,g,m,p,ilevel)
   end do
   ! End loop over particles
 
-  call close_cache(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
   
   p%tailp(ilevel)=p%headp(ilevel)+npart_coarse-1
   p%headp(ilevel+1)=p%tailp(ilevel)+1
@@ -1341,14 +1066,14 @@ subroutine split_part_2(r,g,m,p,ilevel)
      end do
   end do
 
-111 format('   Entering split_part for level',i2)
-
-end subroutine split_part_2
+  end associate
+  
+end subroutine split_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-recursive subroutine sort_hilbert_2(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
+recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
   use amr_parameters, only: dp, ndim, twotondim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
@@ -1383,7 +1108,7 @@ recursive subroutine sort_hilbert_2(r,g,p,head_part, tail_part, ix_coarse, cstat
   ! On output, array sortp is modified.
   
   ! Local variables
-  integer :: ibit, ip, ind_part, idim, np, ioft, ipart, new_ipart
+  integer :: ip, ind_part, idim, ipart, new_ipart
   integer :: ckey_max, cstate_fine, ind_cart_part, head_fine, tail_fine
   real(dp) :: ckey_factor
   integer, dimension(1:ndim) :: ix_fine, ix_ref, ix_part
@@ -1481,10 +1206,76 @@ recursive subroutine sort_hilbert_2(r,g,p,head_part, tail_part, ix_coarse, cstat
            tail_fine = offset(ip) + numb_part(ip)
            ix_fine(1:ndim) = ix_child(ip,1:ndim)
            cstate_fine = nstate(ip)
-           call sort_hilbert_2(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
+           call sort_hilbert(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
         endif
      end do
   endif
   
-end subroutine sort_hilbert_2
+end subroutine sort_hilbert
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+recursive subroutine r_collect_multipole(s,cpu_range,input_size,output_size,ilevel,output_array)
+  use amr_parameters, only: ndim
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8),dimension(1:ndim+1)::multipole,next_multipole
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_COLLECT_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_collect_multipole(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     multipole=transfer(output_array,multipole)
+     next_multipole=transfer(next_output_array,next_multipole)
+     multipole=multipole+next_multipole
+     output_array=transfer(multipole,output_array)
+  else
+     output_array=transfer(s%g%multipole,output_array)
+  endif
+
+end subroutine r_collect_multipole
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+recursive subroutine r_broadcast_multipole(s,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: ndim
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_BROADCAST_MULTIPOLE,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_multipole(s,next_range,input_size,output_size,input_array)
+  else
+     s%g%multipole=transfer(input_array,s%g%multipole)
+     s%g%rho_tot=s%g%multipole(1)/s%r%boxlen**ndim
+!!!     s%g%rho_tot=0d0 ! For non-periodic BC
+  endif
+
+end subroutine r_broadcast_multipole
+!###############################################
+!###############################################
+!###############################################
+!###############################################
 

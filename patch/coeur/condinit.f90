@@ -2,10 +2,13 @@
 !================================================================
 !================================================================
 !================================================================
-subroutine condinit(x,u,dx,nn)
-  use amr_parameters
-  use hydro_parameters
+subroutine condinit(r,g,x,u,dx,nn)
+  use amr_parameters, only: dp, ndim, nvector
+  use hydro_parameters, only: nvar, nener
+  use amr_commons, only: run_t, global_t
   implicit none
+  type(run_t)::r
+  type(global_t)::g
   integer ::nn                            ! Number of cells
   real(dp)::dx                            ! Cell size
   real(dp),dimension(1:nvector,1:nvar)::u ! Conservative variables
@@ -22,25 +25,30 @@ subroutine condinit(x,u,dx,nn)
   ! scalars in the hydro solver.
   ! U(:,:) and Q(:,:) are in user units.
   !================================================================
-  integer::ivar,i,nx_loc
+  integer::i
+#if NVAR>NDIM+2
+  integer::ivar
+#endif
   real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
-  real(dp)::phi,r2,rx,ry,rz,d_trunc,d,p,om,vx,vy,vz,r_trunc,r2_trunc,rr,c2,omega_phys,omega_code,AU,Msol,pi,M,alpha,sigma,r_min,r2_min,omega_const,r_vortex,invr2_vortex
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m,scale_p
+  real(dp)::r2,rx,ry,rz,d,p,vx,vy,vz,r_trunc,r2_trunc,c2
+  real(dp)::omega_code,AU,Msol,pi,M,sigma,r_min,r2_min,omega_const,r_vortex,invr2_vortex
+  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
+
   ! Call built-in initial condition generator
-  call region_condinit(x,q,dx,nn)
+  call region_condinit(r,g,x,q,dx,nn)
 
   ! Add here, if you wish, some user-defined initial conditions
   ! ........
 
-  call units(scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m=scale_d*scale_l**3
 
- !costants
+ ! constants
   AU=1.49598d13
   Msol= 1.98892d33
   pi=3.14159
 
-  !mass, radius, and ratio of rotational to gravitational energy
+  ! mass, radius, and ratio of rotational to gravitational energy
   r_trunc=25*4000.*AU/scale_l
   r_min=10.*AU/scale_l
   r_vortex=4000.*AU/scale_l
@@ -57,9 +65,9 @@ subroutine condinit(x,u,dx,nn)
   c2=(18939.2/(scale_l/scale_t))**2
 
   do i=1,nn
-     rx=x(i,1)-boxlen/2.
-     ry=x(i,2)-boxlen/2.
-     rz=x(i,3)-boxlen/2.
+     rx=x(i,1)-r%boxlen/2.
+     ry=x(i,2)-r%boxlen/2.
+     rz=x(i,3)-r%boxlen/2.
 
      !density/pressure
      r2=rx**2+ry**2+rz**2
@@ -112,8 +120,8 @@ subroutine condinit(x,u,dx,nn)
   u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5*q(1:nn,1)*q(1:nn,4)**2
 #endif
   ! pressure -> total fluid energy
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+q(1:nn,ndim+2)/(gamma-1.0d0)
-#if NVAR > NDIM + 2
+  u(1:nn,ndim+2)=u(1:nn,ndim+2)+q(1:nn,ndim+2)/(r%gamma-1.0d0)
+#if NVAR>NDIM+2
   ! passive scalars
   do ivar=ndim+3,nvar
      u(1:nn,ivar)=q(1:nn,1)*q(1:nn,ivar)

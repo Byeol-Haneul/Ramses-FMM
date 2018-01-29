@@ -1,0 +1,159 @@
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_smooth_fine(s,cpu_range,input_size,output_size,ilevel,noct)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel,noct
+
+  integer::next_range,next_cpu
+  integer::next_noct
+  integer::nflag
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_SMOOTH_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_smooth_fine(s,next_range,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct)
+     noct=noct+next_noct
+  else
+     call smooth_fine(s,ilevel,nflag)
+     noct=nflag
+  endif
+
+end subroutine r_smooth_fine
+!############################################################
+!############################################################
+!############################################################
+!############################################################
+subroutine smooth_fine(s,ilevel,nflag)
+  use amr_parameters, only: ndim,twotondim,twondim
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  implicit none
+  type(ramses_t)::s
+  integer::ilevel,nflag
+  ! -------------------------------------------------------------------
+  ! Dilatation operator.
+  ! This routine makes one cell width cubic buffer around flag1 cells 
+  ! at level ilevel by following these 3 steps:
+  ! step 1: flag1 cells with at least 1 flag1 neighbors (if ndim > 0) 
+  ! step 2: flag1 cells with at least 2 flag1 neighbors (if ndim > 1) 
+  ! step 3: flag1 cells with at least 2 flag1 neighbors (if ndim > 2) 
+  ! Array flag2 is used as temporary workspace.
+  ! -------------------------------------------------------------------
+  integer::ismooth,count_nbor,ig,in
+  integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
+  integer::get_grid
+  integer,dimension(1:3),save::n_nbor=(/1,2,2/)
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer,dimension(0:twondim)::igridn
+
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,&
+       &   0,-1,0,0,1,0,&
+       &   0,0,-1,0,0,1/),(/3,6/))
+  integer,dimension(1:8,1:6),save::ggg=reshape(&
+       & (/1,0,1,0,1,0,1,0,&
+       &   0,2,0,2,0,2,0,2,&
+       &   3,3,0,0,3,3,0,0,&
+       &   0,0,4,4,0,0,4,4,&
+       &   5,5,5,5,0,0,0,0,&
+       &   0,0,0,0,6,6,6,6/),(/8,6/))
+  integer,dimension(1:8,1:6),save::hhh=reshape(&
+       & (/2,1,4,3,6,5,8,7,&
+       &   2,1,4,3,6,5,8,7,&
+       &   3,4,1,2,7,8,5,6,&
+       &   3,4,1,2,7,8,5,6,&
+       &   5,6,7,8,1,2,3,4,&
+       &   5,6,7,8,1,2,3,4/),(/8,6/))
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  hash_nbor(0)=ilevel
+
+  ! Loop over steps
+  do ismooth=1,ndim
+
+     ! Initialize flag2 to 0
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        do ind=1,twotondim
+           m%grid(igrid)%flag2(ind)=0
+        end do
+     end do
+
+     call open_cache(s,operation_smooth,domain_decompos_amr)
+
+     ! Count neighbors and set flag2 accordingly
+     do igrid=m%head(ilevel),m%tail(ilevel)
+
+        ! Get neighboring octs
+        igridn(0)=igrid
+        do i_nbor=1,twondim
+           hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
+           ! Periodic boundary conditons
+           do idim=1,ndim
+              if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
+              if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           enddo
+           igridn(i_nbor)=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
+           call lock_cache(s,igridn(i_nbor))
+        end do
+
+        ! Count neighbors and set flag2 accordingly        
+        do ind=1,twotondim
+           count_nbor=0
+           do in=1,twondim
+              ig=ggg(ind,in)
+              igrid_nbor=igridn(ig)
+              icell_nbor=hhh(ind,in)
+              if(igrid_nbor>0)then
+                 count_nbor=count_nbor+m%grid(igrid_nbor)%flag1(icell_nbor)
+              endif
+           end do
+           ! flag2 cell if necessary
+           if(count_nbor>=n_nbor(ismooth))then
+              m%grid(igrid)%flag2(ind)=1
+           endif
+        end do
+
+        do i_nbor=1,twondim
+           call unlock_cache(s,igridn(i_nbor))
+        end do
+
+     end do
+     ! End loop over grids
+
+    call close_cache(s,m%grid_dict)
+
+     ! Set flag1=1 for cells with flag2=1
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        do ind=1,twotondim
+           if(m%grid(igrid)%flag1(ind)==1)m%grid(igrid)%flag2(ind)=0
+        end do
+        do ind=1,twotondim
+           if(m%grid(igrid)%flag2(ind)==1)then
+              m%grid(igrid)%flag1(ind)=1
+              g%nflag=g%nflag+1
+           endif
+        end do
+     end do     
+
+  end do
+  ! End loop over steps
+
+  nflag=g%nflag
+
+  end associate
+  
+end subroutine smooth_fine
+!############################################################
+!############################################################
+!############################################################
+!############################################################

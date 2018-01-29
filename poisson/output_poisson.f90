@@ -2,67 +2,51 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine output_poisson(filename)
-  use amr_commons
-  use poisson_commons
+recursive subroutine r_output_poisson(s,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: flen
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  character(LEN=80)::filename
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  
+  integer::next_range,next_cpu
+  character(LEN=flen)::filename
+  
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-  integer::ilevel,igrid,ilun
-  character(LEN=5)::nchar
-  character(LEN=80)::fileloc
-
-  if(verbose)write(*,*)'Entering output_poisson'
-  ilun=ncpu+myid+10
-  call title(myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
-  open(unit=ilun,file=fileloc,access="stream"&
-       & ,action="write",form='unformatted')
-  write(ilun)ndim
-  write(ilun)ndim+1
-  write(ilun)levelmin
-  write(ilun)nlevelmax
-  do ilevel=levelmin,nlevelmax
-     write(ilun)noct(ilevel)
-  enddo
-#ifdef GRAV
-  do ilevel=levelmin,nlevelmax
-     do igrid=head(ilevel),tail(ilevel)
-        write(ilun)grid(igrid)%phi
-        write(ilun)grid(igrid)%f
-     end do
-  enddo
-#endif
-  close(ilun)
-     
-end subroutine output_poisson
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_OUTPUT_POISSON,next_cpu,next_range,input_size,output_size,input_array)
+     call r_output_poisson(s,next_range,input_size,output_size,input_array)
+  else
+     filename=transfer(input_array,filename)
+     call output_poisson(s%r,s%g,s%m,filename)
+  endif
+end subroutine r_output_poisson
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine output_poisson_2(r,g,m,filename)
-  use amr_parameters, only: ndim
+subroutine output_poisson(r,g,m,filename)
+  use amr_parameters, only: ndim,flen
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-  character(LEN=80)::filename
+  character(LEN=flen)::filename
 
   integer::ilevel,igrid,ilun
   character(LEN=5)::nchar
-  character(LEN=80)::fileloc
+  character(LEN=flen)::fileloc
 
-  if(r%verbose)write(*,*)'Entering output_poisson'
   ilun=g%ncpu+g%myid+10
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
-  open(unit=ilun,file=fileloc,access="stream"&
-       & ,action="write",form='unformatted')
+  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
   write(ilun)ndim+1
   write(ilun)r%levelmin
@@ -80,7 +64,7 @@ subroutine output_poisson_2(r,g,m,filename)
 #endif
   close(ilun)
      
-end subroutine output_poisson_2
+end subroutine output_poisson
 
 
 

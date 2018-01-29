@@ -5,21 +5,22 @@ module domain_m
   public :: domain_t, get_domain
 
   type domain_t
+     integer :: myid
+     integer :: ncpu
      integer :: n                                                 ! number of points in domain
      integer :: overload                                          ! number of domains per cpu rank
      integer(kind=8), dimension(:,:), allocatable :: b            ! bound key
      integer,         dimension(:),   allocatable :: r2d          ! rank to domain
      integer,         dimension(:),   allocatable :: d2r          ! domain to rank
-  contains
+   contains
      procedure :: copy     => copy_domain
      procedure :: create   => create_domain
      procedure :: destroy  => destroy_domain
      procedure :: in_rank  => in_rank
      procedure :: get_rank => get_rank
-     procedure, nopass :: pos2key  => hilbert_key_one
-     !procedure, nopass :: key2pos  => reverse_hilbert_key_one
-  end type
-
+     procedure, nopass :: pos2key  => hilbert_key
+  end type domain_t
+  
 contains
  
   !================================================================
@@ -28,19 +29,21 @@ contains
   !================================================================
 
   pure function in_rank(domain,key)
-    use amr_parameters, only : nhilbert, myid, ncpu
+    use amr_parameters, only : nhilbert
     implicit none
     class(domain_t),                       intent(in) :: domain
     integer(kind=8), dimension(1:nhilbert), intent(in) :: key
     logical :: in_rank
-    integer :: isub
+    integer :: isub, myid, ncpu
     !
-    do isub=0,domain%overload-1
+    in_rank=.false.
+    myid = domain%myid
+    ncpu = domain%ncpu
+    do isub = 0,domain%overload-1
        in_rank = ge_keys(key,domain%b(1:nhilbert,domain%r2d(myid+ncpu*isub)-1)).and. &
                  gt_keys(domain%b(1:nhilbert,domain%r2d(myid+ncpu*isub)),key)
     end do
   end function in_rank
-
 
   !================================================================
   !================================================================
@@ -48,12 +51,13 @@ contains
   !================================================================
 
   function get_rank(domain,key) result(rank)
-    use amr_parameters, only : nhilbert, ncpu
+    use amr_parameters, only : nhilbert
     implicit none
     class(domain_t),                        intent(in) :: domain
     integer(kind=8), dimension(1:nhilbert), intent(in) :: key
-    integer :: rank, idom
+    integer :: rank, idom, ncpu
     !
+    ncpu = domain%ncpu
     idom = get_domain(domain,key)
     rank = modulo(domain%d2r(idom)-1,ncpu)+1
   end function get_rank
@@ -64,17 +68,18 @@ contains
   !================================================================
 
   subroutine copy_domain(domain,source)
-    use amr_parameters, only : myid
     implicit none
     class(domain_t)             :: domain
     class(domain_t), intent(in) :: source
+    integer::myid
     !
+    myid = domain%myid
     if (source%n==0) then
        write(*,'(a,i7.7,a)') 'CPU=',myid,' ERROR copy_domain: Source domain not allocated.'
        stop
     endif
     !
-    if (domain%n .ne. source%n) call create_domain(domain,source%n)
+    if (domain%n .ne. source%n) call create_domain(domain,source%myid,source%ncpu,source%n)
     domain%b   = source%b
     domain%r2d = source%r2d
     domain%d2r = source%d2r
@@ -85,14 +90,16 @@ contains
   !================================================================
   !================================================================
 
-  subroutine create_domain(domain,n)
-    use amr_parameters, only : nhilbert, ncpu, myid
+  subroutine create_domain(domain,myid,ncpu,n)
+    use amr_parameters, only : nhilbert
     implicit none
     class(domain_t) :: domain
-    integer, intent(in) :: n
+    integer, intent(in) :: myid, ncpu, n
     integer :: i
     !
     if (domain%n > 0) call destroy_domain(domain)
+    domain%myid = myid
+    domain%ncpu = ncpu
     domain%n = n
     domain%overload = n / ncpu
     if (domain%n .ne. domain%overload*ncpu) then
@@ -123,7 +130,9 @@ contains
     class(domain_t) :: domain
     !
     domain%n = 0
-    domain%overload=0
+    domain%overload = 0
+    domain%myid = 0
+    domain%ncpu = 0
     if (allocated(domain%b))   deallocate(domain%b)
     if (allocated(domain%r2d)) deallocate(domain%r2d)
     if (allocated(domain%d2r)) deallocate(domain%d2r)
@@ -135,19 +144,20 @@ contains
   !================================================================
 
   function get_domain(domain,key) result(dom)
-    use amr_parameters, only : nhilbert, myid
+    use amr_parameters, only : nhilbert
     implicit none
     class(domain_t),                       intent(in) :: domain
     integer(kind=8), dimension(1:nhilbert), intent(in) :: key
     integer            :: dom
     !
-    integer            :: idom
+    integer            :: idom, myid
     integer,      save :: last_domain=1, ncall=0
     logical,      save :: do_linear=.true.
     real(kind=8), save :: tlin,thunt
-    real(kind=8)       :: t0
+    real(kind=8)       :: t0=0.
     real(kind=8), external :: wallclock
     !
+    myid = domain%myid
     ! The first 100 calls we use for timing
     if (ncall<=100) then
        if (ncall==0) then
@@ -190,9 +200,9 @@ contains
                 print *, ' Time to do linear search :', real(tlin)
                 print *, ' Time to do hunt search   :', real(thunt)
                 if (do_linear) then
-                   print *, 'Using linear search'
+                   print *, ' Using linear search'
                 else
-                   print *, 'Using hunt search'
+                   print *, ' Using hunt search'
                 end if
              end if
           end if

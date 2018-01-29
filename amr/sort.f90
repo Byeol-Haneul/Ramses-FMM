@@ -6,14 +6,9 @@ module sort
   ! subroutine quick_sort(list, order, n)  
   ! subroutine quick_sort_dp(list, order, n)
 
-  ! not used, might be useful at some point...
-  ! subroutine swap_2parts_in_mem(i,j)
-
-  ! composite hilbert key comparison functions
-  ! function ge_2keys(key_a, key_b)
-  ! function ge_3keys(key_a, key_b)
-  ! function gt_2keys(key_a, key_b)
-  ! function gt_3keys(key_a, key_b)
+  ! hilbert key comparison functions
+  ! function ge_keys(key_a, key_b)
+  ! function gt_keys(key_a, key_b)
 
   ! radix sorts:
   ! recursive msd radix sort
@@ -226,47 +221,6 @@ contains
 
   END SUBROUTINE quick_sort_dp
 
-!   subroutine swap_2parts_in_mem(i,j)
-!     use amr_parameters, only:i8b
-!     use pm_commons
-
-!     integer, intent(in) :: i, j
-    
-!     ! temporary storage for one element
-!     integer(kind=8), save :: i8_temp
-!     integer(kind=4), save :: i4_temp
-!     integer(i8b),    save :: i8b_temp
-!     real(dp),        save :: dp_temp
-    
-!     ! hilbert keys
-!     i8_temp = part_hkey(i,0); part_hkey(i,0) = part_hkey(j,0); part_hkey(j,0) = i8_temp
-!     i8_temp = part_hkey(i,1); part_hkey(i,1) = part_hkey(j,1); part_hkey(j,1) = i8_temp
-!     i8_temp = part_hkey(i,2); part_hkey(i,2) = part_hkey(j,2); part_hkey(j,2) = i8_temp
-!     ! current_state of hilbert state diagram
-!     i4_temp = current_state(i); current_state(i) = current_state(j); current_state(j) = i4_temp
-!     ! position
-!     dp_temp = xp(i,1); xp(i,1) = xp(j,1); xp(j,1) = dp_temp
-!     dp_temp = xp(i,2); xp(i,2) = xp(j,2); xp(j,2) = dp_temp
-!     dp_temp = xp(i,3); xp(i,3) = xp(j,3); xp(j,3) = dp_temp
-!     ! velocity
-!     dp_temp = vp(i,1); vp(i,1) = vp(j,1); vp(j,1) = dp_temp
-!     dp_temp = vp(i,2); vp(i,2) = vp(j,2); vp(j,2) = dp_temp
-!     dp_temp = vp(i,3); vp(i,3) = vp(j,3); vp(j,3) = dp_temp
-!     ! mass
-!     dp_temp = mp(i); mp(i) = mp(j); mp(j) = dp_temp
-!     ! level
-!     i4_temp = levelp(i); levelp(i) = levelp(j); levelp(j) = i4_temp
-!     ! particle index
-!     i8b_temp = idp(i); idp(i) = idp(j); idp(j) = i8b_temp
-    
-! #ifdef OUTPUT_PARTICLE_POTENTIAL
-!     print*, 'add particle potential here'
-!     stop
-! #endif
-    
-!   end SUBROUTINE swap_2parts_in_mem
-
-
   !########################################################################
   !########################################################################
   !########################################################################
@@ -365,29 +319,6 @@ contains
 #endif
   end function gt_keys
 
-  function gt_3keys_individual_input(key_a2, key_a1, key_a0, key_b2, key_b1, key_b0)
-    implicit none
-    integer(kind=8), intent(in) :: key_a2, key_a1, key_a0, key_b2, key_b1, key_b0
-    logical::gt_3keys_individual_input
-    ! Function to test wether a > b for a and b three-integer hilbert keys, where
-    ! the keys are entered a individual (non-adjacent in memory) integers.
-    if     (key_a2 > key_b2) then
-       gt_3keys_individual_input = .true.
-    elseif (key_a2 < key_b2) then
-       gt_3keys_individual_input = .false.
-    elseif (key_a1 > key_b1) then
-       gt_3keys_individual_input = .true.
-    elseif (key_a1 < key_b1) then
-       gt_3keys_individual_input = .false.
-    elseif (key_a0 > key_b0) then
-       gt_3keys_individual_input = .true.
-    elseif (key_a0 < key_b0) then
-       gt_3keys_individual_input = .false.
-    else
-       gt_3keys_individual_input = .false.
-    end if
-  end function gt_3keys_individual_input
-  
   !########################################################################
   !########################################################################
   !########################################################################
@@ -408,7 +339,7 @@ contains
 
     if (final_level > key_level) then
        write(*,*)'you are trying to sort the hilbert keys to a too high level'
-       call clean_stop
+       stop
     end if
 
     call msd_counting_sort_3digits(offset, np, initial_level + 1, key_level)
@@ -495,7 +426,7 @@ contains
 
     if (final_level > key_level) then
        write(*,*)'you are trying to sort the hilbert keys to a too high level'
-       call clean_stop
+       stop
     end if
  
 

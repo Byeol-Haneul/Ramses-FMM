@@ -2,11 +2,10 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine rho_ana(x,d,dx)
-  use amr_parameters
-  use hydro_parameters
-  use poisson_parameters
+subroutine rho_ana(x,d,dx,gravity_params)
+  use amr_parameters, only: dp, ndim
   implicit none
+  real(dp),dimension(1:10)::gravity_params
   real(dp)::dx                  ! Cell size
   real(dp)::d                   ! Density
   real(dp),dimension(1:ndim)::x ! Cell center position.
@@ -16,7 +15,6 @@ subroutine rho_ana(x,d,dx)
   ! x(1:3) are in [0,boxlen]**ndim.
   ! d is the density field in user units.
   !================================================================
-  integer::i
   real(dp)::dmass,emass,xmass,ymass,zmass,rr,rx,ry,rz,dd
 
   emass=gravity_params(1) ! Softening length

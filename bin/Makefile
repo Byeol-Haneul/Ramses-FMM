@@ -22,8 +22,8 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 # Fortran compiler options and directives
 
 # --- No MPI, gfortran -------------------------------
-#F90 = gfortran -O3 -frecord-marker=4 -fbacktrace -ffree-line-length-none -g
-#FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
+F90 = gfortran -O3 -frecord-marker=4 -fbacktrace -ffree-line-length-none -g
+FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
 
 # --- No MPI, tau ----------------------------------
 #F90 = tau_f90.sh -optKeepFiles -optPreProcess -optCPPOpts=$(DEFINES) -DWITHOUTMPI
@@ -49,8 +49,8 @@ DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -D
 #FFLAGS = -x f95-cpp-input $(DEFINES)
 
 # --- MPI, gfortran DEBUG syntax ------------------------------ 
-F90 = mpif90 -frecord-marker=4 -ffree-line-length-none -fbacktrace -g -O -fbounds-check -Wall
-FFLAGS = -x f95-cpp-input -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan  $(DEFINES)    
+#F90 = mpif90 -frecord-marker=4 -ffree-line-length-none -fbacktrace -g -O -fbounds-check -Wall
+#FFLAGS = -x f95-cpp-input -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan  $(DEFINES)    
 
 # --- MPI, pgf90 syntax ------------------------------
 #F90 = mpif90 -O3
@@ -101,21 +101,24 @@ VPATH = $(PATCH):../$(SOLVER):../aton:../hydro:../pm:../poisson:../amr
 
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
-         cache_commons.o amr_commons.o poisson_parameters.o poisson_commons.o hydro_commons.o \
-         gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
+         hydro_commons.o amr_commons.o poisson_parameters.o poisson_commons.o \
+	 mdl_commons.o ramses_commons.o call_back.o cache_commons.o gadgetreadfile.o write_makefile.o write_patch.o write_gitinfo.o
 
 # AMR objects
-AMROBJ = read_params.o init_amr.o init_time.o init_refine.o adaptive_loop.o update_time.o title.o units.o \
-	 refine_utils.o nbors_utils.o flag_utils.o amr_step.o output_amr.o load_balance.o movie.o
+AMROBJ = timer.o read_params.o init_amr.o init_time.o init_refine_basegrid.o init_refine_adaptive.o init_refine_restart.o \
+	 adaptive_loop.o update_time.o title.o units.o refine_utils.o nbors_utils.o flag_utils.o smooth.o \
+         amr_step.o output_amr.o load_balance.o movie.o task_manager.o
 
 # Particle-Mesh objects
-PMOBJ = newdt_fine.o init_part.o rho_fine.o move_fine.o rho_ana.o output_part.o
+PMOBJ = newdt_fine.o init_part.o input_part.o input_part_restart.o input_part_ascii.o input_part_grafic.o rho_fine.o move_fine.o rho_ana.o output_part.o
 
 # Poisson solver objects
-POISSONOBJ = output_poisson.o force_fine.o gravana.o phi_fine_cg.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
+POISSONOBJ = output_poisson.o force_fine.o grav_ana.o phi_fine_cg.o upload.o interpol_phi.o poisson_flag.o multigrid_fine_commons.o multigrid_fine_coarse.o
 
 # Hydro objects
-HYDROOBJ = init_hydro.o init_flow_fine.o interpol_hydro.o condinit.o hydro_flag.o godunov_utils.o read_hydro_params.o write_screen.o courant_fine.o godunov_fine.o umuscl.o uplmde.o output_hydro.o synchro_hydro_fine.o cooling_fine.o
+HYDROOBJ = init_hydro.o init_flow_fine.o input_hydro_condinit.o input_hydro_grafic.o interpol_hydro.o \
+	   condinit.o hydro_flag.o godunov_utils.o write_screen.o courant_fine.o \
+	   godunov_fine.o umuscl.o uplmde.o output_hydro.o synchro_hydro_fine.o cooling_fine.o
 
 # All objects
 AMRLIB = $(AMROBJ) $(HYDROOBJ) $(PMOBJ) $(POISSONOBJ)

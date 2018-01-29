@@ -2,130 +2,66 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine synchro_hydro_fine(ilevel,dteff)
-  use amr_commons
-  use hydro_commons
+subroutine m_synchro_hydro_fine(s,ilevel,dteff)
+  use amr_parameters, only: ndim,dp,twotondim
+  use ramses_commons, only: ramses_t
   implicit none
+  type(ramses_t)::s
   integer::ilevel
   real(dp)::dteff
   !--------------------------------------------------------------
   ! Add gravity source terms to uold with time step dteff.
   !--------------------------------------------------------------
-  integer::igrid,ind
-  integer::idim,neul=ndim+2
-  real(dp)::ener
-
-#ifdef HYDRO
-
-  if(.not. poisson)return
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel,dteff
-
-  ! Loop over octs
-  do igrid=head(ilevel),tail(ilevel)
-     ! Loop over cells
-     do ind=1,twotondim
-
-        ! Remove kinetic energy from total energy
-        ener=grid(igrid)%uold(ind,neul)
-        do idim=1,ndim
-           ener=ener-0.5*grid(igrid)%uold(ind,idim+1)**2/max(grid(igrid)%uold(ind,1),smallr)
-        end do
+  integer,dimension(1:3)::input_array
   
-        ! Update momentum
-#ifdef GRAV
-        do idim=1,ndim
-           grid(igrid)%uold(ind,idim+1)=grid(igrid)%uold(ind,idim+1)+&
-                & max(grid(igrid)%uold(ind,1),smallr)*grid(igrid)%f(ind,idim)*dteff
-        end do
-#endif
-        ! Update total energy
-        do idim=1,ndim
-           ener=ener+0.5*grid(igrid)%uold(ind,idim+1)**2/max(grid(igrid)%uold(ind,1),smallr)
-        end do
-        grid(igrid)%uold(ind,neul)=ener
+  if(.not. s%r%poisson)return
+  if(s%m%noct_tot(ilevel)==0)return
+  if(s%r%verbose)write(*,'("   Entering synchro_hydro_fine for level",i2," and time step dt=",1PE12.5)')ilevel,dteff
 
-     end do
-     ! End loop over cells
-  end do
-  ! End loop over grids
-
-#endif
-
-111 format('   Entering synchro_hydro_fine for level',i2,' and time step dt=',1PE12.5)
-
-end subroutine synchro_hydro_fine
+  input_array(1)=ilevel
+  input_array(2:3)=transfer(dteff,input_array)
+  call r_synchro_hydro_fine(s,s%mdl%ncpu,3,0,input_array)
+  
+end subroutine m_synchro_hydro_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine add_gravity_source_terms(ilevel)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
+recursive subroutine r_synchro_hydro_fine(s,cpu_range,input_size,output_size,input_array)
+  use amr_parameters, only: dp
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
   integer::ilevel
-  !--------------------------------------------------------------
-  ! This routine adds to unew the gravity source terms to unew
-  ! with only half a time step. Only the momentum and the
-  ! total energy are modified in array unew.
-  !--------------------------------------------------------------
-  integer::igrid,ivar,ind
-  real(dp)::d,u,v,w,e_kin,e_prim,d_old,fact
+  real(dp)::dteff
+  
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-#ifdef HYDRO
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_SYNCHRO_HYDRO_FINE,next_cpu,next_range,input_size,output_size,input_array)
+     call r_synchro_hydro_fine(s,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     dteff=transfer(input_array(2:3),dteff)
+     call synchro_hydro_fine(s%r,s%m,ilevel,dteff)
+  endif
 
-  if(.not. poisson)return
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
-
-  ! Add gravity source term at time t with half time step
-  do igrid=head(ilevel),tail(ilevel)
-     do ind=1,twotondim
-
-        d=max(grid(igrid)%unew(ind,1),smallr)
-        u=0.0; v=0.0; w=0.0
-        if(ndim>0)u=grid(igrid)%unew(ind,2)/d
-        if(ndim>1)v=grid(igrid)%unew(ind,3)/d
-        if(ndim>2)w=grid(igrid)%unew(ind,4)/d
-        e_kin=0.5*d*(u**2+v**2+w**2)
-        e_prim=grid(igrid)%unew(ind,ndim+2)-e_kin
-        d_old=max(grid(igrid)%uold(ind,1),smallr)
-        fact=d_old/d*0.5*dtnew(ilevel)
-#ifdef GRAV
-        if(ndim>0)then
-           u=u+grid(igrid)%f(ind,1)*fact
-           grid(igrid)%unew(ind,2)=d*u
-        endif
-        if(ndim>1)then
-           v=v+grid(igrid)%f(ind,2)*fact
-           grid(igrid)%unew(ind,3)=d*v
-        end if
-        if(ndim>2)then
-           w=w+grid(igrid)%f(ind,3)*fact
-           grid(igrid)%unew(ind,4)=d*w
-        endif
-#endif
-        e_kin=0.5*d*(u**2+v**2+w**2)
-        grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin
-     end do
-  end do
-
-#endif
-
-111 format('   Entering add_gravity_source_terms for level ',i2)
-
-end subroutine add_gravity_source_terms
+end subroutine r_synchro_hydro_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine synchro_hydro_fine_2(r,g,m,ilevel,dteff)
+subroutine synchro_hydro_fine(r,m,ilevel,dteff)
   use amr_parameters, only: ndim,dp,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t,mesh_t
   implicit none
   type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
   integer::ilevel
   real(dp)::dteff
@@ -138,10 +74,6 @@ subroutine synchro_hydro_fine_2(r,g,m,ilevel,dteff)
 
 #ifdef HYDRO
 
-  if(.not. r%poisson)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel,dteff
-
   ! Loop over octs
   do igrid=m%head(ilevel),m%tail(ilevel)
      ! Loop over cells
@@ -150,7 +82,7 @@ subroutine synchro_hydro_fine_2(r,g,m,ilevel,dteff)
         ! Remove kinetic energy from total energy
         ener=m%grid(igrid)%uold(ind,neul)
         do idim=1,ndim
-           ener=ener-0.5*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
+           ener=ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
         end do
   
         ! Update momentum
@@ -162,7 +94,7 @@ subroutine synchro_hydro_fine_2(r,g,m,ilevel,dteff)
 #endif
         ! Update total energy
         do idim=1,ndim
-           ener=ener+0.5*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
+           ener=ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
         end do
         m%grid(igrid)%uold(ind,neul)=ener
 
@@ -173,14 +105,38 @@ subroutine synchro_hydro_fine_2(r,g,m,ilevel,dteff)
 
 #endif
 
-111 format('   Entering synchro_hydro_fine for level',i2,' and time step dt=',1PE12.5)
+end subroutine synchro_hydro_fine
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_gravity_hydro_fine(s,cpu_range,input_size,output_size,ilevel)
+  use amr_parameters, only: dp
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
 
-end subroutine synchro_hydro_fine_2
+  integer::next_range,next_cpu
+  
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_GRAVITY_HYDRO_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_gravity_hydro_fine(s,next_range,input_size,output_size,ilevel)
+  else
+     call gravity_hydro_fine(s%r,s%g,s%m,ilevel)
+  endif
+
+end subroutine r_gravity_hydro_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine add_gravity_source_terms_2(r,g,m,ilevel)
+subroutine gravity_hydro_fine(r,g,m,ilevel)
   use amr_parameters, only: ndim,dp,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -193,28 +149,24 @@ subroutine add_gravity_source_terms_2(r,g,m,ilevel)
   ! with only half a time step. Only the momentum and the
   ! total energy are modified in array unew.
   !--------------------------------------------------------------
-  integer::igrid,ivar,ind
+  integer::igrid,ind
   real(dp)::d,u,v,w,e_kin,e_prim,d_old,fact
 
 #ifdef HYDRO
-
-  if(.not. r%poisson)return
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
 
   ! Add gravity source term at time t with half time step
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
 
         d=max(m%grid(igrid)%unew(ind,1),r%smallr)
-        u=0.0; v=0.0; w=0.0
+        u=0.0d0; v=0.0d0; w=0.0d0
         if(ndim>0)u=m%grid(igrid)%unew(ind,2)/d
         if(ndim>1)v=m%grid(igrid)%unew(ind,3)/d
         if(ndim>2)w=m%grid(igrid)%unew(ind,4)/d
-        e_kin=0.5*d*(u**2+v**2+w**2)
+        e_kin=0.5d0*d*(u**2+v**2+w**2)
         e_prim=m%grid(igrid)%unew(ind,ndim+2)-e_kin
         d_old=max(m%grid(igrid)%uold(ind,1),r%smallr)
-        fact=d_old/d*0.5*g%dtnew(ilevel)
+        fact=d_old/d*0.5d0*g%dtnew(ilevel)
 #ifdef GRAV
         if(ndim>0)then
            u=u+m%grid(igrid)%f(ind,1)*fact
@@ -229,16 +181,14 @@ subroutine add_gravity_source_terms_2(r,g,m,ilevel)
            m%grid(igrid)%unew(ind,4)=d*w
         endif
 #endif
-        e_kin=0.5*d*(u**2+v**2+w**2)
+        e_kin=0.5d0*d*(u**2+v**2+w**2)
         m%grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin
      end do
   end do
 
 #endif
 
-111 format('   Entering add_gravity_source_terms for level ',i2)
-
-end subroutine add_gravity_source_terms_2
+end subroutine gravity_hydro_fine
 !###########################################################
 !###########################################################
 !###########################################################

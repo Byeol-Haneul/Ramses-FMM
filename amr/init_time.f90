@@ -2,66 +2,31 @@
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_time
-  use amr_commons
-  use hydro_commons
-  use pm_commons
+recursive subroutine r_init_time(s,cpu_range,input_size,output_size)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
 
-  ! Local variables
-  integer::i
+  integer::next_range,next_cpu
 
-  if(verbose)write(*,*)'Entering init_time'
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
 
-  if(nrestart==0)then
-     if(cosmo)then
-        ! Get cosmological parameters from input files
-        call init_cosmo
-     else
-        ! Get parameters from input files
-        if(initfile(levelmin).ne.' '.and.filetype.eq.'grafic')then
-           call init_file
-        endif
-        t=0.0
-        aexp=1.0
-     end if
-  end if
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_INIT_TIME,next_cpu,next_range,input_size,output_size)
+     call r_init_time(s,next_range,input_size,output_size)
+  else
+     call init_time(s%r,s%g)
+  endif
 
-  if(cosmo)then
-
-     ! Compute Friedman model look up table
-     if(myid==1)write(*,*)'Computing Friedman model'
-     call friedman(dble(omega_m),dble(omega_l),dble(omega_k), &
-          & 1.d-6,dble(aexp_ini), &
-          & aexp_frw,hexp_frw,tau_frw,t_frw,n_frw)
-
-     ! Compute initial conformal time                                    
-     ! Find neighboring expansion factors                                  
-     i=1                                                                   
-     do while(aexp_frw(i)>aexp.and.i<n_frw)                                
-        i=i+1                                                              
-     end do                                                                
-     ! Interploate time                                                    
-     if(nrestart==0)then                                                   
-        t=tau_frw(i)*(aexp-aexp_frw(i-1))/(aexp_frw(i)-aexp_frw(i-1))+ &   
-             & tau_frw(i-1)*(aexp-aexp_frw(i))/(aexp_frw(i-1)-aexp_frw(i)) 
-        aexp=aexp_frw(i)*(t-tau_frw(i-1))/(tau_frw(i)-tau_frw(i-1))+ &     
-             & aexp_frw(i-1)*(t-tau_frw(i))/(tau_frw(i-1)-tau_frw(i))      
-        hexp=hexp_frw(i)*(t-tau_frw(i-1))/(tau_frw(i)-tau_frw(i-1))+ &     
-             & hexp_frw(i-1)*(t-tau_frw(i))/(tau_frw(i-1)-tau_frw(i))      
-     end if                                                                
-     texp=t_frw(i)*(t-tau_frw(i-1))/(tau_frw(i)-tau_frw(i-1))+ &           
-          & t_frw(i-1)*(t-tau_frw(i))/(tau_frw(i-1)-tau_frw(i))            
-  else                                                                     
-     texp=t                                                                
-  end if                                                                   
-
-end subroutine init_time
+end subroutine r_init_time
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_time_2(r,g)
+  subroutine init_time(r,g)
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t
   implicit none
@@ -71,16 +36,14 @@ subroutine init_time_2(r,g)
   ! Local variables
   integer::i
 
-  if(r%verbose)write(*,*)'Entering init_time'
-
   if(r%nrestart==0)then
      if(r%cosmo)then
         ! Get cosmological parameters from input files
-        call init_cosmo_2(r,g)
+        call init_cosmo(r,g)
      else
         ! Get parameters from input files
         if(r%initfile(r%levelmin).ne.' '.and.r%filetype.eq.'grafic')then
-           call init_file_2(r,g)
+           call init_file(r,g)
         endif
         g%t=0.0
         g%aexp=1.0
@@ -116,93 +79,12 @@ subroutine init_time_2(r,g)
      g%texp=g%t
   end if                                                                   
 
-end subroutine init_time_2
+end subroutine init_time
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_file
-  use amr_commons
-  use hydro_commons
-  use pm_commons
-  implicit none
-  !------------------------------------------------------
-  ! Read geometrical parameters in the initial condition files.
-  ! Initial conditions are supposed to be made by 
-  ! Bertschinger's grafic version 2.0 code.
-  !------------------------------------------------------
-  integer:: ilevel
-  real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
-  character(LEN=80)::filename
-  logical::ok
-
-  if(verbose)write(*,*)'Entering init_file'
-
-  ! Reading initial conditions parameters only
-  nlevelmax_part=levelmin-1
-  do ilevel=levelmin,nlevelmax
-     if(initfile(ilevel).ne.' ')then
-        filename=TRIM(initfile(ilevel))//'/ic_d'
-        INQUIRE(file=filename,exist=ok)
-        if(.not.ok)then
-           if(myid==1)then
-
-              write(*,*)TRIM(initfile(ilevel))
-              write(*,*)'File '//TRIM(filename)//' does not exist'
-           end if
-           call clean_stop
-        end if
-        open(10,file=filename,form='unformatted')
-        if(myid==1)write(*,*)'Reading file '//TRIM(filename)
-        rewind 10
-        read(10)n1(ilevel),n2(ilevel),n3(ilevel),dxini0 &
-             & ,xoff10,xoff20,xoff30 &
-             & ,astart0,omega_m0,omega_l0,h00
-        close(10)
-        dxini(ilevel)=dxini0
-        xoff1(ilevel)=xoff10
-        xoff2(ilevel)=xoff20
-        xoff3(ilevel)=xoff30
-        nlevelmax_part=nlevelmax_part+1
-     endif
-  end do
-
-  ! Check compatibility with run parameters
-  if(         n1(levelmin).NE.2**levelmin &
-       & .or. n2(levelmin).NE.2**levelmin &
-       & .or. n3(levelmin).NE.2**levelmin) then 
-     write(*,*)'coarser grid is not compatible with initial conditions file'
-     write(*,*)'Found    n1=',n1(levelmin),&
-          &            ' n2=',n2(levelmin),&
-          &            ' n3=',n3(levelmin)
-     write(*,*)'Expected n1=',2**levelmin &
-          &           ,' n2=',2**levelmin &
-          &           ,' n3=',2**levelmin
-     call clean_stop
-  end if
-
-  ! Write initial conditions parameters
-  if(myid==1)then
-     do ilevel=levelmin,nlevelmax_part
-        write(*,'(" Initial conditions for level =",I4)')ilevel
-        write(*,'(" n1=",I4," n2=",I4," n3=",I4)') &
-             & n1(ilevel),&
-             & n2(ilevel),&
-             & n3(ilevel)
-        write(*,'(" dx=",1pe10.3)')dxini(ilevel)
-        write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",1pe10.3)') &
-             & xoff1(ilevel),&
-             & xoff2(ilevel),&
-             & xoff3(ilevel)
-     end do
-  end if
-
-end subroutine init_file
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine init_file_2(r,g)
+subroutine init_file(r,g)
   use amr_parameters, only: sp
   use amr_commons, only: run_t,global_t
   implicit none
@@ -231,7 +113,7 @@ subroutine init_file_2(r,g)
               write(*,*)TRIM(r%initfile(ilevel))
               write(*,*)'File '//TRIM(filename)//' does not exist'
            end if
-           call clean_stop
+           call mdl_abort
         end if
         open(10,file=filename,form='unformatted')
         if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -259,7 +141,7 @@ subroutine init_file_2(r,g)
      write(*,*)'Expected n1=',2**r%levelmin &
           &           ,' n2=',2**r%levelmin &
           &           ,' n3=',2**r%levelmin
-     call clean_stop
+     call mdl_abort
   end if
 
   ! Write initial conditions parameters
@@ -278,204 +160,12 @@ subroutine init_file_2(r,g)
      end do
   end if
 
-end subroutine init_file_2
+end subroutine init_file
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_cosmo
-  use amr_commons
-  use hydro_commons
-  use pm_commons
-  use gadgetreadfilemod
-  implicit none
-  !------------------------------------------------------
-  ! Read cosmological and geometrical parameters
-  ! in the initial condition files.
-  ! Initial conditions are supposed to be made by 
-  ! Bertschinger's grafic version 2.0 code.
-  !------------------------------------------------------
-  integer:: ilevel,i
-  real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
-  real(dp)::d1a,fpeebl
-  character(LEN=80)::filename
-  character(LEN=5)::nchar
-  logical::ok
-  TYPE(gadgetheadertype) :: gadgetheader 
-
-  if(verbose)write(*,*)'Entering init_cosmo'
-
-  if(initfile(levelmin)==' ')then
-     write(*,*)'You need to specifiy at least one level of initial condition'
-     call clean_stop
-  end if
-
-  SELECT CASE (filetype)
-  case ('grafic', 'ascii')
-
-     ! Reading initial conditions parameters only
-     aexp=2.0
-     nlevelmax_part=levelmin-1
-     do ilevel=levelmin,nlevelmax
-        if(initfile(ilevel).ne.' ')then
-           if(multiple)then
-              call title(myid,nchar)
-              filename=TRIM(initfile(ilevel))//'/dir_deltab/ic_deltab.'//TRIM(nchar)
-           else
-              filename=TRIM(initfile(ilevel))//'/ic_deltab'
-           endif
-           INQUIRE(file=filename,exist=ok)
-           if(.not.ok)then
-              if(myid==1)then
-                 write(*,*)'File '//TRIM(filename)//' does not exist'
-              end if
-              call clean_stop
-           end if
-           open(10,file=filename,form='unformatted')
-           if(myid==1)write(*,*)'Reading file '//TRIM(filename)
-           rewind 10
-           read(10)n1(ilevel),n2(ilevel),n3(ilevel),dxini0 &
-                & ,xoff10,xoff20,xoff30 &
-                & ,astart0,omega_m0,omega_l0,h00
-           close(10)
-           dxini(ilevel)=dxini0
-           xoff1(ilevel)=xoff10
-           xoff2(ilevel)=xoff20
-           xoff3(ilevel)=xoff30
-           astart(ilevel)=astart0
-           omega_m=omega_m0
-           omega_l=omega_l0
-           if(hydro)omega_b=0.045 ! Be careful hard-coded !
-           h0=h00
-           aexp=MIN(aexp,astart(ilevel))
-           nlevelmax_part=nlevelmax_part+1
-           ! Compute SPH equivalent mass (initial gas mass resolution)
-           mass_sph=omega_b/omega_m*0.5d0**(ndim*ilevel)           
-        endif
-     end do
-
-     ! Compute initial expansion factor
-     if(aexp_ini.lt.1.0)then
-        aexp=aexp_ini
-     else
-        aexp_ini=aexp
-     endif
-     
-     ! Check compatibility with run parameters
-     if(.not. multiple) then
-        if(         n1(levelmin).ne.2**levelmin &
-             & .or. n2(levelmin).ne.2**levelmin &
-             & .or. n3(levelmin).ne.2**levelmin) then 
-           write(*,*)'coarser grid is not compatible with initial conditions file'
-           write(*,*)'Found    n1=',n1(levelmin),&
-                &            ' n2=',n2(levelmin),&
-                &            ' n3=',n3(levelmin)
-           write(*,*)'Expected n1=',2**levelmin &
-                &           ,' n2=',2**levelmin &
-                &           ,' n3=',2**levelmin
-           call clean_stop
-        endif
-     end if
-     
-     ! Compute box length in the initial conditions in units of h-1 Mpc
-     boxlen_ini=2**levelmin*dxini(levelmin)*(h0/100.)
-     
-  CASE ('gadget')
-
-     ! Reading gadget file header only
-     if (verbose) write(*,*)'Reading in gadget format from '//TRIM(initfile(levelmin))
-     call gadgetreadheader(TRIM(initfile(levelmin)), 0, gadgetheader, ok)
-     if(.not.ok) call clean_stop
-     do i=1,6
-        if (i .ne. 2) then
-           if (gadgetheader%nparttotal(i) .ne. 0) then
-              write(*,*) 'Non DM particles present in bin ', i
-              call clean_stop
-           endif
-        endif
-     enddo
-     if (gadgetheader%mass(2) == 0) then
-        write(*,*) 'Particles have different masses, not supported'
-        call clean_stop
-     endif
-     omega_m = gadgetheader%omega0
-     omega_l = gadgetheader%omegalambda
-     if(hydro)omega_b=0.045 ! Be careful hard-coded !
-     h0 = gadgetheader%hubbleparam * 100.d0
-     boxlen_ini = gadgetheader%boxsize
-     aexp = gadgetheader%time
-     aexp_ini = aexp
-     ! Compute SPH equivalent mass (initial gas mass resolution)
-     mass_sph=omega_b/omega_m*0.5d0**(ndim*levelmin)
-     nlevelmax_part = levelmin
-     astart(levelmin) = aexp
-     xoff1(levelmin)=0
-     xoff2(levelmin)=0
-     xoff3(levelmin)=0
-     dxini(levelmin) = boxlen_ini/(2**levelmin*(h0/100.0))
-
-  CASE DEFAULT
-     write(*,*) 'Unsupported input format '//filetype
-     call clean_stop
-  END SELECT
-
-  ! Write cosmological parameters
-  if(myid==1)then
-     write(*,'(" Cosmological parameters:")')
-     write(*,'(" aexp=",1pe10.3," H0=",1pe10.3," km s-1 Mpc-1")')aexp,h0
-     write(*,'(" omega_m=",F7.3," omega_l=",F7.3)')omega_m,omega_l
-     write(*,'(" box size=",1pe10.3," h-1 Mpc")')boxlen_ini
-  end if
-  omega_k=1.d0-omega_l-omega_m
-           
-  ! Compute linear scaling factor between aexp and astart(ilevel)
-  do ilevel=levelmin,nlevelmax_part
-     dfact(ilevel)=d1a(aexp,omega_m,omega_l)/d1a(astart(ilevel),omega_m,omega_l)
-     vfact(ilevel)=astart(ilevel)*fpeebl(astart(ilevel),omega_m,omega_l) & ! Same scale factor as in grafic1
-          & *sqrt(omega_m/astart(ilevel)+omega_l*astart(ilevel)*astart(ilevel)+omega_k) &
-          & /astart(ilevel)*h0
-  end do
-
-  ! Write initial conditions parameters
-  do ilevel=levelmin,nlevelmax_part
-     if(myid==1)then
-        write(*,'(" Initial conditions for level =",I4)')ilevel
-        write(*,'(" dx=",1pe10.3," h-1 Mpc")')dxini(ilevel)*h0/100.
-     endif
-     if(.not.multiple)then
-        if(myid==1)then
-           write(*,'(" n1=",I4," n2=",I4," n3=",I4)') &
-                & n1(ilevel),&
-                & n2(ilevel),&
-                & n3(ilevel)
-           write(*,'(" xoff=",1pe10.3," yoff=",1pe10.3," zoff=",&
-                & 1pe10.3," h-1 Mpc")') &
-                & xoff1(ilevel)*h0/100.,&
-                & xoff2(ilevel)*h0/100.,&
-                & xoff3(ilevel)*h0/100.
-        endif
-     else
-        write(*,'(" myid=",I4," n1=",I4," n2=",I4," n3=",I4)') &
-             & myid,n1(ilevel),n2(ilevel),n3(ilevel)
-        write(*,'(" myid=",I4," xoff=",1pe10.3," yoff=",1pe10.3," zoff=",&
-             & 1pe10.3," h-1 Mpc")') &
-             & myid,xoff1(ilevel)*h0/100.,&
-             & xoff2(ilevel)*h0/100.,&
-             & xoff3(ilevel)*h0/100.
-     endif
-  end do
-
-  ! Scale displacement in Mpc to code velocity (v=dx/dtau)
-  ! in coarse cell units per conformal time
-  vfact(1)=aexp*fpeebl(aexp,omega_m,omega_l)*sqrt(omega_m/aexp+omega_l*aexp*aexp+omega_k)
-  ! This scale factor is different from vfact in grafic by h0/aexp
-
-end subroutine init_cosmo
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine init_cosmo_2(r,g)
+subroutine init_cosmo(r,g)
   use amr_parameters, only: sp,dp,ndim
   use amr_commons, only: run_t,global_t
   use gadgetreadfilemod
@@ -500,7 +190,7 @@ subroutine init_cosmo_2(r,g)
 
   if(r%initfile(r%levelmin)==' ')then
      write(*,*)'You need to specifiy at least one level of initial condition'
-     call clean_stop
+     call mdl_abort
   end if
 
   SELECT CASE (r%filetype)
@@ -522,7 +212,7 @@ subroutine init_cosmo_2(r,g)
               if(g%myid==1)then
                  write(*,*)'File '//TRIM(filename)//' does not exist'
               end if
-              call clean_stop
+              call mdl_abort
            end if
            open(10,file=filename,form='unformatted')
            if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -566,7 +256,7 @@ subroutine init_cosmo_2(r,g)
            write(*,*)'Expected n1=',2**r%levelmin &
                 &           ,' n2=',2**r%levelmin &
                 &           ,' n3=',2**r%levelmin
-           call clean_stop
+           call mdl_abort
         endif
      end if
      
@@ -578,18 +268,18 @@ subroutine init_cosmo_2(r,g)
      ! Reading gadget file header only
      if (r%verbose) write(*,*)'Reading in gadget format from '//TRIM(r%initfile(r%levelmin))
      call gadgetreadheader(TRIM(r%initfile(r%levelmin)), 0, gadgetheader, ok)
-     if(.not.ok) call clean_stop
+     if(.not.ok) call mdl_abort
      do i=1,6
         if (i .ne. 2) then
            if (gadgetheader%nparttotal(i) .ne. 0) then
               write(*,*) 'Non DM particles present in bin ', i
-              call clean_stop
+              call mdl_abort
            endif
         endif
      enddo
      if (gadgetheader%mass(2) == 0) then
         write(*,*) 'Particles have different masses, not supported'
-        call clean_stop
+        call mdl_abort
      endif
      g%omega_m = gadgetheader%omega0
      g%omega_l = gadgetheader%omegalambda
@@ -609,7 +299,7 @@ subroutine init_cosmo_2(r,g)
 
   CASE DEFAULT
      write(*,*) 'Unsupported input format '//r%filetype
-     call clean_stop
+     call mdl_abort
   END SELECT
 
   ! Write cosmological parameters
@@ -620,7 +310,13 @@ subroutine init_cosmo_2(r,g)
      write(*,'(" box size=",1pe10.3," h-1 Mpc")')g%boxlen_ini
   end if
   g%omega_k=1.d0-g%omega_l-g%omega_m
-           
+
+  ! Save cosmological parameters into run parameters
+  r%omega_b=g%omega_b
+  r%omega_m=g%omega_m
+  r%omega_l=g%omega_l
+  r%omega_k=g%omega_k
+  
   ! Compute linear scaling factor between aexp and astart(ilevel)
   do ilevel=r%levelmin,g%nlevelmax_part
      g%dfact(ilevel)=d1a(g%aexp,g%omega_m,g%omega_l)/d1a(g%astart(ilevel),g%omega_m,g%omega_l)
@@ -661,7 +357,7 @@ subroutine init_cosmo_2(r,g)
   g%vfact(1)=g%aexp*fpeebl(g%aexp,g%omega_m,g%omega_l)*sqrt(g%omega_m/g%aexp+g%omega_l*g%aexp*g%aexp+g%omega_k)
   ! This scale factor is different from vfact in grafic by h0/aexp
 
-end subroutine init_cosmo_2
+end subroutine init_cosmo
 !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
      & axp_out,hexp_out,tau_out,t_out,ntable)
@@ -693,7 +389,7 @@ subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
      write(*,*)'O_mat_0,O_vac_0,O_k_0=',O_mat_0,O_vac_0,O_k_0
      write(*,*)'The sum must be equal to 1.0, but '
      write(*,*)'O_mat_0+O_vac_0+O_k_0=',O_mat_0+O_vac_0+O_k_0
-     call clean_stop
+     call mdl_abort
   end if
 
   axp_tau = 1.0D0
@@ -718,7 +414,7 @@ subroutine friedman(O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
   end do
 
 !  write(*,666)-t
-  666 format(' Age of the Universe (in unit of 1/H0)=',1pe10.3)
+!  666 format(' Age of the Universe (in unit of 1/H0)=',1pe10.3)
 
   nskip=nstep/ntable
   
@@ -808,12 +504,12 @@ function d1a(a,omega_m,omega_l)
   eps=1.0d-6
   if(a .le. 0.0d0)then
      write(*,*)'a=',a
-     call clean_stop
+     call mdl_abort
   end if
   y=omega_m*(1.d0/a-1.d0) + omega_l*(a*a-1.d0) + 1.d0
   if(y .lt. 0.0D0)then
      write(*,*)'y=',y
-     call clean_stop
+     call mdl_abort
   end if
   y12=y**0.5d0
   d1a=y12/a*rombint(eps,a,eps,omega_m,omega_l)

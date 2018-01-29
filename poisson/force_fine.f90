@@ -2,113 +2,171 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine force_fine(ilevel,icount)
-  use amr_commons
-  use poisson_commons
-   implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
+subroutine m_force_fine(s,ilevel,icount)
+  use amr_parameters, only: ndim,twotondim,nvector,dp
+  use ramses_commons, only: ramses_t
+  implicit none
+  type(ramses_t)::s
   integer::ilevel,icount
   !----------------------------------------------------------
   ! This routine computes the gravitational acceleration,
   ! the maximum density rho_max, and the potential energy
   !----------------------------------------------------------
-  integer::igrid,ind,i,ngrid,info,idim,nstride
-  real(dp)::dx,fact,fourpi
-  real(kind=8)::rho_loc,rho_all,epot_loc,epot_all
-  real(dp),dimension(1:nvector,1:ndim),save::xx,ff
+  integer,dimension(1:2)::input_array,output_array
+  real(kind=8)::rhomax,epot
  
-  if(noct_tot(ilevel)==0)return
-  if(verbose)write(*,111)ilevel
+  if(s%m%noct_tot(ilevel)==0)return
+  if(s%r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
+
 #ifdef GRAV  
+
+  if(s%r%gravity_type>0)then 
+     ! Compute analytical gravity force
+     call r_force_analytic(s,s%mdl%ncpu,1,0,ilevel)
+  else
+     ! Compute gradient of potential
+     input_array(1)=ilevel
+     input_array(2)=icount
+     call r_gradient_phi(s,s%mdl%ncpu,2,0,input_array)
+  endif
+  if(s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
+
+  ! Compute gravity potential energy
+  call r_compute_epot(s,s%mdl%ncpu,1,2,ilevel,output_array)
+  epot=transfer(output_array,epot)
+  s%g%epot_tot=s%g%epot_tot+epot
+  if(s%r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
+
+  ! Compute maximum mass density
+  call r_compute_rhomax(s,s%mdl%ncpu,1,2,ilevel,output_array)
+  rhomax=transfer(output_array,rhomax)
+  s%g%rho_max(ilevel)=rhomax
+  if(s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
+
+#endif  
+
+end subroutine m_force_fine
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+recursive subroutine r_force_analytic(s,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+
+  integer::next_range,next_cpu
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_FORCE_ANALYTIC,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_force_analytic(s,next_range,input_size,output_size,ilevel)
+  else
+     call force_analytic(s%r,s%g,s%m,ilevel)
+  endif
+
+end subroutine r_force_analytic
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+subroutine force_analytic(r,g,m,ilevel)
+  use amr_parameters, only: ndim,twotondim,nvector,dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
   !-------------------------------------
   ! Compute analytical gravity force
   !-------------------------------------
-  if(gravity_type>0)then 
-     ! Mesh size at level ilevel in code units
-     dx=boxlen/2**ilevel
-     ! Loop over grids by vector sweeps
-     do igrid=head(ilevel),tail(ilevel),nvector
-        ngrid=MIN(nvector,tail(ilevel)-igrid+1)
-        ! Loop over cells
-        do ind=1,twotondim
-           ! Compute cell centre position in code units
-           do idim=1,ndim
-              nstride=2**(idim-1)
-              do i=1,ngrid
-                 xx(i,idim)=(2*grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx
-              end do
-           end do
-           ! Call analytical gravity routine
-           call gravana(xx,ff,dx,ngrid)
-           ! Scatter variables to main memory
-           do idim=1,ndim
-              do i=1,ngrid
-                 grid(igrid+i-1)%f(ind,idim)=ff(i,idim)
-              end do
-           end do
-        end do
-        ! End loop over cells
-     end do
-     ! End loop over grids
+  integer::igrid,ind,i,ngrid,idim,nstride
+  real(dp)::dx
+  real(dp),dimension(1:nvector,1:ndim),save::xx,ff
+ 
+#ifdef GRAV  
 
-  !------------------------------
-  ! Compute gradient of potential
-  !------------------------------
-  else
-     call gradient_phi(ilevel,icount)
-  endif
-
-  !----------------------------------------------
-  ! Compute gravity potential and maximum density
-  !----------------------------------------------
   ! Mesh size at level ilevel in code units
-  dx=boxlen/2**ilevel
-  ! Initialise global variables
-  rho_loc=0.0; rho_all=0.0
-  epot_loc=0.0; epot_all=0.0
-  fourpi=4.0D0*ACOS(-1.0D0)
-  if(cosmo)fourpi=1.5D0*omega_m*aexp
-  fact=-dx**ndim/fourpi/2.0D0
+  dx=r%boxlen/2**ilevel
 
-  ! Loop over myid grids by vector sweeps
-  do igrid=head(ilevel),tail(ilevel)
+  ! Loop over grids by vector sweeps
+  do igrid=m%head(ilevel),m%tail(ilevel),nvector
+     ngrid=MIN(nvector,m%tail(ilevel)-igrid+1)
+
      ! Loop over cells
      do ind=1,twotondim
-        ! Loop over dimensions
+
+        ! Compute cell centre position in code units
         do idim=1,ndim
-           if(.not.grid(igrid)%refined(ind))then
-              epot_loc=epot_loc+fact*grid(igrid)%f(ind,idim)**2
-           endif
+           nstride=2**(idim-1)
+           do i=1,ngrid
+              xx(i,idim)=(2*m%grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx
+           end do
         end do
-        rho_loc=MAX(rho_loc,dble(abs(grid(igrid)%rho(ind))))
+
+        ! Call analytical gravity routine
+        call grav_ana(xx,ff,dx,ngrid,r%gravity_type,r%gravity_params)
+
+        ! Scatter variables to main memory
+        do idim=1,ndim
+           do i=1,ngrid
+              m%grid(igrid+i-1)%f(ind,idim)=ff(i,idim)
+           end do
+        end do
+
      end do
      ! End loop over cells
+
   end do
-  ! End loop over grids
+  ! End loop over grid
 
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(epot_loc,epot_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(rho_loc,rho_all,1,MPI_DOUBLE_PRECISION,MPI_MAX,MPI_COMM_WORLD,info)
-     epot_loc=epot_all
-     rho_loc=rho_all
 #endif
-     epot_tot=epot_tot+epot_loc
-     rho_max(ilevel)=rho_loc
-
-#endif  
-111 format('   Entering force_fine for level ',I2)
-
-end subroutine force_fine
+  
+end subroutine force_analytic
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gradient_phi(ilevel,icount)
-  use amr_commons
-  use poisson_commons
+recursive subroutine r_gradient_phi(s,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
   implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer,dimension(1:input_size)::input_array
+
+  integer::next_range,next_cpu
+  integer::ilevel,icount
+  
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_GRADIENT_PHI,next_cpu,next_range,input_size,output_size,input_array)
+     call r_gradient_phi(s,next_range,input_size,output_size,input_array)
+  else
+     ilevel=input_array(1)
+     icount=input_array(2)
+     call gradient_phi(s,ilevel,icount)
+  endif
+
+end subroutine r_gradient_phi
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+subroutine gradient_phi(s,ilevel,icount)
+  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  implicit none
+  type(ramses_t)::s
   integer::ilevel,icount
   !-------------------------------------------------
   ! This routine compute the 3-force for all cells
@@ -129,277 +187,11 @@ subroutine gradient_phi(ilevel,icount)
   real(dp)::dx,a,b,aa,bb,cc,dd,tfrac
   real(dp)::phi1,phi2,phi3,phi4
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
+
 #ifdef GRAV
-  ! Mesh size at level ilevel in code units
-  dx=boxlen/2**ilevel
 
-  ! Rescaling factor
-  a=0.50D0*4.0D0/3.0D0/dx
-  b=0.25D0*1.0D0/3.0D0/dx
-  !   |dim
-  !   | |node
-  !   | | |cell
-  !   v v v
-  ggg(1,1,1:8)=(/1,0,1,0,1,0,1,0/); hhh(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
-  ggg(1,2,1:8)=(/0,2,0,2,0,2,0,2/); hhh(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
-  ggg(1,3,1:8)=(/1,1,1,1,1,1,1,1/); hhh(1,3,1:8)=(/1,2,3,4,5,6,7,8/)
-  ggg(1,4,1:8)=(/2,2,2,2,2,2,2,2/); hhh(1,4,1:8)=(/1,2,3,4,5,6,7,8/)
-  ggg(2,1,1:8)=(/3,3,0,0,3,3,0,0/); hhh(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
-  ggg(2,2,1:8)=(/0,0,4,4,0,0,4,4/); hhh(2,2,1:8)=(/3,4,1,2,7,8,5,6/)
-  ggg(2,3,1:8)=(/3,3,3,3,3,3,3,3/); hhh(2,3,1:8)=(/1,2,3,4,5,6,7,8/)
-  ggg(2,4,1:8)=(/4,4,4,4,4,4,4,4/); hhh(2,4,1:8)=(/1,2,3,4,5,6,7,8/)
-  ggg(3,1,1:8)=(/5,5,5,5,0,0,0,0/); hhh(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
-  ggg(3,2,1:8)=(/0,0,0,0,6,6,6,6/); hhh(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
-  ggg(3,3,1:8)=(/5,5,5,5,5,5,5,5/); hhh(3,3,1:8)=(/1,2,3,4,5,6,7,8/)
-  ggg(3,4,1:8)=(/6,6,6,6,6,6,6,6/); hhh(3,4,1:8)=(/1,2,3,4,5,6,7,8/)
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
-  ! CIC method constants
-  aa = 1.0D0/4.0D0**ndim
-  bb = 3.0D0*aa
-  cc = 9.0D0*aa
-  dd = 27.D0*aa
-  bbb(:)  =(/aa ,bb ,bb ,cc ,bb ,cc ,cc ,dd/)
-
-  ! Sampling positions in the 3x3x3 father cell cube
-  ccc(:,1)=(/1 ,2 ,4 ,5 ,10,11,13,14/)
-  ccc(:,2)=(/3 ,2 ,6 ,5 ,12,11,15,14/)
-  ccc(:,3)=(/7 ,8 ,4 ,5 ,16,17,13,14/)
-  ccc(:,4)=(/9 ,8 ,6 ,5 ,18,17,15,14/)
-  ccc(:,5)=(/19,20,22,23,10,11,13,14/)
-  ccc(:,6)=(/21,20,24,23,12,11,15,14/)
-  ccc(:,7)=(/25,26,22,23,16,17,13,14/)
-  ccc(:,8)=(/27,26,24,23,18,17,15,14/)
-
-  if (icount .ne. 1 .and. icount .ne. 2)then
-     write(*,*)'icount has bad value'
-     call clean_stop
-  endif
-
-  ! Compute fraction of time steps for interpolation
-  if (dtold(ilevel-1)>0.0)then
-     tfrac=dtnew(ilevel)/dtold(ilevel-1)*(icount-1)
-  else
-     tfrac=0.0
-  end if
-
-  call open_cache(operation_interpol,domain_decompos_amr)
-
-  hash_nbor(0)=ilevel
-
-  ! Loop over grids
-  do igrid=head(ilevel),tail(ilevel)
-     
-     ! Get central oct potential
-     do ind=1,twotondim
-        phi_nbor(ind,0)=grid(igrid)%phi(ind)
-     end do
-
-     ! Get neighboring octs potential
-     do i_nbor=1,twondim
-
-        ! Get neighboring grid
-        hash_nbor(1:ndim)=grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
-        ! Periodic boundary conditons
-        do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=ckey_max(ilevel)-1
-           if(hash_nbor(idim)==ckey_max(ilevel))hash_nbor(idim)=0
-        enddo
-        igridn=get_grid(hash_nbor,grid_dict,.false.,.true.)
-
-        ! If grid exists, then copy into array
-        if(igridn>0)then
-           do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=grid(igridn)%phi(ind)
-           end do
-
-        ! Otherwise interpolate from coarser level
-        else
-           ! Get 3**ndim parent cell using read-only cache
-           call get_threetondim_nbor_parent_cell(hash_nbor,grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi(igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
-           do ind=1,threetondim
-              call unlock_cache(igrid_nbor(ind))
-           end do
-        endif
-
-     end do
-     ! End loop over neighboring octs
-
-     ! Loop over cells
-     do ind=1,twotondim
-
-        ! Loop over dimensions
-        do idim=1,ndim
-
-           ! Gather nodes indices
-           id1=hhh(idim,1,ind); ig1=ggg(idim,1,ind)
-           id2=hhh(idim,2,ind); ig2=ggg(idim,2,ind)
-           id3=hhh(idim,3,ind); ig3=ggg(idim,3,ind)
-           id4=hhh(idim,4,ind); ig4=ggg(idim,4,ind)
-
-           ! Gather potential
-           phi1=phi_nbor(id1,ig1)
-           phi2=phi_nbor(id2,ig2)
-           phi3=phi_nbor(id3,ig3)
-           phi4=phi_nbor(id4,ig4)
-
-           ! Compute acceleration
-           grid(igrid)%f(ind,idim)=a*(phi1-phi2)-b*(phi3-phi4)
-
-        end do
-        ! End loop over dimensions
-
-     end do
-     ! End loop over cells
-
-  end do
-  ! End loop over grids
-
-  call close_cache(grid_dict)
-#endif
-end subroutine gradient_phi
-!#########################################################
-!#########################################################
-!#########################################################
-!#########################################################
-subroutine force_fine_2(r,g,m,ilevel,icount)
-  use amr_parameters, only: ndim,twotondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer::ilevel,icount
-  !----------------------------------------------------------
-  ! This routine computes the gravitational acceleration,
-  ! the maximum density rho_max, and the potential energy
-  !----------------------------------------------------------
-  integer::igrid,ind,i,ngrid,info,idim,nstride
-  real(dp)::dx,fact,fourpi
-  real(kind=8)::rho_loc,rho_all,epot_loc,epot_all
-  real(dp),dimension(1:nvector,1:ndim),save::xx,ff
- 
-  if(m%noct_tot(ilevel)==0)return
-  if(r%verbose)write(*,111)ilevel
-#ifdef GRAV  
-  !-------------------------------------
-  ! Compute analytical gravity force
-  !-------------------------------------
-  if(r%gravity_type>0)then 
-     ! Mesh size at level ilevel in code units
-     dx=r%boxlen/2**ilevel
-     ! Loop over grids by vector sweeps
-     do igrid=m%head(ilevel),m%tail(ilevel),nvector
-        ngrid=MIN(nvector,m%tail(ilevel)-igrid+1)
-        ! Loop over cells
-        do ind=1,twotondim
-           ! Compute cell centre position in code units
-           do idim=1,ndim
-              nstride=2**(idim-1)
-              do i=1,ngrid
-                 xx(i,idim)=(2*m%grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx
-              end do
-           end do
-           ! Call analytical gravity routine
-           call gravana(xx,ff,dx,ngrid)
-           ! Scatter variables to main memory
-           do idim=1,ndim
-              do i=1,ngrid
-                 m%grid(igrid+i-1)%f(ind,idim)=ff(i,idim)
-              end do
-           end do
-        end do
-        ! End loop over cells
-     end do
-     ! End loop over grids
-
-  !------------------------------
-  ! Compute gradient of potential
-  !------------------------------
-  else
-     call gradient_phi_2(r,g,m,ilevel,icount)
-  endif
-
-  !----------------------------------------------
-  ! Compute gravity potential and maximum density
-  !----------------------------------------------
-  ! Mesh size at level ilevel in code units
-  dx=r%boxlen/2**ilevel
-  ! Initialise global variables
-  rho_loc=0.0; rho_all=0.0
-  epot_loc=0.0; epot_all=0.0
-  fourpi=4.0D0*ACOS(-1.0D0)
-  if(r%cosmo)fourpi=1.5D0*g%omega_m*g%aexp
-  fact=-dx**ndim/fourpi/2.0D0
-
-  ! Loop over myid grids by vector sweeps
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     ! Loop over cells
-     do ind=1,twotondim
-        ! Loop over dimensions
-        do idim=1,ndim
-           if(.not.m%grid(igrid)%refined(ind))then
-              epot_loc=epot_loc+fact*m%grid(igrid)%f(ind,idim)**2
-           endif
-        end do
-        rho_loc=MAX(rho_loc,dble(abs(m%grid(igrid)%rho(ind))))
-     end do
-     ! End loop over cells
-  end do
-  ! End loop over grids
-
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(epot_loc,epot_all,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(rho_loc,rho_all,1,MPI_DOUBLE_PRECISION,MPI_MAX,MPI_COMM_WORLD,info)
-  epot_loc=epot_all
-  rho_loc=rho_all
-#endif
-  g%epot_tot=g%epot_tot+epot_loc
-  g%rho_max(ilevel)=rho_loc
-  
-#endif  
-111 format('   Entering force_fine for level ',I2)
-
-end subroutine force_fine_2
-!#########################################################
-!#########################################################
-!#########################################################
-!#########################################################
-subroutine gradient_phi_2(r,g,m,ilevel,icount)
-  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use cache_commons
-  implicit none
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-#endif
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  integer::ilevel,icount
-  !-------------------------------------------------
-  ! This routine compute the 3-force for all cells
-  ! in the current level grids, using a
-  ! 5 nodes kernel (5 points FDA).
-  !-------------------------------------------------
-  integer::get_grid_2
-  integer::i_nbor,igrid,idim,ind,igridn
-  integer::id1,id2,id3,id4
-  integer::ig1,ig2,ig3,ig4
-  integer,dimension(1:3,1:4,1:8)::ggg,hhh
-  integer,dimension(1:8,1:8)::ccc
-  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
-  integer,dimension(1:3,1:6),save::shift=reshape(&
-       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(dp),dimension(1:8)::bbb
-  real(dp)::dx,a,b,aa,bb,cc,dd,tfrac
-  real(dp)::phi1,phi2,phi3,phi4
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
-#ifdef GRAV
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 
@@ -442,17 +234,17 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call clean_stop
+     call mdl_abort
   endif
 
   ! Compute fraction of time steps for interpolation
-  if (g%dtold(ilevel-1)>0.0)then
+  if (g%dtold(ilevel-1)>0.0d0)then
      tfrac=g%dtnew(ilevel)/g%dtold(ilevel-1)*(icount-1)
   else
      tfrac=0.0
   end if
 
-  call open_cache_2(r,g,m,operation_interpol,domain_decompos_amr)
+  call open_cache(s,operation_interpol,domain_decompos_amr)
 
   hash_nbor(0)=ilevel
 
@@ -474,7 +266,7 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
            if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        igridn=get_grid_2(r,g,m,hash_nbor,m%grid_dict,.false.,.true.)
+        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -485,10 +277,10 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim parent cell using read-only cache
-           call get_threetondim_nbor_parent_cell_2(r,g,m,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi_2(r,g,m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache_2(r,g,m,igrid_nbor(ind))
+              call unlock_cache(s,igrid_nbor(ind))
            end do
         endif
 
@@ -525,9 +317,166 @@ subroutine gradient_phi_2(r,g,m,ilevel,icount)
   end do
   ! End loop over grids
 
-  call close_cache_2(r,g,m,m%grid_dict)
+  call close_cache(s,m%grid_dict)
+
+  end associate
+  
 #endif
-end subroutine gradient_phi_2
+
+end subroutine gradient_phi
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+recursive subroutine r_compute_epot(s,cpu_range,input_size,output_size,ilevel,output_array)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::epot,next_epot
+
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_COMPUTE_EPOT,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_compute_epot(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     epot=transfer(output_array,epot)
+     next_epot=transfer(next_output_array,next_epot)
+     epot=epot+next_epot
+     output_array=transfer(epot,output_array)
+  else
+     call compute_epot(s%r,s%g,s%m,ilevel,epot)
+     output_array=transfer(epot,output_array)
+  endif
+
+end subroutine r_compute_epot
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+subroutine compute_epot(r,g,m,ilevel,epot)
+  use amr_parameters, only: ndim,twotondim,dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
+  real(kind=8)::epot
+  !----------------------------------------------------------
+  ! This routine computes the potential energy
+  !----------------------------------------------------------
+  integer::igrid,ind,idim
+  real(dp)::dx,fact,fourpi
+ 
+#ifdef GRAV  
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**ilevel
+  ! Local constants
+  fourpi=4.0D0*ACOS(-1.0D0)
+  if(r%cosmo)fourpi=1.5D0*g%omega_m*g%aexp
+  fact=-dx**ndim/fourpi/2.0D0
+
+  ! Compute gravity potential
+  epot=0D0
+
+  ! Loop over myid grids by vector sweeps
+  do igrid=m%head(ilevel),m%tail(ilevel)
+     ! Loop over cells
+     do ind=1,twotondim
+        ! Loop over dimensions
+        do idim=1,ndim
+           if(.not.m%grid(igrid)%refined(ind))then
+              epot=epot+fact*m%grid(igrid)%f(ind,idim)**2
+           endif
+        end do
+     end do
+     ! End loop over cells
+  end do
+  ! End loop over grids
+
+#endif  
+
+end subroutine compute_epot
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+recursive subroutine r_compute_rhomax(s,cpu_range,input_size,output_size,ilevel,output_array)
+  use ramses_commons, only: ramses_t
+  use mdl_parameters
+  implicit none
+  type(ramses_t)::s
+  integer::cpu_range,input_size,output_size
+  integer::ilevel
+  integer,dimension(1:output_size)::output_array
+
+  integer::next_range,next_cpu
+  integer,dimension(1:output_size)::next_output_array
+  real(kind=8)::rhomax,next_rhomax
+  
+  next_range=cpu_range/2
+  next_cpu=s%g%myid+next_range
+
+  if(next_range>0)then
+     call mdl_send_request(s%mdl,MDL_COMPUTE_RHOMAX,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_compute_rhomax(s,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     rhomax=transfer(output_array,rhomax)
+     next_rhomax=transfer(next_output_array,next_rhomax)
+     rhomax=MAX(rhomax,next_rhomax)
+     output_array=transfer(rhomax,output_array)
+  else
+     call compute_rhomax(s%r,s%g,s%m,ilevel,rhomax)
+     output_array=transfer(rhomax,output_array)
+  endif
+
+end subroutine r_compute_rhomax
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+subroutine compute_rhomax(r,g,m,ilevel,rhomax)
+  use amr_parameters, only: ndim,twotondim,dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
+  real(kind=8)::rhomax
+  !----------------------------------------------------------
+  ! This routine computes the potential energy
+  !----------------------------------------------------------
+  integer::igrid,ind,idim
+ 
+#ifdef GRAV  
+
+  ! Compute maximum total mass density
+  rhomax=0D0
+
+  ! Loop over myid grids by vector sweeps
+  do igrid=m%head(ilevel),m%tail(ilevel)
+     ! Loop over cells
+     do ind=1,twotondim
+        rhomax=MAX(rhomax,dble(abs(m%grid(igrid)%rho(ind))))
+     end do
+     ! End loop over cells
+  end do
+  ! End loop over grids
+
+#endif  
+
+end subroutine compute_rhomax
 !#########################################################
 !#########################################################
 !#########################################################

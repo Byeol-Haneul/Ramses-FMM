@@ -2,10 +2,11 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine gravana(x,f,dx,ncell)
-  use amr_parameters
-  use poisson_parameters  
+subroutine grav_ana(x,f,dx,ncell,gravity_type,gravity_params)
+  use amr_parameters, only: dp, ndim, nvector
   implicit none
+  integer::gravity_type
+  real(dp),dimension(1:10)::gravity_params
   integer ::ncell                         ! Size of input arrays
   real(dp)::dx                            ! Cell size
   real(dp),dimension(1:nvector,1:ndim)::f ! Gravitational acceleration
@@ -54,16 +55,16 @@ subroutine gravana(x,f,dx,ncell)
      end do
   end if
 
-end subroutine gravana
+end subroutine grav_ana
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine phi_ana(rr,pp,ngrid)
-  use amr_commons
-  use poisson_commons
+subroutine phi_ana(rr,pp,ngrid,multipole)
+  use amr_commons, only: dp, ndim, nvector
   implicit none
   integer::ngrid
+  real(dp),dimension(1:ndim+1)::multipole
   real(dp),dimension(1:nvector)::rr,pp
   ! -------------------------------------------------------------------
   ! This routine set up boundary conditions for fine levels.
