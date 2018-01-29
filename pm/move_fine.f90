@@ -74,7 +74,8 @@ subroutine kick_drift_part(s,ilevel,action_part)
   integer,dimension(1:twotondim),save::igrid,icell
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::ipart,ind,idim
-  integer::parent_cell,get_parent_cell
+  integer::parent_cell
+  integer,external::get_parent_cell
   real(kind=8)::dx_loc,vol_loc,dteff
   real(dp),dimension(1:ndim),save::ff
   logical::ok_level

@@ -173,7 +173,7 @@ subroutine gradient_phi(s,ilevel,icount)
   ! in the current level grids, using a
   ! 5 nodes kernel (5 points FDA).
   !-------------------------------------------------
-  integer::get_grid
+  integer,external::get_grid
   integer::i_nbor,igrid,idim,ind,igridn
   integer::id1,id2,id3,id4
   integer::ig1,ig2,ig3,ig4

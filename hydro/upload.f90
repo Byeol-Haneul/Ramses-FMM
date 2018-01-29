@@ -64,7 +64,8 @@ subroutine upload_fine(s,ilevel)
 #if NENER>0
   integer::irad
 #endif
-  integer::ioct,parent_cell,get_parent_cell
+  integer::ioct,parent_cell
+  integer,external::get_parent_cell
   integer::ind,ivar,igrid,icell,idim
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad

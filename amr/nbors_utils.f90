@@ -33,8 +33,9 @@ subroutine get_threetondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_
   integer,save::j1max=0*(1-ndim/2)+1*(ndim/2)
   integer,save::k1min=0*(1-ndim/3)-1*(ndim/3)
   integer,save::k1max=0*(1-ndim/3)+1*(ndim/3)
-  integer::ind,ipos,idim,get_grid,ilevel,inbor
-
+  integer::ind,ipos,idim,ilevel,inbor
+  integer,external::get_grid
+  
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ilevel=hash_key(0)
@@ -131,8 +132,9 @@ subroutine get_twondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_nbor
   integer(kind=8),dimension(0:ndim)::hash_father
   integer(kind=8),dimension(1:ndim)::ii
   integer,dimension(1:3,1:6),save::shift=reshape((/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  integer::ind,ipos,idim,get_grid,ilevel,inbor
-
+  integer::ind,ipos,idim,ilevel,inbor
+  integer,external::get_grid
+  
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ilevel=hash_key(0)
@@ -197,7 +199,8 @@ integer function get_parent_cell(s,hash_key,hash_dict,flush_cache,fetch_cache) r
   !
   integer(kind=8),dimension(0:ndim)::hash_father
   integer(kind=8),dimension(1:ndim)::ii
-  integer::ind,ipos,idim,get_grid
+  integer::ind,ipos,idim
+  integer,external::get_grid
   hash_father(0)=hash_key(0)-1
   hash_father(1:ndim)=hash_key(1:ndim)/2
   ii(1:ndim)=hash_key(1:ndim)-2*hash_father(1:ndim)
@@ -496,9 +499,10 @@ integer function get_grid(s,hash_key,hash_dict,flush_cache,fetch_cache) result(c
 
   endif
 
+#endif
+
   end associate
 
-#endif
 end function get_grid
 !##############################################################
 !##############################################################

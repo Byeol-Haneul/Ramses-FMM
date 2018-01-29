@@ -52,7 +52,8 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
 
   integer(kind=8),dimension(0:ndim) :: hash_key
   integer :: ichild,ind,igrid,icell
-  integer :: parent_cell, get_parent_cell
+  integer :: parent_cell
+  integer,external :: get_parent_cell
   real(dp) :: ngpmask, mask_max
   real(dp) :: dtwotondim = (twotondim)
   
@@ -221,7 +222,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
 
   ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
-  integer :: get_grid
+  integer,external :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
@@ -452,7 +453,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   ! Perform a Gauss-Seidel update of grid(igrid)%phi(ind).
   ! The domain mask is also needed.
   
-  integer :: get_grid
+  integer,external :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
@@ -670,7 +671,8 @@ subroutine restrict_residual(s,ifinelevel)
   ! into the rhs of the coarse level (stored in grid(igrid)%f(icell,2))
   ! For interior coarse cell only (we need the mask stored in grid(igrid)%f(icell,3))
   
-  integer :: ichild, ind, get_parent_cell
+  integer :: ichild, ind
+  integer,external :: get_parent_cell
   integer :: igrid, icell, parent_cell
   real(dp) :: dtwotondim = (twotondim)
   integer(kind=8),dimension(0:ndim) :: hash_key
@@ -1033,7 +1035,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   integer, intent(in) :: ilevel
   type(hash_table) :: hash_dict
   !
-  integer :: get_grid
+  integer,external :: get_grid
   integer :: ind, igrid, igridn, inbor, idim, id, ig
   integer, dimension(1:3,1:2,1:8)::iii, jjj
   real(dp),dimension(1:twotondim,0:twondim)::dis_nbor

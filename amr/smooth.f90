@@ -50,7 +50,7 @@ subroutine smooth_fine(s,ilevel,nflag)
   ! -------------------------------------------------------------------
   integer::ismooth,count_nbor,ig,in
   integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
-  integer::get_grid
+  integer,external::get_grid
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::igridn

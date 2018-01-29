@@ -718,7 +718,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   integer::igrid,idim,ind,igridn,inbor,ig,id
-  integer::get_grid
+  integer,external::get_grid
   integer,dimension(1:8,1:8)::ccc
   real(dp)::aa,bb,cc,dd,tfrac
   real(dp),dimension(1:8)::bbb
