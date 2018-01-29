@@ -257,7 +257,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ! and stored in array unew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
-  integer::get_grid,get_parent_cell
+  integer,external::get_grid,get_parent_cell
   integer::ivar,idim,ind_son,ind_oct
   integer::igrid,icell=0,inbor,ichild,parent_cell
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3

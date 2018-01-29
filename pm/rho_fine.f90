@@ -268,7 +268,8 @@ subroutine multipole_split_cells(s,ilevel)
   ! routine is not even called.
   !-------------------------------------------------------------------
   integer::igrid,ind,idim,ivar,nstride,ioct,icell
-  integer::parent_cell,get_parent_cell
+  integer::parent_cell
+  integer,external::get_parent_cell
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key
   logical::leaf_cell
@@ -481,7 +482,8 @@ subroutine cic_multipole(s,ilevel)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::inbor,igrid,ind,idim
-  integer::ioct,icell,parent_cell,get_parent_cell
+  integer::ioct,icell,parent_cell
+  integer,external::get_parent_cell
   real(kind=8)::dx_loc,vol_loc,mmm
 
   associate(r=>s%r,g=>s%g,m=>s%m)
@@ -655,7 +657,8 @@ subroutine cic_part(s,ilevel)
   integer,dimension(1:ndim,1:twotondim),save::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::i,ipart,igrid,ind,idim
-  integer::icell,parent_cell,get_parent_cell
+  integer::icell,parent_cell
+  integer,external::get_parent_cell
   real(kind=8)::dx_loc,vol_loc,vol2
   
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
@@ -938,7 +941,8 @@ subroutine split_part(s,ilevel)
   real(dp),dimension(1:ndim),save::x,xp_tmp,vp_tmp
   integer,dimension(1:ndim),save::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim),save::hash_key
-  integer::i,ipart,jpart,igrid,idim,icell,get_grid
+  integer::i,ipart,jpart,igrid,idim,icell
+  integer,external::get_grid
   integer::npart_coarse,npart_fine
   real(kind=8)::dx_loc,vol_loc
   real(dp)::mp_tmp

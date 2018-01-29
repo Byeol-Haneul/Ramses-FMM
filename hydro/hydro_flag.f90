@@ -19,7 +19,8 @@ subroutine hydro_flag(s,ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer::igrid,ind,idim,ivar,i_nbor
-  integer::parent_cell,get_parent_cell
+  integer::parent_cell
+  integer,external::get_parent_cell
   integer::igridd,igridg,indd,indg,igridp
   integer,dimension(1:twondim),save::indn
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
@@ -172,7 +173,7 @@ subroutine unpack_fetch_hydro(grid,msg_size,msg_array)
   
 #ifdef HYDRO
   do ivar=1,nvar
-     do ind=1,twotondin
+     do ind=1,twotondim
         grid%uold(ind,ivar)=msg%realdp(ind,ivar)
      end do
   end do

@@ -101,6 +101,7 @@ end subroutine r_refine_fine
 !###############################################################
 subroutine refine_fine(s,ilevel,ncreate,nkill)
   use amr_parameters, only: ndim,nhilbert,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use cache_commons
   use hash
@@ -122,7 +123,8 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
-  integer::parent_cell,get_parent_cell
+  integer::parent_cell
+  integer,external::get_parent_cell
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert,1:s%r%nlevelmax)::key_ref

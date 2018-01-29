@@ -96,7 +96,8 @@ subroutine init_flag(s,ilevel,nflag)
   ! refinement rules.
   !-------------------------------------------
   integer::igrid,ichild,icell,ind
-  integer::parent_cell,get_parent_cell
+  integer::parent_cell
+  integer,external::get_parent_cell
   logical::ok
   integer(kind=8),dimension(0:ndim)::hash_key
 
@@ -342,7 +343,7 @@ subroutine ensure_ref_rules(s,ilevel)
   ! strict refinement rule. 
   ! Used in case of adaptive time steps only.
   !-----------------------------------------------------------------
-  integer::get_grid
+  integer,external::get_grid
   integer::idim,ind,igrid,ichild
   integer::i1,j1,k1
   integer::i1min,i1max,j1min,j1max,k1min,k1max

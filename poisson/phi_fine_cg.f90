@@ -245,7 +245,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   ! This routine computes the residual for the Conjugate Gradient
   ! Poisson solver. The residual is stored in f(i,1) and f(i,2).
   !------------------------------------------------------------------
-  integer::get_grid
+  integer,external::get_grid
   integer::i_nbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   integer,dimension(1:8,1:8)::ccc
@@ -416,7 +416,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   ! This routine computes Ap for the Conjugate Gradient
   ! Poisson Solver and store the result into f(i,3).
   !------------------------------------------------------------------
-  integer::get_grid
+  integer,external::get_grid
   integer::inbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   real(dp)::oneoversix,residu

@@ -278,6 +278,7 @@ end subroutine r_load_balance
 !#########################################################################
 subroutine load_balance(s,ilevel)
   use amr_parameters, only: ndim,twotondim,nhilbert,dp
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use hilbert
   use hash
