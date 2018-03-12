@@ -43,7 +43,7 @@ subroutine condinit(r,g,x,u,dx,nn)
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m=scale_d*scale_l**3
 
- ! constants
+  ! constants
   AU=1.49598d13
   Msol= 1.98892d33
   pi=3.14159

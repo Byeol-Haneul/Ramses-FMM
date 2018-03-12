@@ -578,10 +578,10 @@ subroutine m_read_params(s)
   s%r%length_z=length_z
   s%r%exp_region=exp_region
   s%r%d_region=d_region
-  s%r%d_region=u_region
-  s%r%d_region=v_region
-  s%r%d_region=w_region
-  s%r%d_region=p_region
+  s%r%u_region=u_region
+  s%r%v_region=v_region
+  s%r%w_region=w_region
+  s%r%p_region=p_region
 #if NENER>0
   s%r%prad_region=prad_region
 #endif
