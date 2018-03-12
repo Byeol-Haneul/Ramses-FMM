@@ -5,23 +5,11 @@
 # write the Makefile content to disk
 #######################################
 
-
-if [ $# == 0 ]
-  then
-  exit
-fi
-
+test -z "$1" && exit 0
 MAKEFILE=$1
+test -z "$2" && OUTFILE=write_makefile.f90 || OUTFILE=$2
 
-sed "s/\"/\"\"/g;s/^/  write(ilun,format)\"/;s/$/\"/" ${MAKEFILE} > .test_middle.f90
-  
-cat << EOF > .test_after.f90
-
-  close(ilun)
-end subroutine output_makefile
-EOF
-
-cat << EOF > .test_before.f90
+cat << EOF >$OUTFILE
 subroutine output_makefile(filename)
   character(LEN=80)::filename
   character(LEN=80)::fileloc
@@ -33,9 +21,7 @@ subroutine output_makefile(filename)
   fileloc=TRIM(filename)
   format="(A)"
   open(unit=ilun,file=fileloc,form='formatted')
+$(sed "s/\"/\"\"/g;s/^/  write(ilun,format)\"/;s/$/\"/" ${MAKEFILE})
+  close(ilun)
+end subroutine output_makefile
 EOF
-
-cat .test_before.f90 .test_middle.f90 .test_after.f90 > write_makefile.f90
-
-rm .test_before.f90 .test_middle.f90 .test_after.f90
-
