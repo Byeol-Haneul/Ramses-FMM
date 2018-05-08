@@ -2,10 +2,10 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_init_flow_fine(s,ilevel)
-  use ramses_commons, only: ramses_t
+subroutine m_init_flow_fine(pst,ilevel)
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to input a given initial 
@@ -15,6 +15,8 @@ subroutine m_init_flow_fine(s,ilevel)
   character(len=80)::filename
   logical::ok_file1,ok_file2,ok_file
 
+  associate(s=>pst%s)
+  
   if(s%m%noct_tot(ilevel)==0)return
   if(s%r%verbose)write(*,111)ilevel
 111 format(' Entering init_flow_fine for level ',I2)
@@ -31,13 +33,15 @@ subroutine m_init_flow_fine(s,ilevel)
      if(ok_file)then
         ! Read external grafic files 
         if(s%r%verbose)write(*,*)'Reading initial conditions from grafic file'
-        call r_input_hydro_grafic(s,s%mdl%ncpu,1,0,ilevel)
+        call r_input_hydro_grafic(pst,s%mdl%ncpu,1,0,ilevel)
      else
         ! Use internal-defined or user-defined functions
         if(s%r%verbose)write(*,*)'Computing initial conditions from analytical model'
-        call r_input_hydro_condinit(s,s%mdl%ncpu,1,0,ilevel)
+        call r_input_hydro_condinit(pst,s%mdl%ncpu,1,0,ilevel)
      endif
   endif
+
+  end associate
 
 end subroutine m_init_flow_fine
 !###############################################

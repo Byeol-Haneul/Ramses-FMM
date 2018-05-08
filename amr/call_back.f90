@@ -1,16 +1,16 @@
 module call_back
   
   interface
-     subroutine ramses_function(s,cpu_range,input_size,output_size,input,output)
-       use ramses_commons, only: ramses_t
-       type(ramses_t)::s
+     subroutine ramses_function(pst,cpu_range,input_size,output_size,input,output)
+       use ramses_commons, only: pst_t
+       type(pst_t)::pst
        integer::cpu_range,input_size,output_size
        integer,dimension(1:input_size),optional::input
        integer,dimension(1:output_size),optional::output
      end subroutine ramses_function
   end interface
   
-  procedure(ramses_function)::r_clean_stop,r_broadcast_params,r_broadcast_global
+  procedure(ramses_function)::r_clean_stop,r_set_add,r_broadcast_params,r_broadcast_global
   procedure(ramses_function)::r_init_amr,r_init_time,r_init_hydro,r_init_part
   procedure(ramses_function)::r_input_part_grafic,r_input_part_ascii,r_input_part_restart
   procedure(ramses_function)::r_init_flag,r_user_flag,r_ensure_ref_rules

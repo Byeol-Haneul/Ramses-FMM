@@ -77,7 +77,7 @@ PRIVATE	amr/ramses.f90
 	amr/adaptive_loop.f90
 	amr/update_time.f90
 	amr/title.f90
-	amr/units.f90
+	patch/coeur/units.f90
 	amr/refine_utils.f90
 	amr/nbors_utils.f90
 	amr/flag_utils.f90
@@ -110,7 +110,7 @@ PRIVATE	amr/ramses.f90
 	hydro/input_hydro_condinit.f90
 	hydro/input_hydro_grafic.f90
 	hydro/interpol_hydro.f90
-        hydro/condinit.f90
+        patch/coeur/condinit.f90
 	hydro/hydro_flag.f90
 	hydro/godunov_utils.f90
 	hydro/write_screen.f90

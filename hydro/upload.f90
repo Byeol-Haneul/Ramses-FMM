@@ -2,46 +2,46 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_upload_fine(s,ilevel)
-  use ramses_commons, only: ramses_t
+subroutine m_upload_fine(pst,ilevel)
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to upload HYDRO variables
   ! from level ilevel+1 to ilevel (averaging down or restriction).
   !--------------------------------------------------------------------
-  if(ilevel==s%r%nlevelmax)return
-  if(s%m%noct_tot(ilevel)==0)return
-  if(s%m%noct_tot(ilevel+1)==0)return
-  if(s%r%verbose)write(*,111)ilevel
+  if(ilevel==pst%s%r%nlevelmax)return
+  if(pst%s%m%noct_tot(ilevel)==0)return
+  if(pst%s%m%noct_tot(ilevel+1)==0)return
+  if(pst%s%r%verbose)write(*,111)ilevel
 111 format(' Entering upload_fine for level',i2)
 
-  call r_upload_fine(s,s%g%ncpu,1,0,ilevel)
+  call r_upload_fine(pst,pst%s%g%ncpu,1,0,ilevel)
 
 end subroutine m_upload_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_upload_fine(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_upload_fine(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_UPLOAD_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_upload_fine(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_UPLOAD_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_upload_fine(pst,next_range,input_size,output_size,ilevel)
   else
-     call upload_fine(s,ilevel)
+     call upload_fine(pst%s,ilevel)
   endif
 
 end subroutine r_upload_fine

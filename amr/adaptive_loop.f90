@@ -1,40 +1,42 @@
-subroutine adaptive_loop(s)
-  use ramses_commons, only: ramses_t
+subroutine adaptive_loop(pst)
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
 
   ! Local variables
   integer::ilevel,ncpu
   real::tt1,tt2
+
+  associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
   
   call cpu_time(tt1)
 
-  ncpu=s%mdl%ncpu
+  ncpu=mdl%ncpu
   
   ! Read run parameters
-  call m_read_params(s)
+  call m_read_params(pst)
 
   ! Initialize grid variables
-  call r_init_amr(s,ncpu,0,0)
+  call r_init_amr(pst,ncpu,0,0)
 
   ! Initialize time variables
-  call r_init_time(s,ncpu,0,0)
+  call r_init_time(pst,ncpu,0,0)
 
   ! Initialize hydro kernel workspace
-  if(s%r%hydro)call r_init_hydro(s,ncpu,0,0)
+  if(r%hydro)call r_init_hydro(pst,ncpu,0,0)
 
   ! Initialize particle variables
-  if(s%r%pic)call r_init_part(s,ncpu,0,0)
+  if(r%pic)call r_init_part(pst,ncpu,0,0)
 
   ! Read initial particle properties from files
-  if(s%r%pic)call m_input_part(s)
+  if(r%pic)call m_input_part(pst)
   
   ! Build initial AMR grid
-  if(s%r%nrestart==0)then
-     call m_init_refine_basegrid(s) ! Build coarse grid
-     call m_init_refine_adaptive(s) ! Build adaptive grid
+  if(r%nrestart==0)then
+     call m_init_refine_basegrid(pst) ! Build coarse grid
+     call m_init_refine_adaptive(pst) ! Build adaptive grid
   else
-     call m_init_refine_restart(s) ! Build AMR grid from restart file
+     call m_init_refine_restart(pst) ! Build AMR grid from restart file
   endif
 
   ! Timing since startup
@@ -43,13 +45,13 @@ subroutine adaptive_loop(s)
 
   ! Output mesh structure
   write(*,*)'Initial mesh structure'
-  do ilevel=s%r%levelmin,s%r%nlevelmax
-     if(s%m%noct_tot(ilevel)>0)write(*,999)&
-          & ilevel,s%m%noct_tot(ilevel),s%m%noct_min(ilevel),s%m%noct_max(ilevel),s%m%noct_tot(ilevel)/ncpu
+  do ilevel=r%levelmin,r%nlevelmax
+     if(m%noct_tot(ilevel)>0)write(*,999)&
+          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/ncpu
   end do
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
-  s%g%nstep_coarse_old=s%g%nstep_coarse
+  g%nstep_coarse_old=g%nstep_coarse
 
   write(*,*)'Starting time integration' 
 
@@ -57,26 +59,28 @@ subroutine adaptive_loop(s)
 
      call cpu_time(tt1)
 
-     if(s%r%verbose)write(*,*)'Entering amr_step_coarse'
+     if(r%verbose)write(*,*)'Entering amr_step_coarse'
 
-     s%g%epot_tot=0.0D0  ! Reset total potential energy
-     s%g%ekin_tot=0.0D0  ! Reset total kinetic energy
-     s%g%mass_tot=0.0D0  ! Reset total mass
-     s%g%eint_tot=0.0D0  ! Reset total internal energy
+     g%epot_tot=0.0D0  ! Reset total potential energy
+     g%ekin_tot=0.0D0  ! Reset total kinetic energy
+     g%mass_tot=0.0D0  ! Reset total mass
+     g%eint_tot=0.0D0  ! Reset total internal energy
 
      ! Call base level
-     call m_amr_step(s,s%r%levelmin,1)
+     call m_amr_step(pst,r%levelmin,1)
 
      ! New coarse time-step
-     s%g%nstep_coarse=s%g%nstep_coarse+1
+     g%nstep_coarse=g%nstep_coarse+1
 
      call cpu_time(tt2)
      write(*,*)'Time elapsed since last coarse step:',tt2-tt1
      
   end do
 
-  call r_clean_stop(s,ncpu,0,0)
+  call r_clean_stop(pst,ncpu,0,0)
 
   return
 
+  end associate
+  
 end subroutine adaptive_loop

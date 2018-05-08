@@ -2,11 +2,11 @@
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine m_rho_fine(s,ilevel)
+subroutine m_rho_fine(pst,ilevel)
   use amr_parameters, only: dp,ndim
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::ilevel
   !------------------------------------------------------------------
   ! This master routine computes the mass density field to be used
@@ -20,7 +20,7 @@ subroutine m_rho_fine(s,ilevel)
   integer,dimension(:),allocatable::input_array,output_array
   integer::i,input_size
 
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
   if(m%noct_tot(ilevel)==0)return
@@ -35,7 +35,7 @@ subroutine m_rho_fine(s,ilevel)
      input_size=(storage_size(multipole_tot)/32)*(ndim+1)
      allocate(input_array(1:input_size))
      input_array=transfer(multipole_tot,input_array)
-     call r_broadcast_multipole(s,g%ncpu,input_size,0,input_array)
+     call r_broadcast_multipole(pst,g%ncpu,input_size,0,input_array)
      deallocate(input_array)
 
   endif
@@ -52,14 +52,14 @@ subroutine m_rho_fine(s,ilevel)
         ! Set multipoles in all leaf cells
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i        
-           call r_multipole_leaf_cells(s,g%ncpu,1,0,i)
+           call r_multipole_leaf_cells(pst,g%ncpu,1,0,i)
         endif
 
         ! Average down multipoles in all split cells
         if(i<r%nlevelmax)then
            if(m%noct_tot(i+1)>0)then
               if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i        
-              call r_multipole_split_cells(s,g%ncpu,1,0,i)
+              call r_multipole_split_cells(pst,g%ncpu,1,0,i)
            endif
         endif
 
@@ -67,13 +67,13 @@ subroutine m_rho_fine(s,ilevel)
 
      ! Reset array rho to zero
      if(m%noct_tot(i)>0)then
-        call r_reset_rho(s,g%ncpu,1,0,i)
+        call r_reset_rho(pst,g%ncpu,1,0,i)
      endif
 
         ! Gas mass deposition using pseudo-particles
      if(r%hydro.AND.m%noct_tot(i)>0)then
         if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
-        call r_cic_multipole(s,g%ncpu,1,0,i)
+        call r_cic_multipole(pst,g%ncpu,1,0,i)
      endif
 
   end do
@@ -85,10 +85,10 @@ subroutine m_rho_fine(s,ilevel)
   if(r%pic)then
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
-           call r_cic_part(s,g%ncpu,1,0,i)
+           call r_cic_part(pst,g%ncpu,1,0,i)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
-           call r_split_part(s,g%ncpu,1,0,i)
+           call r_split_part(pst,g%ncpu,1,0,i)
         endif
      end do
   endif
@@ -101,7 +101,7 @@ subroutine m_rho_fine(s,ilevel)
      ! Collect local multipole from all CPU
      input_size=(storage_size(multipole_tot)/32)*(ndim+1)
      allocate(output_array(1:input_size))
-     call r_collect_multipole(s,g%ncpu,1,input_size,ilevel,output_array)
+     call r_collect_multipole(pst,g%ncpu,1,input_size,ilevel,output_array)
      multipole_tot=transfer(output_array,multipole_tot)
      deallocate(output_array)
 
@@ -109,7 +109,7 @@ subroutine m_rho_fine(s,ilevel)
      input_size=(storage_size(multipole_tot)/32)*(ndim+1)
      allocate(input_array(1:input_size))
      input_array=transfer(multipole_tot,input_array)
-     call r_broadcast_multipole(s,g%ncpu,(ndim+1)*(storage_size(multipole_tot)/32),0,input_array)     
+     call r_broadcast_multipole(pst,g%ncpu,(ndim+1)*(storage_size(multipole_tot)/32),0,input_array)     
      deallocate(input_array)
 
      if(r%verbose)write(*,*)'rho_average=',g%rho_tot
@@ -122,24 +122,24 @@ end subroutine m_rho_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_multipole_leaf_cells(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_multipole_leaf_cells(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_MULTIPOLE_LEAF_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_multipole_leaf_cells(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_multipole_leaf_cells(pst,next_range,input_size,output_size,ilevel)
   else
-     call multipole_leaf_cells(s%r,s%g,s%m,ilevel)
+     call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_multipole_leaf_cells
@@ -229,24 +229,24 @@ end subroutine multipole_leaf_cells
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_multipole_split_cells(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_multipole_split_cells(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_multipole_split_cells(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_multipole_split_cells(pst,next_range,input_size,output_size,ilevel)
   else
-     call multipole_split_cells(s,ilevel)
+     call multipole_split_cells(pst%s,ilevel)
   endif
 
 end subroutine r_multipole_split_cells
@@ -386,24 +386,24 @@ end subroutine unpack_flush_multipole
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_reset_rho(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_reset_rho(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_RESET_RHO,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_reset_rho(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_RESET_RHO,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_reset_rho(pst,next_range,input_size,output_size,ilevel)
   else
-     call reset_rho(s%r,s%g,s%m,ilevel)
+     call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_reset_rho
@@ -442,24 +442,24 @@ end subroutine reset_rho
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_cic_multipole(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_cic_multipole(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_CIC_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cic_multipole(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_CIC_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cic_multipole(pst,next_range,input_size,output_size,ilevel)
   else
-     call cic_multipole(s,ilevel)
+     call cic_multipole(pst%s,ilevel)
   endif
 
 end subroutine r_cic_multipole
@@ -616,24 +616,24 @@ end subroutine cic_multipole
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_cic_part(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_cic_part(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_CIC_PART,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cic_part(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_CIC_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_cic_part(pst,next_range,input_size,output_size,ilevel)
   else
-     call cic_part(s,ilevel)
+     call cic_part(pst%s,ilevel)
   endif
 
 end subroutine r_cic_part
@@ -852,24 +852,24 @@ end subroutine unpack_flush_rho
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_split_part(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_split_part(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_SPLIT_PART,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_split_part(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_split_part(pst,next_range,input_size,output_size,ilevel)
   else
-     call split_part(s,ilevel)
+     call split_part(pst%s,ilevel)
   endif
 
 end subroutine r_split_part
@@ -1220,12 +1220,12 @@ end subroutine sort_hilbert
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_collect_multipole(s,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_collect_multipole(pst,cpu_range,input_size,output_size,ilevel,output_array)
   use amr_parameters, only: ndim
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
@@ -1235,18 +1235,18 @@ recursive subroutine r_collect_multipole(s,cpu_range,input_size,output_size,ilev
   real(kind=8),dimension(1:ndim+1)::multipole,next_multipole
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_COLLECT_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_collect_multipole(s,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(pst%s%mdl,MDL_COLLECT_MULTIPOLE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_collect_multipole(pst,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
      multipole=transfer(output_array,multipole)
      next_multipole=transfer(next_output_array,next_multipole)
      multipole=multipole+next_multipole
      output_array=transfer(multipole,output_array)
   else
-     output_array=transfer(s%g%multipole,output_array)
+     output_array=transfer(pst%s%g%multipole,output_array)
   endif
 
 end subroutine r_collect_multipole
@@ -1254,27 +1254,27 @@ end subroutine r_collect_multipole
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_broadcast_multipole(s,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_broadcast_multipole(pst,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: ndim
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_BROADCAST_MULTIPOLE,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_multipole(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_multipole(pst,next_range,input_size,output_size,input_array)
   else
-     s%g%multipole=transfer(input_array,s%g%multipole)
-     s%g%rho_tot=s%g%multipole(1)/s%r%boxlen**ndim
-!!!     s%g%rho_tot=0d0 ! For non-periodic BC
+     pst%s%g%multipole=transfer(input_array,pst%s%g%multipole)
+     pst%s%g%rho_tot=pst%s%g%multipole(1)/pst%s%r%boxlen**ndim
+!!!     pst%s%g%rho_tot=0d0 ! For non-periodic BC
   endif
 
 end subroutine r_broadcast_multipole

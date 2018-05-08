@@ -2,11 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_input_part_restart(s)
+subroutine m_input_part_restart(pst)
   use amr_parameters, only: ndim,dp,i8b
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
@@ -17,12 +17,12 @@ subroutine m_input_part_restart(s)
   character(LEN=80)::file_head,file_part
   integer,allocatable,dimension(:)::npart_file
   
-  if(s%r%verbose)write(*,*)'Entering input_part_restart'
+  if(pst%s%r%verbose)write(*,*)'Entering input_part_restart'
 
   ! Read particle files header
-  call title(s%r%nrestart,nchar)
+  call title(pst%s%r%nrestart,nchar)
   file_head='output_'//TRIM(nchar)//'/part_header.txt'
-  call input_header(s%r,s%g,file_head,npart_tot_file,ncpu_file)
+  call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
   write(*,'(" Restart snapshot has ",I8," particles")')npart_tot_file
 
   ! Allocate local array
@@ -45,7 +45,7 @@ subroutine m_input_part_restart(s)
   endif
 
   ! Call recursive slave routine
-  call r_input_part_restart(s,s%mdl%ncpu,ncpu_file,0,npart_file)
+  call r_input_part_restart(pst,pst%s%mdl%ncpu,ncpu_file,0,npart_file)
 
   ! Deallocate local array
   deallocate(npart_file)
@@ -55,12 +55,12 @@ end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_restart(s,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_restart(pst,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: dp
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
@@ -70,13 +70,13 @@ recursive subroutine r_input_part_restart(s,cpu_range,input_size,output_size,inp
   integer::next_range,next_cpu
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_INPUT_PART_RESTART,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_restart(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,next_cpu,next_range,input_size,output_size,input_array)
+     call r_input_part_restart(pst,next_range,input_size,output_size,input_array)
   else
-     call input_part_restart(s%r,s%g,s%p,input_size,input_array)
+     call input_part_restart(pst%s%r,pst%s%g,pst%s%p,input_size,input_array)
   endif
 
 end subroutine r_input_part_restart

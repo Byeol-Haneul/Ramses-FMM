@@ -2,11 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_input_part_ascii(s)
+subroutine m_input_part_ascii(pst)
   use amr_parameters, only: dp,i8b
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
@@ -16,6 +16,8 @@ subroutine m_input_part_ascii(s)
   character(LEN=80)::filename
   integer,allocatable,dimension(:)::input_array
 
+  associate(s=>pst%s)
+  
   if(s%r%nrestart>0)return
   if(s%r%verbose)write(*,*)'Entering init_part_ascii'
   
@@ -47,20 +49,22 @@ subroutine m_input_part_ascii(s)
   ! Call recursive slave routine
   allocate(input_array(1:storage_size(npart_tot)/32))
   input_array=transfer(npart_tot,input_array)
-  call r_input_part_ascii(s,s%mdl%ncpu,storage_size(npart_tot)/32,0,input_array)
+  call r_input_part_ascii(pst,s%mdl%ncpu,storage_size(npart_tot)/32,0,input_array)
   deallocate(input_array)
 
+  end associate
+  
 end subroutine m_input_part_ascii
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_ascii(s,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_ascii(pst,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: i8b
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
@@ -71,14 +75,14 @@ recursive subroutine r_input_part_ascii(s,cpu_range,input_size,output_size,input
   integer::next_range,next_cpu
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_INPUT_PART_ASCII,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_ascii(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_ASCII,next_cpu,next_range,input_size,output_size,input_array)
+     call r_input_part_ascii(pst,next_range,input_size,output_size,input_array)
   else
      npart_tot=transfer(input_array,npart_tot)
-     call input_part_ascii(s%r,s%g,s%p,npart_tot)
+     call input_part_ascii(pst%s%r,pst%s%g,pst%s%p,npart_tot)
   endif
 
 end subroutine r_input_part_ascii

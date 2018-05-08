@@ -2,12 +2,12 @@
 !=======================================================================
 !=======================================================================
 !=======================================================================
-subroutine m_output_frame(s)
+subroutine m_output_frame(pst)
   use amr_parameters, only: dp,ndim,nvector,twotondim,flen
   use hydro_parameters, only: nvar
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
 
   ! Local variables
   character(len=1)::temp_string
@@ -21,7 +21,7 @@ subroutine m_output_frame(s)
   real(kind=8),dimension(:),allocatable::dens
   real(kind=4),dimension(:),allocatable::data_single
 
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   do ind_proj=1,LEN(trim(r%proj_axis)) 
      
@@ -93,14 +93,14 @@ subroutine m_output_frame(s)
         
         ! Compute column density
         input_array(2)=0
-        call r_output_frame(s,mdl%ncpu,input_size,output_size,input_array,output_array)
+        call r_output_frame(pst,mdl%ncpu,input_size,output_size,input_array,output_array)
         dens=transfer(output_array,dens)
         
         do kk=1,NVAR
            if(r%movie_vars(kk).eq.1)then
               ! Compute mass-weighted projected quantities
               input_array(2)=kk
-              call r_output_frame(s,mdl%ncpu,input_size,output_size,input_array,output_array)
+              call r_output_frame(pst,mdl%ncpu,input_size,output_size,input_array,output_array)
               data_frame=transfer(output_array,data_frame)
               ! Divide by column density
               data_frame=data_frame/dens
@@ -148,12 +148,12 @@ end subroutine m_output_frame
 !=======================================================================
 !=======================================================================
 !=======================================================================
-recursive subroutine r_output_frame(s,cpu_range,input_size,output_size,input_array,output_array)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_output_frame(pst,cpu_range,input_size,output_size,input_array,output_array)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   use hilbert
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
@@ -165,15 +165,15 @@ recursive subroutine r_output_frame(s,cpu_range,input_size,output_size,input_arr
   real(kind=8),dimension(:),allocatable::map,next_map
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_OUTPUT_FRAME,next_cpu,next_range,input_size,output_size,input_array)
-     call r_output_frame(s,next_range,input_size,output_size,input_array,output_array)
+     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_FRAME,next_cpu,next_range,input_size,output_size,input_array)
+     call r_output_frame(pst,next_range,input_size,output_size,input_array,output_array)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
-     allocate(map(1:s%r%nw_frame*s%r%nh_frame))
-     allocate(next_map(1:s%r%nw_frame*s%r%nh_frame))
+     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+     allocate(map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
+     allocate(next_map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      map=transfer(output_array,map)
      next_map=transfer(next_output_array,next_map)
      map=map+next_map
@@ -184,9 +184,9 @@ recursive subroutine r_output_frame(s,cpu_range,input_size,output_size,input_arr
   else
      ind_proj=input_array(1)
      ind_var=input_array(2)
-     allocate(map(1:s%r%nw_frame*s%r%nh_frame))
+     allocate(map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      map=0d0
-     call output_frame(s%r,s%g,s%m,ind_proj,ind_var,s%r%nw_frame*s%r%nh_frame,map)
+     call output_frame(pst%s%r,pst%s%g,pst%s%m,ind_proj,ind_var,pst%s%r%nw_frame*pst%s%r%nh_frame,map)
      output_array=transfer(map,output_array)
      deallocate(map)
   endif

@@ -2,24 +2,24 @@
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_godunov_fine(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_godunov_fine(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_GODUNOV_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_godunov_fine(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_godunov_fine(pst,next_range,input_size,output_size,ilevel)
   else
-     call godunov_fine(s,ilevel)
+     call godunov_fine(pst%s,ilevel)
   endif
 
 end subroutine r_godunov_fine
@@ -70,24 +70,24 @@ end subroutine godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_unew(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_set_unew(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_SET_UNEW,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_set_unew(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_SET_UNEW,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_unew(pst,next_range,input_size,output_size,ilevel)
   else
-     call set_unew(s%r,s%g,s%m,ilevel)
+     call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_set_unew
@@ -148,24 +148,24 @@ end subroutine set_unew
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_uold(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_set_uold(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_SET_UOLD,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_set_uold(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_SET_UOLD,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_set_uold(pst,next_range,input_size,output_size,ilevel)
   else
-     call set_uold(s%r,s%g,s%m,ilevel)
+     call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_set_uold

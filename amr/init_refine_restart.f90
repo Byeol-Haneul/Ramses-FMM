@@ -2,12 +2,12 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_init_refine_restart(s)
+subroutine m_init_refine_restart(pst)
   use amr_parameters, only: nhilbert
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use hilbert
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
@@ -15,7 +15,7 @@ subroutine m_init_refine_restart(s)
   character(LEN=80)::file_params,file_amr
   character(LEN=5)::nchar,ncharcpu
   integer(kind=8),dimension(1:nhilbert)::zero_key
-  integer(kind=8),dimension(1:nhilbert,0:s%g%ncpu)::bound_key
+  integer(kind=8),dimension(1:nhilbert,0:pst%s%g%ncpu)::bound_key
   integer::i,ilevel,icpu,ilun,ipos
   integer::levelmin_file,nlevelmax_file
   integer::levelmin_max,nlevelmax_min,noct_tmp
@@ -23,7 +23,7 @@ subroutine m_init_refine_restart(s)
   integer,dimension(:),allocatable::noct_file,noct_skip
   integer,dimension(:),allocatable::input_array,output_array
   
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(r%verbose)write(*,*)'Building adaptive grid from restart file',r%nrestart
 
@@ -38,10 +38,10 @@ subroutine m_init_refine_restart(s)
   write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
 
   ! Broadcast parameters to all CPUs.
-  call m_broadcast_params(s)  
+  call m_broadcast_params(pst)  
   
   ! Broadcast global variables to all CPUs.
-  call m_broadcast_global(s)  
+  call m_broadcast_global(pst)  
   
   ! Compute the proper level interval
   levelmin_max=MAX(r%levelmin,levelmin_file)
@@ -53,17 +53,17 @@ subroutine m_init_refine_restart(s)
      do ilevel=r%levelmin,levelmin_max-1
         
         ! Set unigrid at coarser levels
-        call r_init_refine_basegrid(s,mdl%ncpu,1,0,ilevel)
+        call r_init_refine_basegrid(pst,mdl%ncpu,1,0,ilevel)
         
         ! Get total, min and max grid count (only in master)
-        call r_noct_tot(s,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
-        call r_noct_min(s,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
-        call r_noct_max(s,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
+        call r_noct_tot(pst,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
+        call r_noct_min(pst,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
+        call r_noct_max(pst,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
         
      end do
      
      ! Get maximum used memory (only in master)
-     call r_noct_used_max(s,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
+     call r_noct_used_max(pst,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
      
   endif
 
@@ -106,15 +106,15 @@ subroutine m_init_refine_restart(s)
      allocate(output_array(1:output_size))
 
      ! Call recursive slave routine
-     call r_init_refine_restart(s,mdl%ncpu,input_size,output_size,input_array,output_array)
+     call r_init_refine_restart(pst,mdl%ncpu,input_size,output_size,input_array,output_array)
 
      bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
      deallocate(input_array,output_array)
 
      ! Get total, min and max grid count (only in master).
-     call r_noct_tot(s,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
-     call r_noct_min(s,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
-     call r_noct_max(s,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
+     call r_noct_tot(pst,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
+     call r_noct_min(pst,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
+     call r_noct_max(pst,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
 
      ! Finalize new domain decomposition
      bound_key(1:nhilbert,0)=zero_key
@@ -130,20 +130,20 @@ subroutine m_init_refine_restart(s)
      allocate(input_array(1:input_size))
      input_array(1)=ilevel
      input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
-     call r_broadcast_bound_key(s,g%ncpu,input_size,0,input_array)
+     call r_broadcast_bound_key(pst,g%ncpu,input_size,0,input_array)
      deallocate(input_array)
 
   end do
   ! End loop over relevant levels
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(s,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
+  call r_noct_used_max(pst,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
 
   ! Deallocate local variables
   deallocate(noct_file,noct_skip)
 
   ! Compute total mass density from gas and particles on the grid
-  call m_rho_fine(s,r%levelmin)
+  call m_rho_fine(pst,r%levelmin)
 
   end associate
 
@@ -152,12 +152,12 @@ end subroutine m_init_refine_restart
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_refine_restart(s,cpu_range,input_size,output_size,input_array,output_array)
+recursive subroutine r_init_refine_restart(pst,cpu_range,input_size,output_size,input_array,output_array)
   use amr_parameters, only: nhilbert
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
@@ -173,19 +173,19 @@ recursive subroutine r_init_refine_restart(s,cpu_range,input_size,output_size,in
   integer(kind=8),dimension(:,:),allocatable::next_bound_key
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_INIT_REFINE_RESTART,next_cpu,next_range,input_size,output_size,input_array)
-     call r_init_refine_restart(s,next_range,input_size,output_size,input_array,output_array)
+     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,next_cpu,next_range,input_size,output_size,input_array)
+     call r_init_refine_restart(pst,next_range,input_size,output_size,input_array,output_array)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
-     allocate(bound_key(1:nhilbert,0:s%g%ncpu))
-     allocate(next_bound_key(1:nhilbert,0:s%g%ncpu))
-     bound_key=reshape(transfer(output_array,dummy),[nhilbert,s%g%ncpu+1])
-     next_bound_key=reshape(transfer(next_output_array,dummy),[nhilbert,s%g%ncpu+1])
+     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+     allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
+     allocate(next_bound_key(1:nhilbert,0:pst%s%g%ncpu))
+     bound_key=reshape(transfer(output_array,dummy),[nhilbert,pst%s%g%ncpu+1])
+     next_bound_key=reshape(transfer(next_output_array,dummy),[nhilbert,pst%s%g%ncpu+1])
      bound_key=bound_key+next_bound_key
-     output_array=transfer(reshape(bound_key,[nhilbert*(s%g%ncpu+1)]),output_array)
+     output_array=transfer(reshape(bound_key,[nhilbert*(pst%s%g%ncpu+1)]),output_array)
      deallocate(bound_key)
      deallocate(next_bound_key)
      deallocate(next_output_array)
@@ -198,10 +198,10 @@ recursive subroutine r_init_refine_restart(s,cpu_range,input_size,output_size,in
      noct_file=input_array(5:ncpu_file+4)
      allocate(nskip_file(1:ncpu_file))
      nskip_file=input_array(ncpu_file+5:2*ncpu_file+4)
-     allocate(bound_key(1:nhilbert,0:s%g%ncpu))
+     allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
      bound_key=0
-     call init_refine_restart(s%r,s%g,s%m,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key)
-     output_array=transfer(reshape(bound_key,[nhilbert*(s%g%ncpu+1)]),output_array)
+     call init_refine_restart(pst%s%r,pst%s%g,pst%s%m,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key)
+     output_array=transfer(reshape(bound_key,[nhilbert*(pst%s%g%ncpu+1)]),output_array)
      deallocate(bound_key)
      deallocate(noct_file,nskip_file)
   endif

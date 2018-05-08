@@ -2,11 +2,11 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine m_update_time(s,ilevel)
+subroutine m_update_time(pst,ilevel)
   use amr_parameters, only: dp,n_frw
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::ilevel
 
   ! Local variables
@@ -16,7 +16,7 @@ subroutine m_update_time(s,ilevel)
   integer::i,itest
   integer,dimension(1:4)::input_array
   
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   ! Local constants
   dt=g%dtnew(ilevel)
@@ -149,7 +149,7 @@ subroutine m_update_time(s,ilevel)
   ! Broadcast aexp and hexp to all CPUs
   input_array(1:2)=transfer(g%aexp,input_array)
   input_array(3:4)=transfer(g%hexp,input_array)
-  call r_broadcast_aexp(s,mdl%ncpu,4,0,input_array)
+  call r_broadcast_aexp(pst,mdl%ncpu,4,0,input_array)
 
   end associate
 
@@ -158,11 +158,11 @@ end subroutine m_update_time
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_broadcast_aexp(s,cpu_range,input_size,output_size,input_array)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_broadcast_aexp(pst,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -171,14 +171,14 @@ recursive subroutine r_broadcast_aexp(s,cpu_range,input_size,output_size,input_a
   real(kind=8)::aexp
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_BROADCAST_AEXP,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_aexp(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_aexp(pst,next_range,input_size,output_size,input_array)
   else
-     s%g%aexp=transfer(input_array(1:2),aexp)
-     s%g%hexp=transfer(input_array(3:4),aexp)
+     pst%s%g%aexp=transfer(input_array(1:2),aexp)
+     pst%s%g%hexp=transfer(input_array(3:4),aexp)
   endif
 
 end subroutine r_broadcast_aexp
@@ -186,21 +186,21 @@ end subroutine r_broadcast_aexp
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_clean_stop(s,cpu_range,input_size,output_size)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_clean_stop(pst,cpu_range,input_size,output_size)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%mdl%myid+next_range
+  next_cpu=pst%s%mdl%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_CLEAN_STOP,next_cpu,next_range,input_size,output_size)
-     call r_clean_stop(s,next_range,input_size,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,next_cpu,next_range,input_size,output_size)
+     call r_clean_stop(pst,next_range,input_size,output_size)
   endif
   
 end subroutine r_clean_stop

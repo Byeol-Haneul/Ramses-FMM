@@ -10,8 +10,8 @@ module domain_m
      integer :: n                                                 ! number of points in domain
      integer :: overload                                          ! number of domains per cpu rank
      integer(kind=8), dimension(:,:), allocatable :: b            ! bound key
-     integer,         dimension(:),   allocatable :: r2d          ! rank to domain
-     integer,         dimension(:),   allocatable :: d2r          ! domain to rank
+!     integer,         dimension(:),   allocatable :: r2d          ! rank to domain
+!     integer,         dimension(:),   allocatable :: d2r          ! domain to rank
    contains
      procedure :: copy     => copy_domain
      procedure :: create   => create_domain
@@ -39,10 +39,12 @@ contains
     in_rank=.false.
     myid = domain%myid
     ncpu = domain%ncpu
-    do isub = 0,domain%overload-1
-       in_rank = ge_keys(key,domain%b(1:nhilbert,domain%r2d(myid+ncpu*isub)-1)).and. &
-                 gt_keys(domain%b(1:nhilbert,domain%r2d(myid+ncpu*isub)),key)
-    end do
+    in_rank = ge_keys(key,domain%b(1:nhilbert,myid-1)).and. &
+         &    gt_keys(domain%b(1:nhilbert,myid),key)
+!    do isub = 0,domain%overload-1
+!       in_rank = ge_keys(key,domain%b(1:nhilbert,domain%r2d(myid+ncpu*isub)-1)).and. &
+!                 gt_keys(domain%b(1:nhilbert,domain%r2d(myid+ncpu*isub)),key)
+!    end do
   end function in_rank
 
   !================================================================
@@ -58,8 +60,9 @@ contains
     integer :: rank, idom, ncpu
     !
     ncpu = domain%ncpu
-    idom = get_domain(domain,key)
-    rank = modulo(domain%d2r(idom)-1,ncpu)+1
+!    idom = modulo(domain%d2r(idom)-1,ncpu)+1
+!    rank = modulo(domain%d2r(idom)-1,ncpu)+1
+    rank = get_domain(domain,key)
   end function get_rank
 
   !================================================================
@@ -81,8 +84,8 @@ contains
     !
     if (domain%n .ne. source%n) call create_domain(domain,source%myid,source%ncpu,source%n)
     domain%b   = source%b
-    domain%r2d = source%r2d
-    domain%d2r = source%d2r
+!    domain%r2d = source%r2d
+!    domain%d2r = source%d2r
   end subroutine copy_domain
 
   !================================================================
@@ -108,16 +111,16 @@ contains
        stop
     endif
     allocate(domain%b(1:nhilbert,0:domain%n))
-    allocate(domain%d2r(1:domain%n))
-    allocate(domain%r2d(1:domain%n))
+!    allocate(domain%d2r(1:domain%n))
+!    allocate(domain%r2d(1:domain%n))
     ! Set default values for the domain:
     !   - All bound keys are zero
     !   - Ranks and domains map as the identity
     domain%b = 0
-    do i=1,domain%n
-       domain%d2r(i) = modulo(i-1,ncpu) + 1
-       domain%r2d(i) = i
-    enddo
+!    do i=1,domain%n
+!       domain%d2r(i) = modulo(i-1,ncpu) + 1
+!       domain%r2d(i) = i
+!    enddo
   end subroutine create_domain
 
   !================================================================
@@ -134,8 +137,8 @@ contains
     domain%myid = 0
     domain%ncpu = 0
     if (allocated(domain%b))   deallocate(domain%b)
-    if (allocated(domain%r2d)) deallocate(domain%r2d)
-    if (allocated(domain%d2r)) deallocate(domain%d2r)
+!    if (allocated(domain%r2d)) deallocate(domain%r2d)
+!    if (allocated(domain%d2r)) deallocate(domain%d2r)
   end subroutine destroy_domain
 
   !================================================================

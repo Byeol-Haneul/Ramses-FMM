@@ -2,23 +2,23 @@
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_init_time(s,cpu_range,input_size,output_size)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_init_time(pst,cpu_range,input_size,output_size)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_INIT_TIME,next_cpu,next_range,input_size,output_size)
-     call r_init_time(s,next_range,input_size,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_INIT_TIME,next_cpu,next_range,input_size,output_size)
+     call r_init_time(pst,next_range,input_size,output_size)
   else
-     call init_time(s%r,s%g)
+     call init_time(pst%s%r,pst%s%g)
   endif
 
 end subroutine r_init_time

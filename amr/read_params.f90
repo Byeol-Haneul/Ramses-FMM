@@ -1,9 +1,9 @@
-subroutine m_read_params(s)
+subroutine m_read_params(pst)
   use amr_parameters
   use hydro_parameters
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
 
   !--------------------------------------------------
   ! Local variables
@@ -240,6 +240,8 @@ subroutine m_read_params(s)
        & ,interpol_var,interpol_type
   namelist/physics_params/cooling,units_density,units_time,units_length &
        & ,T2_star,g_star,n_star,isothermal
+
+  associate(s=>pst%s)
   
   !--------------------------------------------------
   ! Advertise RAMSES
@@ -590,17 +592,19 @@ subroutine m_read_params(s)
 #endif
 
   ! Broadcast parameters to all CPUs.
-  call m_broadcast_params(s)
+  call m_broadcast_params(pst)
+
+  end associate
   
 end subroutine m_read_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_broadcast_params(s)
-  use ramses_commons, only: ramses_t
+subroutine m_broadcast_params(pst)
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
@@ -608,9 +612,9 @@ subroutine m_broadcast_params(s)
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
-  allocate(input_array(1:storage_size(s%r)/32))
-  input_array=transfer(s%r,input_array)
-  call r_broadcast_params(s,s%g%ncpu,storage_size(s%r)/32,0,input_array)
+  allocate(input_array(1:storage_size(pst%s%r)/32))
+  input_array=transfer(pst%s%r,input_array)
+  call r_broadcast_params(pst,pst%s%g%ncpu,storage_size(pst%s%r)/32,0,input_array)
   deallocate(input_array)
 
 end subroutine m_broadcast_params
@@ -618,24 +622,19 @@ end subroutine m_broadcast_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_params(s,cpu_range,input_size,output_size,input_array)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_broadcast_params(pst,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
-
-  next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_BCAST_PARAMS,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_params(s,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,cpu_range,input_size,output_size,input_array)
+     call r_broadcast_params(pst%pLower,cpu_range,input_size,output_size,input_array)
   else
-     s%r=transfer(input_array,s%r)
+     pst%s%r=transfer(input_array,pst%s%r)
   endif
 
 end subroutine r_broadcast_params
@@ -643,10 +642,10 @@ end subroutine r_broadcast_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_broadcast_global(s)
-  use ramses_commons, only: ramses_t
+subroutine m_broadcast_global(pst)
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
@@ -655,10 +654,10 @@ subroutine m_broadcast_global(s)
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
-  input_size=storage_size(s%g)/32
+  input_size=storage_size(pst%s%g)/32
   allocate(input_array(1:input_size))
-  input_array=transfer(s%g,input_array)
-  call r_broadcast_global(s,s%mdl%ncpu,input_size,0,input_array)
+  input_array=transfer(pst%s%g,input_array)
+  call r_broadcast_global(pst,pst%s%mdl%ncpu,input_size,0,input_array)
   deallocate(input_array)
 
 end subroutine m_broadcast_global
@@ -666,25 +665,25 @@ end subroutine m_broadcast_global
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_global(s,cpu_range,input_size,output_size,input_array)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_broadcast_global(pst,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_BCAST_GLOBAL,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_global(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_BCAST_GLOBAL,next_cpu,next_range,input_size,output_size,input_array)
+     call r_broadcast_global(pst,next_range,input_size,output_size,input_array)
   else
-     s%g=transfer(input_array,s%g)
-     s%g%myid=s%mdl%myid
+     pst%s%g=transfer(input_array,pst%s%g)
+     pst%s%g%myid=pst%s%mdl%myid
   endif
 
 end subroutine r_broadcast_global

@@ -2,38 +2,38 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_input_part_grafic(s)
+subroutine m_input_part_grafic(pst)
   use amr_parameters, only: dp,i8b
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
   integer,allocatable,dimension(:)::input_array
 
-  if(s%r%verbose)write(*,*)'Entering input_part_grafic'
-  if(TRIM(s%r%filetype).NE.'grafic')return
-  if(s%r%nrestart>0)return
+  if(pst%s%r%verbose)write(*,*)'Entering input_part_grafic'
+  if(TRIM(pst%s%r%filetype).NE.'grafic')return
+  if(pst%s%r%nrestart>0)return
 
   ! Compute total number of particles in file
-  if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
-     s%p%npart_tot=s%g%n1(s%r%levelmin)*s%g%n2(s%r%levelmin)*s%g%n3(s%r%levelmin)
-     write(*,*)'Found npart_tot=',s%p%npart_tot
+  if(TRIM(pst%s%r%initfile(pst%s%r%levelmin)).NE.' ')then
+     pst%s%p%npart_tot=pst%s%g%n1(pst%s%r%levelmin)*pst%s%g%n2(pst%s%r%levelmin)*pst%s%g%n3(pst%s%r%levelmin)
+     write(*,*)'Found npart_tot=',pst%s%p%npart_tot
   else
-     s%p%npart_tot=0
+     pst%s%p%npart_tot=0
   endif
 
   ! If no particle found, no need to read
-  if(s%p%npart_tot==0)then
+  if(pst%s%p%npart_tot==0)then
      return
   endif
 
   ! Call recursive slave routine
-  allocate(input_array(1:storage_size(s%p%npart_tot)/32))
-  input_array=transfer(s%p%npart_tot,input_array)
-  call r_input_part_grafic(s,s%mdl%ncpu,storage_size(s%p%npart_tot)/32,0,input_array)
+  allocate(input_array(1:storage_size(pst%s%p%npart_tot)/32))
+  input_array=transfer(pst%s%p%npart_tot,input_array)
+  call r_input_part_grafic(pst,pst%s%mdl%ncpu,storage_size(pst%s%p%npart_tot)/32,0,input_array)
   deallocate(input_array)
 
 end subroutine m_input_part_grafic
@@ -41,12 +41,12 @@ end subroutine m_input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_grafic(s,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_grafic(pst,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: i8b
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
@@ -57,14 +57,14 @@ recursive subroutine r_input_part_grafic(s,cpu_range,input_size,output_size,inpu
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_INPUT_PART_GRAFIC,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_grafic(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,next_cpu,next_range,input_size,output_size,input_array)
+     call r_input_part_grafic(pst,next_range,input_size,output_size,input_array)
   else
      npart_tot=transfer(input_array,npart_tot)
-     call input_part_grafic(s%r,s%g,s%p,npart_tot)
+     call input_part_grafic(pst%s%r,pst%s%g,pst%s%p,npart_tot)
   endif
 
 end subroutine r_input_part_grafic

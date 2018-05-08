@@ -2,11 +2,11 @@
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine m_force_fine(s,ilevel,icount)
+subroutine m_force_fine(pst,ilevel,icount)
   use amr_parameters, only: ndim,twotondim,nvector,dp
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::ilevel,icount
   !----------------------------------------------------------
   ! This routine computes the gravitational acceleration,
@@ -15,33 +15,33 @@ subroutine m_force_fine(s,ilevel,icount)
   integer,dimension(1:2)::input_array,output_array
   real(kind=8)::rhomax,epot
  
-  if(s%m%noct_tot(ilevel)==0)return
-  if(s%r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
+  if(pst%s%m%noct_tot(ilevel)==0)return
+  if(pst%s%r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
 
 #ifdef GRAV  
 
-  if(s%r%gravity_type>0)then 
+  if(pst%s%r%gravity_type>0)then 
      ! Compute analytical gravity force
-     call r_force_analytic(s,s%mdl%ncpu,1,0,ilevel)
+     call r_force_analytic(pst,pst%s%mdl%ncpu,1,0,ilevel)
   else
      ! Compute gradient of potential
      input_array(1)=ilevel
      input_array(2)=icount
-     call r_gradient_phi(s,s%mdl%ncpu,2,0,input_array)
+     call r_gradient_phi(pst,pst%s%mdl%ncpu,2,0,input_array)
   endif
-  if(s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
+  if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
   ! Compute gravity potential energy
-  call r_compute_epot(s,s%mdl%ncpu,1,2,ilevel,output_array)
+  call r_compute_epot(pst,pst%s%mdl%ncpu,1,2,ilevel,output_array)
   epot=transfer(output_array,epot)
-  s%g%epot_tot=s%g%epot_tot+epot
-  if(s%r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
+  pst%s%g%epot_tot=pst%s%g%epot_tot+epot
+  if(pst%s%r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
 
   ! Compute maximum mass density
-  call r_compute_rhomax(s,s%mdl%ncpu,1,2,ilevel,output_array)
+  call r_compute_rhomax(pst,pst%s%mdl%ncpu,1,2,ilevel,output_array)
   rhomax=transfer(output_array,rhomax)
-  s%g%rho_max(ilevel)=rhomax
-  if(s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
+  pst%s%g%rho_max(ilevel)=rhomax
+  if(pst%s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
 
 #endif  
 
@@ -50,24 +50,24 @@ end subroutine m_force_fine
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_force_analytic(s,cpu_range,input_size,output_size,ilevel)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_force_analytic(pst,cpu_range,input_size,output_size,ilevel)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_FORCE_ANALYTIC,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_force_analytic(s,next_range,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_force_analytic(pst,next_range,input_size,output_size,ilevel)
   else
-     call force_analytic(s%r,s%g,s%m,ilevel)
+     call force_analytic(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_force_analytic
@@ -133,11 +133,11 @@ end subroutine force_analytic
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_gradient_phi(s,cpu_range,input_size,output_size,input_array)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_gradient_phi(pst,cpu_range,input_size,output_size,input_array)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -145,15 +145,15 @@ recursive subroutine r_gradient_phi(s,cpu_range,input_size,output_size,input_arr
   integer::ilevel,icount
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_GRADIENT_PHI,next_cpu,next_range,input_size,output_size,input_array)
-     call r_gradient_phi(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_GRADIENT_PHI,next_cpu,next_range,input_size,output_size,input_array)
+     call r_gradient_phi(pst,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)
-     call gradient_phi(s,ilevel,icount)
+     call gradient_phi(pst%s,ilevel,icount)
   endif
 
 end subroutine r_gradient_phi
@@ -328,11 +328,11 @@ end subroutine gradient_phi
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_epot(s,cpu_range,input_size,output_size,ilevel,output_array)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_compute_epot(pst,cpu_range,input_size,output_size,ilevel,output_array)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
@@ -342,18 +342,18 @@ recursive subroutine r_compute_epot(s,cpu_range,input_size,output_size,ilevel,ou
   real(kind=8)::epot,next_epot
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_COMPUTE_EPOT,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_compute_epot(s,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(pst%s%mdl,MDL_COMPUTE_EPOT,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_compute_epot(pst,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
      epot=transfer(output_array,epot)
      next_epot=transfer(next_output_array,next_epot)
      epot=epot+next_epot
      output_array=transfer(epot,output_array)
   else
-     call compute_epot(s%r,s%g,s%m,ilevel,epot)
+     call compute_epot(pst%s%r,pst%s%g,pst%s%m,ilevel,epot)
      output_array=transfer(epot,output_array)
   endif
 
@@ -411,11 +411,11 @@ end subroutine compute_epot
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_rhomax(s,cpu_range,input_size,output_size,ilevel,output_array)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_compute_rhomax(pst,cpu_range,input_size,output_size,ilevel,output_array)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
@@ -425,18 +425,18 @@ recursive subroutine r_compute_rhomax(s,cpu_range,input_size,output_size,ilevel,
   real(kind=8)::rhomax,next_rhomax
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_COMPUTE_RHOMAX,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_compute_rhomax(s,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(s%mdl,next_cpu,output_size,next_output_array)
+     call mdl_send_request(pst%s%mdl,MDL_COMPUTE_RHOMAX,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_compute_rhomax(pst,next_range,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
      rhomax=transfer(output_array,rhomax)
      next_rhomax=transfer(next_output_array,next_rhomax)
      rhomax=MAX(rhomax,next_rhomax)
      output_array=transfer(rhomax,output_array)
   else
-     call compute_rhomax(s%r,s%g,s%m,ilevel,rhomax)
+     call compute_rhomax(pst%s%r,pst%s%g,pst%s%m,ilevel,rhomax)
      output_array=transfer(rhomax,output_array)
   endif
 

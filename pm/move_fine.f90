@@ -2,11 +2,11 @@
 !################################################################
 !################################################################
 !################################################################
-subroutine m_kick_drift_part(s,ilevel,action_part)
+subroutine m_kick_drift_part(pst,ilevel,action_part)
   use amr_parameters, only: ndim,dp,twotondim
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::ilevel
   integer::action_part
   !--------------------------------------------------------------
@@ -14,24 +14,24 @@ subroutine m_kick_drift_part(s,ilevel,action_part)
   !--------------------------------------------------------------
   integer,dimension(1:2)::input_array
   
-  if(s%m%noct_tot(ilevel)==0)return
-  if(s%r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
+  if(pst%s%m%noct_tot(ilevel)==0)return
+  if(pst%s%r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
 
   input_array(1)=ilevel
   input_array(2)=action_part
-  call r_kick_drift_part(s,s%mdl%ncpu,2,0,input_array)
+  call r_kick_drift_part(pst,pst%s%mdl%ncpu,2,0,input_array)
   
 end subroutine m_kick_drift_part
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_kick_drift_part(s,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_kick_drift_part(pst,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: dp
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
 
@@ -40,15 +40,15 @@ recursive subroutine r_kick_drift_part(s,cpu_range,input_size,output_size,input_
   integer::action_part
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_KICK_DRIFT_PART,next_cpu,next_range,input_size,output_size,input_array)
-     call r_kick_drift_part(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,next_cpu,next_range,input_size,output_size,input_array)
+     call r_kick_drift_part(pst,next_range,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-     call kick_drift_part(s,ilevel,action_part)
+     call kick_drift_part(pst%s,ilevel,action_part)
   endif
 
 end subroutine r_kick_drift_part

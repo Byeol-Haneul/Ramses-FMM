@@ -13,5 +13,16 @@ module ramses_commons
      
   end type ramses_t
 
+  type pst_t
+     
+     type(ramses_t),pointer::s => null()
+     type(pst_t),pointer::pLower => null()
+     integer::iUpper = -1
+     integer::nLower = 0
+     integer::nUpper = 0
+     
+  end type pst_t
+
+  
 end module ramses_commons
 

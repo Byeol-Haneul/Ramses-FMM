@@ -2,11 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_init_part(s,cpu_range,input_size,output_size)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_init_part(pst,cpu_range,input_size,output_size)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to allocate
@@ -15,13 +15,13 @@ recursive subroutine r_init_part(s,cpu_range,input_size,output_size)
   integer::next_range,next_cpu
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_INIT_PART,next_cpu,next_range,input_size,output_size)
-     call r_init_part(s,next_range,input_size,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_INIT_PART,next_cpu,next_range,input_size,output_size)
+     call r_init_part(pst,next_range,input_size,output_size)
   else
-     call init_part(s%r,s%g,s%p)
+     call init_part(pst%s%r,pst%s%g,pst%s%p)
   endif
 
 end subroutine r_init_part

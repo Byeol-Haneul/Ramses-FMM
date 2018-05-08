@@ -2,23 +2,58 @@
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_amr(s,cpu_range,input_size,output_size)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_set_add(pst,cpu_range,input_size,output_size,iUpper)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
+  integer::cpu_range,input_size,output_size
+  integer::iUpper
+
+  integer::n,iLower,iMiddle
+
+  associate(mdl=>pst%s%mdl)
+
+ iLower = mdl%myid-1
+ n = iUpper - iLower
+ iMiddle = (iUpper + iLower) / 2
+ 
+ if(n>1)then
+    pst%iUpper = iMiddle
+    pst%nLower = iMiddle - iLower
+    pst%nUpper = iUpper - iMiddle
+    allocate(pst%pLower)
+    pst%pLower%s => pst%s
+    call mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,cpu_range,input_size,output_size,iUpper)
+    call r_set_add(pst%pLower,cpu_range,input_size,output_size,iMiddle)
+ else
+    write(*,*)mdl%myid,'pst activated'
+ end if
+ 
+ end associate
+
+end subroutine r_set_add
+!###############################################
+!###############################################
+!###############################################
+!###############################################
+recursive subroutine r_init_amr(pst,cpu_range,input_size,output_size)
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
 
   integer::next_range,next_cpu
 
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_INIT_AMR,next_cpu,next_range,input_size,output_size)
-     call r_init_amr(s,next_range,input_size,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_INIT_AMR,next_cpu,next_range,input_size,output_size)
+     call r_init_amr(pst,next_range,input_size,output_size)
   else
-     call init_amr(s%r,s%g,s%m)
+     call init_amr(pst%s%r,pst%s%g,pst%s%m)
   endif
 
 end subroutine r_init_amr
@@ -88,7 +123,7 @@ subroutine init_amr(r,g,m)
 
   allocate(m%domain(1:r%nlevelmax+1))
   do ilevel=1,r%nlevelmax+1
-     call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu*r%overload)
+     call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu)
   end do
 
   ! Make sure that the coarsest level uses only one Hilbert integer

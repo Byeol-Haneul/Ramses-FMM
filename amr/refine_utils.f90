@@ -2,10 +2,10 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_refine_fine(s,ilevel)
-  use ramses_commons, only: ramses_t
+subroutine m_refine_fine(pst,ilevel)
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to refine the AMR grid
@@ -13,6 +13,8 @@ subroutine m_refine_fine(s,ilevel)
   !--------------------------------------------------------------------
   integer::ilev,ncpu
   integer,dimension(1:2)::noct
+
+  associate(s=>pst%s)
   
   if(ilevel==s%r%nlevelmax)return
   if(s%m%noct_tot(ilevel)==0)return
@@ -23,7 +25,7 @@ subroutine m_refine_fine(s,ilevel)
   ncpu=s%mdl%ncpu
   
   ! Create new octs and destroy unecessary octs
-  call r_refine_fine(s,ncpu,1,2,ilevel,noct)
+  call r_refine_fine(pst,ncpu,1,2,ilevel,noct)
 
   if(s%r%verbose)write(*,112)noct(1)
 112 format(' ==> Make ',i6,' sub-grids')
@@ -33,45 +35,47 @@ subroutine m_refine_fine(s,ilevel)
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(s,ncpu,1,1,ilev,s%m%noct_tot(ilev))
-     call r_noct_min(s,ncpu,1,1,ilev,s%m%noct_min(ilev))
-     call r_noct_max(s,ncpu,1,1,ilev,s%m%noct_max(ilev))
+     call r_noct_tot(pst,ncpu,1,1,ilev,s%m%noct_tot(ilev))
+     call r_noct_min(pst,ncpu,1,1,ilev,s%m%noct_min(ilev))
+     call r_noct_max(pst,ncpu,1,1,ilev,s%m%noct_max(ilev))
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(s,ncpu,1,1,ilevel,s%m%noct_used_max)
+  call r_noct_used_max(pst,ncpu,1,1,ilevel,s%m%noct_used_max)
 
   ! Load balance all levels across cpus
-  call m_load_balance(s,ilevel)
+  call m_load_balance(pst,ilevel)
 
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(s,ncpu,1,1,ilev,s%m%noct_tot(ilev))
-     call r_noct_min(s,ncpu,1,1,ilev,s%m%noct_min(ilev))
-     call r_noct_max(s,ncpu,1,1,ilev,s%m%noct_max(ilev))
+     call r_noct_tot(pst,ncpu,1,1,ilev,s%m%noct_tot(ilev))
+     call r_noct_min(pst,ncpu,1,1,ilev,s%m%noct_min(ilev))
+     call r_noct_max(pst,ncpu,1,1,ilev,s%m%noct_max(ilev))
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(s,ncpu,1,1,ilevel,s%m%noct_used_max)
+  call r_noct_used_max(pst,ncpu,1,1,ilevel,s%m%noct_used_max)
 
   ! Balance particles across cpus
   if(ncpu>1.AND.ilevel==s%r%levelmin)then
      if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
         if(s%r%verbose)write(*,*)'Entering balance_part for level',s%r%levelmin
-        call r_balance_part(s,ncpu,1,0,ilevel)
+        call r_balance_part(pst,ncpu,1,0,ilevel)
      endif
   endif
+
+  end associate
   
 end subroutine m_refine_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_refine_fine(s,cpu_range,input_size,output_size,ilevel,noct)
-  use ramses_commons, only: ramses_t
+recursive subroutine r_refine_fine(pst,cpu_range,input_size,output_size,ilevel,noct)
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer::ilevel
   integer,dimension(1:2)::noct
@@ -81,15 +85,15 @@ recursive subroutine r_refine_fine(s,cpu_range,input_size,output_size,ilevel,noc
   integer::ncreate,nkill
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_REFINE_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_refine_fine(s,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(s%mdl,next_cpu,output_size,next_noct)
+     call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,next_cpu,next_range,input_size,output_size,ilevel)
+     call r_refine_fine(pst,next_range,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_noct)
      noct=noct+next_noct
   else
-     call refine_fine(s,ilevel,ncreate,nkill)
+     call refine_fine(pst%s,ilevel,ncreate,nkill)
      noct(1)=ncreate
      noct(2)=nkill
   endif

@@ -2,11 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_dump_all(s)
+subroutine m_dump_all(pst)
   use amr_parameters, only: ndim,flen
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
 
   ! Local variables
   integer::i
@@ -17,7 +17,7 @@ subroutine m_dump_all(s)
   character(LEN=flen)::filename,filedir,filecmd
   integer,dimension(1:flen/4)::input_array
 
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -76,27 +76,27 @@ subroutine m_dump_all(s)
      ! Output AMR data
      filename=TRIM(filedir)//'amr.out'
      input_array=transfer(filename,input_array)
-     call r_output_amr(s,mdl%ncpu,flen/4,0,input_array)
+     call r_output_amr(pst,mdl%ncpu,flen/4,0,input_array)
      
      ! Output HYDRO data
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.out'
         input_array=transfer(filename,input_array)
-        call r_output_hydro(s,mdl%ncpu,flen/4,0,input_array)
+        call r_output_hydro(pst,mdl%ncpu,flen/4,0,input_array)
      end if
 
      ! Output GRAV data
      if(r%poisson)then
         filename=TRIM(filedir)//'grav.out'
         input_array=transfer(filename,input_array)
-        call r_output_poisson(s,mdl%ncpu,flen/4,0,input_array)
+        call r_output_poisson(pst,mdl%ncpu,flen/4,0,input_array)
      end if
 
      ! Output PART data
      if(r%pic)then
         filename=TRIM(filedir)//'part.out'
         input_array=transfer(filename,input_array)
-        call r_output_part(s,mdl%ncpu,flen/4,0,input_array)
+        call r_output_part(pst,mdl%ncpu,flen/4,0,input_array)
      end if
   end if
 
@@ -283,12 +283,12 @@ end subroutine input_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_output_amr(s,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_output_amr(pst,cpu_range,input_size,output_size,input_array)
   use amr_parameters, only: flen
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
-  type(ramses_t)::s
+  type(pst_t)::pst
   integer::cpu_range,input_size,output_size
   integer,dimension(1:input_size)::input_array
   
@@ -296,14 +296,14 @@ recursive subroutine r_output_amr(s,cpu_range,input_size,output_size,input_array
   character(LEN=flen)::filename
   
   next_range=cpu_range/2
-  next_cpu=s%g%myid+next_range
+  next_cpu=pst%s%g%myid+next_range
 
   if(next_range>0)then
-     call mdl_send_request(s%mdl,MDL_OUTPUT_AMR,next_cpu,next_range,input_size,output_size,input_array)
-     call r_output_amr(s,next_range,input_size,output_size,input_array)
+     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_AMR,next_cpu,next_range,input_size,output_size,input_array)
+     call r_output_amr(pst,next_range,input_size,output_size,input_array)
   else
      filename=transfer(input_array,filename)
-     call output_amr(s%r,s%g,s%m,filename)
+     call output_amr(pst%s%r,pst%s%g,pst%s%m,filename)
   endif
 
 end subroutine r_output_amr
