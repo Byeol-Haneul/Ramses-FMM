@@ -38,12 +38,12 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   !===============================
   input_array(1)=ilevel
   input_array(2)=icount
-  call r_make_initial_phi(pst,mdl%ncpu,2,0,input_array)
+  call r_make_initial_phi(pst,2,0,input_array)
 
   !===============================
   ! Compute right-hand side norm
   !===============================
-  call r_cmp_rhs_norm(pst,mdl%ncpu,1,2,input_array,output_array)
+  call r_cmp_rhs_norm(pst,1,2,input_array,output_array)
   rhs_norm=transfer(output_array(1:2),rhs_norm)
   rhs_norm=DSQRT(rhs_norm/dble(twotondim*m%noct_tot(ilevel)))
 
@@ -53,7 +53,7 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   !==============================================
   input_array(1)=ilevel
   input_array(2)=icount
-  call r_cmp_residual_cg(pst,mdl%ncpu,2,0,input_array)
+  call r_cmp_residual_cg(pst,2,0,input_array)
 
   !====================================
   ! Main iteration loop
@@ -67,7 +67,7 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      ! Compute residual norm
      !====================================
-     call r_cmp_r2_cg(pst,mdl%ncpu,1,2,input_array,output_array)
+     call r_cmp_r2_cg(pst,1,2,input_array,output_array)
      r2=transfer(output_array(1:2),r2)
 
      !====================================
@@ -85,17 +85,17 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      input_array(1)=ilevel
      input_array(2:3)=transfer(beta_cg,input_array(2:3))
-     call r_recurrence_on_p(pst,mdl%ncpu,3,0,input_array)
+     call r_recurrence_on_p(pst,3,0,input_array)
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
      !==============================================
-     call r_cmp_Ap_cg(pst,mdl%ncpu,1,0,input_array)
+     call r_cmp_Ap_cg(pst,1,0,input_array)
 
      !====================================
      ! Compute p.Ap scalar product
      !====================================
-     call r_cmp_pAp_cg(pst,mdl%ncpu,1,2,input_array,output_array)
+     call r_cmp_pAp_cg(pst,1,2,input_array,output_array)
      pAp=transfer(output_array(1:2),pAp)
 
      !====================================
@@ -108,7 +108,7 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      input_array(1)=ilevel
      input_array(2:3)=transfer(alpha_cg,input_array(2:3))
-     call r_recurrence_x_and_r(pst,mdl%ncpu,3,0,input_array)
+     call r_recurrence_x_and_r(pst,3,0,input_array)
 
      !====================================
      ! Compute error
@@ -134,25 +134,21 @@ end subroutine m_phi_fine_cg
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_recurrence_on_p(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_recurrence_on_p(pst,input_size,output_size,input_array)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ind,igrid,ilevel
   real(kind=8)::beta_cg
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_ON_P,next_cpu,next_range,input_size,output_size,input_array)
-     call r_recurrence_on_p(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_ON_P,pst%iUpper+1,input_size,output_size,input_array)
+     call r_recurrence_on_p(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      beta_cg=transfer(input_array(2:3),beta_cg)
@@ -168,25 +164,21 @@ end subroutine r_recurrence_on_p
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_recurrence_x_and_r(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_recurrence_x_and_r(pst,input_size,output_size,input_array)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ind,igrid,ilevel
   real(kind=8)::alpha_cg
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_X_AND_R,next_cpu,next_range,input_size,output_size,input_array)
-     call r_recurrence_x_and_r(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_X_AND_R,pst%iUpper+1,input_size,output_size,input_array)
+     call r_recurrence_x_and_r(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      alpha_cg=transfer(input_array(2:3),alpha_cg)
@@ -209,23 +201,19 @@ end subroutine r_recurrence_x_and_r
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_cmp_residual_cg(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_cmp_residual_cg(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel,icount
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_CG,next_cpu,next_range,input_size,output_size,input_array)
-     call r_cmp_residual_cg(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,output_size,input_array)
+     call r_cmp_residual_cg(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)
@@ -383,22 +371,17 @@ end subroutine cmp_residual_cg
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_cmp_Ap_cg(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_cmp_Ap_cg(pst,input_size,output_size,ilevel)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_AP_CG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cmp_Ap_cg(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_Ap_cg(pst%pLower,input_size,output_size,ilevel)
   else
      call cmp_Ap_cg(pst%s,ilevel)
   endif
@@ -508,23 +491,19 @@ end subroutine cmp_Ap_cg
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_make_initial_phi(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_make_initial_phi(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel,icount
   
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,next_cpu,next_range,input_size,output_size,input_array)
-     call r_make_initial_phi(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input_array)
+     call r_make_initial_phi(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)
@@ -728,31 +707,27 @@ end subroutine unpack_fetch_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_rhs_norm(pst,cpu_range,input_size,output_size,input_array,output_array)
+recursive subroutine r_cmp_rhs_norm(pst,input_size,output_size,input_array,output_array)
   use amr_parameters, only: twotondim,twondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
-  integer::next_range,next_cpu
   integer::ind,igrid,ilevel
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::rhs_norm,next_rhs_norm
   real(kind=8)::dx2,fourpi,oneoversix,fact,fact2
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RHS_NORM,next_cpu,next_range,input_size,output_size,input_array)
-     call r_cmp_rhs_norm(pst,next_range,input_size,output_size,input_array,output_array)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CMP_RHS_NORM,pst%iUpper+1,input_size,output_size,input_array)
+     call r_cmp_rhs_norm(pst%pLower,input_size,output_size,input_array,output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      rhs_norm=transfer(output_array,rhs_norm)
      next_rhs_norm=transfer(next_output_array,next_rhs_norm)
      rhs_norm=rhs_norm+next_rhs_norm
@@ -780,30 +755,26 @@ end subroutine r_cmp_rhs_norm
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_r2_cg(pst,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_cmp_r2_cg(pst,input_size,output_size,ilevel,output_array)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
-  integer::next_range,next_cpu
   integer::ind,igrid
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::r2,next_r2
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_R2_CG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cmp_r2_cg(pst,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CMP_R2_CG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_r2_cg(pst%pLower,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      r2=transfer(output_array,r2)
      next_r2=transfer(next_output_array,next_r2)
      r2=r2+next_r2
@@ -823,30 +794,26 @@ end subroutine r_cmp_r2_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_pAp_cg(pst,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_cmp_pAp_cg(pst,input_size,output_size,ilevel,output_array)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
-  integer::next_range,next_cpu
   integer::igrid,ind
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::pAp,next_pAp
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_PAP_CG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cmp_pAp_cg(pst,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CMP_PAP_CG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_pAp_cg(pst%pLower,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      pAp=transfer(output_array,pAp)
      next_pAp=transfer(next_output_array,next_pAp)
      pAp=pAp+next_pAp

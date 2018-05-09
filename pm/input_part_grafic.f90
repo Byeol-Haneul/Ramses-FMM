@@ -33,7 +33,7 @@ subroutine m_input_part_grafic(pst)
   ! Call recursive slave routine
   allocate(input_array(1:storage_size(pst%s%p%npart_tot)/32))
   input_array=transfer(pst%s%p%npart_tot,input_array)
-  call r_input_part_grafic(pst,pst%s%mdl%ncpu,storage_size(pst%s%p%npart_tot)/32,0,input_array)
+  call r_input_part_grafic(pst,storage_size(pst%s%p%npart_tot)/32,0,input_array)
   deallocate(input_array)
 
 end subroutine m_input_part_grafic
@@ -41,27 +41,23 @@ end subroutine m_input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_grafic(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_grafic(pst,input_size,output_size,input_array)
   use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
   !--------------------------------------------------------------------
   integer(i8b)::npart_tot
-  integer::next_range,next_cpu
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_grafic(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,pst%iUpper+1,input_size,output_size,input_array)
+     call r_input_part_grafic(pst%pLower,input_size,output_size,input_array)
   else
      npart_tot=transfer(input_array,npart_tot)
      call input_part_grafic(pst%s%r,pst%s%g,pst%s%p,npart_tot)

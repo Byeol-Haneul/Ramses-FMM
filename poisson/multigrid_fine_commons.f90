@@ -31,7 +31,7 @@ subroutine multigrid(pst,ilevel,icount)
   integer,parameter  :: MAXITER  = 10
   real(dp),parameter :: SAFE_FACTOR = 0.5
   
-  integer :: ncpu, igrid, ifine, i, iter, allmasked
+  integer :: igrid, ifine, i, iter, allmasked
   integer,dimension(1:4) :: input_array
   integer,dimension(1:4) :: output_array
   real(kind=8) :: res_norm2, i_res_norm2
@@ -43,27 +43,25 @@ subroutine multigrid(pst,ilevel,icount)
   
   if(pst%s%r%verbose) print '(A,I2)','Entering multigrid at level ',ilevel
 
-  ncpu=pst%s%mdl%ncpu
-  
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
   input_array(1)=ilevel
   input_array(2)=icount
-  call r_make_initial_phi(pst,ncpu,2,0,input_array)  ! Initial guess
-  call r_make_mask(pst,ncpu,1,0,ilevel)              ! Fill the fine level mask
-  call r_make_bc_rhs(pst,ncpu,2,0,input_array)       ! Fill BC-modified RHS
+  call r_make_initial_phi(pst,2,0,input_array)  ! Initial guess
+  call r_make_mask(pst,1,0,ilevel)              ! Fill the fine level mask
+  call r_make_bc_rhs(pst,2,0,input_array)       ! Fill BC-modified RHS
 
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
-  call r_init_mg(pst,ncpu,1,0,ilevel)
+  call r_init_mg(pst,1,0,ilevel)
   
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
-     call r_build_mg(pst,ncpu,1,0,ifine)
+     call r_build_mg(pst,1,0,ifine)
   end do
   
   ! ---------------------------------------------------------------------
@@ -72,7 +70,7 @@ subroutine multigrid(pst,ilevel,icount)
   pst%s%g%levelmin_mg=1
   do ifine=ilevel,2,-1
      ! Restrict and communicate mask
-     call r_restrict_mask(pst,ncpu,1,1,ifine,allmasked)
+     call r_restrict_mask(pst,1,1,ifine,allmasked)
      if(allmasked==1) then ! Coarser level is fully masked: stop here
         pst%s%g%levelmin_mg=ifine
         exit
@@ -85,7 +83,7 @@ subroutine multigrid(pst,ilevel,icount)
   input_array(1)=ilevel
   do ifine=ilevel,pst%s%g%levelmin_mg,-1
      input_array(2)=ifine
-     call r_set_scan_flag(pst,ncpu,2,0,input_array)
+     call r_set_scan_flag(pst,2,0,input_array)
   end do
   
   ! ---------------------------------------------------------------------
@@ -109,49 +107,49 @@ subroutine multigrid(pst,ilevel,icount)
      ! Pre-smoothing
      do i=1,ngs_fine
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
      end do
      
      ! Compute new residual
-     call r_cmp_residual_mg(pst,ncpu,2,0,input_array)
+     call r_cmp_residual_mg(pst,2,0,input_array)
 
      ! Compute initial residual norm
      if(iter==1) then
-        call r_cmp_residual_norm2(pst,ncpu,1,2,ilevel,output_array)
+        call r_cmp_residual_norm2(pst,1,2,ilevel,output_array)
         i_res_norm2=transfer(output_array(1:2),i_res_norm2)
      end if
 
      if(ilevel>1) then
 
         ! Restrict residual to coarser level
-        call r_restrict_residual(pst,ncpu,1,0,ilevel)
+        call r_restrict_residual(pst,1,0,ilevel)
 
         ! Reset correction from upper level before solve
-        call r_reset_correction(pst,ncpu,1,0,ilevel-1)
+        call r_reset_correction(pst,1,0,ilevel-1)
         
         ! Multigrid-solve the upper level
         call recursive_multigrid(pst,ilevel-1, pst%s%g%safe_mode(ilevel))
         
         ! Interpolate coarse solution and correct fine solution
-        call r_interpolate_and_correct(pst,ncpu,1,0,ilevel)
+        call r_interpolate_and_correct(pst,1,0,ilevel)
 
      end if
 
      ! Post-smoothing
      do i=1,ngs_fine
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
      end do
      
      ! Update fine residual
-     call r_cmp_residual_mg(pst,ncpu,2,0,input_array)
+     call r_cmp_residual_mg(pst,2,0,input_array)
 
      ! Compute residual norm
-     call r_cmp_residual_norm2(pst,ncpu,1,2,ilevel,output_array)
+     call r_cmp_residual_norm2(pst,1,2,ilevel,output_array)
      res_norm2=transfer(output_array(1:2),res_norm2)
      
      last_err = err
@@ -177,7 +175,7 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-  call r_cleanup_mg(pst,ncpu,0,0)
+  call r_cleanup_mg(pst,0,0)
   
 end subroutine multigrid
 
@@ -199,11 +197,9 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
   integer,intent(in) :: ifinelevel
   logical,intent(in) :: safe
 
-  integer :: ncpu, i, igrid, icycle, ncycle
+  integer :: i, igrid, icycle, ncycle
   integer,dimension(1:4) :: input_array
 
-  ncpu=pst%s%mdl%ncpu
-  
   ! Set parameter array
   input_array(1)=ifinelevel+1
   input_array(2)=ifinelevel
@@ -217,9 +213,9 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
      end do
      return
   end if
@@ -235,32 +231,32 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
      ! Pre-smoothing
      do i=1,ngs_coarse
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     call r_cmp_residual_mg(pst,ncpu,2,0,input_array)
+     call r_cmp_residual_mg(pst,2,0,input_array)
 
      ! Restrict residual to coarser level
-     call r_restrict_residual(pst,ncpu,1,0,ifinelevel)
+     call r_restrict_residual(pst,1,0,ifinelevel)
      
      ! Reset correction from upper level before solve
-     call r_reset_correction(pst,ncpu,1,0,ifinelevel-1)
+     call r_reset_correction(pst,1,0,ifinelevel-1)
      
      ! Multigrid-solve the upper level
      call recursive_multigrid(pst,ifinelevel-1, safe)
      
      ! Interpolate coarse solution and correct back into fine solution
-     call r_interpolate_and_correct(pst,ncpu,1,0,ifinelevel)
+     call r_interpolate_and_correct(pst,1,0,ifinelevel)
      
      ! Post-smoothing
      do i=1,ngs_coarse
         input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
         input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,ncpu,4,0,input_array)
+        call r_gauss_seidel_mg(pst,4,0,input_array)
      end do
      
   end do
@@ -276,22 +272,17 @@ end subroutine recursive_multigrid
 ! Multigrid workspace initialisation
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_init_mg(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_init_mg(pst,input_size,output_size,ilevel)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_MG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_init_mg(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_INIT_MG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_init_mg(pst%pLower,input_size,output_size,ilevel)
   else
      call init_mg(pst%s%r,pst%s%m,ilevel)
   endif
@@ -342,22 +333,17 @@ end subroutine init_mg
 ! Coarse grid MG activation for local grids
 ! ---------------------------------------------------------------------
 
-recursive subroutine r_build_mg(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_build_mg(pst,input_size,output_size,ilevel)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BUILD_MG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_build_mg(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_BUILD_MG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_build_mg(pst%pLower,input_size,output_size,ilevel)
   else
      call build_mg(pst%s,ilevel)
   endif
@@ -564,23 +550,17 @@ end subroutine unpack_flush_build_mg
 ! Multigrid cleanup
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cleanup_mg(pst,cpu_range,input_size,output_size)
+recursive subroutine r_cleanup_mg(pst,input_size,output_size)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
 
-  integer::next_range,next_cpu
-  integer::igrid
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CLEANUP_MG,next_cpu,next_range,input_size,output_size)
-     call r_cleanup_mg(pst,next_range,input_size,output_size)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CLEANUP_MG,pst%iUpper+1,input_size,output_size)
+     call r_cleanup_mg(pst%pLower,input_size,output_size)
   else
      call cleanup_mg(pst%s%m)
   endif
@@ -620,22 +600,17 @@ end subroutine cleanup_mg
 ! Initialize mask at fine level into f(:,3)
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_make_mask(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_make_mask(pst,input_size,output_size,ilevel)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MAKE_MASK,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_make_mask(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_MAKE_MASK,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_make_mask(pst%pLower,input_size,output_size,ilevel)
   else
      call make_mask(pst%s%m,ilevel)
   endif
@@ -682,23 +657,19 @@ end subroutine make_mask
 !
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_make_bc_rhs(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_make_bc_rhs(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel,icount
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MAKE_BC_RHS,next_cpu,next_range,input_size,output_size,input_array)
-     call r_make_bc_rhs(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_MAKE_BC_RHS,pst%iUpper+1,input_size,output_size,input_array)
+     call r_make_bc_rhs(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      icount=input_array(2)

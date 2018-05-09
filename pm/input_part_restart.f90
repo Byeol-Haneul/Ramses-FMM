@@ -45,7 +45,7 @@ subroutine m_input_part_restart(pst)
   endif
 
   ! Call recursive slave routine
-  call r_input_part_restart(pst,pst%s%mdl%ncpu,ncpu_file,0,npart_file)
+  call r_input_part_restart(pst,ncpu_file,0,npart_file)
 
   ! Deallocate local array
   deallocate(npart_file)
@@ -55,26 +55,22 @@ end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_restart(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_input_part_restart(pst,input_size,output_size,input_array)
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer::next_range,next_cpu
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,next_cpu,next_range,input_size,output_size,input_array)
-     call r_input_part_restart(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,pst%iUpper+1,input_size,output_size,input_array)
+     call r_input_part_restart(pst%pLower,input_size,output_size,input_array)
   else
      call input_part_restart(pst%s%r,pst%s%g,pst%s%p,input_size,input_array)
   endif

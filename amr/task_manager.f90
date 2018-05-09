@@ -242,7 +242,7 @@ subroutine mdl_init
      call mdl_wait(pst,callback)
   else
      ncpu(1)=mdl%ncpu
-     call r_set_add(pst,mdl%ncpu,1,0,ncpu)
+     call r_set_add(pst,1,0,ncpu)
      call adaptive_loop(pst)
   endif
 
@@ -279,7 +279,7 @@ subroutine mdl_wait(pst,callback)
   logical::stop_order_received,order_received
   integer::order_id,order_tag=101,output_tag=203,output_id
   integer,dimension(MPI_STATUS_SIZE)::order_status,output_status
-  integer::input_size,output_size,cpu_range,source_cpu,function_id
+  integer::input_size,output_size,source_cpu,function_id
   integer,dimension(:),allocatable::input_array,output_array
   integer,dimension(1:32)::header
 
@@ -304,9 +304,8 @@ subroutine mdl_wait(pst,callback)
         source_cpu=order_status(MPI_SOURCE)
         
         ! Allocate input and output arrays
-        cpu_range=header(2)
-        input_size=header(3)
-        output_size=header(4)
+        input_size=header(2)
+        output_size=header(3)
         
         if(input_size>0)then
            allocate(input_array(1:input_size))
@@ -319,7 +318,7 @@ subroutine mdl_wait(pst,callback)
         endif
         
         ! Launch the corresponding call-back function
-        call callback(function_id)%proc(pst,cpu_range,input_size,output_size,input_array,output_array)
+        call callback(function_id)%proc(pst,input_size,output_size,input_array,output_array)
         
         ! Deallocate input array
         if(input_size>0)then
@@ -350,7 +349,7 @@ end subroutine mdl_wait
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine mdl_send_request(mdl,mdl_function_id,target_cpu,cpu_range,input_size,output_size,input_array)
+subroutine mdl_send_request(mdl,mdl_function_id,target_cpu,input_size,output_size,input_array)
   use mdl_commons, only: mdl_t
   implicit none
   type(mdl_t)::mdl
@@ -359,7 +358,7 @@ subroutine mdl_send_request(mdl,mdl_function_id,target_cpu,cpu_range,input_size,
   integer::info
 #endif
   integer::mdl_function_id
-  integer::target_cpu,cpu_range,input_size,output_size
+  integer::target_cpu,input_size,output_size
   integer,dimension(1:input_size),optional::input_array
 
 #ifndef WITHOUTMPI
@@ -369,9 +368,8 @@ subroutine mdl_send_request(mdl,mdl_function_id,target_cpu,cpu_range,input_size,
 
   ! Assemble MPI message
   header(1)=mdl_function_id
-  header(2)=cpu_range
-  header(3)=input_size
-  header(4)=output_size
+  header(2)=input_size
+  header(3)=output_size
   mdl%mpi_input_buffer(1:32)=header
   if(input_size>0)then
      mdl%mpi_input_buffer(33:32+input_size)=input_array

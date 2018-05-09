@@ -51,7 +51,7 @@ subroutine m_newdt_fine(pst,ilevel)
 
   ! Particle-based Courant condition
   if(r%pic)then
-     call r_newdt_part(pst,mdl%ncpu,1,4,ilevel,part_array)
+     call r_newdt_part(pst,1,4,ilevel,part_array)
      ekin=transfer(part_array(1:2),ekin)
      vmax=transfer(part_array(3:4),vmax)
      dt=r%courant_factor * dx/vmax
@@ -61,7 +61,7 @@ subroutine m_newdt_fine(pst,ilevel)
 
   ! Hydro-based Courant condition
   if(r%hydro)then
-     call r_courant_fine(pst,mdl%ncpu,1,8,ilevel,output_array)
+     call r_courant_fine(pst,1,8,ilevel,output_array)
      mass=transfer(output_array(1:2),mass)
      ekin=transfer(output_array(3:4),ekin)
      eint=transfer(output_array(5:6),eint)
@@ -82,7 +82,7 @@ subroutine m_newdt_fine(pst,ilevel)
   input_array(1)=ilevel
   input_array(2:3)=transfer(g%dtnew(ilevel),input_array)
   input_array(4:5)=transfer(g%dtold(ilevel),input_array)
-  call r_broadcast_dt(pst,mdl%ncpu,5,0,input_array)
+  call r_broadcast_dt(pst,5,0,input_array)
 
   end associate
   
@@ -91,27 +91,23 @@ end subroutine m_newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
-recursive subroutine r_newdt_part(pst,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_newdt_part(pst,input_size,output_size,ilevel,output_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
 
-  integer::next_range,next_cpu
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::ekin,vmax
   real(kind=8)::next_ekin,next_vmax
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NEWDT_PART,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_newdt_part(pst,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_NEWDT_PART,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_newdt_part(pst%pLower,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      ekin=transfer(output_array(1:2),ekin)
      vmax=transfer(output_array(3:4),vmax)
      next_ekin=transfer(next_output_array(1:2),next_ekin)
@@ -165,24 +161,20 @@ end subroutine newdt_part
 !#####################################################################
 !#####################################################################
 !#####################################################################
-recursive subroutine r_broadcast_dt(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_broadcast_dt(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel
   real(kind=8)::dt
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_DT,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_dt(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_DT,pst%iUpper+1,input_size,output_size,input_array)
+     call r_broadcast_dt(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      pst%s%g%dtnew(ilevel)=transfer(input_array(2:3),dt)

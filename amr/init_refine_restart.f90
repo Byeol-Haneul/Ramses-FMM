@@ -53,17 +53,17 @@ subroutine m_init_refine_restart(pst)
      do ilevel=r%levelmin,levelmin_max-1
         
         ! Set unigrid at coarser levels
-        call r_init_refine_basegrid(pst,mdl%ncpu,1,0,ilevel)
+        call r_init_refine_basegrid(pst,1,0,ilevel)
         
         ! Get total, min and max grid count (only in master)
-        call r_noct_tot(pst,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
-        call r_noct_min(pst,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
-        call r_noct_max(pst,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
+        call r_noct_tot(pst,1,1,ilevel,m%noct_tot(ilevel))
+        call r_noct_min(pst,1,1,ilevel,m%noct_min(ilevel))
+        call r_noct_max(pst,1,1,ilevel,m%noct_max(ilevel))
         
      end do
      
      ! Get maximum used memory (only in master)
-     call r_noct_used_max(pst,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
+     call r_noct_used_max(pst,1,1,r%levelmin,m%noct_used_max)
      
   endif
 
@@ -106,15 +106,15 @@ subroutine m_init_refine_restart(pst)
      allocate(output_array(1:output_size))
 
      ! Call recursive slave routine
-     call r_init_refine_restart(pst,mdl%ncpu,input_size,output_size,input_array,output_array)
+     call r_init_refine_restart(pst,input_size,output_size,input_array,output_array)
 
      bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
      deallocate(input_array,output_array)
 
      ! Get total, min and max grid count (only in master).
-     call r_noct_tot(pst,mdl%ncpu,1,1,ilevel,m%noct_tot(ilevel))
-     call r_noct_min(pst,mdl%ncpu,1,1,ilevel,m%noct_min(ilevel))
-     call r_noct_max(pst,mdl%ncpu,1,1,ilevel,m%noct_max(ilevel))
+     call r_noct_tot(pst,1,1,ilevel,m%noct_tot(ilevel))
+     call r_noct_min(pst,1,1,ilevel,m%noct_min(ilevel))
+     call r_noct_max(pst,1,1,ilevel,m%noct_max(ilevel))
 
      ! Finalize new domain decomposition
      bound_key(1:nhilbert,0)=zero_key
@@ -137,7 +137,7 @@ subroutine m_init_refine_restart(pst)
   ! End loop over relevant levels
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(pst,mdl%ncpu,1,1,r%levelmin,m%noct_used_max)
+  call r_noct_used_max(pst,1,1,r%levelmin,m%noct_used_max)
 
   ! Deallocate local variables
   deallocate(noct_file,noct_skip)
@@ -152,17 +152,16 @@ end subroutine m_init_refine_restart
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_refine_restart(pst,cpu_range,input_size,output_size,input_array,output_array)
+recursive subroutine r_init_refine_restart(pst,input_size,output_size,input_array,output_array)
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
-  integer::next_range,next_cpu
   integer,dimension(:),allocatable::next_output_array
 
   integer::ilevel,ncpu_file
@@ -172,14 +171,11 @@ recursive subroutine r_init_refine_restart(pst,cpu_range,input_size,output_size,
   integer(kind=8),dimension(:,:),allocatable::bound_key
   integer(kind=8),dimension(:,:),allocatable::next_bound_key
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,next_cpu,next_range,input_size,output_size,input_array)
-     call r_init_refine_restart(pst,next_range,input_size,output_size,input_array,output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,pst%iUpper+1,input_size,output_size,input_array)
+     call r_init_refine_restart(pst%pLower,input_size,output_size,input_array,output_array)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
      allocate(next_bound_key(1:nhilbert,0:pst%s%g%ncpu))
      bound_key=reshape(transfer(output_array,dummy),[nhilbert,pst%s%g%ncpu+1])

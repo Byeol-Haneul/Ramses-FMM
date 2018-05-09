@@ -2,27 +2,23 @@
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_courant_fine(pst,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_courant_fine(pst,input_size,output_size,ilevel,output_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
 
-  integer::next_range,next_cpu
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::mass,ekin,eint,dt
   real(kind=8)::next_mass,next_ekin,next_eint,next_dt
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COURANT_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_courant_fine(pst,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_COURANT_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_courant_fine(pst%pLower,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      mass=transfer(output_array(1:2),mass)
      ekin=transfer(output_array(3:4),ekin)
      eint=transfer(output_array(5:6),eint)

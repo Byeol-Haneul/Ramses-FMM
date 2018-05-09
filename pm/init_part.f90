@@ -2,24 +2,19 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_init_part(pst,cpu_range,input_size,output_size)
+recursive subroutine r_init_part(pst,input_size,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to allocate
   ! particle-based arrays.
   !--------------------------------------------------------------------
-  integer::next_range,next_cpu
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_PART,next_cpu,next_range,input_size,output_size)
-     call r_init_part(pst,next_range,input_size,output_size)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_INIT_PART,pst%iUpper+1,input_size,output_size)
+     call r_init_part(pst%pLower,input_size,output_size)
   else
      call init_part(pst%s%r,pst%s%g,pst%s%p)
   endif

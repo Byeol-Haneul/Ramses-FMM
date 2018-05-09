@@ -8,25 +8,21 @@
 ! Mask restriction (bottom-up)
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_restrict_mask(pst,cpu_range,input_size,output_size,ilevel,masked)
+recursive subroutine r_restrict_mask(pst,input_size,output_size,ilevel,masked)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel,masked
   
-  integer::next_range,next_cpu
   integer::next_masked
   logical::allmasked
   
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_MASK,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_restrict_mask(pst,next_range,input_size,output_size,ilevel,masked)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_masked)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_MASK,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_restrict_mask(pst%pLower,input_size,output_size,ilevel,masked)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_masked)
      masked=masked*next_masked
   else
      call restrict_mask(pst%s,ilevel,allmasked)
@@ -179,24 +175,20 @@ end subroutine unpack_flush_restrict_mask
 ! Residual computation
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cmp_residual_mg(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_cmp_residual_mg(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel,ifine
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,next_cpu,next_range,input_size,output_size,input_array)
-     call r_cmp_residual_mg(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,output_size,input_array)
+     call r_cmp_residual_mg(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -402,25 +394,21 @@ end subroutine unpack_fetch_mg
 ! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_gauss_seidel_mg(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_gauss_seidel_mg(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel,ifine,isafe,iredstep
   logical::safe,redstep
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,next_cpu,next_range,input_size,output_size,input_array)
-     call r_gauss_seidel_mg(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,output_size,input_array)
+     call r_gauss_seidel_mg(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -604,24 +592,20 @@ end subroutine gauss_seidel_mg
 ! Reset correction
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_reset_correction(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_reset_correction(pst,input_size,output_size,ilevel)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
   integer::igrid
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESET_CORRECTION,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_reset_correction(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_RESET_CORRECTION,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_reset_correction(pst%pLower,input_size,output_size,ilevel)
   else
      do igrid=pst%s%m%head_mg(ilevel),pst%s%m%tail_mg(ilevel)
         pst%s%m%grid(igrid)%phi(1:twotondim)=0.0d0
@@ -634,23 +618,18 @@ end subroutine r_reset_correction
 ! Residual restriction
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_restrict_residual(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_restrict_residual(pst,input_size,output_size,ilevel)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_RESIDUAL,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_restrict_residual(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_RESIDUAL,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_restrict_residual(pst%pLower,input_size,output_size,ilevel)
   else
      call restrict_residual(pst%s,ilevel)
   endif
@@ -825,23 +804,18 @@ end subroutine unpack_flush_restrict_res
 ! Interpolation and correction
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_interpolate_and_correct(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_interpolate_and_correct(pst,input_size,output_size,ilevel)
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_interpolate_and_correct(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_interpolate_and_correct(pst%pLower,input_size,output_size,ilevel)
   else
      call interpolate_and_correct(pst%s,ilevel)
   endif
@@ -994,24 +968,20 @@ end subroutine unpack_fetch_phi
 ! Flag settings used to speed-up the sweeps
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_set_scan_flag(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_set_scan_flag(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel,ifine
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,next_cpu,next_range,input_size,output_size,input_array)
-     call r_set_scan_flag(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,output_size,input_array)
+     call r_set_scan_flag(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -1185,26 +1155,22 @@ end subroutine unpack_fetch_scan
 ! Compute norm of residual 
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cmp_residual_norm2(pst,cpu_range,input_size,output_size,ilevel,output_array)
+recursive subroutine r_cmp_residual_norm2(pst,input_size,output_size,ilevel,output_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
   integer,dimension(1:output_size)::output_array
 
-  integer::next_range,next_cpu
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::norm2,next_norm2
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_cmp_residual_norm2(pst,next_range,input_size,output_size,ilevel,output_array)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_residual_norm2(pst%pLower,input_size,output_size,ilevel,output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      norm2=transfer(output_array,norm2)
      next_norm2=transfer(next_output_array,next_norm2)
      norm2=norm2+next_norm2

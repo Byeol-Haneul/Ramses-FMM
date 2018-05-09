@@ -2,24 +2,20 @@
 !###################################################
 !###################################################
 !###################################################
-recursive subroutine r_output_hydro(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_output_hydro(pst,input_size,output_size,input_array)
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
   
-  integer::next_range,next_cpu
   character(LEN=flen)::filename
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
 
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_HYDRO,next_cpu,next_range,input_size,output_size,input_array)
-     call r_output_hydro(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_HYDRO,pst%iUpper+1,input_size,output_size,input_array)
+     call r_output_hydro(pst%pLower,input_size,output_size,input_array)
   else
      filename=transfer(input_array,filename)
      call output_hydro(pst%s%r,pst%s%g,pst%s%m,filename)

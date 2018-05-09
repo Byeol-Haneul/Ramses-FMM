@@ -69,7 +69,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
      endif
 
      ! Save old potential for time-extrapolation at level boundaries
-     call r_save_phi_old(pst,mdl%ncpu,1,0,ilevel)
+     call r_save_phi_old(pst,1,0,ilevel)
 
      ! Compute new gravitational potential
      if(ilevel > r%levelmin)then
@@ -83,7 +83,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
      end if
 
      ! Initial old potential
-     if (g%nstep==0)call r_save_phi_old(pst,mdl%ncpu,1,0,ilevel)
+     if (g%nstep==0)call r_save_phi_old(pst,1,0,ilevel)
 
      ! Compute gravitational acceleration
      call m_force_fine(pst,ilevel,icount)
@@ -107,7 +107,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
-  if(r%hydro)call r_set_unew(pst,mdl%ncpu,1,0,ilevel)
+  if(r%hydro)call r_set_unew(pst,1,0,ilevel)
 
   !---------------------------
   ! Recursive call to amr_step
@@ -129,7 +129,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
         input_array(1)=ilevel+1
         input_array(2:3)=transfer(g%dtnew(ilevel+1),input_array)
         input_array(4:5)=transfer(g%dtold(ilevel+1),input_array)
-        call r_broadcast_dt(pst,mdl%ncpu,5,0,input_array)
+        call r_broadcast_dt(pst,5,0,input_array)
 
         ! Update time variable
         call m_update_time(pst,ilevel)
@@ -144,13 +144,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   if(r%hydro)then
 
      ! Hyperbolic solver
-     if(.not.r%static)call r_godunov_fine(pst,mdl%ncpu,1,0,ilevel)
+     if(.not.r%static)call r_godunov_fine(pst,1,0,ilevel)
 
      ! Add gravity source terms to unew with half time step
-     if(r%poisson)call r_gravity_hydro_fine(pst,mdl%ncpu,1,0,ilevel)
+     if(r%poisson)call r_gravity_hydro_fine(pst,1,0,ilevel)
 
      ! Set uold equal to unew
-     call r_set_uold(pst,mdl%ncpu,1,0,ilevel)
+     call r_set_uold(pst,1,0,ilevel)
 
      ! Add gravity source terms to uold with half time step
      ! to complete the time step with old force (will be removed later)
@@ -163,7 +163,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   !----------------------------
   ! Compute cooling/heating
   !----------------------------
-  if(r%cooling)call r_cooling_fine(pst,mdl%ncpu,1,0,ilevel)
+  if(r%cooling)call r_cooling_fine(pst,1,0,ilevel)
 
   !-------------------------------------------
   ! Perform first kick and drift for particles
@@ -187,7 +187,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
      input_array(1)=ilevel-1
      input_array(2:3)=transfer(g%dtnew(ilevel-1),input_array)
      input_array(4:5)=transfer(g%dtold(ilevel-1),input_array)
-     call r_broadcast_dt(pst,mdl%ncpu,5,0,input_array)
+     call r_broadcast_dt(pst,5,0,input_array)
   end if
 
   end associate

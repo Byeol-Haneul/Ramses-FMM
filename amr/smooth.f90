@@ -2,25 +2,21 @@
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_smooth_fine(pst,cpu_range,input_size,output_size,ilevel,noct)
+recursive subroutine r_smooth_fine(pst,input_size,output_size,ilevel,noct)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel,noct
 
-  integer::next_range,next_cpu
   integer::next_noct
   integer::nflag
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SMOOTH_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_smooth_fine(pst,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_noct)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_SMOOTH_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_smooth_fine(pst%pLower,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
      noct=noct+next_noct
   else
      call smooth_fine(pst%s,ilevel,nflag)

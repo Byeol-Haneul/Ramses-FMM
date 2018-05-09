@@ -11,7 +11,7 @@ subroutine m_refine_fine(pst,ilevel)
   ! This routine is the master procedure to refine the AMR grid
   ! from level ilevel to nlevelmax.
   !--------------------------------------------------------------------
-  integer::ilev,ncpu
+  integer::ilev
   integer,dimension(1:2)::noct
 
   associate(s=>pst%s)
@@ -22,10 +22,8 @@ subroutine m_refine_fine(pst,ilevel)
   if(s%r%verbose)write(*,111)ilevel
 111 format(' Entering refine_fine for level ',I2)
 
-  ncpu=s%mdl%ncpu
-  
   ! Create new octs and destroy unecessary octs
-  call r_refine_fine(pst,ncpu,1,2,ilevel,noct)
+  call r_refine_fine(pst,1,2,ilevel,noct)
 
   if(s%r%verbose)write(*,112)noct(1)
 112 format(' ==> Make ',i6,' sub-grids')
@@ -35,32 +33,32 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,ncpu,1,1,ilev,s%m%noct_tot(ilev))
-     call r_noct_min(pst,ncpu,1,1,ilev,s%m%noct_min(ilev))
-     call r_noct_max(pst,ncpu,1,1,ilev,s%m%noct_max(ilev))
+     call r_noct_tot(pst,1,1,ilev,s%m%noct_tot(ilev))
+     call r_noct_min(pst,1,1,ilev,s%m%noct_min(ilev))
+     call r_noct_max(pst,1,1,ilev,s%m%noct_max(ilev))
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(pst,ncpu,1,1,ilevel,s%m%noct_used_max)
+  call r_noct_used_max(pst,1,1,ilevel,s%m%noct_used_max)
 
   ! Load balance all levels across cpus
   call m_load_balance(pst,ilevel)
 
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,ncpu,1,1,ilev,s%m%noct_tot(ilev))
-     call r_noct_min(pst,ncpu,1,1,ilev,s%m%noct_min(ilev))
-     call r_noct_max(pst,ncpu,1,1,ilev,s%m%noct_max(ilev))
+     call r_noct_tot(pst,1,1,ilev,s%m%noct_tot(ilev))
+     call r_noct_min(pst,1,1,ilev,s%m%noct_min(ilev))
+     call r_noct_max(pst,1,1,ilev,s%m%noct_max(ilev))
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(pst,ncpu,1,1,ilevel,s%m%noct_used_max)
+  call r_noct_used_max(pst,1,1,ilevel,s%m%noct_used_max)
 
   ! Balance particles across cpus
-  if(ncpu>1.AND.ilevel==s%r%levelmin)then
+  if(s%mdl%ncpu>1.AND.ilevel==s%r%levelmin)then
      if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
         if(s%r%verbose)write(*,*)'Entering balance_part for level',s%r%levelmin
-        call r_balance_part(pst,ncpu,1,0,ilevel)
+        call r_balance_part(pst,1,0,ilevel)
      endif
   endif
 
@@ -71,26 +69,22 @@ end subroutine m_refine_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_refine_fine(pst,cpu_range,input_size,output_size,ilevel,noct)
+recursive subroutine r_refine_fine(pst,input_size,output_size,ilevel,noct)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
   integer,dimension(1:2)::noct
 
-  integer::next_range,next_cpu
   integer,dimension(1:2)::next_noct
   integer::ncreate,nkill
   
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_refine_fine(pst,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_noct)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_refine_fine(pst%pLower,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
      noct=noct+next_noct
   else
      call refine_fine(pst%s,ilevel,ncreate,nkill)

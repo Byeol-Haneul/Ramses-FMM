@@ -33,11 +33,11 @@ subroutine m_init_flow_fine(pst,ilevel)
      if(ok_file)then
         ! Read external grafic files 
         if(s%r%verbose)write(*,*)'Reading initial conditions from grafic file'
-        call r_input_hydro_grafic(pst,s%mdl%ncpu,1,0,ilevel)
+        call r_input_hydro_grafic(pst,1,0,ilevel)
      else
         ! Use internal-defined or user-defined functions
         if(s%r%verbose)write(*,*)'Computing initial conditions from analytical model'
-        call r_input_hydro_condinit(pst,s%mdl%ncpu,1,0,ilevel)
+        call r_input_hydro_condinit(pst,1,0,ilevel)
      endif
   endif
 

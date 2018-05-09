@@ -1,10 +1,10 @@
 module call_back
   
   interface
-     subroutine ramses_function(pst,cpu_range,input_size,output_size,input,output)
+     subroutine ramses_function(pst,input_size,output_size,input,output)
        use ramses_commons, only: pst_t
        type(pst_t)::pst
-       integer::cpu_range,input_size,output_size
+       integer::input_size,output_size
        integer,dimension(1:input_size),optional::input
        integer,dimension(1:output_size),optional::output
      end subroutine ramses_function

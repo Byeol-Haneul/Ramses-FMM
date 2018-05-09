@@ -4,29 +4,27 @@ subroutine adaptive_loop(pst)
   type(pst_t)::pst
 
   ! Local variables
-  integer::ilevel,ncpu
+  integer::ilevel
   real::tt1,tt2
 
   associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
   
   call cpu_time(tt1)
 
-  ncpu=mdl%ncpu
-  
   ! Read run parameters
   call m_read_params(pst)
 
   ! Initialize grid variables
-  call r_init_amr(pst,ncpu,0,0)
+  call r_init_amr(pst,0,0)
 
   ! Initialize time variables
-  call r_init_time(pst,ncpu,0,0)
+  call r_init_time(pst,0,0)
 
   ! Initialize hydro kernel workspace
-  if(r%hydro)call r_init_hydro(pst,ncpu,0,0)
+  if(r%hydro)call r_init_hydro(pst,0,0)
 
   ! Initialize particle variables
-  if(r%pic)call r_init_part(pst,ncpu,0,0)
+  if(r%pic)call r_init_part(pst,0,0)
 
   ! Read initial particle properties from files
   if(r%pic)call m_input_part(pst)
@@ -47,7 +45,7 @@ subroutine adaptive_loop(pst)
   write(*,*)'Initial mesh structure'
   do ilevel=r%levelmin,r%nlevelmax
      if(m%noct_tot(ilevel)>0)write(*,999)&
-          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/ncpu
+          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl%ncpu
   end do
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
@@ -77,7 +75,7 @@ subroutine adaptive_loop(pst)
      
   end do
 
-  call r_clean_stop(pst,ncpu,0,0)
+  call r_clean_stop(pst,0,0)
 
   return
 

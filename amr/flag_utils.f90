@@ -10,7 +10,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   !---------------------------------------------------------------
   ! This master routine builds the refinement map at level ilevel.
   !---------------------------------------------------------------
-  integer::iexpand,nflag_tot,ncpu
+  integer::iexpand,nflag_tot
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
   
@@ -20,25 +20,23 @@ subroutine m_flag_fine(pst,ilevel,icount)
   if(r%verbose)write(*,111)ilevel
 111 format('   Entering flag_fine for level ',I2)
 
-  ncpu=mdl%ncpu
-  
   ! Step 1: initialize refinement map to minimal refinement rules
-  call r_init_flag(pst,ncpu,1,1,ilevel,nflag_tot)
+  call r_init_flag(pst,1,1,ilevel,nflag_tot)
   if(r%verbose)write(*,*) '  ==> end step 1',nflag_tot
   
   ! Step 2: make one cubic buffer around flagged cells,
   ! in order to enforce numerical rule.
-  call r_smooth_fine(pst,ncpu,1,1,ilevel,nflag_tot)
+  call r_smooth_fine(pst,1,1,ilevel,nflag_tot)
   if(r%verbose)write(*,*) '  ==> end step 2',nflag_tot
 
   ! Step 3: if cell satisfies user-defined physical citeria,
   ! then flag cell for refinement.
-  call r_user_flag(pst,ncpu,1,1,ilevel,nflag_tot)
+  call r_user_flag(pst,1,1,ilevel,nflag_tot)
   if(r%verbose)write(*,*) '  ==> end step 3',nflag_tot
 
   ! Step 4: make nexpand cubic buffers around flagged cells.
   do iexpand=1,r%nexpand(ilevel)
-     call r_smooth_fine(pst,ncpu,1,1,ilevel,nflag_tot)
+     call r_smooth_fine(pst,1,1,ilevel,nflag_tot)
   end do
   if(r%verbose)write(*,*) '  ==> end step 4',nflag_tot
 
@@ -46,7 +44,7 @@ subroutine m_flag_fine(pst,ilevel,icount)
   ! and unflag cells that will not be refined.
   if(ilevel>r%levelmin)then
      if(icount<r%nsubcycle(ilevel-1))then
-        call r_ensure_ref_rules(pst,ncpu,1,0,ilevel)
+        call r_ensure_ref_rules(pst,1,0,ilevel)
      end if
   end if
 
@@ -57,25 +55,21 @@ end subroutine m_flag_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_init_flag(pst,cpu_range,input_size,output_size,ilevel,noct)
+recursive subroutine r_init_flag(pst,input_size,output_size,ilevel,noct)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel,noct
 
-  integer::next_range,next_cpu
   integer::next_noct
   integer::nflag
-
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_FLAG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_init_flag(pst,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_noct)
+  
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_INIT_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_init_flag(pst%pLower,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
      noct=noct+next_noct
   else
      call init_flag(pst%s,ilevel,nflag)
@@ -256,25 +250,21 @@ end subroutine unpack_flush_initflag
 !###############################################################
 !###############################################################
 !###############################################################
-recursive subroutine r_user_flag(pst,cpu_range,input_size,output_size,ilevel,noct)
+recursive subroutine r_user_flag(pst,input_size,output_size,ilevel,noct)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel,noct
 
-  integer::next_range,next_cpu
   integer::next_noct
   integer::nflag
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_USER_FLAG,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_user_flag(pst,next_range,input_size,output_size,ilevel,noct)
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_noct)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_USER_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_user_flag(pst%pLower,input_size,output_size,ilevel,noct)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
      noct=noct+next_noct
   else
      call user_flag(pst%s,ilevel,nflag)
@@ -309,22 +299,17 @@ end subroutine user_flag
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_ensure_ref_rules(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_ensure_ref_rules(pst,input_size,output_size,ilevel)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_ENSURE_REF_RULES,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_ensure_ref_rules(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_ENSURE_REF_RULES,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_ensure_ref_rules(pst%pLower,input_size,output_size,ilevel)
   else
      call ensure_ref_rules(pst%s,ilevel)
   endif

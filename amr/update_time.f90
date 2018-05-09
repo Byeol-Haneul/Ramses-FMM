@@ -149,7 +149,7 @@ subroutine m_update_time(pst,ilevel)
   ! Broadcast aexp and hexp to all CPUs
   input_array(1:2)=transfer(g%aexp,input_array)
   input_array(3:4)=transfer(g%hexp,input_array)
-  call r_broadcast_aexp(pst,mdl%ncpu,4,0,input_array)
+  call r_broadcast_aexp(pst,4,0,input_array)
 
   end associate
 
@@ -158,24 +158,20 @@ end subroutine m_update_time
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_broadcast_aexp(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_broadcast_aexp(pst,input_size,output_size,input_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel
   real(kind=8)::aexp
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,next_cpu,next_range,input_size,output_size,input_array)
-     call r_broadcast_aexp(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,output_size,input_array)
+     call r_broadcast_aexp(pst%pLower,input_size,output_size,input_array)
   else
      pst%s%g%aexp=transfer(input_array(1:2),aexp)
      pst%s%g%hexp=transfer(input_array(3:4),aexp)
@@ -186,21 +182,16 @@ end subroutine r_broadcast_aexp
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_clean_stop(pst,cpu_range,input_size,output_size)
+recursive subroutine r_clean_stop(pst,input_size,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
 
-  integer::next_range,next_cpu
-
-  next_range=cpu_range/2
-  next_cpu=pst%s%mdl%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,next_cpu,next_range,input_size,output_size)
-     call r_clean_stop(pst,next_range,input_size,output_size)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1,input_size,output_size)
+     call r_clean_stop(pst%pLower,input_size,output_size)
   endif
   
 end subroutine r_clean_stop

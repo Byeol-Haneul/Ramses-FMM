@@ -20,32 +20,28 @@ subroutine m_synchro_hydro_fine(pst,ilevel,dteff)
 
   input_array(1)=ilevel
   input_array(2:3)=transfer(dteff,input_array)
-  call r_synchro_hydro_fine(pst,pst%s%mdl%ncpu,3,0,input_array)
+  call r_synchro_hydro_fine(pst,3,0,input_array)
   
 end subroutine m_synchro_hydro_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_synchro_hydro_fine(pst,cpu_range,input_size,output_size,input_array)
+recursive subroutine r_synchro_hydro_fine(pst,input_size,output_size,input_array)
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
 
-  integer::next_range,next_cpu
   integer::ilevel
   real(dp)::dteff
   
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,next_cpu,next_range,input_size,output_size,input_array)
-     call r_synchro_hydro_fine(pst,next_range,input_size,output_size,input_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     call r_synchro_hydro_fine(pst%pLower,input_size,output_size,input_array)
   else
      ilevel=input_array(1)
      dteff=transfer(input_array(2:3),dteff)
@@ -110,23 +106,18 @@ end subroutine synchro_hydro_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_gravity_hydro_fine(pst,cpu_range,input_size,output_size,ilevel)
+recursive subroutine r_gravity_hydro_fine(pst,input_size,output_size,ilevel)
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer::ilevel
 
-  integer::next_range,next_cpu
-  
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,next_cpu,next_range,input_size,output_size,ilevel)
-     call r_gravity_hydro_fine(pst,next_range,input_size,output_size,ilevel)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_gravity_hydro_fine(pst%pLower,input_size,output_size,ilevel)
   else
      call gravity_hydro_fine(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif

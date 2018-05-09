@@ -93,14 +93,14 @@ subroutine m_output_frame(pst)
         
         ! Compute column density
         input_array(2)=0
-        call r_output_frame(pst,mdl%ncpu,input_size,output_size,input_array,output_array)
+        call r_output_frame(pst,input_size,output_size,input_array,output_array)
         dens=transfer(output_array,dens)
         
         do kk=1,NVAR
            if(r%movie_vars(kk).eq.1)then
               ! Compute mass-weighted projected quantities
               input_array(2)=kk
-              call r_output_frame(pst,mdl%ncpu,input_size,output_size,input_array,output_array)
+              call r_output_frame(pst,input_size,output_size,input_array,output_array)
               data_frame=transfer(output_array,data_frame)
               ! Divide by column density
               data_frame=data_frame/dens
@@ -148,30 +148,26 @@ end subroutine m_output_frame
 !=======================================================================
 !=======================================================================
 !=======================================================================
-recursive subroutine r_output_frame(pst,cpu_range,input_size,output_size,input_array,output_array)
+recursive subroutine r_output_frame(pst,input_size,output_size,input_array,output_array)
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hilbert
   implicit none
   type(pst_t)::pst
-  integer::cpu_range,input_size,output_size
+  integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
-  integer::next_range,next_cpu
   integer,dimension(:),allocatable::next_output_array
   
   integer::ind_proj,ind_var
   real(kind=8),dimension(:),allocatable::map,next_map
 
-  next_range=cpu_range/2
-  next_cpu=pst%s%g%myid+next_range
-
-  if(next_range>0)then
-     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_FRAME,next_cpu,next_range,input_size,output_size,input_array)
-     call r_output_frame(pst,next_range,input_size,output_size,input_array,output_array)
+  if(pst%nLower>0)then
+     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_FRAME,pst%iUpper+1,input_size,output_size,input_array)
+     call r_output_frame(pst%pLower,input_size,output_size,input_array,output_array)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(pst%s%mdl,next_cpu,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      allocate(map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      allocate(next_map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      map=transfer(output_array,map)
