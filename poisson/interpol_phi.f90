@@ -66,6 +66,7 @@ recursive subroutine r_save_phi_old(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_SAVE_PHI_OLD,pst%iUpper+1,input_size,output_size,ilevel)
      call r_save_phi_old(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call save_phi_old(pst%s%m,ilevel)
   endif

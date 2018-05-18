@@ -26,6 +26,7 @@ recursive subroutine r_set_add(pst,input_size,output_size,iUpper)
     pst%pLower%s => pst%s
     call mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,output_size,iUpper)
     call r_set_add(pst%pLower,input_size,output_size,iMiddle)
+    call mdl_get_reply(mdl,pst%iUpper+1,output_size)
  end if
  
  end associate
@@ -45,6 +46,7 @@ recursive subroutine r_init_amr(pst,input_size,output_size)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1,input_size,output_size)
      call r_init_amr(pst%pLower,input_size,output_size)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call init_amr(pst%s%r,pst%s%g,pst%s%m)
   endif

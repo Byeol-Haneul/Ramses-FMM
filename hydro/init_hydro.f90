@@ -12,6 +12,7 @@ recursive subroutine r_init_hydro(pst,input_size,output_size)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INIT_HYDRO,pst%iUpper+1,input_size,output_size)
      call r_init_hydro(pst%pLower,input_size,output_size)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call init_hydro(pst%s%r,pst%s%m)
   endif

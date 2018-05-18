@@ -16,6 +16,7 @@ recursive subroutine r_output_part(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_OUTPUT_PART,pst%iUpper+1,input_size,output_size,input_array)
      call r_output_part(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      filename=transfer(input_array,filename)
      call output_part(pst%s%r,pst%s%g,pst%s%p,filename)

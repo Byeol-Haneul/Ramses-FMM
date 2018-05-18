@@ -189,6 +189,7 @@ recursive subroutine r_cmp_residual_mg(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,output_size,input_array)
      call r_cmp_residual_mg(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -409,6 +410,7 @@ recursive subroutine r_gauss_seidel_mg(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,output_size,input_array)
      call r_gauss_seidel_mg(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -606,6 +608,7 @@ recursive subroutine r_reset_correction(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_RESET_CORRECTION,pst%iUpper+1,input_size,output_size,ilevel)
      call r_reset_correction(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      do igrid=pst%s%m%head_mg(ilevel),pst%s%m%tail_mg(ilevel)
         pst%s%m%grid(igrid)%phi(1:twotondim)=0.0d0
@@ -630,6 +633,7 @@ recursive subroutine r_restrict_residual(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_RESTRICT_RESIDUAL,pst%iUpper+1,input_size,output_size,ilevel)
      call r_restrict_residual(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call restrict_residual(pst%s,ilevel)
   endif
@@ -816,6 +820,7 @@ recursive subroutine r_interpolate_and_correct(pst,input_size,output_size,ilevel
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst%iUpper+1,input_size,output_size,ilevel)
      call r_interpolate_and_correct(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call interpolate_and_correct(pst%s,ilevel)
   endif
@@ -982,6 +987,7 @@ recursive subroutine r_set_scan_flag(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,output_size,input_array)
      call r_set_scan_flag(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      ifine=input_array(2)

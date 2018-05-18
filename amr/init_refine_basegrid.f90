@@ -194,6 +194,7 @@ recursive subroutine r_init_refine_basegrid(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,pst%iUpper+1,input_size,output_size,ilevel)
      call r_init_refine_basegrid(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call init_refine_basegrid(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif

@@ -85,6 +85,7 @@ recursive subroutine r_broadcast_mp_min(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BROADCAST_MP_MIN,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_mp_min(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      pst%s%g%mp_min=transfer(input_array(1:2),mp_min)
   endif

@@ -283,6 +283,7 @@ recursive subroutine r_init_mg(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INIT_MG,pst%iUpper+1,input_size,output_size,ilevel)
      call r_init_mg(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call init_mg(pst%s%r,pst%s%m,ilevel)
   endif
@@ -344,6 +345,7 @@ recursive subroutine r_build_mg(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BUILD_MG,pst%iUpper+1,input_size,output_size,ilevel)
      call r_build_mg(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call build_mg(pst%s,ilevel)
   endif
@@ -561,6 +563,7 @@ recursive subroutine r_cleanup_mg(pst,input_size,output_size)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_CLEANUP_MG,pst%iUpper+1,input_size,output_size)
      call r_cleanup_mg(pst%pLower,input_size,output_size)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call cleanup_mg(pst%s%m)
   endif
@@ -611,6 +614,7 @@ recursive subroutine r_make_mask(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_MAKE_MASK,pst%iUpper+1,input_size,output_size,ilevel)
      call r_make_mask(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call make_mask(pst%s%m,ilevel)
   endif
@@ -670,6 +674,7 @@ recursive subroutine r_make_bc_rhs(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_MAKE_BC_RHS,pst%iUpper+1,input_size,output_size,input_array)
      call r_make_bc_rhs(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      icount=input_array(2)

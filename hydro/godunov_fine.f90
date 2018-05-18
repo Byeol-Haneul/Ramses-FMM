@@ -13,6 +13,7 @@ recursive subroutine r_godunov_fine(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_godunov_fine(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call godunov_fine(pst%s,ilevel)
   endif
@@ -76,6 +77,7 @@ recursive subroutine r_set_unew(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,output_size,ilevel)
      call r_set_unew(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
@@ -149,6 +151,7 @@ recursive subroutine r_set_uold(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,output_size,ilevel)
      call r_set_uold(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif

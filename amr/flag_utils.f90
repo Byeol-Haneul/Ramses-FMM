@@ -310,6 +310,7 @@ recursive subroutine r_ensure_ref_rules(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_ENSURE_REF_RULES,pst%iUpper+1,input_size,output_size,ilevel)
      call r_ensure_ref_rules(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call ensure_ref_rules(pst%s,ilevel)
   endif

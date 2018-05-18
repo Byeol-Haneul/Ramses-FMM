@@ -325,10 +325,12 @@ subroutine mdl_wait(pst,callback)
            deallocate(input_array)
         endif
         
-        ! Send the output back to the source cpu
+        ! Always send the output back to the source cpu (even if not allocated = handshake)
+        call MPI_ISEND(output_array,output_size,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
+        call MPI_WAIT(output_id,output_status,info)
+
+        ! Deallocate output array
         if(output_size>0)then
-           call MPI_ISEND(output_array,output_size,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
-           call MPI_WAIT(output_id,output_status,info)
            deallocate(output_array)
         endif
         
@@ -397,7 +399,7 @@ subroutine mdl_get_reply(mdl,target_cpu,output_size,output_array)
   integer::info
 #endif
   integer::target_cpu,output_size
-  integer,dimension(1:output_size)::output_array
+  integer,dimension(1:output_size),optional::output_array
 
 #ifndef WITHOUTMPI  
   integer::output_tag=203,output_id

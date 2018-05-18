@@ -61,6 +61,7 @@ recursive subroutine r_force_analytic(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,pst%iUpper+1,input_size,output_size,ilevel)
      call r_force_analytic(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call force_analytic(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
@@ -141,6 +142,7 @@ recursive subroutine r_gradient_phi(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_GRADIENT_PHI,pst%iUpper+1,input_size,output_size,input_array)
      call r_gradient_phi(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      icount=input_array(2)

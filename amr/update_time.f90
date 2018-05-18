@@ -172,6 +172,7 @@ recursive subroutine r_broadcast_aexp(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_aexp(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      pst%s%g%aexp=transfer(input_array(1:2),aexp)
      pst%s%g%hexp=transfer(input_array(3:4),aexp)
@@ -192,6 +193,7 @@ recursive subroutine r_clean_stop(pst,input_size,output_size)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1,input_size,output_size)
      call r_clean_stop(pst%pLower,input_size,output_size)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   endif
   
 end subroutine r_clean_stop

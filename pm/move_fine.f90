@@ -41,6 +41,7 @@ recursive subroutine r_kick_drift_part(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
      call r_kick_drift_part(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      action_part=input_array(2)

@@ -99,6 +99,7 @@ recursive subroutine r_broadcast_bound_key(pst,input_size,output_size,input_arra
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BROADCAST_BOUND_KEY,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_bound_key(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      pst%s%m%domain(ilevel)%b=reshape(transfer(input_array(2:input_size),dummy),[nhilbert,pst%s%g%ncpu+1])
@@ -254,6 +255,7 @@ recursive subroutine r_load_balance(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_LOAD_BALANCE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_load_balance(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call load_balance(pst%s,ilevel)
   endif
@@ -634,6 +636,7 @@ recursive subroutine r_balance_part(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BALANCE_PART,pst%iUpper+1,input_size,output_size,ilevel)
      call r_balance_part(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
 #ifndef WITHOUTMPI
      call balance_part(pst%s,ilevel)

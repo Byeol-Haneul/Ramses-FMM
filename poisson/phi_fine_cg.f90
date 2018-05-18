@@ -149,6 +149,7 @@ recursive subroutine r_recurrence_on_p(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_ON_P,pst%iUpper+1,input_size,output_size,input_array)
      call r_recurrence_on_p(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      beta_cg=transfer(input_array(2:3),beta_cg)
@@ -179,6 +180,7 @@ recursive subroutine r_recurrence_x_and_r(pst,input_size,output_size,input_array
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_X_AND_R,pst%iUpper+1,input_size,output_size,input_array)
      call r_recurrence_x_and_r(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      alpha_cg=transfer(input_array(2:3),alpha_cg)
@@ -214,6 +216,7 @@ recursive subroutine r_cmp_residual_cg(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,output_size,input_array)
      call r_cmp_residual_cg(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      icount=input_array(2)
@@ -382,6 +385,7 @@ recursive subroutine r_cmp_Ap_cg(pst,input_size,output_size,ilevel)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,output_size,ilevel)
      call r_cmp_Ap_cg(pst%pLower,input_size,output_size,ilevel)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call cmp_Ap_cg(pst%s,ilevel)
   endif
@@ -504,6 +508,7 @@ recursive subroutine r_make_initial_phi(pst,input_size,output_size,input_array)
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input_array)
      call r_make_initial_phi(pst%pLower,input_size,output_size,input_array)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
      icount=input_array(2)
