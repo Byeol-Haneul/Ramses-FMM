@@ -11,7 +11,7 @@ nsuperoct=3
 /
 
 &AMR_PARAMS
-levelmin=7
+levelmin=3
 levelmax=7
 ngridmax=2000000
 nexpand=1

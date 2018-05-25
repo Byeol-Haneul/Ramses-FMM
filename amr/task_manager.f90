@@ -281,6 +281,7 @@ subroutine mdl_wait(pst,callback)
   integer,dimension(MPI_STATUS_SIZE)::order_status,output_status
   integer::input_size,output_size,source_cpu,function_id
   integer,dimension(:),allocatable::input_array,output_array
+  integer::dummy=1
   integer,dimension(1:32)::header
 
   associate(s=>pst%s,mdl=>pst%s%mdl)
@@ -326,7 +327,11 @@ subroutine mdl_wait(pst,callback)
         endif
         
         ! Always send the output back to the source cpu (even if not allocated = handshake)
-        call MPI_ISEND(output_array,output_size,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
+        if(output_size>0)then
+           call MPI_ISEND(output_array,output_size,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
+        else
+           call MPI_ISEND(dummy,1,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
+        endif
         call MPI_WAIT(output_id,output_status,info)
 
         ! Deallocate output array
@@ -402,11 +407,15 @@ subroutine mdl_get_reply(mdl,target_cpu,output_size,output_array)
   integer,dimension(1:output_size),optional::output_array
 
 #ifndef WITHOUTMPI  
-  integer::output_tag=203,output_id
+  integer::output_tag=203,output_id,dummy=1
   integer,dimension(MPI_STATUS_SIZE)::output_status  
   
   ! Post a RECV for the output back from target_cpu
-  call MPI_IRECV(output_array,output_size,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
+  if(output_size>0)then
+     call MPI_IRECV(output_array,output_size,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
+  else
+     call MPI_IRECV(dummy,1,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
+  endif
 
   ! Wait for ISEND completion to free memory in corresponding MPI buffer
   call MPI_WAIT(output_id,output_status,info)

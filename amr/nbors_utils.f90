@@ -282,7 +282,7 @@ integer function get_grid(s,hash_key,hash_dict,flush_cache,fetch_cache) result(c
   integer(kind=8),dimension(0:ndim)::hash_child
   integer::i,ind,idim,ivar,iskip,ichild,ilevel,info,grid_cpu,ntile_response,icounter
   integer::send_request_id,response_id  
-  logical::failed_request
+  logical::failed_request,in_rank
   integer,dimension(MPI_STATUS_SIZE)::send_request_status
 #endif
  
@@ -322,7 +322,10 @@ integer function get_grid(s,hash_key,hash_dict,flush_cache,fetch_cache) result(c
   hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
 
   ! Check if grid sits inside processor boundaries
-  if (m%domain_hilbert(ilevel)%in_rank(hk)) return
+!  if (m%domain_hilbert(ilevel)%in_rank(hk)) return
+  in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid-1)).and. &
+       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid),hk)
+  if (in_rank) return
 
   ! Determine parent processor
   grid_cpu = m%domain_hilbert(ilevel)%get_rank(hk)

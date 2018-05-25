@@ -52,18 +52,25 @@ subroutine multigrid(pst,ilevel,icount)
   call r_make_mask(pst,1,0,ilevel)              ! Fill the fine level mask
   call r_make_bc_rhs(pst,2,0,input_array)       ! Fill BC-modified RHS
 
+  if(pst%s%r%verbose) print '(A)','Initial guess done '
+
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
   call r_init_mg(pst,1,0,ilevel)
   
+  if(pst%s%r%verbose) print '(A)','Multigrid init done '
+
   ! ---------------------------------------------------------------------
   ! Build Multigrid hierarchy in memory
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
+     if(pst%s%r%verbose) print '(A,I2)','Build MG ',ifine
      call r_build_mg(pst,1,0,ifine)
   end do
   
+  if(pst%s%r%verbose) print '(A)','Multigrid hierarchy done '
+
   ! ---------------------------------------------------------------------
   ! Restrict mask up
   ! ---------------------------------------------------------------------
@@ -86,6 +93,8 @@ subroutine multigrid(pst,ilevel,icount)
      call r_set_scan_flag(pst,2,0,input_array)
   end do
   
+  if(pst%s%r%verbose) print '(A)','Mask and scan done '
+
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
   ! ---------------------------------------------------------------------
@@ -373,6 +382,7 @@ subroutine build_mg(s,ifinelevel)
        &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
+  logical::in_rank
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -423,8 +433,11 @@ subroutine build_mg(s,ifinelevel)
            hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
            
            ! Check if grid sits inside processor boundaries
-           if( m%domain_mg(icoarselevel)%in_rank(hk)) then
-              
+           in_rank = ge_keys(hk,m%domain_mg(icoarselevel)%b(1:nhilbert,mdl%myid-1)).and. &
+                &    gt_keys(m%domain_mg(icoarselevel)%b(1:nhilbert,mdl%myid),hk)
+           if(in_rank)then
+!           if( m%domain_mg(icoarselevel)%in_rank(hk)) then
+
               ! Set grid index to a virtual grid in local main memory
               ichild=m%ifree
               

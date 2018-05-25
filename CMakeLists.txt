@@ -26,7 +26,7 @@ if(MDL2)
 endif(MDL2)
 
 if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
-  set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none -g" )
+  set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none -fcheck=all -g" )
 endif()
 
 #if(Git_FOUND)
