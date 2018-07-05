@@ -71,8 +71,6 @@ subroutine kick_drift_part(s,ilevel,action_part)
   integer,dimension(1:twotondim),save::igrid,icell
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::ipart,ind,idim
-  integer::parent_cell
-  integer,external::get_parent_cell
   real(kind=8)::dx_loc,vol_loc,dteff
   real(dp),dimension(1:ndim),save::ff
   logical::ok_level
@@ -137,12 +135,9 @@ subroutine kick_drift_part(s,ilevel,action_part)
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
-        if(parent_cell>0)then
-           igrid(ind)=(parent_cell-1)/twotondim+1
-           icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
-           call lock_cache(s,igrid(ind))
-        else
+        call get_parent_cell(s,hash_nbor,m%grid_dict,igrid(ind),icell(ind),.false.,.true.)
+        call lock_cache(s,igrid(ind))
+        if(igrid(ind)==0)then
            ok_level=.false.
            exit
         end if
@@ -202,12 +197,9 @@ subroutine kick_drift_part(s,ilevel,action_part)
         igrid=0; icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
-           if(parent_cell>0)then
-              igrid(ind)=(parent_cell-1)/twotondim+1
-              icell(ind)=parent_cell-(igrid(ind)-1)*twotondim
-              call lock_cache(s,igrid(ind))
-           else
+           call get_parent_cell(s,hash_nbor,m%grid_dict,igrid(ind),icell(ind),.false.,.true.)
+           call lock_cache(s,igrid(ind))
+           if(igrid(ind)==0)then
               ok_level=.false.
               exit
            end if

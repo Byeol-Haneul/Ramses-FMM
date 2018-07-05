@@ -260,8 +260,6 @@ subroutine multipole_split_cells(s,ilevel)
   ! routine is not even called.
   !-------------------------------------------------------------------
   integer::igrid,ind,idim,ivar,nstride,ioct,icell
-  integer::parent_cell
-  integer,external::get_parent_cell
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key
   logical::leaf_cell
@@ -278,9 +276,7 @@ subroutine multipole_split_cells(s,ilevel)
   do ioct=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     parent_cell=get_parent_cell(s,hash_key,m%grid_dict,.true.,.false.)
-     igrid=(parent_cell-1)/twotondim+1
-     icell=parent_cell-(igrid-1)*twotondim
+     call get_parent_cell(s,hash_key,m%grid_dict,igrid,icell,.true.,.false.)
 #ifdef HYDRO
      ! Average conservative variables
      do ivar=1,ndim+1
@@ -466,8 +462,7 @@ subroutine cic_multipole(s,ilevel)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
   integer::inbor,igrid,ind,idim
-  integer::ioct,icell,parent_cell
-  integer,external::get_parent_cell
+  integer::ioct,icell
   real(kind=8)::dx_loc,vol_loc,mmm
 
   associate(r=>s%r,g=>s%g,m=>s%m)
@@ -577,10 +572,8 @@ subroutine cic_multipole(s,ilevel)
         do inbor=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,inbor)
            ! Get parent cell using write-only cache
-           parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.true.,.false.)
-           if(parent_cell>0)then
-              ioct=(parent_cell-1)/twotondim+1
-              icell=parent_cell-(ioct-1)*twotondim
+           call get_parent_cell(s,hash_nbor,m%grid_dict,ioct,icell,.true.,.false.)
+           if(ioct>0)then
               m%grid(ioct)%rho(icell)=m%grid(ioct)%rho(icell)+mmm*vol(inbor)/vol_loc
            end if
         end do
@@ -636,9 +629,7 @@ subroutine cic_part(s,ilevel)
   real(dp),dimension(1:twotondim),save::vol
   integer,dimension(1:ndim,1:twotondim),save::ckey
   integer(kind=8),dimension(0:ndim),save::hash_nbor
-  integer::i,ipart,igrid,ind,idim
-  integer::icell,parent_cell
-  integer,external::get_parent_cell
+  integer::i,ipart,igrid,icell,ind,idim
   real(kind=8)::dx_loc,vol_loc,vol2
   
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
@@ -743,10 +734,8 @@ subroutine cic_part(s,ilevel)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
-        parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.true.,.false.)
-        if(parent_cell>0)then
-           igrid=(parent_cell-1)/twotondim+1
-           icell=parent_cell-(igrid-1)*twotondim
+        call get_parent_cell(s,hash_nbor,m%grid_dict,igrid,icell,.true.,.false.)
+        if(igrid>0)then
            vol2=p%mp(ipart)*vol(ind)/vol_loc
            m%grid(igrid)%rho(icell)=m%grid(igrid)%rho(icell)+vol2
         endif
@@ -967,7 +956,7 @@ subroutine split_part(s,ilevel)
            ii(idim)=int(x(idim)-2*ix_ref(idim))
         end do
         
-        ! Compute parent cell
+        ! Compute parent cell index
 #if NDIM==1
         icell=1+ii(1)
 #endif

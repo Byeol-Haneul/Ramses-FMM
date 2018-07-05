@@ -48,8 +48,6 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
 
   integer(kind=8),dimension(0:ndim) :: hash_key
   integer :: ichild,ind,igrid,icell
-  integer :: parent_cell
-  integer,external :: get_parent_cell
   real(dp) :: ngpmask, mask_max
   real(dp) :: dtwotondim = (twotondim)
   
@@ -75,9 +73,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
 
         ! Get parent cell using write-only cache
-        parent_cell=get_parent_cell(s,hash_key,m%mg_dict,.true.,.false.)
-        igrid=(parent_cell-1)/twotondim+1
-        icell=parent_cell-(igrid-1)*twotondim
+        call get_parent_cell(s,hash_key,m%mg_dict,igrid,icell,.true.,.false.)
 
         ! Convert mask value to volume fraction
         ngpmask=(1d0+m%grid(ichild)%f(ind,3))/2d0/dtwotondim
@@ -655,8 +651,7 @@ subroutine restrict_residual(s,ifinelevel)
   ! For interior coarse cell only (we need the mask stored in grid(igrid)%f(icell,3))
   
   integer :: ichild, ind
-  integer,external :: get_parent_cell
-  integer :: igrid, icell, parent_cell
+  integer :: igrid, icell
   real(dp) :: dtwotondim = (twotondim)
   integer(kind=8),dimension(0:ndim) :: hash_key
   
@@ -685,9 +680,7 @@ subroutine restrict_residual(s,ifinelevel)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
         
         ! Get parent cell using read-write cache
-        parent_cell=get_parent_cell(s,hash_key,m%mg_dict,.true.,.true.)
-        igrid=(parent_cell-1)/twotondim+1
-        icell=parent_cell-(igrid-1)*twotondim
+        call get_parent_cell(s,hash_key,m%mg_dict,igrid,icell,.true.,.true.)
         
         ! Is coarse cell masked?
         if(m%grid(igrid)%f(icell,3)<=0d0)cycle

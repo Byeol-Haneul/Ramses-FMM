@@ -245,7 +245,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ! and stored in array unew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
-  integer,external::get_grid,get_parent_cell
+  integer,external::get_grid
   integer::ivar,idim,ind_son,ind_oct
   integer::igrid,icell=0,inbor,ichild,parent_cell
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
@@ -388,14 +388,13 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               else
 
                  ! Get parent father cell with read-write cache
-                 parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.true.,.true.)
-                 if(parent_cell==0)then
+                 call get_parent_cell(s,hash_nbor,m%grid_dict,igrid,icell,.true.,.true.)
+                 if(igrid==0)then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
                     stop
                  endif
-                 igrid=(parent_cell-1)/twotondim+1
-                 icell=parent_cell-(igrid-1)*twotondim
+                 parent_cell=(igrid-1)*twotondim+icell
                  call lock_cache(s,igrid)
 
                  ! In case one wants to interpolate using high-order schemes

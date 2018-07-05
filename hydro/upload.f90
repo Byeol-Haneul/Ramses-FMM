@@ -60,9 +60,7 @@ subroutine upload_fine(s,ilevel)
 #if NENER>0
   integer::irad
 #endif
-  integer::ioct,parent_cell
-  integer,external::get_parent_cell
-  integer::ind,ivar,igrid,icell,idim
+  integer::ioct,ind,ivar,igrid,icell,idim
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad
 
@@ -89,9 +87,7 @@ subroutine upload_fine(s,ilevel)
 
      ! Get cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     parent_cell=get_parent_cell(s,hash_key,m%grid_dict,.true.,.false.)
-     igrid=(parent_cell-1)/twotondim+1
-     icell=parent_cell-(igrid-1)*twotondim
+     call get_parent_cell(s,hash_key,m%grid_dict,igrid,icell,.true.,.false.)
 
      ! Average conservative variables
      do ivar=1,nvar

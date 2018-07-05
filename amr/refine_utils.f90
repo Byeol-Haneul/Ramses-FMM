@@ -121,8 +121,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
-  integer::parent_cell
-  integer,external::get_parent_cell
   integer::ind_cell,ind_parent
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert,1:s%r%nlevelmax)::key_ref
@@ -177,9 +175,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
-        parent_cell=get_parent_cell(s,hash_key,m%grid_dict,.true.,.true.)
-        igrid=(parent_cell-1)/twotondim+1
-        icell=parent_cell-(igrid-1)*twotondim
+        call get_parent_cell(s,hash_key,m%grid_dict,igrid,icell,.true.,.true.)
         ok   = m%grid(igrid)%flag1(icell)==0 .and. &
              & m%grid(igrid)%refined(icell)
         if(ok)then

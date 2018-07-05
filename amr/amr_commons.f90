@@ -30,6 +30,11 @@ module amr_commons
 #endif
   end type oct
 
+  type cell
+     type(oct),pointer::grid
+     integer::ind
+  end type cell
+  
   type run_t
 
      ! Run control

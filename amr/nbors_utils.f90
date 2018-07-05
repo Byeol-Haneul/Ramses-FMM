@@ -184,7 +184,7 @@ end subroutine get_twondim_nbor_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################
-integer function get_parent_cell(s,hash_key,hash_dict,flush_cache,fetch_cache) result(parent_cell)
+subroutine get_parent_cell(s,hash_key,hash_dict,igrid,ind,flush_cache,fetch_cache)
   use amr_parameters, only: ndim,twotondim
   use ramses_commons, only: ramses_t
   use hash
@@ -193,13 +193,14 @@ integer function get_parent_cell(s,hash_key,hash_dict,flush_cache,fetch_cache) r
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
+  integer::igrid,ind
   !
   ! This routine acquires the parent cell of the grid 
   ! corresponding to the input hash key.
   !
   integer(kind=8),dimension(0:ndim)::hash_father
   integer(kind=8),dimension(1:ndim)::ii
-  integer::ind,ipos,idim
+  integer::idim
   integer,external::get_grid
   hash_father(0)=hash_key(0)-1
   hash_father(1:ndim)=hash_key(1:ndim)/2
@@ -208,10 +209,8 @@ integer function get_parent_cell(s,hash_key,hash_dict,flush_cache,fetch_cache) r
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
-  ipos=get_grid(s,hash_father,hash_dict,flush_cache,fetch_cache)
-  parent_cell=0
-  if(ipos>0)parent_cell=(ipos-1)*twotondim+ind
-end function get_parent_cell
+  igrid=get_grid(s,hash_father,hash_dict,flush_cache,fetch_cache)
+end subroutine get_parent_cell
 !###############################################################
 !###############################################################
 !###############################################################

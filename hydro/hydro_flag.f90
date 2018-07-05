@@ -19,10 +19,8 @@ subroutine hydro_flag(s,ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer::igrid,ind,idim,ivar,i_nbor
-  integer::parent_cell
-  integer,external::get_parent_cell
-  integer::igridd,igridg,indd,indg,igridp
-  integer,dimension(1:twondim),save::indn
+  integer::igridd,igridg,icelld,icellg,igridp,icellp
+  integer,dimension(1:twondim),save::igridn,icelln
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
   real(dp),dimension(1:nvar),save::uug,uum,uud
   logical::ok
@@ -61,37 +59,37 @@ subroutine hydro_flag(s,ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel+1)-1
               if(hash_nbor(idim)==m%ckey_max(ilevel+1))hash_nbor(idim)=0
            enddo
-           parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
-           if(parent_cell>0)then
-              indn(i_nbor)=parent_cell
+           call get_parent_cell(s,hash_nbor,m%grid_dict,igridp,icellp,.false.,.true.)
+           if(igridp>0)then
+              igridn(i_nbor)=igridp
+              icelln(i_nbor)=icellp
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
-              parent_cell=get_parent_cell(s,hash_nbor,m%grid_dict,.false.,.true.)
-              indn(i_nbor)=parent_cell
+              call get_parent_cell(s,hash_nbor,m%grid_dict,igridp,icellp,.false.,.true.)
+              igridn(i_nbor)=igridp
+              icelln(i_nbor)=icellp
            endif
-           igridp=(indn(i_nbor)-1)/twotondim+1
-           call lock_cache(s,igridp)
+           call lock_cache(s,igridn(i_nbor))
         end do
 
         ! Loop over dimensions
         do idim=1,ndim
            ! Gather hydro variables
            do ivar=1,nvar
-              igridg=(indn(2*idim-1)-1)/twotondim+1
-              igridd=(indn(2*idim  )-1)/twotondim+1
-              indg=indn(2*idim-1)-(igridg-1)*twotondim
-              indd=indn(2*idim  )-(igridd-1)*twotondim
-              uug(ivar)=m%grid(igridg)%uold(indg,ivar)
-              uum(ivar)=m%grid(igrid )%uold(ind ,ivar)
-              uud(ivar)=m%grid(igridd)%uold(indd,ivar)
+              igridg=igridn(2*idim-1)
+              igridd=igridn(2*idim  )
+              icellg=icelln(2*idim-1)
+              icelld=icelln(2*idim  )
+              uug(ivar)=m%grid(igridg)%uold(icellg,ivar)
+              uum(ivar)=m%grid(igrid )%uold(ind   ,ivar)
+              uud(ivar)=m%grid(igridd)%uold(icelld,ivar)
            end do
            call hydro_refine(r,uug,uum,uud,ok)
         end do
         
         do i_nbor=1,twondim
-           igridp=(indn(i_nbor)-1)/twotondim+1
-           call unlock_cache(s,igridp)
+           call unlock_cache(s,igridn(i_nbor))
         end do
 
         ! Count only newly flagged cells
