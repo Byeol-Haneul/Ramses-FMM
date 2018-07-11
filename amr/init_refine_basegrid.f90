@@ -10,7 +10,7 @@ subroutine m_init_refine_basegrid(pst)
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
   !--------------------------------------------------------------------
-  integer::dummy
+  integer,dimension(1:1)::dummy
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
   

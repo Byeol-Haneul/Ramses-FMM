@@ -33,9 +33,9 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,ilevel,1,s%m%noct_tot(ilev),1)
-     call r_noct_min(pst,ilevel,1,s%m%noct_min(ilev),1)
-     call r_noct_max(pst,ilevel,1,s%m%noct_max(ilev),1)
+     call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),1)
+     call r_noct_min(pst,ilev,1,s%m%noct_min(ilev),1)
+     call r_noct_max(pst,ilev,1,s%m%noct_max(ilev),1)
   end do
 
   ! Get maximum used memory (only in master)
@@ -46,9 +46,9 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,ilevel,1,s%m%noct_tot(ilev),1)
-     call r_noct_min(pst,ilevel,1,s%m%noct_min(ilev),1)
-     call r_noct_max(pst,ilevel,1,s%m%noct_max(ilev),1)
+     call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),1)
+     call r_noct_min(pst,ilev,1,s%m%noct_min(ilev),1)
+     call r_noct_max(pst,ilev,1,s%m%noct_max(ilev),1)
   end do
 
   ! Get maximum used memory (only in master)
@@ -69,27 +69,28 @@ end subroutine m_refine_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_refine_fine(pst,ilevel,input_size,noct,output_size)
+recursive subroutine r_refine_fine(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:1)::ilevel
-  integer,dimension(1:2)::noct
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
-  integer,dimension(1:2)::next_noct
-  integer::ncreate,nkill
+  integer,dimension(1:output_size)::next_output_array
+  integer::ilevel,ncreate,nkill
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_refine_fine(pst%pLower,ilevel,input_size,noct,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
-     noct=noct+next_noct
+     call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     call r_refine_fine(pst%pLower,input_array,input_size,output_array,output_size)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     output_array=output_array+next_output_array
   else
-     call refine_fine(pst%s,ilevel(1),ncreate,nkill)
-     noct(1)=ncreate
-     noct(2)=nkill
+     ilevel=input_array(1)
+     call refine_fine(pst%s,ilevel,ncreate,nkill)
+     output_array(1)=ncreate
+     output_array(2)=nkill
   endif
 
 end subroutine r_refine_fine

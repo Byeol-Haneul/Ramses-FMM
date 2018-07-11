@@ -309,23 +309,23 @@ subroutine mdl_wait(pst,callback)
         input_size=header(2)
         output_size=header(3)
         
-        if(input_size>0)then
+!        if(input_size>0)then
            allocate(input_array(1:input_size))
            input_array(1:input_size)=mdl%mpi_input_buffer(33:32+input_size)
-        endif
+!        endif
         
-        if(output_size>0)then
+!        if(output_size>0)then
            allocate(output_array(1:output_size))
            output_array=0
-        endif
+!        endif
         
         ! Launch the corresponding call-back function
         call callback(function_id)%proc(pst,input_array,input_size,output_array,output_size)
         
         ! Deallocate input array
-        if(input_size>0)then
+!        if(input_size>0)then
            deallocate(input_array)
-        endif
+!        endif
         
         ! Always send the output back to the source cpu (even if not allocated = handshake)
         if(output_size>0)then
@@ -336,9 +336,9 @@ subroutine mdl_wait(pst,callback)
         call MPI_WAIT(output_id,output_status,info)
 
         ! Deallocate output array
-        if(output_size>0)then
+!        if(output_size>0)then
            deallocate(output_array)
-        endif
+!        endif
         
         ! Post a new RECV for the next launch order
         if(.NOT. stop_order_received)then

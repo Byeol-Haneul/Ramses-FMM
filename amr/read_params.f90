@@ -609,7 +609,7 @@ subroutine m_broadcast_params(pst)
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
   !--------------------------------------------------------------------
-  integer::dummy
+  integer,dimension(1:1)::dummy
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
@@ -653,7 +653,8 @@ subroutine m_broadcast_global(pst)
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
   !--------------------------------------------------------------------
-  integer::input_size,dummy
+  integer::input_size
+  integer,dimension(1:1)::dummy
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.

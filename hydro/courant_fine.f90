@@ -2,22 +2,23 @@
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_courant_fine(pst,input_size,output_size,ilevel,output_array)
+recursive subroutine r_courant_fine(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
   integer,dimension(1:output_size)::next_output_array
+  integer::ilevel
   real(kind=8)::mass,ekin,eint,dt
   real(kind=8)::next_mass,next_ekin,next_eint,next_dt
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COURANT_FINE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_courant_fine(pst%pLower,input_size,output_size,ilevel,output_array)
+     call mdl_send_request(pst%s%mdl,MDL_COURANT_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     call r_courant_fine(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      mass=transfer(output_array(1:2),mass)
      ekin=transfer(output_array(3:4),ekin)
@@ -36,6 +37,7 @@ recursive subroutine r_courant_fine(pst,input_size,output_size,ilevel,output_arr
      output_array(5:6)=transfer(eint,output_array)
      output_array(7:8)=transfer(dt,output_array)
   else
+     ilevel=input_array(1)
      call courant_fine(pst%s%r,pst%s%g,pst%s%m,ilevel,mass,ekin,eint,dt)
      output_array(1:2)=transfer(mass,output_array)
      output_array(3:4)=transfer(ekin,output_array)
