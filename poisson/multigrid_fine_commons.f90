@@ -323,7 +323,7 @@ subroutine init_mg(r,m,ilevel)
   call m%domain_mg(ilevel)%copy(m%domain(ilevel))
   do ilev=ilevel-1,1,-1
      call m%domain_mg(ilev)%copy(m%domain_mg(ilev+1))
-     do idom=0,m%domain_mg(ilev)%n
+     do idom=0,m%domain_mg(ilev)%ncpu
         m%domain_mg(ilev)%b(1:nhilbert,idom)=coarsen_key(m%domain_mg(ilev+1)%b(1:nhilbert,idom),ilev)
      end do
   end do

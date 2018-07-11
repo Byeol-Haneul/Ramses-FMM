@@ -7,8 +7,8 @@ module domain_m
   type domain_t
      integer :: myid
      integer :: ncpu
-     integer :: n                                                 ! number of points in domain
-     integer :: overload                                          ! number of domains per cpu rank
+!     integer :: n                                                 ! number of points in domain
+!     integer :: overload                                          ! number of domains per cpu rank
      integer(kind=8), dimension(:,:), allocatable :: b            ! bound key
 !     integer,         dimension(:),   allocatable :: r2d          ! rank to domain
 !     integer,         dimension(:),   allocatable :: d2r          ! domain to rank
@@ -77,12 +77,12 @@ contains
     integer::myid
     !
     myid = domain%myid
-    if (source%n==0) then
+    if (source%ncpu==0) then
        write(*,'(a,i7.7,a)') 'CPU=',myid,' ERROR copy_domain: Source domain not allocated.'
        stop
     endif
     !
-    if (domain%n .ne. source%n) call create_domain(domain,source%myid,source%ncpu,source%n)
+    if (domain%ncpu .ne. source%ncpu) call create_domain(domain,source%myid,source%ncpu,source%ncpu)
     domain%b   = source%b
 !    domain%r2d = source%r2d
 !    domain%d2r = source%d2r
@@ -100,17 +100,17 @@ contains
     integer, intent(in) :: myid, ncpu, n
     integer :: i
     !
-    if (domain%n > 0) call destroy_domain(domain)
+    if (domain%ncpu > 0) call destroy_domain(domain)
     domain%myid = myid
     domain%ncpu = ncpu
-    domain%n = n
-    domain%overload = n / ncpu
-    if (domain%n .ne. domain%overload*ncpu) then
-       write(*,'(a,i7.7,a)') 'CPU=',myid,' ERROR create_domain: Number of domains not divisible by number of ranks.'
-       write(*,'(a,i7.7,a,i7,a,i7,a,f10.2)') 'CPU=',myid,' ERROR create_domain: Ndomain=',n,' Ncpu=', ncpu, ' overload=', real(n)/ncpu
-       stop
-    endif
-    allocate(domain%b(1:nhilbert,0:domain%n))
+!    domain%n = n
+!    domain%overload = n / ncpu
+!    if (domain%ncpu .ne. domain%overload*ncpu) then
+!       write(*,'(a,i7.7,a)') 'CPU=',myid,' ERROR create_domain: Number of domains not divisible by number of ranks.'
+!       write(*,'(a,i7.7,a,i7,a,i7,a,f10.2)') 'CPU=',myid,' ERROR create_domain: Ndomain=',n,' Ncpu=', ncpu, ' overload=', real(n)/ncpu
+!       stop
+!    endif
+    allocate(domain%b(1:nhilbert,0:domain%ncpu))
 !    allocate(domain%d2r(1:domain%n))
 !    allocate(domain%r2d(1:domain%n))
     ! Set default values for the domain:
@@ -132,8 +132,8 @@ contains
     implicit none
     class(domain_t) :: domain
     !
-    domain%n = 0
-    domain%overload = 0
+!    domain%n = 0
+!    domain%overload = 0
     domain%myid = 0
     domain%ncpu = 0
     if (allocated(domain%b))   deallocate(domain%b)
@@ -173,7 +173,7 @@ contains
     !
     if (do_linear) then                                                          ! do dumb linear search
        dom=1                                                                     ! default value
-       do idom=1,domain%n-1
+       do idom=1,domain%ncpu-1
           if (ge_keys(key,domain%b(1:nhilbert,idom))) then
              dom = dom + 1                                                       ! have to check lower bound
           else
@@ -182,7 +182,7 @@ contains
        end do
     else                                                                         ! use hunt to predictively find the right domain
        dom = last_domain
-       call hunt(domain%b,key,dom,domain%n)
+       call hunt(domain%b,key,dom,domain%ncpu)
        last_domain = dom                                                         ! hopefully a close guess
        dom = dom + 1                                                             ! hunt returns lower bound, we need upper
     end if
