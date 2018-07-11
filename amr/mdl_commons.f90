@@ -86,7 +86,7 @@ module mdl_parameters
      enumerator::MDL_SET_SCAN_FLAG
      enumerator::MDL_CMP_RESIDUAL_NORM2
      enumerator::MDL_OUTPUT_FRAME
-  endenum
+  end enum
   
   ! Maximum number of cpus
   integer,parameter::MDL_MAX_CPU=262144

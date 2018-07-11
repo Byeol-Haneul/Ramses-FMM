@@ -16,7 +16,7 @@ subroutine m_init_refine_restart(pst)
   character(LEN=5)::nchar,ncharcpu
   integer(kind=8),dimension(1:nhilbert)::zero_key
   integer(kind=8),dimension(1:nhilbert,0:pst%s%g%ncpu)::bound_key
-  integer::i,ilevel,icpu,ilun,ipos
+  integer::i,ilevel,icpu,ilun,ipos,dummy
   integer::levelmin_file,nlevelmax_file
   integer::levelmin_max,nlevelmax_min,noct_tmp
   integer::ncpu_file,input_size,output_size
@@ -53,17 +53,17 @@ subroutine m_init_refine_restart(pst)
      do ilevel=r%levelmin,levelmin_max-1
         
         ! Set unigrid at coarser levels
-        call r_init_refine_basegrid(pst,1,0,ilevel)
+        call r_init_refine_basegrid(pst,ilevel,1,dummy,0)
         
         ! Get total, min and max grid count (only in master)
-        call r_noct_tot(pst,1,1,ilevel,m%noct_tot(ilevel))
-        call r_noct_min(pst,1,1,ilevel,m%noct_min(ilevel))
-        call r_noct_max(pst,1,1,ilevel,m%noct_max(ilevel))
+        call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),1)
+        call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
+        call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
         
      end do
      
      ! Get maximum used memory (only in master)
-     call r_noct_used_max(pst,1,1,r%levelmin,m%noct_used_max)
+     call r_noct_used_max(pst,r%levelmin,1,m%noct_used_max,1)
      
   endif
 
@@ -106,15 +106,15 @@ subroutine m_init_refine_restart(pst)
      allocate(output_array(1:output_size))
 
      ! Call recursive slave routine
-     call r_init_refine_restart(pst,input_size,output_size,input_array,output_array)
+     call r_init_refine_restart(pst,input_array,input_size,output_array,output_size)
 
      bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
      deallocate(input_array,output_array)
 
      ! Get total, min and max grid count (only in master).
-     call r_noct_tot(pst,1,1,ilevel,m%noct_tot(ilevel))
-     call r_noct_min(pst,1,1,ilevel,m%noct_min(ilevel))
-     call r_noct_max(pst,1,1,ilevel,m%noct_max(ilevel))
+     call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),1)
+     call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
+     call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
 
      ! Finalize new domain decomposition
      bound_key(1:nhilbert,0)=zero_key
@@ -130,14 +130,14 @@ subroutine m_init_refine_restart(pst)
      allocate(input_array(1:input_size))
      input_array(1)=ilevel
      input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
-     call r_broadcast_bound_key(pst,g%ncpu,input_size,0,input_array)
+     call r_broadcast_bound_key(pst,g%ncpu,input_array,input_size,dummy,0)
      deallocate(input_array)
 
   end do
   ! End loop over relevant levels
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(pst,1,1,r%levelmin,m%noct_used_max)
+  call r_noct_used_max(pst,r%levelmin,1,m%noct_used_max,1)
 
   ! Deallocate local variables
   deallocate(noct_file,noct_skip)
@@ -152,7 +152,7 @@ end subroutine m_init_refine_restart
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_refine_restart(pst,input_size,output_size,input_array,output_array)
+recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -173,7 +173,7 @@ recursive subroutine r_init_refine_restart(pst,input_size,output_size,input_arra
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_init_refine_restart(pst%pLower,input_size,output_size,input_array,output_array)
+     call r_init_refine_restart(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))

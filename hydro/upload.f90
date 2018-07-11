@@ -11,32 +11,38 @@ subroutine m_upload_fine(pst,ilevel)
   ! This routine is the master procedure to upload HYDRO variables
   ! from level ilevel+1 to ilevel (averaging down or restriction).
   !--------------------------------------------------------------------
+  integer::dummy
+
   if(ilevel==pst%s%r%nlevelmax)return
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%m%noct_tot(ilevel+1)==0)return
   if(pst%s%r%verbose)write(*,111)ilevel
 111 format(' Entering upload_fine for level',i2)
 
-  call r_upload_fine(pst,1,0,ilevel)
+  call r_upload_fine(pst,ilevel,1,dummy,0)
 
 end subroutine m_upload_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_upload_fine(pst,input_size,output_size,ilevel)
+recursive subroutine r_upload_fine(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+
   integer::ilevel
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_UPLOAD_FINE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_upload_fine(pst%pLower,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_UPLOAD_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     call r_upload_fine(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
+     ilevel=input_array(1)
      call upload_fine(pst%s,ilevel)
   endif
 
@@ -155,12 +161,13 @@ end subroutine upload_fine
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine init_flush_upload(grid,msg_size)
+subroutine init_flush_upload(grid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   type(oct)::grid
   integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   
@@ -184,7 +191,7 @@ subroutine pack_flush_upload(grid,msg_size,msg_array)
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_realdp)::msg
@@ -211,7 +218,7 @@ subroutine unpack_flush_upload(grid,msg_size,msg_array)
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_realdp)::msg

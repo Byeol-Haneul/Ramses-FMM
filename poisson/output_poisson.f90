@@ -2,7 +2,7 @@
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_output_poisson(pst,input_size,output_size,input_array)
+recursive subroutine r_output_poisson(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -10,12 +10,13 @@ recursive subroutine r_output_poisson(pst,input_size,output_size,input_array)
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename
   
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_OUTPUT_POISSON,pst%iUpper+1,input_size,output_size,input_array)
-     call r_output_poisson(pst%pLower,input_size,output_size,input_array)
+     call r_output_poisson(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      filename=transfer(input_array,filename)
@@ -40,7 +41,7 @@ subroutine output_poisson(r,g,m,filename)
   character(LEN=5)::nchar
   character(LEN=flen)::fileloc
 
-  ilun=g%ncpu+g%myid+10
+  ilun=10!+g%ncpu+g%myid
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')

@@ -10,19 +10,20 @@ subroutine m_init_refine_basegrid(pst)
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
   !--------------------------------------------------------------------
+  integer::dummy
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
   
   if(r%verbose)write(*,*)'Entering init_refine_basegrid'
 
   ! Call recursive slave routine
-  call r_init_refine_basegrid(pst,1,0,r%levelmin)
+  call r_init_refine_basegrid(pst,r%levelmin,1,dummy,0)
 
   ! Get total, min and max grid count (only in master).
-  call r_noct_tot(pst,1,1,r%levelmin,m%noct_tot(r%levelmin))
-  call r_noct_min(pst,1,1,r%levelmin,m%noct_min(r%levelmin))
-  call r_noct_max(pst,1,1,r%levelmin,m%noct_max(r%levelmin))
-  call r_noct_used_max(pst,1,1,r%levelmin,m%noct_used_max)
+  call r_noct_tot(pst,r%levelmin,1,m%noct_tot(r%levelmin),1)
+  call r_noct_min(pst,r%levelmin,1,m%noct_min(r%levelmin),1)
+  call r_noct_max(pst,r%levelmin,1,m%noct_max(r%levelmin),1)
+  call r_noct_used_max(pst,r%levelmin,1,m%noct_used_max,1)
 
   ! Initialize hydro variables on the base grid
   if(r%hydro)call m_init_flow_fine(pst,r%levelmin)
@@ -37,25 +38,25 @@ end subroutine m_init_refine_basegrid
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_collect_noct(pst,input_size,output_size,ilevel,noct)
+recursive subroutine r_collect_noct(pst,ilevel,input_size,noct,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::noct
 
   integer,dimension(1:output_size)::next_noct
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_COLLECT_NOCT,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_collect_noct(pst%pLower,input_size,output_size,ilevel,noct)
+     call r_collect_noct(pst%pLower,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
      noct=noct+next_noct
   else
      noct=0
-     noct(pst%s%g%myid)=pst%s%m%noct(ilevel)
+     noct(pst%s%g%myid)=pst%s%m%noct(ilevel(1))
   endif
 
 end subroutine r_collect_noct
@@ -63,23 +64,24 @@ end subroutine r_collect_noct
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_tot(pst,input_size,output_size,ilevel,noct_tot)
+recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel,noct_tot
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::noct_tot
 
-  integer::next_noct_tot
+  integer,dimension(1:output_size)::next_noct_tot
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_NOCT_TOT,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_noct_tot(pst%pLower,input_size,output_size,ilevel,noct_tot)
+     call r_noct_tot(pst%pLower,ilevel,input_size,noct_tot,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_tot)
-     noct_tot=noct_tot+next_noct_tot
+     noct_tot(1)=noct_tot(1)+next_noct_tot(1)
   else
-     noct_tot=pst%s%m%noct(ilevel)
+     noct_tot(1)=pst%s%m%noct(ilevel(1))
   endif
 
 end subroutine r_noct_tot
@@ -87,23 +89,24 @@ end subroutine r_noct_tot
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_max(pst,input_size,output_size,ilevel,noct_max)
+recursive subroutine r_noct_max(pst,ilevel,input_size,noct_max,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel,noct_max
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::noct_max
 
-  integer::next_noct_max
+  integer,dimension(1:output_size)::next_noct_max
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_NOCT_MAX,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_noct_max(pst%pLower,input_size,output_size,ilevel,noct_max)
+     call r_noct_max(pst%pLower,ilevel,input_size,noct_max,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_max)
-     noct_max=MAX(noct_max,next_noct_max)
+     noct_max(1)=MAX(noct_max(1),next_noct_max(1))
   else
-     noct_max=pst%s%m%noct(ilevel)
+     noct_max(1)=pst%s%m%noct(ilevel(1))
   endif
 
 end subroutine r_noct_max
@@ -111,23 +114,24 @@ end subroutine r_noct_max
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_used_max(pst,input_size,output_size,ilevel,noct_used_max)
+recursive subroutine r_noct_used_max(pst,ilevel,input_size,noct_used_max,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel,noct_used_max
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::noct_used_max
 
-  integer::next_noct_used_max
+  integer,dimension(1:output_size)::next_noct_used_max
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_NOCT_USED_MAX,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_noct_used_max(pst%pLower,input_size,output_size,ilevel,noct_used_max)
+     call r_noct_used_max(pst%pLower,ilevel,input_size,noct_used_max,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_used_max)
-     noct_used_max=MAX(noct_used_max,next_noct_used_max)
+     noct_used_max(1)=MAX(noct_used_max(1),next_noct_used_max(1))
   else
-     noct_used_max=pst%s%m%noct_used
+     noct_used_max(1)=pst%s%m%noct_used
   endif
 
 end subroutine r_noct_used_max
@@ -135,23 +139,24 @@ end subroutine r_noct_used_max
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_min(pst,input_size,output_size,ilevel,noct_min)
+recursive subroutine r_noct_min(pst,ilevel,input_size,noct_min,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel,noct_min
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::noct_min
 
-  integer::next_noct_min
+  integer,dimension(1:output_size)::next_noct_min
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_NOCT_MIN,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_noct_min(pst%pLower,input_size,output_size,ilevel,noct_min)
+     call r_noct_min(pst%pLower,ilevel,input_size,noct_min,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_min)
-     noct_min=MIN(noct_min,next_noct_min)
+     noct_min(1)=MIN(noct_min(1),next_noct_min(1))
   else
-     noct_min=pst%s%m%noct(ilevel)
+     noct_min(1)=pst%s%m%noct(ilevel(1))
   endif
 
 end subroutine r_noct_min
@@ -159,23 +164,24 @@ end subroutine r_noct_min
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_gather_noct_max(pst,input_size,output_size,ilevel,noct_max)
+recursive subroutine r_gather_noct_max(pst,ilevel,input_size,noct_max,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel,noct_max
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::noct_max
 
-  integer::next_noct_max
+  integer,dimension(1:output_size)::next_noct_max
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_GATHER_NOCT_MAX,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_gather_noct_max(pst%pLower,input_size,output_size,ilevel,noct_max)
+     call r_gather_noct_max(pst%pLower,ilevel,input_size,noct_max,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_max)
-     noct_max=MAX(noct_max,next_noct_max)
+     noct_max(1)=MAX(noct_max(1),next_noct_max(1))
   else
-     noct_max=pst%s%m%noct(ilevel)
+     noct_max(1)=pst%s%m%noct(ilevel(1))
   endif
 
 end subroutine r_gather_noct_max
@@ -183,19 +189,23 @@ end subroutine r_gather_noct_max
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_refine_basegrid(pst,input_size,output_size,ilevel)
+recursive subroutine r_init_refine_basegrid(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+
   integer::ilevel
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_init_refine_basegrid(pst%pLower,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,pst%iUpper+1,input_size,output_size,input_array)
+     call r_init_refine_basegrid(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
+     ilevel=input_array(1)
      call init_refine_basegrid(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 

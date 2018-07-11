@@ -2,19 +2,23 @@
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_input_hydro_grafic(pst,input_size,output_size,ilevel)
+recursive subroutine r_input_hydro_grafic(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+
   integer::ilevel
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_input_hydro_grafic(pst%pLower,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,pst%iUpper+1,input_size,output_size,input_array)
+     call r_input_hydro_grafic(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
+     ilevel=input_array(1)
      call input_hydro_grafic(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 

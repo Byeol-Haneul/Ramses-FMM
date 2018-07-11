@@ -18,7 +18,7 @@ subroutine m_load_balance(pst,ilevel)
   integer,allocatable,dimension(:)::output_array
   integer(kind=8),dimension(1:nhilbert)::zero_key=0
   integer(kind=8),dimension(1:nhilbert,0:pst%s%g%ncpu)::bound_key
-  integer::ilev,icpu,input_size,output_size
+  integer::ilev,icpu,input_size,output_size,dummy
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
   
@@ -34,7 +34,7 @@ subroutine m_load_balance(pst,ilevel)
      if(m%noct_tot(ilev)>0)then
         
         ! Collect number of oct in each cpu for current level
-        call r_collect_noct(pst,1,g%ncpu,ilev,noct)
+        call r_collect_noct(pst,ilev,1,noct,g%ncpu)
 
         ! Compute input array
         input_size=g%ncpu+1
@@ -47,7 +47,7 @@ subroutine m_load_balance(pst,ilevel)
         allocate(output_array(1:output_size))
         
         ! Compute and collect new Hilbert key boundaries for the new domain decomposition
-        call r_collect_bound_key(pst,g%ncpu+1,output_size,input_array,output_array)
+        call r_collect_bound_key(pst,input_array,input_size,output_array,output_size)
         bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
         deallocate(input_array,output_array)
 
@@ -65,7 +65,7 @@ subroutine m_load_balance(pst,ilevel)
         allocate(input_array(1:input_size))
         input_array(1)=ilev
         input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
-        call r_broadcast_bound_key(pst,input_size,0,input_array)
+        call r_broadcast_bound_key(pst,input_array,input_size,dummy,0)
         deallocate(input_array)
 
      endif
@@ -74,7 +74,7 @@ subroutine m_load_balance(pst,ilevel)
   ! End loop over finer levels
   
   ! Redistribute the grid across CPU according to the new domains
-  call r_load_balance(pst,1,0,ilevel)
+  call r_load_balance(pst,ilevel,1,dummy,0)
 
   end associate
   
@@ -83,7 +83,7 @@ end subroutine m_load_balance
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_broadcast_bound_key(pst,input_size,output_size,input_array)
+recursive subroutine r_broadcast_bound_key(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -92,13 +92,14 @@ recursive subroutine r_broadcast_bound_key(pst,input_size,output_size,input_arra
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
   integer::ilevel
   integer(kind=8),dimension(1)::dummy
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BROADCAST_BOUND_KEY,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_bound_key(pst%pLower,input_size,output_size,input_array)
+     call r_broadcast_bound_key(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
@@ -110,7 +111,7 @@ end subroutine r_broadcast_bound_key
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_collect_bound_key(pst,input_size,output_size,input_array,output_array)
+recursive subroutine r_collect_bound_key(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -131,7 +132,7 @@ recursive subroutine r_collect_bound_key(pst,input_size,output_size,input_array,
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_COLLECT_BOUND_KEY,pst%iUpper+1,input_size,output_size,input_array)
-     call r_collect_bound_key(pst%pLower,input_size,output_size,input_array,output_array)
+     call r_collect_bound_key(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
@@ -244,20 +245,21 @@ end subroutine compute_new_bound_key
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_load_balance(pst,input_size,output_size,ilevel)
+recursive subroutine r_load_balance(pst,ilevel,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_LOAD_BALANCE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_load_balance(pst%pLower,input_size,output_size,ilevel)
+     call r_load_balance(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     call load_balance(pst%s,ilevel)
+     call load_balance(pst%s,ilevel(1))
   endif
 
 end subroutine r_load_balance
@@ -539,7 +541,7 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar,idim
   type(msg_large_realdp)::msg
@@ -584,7 +586,7 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar,idim
   type(msg_large_realdp)::msg
@@ -625,21 +627,22 @@ end subroutine unpack_flush_loadbalance
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_balance_part(pst,input_size,output_size,ilevel)
+recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BALANCE_PART,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_balance_part(pst%pLower,input_size,output_size,ilevel)
+     call r_balance_part(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
 #ifndef WITHOUTMPI
-     call balance_part(pst%s,ilevel)
+     call balance_part(pst%s,ilevel(1))
 #endif
   endif
 

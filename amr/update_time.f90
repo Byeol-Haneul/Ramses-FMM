@@ -14,7 +14,7 @@ subroutine m_update_time(pst,ilevel)
   real,save::ttstart=0.0
   real(dp)::dt,econs,mcons
   integer::i,itest
-  integer,dimension(1:4)::input_array
+  integer,dimension(1:4)::input_array,dummy
   
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -149,7 +149,7 @@ subroutine m_update_time(pst,ilevel)
   ! Broadcast aexp and hexp to all CPUs
   input_array(1:2)=transfer(g%aexp,input_array)
   input_array(3:4)=transfer(g%hexp,input_array)
-  call r_broadcast_aexp(pst,4,0,input_array)
+  call r_broadcast_aexp(pst,input_array,4,dummy,0)
 
   end associate
 
@@ -158,20 +158,20 @@ end subroutine m_update_time
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_broadcast_aexp(pst,input_size,output_size,input_array)
+recursive subroutine r_broadcast_aexp(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
-  integer::ilevel
   real(kind=8)::aexp
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_aexp(pst%pLower,input_size,output_size,input_array)
+     call r_broadcast_aexp(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      pst%s%g%aexp=transfer(input_array(1:2),aexp)
@@ -183,16 +183,18 @@ end subroutine r_broadcast_aexp
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_clean_stop(pst,input_size,output_size)
+recursive subroutine r_clean_stop(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1,input_size,output_size)
-     call r_clean_stop(pst%pLower,input_size,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1,input_size,output_size,input_array)
+     call r_clean_stop(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   endif
   

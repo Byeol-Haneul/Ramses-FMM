@@ -45,7 +45,7 @@ subroutine output_part(r,g,p,filename)
   integer(i8b),allocatable,dimension(:)::ii8
   integer,allocatable,dimension(:)::ll
   
-  ilun=2*g%ncpu+g%myid+10
+  ilun=10!+2*g%ncpu+g%myid
 
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)

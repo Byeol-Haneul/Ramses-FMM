@@ -11,6 +11,7 @@ subroutine m_input_part_grafic(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
+  integer::dummy
   integer,allocatable,dimension(:)::input_array
 
   if(pst%s%r%verbose)write(*,*)'Entering input_part_grafic'
@@ -33,7 +34,7 @@ subroutine m_input_part_grafic(pst)
   ! Call recursive slave routine
   allocate(input_array(1:storage_size(pst%s%p%npart_tot)/32))
   input_array=transfer(pst%s%p%npart_tot,input_array)
-  call r_input_part_grafic(pst,storage_size(pst%s%p%npart_tot)/32,0,input_array)
+  call r_input_part_grafic(pst,input_array,storage_size(pst%s%p%npart_tot)/32,dummy,0)
   deallocate(input_array)
 
 end subroutine m_input_part_grafic
@@ -41,7 +42,7 @@ end subroutine m_input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_grafic(pst,input_size,output_size,input_array)
+recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -49,6 +50,7 @@ recursive subroutine r_input_part_grafic(pst,input_size,output_size,input_array)
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
@@ -57,7 +59,7 @@ recursive subroutine r_input_part_grafic(pst,input_size,output_size,input_array)
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_part_grafic(pst%pLower,input_size,output_size,input_array)
+     call r_input_part_grafic(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      npart_tot=transfer(input_array,npart_tot)

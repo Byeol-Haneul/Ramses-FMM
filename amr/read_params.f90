@@ -609,12 +609,13 @@ subroutine m_broadcast_params(pst)
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
   !--------------------------------------------------------------------
+  integer::dummy
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
   allocate(input_array(1:storage_size(pst%s%r)/32))
   input_array=transfer(pst%s%r,input_array)
-  call r_broadcast_params(pst,storage_size(pst%s%r)/32,0,input_array)
+  call r_broadcast_params(pst,input_array,storage_size(pst%s%r)/32,dummy,0)
   deallocate(input_array)
 
 end subroutine m_broadcast_params
@@ -622,17 +623,18 @@ end subroutine m_broadcast_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_params(pst,input_size,output_size,input_array)
+recursive subroutine r_broadcast_params(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_params(pst%pLower,input_size,output_size,input_array)
+     call r_broadcast_params(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      pst%s%r=transfer(input_array,pst%s%r)
@@ -651,14 +653,14 @@ subroutine m_broadcast_global(pst)
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
   !--------------------------------------------------------------------
-  integer::input_size
+  integer::input_size,dummy
   integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
   input_size=storage_size(pst%s%g)/32
   allocate(input_array(1:input_size))
   input_array=transfer(pst%s%g,input_array)
-  call r_broadcast_global(pst,input_size,0,input_array)
+  call r_broadcast_global(pst,input_array,input_size,dummy,0)
   deallocate(input_array)
 
 end subroutine m_broadcast_global
@@ -666,17 +668,18 @@ end subroutine m_broadcast_global
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_global(pst,input_size,output_size,input_array)
+recursive subroutine r_broadcast_global(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_BCAST_GLOBAL,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_global(pst%pLower,input_size,output_size,input_array)
+     call r_broadcast_global(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      pst%s%g=transfer(input_array,pst%s%g)

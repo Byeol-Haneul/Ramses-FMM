@@ -17,6 +17,7 @@ subroutine mdl_init
   type(ramses_t),target::s
   type(call_back_f),dimension(0:100)::callback
   integer,dimension(1)::ncpu
+  integer,dimension(1)::dummy
   
   pst%s => s
   
@@ -242,7 +243,7 @@ subroutine mdl_init
      call mdl_wait(pst,callback)
   else
      ncpu(1)=mdl%ncpu
-     call r_set_add(pst,1,0,ncpu)
+     call r_set_add(pst,ncpu,1,dummy,0)
      call adaptive_loop(pst)
   endif
 
@@ -319,7 +320,7 @@ subroutine mdl_wait(pst,callback)
         endif
         
         ! Launch the corresponding call-back function
-        call callback(function_id)%proc(pst,input_size,output_size,input_array,output_array)
+        call callback(function_id)%proc(pst,input_array,input_size,output_array,output_size)
         
         ! Deallocate input array
         if(input_size>0)then

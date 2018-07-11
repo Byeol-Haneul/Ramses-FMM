@@ -11,7 +11,7 @@ subroutine m_refine_fine(pst,ilevel)
   ! This routine is the master procedure to refine the AMR grid
   ! from level ilevel to nlevelmax.
   !--------------------------------------------------------------------
-  integer::ilev
+  integer::ilev,dummy
   integer,dimension(1:2)::noct
 
   associate(s=>pst%s)
@@ -23,7 +23,7 @@ subroutine m_refine_fine(pst,ilevel)
 111 format(' Entering refine_fine for level ',I2)
 
   ! Create new octs and destroy unecessary octs
-  call r_refine_fine(pst,1,2,ilevel,noct)
+  call r_refine_fine(pst,ilevel,1,noct,2)
 
   if(s%r%verbose)write(*,112)noct(1)
 112 format(' ==> Make ',i6,' sub-grids')
@@ -33,32 +33,32 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,1,1,ilev,s%m%noct_tot(ilev))
-     call r_noct_min(pst,1,1,ilev,s%m%noct_min(ilev))
-     call r_noct_max(pst,1,1,ilev,s%m%noct_max(ilev))
+     call r_noct_tot(pst,ilevel,1,s%m%noct_tot(ilev),1)
+     call r_noct_min(pst,ilevel,1,s%m%noct_min(ilev),1)
+     call r_noct_max(pst,ilevel,1,s%m%noct_max(ilev),1)
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(pst,1,1,ilevel,s%m%noct_used_max)
-
+  call r_noct_used_max(pst,ilevel,1,s%m%noct_used_max,1)
+  
   ! Load balance all levels across cpus
   call m_load_balance(pst,ilevel)
 
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,1,1,ilev,s%m%noct_tot(ilev))
-     call r_noct_min(pst,1,1,ilev,s%m%noct_min(ilev))
-     call r_noct_max(pst,1,1,ilev,s%m%noct_max(ilev))
+     call r_noct_tot(pst,ilevel,1,s%m%noct_tot(ilev),1)
+     call r_noct_min(pst,ilevel,1,s%m%noct_min(ilev),1)
+     call r_noct_max(pst,ilevel,1,s%m%noct_max(ilev),1)
   end do
 
   ! Get maximum used memory (only in master)
-  call r_noct_used_max(pst,1,1,ilevel,s%m%noct_used_max)
+  call r_noct_used_max(pst,ilevel,1,s%m%noct_used_max,1)
 
   ! Balance particles across cpus
   if(s%mdl%ncpu>1.AND.ilevel==s%r%levelmin)then
      if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
         if(s%r%verbose)write(*,*)'Entering balance_part for level',s%r%levelmin
-        call r_balance_part(pst,1,0,ilevel)
+        call r_balance_part(pst,ilevel,1,dummy,0)
      endif
   endif
 
@@ -69,13 +69,13 @@ end subroutine m_refine_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_refine_fine(pst,input_size,output_size,ilevel,noct)
+recursive subroutine r_refine_fine(pst,ilevel,input_size,noct,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:1)::ilevel
   integer,dimension(1:2)::noct
 
   integer,dimension(1:2)::next_noct
@@ -83,11 +83,11 @@ recursive subroutine r_refine_fine(pst,input_size,output_size,ilevel,noct)
   
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_refine_fine(pst%pLower,input_size,output_size,ilevel,noct)
+     call r_refine_fine(pst%pLower,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
      noct=noct+next_noct
   else
-     call refine_fine(pst%s,ilevel,ncreate,nkill)
+     call refine_fine(pst%s,ilevel(1),ncreate,nkill)
      noct(1)=ncreate
      noct(2)=nkill
   endif
@@ -380,7 +380,7 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
@@ -427,7 +427,7 @@ subroutine unpack_fetch_refine(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
@@ -474,7 +474,7 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar,idim
   type(msg_large_realdp)::msg
@@ -513,7 +513,7 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar,idim
   type(msg_large_realdp)::msg
@@ -547,11 +547,12 @@ end subroutine unpack_flush_refine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine init_flush_derefine(grid,msg_size)
+subroutine init_flush_derefine(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use amr_commons, only: oct
   type(oct)::grid
   integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
 
   grid%refined(1:twotondim)=.true.
   
@@ -566,7 +567,7 @@ subroutine pack_flush_derefine(grid,msg_size,msg_array)
   use cache_commons, only: msg_int4
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind
   type(msg_int4)::msg
@@ -591,7 +592,7 @@ subroutine unpack_flush_derefine(grid,msg_size,msg_array)
   use cache_commons, only: msg_int4
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind
   type(msg_int4)::msg

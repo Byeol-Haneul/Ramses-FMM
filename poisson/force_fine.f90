@@ -12,6 +12,7 @@ subroutine m_force_fine(pst,ilevel,icount)
   ! This routine computes the gravitational acceleration,
   ! the maximum density rho_max, and the potential energy
   !----------------------------------------------------------
+  integer::dummy
   integer,dimension(1:2)::input_array,output_array
   real(kind=8)::rhomax,epot
  
@@ -22,23 +23,23 @@ subroutine m_force_fine(pst,ilevel,icount)
 
   if(pst%s%r%gravity_type>0)then 
      ! Compute analytical gravity force
-     call r_force_analytic(pst,1,0,ilevel)
+     call r_force_analytic(pst,ilevel,1,dummy,0)
   else
      ! Compute gradient of potential
      input_array(1)=ilevel
      input_array(2)=icount
-     call r_gradient_phi(pst,2,0,input_array)
+     call r_gradient_phi(pst,input_array,2,dummy,0)
   endif
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
   ! Compute gravity potential energy
-  call r_compute_epot(pst,1,2,ilevel,output_array)
+  call r_compute_epot(pst,ilevel,1,output_array,2)
   epot=transfer(output_array,epot)
   pst%s%g%epot_tot=pst%s%g%epot_tot+epot
   if(pst%s%r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
 
   ! Compute maximum mass density
-  call r_compute_rhomax(pst,1,2,ilevel,output_array)
+  call r_compute_rhomax(pst,ilevel,1,output_array,2)
   rhomax=transfer(output_array,rhomax)
   pst%s%g%rho_max(ilevel)=rhomax
   if(pst%s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
@@ -50,19 +51,23 @@ end subroutine m_force_fine
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_force_analytic(pst,input_size,output_size,ilevel)
+recursive subroutine r_force_analytic(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+
   integer::ilevel
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_force_analytic(pst%pLower,input_size,output_size,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,pst%iUpper+1,input_size,output_size,input_array)
+     call r_force_analytic(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
+     ilevel=input_array(1)
      call force_analytic(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
@@ -129,19 +134,20 @@ end subroutine force_analytic
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_gradient_phi(pst,input_size,output_size,input_array)
+recursive subroutine r_gradient_phi(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
   integer::ilevel,icount
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_GRADIENT_PHI,pst%iUpper+1,input_size,output_size,input_array)
-     call r_gradient_phi(pst%pLower,input_size,output_size,input_array)
+     call r_gradient_phi(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
@@ -321,13 +327,13 @@ end subroutine gradient_phi
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_epot(pst,input_size,output_size,ilevel,output_array)
+recursive subroutine r_compute_epot(pst,ilevel,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
   integer,dimension(1:output_size)::next_output_array
@@ -335,14 +341,14 @@ recursive subroutine r_compute_epot(pst,input_size,output_size,ilevel,output_arr
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_COMPUTE_EPOT,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_compute_epot(pst%pLower,input_size,output_size,ilevel,output_array)
+     call r_compute_epot(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      epot=transfer(output_array,epot)
      next_epot=transfer(next_output_array,next_epot)
      epot=epot+next_epot
      output_array=transfer(epot,output_array)
   else
-     call compute_epot(pst%s%r,pst%s%g,pst%s%m,ilevel,epot)
+     call compute_epot(pst%s%r,pst%s%g,pst%s%m,ilevel(1),epot)
      output_array=transfer(epot,output_array)
   endif
 
@@ -400,13 +406,13 @@ end subroutine compute_epot
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_rhomax(pst,input_size,output_size,ilevel,output_array)
+recursive subroutine r_compute_rhomax(pst,ilevel,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
   integer,dimension(1:output_size)::next_output_array
@@ -414,14 +420,14 @@ recursive subroutine r_compute_rhomax(pst,input_size,output_size,ilevel,output_a
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_COMPUTE_RHOMAX,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_compute_rhomax(pst%pLower,input_size,output_size,ilevel,output_array)
+     call r_compute_rhomax(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
      rhomax=transfer(output_array,rhomax)
      next_rhomax=transfer(next_output_array,next_rhomax)
      rhomax=MAX(rhomax,next_rhomax)
      output_array=transfer(rhomax,output_array)
   else
-     call compute_rhomax(pst%s%r,pst%s%g,pst%s%m,ilevel,rhomax)
+     call compute_rhomax(pst%s%r,pst%s%g,pst%s%m,ilevel(1),rhomax)
      output_array=transfer(rhomax,output_array)
   endif
 

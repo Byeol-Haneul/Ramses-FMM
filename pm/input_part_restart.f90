@@ -11,7 +11,7 @@ subroutine m_input_part_restart(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer::icpu,ilun,ncpu_file
+  integer::icpu,ilun,ncpu_file,dummy
   integer(i8b)::npart_tot_file,npart_tot_check
   character(LEN=5)::nchar,ncharcpu
   character(LEN=80)::file_head,file_part
@@ -45,7 +45,7 @@ subroutine m_input_part_restart(pst)
   endif
 
   ! Call recursive slave routine
-  call r_input_part_restart(pst,ncpu_file,0,npart_file)
+  call r_input_part_restart(pst,npart_file,ncpu_file,dummy,0)
 
   ! Deallocate local array
   deallocate(npart_file)
@@ -55,7 +55,7 @@ end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_restart(pst,input_size,output_size,input_array)
+recursive subroutine r_input_part_restart(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -63,6 +63,7 @@ recursive subroutine r_input_part_restart(pst,input_size,output_size,input_array
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
@@ -70,7 +71,7 @@ recursive subroutine r_input_part_restart(pst,input_size,output_size,input_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_part_restart(pst%pLower,input_size,output_size,input_array)
+     call r_input_part_restart(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call input_part_restart(pst%s%r,pst%s%g,pst%s%p,input_size,input_array)

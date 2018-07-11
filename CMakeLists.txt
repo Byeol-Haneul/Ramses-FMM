@@ -2,9 +2,14 @@ cmake_minimum_required(VERSION 3.1)
 project(ramses3d)
 enable_language (Fortran)
 get_filename_component (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
-if (Fortran_COMPILER_NAME MATCHES "ifort.*")
-  set (CMAKE_Fortran_FLAGS "-cpp")
-endif()
+
+#if (Fortran_COMPILER_NAME MATCHES "ifort.*")
+#  set (CMAKE_Fortran_FLAGS "-cpp")
+#endif()
+#if (Fortran_COMPILER_NAME MATCHES "ftn.*")
+#  set (CMAKE_Fortran_FLAGS "-cpp")
+#endif()
+
 add_executable(${PROJECT_NAME} "")
 
 find_package(MPI REQUIRED)      # MPI support
@@ -25,8 +30,16 @@ if(MDL2)
   add_definitions(-DMDL2)
 endif(MDL2)
 
-if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
-  set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none -fcheck=all -g" )
+#if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
+#  set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none -fcheck=all -g" )
+
+# The Fortran source contains preprocessor directives which are enable differently for each compiler
+if (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-cpp" )
+elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none" )
+elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-e Z" )
 endif()
 
 #if(Git_FOUND)

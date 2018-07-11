@@ -9,7 +9,7 @@ subroutine m_dump_all(pst)
   type(pst_t)::pst
 
   ! Local variables
-  integer::i
+  integer::i,dummy
 #ifdef NOSYSTEM
   integer::ierr
 #endif
@@ -76,27 +76,27 @@ subroutine m_dump_all(pst)
      ! Output AMR data
      filename=TRIM(filedir)//'amr.out'
      input_array=transfer(filename,input_array)
-     call r_output_amr(pst,flen/4,0,input_array)
+     call r_output_amr(pst,input_array,flen/4,dummy,0)
      
      ! Output HYDRO data
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.out'
         input_array=transfer(filename,input_array)
-        call r_output_hydro(pst,flen/4,0,input_array)
+        call r_output_hydro(pst,input_array,flen/4,dummy,0)
      end if
 
      ! Output GRAV data
      if(r%poisson)then
         filename=TRIM(filedir)//'grav.out'
         input_array=transfer(filename,input_array)
-        call r_output_poisson(pst,flen/4,0,input_array)
+        call r_output_poisson(pst,input_array,flen/4,dummy,0)
      end if
 
      ! Output PART data
      if(r%pic)then
         filename=TRIM(filedir)//'part.out'
         input_array=transfer(filename,input_array)
-        call r_output_part(pst,flen/4,0,input_array)
+        call r_output_part(pst,input_array,flen/4,dummy,0)
      end if
   end if
 
@@ -227,7 +227,7 @@ subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
 
   if(r%verbose)write(*,*)'Entering input_params'
 
-  ilun=10+g%myid
+  ilun=10!+g%myid
   fileloc=TRIM(filename)
   open(unit=ilun,file=fileloc,access="stream"&
        & ,action="read",form='unformatted')
@@ -283,7 +283,7 @@ end subroutine input_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_output_amr(pst,input_size,output_size,input_array)
+recursive subroutine r_output_amr(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -291,12 +291,13 @@ recursive subroutine r_output_amr(pst,input_size,output_size,input_array)
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename
   
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_OUTPUT_AMR,pst%iUpper+1,input_size,output_size,input_array)
-     call r_output_amr(pst%pLower,input_size,output_size,input_array)
+     call r_output_amr(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      filename=transfer(input_array,filename)
@@ -323,7 +324,7 @@ subroutine output_amr(r,g,m,filename)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
 
-  ilun=g%myid+10
+  ilun=10!+g%myid
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
@@ -414,7 +415,7 @@ subroutine output_header(r,g,p,filename)
 
   if(r%verbose)write(*,*)'Entering output_header'
   
-  ilun=g%myid+10
+  ilun=10!+g%myid
   
   ! Open file
   fileloc=TRIM(filename)
@@ -455,7 +456,7 @@ subroutine input_header(r,g,filename,npart_tot_file,ncpu_file)
 
   if(r%verbose)write(*,*)'Entering input_header'
   
-  ilun=g%myid+10
+  ilun=10!+g%myid
   
   ! Write header information
   fileloc=TRIM(filename)

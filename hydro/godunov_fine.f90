@@ -2,20 +2,21 @@
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_godunov_fine(pst,input_size,output_size,ilevel)
+recursive subroutine r_godunov_fine(pst,ilevel,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_godunov_fine(pst%pLower,input_size,output_size,ilevel)
+     call r_godunov_fine(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     call godunov_fine(pst%s,ilevel)
+     call godunov_fine(pst%s,ilevel(1))
   endif
 
 end subroutine r_godunov_fine
@@ -66,20 +67,21 @@ end subroutine godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_unew(pst,input_size,output_size,ilevel)
+recursive subroutine r_set_unew(pst,ilevel,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_set_unew(pst%pLower,input_size,output_size,ilevel)
+     call r_set_unew(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
   endif
 
 end subroutine r_set_unew
@@ -140,20 +142,21 @@ end subroutine set_unew
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_uold(pst,input_size,output_size,ilevel)
+recursive subroutine r_set_uold(pst,ilevel,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::ilevel
+  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_set_uold(pst%pLower,input_size,output_size,ilevel)
+     call r_set_uold(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
   endif
 
 end subroutine r_set_uold
@@ -781,12 +784,13 @@ end subroutine godfine1
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_flush_godunov(grid,msg_size)
+subroutine init_flush_godunov(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   type(oct)::grid
   integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
 
@@ -810,7 +814,7 @@ subroutine pack_flush_godunov(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
@@ -837,7 +841,7 @@ subroutine unpack_flush_godunov(grid,msg_size,msg_array)
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_large_realdp)::msg

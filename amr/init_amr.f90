@@ -2,50 +2,55 @@
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_set_add(pst,input_size,output_size,iUpper)
+recursive subroutine r_set_add(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer::iUpper
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
-  integer::n,iLower,iMiddle
+  integer::n,iLower,iMiddle,iUpper
 
   associate(mdl=>pst%s%mdl)
 
- iLower = mdl%myid-1
- n = iUpper - iLower
- iMiddle = (iUpper + iLower) / 2
+  iUpper = input_array(1)
+  iLower = mdl%myid-1
+  n = iUpper - iLower
+  iMiddle = (iUpper + iLower) / 2
  
- if(n>1)then
-    pst%iUpper = iMiddle
-    pst%nLower = iMiddle - iLower
-    pst%nUpper = iUpper - iMiddle
-    allocate(pst%pLower)
-    pst%pLower%s => pst%s
-    call mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,output_size,iUpper)
-    call r_set_add(pst%pLower,input_size,output_size,iMiddle)
-    call mdl_get_reply(mdl,pst%iUpper+1,output_size)
- end if
+  if(n>1)then
+     pst%iUpper = iMiddle
+     pst%nLower = iMiddle - iLower
+     pst%nUpper = iUpper - iMiddle
+     allocate(pst%pLower)
+     pst%pLower%s => pst%s
+     call mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,output_size,input_array)
+     input_array(1)=iMiddle
+     call r_set_add(pst%pLower,input_array,input_size,output_array,output_size)
+     call mdl_get_reply(mdl,pst%iUpper+1,output_size)
+  end if
  
- end associate
+  end associate
 
 end subroutine r_set_add
 !###############################################
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_amr(pst,input_size,output_size)
+recursive subroutine r_init_amr(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1,input_size,output_size)
-     call r_init_amr(pst%pLower,input_size,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1,input_size,output_size,input_array)
+     call r_init_amr(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      call init_amr(pst%s%r,pst%s%g,pst%s%m)

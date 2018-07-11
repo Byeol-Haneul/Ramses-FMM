@@ -119,7 +119,7 @@ subroutine pack_fetch_hydro(grid,msg_size,msg_array)
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_realdp)::msg
@@ -154,7 +154,7 @@ subroutine unpack_fetch_hydro(grid,msg_size,msg_array)
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
   type(msg_realdp)::msg

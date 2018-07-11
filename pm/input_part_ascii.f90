@@ -14,6 +14,7 @@ subroutine m_input_part_ascii(pst)
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   integer(i8b)::npart_tot
   character(LEN=80)::filename
+  integer::dummy
   integer,allocatable,dimension(:)::input_array
 
   associate(s=>pst%s)
@@ -49,7 +50,7 @@ subroutine m_input_part_ascii(pst)
   ! Call recursive slave routine
   allocate(input_array(1:storage_size(npart_tot)/32))
   input_array=transfer(npart_tot,input_array)
-  call r_input_part_ascii(pst,storage_size(npart_tot)/32,0,input_array)
+  call r_input_part_ascii(pst,input_array,storage_size(npart_tot)/32,dummy,0)
   deallocate(input_array)
 
   end associate
@@ -59,7 +60,7 @@ end subroutine m_input_part_ascii
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_ascii(pst,input_size,output_size,input_array)
+recursive subroutine r_input_part_ascii(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -67,6 +68,7 @@ recursive subroutine r_input_part_ascii(pst,input_size,output_size,input_array)
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
@@ -75,7 +77,7 @@ recursive subroutine r_input_part_ascii(pst,input_size,output_size,input_array)
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_ASCII,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_part_ascii(pst%pLower,input_size,output_size,input_array)
+     call r_input_part_ascii(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      npart_tot=transfer(input_array,npart_tot)

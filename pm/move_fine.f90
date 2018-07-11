@@ -13,20 +13,21 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
   ! Move particles according to kick-drift leap frog scheme.
   !--------------------------------------------------------------
   integer,dimension(1:2)::input_array
-  
+  integer::dummy
+
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
 
   input_array(1)=ilevel
   input_array(2)=action_part
-  call r_kick_drift_part(pst,2,0,input_array)
+  call r_kick_drift_part(pst,input_array,2,dummy,0)
   
 end subroutine m_kick_drift_part
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_kick_drift_part(pst,input_size,output_size,input_array)
+recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,output_size)
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -34,13 +35,14 @@ recursive subroutine r_kick_drift_part(pst,input_size,output_size,input_array)
   type(pst_t)::pst
   integer::input_size,output_size
   integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
 
   integer::ilevel
   integer::action_part
 
   if(pst%nLower>0)then
      call mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_kick_drift_part(pst%pLower,input_size,output_size,input_array)
+     call r_kick_drift_part(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
      ilevel=input_array(1)
@@ -299,7 +301,7 @@ subroutine pack_fetch_kick(grid,msg_size,msg_array)
   use cache_commons, only: msg_three_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind
   type(msg_three_realdp)::msg
@@ -325,7 +327,7 @@ subroutine unpack_fetch_kick(grid,msg_size,msg_array)
   use cache_commons, only: msg_three_realdp
   type(oct)::grid
   integer::msg_size
-  integer,dimension(1:msg_size)::msg_array
+  integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind
   type(msg_three_realdp)::msg
