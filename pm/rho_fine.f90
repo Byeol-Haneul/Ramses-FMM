@@ -915,7 +915,6 @@ subroutine split_part(s,ilevel)
   integer,dimension(1:ndim),save::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim),save::hash_key
   integer::i,ipart,jpart,igrid,idim,icell
-  integer,external::get_grid
   integer::npart_coarse,npart_fine
   real(kind=8)::dx_loc,vol_loc
   real(dp)::mp_tmp
@@ -943,7 +942,7 @@ subroutine split_part(s,ilevel)
      ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
      if(.NOT. ALL(ix.EQ.ix_ref))then
         hash_key(1:ndim)=ix(1:ndim)
-        igrid=get_grid(s,hash_key,m%grid_dict,.false.,.true.)
+        call get_grid(s,hash_key,m%grid_dict,igrid,.false.,.true.)
         ix_ref=ix
      endif
 

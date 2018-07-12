@@ -722,7 +722,6 @@ subroutine make_bc_rhs(s,ilevel,icount)
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   integer::igrid,idim,ind,igridn,inbor,ig,id
-  integer,external::get_grid
   integer,dimension(1:8,1:8)::ccc
   real(dp)::aa,bb,cc,dd,tfrac
   real(dp),dimension(1:8)::bbb
@@ -806,7 +805,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
+        call get_grid(s,hash_nbor,m%grid_dict,igridn,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then

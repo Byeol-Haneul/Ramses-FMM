@@ -216,7 +216,6 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
 
   ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
-  integer,external :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
@@ -265,7 +264,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid(s,hash_nbor,hash_dict,.false.,.true.)
+        call get_grid(s,hash_nbor,hash_dict,igridn,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -445,7 +444,6 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   ! Perform a Gauss-Seidel update of grid(igrid)%phi(ind).
   ! The domain mask is also needed.
   
-  integer,external :: get_grid
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
@@ -501,7 +499,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        igridn=get_grid(s,hash_nbor,hash_dict,.false.,.true.)
+        call get_grid(s,hash_nbor,hash_dict,igridn,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -1022,7 +1020,6 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   integer, intent(in) :: ilevel
   type(hash_table) :: hash_dict
   !
-  integer,external :: get_grid
   integer :: ind, igrid, igridn, inbor, idim, id, ig
   integer, dimension(1:3,1:2,1:8)::iii, jjj
   real(dp),dimension(1:twotondim,0:twondim)::dis_nbor
@@ -1065,7 +1062,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid(s,hash_nbor,hash_dict,.false.,.true.)
+        call get_grid(s,hash_nbor,hash_dict,igridn,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then

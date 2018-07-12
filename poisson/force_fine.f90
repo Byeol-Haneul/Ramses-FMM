@@ -172,7 +172,6 @@ subroutine gradient_phi(s,ilevel,icount)
   ! in the current level grids, using a
   ! 5 nodes kernel (5 points FDA).
   !-------------------------------------------------
-  integer,external::get_grid
   integer::i_nbor,igrid,idim,ind,igridn
   integer::id1,id2,id3,id4
   integer::ig1,ig2,ig3,ig4
@@ -265,7 +264,7 @@ subroutine gradient_phi(s,ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
            if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
+        call get_grid(s,hash_nbor,m%grid_dict,igridn,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then

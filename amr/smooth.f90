@@ -46,7 +46,6 @@ subroutine smooth_fine(s,ilevel,nflag)
   ! -------------------------------------------------------------------
   integer::ismooth,count_nbor,ig,in
   integer::igrid,idim,ind,i_nbor,igrid_nbor,icell_nbor
-  integer,external::get_grid
   integer,dimension(1:3),save::n_nbor=(/1,2,2/)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::igridn
@@ -98,7 +97,7 @@ subroutine smooth_fine(s,ilevel,nflag)
               if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
               if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
            enddo
-           igridn(i_nbor)=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
+           call get_grid(s,hash_nbor,m%grid_dict,igridn(i_nbor),.false.,.true.)
            call lock_cache(s,igridn(i_nbor))
         end do
 

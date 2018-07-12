@@ -34,7 +34,6 @@ subroutine get_threetondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_
   integer,save::k1min=0*(1-ndim/3)-1*(ndim/3)
   integer,save::k1max=0*(1-ndim/3)+1*(ndim/3)
   integer::ind,ipos,idim,ilevel,inbor
-  integer,external::get_grid
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -54,7 +53,7 @@ subroutine get_threetondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_
      ! Store lower left neighbor coordinates 
      if(inbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
      ! Get grid into memory and lock it if remote 
-     ipos=get_grid(s,hash_father,hash_dict,flush_cache,fetch_cache)
+     call get_grid(s,hash_father,hash_dict,ipos,flush_cache,fetch_cache)
      call lock_cache(s,ipos)
      igrid_twotondim_nbor(inbor)=ipos
   end do
@@ -133,7 +132,6 @@ subroutine get_twondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_nbor
   integer(kind=8),dimension(1:ndim)::ii
   integer,dimension(1:3,1:6),save::shift=reshape((/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer::ind,ipos,idim,ilevel,inbor
-  integer,external::get_grid
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -149,7 +147,7 @@ subroutine get_twondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_nbor
   end do
 
   ! Get grid into memory and lock it if remote 
-  ipos=get_grid(s,hash_father,hash_dict,flush_cache,fetch_cache)
+  call get_grid(s,hash_father,hash_dict,ipos,flush_cache,fetch_cache)
   call lock_cache(s,ipos)
   igrid_nbor(0)=ipos
   ind_nbor(0)=ind
@@ -171,7 +169,7 @@ subroutine get_twondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_nbor
      end do
 
      ! Get grid into memory and lock it if remote 
-     ipos=get_grid(s,hash_father,hash_dict,flush_cache,fetch_cache)
+     call get_grid(s,hash_father,hash_dict,ipos,flush_cache,fetch_cache)
      call lock_cache(s,ipos)
      igrid_nbor(inbor)=ipos
      ind_nbor(inbor)=ind
@@ -201,7 +199,6 @@ subroutine get_parent_cell(s,hash_key,hash_dict,igrid,ind,flush_cache,fetch_cach
   integer(kind=8),dimension(0:ndim)::hash_father
   integer(kind=8),dimension(1:ndim)::ii
   integer::idim
-  integer,external::get_grid
   hash_father(0)=hash_key(0)-1
   hash_father(1:ndim)=hash_key(1:ndim)/2
   ii(1:ndim)=hash_key(1:ndim)-2*hash_father(1:ndim)
@@ -209,7 +206,7 @@ subroutine get_parent_cell(s,hash_key,hash_dict,igrid,ind,flush_cache,fetch_cach
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
-  igrid=get_grid(s,hash_father,hash_dict,flush_cache,fetch_cache)
+  call get_grid(s,hash_father,hash_dict,igrid,flush_cache,fetch_cache)
 end subroutine get_parent_cell
 !###############################################################
 !###############################################################
@@ -253,7 +250,7 @@ end subroutine unlock_cache
 !##############################################################
 !##############################################################
 !##############################################################
-integer function get_grid(s,hash_key,hash_dict,flush_cache,fetch_cache) result(child_grid)
+subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -265,6 +262,7 @@ integer function get_grid(s,hash_key,hash_dict,flush_cache,fetch_cache) result(c
   include 'mpif.h'
 #endif
   type(ramses_t)::s
+  integer::child_grid
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
@@ -505,7 +503,7 @@ integer function get_grid(s,hash_key,hash_dict,flush_cache,fetch_cache) result(c
 
   end associate
 
-end function get_grid
+end subroutine get_grid
 !##############################################################
 !##############################################################
 !##############################################################

@@ -20,7 +20,8 @@ module hydro_commons
      real(dp),dimension(:,:,:),allocatable::divu
      logical ,dimension(:,:,:),allocatable::okloc
      integer ,dimension(:,:,:),allocatable::childloc
-     integer ,dimension(:,:,:),allocatable::parentloc
+     integer ,dimension(:,:,:),allocatable::gridloc
+     integer ,dimension(:,:,:),allocatable::cellloc
      integer ,dimension(:,:,:,:),allocatable::nborloc
    contains
      procedure :: init => init_hydro_kernel
@@ -48,22 +49,25 @@ contains
     h%jo1=(1-ndim/2); h%jo2=(1-ndim/2)+(nn/2+1)*(ndim/2)
     h%ko1=(1-ndim/3); h%ko2=(1-ndim/3)+(nn/2+1)*(ndim/3)
     
-    allocate(h%uloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
-    allocate(h%gloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:ndim))
-    allocate(h%qloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
-    allocate(h%cloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
+    allocate(h%uloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
+    allocate(h%gloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:ndim))
+    allocate(h%qloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
+    allocate(h%cloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
+    allocate(h%okloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
+    allocate(h%dq   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
+    allocate(h%qm   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
+    allocate(h%qp   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
+    allocate(h%fx   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
+    allocate(h%tx   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:2   ))
+
     allocate(h%flux(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:nvar,1:ndim))
     allocate(h%tmp (h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:2   ,1:ndim))
-    allocate(h%dq  (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
-    allocate(h%qm  (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
-    allocate(h%qp  (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
-    allocate(h%fx  (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
-    allocate(h%tx  (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:2   ))
     allocate(h%divu(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2))
-    allocate(h%okloc    (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
-    allocate(h%childloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
-    allocate(h%parentloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
-    allocate(h%nborloc  (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2,1:twondim))
+
+    allocate(h%childloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
+    allocate(h%gridloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
+    allocate(h%cellloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
+    allocate(h%nborloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2,1:twondim))
     
   end subroutine init_hydro_kernel
 

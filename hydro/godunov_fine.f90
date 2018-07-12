@@ -2,21 +2,24 @@
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_godunov_fine(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_godunov_fine(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
+  integer::ilevel
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_godunov_fine(pst%pLower,ilevel,input_size,output_array,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     call r_godunov_fine(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     call godunov_fine(pst%s,ilevel(1))
+     ilevel=input_array(1)
+     call godunov_fine(pst%s,ilevel)
   endif
 
 end subroutine r_godunov_fine
@@ -67,21 +70,24 @@ end subroutine godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_unew(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_set_unew(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
+  integer::ilevel
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_set_unew(pst%pLower,ilevel,input_size,output_array,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,output_size,input_array)
+     call r_set_unew(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
+     ilevel=input_array(1)
+     call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_set_unew
@@ -142,21 +148,24 @@ end subroutine set_unew
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_uold(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_set_uold(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
+  integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
+  integer::ilevel
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_set_uold(pst%pLower,ilevel,input_size,output_array,output_size)
+     call mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,output_size,input_array)
+     call r_set_uold(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
+     ilevel=input_array(1)
+     call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_set_uold
@@ -248,9 +257,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ! and stored in array unew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
-  integer,external::get_grid
   integer::ivar,idim,ind_son,ind_oct
-  integer::igrid,icell=0,inbor,ichild,parent_cell
+  integer::igrid,icell,inbor,ichild
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -328,7 +336,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               kk1=ckey(3)+1
 #endif
               h%childloc(ii1,jj1,kk1)=ind_oct
-              h%parentloc(ii1,jj1,kk1)=0
+              h%gridloc (ii1,jj1,kk1)=0
+              h%cellloc (ii1,jj1,kk1)=0
 
               ! Loop over 2x2x2 cells
               do k2=k2min,k2max
@@ -383,8 +392,9 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               enddo
               
               ! Get neighboring grid index with read-only cache
-              ichild=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
-              parent_cell=0
+              call get_grid(s,hash_nbor,m%grid_dict,ichild,.false.,.true.)
+              igrid=0
+              icell=0
               igrid_nbor=0
               if(ichild>0)then
                  call lock_cache(s,ichild)
@@ -397,13 +407,13 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     write(*,*)'PE ',g%myid,hash_nbor
                     stop
                  endif
-                 parent_cell=(igrid-1)*twotondim+icell
                  call lock_cache(s,igrid)
 
                  ! In case one wants to interpolate using high-order schemes
                  if(r%interpol_type>0)then
 
                     ! Get 2ndim neighboring father cells with read-write cache
+                    ! Note that possible cache grids are locked inside the routine
                     call get_twondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
@@ -420,7 +430,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 
               ! Store grid index
               h%childloc(i1,j1,k1)=ichild
-              h%parentloc(i1,j1,k1)=parent_cell
+              h%gridloc (i1,j1,k1)=igrid
+              h%cellloc (i1,j1,k1)=icell
               if(r%interpol_type>0)then
                  do inbor=1,twondim
                     h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
@@ -645,9 +656,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               ! Check that parent cell is not refined
               if(ind_oct==0)then
                  ! Get parent cell index
-                 parent_cell=h%parentloc(i1,j1,k1)
-                 igrid=(parent_cell-1)/twotondim+1
-                 icell=parent_cell-(igrid-1)*twotondim
+                 igrid=h%gridloc(i1,j1,k1)
+                 icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell left faces
                  do k2=k2min,k2max-k0
                     do j2=j2min,j2max-j0
@@ -703,9 +713,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               ! Check that parent cell is not refined
               if(ind_oct==0)then
                  ! Get parent cell index
-                 parent_cell=h%parentloc(i1,j1,k1)
-                 igrid=(parent_cell-1)/twotondim+1
-                 icell=parent_cell-(igrid-1)*twotondim
+                 igrid=h%gridloc(i1,j1,k1)
+                 icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell right faces
                  do k2=k2min+k0,k2max
                     do j2=j2min+j0,j2max
@@ -757,9 +766,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               call unlock_cache(s,ind_oct)
            else
               ! Get parent cell index
-              parent_cell=h%parentloc(i1,j1,k1)
-              igrid=(parent_cell-1)/twotondim+1
-              icell=parent_cell-(igrid-1)*twotondim
+              igrid=h%gridloc(i1,j1,k1)
               call unlock_cache(s,igrid)
               ! Get neighbouring parent oct index
               if(r%interpol_type>0)then

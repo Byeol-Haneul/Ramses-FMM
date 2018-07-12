@@ -240,7 +240,6 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   ! This routine computes the residual for the Conjugate Gradient
   ! Poisson solver. The residual is stored in f(i,1) and f(i,2).
   !------------------------------------------------------------------
-  integer,external::get_grid
   integer::i_nbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   integer,dimension(1:8,1:8)::ccc
@@ -324,7 +323,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
+        call get_grid(s,hash_nbor,m%grid_dict,igridn,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then
@@ -411,7 +410,6 @@ subroutine cmp_Ap_cg(s,ilevel)
   ! This routine computes Ap for the Conjugate Gradient
   ! Poisson Solver and store the result into f(i,3).
   !------------------------------------------------------------------
-  integer,external::get_grid
   integer::inbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   real(dp)::oneoversix,residu
@@ -458,7 +456,7 @@ subroutine cmp_Ap_cg(s,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        igridn=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
+        call get_grid(s,hash_nbor,m%grid_dict,igridn,.false.,.true.)
 
         ! If grid exists, then copy into array
         if(igridn>0)then

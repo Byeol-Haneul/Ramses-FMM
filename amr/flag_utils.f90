@@ -334,7 +334,6 @@ subroutine ensure_ref_rules(s,ilevel)
   ! strict refinement rule. 
   ! Used in case of adaptive time steps only.
   !-----------------------------------------------------------------
-  integer,external::get_grid
   integer::idim,ind,igrid,ichild
   integer::i1,j1,k1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -384,7 +383,7 @@ subroutine ensure_ref_rules(s,ilevel)
               enddo
 
               ! Get neighboring grid index
-              ichild=get_grid(s,hash_nbor,m%grid_dict,.false.,.true.)
+              call get_grid(s,hash_nbor,m%grid_dict,ichild,.false.,.true.)
               ok=ok.and.(ichild>0)
 
            end do
