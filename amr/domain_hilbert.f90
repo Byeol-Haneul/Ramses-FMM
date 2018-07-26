@@ -7,6 +7,7 @@ module domain_m
   type domain_t
      integer :: myid
      integer :: ncpu
+     integer :: last_domain
 !     integer :: n                                                 ! number of points in domain
 !     integer :: overload                                          ! number of domains per cpu rank
      integer(kind=8), dimension(:,:), allocatable :: b            ! bound key
@@ -55,14 +56,14 @@ contains
   function get_rank(domain,key) result(rank)
     use amr_parameters, only : nhilbert
     implicit none
-    class(domain_t),                        intent(in) :: domain
+    class(domain_t),                        intent(inout) :: domain
     integer(kind=8), dimension(1:nhilbert), intent(in) :: key
     integer :: rank, idom, ncpu
     !
     ncpu = domain%ncpu
 !    idom = modulo(domain%d2r(idom)-1,ncpu)+1
 !    rank = modulo(domain%d2r(idom)-1,ncpu)+1
-    rank = get_domain(domain,key)
+    rank = get_domain_bis(domain,key)
   end function get_rank
 
   !================================================================
@@ -149,7 +150,7 @@ contains
   function get_domain(domain,key) result(dom)
     use amr_parameters, only : nhilbert
     implicit none
-    class(domain_t),                       intent(in) :: domain
+    class(domain_t),                        intent(in) :: domain
     integer(kind=8), dimension(1:nhilbert), intent(in) :: key
     integer            :: dom
     !
@@ -215,6 +216,46 @@ contains
     ncall = modulo(ncall + 1,20000000)                                            ! Use 0.1% of the calls for timing
     !
   end function get_domain
+
+  function get_domain_lin(domain,key) result(dom)
+    use amr_parameters, only : nhilbert
+    implicit none
+    class(domain_t),                        intent(in) :: domain
+    integer(kind=8), dimension(1:nhilbert), intent(in) :: key
+    integer            :: dom
+    !
+    integer            :: idom, myid
+    !
+    myid = domain%myid
+    !
+    dom=1                                                                     ! default value
+    do idom=1,domain%ncpu-1
+       if (ge_keys(key,domain%b(1:nhilbert,idom))) then
+          dom = dom + 1                                                       ! have to check lower bound
+       else
+          exit
+       endif
+    end do
+    !
+  end function get_domain_lin
+
+  function get_domain_bis(domain,key) result(dom)
+    use amr_parameters, only : nhilbert
+    implicit none
+    class(domain_t),                     intent(inout) :: domain
+    integer(kind=8), dimension(1:nhilbert), intent(in) :: key
+    integer            :: dom
+    !
+    integer            :: idom, myid
+    !
+    myid = domain%myid
+    !
+    dom = domain%last_domain
+    call hunt(domain%b,key,dom,domain%ncpu)
+    domain%last_domain = dom                                         ! hopefully a close guess
+    dom = dom + 1                                                    ! hunt returns lower bound, we need upper
+    !
+  end function get_domain_bis
 
   !================================================================
   !================================================================
