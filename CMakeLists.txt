@@ -93,6 +93,7 @@ PRIVATE	amr/ramses.f90
 	patch/coeur/units.f90
 	amr/refine_utils.f90
 	amr/nbors_utils.f90
+	amr/nbors_utils_p.f90
 	amr/flag_utils.f90
 	amr/smooth.f90
 	amr/amr_step.f90
@@ -109,6 +110,7 @@ PRIVATE	amr/ramses.f90
 	amr/hilbert.f90
 	amr/domain_hilbert.f90
 	hydro/hydro_commons.f90
+	amr/oct_commons.f90
 	amr/amr_commons.f90
 	poisson/poisson_parameters.f90
 	poisson/poisson_commons.f90

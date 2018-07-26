@@ -675,10 +675,10 @@ subroutine balance_part(s,ilevel)
   integer::info
   integer,dimension(MPI_STATUS_SIZE,s%g%ncpu)::statuses
 #endif
-  integer(kind=8),dimension(1:nhilbert),save::hk_ref
-  integer(kind=8),dimension(1:ndim),save::ix_ref
+  integer(kind=8),dimension(1:nhilbert)::hk_ref
+  integer(kind=8),dimension(1:ndim)::ix_ref
 
-  integer,dimension(1:ndim),save::ix
+  integer,dimension(1:ndim)::ix
   integer::i,istart,ipart,jpart,idim,grid_cpu,myid,ncpu
   integer::ilev,idom,icpu,mydom,ndom,count_loc,recv_cnt_tot,send_cnt_tot
   integer::nbuffer,countrecv,countsend,tag=101
@@ -702,7 +702,7 @@ subroutine balance_part(s,ilevel)
   integer,dimension(1:s%g%ncpu)::npart_cpu,npart_cpu_tot
   real(dp)::xpart_target,xcum_target
 
-  real(dp),dimension(1:ndim),save::xp_tmp,vp_tmp
+  real(dp),dimension(1:ndim)::xp_tmp,vp_tmp
   real(dp)::mp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp

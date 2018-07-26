@@ -39,8 +39,8 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   
   ! Local variables
   integer::igrid,ngrid,ind,idim,nstride,i,ivar
-  real(dp),dimension(1:nvector,1:ndim),save::xx
-  real(dp),dimension(1:nvector,1:nvar),save::uu
+  real(dp),dimension(1:nvector,1:ndim)::xx
+  real(dp),dimension(1:nvector,1:nvar)::uu
   real(dp)::dx
 
   if(m%noct(ilevel)==0)return

@@ -40,7 +40,9 @@ end subroutine r_restrict_mask
 
 subroutine restrict_mask(s,ifinelevel,allmasked)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   use hash
@@ -53,7 +55,8 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
   integer :: ichild,ind,igrid,icell
   real(dp) :: ngpmask, mask_max
   real(dp) :: dtwotondim = (twotondim)
-  
+  type(oct),pointer::gridp
+
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Initialize volume fraction to zero at coarse level
@@ -76,11 +79,11 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
 
         ! Get parent cell using write-only cache
-        call get_parent_cell(s,hash_key,m%mg_dict,igrid,icell,.true.,.false.)
+        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,.true.,.false.)
 
         ! Convert mask value to volume fraction
         ngpmask=(1d0+m%grid(ichild)%f(ind,3))/2d0/dtwotondim
-        m%grid(igrid)%f(icell,3)=m%grid(igrid)%f(icell,3)+ngpmask
+        gridp%f(icell,3)=gridp%f(icell,3)+ngpmask
 
      end do
   end do
@@ -205,7 +208,9 @@ end subroutine r_cmp_residual_mg
 
 subroutine cmp_residual_mg(s,hash_dict, ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   use hash
@@ -217,14 +222,15 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
+  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
   real(dp) :: dx, oneoverdx2, phi_c, dis_c, nb_sum
   integer  :: igrid, ind, inbor, idim, igridn, id, ig
   real(dp) :: dtwondim = (twondim)
-  
+  type(oct),pointer::gridp
+
   associate(r=>s%r,g=>s%g,m=>s%m)
   
   ! Set constants
@@ -264,13 +270,13 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid(s,hash_nbor,hash_dict,igridn,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
 
         ! If grid exists, then copy into array
-        if(igridn>0)then
+        if(associated(gridp))then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=m%grid(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=m%grid(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=gridp%phi(ind)
+              dis_nbor(ind,inbor)=gridp%f(ind,3)
            end do
 
         ! Otherwise set to zero and outside
@@ -430,7 +436,9 @@ end subroutine r_gauss_seidel_mg
 
 subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   use hash
@@ -445,13 +453,14 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   ! The domain mask is also needed.
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor,dis_nbor
+  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
   real(dp) :: phi_c, dis_c, dx2, nb_sum, weight
   integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0
   real(dp) :: dtwondim = (twondim)
+  type(oct),pointer::gridp
 
   integer, dimension(1:4) :: ired, iblack
   
@@ -499,13 +508,13 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        call get_grid(s,hash_nbor,hash_dict,igridn,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
 
         ! If grid exists, then copy into array
-        if(igridn>0)then
+        if(associated(gridp))then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=m%grid(igridn)%phi(ind)
-              dis_nbor(ind,inbor)=m%grid(igridn)%f(ind,3)
+              phi_nbor(ind,inbor)=gridp%phi(ind)
+              dis_nbor(ind,inbor)=gridp%f(ind,3)
            end do
 
         ! Otherwise set to zero and outside
@@ -648,7 +657,9 @@ end subroutine r_restrict_residual
 
 subroutine restrict_residual(s,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   use hash
@@ -664,7 +675,8 @@ subroutine restrict_residual(s,ifinelevel)
   integer :: igrid, icell
   real(dp) :: dtwotondim = (twotondim)
   integer(kind=8),dimension(0:ndim) :: hash_key
-  
+  type(oct),pointer::gridp
+
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Set rhs to zero in coarse cells
@@ -690,13 +702,13 @@ subroutine restrict_residual(s,ifinelevel)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
         
         ! Get parent cell using read-write cache
-        call get_parent_cell(s,hash_key,m%mg_dict,igrid,icell,.true.,.true.)
+        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,.true.,.true.)
         
         ! Is coarse cell masked?
-        if(m%grid(igrid)%f(icell,3)<=0d0)cycle
+        if(gridp%f(icell,3)<=0d0)cycle
         
         ! Stack fine cell residual in coarse cell rhs
-        m%grid(igrid)%f(icell,2)=m%grid(igrid)%f(icell,2)+m%grid(ichild)%f(ind,1)/dtwotondim
+        gridp%f(icell,2)=gridp%f(icell,2)+m%grid(ichild)%f(ind,1)/dtwotondim
         
      end do
   end do
@@ -837,7 +849,9 @@ end subroutine r_interpolate_and_correct
 
 subroutine interpolate_and_correct(s,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
+  use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   use hash
@@ -850,6 +864,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   
   integer(kind=8),dimension(0:ndim) :: hash_key
   integer,dimension(1:threetondim) :: igrid_nbor,ind_nbor
+  type(nbor),dimension(1:threetondim) :: grid_nbor
   integer  :: ichild, ind
   real(dp) :: aa, bb, cc, dd, coeff
   real(dp), dimension(1:8)     :: bbb
@@ -857,6 +872,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   integer::ind_average,ind_father
   integer::igrid_nbr,ind_nbr
   real(dp),dimension(1:twotondim)::corr
+  type(oct),pointer::gridp
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -887,7 +903,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
      
      ! Get 3**ndim neighbouring parent cell using a read-only cache
-     call get_threetondim_nbor_parent_cell(s,hash_key,m%mg_dict,igrid_nbor,ind_nbor,.false.,.true.)
+     call get_threetondim_nbor_parent_cell_p(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,.false.,.true.)
      
      ! Loop over cells
      do ind=1,twotondim
@@ -902,10 +918,10 @@ subroutine interpolate_and_correct(s,ifinelevel)
         do ind_average=1,twotondim
            ind_father=ccc(ind_average,ind)
            coeff=bbb(ind_average)
-           igrid_nbr=igrid_nbor(ind_father)
+           gridp=>grid_nbor(ind_father)%p
            ind_nbr=ind_nbor(ind_father)
-           if (igrid_nbr>0) then
-              corr(ind)=corr(ind)+coeff*m%grid(igrid_nbr)%phi(ind_nbr)
+           if (associated(gridp)) then
+              corr(ind)=corr(ind)+coeff*gridp%phi(ind_nbr)
            endif
         end do
 
@@ -913,7 +929,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
      ! End loop over cells
      
      do ind=1,threetondim
-        call unlock_cache(s,igrid_nbor(ind))
+        call unlock_cache_p(s,grid_nbor(ind)%p)
      end do
      
      ! Add correction to fine level solution
@@ -1011,7 +1027,9 @@ end subroutine r_set_scan_flag
 
 subroutine set_scan_flag(s,hash_dict,ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   use hash
@@ -1027,6 +1045,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   real(dp)::dis_c
+  type(oct),pointer::gridp
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -1062,12 +1081,12 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid(s,hash_nbor,hash_dict,igridn,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
 
         ! If grid exists, then copy into array
-        if(igridn>0)then
+        if(associated(gridp))then
            do ind=1,twotondim
-              dis_nbor(ind,inbor)=m%grid(igridn)%f(ind,3)
+              dis_nbor(ind,inbor)=gridp%f(ind,3)
            end do
 
         ! Otherwise set to "outside"

@@ -54,7 +54,9 @@ end subroutine r_upload_fine
 subroutine upload_fine(s,ilevel)
   use hydro_parameters, only: nvar,nener
   use amr_parameters, only: dp,ndim,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
@@ -66,9 +68,10 @@ subroutine upload_fine(s,ilevel)
 #if NENER>0
   integer::irad
 #endif
-  integer::ioct,ind,ivar,igrid,icell,idim
+  integer::ioct,ind,ivar,icell,idim
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad
+  type(oct),pointer::gridp
 
 #ifdef HYDRO
 
@@ -93,7 +96,7 @@ subroutine upload_fine(s,ilevel)
 
      ! Get cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     call get_parent_cell(s,hash_key,m%grid_dict,igrid,icell,.true.,.false.)
+     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.false.)
 
      ! Average conservative variables
      do ivar=1,nvar
@@ -102,7 +105,7 @@ subroutine upload_fine(s,ilevel)
            average=average+m%grid(ioct)%uold(ind,ivar)
         end do
         ! Scatter result to cell
-        m%grid(igrid)%uold(icell,ivar)=average/dble(twotondim)
+        gridp%uold(icell,ivar)=average/dble(twotondim)
      end do
 
      ! Average internal energy instead of total energy
@@ -124,15 +127,15 @@ subroutine upload_fine(s,ilevel)
         ! Scatter result to cell
         ekin=0.0d0
         do idim=1,ndim
-           ekin=ekin+0.5d0*m%grid(igrid)%uold(icell,idim+1)**2/max(m%grid(igrid)%uold(icell,1),r%smallr)
+           ekin=ekin+0.5d0*gridp%uold(icell,idim+1)**2/max(gridp%uold(icell,1),r%smallr)
         end do
         erad=0.0d0
 #if NENER>0
         do irad=1,nener
-           erad=erad+m%grid(igrid)%uold(icell,ndim+2+irad)
+           erad=erad+gridp%uold(icell,ndim+2+irad)
         end do
 #endif
-        m%grid(igrid)%uold(icell,ndim+2)=average/dble(twotondim)+ekin+erad
+        gridp%uold(icell,ndim+2)=average/dble(twotondim)+ekin+erad
      endif
   end do
 

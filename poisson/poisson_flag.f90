@@ -15,7 +15,7 @@ subroutine poisson_flag(s,ilevel)
   ! some user-defined physical criteria at the level ilevel. 
   ! -------------------------------------------------------------------
   real(dp)::dx_loc,vol_loc,d_scale,dp_scale,factG
-  real(dp),dimension(1:nvar),save::uu
+  real(dp),dimension(1:nvar)::uu
   integer::igrid,ind,ivar
   logical::ok
 

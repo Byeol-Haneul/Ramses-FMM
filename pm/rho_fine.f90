@@ -159,8 +159,8 @@ subroutine multipole_leaf_cells(r,g,m,ilevel)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::igrid,ind,idim,ivar,nstride,ioct,icell
-  real(dp),dimension(1:ndim),save::xx
+  integer::igrid,ind,idim,ivar,nstride,icell
+  real(dp),dimension(1:ndim)::xx
   real(kind=8)::dx_loc,vol_loc,mmm,dd
   logical::leaf_cell
 
@@ -250,7 +250,9 @@ end subroutine r_multipole_split_cells
 !###########################################################
 subroutine multipole_split_cells(s,ilevel)
   use amr_parameters, only: ndim,dp,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
@@ -261,10 +263,11 @@ subroutine multipole_split_cells(s,ilevel)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::igrid,ind,idim,ivar,nstride,ioct,icell
+  integer::ind,idim,ivar,nstride,ioct,icell
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key
   logical::leaf_cell
+  type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   
@@ -278,7 +281,7 @@ subroutine multipole_split_cells(s,ilevel)
   do ioct=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell(s,hash_key,m%grid_dict,igrid,icell,.true.,.false.)
+     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.false.)
 #ifdef HYDRO
      ! Average conservative variables
      do ivar=1,ndim+1
@@ -287,7 +290,7 @@ subroutine multipole_split_cells(s,ilevel)
            average=average+m%grid(ioct)%unew(ind,ivar)
         end do
         ! Scatter result to cell
-        m%grid(igrid)%unew(icell,ivar)=average
+        gridp%unew(icell,ivar)=average
      end do
 #endif
   end do
@@ -454,21 +457,24 @@ end subroutine r_cic_multipole
 !###########################################################
 subroutine cic_multipole(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim),save::x,dd,dg
-  integer,dimension(1:ndim),save::ig,id
-  real(dp),dimension(1:twotondim),save::vol
+  real(dp),dimension(1:ndim)::x,dd,dg
+  integer,dimension(1:ndim)::ig,id
+  real(dp),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
-  integer(kind=8),dimension(0:ndim),save::hash_nbor
+  integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::inbor,igrid,ind,idim
-  integer::ioct,icell
+  integer::icell
   real(kind=8)::dx_loc,vol_loc,mmm
+  type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
     
@@ -577,9 +583,9 @@ subroutine cic_multipole(s,ilevel)
         do inbor=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,inbor)
            ! Get parent cell using write-only cache
-           call get_parent_cell(s,hash_nbor,m%grid_dict,ioct,icell,.true.,.false.)
-           if(ioct>0)then
-              m%grid(ioct)%rho(icell)=m%grid(ioct)%rho(icell)+mmm*vol(inbor)/vol_loc
+           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,.true.,.false.)
+           if(associated(gridp))then
+              gridp%rho(icell)=gridp%rho(icell)+mmm*vol(inbor)/vol_loc
            end if
         end do
 #endif     
@@ -622,7 +628,9 @@ end subroutine r_cic_part
 !##############################################################################
 subroutine cic_part(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   implicit none
@@ -630,13 +638,14 @@ subroutine cic_part(s,ilevel)
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim),save::x,dd,dg
-  integer,dimension(1:ndim),save::ig,id,ix
-  real(dp),dimension(1:twotondim),save::vol
-  integer,dimension(1:ndim,1:twotondim),save::ckey
-  integer(kind=8),dimension(0:ndim),save::hash_nbor
-  integer::i,ipart,igrid,icell,ind,idim
+  real(dp),dimension(1:ndim)::x,dd,dg
+  integer,dimension(1:ndim)::ig,id,ix
+  real(dp),dimension(1:twotondim)::vol
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::i,ipart,icell,ind,idim
   real(kind=8)::dx_loc,vol_loc,vol2
+  type(oct),pointer::gridp
   
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
 
@@ -740,10 +749,10 @@ subroutine cic_part(s,ilevel)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
-        call get_parent_cell(s,hash_nbor,m%grid_dict,igrid,icell,.true.,.false.)
-        if(igrid>0)then
+        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,.true.,.false.)
+        if(associated(gridp))then
            vol2=p%mp(ipart)*vol(ind)/vol_loc
-           m%grid(igrid)%rho(icell)=m%grid(igrid)%rho(icell)+vol2
+           gridp%rho(icell)=gridp%rho(icell)+vol2
         endif
      end do
 #endif
@@ -903,7 +912,9 @@ end subroutine unpack_fetch_split
 !##############################################################################
 subroutine split_part(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,i8b
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   implicit none
@@ -911,15 +922,16 @@ subroutine split_part(s,ilevel)
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim),save::x,xp_tmp,vp_tmp
-  integer,dimension(1:ndim),save::ii,ix,ix_ref
-  integer(kind=8),dimension(0:ndim),save::hash_key
-  integer::i,ipart,jpart,igrid,idim,icell
+  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp
+  integer,dimension(1:ndim)::ii,ix,ix_ref
+  integer(kind=8),dimension(0:ndim)::hash_key
+  integer::i,ipart,jpart,idim,icell
   integer::npart_coarse,npart_fine
   real(kind=8)::dx_loc,vol_loc
   real(dp)::mp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
+  type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
     
@@ -933,7 +945,6 @@ subroutine split_part(s,ilevel)
 
   ! Loop over particles
   ix_ref=-1
-  igrid=0
   npart_coarse=0
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
      ipart=p%sortp(i)
@@ -942,14 +953,14 @@ subroutine split_part(s,ilevel)
      ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
      if(.NOT. ALL(ix.EQ.ix_ref))then
         hash_key(1:ndim)=ix(1:ndim)
-        call get_grid(s,hash_key,m%grid_dict,igrid,.false.,.true.)
+        call get_grid_p(s,hash_key,m%grid_dict,gridp,.false.,.true.)
         ix_ref=ix
      endif
 
      ! If particle sits outside current level,
      ! then it is clearly not in a refined cell.
      ! This can happen during second adaptive step
-     if(igrid==0)then
+     if(.not.associated(gridp))then
         npart_coarse=npart_coarse+1
         p%levelp(ipart)=-p%levelp(ipart)
      else
@@ -974,7 +985,7 @@ subroutine split_part(s,ilevel)
         icell=1+ii(1)+2*ii(2)+4*ii(3)
 #endif
         ! Increase counter if cell is not refined
-        if(.NOT.m%grid(igrid)%refined(icell))then
+        if(.NOT.gridp%refined(icell))then
            npart_coarse=npart_coarse+1
            p%levelp(ipart)=-p%levelp(ipart)
         else

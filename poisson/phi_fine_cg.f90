@@ -231,7 +231,9 @@ end subroutine r_cmp_residual_cg
 
 subroutine cmp_residual_cg(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
@@ -247,11 +249,13 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   real(dp)::aa,bb,cc,dd,tfrac
   real(dp),dimension(1:8)::bbb
   integer,dimension(1:3,1:2,1:8)::iii,jjj
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
+  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
+  integer,dimension(1:threetondim)::ind_nbor
+  type(nbor),dimension(1:threetondim)::grid_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
     
@@ -323,21 +327,21 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        call get_grid(s,hash_nbor,m%grid_dict,igridn,.false.,.true.)
+        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
 
         ! If grid exists, then copy into array
-        if(igridn>0)then
+        if(associated(gridp))then
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=m%grid(igridn)%phi(ind)
+              phi_nbor(ind,i_nbor)=gridp%phi(ind)
            end do
 
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
-           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
+           call interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache(s,igrid_nbor(ind))
+              call unlock_cache_p(s,grid_nbor(ind)%p)
            end do
         endif
 
@@ -401,7 +405,9 @@ end subroutine r_cmp_Ap_cg
 
 subroutine cmp_Ap_cg(s,ilevel)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
@@ -414,10 +420,11 @@ subroutine cmp_Ap_cg(s,ilevel)
   integer::id1,id2,ig1,ig2
   real(dp)::oneoversix,residu
   integer,dimension(1:3,1:2,1:8)::iii,jjj
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
+  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -456,12 +463,12 @@ subroutine cmp_Ap_cg(s,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid(s,hash_nbor,m%grid_dict,igridn,.false.,.true.)
+        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
 
         ! If grid exists, then copy into array
-        if(igridn>0)then
+        if(associated(gridp))then
            do ind=1,twotondim
-              phi_nbor(ind,inbor)=m%grid(igridn)%f(ind,2)
+              phi_nbor(ind,inbor)=gridp%f(ind,2)
            end do
         else
            do ind=1,twotondim
@@ -529,7 +536,9 @@ end subroutine r_make_initial_phi
 !###########################################################
 subroutine make_initial_phi(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
@@ -542,8 +551,9 @@ subroutine make_initial_phi(s,ilevel,icount)
   real(dp)::aa,bb,cc,dd,tfrac
   real(dp),dimension(1:8)::bbb
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
-  real(dp),dimension(1:twotondim),save::phi_int
+  integer,dimension(1:threetondim)::ind_nbor
+  type(nbor),dimension(1:threetondim)::grid_nbor
+  real(dp),dimension(1:twotondim)::phi_int
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -599,10 +609,10 @@ subroutine make_initial_phi(s,ilevel,icount)
         
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
-        call get_threetondim_nbor_parent_cell(s,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-        call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
+        call get_threetondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
+        call interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
-           call unlock_cache(s,igrid_nbor(ind))
+           call unlock_cache_p(s,grid_nbor(ind)%p)
         end do
 
         ! Loop over cells

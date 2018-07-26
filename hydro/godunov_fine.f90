@@ -239,8 +239,10 @@ end subroutine set_uold
 !###########################################################
 subroutine godfine1(s,ind_grid,ilevel,h)
   use amr_parameters, only: ndim,twondim,twotondim,dp
+  use amr_commons, only: nbor,oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use hydro_commons
   use hash
   implicit none
@@ -258,7 +260,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ! coarser level if necessary.
   !-------------------------------------------------------------------
   integer::ivar,idim,ind_son,ind_oct
-  integer::igrid,icell,inbor,ichild
+  integer::igrid,icell,inbor
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -267,11 +269,13 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   integer::i3min=1,i3max=1,j3min=1,j3max=1,k3min=1,k3max=1
   integer,dimension(1:ndim)::ckey_corner,ckey
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
-  integer,dimension(0:twondim)::igrid_nbor,ind_nbor
+  integer,dimension(0:twondim)::ind_nbor
+  type(nbor),dimension(0:twondim)::grid_nbor
   real(dp)::dx,oneontwotondim
   real(dp),dimension(0:twondim  ,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
   logical::okx=.true.,oky=.true.,okz=.true.
+  type(oct),pointer::gridp,childp
 
 #ifdef HYDRO
 
@@ -335,9 +339,9 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
               kk1=ckey(3)+1
 #endif
-              h%childloc(ii1,jj1,kk1)=ind_oct
-              h%gridloc (ii1,jj1,kk1)=0
-              h%cellloc (ii1,jj1,kk1)=0
+              h%childloc(ii1,jj1,kk1)%p=>m%grid(ind_oct)
+              nullify(h%gridloc(ii1,jj1,kk1)%p)
+              h%cellloc(ii1,jj1,kk1)=0
 
               ! Loop over 2x2x2 cells
               do k2=k2min,k2max
@@ -391,33 +395,37 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                  if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
               enddo
               
-              ! Get neighboring grid index with read-only cache
-              call get_grid(s,hash_nbor,m%grid_dict,ichild,.false.,.true.)
-              igrid=0
+              ! Set pointers to null
               icell=0
-              igrid_nbor=0
-              if(ichild>0)then
-                 call lock_cache(s,ichild)
+              nullify(gridp)
+              do inbor=0,twondim
+                 nullify(grid_nbor(inbor)%p)
+              end do
+
+              ! Get neighboring grid index with read-only cache
+              call get_grid_p(s,hash_nbor,m%grid_dict,childp,.false.,.true.)
+              if(associated(childp))then
+                 call lock_cache_p(s,childp)
               else
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell(s,hash_nbor,m%grid_dict,igrid,icell,.true.,.true.)
-                 if(igrid==0)then
+                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,.true.,.true.)
+                 if(.not.associated(gridp))then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
-                    stop
+                    call mdl_abort
                  endif
-                 call lock_cache(s,igrid)
+                 call lock_cache_p(s,gridp)
 
                  ! In case one wants to interpolate using high-order schemes
                  if(r%interpol_type>0)then
 
                     ! Get 2ndim neighboring father cells with read-write cache
                     ! Note that possible cache grids are locked inside the routine
-                    call get_twondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.true.,.true.)
+                    call get_twondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.true.,.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
-                          u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
+                          u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
                        end do
                     end do
 
@@ -429,12 +437,12 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               endif
 
               ! Store grid index
-              h%childloc(i1,j1,k1)=ichild
-              h%gridloc (i1,j1,k1)=igrid
+              h%childloc(i1,j1,k1)%p=>childp
+              h%gridloc (i1,j1,k1)%p=>gridp
               h%cellloc (i1,j1,k1)=icell
               if(r%interpol_type>0)then
                  do inbor=1,twondim
-                    h%nborloc(i1,j1,k1,inbor)=igrid_nbor(inbor)
+                    h%nborloc(i1,j1,k1,inbor)%p=>grid_nbor(inbor)%p
                  end do
               endif
 
@@ -454,28 +462,28 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                        k3=1+2*(k1-1)+k2
 #endif             
                        ! If neighboring grid exists
-                       if(ichild>0)then
+                       if(associated(childp))then
 
                           ! Gather hydro variables
                           do ivar=1,nvar
-                             h%uloc(i3,j3,k3,ivar)=m%grid(ichild)%uold(ind_son,ivar)
+                             h%uloc(i3,j3,k3,ivar)=childp%uold(ind_son,ivar)
                           end do
 
 #ifdef GRAV
                           ! Gather gravitational acceleration
                           do idim=1,ndim
-                             h%gloc(i3,j3,k3,idim)=m%grid(ichild)%f(ind_son,idim)
+                             h%gloc(i3,j3,k3,idim)=childp%f(ind_son,idim)
                           end do
 #endif
                           ! Gather refinement flag
-                          h%okloc(i3,j3,k3)=m%grid(ichild)%refined(ind_son)
+                          h%okloc(i3,j3,k3)=childp%refined(ind_son)
 
                        ! If neighboring grid doesn't exist, interpolate
                        else
 
                           ! Gather hydro variables
                           do ivar=1,nvar
-                             h%uloc(i3,j3,k3,ivar)=m%grid(igrid)%uold(icell,ivar)
+                             h%uloc(i3,j3,k3,ivar)=gridp%uold(icell,ivar)
                           end do
 
                           ! Gather interpolated hydro variables
@@ -488,7 +496,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #ifdef GRAV
                           ! Gather gravitational acceleration
                           do idim=1,ndim
-                             h%gloc(i3,j3,k3,idim)=m%grid(igrid)%f(icell,idim)
+                             h%gloc(i3,j3,k3,idim)=gridp%f(icell,idim)
                           end do
 #endif
                           ! Gather refinement flag
@@ -567,7 +575,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
         do j1=j1min+jj0,j1max-jj0
            do i1=i1min+ii0,i1max-ii0
               ! Get oct index
-              ind_oct=h%childloc(i1,j1,k1)
+              childp=>h%childloc(i1,j1,k1)%p
               ! Loop over cells
               do k2=k2min,k2max
                  do j2=j2min,j2max
@@ -585,20 +593,17 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
                        ! Update conservative variables new state vector
                        do ivar=1,nvar
-                          m%grid(ind_oct)%unew(ind_son,ivar)=&
-                               & m%grid(ind_oct)%unew(ind_son,ivar)+ &
+                          childp%unew(ind_son,ivar)=childp%unew(ind_son,ivar)+ &
                                & (h%flux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -h%flux(i3+i0,j3+j0,k3+k0,ivar,idim))
                        end do
 #ifdef DUALENER
                        ! Update velocity divergence
-                       m%grid(ind_oct)%divu(ind_son)=&
-                            & m%grid(ind_oct)%divu(ind_son)+ &
+                       childp%divu(ind_son)=childp%divu(ind_son)+ &
                             & (h%tmp(i3   ,j3   ,k3   ,1,idim) &
                             & -h%tmp(i3+i0,j3+j0,k3+k0,1,idim))
                        ! Update internal energy
-                       m%grid(ind_oct)%enew(ind_son)=&
-                            & m%grid(ind_oct)%enew(ind_son)+ &
+                       childp%enew(ind_son)=childp%enew(ind_son)+ &
                             & (h%tmp(i3   ,j3   ,k3   ,2,idim) &
                             & -h%tmp(i3+i0,j3+j0,k3+k0,2,idim))
 #endif
@@ -652,11 +657,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              ind_oct=h%childloc(i1,j1,k1)
+              childp=>h%childloc(i1,j1,k1)%p
               ! Check that parent cell is not refined
-              if(ind_oct==0)then
+              if(.not.associated(childp))then
                  ! Get parent cell index
-                 igrid=h%gridloc(i1,j1,k1)
+                 gridp=>h%gridloc(i1,j1,k1)%p
                  icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell left faces
                  do k2=k2min,k2max-k0
@@ -674,15 +679,15 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nvar
-                             m%grid(igrid)%unew(icell,ivar)=m%grid(igrid)%unew(icell,ivar) &
+                             gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
                                   & -h%flux(i3,j3,k3,ivar,idim)*oneontwotondim
                           end do
 #ifdef DUALENER
                           ! Update velocity divergence
-                          m%grid(igrid)%divu(icell)=m%grid(igrid)%divu(icell) &
+                          gridp%divu(icell)=gridp%divu(icell) &
                                & -h%tmp(i3,j3,k3,1,idim)*oneontwotondim
                           ! Update internal energy
-                          m%grid(igrid)%enew(icell)=m%grid(igrid)%enew(icell) &
+                          gridp%enew(icell)=gridp%enew(icell) &
                                & -h%tmp(i3,j3,k3,2,idim)*oneontwotondim
 #endif
                        end do
@@ -709,11 +714,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
         do j1=jj1min,jj1max
            do i1=ii1min,ii1max
               ! Get oct index
-              ind_oct=h%childloc(i1,j1,k1)
+              childp=>h%childloc(i1,j1,k1)%p
               ! Check that parent cell is not refined
-              if(ind_oct==0)then
+              if(.not.associated(childp))then
                  ! Get parent cell index
-                 igrid=h%gridloc(i1,j1,k1)
+                 gridp=>h%gridloc(i1,j1,k1)%p
                  icell=h%cellloc(i1,j1,k1)
                  ! Loop over inner cell right faces
                  do k2=k2min+k0,k2max
@@ -731,15 +736,15 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nvar
-                             m%grid(igrid)%unew(icell,ivar)=m%grid(igrid)%unew(icell,ivar) &
+                             gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
                                   & +h%flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
                           end do
 #ifdef DUALENER
                           ! Update velocity divergence
-                          m%grid(igrid)%divu(icell)=m%grid(igrid)%divu(icell) &
+                          gridp%divu(icell)=gridp%divu(icell) &
                                & +h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*oneontwotondim
                           ! Update internal energy
-                          m%grid(igrid)%enew(icell)=m%grid(igrid)%enew(incell) &
+                          gridp%enew(icell)=gridp%enew(incell) &
                                & +h%tmp(i3+i0,j3+j0,k3+k0,2,idim)*oneontwotondim
 #endif
                        end do
@@ -760,21 +765,19 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      do j1=j1min,j1max
         do i1=i1min,i1max     
            ! Get oct index
-           ind_oct=h%childloc(i1,j1,k1)
+           childp=>h%childloc(i1,j1,k1)%p
            ! Check that parent cell is not refined
-           if(ind_oct>0)then
-              call unlock_cache(s,ind_oct)
+           if(associated(childp))then
+              call unlock_cache_p(s,childp)
            else
               ! Get parent cell index
-              igrid=h%gridloc(i1,j1,k1)
-              call unlock_cache(s,igrid)
+              gridp=>h%gridloc(i1,j1,k1)%p
+              call unlock_cache_p(s,gridp)
               ! Get neighbouring parent oct index
               if(r%interpol_type>0)then
                  do inbor=1,twondim
-                    igrid=h%nborloc(i1,j1,k1,inbor)
-                    if(igrid>0)then
-                       call unlock_cache(s,igrid)
-                    endif
+                    gridp=>h%nborloc(i1,j1,k1,inbor)%p
+                    call unlock_cache_p(s,gridp)
                  end do
               endif
            endif

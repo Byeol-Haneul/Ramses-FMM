@@ -1,39 +1,10 @@
 module amr_commons
   use amr_parameters
   use hydro_parameters
+  use oct_commons
   use hydro_commons
   use hash
   use domain_m
-  
-  ! New type for oct structure
-  type oct
-     integer(kind=4)::lev
-     integer(kind=4),dimension(1:ndim)::ckey
-     integer(kind=8),dimension(1:nhilbert)::hkey
-     integer(kind=4),dimension(1:twotondim)::flag1
-     integer(kind=4),dimension(1:twotondim)::flag2
-     logical,dimension(1:twotondim)::refined
-     integer(kind=4)::superoct
-#ifdef GRAV
-     real(kind=dp),dimension(1:twotondim)::rho
-     real(kind=dp),dimension(1:twotondim)::phi
-     real(kind=dp),dimension(1:twotondim)::phi_old
-     real(kind=dp),dimension(1:twotondim,1:ndim)::f
-#endif
-#ifdef HYDRO
-     real(kind=dp),dimension(1:twotondim,1:nvar)::uold
-     real(kind=dp),dimension(1:twotondim,1:nvar)::unew
-#endif
-#ifdef DUALENER
-     real(kind=dp),dimension(1:twotondim)::divu
-     real(kind=dp),dimension(1:twotondim)::enew
-#endif
-  end type oct
-
-  type cell
-     type(oct),pointer::grid
-     integer::ind
-  end type cell
   
   type run_t
 
@@ -309,7 +280,8 @@ module amr_commons
      integer::noct_used,noct_used_max,noct_used_tot ! Total used octs
      
      ! Persistent array for the AMR grid
-     type(oct),dimension(:),allocatable::grid
+!     type(oct),dimension(:),allocatable::grid
+     type(oct),dimension(:),pointer::grid
      type(hash_table)::grid_dict   ! Oct hash table
      
      ! Arrays for the MG solver

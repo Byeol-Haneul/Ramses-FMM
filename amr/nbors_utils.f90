@@ -20,19 +20,19 @@ subroutine get_threetondim_nbor_parent_cell(s,hash_key,hash_dict,igrid_nbor,ind_
   ! If the grid index is zero, it means that this oct does not exist.
   ! Note that the 2**ndim grids are all locked if remote.
   !
-  integer,dimension(1:twotondim),save::igrid_twotondim_nbor
+  integer,dimension(1:twotondim)::igrid_twotondim_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor,hash_ref,hash_father
   integer(kind=8),dimension(1:ndim)::ii
-  integer,dimension(1:3,1:8),save::shift_oct=reshape(&
+  integer,dimension(1:3,1:8)::shift_oct=reshape(&
        & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
        &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
   integer::i1,j1,k1
-  integer,save::i1min=-1
-  integer,save::i1max=+1
-  integer,save::j1min=0*(1-ndim/2)-1*(ndim/2)
-  integer,save::j1max=0*(1-ndim/2)+1*(ndim/2)
-  integer,save::k1min=0*(1-ndim/3)-1*(ndim/3)
-  integer,save::k1max=0*(1-ndim/3)+1*(ndim/3)
+  integer::i1min=-1
+  integer::i1max=+1
+  integer::j1min=0*(1-ndim/2)-1*(ndim/2)
+  integer::j1max=0*(1-ndim/2)+1*(ndim/2)
+  integer::k1min=0*(1-ndim/3)-1*(ndim/3)
+  integer::k1max=0*(1-ndim/3)+1*(ndim/3)
   integer::ind,ipos,idim,ilevel,inbor
   
   associate(r=>s%r,g=>s%g,m=>s%m)

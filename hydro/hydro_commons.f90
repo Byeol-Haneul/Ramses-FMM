@@ -1,6 +1,7 @@
 module hydro_commons
   use amr_parameters
   use hydro_parameters
+  use oct_commons
 
   type hydro_kernel_t
      integer::iu1,iu2,ju1,ju2,ku1,ku2
@@ -19,10 +20,10 @@ module hydro_commons
      real(dp),dimension(:,:,:,:),allocatable::tx
      real(dp),dimension(:,:,:),allocatable::divu
      logical ,dimension(:,:,:),allocatable::okloc
-     integer ,dimension(:,:,:),allocatable::childloc
-     integer ,dimension(:,:,:),allocatable::gridloc
      integer ,dimension(:,:,:),allocatable::cellloc
-     integer ,dimension(:,:,:,:),allocatable::nborloc
+     type(nbor),dimension(:,:,:),allocatable::childloc
+     type(nbor),dimension(:,:,:),allocatable::gridloc
+     type(nbor),dimension(:,:,:,:),allocatable::nborloc
    contains
      procedure :: init => init_hydro_kernel
   end type hydro_kernel_t

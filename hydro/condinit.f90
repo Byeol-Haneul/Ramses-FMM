@@ -31,7 +31,7 @@ subroutine condinit(r,g,x,u,dx,nn)
 #if NENER>0
   integer::irad
 #endif
-  real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
+  real(dp),dimension(1:nvector,1:nvar)::q   ! Primitive variables
 
   ! Call built-in initial condition generator
   call region_condinit(r,g,x,q,dx,nn)

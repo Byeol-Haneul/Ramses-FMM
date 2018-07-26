@@ -352,10 +352,10 @@ contains
       ! Recursive subroutine that sorts three bits and calls itself 8 times to
       ! sort the shorter particle sequences by the next three (less significant) bits.
 
-      integer,         save :: ind, ibit1, ikey
-      integer,         save :: ipart, inext, ip
-      integer,         save :: dummy_arg1, dummy_arg2
-      integer(kind=8), save :: ibucket
+      integer          :: ind, ibit1, ikey
+      integer          :: ipart, inext, ip
+      integer          :: dummy_arg1, dummy_arg2
+      integer(kind=8)  :: ibucket
 
       ! get bit and key to read from 
       ibit1 = (key_level-ilevel)*3       
@@ -417,7 +417,7 @@ contains
     ! This routine sorts a contiguous sequence of the pariticle 
     ! array (specified by offset and np) by ascending hilbert keys
 
-    integer, save       :: ilevel, ip
+    integer :: ilevel, ip
     
     if (ndim ==1)then
        print*, 'no 1D particle sorting case yet'
@@ -486,12 +486,12 @@ contains
     ! For the 2D version, only two bits (corresponding to one level of refinement
     ! are read at the time.
 
-    integer(kind=8),      pointer :: use_key(:)
-    integer,                 save :: ipart, ip, ibit1, ikey
-    integer(kind=8),         save :: ibucket
+    integer(kind=8),pointer :: use_key(:)
+    integer :: ipart, ip, ibit1, ikey
+    integer(kind=8) :: ibucket
 
 #if NDIM==3
-    integer, dimension(0:7), save :: bucket_offset, bucket_count
+    integer, dimension(0:7) :: bucket_offset, bucket_count
     integer, parameter :: nbucket = 7
     integer, parameter :: nbits_read = 3
 
@@ -502,7 +502,7 @@ contains
 #endif
 
 #if NDIM==2
-    integer, dimension(0:3), save :: bucket_offset, bucket_count
+    integer, dimension(0:3) :: bucket_offset, bucket_count
     integer, parameter :: nbucket = 3
     integer, parameter :: nbits_read = 2
  
@@ -558,7 +558,8 @@ contains
     use pm_commons
     implicit none
     integer, intent(in)                          :: offset, np, key_level
-    integer, save                                :: ipart, ikey, idim
+
+    integer                                      :: ipart, ikey, idim
 
     real(dp),        allocatable, dimension(:)   :: extra_storage_dp
     integer(kind=8), allocatable, dimension(:)   :: extra_storage_i8

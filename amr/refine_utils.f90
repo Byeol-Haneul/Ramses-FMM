@@ -106,6 +106,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use hash
   use hilbert
   use call_back, only: cache_f
+  use nbors_utils_p
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -132,6 +133,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   logical::ok
   type(oct)::oct_tmp
+  type(oct),pointer::gridp
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -176,14 +178,14 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
-        call get_parent_cell(s,hash_key,m%grid_dict,igrid,icell,.true.,.true.)
-        ok   = m%grid(igrid)%flag1(icell)==0 .and. &
-             & m%grid(igrid)%refined(icell)
+        call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.true.)
+        ok   = gridp%flag1(icell)==0 .and. &
+             & gridp%refined(icell)
         if(ok)then
            ! Set grid level to zero
            m%grid(ioct)%lev=0
            ! Set parent cell to "unrefined" status
-           m%grid(igrid)%refined(icell)=.false.
+           gridp%refined(icell)=.false.
            ! Free grid from hash table
            call hash_free(m%grid_dict,hash_key)
            g%nkill=g%nkill+1
@@ -614,8 +616,10 @@ end subroutine unpack_flush_derefine
 !###############################################################
 subroutine make_new_oct(s,iparent,icell,ilevel)
   use amr_parameters, only: ndim,nhilbert,twotondim,twondim,nvector
+  use amr_commons, only:nbor
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   use hilbert
   use hash
@@ -641,6 +645,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
   real(dp),dimension(0:twondim,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
+  type(nbor),dimension(0:twondim)::grid_nbor
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -730,14 +735,14 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   if(r%interpol_type>0)then
      
      ! Get 2ndim neighboring father cells with read-only cache
-     call get_twondim_nbor_parent_cell(s,hash_key,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
+     call get_twondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
      do inbor=0,twondim
         do ivar=1,nvar
-           u1(inbor,ivar)=m%grid(igrid_nbor(inbor))%uold(ind_nbor(inbor),ivar)
+           u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
         end do
      end do
      do inbor=1,twondim
-        call unlock_cache(s,igrid_nbor(inbor))
+        call unlock_cache_p(s,grid_nbor(inbor)%p)
      end do
      
      ! Interpolate

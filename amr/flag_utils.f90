@@ -86,8 +86,10 @@ end subroutine r_init_flag
 !################################################################
 subroutine init_flag(s,ilevel,nflag)
   use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use cache_commons
+  use nbors_utils_p
   implicit none
   type(ramses_t)::s
   integer::ilevel,nflag
@@ -99,6 +101,7 @@ subroutine init_flag(s,ilevel,nflag)
   integer::igrid,ichild,icell,ind
   logical::ok
   integer(kind=8),dimension(0:ndim)::hash_key
+  type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -120,7 +123,7 @@ subroutine init_flag(s,ilevel,nflag)
   hash_key(0)=ilevel+1
   do ichild=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     call get_parent_cell(s,hash_key,m%grid_dict,igrid,icell,.true.,.false.)
+     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.false.)
      ok=.false.
      ! Loop over cells
      do ind=1,twotondim
@@ -128,7 +131,7 @@ subroutine init_flag(s,ilevel,nflag)
         ok=(ok.or.(m%grid(ichild)%flag1(ind)==1))
      end do
      if(ok)then
-        m%grid(igrid)%flag1(icell)=1
+        gridp%flag1(icell)=1
         g%nflag=g%nflag+1
      endif
   end do
@@ -323,8 +326,10 @@ end subroutine r_ensure_ref_rules
 !############################################################
 subroutine ensure_ref_rules(s,ilevel)
   use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use cache_commons
+  use nbors_utils_p
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -339,6 +344,7 @@ subroutine ensure_ref_rules(s,ilevel)
   integer::i1min,i1max,j1min,j1max,k1min,k1max
   integer(kind=8),dimension(0:ndim)::hash_nbor
   logical::ok
+  type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -383,8 +389,8 @@ subroutine ensure_ref_rules(s,ilevel)
               enddo
 
               ! Get neighboring grid index
-              call get_grid(s,hash_nbor,m%grid_dict,ichild,.false.,.true.)
-              ok=ok.and.(ichild>0)
+              call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
+              ok=ok.and.(associated(gridp))
 
            end do
         end do

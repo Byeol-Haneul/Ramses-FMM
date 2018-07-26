@@ -242,9 +242,9 @@ contains
     ! Subroutine to obtain up to nvector values from the hash key at once.
     ! This subroutine is only valid if the simple hash is used.
     
-    integer(kind = 8), dimension(1:nvector),        save :: ibucket, full_hash
-    integer(kind = 8), dimension(1:nvector, 0:ndim),save :: bucket_keys
-    logical,           dimension(1:nvector),        save :: ok
+    integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
+    integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys
+    logical,           dimension(1:nvector)         :: ok
     integer :: i, idim, n_coll
 
     full_hash = 0

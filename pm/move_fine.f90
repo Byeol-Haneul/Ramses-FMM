@@ -58,7 +58,9 @@ end subroutine r_kick_drift_part
 subroutine kick_drift_part(s,ilevel,action_part)
   use amr_parameters, only: dp,ndim,twotondim
   use pm_parameters
+  use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
@@ -66,16 +68,17 @@ subroutine kick_drift_part(s,ilevel,action_part)
   integer::action_part
   !
   !
-  real(dp),dimension(1:ndim),save::x,dd,dg
-  integer,dimension(1:ndim),save::ig,id
-  real(dp),dimension(1:twotondim),save::vol
-  integer,dimension(1:ndim,1:twotondim),save::ckey
-  integer,dimension(1:twotondim),save::igrid,icell
-  integer(kind=8),dimension(0:ndim),save::hash_nbor
+  real(dp),dimension(1:ndim)::x,dd,dg
+  integer,dimension(1:ndim)::ig,id
+  real(dp),dimension(1:twotondim)::vol
+  integer,dimension(1:ndim,1:twotondim)::ckey
+  integer,dimension(1:twotondim)::icell
+  integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc,dteff
-  real(dp),dimension(1:ndim),save::ff
+  real(dp),dimension(1:ndim)::ff
   logical::ok_level
+  type(nbor),dimension(1:twotondim)::gridp
   
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
 
@@ -133,19 +136,19 @@ subroutine kick_drift_part(s,ilevel,action_part)
      
      ! Get parent cell at level ilevel using read-only cache
      ok_level=.true.
-     igrid=0; icell=0
+     icell=0
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,igrid(ind),icell(ind),.false.,.true.)
-        call lock_cache(s,igrid(ind))
-        if(igrid(ind)==0)then
+        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),.false.,.true.)
+        call lock_cache(s,gridp(ind)%p)
+        if(.not.associated(gridp(ind)%p))then
            ok_level=.false.
            exit
         end if
      end do
      do ind=1,twotondim
-        call unlock_cache(s,igrid(ind))
+        call unlock_cache(s,gridp(ind)%p)
      end do
 
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
@@ -196,18 +199,18 @@ subroutine kick_drift_part(s,ilevel,action_part)
         ! Get parent cell at level ilevel-1 using read-only cache
         ok_level=.true.
         hash_nbor(0)=ilevel
-        igrid=0; icell=0
+        icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,igrid(ind),icell(ind),.false.,.true.)
-           call lock_cache(s,igrid(ind))
-           if(igrid(ind)==0)then
+           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),.false.,.true.)
+           call lock_cache(s,gridp(ind)%p)
+           if(.not.associated(gridp(ind)%p))then
               ok_level=.false.
               exit
            end if
         end do
         do ind=1,twotondim
-           call unlock_cache(s,igrid(ind))
+           call unlock_cache_p(s,gridp(ind)%p)
         end do
      end if
         
@@ -238,7 +241,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
      if(ok_level)then
         do ind=1,twotondim
 #ifdef GRAV
-           ff(1:ndim)=ff(1:ndim)+m%grid(igrid(ind))%f(icell(ind),1:ndim)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
 #endif
         end do
      endif

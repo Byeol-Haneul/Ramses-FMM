@@ -89,7 +89,7 @@ subroutine force_analytic(r,g,m,ilevel)
   !-------------------------------------
   integer::igrid,ind,i,ngrid,idim,nstride
   real(dp)::dx
-  real(dp),dimension(1:nvector,1:ndim),save::xx,ff
+  real(dp),dimension(1:nvector,1:ndim)::xx,ff
  
 #ifdef GRAV  
 
@@ -162,7 +162,9 @@ end subroutine r_gradient_phi
 !#########################################################
 subroutine gradient_phi(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
+  use nbors_utils_p
   use cache_commons
   implicit none
   type(ramses_t)::s
@@ -177,14 +179,16 @@ subroutine gradient_phi(s,ilevel,icount)
   integer::ig1,ig2,ig3,ig4
   integer,dimension(1:3,1:4,1:8)::ggg,hhh
   integer,dimension(1:8,1:8)::ccc
-  integer,dimension(1:threetondim),save::igrid_nbor,ind_nbor
-  integer,dimension(1:3,1:6),save::shift=reshape(&
+  integer,dimension(1:threetondim)::igrid_nbor,ind_nbor
+  type(nbor),dimension(1:threetondim)::grid_nbor
+  integer,dimension(1:3,1:6)::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim)::hash_nbor
   real(dp),dimension(1:8)::bbb
   real(dp)::dx,a,b,aa,bb,cc,dd,tfrac
   real(dp)::phi1,phi2,phi3,phi4
-  real(dp),dimension(1:twotondim,0:twondim),save::phi_nbor
+  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
+  type(oct),pointer::gridp
 
 #ifdef GRAV
 
@@ -264,21 +268,21 @@ subroutine gradient_phi(s,ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
            if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        call get_grid(s,hash_nbor,m%grid_dict,igridn,.false.,.true.)
+        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
 
         ! If grid exists, then copy into array
-        if(igridn>0)then
+        if(associated(gridp))then
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=m%grid(igridn)%phi(ind)
+              phi_nbor(ind,i_nbor)=gridp%phi(ind)
            end do
 
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim parent cell using read-only cache
-           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,igrid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
+           call interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
-              call unlock_cache(s,igrid_nbor(ind))
+              call unlock_cache_p(s,grid_nbor(ind)%p)
            end do
         endif
 

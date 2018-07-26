@@ -718,8 +718,8 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
   ! local variables
   integer ::i, j, k, xdim
   real(dp)::entho
-  real(dp),dimension(1:nvar),save::qleft,qright
-  real(dp),dimension(1:nvar+1),save::fgdnv
+  real(dp),dimension(1:nvar)::qleft,qright
+  real(dp),dimension(1:nvar+1)::fgdnv
 #if NVAR>NDIM+2
   integer ::n
 #endif
