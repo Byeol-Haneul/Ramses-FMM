@@ -55,7 +55,7 @@ set(NENER 0)
 set(SOLVER hydro)
 set(EXEC ramses)
 #add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DHYDRO -DGRAV -DMDL2)
-add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DHYDRO -DGRAV)
+add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DHYDRO -DGRAV -DCOEUR)
 
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/write_gitinfo.f90
@@ -90,7 +90,7 @@ PRIVATE	amr/ramses.f90
 	amr/adaptive_loop.f90
 	amr/update_time.f90
 	amr/title.f90
-	patch/coeur/units.f90
+	amr/units.f90
 	amr/refine_utils.f90
 	amr/nbors_utils.f90
 	amr/nbors_utils_p.f90
@@ -125,7 +125,7 @@ PRIVATE	amr/ramses.f90
 	hydro/input_hydro_condinit.f90
 	hydro/input_hydro_grafic.f90
 	hydro/interpol_hydro.f90
-        patch/coeur/condinit.f90
+        hydro/condinit.f90
 	hydro/hydro_flag.f90
 	hydro/godunov_utils.f90
 	hydro/write_screen.f90
