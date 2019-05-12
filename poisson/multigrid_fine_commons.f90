@@ -410,7 +410,7 @@ subroutine build_mg(s,ifinelevel)
      ! Gather twotondim neighboring father grids
      do inbor=1,twotondim
 
-#ifndef WITHOUTMPI
+#if !defined(WITHOUTMPI) && !defined(MDL2)
         ! If counter is good, check on incoming messages and perform actions
         if(mdl%mail_counter==32)then
            call check_mail(s,MPI_REQUEST_NULL,m%mg_dict)

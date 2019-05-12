@@ -2,6 +2,7 @@ subroutine m_read_params(pst)
   use amr_parameters
   use hydro_parameters
   use ramses_commons, only: pst_t
+  use mdl_module
   implicit none
   type(pst_t)::pst
 
@@ -263,7 +264,7 @@ subroutine m_read_params(pst)
   if(nvar<ndim+2)then
      write(*,*)'You should have: nvar>=ndim+2'
      write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
-     call mdl_abort
+     call mdl_abort(s%mdl)
   endif
 
   ! Write information about git version
@@ -275,7 +276,7 @@ subroutine m_read_params(pst)
      write(*,*)'You should type: ramses3d input.nml [nrestart]'
      write(*,*)'File input.nml should contain a parameter namelist'
      write(*,*)'nrestart is optional'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   END IF
   CALL getarg(1,infile)
 
@@ -286,7 +287,7 @@ subroutine m_read_params(pst)
   INQUIRE(file=infile,exist=nml_ok)
   if(.not. nml_ok)then
      write(*,*)'File '//TRIM(infile)//' does not exist'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
 
   open(1,file=infile)
@@ -381,7 +382,7 @@ subroutine m_read_params(pst)
   read(1,NML=init_params,END=101)
   goto 102
 101 write(*,*)' You need to set up namelist &INIT_PARAMS in parameter file'
-  call mdl_abort
+  call mdl_abort(s%mdl)
 102 rewind(1)
   if(nlevelmax>levelmin)read(1,NML=refine_params)
   rewind(1)
@@ -396,11 +397,11 @@ subroutine m_read_params(pst)
   !-----------------
   if(nlevelmax>MAXLEVEL)then
      write(*,*) 'Error: nlevelmax>MAXLEVEL'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
   if(nregion>MAXREGION)then
      write(*,*) 'Error: nregion>MAXREGION'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
   
   !-----------------------------------
@@ -449,7 +450,7 @@ subroutine m_read_params(pst)
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'
      write(*,*)'Aborting...'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
 
   ! Fill in all run parameters in corresponding structure
@@ -626,6 +627,7 @@ end subroutine m_broadcast_params
 recursive subroutine r_broadcast_params(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
@@ -672,6 +674,7 @@ end subroutine m_broadcast_global
 recursive subroutine r_broadcast_global(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size

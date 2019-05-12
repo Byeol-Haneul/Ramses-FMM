@@ -5,6 +5,7 @@ module amr_commons
   use hydro_commons
   use hash
   use domain_m
+  use mdl_module, only: mdl_t
   
   type run_t
 
@@ -171,6 +172,7 @@ module amr_commons
   type global_t
 
      ! MPI variables
+     type(mdl_t),pointer::mdl => null()
      integer::ncpu, myid
 
      integer::iout=1             ! Increment for output times

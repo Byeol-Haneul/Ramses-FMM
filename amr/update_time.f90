@@ -5,6 +5,7 @@
 subroutine m_update_time(pst,ilevel)
   use amr_parameters, only: dp,n_frw
   use ramses_commons, only: pst_t
+  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -101,7 +102,7 @@ subroutine m_update_time(pst,ilevel)
         end do
         call cpu_time(ttend)
         write(*,*)'Total elapsed time:',ttend-ttstart
-        call mdl_abort
+        call mdl_abort(mdl)
      end if
 
   end if
@@ -161,6 +162,7 @@ end subroutine m_update_time
 recursive subroutine r_broadcast_aexp(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
@@ -186,6 +188,7 @@ end subroutine r_broadcast_aexp
 recursive subroutine r_clean_stop(pst,input_array,input_size,output_array,output_size)
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size

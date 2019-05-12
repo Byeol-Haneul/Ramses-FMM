@@ -266,6 +266,7 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
+#ifndef MDL2
   !
   ! This routine acquires the grid 
   ! corresponding to the input hash key.
@@ -502,13 +503,14 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
 #endif
 
   end associate
-
+#endif
 end subroutine get_grid
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine check_mail(s,comm_id,hash_dict)
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -720,12 +722,14 @@ subroutine check_mail(s,comm_id,hash_dict)
   end associate
   
 #endif
+#endif
 end subroutine check_mail
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine destage(s,igrid,hash_dict)
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -803,12 +807,14 @@ subroutine destage(s,igrid,hash_dict)
   end associate
 
 #endif
+#endif
 end subroutine destage
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine close_cache(s,hash_dict)
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -909,12 +915,14 @@ subroutine close_cache(s,hash_dict)
   end associate
   
 #endif
+#endif
 end subroutine close_cache
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine open_cache(s,cache_operation,domain_decompos)
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -1161,7 +1169,7 @@ subroutine open_cache(s,cache_operation,domain_decompos)
   end associate
   
 #endif
-
+#endif
 end subroutine open_cache
 !##############################################################
 !##############################################################

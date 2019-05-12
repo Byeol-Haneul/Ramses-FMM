@@ -285,6 +285,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
+#ifndef MDL2
   !
   ! This routine acquires the grid 
   ! corresponding to the input hash key.
@@ -532,7 +533,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 #endif
 
   end associate
-
+#endif
 end subroutine get_grid_p
 !##############################################################
 !##############################################################

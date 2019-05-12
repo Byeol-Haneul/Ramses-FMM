@@ -5,15 +5,14 @@
 
 subroutine mdl_init
   use call_back
+  use amr_parameters, only: flen
+  use mdl_module
 #ifdef MDL2
-  use mdl
   use ramses_commons, only: pst_t
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_NULL_PTR, C_FUNLOC
   call mdl_launch( command_argument_count(), C_NULL_PTR, C_FUNLOC(master), C_FUNLOC(worker_init), C_FUNLOC(worker_done) )
 #else
-  use amr_parameters, only: flen
   use ramses_commons, only: pst_t, ramses_t
-  use mdl_commons
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNLOC, C_SIZEOF
   implicit none
 #ifndef WITHOUTMPI
@@ -23,7 +22,6 @@ subroutine mdl_init
   type(mdl_t),allocatable,target::mdl
   type(pst_t),allocatable::pst
   integer,dimension(1)::ncpu
-  integer,dimension(1)::dummy
 
   allocate(mdl)
   pst = worker_init(mdl)
@@ -79,13 +77,9 @@ subroutine mdl_init
 contains
 
 subroutine master(mdl,pst)
-#ifdef MDL2
-  type(mdl2_t), target::mdl
-#else
   type(mdl_t), target::mdl
-#endif
   type(pst_t)::pst
-  integer,dimension(1)::ncpu
+  integer,dimension(1)::ncpu, dummy
 
   write(*,*) 'master started',mdl%myid
   ncpu(1)=mdl%ncpu
@@ -94,20 +88,15 @@ subroutine master(mdl,pst)
 end subroutine master
 
 function worker_init(mdl) result(pst)
-  use mdl_commons
   use ramses_commons, only: pst_t, ramses_t
-#ifdef MDL2
-  type(mdl2_t), target::mdl
-#else
   type(mdl_t), target::mdl
-#endif
   type(pst_t),allocatable::pst
   write(*,*) 'worker started',mdl%myid
   allocate(pst)
   allocate(pst%s)
   pst%s%mdl => mdl
+  pst%s%g%mdl => mdl
 
-#ifndef WITHOUTMPI
   call mdl_add_service(mdl,MDL_CLEAN_STOP,             pst,C_FUNLOC(r_clean_stop),0,0)
   call mdl_add_service(mdl,MDL_SET_ADD,                pst,C_FUNLOC(r_set_add),0,0)
   call mdl_add_service(mdl,MDL_BCAST_PARAMS,           pst,C_FUNLOC(r_broadcast_params),storage_size(pst%s%r)/8,0)
@@ -191,17 +180,14 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(mdl,MDL_SET_SCAN_FLAG,          pst,C_FUNLOC(r_set_scan_flag),0,0)
   call mdl_add_service(mdl,MDL_CMP_RESIDUAL_NORM2,     pst,C_FUNLOC(r_cmp_residual_norm2),0,0)
   call mdl_add_service(mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),0,0)
-#endif
 end function worker_init
 
 subroutine worker_done(mdl,pst)
-#ifdef MDL2
-  type(mdl2_t)::mdl
-#else
   type(mdl_t)::mdl
-#endif
-  type(pst_t)::pst
+  type(pst_t),allocatable::pst
   write(*,*) 'worker complete',mdl%myid
+  deallocate(pst%s)
+  deallocate(pst)
 end subroutine worker_done
 
 end subroutine mdl_init
@@ -209,6 +195,7 @@ end subroutine mdl_init
 !##############################################################
 !##############################################################
 !##############################################################
+#ifndef MDL2
 subroutine mdl_wait(pst)
   use ramses_commons, only: pst_t
   use call_back, only: call_back_f, ramses_function
@@ -306,7 +293,7 @@ end subroutine mdl_wait
 !##############################################################
 !##############################################################
 subroutine mdl_send_request(mdl,mdl_function_id,target_cpu,input_size,output_size,input_array)
-  use mdl_commons, only: mdl_t
+  use mdl_module, only: mdl_t
   implicit none
   type(mdl_t)::mdl
 #ifndef WITHOUTMPI
@@ -345,7 +332,7 @@ end subroutine mdl_send_request
 !##############################################################
 !##############################################################
 subroutine mdl_get_reply(mdl,target_cpu,output_size,output_array)
-  use mdl_commons, only: mdl_t
+  use mdl_module, only: mdl_t
   implicit none
   type(mdl_t)::mdl
 #ifndef WITHOUTMPI
@@ -390,7 +377,7 @@ end subroutine mdl_abort
 !##############################################################
 !##############################################################
 subroutine init_cache(mdl)
-  use mdl_commons, only: mdl_t
+  use mdl_module, only: mdl_t
   use cache_commons
   implicit none
   type(mdl_t)::mdl
@@ -422,19 +409,8 @@ subroutine init_cache(mdl)
 #endif
 
 end subroutine init_cache
+#endif
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-
-
-
-
-
-
-
-
-
-
-
-
