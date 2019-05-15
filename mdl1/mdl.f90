@@ -36,7 +36,7 @@ module mdl_module
      ! Callback functions
      type(c_funptr),dimension(0:100)::callback
      type(c_ptr),dimension(0:100)::p1opaque
-     
+     integer(kind=4),dimension(0:100)::input_size, output_size
   end type mdl_t
 
   contains
@@ -52,16 +52,18 @@ module mdl_module
 #endif  
     end subroutine mdl_abort
 
-    subroutine mdl_add_service(mdl,sid,p1,service,nin,nout)
+    subroutine mdl_add_service(mdl,sid,p1,service,input_size,output_size)
       USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_INT, C_FUNPTR, C_LOC
       type(mdl_t)::mdl
       integer::sid
       type(*),target::p1
       type(c_funptr), intent(in), value :: service
-      integer :: nin, nout ! NOTE: nin is the size IN BYTES!!
+      integer :: input_size, output_size ! NOTE: size IN BYTES!!
       mdl%callback(sid) = service
       mdl%p1opaque(sid) = c_loc(p1)
-      mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,nin/4) ! Divide by four to get the number of Integers
+      mdl%input_size(sid) = input_size
+      mdl%output_size(sid) = output_size
+      mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,input_size/4) ! Divide by four to get the number of Integers
 
     end subroutine mdl_add_service
 
