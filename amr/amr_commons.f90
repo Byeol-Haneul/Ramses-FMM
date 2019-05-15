@@ -163,10 +163,6 @@ module amr_commons
      logical::multiple=.false.
      character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
      
-   contains
-
-     procedure :: print => print_run_parameters
-     
   end type run_t
   
   type global_t
