@@ -3,9 +3,9 @@
 !###########################################################
 !###########################################################
 recursive subroutine r_init_time(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
-  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size

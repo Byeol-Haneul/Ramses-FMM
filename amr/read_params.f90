@@ -625,9 +625,9 @@ end subroutine m_broadcast_params
 !#########################################################################
 !#########################################################################
 recursive subroutine r_broadcast_params(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
-  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
@@ -672,9 +672,9 @@ end subroutine m_broadcast_global
 !#########################################################################
 !#########################################################################
 recursive subroutine r_broadcast_global(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
-  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size

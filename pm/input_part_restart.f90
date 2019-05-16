@@ -3,6 +3,7 @@
 !#########################################################################
 !#########################################################################
 subroutine m_input_part_restart(pst)
+  use mdl_module
   use amr_parameters, only: ndim,dp,i8b
   use ramses_commons, only: pst_t
   implicit none
@@ -41,7 +42,7 @@ subroutine m_input_part_restart(pst)
   end do
   if(npart_tot_check.NE.npart_tot_file)then
      write(*,*)' Input file corrupted'
-     call mdl_abort
+     call mdl_abort(pst%s%mdl)
   endif
 
   ! Call recursive slave routine
@@ -56,6 +57,7 @@ end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
 recursive subroutine r_input_part_restart(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters

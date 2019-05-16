@@ -24,6 +24,8 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   real(kind=8)::error,error_ini
   real(kind=8)::r2_old=0,alpha_cg,beta_cg
   real(kind=8)::r2,pAp,rhs_norm
+  type(in_make_initial_phi_t)::in_make_initial_phi
+  type(in_recurrence_t)::in_recurrence
   integer,dimension(1:4)::input_array
   integer,dimension(1:4)::output_array
 
@@ -37,24 +39,21 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   !===============================
   ! Compute initial phi
   !===============================
-  input_array(1)=ilevel
-  input_array(2)=icount
-  call r_make_initial_phi(pst,input_array,2,dummy,0)
+  in_make_initial_phi%ilevel=ilevel
+  in_make_initial_phi%icount=icount
+  call r_make_initial_phi(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/8)
 
   !===============================
   ! Compute right-hand side norm
   !===============================
-  call r_cmp_rhs_norm(pst,input_array,1,output_array,2)
-  rhs_norm=transfer(output_array(1:2),rhs_norm)
+  call r_cmp_rhs_norm(pst,ilevel,storage_size(ilevel)/8,rhs_norm,storage_size(rhs_norm)/8)
   rhs_norm=DSQRT(rhs_norm/dble(twotondim*m%noct_tot(ilevel)))
 
   !==============================================
   ! Compute r = b - Ax and store it into f(i,1)
   ! Also set p = r and store it into f(i,2)
   !==============================================
-  input_array(1)=ilevel
-  input_array(2)=icount
-  call r_cmp_residual_cg(pst,input_array,2,dummy,0)
+  call r_cmp_residual_cg(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/8)
 
   !====================================
   ! Main iteration loop
@@ -68,8 +67,7 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      ! Compute residual norm
      !====================================
-     call r_cmp_r2_cg(pst,input_array,1,output_array,2)
-     r2=transfer(output_array(1:2),r2)
+     call r_cmp_r2_cg(pst,ilevel,storage_size(ilevel)/8,r2,storage_size(r2)/8)
 
      !====================================
      ! Compute beta factor
@@ -84,20 +82,19 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      ! Recurrence on p
      !====================================
-     input_array(1)=ilevel
-     input_array(2:3)=transfer(beta_cg,input_array(2:3))
-     call r_recurrence_on_p(pst,input_array,3,dummy,0)
+     in_recurrence%ilevel=ilevel
+     in_recurrence%cg=beta_cg
+     call r_recurrence_on_p(pst,in_recurrence,storage_size(in_recurrence)/8)
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
      !==============================================
-     call r_cmp_Ap_cg(pst,input_array,1,dummy,0)
+     call r_cmp_Ap_cg(pst,ilevel,storage_size(ilevel)/8)
 
      !====================================
      ! Compute p.Ap scalar product
      !====================================
-     call r_cmp_pAp_cg(pst,input_array,1,output_array,2)
-     pAp=transfer(output_array(1:2),pAp)
+     call r_cmp_pAp_cg(pst,ilevel,storage_size(ilevel)/8,pAp,storage_size(pAp)/8)
 
      !====================================
      ! Compute alpha factor
@@ -107,9 +104,9 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      ! Recurrence on x and r
      !====================================
-     input_array(1)=ilevel
-     input_array(2:3)=transfer(alpha_cg,input_array(2:3))
-     call r_recurrence_x_and_r(pst,input_array,3,dummy,0)
+     in_recurrence%ilevel=ilevel
+     in_recurrence%cg=alpha_cg
+     call r_recurrence_x_and_r(pst,in_recurrence,storage_size(in_recurrence)/8)
 
      !====================================
      ! Compute error
@@ -136,6 +133,7 @@ end subroutine m_phi_fine_cg
 !###########################################################
 !###########################################################
 recursive subroutine r_recurrence_on_p(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -168,6 +166,7 @@ end subroutine r_recurrence_on_p
 !###########################################################
 !###########################################################
 recursive subroutine r_recurrence_x_and_r(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -206,30 +205,30 @@ end subroutine r_recurrence_x_and_r
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_cmp_residual_cg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_residual_cg(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use call_back
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_residual_cg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_send_request2(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,0,input)
+     call r_cmp_residual_cg(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,0)
   else
-     ilevel=input_array(1)
-     icount=input_array(2)
-     call cmp_residual_cg(pst%s,ilevel,icount)
+     call cmp_residual_cg(pst%s,input%ilevel,input%icount)
   endif
 
 end subroutine r_cmp_residual_cg
 
 subroutine cmp_residual_cg(s,ilevel,icount)
+  use mdl_module
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
@@ -257,7 +256,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   type(oct),pointer::gridp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
   ! Set constants
   dx2=(r%boxlen/2**ilevel)**2
@@ -292,7 +291,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call mdl_abort
+     call mdl_abort(mdl)
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -381,23 +380,20 @@ end subroutine cmp_residual_cg
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_cmp_Ap_cg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_Ap_cg(pst,ilevel,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_Ap_cg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_send_request2(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,0,ilevel)
+     call r_cmp_Ap_cg(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,0)
   else
-     ilevel=input_array(1)
      call cmp_Ap_cg(pst%s,ilevel)
   endif
 
@@ -508,25 +504,24 @@ end subroutine cmp_Ap_cg
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_make_initial_phi(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_make_initial_phi(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use call_back
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input_array)
-     call r_make_initial_phi(pst%pLower,input_array,input_size,output_array,output_size)
+     call mdl_send_request2(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input)
+     call r_make_initial_phi(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
-     ilevel=input_array(1)
-     icount=input_array(2)
-     call make_initial_phi(pst%s,ilevel,icount)
+     call make_initial_phi(pst%s,input%ilevel,input%icount)
   endif
 
 end subroutine r_make_initial_phi
@@ -535,6 +530,7 @@ end subroutine r_make_initial_phi
 !###########################################################
 !###########################################################
 subroutine make_initial_phi(s,ilevel,icount)
+  use mdl_module
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
@@ -555,7 +551,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   type(nbor),dimension(1:threetondim)::grid_nbor
   real(dp),dimension(1:twotondim)::phi_int
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! CIC method constants
   aa = 1.0D0/4.0D0**ndim
@@ -576,7 +572,7 @@ subroutine make_initial_phi(s,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call mdl_abort
+     call mdl_abort(mdl)
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -730,6 +726,7 @@ end subroutine unpack_fetch_cg
 ! ########################################################################
 ! ########################################################################
 recursive subroutine r_cmp_rhs_norm(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim,twondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -778,6 +775,7 @@ end subroutine r_cmp_rhs_norm
 ! ########################################################################
 ! ########################################################################
 recursive subroutine r_cmp_r2_cg(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -818,6 +816,7 @@ end subroutine r_cmp_r2_cg
 ! ########################################################################
 ! ########################################################################
 recursive subroutine r_cmp_pAp_cg(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters

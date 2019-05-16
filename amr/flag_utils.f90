@@ -59,6 +59,7 @@ end subroutine m_flag_fine
 !################################################################
 !################################################################
 recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -254,6 +255,7 @@ end subroutine unpack_flush_initflag
 !###############################################################
 !###############################################################
 recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -303,6 +305,7 @@ end subroutine user_flag
 !################################################################
 !################################################################
 recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

@@ -28,6 +28,7 @@ end subroutine m_kick_drift_part
 !################################################################
 !################################################################
 recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters

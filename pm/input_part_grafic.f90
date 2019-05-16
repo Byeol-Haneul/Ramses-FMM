@@ -43,6 +43,7 @@ end subroutine m_input_part_grafic
 !#########################################################################
 !#########################################################################
 recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters

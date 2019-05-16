@@ -282,6 +282,7 @@ end subroutine recursive_multigrid
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_init_mg(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -348,6 +349,7 @@ end subroutine init_mg
 ! ---------------------------------------------------------------------
 
 recursive subroutine r_build_mg(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -370,6 +372,7 @@ recursive subroutine r_build_mg(pst,input_array,input_size,output_array,output_s
 end subroutine r_build_mg
 
 subroutine build_mg(s,ifinelevel)
+  use mdl_module
   use amr_parameters, only: dp,nhilbert,ndim,twotondim
   use ramses_commons, only: ramses_t
   use cache_commons
@@ -455,7 +458,7 @@ subroutine build_mg(s,ifinelevel)
                  write(*,*)'No more free memory'
                  write(*,*)'for multigrid...'
                  write(*,*)'Increase ngridmax'
-                 call mdl_abort
+                 call mdl_abort(mdl)
               end if
 
            else
@@ -574,6 +577,7 @@ end subroutine unpack_flush_build_mg
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_cleanup_mg(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -627,6 +631,7 @@ end subroutine cleanup_mg
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_make_mask(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -689,6 +694,7 @@ end subroutine make_mask
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_make_bc_rhs(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -712,6 +718,7 @@ recursive subroutine r_make_bc_rhs(pst,input_array,input_size,output_array,outpu
 end subroutine r_make_bc_rhs
 
 subroutine make_bc_rhs(s,ilevel,icount)
+  use mdl_module
   use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
@@ -738,7 +745,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   real(dp) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
   real(dp) :: fourpi
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   
   ! Set constants
   fourpi = 4.D0*ACOS(-1.0D0)
@@ -773,7 +780,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call mdl_abort
+     call mdl_abort(mdl)
   endif
 
   ! Compute fraction of time steps for interpolation

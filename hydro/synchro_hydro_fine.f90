@@ -28,6 +28,7 @@ end subroutine m_synchro_hydro_fine
 !################################################################
 !################################################################
 recursive subroutine r_synchro_hydro_fine(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -109,6 +110,7 @@ end subroutine synchro_hydro_fine
 !################################################################
 !################################################################
 recursive subroutine r_gravity_hydro_fine(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters

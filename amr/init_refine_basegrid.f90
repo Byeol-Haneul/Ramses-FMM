@@ -39,6 +39,7 @@ end subroutine m_init_refine_basegrid
 !###############################################
 !###############################################
 recursive subroutine r_collect_noct(pst,ilevel,input_size,noct,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -65,6 +66,7 @@ end subroutine r_collect_noct
 !###############################################
 !###############################################
 recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -90,6 +92,7 @@ end subroutine r_noct_tot
 !###############################################
 !###############################################
 recursive subroutine r_noct_max(pst,ilevel,input_size,noct_max,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -115,6 +118,7 @@ end subroutine r_noct_max
 !###############################################
 !###############################################
 recursive subroutine r_noct_used_max(pst,ilevel,input_size,noct_used_max,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -140,6 +144,7 @@ end subroutine r_noct_used_max
 !###############################################
 !###############################################
 recursive subroutine r_noct_min(pst,ilevel,input_size,noct_min,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -165,6 +170,7 @@ end subroutine r_noct_min
 !###############################################
 !###############################################
 recursive subroutine r_gather_noct_max(pst,ilevel,input_size,noct_max,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -190,6 +196,7 @@ end subroutine r_gather_noct_max
 !###############################################
 !###############################################
 recursive subroutine r_init_refine_basegrid(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

@@ -56,6 +56,7 @@ end subroutine interpol_phi
 !###########################################################
 !###########################################################
 recursive subroutine r_save_phi_old(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

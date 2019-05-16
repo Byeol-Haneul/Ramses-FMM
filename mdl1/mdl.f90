@@ -67,4 +67,97 @@ module mdl_module
 
     end subroutine mdl_add_service
 
+
+    subroutine mdl_req_service(mdl,target_cpu,mdl_function_id,input,input_length)
+      USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_LOC, C_F_POINTER
+      implicit none
+      type(mdl_t)::mdl
+#ifndef WITHOUTMPI
+      include 'mpif.h'
+      integer::info
+#endif
+      integer::mdl_function_id
+      integer,value,intent(in)::target_cpu
+      integer,value,intent(in),optional::input_length
+      type(*),intent(in),optional,target::input
+
+#ifndef WITHOUTMPI
+      integer::launch_id,launch_tag=101
+      integer,dimension(MPI_STATUS_SIZE)::launch_status
+      integer,dimension(1:32)::header=0
+      byte,dimension(:),pointer::dummy
+
+      write(*,*) 'NEW:',mdl_function_id
+
+      ! Assemble MPI message
+      header(1)=mdl_function_id
+      header(2)=input_length/4
+!      header(3)=output_size
+      header(3)=1
+      mdl%mpi_input_buffer(1:32)=header
+      mdl%mpi_input_buffer(33) = 99
+      if (present(input_length) .and. input_length>0) then
+        call c_f_pointer(c_loc(input),dummy,[input_length])
+        mdl%mpi_input_buffer(33:32+input_length/4) = transfer(dummy,mdl%mpi_input_buffer(33:32+input_length/4))
+      endif
+
+      ! Send input array to the target cpu
+      call MPI_ISEND(mdl%mpi_input_buffer,input_length/4+32,MPI_INTEGER,target_cpu-1,launch_tag,MPI_COMM_WORLD,launch_id,info)
+
+      ! Wait for ISEND completion to free memory in corresponding MPI buffer
+      call MPI_WAIT(launch_id,launch_status,info)      
+#endif
+    end subroutine mdl_req_service
+
+    subroutine mdl_get_reply2(mdl,target_cpu,output,output_length)
+      USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_LOC, C_F_POINTER
+      implicit none
+      type(mdl_t)::mdl
+#ifndef WITHOUTMPI
+      include 'mpif.h'
+      integer::info
+#endif
+      integer,value,intent(in)::target_cpu
+      integer,optional::output_length
+      type(*),optional,target::output
+      byte,dimension(:),pointer::buffer
+
+#ifndef WITHOUTMPI  
+      integer::output_tag=203,output_id,dummy=1
+      integer,dimension(MPI_STATUS_SIZE)::output_status  
+      
+      ! Post a RECV for the output back from target_cpu
+      if(present(output)) then
+        call c_f_pointer(c_loc(output),buffer,[mdl%MDL_INPUT_MAXSIZE])
+        write(*,*) 'Post MPI_IRECV',buffer(4)
+        call MPI_IRECV(buffer,output_length,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
+        write(*,*) 'what now'
+      else
+        call MPI_IRECV(dummy,1,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
+      endif
+
+!      if(output_size>0)then
+!        call MPI_IRECV(output_array,output_size,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
+!      else
+!        call MPI_IRECV(dummy,1,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
+!      endif
+
+      ! Wait for ISEND completion to free memory in corresponding MPI buffer
+      write(*,*) 'Waiting for response'
+      call MPI_WAIT(output_id,output_status,info)
+      if (present(output_length)) then
+        call MPI_GET_COUNT(output_status, MPI_INTEGER, output_length, info)
+        write(*,*) 'Length is',output_length
+      endif
+
+
+      write(*,*) 'Got response'
+
+#endif  
+
+    end subroutine mdl_get_reply2
+
+
+
+
 end module mdl_module

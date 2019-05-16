@@ -543,6 +543,7 @@ subroutine interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   use amr_parameters, only: ndim,dp,twotondim,threetondim
   use amr_commons, only: nbor,oct
   use amr_commons, only: mesh_t
+  use mdl_module
   implicit none
   type(mesh_t)::m
   integer,dimension(1:threetondim)::ind_nbor
@@ -578,7 +579,7 @@ subroutine interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         ind_nbr=ind_nbor(ind_father)
         if (.not.associated(grid_nbr)) then 
            write(*,*)'no all neighbors present in interpol_phi...'
-           call mdl_abort ! Remove in case it happens
+           call mdl_abort(m%mdl) ! Remove in case it happens
            add=coeff*(grid_cen%phi(ind_cen)+&
                 & (grid_cen%phi(ind_cen)-grid_cen%phi_old(ind_cen))*tfrac)
         else
@@ -595,6 +596,7 @@ end subroutine interpol_phi_p
 !###########################################################
 !###########################################################
 recursive subroutine r_save_phi_old(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

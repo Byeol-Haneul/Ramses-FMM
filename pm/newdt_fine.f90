@@ -92,6 +92,7 @@ end subroutine m_newdt_fine
 !#####################################################################
 !#####################################################################
 recursive subroutine r_newdt_part(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -164,6 +165,7 @@ end subroutine newdt_part
 !#####################################################################
 !#####################################################################
 recursive subroutine r_broadcast_dt(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

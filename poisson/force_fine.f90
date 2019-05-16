@@ -52,6 +52,7 @@ end subroutine m_force_fine
 !#########################################################
 !#########################################################
 recursive subroutine r_force_analytic(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -135,6 +136,7 @@ end subroutine force_analytic
 !#########################################################
 !#########################################################
 recursive subroutine r_gradient_phi(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -161,6 +163,7 @@ end subroutine r_gradient_phi
 !#########################################################
 !#########################################################
 subroutine gradient_phi(s,ilevel,icount)
+  use mdl_module
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
@@ -192,7 +195,7 @@ subroutine gradient_phi(s,ilevel,icount)
 
 #ifdef GRAV
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
@@ -236,7 +239,7 @@ subroutine gradient_phi(s,ilevel,icount)
 
   if (icount .ne. 1 .and. icount .ne. 2)then
      write(*,*)'icount has bad value'
-     call mdl_abort
+     call mdl_abort(mdl)
   endif
 
   ! Compute fraction of time steps for interpolation
@@ -331,6 +334,7 @@ end subroutine gradient_phi
 !#########################################################
 !#########################################################
 recursive subroutine r_compute_epot(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -410,6 +414,7 @@ end subroutine compute_epot
 !#########################################################
 !#########################################################
 recursive subroutine r_compute_rhomax(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

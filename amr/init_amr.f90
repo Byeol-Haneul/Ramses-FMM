@@ -2,20 +2,18 @@
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_set_add(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_set_add(pst,iUpper,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
 
   integer::n,iLower,iMiddle,iUpper
 
   associate(mdl=>pst%s%mdl)
 
-  iUpper = input_array(1)
   iLower = mdl%myid-1
   n = iUpper - iLower
   iMiddle = (iUpper + iLower) / 2
@@ -26,10 +24,9 @@ recursive subroutine r_set_add(pst,input_array,input_size,output_array,output_si
      pst%nUpper = iUpper - iMiddle
      allocate(pst%pLower)
      pst%pLower%s => pst%s
-     call mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,output_size,input_array)
-     input_array(1)=iMiddle
-     call r_set_add(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(mdl,pst%iUpper+1,output_size)
+     call mdl_send_request2(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,0,iUpper)
+     call r_set_add(pst%pLower,iMiddle,input_size)
+     call mdl_get_reply(mdl,pst%iUpper+1,0)
   end if
  
   end associate
@@ -40,6 +37,7 @@ end subroutine r_set_add
 !###############################################
 !###############################################
 recursive subroutine r_init_amr(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

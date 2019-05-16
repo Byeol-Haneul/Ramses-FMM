@@ -27,6 +27,7 @@ end subroutine m_upload_fine
 !################################################################
 !################################################################
 recursive subroutine r_upload_fine(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -52,6 +53,7 @@ end subroutine r_upload_fine
 !###########################################################
 !###########################################################
 subroutine upload_fine(s,ilevel)
+  use mdl_module
   use hydro_parameters, only: nvar,nener
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: oct
@@ -75,7 +77,7 @@ subroutine upload_fine(s,ilevel)
 
 #ifdef HYDRO
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Set conservative variable to zero in refined cells
   do ioct=m%head(ilevel),m%tail(ilevel)
@@ -149,7 +151,7 @@ subroutine upload_fine(s,ilevel)
               write(*,*)'Sorry zero density cell'
               write(*,*)m%grid(ioct)%uold(ind,1:nvar)
               write(*,*)m%grid(ioct)%refined(ind)
-              call mdl_abort
+              call mdl_abort(mdl)
            endif
         end do
      end do

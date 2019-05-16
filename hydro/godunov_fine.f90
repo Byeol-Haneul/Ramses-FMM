@@ -3,6 +3,7 @@
 !###########################################################
 !###########################################################
 recursive subroutine r_godunov_fine(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -71,6 +72,7 @@ end subroutine godunov_fine
 !###########################################################
 !###########################################################
 recursive subroutine r_set_unew(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -149,6 +151,7 @@ end subroutine set_unew
 !###########################################################
 !###########################################################
 recursive subroutine r_set_uold(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -238,6 +241,7 @@ end subroutine set_uold
 !###########################################################
 !###########################################################
 subroutine godfine1(s,ind_grid,ilevel,h)
+  use mdl_module
   use amr_parameters, only: ndim,twondim,twotondim,dp
   use amr_commons, only: nbor,oct
   use hydro_parameters, only: nvar
@@ -279,7 +283,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 
 #ifdef HYDRO
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   
   oneontwotondim = 1.d0/dble(twotondim)
 
@@ -413,7 +417,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                  if(.not.associated(gridp))then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
-                    call mdl_abort
+                    call mdl_abort(mdl)
                  endif
                  call lock_cache_p(s,gridp)
 

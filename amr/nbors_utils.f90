@@ -510,6 +510,7 @@ end subroutine get_grid
 !##############################################################
 !##############################################################
 subroutine check_mail(s,comm_id,hash_dict)
+  use mdl_module
 #ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
@@ -677,7 +678,7 @@ subroutine check_mail(s,comm_id,hash_dict)
                        write(*,*)'No more free memory'
                        write(*,*)'while refining...'
                        write(*,*)'Increase ngridmax'
-                       call mdl_abort
+                       call mdl_abort(mdl)
                     endif
                     
                     m%grid(ichild)%lev=hash_child(0)

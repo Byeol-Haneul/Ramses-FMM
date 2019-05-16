@@ -3,6 +3,7 @@
 !################################################################
 !################################################################
 recursive subroutine r_input_hydro_grafic(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -28,6 +29,7 @@ end subroutine r_input_hydro_grafic
 !#########################################################################
 !#########################################################################
 subroutine input_hydro_grafic(r,g,m,ilevel)
+  use mdl_module
   use amr_parameters, only: ndim,twotondim,dp,nvector
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -100,7 +102,7 @@ subroutine input_hydro_grafic(r,g,m,ilevel)
      write(*,*)i2_min,i2_max
      write(*,*)i3_min,i3_max
      write(*,*)g%n1(ilevel),g%n2(ilevel),g%n3(ilevel)
-     call mdl_abort
+     call mdl_abort(g%mdl)
   end if
   
   !------------------------------------------

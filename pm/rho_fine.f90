@@ -123,6 +123,7 @@ end subroutine m_rho_fine
 !################################################################
 !################################################################
 recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -227,6 +228,7 @@ end subroutine multipole_leaf_cells
 !################################################################
 !################################################################
 recursive subroutine r_multipole_split_cells(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -381,6 +383,7 @@ end subroutine unpack_flush_multipole
 !################################################################
 !################################################################
 recursive subroutine r_reset_rho(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -434,6 +437,7 @@ end subroutine reset_rho
 !################################################################
 !################################################################
 recursive subroutine r_cic_multipole(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -456,6 +460,7 @@ end subroutine r_cic_multipole
 !###########################################################
 !###########################################################
 subroutine cic_multipole(s,ilevel)
+  use mdl_module
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -476,7 +481,7 @@ subroutine cic_multipole(s,ilevel)
   real(kind=8)::dx_loc,vol_loc,mmm
   type(oct),pointer::gridp
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
@@ -503,7 +508,7 @@ subroutine cic_multipole(s,ilevel)
            write(*,*)m%grid(igrid)%unew(ind,1:nvar)
            write(*,*)m%grid(igrid)%uold(ind,1:nvar)
            write(*,*)m%grid(igrid)%refined(ind)
-           call mdl_abort
+           call mdl_abort(mdl)
         endif
         x(1:ndim)=m%grid(igrid)%unew(ind,2:ndim+1)/mmm
         
@@ -605,6 +610,7 @@ end subroutine cic_multipole
 !################################################################
 !################################################################
 recursive subroutine r_cic_part(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -838,6 +844,7 @@ end subroutine unpack_flush_rho
 !################################################################
 !################################################################
 recursive subroutine r_split_part(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -1204,6 +1211,7 @@ end subroutine sort_hilbert
 !###############################################
 !###############################################
 recursive subroutine r_collect_multipole(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -1234,6 +1242,7 @@ end subroutine r_collect_multipole
 !###############################################
 !###############################################
 recursive subroutine r_broadcast_multipole(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use mdl_parameters

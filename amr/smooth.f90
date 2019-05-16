@@ -3,6 +3,7 @@
 !################################################################
 !################################################################
 recursive subroutine r_smooth_fine(pst,ilevel,input_size,noct,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

@@ -153,6 +153,7 @@ end subroutine m_init_refine_restart
 !###############################################
 !###############################################
 recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters

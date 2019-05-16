@@ -9,6 +9,7 @@
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_restrict_mask(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -179,6 +180,7 @@ end subroutine unpack_flush_restrict_mask
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_cmp_residual_mg(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
@@ -402,6 +404,7 @@ end subroutine unpack_fetch_mg
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_gauss_seidel_mg(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
@@ -604,6 +607,7 @@ end subroutine gauss_seidel_mg
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_reset_correction(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -633,6 +637,7 @@ end subroutine r_reset_correction
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_restrict_residual(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -825,6 +830,7 @@ end subroutine unpack_flush_restrict_res
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_interpolate_and_correct(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -998,6 +1004,7 @@ end subroutine unpack_fetch_phi
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_set_scan_flag(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
@@ -1189,6 +1196,7 @@ end subroutine unpack_fetch_scan
 ! ------------------------------------------------------------------------
 
 recursive subroutine r_cmp_residual_norm2(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

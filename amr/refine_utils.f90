@@ -70,6 +70,7 @@ end subroutine m_refine_fine
 !################################################################
 !################################################################
 recursive subroutine r_refine_fine(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -615,6 +616,7 @@ end subroutine unpack_flush_derefine
 !###############################################################
 !###############################################################
 subroutine make_new_oct(s,iparent,icell,ilevel)
+  use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim,twondim,nvector
   use amr_commons, only:nbor
   use hydro_parameters, only: nvar
@@ -683,7 +685,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
         write(*,*)'No more free memory'
         write(*,*)'while refining...'
         write(*,*)'Increase ngridmax'
-        call mdl_abort
+        call mdl_abort(mdl)
      end if
 
   ! Otherwise, determine parent processor and use the cache

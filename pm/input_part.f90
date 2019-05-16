@@ -3,6 +3,7 @@
 !#########################################################################
 !#########################################################################
 subroutine m_input_part(pst)
+  use mdl_module
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -20,12 +21,12 @@ subroutine m_input_part(pst)
      call m_input_part_ascii(pst)
   case('gadget')
      write(*,*)'Gadget format not supported yet'
-     call mdl_abort
+     call mdl_abort(pst%s%mdl)
   case('restart')
      call m_input_part_restart(pst)
   case DEFAULT
      write(*,*) 'Unsupported format file ' // pst%s%r%filetype
-     call mdl_abort
+     call mdl_abort(pst%s%mdl)
   end select
   
   ! Compute minimum particle mass
@@ -43,6 +44,7 @@ end subroutine m_input_part
 !#####################################################################
 !#####################################################################
 recursive subroutine r_mass_min_part(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -75,6 +77,7 @@ end subroutine r_mass_min_part
 !#####################################################################
 !#####################################################################
 recursive subroutine r_broadcast_mp_min(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -99,6 +102,7 @@ end subroutine r_broadcast_mp_min
 !#########################################################################
 !#########################################################################
 recursive subroutine r_npart_max(pst,ilevel,input_size,npart_max,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

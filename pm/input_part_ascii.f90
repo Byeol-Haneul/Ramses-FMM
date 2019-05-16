@@ -61,6 +61,7 @@ end subroutine m_input_part_ascii
 !#########################################################################
 !#########################################################################
 recursive subroutine r_input_part_ascii(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -90,6 +91,7 @@ end subroutine r_input_part_ascii
 !#########################################################################
 !#########################################################################
 subroutine input_part_ascii(r,g,p,npart_tot)
+  use mdl_module
   use amr_parameters, only: dp,i8b
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
@@ -138,7 +140,7 @@ subroutine input_part_ascii(r,g,p,npart_tot)
            if(jpart_loc>r%npartmax)then
               write(*,*)'Maximum number of particles incorrect'
               write(*,*)'npartmax should be greater than',start_ind(2)
-              call mdl_abort
+              call mdl_abort(g%mdl)
            endif
            p%xp(jpart_loc,1)=xx1+r%boxlen/2.0
            p%xp(jpart_loc,2)=xx2+r%boxlen/2.0

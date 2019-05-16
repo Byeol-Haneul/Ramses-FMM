@@ -84,6 +84,7 @@ end subroutine m_load_balance
 !###############################################
 !###############################################
 recursive subroutine r_broadcast_bound_key(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -112,6 +113,7 @@ end subroutine r_broadcast_bound_key
 !###############################################
 !###############################################
 recursive subroutine r_collect_bound_key(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -246,6 +248,7 @@ end subroutine compute_new_bound_key
 !################################################################
 !################################################################
 recursive subroutine r_load_balance(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -628,6 +631,7 @@ end subroutine unpack_flush_loadbalance
 !################################################################
 !################################################################
 recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

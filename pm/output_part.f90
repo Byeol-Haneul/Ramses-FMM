@@ -3,6 +3,7 @@
 !#######################################################
 !#######################################################
 recursive subroutine r_output_part(pst,input_size,output_size,input_array)
+  use mdl_module
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
   use mdl_parameters

@@ -149,6 +149,7 @@ end subroutine m_output_frame
 !=======================================================================
 !=======================================================================
 recursive subroutine r_output_frame(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hilbert

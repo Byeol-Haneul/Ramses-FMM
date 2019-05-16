@@ -263,6 +263,8 @@ module amr_commons
   end type global_t
 
   type mesh_t
+     ! MPI variables
+     type(mdl_t),pointer::mdl => null()
 
      ! Level related arrays
      integer,allocatable,dimension(:)::head      ! Starting index for each level 
