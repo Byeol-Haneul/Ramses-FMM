@@ -24,7 +24,7 @@ recursive subroutine r_set_add(pst,iUpper,input_size)
      pst%nUpper = iUpper - iMiddle
      allocate(pst%pLower)
      pst%pLower%s => pst%s
-     call mdl_send_request2(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,0,iUpper)
+     call mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,0,iUpper)
      call r_set_add(pst%pLower,iMiddle,input_size)
      call mdl_get_reply(mdl,pst%iUpper+1,0)
   end if

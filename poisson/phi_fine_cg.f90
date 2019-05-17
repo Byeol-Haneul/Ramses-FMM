@@ -218,7 +218,7 @@ recursive subroutine r_cmp_residual_cg(pst,input,input_size)
   integer::ilevel,icount
 
   if(pst%nLower>0)then
-     call mdl_send_request2(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,0,input)
+     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,0,input)
      call r_cmp_residual_cg(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,0)
   else
@@ -390,7 +390,7 @@ recursive subroutine r_cmp_Ap_cg(pst,ilevel,input_size)
   integer::ilevel
 
   if(pst%nLower>0)then
-     call mdl_send_request2(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,0,ilevel)
+     call mdl_send_request(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,0,ilevel)
      call r_cmp_Ap_cg(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,0)
   else
@@ -517,7 +517,7 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
   integer::ilevel,icount
   
   if(pst%nLower>0)then
-     call mdl_send_request2(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input)
+     call mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input)
      call r_make_initial_phi(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
   else
