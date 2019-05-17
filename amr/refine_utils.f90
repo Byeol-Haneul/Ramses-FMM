@@ -81,11 +81,12 @@ recursive subroutine r_refine_fine(pst,input_array,input_size,output_array,outpu
 
   integer,dimension(1:output_size)::next_output_array
   integer::ilevel,ncreate,nkill
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,input_array)
      call r_refine_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      output_array=output_array+next_output_array
   else
      ilevel=input_array(1)

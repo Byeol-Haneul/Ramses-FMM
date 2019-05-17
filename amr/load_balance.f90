@@ -97,11 +97,12 @@ recursive subroutine r_broadcast_bound_key(pst,input_array,input_size,output_arr
 
   integer::ilevel
   integer(kind=8),dimension(1)::dummy
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_BOUND_KEY,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_BOUND_KEY,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_bound_key(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      pst%s%m%domain(ilevel)%b=reshape(transfer(input_array(2:input_size),dummy),[nhilbert,pst%s%g%ncpu+1])
@@ -131,12 +132,13 @@ recursive subroutine r_collect_bound_key(pst,input_array,input_size,output_array
   integer(kind=8),dimension(1)::dummy
   integer(kind=8),dimension(:,:),allocatable::bound_key
   integer(kind=8),dimension(:,:),allocatable::next_bound_key
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COLLECT_BOUND_KEY,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_COLLECT_BOUND_KEY,pst%iUpper+1,input_size,output_size,input_array)
      call r_collect_bound_key(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
      allocate(next_bound_key(1:nhilbert,0:pst%s%g%ncpu))
      bound_key=reshape(transfer(output_array,dummy),[nhilbert,pst%s%g%ncpu+1])
@@ -257,10 +259,12 @@ recursive subroutine r_load_balance(pst,ilevel,input_size,output_array,output_si
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_LOAD_BALANCE,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_LOAD_BALANCE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_load_balance(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call load_balance(pst%s,ilevel(1))
   endif
@@ -640,10 +644,12 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BALANCE_PART,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_BALANCE_PART,pst%iUpper+1,input_size,output_size,ilevel)
      call r_balance_part(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
 #ifndef WITHOUTMPI
      call balance_part(pst%s,ilevel(1))

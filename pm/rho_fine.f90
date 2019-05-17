@@ -131,11 +131,12 @@ recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size,output_array,o
   integer::input_size,output_size
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,pst%iUpper+1,input_size,output_size,ilevel)
      call r_multipole_leaf_cells(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
   endif
@@ -237,10 +238,12 @@ recursive subroutine r_multipole_split_cells(pst,ilevel,input_size,output_array,
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,output_size,ilevel)
      call r_multipole_split_cells(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call multipole_split_cells(pst%s,ilevel(1))
   endif
@@ -392,10 +395,12 @@ recursive subroutine r_reset_rho(pst,ilevel,input_size,output_array,output_size)
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,output_size,ilevel)
      call r_reset_rho(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
   endif
@@ -446,10 +451,12 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size,output_array,output_s
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CIC_MULTIPOLE,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_CIC_MULTIPOLE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_cic_multipole(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call cic_multipole(pst%s,ilevel(1))
   endif
@@ -619,10 +626,12 @@ recursive subroutine r_cic_part(pst,ilevel,input_size,output_array,output_size)
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,output_size,ilevel)
      call r_cic_part(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call cic_part(pst%s,ilevel(1))
   endif
@@ -853,10 +862,12 @@ recursive subroutine r_split_part(pst,ilevel,input_size,output_array,output_size
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,output_size,ilevel)
      call r_split_part(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call split_part(pst%s,ilevel(1))
   endif
@@ -1223,11 +1234,12 @@ recursive subroutine r_collect_multipole(pst,ilevel,input_size,output_array,outp
 
   integer,dimension(1:output_size)::next_output_array
   real(kind=8),dimension(1:ndim+1)::multipole,next_multipole
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COLLECT_MULTIPOLE,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_COLLECT_MULTIPOLE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_collect_multipole(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      multipole=transfer(output_array,multipole)
      next_multipole=transfer(next_output_array,next_multipole)
      multipole=multipole+next_multipole
@@ -1252,10 +1264,12 @@ recursive subroutine r_broadcast_multipole(pst,input_array,input_size,output_arr
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_multipole(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      pst%s%g%multipole=transfer(input_array,pst%s%g%multipole)
      pst%s%g%rho_tot=pst%s%g%multipole(1)/pst%s%r%boxlen**ndim

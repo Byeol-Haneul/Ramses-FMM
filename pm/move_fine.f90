@@ -40,11 +40,12 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
 
   integer::ilevel
   integer::action_part
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
      call r_kick_drift_part(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      action_part=input_array(2)

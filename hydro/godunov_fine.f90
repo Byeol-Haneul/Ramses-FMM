@@ -13,11 +13,12 @@ recursive subroutine r_godunov_fine(pst,input_array,input_size,output_array,outp
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,output_size,input_array)
      call r_godunov_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call godunov_fine(pst%s,ilevel)
@@ -82,11 +83,12 @@ recursive subroutine r_set_unew(pst,input_array,input_size,output_array,output_s
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,output_size,input_array)
      call r_set_unew(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
@@ -161,11 +163,12 @@ recursive subroutine r_set_uold(pst,input_array,input_size,output_array,output_s
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,output_size,input_array)
      call r_set_uold(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)

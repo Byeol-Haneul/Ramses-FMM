@@ -170,11 +170,12 @@ recursive subroutine r_broadcast_aexp(pst,input_array,input_size,output_array,ou
   integer,dimension(1:output_size)::output_array
 
   real(kind=8)::aexp
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_aexp(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      pst%s%g%aexp=transfer(input_array(1:2),aexp)
      pst%s%g%hexp=transfer(input_array(3:4),aexp)
@@ -195,10 +196,12 @@ recursive subroutine r_clean_stop(pst,input_array,input_size,output_array,output
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1,input_size,output_size,input_array)
      call r_clean_stop(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   endif
   
 end subroutine r_clean_stop

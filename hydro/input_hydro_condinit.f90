@@ -13,11 +13,12 @@ recursive subroutine r_input_hydro_condinit(pst,input_array,input_size,output_ar
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,pst%iUpper+1,input_size,output_size,input_array)
      call r_input_hydro_condinit(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call input_hydro_condinit(pst%s%r,pst%s%g,pst%s%m,ilevel)

@@ -69,11 +69,12 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
 
   integer,dimension(1:1)::next_noct
   integer::nflag
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
      call r_init_flag(pst%pLower,ilevel,input_size,noct,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
      call init_flag(pst%s,ilevel(1),nflag)
@@ -265,11 +266,12 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
 
   integer,dimension(1:1)::next_noct
   integer::nflag
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_USER_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_USER_FLAG,pst%iUpper+1,input_size,output_size,ilevel)
      call r_user_flag(pst%pLower,ilevel,input_size,noct,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
      call user_flag(pst%s,ilevel(1),nflag)
@@ -313,11 +315,12 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size,output_array,outpu
   integer::input_size,output_size
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_ENSURE_REF_RULES,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_ENSURE_REF_RULES,pst%iUpper+1,input_size,output_size,ilevel)
      call r_ensure_ref_rules(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call ensure_ref_rules(pst%s,ilevel(1))
   endif

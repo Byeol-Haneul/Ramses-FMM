@@ -40,11 +40,12 @@ recursive subroutine r_synchro_hydro_fine(pst,input_array,input_size,output_arra
 
   integer::ilevel
   real(dp)::dteff
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,pst%iUpper+1,input_size,output_size,input_array)
      call r_synchro_hydro_fine(pst%pLower,input_array,input_size,input_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      dteff=transfer(input_array(2:3),dteff)
@@ -121,11 +122,12 @@ recursive subroutine r_gravity_hydro_fine(pst,input_array,input_size,output_arra
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,pst%iUpper+1,input_size,output_size,input_array)
      call r_gravity_hydro_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call gravity_hydro_fine(pst%s%r,pst%s%g,pst%s%m,ilevel)

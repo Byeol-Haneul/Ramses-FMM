@@ -49,11 +49,12 @@ recursive subroutine r_collect_noct(pst,ilevel,input_size,noct,output_size)
   integer,dimension(1:output_size)::noct
 
   integer,dimension(1:output_size)::next_noct
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COLLECT_NOCT,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_COLLECT_NOCT,pst%iUpper+1,input_size,output_size,ilevel)
      call r_collect_noct(pst%pLower,ilevel,input_size,noct,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
      noct=0
@@ -76,11 +77,12 @@ recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
   integer,dimension(1:output_size)::noct_tot
 
   integer,dimension(1:output_size)::next_noct_tot
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NOCT_TOT,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_NOCT_TOT,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_tot(pst%pLower,ilevel,input_size,noct_tot,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_tot)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_tot)
      noct_tot(1)=noct_tot(1)+next_noct_tot(1)
   else
      noct_tot(1)=pst%s%m%noct(ilevel(1))
@@ -102,11 +104,12 @@ recursive subroutine r_noct_max(pst,ilevel,input_size,noct_max,output_size)
   integer,dimension(1:output_size)::noct_max
 
   integer,dimension(1:output_size)::next_noct_max
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NOCT_MAX,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_NOCT_MAX,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_max(pst%pLower,ilevel,input_size,noct_max,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_max)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_max)
      noct_max(1)=MAX(noct_max(1),next_noct_max(1))
   else
      noct_max(1)=pst%s%m%noct(ilevel(1))
@@ -128,11 +131,12 @@ recursive subroutine r_noct_used_max(pst,ilevel,input_size,noct_used_max,output_
   integer,dimension(1:output_size)::noct_used_max
 
   integer,dimension(1:output_size)::next_noct_used_max
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NOCT_USED_MAX,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_NOCT_USED_MAX,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_used_max(pst%pLower,ilevel,input_size,noct_used_max,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_used_max)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_used_max)
      noct_used_max(1)=MAX(noct_used_max(1),next_noct_used_max(1))
   else
      noct_used_max(1)=pst%s%m%noct_used
@@ -154,11 +158,12 @@ recursive subroutine r_noct_min(pst,ilevel,input_size,noct_min,output_size)
   integer,dimension(1:output_size)::noct_min
 
   integer,dimension(1:output_size)::next_noct_min
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NOCT_MIN,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_NOCT_MIN,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_min(pst%pLower,ilevel,input_size,noct_min,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_min)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_min)
      noct_min(1)=MIN(noct_min(1),next_noct_min(1))
   else
      noct_min(1)=pst%s%m%noct(ilevel(1))
@@ -180,11 +185,12 @@ recursive subroutine r_gather_noct_max(pst,ilevel,input_size,noct_max,output_siz
   integer,dimension(1:output_size)::noct_max
 
   integer,dimension(1:output_size)::next_noct_max
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GATHER_NOCT_MAX,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_GATHER_NOCT_MAX,pst%iUpper+1,input_size,output_size,ilevel)
      call r_gather_noct_max(pst%pLower,ilevel,input_size,noct_max,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct_max)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_max)
      noct_max(1)=MAX(noct_max(1),next_noct_max(1))
   else
      noct_max(1)=pst%s%m%noct(ilevel(1))
@@ -206,11 +212,12 @@ recursive subroutine r_init_refine_basegrid(pst,input_array,input_size,output_ar
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,pst%iUpper+1,input_size,output_size,input_array)
      call r_init_refine_basegrid(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call init_refine_basegrid(pst%s%r,pst%s%g,pst%s%m,ilevel)

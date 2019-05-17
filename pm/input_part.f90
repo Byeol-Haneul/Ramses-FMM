@@ -56,11 +56,12 @@ recursive subroutine r_mass_min_part(pst,input_array,input_size,output_array,out
   integer,dimension(1:output_size)::next_output_array
   integer::ilevel
   real(kind=8)::mp_min,next_mp_min
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MASS_MIN_PART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_MASS_MIN_PART,pst%iUpper+1,input_size,output_size,input_array)
      call r_mass_min_part(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      mp_min=transfer(output_array(1:2),mp_min)
      next_mp_min=transfer(next_output_array(1:2),next_mp_min)
      mp_min=MIN(mp_min,next_mp_min)
@@ -87,11 +88,12 @@ recursive subroutine r_broadcast_mp_min(pst,input_array,input_size,output_array,
   integer,dimension(1:output_size)::output_array
 
   real(kind=8)::mp_min
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_MP_MIN,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MP_MIN,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_mp_min(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      pst%s%g%mp_min=transfer(input_array(1:2),mp_min)
   endif
@@ -112,11 +114,12 @@ recursive subroutine r_npart_max(pst,ilevel,input_size,npart_max,output_size)
   integer,dimension(1:output_size)::npart_max
 
   integer,dimension(1:output_size)::next_npart_max
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NPART_MAX,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_NPART_MAX,pst%iUpper+1,input_size,output_size,ilevel)
      call r_npart_max(pst%pLower,ilevel,input_size,npart_max,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_npart_max)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_npart_max)
      npart_max(1)=MAX(npart_max(1),next_npart_max(1))
   else
      npart_max(1)=pst%s%p%npart

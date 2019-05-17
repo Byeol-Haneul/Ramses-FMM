@@ -66,11 +66,12 @@ recursive subroutine r_save_phi_old(pst,input_array,input_size,output_array,outp
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SAVE_PHI_OLD,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_SAVE_PHI_OLD,pst%iUpper+1,input_size,output_size,input_array)
      call r_save_phi_old(pst%pLower,input_array,input_size,input_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call save_phi_old(pst%s%m,ilevel)

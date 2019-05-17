@@ -163,12 +163,13 @@ recursive subroutine r_output_frame(pst,input_array,input_size,output_array,outp
   
   integer::ind_proj,ind_var
   real(kind=8),dimension(:),allocatable::map,next_map
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_FRAME,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_FRAME,pst%iUpper+1,input_size,output_size,input_array)
      call r_output_frame(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      allocate(map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      allocate(next_map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      map=transfer(output_array,map)

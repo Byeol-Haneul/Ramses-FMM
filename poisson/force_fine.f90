@@ -62,11 +62,12 @@ recursive subroutine r_force_analytic(pst,input_array,input_size,output_array,ou
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,pst%iUpper+1,input_size,output_size,input_array)
      call r_force_analytic(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call force_analytic(pst%s%r,pst%s%g,pst%s%m,ilevel)
@@ -146,11 +147,12 @@ recursive subroutine r_gradient_phi(pst,input_array,input_size,output_array,outp
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel,icount
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GRADIENT_PHI,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_GRADIENT_PHI,pst%iUpper+1,input_size,output_size,input_array)
      call r_gradient_phi(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      icount=input_array(2)
@@ -345,11 +347,12 @@ recursive subroutine r_compute_epot(pst,ilevel,input_size,output_array,output_si
 
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::epot,next_epot
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COMPUTE_EPOT,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_COMPUTE_EPOT,pst%iUpper+1,input_size,output_size,ilevel)
      call r_compute_epot(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      epot=transfer(output_array,epot)
      next_epot=transfer(next_output_array,next_epot)
      epot=epot+next_epot
@@ -425,11 +428,12 @@ recursive subroutine r_compute_rhomax(pst,ilevel,input_size,output_array,output_
 
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::rhomax,next_rhomax
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COMPUTE_RHOMAX,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_COMPUTE_RHOMAX,pst%iUpper+1,input_size,output_size,ilevel)
      call r_compute_rhomax(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      rhomax=transfer(output_array,rhomax)
      next_rhomax=transfer(next_output_array,next_rhomax)
      rhomax=MAX(rhomax,next_rhomax)

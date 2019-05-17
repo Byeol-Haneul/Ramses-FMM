@@ -105,11 +105,12 @@ recursive subroutine r_newdt_part(pst,input_array,input_size,output_array,output
   integer::ilevel
   real(kind=8)::ekin,vmax
   real(kind=8)::next_ekin,next_vmax
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NEWDT_PART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_NEWDT_PART,pst%iUpper+1,input_size,output_size,input_array)
      call r_newdt_part(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      ekin=transfer(output_array(1:2),ekin)
      vmax=transfer(output_array(3:4),vmax)
      next_ekin=transfer(next_output_array(1:2),next_ekin)
@@ -176,11 +177,12 @@ recursive subroutine r_broadcast_dt(pst,input_array,input_size,output_array,outp
 
   integer::ilevel
   real(kind=8)::dt
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_DT,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_DT,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_dt(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      pst%s%g%dtnew(ilevel)=transfer(input_array(2:3),dt)

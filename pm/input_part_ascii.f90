@@ -75,11 +75,12 @@ recursive subroutine r_input_part_ascii(pst,input_array,input_size,output_array,
   ! particles from a Ramses restart file.
   !--------------------------------------------------------------------
   integer(i8b)::npart_tot
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_ASCII,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_ASCII,pst%iUpper+1,input_size,output_size,input_array)
      call r_input_part_ascii(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      npart_tot=transfer(input_array,npart_tot)
      call input_part_ascii(pst%s%r,pst%s%g,pst%s%p,npart_tot)

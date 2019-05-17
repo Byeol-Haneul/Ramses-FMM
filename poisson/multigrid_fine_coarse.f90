@@ -21,11 +21,12 @@ recursive subroutine r_restrict_mask(pst,input_array,input_size,output_array,out
   integer,dimension(1:output_size)::next_output_array
   integer::ilevel
   logical::allmasked
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_MASK,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESTRICT_MASK,pst%iUpper+1,input_size,output_size,input_array)
      call r_restrict_mask(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      output_array(1)=output_array(1)*next_output_array(1)
   else
      ilevel=input_array(1)
@@ -191,11 +192,12 @@ recursive subroutine r_cmp_residual_mg(pst,input_array,input_size,output_array,o
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel,ifine
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,output_size,input_array)
      call r_cmp_residual_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -416,11 +418,12 @@ recursive subroutine r_gauss_seidel_mg(pst,input_array,input_size,output_array,o
 
   integer::ilevel,ifine,isafe,iredstep
   logical::safe,redstep
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,output_size,input_array)
      call r_gauss_seidel_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -618,11 +621,12 @@ recursive subroutine r_reset_correction(pst,input_array,input_size,output_array,
   integer,dimension(1:output_size)::output_array
 
   integer::igrid,ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESET_CORRECTION,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESET_CORRECTION,pst%iUpper+1,input_size,output_size,input_array)
      call r_reset_correction(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      do igrid=pst%s%m%head_mg(ilevel),pst%s%m%tail_mg(ilevel)
@@ -648,11 +652,12 @@ recursive subroutine r_restrict_residual(pst,input_array,input_size,output_array
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_RESIDUAL,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESTRICT_RESIDUAL,pst%iUpper+1,input_size,output_size,input_array)
      call r_restrict_residual(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call restrict_residual(pst%s,ilevel)
@@ -841,11 +846,12 @@ recursive subroutine r_interpolate_and_correct(pst,input_array,input_size,output
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst%iUpper+1,input_size,output_size,input_array)
      call r_interpolate_and_correct(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      call interpolate_and_correct(pst%s,ilevel)
@@ -1015,11 +1021,12 @@ recursive subroutine r_set_scan_flag(pst,input_array,input_size,output_array,out
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel,ifine
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,output_size,input_array)
      call r_set_scan_flag(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      ifine=input_array(2)
@@ -1208,11 +1215,12 @@ recursive subroutine r_cmp_residual_norm2(pst,input_array,input_size,output_arra
   integer,dimension(1:output_size)::next_output_array
   integer::ilevel
   real(kind=8)::norm2,next_norm2
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,pst%iUpper+1,input_size,output_size,input_array)
      call r_cmp_residual_norm2(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      norm2=transfer(output_array,norm2)
      next_norm2=transfer(next_output_array,next_norm2)
      norm2=norm2+next_norm2

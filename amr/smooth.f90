@@ -13,11 +13,12 @@ recursive subroutine r_smooth_fine(pst,ilevel,input_size,noct,output_size)
 
   integer,dimension(1:1)::next_noct
   integer::nflag
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SMOOTH_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_SMOOTH_FINE,pst%iUpper+1,input_size,output_size,ilevel)
      call r_smooth_fine(pst%pLower,ilevel,input_size,noct,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_noct)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
      call smooth_fine(pst%s,ilevel(1),nflag)

@@ -14,11 +14,12 @@ recursive subroutine r_output_poisson(pst,input_array,input_size,output_array,ou
   integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_POISSON,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_POISSON,pst%iUpper+1,input_size,output_size,input_array)
      call r_output_poisson(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
      call output_poisson(pst%s%r,pst%s%g,pst%s%m,filename)

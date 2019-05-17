@@ -145,11 +145,12 @@ recursive subroutine r_recurrence_on_p(pst,input_array,input_size,output_array,o
 
   integer::ind,igrid,ilevel
   real(kind=8)::beta_cg
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_ON_P,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_RECURRENCE_ON_P,pst%iUpper+1,input_size,output_size,input_array)
      call r_recurrence_on_p(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      beta_cg=transfer(input_array(2:3),beta_cg)
@@ -178,11 +179,12 @@ recursive subroutine r_recurrence_x_and_r(pst,input_array,input_size,output_arra
 
   integer::ind,igrid,ilevel
   real(kind=8)::alpha_cg
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RECURRENCE_X_AND_R,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_RECURRENCE_X_AND_R,pst%iUpper+1,input_size,output_size,input_array)
      call r_recurrence_x_and_r(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      alpha_cg=transfer(input_array(2:3),alpha_cg)
@@ -216,11 +218,12 @@ recursive subroutine r_cmp_residual_cg(pst,input,input_size)
   type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,0,input)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_CG,pst%iUpper+1,input_size,0,input)
      call r_cmp_residual_cg(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,0)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call cmp_residual_cg(pst%s,input%ilevel,input%icount)
   endif
@@ -389,10 +392,12 @@ recursive subroutine r_cmp_Ap_cg(pst,ilevel,input_size)
   integer::input_size
   integer::ilevel
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_AP_CG,pst%iUpper+1,input_size,0,ilevel)
      call r_cmp_Ap_cg(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,0)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call cmp_Ap_cg(pst%s,ilevel)
   endif
@@ -515,11 +520,12 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
   type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input)
+     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input)
      call r_make_initial_phi(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call make_initial_phi(pst%s,input%ilevel,input%icount)
   endif
@@ -743,10 +749,12 @@ recursive subroutine r_cmp_rhs_norm(pst,input_array,input_size,output_array,outp
   real(kind=8)::rhs_norm,next_rhs_norm
   real(kind=8)::dx2,fourpi,oneoversix,fact,fact2
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RHS_NORM,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RHS_NORM,pst%iUpper+1,input_size,output_size,input_array)
      call r_cmp_rhs_norm(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      rhs_norm=transfer(output_array,rhs_norm)
      next_rhs_norm=transfer(next_output_array,next_rhs_norm)
      rhs_norm=rhs_norm+next_rhs_norm
@@ -790,11 +798,12 @@ recursive subroutine r_cmp_r2_cg(pst,input_array,input_size,output_array,output_
   integer::ind,igrid,ilevel
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::r2,next_r2
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_R2_CG,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_R2_CG,pst%iUpper+1,input_size,output_size,input_array)
      call r_cmp_r2_cg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      r2=transfer(output_array,r2)
      next_r2=transfer(next_output_array,next_r2)
      r2=r2+next_r2
@@ -831,11 +840,12 @@ recursive subroutine r_cmp_pAp_cg(pst,input_array,input_size,output_array,output
   integer::igrid,ind,ilevel
   integer,dimension(1:output_size)::next_output_array
   real(kind=8)::pAp,next_pAp
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_PAP_CG,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_PAP_CG,pst%iUpper+1,input_size,output_size,input_array)
      call r_cmp_pAp_cg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      pAp=transfer(output_array,pAp)
      next_pAp=transfer(next_output_array,next_pAp)
      pAp=pAp+next_pAp

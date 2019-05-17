@@ -171,12 +171,13 @@ recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_arr
   integer(kind=8),dimension(1)::dummy
   integer(kind=8),dimension(:,:),allocatable::bound_key
   integer(kind=8),dimension(:,:),allocatable::next_bound_key
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,pst%iUpper+1,input_size,output_size,input_array)
      call r_init_refine_restart(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
      allocate(next_bound_key(1:nhilbert,0:pst%s%g%ncpu))
      bound_key=reshape(transfer(output_array,dummy),[nhilbert,pst%s%g%ncpu+1])
