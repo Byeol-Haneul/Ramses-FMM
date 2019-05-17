@@ -87,6 +87,8 @@ end subroutine master
 function worker_init(mdl) result(pst)
   use ramses_commons, only: pst_t, ramses_t
   use call_back, only: ramses_function
+  use mdl_parameters
+  implicit none
 
   procedure(ramses_function)::r_clean_stop,r_set_add,r_broadcast_params,r_broadcast_global
   procedure(ramses_function)::r_init_amr,r_init_time,r_init_hydro,r_init_part
