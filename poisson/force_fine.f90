@@ -1,3 +1,5 @@
+module force_fine_module
+contains
 !#########################################################
 !#########################################################
 !#########################################################
@@ -12,7 +14,7 @@ subroutine m_force_fine(pst,ilevel,icount)
   ! This routine computes the gravitational acceleration,
   ! the maximum density rho_max, and the potential energy
   !----------------------------------------------------------
-  integer::dummy
+  integer::dummy(2)
   integer,dimension(1:2)::input_array,output_array
   real(kind=8)::rhomax,epot
  
@@ -23,7 +25,7 @@ subroutine m_force_fine(pst,ilevel,icount)
 
   if(pst%s%r%gravity_type>0)then 
      ! Compute analytical gravity force
-     call r_force_analytic(pst,ilevel,1,dummy,0)
+     call r_force_analytic(pst,ilevel,1)
   else
      ! Compute gradient of potential
      input_array(1)=ilevel
@@ -33,14 +35,12 @@ subroutine m_force_fine(pst,ilevel,icount)
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
   ! Compute gravity potential energy
-  call r_compute_epot(pst,ilevel,1,output_array,2)
-  epot=transfer(output_array,epot)
+  call r_compute_epot(pst,ilevel,1,epot,2)
   pst%s%g%epot_tot=pst%s%g%epot_tot+epot
   if(pst%s%r%verbose)write(*,'("   Potential energy done for level ",I2)')ilevel
 
   ! Compute maximum mass density
-  call r_compute_rhomax(pst,ilevel,1,output_array,2)
-  rhomax=transfer(output_array,rhomax)
+  call r_compute_rhomax(pst,ilevel,1,rhomax,2)
   pst%s%g%rho_max(ilevel)=rhomax
   if(pst%s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
 
@@ -51,25 +51,22 @@ end subroutine m_force_fine
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_force_analytic(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_force_analytic(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,pst%iUpper+1,input_size,output_size,input_array)
-     call r_force_analytic(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_FORCE_ANALYTIC,pst%iUpper+1,input_size,0,ilevel)
+     call r_force_analytic(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call force_analytic(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
@@ -335,31 +332,25 @@ end subroutine gradient_phi
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_epot(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_compute_epot(pst,ilevel,input_size,epot,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
-
-  integer,dimension(1:output_size)::next_output_array
+  integer::ilevel
   real(kind=8)::epot,next_epot
+
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_COMPUTE_EPOT,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_compute_epot(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
-     epot=transfer(output_array,epot)
-     next_epot=transfer(next_output_array,next_epot)
+     call r_compute_epot(pst%pLower,ilevel,input_size,epot,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_epot)
      epot=epot+next_epot
-     output_array=transfer(epot,output_array)
   else
-     call compute_epot(pst%s%r,pst%s%g,pst%s%m,ilevel(1),epot)
-     output_array=transfer(epot,output_array)
+     call compute_epot(pst%s%r,pst%s%g,pst%s%m,ilevel,epot)
   endif
 
 end subroutine r_compute_epot
@@ -416,31 +407,25 @@ end subroutine compute_epot
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_compute_rhomax(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_compute_rhomax(pst,ilevel,input_size,rhomax,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::ilevel
 
-  integer,dimension(1:output_size)::next_output_array
   real(kind=8)::rhomax,next_rhomax
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_COMPUTE_RHOMAX,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_compute_rhomax(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
-     rhomax=transfer(output_array,rhomax)
-     next_rhomax=transfer(next_output_array,next_rhomax)
+     call r_compute_rhomax(pst%pLower,ilevel,input_size,rhomax,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_rhomax)
      rhomax=MAX(rhomax,next_rhomax)
-     output_array=transfer(rhomax,output_array)
   else
-     call compute_rhomax(pst%s%r,pst%s%g,pst%s%m,ilevel(1),rhomax)
-     output_array=transfer(rhomax,output_array)
+     call compute_rhomax(pst%s%r,pst%s%g,pst%s%m,ilevel,rhomax)
   endif
 
 end subroutine r_compute_rhomax
@@ -484,8 +469,4 @@ end subroutine compute_rhomax
 !#########################################################
 !#########################################################
 !#########################################################
-
-
-
-
-
+end module force_fine_module

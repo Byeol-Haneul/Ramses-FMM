@@ -1,3 +1,5 @@
+module rho_fine_module
+contains
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -5,6 +7,7 @@
 subroutine m_rho_fine(pst,ilevel)
   use amr_parameters, only: dp,ndim
   use ramses_commons, only: pst_t
+  use amr_commons, only: multipole_t
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -16,9 +19,8 @@ subroutine m_rho_fine(pst,ilevel)
   ! refinement, and inside their level, they are sorted according to
   ! their grid Hilbert order.
   !------------------------------------------------------------------
-  real(kind=8),dimension(1:ndim+1)::multipole_tot
-  integer,dimension(:),allocatable::input_array,output_array
-  integer::i,input_size,dummy
+  type(multipole_t)::multipole_tot
+  integer::i,input_size,dummy(2)
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -30,14 +32,9 @@ subroutine m_rho_fine(pst,ilevel)
   ! Reset multipole to zero
   !---------------------------
   if(ilevel==r%levelmin)then
-     multipole_tot=0d0
-
+     multipole_tot%q=0d0
      input_size=(storage_size(multipole_tot)/32)*(ndim+1)
-     allocate(input_array(1:input_size))
-     input_array=transfer(multipole_tot,input_array)
-     call r_broadcast_multipole(pst,input_array,input_size,dummy,0)
-     deallocate(input_array)
-
+     call r_broadcast_multipole(pst,multipole_tot,input_size)
   endif
   
   !-------------------------------------------------------
@@ -52,14 +49,14 @@ subroutine m_rho_fine(pst,ilevel)
         ! Set multipoles in all leaf cells
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i        
-           call r_multipole_leaf_cells(pst,i,1,dummy,0)
+           call r_multipole_leaf_cells(pst,i,1)
         endif
 
         ! Average down multipoles in all split cells
         if(i<r%nlevelmax)then
            if(m%noct_tot(i+1)>0)then
               if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i        
-              call r_multipole_split_cells(pst,i,1,dummy,0)
+              call r_multipole_split_cells(pst,i,1)
            endif
         endif
 
@@ -67,13 +64,13 @@ subroutine m_rho_fine(pst,ilevel)
 
      ! Reset array rho to zero
      if(m%noct_tot(i)>0)then
-        call r_reset_rho(pst,i,1,dummy,0)
+        call r_reset_rho(pst,i,1)
      endif
 
         ! Gas mass deposition using pseudo-particles
      if(r%hydro.AND.m%noct_tot(i)>0)then
         if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
-        call r_cic_multipole(pst,i,1,dummy,0)
+        call r_cic_multipole(pst,i,1)
      endif
 
   end do
@@ -85,10 +82,10 @@ subroutine m_rho_fine(pst,ilevel)
   if(r%pic)then
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
-           call r_cic_part(pst,i,1,dummy,0)
+           call r_cic_part(pst,i,1)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
-           call r_split_part(pst,i,1,dummy,0)
+           call r_split_part(pst,i,1)
         endif
      end do
   endif
@@ -99,18 +96,11 @@ subroutine m_rho_fine(pst,ilevel)
   if(ilevel==r%levelmin)then
 
      ! Collect local multipole from all CPU
-     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
-     allocate(output_array(1:input_size))
-     call r_collect_multipole(pst,ilevel,1,output_array,input_size)
-     multipole_tot=transfer(output_array,multipole_tot)
-     deallocate(output_array)
+     input_size=(storage_size(multipole_tot)/32)
+     call r_collect_multipole(pst,ilevel,1,multipole_tot,input_size)
 
      ! Broadcast total multipole to all CPU
-     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
-     allocate(input_array(1:input_size))
-     input_array=transfer(multipole_tot,input_array)
-     call r_broadcast_multipole(pst,input_array,(ndim+1)*(storage_size(multipole_tot)/32),dummy,0)
-     deallocate(input_array)
+     call r_broadcast_multipole(pst,multipole_tot,(storage_size(multipole_tot)/32))
 
      if(r%verbose)write(*,*)'rho_average=',g%rho_tot
   endif  
@@ -122,23 +112,22 @@ end subroutine m_rho_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  integer::ilevel
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_multipole_leaf_cells(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,pst%iUpper+1,input_size,0,ilevel)
+     call r_multipole_leaf_cells(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
+     call multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_multipole_leaf_cells
@@ -228,24 +217,23 @@ end subroutine multipole_leaf_cells
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_multipole_split_cells(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_multipole_split_cells(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_multipole_split_cells(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,0,ilevel)
+     call r_multipole_split_cells(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call multipole_split_cells(pst%s,ilevel(1))
+     call multipole_split_cells(pst%s,ilevel)
   endif
 
 end subroutine r_multipole_split_cells
@@ -385,24 +373,23 @@ end subroutine unpack_flush_multipole
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_reset_rho(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_reset_rho(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_reset_rho(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,0,ilevel)
+     call r_reset_rho(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel(1))
+     call reset_rho(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_reset_rho
@@ -441,24 +428,23 @@ end subroutine reset_rho
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_cic_multipole(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_cic_multipole(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CIC_MULTIPOLE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_cic_multipole(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CIC_MULTIPOLE,pst%iUpper+1,input_size,0,ilevel)
+     call r_cic_multipole(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call cic_multipole(pst%s,ilevel(1))
+     call cic_multipole(pst%s,ilevel)
   endif
 
 end subroutine r_cic_multipole
@@ -522,7 +508,7 @@ subroutine cic_multipole(s,ilevel)
         ! Compute total multipole
         if(ilevel==r%levelmin)then
            do idim=1,ndim+1
-              g%multipole(idim)=g%multipole(idim)+m%grid(igrid)%unew(ind,idim)
+              g%multipole%q(idim)=g%multipole%q(idim)+m%grid(igrid)%unew(ind,idim)
            end do
         endif
 #endif
@@ -616,24 +602,23 @@ end subroutine cic_multipole
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_cic_part(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_cic_part(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_cic_part(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,ilevel)
+     call r_cic_part(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call cic_part(pst%s,ilevel(1))
+     call cic_part(pst%s,ilevel)
   endif
 
 end subroutine r_cic_part
@@ -671,11 +656,11 @@ subroutine cic_part(s,ilevel)
   ! Compute contribution to multipole
   if(ilevel==r%levelmin)then
      do i=1,p%npart
-        g%multipole(1)=g%multipole(1)+p%mp(i)
+        g%multipole%q(1)=g%multipole%q(1)+p%mp(i)
      end do
      do idim=1,ndim
         do i=1,p%npart
-           g%multipole(idim+1)=g%multipole(idim+1)+p%mp(i)*p%xp(i,idim)
+           g%multipole%q(idim+1)=g%multipole%q(idim+1)+p%mp(i)*p%xp(i,idim)
         end do
      end do
   endif
@@ -852,24 +837,23 @@ end subroutine unpack_flush_rho
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_split_part(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_split_part(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_split_part(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,0,ilevel)
+     call r_split_part(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call split_part(pst%s,ilevel(1))
+     call split_part(pst%s,ilevel)
   endif
 
 end subroutine r_split_part
@@ -1221,31 +1205,27 @@ end subroutine sort_hilbert
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_collect_multipole(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_collect_multipole(pst,ilevel,input_size,multipole,output_size)
   use mdl_module
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
+  use amr_commons, only: multipole_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::ilevel
+  type(multipole_t)::multipole,next_multipole
 
-  integer,dimension(1:output_size)::next_output_array
-  real(kind=8),dimension(1:ndim+1)::multipole,next_multipole
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_COLLECT_MULTIPOLE,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_collect_multipole(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
-     multipole=transfer(output_array,multipole)
-     next_multipole=transfer(next_output_array,next_multipole)
-     multipole=multipole+next_multipole
-     output_array=transfer(multipole,output_array)
+     call r_collect_multipole(pst%pLower,ilevel,input_size,multipole,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_multipole)
+     multipole%q = multipole%q+next_multipole%q
   else
-     output_array=transfer(pst%s%g%multipole,output_array)
+     multipole%q = pst%s%g%multipole%q
   endif
 
 end subroutine r_collect_multipole
@@ -1253,26 +1233,26 @@ end subroutine r_collect_multipole
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_broadcast_multipole(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
   use mdl_module
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
+  use amr_commons, only: multipole_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  type(multipole_t)::multipole
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_multipole(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,pst%iUpper+1,input_size,0,multipole)
+     call r_broadcast_multipole(pst%pLower,multipole,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     pst%s%g%multipole=transfer(input_array,pst%s%g%multipole)
-     pst%s%g%rho_tot=pst%s%g%multipole(1)/pst%s%r%boxlen**ndim
+     pst%s%g%multipole=multipole
+     pst%s%g%rho_tot=pst%s%g%multipole%q(1)/pst%s%r%boxlen**ndim
 !!!     pst%s%g%rho_tot=0d0 ! For non-periodic BC
   endif
 
@@ -1281,4 +1261,4 @@ end subroutine r_broadcast_multipole
 !###############################################
 !###############################################
 !###############################################
-
+end module rho_fine_module

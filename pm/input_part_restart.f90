@@ -1,3 +1,5 @@
+module input_part_restart_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -6,13 +8,15 @@ subroutine m_input_part_restart(pst)
   use mdl_module
   use amr_parameters, only: ndim,dp,i8b
   use ramses_commons, only: pst_t
+  use output_amr_module, only: input_header
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer::icpu,ilun,ncpu_file,dummy
+  integer::icpu,ilun,ncpu_file
+  integer::dummy(1)
   integer(i8b)::npart_tot_file,npart_tot_check
   character(LEN=5)::nchar,ncharcpu
   character(LEN=80)::file_head,file_part
@@ -251,4 +255,4 @@ end subroutine input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-
+end module input_part_restart_module

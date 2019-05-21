@@ -1,9 +1,13 @@
+module refine_utils
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine m_refine_fine(pst,ilevel)
   use ramses_commons, only: pst_t
+  use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
+  use load_balance_module, only: m_load_balance, r_balance_part
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -13,6 +17,7 @@ subroutine m_refine_fine(pst,ilevel)
   !--------------------------------------------------------------------
   integer::ilev,dummy
   integer,dimension(1:2)::noct
+  integer,dimension(1)::alevel
 
   associate(s=>pst%s)
   
@@ -23,7 +28,8 @@ subroutine m_refine_fine(pst,ilevel)
 111 format(' Entering refine_fine for level ',I2)
 
   ! Create new octs and destroy unecessary octs
-  call r_refine_fine(pst,ilevel,1,noct,2)
+  alevel(1)=ilevel
+  call r_refine_fine(pst,alevel,1,noct,2)
 
   if(s%r%verbose)write(*,112)noct(1)
 112 format(' ==> Make ',i6,' sub-grids')
@@ -780,4 +786,4 @@ end subroutine make_new_oct
 !###############################################################
 !###############################################################
 !###############################################################
-  
+end module refine_utils

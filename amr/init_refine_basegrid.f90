@@ -1,23 +1,26 @@
+module init_refine_basegrid_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine m_init_refine_basegrid(pst)
   use ramses_commons, only: pst_t
+  use rho_fine_module, only: m_rho_fine
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
   !--------------------------------------------------------------------
-  integer,dimension(1:1)::dummy
+  integer::dummy
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
   
   if(r%verbose)write(*,*)'Entering init_refine_basegrid'
 
   ! Call recursive slave routine
-  call r_init_refine_basegrid(pst,r%levelmin,1,dummy,0)
+  call r_init_refine_basegrid(pst,r%levelmin,1)
 
   ! Get total, min and max grid count (only in master).
   call r_noct_tot(pst,r%levelmin,1,m%noct_tot(r%levelmin),1)
@@ -44,7 +47,9 @@ recursive subroutine r_collect_noct(pst,ilevel,input_size,noct,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+!  integer,VALUE::input_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::noct
 
@@ -73,19 +78,19 @@ recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::noct_tot
+  integer::ilevel
+  integer::noct_tot
 
-  integer,dimension(1:output_size)::next_noct_tot
+  integer::next_noct_tot
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_NOCT_TOT,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_tot(pst%pLower,ilevel,input_size,noct_tot,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_tot)
-     noct_tot(1)=noct_tot(1)+next_noct_tot(1)
+     noct_tot=noct_tot+next_noct_tot
   else
-     noct_tot(1)=pst%s%m%noct(ilevel(1))
+     noct_tot=pst%s%m%noct(ilevel)
   endif
 
 end subroutine r_noct_tot
@@ -100,19 +105,19 @@ recursive subroutine r_noct_max(pst,ilevel,input_size,noct_max,output_size)
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::noct_max
+  integer::ilevel
+  integer::noct_max
 
-  integer,dimension(1:output_size)::next_noct_max
+  integer::next_noct_max
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_NOCT_MAX,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_max(pst%pLower,ilevel,input_size,noct_max,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_max)
-     noct_max(1)=MAX(noct_max(1),next_noct_max(1))
+     noct_max=MAX(noct_max,next_noct_max)
   else
-     noct_max(1)=pst%s%m%noct(ilevel(1))
+     noct_max=pst%s%m%noct(ilevel)
   endif
 
 end subroutine r_noct_max
@@ -127,19 +132,19 @@ recursive subroutine r_noct_used_max(pst,ilevel,input_size,noct_used_max,output_
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::noct_used_max
+  integer::ilevel
+  integer::noct_used_max
 
-  integer,dimension(1:output_size)::next_noct_used_max
+  integer::next_noct_used_max
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_NOCT_USED_MAX,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_used_max(pst%pLower,ilevel,input_size,noct_used_max,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_used_max)
-     noct_used_max(1)=MAX(noct_used_max(1),next_noct_used_max(1))
+     noct_used_max=MAX(noct_used_max,next_noct_used_max)
   else
-     noct_used_max(1)=pst%s%m%noct_used
+     noct_used_max=pst%s%m%noct_used
   endif
 
 end subroutine r_noct_used_max
@@ -154,19 +159,19 @@ recursive subroutine r_noct_min(pst,ilevel,input_size,noct_min,output_size)
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::noct_min
+  integer::ilevel
+  integer::noct_min
 
-  integer,dimension(1:output_size)::next_noct_min
+  integer::next_noct_min
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_NOCT_MIN,pst%iUpper+1,input_size,output_size,ilevel)
      call r_noct_min(pst%pLower,ilevel,input_size,noct_min,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_min)
-     noct_min(1)=MIN(noct_min(1),next_noct_min(1))
+     noct_min=MIN(noct_min,next_noct_min)
   else
-     noct_min(1)=pst%s%m%noct(ilevel(1))
+     noct_min=pst%s%m%noct(ilevel)
   endif
 
 end subroutine r_noct_min
@@ -201,25 +206,22 @@ end subroutine r_gather_noct_max
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_refine_basegrid(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_init_refine_basegrid(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,pst%iUpper+1,input_size,output_size,input_array)
-     call r_init_refine_basegrid(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,pst%iUpper+1,input_size,0,ilevel)
+     call r_init_refine_basegrid(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call init_refine_basegrid(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
@@ -314,4 +316,4 @@ end subroutine init_refine_basegrid
 !################################################################
 !################################################################
 !################################################################
-
+end module init_refine_basegrid_module

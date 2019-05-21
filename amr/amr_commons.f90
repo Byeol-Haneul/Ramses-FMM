@@ -7,6 +7,10 @@ module amr_commons
   use domain_m
   use mdl_module, only: mdl_t
   
+  type multipole_t
+    real(dp),dimension(1:ndim+1)::q
+  end type multipole_t
+
   type run_t
 
      ! Run control
@@ -258,7 +262,8 @@ module amr_commons
      logical, dimension(1:MAXLEVEL)::safe_mode=.false.
      
      ! Multipole coefficients
-     real(dp),dimension(1:ndim+1)::multipole
+     !real(dp),dimension(1:ndim+1)::multipole
+     type(multipole_t)::multipole
      
   end type global_t
 

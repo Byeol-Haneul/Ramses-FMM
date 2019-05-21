@@ -4,6 +4,8 @@
 !#########################################################################
 subroutine m_init_flow_fine(pst,ilevel)
   use ramses_commons, only: pst_t
+  use input_hydro_condinit_module, only: r_input_hydro_condinit
+  use input_hydro_grafic_module, only: r_input_hydro_grafic
   implicit none
   type(pst_t)::pst
   integer::ilevel

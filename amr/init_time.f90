@@ -1,3 +1,7 @@
+module init_time_module
+
+contains
+
 !###########################################################
 !###########################################################
 !###########################################################
@@ -182,7 +186,6 @@ subroutine init_cosmo(r,g)
   !------------------------------------------------------
   integer:: ilevel,i
   real(sp)::dxini0,xoff10,xoff20,xoff30,astart0,omega_m0,omega_l0,h00
-  real(dp)::d1a,fpeebl
   character(LEN=80)::filename
   character(LEN=5)::nchar
   logical::ok
@@ -383,7 +386,6 @@ subroutine friedman(mdl,O_mat_0,O_vac_0,O_k_0,alpha,axp_min, &
   ! ######################################################!
   real(kind=8)::axp_tau, axp_t
   real(kind=8)::axp_tau_pre, axp_t_pre
-  real(kind=8)::dadtau, dadt
   real(kind=8)::dtau,dt
   real(kind=8)::tau,t
   integer::nstep,nout,nskip
@@ -505,7 +507,7 @@ function d1a(mdl,a,omega_m,omega_l)
   !     Computes the linear growing mode D1 in a Friedmann-Robertson-Walker
   !     universe. See Peebles LSSU sections 11 and 14.
   type(mdl_t)::mdl
-  real(dp)::a,omega_m,omega_l,y12,y,eps,rombint
+  real(dp)::a,omega_m,omega_l,y12,y,eps
   
   eps=1.0d-6
   if(a .le. 0.0d0)then
@@ -526,7 +528,7 @@ end function d1a
 function fpeebl(a,omega_m,omega_l)
   use amr_parameters, only: dp
   implicit none
-  real(dp) :: fpeebl,a,omega_m,omega_l,rombint,fy
+  real(dp) :: fpeebl,a,omega_m,omega_l
   !     Computes the growth factor f=d\log D1/d\log a.
   real(dp) :: fact,y,eps
   
@@ -551,7 +553,7 @@ function rombint(a,b,tol,omega_m,omega_l)
   integer::maxiter=16,maxj=5
   real(dp),dimension(100):: g
   real(dp)::a,b,tol,fourj,omega_m,omega_l
-  real(dp)::h,error,gmax,g0,g1,fy
+  real(dp)::h,error,gmax,g0,g1
   integer::nint,i,j,k,jmax
   
   h=0.5d0*(b-a)
@@ -597,5 +599,4 @@ function rombint(a,b,tol,omega_m,omega_l)
   return
 end function rombint
 
-
-
+end module init_time_module

@@ -927,6 +927,17 @@ subroutine open_cache(s,cache_operation,domain_decompos)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
+  use flag_utils, only:pack_fetch_flag, unpack_fetch_flag,&
+                      init_flush_initflag, pack_flush_initflag, unpack_flush_initflag
+  use load_balance_module, only: pack_flush_loadbalance, unpack_flush_loadbalance
+  use refine_utils, only: init_flush_derefine,pack_flush_derefine,unpack_flush_derefine,&
+                          pack_flush_refine,unpack_flush_refine,&
+                          pack_fetch_refine,unpack_fetch_refine
+  use upload_module, only: init_flush_upload,pack_flush_upload,unpack_flush_upload
+  use rho_fine_module, only: init_flush_multipole,pack_flush_multipole,unpack_flush_multipole,&
+                        init_flush_rho,pack_flush_rho,unpack_flush_rho,pack_fetch_split,unpack_fetch_split
+  use move_fine_module, only: pack_fetch_kick,unpack_fetch_kick
+
   use cache_commons
   use hash
   implicit none

@@ -1,3 +1,5 @@
+module output_amr_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -5,11 +7,14 @@
 subroutine m_dump_all(pst)
   use amr_parameters, only: ndim,flen
   use ramses_commons, only: pst_t
+  use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
+  use output_poisson_module, only: r_output_poisson
+  use output_part_module, only: r_output_part
   implicit none
   type(pst_t)::pst
 
   ! Local variables
-  integer::i,dummy
+  integer::i,dummy(1)
 #ifdef NOSYSTEM
   integer::ierr
 #endif
@@ -552,3 +557,4 @@ subroutine savegadget(filename)
 
 end subroutine savegadget
 #endif
+end module output_amr_module

@@ -1,3 +1,5 @@
+module output_poisson_module
+contains
 !#########################################################
 !#########################################################
 !#########################################################
@@ -65,8 +67,4 @@ subroutine output_poisson(r,g,m,filename)
   close(ilun)
      
 end subroutine output_poisson
-
-
-
-
-
+end module output_poisson_module

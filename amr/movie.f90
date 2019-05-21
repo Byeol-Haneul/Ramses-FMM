@@ -6,6 +6,7 @@ subroutine m_output_frame(pst)
   use amr_parameters, only: dp,ndim,nvector,twotondim,flen
   use hydro_parameters, only: nvar
   use ramses_commons, only: pst_t
+  use output_amr_module, only: output_info
   implicit none
   type(pst_t)::pst
 

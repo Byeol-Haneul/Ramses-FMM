@@ -1,3 +1,5 @@
+module output_hydro_module
+contains
 !###################################################
 !###################################################
 !###################################################
@@ -122,8 +124,4 @@ subroutine file_descriptor_hydro(r,filename)
   close(ilun)
 
 end subroutine file_descriptor_hydro
-
-
-
-
-
+end module output_hydro_module

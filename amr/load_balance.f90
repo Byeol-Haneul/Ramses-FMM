@@ -1,3 +1,5 @@
+module load_balance_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -6,6 +8,7 @@ subroutine m_load_balance(pst,ilevel)
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use hilbert
+  use init_refine_basegrid_module, only: r_collect_noct
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -18,7 +21,7 @@ subroutine m_load_balance(pst,ilevel)
   integer,allocatable,dimension(:)::output_array
   integer(kind=8),dimension(1:nhilbert)::zero_key=0
   integer(kind=8),dimension(1:nhilbert,0:pst%s%g%ncpu)::bound_key
-  integer::ilev,icpu,input_size,output_size,dummy
+  integer::ilev,icpu,input_size,output_size,dummy,adummy(1)
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
   
@@ -34,7 +37,8 @@ subroutine m_load_balance(pst,ilevel)
      if(m%noct_tot(ilev)>0)then
         
         ! Collect number of oct in each cpu for current level
-        call r_collect_noct(pst,ilev,1,noct,g%ncpu)
+        adummy(1) = ilev
+        call r_collect_noct(pst,adummy,1,noct,g%ncpu)
 
         ! Compute input array
         input_size=g%ncpu+1
@@ -65,7 +69,7 @@ subroutine m_load_balance(pst,ilevel)
         allocate(input_array(1:input_size))
         input_array(1)=ilev
         input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
-        call r_broadcast_bound_key(pst,input_array,input_size,dummy,0)
+        call r_broadcast_bound_key(pst,input_array,input_size,adummy,0)
         deallocate(input_array)
 
      endif
@@ -256,8 +260,8 @@ recursive subroutine r_load_balance(pst,ilevel,input_size,output_array,output_si
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::ilevel
+  integer::output_array
 
   integer::rID
 
@@ -266,7 +270,7 @@ recursive subroutine r_load_balance(pst,ilevel,input_size,output_array,output_si
      call r_load_balance(pst%pLower,ilevel,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
-     call load_balance(pst%s,ilevel(1))
+     call load_balance(pst%s,ilevel)
   endif
 
 end subroutine r_load_balance
@@ -641,8 +645,8 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::ilevel
-  integer,dimension(1:output_size)::output_array
+  integer::ilevel
+  integer::output_array
 
   integer::rID
 
@@ -652,7 +656,7 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
 #ifndef WITHOUTMPI
-     call balance_part(pst%s,ilevel(1))
+     call balance_part(pst%s,ilevel)
 #endif
   endif
 
@@ -667,6 +671,7 @@ subroutine balance_part(s,ilevel)
   use pm_parameters, only: part_memory
   use ramses_commons, only: ramses_t
   use domain_m, only: domain_t
+  use rho_fine_module, only: sort_hilbert
   use hilbert
   implicit none
 #ifndef WITHOUTMPI
@@ -1282,3 +1287,4 @@ end subroutine balance_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
+end module load_balance_module

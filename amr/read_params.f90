@@ -1,3 +1,7 @@
+module params_module
+
+contains
+
 subroutine m_read_params(pst)
   use amr_parameters
   use hydro_parameters
@@ -637,11 +641,11 @@ recursive subroutine r_broadcast_params(pst,input_array,input_size,output_array,
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_params(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+    rID = mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,input_size,output_size,input_array)
+    call r_broadcast_params(pst%pLower,input_array,input_size,output_array,output_size)
+    call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
-     pst%s%r=transfer(input_array,pst%s%r)
+    pst%s%r=transfer(input_array,pst%s%r)
   endif
 
 end subroutine r_broadcast_params
@@ -699,3 +703,4 @@ end subroutine r_broadcast_global
 !#########################################################################
 !#########################################################################
 !#########################################################################
+end module params_module

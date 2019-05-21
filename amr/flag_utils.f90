@@ -2,8 +2,14 @@
 !################################################################
 !################################################################
 !################################################################
+
+module flag_utils
+
+contains
+
 subroutine m_flag_fine(pst,ilevel,icount)
   use ramses_commons, only: pst_t
+  use smooth_module, only: r_smooth_fine
   implicit none
   type(pst_t)::pst
   integer::ilevel,icount
@@ -64,7 +70,8 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:1)::ilevel,noct
 
   integer,dimension(1:1)::next_noct
@@ -261,7 +268,8 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:1)::ilevel,noct
 
   integer,dimension(1:1)::next_noct
@@ -312,7 +320,8 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size,output_array,outpu
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
   integer::rID
@@ -419,3 +428,4 @@ end subroutine ensure_ref_rules
 !############################################################
 !############################################################
 !############################################################
+end module flag_utils

@@ -1,3 +1,5 @@
+module interpol_phi_module
+contains
 !###########################################################
 !###########################################################
 !###########################################################
@@ -55,25 +57,22 @@ end subroutine interpol_phi
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_save_phi_old(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_save_phi_old(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
 
   integer::ilevel
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SAVE_PHI_OLD,pst%iUpper+1,input_size,output_size,input_array)
-     call r_save_phi_old(pst%pLower,input_array,input_size,input_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SAVE_PHI_OLD,pst%iUpper+1,input_size,0,ilevel)
+     call r_save_phi_old(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call save_phi_old(pst%s%m,ilevel)
   endif
 
@@ -107,3 +106,4 @@ end subroutine save_phi_old
 !###########################################################
 !###########################################################
 !###########################################################
+end module interpol_phi_module

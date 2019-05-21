@@ -89,6 +89,8 @@ module mdl_module
       integer,dimension(MPI_STATUS_SIZE)::launch_status
       integer,dimension(1:32)::header=0
 
+      write(*,*) 'OLD:',mdl_function_id,input_size
+
       ! Assemble MPI message
       header(1)=mdl_function_id
       header(2)=input_size
@@ -107,13 +109,13 @@ module mdl_module
       mdl_send_request_array = target_cpu
     end function mdl_send_request_array
 
-    integer function mdl_send_request_scalar(mdl,mdl_function_id,target_cpu,input_length,output_size,input)
+    integer function mdl_send_request_scalar(mdl,mdl_function_id,target_cpu,input_size,output_size,input)
       USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_LOC, C_F_POINTER
       implicit none
       type(mdl_t)::mdl
       integer,intent(in)::mdl_function_id
       integer,intent(in)::target_cpu
-      integer,intent(in),optional::input_length,output_size
+      integer,intent(in),optional::input_size,output_size
       type(*),intent(in),optional,target::input
 
 #ifndef WITHOUTMPI
@@ -124,21 +126,19 @@ module mdl_module
       integer,dimension(1:32)::header=0
       byte,dimension(:),pointer::dummy
 
-      write(*,*) 'NEW:',mdl_function_id
-
       ! Assemble MPI message
       header(1)=mdl_function_id
-      header(2)=input_length/4
+      header(2)=input_size
       header(3)=output_size
       mdl%mpi_input_buffer(1:32)=header
       mdl%mpi_input_buffer(33) = 99
-      if (present(input_length) .and. input_length>0) then
-        call c_f_pointer(c_loc(input),dummy,[input_length])
-        mdl%mpi_input_buffer(33:32+input_length/4) = transfer(dummy,mdl%mpi_input_buffer(33:32+input_length/4))
+      if (present(input_size) .and. input_size>0) then
+        call c_f_pointer(c_loc(input),dummy,[input_size])
+        mdl%mpi_input_buffer(33:32+input_size) = transfer(dummy,mdl%mpi_input_buffer(33:32+input_size))
       endif
 
       ! Send input array to the target cpu
-      call MPI_ISEND(mdl%mpi_input_buffer,input_length/4+32,MPI_INTEGER,target_cpu-1,launch_tag,MPI_COMM_WORLD,launch_id,info)
+      call MPI_ISEND(mdl%mpi_input_buffer,input_size+32,MPI_INTEGER,target_cpu-1,launch_tag,MPI_COMM_WORLD,launch_id,info)
 
       ! Wait for ISEND completion to free memory in corresponding MPI buffer
       call MPI_WAIT(launch_id,launch_status,info)      

@@ -77,6 +77,8 @@ subroutine mdl_init
 contains
 
 subroutine master(mdl,pst)
+  use init_amr_module, only: r_set_add
+  implicit none
   type(mdl_t), target::mdl
   type(pst_t)::pst
   write(*,*) 'master started',mdl%myid
@@ -88,30 +90,41 @@ function worker_init(mdl) result(pst)
   use ramses_commons, only: pst_t, ramses_t
   use call_back, only: ramses_function
   use mdl_parameters
-  implicit none
+  use flag_utils, only: r_init_flag, r_ensure_ref_rules, r_user_flag
+  use init_amr_module, only: r_init_amr, r_set_add
+  use params_module, only: r_broadcast_params,r_broadcast_global
+  use init_time_module, only: r_init_time
+  use init_hydro_module, only: r_init_hydro
+  use init_part_module, only: r_init_part
+  use input_part_grafic_module, only: r_input_part_grafic
+  use input_part_ascii_module, only: r_input_part_ascii
+  use input_part_restart_module, only: r_input_part_restart
+  use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
+  use update_time_module, only: r_clean_stop, r_broadcast_aexp
+  use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,&
+                                        r_noct_used_max,r_gather_noct_max
+  use init_refine_restart_module, only: r_init_refine_restart
+  use load_balance_module, only: r_load_balance,r_balance_part,r_broadcast_bound_key,r_collect_bound_key
+  use refine_utils, only: r_refine_fine
+  use smooth_module, only: r_smooth_fine
+  use input_hydro_condinit_module, only: r_input_hydro_condinit
+  use input_hydro_grafic_module, only: r_input_hydro_grafic
+  use upload_module, only: r_upload_fine
+  use rho_fine_module, only: r_multipole_leaf_cells,r_multipole_split_cells,r_broadcast_multipole,r_collect_multipole,&
+                            r_cic_multipole,r_cic_part,r_split_part,r_reset_rho
+  use move_fine_module, only: r_kick_drift_part
+  use output_amr_module, only: r_output_amr
+  use output_hydro_module, only: r_output_hydro
+  use output_poisson_module, only: r_output_poisson
+  use output_part_module, only: r_output_part
+  use synchro_hydro_fine_module, only: r_synchro_hydro_fine, r_gravity_hydro_fine
+  use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
+  use interpol_phi_module, only: r_save_phi_old
 
-  procedure(ramses_function)::r_clean_stop,r_set_add,r_broadcast_params,r_broadcast_global
-  procedure(ramses_function)::r_init_amr,r_init_time,r_init_hydro,r_init_part
-  procedure(ramses_function)::r_input_part_grafic,r_input_part_ascii,r_input_part_restart
-  procedure(ramses_function)::r_init_flag,r_user_flag,r_ensure_ref_rules
-  procedure(ramses_function)::r_collect_noct,r_noct_tot,r_noct_min,r_noct_max
-  procedure(ramses_function)::r_noct_used_max,r_gather_noct_max,r_npart_max
-  procedure(ramses_function)::r_init_refine_basegrid,r_init_refine_restart
-  procedure(ramses_function)::r_broadcast_bound_key,r_collect_bound_key
-  procedure(ramses_function)::r_load_balance,r_balance_part
-  procedure(ramses_function)::r_refine_fine,r_smooth_fine
-  procedure(ramses_function)::r_input_hydro_condinit,r_input_hydro_grafic
-  procedure(ramses_function)::r_upload_fine
-  procedure(ramses_function)::r_multipole_leaf_cells,r_multipole_split_cells
-  procedure(ramses_function)::r_reset_rho,r_cic_multipole,r_cic_part,r_split_part
-  procedure(ramses_function)::r_kick_drift_part
-  procedure(ramses_function)::r_mass_min_part,r_broadcast_mp_min
-  procedure(ramses_function)::r_collect_multipole,r_broadcast_multipole
-  procedure(ramses_function)::r_output_amr,r_output_hydro,r_output_poisson,r_output_part
-  procedure(ramses_function)::r_synchro_hydro_fine,r_force_analytic,r_gradient_phi
-  procedure(ramses_function)::r_save_phi_old,r_compute_epot,r_compute_rhomax
-  procedure(ramses_function)::r_broadcast_aexp,r_courant_fine,r_godunov_fine
-  procedure(ramses_function)::r_set_unew,r_set_uold,r_gravity_hydro_fine
+  implicit none
+  
+  procedure(ramses_function)::r_courant_fine,r_godunov_fine
+  procedure(ramses_function)::r_set_unew,r_set_uold
   procedure(ramses_function)::r_cooling_fine,r_newdt_part,r_broadcast_dt
   procedure(ramses_function)::r_make_initial_phi,r_init_mg,r_build_mg,r_cleanup_mg
   procedure(ramses_function)::r_recurrence_on_p,r_recurrence_x_and_r
@@ -154,7 +167,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(mdl,MDL_NOCT_MAX,               pst,C_FUNLOC(r_noct_max),0,4)
   call mdl_add_service(mdl,MDL_NOCT_USED_MAX,          pst,C_FUNLOC(r_noct_used_max),0,4)
   call mdl_add_service(mdl,MDL_GATHER_NOCT_MAX,        pst,C_FUNLOC(r_gather_noct_max),0,0)
-  call mdl_add_service(mdl,MDL_INIT_REFINE_BASEGRID,   pst,C_FUNLOC(r_init_refine_basegrid),0,0)
+  call mdl_add_service(mdl,MDL_INIT_REFINE_BASEGRID,   pst,C_FUNLOC(r_init_refine_basegrid),4,0)
   call mdl_add_service(mdl,MDL_INIT_REFINE_RESTART,    pst,C_FUNLOC(r_init_refine_restart),0,0) !**************************
   call mdl_add_service(mdl,MDL_COLLECT_BOUND_KEY,      pst,C_FUNLOC(r_collect_bound_key),(MDL_MAX_CPU+1)*4,0) !*****************
   call mdl_add_service(mdl,MDL_BROADCAST_BOUND_KEY,    pst,C_FUNLOC(r_broadcast_bound_key),storage_size(pst%s%m%domain)/8 + 4,0)

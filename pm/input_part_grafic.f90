@@ -1,3 +1,5 @@
+module input_part_grafic_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -11,7 +13,7 @@ subroutine m_input_part_grafic(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer::dummy
+  integer::dummy(1)
   integer,allocatable,dimension(:)::input_array
 
   if(pst%s%r%verbose)write(*,*)'Entering input_part_grafic'
@@ -277,4 +279,4 @@ end subroutine input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-
+end module input_part_grafic_module

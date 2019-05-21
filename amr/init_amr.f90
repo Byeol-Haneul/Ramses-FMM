@@ -1,3 +1,7 @@
+module init_amr_module
+
+contains
+
 !###############################################
 !###############################################
 !###############################################
@@ -8,6 +12,7 @@ recursive subroutine r_set_add(pst,iUpper,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
+!  integer,VALUE,BIND(C)::input_size
   integer::input_size
 
   integer::n,iLower,iMiddle,iUpper
@@ -26,11 +31,8 @@ recursive subroutine r_set_add(pst,iUpper,input_size)
      allocate(pst%pLower)
      pst%pLower%s => pst%s
      rID = mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,0,iUpper)
-     write(*,*) 'rID=',rID
      call r_set_add(pst%pLower,iMiddle,input_size)
-     write(*,*) 'recurse done'
      call mdl_get_reply(mdl,rID,0)
-     write(*,*) 'done'
   end if
  
   end associate
@@ -46,7 +48,9 @@ recursive subroutine r_init_amr(pst,input_array,input_size,output_array,output_s
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+!  integer,VALUE::input_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
@@ -70,6 +74,7 @@ subroutine init_amr(r,g,m)
   use amr_commons, ONLY: run_t, global_t, mesh_t
   use hash
   use hilbert
+  use output_amr_module, only: input_params
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -192,6 +197,4 @@ end subroutine init_amr
 !###############################################
 !###############################################
 !###############################################
-
-
-
+end module init_amr_module

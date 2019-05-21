@@ -1,3 +1,5 @@
+module move_fine_module
+contains
 !################################################################
 !################################################################
 !################################################################
@@ -13,7 +15,7 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
   ! Move particles according to kick-drift leap frog scheme.
   !--------------------------------------------------------------
   integer,dimension(1:2)::input_array
-  integer::dummy
+  integer::dummy(2)
 
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
@@ -352,3 +354,4 @@ end subroutine unpack_fetch_kick
 !#########################################################################
 !#########################################################################
 !#########################################################################
+end module move_fine_module

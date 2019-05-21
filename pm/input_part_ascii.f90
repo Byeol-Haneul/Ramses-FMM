@@ -1,3 +1,6 @@
+module input_part_ascii_module
+
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -14,7 +17,7 @@ subroutine m_input_part_ascii(pst)
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   integer(i8b)::npart_tot
   character(LEN=80)::filename
-  integer::dummy
+  integer::dummy(1)
   integer,allocatable,dimension(:)::input_array
 
   associate(s=>pst%s)
@@ -171,4 +174,4 @@ end subroutine input_part_ascii
 !#########################################################################
 !#########################################################################
 !#########################################################################
-
+end module input_part_ascii_module

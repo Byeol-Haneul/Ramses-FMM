@@ -5,7 +5,19 @@
 recursive subroutine m_amr_step(pst,ilevel,icount)
   use ramses_commons, only: pst_t
   use pm_parameters
+  use flag_utils, only: m_flag_fine
+  use update_time_module, only: m_update_time
+  use refine_utils, only: m_refine_fine
+  use upload_module, only: m_upload_fine
+  use rho_fine_module, only: m_rho_fine
+  use move_fine_module, only: m_kick_drift_part
+  use output_amr_module, only: m_dump_all
+  use synchro_hydro_fine_module, only: m_synchro_hydro_fine, r_gravity_hydro_fine
+  use force_fine_module, only: m_force_fine
+  use interpol_phi_module, only: r_save_phi_old
+
   implicit none
+
   type(pst_t)::pst
   integer::ilevel,icount,dummy
   !-------------------------------------------------------------------!
@@ -69,7 +81,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
      endif
 
      ! Save old potential for time-extrapolation at level boundaries
-     call r_save_phi_old(pst,ilevel,1,dummy,0)
+     call r_save_phi_old(pst,ilevel,1)
 
      ! Compute new gravitational potential
      if(ilevel > r%levelmin)then
@@ -83,7 +95,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
      end if
 
      ! Initial old potential
-     if (g%nstep==0)call r_save_phi_old(pst,ilevel,1,dummy,0)
+     if (g%nstep==0)call r_save_phi_old(pst,ilevel,1)
 
      ! Compute gravitational acceleration
      call m_force_fine(pst,ilevel,icount)
@@ -147,7 +159,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
      if(.not.r%static)call r_godunov_fine(pst,ilevel,1,dummy,0)
 
      ! Add gravity source terms to unew with half time step
-     if(r%poisson)call r_gravity_hydro_fine(pst,ilevel,1,dummy,0)
+     if(r%poisson)call r_gravity_hydro_fine(pst,ilevel,1)
 
      ! Set uold equal to unew
      call r_set_uold(pst,ilevel,1,dummy,0)
