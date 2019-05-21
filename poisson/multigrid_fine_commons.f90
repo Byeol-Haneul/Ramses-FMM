@@ -24,6 +24,7 @@ subroutine multigrid(pst,ilevel,icount)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
   use ramses_commons, only: pst_t
+  use phi_fine_cg_module, only: r_make_initial_phi, in_make_initial_phi_t
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilevel,icount
@@ -37,6 +38,7 @@ subroutine multigrid(pst,ilevel,icount)
   real(kind=8) :: res_norm2, i_res_norm2
   real(kind=8) :: err, last_err
   real(kind=8) :: i_res_norm2_tot, res_norm2_tot
+  type(in_make_initial_phi_t)::in_make_initial_phi
   
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilevel)==0)return
@@ -46,9 +48,9 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Prepare first guess, mask and BCs at finest level
   ! ---------------------------------------------------------------------
-  input_array(1)=ilevel
-  input_array(2)=icount
-  call r_make_initial_phi(pst,input_array,2,dummy,0)  ! Initial guess
+  in_make_initial_phi%ilevel=ilevel
+  in_make_initial_phi%icount=icount
+  call r_make_initial_phi(pst,in_make_initial_phi,2)  ! Initial guess
   call r_make_mask(pst,ilevel,1,dummy,0)              ! Fill the fine level mask
   call r_make_bc_rhs(pst,input_array,2,dummy,0)       ! Fill BC-modified RHS
 

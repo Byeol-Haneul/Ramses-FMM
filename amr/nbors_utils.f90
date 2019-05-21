@@ -937,6 +937,8 @@ subroutine open_cache(s,cache_operation,domain_decompos)
   use rho_fine_module, only: init_flush_multipole,pack_flush_multipole,unpack_flush_multipole,&
                         init_flush_rho,pack_flush_rho,unpack_flush_rho,pack_fetch_split,unpack_fetch_split
   use move_fine_module, only: pack_fetch_kick,unpack_fetch_kick
+  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
+  use phi_fine_cg_module, only: pack_fetch_cg,unpack_fetch_cg,pack_fetch_interpol,unpack_fetch_interpol
 
   use cache_commons
   use hash

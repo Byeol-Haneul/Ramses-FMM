@@ -1,3 +1,15 @@
+module phi_fine_cg_module
+
+  type in_make_initial_phi_t
+    integer::ilevel, icount
+  end type in_make_initial_phi_t
+
+  type in_recurrence_t
+    integer::ilevel
+    real(kind=8)::cg
+  end type in_recurrence_t
+
+contains
 #ifdef GRAV
 !###########################################################
 !###########################################################
@@ -132,28 +144,27 @@ end subroutine m_phi_fine_cg
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_recurrence_on_p(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_recurrence_on_p(pst,input,input_size)
   use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  type(in_recurrence_t)::input
 
   integer::ind,igrid,ilevel
   real(kind=8)::beta_cg
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_RECURRENCE_ON_P,pst%iUpper+1,input_size,output_size,input_array)
-     call r_recurrence_on_p(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RECURRENCE_ON_P,pst%iUpper+1,input_size,0,input)
+     call r_recurrence_on_p(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
-     beta_cg=transfer(input_array(2:3),beta_cg)
+     ilevel=input%ilevel
+     beta_cg=input%cg
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
            pst%s%m%grid(igrid)%f(ind,2)=pst%s%m%grid(igrid)%f(ind,1)+beta_cg*pst%s%m%grid(igrid)%f(ind,2)
@@ -166,28 +177,27 @@ end subroutine r_recurrence_on_p
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_recurrence_x_and_r(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_recurrence_x_and_r(pst,input,input_size)
   use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer::input_size
+  type(in_recurrence_t)::input
 
   integer::ind,igrid,ilevel
   real(kind=8)::alpha_cg
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_RECURRENCE_X_AND_R,pst%iUpper+1,input_size,output_size,input_array)
-     call r_recurrence_x_and_r(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RECURRENCE_X_AND_R,pst%iUpper+1,input_size,0,input)
+     call r_recurrence_x_and_r(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
-     alpha_cg=transfer(input_array(2:3),alpha_cg)
+     ilevel=input%ilevel
+     alpha_cg=input%cg
      ! Recurrence on x
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
@@ -731,7 +741,7 @@ end subroutine unpack_fetch_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_rhs_norm(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_rhs_norm(pst,ilevel,input_size,rhs_norm,output_size)
   use mdl_module
   use amr_parameters, only: twotondim,twondim
   use ramses_commons, only: pst_t
@@ -739,28 +749,21 @@ recursive subroutine r_cmp_rhs_norm(pst,input_array,input_size,output_array,outp
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
   integer::ind,igrid,ilevel
-  integer,dimension(1:output_size)::next_output_array
   real(kind=8)::rhs_norm,next_rhs_norm
   real(kind=8)::dx2,fourpi,oneoversix,fact,fact2
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RHS_NORM,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_rhs_norm(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
-     rhs_norm=transfer(output_array,rhs_norm)
-     next_rhs_norm=transfer(next_output_array,next_rhs_norm)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RHS_NORM,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_rhs_norm(pst%pLower,ilevel,input_size,rhs_norm,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_rhs_norm)
      rhs_norm=rhs_norm+next_rhs_norm
-     output_array=transfer(rhs_norm,output_array)
   else
-     ilevel=input_array(1)
      ! Set constants
      dx2=(pst%s%r%boxlen/2.0d0**ilevel)**2
      fourpi=4.D0*ACOS(-1.0D0)
@@ -774,7 +777,6 @@ recursive subroutine r_cmp_rhs_norm(pst,input_array,input_size,output_array,outp
            rhs_norm=rhs_norm+fact2*(pst%s%m%grid(igrid)%rho(ind)-pst%s%g%rho_tot)**2
         end do
      end do
-     output_array=transfer(rhs_norm,output_array)
   endif
 
 end subroutine r_cmp_rhs_norm
@@ -782,7 +784,7 @@ end subroutine r_cmp_rhs_norm
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_r2_cg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_r2_cg(pst,ilevel,input_size,r2,output_size)
   use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
@@ -790,33 +792,25 @@ recursive subroutine r_cmp_r2_cg(pst,input_array,input_size,output_array,output_
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
   integer::ind,igrid,ilevel
-  integer,dimension(1:output_size)::next_output_array
   real(kind=8)::r2,next_r2
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CMP_R2_CG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_r2_cg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
-     r2=transfer(output_array,r2)
-     next_r2=transfer(next_output_array,next_r2)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_R2_CG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_r2_cg(pst%pLower,ilevel,input_size,r2,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_r2)
      r2=r2+next_r2
-     output_array=transfer(r2,output_array)
   else
-     ilevel=input_array(1)
      r2=0.0d0
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
            r2=r2+pst%s%m%grid(igrid)%f(ind,1)**2
         end do
      end do
-     output_array=transfer(r2,output_array)
   endif
 
 end subroutine r_cmp_r2_cg
@@ -824,7 +818,7 @@ end subroutine r_cmp_r2_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-recursive subroutine r_cmp_pAp_cg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_pAp_cg(pst,ilevel,input_size,pAp,output_size)
   use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
@@ -832,8 +826,6 @@ recursive subroutine r_cmp_pAp_cg(pst,input_array,input_size,output_array,output
   implicit none
   type(pst_t)::pst
   integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
@@ -843,22 +835,17 @@ recursive subroutine r_cmp_pAp_cg(pst,input_array,input_size,output_array,output
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CMP_PAP_CG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_pAp_cg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
-     pAp=transfer(output_array,pAp)
-     next_pAp=transfer(next_output_array,next_pAp)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_PAP_CG,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_pAp_cg(pst%pLower,ilevel,input_size,pAp,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_pAp)
      pAp=pAp+next_pAp
-     output_array=transfer(pAp,output_array)
   else
-     ilevel=input_array(1)
      pAp=0.0d0
      do igrid=pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
         do ind=1,twotondim
            pAp=pAp+pst%s%m%grid(igrid)%f(ind,2)*pst%s%m%grid(igrid)%f(ind,3)
         end do
      end do
-     output_array=transfer(pAp,output_array)
   endif
 
 end subroutine r_cmp_pAp_cg
@@ -868,4 +855,4 @@ end subroutine r_cmp_pAp_cg
 ! ########################################################################
 
 #endif
-
+end module phi_fine_cg_module

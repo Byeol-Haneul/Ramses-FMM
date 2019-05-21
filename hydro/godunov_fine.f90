@@ -1,26 +1,25 @@
+module godunov_fine_module
+contains
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_godunov_fine(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_godunov_fine(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,output_size,input_array)
-     call r_godunov_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_GODUNOV_FINE,pst%iUpper+1,input_size,0,ilevel)
+     call r_godunov_fine(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call godunov_fine(pst%s,ilevel)
   endif
 
@@ -72,25 +71,22 @@ end subroutine godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_unew(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_set_unew(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,output_size,input_array)
-     call r_set_unew(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_UNEW,pst%iUpper+1,input_size,0,ilevel)
+     call r_set_unew(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
@@ -152,25 +148,21 @@ end subroutine set_unew
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_set_uold(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_set_uold(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,output_size,input_array)
-     call r_set_uold(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_UOLD,pst%iUpper+1,input_size,0,ilevel)
+     call r_set_uold(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
@@ -878,3 +870,4 @@ end subroutine unpack_flush_godunov
 !###########################################################
 !###########################################################
 !###########################################################
+end module godunov_fine_module
