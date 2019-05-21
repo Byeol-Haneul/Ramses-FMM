@@ -939,7 +939,13 @@ subroutine open_cache(s,cache_operation,domain_decompos)
   use move_fine_module, only: pack_fetch_kick,unpack_fetch_kick
   use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
   use phi_fine_cg_module, only: pack_fetch_cg,unpack_fetch_cg,pack_fetch_interpol,unpack_fetch_interpol
-
+  use multigrid_fine_commons, only: pack_flush_build_mg,unpack_flush_build_mg
+  use multigrid_fine_coarse, only: init_flush_restrict_mask,pack_flush_restrict_mask,unpack_flush_restrict_mask,&
+                                  init_flush_restrict_res,pack_flush_restrict_res,unpack_flush_restrict_res,&
+                                  pack_fetch_restrict_res,unpack_fetch_restrict_res,&
+                                  pack_fetch_scan,pack_fetch_mg,pack_fetch_phi,&
+                                  unpack_fetch_scan,unpack_fetch_mg,unpack_fetch_phi
+  use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
   use cache_commons
   use hash
   implicit none

@@ -31,14 +31,6 @@ module call_back
      end subroutine cache_function
   end interface
 
-  procedure(cache_function)::pack_fetch_hydro,pack_fetch_phi
-  procedure(cache_function)::pack_fetch_restrict_res,pack_fetch_scan,pack_fetch_mg
-  procedure(cache_function)::unpack_fetch_hydro,unpack_fetch_phi
-  procedure(cache_function)::unpack_fetch_restrict_res,unpack_fetch_scan,unpack_fetch_mg
-  procedure(cache_function)::init_flush_restrict_mask,init_flush_restrict_res
-  procedure(cache_function)::pack_flush_build_mg,pack_flush_restrict_mask,pack_flush_restrict_res
-  procedure(cache_function)::unpack_flush_build_mg,unpack_flush_restrict_mask,unpack_flush_restrict_res
-
   type cache_f
      procedure(cache_function),pointer,nopass::proc
   end type cache_f

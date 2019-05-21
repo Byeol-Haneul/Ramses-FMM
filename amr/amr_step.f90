@@ -19,6 +19,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   use cooling_fine_module, only: r_cooling_fine
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
   use phi_fine_cg_module, only: m_phi_fine_cg
+  use multigrid_fine_commons, only: multigrid
+  use movie_module, only: m_output_frame
 
   implicit none
 

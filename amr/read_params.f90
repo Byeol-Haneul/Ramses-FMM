@@ -7,6 +7,7 @@ subroutine m_read_params(pst)
   use hydro_parameters
   use ramses_commons, only: pst_t
   use mdl_module
+  use movie_module, only: set_movie_vars
   implicit none
   type(pst_t)::pst
 

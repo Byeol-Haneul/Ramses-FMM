@@ -1,3 +1,5 @@
+module multigrid_fine_commons
+contains
 ! ------------------------------------------------------------------------
 ! Multigrid Poisson solver for refined AMR levels
 ! ------------------------------------------------------------------------
@@ -25,6 +27,8 @@ subroutine multigrid(pst,ilevel,icount)
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
   use ramses_commons, only: pst_t
   use phi_fine_cg_module, only: r_make_initial_phi, in_make_initial_phi_t
+  use multigrid_fine_coarse, only: r_cmp_residual_mg, r_cmp_residual_norm2,r_gauss_seidel_mg,&
+        r_interpolate_and_correct,r_reset_correction,r_restrict_mask,r_restrict_residual,r_set_scan_flag
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilevel,icount
@@ -51,7 +55,7 @@ subroutine multigrid(pst,ilevel,icount)
   in_make_initial_phi%ilevel=ilevel
   in_make_initial_phi%icount=icount
   call r_make_initial_phi(pst,in_make_initial_phi,2)  ! Initial guess
-  call r_make_mask(pst,ilevel,1,dummy,0)              ! Fill the fine level mask
+  call r_make_mask(pst,ilevel,1)              ! Fill the fine level mask
   call r_make_bc_rhs(pst,input_array,2,dummy,0)       ! Fill BC-modified RHS
 
   if(pst%s%r%verbose) print '(A)','Initial guess done '
@@ -59,7 +63,7 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Initialize Domain Decomposition and Hash Table for Multigrid
   ! ---------------------------------------------------------------------
-  call r_init_mg(pst,ilevel,1,dummy,0)
+  call r_init_mg(pst,ilevel,1)
   
   if(pst%s%r%verbose) print '(A)','Multigrid init done '
 
@@ -68,7 +72,7 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   do ifine=ilevel,2,-1
      if(pst%s%r%verbose) print '(A,I2)','Build MG ',ifine
-     call r_build_mg(pst,ifine,1,dummy,0)
+     call r_build_mg(pst,ifine,1)
   end do
   
   if(pst%s%r%verbose) print '(A)','Multigrid hierarchy done '
@@ -128,23 +132,22 @@ subroutine multigrid(pst,ilevel,icount)
 
      ! Compute initial residual norm
      if(iter==1) then
-        call r_cmp_residual_norm2(pst,ilevel,1,output_array,2)
-        i_res_norm2=transfer(output_array(1:2),i_res_norm2)
+        call r_cmp_residual_norm2(pst,ilevel,1,i_res_norm2,2)
      end if
 
      if(ilevel>1) then
 
         ! Restrict residual to coarser level
-        call r_restrict_residual(pst,ilevel,1,dummy,0)
+        call r_restrict_residual(pst,ilevel,1)
 
         ! Reset correction from upper level before solve
-        call r_reset_correction(pst,ilevel-1,1,dummy,0)
+        call r_reset_correction(pst,ilevel-1,1)
         
         ! Multigrid-solve the upper level
         call recursive_multigrid(pst,ilevel-1, pst%s%g%safe_mode(ilevel))
         
         ! Interpolate coarse solution and correct fine solution
-        call r_interpolate_and_correct(pst,ilevel,1,dummy,0)
+        call r_interpolate_and_correct(pst,ilevel,1)
 
      end if
 
@@ -160,8 +163,7 @@ subroutine multigrid(pst,ilevel,icount)
      call r_cmp_residual_mg(pst,input_array,2,dummy,0)
 
      ! Compute residual norm
-     call r_cmp_residual_norm2(pst,ilevel,1,output_array,2)
-     res_norm2=transfer(output_array(1:2),res_norm2)
+     call r_cmp_residual_norm2(pst,ilevel,1,res_norm2,2)
      
      last_err = err
      err = sqrt(res_norm2/(i_res_norm2+1d-20*pst%s%g%rho_tot**2))
@@ -203,6 +205,8 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
   use amr_parameters, only: dp,twotondim
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
   use ramses_commons, only: pst_t
+  use multigrid_fine_coarse, only: r_cmp_residual_mg,r_gauss_seidel_mg,r_interpolate_and_correct,&
+        r_reset_correction,r_restrict_residual
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ifinelevel
@@ -251,16 +255,16 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
      call r_cmp_residual_mg(pst,input_array,2,dummy,0)
 
      ! Restrict residual to coarser level
-     call r_restrict_residual(pst,ifinelevel,1,dummy,0)
+     call r_restrict_residual(pst,ifinelevel,1)
      
      ! Reset correction from upper level before solve
-     call r_reset_correction(pst,ifinelevel-1,1,dummy,0)
+     call r_reset_correction(pst,ifinelevel-1,1)
      
      ! Multigrid-solve the upper level
      call recursive_multigrid(pst,ifinelevel-1, safe)
      
      ! Interpolate coarse solution and correct back into fine solution
-     call r_interpolate_and_correct(pst,ifinelevel,1,dummy,0)
+     call r_interpolate_and_correct(pst,ifinelevel,1)
      
      ! Post-smoothing
      do i=1,ngs_coarse
@@ -283,25 +287,22 @@ end subroutine recursive_multigrid
 ! Multigrid workspace initialisation
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_init_mg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_init_mg(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INIT_MG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_init_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_MG,pst%iUpper+1,input_size,0,ilevel)
+     call r_init_mg(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call init_mg(pst%s%r,pst%s%m,ilevel)
   endif
 
@@ -351,25 +352,22 @@ end subroutine init_mg
 ! Coarse grid MG activation for local grids
 ! ---------------------------------------------------------------------
 
-recursive subroutine r_build_mg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_build_mg(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_BUILD_MG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_build_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_BUILD_MG,pst%iUpper+1,input_size,0,ilevel)
+     call r_build_mg(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call build_mg(pst%s,ilevel)
   endif
 
@@ -636,25 +634,22 @@ end subroutine cleanup_mg
 ! Initialize mask at fine level into f(:,3)
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_make_mask(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_make_mask(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_MASK,pst%iUpper+1,input_size,output_size,input_array)
-     call r_make_mask(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_MASK,pst%iUpper+1,input_size,0,ilevel)
+     call r_make_mask(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call make_mask(pst%s%m,ilevel)
   endif
 
@@ -895,4 +890,4 @@ end subroutine make_bc_rhs
 ! ########################################################################
 
 #endif
-
+end module multigrid_fine_commons

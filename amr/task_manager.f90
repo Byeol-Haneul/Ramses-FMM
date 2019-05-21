@@ -124,20 +124,15 @@ function worker_init(mdl) result(pst)
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
   use newdt_fine_module, only: r_newdt_part,r_broadcast_dt
-  use phi_fine_cg_module, only: r_make_initial_phi
   use phi_fine_cg_module, only: r_cmp_pAp_cg,r_cmp_r2_cg,r_cmp_residual_cg,r_cmp_rhs_norm,&
-                                r_recurrence_on_p,r_recurrence_x_and_r
+                                r_make_initial_phi,r_recurrence_on_p,r_recurrence_x_and_r
+  use multigrid_fine_commons, only: r_init_mg,r_build_mg,r_cleanup_mg,r_make_mask,r_make_bc_rhs
+  use multigrid_fine_coarse, only: r_restrict_mask,r_cmp_residual_mg,r_cmp_residual_norm2,r_restrict_residual,&
+                                r_reset_correction,r_set_scan_flag,r_gauss_seidel_mg,r_interpolate_and_correct
+  use movie_module, only: r_output_frame
 
   implicit none
   
-  procedure(ramses_function)::r_init_mg,r_build_mg,r_cleanup_mg
-  procedure(ramses_function)::r_cmp_Ap_cg
-  procedure(ramses_function)::r_make_mask,r_make_bc_rhs,r_restrict_mask
-  procedure(ramses_function)::r_cmp_residual_mg,r_gauss_seidel_mg,r_reset_correction
-  procedure(ramses_function)::r_restrict_residual,r_interpolate_and_correct
-  procedure(ramses_function)::r_set_scan_flag,r_cmp_residual_norm2
-  procedure(ramses_function)::r_output_frame
-
   type(mdl_t), target::mdl
   type(pst_t),allocatable::pst
   integer::dummy
