@@ -89,8 +89,6 @@ module mdl_module
       integer,dimension(MPI_STATUS_SIZE)::launch_status
       integer,dimension(1:32)::header=0
 
-      write(*,*) 'OLD:',mdl_function_id,input_size
-
       ! Assemble MPI message
       header(1)=mdl_function_id
       header(2)=input_size
@@ -124,7 +122,7 @@ module mdl_module
       integer::launch_id,launch_tag=101
       integer,dimension(MPI_STATUS_SIZE)::launch_status
       integer,dimension(1:32)::header=0
-      byte,dimension(:),pointer::dummy
+      integer,dimension(:),pointer::dummy
 
       ! Assemble MPI message
       header(1)=mdl_function_id
