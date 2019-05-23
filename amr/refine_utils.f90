@@ -1,4 +1,7 @@
 module refine_utils
+  type out_refine_fine_t
+    integer::make,kill
+  end type out_refine_fine_t
 contains
 !#########################################################################
 !#########################################################################
@@ -17,6 +20,7 @@ subroutine m_refine_fine(pst,ilevel)
   ! from level ilevel to nlevelmax.
   !--------------------------------------------------------------------
   integer::ilev,dummy
+  type(out_refine_fine_t)::out_refine_fine
   integer,dimension(1:2)::noct
   integer,dimension(1)::alevel
 
@@ -29,13 +33,12 @@ subroutine m_refine_fine(pst,ilevel)
 111 format(' Entering refine_fine for level ',I2)
 
   ! Create new octs and destroy unecessary octs
-  alevel(1)=ilevel
-  call r_refine_fine(pst,alevel,1,noct,2)
+  call r_refine_fine(pst,ilevel,1,out_refine_fine,2)
 
-  if(s%r%verbose)write(*,112)noct(1)
+  if(s%r%verbose)write(*,112)out_refine_fine%make
 112 format(' ==> Make ',i6,' sub-grids')
 
-  if(s%r%verbose)write(*,113)noct(2)
+  if(s%r%verbose)write(*,113)out_refine_fine%kill
 113 format(' ==> Kill ',i6,' sub-grids')
 
   ! Get total, min and max grid count (only in master)
@@ -76,7 +79,7 @@ end subroutine m_refine_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_refine_fine(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -84,23 +87,21 @@ recursive subroutine r_refine_fine(pst,input_array,input_size,output_array,outpu
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer::ilevel
+  type(out_refine_fine_t)::output
 
-  integer,dimension(1:output_size)::next_output_array
-  integer::ilevel,ncreate,nkill
+  type(out_refine_fine_t)::next_output
+  integer::ncreate,nkill
   integer::rID
   
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,input_array)
-     call r_refine_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
-     output_array=output_array+next_output_array
+     rID = mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_refine_fine(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%make = output%make + next_output%make
+     output%kill = output%kill + next_output%kill
   else
-     ilevel=input_array(1)
-     call refine_fine(pst%s,ilevel,ncreate,nkill)
-     output_array(1)=ncreate
-     output_array(2)=nkill
+     call refine_fine(pst%s,ilevel,output%make,output%kill)
   endif
 
 end subroutine r_refine_fine
