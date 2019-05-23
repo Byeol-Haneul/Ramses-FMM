@@ -24,7 +24,6 @@ subroutine mdl_init
   integer,dimension(1)::ncpu
 
   allocate(mdl)
-  pst = worker_init(mdl)
 !  associate(mdl=>pst%s%mdl)
 
   ! MPI initialization
@@ -41,6 +40,8 @@ subroutine mdl_init
   mdl%ncpu=1
   mdl%myid=1
 #endif
+
+  pst = worker_init(mdl)
 
   ! Store cpu info as a global variable
   pst%s%g%myid=mdl%myid
