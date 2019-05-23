@@ -160,7 +160,6 @@ PRIVATE	amr/ramses.f90
 	poisson/grav_ana.f90
 	poisson/phi_fine_cg.f90
 	hydro/upload.f90
-	poisson/interpol_phi.f90
 	poisson/poisson_flag.f90
 	poisson/multigrid_fine_commons.f90
 	poisson/multigrid_fine_coarse.f90

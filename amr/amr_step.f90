@@ -14,7 +14,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   use output_amr_module, only: m_dump_all
   use synchro_hydro_fine_module, only: m_synchro_hydro_fine, r_gravity_hydro_fine
   use force_fine_module, only: m_force_fine
-  use interpol_phi_module, only: r_save_phi_old
+  use nbors_utils_p, only: r_save_phi_old
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
