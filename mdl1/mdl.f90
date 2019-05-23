@@ -5,7 +5,7 @@ module mdl_module
 
   type :: mdl_t
      
-     integer::myid
+     integer::idSelf
      integer::ncpu
 
      integer::MDL_INPUT_MAXSIZE=1
@@ -206,7 +206,9 @@ module mdl_module
 
     end subroutine mdl_get_reply_scalar
 
-
-
+    integer function mdl_self(mdl)
+      type(mdl_t)::mdl
+      mdl_self = mdl%idSelf
+    end function mdl_self
 
 end module mdl_module

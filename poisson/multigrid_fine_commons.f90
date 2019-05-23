@@ -446,8 +446,8 @@ subroutine build_mg(s,ifinelevel)
            hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
            
            ! Check if grid sits inside processor boundaries
-           in_rank = ge_keys(hk,m%domain_mg(icoarselevel)%b(1:nhilbert,mdl%myid-1)).and. &
-                &    gt_keys(m%domain_mg(icoarselevel)%b(1:nhilbert,mdl%myid),hk)
+           in_rank = ge_keys(hk,m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
+                &    gt_keys(m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)),hk)
            if(in_rank)then
 !           if( m%domain_mg(icoarselevel)%in_rank(hk)) then
 

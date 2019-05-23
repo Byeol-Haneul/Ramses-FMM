@@ -19,7 +19,7 @@ recursive subroutine r_set_add(pst,iUpper,input_size)
 
   associate(mdl=>pst%s%mdl)
 
-  iLower = mdl%myid-1
+  iLower = mdl_self(mdl)-1
   n = iUpper - iLower
   iMiddle = (iUpper + iLower) / 2
  

@@ -269,6 +269,7 @@ end subroutine unlock_cache_p
 !##############################################################
 !##############################################################
 subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
+  use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: oct
   use hydro_parameters, only: nvar
@@ -342,8 +343,8 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 
   ! Check if grid sits inside processor boundaries
 !  if (m%domain_hilbert(ilevel)%in_rank(hk)) return
-  in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid-1)).and. &
-       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid),hk)
+  in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
+       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,mdl_self(mdl)),hk)
   if (in_rank)then ! The grid does not exist in the local domain
      nullify(child)
      return

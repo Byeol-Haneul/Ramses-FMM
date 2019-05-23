@@ -698,7 +698,7 @@ recursive subroutine r_broadcast_global(pst,input_array,input_size,output_array,
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      pst%s%g=transfer(input_array,pst%s%g)
-     pst%s%g%myid=pst%s%mdl%myid
+     pst%s%g%myid=mdl_self(pst%s%mdl)
   endif
 
 end subroutine r_broadcast_global

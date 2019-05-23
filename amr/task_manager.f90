@@ -29,22 +29,22 @@ subroutine mdl_init
   ! MPI initialization
 #ifndef WITHOUTMPI
   call MPI_INIT(info)
-  call MPI_COMM_RANK(MPI_COMM_WORLD,mdl%myid,info)
+  call MPI_COMM_RANK(MPI_COMM_WORLD,mdl%idSelf,info)
   call MPI_COMM_SIZE(MPI_COMM_WORLD,mdl%ncpu,info)
-  mdl%myid=mdl%myid+1 ! Careful with this...
-  if(mdl%myid==1)then
+  mdl%idSelf=mdl%idSelf+1 ! Careful with this...
+  if(mdl_self(mdl)==1)then
      write(*,'(" Launching MPI with nproc = ",I4)')mdl%ncpu
   endif
 #else
   write(*,'(" Serial execution (no MPI).")')
   mdl%ncpu=1
-  mdl%myid=1
+  mdl%idSelf=1
 #endif
 
   pst = worker_init(mdl)
 
   ! Store cpu info as a global variable
-  pst%s%g%myid=mdl%myid
+  pst%s%g%myid=mdl_self(mdl)
   pst%s%g%ncpu=mdl%ncpu
 
 #ifndef WITHOUTMPI
@@ -56,14 +56,14 @@ subroutine mdl_init
 #endif
   
   ! For slave workers, go into waiting loop
-  if(mdl%myid>1)then
+  if(mdl_self(mdl)>1)then
      call mdl_wait(pst)
   else
      call master(mdl,pst)
   endif
 
 #ifndef WITHOUTMPI
-  write(*,*)"MYID ",mdl%myid," TERMINATING AND EXITING"
+  write(*,*)"MYID ",mdl_self(mdl)," TERMINATING AND EXITING"
 #else
   write(*,*)"TERMINATING AND EXITING"
 #endif  
@@ -82,7 +82,7 @@ subroutine master(mdl,pst)
   implicit none
   type(mdl_t), target::mdl
   type(pst_t)::pst
-  write(*,*) 'master started',mdl%myid
+  write(*,*) 'master started',mdl_self(mdl)
   call r_set_add(pst,mdl%ncpu,1)
   call adaptive_loop(pst)
 end subroutine master
@@ -137,7 +137,7 @@ function worker_init(mdl) result(pst)
   type(mdl_t), target::mdl
   type(pst_t),allocatable::pst
   integer::dummy
-  write(*,*) 'worker started',mdl%myid
+  write(*,*) 'worker started',mdl_self(mdl)
   allocate(pst)
   allocate(pst%s)
   pst%s%mdl => mdl
@@ -232,7 +232,7 @@ end function worker_init
 subroutine worker_done(mdl,pst)
   type(mdl_t)::mdl
   type(pst_t),allocatable::pst
-  write(*,*) 'worker complete',mdl%myid
+  write(*,*) 'worker complete',mdl_self(mdl)
   deallocate(pst%s)
   deallocate(pst)
 end subroutine worker_done
