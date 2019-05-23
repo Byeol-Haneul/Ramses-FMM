@@ -5,8 +5,8 @@ module mdl_module
 
   type :: mdl_t
      
-     integer::idSelf
-     integer::ncpu
+     integer,PRIVATE::myid
+     integer,PRIVATE::ncpu
 
      integer::MDL_INPUT_MAXSIZE=1
      integer,dimension(:),allocatable::mpi_input_buffer
@@ -206,9 +206,34 @@ module mdl_module
 
     end subroutine mdl_get_reply_scalar
 
+    subroutine mdl_initialize(mdl)
+      type(mdl_t)::mdl
+
+#ifndef WITHOUTMPI
+      include 'mpif.h'
+      integer::info
+      call MPI_INIT(info)
+      call MPI_COMM_RANK(MPI_COMM_WORLD,mdl%myid,info)
+      call MPI_COMM_SIZE(MPI_COMM_WORLD,mdl%ncpu,info)
+      mdl%myid=mdl%myid+1 ! Careful with this...
+      if(mdl_self(mdl)==1)then
+        write(*,'(" Launching MPI with nproc = ",I4)')mdl%ncpu
+      endif
+#else
+      write(*,'(" Serial execution (no MPI).")')
+      mdl%ncpu=1
+      mdl%myid=1
+#endif
+    end subroutine mdl_initialize
+
+    integer function mdl_threads(mdl)
+      type(mdl_t)::mdl
+      mdl_threads = mdl%ncpu
+    end function mdl_threads
+
     integer function mdl_self(mdl)
       type(mdl_t)::mdl
-      mdl_self = mdl%idSelf
+      mdl_self = mdl%myid
     end function mdl_self
 
 end module mdl_module

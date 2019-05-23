@@ -5,6 +5,7 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_refine_fine(pst,ilevel)
+  use mdl_module
   use ramses_commons, only: pst_t
   use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
   use load_balance_module, only: m_load_balance, r_balance_part
@@ -61,7 +62,7 @@ subroutine m_refine_fine(pst,ilevel)
   call r_noct_used_max(pst,ilevel,1,s%m%noct_used_max,1)
 
   ! Balance particles across cpus
-  if(s%mdl%ncpu>1.AND.ilevel==s%r%levelmin)then
+  if(mdl_threads(s%mdl)>1.AND.ilevel==s%r%levelmin)then
      if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
         if(s%r%verbose)write(*,*)'Entering balance_part for level',s%r%levelmin
         call r_balance_part(pst,ilevel,1,dummy,0)

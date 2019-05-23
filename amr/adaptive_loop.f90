@@ -1,4 +1,5 @@
 subroutine adaptive_loop(pst)
+  use mdl_module
   use ramses_commons, only: pst_t
   use init_amr_module, only: r_init_amr
   use params_module, only: m_read_params
@@ -54,7 +55,7 @@ subroutine adaptive_loop(pst)
   write(*,*)'Initial mesh structure'
   do ilevel=r%levelmin,r%nlevelmax
      if(m%noct_tot(ilevel)>0)write(*,999)&
-          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl%ncpu
+          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl_threads(mdl)
   end do
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 

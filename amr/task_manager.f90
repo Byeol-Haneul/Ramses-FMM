@@ -24,28 +24,14 @@ subroutine mdl_init
   integer,dimension(1)::ncpu
 
   allocate(mdl)
+  call mdl_initialize(mdl)
 !  associate(mdl=>pst%s%mdl)
-
-  ! MPI initialization
-#ifndef WITHOUTMPI
-  call MPI_INIT(info)
-  call MPI_COMM_RANK(MPI_COMM_WORLD,mdl%idSelf,info)
-  call MPI_COMM_SIZE(MPI_COMM_WORLD,mdl%ncpu,info)
-  mdl%idSelf=mdl%idSelf+1 ! Careful with this...
-  if(mdl_self(mdl)==1)then
-     write(*,'(" Launching MPI with nproc = ",I4)')mdl%ncpu
-  endif
-#else
-  write(*,'(" Serial execution (no MPI).")')
-  mdl%ncpu=1
-  mdl%idSelf=1
-#endif
 
   pst = worker_init(mdl)
 
   ! Store cpu info as a global variable
   pst%s%g%myid=mdl_self(mdl)
-  pst%s%g%ncpu=mdl%ncpu
+  pst%s%g%ncpu=mdl_threads(mdl)
 
 #ifndef WITHOUTMPI
   ! Allocate input and output buffer sizes
@@ -83,7 +69,7 @@ subroutine master(mdl,pst)
   type(mdl_t), target::mdl
   type(pst_t)::pst
   write(*,*) 'master started',mdl_self(mdl)
-  call r_set_add(pst,mdl%ncpu,1)
+  call r_set_add(pst,mdl_threads(mdl),1)
   call adaptive_loop(pst)
 end subroutine master
 
@@ -347,21 +333,8 @@ end subroutine mdl_wait
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine mdl_abort
-#ifndef WITHOUTMPI
-  include 'mpif.h'
-  integer::info
-  call MPI_ABORT(MPI_COMM_WORLD,info)
-#else
-  stop
-#endif  
-end subroutine mdl_abort
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
 subroutine init_cache(mdl)
-  use mdl_module, only: mdl_t
+  use mdl_module
   use cache_commons
   implicit none
   type(mdl_t)::mdl
@@ -369,7 +342,7 @@ subroutine init_cache(mdl)
   integer::ncpu
   type(msg_large_realdp)::dummy_large_realdp
 
-  ncpu=mdl%ncpu
+  ncpu=mdl_threads(mdl)
   
 #ifndef WITHOUTMPI  
 
