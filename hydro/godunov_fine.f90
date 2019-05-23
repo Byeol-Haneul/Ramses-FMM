@@ -10,7 +10,7 @@ recursive subroutine r_godunov_fine(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -77,7 +77,7 @@ recursive subroutine r_set_unew(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -154,7 +154,7 @@ recursive subroutine r_set_uold(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
   integer::rID
 

@@ -12,7 +12,7 @@ recursive subroutine r_set_add(pst,iUpper,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
 
   integer::n,iLower,iMiddle,iUpper
   integer::rID
@@ -48,7 +48,7 @@ recursive subroutine r_init_amr(pst,input_array,input_size,output_array,output_s
   implicit none
   type(pst_t)::pst
 !  integer,VALUE::input_size
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array

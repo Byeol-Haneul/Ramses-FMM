@@ -118,7 +118,7 @@ recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
   integer::rID
 
@@ -223,7 +223,7 @@ recursive subroutine r_multipole_split_cells(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -379,7 +379,7 @@ recursive subroutine r_reset_rho(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -434,7 +434,7 @@ recursive subroutine r_cic_multipole(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -608,7 +608,7 @@ recursive subroutine r_cic_part(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -843,7 +843,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -1213,7 +1213,7 @@ recursive subroutine r_collect_multipole(pst,ilevel,input_size,multipole,output_
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer::ilevel
   type(multipole_t)::multipole,next_multipole
@@ -1242,7 +1242,7 @@ recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   type(multipole_t)::multipole
 
   integer::rID

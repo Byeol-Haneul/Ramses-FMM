@@ -63,7 +63,7 @@ recursive subroutine r_save_phi_old(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
 
   integer::ilevel
   integer::rID

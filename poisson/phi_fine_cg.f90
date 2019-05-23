@@ -151,7 +151,7 @@ recursive subroutine r_recurrence_on_p(pst,input,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   type(in_recurrence_t)::input
 
   integer::ind,igrid,ilevel
@@ -184,7 +184,7 @@ recursive subroutine r_recurrence_x_and_r(pst,input,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   type(in_recurrence_t)::input
 
   integer::ind,igrid,ilevel
@@ -224,7 +224,7 @@ recursive subroutine r_cmp_residual_cg(pst,input,input_size)
   use call_back
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
@@ -399,7 +399,7 @@ recursive subroutine r_cmp_Ap_cg(pst,ilevel,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::ilevel
 
   integer::rID
@@ -526,7 +526,7 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
   use call_back
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   type(in_make_initial_phi_t)::input
 
@@ -749,7 +749,7 @@ recursive subroutine r_cmp_rhs_norm(pst,ilevel,input_size,rhs_norm,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
@@ -793,7 +793,7 @@ recursive subroutine r_cmp_r2_cg(pst,ilevel,input_size,r2,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
@@ -828,7 +828,7 @@ recursive subroutine r_cmp_pAp_cg(pst,ilevel,input_size,pAp,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 

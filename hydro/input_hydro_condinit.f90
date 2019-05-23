@@ -10,7 +10,7 @@ recursive subroutine r_input_hydro_condinit(pst,ilevel,input_size,output_array,o
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer::output_array
 

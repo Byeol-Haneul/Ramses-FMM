@@ -36,7 +36,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array

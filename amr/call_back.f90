@@ -4,7 +4,7 @@ module call_back
      recursive subroutine ramses_function(pst,input,input_size,output,output_size)
        use ramses_commons, only: pst_t
        type(pst_t)::pst
-       integer::input_size
+       integer,VALUE::input_size
        integer,optional::output_size
        TYPE(*)::input
        TYPE(*),optional::output

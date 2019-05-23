@@ -11,7 +11,7 @@ recursive subroutine r_output_hydro(pst,input_array,input_size,output_array,outp
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array

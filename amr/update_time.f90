@@ -167,7 +167,7 @@ recursive subroutine r_broadcast_aexp(pst,input_array,input_size,output_array,ou
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
@@ -195,7 +195,7 @@ recursive subroutine r_clean_stop(pst,input_array,input_size,output_array,output
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array

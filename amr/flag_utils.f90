@@ -70,7 +70,7 @@ recursive subroutine r_init_flag(pst,ilevel,input_size,noct,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:1)::ilevel,noct
 
@@ -268,7 +268,7 @@ recursive subroutine r_user_flag(pst,ilevel,input_size,noct,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:1)::ilevel,noct
 
@@ -321,7 +321,7 @@ recursive subroutine r_ensure_ref_rules(pst,ilevel,input_size,output_array,outpu
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size
+  integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::output_array
