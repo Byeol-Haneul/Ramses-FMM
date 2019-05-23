@@ -33,7 +33,7 @@ subroutine m_rho_fine(pst,ilevel)
   !---------------------------
   if(ilevel==r%levelmin)then
      multipole_tot%q=0d0
-     input_size=(storage_size(multipole_tot)/32)*(ndim+1)
+     input_size=storage_size(multipole_tot)/32
      call r_broadcast_multipole(pst,multipole_tot,input_size)
   endif
   

@@ -117,12 +117,16 @@ function worker_init(mdl) result(pst)
   use multigrid_fine_coarse, only: r_restrict_mask,r_cmp_residual_mg,r_cmp_residual_norm2,r_restrict_residual,&
                                 r_reset_correction,r_set_scan_flag,r_gauss_seidel_mg,r_interpolate_and_correct
   use movie_module, only: r_output_frame
+  use amr_parameters, only: nhilbert
 
   implicit none
   
   type(mdl_t), target::mdl
   type(pst_t),allocatable::pst
   integer::dummy
+  integer(kind=8)::dummy8
+  integer::ncpu
+
   write(*,*) 'worker started',mdl_self(mdl)
   allocate(pst)
   allocate(pst%s)
@@ -130,6 +134,9 @@ function worker_init(mdl) result(pst)
   pst%s%g%mdl => mdl
   pst%s%m%mdl => mdl
 
+  ncpu = mdl_threads(mdl)
+
+  ! Input and Output sizes here are in BYTES!
   call mdl_add_service(mdl,MDL_CLEAN_STOP,             pst,C_FUNLOC(r_clean_stop),0,0)
   call mdl_add_service(mdl,MDL_SET_ADD,                pst,C_FUNLOC(r_set_add),storage_size(dummy)/8,0)
   call mdl_add_service(mdl,MDL_BCAST_PARAMS,           pst,C_FUNLOC(r_broadcast_params),storage_size(pst%s%r)/8,0)
@@ -142,36 +149,36 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(mdl,MDL_INPUT_PART_ASCII,       pst,C_FUNLOC(r_input_part_ascii),storage_size(pst%s%p%npart_tot)/8,0)
   call mdl_add_service(mdl,MDL_INPUT_PART_RESTART,     pst,C_FUNLOC(r_input_part_restart),MDL_MAX_CPU*4,0) ! number of integers
   call mdl_add_service(mdl,MDL_NPART_MAX,              pst,C_FUNLOC(r_npart_max),0,4)
-  call mdl_add_service(mdl,MDL_INIT_FLAG,              pst,C_FUNLOC(r_init_flag),0,4)
-  call mdl_add_service(mdl,MDL_USER_FLAG,              pst,C_FUNLOC(r_user_flag),0,4)
+  call mdl_add_service(mdl,MDL_INIT_FLAG,              pst,C_FUNLOC(r_init_flag),4,4)
+  call mdl_add_service(mdl,MDL_USER_FLAG,              pst,C_FUNLOC(r_user_flag),4,4)
   call mdl_add_service(mdl,MDL_ENSURE_REF_RULES,       pst,C_FUNLOC(r_ensure_ref_rules),0,0)
-  call mdl_add_service(mdl,MDL_COLLECT_NOCT,           pst,C_FUNLOC(r_collect_noct),0,0) !************************
-  call mdl_add_service(mdl,MDL_NOCT_TOT,               pst,C_FUNLOC(r_noct_tot),0,4)
-  call mdl_add_service(mdl,MDL_NOCT_MIN,               pst,C_FUNLOC(r_noct_min),0,4)
-  call mdl_add_service(mdl,MDL_NOCT_MAX,               pst,C_FUNLOC(r_noct_max),0,4)
-  call mdl_add_service(mdl,MDL_NOCT_USED_MAX,          pst,C_FUNLOC(r_noct_used_max),0,4)
+  call mdl_add_service(mdl,MDL_COLLECT_NOCT,           pst,C_FUNLOC(r_collect_noct),4,ncpu*storage_size(dummy)/8)
+  call mdl_add_service(mdl,MDL_NOCT_TOT,               pst,C_FUNLOC(r_noct_tot),4,4)
+  call mdl_add_service(mdl,MDL_NOCT_MIN,               pst,C_FUNLOC(r_noct_min),4,4)
+  call mdl_add_service(mdl,MDL_NOCT_MAX,               pst,C_FUNLOC(r_noct_max),4,4)
+  call mdl_add_service(mdl,MDL_NOCT_USED_MAX,          pst,C_FUNLOC(r_noct_used_max),4,4)
   call mdl_add_service(mdl,MDL_GATHER_NOCT_MAX,        pst,C_FUNLOC(r_gather_noct_max),0,0)
   call mdl_add_service(mdl,MDL_INIT_REFINE_BASEGRID,   pst,C_FUNLOC(r_init_refine_basegrid),4,0)
   call mdl_add_service(mdl,MDL_INIT_REFINE_RESTART,    pst,C_FUNLOC(r_init_refine_restart),0,0) !**************************
-  call mdl_add_service(mdl,MDL_COLLECT_BOUND_KEY,      pst,C_FUNLOC(r_collect_bound_key),(MDL_MAX_CPU+1)*4,0) !*****************
+  call mdl_add_service(mdl,MDL_COLLECT_BOUND_KEY,      pst,C_FUNLOC(r_collect_bound_key),(MDL_MAX_CPU+1)*4,nhilbert*(ncpu+1)*storage_size(dummy8)/8)
   call mdl_add_service(mdl,MDL_BROADCAST_BOUND_KEY,    pst,C_FUNLOC(r_broadcast_bound_key),storage_size(pst%s%m%domain)/8 + 4,0)
-  call mdl_add_service(mdl,MDL_LOAD_BALANCE,           pst,C_FUNLOC(r_load_balance),0,0)
+  call mdl_add_service(mdl,MDL_LOAD_BALANCE,           pst,C_FUNLOC(r_load_balance),4,0)
   call mdl_add_service(mdl,MDL_BALANCE_PART,           pst,C_FUNLOC(r_balance_part),0,0)
-  call mdl_add_service(mdl,MDL_REFINE_FINE,            pst,C_FUNLOC(r_refine_fine),0,8)
-  call mdl_add_service(mdl,MDL_SMOOTH_FINE,            pst,C_FUNLOC(r_smooth_fine),0,4)
-  call mdl_add_service(mdl,MDL_INPUT_HYDRO_CONDINIT,   pst,C_FUNLOC(r_input_hydro_condinit),0,0)
+  call mdl_add_service(mdl,MDL_REFINE_FINE,            pst,C_FUNLOC(r_refine_fine),4,8)
+  call mdl_add_service(mdl,MDL_SMOOTH_FINE,            pst,C_FUNLOC(r_smooth_fine),4,4)
+  call mdl_add_service(mdl,MDL_INPUT_HYDRO_CONDINIT,   pst,C_FUNLOC(r_input_hydro_condinit),4,0)
   call mdl_add_service(mdl,MDL_INPUT_HYDRO_GRAFIC,     pst,C_FUNLOC(r_input_hydro_grafic),0,0)
-  call mdl_add_service(mdl,MDL_UPLOAD_FINE,            pst,C_FUNLOC(r_upload_fine),0,0)
-  call mdl_add_service(mdl,MDL_MULTIPOLE_LEAF_CELLS,   pst,C_FUNLOC(r_multipole_leaf_cells),0,0)
-  call mdl_add_service(mdl,MDL_MULTIPOLE_SPLIT_CELLS,  pst,C_FUNLOC(r_multipole_split_cells),0,0)
-  call mdl_add_service(mdl,MDL_RESET_RHO,              pst,C_FUNLOC(r_reset_rho),0,0)
-  call mdl_add_service(mdl,MDL_CIC_MULTIPOLE,          pst,C_FUNLOC(r_cic_multipole),0,0)
+  call mdl_add_service(mdl,MDL_UPLOAD_FINE,            pst,C_FUNLOC(r_upload_fine),4,0)
+  call mdl_add_service(mdl,MDL_MULTIPOLE_LEAF_CELLS,   pst,C_FUNLOC(r_multipole_leaf_cells),4,0)
+  call mdl_add_service(mdl,MDL_MULTIPOLE_SPLIT_CELLS,  pst,C_FUNLOC(r_multipole_split_cells),4,0)
+  call mdl_add_service(mdl,MDL_RESET_RHO,              pst,C_FUNLOC(r_reset_rho),4,0)
+  call mdl_add_service(mdl,MDL_CIC_MULTIPOLE,          pst,C_FUNLOC(r_cic_multipole),4,0)
   call mdl_add_service(mdl,MDL_CIC_PART,               pst,C_FUNLOC(r_cic_part),0,0)
   call mdl_add_service(mdl,MDL_SPLIT_PART,             pst,C_FUNLOC(r_split_part),0,0)
   call mdl_add_service(mdl,MDL_KICK_DRIFT_PART,        pst,C_FUNLOC(r_kick_drift_part),0,0)
   call mdl_add_service(mdl,MDL_MASS_MIN_PART,          pst,C_FUNLOC(r_mass_min_part),0,8)
   call mdl_add_service(mdl,MDL_BROADCAST_MP_MIN,       pst,C_FUNLOC(r_broadcast_mp_min),0,0)
-  call mdl_add_service(mdl,MDL_COLLECT_MULTIPOLE,      pst,C_FUNLOC(r_collect_multipole),0,0) !****************
+  call mdl_add_service(mdl,MDL_COLLECT_MULTIPOLE,      pst,C_FUNLOC(r_collect_multipole),4,storage_size(pst%s%g%multipole)/8)
   call mdl_add_service(mdl,MDL_BROADCAST_MULTIPOLE,    pst,C_FUNLOC(r_broadcast_multipole),storage_size(pst%s%g%multipole)/8,0)
   call mdl_add_service(mdl,MDL_OUTPUT_AMR,             pst,C_FUNLOC(r_output_amr),flen,0)
   call mdl_add_service(mdl,MDL_OUTPUT_HYDRO,           pst,C_FUNLOC(r_output_hydro),flen,0)
