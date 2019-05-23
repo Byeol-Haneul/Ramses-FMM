@@ -69,7 +69,7 @@ module mdl_module
       integer :: input_size, output_size ! NOTE: size IN BYTES!!
       mdl%callback(sid) = service
       mdl%p1opaque(sid) = c_loc(p1)
-      mdl%input_size(sid) = input_size
+      mdl%input_size(sid) = input_size/4
       mdl%output_size(sid) = output_size
       mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,input_size/4) ! Divide by four to get the number of Integers
 
@@ -88,6 +88,17 @@ module mdl_module
       integer::launch_id,launch_tag=101
       integer,dimension(MPI_STATUS_SIZE)::launch_status
       integer,dimension(1:32)::header=0
+
+!      write(*,*)'ARRAY:',mdl_function_id,input_size
+      if (mdl%input_size(mdl_function_id) .lt. input_size) then
+        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' INPUT SIZE:',input_size,'MAX:',mdl%input_size(mdl_function_id)
+      end if
+      if (mdl%output_size(mdl_function_id) .lt. output_size) then
+        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' OUTPUT SIZE:',output_size,'MAX:',mdl%output_size(mdl_function_id)
+      end if
+!      if (mod(input_size,4).ne.0) then
+!        write(*,*) 'SUSPICIOUS SIZE: function_id=',mdl_function_id,'SIZE:',input_size
+!      end if
 
       ! Assemble MPI message
       header(1)=mdl_function_id
@@ -116,6 +127,7 @@ module mdl_module
       integer,intent(in),optional::input_size,output_size
       type(*),intent(in),optional,target::input
 
+      integer::isize
 #ifndef WITHOUTMPI
       include 'mpif.h'
       integer::info
@@ -124,19 +136,40 @@ module mdl_module
       integer,dimension(1:32)::header=0
       integer,dimension(:),pointer::dummy
 
+      if (present(input_size)) then
+        isize = input_size
+        if (mdl%input_size(mdl_function_id) .lt. input_size) then
+          write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,'INPUT SIZE:',input_size,'MAX:',mdl%input_size(mdl_function_id)
+        end if
+!        if (mod(input_size,4).ne.0) then
+!          write(*,*) 'SUSPICIOUS SIZE: function_id=',mdl_function_id,'SIZE:',input_size
+!        end if
+      else
+        isize = 0
+      end if
+      if (present(output_size)) then
+        if (mdl%output_size(mdl_function_id) .lt. output_size) then
+          write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' OUTPUT SIZE:',output_size,'MAX:',mdl%output_size(mdl_function_id)
+        end if
+      end if
+!      write(*,*)'SCALAR:',mdl_function_id,isize
+
       ! Assemble MPI message
       header(1)=mdl_function_id
-      header(2)=input_size
-      header(3)=output_size
+      header(2)=isize
+      if (present(output_size)) then
+        header(3)=output_size
+      else
+        header(3)=0
+      end if
       mdl%mpi_input_buffer(1:32)=header
-      mdl%mpi_input_buffer(33) = 99
-      if (present(input_size) .and. input_size>0) then
+      if (isize .gt. 0) then
         call c_f_pointer(c_loc(input),dummy,[input_size])
         mdl%mpi_input_buffer(33:32+input_size) = transfer(dummy,mdl%mpi_input_buffer(33:32+input_size))
       endif
 
       ! Send input array to the target cpu
-      call MPI_ISEND(mdl%mpi_input_buffer,input_size+32,MPI_INTEGER,target_cpu-1,launch_tag,MPI_COMM_WORLD,launch_id,info)
+      call MPI_ISEND(mdl%mpi_input_buffer,isize+32,MPI_INTEGER,target_cpu-1,launch_tag,MPI_COMM_WORLD,launch_id,info)
 
       ! Wait for ISEND completion to free memory in corresponding MPI buffer
       call MPI_WAIT(launch_id,launch_status,info)      
