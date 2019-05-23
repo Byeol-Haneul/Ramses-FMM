@@ -1,4 +1,7 @@
 module force_fine_module
+  type :: in_gradient_phi_t
+    integer::ilevel,icount
+  end type in_gradient_phi_t
 contains
 !#########################################################
 !#########################################################
@@ -17,6 +20,7 @@ subroutine m_force_fine(pst,ilevel,icount)
   integer::dummy(2)
   integer,dimension(1:2)::input_array,output_array
   real(kind=8)::rhomax,epot
+  type(in_gradient_phi_t)::in_gradient_phi
  
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
@@ -28,9 +32,9 @@ subroutine m_force_fine(pst,ilevel,icount)
      call r_force_analytic(pst,ilevel,1)
   else
      ! Compute gradient of potential
-     input_array(1)=ilevel
-     input_array(2)=icount
-     call r_gradient_phi(pst,input_array,2,dummy,0)
+     in_gradient_phi%ilevel=ilevel
+     in_gradient_phi%icount=icount
+     call r_gradient_phi(pst,in_gradient_phi,2)
   endif
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
@@ -133,28 +137,23 @@ end subroutine force_analytic
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_gradient_phi(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_gradient_phi(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_gradient_phi_t)::input
 
-  integer::ilevel,icount
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_GRADIENT_PHI,pst%iUpper+1,input_size,output_size,input_array)
-     call r_gradient_phi(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_GRADIENT_PHI,pst%iUpper+1,input_size,0,input)
+     call r_gradient_phi(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
-     icount=input_array(2)
-     call gradient_phi(pst%s,ilevel,icount)
+     call gradient_phi(pst%s,input%ilevel,input%icount)
   endif
 
 end subroutine r_gradient_phi
