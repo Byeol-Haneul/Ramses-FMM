@@ -526,7 +526,8 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
   use call_back
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
@@ -748,7 +749,8 @@ recursive subroutine r_cmp_rhs_norm(pst,ilevel,input_size,rhs_norm,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
@@ -791,7 +793,8 @@ recursive subroutine r_cmp_r2_cg(pst,ilevel,input_size,r2,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
@@ -825,7 +828,8 @@ recursive subroutine r_cmp_pAp_cg(pst,ilevel,input_size,pAp,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   ! ------------------------------------------------------------------------
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------

@@ -1213,7 +1213,8 @@ recursive subroutine r_collect_multipole(pst,ilevel,input_size,multipole,output_
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   type(multipole_t)::multipole,next_multipole
 

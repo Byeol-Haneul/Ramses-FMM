@@ -12,7 +12,6 @@ recursive subroutine r_set_add(pst,iUpper,input_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-!  integer,VALUE,BIND(C)::input_size
   integer::input_size
 
   integer::n,iLower,iMiddle,iUpper

@@ -264,7 +264,8 @@ subroutine mdl_wait(pst)
   logical::stop_order_received,order_received
   integer::order_id,order_tag=101,output_tag=203,output_id
   integer,dimension(MPI_STATUS_SIZE)::order_status,output_status
-  integer::input_size,output_size,source_cpu,function_id
+  integer::input_size
+  integer::output_size,source_cpu,function_id
   integer,dimension(:),allocatable,target::input_array,output_array
   integer::dummy=1
   integer,dimension(1:32)::header

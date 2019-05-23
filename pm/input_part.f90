@@ -55,7 +55,8 @@ recursive subroutine r_mass_min_part(pst,ilevel,input_size,mp_min,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   real(kind=8)::mp_min,next_mp_min
   integer::rID
@@ -80,7 +81,8 @@ recursive subroutine r_broadcast_mp_min(pst,mp_min,input_size,output_array,outpu
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:output_size)::output_array
   real(kind=8)::mp_min
 
@@ -105,7 +107,8 @@ recursive subroutine r_npart_max(pst,ilevel,input_size,npart_max,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   integer::npart_max
 

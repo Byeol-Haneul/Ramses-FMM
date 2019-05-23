@@ -77,7 +77,8 @@ recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   integer::noct_tot
 
@@ -104,7 +105,8 @@ recursive subroutine r_noct_max(pst,ilevel,input_size,noct_max,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   integer::noct_max
 
@@ -131,7 +133,8 @@ recursive subroutine r_noct_used_max(pst,ilevel,input_size,noct_used_max,output_
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   integer::noct_used_max
 
@@ -158,7 +161,8 @@ recursive subroutine r_noct_min(pst,ilevel,input_size,noct_min,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   integer::noct_min
 
@@ -185,7 +189,8 @@ recursive subroutine r_gather_noct_max(pst,ilevel,input_size,noct_max,output_siz
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::ilevel
   integer,dimension(1:output_size)::noct_max
 

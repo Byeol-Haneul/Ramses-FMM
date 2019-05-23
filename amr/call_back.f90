@@ -1,13 +1,6 @@
 module call_back
 
   interface
-!     recursive subroutine ramses_function(pst,input,input_size,output,output_size)
-!       use ramses_commons, only: pst_t
-!       type(pst_t)::pst
-!       integer::input_size,output_size
-!       integer,dimension(1:input_size)::input
-!       integer,dimension(1:output_size)::output
-!     end subroutine ramses_function
      recursive subroutine ramses_function(pst,input,input_size,output,output_size)
        use ramses_commons, only: pst_t
        type(pst_t)::pst

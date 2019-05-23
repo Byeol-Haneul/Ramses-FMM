@@ -16,7 +16,8 @@ recursive subroutine r_restrict_mask(pst,ilevel,input_size,masked,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::masked,next_masked
   integer::ilevel
 
@@ -186,7 +187,8 @@ recursive subroutine r_cmp_residual_mg(pst,input_array,input_size,output_array,o
   use hash
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
@@ -411,7 +413,8 @@ recursive subroutine r_gauss_seidel_mg(pst,input_array,input_size,output_array,o
   use hash
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
@@ -1005,7 +1008,8 @@ recursive subroutine r_set_scan_flag(pst,input_array,input_size,output_array,out
   use hash
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
@@ -1197,7 +1201,8 @@ recursive subroutine r_cmp_residual_norm2(pst,ilevel,input_size,norm2,output_siz
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   real(kind=8)::norm2,next_norm2
 

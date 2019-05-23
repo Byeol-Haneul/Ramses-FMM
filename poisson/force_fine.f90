@@ -139,7 +139,8 @@ recursive subroutine r_gradient_phi(pst,input_array,input_size,output_array,outp
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
@@ -338,7 +339,8 @@ recursive subroutine r_compute_epot(pst,ilevel,input_size,epot,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
   real(kind=8)::epot,next_epot
 
@@ -413,7 +415,8 @@ recursive subroutine r_compute_rhomax(pst,ilevel,input_size,rhomax,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer::ilevel
 
   real(kind=8)::rhomax,next_rhomax

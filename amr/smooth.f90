@@ -10,7 +10,8 @@ recursive subroutine r_smooth_fine(pst,ilevel,input_size,noct,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   integer,dimension(1:1)::ilevel,noct
 
   integer,dimension(1:1)::next_noct

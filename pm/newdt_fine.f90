@@ -109,7 +109,8 @@ recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer::input_size
+  integer::output_size
   type(out_newdt_part_t)::output,next_output
   integer::ilevel
 
