@@ -5,16 +5,12 @@ contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_init_part(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_init_part(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
 
   integer::rID
 
@@ -23,9 +19,9 @@ recursive subroutine r_init_part(pst,input_array,input_size,output_array,output_
   ! particle-based arrays.
   !--------------------------------------------------------------------
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INIT_PART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_init_part(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_PART,pst%iUpper+1)
+     call r_init_part(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
      call init_part(pst%s%r,pst%s%g,pst%s%p)
   endif

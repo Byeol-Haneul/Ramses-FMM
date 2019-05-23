@@ -25,7 +25,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   implicit none
 
   type(pst_t)::pst
-  integer::ilevel,icount,dummy
+  integer::ilevel,icount
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !

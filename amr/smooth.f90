@@ -12,9 +12,9 @@ recursive subroutine r_smooth_fine(pst,ilevel,input_size,noct,output_size)
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::output_size
-  integer,dimension(1:1)::ilevel,noct
+  integer::ilevel,noct
 
-  integer,dimension(1:1)::next_noct
+  integer::next_noct
   integer::nflag
   integer::rID
 
@@ -24,8 +24,8 @@ recursive subroutine r_smooth_fine(pst,ilevel,input_size,noct,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct)
      noct=noct+next_noct
   else
-     call smooth_fine(pst%s,ilevel(1),nflag)
-     noct(1)=nflag
+     call smooth_fine(pst%s,ilevel,nflag)
+     noct=nflag
   endif
 
 end subroutine r_smooth_fine

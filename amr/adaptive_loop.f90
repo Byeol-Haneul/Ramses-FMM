@@ -13,8 +13,7 @@ subroutine adaptive_loop(pst)
   type(pst_t)::pst
 
   ! Local variables
-  integer::ilevel,dummy
-  integer::adummy(1)
+  integer::ilevel
   real::tt1,tt2
 
   associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
@@ -25,16 +24,16 @@ subroutine adaptive_loop(pst)
   call m_read_params(pst)
 
   ! Initialize grid variables
-  call r_init_amr(pst,adummy,0,adummy,0)
+  call r_init_amr(pst)
 
   ! Initialize time variables
-  call r_init_time(pst,adummy,0,adummy,0)
+  call r_init_time(pst)
 
   ! Initialize hydro kernel workspace
-  if(r%hydro)call r_init_hydro(pst,adummy,0,adummy,0)
+  if(r%hydro)call r_init_hydro(pst)
 
   ! Initialize particle variables
-  if(r%pic)call r_init_part(pst,adummy,0,adummy,0)
+  if(r%pic)call r_init_part(pst)
 
   ! Read initial particle properties from files
   if(r%pic)call m_input_part(pst)
@@ -85,7 +84,7 @@ subroutine adaptive_loop(pst)
      
   end do
 
-  call r_clean_stop(pst,dummy,0,dummy,0)
+  call r_clean_stop(pst)
 
   return
 
