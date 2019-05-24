@@ -42,11 +42,11 @@ endif(MDL2)
 
 # The Fortran source contains preprocessor directives which are enable differently for each compiler
 if (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-cpp" )
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-cpp -recursive" )
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none -Wno-argument-mismatch" )
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none -Wno-argument-mismatch" )
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-e Z" )
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-e ZR" )
 endif()
 
 #if(Git_FOUND)
