@@ -1,10 +1,14 @@
 module output_poisson_module
+  use amr_parameters, only: flen
+  type :: in_output_poisson_t
+    character(LEN=flen)::filename
+  end type in_output_poisson_t
 contains
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
-recursive subroutine r_output_poisson(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_output_poisson(pst,input,input_size)
   use mdl_module
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
@@ -12,20 +16,16 @@ recursive subroutine r_output_poisson(pst,input_array,input_size,output_array,ou
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_output_poisson_t)::input
   
-  character(LEN=flen)::filename
   integer::rID
   
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_POISSON,pst%iUpper+1,input_size,output_size,input_array)
-     call r_output_poisson(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_POISSON,pst%iUpper+1,input_size,0,input)
+     call r_output_poisson(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     filename=transfer(input_array,filename)
-     call output_poisson(pst%s%r,pst%s%g,pst%s%m,filename)
+     call output_poisson(pst%s%r,pst%s%g,pst%s%m,input%filename)
   endif
 end subroutine r_output_poisson
 !#########################################################

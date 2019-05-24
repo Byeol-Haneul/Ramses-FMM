@@ -8,7 +8,7 @@ subroutine m_dump_all(pst)
   use amr_parameters, only: ndim,flen
   use ramses_commons, only: pst_t
   use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
-  use output_poisson_module, only: r_output_poisson
+  use output_poisson_module, only: r_output_poisson,in_output_poisson_t
   use output_part_module, only: r_output_part
   implicit none
   type(pst_t)::pst
@@ -21,6 +21,7 @@ subroutine m_dump_all(pst)
   character(LEN=5)::nchar
   character(LEN=flen)::filename,filedir,filecmd
   integer,dimension(1:flen/4)::input_array
+  type(in_output_poisson_t)::in_output_poisson
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -92,9 +93,8 @@ subroutine m_dump_all(pst)
 
      ! Output GRAV data
      if(r%poisson)then
-        filename=TRIM(filedir)//'grav.out'
-        input_array=transfer(filename,input_array)
-        call r_output_poisson(pst,input_array,flen/4,dummy,0)
+        in_output_poisson%filename=TRIM(filedir)//'grav.out'
+        call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
      end if
 
      ! Output PART data
