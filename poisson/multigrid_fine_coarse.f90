@@ -1,4 +1,14 @@
 module multigrid_fine_coarse
+  type :: in_cmp_residual_mg_t
+    integer::ilevel,ifine
+  end type in_cmp_residual_mg_t
+  type :: in_gauss_seidel_mg_t
+    integer::ilevel,ifine
+    logical::safe,redstep
+  end type in_gauss_seidel_mg_t
+  type :: in_set_scan_flag_t
+    integer::ilevel,ifine
+  end type in_set_scan_flag_t
 contains
 #ifdef GRAV
 ! ########################################################################
@@ -180,7 +190,7 @@ end subroutine unpack_flush_restrict_mask
 ! Residual computation
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cmp_residual_mg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_residual_mg(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -188,24 +198,19 @@ recursive subroutine r_cmp_residual_mg(pst,input_array,input_size,output_array,o
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_cmp_residual_mg_t)::input
 
-  integer::ilevel,ifine
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_residual_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,0,input)
+     call r_cmp_residual_mg(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     ilevel=input_array(1)
-     ifine=input_array(2)
-     if(ifine==ilevel)then
-        call cmp_residual_mg(pst%s,pst%s%m%grid_dict,ifine)
+     if(input%ifine==input%ilevel)then
+        call cmp_residual_mg(pst%s,pst%s%m%grid_dict,input%ifine)
      else
-        call cmp_residual_mg(pst%s,pst%s%m%mg_dict,ifine)
+        call cmp_residual_mg(pst%s,pst%s%m%mg_dict,input%ifine)
      endif
   endif
 
@@ -406,7 +411,7 @@ end subroutine unpack_fetch_mg
 ! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_gauss_seidel_mg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_gauss_seidel_mg(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -414,29 +419,19 @@ recursive subroutine r_gauss_seidel_mg(pst,input_array,input_size,output_array,o
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_gauss_seidel_mg_t)::input
 
-  integer::ilevel,ifine,isafe,iredstep
-  logical::safe,redstep
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_gauss_seidel_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,0,input)
+     call r_gauss_seidel_mg(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     ilevel=input_array(1)
-     ifine=input_array(2)
-     isafe=input_array(3)
-     iredstep=input_array(4)
-     safe=(isafe==1)
-     redstep=(iredstep==1)
-     if(ifine==ilevel)then
-        call gauss_seidel_mg(pst%s,pst%s%m%grid_dict,ifine,safe,redstep)
+     if(input%ifine==input%ilevel)then
+        call gauss_seidel_mg(pst%s,pst%s%m%grid_dict,input%ifine,input%safe,input%redstep)
      else
-        call gauss_seidel_mg(pst%s,pst%s%m%mg_dict,ifine,safe,redstep)
+        call gauss_seidel_mg(pst%s,pst%s%m%mg_dict,input%ifine,input%safe,input%redstep)
      endif
   endif
 
@@ -1001,7 +996,7 @@ end subroutine unpack_fetch_phi
 ! Flag settings used to speed-up the sweeps
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_set_scan_flag(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_set_scan_flag(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -1009,24 +1004,19 @@ recursive subroutine r_set_scan_flag(pst,input_array,input_size,output_array,out
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_set_scan_flag_t)::input
 
-  integer::ilevel,ifine
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_set_scan_flag(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,0,input)
+     call r_set_scan_flag(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     ilevel=input_array(1)
-     ifine=input_array(2)
-     if(ifine==ilevel)then
-        call set_scan_flag(pst%s,pst%s%m%grid_dict,ifine)
+     if(input%ifine==input%ilevel)then
+        call set_scan_flag(pst%s,pst%s%m%grid_dict,input%ifine)
      else
-        call set_scan_flag(pst%s,pst%s%m%mg_dict,ifine)
+        call set_scan_flag(pst%s,pst%s%m%mg_dict,input%ifine)
      endif
   endif
 

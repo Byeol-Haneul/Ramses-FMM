@@ -1,4 +1,7 @@
 module multigrid_fine_commons
+  type :: in_make_bc_rhs_t
+    integer::ilevel,icount
+  end type in_make_bc_rhs_t
 contains
 ! ------------------------------------------------------------------------
 ! Multigrid Poisson solver for refined AMR levels
@@ -28,7 +31,8 @@ subroutine multigrid(pst,ilevel,icount)
   use ramses_commons, only: pst_t
   use phi_fine_cg_module, only: r_make_initial_phi, in_make_initial_phi_t
   use multigrid_fine_coarse, only: r_cmp_residual_mg, r_cmp_residual_norm2,r_gauss_seidel_mg,&
-        r_interpolate_and_correct,r_reset_correction,r_restrict_mask,r_restrict_residual,r_set_scan_flag
+        r_interpolate_and_correct,r_reset_correction,r_restrict_mask,r_restrict_residual,r_set_scan_flag,&
+        in_cmp_residual_mg_t,in_gauss_seidel_mg_t,in_set_scan_flag_t
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilevel,icount
@@ -37,12 +41,15 @@ subroutine multigrid(pst,ilevel,icount)
   real(dp),parameter :: SAFE_FACTOR = 0.5
   
   integer :: igrid, ifine, i, iter, allmasked
-  integer,dimension(1:4) :: input_array, dummy
   integer,dimension(1:4) :: output_array
   real(kind=8) :: res_norm2, i_res_norm2
   real(kind=8) :: err, last_err
   real(kind=8) :: i_res_norm2_tot, res_norm2_tot
   type(in_make_initial_phi_t)::in_make_initial_phi
+  type(in_make_bc_rhs_t)::in_make_bc_rhs
+  type(in_cmp_residual_mg_t)::in_cmp_residual_mg
+  type(in_gauss_seidel_mg_t)::in_gauss_seidel_mg
+  type(in_set_scan_flag_t)::in_set_scan_flag
   
   if(pst%s%r%gravity_type>0)return
   if(pst%s%m%noct_tot(ilevel)==0)return
@@ -54,9 +61,11 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   in_make_initial_phi%ilevel=ilevel
   in_make_initial_phi%icount=icount
-  call r_make_initial_phi(pst,in_make_initial_phi,2)  ! Initial guess
+  call r_make_initial_phi(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/32)  ! Initial guess
   call r_make_mask(pst,ilevel,1)              ! Fill the fine level mask
-  call r_make_bc_rhs(pst,input_array,2,dummy,0)       ! Fill BC-modified RHS
+  in_make_bc_rhs%ilevel=ilevel
+  in_make_bc_rhs%icount=icount
+  call r_make_bc_rhs(pst,in_make_bc_rhs,storage_size(in_make_bc_rhs)/32)       ! Fill BC-modified RHS
 
   if(pst%s%r%verbose) print '(A)','Initial guess done '
 
@@ -93,10 +102,10 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
-  input_array(1)=ilevel
+  in_set_scan_flag%ilevel=ilevel
   do ifine=ilevel,pst%s%g%levelmin_mg,-1
-     input_array(2)=ifine
-     call r_set_scan_flag(pst,input_array,2,dummy,0)
+     in_set_scan_flag%ifine=ifine
+     call r_set_scan_flag(pst,in_set_scan_flag,storage_size(in_set_scan_flag)/32)
   end do
   
   if(pst%s%r%verbose) print '(A)','Mask and scan done '
@@ -111,24 +120,22 @@ subroutine multigrid(pst,ilevel,icount)
 
      iter=iter+1
 
-     input_array(1)=ilevel
-     input_array(2)=ilevel
-     if(pst%s%g%safe_mode(ilevel))then
-        input_array(3)=1
-     else
-        input_array(3)=0
-     endif
+     in_gauss_seidel_mg%ilevel=ilevel
+     in_gauss_seidel_mg%ifine=ilevel
+     in_gauss_seidel_mg%safe=pst%s%g%safe_mode(ilevel)
      
      ! Pre-smoothing
      do i=1,ngs_fine
-        input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
-        input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
+        in_gauss_seidel_mg%redstep=.true.   ! Red step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
+        in_gauss_seidel_mg%redstep=.false.  ! Black step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
      end do
      
      ! Compute new residual
-     call r_cmp_residual_mg(pst,input_array,2,dummy,0)
+     in_cmp_residual_mg%ilevel=ilevel
+     in_cmp_residual_mg%ifine=ilevel
+     call r_cmp_residual_mg(pst,in_cmp_residual_mg,storage_size(in_cmp_residual_mg)/32)
 
      ! Compute initial residual norm
      if(iter==1) then
@@ -153,14 +160,16 @@ subroutine multigrid(pst,ilevel,icount)
 
      ! Post-smoothing
      do i=1,ngs_fine
-        input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
-        input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
+        in_gauss_seidel_mg%redstep=.true.   ! Red step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
+        in_gauss_seidel_mg%redstep=.false.  ! Black step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
      end do
      
      ! Update fine residual
-     call r_cmp_residual_mg(pst,input_array,2,dummy,0)
+     in_cmp_residual_mg%ilevel=ilevel
+     in_cmp_residual_mg%ifine=ilevel
+     call r_cmp_residual_mg(pst,in_cmp_residual_mg,storage_size(in_cmp_residual_mg)/32)
 
      ! Compute residual norm
      call r_cmp_residual_norm2(pst,ilevel,1,res_norm2,2)
@@ -188,7 +197,7 @@ subroutine multigrid(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
-  call r_cleanup_mg(pst,dummy,0,dummy,0)
+  call r_cleanup_mg(pst)
   
 end subroutine multigrid
 
@@ -206,31 +215,28 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
   use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
   use ramses_commons, only: pst_t
   use multigrid_fine_coarse, only: r_cmp_residual_mg,r_gauss_seidel_mg,r_interpolate_and_correct,&
-        r_reset_correction,r_restrict_residual
+        r_reset_correction,r_restrict_residual,in_cmp_residual_mg_t,in_gauss_seidel_mg_t
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ifinelevel
   logical,intent(in) :: safe
 
   integer :: i, igrid, icycle, ncycle
-  integer,dimension(1:4) :: input_array, dummy
+  type(in_cmp_residual_mg_t)::in_cmp_residual_mg
+  type(in_gauss_seidel_mg_t)::in_gauss_seidel_mg
 
   ! Set parameter array
-  input_array(1)=ifinelevel+1
-  input_array(2)=ifinelevel
-  if(safe)then
-     input_array(3)=1
-  else
-     input_array(3)=0
-  endif
+  in_gauss_seidel_mg%ilevel=ifinelevel+1
+  in_gauss_seidel_mg%ifine=ifinelevel
+  in_gauss_seidel_mg%safe=safe
   
   if(ifinelevel<=pst%s%g%levelmin_mg) then
      ! Solve 'directly' :
      do i=1,2*ngs_coarse
-        input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
-        input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
+        in_gauss_seidel_mg%redstep=.true.   ! Red step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
+        in_gauss_seidel_mg%redstep=.false.  ! Black step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
      end do
      return
   end if
@@ -245,14 +251,16 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
      
      ! Pre-smoothing
      do i=1,ngs_coarse
-        input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
-        input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
+        in_gauss_seidel_mg%redstep=.true.   ! Red step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
+        in_gauss_seidel_mg%redstep=.false.  ! Black step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
      end do     
 
      ! Compute residual and restrict into upper level RHS
-     call r_cmp_residual_mg(pst,input_array,2,dummy,0)
+     in_cmp_residual_mg%ilevel=ifinelevel+1
+     in_cmp_residual_mg%ifine=ifinelevel
+     call r_cmp_residual_mg(pst,in_cmp_residual_mg,storage_size(in_cmp_residual_mg)/32)
 
      ! Restrict residual to coarser level
      call r_restrict_residual(pst,ifinelevel,1)
@@ -268,10 +276,10 @@ recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
      
      ! Post-smoothing
      do i=1,ngs_coarse
-        input_array(4)=1  ! Red step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
-        input_array(4)=0  ! Black step
-        call r_gauss_seidel_mg(pst,input_array,4,dummy,0)
+        in_gauss_seidel_mg%redstep=.true.   ! Red step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
+        in_gauss_seidel_mg%redstep=.false.  ! Black step
+        call r_gauss_seidel_mg(pst,in_gauss_seidel_mg,storage_size(in_gauss_seidel_mg)/32)
      end do
      
   end do
@@ -578,24 +586,20 @@ end subroutine unpack_flush_build_mg
 ! Multigrid cleanup
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cleanup_mg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cleanup_mg(pst)
   use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_MG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cleanup_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_MG,pst%iUpper+1)
+     call r_cleanup_mg(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
      call cleanup_mg(pst%s%m)
   endif
@@ -696,28 +700,23 @@ end subroutine make_mask
 !
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_make_bc_rhs(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_make_bc_rhs(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_make_bc_rhs_t)::input
 
-  integer::ilevel,icount
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_BC_RHS,pst%iUpper+1,input_size,output_size,input_array)
-     call r_make_bc_rhs(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_BC_RHS,pst%iUpper+1,input_size,0,input)
+     call r_make_bc_rhs(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     ilevel=input_array(1)
-     icount=input_array(2)
-     call make_bc_rhs(pst%s,ilevel,icount)
+     call make_bc_rhs(pst%s,input%ilevel,input%icount)
   endif
 
 end subroutine r_make_bc_rhs
