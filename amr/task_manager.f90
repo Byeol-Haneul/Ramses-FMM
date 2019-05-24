@@ -131,7 +131,6 @@ function worker_init(mdl) result(pst)
   allocate(pst)
   allocate(pst%s)
   pst%s%mdl => mdl
-  pst%s%g%mdl => mdl
   pst%s%m%mdl => mdl
 
   ncpu = mdl_threads(mdl)

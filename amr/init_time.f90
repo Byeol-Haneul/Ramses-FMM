@@ -20,7 +20,7 @@ recursive subroutine r_init_time(pst)
      call r_init_time(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID)
   else
-     call init_time(pst%s%r,pst%s%g)
+     call init_time(pst%s%mdl,pst%s%r,pst%s%g)
   endif
 
 end subroutine r_init_time
@@ -28,10 +28,12 @@ end subroutine r_init_time
 !###########################################################
 !###########################################################
 !###########################################################
-  subroutine init_time(r,g)
+  subroutine init_time(mdl,r,g)
+  use mdl_module
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t
   implicit none
+  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
 
@@ -41,11 +43,11 @@ end subroutine r_init_time
   if(r%nrestart==0)then
      if(r%cosmo)then
         ! Get cosmological parameters from input files
-        call init_cosmo(r,g)
+        call init_cosmo(mdl,r,g)
      else
         ! Get parameters from input files
         if(r%initfile(r%levelmin).ne.' '.and.r%filetype.eq.'grafic')then
-           call init_file(r,g)
+           call init_file(mdl,r,g)
         endif
         g%t=0.0
         g%aexp=1.0
@@ -56,7 +58,7 @@ end subroutine r_init_time
 
      ! Compute Friedman model look up table
      if(g%myid==1)write(*,*)'Computing Friedman model'
-     call friedman(g%mdl,dble(g%omega_m),dble(g%omega_l),dble(g%omega_k), &
+     call friedman(mdl,dble(g%omega_m),dble(g%omega_l),dble(g%omega_k), &
           & 1.d-6,dble(g%aexp_ini), &
           & g%aexp_frw,g%hexp_frw,g%tau_frw,g%t_frw,n_frw)
 
@@ -86,11 +88,12 @@ end subroutine init_time
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_file(r,g)
+subroutine init_file(mdl,r,g)
   use amr_parameters, only: sp
   use amr_commons, only: run_t,global_t
   use mdl_module
   implicit none
+  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   !------------------------------------------------------
@@ -116,7 +119,7 @@ subroutine init_file(r,g)
               write(*,*)TRIM(r%initfile(ilevel))
               write(*,*)'File '//TRIM(filename)//' does not exist'
            end if
-           call mdl_abort(g%mdl)
+           call mdl_abort(mdl)
         end if
         open(10,file=filename,form='unformatted')
         if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -144,7 +147,7 @@ subroutine init_file(r,g)
      write(*,*)'Expected n1=',2**r%levelmin &
           &           ,' n2=',2**r%levelmin &
           &           ,' n3=',2**r%levelmin
-     call mdl_abort(g%mdl)
+     call mdl_abort(mdl)
   end if
 
   ! Write initial conditions parameters
@@ -168,12 +171,13 @@ end subroutine init_file
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_cosmo(r,g)
+subroutine init_cosmo(mdl,r,g)
   use amr_parameters, only: sp,dp,ndim
   use amr_commons, only: run_t,global_t
   use gadgetreadfilemod
   use mdl_module
   implicit none
+  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   !------------------------------------------------------
@@ -193,7 +197,7 @@ subroutine init_cosmo(r,g)
 
   if(r%initfile(r%levelmin)==' ')then
      write(*,*)'You need to specifiy at least one level of initial condition'
-     call mdl_abort(g%mdl)
+     call mdl_abort(mdl)
   end if
 
   SELECT CASE (r%filetype)
@@ -215,7 +219,7 @@ subroutine init_cosmo(r,g)
               if(g%myid==1)then
                  write(*,*)'File '//TRIM(filename)//' does not exist'
               end if
-              call mdl_abort(g%mdl)
+              call mdl_abort(mdl)
            end if
            open(10,file=filename,form='unformatted')
            if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)
@@ -259,7 +263,7 @@ subroutine init_cosmo(r,g)
            write(*,*)'Expected n1=',2**r%levelmin &
                 &           ,' n2=',2**r%levelmin &
                 &           ,' n3=',2**r%levelmin
-           call mdl_abort(g%mdl)
+           call mdl_abort(mdl)
         endif
      end if
      
@@ -271,18 +275,18 @@ subroutine init_cosmo(r,g)
      ! Reading gadget file header only
      if (r%verbose) write(*,*)'Reading in gadget format from '//TRIM(r%initfile(r%levelmin))
      call gadgetreadheader(TRIM(r%initfile(r%levelmin)), 0, gadgetheader, ok)
-     if(.not.ok) call mdl_abort(g%mdl)
+     if(.not.ok) call mdl_abort(mdl)
      do i=1,6
         if (i .ne. 2) then
            if (gadgetheader%nparttotal(i) .ne. 0) then
               write(*,*) 'Non DM particles present in bin ', i
-              call mdl_abort(g%mdl)
+              call mdl_abort(mdl)
            endif
         endif
      enddo
      if (gadgetheader%mass(2) == 0) then
         write(*,*) 'Particles have different masses, not supported'
-        call mdl_abort(g%mdl)
+        call mdl_abort(mdl)
      endif
      g%omega_m = gadgetheader%omega0
      g%omega_l = gadgetheader%omegalambda
@@ -302,7 +306,7 @@ subroutine init_cosmo(r,g)
 
   CASE DEFAULT
      write(*,*) 'Unsupported input format '//r%filetype
-     call mdl_abort(g%mdl)
+     call mdl_abort(mdl)
   END SELECT
 
   ! Write cosmological parameters
@@ -322,7 +326,7 @@ subroutine init_cosmo(r,g)
   
   ! Compute linear scaling factor between aexp and astart(ilevel)
   do ilevel=r%levelmin,g%nlevelmax_part
-     g%dfact(ilevel)=d1a(g%mdl,g%aexp,g%omega_m,g%omega_l)/d1a(g%mdl,g%astart(ilevel),g%omega_m,g%omega_l)
+     g%dfact(ilevel)=d1a(mdl,g%aexp,g%omega_m,g%omega_l)/d1a(mdl,g%astart(ilevel),g%omega_m,g%omega_l)
      g%vfact(ilevel)=g%astart(ilevel)*fpeebl(g%astart(ilevel),g%omega_m,g%omega_l) & ! Same scale factor as in grafic1
           & *sqrt(g%omega_m/g%astart(ilevel)+g%omega_l*g%astart(ilevel)*g%astart(ilevel)+g%omega_k) &
           & /g%astart(ilevel)*g%h0

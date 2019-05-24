@@ -211,11 +211,12 @@ end subroutine output_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
+subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   use mdl_module
   use amr_parameters, only: ndim,nhilbert,dp,flen
   use amr_commons, only: run_t,global_t
   implicit none
+  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   character(LEN=flen)::filename
@@ -267,7 +268,7 @@ subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
      if(g%myid==1)then
         write(*,*)'Incorrect number of space dimensions in restart file'
      endif
-     call mdl_abort(g%mdl)
+     call mdl_abort(mdl)
   endif
   ! Compute movie frame number if applicable
   if(r%imovout>0) then

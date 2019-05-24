@@ -40,7 +40,7 @@ subroutine m_init_refine_restart(pst)
   ! Read parameters from restart file
   call title(r%nrestart,nchar)
   file_params='output_'//TRIM(nchar)//'/params.out'
-  call input_params(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+  call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
   write(*,'(" Restart snapshot has levelmin=",I4)')levelmin_file
   write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
 

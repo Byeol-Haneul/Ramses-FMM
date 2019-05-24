@@ -172,7 +172,6 @@ module amr_commons
   type global_t
 
      ! MPI variables
-     type(mdl_t),pointer::mdl => null()
      integer::ncpu, myid
 
      integer::iout=1             ! Increment for output times
