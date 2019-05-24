@@ -1,4 +1,7 @@
 module update_time_module
+  type :: in_broadcast_aexp_t
+    real(kind=8)::aexp,hexp
+  end type in_broadcast_aexp_t
 contains
 !################################################################
 !################################################################
@@ -17,7 +20,7 @@ subroutine m_update_time(pst,ilevel)
   real,save::ttstart=0.0
   real(dp)::dt,econs,mcons
   integer::i,itest
-  integer,dimension(1:4)::input_array,dummy
+  type(in_broadcast_aexp_t)::in_broadcast_aexp
   
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -150,9 +153,9 @@ subroutine m_update_time(pst,ilevel)
   end if
 
   ! Broadcast aexp and hexp to all CPUs
-  input_array(1:2)=transfer(g%aexp,input_array)
-  input_array(3:4)=transfer(g%hexp,input_array)
-  call r_broadcast_aexp(pst,input_array,4,dummy,0)
+  in_broadcast_aexp%aexp=g%aexp
+  in_broadcast_aexp%hexp=g%hexp
+  call r_broadcast_aexp(pst,in_broadcast_aexp,storage_size(in_broadcast_aexp)/32)
 
   end associate
 
@@ -161,27 +164,24 @@ end subroutine m_update_time
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_broadcast_aexp(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_broadcast_aexp(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(in_broadcast_aexp_t)::input
 
-  real(kind=8)::aexp
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_aexp(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,0,input)
+     call r_broadcast_aexp(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     pst%s%g%aexp=transfer(input_array(1:2),aexp)
-     pst%s%g%hexp=transfer(input_array(3:4),aexp)
+     pst%s%g%aexp=input%aexp
+     pst%s%g%hexp=input%hexp
   endif
 
 end subroutine r_broadcast_aexp
