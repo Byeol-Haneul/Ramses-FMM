@@ -42,10 +42,12 @@ module mdl_module
   interface mdl_send_request
     module procedure mdl_send_request_array, mdl_send_request_scalar
   end interface mdl_send_request
+  PRIVATE :: mdl_send_request_array, mdl_send_request_scalar
 
   interface mdl_get_reply
     module procedure mdl_get_reply_array, mdl_get_reply_scalar
   end interface mdl_get_reply
+  PRIVATE :: mdl_get_reply_array, mdl_get_reply_scalar
 
   contains
 
@@ -70,7 +72,7 @@ module mdl_module
       mdl%callback(sid) = service
       mdl%p1opaque(sid) = c_loc(p1)
       mdl%input_size(sid) = input_size/4
-      mdl%output_size(sid) = output_size
+      mdl%output_size(sid) = output_size/4
       mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,input_size/4) ! Divide by four to get the number of Integers
 
     end subroutine mdl_add_service

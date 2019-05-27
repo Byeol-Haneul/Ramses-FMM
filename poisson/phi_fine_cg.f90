@@ -351,7 +351,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
            call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
               call unlock_cache_p(s,grid_nbor(ind)%p)
            end do
@@ -623,7 +623,7 @@ subroutine make_initial_phi(s,ilevel,icount)
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
         call get_threetondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
-        call interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
+        call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
            call unlock_cache_p(s,grid_nbor(ind)%p)
         end do

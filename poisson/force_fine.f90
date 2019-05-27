@@ -282,7 +282,7 @@ subroutine gradient_phi(s,ilevel,icount)
         else
            ! Get 3**ndim parent cell using read-only cache
            call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
-           call interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
               call unlock_cache_p(s,grid_nbor(ind)%p)
            end do
