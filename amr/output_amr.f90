@@ -1,3 +1,5 @@
+module output_amr_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -5,17 +7,21 @@
 subroutine m_dump_all(pst)
   use amr_parameters, only: ndim,flen
   use ramses_commons, only: pst_t
+  use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
+  use output_poisson_module, only: r_output_poisson,in_output_poisson_t
+  use output_part_module, only: r_output_part
   implicit none
   type(pst_t)::pst
 
   ! Local variables
-  integer::i,dummy
+  integer::i,dummy(1)
 #ifdef NOSYSTEM
   integer::ierr
 #endif
   character(LEN=5)::nchar
   character(LEN=flen)::filename,filedir,filecmd
   integer,dimension(1:flen/4)::input_array
+  type(in_output_poisson_t)::in_output_poisson
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -87,9 +93,8 @@ subroutine m_dump_all(pst)
 
      ! Output GRAV data
      if(r%poisson)then
-        filename=TRIM(filedir)//'grav.out'
-        input_array=transfer(filename,input_array)
-        call r_output_poisson(pst,input_array,flen/4,dummy,0)
+        in_output_poisson%filename=TRIM(filedir)//'grav.out'
+        call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
      end if
 
      ! Output PART data
@@ -206,10 +211,12 @@ end subroutine output_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
+subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
+  use mdl_module
   use amr_parameters, only: ndim,nhilbert,dp,flen
   use amr_commons, only: run_t,global_t
   implicit none
+  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   character(LEN=flen)::filename
@@ -261,7 +268,7 @@ subroutine input_params(r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
      if(g%myid==1)then
         write(*,*)'Incorrect number of space dimensions in restart file'
      endif
-     call mdl_abort
+     call mdl_abort(mdl)
   endif
   ! Compute movie frame number if applicable
   if(r%imovout>0) then
@@ -284,21 +291,24 @@ end subroutine input_params
 !#########################################################################
 !#########################################################################
 recursive subroutine r_output_amr(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_AMR,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_AMR,pst%iUpper+1,input_size,output_size,input_array)
      call r_output_amr(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
      call output_amr(pst%s%r,pst%s%g,pst%s%m,filename)
@@ -549,3 +559,4 @@ subroutine savegadget(filename)
 
 end subroutine savegadget
 #endif
+end module output_amr_module

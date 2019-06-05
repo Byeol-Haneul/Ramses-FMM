@@ -1,3 +1,5 @@
+module upload_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -19,30 +21,29 @@ subroutine m_upload_fine(pst,ilevel)
   if(pst%s%r%verbose)write(*,111)ilevel
 111 format(' Entering upload_fine for level',i2)
 
-  call r_upload_fine(pst,ilevel,1,dummy,0)
+  call r_upload_fine(pst,ilevel,1)
 
 end subroutine m_upload_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_upload_fine(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_upload_fine(pst,ilevel,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
 
   integer::ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_UPLOAD_FINE,pst%iUpper+1,input_size,output_size,input_array)
-     call r_upload_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_UPLOAD_FINE,pst%iUpper+1,input_size,0,ilevel)
+     call r_upload_fine(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call upload_fine(pst%s,ilevel)
   endif
 
@@ -52,6 +53,7 @@ end subroutine r_upload_fine
 !###########################################################
 !###########################################################
 subroutine upload_fine(s,ilevel)
+  use mdl_module
   use hydro_parameters, only: nvar,nener
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: oct
@@ -75,7 +77,7 @@ subroutine upload_fine(s,ilevel)
 
 #ifdef HYDRO
 
-  associate(r=>s%r,g=>s%g,m=>s%m)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Set conservative variable to zero in refined cells
   do ioct=m%head(ilevel),m%tail(ilevel)
@@ -149,7 +151,7 @@ subroutine upload_fine(s,ilevel)
               write(*,*)'Sorry zero density cell'
               write(*,*)m%grid(ioct)%uold(ind,1:nvar)
               write(*,*)m%grid(ioct)%refined(ind)
-              call mdl_abort
+              call mdl_abort(mdl)
            endif
         end do
      end do
@@ -243,3 +245,4 @@ end subroutine unpack_flush_upload
 !##########################################################################
 !##########################################################################
 !##########################################################################
+end module upload_module

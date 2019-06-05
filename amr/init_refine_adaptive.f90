@@ -4,6 +4,10 @@
 !#########################################################################
 subroutine m_init_refine_adaptive(pst)
   use ramses_commons, only: pst_t
+  use flag_utils, only:m_flag_fine
+  use refine_utils, only: m_refine_fine
+  use upload_module, only: m_upload_fine
+  use rho_fine_module, only: m_rho_fine
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------

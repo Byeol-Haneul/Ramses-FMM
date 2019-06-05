@@ -1,22 +1,25 @@
+module init_amr_module
+
+contains
+
 !###############################################
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_set_add(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_set_add(pst,iUpper,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
 
   integer::n,iLower,iMiddle,iUpper
+  integer::rID
 
   associate(mdl=>pst%s%mdl)
 
-  iUpper = input_array(1)
-  iLower = mdl%myid-1
+  iLower = mdl_self(mdl)-1
   n = iUpper - iLower
   iMiddle = (iUpper + iLower) / 2
  
@@ -26,10 +29,9 @@ recursive subroutine r_set_add(pst,input_array,input_size,output_array,output_si
      pst%nUpper = iUpper - iMiddle
      allocate(pst%pLower)
      pst%pLower%s => pst%s
-     call mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,output_size,input_array)
-     input_array(1)=iMiddle
-     call r_set_add(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(mdl,MDL_SET_ADD,pst%iUpper+1,input_size,0,iUpper)
+     call r_set_add(pst%pLower,iMiddle,input_size)
+     call mdl_get_reply(mdl,rID,0)
   end if
  
   end associate
@@ -39,21 +41,21 @@ end subroutine r_set_add
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_amr(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_init_amr(pst)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1,input_size,output_size,input_array)
-     call r_init_amr(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_AMR,pst%iUpper+1)
+     call r_init_amr(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     call init_amr(pst%s%r,pst%s%g,pst%s%m)
+     call init_amr(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m)
   endif
 
 end subroutine r_init_amr
@@ -61,12 +63,15 @@ end subroutine r_init_amr
 !###############################################
 !###############################################
 !###############################################
-subroutine init_amr(r,g,m)
+subroutine init_amr(mdl,r,g,m)
+  use mdl_module
   use amr_parameters, ONLY: nhilbert
   use amr_commons, ONLY: run_t, global_t, mesh_t
   use hash
   use hilbert
+  use output_amr_module, only: input_params
   implicit none
+  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -178,7 +183,7 @@ subroutine init_amr(r,g,m)
      ! Read parameters from restart file
      call title(r%nrestart,nchar)
      file_params='output_'//TRIM(nchar)//'/params.out'
-     call input_params(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+     call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
      if(g%myid==1)write(*,'(" Restarting from output number ",I8)')r%nrestart
      if(g%myid==1)write(*,'(" Restart snapshot has ",I8," files")')ncpu_file
   endif
@@ -188,6 +193,4 @@ end subroutine init_amr
 !###############################################
 !###############################################
 !###############################################
-
-
-
+end module init_amr_module

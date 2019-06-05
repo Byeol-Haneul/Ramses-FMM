@@ -96,6 +96,7 @@ end module mdl_parameters
 module mdl_commons
   
   use mdl_parameters
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNPTR
 
   type mdl_t
      
@@ -126,7 +127,27 @@ module mdl_commons
      integer(kind=4),dimension(:),allocatable::send_fetch_array
      integer(kind=4),dimension(:),allocatable::recv_flush_array
      integer(kind=4),dimension(:),allocatable::send_flush_array
+
+     ! Callback functions
+     type(c_funptr),dimension(0:100)::callback
      
   end type mdl_t
+
+  contains
+    subroutine mdl_add_service(mdl,sid,p1,service,nin,nout)
+      USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_INT, C_FUNPTR
+      type(mdl_t)::mdl
+      integer::sid
+      type(*)::p1
+      type(c_funptr), intent(in), value :: service
+      integer :: nin, nout ! NOTE: nin is the size IN BYTES!!
+      mdl%callback(sid) = service
+      mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,nin/4) ! Divide by four to get the number of Integers
+
+    end subroutine mdl_add_service
+
+
+!     callback(MDL_BCAST_PARAMS)%proc => r_broadcast_params
+!     mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,storage_size(pst%s%r)/32)
 
 end module mdl_commons

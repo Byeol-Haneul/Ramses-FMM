@@ -6,6 +6,7 @@ subroutine condinit(r,g,x,u,dx,nn)
   use amr_parameters, only: dp, ndim, nvector
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
+  use input_hydro_condinit_module, only: region_condinit
   implicit none
   type(run_t)::r
   type(global_t)::g

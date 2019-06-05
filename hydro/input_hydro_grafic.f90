@@ -1,25 +1,28 @@
+module input_hydro_grafic_module
+contains
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_input_hydro_grafic(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_input_hydro_grafic(pst,ilevel,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer,VALUE::input_size
+  integer::output_size
+  integer::output_array
   integer::ilevel
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_hydro_grafic(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_input_hydro_grafic(pst%pLower,ilevel,input_size,output_array,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
-     ilevel=input_array(1)
-     call input_hydro_grafic(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call input_hydro_grafic(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
 
 end subroutine r_input_hydro_grafic
@@ -27,11 +30,13 @@ end subroutine r_input_hydro_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_hydro_grafic(r,g,m,ilevel)
+subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
+  use mdl_module
   use amr_parameters, only: ndim,twotondim,dp,nvector
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
+  type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
@@ -100,7 +105,7 @@ subroutine input_hydro_grafic(r,g,m,ilevel)
      write(*,*)i2_min,i2_max
      write(*,*)i3_min,i3_max
      write(*,*)g%n1(ilevel),g%n2(ilevel),g%n3(ilevel)
-     call mdl_abort
+     call mdl_abort(mdl)
   end if
   
   !------------------------------------------
@@ -259,3 +264,4 @@ end subroutine input_hydro_grafic
 !################################################################
 !################################################################
 !################################################################
+end module input_hydro_grafic_module
