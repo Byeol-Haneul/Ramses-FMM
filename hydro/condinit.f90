@@ -33,7 +33,7 @@ subroutine condinit(r,g,x,u,dx,nn)
 #endif
   real(dp),dimension(1:nvector,1:nvar)::q   ! Primitive variables
 
-#ifdef COEUR
+#if CONDINIT==coeur
   integer::i
   real(dp)::r2,rx,ry,rz,d,p,vx,vy,vz,r_trunc,r2_trunc,c2
   real(dp)::omega_code,AU,Msol,pi,M,sigma,r_min,r2_min,omega_const,r_vortex,invr2_vortex
@@ -46,7 +46,7 @@ subroutine condinit(r,g,x,u,dx,nn)
   ! Add here, if you wish, some user-defined initial conditions
   ! ........
 
-#ifdef COEUR
+#if CONDINIT==coeur
 
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m=scale_d*scale_l**3
