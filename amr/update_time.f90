@@ -1,3 +1,8 @@
+module update_time_module
+  type :: in_broadcast_aexp_t
+    real(kind=8)::aexp,hexp
+  end type in_broadcast_aexp_t
+contains
 !################################################################
 !################################################################
 !################################################################
@@ -5,6 +10,7 @@
 subroutine m_update_time(pst,ilevel)
   use amr_parameters, only: dp,n_frw
   use ramses_commons, only: pst_t
+  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -14,7 +20,7 @@ subroutine m_update_time(pst,ilevel)
   real,save::ttstart=0.0
   real(dp)::dt,econs,mcons
   integer::i,itest
-  integer,dimension(1:4)::input_array,dummy
+  type(in_broadcast_aexp_t)::in_broadcast_aexp
   
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -101,7 +107,7 @@ subroutine m_update_time(pst,ilevel)
         end do
         call cpu_time(ttend)
         write(*,*)'Total elapsed time:',ttend-ttstart
-        call mdl_abort
+        call mdl_abort(mdl)
      end if
 
   end if
@@ -147,9 +153,9 @@ subroutine m_update_time(pst,ilevel)
   end if
 
   ! Broadcast aexp and hexp to all CPUs
-  input_array(1:2)=transfer(g%aexp,input_array)
-  input_array(3:4)=transfer(g%hexp,input_array)
-  call r_broadcast_aexp(pst,input_array,4,dummy,0)
+  in_broadcast_aexp%aexp=g%aexp
+  in_broadcast_aexp%hexp=g%hexp
+  call r_broadcast_aexp(pst,in_broadcast_aexp,storage_size(in_broadcast_aexp)/32)
 
   end associate
 
@@ -158,24 +164,24 @@ end subroutine m_update_time
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_broadcast_aexp(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_broadcast_aexp(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  type(in_broadcast_aexp_t)::input
 
-  real(kind=8)::aexp
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_aexp(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,0,input)
+     call r_broadcast_aexp(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     pst%s%g%aexp=transfer(input_array(1:2),aexp)
-     pst%s%g%hexp=transfer(input_array(3:4),aexp)
+     pst%s%g%aexp=input%aexp
+     pst%s%g%hexp=input%hexp
   endif
 
 end subroutine r_broadcast_aexp
@@ -183,19 +189,19 @@ end subroutine r_broadcast_aexp
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_clean_stop(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_clean_stop(pst)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1,input_size,output_size,input_array)
-     call r_clean_stop(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1)
+     call r_clean_stop(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID)
   endif
   
 end subroutine r_clean_stop
@@ -258,8 +264,4 @@ subroutine getmem(outmem)
   end if
 
 end subroutine getmem
-
-
-
-
-
+end module update_time_module

@@ -1,23 +1,28 @@
+module output_hydro_module
+contains
 !###################################################
 !###################################################
 !###################################################
 !###################################################
 recursive subroutine r_output_hydro(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_HYDRO,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_HYDRO,pst%iUpper+1,input_size,output_size,input_array)
      call r_output_hydro(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
      call output_hydro(pst%s%r,pst%s%g,pst%s%m,filename)
@@ -120,8 +125,4 @@ subroutine file_descriptor_hydro(r,filename)
   close(ilun)
 
 end subroutine file_descriptor_hydro
-
-
-
-
-
+end module output_hydro_module

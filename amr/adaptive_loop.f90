@@ -1,10 +1,19 @@
 subroutine adaptive_loop(pst)
+  use mdl_module
   use ramses_commons, only: pst_t
+  use init_amr_module, only: r_init_amr
+  use params_module, only: m_read_params
+  use init_time_module, only: r_init_time
+  use init_hydro_module, only: r_init_hydro
+  use init_part_module, only: r_init_part
+  use input_part_module, only: m_input_part
+  use init_refine_basegrid_module, only: m_init_refine_basegrid
+  use init_refine_restart_module, only: m_init_refine_restart
   implicit none
   type(pst_t)::pst
 
   ! Local variables
-  integer::ilevel,dummy
+  integer::ilevel
   real::tt1,tt2
 
   associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
@@ -15,20 +24,25 @@ subroutine adaptive_loop(pst)
   call m_read_params(pst)
 
   ! Initialize grid variables
-  call r_init_amr(pst,dummy,0,dummy,0)
+  call r_init_amr(pst)
 
   ! Initialize time variables
-  call r_init_time(pst,dummy,0,dummy,0)
+  call r_init_time(pst)
 
   ! Initialize hydro kernel workspace
-  if(r%hydro)call r_init_hydro(pst,dummy,0,dummy,0)
+  if(r%hydro)call r_init_hydro(pst)
 
   ! Initialize particle variables
-  if(r%pic)call r_init_part(pst,dummy,0,dummy,0)
+  if(r%pic)call r_init_part(pst)
 
   ! Read initial particle properties from files
   if(r%pic)call m_input_part(pst)
-  
+
+#ifdef MDL2
+  write(*,*)'I HAVE COME AS FAR AS I DARE!'
+  stop
+#endif
+
   ! Build initial AMR grid
   if(r%nrestart==0)then
      call m_init_refine_basegrid(pst) ! Build coarse grid
@@ -45,7 +59,7 @@ subroutine adaptive_loop(pst)
   write(*,*)'Initial mesh structure'
   do ilevel=r%levelmin,r%nlevelmax
      if(m%noct_tot(ilevel)>0)write(*,999)&
-          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl%ncpu
+          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl_threads(mdl)
   end do
 999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
@@ -75,7 +89,7 @@ subroutine adaptive_loop(pst)
      
   end do
 
-  call r_clean_stop(pst,dummy,0,dummy,0)
+  call r_clean_stop(pst)
 
   return
 

@@ -1,3 +1,15 @@
+module multigrid_fine_coarse
+  type :: in_cmp_residual_mg_t
+    integer::ilevel,ifine
+  end type in_cmp_residual_mg_t
+  type :: in_gauss_seidel_mg_t
+    integer::ilevel,ifine
+    logical::safe,redstep
+  end type in_gauss_seidel_mg_t
+  type :: in_set_scan_flag_t
+    integer::ilevel,ifine
+  end type in_set_scan_flag_t
+contains
 #ifdef GRAV
 ! ########################################################################
 ! ########################################################################
@@ -8,31 +20,31 @@
 ! Mask restriction (bottom-up)
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_restrict_mask(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_restrict_mask(pst,ilevel,input_size,masked,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
-  integer,dimension(1:output_size)::next_output_array
+  integer,VALUE::input_size
+  integer::output_size
+  integer::masked,next_masked
   integer::ilevel
+
   logical::allmasked
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_MASK,pst%iUpper+1,input_size,output_size,input_array)
-     call r_restrict_mask(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
-     output_array(1)=output_array(1)*next_output_array(1)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESTRICT_MASK,pst%iUpper+1,input_size,output_size,masked)
+     call r_restrict_mask(pst%pLower,masked,input_size,masked,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_masked)
+     masked=masked*next_masked
   else
-     ilevel=input_array(1)
      call restrict_mask(pst%s,ilevel,allmasked)
      if(allmasked)then
-        output_array(1)=1
+        masked=1
      else
-        output_array(1)=0
+        masked=0
      endif
   endif
 
@@ -178,29 +190,27 @@ end subroutine unpack_flush_restrict_mask
 ! Residual computation
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cmp_residual_mg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_residual_mg(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  type(in_cmp_residual_mg_t)::input
 
-  integer::ilevel,ifine
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_residual_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,0,input)
+     call r_cmp_residual_mg(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     ilevel=input_array(1)
-     ifine=input_array(2)
-     if(ifine==ilevel)then
-        call cmp_residual_mg(pst%s,pst%s%m%grid_dict,ifine)
+     if(input%ifine==input%ilevel)then
+        call cmp_residual_mg(pst%s,pst%s%m%grid_dict,input%ifine)
      else
-        call cmp_residual_mg(pst%s,pst%s%m%mg_dict,ifine)
+        call cmp_residual_mg(pst%s,pst%s%m%mg_dict,input%ifine)
      endif
   endif
 
@@ -401,34 +411,27 @@ end subroutine unpack_fetch_mg
 ! Gauss-Seidel Red-Black sweeps
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_gauss_seidel_mg(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_gauss_seidel_mg(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  type(in_gauss_seidel_mg_t)::input
 
-  integer::ilevel,ifine,isafe,iredstep
-  logical::safe,redstep
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_gauss_seidel_mg(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,0,input)
+     call r_gauss_seidel_mg(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     ilevel=input_array(1)
-     ifine=input_array(2)
-     isafe=input_array(3)
-     iredstep=input_array(4)
-     safe=(isafe==1)
-     redstep=(iredstep==1)
-     if(ifine==ilevel)then
-        call gauss_seidel_mg(pst%s,pst%s%m%grid_dict,ifine,safe,redstep)
+     if(input%ifine==input%ilevel)then
+        call gauss_seidel_mg(pst%s,pst%s%m%grid_dict,input%ifine,input%safe,input%redstep)
      else
-        call gauss_seidel_mg(pst%s,pst%s%m%mg_dict,ifine,safe,redstep)
+        call gauss_seidel_mg(pst%s,pst%s%m%mg_dict,input%ifine,input%safe,input%redstep)
      endif
   endif
 
@@ -603,24 +606,22 @@ end subroutine gauss_seidel_mg
 ! Reset correction
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_reset_correction(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_reset_correction(pst,ilevel,input_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer,VALUE::input_size
   integer::igrid,ilevel
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESET_CORRECTION,pst%iUpper+1,input_size,output_size,input_array)
-     call r_reset_correction(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESET_CORRECTION,pst%iUpper+1,input_size,0,ilevel)
+     call r_reset_correction(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      do igrid=pst%s%m%head_mg(ilevel),pst%s%m%tail_mg(ilevel)
         pst%s%m%grid(igrid)%phi(1:twotondim)=0.0d0
      end do
@@ -632,24 +633,23 @@ end subroutine r_reset_correction
 ! Residual restriction
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_restrict_residual(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_restrict_residual(pst,ilevel,input_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer,VALUE::input_size
   integer::ilevel
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_RESTRICT_RESIDUAL,pst%iUpper+1,input_size,output_size,input_array)
-     call r_restrict_residual(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RESTRICT_RESIDUAL,pst%iUpper+1,input_size,0,ilevel)
+     call r_restrict_residual(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call restrict_residual(pst%s,ilevel)
   endif
 
@@ -824,24 +824,23 @@ end subroutine unpack_flush_restrict_res
 ! Interpolation and correction
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_interpolate_and_correct(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_interpolate_and_correct(pst,ilevel,input_size)
+  use mdl_module
   use amr_parameters, only: twotondim
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer,VALUE::input_size
   integer::ilevel
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst%iUpper+1,input_size,output_size,input_array)
-     call r_interpolate_and_correct(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst%iUpper+1,input_size,0,ilevel)
+     call r_interpolate_and_correct(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call interpolate_and_correct(pst%s,ilevel)
   endif
 
@@ -997,29 +996,27 @@ end subroutine unpack_fetch_phi
 ! Flag settings used to speed-up the sweeps
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_set_scan_flag(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_set_scan_flag(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hash
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  type(in_set_scan_flag_t)::input
 
-  integer::ilevel,ifine
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,output_size,input_array)
-     call r_set_scan_flag(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_SCAN_FLAG,pst%iUpper+1,input_size,0,input)
+     call r_set_scan_flag(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID)
   else
-     ilevel=input_array(1)
-     ifine=input_array(2)
-     if(ifine==ilevel)then
-        call set_scan_flag(pst%s,pst%s%m%grid_dict,ifine)
+     if(input%ifine==input%ilevel)then
+        call set_scan_flag(pst%s,pst%s%m%grid_dict,input%ifine)
      else
-        call set_scan_flag(pst%s,pst%s%m%mg_dict,ifine)
+        call set_scan_flag(pst%s,pst%s%m%mg_dict,input%ifine)
      endif
   endif
 
@@ -1188,31 +1185,26 @@ end subroutine unpack_fetch_scan
 ! Compute norm of residual 
 ! ------------------------------------------------------------------------
 
-recursive subroutine r_cmp_residual_norm2(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_cmp_residual_norm2(pst,ilevel,input_size,norm2,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
-  integer,dimension(1:output_size)::next_output_array
+  integer,VALUE::input_size
+  integer::output_size
   integer::ilevel
   real(kind=8)::norm2,next_norm2
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,pst%iUpper+1,input_size,output_size,input_array)
-     call r_cmp_residual_norm2(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
-     norm2=transfer(output_array,norm2)
-     next_norm2=transfer(next_output_array,next_norm2)
+     rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_cmp_residual_norm2(pst%pLower,ilevel,input_size,norm2,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_norm2)
      norm2=norm2+next_norm2
-     output_array=transfer(norm2,output_array)
   else
-     ilevel=input_array(1)
      call cmp_residual_norm2(pst%s%r,pst%s%m,ilevel,norm2)
-     output_array=transfer(norm2,output_array)
   endif
 
 end subroutine r_cmp_residual_norm2
@@ -1252,3 +1244,4 @@ end subroutine cmp_residual_norm2
 
 #endif
 
+end module multigrid_fine_coarse

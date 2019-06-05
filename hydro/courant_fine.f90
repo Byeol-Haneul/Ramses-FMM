@@ -1,48 +1,37 @@
+module courant_fine_module
+
+type :: out_courant_fine_t
+  real(kind=8)::mass,ekin,eint,dt
+end type out_courant_fine_t
+
+contains
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_courant_fine(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_courant_fine(pst,ilevel,input_size,output,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  integer::output_size
+  type(out_courant_fine_t) output, next_output
 
-  integer,dimension(1:output_size)::next_output_array
   integer::ilevel
-  real(kind=8)::mass,ekin,eint,dt
-  real(kind=8)::next_mass,next_ekin,next_eint,next_dt
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_COURANT_FINE,pst%iUpper+1,input_size,output_size,input_array)
-     call r_courant_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
-     mass=transfer(output_array(1:2),mass)
-     ekin=transfer(output_array(3:4),ekin)
-     eint=transfer(output_array(5:6),eint)
-     dt=transfer(output_array(7:8),dt)
-     next_mass=transfer(next_output_array(1:2),next_mass)
-     next_ekin=transfer(next_output_array(3:4),next_ekin)
-     next_eint=transfer(next_output_array(5:6),next_eint)
-     next_dt=transfer(next_output_array(7:8),next_dt)
-     mass=mass+next_mass
-     ekin=ekin+next_ekin
-     eint=eint+next_eint
-     dt=MIN(dt,next_dt)
-     output_array(1:2)=transfer(mass,output_array)
-     output_array(3:4)=transfer(ekin,output_array)
-     output_array(5:6)=transfer(eint,output_array)
-     output_array(7:8)=transfer(dt,output_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_COURANT_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_courant_fine(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%mass=output%mass+next_output%mass
+     output%ekin=output%ekin+next_output%ekin
+     output%eint=output%eint+next_output%eint
+     output%dt=MIN(output%dt,next_output%dt)
   else
-     ilevel=input_array(1)
-     call courant_fine(pst%s%r,pst%s%g,pst%s%m,ilevel,mass,ekin,eint,dt)
-     output_array(1:2)=transfer(mass,output_array)
-     output_array(3:4)=transfer(ekin,output_array)
-     output_array(5:6)=transfer(eint,output_array)
-     output_array(7:8)=transfer(dt,output_array)
+     call courant_fine(pst%s%r,pst%s%g,pst%s%m,ilevel,output%mass,output%ekin,output%eint,output%dt)
   endif
 
 end subroutine r_courant_fine
@@ -135,4 +124,4 @@ end subroutine courant_fine
 !###########################################################
 !###########################################################
 !###########################################################
-
+end module courant_fine_module

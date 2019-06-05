@@ -1,7 +1,13 @@
+module params_module
+
+contains
+
 subroutine m_read_params(pst)
   use amr_parameters
   use hydro_parameters
   use ramses_commons, only: pst_t
+  use mdl_module
+  use movie_module, only: set_movie_vars
   implicit none
   type(pst_t)::pst
 
@@ -263,7 +269,7 @@ subroutine m_read_params(pst)
   if(nvar<ndim+2)then
      write(*,*)'You should have: nvar>=ndim+2'
      write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
-     call mdl_abort
+     call mdl_abort(s%mdl)
   endif
 
   ! Write information about git version
@@ -275,7 +281,7 @@ subroutine m_read_params(pst)
      write(*,*)'You should type: ramses3d input.nml [nrestart]'
      write(*,*)'File input.nml should contain a parameter namelist'
      write(*,*)'nrestart is optional'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   END IF
   CALL getarg(1,infile)
 
@@ -286,7 +292,7 @@ subroutine m_read_params(pst)
   INQUIRE(file=infile,exist=nml_ok)
   if(.not. nml_ok)then
      write(*,*)'File '//TRIM(infile)//' does not exist'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
 
   open(1,file=infile)
@@ -381,7 +387,7 @@ subroutine m_read_params(pst)
   read(1,NML=init_params,END=101)
   goto 102
 101 write(*,*)' You need to set up namelist &INIT_PARAMS in parameter file'
-  call mdl_abort
+  call mdl_abort(s%mdl)
 102 rewind(1)
   if(nlevelmax>levelmin)read(1,NML=refine_params)
   rewind(1)
@@ -396,11 +402,11 @@ subroutine m_read_params(pst)
   !-----------------
   if(nlevelmax>MAXLEVEL)then
      write(*,*) 'Error: nlevelmax>MAXLEVEL'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
   if(nregion>MAXREGION)then
      write(*,*) 'Error: nregion>MAXREGION'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
   
   !-----------------------------------
@@ -449,7 +455,7 @@ subroutine m_read_params(pst)
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'
      write(*,*)'Aborting...'
-     call mdl_abort
+     call mdl_abort(s%mdl)
   end if
 
   ! Fill in all run parameters in corresponding structure
@@ -609,35 +615,32 @@ subroutine m_broadcast_params(pst)
   ! This routine is the master procedure to broadcast the run
   ! parameters to all the CPUs.
   !--------------------------------------------------------------------
-  integer,dimension(1:1)::dummy
-  integer,dimension(:),allocatable::input_array
 
   ! Broadcast parameters to all CPUs.
-  allocate(input_array(1:storage_size(pst%s%r)/32))
-  input_array=transfer(pst%s%r,input_array)
-  call r_broadcast_params(pst,input_array,storage_size(pst%s%r)/32,dummy,0)
-  deallocate(input_array)
-
+  call r_broadcast_params(pst,pst%s%r,storage_size(pst%s%r)/32)
 end subroutine m_broadcast_params
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_broadcast_params(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_broadcast_params(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
+  use amr_commons, only: run_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  type(run_t)::input
+
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_params(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+    rID = mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,input_size,0,input)
+    call r_broadcast_params(pst%pLower,input,input_size)
+    call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     pst%s%r=transfer(input_array,pst%s%r)
+    pst%s%r=input
   endif
 
 end subroutine r_broadcast_params
@@ -670,21 +673,25 @@ end subroutine m_broadcast_global
 !#########################################################################
 !#########################################################################
 recursive subroutine r_broadcast_global(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BCAST_GLOBAL,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_BCAST_GLOBAL,pst%iUpper+1,input_size,output_size,input_array)
      call r_broadcast_global(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      pst%s%g=transfer(input_array,pst%s%g)
-     pst%s%g%myid=pst%s%mdl%myid
+     pst%s%g%myid=mdl_self(pst%s%mdl)
   endif
 
 end subroutine r_broadcast_global
@@ -692,3 +699,4 @@ end subroutine r_broadcast_global
 !#########################################################################
 !#########################################################################
 !#########################################################################
+end module params_module

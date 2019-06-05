@@ -1,3 +1,5 @@
+module init_refine_restart_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -6,6 +8,11 @@ subroutine m_init_refine_restart(pst)
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use hilbert
+  use params_module, only: m_broadcast_params, m_broadcast_global
+  use init_refine_basegrid_module, only:r_init_refine_basegrid,r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
+  use load_balance_module, only: r_broadcast_bound_key
+  use rho_fine_module, only: m_rho_fine
+  use output_amr_module, only: input_params
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
@@ -16,7 +23,7 @@ subroutine m_init_refine_restart(pst)
   character(LEN=5)::nchar,ncharcpu
   integer(kind=8),dimension(1:nhilbert)::zero_key
   integer(kind=8),dimension(1:nhilbert,0:pst%s%g%ncpu)::bound_key
-  integer::i,ilevel,icpu,ilun,ipos,dummy
+  integer::i,ilevel,icpu,ilun,ipos,dummy(1)
   integer::levelmin_file,nlevelmax_file
   integer::levelmin_max,nlevelmax_min,noct_tmp
   integer::ncpu_file,input_size,output_size
@@ -33,7 +40,7 @@ subroutine m_init_refine_restart(pst)
   ! Read parameters from restart file
   call title(r%nrestart,nchar)
   file_params='output_'//TRIM(nchar)//'/params.out'
-  call input_params(r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+  call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
   write(*,'(" Restart snapshot has levelmin=",I4)')levelmin_file
   write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
 
@@ -53,7 +60,7 @@ subroutine m_init_refine_restart(pst)
      do ilevel=r%levelmin,levelmin_max-1
         
         ! Set unigrid at coarser levels
-        call r_init_refine_basegrid(pst,ilevel,1,dummy,0)
+        call r_init_refine_basegrid(pst,ilevel,1)
         
         ! Get total, min and max grid count (only in master)
         call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),1)
@@ -130,7 +137,7 @@ subroutine m_init_refine_restart(pst)
      allocate(input_array(1:input_size))
      input_array(1)=ilevel
      input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
-     call r_broadcast_bound_key(pst,g%ncpu,input_array,input_size,dummy,0)
+     call r_broadcast_bound_key(pst,input_array,input_size,dummy,0)
      deallocate(input_array)
 
   end do
@@ -153,12 +160,14 @@ end subroutine m_init_refine_restart
 !###############################################
 !###############################################
 recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
@@ -170,12 +179,13 @@ recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_arr
   integer(kind=8),dimension(1)::dummy
   integer(kind=8),dimension(:,:),allocatable::bound_key
   integer(kind=8),dimension(:,:),allocatable::next_bound_key
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,pst%iUpper+1,input_size,output_size,input_array)
      call r_init_refine_restart(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
      allocate(next_bound_key(1:nhilbert,0:pst%s%g%ncpu))
      bound_key=reshape(transfer(output_array,dummy),[nhilbert,pst%s%g%ncpu+1])
@@ -447,3 +457,4 @@ end subroutine init_refine_restart
 !################################################################
 !################################################################
 !################################################################
+end module init_refine_restart_module

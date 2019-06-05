@@ -1,3 +1,15 @@
+module newdt_fine_module
+
+type :: out_newdt_part_t
+  real(kind=8)::ekin,vmax
+end type out_newdt_part_t
+
+type :: in_broadcast_dt_t
+  integer::ilevel
+  real(kind=8)::dtnew,dtold
+end type in_broadcast_dt_t
+
+contains
 !#####################################################################
 !#####################################################################
 !#####################################################################
@@ -5,6 +17,7 @@
 subroutine m_newdt_fine(pst,ilevel)
   use amr_parameters, only: dp,nvector
   use ramses_commons, only: pst_t
+  use courant_fine_module, only: r_courant_fine, out_courant_fine_t
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -16,10 +29,13 @@ subroutine m_newdt_fine(pst,ilevel)
   ! This routine also compute the particle kinetic energy.
   !-----------------------------------------------------------
   real(dp)::dx,tff,fourpi,threepi2
-  real(kind=8)::mass,ekin,eint,dt,vmax
-  integer,dimension(1:4)::part_array,dummy
+  real(kind=8)::dt,ekin,vmax
+  integer,dimension(1:4)::dummy
   integer,dimension(1:5)::input_array
   integer,dimension(1:8)::output_array
+  type(out_courant_fine_t)::out_courant_fine
+  type(out_newdt_part_t)::out_newdt_part
+  type(in_broadcast_dt_t)::in_broadcast_dt
   
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -51,9 +67,9 @@ subroutine m_newdt_fine(pst,ilevel)
 
   ! Particle-based Courant condition
   if(r%pic)then
-     call r_newdt_part(pst,ilevel,1,part_array,4)
-     ekin=transfer(part_array(1:2),ekin)
-     vmax=transfer(part_array(3:4),vmax)
+     call r_newdt_part(pst,ilevel,1,out_newdt_part,4)
+     ekin=out_newdt_part%ekin
+     vmax=out_newdt_part%vmax
      dt=r%courant_factor * dx/vmax
      g%ekin_tot=g%ekin_tot+ekin
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt)
@@ -61,15 +77,11 @@ subroutine m_newdt_fine(pst,ilevel)
 
   ! Hydro-based Courant condition
   if(r%hydro)then
-     call r_courant_fine(pst,ilevel,1,output_array,8)
-     mass=transfer(output_array(1:2),mass)
-     ekin=transfer(output_array(3:4),ekin)
-     eint=transfer(output_array(5:6),eint)
-     dt=transfer(output_array(7:8),dt)
-     g%mass_tot=g%mass_tot+mass
-     g%ekin_tot=g%ekin_tot+ekin
-     g%eint_tot=g%eint_tot+eint
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt)
+     call r_courant_fine(pst,ilevel,1,out_courant_fine,8)
+     g%mass_tot=g%mass_tot+out_courant_fine%mass
+     g%ekin_tot=g%ekin_tot+out_courant_fine%ekin
+     g%eint_tot=g%eint_tot+out_courant_fine%eint
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),out_courant_fine%dt)
   endif  
   
   ! Adaptive time step condition
@@ -79,10 +91,10 @@ subroutine m_newdt_fine(pst,ilevel)
   if(r%verbose)write(*,'("   New time step for level ",I2," is ",1PE12.5)')ilevel,g%dtnew(ilevel)
 
   ! Broadcast new and old time steps to all CPUs
-  input_array(1)=ilevel
-  input_array(2:3)=transfer(g%dtnew(ilevel),input_array)
-  input_array(4:5)=transfer(g%dtold(ilevel),input_array)
-  call r_broadcast_dt(pst,input_array,5,dummy,0)
+  in_broadcast_dt%ilevel=ilevel
+  in_broadcast_dt%dtnew=g%dtnew(ilevel)
+  in_broadcast_dt%dtold=g%dtold(ilevel)
+  call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/8)
 
   end associate
   
@@ -91,37 +103,27 @@ end subroutine m_newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
-recursive subroutine r_newdt_part(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
-  integer,dimension(1:output_size)::next_output_array
+  integer,VALUE::input_size
+  integer::output_size
+  type(out_newdt_part_t)::output,next_output
   integer::ilevel
-  real(kind=8)::ekin,vmax
-  real(kind=8)::next_ekin,next_vmax
+
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_NEWDT_PART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_newdt_part(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
-     ekin=transfer(output_array(1:2),ekin)
-     vmax=transfer(output_array(3:4),vmax)
-     next_ekin=transfer(next_output_array(1:2),next_ekin)
-     next_vmax=transfer(next_output_array(3:4),next_vmax)
-     ekin=ekin+next_ekin
-     vmax=MAX(vmax,next_vmax)
-     output_array(1:2)=transfer(ekin,output_array)
-     output_array(3:4)=transfer(vmax,output_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_NEWDT_PART,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_newdt_part(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%ekin=output%ekin+next_output%ekin
+     output%vmax=MAX(output%vmax,next_output%vmax)
   else
-     ilevel=input_array(1)
-     call newdt_part(pst%s%r,pst%s%g,pst%s%p,ilevel,ekin,vmax)
-     output_array(1:2)=transfer(ekin,output_array)
-     output_array(3:4)=transfer(vmax,output_array)
+     call newdt_part(pst%s%r,pst%s%g,pst%s%p,ilevel,output%ekin,output%vmax)
   endif
 
 end subroutine r_newdt_part
@@ -163,26 +165,24 @@ end subroutine newdt_part
 !#####################################################################
 !#####################################################################
 !#####################################################################
-recursive subroutine r_broadcast_dt(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_broadcast_dt(pst,input,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  type(in_broadcast_dt_t)::input
 
-  integer::ilevel
-  real(kind=8)::dt
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_BROADCAST_DT,pst%iUpper+1,input_size,output_size,input_array)
-     call r_broadcast_dt(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_DT,pst%iUpper+1,input_size,0,input)
+     call r_broadcast_dt(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
-     pst%s%g%dtnew(ilevel)=transfer(input_array(2:3),dt)
-     pst%s%g%dtold(ilevel)=transfer(input_array(4:5),dt)
+     pst%s%g%dtnew(input%ilevel)=input%dtnew
+     pst%s%g%dtold(input%ilevel)=input%dtold
   endif
 
 end subroutine r_broadcast_dt
@@ -190,6 +190,4 @@ end subroutine r_broadcast_dt
 !#####################################################################
 !#####################################################################
 !#####################################################################
-
-
-
+end module newdt_fine_module

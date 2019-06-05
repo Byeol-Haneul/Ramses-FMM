@@ -3,6 +3,11 @@ project(ramses3d)
 enable_language (Fortran)
 get_filename_component (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Release build with debug info selected")
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
 #if (Fortran_COMPILER_NAME MATCHES "ifort.*")
 #  set (CMAKE_Fortran_FLAGS "-cpp")
 #endif()
@@ -25,9 +30,11 @@ else()
 endif()
 if(MDL2)
   add_subdirectory(mdl2)
-  target_link_libraries(${PROJECT_NAME} mdl2 openpa)
+  target_link_libraries(${PROJECT_NAME} mdl2)
   target_sources(${PROJECT_NAME} PRIVATE mdl2/mdl.f90)
   add_definitions(-DMDL2)
+else()
+  target_sources(${PROJECT_NAME} PRIVATE mdl1/mdl.f90)
 endif(MDL2)
 
 #if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
@@ -35,11 +42,11 @@ endif(MDL2)
 
 # The Fortran source contains preprocessor directives which are enable differently for each compiler
 if (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-cpp" )
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-cpp -recursive" )
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none" )
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none" )
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-e Z" )
+ set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-e ZR" )
 endif()
 
 #if(Git_FOUND)
@@ -153,7 +160,6 @@ PRIVATE	amr/ramses.f90
 	poisson/grav_ana.f90
 	poisson/phi_fine_cg.f90
 	hydro/upload.f90
-	poisson/interpol_phi.f90
 	poisson/poisson_flag.f90
 	poisson/multigrid_fine_commons.f90
 	poisson/multigrid_fine_coarse.f90

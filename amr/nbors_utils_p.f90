@@ -269,6 +269,7 @@ end subroutine unlock_cache_p
 !##############################################################
 !##############################################################
 subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
+  use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: oct
   use hydro_parameters, only: nvar
@@ -285,6 +286,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
+#ifndef MDL2
   !
   ! This routine acquires the grid 
   ! corresponding to the input hash key.
@@ -341,8 +343,8 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 
   ! Check if grid sits inside processor boundaries
 !  if (m%domain_hilbert(ilevel)%in_rank(hk)) return
-  in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid-1)).and. &
-       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid),hk)
+  in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
+       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,mdl_self(mdl)),hk)
   if (in_rank)then ! The grid does not exist in the local domain
      nullify(child)
      return
@@ -532,17 +534,19 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 #endif
 
   end associate
-
+#endif
 end subroutine get_grid_p
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
+subroutine interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   use amr_parameters, only: ndim,dp,twotondim,threetondim
   use amr_commons, only: nbor,oct
   use amr_commons, only: mesh_t
+  use mdl_module
   implicit none
+  type(mdl_t)::mdl
   type(mesh_t)::m
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
@@ -577,7 +581,7 @@ subroutine interpol_phi_p(m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         ind_nbr=ind_nbor(ind_father)
         if (.not.associated(grid_nbr)) then 
            write(*,*)'no all neighbors present in interpol_phi...'
-           call mdl_abort ! Remove in case it happens
+           call mdl_abort(mdl) ! Remove in case it happens
            add=coeff*(grid_cen%phi(ind_cen)+&
                 & (grid_cen%phi(ind_cen)-grid_cen%phi_old(ind_cen))*tfrac)
         else
@@ -593,23 +597,23 @@ end subroutine interpol_phi_p
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_save_phi_old(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_save_phi_old(pst,ilevel,input_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
+  integer,VALUE::input_size
+  integer::output_size
   integer::ilevel
 
+  integer::rID
+
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_SAVE_PHI_OLD,pst%iUpper+1,input_size,output_size,input_array)
-     call r_save_phi_old(pst%pLower,input_array,input_size,input_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SAVE_PHI_OLD,pst%iUpper+1,input_size,0,ilevel)
+     call r_save_phi_old(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
      call save_phi_old(pst%s%m,ilevel)
   endif
 

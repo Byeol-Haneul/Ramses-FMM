@@ -251,6 +251,7 @@ end subroutine unlock_cache
 !##############################################################
 !##############################################################
 subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
+  use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -266,6 +267,7 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
   logical::flush_cache,fetch_cache
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
+#ifndef MDL2
   !
   ! This routine acquires the grid 
   ! corresponding to the input hash key.
@@ -320,8 +322,8 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
 
   ! Check if grid sits inside processor boundaries
 !  if (m%domain_hilbert(ilevel)%in_rank(hk)) return
-  in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid-1)).and. &
-       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,mdl%myid),hk)
+  in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
+       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,mdl_self(mdl)),hk)
   if (in_rank) return
 
   ! Determine parent processor
@@ -502,13 +504,15 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
 #endif
 
   end associate
-
+#endif
 end subroutine get_grid
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine check_mail(s,comm_id,hash_dict)
+  use mdl_module
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -675,7 +679,7 @@ subroutine check_mail(s,comm_id,hash_dict)
                        write(*,*)'No more free memory'
                        write(*,*)'while refining...'
                        write(*,*)'Increase ngridmax'
-                       call mdl_abort
+                       call mdl_abort(mdl)
                     endif
                     
                     m%grid(ichild)%lev=hash_child(0)
@@ -720,12 +724,14 @@ subroutine check_mail(s,comm_id,hash_dict)
   end associate
   
 #endif
+#endif
 end subroutine check_mail
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine destage(s,igrid,hash_dict)
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -803,12 +809,14 @@ subroutine destage(s,igrid,hash_dict)
   end associate
 
 #endif
+#endif
 end subroutine destage
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine close_cache(s,hash_dict)
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -909,15 +917,36 @@ subroutine close_cache(s,hash_dict)
   end associate
   
 #endif
+#endif
 end subroutine close_cache
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine open_cache(s,cache_operation,domain_decompos)
+#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
+  use flag_utils, only:pack_fetch_flag, unpack_fetch_flag,&
+                      init_flush_initflag, pack_flush_initflag, unpack_flush_initflag
+  use load_balance_module, only: pack_flush_loadbalance, unpack_flush_loadbalance
+  use refine_utils, only: init_flush_derefine,pack_flush_derefine,unpack_flush_derefine,&
+                          pack_flush_refine,unpack_flush_refine,&
+                          pack_fetch_refine,unpack_fetch_refine
+  use upload_module, only: init_flush_upload,pack_flush_upload,unpack_flush_upload
+  use rho_fine_module, only: init_flush_multipole,pack_flush_multipole,unpack_flush_multipole,&
+                        init_flush_rho,pack_flush_rho,unpack_flush_rho,pack_fetch_split,unpack_fetch_split
+  use move_fine_module, only: pack_fetch_kick,unpack_fetch_kick
+  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
+  use phi_fine_cg_module, only: pack_fetch_cg,unpack_fetch_cg,pack_fetch_interpol,unpack_fetch_interpol
+  use multigrid_fine_commons, only: pack_flush_build_mg,unpack_flush_build_mg
+  use multigrid_fine_coarse, only: init_flush_restrict_mask,pack_flush_restrict_mask,unpack_flush_restrict_mask,&
+                                  init_flush_restrict_res,pack_flush_restrict_res,unpack_flush_restrict_res,&
+                                  pack_fetch_restrict_res,unpack_fetch_restrict_res,&
+                                  pack_fetch_scan,pack_fetch_mg,pack_fetch_phi,&
+                                  unpack_fetch_scan,unpack_fetch_mg,unpack_fetch_phi
+  use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
   use cache_commons
   use hash
   implicit none
@@ -1161,7 +1190,7 @@ subroutine open_cache(s,cache_operation,domain_decompos)
   end associate
   
 #endif
-
+#endif
 end subroutine open_cache
 !##############################################################
 !##############################################################

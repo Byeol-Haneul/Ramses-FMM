@@ -1,3 +1,5 @@
+module move_fine_module
+contains
 !################################################################
 !################################################################
 !################################################################
@@ -13,7 +15,7 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
   ! Move particles according to kick-drift leap frog scheme.
   !--------------------------------------------------------------
   integer,dimension(1:2)::input_array
-  integer::dummy
+  integer::dummy(2)
 
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%r%verbose)write(*,'("   Entering kick_drift_part for level",i2," and action=",i2)')ilevel,action_part
@@ -28,22 +30,25 @@ end subroutine m_kick_drift_part
 !################################################################
 !################################################################
 recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
   integer::action_part
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
      call r_kick_drift_part(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      ilevel=input_array(1)
      action_part=input_array(2)
@@ -350,3 +355,4 @@ end subroutine unpack_fetch_kick
 !#########################################################################
 !#########################################################################
 !#########################################################################
+end module move_fine_module

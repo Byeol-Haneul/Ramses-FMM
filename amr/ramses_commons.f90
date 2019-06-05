@@ -1,16 +1,14 @@
 module ramses_commons
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
-  use mdl_commons, only: mdl_t
-  
+  use mdl_module, only: mdl_t
   type ramses_t
 
      type(run_t)::r
      type(global_t)::g
      type(mesh_t)::m
      type(part_t)::p
-     type(mdl_t)::mdl
-     
+     type(mdl_t),pointer::mdl => null()
   end type ramses_t
 
   type pst_t

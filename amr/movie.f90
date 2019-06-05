@@ -1,3 +1,5 @@
+module movie_module
+contains
 !=======================================================================
 !=======================================================================
 !=======================================================================
@@ -6,6 +8,7 @@ subroutine m_output_frame(pst)
   use amr_parameters, only: dp,ndim,nvector,twotondim,flen
   use hydro_parameters, only: nvar
   use ramses_commons, only: pst_t
+  use output_amr_module, only: output_info
   implicit none
   type(pst_t)::pst
 
@@ -149,12 +152,14 @@ end subroutine m_output_frame
 !=======================================================================
 !=======================================================================
 recursive subroutine r_output_frame(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   use hilbert
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
 
@@ -162,12 +167,13 @@ recursive subroutine r_output_frame(pst,input_array,input_size,output_array,outp
   
   integer::ind_proj,ind_var
   real(kind=8),dimension(:),allocatable::map,next_map
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_OUTPUT_FRAME,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_FRAME,pst%iUpper+1,input_size,output_size,input_array)
      call r_output_frame(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      allocate(map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      allocate(next_map(1:pst%s%r%nw_frame*pst%s%r%nh_frame))
      map=transfer(output_array,map)
@@ -448,3 +454,4 @@ end subroutine set_movie_vars
 !=======================================================================
 !=======================================================================
 !=======================================================================
+end module movie_module

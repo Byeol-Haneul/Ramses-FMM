@@ -1,3 +1,5 @@
+module input_part_grafic_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -11,7 +13,7 @@ subroutine m_input_part_grafic(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer::dummy
+  integer::dummy(1)
   integer,allocatable,dimension(:)::input_array
 
   if(pst%s%r%verbose)write(*,*)'Entering input_part_grafic'
@@ -43,12 +45,14 @@ end subroutine m_input_part_grafic
 !#########################################################################
 !#########################################################################
 recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
   !--------------------------------------------------------------------
@@ -56,11 +60,12 @@ recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array
   ! particles from a Ramses restart file.
   !--------------------------------------------------------------------
   integer(i8b)::npart_tot
+  integer::rID
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,pst%iUpper+1,input_size,output_size,input_array)
      call r_input_part_grafic(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      npart_tot=transfer(input_array,npart_tot)
      call input_part_grafic(pst%s%r,pst%s%g,pst%s%p,npart_tot)
@@ -275,4 +280,4 @@ end subroutine input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-
+end module input_part_grafic_module

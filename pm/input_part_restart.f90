@@ -1,17 +1,22 @@
+module input_part_restart_module
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine m_input_part_restart(pst)
+  use mdl_module
   use amr_parameters, only: ndim,dp,i8b
   use ramses_commons, only: pst_t
+  use output_amr_module, only: input_header
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer::icpu,ilun,ncpu_file,dummy
+  integer::icpu,ilun,ncpu_file
+  integer::dummy(1)
   integer(i8b)::npart_tot_file,npart_tot_check
   character(LEN=5)::nchar,ncharcpu
   character(LEN=80)::file_head,file_part
@@ -41,7 +46,7 @@ subroutine m_input_part_restart(pst)
   end do
   if(npart_tot_check.NE.npart_tot_file)then
      write(*,*)' Input file corrupted'
-     call mdl_abort
+     call mdl_abort(pst%s%mdl)
   endif
 
   ! Call recursive slave routine
@@ -56,23 +61,28 @@ end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
 recursive subroutine r_input_part_restart(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
+  integer,VALUE::input_size
+  integer::output_size
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
+
+  integer::rID
+
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
   !--------------------------------------------------------------------
 
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,pst%iUpper+1,input_size,output_size,input_array)
      call r_input_part_restart(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      call input_part_restart(pst%s%r,pst%s%g,pst%s%p,input_size,input_array)
   endif
@@ -246,4 +256,4 @@ end subroutine input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-
+end module input_part_restart_module

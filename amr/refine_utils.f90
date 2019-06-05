@@ -1,9 +1,17 @@
+module refine_utils
+  type out_refine_fine_t
+    integer::make,kill
+  end type out_refine_fine_t
+contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine m_refine_fine(pst,ilevel)
+  use mdl_module
   use ramses_commons, only: pst_t
+  use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
+  use load_balance_module, only: m_load_balance, r_balance_part
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -12,7 +20,9 @@ subroutine m_refine_fine(pst,ilevel)
   ! from level ilevel to nlevelmax.
   !--------------------------------------------------------------------
   integer::ilev,dummy
+  type(out_refine_fine_t)::out_refine_fine
   integer,dimension(1:2)::noct
+  integer,dimension(1)::alevel
 
   associate(s=>pst%s)
   
@@ -23,12 +33,12 @@ subroutine m_refine_fine(pst,ilevel)
 111 format(' Entering refine_fine for level ',I2)
 
   ! Create new octs and destroy unecessary octs
-  call r_refine_fine(pst,ilevel,1,noct,2)
+  call r_refine_fine(pst,ilevel,1,out_refine_fine,2)
 
-  if(s%r%verbose)write(*,112)noct(1)
+  if(s%r%verbose)write(*,112)out_refine_fine%make
 112 format(' ==> Make ',i6,' sub-grids')
 
-  if(s%r%verbose)write(*,113)noct(2)
+  if(s%r%verbose)write(*,113)out_refine_fine%kill
 113 format(' ==> Kill ',i6,' sub-grids')
 
   ! Get total, min and max grid count (only in master)
@@ -55,7 +65,7 @@ subroutine m_refine_fine(pst,ilevel)
   call r_noct_used_max(pst,ilevel,1,s%m%noct_used_max,1)
 
   ! Balance particles across cpus
-  if(s%mdl%ncpu>1.AND.ilevel==s%r%levelmin)then
+  if(mdl_threads(s%mdl)>1.AND.ilevel==s%r%levelmin)then
      if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
         if(s%r%verbose)write(*,*)'Entering balance_part for level',s%r%levelmin
         call r_balance_part(pst,ilevel,1,dummy,0)
@@ -69,28 +79,29 @@ end subroutine m_refine_fine
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_refine_fine(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
+  use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer::input_size,output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  integer,VALUE::input_size
+  integer::output_size
+  integer::ilevel
+  type(out_refine_fine_t)::output
 
-  integer,dimension(1:output_size)::next_output_array
-  integer::ilevel,ncreate,nkill
+  type(out_refine_fine_t)::next_output
+  integer::ncreate,nkill
+  integer::rID
   
   if(pst%nLower>0)then
-     call mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,input_array)
-     call r_refine_fine(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,pst%iUpper+1,output_size,next_output_array)
-     output_array=output_array+next_output_array
+     rID = mdl_send_request(pst%s%mdl,MDL_REFINE_FINE,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_refine_fine(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%make = output%make + next_output%make
+     output%kill = output%kill + next_output%kill
   else
-     ilevel=input_array(1)
-     call refine_fine(pst%s,ilevel,ncreate,nkill)
-     output_array(1)=ncreate
-     output_array(2)=nkill
+     call refine_fine(pst%s,ilevel,output%make,output%kill)
   endif
 
 end subroutine r_refine_fine
@@ -615,6 +626,7 @@ end subroutine unpack_flush_derefine
 !###############################################################
 !###############################################################
 subroutine make_new_oct(s,iparent,icell,ilevel)
+  use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim,twondim,nvector
   use amr_commons, only:nbor
   use hydro_parameters, only: nvar
@@ -649,7 +661,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-#ifndef WITHOUTMPI
+#if !defined(WITHOUTMPI) && !defined(MDL2)
   ! If counter is good, check on incoming messages and perform actions
   if(mdl%mail_counter==32)then
      call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
@@ -683,7 +695,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
         write(*,*)'No more free memory'
         write(*,*)'while refining...'
         write(*,*)'Increase ngridmax'
-        call mdl_abort
+        call mdl_abort(mdl)
      end if
 
   ! Otherwise, determine parent processor and use the cache
@@ -777,4 +789,4 @@ end subroutine make_new_oct
 !###############################################################
 !###############################################################
 !###############################################################
-  
+end module refine_utils
