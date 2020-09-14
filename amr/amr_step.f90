@@ -203,9 +203,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
      if(icount==2)g%dtnew(ilevel-1)=g%dtold(ilevel)+g%dtnew(ilevel)
 
      ! Broadcast updated time step to all CPUs
-     in_broadcast_dt%ilevel=ilevel+1
-     in_broadcast_dt%dtnew=g%dtnew(ilevel+1)
-     in_broadcast_dt%dtold=g%dtold(ilevel+1)
+     in_broadcast_dt%ilevel=ilevel-1
+     in_broadcast_dt%dtnew=g%dtnew(ilevel-1)
+     in_broadcast_dt%dtold=g%dtold(ilevel-1)
      call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
   end if
 
