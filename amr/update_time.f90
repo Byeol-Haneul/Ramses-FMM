@@ -178,7 +178,7 @@ recursive subroutine r_broadcast_aexp(pst,input,input_size)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_AEXP,pst%iUpper+1,input_size,0,input)
      call r_broadcast_aexp(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      pst%s%g%aexp=input%aexp
      pst%s%g%hexp=input%hexp
@@ -201,7 +201,7 @@ recursive subroutine r_clean_stop(pst)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1)
      call r_clean_stop(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   endif
   
 end subroutine r_clean_stop

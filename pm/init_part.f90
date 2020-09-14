@@ -21,7 +21,7 @@ recursive subroutine r_init_part(pst)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_INIT_PART,pst%iUpper+1)
      call r_init_part(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call init_part(pst%s%r,pst%s%g,pst%s%p)
   endif

@@ -603,7 +603,7 @@ recursive subroutine r_cleanup_mg(pst)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CLEANUP_MG,pst%iUpper+1)
      call r_cleanup_mg(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call cleanup_mg(pst%s%m)
   endif
@@ -718,7 +718,7 @@ recursive subroutine r_make_bc_rhs(pst,input,input_size)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_MAKE_BC_RHS,pst%iUpper+1,input_size,0,input)
      call r_make_bc_rhs(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call make_bc_rhs(pst%s,input%ilevel,input%icount)
   endif

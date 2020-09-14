@@ -205,7 +205,7 @@ recursive subroutine r_cmp_residual_mg(pst,input,input_size)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CMP_RESIDUAL_MG,pst%iUpper+1,input_size,0,input)
      call r_cmp_residual_mg(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if(input%ifine==input%ilevel)then
         call cmp_residual_mg(pst%s,pst%s%m%grid_dict,input%ifine)
@@ -426,7 +426,7 @@ recursive subroutine r_gauss_seidel_mg(pst,input,input_size)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_GAUSS_SEIDEL_MG,pst%iUpper+1,input_size,0,input)
      call r_gauss_seidel_mg(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      if(input%ifine==input%ilevel)then
         call gauss_seidel_mg(pst%s,pst%s%m%grid_dict,input%ifine,input%safe,input%redstep)
