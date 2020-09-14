@@ -527,16 +527,15 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
   type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
   integer::rID
   
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input)
+     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,0,input)
      call r_make_initial_phi(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call make_initial_phi(pst%s,input%ilevel,input%icount)
   endif
