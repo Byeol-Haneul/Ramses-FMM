@@ -96,11 +96,10 @@ subroutine m_rho_fine(pst,ilevel)
   if(ilevel==r%levelmin)then
 
      ! Collect local multipole from all CPU
-     input_size=(storage_size(multipole_tot)/32)
-     call r_collect_multipole(pst,ilevel,1,multipole_tot,input_size)
+     call r_collect_multipole(pst,ilevel,1,multipole_tot,storage_size(multipole_tot)/32)
 
      ! Broadcast total multipole to all CPU
-     call r_broadcast_multipole(pst,multipole_tot,(storage_size(multipole_tot)/32))
+     call r_broadcast_multipole(pst,multipole_tot,storage_size(multipole_tot)/32)
 
      if(r%verbose)write(*,*)'rho_average=',g%rho_tot
   endif  
