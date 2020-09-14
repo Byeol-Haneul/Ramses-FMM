@@ -27,9 +27,9 @@ subroutine mdl_init
   call mdl_initialize(mdl)
 !  associate(mdl=>pst%s%mdl)
 
-  write(*,*)'HELLO-X'
+!  write(*,*)'HELLO-X'
   pst = worker_init(mdl)
-  write(*,*)'HELLO-Y'
+!  write(*,*)'HELLO-Y'
 
 #ifndef WITHOUTMPI
   ! Allocate input and output buffer sizes
@@ -228,7 +228,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_SCAN_FLAG,          pst,C_FUNLOC(r_set_scan_flag),0,0)
   call mdl_add_service(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,     pst,C_FUNLOC(r_cmp_residual_norm2),0,8)
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),0,0) !*******************
-  write(*,*)'HELLO-?'
+!  write(*,*)'HELLO-?'
 end function worker_init
 
 subroutine worker_done(mdl,pst)

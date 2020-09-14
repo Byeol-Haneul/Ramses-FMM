@@ -94,7 +94,7 @@ subroutine m_newdt_fine(pst,ilevel)
   in_broadcast_dt%ilevel=ilevel
   in_broadcast_dt%dtnew=g%dtnew(ilevel)
   in_broadcast_dt%dtold=g%dtold(ilevel)
-  call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/8)
+  call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
 
   end associate
   

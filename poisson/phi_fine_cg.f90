@@ -53,19 +53,19 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   !===============================
   in_make_initial_phi%ilevel=ilevel
   in_make_initial_phi%icount=icount
-  call r_make_initial_phi(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/8)
+  call r_make_initial_phi(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/32)
 
   !===============================
   ! Compute right-hand side norm
   !===============================
-  call r_cmp_rhs_norm(pst,ilevel,storage_size(ilevel)/8,rhs_norm,storage_size(rhs_norm)/8)
+  call r_cmp_rhs_norm(pst,ilevel,1,rhs_norm,storage_size(rhs_norm)/32)
   rhs_norm=DSQRT(rhs_norm/dble(twotondim*m%noct_tot(ilevel)))
 
   !==============================================
   ! Compute r = b - Ax and store it into f(i,1)
   ! Also set p = r and store it into f(i,2)
   !==============================================
-  call r_cmp_residual_cg(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/8)
+  call r_cmp_residual_cg(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/32)
 
   !====================================
   ! Main iteration loop
@@ -79,7 +79,7 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      ! Compute residual norm
      !====================================
-     call r_cmp_r2_cg(pst,ilevel,storage_size(ilevel)/8,r2,storage_size(r2)/8)
+     call r_cmp_r2_cg(pst,ilevel,1,r2,storage_size(r2)/32)
 
      !====================================
      ! Compute beta factor
@@ -96,17 +96,17 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      in_recurrence%ilevel=ilevel
      in_recurrence%cg=beta_cg
-     call r_recurrence_on_p(pst,in_recurrence,storage_size(in_recurrence)/8)
+     call r_recurrence_on_p(pst,in_recurrence,storage_size(in_recurrence)/32)
 
      !==============================================
      ! Compute z = Ap and store it into f(i,3)
      !==============================================
-     call r_cmp_Ap_cg(pst,ilevel,storage_size(ilevel)/8)
+     call r_cmp_Ap_cg(pst,ilevel,1)
 
      !====================================
      ! Compute p.Ap scalar product
      !====================================
-     call r_cmp_pAp_cg(pst,ilevel,storage_size(ilevel)/8,pAp,storage_size(pAp)/8)
+     call r_cmp_pAp_cg(pst,ilevel,1,pAp,storage_size(pAp)/32)
 
      !====================================
      ! Compute alpha factor
@@ -118,7 +118,7 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
      !====================================
      in_recurrence%ilevel=ilevel
      in_recurrence%cg=alpha_cg
-     call r_recurrence_x_and_r(pst,in_recurrence,storage_size(in_recurrence)/8)
+     call r_recurrence_x_and_r(pst,in_recurrence,storage_size(in_recurrence)/32)
 
      !====================================
      ! Compute error
@@ -527,16 +527,15 @@ recursive subroutine r_make_initial_phi(pst,input,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
   type(in_make_initial_phi_t)::input
 
   integer::ilevel,icount
   integer::rID
   
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,output_size,input)
+     rID = mdl_send_request(pst%s%mdl,MDL_MAKE_INITIAL_PHI,pst%iUpper+1,input_size,0,input)
      call r_make_initial_phi(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call make_initial_phi(pst%s,input%ilevel,input%icount)
   endif

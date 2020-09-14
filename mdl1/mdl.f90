@@ -93,10 +93,10 @@ module mdl_module
 
 !      write(*,*)'ARRAY:',mdl_function_id,input_size
       if (mdl%input_size(mdl_function_id) .lt. input_size) then
-        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' INPUT SIZE:',input_size,'MAX:',mdl%input_size(mdl_function_id)
+!        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' INPUT SIZE:',input_size,'MAX:',mdl%input_size(mdl_function_id)
       end if
       if (mdl%output_size(mdl_function_id) .lt. output_size) then
-        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' OUTPUT SIZE:',output_size,'MAX:',mdl%output_size(mdl_function_id)
+!        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' OUTPUT SIZE:',output_size,'MAX:',mdl%output_size(mdl_function_id)
       end if
 !      if (mod(input_size,4).ne.0) then
 !        write(*,*) 'SUSPICIOUS SIZE: function_id=',mdl_function_id,'SIZE:',input_size
@@ -141,7 +141,7 @@ module mdl_module
       if (present(input_size)) then
         isize = input_size
         if (mdl%input_size(mdl_function_id) .lt. input_size) then
-          write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,'INPUT SIZE:',input_size,'MAX:',mdl%input_size(mdl_function_id)
+!          write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,'INPUT SIZE:',input_size,'MAX:',mdl%input_size(mdl_function_id)
         end if
 !        if (mod(input_size,4).ne.0) then
 !          write(*,*) 'SUSPICIOUS SIZE: function_id=',mdl_function_id,'SIZE:',input_size
@@ -151,7 +151,7 @@ module mdl_module
       end if
       if (present(output_size)) then
         if (mdl%output_size(mdl_function_id) .lt. output_size) then
-          write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' OUTPUT SIZE:',output_size,'MAX:',mdl%output_size(mdl_function_id)
+!          write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' OUTPUT SIZE:',output_size,'MAX:',mdl%output_size(mdl_function_id)
         end if
       end if
 !      write(*,*)'SCALAR:',mdl_function_id,isize

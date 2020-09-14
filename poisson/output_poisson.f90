@@ -23,7 +23,7 @@ recursive subroutine r_output_poisson(pst,input,input_size)
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_POISSON,pst%iUpper+1,input_size,0,input)
      call r_output_poisson(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call output_poisson(pst%s%r,pst%s%g,pst%s%m,input%filename)
   endif
