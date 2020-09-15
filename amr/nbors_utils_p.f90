@@ -58,7 +58,7 @@ subroutine get_threetondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind
      ! Store lower left neighbor coordinates 
      if(inbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
      ! Get grid into memory and lock it if remote 
-     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
+     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
      call lock_cache_p(s,gridp)
      grid_twotondim_nbor(inbor)%p=>gridp
   end do
@@ -155,7 +155,7 @@ subroutine get_twondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind_nbo
   end do
 
   ! Get grid into memory and lock it if remote 
-  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
+  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
   call lock_cache_p(s,gridp)
   grid_nbor(0)%p=>gridp
   ind_nbor(0)=ind
@@ -177,7 +177,7 @@ subroutine get_twondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind_nbo
      end do
 
      ! Get grid into memory and lock it if remote 
-     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
+     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
      call lock_cache_p(s,gridp)
      grid_nbor(inbor)%p=>gridp
      ind_nbor(inbor)=ind
@@ -216,7 +216,7 @@ subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_ca
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
-  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
+  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
 end subroutine get_parent_cell_p
 !###############################################################
 !###############################################################

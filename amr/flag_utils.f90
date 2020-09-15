@@ -130,7 +130,7 @@ subroutine init_flag(s,ilevel,nflag)
   hash_key(0)=ilevel+1
   do ichild=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.false.)
+     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
      ok=.false.
      ! Loop over cells
      do ind=1,twotondim
@@ -402,7 +402,7 @@ subroutine ensure_ref_rules(s,ilevel)
               enddo
 
               ! Get neighboring grid index
-              call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
+              call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
               ok=ok.and.(associated(gridp))
 
            end do

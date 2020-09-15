@@ -402,13 +402,13 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               end do
 
               ! Get neighboring grid index with read-only cache
-              call get_grid_p(s,hash_nbor,m%grid_dict,childp,.false.,.true.)
+              call get_grid_p(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.)
               if(associated(childp))then
                  call lock_cache_p(s,childp)
               else
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,.true.,.true.)
+                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
                  if(.not.associated(gridp))then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
@@ -421,7 +421,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 
                     ! Get 2ndim neighboring father cells with read-write cache
                     ! Note that possible cache grids are locked inside the routine
-                    call get_twondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.true.,.true.)
+                    call get_twondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.true.,fetch_cache=.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
                           u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)

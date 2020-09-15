@@ -189,7 +189,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
-        call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.true.)
+        call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
         ok   = gridp%flag1(icell)==0 .and. &
              & gridp%refined(icell)
         if(ok)then
@@ -747,7 +747,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   if(r%interpol_type>0)then
      
      ! Get 2ndim neighboring father cells with read-only cache
-     call get_twondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
+     call get_twondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
      do inbor=0,twondim
         do ivar=1,nvar
            u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)

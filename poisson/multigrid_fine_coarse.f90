@@ -91,7 +91,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
 
         ! Get parent cell using write-only cache
-        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,.true.,.false.)
+        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 
         ! Convert mask value to volume fraction
         ngpmask=(1d0+m%grid(ichild)%f(ind,3))/2d0/dtwotondim
@@ -280,7 +280,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -511,7 +511,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -702,7 +702,7 @@ subroutine restrict_residual(s,ifinelevel)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
         
         ! Get parent cell using read-write cache
-        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,.true.,.true.)
+        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
         
         ! Is coarse cell masked?
         if(gridp%f(icell,3)<=0d0)cycle
@@ -902,7 +902,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
      
      ! Get 3**ndim neighbouring parent cell using a read-only cache
-     call get_threetondim_nbor_parent_cell_p(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,.false.,.true.)
+     call get_threetondim_nbor_parent_cell_p(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
      
      ! Loop over cells
      do ind=1,twotondim
@@ -1078,7 +1078,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
