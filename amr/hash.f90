@@ -10,6 +10,7 @@
 ! - COLLISIONS: A linked list is used to deal with collisions.
 
 module hash
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR
   use amr_parameters, only: ndim, nvector
   implicit none
   
@@ -18,9 +19,10 @@ module hash
   
   ! Define a bucket as a derived type (sequence statement!) for better
   ! cache efficiency.
-  type bucket
-     sequence
+  type,bind(c) :: bucket
+     !sequence
      integer(kind=8), dimension(0:ndim) :: key
+     type(c_ptr) :: valuep
      integer :: value
      integer :: next_ibucket
   end type bucket     
@@ -198,6 +200,81 @@ contains
   ! =============================================================================
 
   ! =============================================================================
+  subroutine hash_setp(htable, key, val)
+    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_LOC, C_NULL_PTR
+    implicit none
+    type(hash_table),                    intent(inout) :: htable
+    integer(kind=8) , dimension(0:ndim), intent(in)    :: key
+    type(*),optional,target,             intent(in)    :: val    
+    
+    ! Add a key/value pair to the hash table. If there is already a key/value
+    ! pair stored for this key, return an error message.
+
+    integer(kind=8) :: full_hash
+    integer(kind=8) :: ibucket
+
+    ! Compute ibucket
+    full_hash = hash_func(key)
+    ibucket = IAND(full_hash, htable%bitmask) + 1
+
+    if (htable%data(ibucket)%next_ibucket < 0) then          
+
+       ! Bucket is empty, simply insert value       
+       htable%data(ibucket)%next_ibucket = 0
+       if (present(val)) then
+         htable%data(ibucket)%value  = 999999999
+         htable%data(ibucket)%valuep       = C_LOC(val)
+       else
+         htable%data(ibucket)%value  = -1
+         htable%data(ibucket)%valuep       = C_NULL_PTR
+       endif
+       htable%data(ibucket)%key(0:ndim) = key(0:ndim)
+       htable%nfree = htable%nfree - 1
+       
+    else if (htable%nfree_chain>0)then
+
+       ! Bucket is not empty, walk through linked list
+       do while (htable%data(ibucket)%next_ibucket .ne. 0)
+          ! Check if key already exists - abort if so
+          if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
+             write(*,*) "trying to insert already existing key: ",key,htable%data(ibucket)%valuep
+             write(*,*) "existing key: ", htable%data(ibucket)%key(0:ndim)
+             stop
+          end if
+          ibucket = htable%data(ibucket)%next_ibucket
+       end do
+
+       ! Check again (at the end of linked list)
+       if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
+          write(*,*) "trying to insert already existing key: ",key,htable%data(ibucket)%value
+          stop
+       end if
+       
+       ! Have reached end of chain, val not present yet -> add
+       htable%data(ibucket)%next_ibucket = htable%head_free
+       ibucket = htable%head_free
+       htable%data(ibucket)%next_ibucket = 0
+       if (present(val)) then
+         htable%data(ibucket)%value  = 999999999
+         htable%data(ibucket)%valuep       = C_LOC(val)
+       else
+         htable%data(ibucket)%value  = -1
+         htable%data(ibucket)%valuep       = C_NULL_PTR
+       endif
+       htable%data(ibucket)%key(0:ndim) = key(0:ndim)
+
+       ! remove bucket from head of free linked list
+       htable%head_free   = htable%next_free(htable%head_free)
+       htable%nfree_chain = htable%nfree_chain - 1
+
+    else
+       write(*,*)"hash chaining space full "
+       stop
+    end if
+  end subroutine hash_setp
+  ! =============================================================================
+
+  ! =============================================================================
   pure function hash_get(htable, key)
     implicit none
     type(hash_table),                     intent(in) :: htable
@@ -229,6 +306,47 @@ contains
     hash_get = 0
 
   end function hash_get
+  ! =============================================================================
+
+  ! =============================================================================
+  function hash_getp(htable, key, absent)
+    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR, C_NULL_PTR, C_ASSOCIATED
+    USE oct_commons
+    implicit none
+    type(hash_table),                    intent(in) :: htable
+    integer(kind=8) , dimension(0:ndim), intent(in) :: key
+    type(C_PTR)                                     :: hash_getp
+    logical,optional,                    intent(out):: absent
+
+    ! Function (not subroutine, could also be changed...? ) which retrieves the 
+    ! hash table value for a given key. If no entry exists, return 0
+    integer(kind=8) :: ibucket, full_hash
+
+    if(present(absent)) absent = .false.
+    
+    full_hash = hash_func(key)
+    ibucket = IAND(full_hash, htable%bitmask) + 1
+
+    if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
+       hash_getp = htable%data(ibucket)%valuep
+       if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
+       return
+    end if
+    
+    ! Walk linked list until key is found or to the end is reached
+    do while( htable%data(ibucket)%next_ibucket > 0)
+       ibucket = htable%data(ibucket)%next_ibucket
+       if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
+          hash_getp = htable%data(ibucket)%valuep
+          if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
+          return
+       end if
+    end do
+
+    ! Nothing found...
+    hash_getp = C_NULL_PTR
+
+  end function hash_getp
   ! =============================================================================
 
   ! =============================================================================`
@@ -329,6 +447,7 @@ contains
           ! It's the first element we need to erase: Move first element from chaning 
           ! space into bucket and do as if the value to remove had been in the chaning space
           htable%data(ibucket)%value = htable%data(htable%data(ibucket)%next_ibucket)%value
+          htable%data(ibucket)%valuep = htable%data(htable%data(ibucket)%next_ibucket)%valuep
           htable%data(ibucket)%key = htable%data(htable%data(ibucket)%next_ibucket)%key
           previous_ibucket = ibucket
           ibucket = htable%data(ibucket)%next_ibucket
