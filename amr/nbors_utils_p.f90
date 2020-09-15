@@ -58,8 +58,7 @@ subroutine get_threetondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind
      ! Store lower left neighbor coordinates 
      if(inbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
      ! Get grid into memory and lock it if remote 
-     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
-     call lock_cache_p(s,gridp)
+     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=.true.)
      grid_twotondim_nbor(inbor)%p=>gridp
   end do
      
@@ -155,8 +154,7 @@ subroutine get_twondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind_nbo
   end do
 
   ! Get grid into memory and lock it if remote 
-  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
-  call lock_cache_p(s,gridp)
+  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=.true.)
   grid_nbor(0)%p=>gridp
   ind_nbor(0)=ind
   
@@ -177,8 +175,7 @@ subroutine get_twondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind_nbo
      end do
 
      ! Get grid into memory and lock it if remote 
-     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
-     call lock_cache_p(s,gridp)
+     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=.true.)
      grid_nbor(inbor)%p=>gridp
      ind_nbor(inbor)=ind
   end do
@@ -190,7 +187,7 @@ end subroutine get_twondim_nbor_parent_cell_p
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_cache)
+subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_cache,lock)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -198,6 +195,7 @@ subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_ca
   implicit none
   type(ramses_t)::s
   logical::flush_cache,fetch_cache
+  logical,optional::lock
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
   integer::ind
@@ -216,7 +214,7 @@ subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_ca
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
-  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache)
+  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=lock)
 end subroutine get_parent_cell_p
 !###############################################################
 !###############################################################
@@ -268,7 +266,7 @@ end subroutine unlock_cache_p
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
+subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: oct
@@ -284,6 +282,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
   type(ramses_t)::s
   type(oct),pointer::child
   logical::flush_cache,fetch_cache
+  logical,optional::lock
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
 #ifndef MDL2
@@ -323,6 +322,9 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
   ! If grid index is positive, then return
   if(child_grid>0)then
      child => m%grid(child_grid)
+     if (present(lock).and.associated(child)) then
+       if (lock) call lock_cache_p(s,child)
+     endif
      return
   endif
 
@@ -527,6 +529,9 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 
   if(child_grid>0)then
      child => m%grid(child_grid)
+     if (present(lock).and.associated(child)) then
+       if (lock) call lock_cache_p(s,child)
+     endif
   else
      nullify(child)
   endif

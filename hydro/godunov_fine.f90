@@ -402,10 +402,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               end do
 
               ! Get neighboring grid index with read-only cache
-              call get_grid_p(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.)
-              if(associated(childp))then
-                 call lock_cache_p(s,childp)
-              else
+              call get_grid_p(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              if(.not.associated(childp))then
 
                  ! Get parent father cell with read-write cache
                  call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
@@ -414,7 +412,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     write(*,*)'PE ',g%myid,hash_nbor
                     call mdl_abort(mdl)
                  endif
-                 call lock_cache_p(s,gridp)
 
                  ! In case one wants to interpolate using high-order schemes
                  if(r%interpol_type>0)then

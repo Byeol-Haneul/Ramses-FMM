@@ -106,8 +106,7 @@ subroutine smooth_fine(s,ilevel,nflag)
               if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
               if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
            enddo
-           call get_grid_p(s,hash_nbor,m%grid_dict,gridn(i_nbor)%p,flush_cache=.false.,fetch_cache=.true.)
-           call lock_cache_p(s,gridn(i_nbor)%p)
+           call get_grid_p(s,hash_nbor,m%grid_dict,gridn(i_nbor)%p,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         end do
 
         ! Count neighbors and set flag2 accordingly        

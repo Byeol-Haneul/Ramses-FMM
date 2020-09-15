@@ -65,18 +65,17 @@ subroutine hydro_flag(s,ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel+1)-1
               if(hash_nbor(idim)==m%ckey_max(ilevel+1))hash_nbor(idim)=0
            enddo
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.)
+           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(associated(gridp))then
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
-              call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.)
+              call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
            endif
-           call lock_cache_p(s,gridn(i_nbor)%p)
         end do
 
         ! Loop over dimensions
