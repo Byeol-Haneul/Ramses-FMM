@@ -273,4 +273,14 @@ module mdl_module
       mdl_self = mdl%myid
     end function mdl_self
 
+    integer function mdl_core(mdl)
+      type(mdl_t)::mdl
+      mdl_core = 1
+    end function mdl_core
+
+    integer function mdl_cores(mdl)
+      type(mdl_t)::mdl
+      mdl_cores = 1
+    end function mdl_cores
+
 end module mdl_module
