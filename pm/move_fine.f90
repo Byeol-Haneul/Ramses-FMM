@@ -146,14 +146,14 @@ subroutine kick_drift_part(s,ilevel,action_part)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.)
-        call lock_cache(s,gridp(ind)%p)
+        call lock_cache_p(s,gridp(ind)%p)
         if(.not.associated(gridp(ind)%p))then
            ok_level=.false.
            exit
         end if
      end do
      do ind=1,twotondim
-        call unlock_cache(s,gridp(ind)%p)
+        call unlock_cache_p(s,gridp(ind)%p)
      end do
 
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
@@ -208,7 +208,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
            call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.)
-           call lock_cache(s,gridp(ind)%p)
+           call lock_cache_p(s,gridp(ind)%p)
            if(.not.associated(gridp(ind)%p))then
               ok_level=.false.
               exit
