@@ -37,7 +37,7 @@ subroutine smooth_fine(s,ilevel,nflag)
   use amr_parameters, only: ndim,twotondim,twondim
   use ramses_commons, only: ramses_t
   use cache_commons
-  use cache, only:close_cache
+  use cache
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use amr_commons, only: nbor
   use nbors_utils_p
@@ -59,6 +59,7 @@ subroutine smooth_fine(s,ilevel,nflag)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::igridn
   type(nbor),dimension(0:twondim)::gridn
+  type(msg_int4)::dummy_int4
 
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,&
@@ -93,8 +94,9 @@ subroutine smooth_fine(s,ilevel,nflag)
         end do
      end do
 
-     call open_cache(s,operation_smooth,domain_decompos_amr)
-
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag)
      ! Count neighbors and set flag2 accordingly
      do igrid=m%head(ilevel),m%tail(ilevel)
 

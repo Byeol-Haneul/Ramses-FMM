@@ -67,7 +67,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -85,6 +85,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
   real(dp),dimension(1:ndim)::ff
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
+  type(msg_three_realdp)::dummy_three_realdp
   
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
 
@@ -93,7 +94,9 @@ subroutine kick_drift_part(s,ilevel,action_part)
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,operation_kick,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+                     pack=pack_fetch_kick,unpack=unpack_fetch_kick)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)

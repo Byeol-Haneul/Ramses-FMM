@@ -116,7 +116,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use marshal, only:pack_fetch_refine, unpack_fetch_refine,&
                     pack_fetch_flag, unpack_fetch_flag
   use cache_commons
-  use cache, only:close_cache
+  use cache
   use hash
   use hilbert
   use call_back, only: cache_f
@@ -148,6 +148,8 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   logical::ok
   type(oct)::oct_tmp
   type(oct),pointer::gridp
+  type(msg_large_realdp)::dummy_large_realdp
+  type(msg_int4)::dummy_int4
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -159,7 +161,10 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   m%ifree=m%noct_used+1
   do ilev=ilevel,r%nlevelmax-1
 
-     call open_cache(s,operation_refine,domain_decompos_amr)
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                        hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
+                        pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+                        flush=pack_flush_refine, combine=unpack_flush_refine)
 
      do ioct=m%head(ilev),m%tail(ilev)
         do ind=1,twotondim
@@ -186,13 +191,20 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   g%nkill=0
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache(s,operation_derefine,domain_decompos_amr)
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
+                init=init_flush_derefine,flush=pack_flush_derefine, combine=unpack_flush_derefine)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
         call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
+        if (.not.associated(gridp)) then
+          write(*,*) 'FATAL: no parent'
+          stop
+        endif
         ok   = gridp%flag1(icell)==0 .and. &
              & gridp%refined(icell)
         if(ok)then

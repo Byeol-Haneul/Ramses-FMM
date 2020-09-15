@@ -60,7 +60,8 @@ subroutine upload_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
+  use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -75,6 +76,7 @@ subroutine upload_fine(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad
   type(oct),pointer::gridp
+  type(msg_realdp)::dummy_realdp
 
 #ifdef HYDRO
 
@@ -91,7 +93,10 @@ subroutine upload_fine(s,ilevel)
      end do
   end do
 
-  call open_cache(s,operation_upload,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+                     pack=pack_fetch_hydro, unpack=unpack_fetch_hydro,&
+                     init=init_flush_upload, flush=pack_flush_upload, combine=unpack_flush_upload)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1

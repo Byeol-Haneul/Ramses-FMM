@@ -245,8 +245,9 @@ subroutine multipole_split_cells(s,ilevel)
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils_p
+  use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
   use cache_commons
-  use cache, only:close_cache
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -261,13 +262,17 @@ subroutine multipole_split_cells(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   logical::leaf_cell
   type(oct),pointer::gridp
+  type(msg_realdp)::dummy_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   
   !-------------------------------------------------------
   ! Perform octree restriction from level ilevel+1
   !-------------------------------------------------------
-  call open_cache(s,operation_multipole,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
+                     init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
@@ -463,7 +468,8 @@ subroutine cic_multipole(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -478,6 +484,7 @@ subroutine cic_multipole(s,ilevel)
   integer::icell
   real(kind=8)::dx_loc,vol_loc,mmm
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
@@ -488,7 +495,10 @@ subroutine cic_multipole(s,ilevel)
   ! Use hash table directly for cells (not for grids)
   hash_nbor(0)=ilevel+1
 
-  call open_cache(s,operation_rho,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
+                pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+                init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
   ! Loop over grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -637,7 +647,8 @@ subroutine cic_part(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
   use hilbert
   implicit none
   type(ramses_t)::s
@@ -680,7 +691,10 @@ subroutine cic_part(s,ilevel)
 
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
-  call open_cache(s,operation_rho,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(m%grid(1)%rho)/32,&
+                pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+                init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
   ! Loop over particles in Hilbert order
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
@@ -932,7 +946,7 @@ subroutine split_part(s,ilevel)
   use nbors_utils_p
   use cache_commons
   use hilbert
-  use cache, only:close_cache
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -948,6 +962,7 @@ subroutine split_part(s,ilevel)
   integer::levelp_tmp
   integer(i8b)::idp_tmp
   type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
 
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
     
@@ -957,7 +972,9 @@ subroutine split_part(s,ilevel)
 
   ! Open read-only cache for array refined
   hash_key(0)=ilevel
-  call open_cache(s,operation_split,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_split,unpack=unpack_fetch_split)
 
   ! Loop over particles
   ix_ref=-1

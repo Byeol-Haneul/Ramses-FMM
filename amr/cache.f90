@@ -113,4 +113,164 @@ end subroutine close_cache
 !##############################################################
 !##############################################################
 !##############################################################
+function create_grid(s,uhash,hash_key) result(gridp)
+  !USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_INT
+  use amr_parameters, only: ndim
+  use ramses_commons, only: ramses_t
+  use amr_commons, only: oct
+  use mdl_module
+  implicit none
+  type(ramses_t)::s
+  integer,value::uhash
+  integer(kind=8),dimension(0:ndim)::hash_key
+  type(oct),pointer::gridp
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+    ! Set grid index to a virtual grid in local main memory
+    gridp => m%grid(m%ifree)
+
+    ! Go to next main memory free line
+    m%ifree=m%ifree+1
+    if(m%ifree.GT.r%ngridmax)then
+      write(*,*)'No more free memory'
+      write(*,*)'while refining...'
+      write(*,*)'Increase ngridmax'
+      call mdl_abort(mdl)
+    endif
+  end associate
+end function create_grid
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+integer function get_thread_id(s,uhash,size,hash_key) result(grid_cpu)
+  use amr_parameters, only: ndim,nhilbert,twotondim
+  use ramses_commons, only: ramses_t
+  use hilbert
+  use mdl_module
+  implicit none
+  type(ramses_t)::s
+  integer,value::uhash, size
+  integer(kind=8),dimension(0:ndim),intent(in)::hash_key
+  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:ndim)::ix
+  integer::ilevel
+  logical::in_rank
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+    ilevel=hash_key(0)
+    ix(1:ndim)=hash_key(1:ndim)
+    hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
+
+    grid_cpu = mdl_self(mdl)
+    in_rank = ge_keys(hk,m%domain_hilbert(ilevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
+       &    gt_keys(m%domain_hilbert(ilevel)%b(1:nhilbert,grid_cpu),hk)
+
+    ! Determine parent processor
+    if (.not.in_rank) grid_cpu = m%domain_hilbert(ilevel)%get_rank(hk)
+
+    grid_cpu = grid_cpu - 1 ! Fortran is 1 based
+  end associate
+
+end function get_thread_id
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine open_cache(s,table,data_size,hilbert,pack_size,&
+                         pack,unpack,init,flush,combine)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_BOOL, C_FUNLOC, C_NULL_PTR
+  use amr_parameters, only: ndim,nhilbert,twotondim
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  use call_back, only: cache_function, cache_f
+  use domain_m, only: domain_t
+  use hash
+  use mdl_module
+  implicit none
+#ifndef WITHOUTMPI
+  include 'mpif.h'
+#endif
+  type(ramses_t)::s
+  type(hash_table)::table
+  type(domain_t),pointer,dimension(:)::hilbert
+  integer::data_size,pack_size
+  procedure(cache_function_unpack)::unpack
+  procedure(cache_function)::pack
+  procedure(cache_function_init),optional::init
+  procedure(cache_function_unpack),optional::combine
+  procedure(cache_function),optional::flush
+  integer::info,icpu,iskip
+  logical(C_BOOL)::modify
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+    m%domain_hilbert => hilbert
+#ifdef MDL2
+    modify = .false.
+    if (present(combine)) modify = .true.
+    call ramses_cache_open(mdl%mdl2,0,table%mdl_cache_table,data_size*4,modify,&
+                      s,c_funloc(get_thread_id),&
+                        pack_size*4,c_funloc(pack),c_funloc(unpack),&
+                        c_funloc(init),&
+                        pack_size*4,c_funloc(flush), c_funloc(combine),&
+                        c_funloc(create_grid) )
+#else
+    mdl%size_msg_array = pack_size
+
+    pack_fetch%proc => pack
+    unpack_fetch%proc => unpack
+    init_flush%proc => null()
+    pack_flush%proc => null()
+    unpack_flush%proc => null()
+    if (present(init))      init_flush%proc => init
+    if (present(flush))     pack_flush%proc => flush
+    if (present(combine)) unpack_flush%proc => combine
+
+    do icpu=1,g%ncpu
+      mdl%reply_id(icpu)=MPI_REQUEST_NULL
+    end do
+
+    mdl%mail_counter=0
+
+    if (loc(m%domain_hilbert) .eq. loc(m%domain)) then
+      m%head_cache(r%levelmin:r%nlevelmax)=m%head
+      m%tail_cache(r%levelmin:r%nlevelmax)=m%tail
+    else if (loc(m%domain_hilbert) .eq. loc(m%domain_mg)) then
+      m%head_cache(1:r%nlevelmax)=m%head_mg
+      m%tail_cache(1:r%nlevelmax)=m%tail_mg
+    else
+      write(*,*) 'Unknown domain decomposition scheme'
+      stop
+    end if
+
+    if (.not.present(init) .and. present(flush)) then
+      mdl%combiner_rule = COMBINER_CREATE
+    else
+      mdl%combiner_rule = COMBINER_EXIST
+    end if
+    mdl%size_request_array=1+ndim
+    mdl%size_flush_array=1+(1+ndim+mdl%size_msg_array)*nflushmax
+    mdl%size_fetch_array=2+(1+ndim+mdl%size_msg_array)*ntilemax
+
+    ! Set communication counters to zero
+    do icpu=1,g%ncpu
+      iskip=mdl%size_flush_array*(icpu-1)+1
+      mdl%send_flush_array(iskip)=0
+    end do
+  
+    ! Post the first RECV for request
+    call MPI_IRECV(mdl%recv_request_array,mdl%size_request_array,MPI_INTEGER,MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,mdl%request_id,info)
+  
+    ! Post the first RECV for flush
+    call MPI_IRECV(mdl%recv_flush_array,mdl%size_flush_array,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,mdl%flush_id,info)
+#endif
+  end associate
+
+
+end subroutine open_cache
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
 end module cache

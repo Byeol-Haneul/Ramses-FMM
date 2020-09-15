@@ -10,7 +10,7 @@ subroutine hydro_flag(s,ilevel)
   use ramses_commons, only: ramses_t
   use hydro_parameters, only: nvar
   use cache_commons
-  use cache, only:close_cache
+  use cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
@@ -31,6 +31,7 @@ subroutine hydro_flag(s,ilevel)
   logical::ok
   type(nbor),dimension(1:twondim)::gridn
   type(oct),pointer::gridp
+  type(msg_realdp)::dummy_realdp
 
 #ifdef HYDRO
 
@@ -42,7 +43,9 @@ subroutine hydro_flag(s,ilevel)
        & r%err_grad_p==-1.0.and.&
        & r%err_grad_u==-1.0)return
 
-  call open_cache(s,operation_hydro,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro)
 
   ! Loop over active grids
   do igrid=m%head(ilevel),m%tail(ilevel)

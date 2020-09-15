@@ -95,8 +95,9 @@ subroutine init_flag(s,ilevel,nflag)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use cache_commons
-  use cache, only:close_cache
+  use cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
@@ -110,6 +111,7 @@ subroutine init_flag(s,ilevel,nflag)
   logical::ok
   integer(kind=8),dimension(0:ndim)::hash_key
   type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -125,7 +127,10 @@ subroutine init_flag(s,ilevel,nflag)
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------
-  call open_cache(s,operation_initflag,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
+                init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
@@ -151,6 +156,7 @@ subroutine init_flag(s,ilevel,nflag)
   end associate
   
 end subroutine init_flag
+!###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
@@ -301,8 +307,9 @@ subroutine ensure_ref_rules(s,ilevel)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use cache_commons
-  use cache, only:close_cache
+  use cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
@@ -319,6 +326,7 @@ subroutine ensure_ref_rules(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   logical::ok
   type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -334,7 +342,9 @@ subroutine ensure_ref_rules(s,ilevel)
   k1max=2
 #endif
 
-  call open_cache(s,operation_smooth,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)

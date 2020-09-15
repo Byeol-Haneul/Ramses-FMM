@@ -288,7 +288,8 @@ subroutine load_balance(s,ilevel)
   use hilbert
   use hash
   use cache_commons
-  use cache, only:close_cache
+  use cache
+  use marshal, only: pack_fetch_refine,unpack_fetch_refine
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -312,6 +313,8 @@ subroutine load_balance(s,ilevel)
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   type(oct)::grid_tmp
+  type(oct),pointer::child
+  type(msg_large_realdp)::dummy_large_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -322,7 +325,10 @@ subroutine load_balance(s,ilevel)
   m%ifree=m%noct_used+1
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache(s,operation_loadbalance,domain_decompos_amr)
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
+                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+                flush=pack_flush_loadbalance, combine=unpack_flush_loadbalance)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)

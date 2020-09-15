@@ -387,7 +387,8 @@ subroutine build_mg(s,ifinelevel)
   use amr_parameters, only: dp,nhilbert,ndim,twotondim
   use ramses_commons, only: ramses_t
   use cache_commons
-  use cache, only:close_cache
+  use cache
+  use multigrid_fine_coarse, only: pack_fetch_phi, unpack_fetch_phi
   use amr_commons, only: oct
   use hilbert
   use hash
@@ -408,6 +409,7 @@ subroutine build_mg(s,ifinelevel)
   integer(kind=8),dimension(1:ndim)::ix
   logical::in_rank
   type(oct),pointer::father
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -417,7 +419,10 @@ subroutine build_mg(s,ifinelevel)
   
   hash_father(0)=icoarselevel
   
-  call open_cache(s,operation_build_mg,domain_decompos_mg)
+  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+                     pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+                     flush=pack_flush_build_mg, combine=unpack_flush_build_mg)
   
   ! Loop over fine grids
   do igrid=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -476,6 +481,9 @@ subroutine build_mg(s,ifinelevel)
               end if
 
            else
+#ifdef MDL2
+              stop
+#else
               ! Otherwise, determine parent processor and use the cache
               grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
               
@@ -491,6 +499,7 @@ subroutine build_mg(s,ifinelevel)
               m%ncache=m%ncache+1
               if(m%free_cache.GT.r%ncachemax)m%free_cache=1
               if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+#endif
            endif
            
            m%grid(ichild)%lev=icoarselevel
@@ -735,7 +744,8 @@ subroutine make_bc_rhs(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
+  use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol
   implicit none
   type(ramses_t)::s
 
@@ -756,6 +766,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
 
   real(dp) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
   real(dp) :: fourpi
+  type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   
@@ -802,7 +813,9 @@ subroutine make_bc_rhs(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,operation_interpol,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
+                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
 
   hash_nbor(0)=ilevel
 

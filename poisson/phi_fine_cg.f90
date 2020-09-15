@@ -247,7 +247,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
@@ -269,6 +269,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   type(oct),pointer::gridp
+  type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
@@ -315,7 +316,9 @@ subroutine cmp_residual_cg(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,operation_interpol,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
+                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
 
   hash_nbor(0)=ilevel
 
@@ -421,7 +424,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -438,6 +441,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -451,7 +455,9 @@ subroutine cmp_Ap_cg(s,ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
 
-  call open_cache(s,operation_cg,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
+                pack=pack_fetch_cg,unpack=unpack_fetch_cg)
 
   hash_nbor(0)=ilevel
 
@@ -554,7 +560,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
-  use cache, only:close_cache
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
@@ -569,6 +575,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
   real(dp),dimension(1:twotondim)::phi_int
+  type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -601,7 +608,9 @@ subroutine make_initial_phi(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,operation_interpol,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
+                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
 
   hash_key(0)=ilevel
 

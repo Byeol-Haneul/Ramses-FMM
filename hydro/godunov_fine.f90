@@ -31,10 +31,12 @@ end subroutine r_godunov_fine
 subroutine godunov_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use cache_commons
-  use cache, only:close_cache
+  use cache
+  use marshal, only: pack_fetch_refine,unpack_fetch_refine
   implicit none
   type(ramses_t)::s
   integer::ilevel
+  type(msg_large_realdp)::dummy_large_realdp
   !--------------------------------------------------------------------------
   ! This routine is a wrapper to the second order Godunov solver.
   ! Small grids (2x2x2) are gathered from level ilevel and sent to the
@@ -43,30 +45,36 @@ subroutine godunov_fine(s,ilevel)
   !--------------------------------------------------------------------------
   integer::igrid
 
-  call open_cache(s,operation_godunov,domain_decompos_amr)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
+                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+                init=init_flush_godunov, flush=pack_flush_godunov, combine=unpack_flush_godunov)
 
   ! Loop over active grids by vector sweeps
-  igrid=s%m%head(ilevel)
-  do while(igrid.LE.s%m%tail(ilevel))
-     SELECT CASE (s%m%grid(igrid)%superoct)
+  igrid=m%head(ilevel)
+  do while(igrid.LE.m%tail(ilevel))
+     SELECT CASE (m%grid(igrid)%superoct)
      CASE(1)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_1)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_1)
      CASE(2**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_2)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_2)
      CASE(4**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_4)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_4)
      CASE(8**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_8)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_8)
      CASE(16**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_16)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_16)
      CASE(32**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_32)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_32)
      END SELECT
-     igrid=igrid+s%m%grid(igrid)%superoct
+     igrid=igrid+m%grid(igrid)%superoct
   end do
 
-  call close_cache(s,s%m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
+  end associate
 end subroutine godunov_fine
 !###########################################################
 !###########################################################
