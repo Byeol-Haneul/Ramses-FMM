@@ -1,26 +1,15 @@
 cmake_minimum_required(VERSION 3.1)
-project(ramses3d)
-enable_language (Fortran)
-get_filename_component (Fortran_COMPILER_NAME ${CMAKE_Fortran_COMPILER} NAME)
+project(ramses3d LANGUAGES Fortran CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Release build with debug info selected")
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-#if (Fortran_COMPILER_NAME MATCHES "ifort.*")
-#  set (CMAKE_Fortran_FLAGS "-cpp")
-#endif()
-#if (Fortran_COMPILER_NAME MATCHES "ftn.*")
-#  set (CMAKE_Fortran_FLAGS "-cpp")
-#endif()
-
-add_executable(${PROJECT_NAME} "")
+add_executable(${PROJECT_NAME})
 
 find_package(MPI REQUIRED)      # MPI support
-add_definitions(${MPI_Fortran_COMPILE_FLAGS})
 include_directories(${MPI_Fortran_INCLUDE_PATH})
-link_directories(${MPI_Fortran_LIBRARIES})
 target_link_libraries(${PROJECT_NAME} ${MPI_Fortran_LIBRARIES})
 
 if(EXISTS ${CMAKE_SOURCE_DIR}/mdl2)
@@ -28,30 +17,6 @@ if(EXISTS ${CMAKE_SOURCE_DIR}/mdl2)
 else()
   set(MDL2 false CACHE BOOL "Enable the new MDL version of RAMSES")
 endif()
-if(MDL2)
-  add_subdirectory(mdl2)
-  target_link_libraries(${PROJECT_NAME} mdl2)
-  target_sources(${PROJECT_NAME} PRIVATE mdl2/mdl.f90)
-  add_definitions(-DMDL2)
-else()
-  target_sources(${PROJECT_NAME} PRIVATE mdl1/mdl.f90)
-endif(MDL2)
-
-#if (Fortran_COMPILER_NAME MATCHES "gfortran.*")
-#  set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecord-marker=4 -ffree-line-length-none -fcheck=all -g" )
-
-# The Fortran source contains preprocessor directives which are enable differently for each compiler
-if (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-cpp -recursive" )
-elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none" )
-elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
- set_target_properties( ${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-e ZR" )
-endif()
-
-#if(Git_FOUND)
-#  message("Git found: ${GIT_EXECUTABLE}")
-#endif()
 
 set(NVECTOR 32)
 set(NDIM 3)
@@ -72,14 +37,12 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     VERBATIM
 )
-
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/write_makefile.f90
     COMMAND ${CMAKE_SOURCE_DIR}/utils/scripts/cr_write_makefile.sh ${CMAKE_SOURCE_DIR}/CMakeLists.txt ${CMAKE_BINARY_DIR}/write_makefile.f90
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     VERBATIM
 )
-
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/write_patch.f90
     COMMAND ${CMAKE_SOURCE_DIR}/utils/scripts/cr_write_patch.sh "" ${CMAKE_BINARY_DIR}/write_patch.f90
@@ -87,8 +50,8 @@ add_custom_command(
     VERBATIM
 )
 
-target_sources(${PROJECT_NAME}
-PRIVATE	amr/ramses.f90
+set(fortran_files
+    amr/ramses.f90
 	amr/timer.f90
 	amr/read_params.f90
 	amr/init_amr.f90
@@ -169,6 +132,32 @@ PRIVATE	amr/ramses.f90
 	${CMAKE_BINARY_DIR}/write_gitinfo.f90
 	${CMAKE_BINARY_DIR}/write_makefile.f90
 	${CMAKE_BINARY_DIR}/write_patch.f90
-
 )
+if(MDL2)
+  add_subdirectory(mdl2)
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+    CXX_STANDARD 14
+    CXX_STANDARD_REQUIRED YES
+    CXX_EXTENSIONS NO
+  )
+  list(APPEND fortran_files mdl2/mdl.f90 amr/mdlcache.f90 amr/nbors_utils_p.f90)
+  target_link_libraries(${PROJECT_NAME} mdl2)
+  target_sources(${PROJECT_NAME} PRIVATE amr/mdlcache.cxx)
+  add_definitions(-DMDL2)
+else()
+  list(APPEND fortran_files mdl1/mdl.f90)
+endif(MDL2)
+
+set_source_files_properties(${fortran_files} ${MPI_Fortran_COMPILE_FLAGS})
+
+# The Fortran source contains preprocessor directives which are enable differently for each compiler
+if (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+ set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-cpp -recursive" )
+elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+ set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none -fallow-argument-mismatch" )
+elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
+ set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-e ZR" )
+endif()
+
+target_sources(${PROJECT_NAME} PRIVATE ${fortran_files})
 
