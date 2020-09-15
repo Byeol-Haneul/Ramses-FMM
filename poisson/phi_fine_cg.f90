@@ -247,6 +247,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
@@ -420,6 +421,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -552,6 +554,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount

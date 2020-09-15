@@ -116,6 +116,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use marshal, only:pack_fetch_refine, unpack_fetch_refine,&
                     pack_fetch_flag, unpack_fetch_flag
   use cache_commons
+  use cache, only:close_cache
   use hash
   use hilbert
   use call_back, only: cache_f

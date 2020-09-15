@@ -31,6 +31,7 @@ end subroutine r_godunov_fine
 subroutine godunov_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel

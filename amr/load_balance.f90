@@ -288,6 +288,7 @@ subroutine load_balance(s,ilevel)
   use hilbert
   use hash
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel

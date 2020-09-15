@@ -60,6 +60,7 @@ subroutine upload_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel

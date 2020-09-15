@@ -387,6 +387,7 @@ subroutine build_mg(s,ifinelevel)
   use amr_parameters, only: dp,nhilbert,ndim,twotondim
   use ramses_commons, only: ramses_t
   use cache_commons
+  use cache, only:close_cache
   use amr_commons, only: oct
   use hilbert
   use hash
@@ -734,6 +735,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
 

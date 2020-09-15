@@ -246,6 +246,7 @@ subroutine multipole_split_cells(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -462,6 +463,7 @@ subroutine cic_multipole(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -635,6 +637,7 @@ subroutine cic_part(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   use hilbert
   implicit none
   type(ramses_t)::s
@@ -929,6 +932,7 @@ subroutine split_part(s,ilevel)
   use nbors_utils_p
   use cache_commons
   use hilbert
+  use cache, only:close_cache
   implicit none
   type(ramses_t)::s
   integer::ilevel

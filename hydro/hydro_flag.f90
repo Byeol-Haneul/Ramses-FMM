@@ -10,6 +10,7 @@ subroutine hydro_flag(s,ilevel)
   use ramses_commons, only: ramses_t
   use hydro_parameters, only: nvar
   use cache_commons
+  use cache, only:close_cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s

@@ -56,6 +56,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   use hilbert
   use hash
   implicit none
@@ -226,6 +227,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   use hilbert
   use hash
   implicit none
@@ -450,6 +452,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   use hilbert
   use hash
   implicit none
@@ -668,6 +671,7 @@ subroutine restrict_residual(s,ifinelevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   use hilbert
   use hash
   implicit none
@@ -866,6 +870,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   use hilbert
   use hash
   implicit none
@@ -1045,6 +1050,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache, only:close_cache
   use hilbert
   use hash
   implicit none

@@ -96,6 +96,7 @@ subroutine init_flag(s,ilevel,nflag)
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use cache_commons
+  use cache, only:close_cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
@@ -301,6 +302,7 @@ subroutine ensure_ref_rules(s,ilevel)
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use cache_commons
+  use cache, only:close_cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
