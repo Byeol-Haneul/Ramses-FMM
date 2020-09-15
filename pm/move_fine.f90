@@ -149,8 +149,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.)
-        call lock_cache_p(s,gridp(ind)%p)
+        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         if(.not.associated(gridp(ind)%p))then
            ok_level=.false.
            exit
@@ -211,8 +210,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
         icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.)
-           call lock_cache_p(s,gridp(ind)%p)
+           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(.not.associated(gridp(ind)%p))then
               ok_level=.false.
               exit
