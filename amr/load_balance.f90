@@ -356,7 +356,7 @@ subroutine load_balance(s,ilevel)
            call hash_free(m%grid_dict,hash_key)
            
            ! Insert new cache grid in hash table
-           call hash_set(m%grid_dict,hash_key,ichild)
+           call hash_setp(m%grid_dict,hash_key,m%grid(ichild))
         
         endif
 
@@ -484,7 +484,7 @@ subroutine load_balance(s,ilevel)
            hash_key(1:ndim)=m%grid(inew)%ckey(1:ndim)
            if(m%grid(inew)%lev>0)then
               call hash_free(m%grid_dict,hash_key)
-              call hash_set(m%grid_dict,hash_key,i)
+              call hash_setp(m%grid_dict,hash_key,m%grid(i))
            endif
            swap_table(i)=i
            i=inew
@@ -494,7 +494,7 @@ subroutine load_balance(s,ilevel)
         hash_key(0)=m%grid(i)%lev
         hash_key(1:ndim)=m%grid(i)%ckey(1:ndim)
         if(m%grid(i)%lev>0)then
-           call hash_set(m%grid_dict,hash_key,i)
+           call hash_setp(m%grid_dict,hash_key,m%grid(i))
         end if
         swap_table(i)=i
      endif

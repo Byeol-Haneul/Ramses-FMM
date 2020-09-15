@@ -382,10 +382,12 @@ recursive subroutine r_build_mg(pst,ilevel,input_size)
 end subroutine r_build_mg
 
 subroutine build_mg(s,ifinelevel)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
   use mdl_module
   use amr_parameters, only: dp,nhilbert,ndim,twotondim
   use ramses_commons, only: ramses_t
   use cache_commons
+  use amr_commons, only: oct
   use hilbert
   use hash
   implicit none
@@ -395,7 +397,7 @@ subroutine build_mg(s,ifinelevel)
   type(ramses_t)::s
   integer,intent(in)::ifinelevel
   
-  integer::icoarselevel,igrid,inbor,idim,ipos,ichild,grid_cpu,ind
+  integer::icoarselevel,igrid,inbor,idim,ichild,grid_cpu,ind
   integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
   integer(kind=4),dimension(1:ndim)::cart_key
   integer,dimension(1:3,1:8),save::shift_oct=reshape(&
@@ -404,6 +406,7 @@ subroutine build_mg(s,ifinelevel)
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
   logical::in_rank
+  type(oct),pointer::father
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -441,10 +444,10 @@ subroutine build_mg(s,ifinelevel)
         hash_father(1:ndim)=hash_nbor(1:ndim)/2
         
         ! Access hash table
-        ipos=hash_get(m%mg_dict,hash_father)
+        call c_f_pointer(hash_getp(m%mg_dict,hash_father),father)
 
         ! If grid does not exist, create it in memory
-        if(ipos==0)then
+        if(.not.associated(father))then
            
            ! Compute Cartesian keys of new oct
            cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
@@ -505,7 +508,7 @@ subroutine build_mg(s,ifinelevel)
            enddo
 
            ! Insert new grid in hash table
-           call hash_set(m%mg_dict,hash_father,ichild)
+           call hash_setp(m%mg_dict,hash_father,m%grid(ichild))
            
         end if
      end do

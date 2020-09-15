@@ -251,6 +251,7 @@ end subroutine unlock_cache
 !##############################################################
 !##############################################################
 subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
   use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
@@ -297,7 +298,8 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
 #endif
 
   ! Access hash table
-  child_grid=hash_get(hash_dict,hash_key)
+  stop
+  !child_grid=hash_get(hash_dict,hash_key)
 
 #ifndef WITHOUTMPI
 
@@ -367,7 +369,7 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
            hash_child(1:ndim)=m%ckey_null(1:ndim,m%free_null)
            call hash_free(hash_dict,hash_child)
         endif
-        call hash_set(hash_dict,hash_key,-1)
+        call hash_setp(hash_dict,hash_key)
         m%occupied_null(m%free_null)=.true.
         m%lev_null(m%free_null)=ilevel
         m%ckey_null(1:ndim,m%free_null)=hash_key(1:ndim)
@@ -413,11 +415,11 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
            iskip=iskip+ndim+1
 
            ! If grid does not already exist, create it in local memory
-           if(hash_get(hash_dict,hash_child).EQ.0)then
+           if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
 
               if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,hash_dict)
 
-              call hash_set(hash_dict,hash_child,ichild)
+              call hash_setp(hash_dict,hash_child,m%grid(ichild))
               
               m%occupied(m%free_cache)=.true.
               m%parent_cpu(m%free_cache)=grid_cpu
@@ -479,7 +481,7 @@ subroutine get_grid(s,hash_key,hash_dict,child_grid,flush_cache,fetch_cache)
 
      ! Set grid index to a virtual grid in local memory
      child_grid=r%ngridmax+m%free_cache
-     call hash_set(hash_dict,hash_key,child_grid)
+     call hash_setp(hash_dict,hash_key,m%grid(child_grid))
 
      ! Store the grid coordinates
      m%grid(child_grid)%lev=hash_key(0)
@@ -511,12 +513,14 @@ end subroutine get_grid
 !##############################################################
 !##############################################################
 subroutine check_mail(s,comm_id,hash_dict)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
   use mdl_module
 #ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use cache_commons
+  use amr_commons, only: oct
   use hilbert
   use hash
   implicit none
@@ -541,6 +545,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   integer(kind=8), dimension(1:nhilbert)::hk
   integer(kind=8), dimension(1:ndim)::ix
   integer(kind=8), dimension(0:ndim)::hash_key,hash_child
+  type(oct),pointer::child
 
 #ifndef WITHOUTMPI
 
@@ -563,11 +568,11 @@ subroutine check_mail(s,comm_id,hash_dict)
            ilevel=mdl%recv_request_array(1)
            hash_key(0)=ilevel
            hash_key(1:ndim)=mdl%recv_request_array(2:ndim+1)
-           igrid=hash_get(hash_dict,hash_key)
+           call c_f_pointer(hash_getp(hash_dict,hash_key),child)
            grid_cpu=request_status(MPI_SOURCE)+1
            
            ! If grid does not exist, send a null reply
-           if(igrid.EQ.0)then
+           if(.not.ASSOCIATED(child))then
               
               ! Store type corresponding to a null reply
               iskip=mdl%size_fetch_array*(grid_cpu-1)+1
@@ -575,7 +580,8 @@ subroutine check_mail(s,comm_id,hash_dict)
 
            ! Otherwise, assemble a proper reply with a complete tile
            else
-              
+              igrid=(loc(child)-loc(s%m%grid(1)))/(loc(s%m%grid(2))-loc(s%m%grid(1)))+1
+
               itile=(igrid-m%head_cache(ilevel))/ntilemax
               ntile_reply=MIN(m%tail_cache(ilevel)-itile*ntilemax-m%head_cache(ilevel)+1,ntilemax)              
 
@@ -637,12 +643,10 @@ subroutine check_mail(s,comm_id,hash_dict)
                  hash_child(1:ndim)=mdl%recv_flush_array(iskip+1:iskip+ndim)
                  iskip=iskip+ndim+1
 
-                 ! Get grid index from hash table
-                 ichild=hash_get(hash_dict,hash_child)
-
-                 ! Unpack message content only if grid exists
-                 if(ichild>0)then
-                    call unpack_flush%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1))
+                 ! Get grid from hash table
+                 call c_f_pointer(hash_getp(hash_dict,hash_child),child)
+                 if(ASSOCIATED(child))then
+                    call unpack_flush%proc(child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1))
                  endif
 
                  iskip=iskip+mdl%size_msg_array
@@ -664,7 +668,7 @@ subroutine check_mail(s,comm_id,hash_dict)
                  iskip=iskip+ndim+1
 
                  ! Create new grid if grid does not exist
-                 if(hash_get(hash_dict,hash_child).EQ.0)then
+                 if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
                     
                     ! Compute Hilbert keys of new octs
                     ix(1:ndim)=hash_child(1:ndim)
@@ -690,7 +694,7 @@ subroutine check_mail(s,comm_id,hash_dict)
                     m%grid(ichild)%flag2(1:twotondim)=0
                     
                     ! Insert new grid in hash table
-                    call hash_set(hash_dict,hash_child,ichild)
+                    call hash_setp(hash_dict,hash_child,m%grid(ichild))
 
                     ! Unpack message content
                     call unpack_flush%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1))
@@ -731,6 +735,7 @@ end subroutine check_mail
 !##############################################################
 !##############################################################
 subroutine destage(s,igrid,hash_dict)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
 #ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
@@ -749,7 +754,7 @@ subroutine destage(s,igrid,hash_dict)
   ! It assembles flush messages, and when the message
   ! buffer is full, it sends it to the target CPU.
   !
-  integer::ind,ivar,idim,ipos,info,icache,iflush,grid_cpu
+  integer::ind,ivar,idim,info,icache,iflush,grid_cpu
   integer::send_flush_id,iskip,nflush
   integer(kind=8),dimension(0:ndim)::hash_key
 
@@ -759,9 +764,8 @@ subroutine destage(s,igrid,hash_dict)
 
   hash_key(0)=m%grid(igrid)%lev
   hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
-  ipos=hash_get(hash_dict,hash_key)
 
-  if(hash_get(hash_dict,hash_key).EQ.0)then
+  if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_key)))then
      write(*,*)'PE ',g%myid,' trying to free non existing grid'
      stop
   endif

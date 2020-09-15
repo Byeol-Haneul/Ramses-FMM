@@ -267,6 +267,7 @@ end subroutine unlock_cache_p
 !##############################################################
 !##############################################################
 subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED, C_BOOL
   use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: oct
@@ -285,6 +286,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   logical,optional::lock
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
+  logical::absent
 #ifndef MDL2
   !
   ! This routine acquires the grid 
@@ -315,28 +317,17 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
 #endif
 
   ! Access hash table
-  child_grid=hash_get(hash_dict,hash_key)
+  call c_f_pointer(hash_getp(hash_dict,hash_key,absent),child)
+  if (present(lock).and.associated(child)) then
+     if (lock) call lock_cache_p(s,child)
+  endif
+  if (associated(child).or.absent) return
 
 #ifndef WITHOUTMPI
 
-  ! If grid index is positive, then return
-  if(child_grid>0)then
-     child => m%grid(child_grid)
-     if (present(lock).and.associated(child)) then
-       if (lock) call lock_cache_p(s,child)
-     endif
-     return
-  endif
-
-  ! If grid index is -1, then set it to 0 and return
-  ! This means we already know the remote grid does not exist
-  if(child_grid.EQ.-1)then
-     child_grid = 0
-     nullify(child)
-     return
-  endif
 
   ! Now we know child_grid=0
+  child_grid = 0
 
   ! Compute the Hilbert key
   ilevel=hash_key(0)
@@ -393,7 +384,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
            hash_child(1:ndim)=m%ckey_null(1:ndim,m%free_null)
            call hash_free(hash_dict,hash_child)
         endif
-        call hash_set(hash_dict,hash_key,-1)
+        call hash_setp(hash_dict,hash_key)
         m%occupied_null(m%free_null)=.true.
         m%lev_null(m%free_null)=ilevel
         m%ckey_null(1:ndim,m%free_null)=hash_key(1:ndim)
@@ -405,6 +396,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
            m%free_null=1
         endif
         if(m%nnull.GT.r%ncachemax)m%nnull=r%ncachemax
+        child_grid = 0
 
      ! If grid exists, store incoming tile in the cache
      else
@@ -439,11 +431,11 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
            iskip=iskip+ndim+1
 
            ! If grid does not already exist, create it in local memory
-           if(hash_get(hash_dict,hash_child).EQ.0)then
+           if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
 
               if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,hash_dict)
 
-              call hash_set(hash_dict,hash_child,ichild)
+              call hash_setp(hash_dict,hash_child,m%grid(ichild))
               
               m%occupied(m%free_cache)=.true.
               m%parent_cpu(m%free_cache)=grid_cpu
@@ -505,7 +497,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
 
      ! Set grid index to a virtual grid in local memory
      child_grid=r%ngridmax+m%free_cache
-     call hash_set(hash_dict,hash_key,child_grid)
+     call hash_setp(hash_dict,hash_key,m%grid(child_grid))
 
      ! Store the grid coordinates
      m%grid(child_grid)%lev=hash_key(0)

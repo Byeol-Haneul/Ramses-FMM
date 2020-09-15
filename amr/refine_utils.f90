@@ -165,7 +165,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
            if(ok)then
               ind_parent=ioct
               ind_cell=ind
-              call make_new_oct(s,ind_parent,ind_cell,ilev+1)
+              call make_new_oct(s,m%grid(ind_parent),ind_cell,ilev+1)
               g%ncreate=g%ncreate+1
            endif
         end do
@@ -323,7 +323,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
            hash_key(1:ndim)=m%grid(inew)%ckey(1:ndim)
            if(m%grid(inew)%lev>0)then
               call hash_free(m%grid_dict,hash_key)
-              call hash_set(m%grid_dict,hash_key,i)
+              call hash_setp(m%grid_dict,hash_key,m%grid(i))
            endif
            swap_table(i)=i
            i=inew
@@ -333,7 +333,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         hash_key(0)=m%grid(i)%lev
         hash_key(1:ndim)=m%grid(i)%ckey(1:ndim)
         if(m%grid(i)%lev>0)then
-           call hash_set(m%grid_dict,hash_key,i)
+           call hash_setp(m%grid_dict,hash_key,m%grid(i))
         end if
         swap_table(i)=i
      endif
@@ -625,10 +625,11 @@ end subroutine unpack_flush_derefine
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine make_new_oct(s,iparent,icell,ilevel)
+subroutine make_new_oct(s,parent,icell,ilevel)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY: c_associated
   use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim,twondim,nvector
-  use amr_commons, only:nbor
+  use amr_commons, only:nbor,oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use nbors_utils_p
@@ -641,7 +642,8 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
 #endif
   type(ramses_t)::s
   integer::ilevel
-  integer::iparent,icell
+  integer::icell
+  type(oct)::parent
   !--------------------------------------------------------------
   ! This routine creates a children oct at level ilevel.
   ! ilevel is thus the level of the new children oct.
@@ -649,7 +651,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   ! The parent cell is labeled with the parent oct index iparent
   ! and the cell index icell (from 1 to 8).
   !--------------------------------------------------------------
-  integer::idim,ivar,ichild,ind,inbor,nstride,grid_cpu
+  integer::idim,ivar,ind,inbor,nstride,grid_cpu
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
   integer(kind=8),dimension(1:ndim)::cart_key
@@ -658,6 +660,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   real(dp),dimension(0:twondim,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
   type(nbor),dimension(0:twondim)::grid_nbor
+  type(oct),pointer::child
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -676,8 +679,10 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   ! Compute Cartesian keys of new octs
   do idim=1,ndim
      nstride=2**(idim-1)
-     cart_key(idim)=2*m%grid(iparent)%ckey(idim)+MOD((icell-1)/nstride,2)
+     cart_key(idim)=2*parent%ckey(idim)+MOD((icell-1)/nstride,2)
   end do
+  hash_key(0)=ilevel
+  hash_key(1:ndim)=cart_key(1:ndim)
 
   ! Compute Hilbert keys of new octs
   ix(1:ndim)=cart_key(1:ndim)
@@ -687,7 +692,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   if (m%domain(ilevel)%in_rank(hk)) then
 
      ! Set grid index to a virtual grid in local main memory
-     ichild=m%ifree
+     child => m%grid(m%ifree)
 
      ! Go to next main memory free line
      m%ifree=m%ifree+1
@@ -697,14 +702,14 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
         write(*,*)'Increase ngridmax'
         call mdl_abort(mdl)
      end if
-
+     call hash_setp(m%grid_dict,hash_key,child)
   ! Otherwise, determine parent processor and use the cache
   else
      grid_cpu = m%domain(ilevel)%get_rank(hk)
      ! If next cache line is occupied, free it.
      if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
      ! Set grid index to a virtual grid in local cache memory
-     ichild=r%ngridmax+m%free_cache
+     child => m%grid(r%ngridmax+m%free_cache)
      m%occupied(m%free_cache)=.true.
      m%parent_cpu(m%free_cache)=grid_cpu
      m%dirty(m%free_cache)=.true.
@@ -713,23 +718,20 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
      m%ncache=m%ncache+1
      if(m%free_cache.GT.r%ncachemax)m%free_cache=1
      if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+     ! Insert new grid in hash table
+     call hash_setp(m%grid_dict,hash_key,child)
   endif
 
-  m%grid(ichild)%lev=ilevel
-  m%grid(ichild)%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
-  m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
-  m%grid(ichild)%refined(1:twotondim)=.false.
-  m%grid(ichild)%flag1(1:twotondim)=0
-  m%grid(ichild)%flag2(1:twotondim)=0
-  m%grid(ichild)%superoct=1
-
-  ! Insert new grid in hash table
-  hash_key(0)=ilevel
-  hash_key(1:ndim)=cart_key(1:ndim)
-  call hash_set(m%grid_dict,hash_key,ichild)
+  child%lev=ilevel
+  child%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
+  child%hkey(1:nhilbert)=hk(1:nhilbert)
+  child%refined(1:twotondim)=.false.
+  child%flag1(1:twotondim)=0
+  child%flag2(1:twotondim)=0
+  child%superoct=1
 
   ! Set status of parent cell to "refined"
-  m%grid(iparent)%refined(icell)=.true.
+  parent%refined(icell)=.true.
 
   !=========================================================
   ! Inject parent hydro variables into new children ones
@@ -739,7 +741,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   ! Interpolate hydro variables
   do ivar=1,nvar
      do ind=1,twotondim
-        m%grid(ichild)%uold(ind,ivar)=m%grid(iparent)%uold(icell,ivar)
+        child%uold(ind,ivar)=parent%uold(icell,ivar)
      enddo
   end do
   
@@ -763,7 +765,7 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
      ! Store hydro variables
      do ivar=1,nvar
         do ind=1,twotondim
-           m%grid(ichild)%uold(ind,ivar)=u2(ind,ivar)
+           child%uold(ind,ivar)=u2(ind,ivar)
         enddo
      end do
      
@@ -775,9 +777,9 @@ subroutine make_new_oct(s,iparent,icell,ilevel)
   
   ! Interpolate (straight injection) gravity variables
   do ind=1,twotondim
-     m%grid(ichild)%f(ind,1:ndim)=m%grid(iparent)%f(icell,1:ndim)
-     m%grid(ichild)%phi(ind)=m%grid(iparent)%phi(icell)
-     m%grid(ichild)%phi_old(ind)=m%grid(iparent)%phi_old(icell)
+     child%f(ind,1:ndim)=parent%f(icell,1:ndim)
+     child%phi(ind)=parent%phi(icell)
+     child%phi_old(ind)=parent%phi_old(icell)
   enddo
   
 #endif
