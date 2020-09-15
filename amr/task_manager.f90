@@ -27,9 +27,7 @@ subroutine mdl_init
   call mdl_initialize(mdl)
 !  associate(mdl=>pst%s%mdl)
 
-!  write(*,*)'HELLO-X'
   pst = worker_init(mdl)
-!  write(*,*)'HELLO-Y'
 
 #ifndef WITHOUTMPI
   ! Allocate input and output buffer sizes

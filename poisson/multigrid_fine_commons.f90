@@ -62,9 +62,7 @@ subroutine multigrid(pst,ilevel,icount)
   in_make_initial_phi%ilevel=ilevel
   in_make_initial_phi%icount=icount
   call r_make_initial_phi(pst,in_make_initial_phi,storage_size(in_make_initial_phi)/32)  ! Initial guess
-  if(pst%s%r%verbose) print '(A)','Initial phi done '
   call r_make_mask(pst,ilevel,1)              ! Fill the fine level mask
-  if(pst%s%r%verbose) print '(A)','Initial mask done '
   in_make_bc_rhs%ilevel=ilevel
   in_make_bc_rhs%icount=icount
   call r_make_bc_rhs(pst,in_make_bc_rhs,storage_size(in_make_bc_rhs)/32)       ! Fill BC-modified RHS
@@ -100,8 +98,6 @@ subroutine multigrid(pst,ilevel,icount)
         exit
      end if
   end do
-
-  if(pst%s%r%verbose) print '(A)','Mask done '
   
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
@@ -112,7 +108,7 @@ subroutine multigrid(pst,ilevel,icount)
      call r_set_scan_flag(pst,in_set_scan_flag,storage_size(in_set_scan_flag)/32)
   end do
   
-  if(pst%s%r%verbose) print '(A)','Scan done '
+  if(pst%s%r%verbose) print '(A)','Mask and scan done '
 
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
