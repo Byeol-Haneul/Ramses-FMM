@@ -136,7 +136,7 @@ subroutine check_mail(s,comm_id,hash_dict)
                  ! Get grid from hash table
                  call c_f_pointer(hash_getp(hash_dict,hash_child),child)
                  if(ASSOCIATED(child))then
-                    call unpack_flush%proc(child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1))
+                    call unpack_flush%proc(child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
                  endif
 
                  iskip=iskip+mdl%size_msg_array
@@ -175,7 +175,6 @@ subroutine check_mail(s,comm_id,hash_dict)
                        write(*,*)'Increase ngridmax'
                        call mdl_abort(mdl)
                     endif
-                    
                     m%grid(ichild)%lev=hash_child(0)
                     m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
                     m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
@@ -187,7 +186,7 @@ subroutine check_mail(s,comm_id,hash_dict)
                     call hash_setp(hash_dict,hash_child,m%grid(ichild))
 
                     ! Unpack message content
-                    call unpack_flush%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1))
+                    call unpack_flush%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
                     
                  endif
                  
@@ -423,12 +422,12 @@ subroutine open_cache(s,cache_operation,domain_decompos)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
-  use flag_utils, only:pack_fetch_flag, unpack_fetch_flag,&
-                      init_flush_initflag, pack_flush_initflag, unpack_flush_initflag
+  use flag_utils, only:init_flush_initflag, pack_flush_initflag, unpack_flush_initflag
   use load_balance_module, only: pack_flush_loadbalance, unpack_flush_loadbalance
   use refine_utils, only: init_flush_derefine,pack_flush_derefine,unpack_flush_derefine,&
-                          pack_flush_refine,unpack_flush_refine,&
-                          pack_fetch_refine,unpack_fetch_refine
+                          pack_flush_refine,unpack_flush_refine
+  use marshal, only: pack_fetch_refine,unpack_fetch_refine,&
+                     pack_fetch_flag, unpack_fetch_flag
   use upload_module, only: init_flush_upload,pack_flush_upload,unpack_flush_upload
   use rho_fine_module, only: init_flush_multipole,pack_flush_multipole,unpack_flush_multipole,&
                         init_flush_rho,pack_flush_rho,unpack_flush_rho,pack_fetch_split,unpack_fetch_split
@@ -489,8 +488,8 @@ subroutine open_cache(s,cache_operation,domain_decompos)
 
   ! Default combiner rule
   mdl%combiner_rule=COMBINER_EXIST
-  
-  ! Operations of type "flag"
+
+    ! Operations of type "flag"
   if(cache_operation.EQ.operation_initflag)then
      mdl%size_msg_array = storage_size(dummy_int4)/32
      init_flush%proc => init_flush_initflag

@@ -150,7 +150,7 @@ end subroutine pack_fetch_hydro
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine unpack_fetch_hydro(grid,msg_size,msg_array)
+subroutine unpack_fetch_hydro(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
@@ -158,10 +158,13 @@ subroutine unpack_fetch_hydro(grid,msg_size,msg_array)
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   type(msg_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim

@@ -447,11 +447,12 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
               endif
               
               ! Store the grid coordinates for the entire tile
-              m%grid(ichild)%lev=hash_child(0)
-              m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
+              ! TODO: THIS IS NOW DONE IN UNPACK / INIT and seems to work (but should be checked)
+              !m%grid(ichild)%lev=hash_child(0)
+              !m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
              
               ! Unpack response to fetch request
-              call unpack_fetch%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_fetch_array(iskip:iskip+mdl%size_msg_array-1))
+              call unpack_fetch%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_fetch_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
               
               ! If we also have also a flush cache...
               ! This is for combined read-write cache operations
@@ -459,7 +460,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
                  m%dirty(m%free_cache)=.true.
                  
                  ! Set initialisation rule for combiner operations
-                 call init_flush%proc(m%grid(ichild),0)
+                 call init_flush%proc(m%grid(ichild),hash_child)
                  
               endif
 
@@ -507,7 +508,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
      m%dirty(m%free_cache)=.true.
 
      ! Set initialisation rule for combiner operation
-     call init_flush%proc(m%grid(child_grid),0)
+     call init_flush%proc(m%grid(child_grid),hash_key)
 
      ! Go to next free cache line
      m%free_cache=m%free_cache+1

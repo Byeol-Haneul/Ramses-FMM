@@ -37,6 +37,7 @@ subroutine smooth_fine(s,ilevel,nflag)
   use amr_parameters, only: ndim,twotondim,twondim
   use ramses_commons, only: ramses_t
   use cache_commons
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use amr_commons, only: nbor
   use nbors_utils_p
   implicit none

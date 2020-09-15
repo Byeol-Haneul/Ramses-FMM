@@ -73,7 +73,7 @@ set(fortran_files
 	amr/load_balance.f90
 	amr/movie.f90
 	amr/task_manager.f90
-
+        amr/marshal.f90
 	amr/amr_parameters.f90
 	hydro/hydro_parameters.f90
 	amr/hash.f90

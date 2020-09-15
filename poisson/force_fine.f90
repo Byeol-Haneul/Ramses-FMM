@@ -168,6 +168,7 @@ subroutine gradient_phi(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount

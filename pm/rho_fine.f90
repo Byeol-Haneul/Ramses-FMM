@@ -296,15 +296,16 @@ end subroutine multipole_split_cells
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flush_multipole(grid,msg_size,msg_array)
+subroutine init_flush_multipole(grid,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef HYDRO
   do ivar=1,ndim+1
      do ind=1,twotondim
@@ -344,17 +345,20 @@ end subroutine pack_flush_multipole
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_flush_multipole(grid,msg_size,msg_array)
+subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   type(msg_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef HYDRO
@@ -768,15 +772,16 @@ end subroutine cic_part
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flush_rho(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_rho(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef GRAV
   do ind=1,twotondim
      grid%rho(ind)=0.0
@@ -812,17 +817,20 @@ end subroutine pack_flush_rho
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_flush_rho(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_rho(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -885,17 +893,20 @@ end subroutine pack_fetch_split
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine unpack_fetch_split(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_fetch_split(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_int4
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_int4)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim

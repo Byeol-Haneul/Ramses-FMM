@@ -166,16 +166,17 @@ end subroutine upload_fine
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine init_flush_upload(grid,msg_size,msg_array)
+subroutine init_flush_upload(grid,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
@@ -216,18 +217,21 @@ end subroutine pack_flush_upload
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine unpack_flush_upload(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   type(msg_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef HYDRO

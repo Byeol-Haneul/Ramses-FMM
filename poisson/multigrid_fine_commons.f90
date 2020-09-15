@@ -549,17 +549,20 @@ subroutine pack_flush_build_mg(grid,msg_size,msg_array)
 
 end subroutine pack_flush_build_mg
 
-subroutine unpack_flush_build_mg(grid,msg_size,msg_array)
+subroutine unpack_flush_build_mg(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::idim,ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
   do ind=1,twotondim

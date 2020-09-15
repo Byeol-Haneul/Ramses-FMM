@@ -122,15 +122,16 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
 
 end subroutine restrict_mask
 
-subroutine init_flush_restrict_mask(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_restrict_mask(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef GRAV
   do ind=1,twotondim
      grid%f(ind,3)=0.0d0
@@ -160,17 +161,20 @@ subroutine pack_flush_restrict_mask(grid,msg_size,msg_array)
 
 end subroutine pack_flush_restrict_mask
 
-subroutine unpack_flush_restrict_mask(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_restrict_mask(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -380,17 +384,20 @@ subroutine pack_fetch_mg(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_mg
 
-subroutine unpack_fetch_mg(grid,msg_size,msg_array)
+subroutine unpack_fetch_mg(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_twin_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_twin_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -740,17 +747,20 @@ subroutine pack_fetch_restrict_res(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_restrict_res
 
-subroutine unpack_fetch_restrict_res(grid,msg_size,msg_array)
+subroutine unpack_fetch_restrict_res(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -761,15 +771,16 @@ subroutine unpack_fetch_restrict_res(grid,msg_size,msg_array)
 
 end subroutine unpack_fetch_restrict_res
 
-subroutine init_flush_restrict_res(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_restrict_res(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef GRAV
   do ind=1,twotondim
      grid%f(ind,2)=0.0d0
@@ -799,17 +810,20 @@ subroutine pack_flush_restrict_res(grid,msg_size,msg_array)
 
 end subroutine pack_flush_restrict_res
 
-subroutine unpack_flush_restrict_res(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_restrict_res(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -966,17 +980,20 @@ subroutine pack_fetch_phi(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_phi
 
-subroutine unpack_fetch_phi(grid,msg_size,msg_array)
+subroutine unpack_fetch_phi(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -1155,17 +1172,20 @@ subroutine pack_fetch_scan(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_scan
 
-subroutine unpack_fetch_scan(grid,msg_size,msg_array)
+subroutine unpack_fetch_scan(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
