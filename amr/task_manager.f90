@@ -269,7 +269,7 @@ subroutine mdl_wait(pst)
   integer::input_size
   integer::output_size,source_cpu,function_id
   integer,dimension(:),allocatable,target::input_array,output_array
-  integer::dummy=1
+  integer,dimension(1)::dummy
   integer,dimension(1:32)::header
 
   associate(s=>pst%s,mdl=>pst%s%mdl)
@@ -321,6 +321,7 @@ subroutine mdl_wait(pst)
         if(output_size>0)then
            call MPI_ISEND(output_array,output_size,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
         else
+           dummy(1)=1
            call MPI_ISEND(dummy,1,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
         endif
         call MPI_WAIT(output_id,output_status,info)

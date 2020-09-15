@@ -834,7 +834,8 @@ subroutine close_cache(s,hash_dict)
   !
   integer::info,icache,igrid,icpu,iskip
   integer::send_flush_id,nflush
-  integer::dummy_int,close_tag=7,close_id
+  integer::close_tag=7,close_id
+  integer,dimension(1)::dummy_int
   integer(kind=8),dimension(0:ndim)::hash_child
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status
