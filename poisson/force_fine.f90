@@ -168,6 +168,8 @@ subroutine gradient_phi(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
+  use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
@@ -191,6 +193,7 @@ subroutine gradient_phi(s,ilevel,icount)
   real(dp)::phi1,phi2,phi3,phi4
   real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
   type(oct),pointer::gridp
+  type(msg_three_realdp)::dummy_three_realdp
 
 #ifdef GRAV
 
@@ -248,7 +251,9 @@ subroutine gradient_phi(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,operation_interpol,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+                     pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
 
   hash_nbor(0)=ilevel
 
@@ -270,7 +275,7 @@ subroutine gradient_phi(s,ilevel,icount)
            if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
            if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
-        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -281,7 +286,7 @@ subroutine gradient_phi(s,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim parent cell using read-only cache
-           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
+           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
            call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
               call unlock_cache_p(s,grid_nbor(ind)%p)

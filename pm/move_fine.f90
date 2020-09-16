@@ -67,6 +67,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -84,6 +85,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
   real(dp),dimension(1:ndim)::ff
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
+  type(msg_three_realdp)::dummy_three_realdp
   
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
 
@@ -92,7 +94,9 @@ subroutine kick_drift_part(s,ilevel,action_part)
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,operation_kick,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+                     pack=pack_fetch_kick,unpack=unpack_fetch_kick)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -145,15 +149,14 @@ subroutine kick_drift_part(s,ilevel,action_part)
      hash_nbor(0)=ilevel+1
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),.false.,.true.)
-        call lock_cache(s,gridp(ind)%p)
+        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         if(.not.associated(gridp(ind)%p))then
            ok_level=.false.
            exit
         end if
      end do
      do ind=1,twotondim
-        call unlock_cache(s,gridp(ind)%p)
+        call unlock_cache_p(s,gridp(ind)%p)
      end do
 
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
@@ -207,8 +210,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
         icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),.false.,.true.)
-           call lock_cache(s,gridp(ind)%p)
+           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(.not.associated(gridp(ind)%p))then
               ok_level=.false.
               exit
@@ -329,17 +331,20 @@ end subroutine pack_fetch_kick
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine unpack_fetch_kick(grid,msg_size,msg_array)
+subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_three_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_three_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV

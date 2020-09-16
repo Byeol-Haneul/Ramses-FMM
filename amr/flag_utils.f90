@@ -95,7 +95,9 @@ subroutine init_flag(s,ilevel,nflag)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use cache_commons
+  use cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
@@ -109,6 +111,7 @@ subroutine init_flag(s,ilevel,nflag)
   logical::ok
   integer(kind=8),dimension(0:ndim)::hash_key
   type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -124,13 +127,16 @@ subroutine init_flag(s,ilevel,nflag)
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------
-  call open_cache(s,operation_initflag,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
+                init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ichild=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.false.)
+     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
      ok=.false.
      ! Loop over cells
      do ind=1,twotondim
@@ -150,63 +156,20 @@ subroutine init_flag(s,ilevel,nflag)
   end associate
   
 end subroutine init_flag
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_fetch_flag(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
-  use amr_commons, only: oct
-  use cache_commons, only: msg_int4
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  integer::ind
-  type(msg_int4)::msg
-
-  do ind=1,twotondim
-     msg%int4(ind)=grid%flag1(ind)
-  end do
-
-  msg_array=transfer(msg,msg_array)
-  
-end subroutine pack_fetch_flag
 !###############################################################
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_fetch_flag(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
-  use amr_commons, only: oct
-  use cache_commons, only: msg_int4
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  integer::ind
-  type(msg_int4)::msg
-
-  msg=transfer(msg_array,msg)
-
-  do ind=1,twotondim
-     grid%flag1(ind)=msg%int4(ind)
-  end do
-  
-end subroutine unpack_fetch_flag
-!###############################################################
-!###############################################################
-!###############################################################
-!###############################################################
-subroutine init_flush_initflag(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_initflag(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   do ind=1,twotondim
      grid%flag1(ind)=0
   end do
@@ -238,17 +201,20 @@ end subroutine pack_flush_initflag
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine unpack_flush_initflag(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_initflag(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_int4
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_int4)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
   do ind=1,twotondim
@@ -341,7 +307,9 @@ subroutine ensure_ref_rules(s,ilevel)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use cache_commons
+  use cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
@@ -358,6 +326,7 @@ subroutine ensure_ref_rules(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   logical::ok
   type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -373,7 +342,9 @@ subroutine ensure_ref_rules(s,ilevel)
   k1max=2
 #endif
 
-  call open_cache(s,operation_smooth,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -402,7 +373,7 @@ subroutine ensure_ref_rules(s,ilevel)
               enddo
 
               ! Get neighboring grid index
-              call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
+              call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
               ok=ok.and.(associated(gridp))
 
            end do

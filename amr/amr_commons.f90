@@ -5,7 +5,6 @@ module amr_commons
   use hydro_commons
   use hash
   use domain_m
-  use mdl_module, only: mdl_t
   
   type multipole_t
     real(dp),dimension(1:ndim+1)::q

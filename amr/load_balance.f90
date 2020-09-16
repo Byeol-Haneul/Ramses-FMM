@@ -288,6 +288,8 @@ subroutine load_balance(s,ilevel)
   use hilbert
   use hash
   use cache_commons
+  use cache
+  use marshal, only: pack_fetch_refine,unpack_fetch_refine
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -311,6 +313,8 @@ subroutine load_balance(s,ilevel)
   integer,dimension(:),allocatable::swap_table,swap_tmp
   integer,dimension(0:twotondim-1)::bucket_count,bucket_offset
   type(oct)::grid_tmp
+  type(oct),pointer::child
+  type(msg_large_realdp)::dummy_large_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -321,7 +325,10 @@ subroutine load_balance(s,ilevel)
   m%ifree=m%noct_used+1
   do ilev=ilevel+1,r%nlevelmax
 
-     call open_cache(s,operation_loadbalance,domain_decompos_amr)
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
+                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+                flush=pack_flush_loadbalance, combine=unpack_flush_loadbalance)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
@@ -356,7 +363,7 @@ subroutine load_balance(s,ilevel)
            call hash_free(m%grid_dict,hash_key)
            
            ! Insert new cache grid in hash table
-           call hash_set(m%grid_dict,hash_key,ichild)
+           call hash_setp(m%grid_dict,hash_key,m%grid(ichild))
         
         endif
 
@@ -484,7 +491,7 @@ subroutine load_balance(s,ilevel)
            hash_key(1:ndim)=m%grid(inew)%ckey(1:ndim)
            if(m%grid(inew)%lev>0)then
               call hash_free(m%grid_dict,hash_key)
-              call hash_set(m%grid_dict,hash_key,i)
+              call hash_setp(m%grid_dict,hash_key,m%grid(i))
            endif
            swap_table(i)=i
            i=inew
@@ -494,7 +501,7 @@ subroutine load_balance(s,ilevel)
         hash_key(0)=m%grid(i)%lev
         hash_key(1:ndim)=m%grid(i)%ckey(1:ndim)
         if(m%grid(i)%lev>0)then
-           call hash_set(m%grid_dict,hash_key,i)
+           call hash_setp(m%grid_dict,hash_key,m%grid(i))
         end if
         swap_table(i)=i
      endif
@@ -593,7 +600,7 @@ end subroutine pack_flush_loadbalance
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine unpack_flush_loadbalance(grid,msg_size,msg_array)
+subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
@@ -601,10 +608,13 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array)
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar,idim
   type(msg_large_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
 !  write(*,*)'UNPACK REF',msg%int4

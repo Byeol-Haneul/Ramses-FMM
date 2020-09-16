@@ -247,6 +247,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
@@ -268,6 +269,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   type(oct),pointer::gridp
+  type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
@@ -314,7 +316,9 @@ subroutine cmp_residual_cg(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,operation_interpol,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
+                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
 
   hash_nbor(0)=ilevel
 
@@ -339,7 +343,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -350,7 +354,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
-           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
+           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
            call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
            do ind=1,threetondim
               call unlock_cache_p(s,grid_nbor(ind)%p)
@@ -420,6 +424,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -436,6 +441,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -449,7 +455,9 @@ subroutine cmp_Ap_cg(s,ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
 
-  call open_cache(s,operation_cg,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
+                pack=pack_fetch_cg,unpack=unpack_fetch_cg)
 
   hash_nbor(0)=ilevel
 
@@ -474,7 +482,7 @@ subroutine cmp_Ap_cg(s,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -552,6 +560,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
@@ -566,6 +575,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
   real(dp),dimension(1:twotondim)::phi_int
+  type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -598,7 +608,9 @@ subroutine make_initial_phi(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,operation_interpol,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
+                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
 
   hash_key(0)=ilevel
 
@@ -621,7 +633,7 @@ subroutine make_initial_phi(s,ilevel,icount)
         
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
-        call get_threetondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,.false.,.true.)
+        call get_threetondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
         call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
            call unlock_cache_p(s,grid_nbor(ind)%p)
@@ -667,17 +679,20 @@ subroutine pack_fetch_interpol(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_interpol
 
-subroutine unpack_fetch_interpol(grid,msg_size,msg_array)
+subroutine unpack_fetch_interpol(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_three_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_three_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -717,17 +732,20 @@ end subroutine pack_fetch_cg
 ! ########################################################################
 ! ########################################################################
 ! ########################################################################
-subroutine unpack_fetch_cg(grid,msg_size,msg_array)
+subroutine unpack_fetch_cg(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV

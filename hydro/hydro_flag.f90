@@ -10,6 +10,7 @@ subroutine hydro_flag(s,ilevel)
   use ramses_commons, only: ramses_t
   use hydro_parameters, only: nvar
   use cache_commons
+  use cache
   use nbors_utils_p
   implicit none
   type(ramses_t)::s
@@ -30,6 +31,7 @@ subroutine hydro_flag(s,ilevel)
   logical::ok
   type(nbor),dimension(1:twondim)::gridn
   type(oct),pointer::gridp
+  type(msg_realdp)::dummy_realdp
 
 #ifdef HYDRO
 
@@ -41,7 +43,9 @@ subroutine hydro_flag(s,ilevel)
        & r%err_grad_p==-1.0.and.&
        & r%err_grad_u==-1.0)return
 
-  call open_cache(s,operation_hydro,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro)
 
   ! Loop over active grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -65,18 +69,17 @@ subroutine hydro_flag(s,ilevel)
               if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel+1)-1
               if(hash_nbor(idim)==m%ckey_max(ilevel+1))hash_nbor(idim)=0
            enddo
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,.false.,.true.)
+           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(associated(gridp))then
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
-              call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,.false.,.true.)
+              call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
            endif
-           call lock_cache_p(s,gridn(i_nbor)%p)
         end do
 
         ! Loop over dimensions
@@ -151,7 +154,7 @@ end subroutine pack_fetch_hydro
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine unpack_fetch_hydro(grid,msg_size,msg_array)
+subroutine unpack_fetch_hydro(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
@@ -159,10 +162,13 @@ subroutine unpack_fetch_hydro(grid,msg_size,msg_array)
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   type(msg_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim

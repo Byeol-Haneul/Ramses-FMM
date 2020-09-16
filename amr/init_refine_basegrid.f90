@@ -239,7 +239,7 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
   use amr_parameters, only: nhilbert,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   use hilbert
-  use hash, only: hash_set
+  use hash, only: hash_setp
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -251,8 +251,8 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
   !-------------------------------------------------------
   integer::i,igrid,ioct,ilev,istart
   integer(kind=8)::ikey
-  integer(kind=8),dimension(1:nhilbert)::hk=0
-  integer(kind=8),dimension(1:ndim)::ix=0
+  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:ndim)::ix
   integer(kind=8),dimension(0:ndim)::hash_key
   integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
   integer(kind=8),dimension(1:nhilbert)::coarse_key
@@ -264,7 +264,7 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
   else
      istart=m%tail(ilevel-1)+1
   endif
-
+  hk=0
   ! New grid in current level
   igrid=istart-1
 
@@ -286,7 +286,7 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
      ! Insert new grid in hash table
      hash_key(0)=ilevel
      hash_key(1:ndim)=ix(1:ndim)
-     call hash_set(m%grid_dict,hash_key,igrid)
+     call hash_setp(m%grid_dict,hash_key,m%grid(igrid))
   end do
 
   !-----------

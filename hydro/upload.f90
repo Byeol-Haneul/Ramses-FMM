@@ -60,6 +60,8 @@ subroutine upload_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
+  use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -74,6 +76,7 @@ subroutine upload_fine(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   real(dp)::average,ekin,erad
   type(oct),pointer::gridp
+  type(msg_realdp)::dummy_realdp
 
 #ifdef HYDRO
 
@@ -90,7 +93,10 @@ subroutine upload_fine(s,ilevel)
      end do
   end do
 
-  call open_cache(s,operation_upload,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+                     pack=pack_fetch_hydro, unpack=unpack_fetch_hydro,&
+                     init=init_flush_upload, flush=pack_flush_upload, combine=unpack_flush_upload)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
@@ -98,7 +104,7 @@ subroutine upload_fine(s,ilevel)
 
      ! Get cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.false.)
+     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 
      ! Average conservative variables
      do ivar=1,nvar
@@ -166,16 +172,17 @@ end subroutine upload_fine
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine init_flush_upload(grid,msg_size,msg_array)
+subroutine init_flush_upload(grid,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
@@ -216,18 +223,21 @@ end subroutine pack_flush_upload
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine unpack_flush_upload(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   type(msg_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef HYDRO

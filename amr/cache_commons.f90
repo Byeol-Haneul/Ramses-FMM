@@ -51,8 +51,10 @@ module cache_commons
   end type msg_large_realdp
 
   ! Cache call back functions
-  type(cache_f)::pack_fetch,unpack_fetch
-  type(cache_f)::pack_flush,unpack_flush
-  type(cache_f)::init_flush
+  type(cache_f)       ::pack_fetch
+  type(cache_unpack_f)::unpack_fetch
+  type(cache_f)       ::pack_flush
+  type(cache_unpack_f)::unpack_flush
+  type(cache_init_f)  ::init_flush
   
 end module cache_commons

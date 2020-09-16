@@ -411,7 +411,7 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
         ! Insert in hash table
         hash_key(0)=ilevel
         hash_key(1:ndim)=ckey
-        call hash_set(m%grid_dict,hash_key,igrid)
+        call hash_setp(m%grid_dict,hash_key,m%grid(igrid))
         
         ! Compute Hilbert keys of new octs
         ix(1:ndim)=ckey(1:ndim)

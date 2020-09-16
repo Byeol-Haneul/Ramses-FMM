@@ -56,6 +56,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   use hilbert
   use hash
   implicit none
@@ -68,6 +69,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
   real(dp) :: ngpmask, mask_max
   real(dp) :: dtwotondim = (twotondim)
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -80,7 +82,11 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
   
   hash_key(0)=ifinelevel
   
-  call open_cache(s,operation_restrict_mask,domain_decompos_mg)
+  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+                     pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+                     init=init_flush_restrict_mask,&
+                     flush=pack_flush_restrict_mask, combine=unpack_flush_restrict_mask)
   
   ! Loop over grids
   do ichild=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -91,7 +97,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
 
         ! Get parent cell using write-only cache
-        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,.true.,.false.)
+        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 
         ! Convert mask value to volume fraction
         ngpmask=(1d0+m%grid(ichild)%f(ind,3))/2d0/dtwotondim
@@ -122,15 +128,16 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
 
 end subroutine restrict_mask
 
-subroutine init_flush_restrict_mask(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_restrict_mask(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef GRAV
   do ind=1,twotondim
      grid%f(ind,3)=0.0d0
@@ -160,17 +167,20 @@ subroutine pack_flush_restrict_mask(grid,msg_size,msg_array)
 
 end subroutine pack_flush_restrict_mask
 
-subroutine unpack_flush_restrict_mask(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_restrict_mask(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -222,6 +232,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   use hilbert
   use hash
   implicit none
@@ -240,6 +251,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   integer  :: igrid, ind, inbor, idim, igridn, id, ig
   real(dp) :: dtwondim = (twondim)
   type(oct),pointer::gridp
+  type(msg_twin_realdp)::dummy_twin_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   
@@ -254,7 +266,9 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache(s,operation_mg,domain_decompos_mg)
+  call open_cache(s,table=hash_dict,     data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain_mg, pack_size=storage_size(dummy_twin_realdp)/32,&
+                     pack=pack_fetch_mg,unpack=unpack_fetch_mg)
 
   hash_nbor(0)=ilevel
 
@@ -280,7 +294,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -380,17 +394,20 @@ subroutine pack_fetch_mg(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_mg
 
-subroutine unpack_fetch_mg(grid,msg_size,msg_array)
+subroutine unpack_fetch_mg(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_twin_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_twin_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -443,6 +460,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   use hilbert
   use hash
   implicit none
@@ -464,6 +482,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0
   real(dp) :: dtwondim = (twondim)
   type(oct),pointer::gridp
+  type(msg_twin_realdp)::dummy_twin_realdp
 
   integer, dimension(1:4) :: ired, iblack
   
@@ -482,7 +501,11 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache(s,operation_mg,domain_decompos_mg)
+  call open_cache(s,table=hash_dict,     data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain_mg, pack_size=storage_size(dummy_twin_realdp)/32,&
+                     pack=pack_fetch_mg,unpack=unpack_fetch_mg)
+
+
 
   hash_nbor(0)=ilevel
 
@@ -511,7 +534,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -661,6 +684,7 @@ subroutine restrict_residual(s,ifinelevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   use hilbert
   use hash
   implicit none
@@ -676,6 +700,7 @@ subroutine restrict_residual(s,ifinelevel)
   real(dp) :: dtwotondim = (twotondim)
   integer(kind=8),dimension(0:ndim) :: hash_key
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -688,7 +713,11 @@ subroutine restrict_residual(s,ifinelevel)
 
   hash_key(0)=ifinelevel
 
-  call open_cache(s,operation_restrict_res,domain_decompos_mg)
+  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+                     pack=pack_fetch_restrict_res,unpack=unpack_fetch_restrict_res,&
+                     init=init_flush_restrict_res,&
+                     flush=pack_flush_restrict_res, combine=unpack_flush_restrict_res)
   
   ! Loop over grids
   do ichild=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
@@ -702,7 +731,7 @@ subroutine restrict_residual(s,ifinelevel)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
         
         ! Get parent cell using read-write cache
-        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,.true.,.true.)
+        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
         
         ! Is coarse cell masked?
         if(gridp%f(icell,3)<=0d0)cycle
@@ -740,17 +769,20 @@ subroutine pack_fetch_restrict_res(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_restrict_res
 
-subroutine unpack_fetch_restrict_res(grid,msg_size,msg_array)
+subroutine unpack_fetch_restrict_res(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -761,15 +793,16 @@ subroutine unpack_fetch_restrict_res(grid,msg_size,msg_array)
 
 end subroutine unpack_fetch_restrict_res
 
-subroutine init_flush_restrict_res(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_restrict_res(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef GRAV
   do ind=1,twotondim
      grid%f(ind,2)=0.0d0
@@ -799,17 +832,20 @@ subroutine pack_flush_restrict_res(grid,msg_size,msg_array)
 
 end subroutine pack_flush_restrict_res
 
-subroutine unpack_flush_restrict_res(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_restrict_res(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -852,6 +888,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   use hilbert
   use hash
   implicit none
@@ -872,6 +909,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   integer::igrid_nbr,ind_nbr
   real(dp),dimension(1:twotondim)::corr
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -891,7 +929,9 @@ subroutine interpolate_and_correct(s,ifinelevel)
   ccc(:,7)=(/25,26,22,23,16,17,13,14/)
   ccc(:,8)=(/27,26,24,23,18,17,15,14/)
   
-  call open_cache(s,operation_phi,domain_decompos_mg)
+  call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+                     pack=pack_fetch_phi,unpack=unpack_fetch_phi)
 
   hash_key(0)=ifinelevel
 
@@ -902,7 +942,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
      
      ! Get 3**ndim neighbouring parent cell using a read-only cache
-     call get_threetondim_nbor_parent_cell_p(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,.false.,.true.)
+     call get_threetondim_nbor_parent_cell_p(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
      
      ! Loop over cells
      do ind=1,twotondim
@@ -966,17 +1006,20 @@ subroutine pack_fetch_phi(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_phi
 
-subroutine unpack_fetch_phi(grid,msg_size,msg_array)
+subroutine unpack_fetch_phi(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -1028,6 +1071,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
   use hilbert
   use hash
   implicit none
@@ -1043,6 +1087,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   real(dp)::dis_c
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -1053,7 +1098,9 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   iii(3,1,1:8)=(/5,5,5,5,0,0,0,0/); jjj(3,1,1:8)=(/5,6,7,8,1,2,3,4/)
   iii(3,2,1:8)=(/0,0,0,0,6,6,6,6/); jjj(3,2,1:8)=(/5,6,7,8,1,2,3,4/)
   
-  call open_cache(s,operation_scan,domain_decompos_mg)
+  call open_cache(s,table=hash_dict,     data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
+                     pack=pack_fetch_scan,unpack=unpack_fetch_scan)
 
   hash_nbor(0)=ilevel
 
@@ -1078,7 +1125,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -1155,17 +1202,20 @@ subroutine pack_fetch_scan(grid,msg_size,msg_array)
 
 end subroutine pack_fetch_scan
 
-subroutine unpack_fetch_scan(grid,msg_size,msg_array)
+subroutine unpack_fetch_scan(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV

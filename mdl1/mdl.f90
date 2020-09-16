@@ -193,7 +193,8 @@ module mdl_module
 #ifndef WITHOUTMPI  
       include 'mpif.h'
       integer::info
-      integer::output_tag=203,output_id,dummy=1
+      integer::output_tag=203,output_id
+      integer,dimension(1)::dummy
       integer,dimension(MPI_STATUS_SIZE)::output_status  
       
       ! Post a RECV for the output back from target_cpu
@@ -215,17 +216,18 @@ module mdl_module
       integer,value,intent(in)::target_cpu
       integer,optional::output_length
       type(*),optional,target::output
-      byte,dimension(:),pointer::buffer
+      integer,dimension(:),pointer::buffer
 
 #ifndef WITHOUTMPI  
       include 'mpif.h'
       integer::info
-      integer::output_tag=203,output_id,dummy=1
+      integer::output_tag=203,output_id
+      integer,dimension(1)::dummy
       integer,dimension(MPI_STATUS_SIZE)::output_status  
       
       ! Post a RECV for the output back from target_cpu
       if(present(output)) then
-        call c_f_pointer(c_loc(output),buffer,[mdl%MDL_INPUT_MAXSIZE])
+        call c_f_pointer(c_loc(output),buffer,[mdl%MDL_INPUT_MAXSIZE/4])
         call MPI_IRECV(buffer,output_length,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
       else
         call MPI_IRECV(dummy,1,MPI_INTEGER,target_cpu-1,output_tag,MPI_COMM_WORLD,output_id,info)
@@ -270,5 +272,15 @@ module mdl_module
       type(mdl_t)::mdl
       mdl_self = mdl%myid
     end function mdl_self
+
+    integer function mdl_core(mdl)
+      type(mdl_t)::mdl
+      mdl_core = 1
+    end function mdl_core
+
+    integer function mdl_cores(mdl)
+      type(mdl_t)::mdl
+      mdl_cores = 1
+    end function mdl_cores
 
 end module mdl_module

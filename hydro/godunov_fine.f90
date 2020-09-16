@@ -31,9 +31,12 @@ end subroutine r_godunov_fine
 subroutine godunov_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use cache_commons
+  use cache
+  use marshal, only: pack_fetch_refine,unpack_fetch_refine
   implicit none
   type(ramses_t)::s
   integer::ilevel
+  type(msg_large_realdp)::dummy_large_realdp
   !--------------------------------------------------------------------------
   ! This routine is a wrapper to the second order Godunov solver.
   ! Small grids (2x2x2) are gathered from level ilevel and sent to the
@@ -42,30 +45,36 @@ subroutine godunov_fine(s,ilevel)
   !--------------------------------------------------------------------------
   integer::igrid
 
-  call open_cache(s,operation_godunov,domain_decompos_amr)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
+                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+                init=init_flush_godunov, flush=pack_flush_godunov, combine=unpack_flush_godunov)
 
   ! Loop over active grids by vector sweeps
-  igrid=s%m%head(ilevel)
-  do while(igrid.LE.s%m%tail(ilevel))
-     SELECT CASE (s%m%grid(igrid)%superoct)
+  igrid=m%head(ilevel)
+  do while(igrid.LE.m%tail(ilevel))
+     SELECT CASE (m%grid(igrid)%superoct)
      CASE(1)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_1)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_1)
      CASE(2**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_2)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_2)
      CASE(4**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_4)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_4)
      CASE(8**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_8)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_8)
      CASE(16**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_16)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_16)
      CASE(32**ndim)
-        call godfine1(s,igrid,ilevel,s%m%hydro_w%kernel_32)
+        call godfine1(s,igrid,ilevel,m%hydro_w%kernel_32)
      END SELECT
-     igrid=igrid+s%m%grid(igrid)%superoct
+     igrid=igrid+m%grid(igrid)%superoct
   end do
 
-  call close_cache(s,s%m%grid_dict)
+  call close_cache(s,m%grid_dict)
 
+  end associate
 end subroutine godunov_fine
 !###########################################################
 !###########################################################
@@ -402,26 +411,23 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               end do
 
               ! Get neighboring grid index with read-only cache
-              call get_grid_p(s,hash_nbor,m%grid_dict,childp,.false.,.true.)
-              if(associated(childp))then
-                 call lock_cache_p(s,childp)
-              else
+              call get_grid_p(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              if(.not.associated(childp))then
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,.true.,.true.)
+                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
                  if(.not.associated(gridp))then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
                     call mdl_abort(mdl)
                  endif
-                 call lock_cache_p(s,gridp)
 
                  ! In case one wants to interpolate using high-order schemes
                  if(r%interpol_type>0)then
 
                     ! Get 2ndim neighboring father cells with read-write cache
                     ! Note that possible cache grids are locked inside the routine
-                    call get_twondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,.true.,.true.)
+                    call get_twondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.true.,fetch_cache=.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
                           u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
@@ -793,16 +799,17 @@ end subroutine godfine1
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_flush_godunov(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_godunov(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
@@ -843,18 +850,21 @@ end subroutine pack_flush_godunov
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine unpack_flush_godunov(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
 #ifdef HYDRO

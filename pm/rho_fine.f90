@@ -245,7 +245,9 @@ subroutine multipole_split_cells(s,ilevel)
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils_p
+  use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
   use cache_commons
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -260,20 +262,24 @@ subroutine multipole_split_cells(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_key
   logical::leaf_cell
   type(oct),pointer::gridp
+  type(msg_realdp)::dummy_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   
   !-------------------------------------------------------
   ! Perform octree restriction from level ilevel+1
   !-------------------------------------------------------
-  call open_cache(s,operation_multipole,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
+                     init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over finer level grids
   hash_key(0)=ilevel+1
   do ioct=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,.true.,.false.)
+     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 #ifdef HYDRO
      ! Average conservative variables
      do ivar=1,ndim+1
@@ -296,15 +302,16 @@ end subroutine multipole_split_cells
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flush_multipole(grid,msg_size,msg_array)
+subroutine init_flush_multipole(grid,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef HYDRO
   do ivar=1,ndim+1
      do ind=1,twotondim
@@ -344,17 +351,20 @@ end subroutine pack_flush_multipole
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_flush_multipole(grid,msg_size,msg_array)
+subroutine unpack_flush_multipole(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
   type(msg_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef HYDRO
@@ -458,6 +468,8 @@ subroutine cic_multipole(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -472,6 +484,7 @@ subroutine cic_multipole(s,ilevel)
   integer::icell
   real(kind=8)::dx_loc,vol_loc,mmm
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
@@ -482,7 +495,10 @@ subroutine cic_multipole(s,ilevel)
   ! Use hash table directly for cells (not for grids)
   hash_nbor(0)=ilevel+1
 
-  call open_cache(s,operation_rho,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
+                pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+                init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
   ! Loop over grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -580,7 +596,7 @@ subroutine cic_multipole(s,ilevel)
         do inbor=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,inbor)
            ! Get parent cell using write-only cache
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,.true.,.false.)
+           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
            if(associated(gridp))then
               gridp%rho(icell)=gridp%rho(icell)+mmm*vol(inbor)/vol_loc
            end if
@@ -631,6 +647,8 @@ subroutine cic_part(s,ilevel)
   use ramses_commons, only: ramses_t
   use nbors_utils_p
   use cache_commons
+  use cache
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
   use hilbert
   implicit none
   type(ramses_t)::s
@@ -673,7 +691,10 @@ subroutine cic_part(s,ilevel)
 
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
-  call open_cache(s,operation_rho,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(m%grid(1)%rho)/32,&
+                pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+                init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
   ! Loop over particles in Hilbert order
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
@@ -748,7 +769,7 @@ subroutine cic_part(s,ilevel)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
-        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,.true.,.false.)
+        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
            vol2=p%mp(ipart)*vol(ind)/vol_loc
            gridp%rho(icell)=gridp%rho(icell)+vol2
@@ -768,15 +789,16 @@ end subroutine cic_part
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flush_rho(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine init_flush_rho(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef GRAV
   do ind=1,twotondim
      grid%rho(ind)=0.0
@@ -812,17 +834,20 @@ end subroutine pack_flush_rho
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_flush_rho(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_flush_rho(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_small_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_small_realdp)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
   
 #ifdef GRAV
@@ -885,17 +910,20 @@ end subroutine pack_fetch_split
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine unpack_fetch_split(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
+subroutine unpack_fetch_split(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use cache_commons, only: msg_int4
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
   type(msg_int4)::msg
 
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
@@ -918,6 +946,7 @@ subroutine split_part(s,ilevel)
   use nbors_utils_p
   use cache_commons
   use hilbert
+  use cache
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -933,6 +962,7 @@ subroutine split_part(s,ilevel)
   integer::levelp_tmp
   integer(i8b)::idp_tmp
   type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
 
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
     
@@ -942,7 +972,9 @@ subroutine split_part(s,ilevel)
 
   ! Open read-only cache for array refined
   hash_key(0)=ilevel
-  call open_cache(s,operation_split,domain_decompos_amr)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+                pack=pack_fetch_split,unpack=unpack_fetch_split)
 
   ! Loop over particles
   ix_ref=-1
@@ -954,7 +986,7 @@ subroutine split_part(s,ilevel)
      ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
      if(.NOT. ALL(ix.EQ.ix_ref))then
         hash_key(1:ndim)=ix(1:ndim)
-        call get_grid_p(s,hash_key,m%grid_dict,gridp,.false.,.true.)
+        call get_grid_p(s,hash_key,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
         ix_ref=ix
      endif
 

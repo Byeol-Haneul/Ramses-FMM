@@ -58,8 +58,7 @@ subroutine get_threetondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind
      ! Store lower left neighbor coordinates 
      if(inbor==1)hash_ref(1:ndim)=hash_father(1:ndim)
      ! Get grid into memory and lock it if remote 
-     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
-     call lock_cache_p(s,gridp)
+     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=.true.)
      grid_twotondim_nbor(inbor)%p=>gridp
   end do
      
@@ -155,8 +154,7 @@ subroutine get_twondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind_nbo
   end do
 
   ! Get grid into memory and lock it if remote 
-  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
-  call lock_cache_p(s,gridp)
+  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=.true.)
   grid_nbor(0)%p=>gridp
   ind_nbor(0)=ind
   
@@ -177,8 +175,7 @@ subroutine get_twondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind_nbo
      end do
 
      ! Get grid into memory and lock it if remote 
-     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
-     call lock_cache_p(s,gridp)
+     call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=.true.)
      grid_nbor(inbor)%p=>gridp
      ind_nbor(inbor)=ind
   end do
@@ -190,7 +187,7 @@ end subroutine get_twondim_nbor_parent_cell_p
 !###############################################################
 !###############################################################
 !###############################################################
-subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_cache)
+subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_cache,lock)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -198,6 +195,7 @@ subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_ca
   implicit none
   type(ramses_t)::s
   logical::flush_cache,fetch_cache
+  logical,optional::lock
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
   integer::ind
@@ -216,7 +214,7 @@ subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_ca
   do idim=1,ndim
      ind=ind+2**(idim-1)*ii(idim)
   end do
-  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache,fetch_cache)
+  call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=lock)
 end subroutine get_parent_cell_p
 !###############################################################
 !###############################################################
@@ -268,7 +266,8 @@ end subroutine unlock_cache_p
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
+subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED, C_BOOL
   use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: oct
@@ -284,8 +283,10 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
   type(ramses_t)::s
   type(oct),pointer::child
   logical::flush_cache,fetch_cache
+  logical,optional::lock
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
+  logical::absent
 #ifndef MDL2
   !
   ! This routine acquires the grid 
@@ -316,25 +317,17 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 #endif
 
   ! Access hash table
-  child_grid=hash_get(hash_dict,hash_key)
+  call c_f_pointer(hash_getp(hash_dict,hash_key,absent),child)
+  if (present(lock).and.associated(child)) then
+     if (lock) call lock_cache_p(s,child)
+  endif
+  if (associated(child).or.absent) return
 
 #ifndef WITHOUTMPI
 
-  ! If grid index is positive, then return
-  if(child_grid>0)then
-     child => m%grid(child_grid)
-     return
-  endif
-
-  ! If grid index is -1, then set it to 0 and return
-  ! This means we already know the remote grid does not exist
-  if(child_grid.EQ.-1)then
-     child_grid = 0
-     nullify(child)
-     return
-  endif
 
   ! Now we know child_grid=0
+  child_grid = 0
 
   ! Compute the Hilbert key
   ilevel=hash_key(0)
@@ -391,7 +384,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
            hash_child(1:ndim)=m%ckey_null(1:ndim,m%free_null)
            call hash_free(hash_dict,hash_child)
         endif
-        call hash_set(hash_dict,hash_key,-1)
+        call hash_setp(hash_dict,hash_key)
         m%occupied_null(m%free_null)=.true.
         m%lev_null(m%free_null)=ilevel
         m%ckey_null(1:ndim,m%free_null)=hash_key(1:ndim)
@@ -403,6 +396,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
            m%free_null=1
         endif
         if(m%nnull.GT.r%ncachemax)m%nnull=r%ncachemax
+        child_grid = 0
 
      ! If grid exists, store incoming tile in the cache
      else
@@ -437,11 +431,11 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
            iskip=iskip+ndim+1
 
            ! If grid does not already exist, create it in local memory
-           if(hash_get(hash_dict,hash_child).EQ.0)then
+           if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
 
               if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,hash_dict)
 
-              call hash_set(hash_dict,hash_child,ichild)
+              call hash_setp(hash_dict,hash_child,m%grid(ichild))
               
               m%occupied(m%free_cache)=.true.
               m%parent_cpu(m%free_cache)=grid_cpu
@@ -453,11 +447,12 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
               endif
               
               ! Store the grid coordinates for the entire tile
-              m%grid(ichild)%lev=hash_child(0)
-              m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
+              ! TODO: THIS IS NOW DONE IN UNPACK / INIT and seems to work (but should be checked)
+              !m%grid(ichild)%lev=hash_child(0)
+              !m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
              
               ! Unpack response to fetch request
-              call unpack_fetch%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_fetch_array(iskip:iskip+mdl%size_msg_array-1))
+              call unpack_fetch%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_fetch_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
               
               ! If we also have also a flush cache...
               ! This is for combined read-write cache operations
@@ -465,7 +460,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
                  m%dirty(m%free_cache)=.true.
                  
                  ! Set initialisation rule for combiner operations
-                 call init_flush%proc(m%grid(ichild),0)
+                 call init_flush%proc(m%grid(ichild),hash_child)
                  
               endif
 
@@ -503,7 +498,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 
      ! Set grid index to a virtual grid in local memory
      child_grid=r%ngridmax+m%free_cache
-     call hash_set(hash_dict,hash_key,child_grid)
+     call hash_setp(hash_dict,hash_key,m%grid(child_grid))
 
      ! Store the grid coordinates
      m%grid(child_grid)%lev=hash_key(0)
@@ -513,7 +508,7 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
      m%dirty(m%free_cache)=.true.
 
      ! Set initialisation rule for combiner operation
-     call init_flush%proc(m%grid(child_grid),0)
+     call init_flush%proc(m%grid(child_grid),hash_key)
 
      ! Go to next free cache line
      m%free_cache=m%free_cache+1
@@ -527,6 +522,9 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache)
 
   if(child_grid>0)then
      child => m%grid(child_grid)
+     if (present(lock).and.associated(child)) then
+       if (lock) call lock_cache_p(s,child)
+     endif
   else
      nullify(child)
   endif

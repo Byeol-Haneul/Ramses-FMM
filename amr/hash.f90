@@ -10,6 +10,7 @@
 ! - COLLISIONS: A linked list is used to deal with collisions.
 
 module hash
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR
   use amr_parameters, only: ndim, nvector
   implicit none
   
@@ -18,10 +19,10 @@ module hash
   
   ! Define a bucket as a derived type (sequence statement!) for better
   ! cache efficiency.
-  type bucket
-     sequence
+  type,bind(c) :: bucket
+     !sequence
      integer(kind=8), dimension(0:ndim) :: key
-     integer :: value
+     type(c_ptr) :: valuep
      integer :: next_ibucket
   end type bucket     
 
@@ -131,22 +132,18 @@ contains
   ! =============================================================================
 
   ! =============================================================================
-  subroutine hash_set(htable, key, val)
+  subroutine hash_setp(htable, key, val)
+    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_LOC, C_NULL_PTR
     implicit none
-    type(hash_table),                     intent(inout) :: htable
+    type(hash_table),                    intent(inout) :: htable
     integer(kind=8) , dimension(0:ndim), intent(in)    :: key
-    integer,                              intent(in)    :: val    
+    type(*),optional,target,             intent(in)    :: val    
     
     ! Add a key/value pair to the hash table. If there is already a key/value
     ! pair stored for this key, return an error message.
 
     integer(kind=8) :: full_hash
     integer(kind=8) :: ibucket
-
-    if (val == 0)then
-       write(*,*) "trying to insert 0 (0 is used to indicate absence of a value) "
-       stop
-    end if
 
     ! Compute ibucket
     full_hash = hash_func(key)
@@ -156,7 +153,11 @@ contains
 
        ! Bucket is empty, simply insert value       
        htable%data(ibucket)%next_ibucket = 0
-       htable%data(ibucket)%value       = val
+       if (present(val)) then
+         htable%data(ibucket)%valuep       = C_LOC(val)
+       else
+         htable%data(ibucket)%valuep       = C_NULL_PTR
+       endif
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
        htable%nfree = htable%nfree - 1
        
@@ -166,7 +167,7 @@ contains
        do while (htable%data(ibucket)%next_ibucket .ne. 0)
           ! Check if key already exists - abort if so
           if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
-             write(*,*) "trying to insert already existing key: ",key
+             write(*,*) "trying to insert already existing key: ",key,htable%data(ibucket)%valuep
              write(*,*) "existing key: ", htable%data(ibucket)%key(0:ndim)
              stop
           end if
@@ -176,6 +177,7 @@ contains
        ! Check again (at the end of linked list)
        if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
           write(*,*) "trying to insert already existing key: ",key
+          CALL ABORT
           stop
        end if
        
@@ -183,7 +185,11 @@ contains
        htable%data(ibucket)%next_ibucket = htable%head_free
        ibucket = htable%head_free
        htable%data(ibucket)%next_ibucket = 0
-       htable%data(ibucket)%value = val
+       if (present(val)) then
+         htable%data(ibucket)%valuep       = C_LOC(val)
+       else
+         htable%data(ibucket)%valuep       = C_NULL_PTR
+       endif
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
 
        ! remove bucket from head of free linked list
@@ -194,25 +200,31 @@ contains
        write(*,*)"hash chaining space full "
        stop
     end if
-  end subroutine hash_set
+  end subroutine hash_setp
   ! =============================================================================
 
   ! =============================================================================
-  pure function hash_get(htable, key)
+  function hash_getp(htable, key, absent)
+    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR, C_NULL_PTR, C_ASSOCIATED
+    USE oct_commons
     implicit none
-    type(hash_table),                     intent(in) :: htable
+    type(hash_table),                    intent(in) :: htable
     integer(kind=8) , dimension(0:ndim), intent(in) :: key
-    integer                                          :: hash_get
-    
+    type(C_PTR)                                     :: hash_getp
+    logical,optional,                    intent(out):: absent
+
     ! Function (not subroutine, could also be changed...? ) which retrieves the 
     ! hash table value for a given key. If no entry exists, return 0
     integer(kind=8) :: ibucket, full_hash
+
+    if(present(absent)) absent = .false.
     
     full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
     if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
-       hash_get = htable%data(ibucket)%value
+       hash_getp = htable%data(ibucket)%valuep
+       if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
        return
     end if
     
@@ -220,15 +232,16 @@ contains
     do while( htable%data(ibucket)%next_ibucket > 0)
        ibucket = htable%data(ibucket)%next_ibucket
        if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
-          hash_get = htable%data(ibucket)%value
+          hash_getp = htable%data(ibucket)%valuep
+          if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
           return
        end if
     end do
 
     ! Nothing found...
-    hash_get = 0
+    hash_getp = C_NULL_PTR
 
-  end function hash_get
+  end function hash_getp
   ! =============================================================================
 
   ! =============================================================================`
@@ -247,6 +260,7 @@ contains
     logical,           dimension(1:nvector)         :: ok
     integer :: i, idim, n_coll
 
+    stop
     full_hash = 0
     do idim = 0, ndim
        do i = 1, n
@@ -260,7 +274,7 @@ contains
     
     do idim = 0, ndim
        do i = 1, n
-          bucket_keys(i, idim) = htable%data(ibucket(i))%key(idim)
+          !bucket_keys(i, idim) = htable%data(ibucket(i))%key(idim)
        end do
     end do
 
@@ -274,7 +288,7 @@ contains
     n_coll = 0
     do i = 1, n
        if (ok(i)) then
-          values(i) = htable%data(ibucket(i))%value
+          !values(i) = htable%data(ibucket(i))%value
        else
           n_coll = n_coll + 1
        endif
@@ -288,7 +302,7 @@ contains
           do while( htable%data(ibucket(i))%next_ibucket > 0)
              ibucket(i) = htable%data(ibucket(i))%next_ibucket
              if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
-                values(i) = htable%data(ibucket(i))%value
+                !values(i) = htable%data(ibucket(i))%value
                 ok(i) = .true.
              end if
           end do
@@ -328,7 +342,7 @@ contains
        if (ibucket <= htable%size) then           
           ! It's the first element we need to erase: Move first element from chaning 
           ! space into bucket and do as if the value to remove had been in the chaning space
-          htable%data(ibucket)%value = htable%data(htable%data(ibucket)%next_ibucket)%value
+          htable%data(ibucket)%valuep = htable%data(htable%data(ibucket)%next_ibucket)%valuep
           htable%data(ibucket)%key = htable%data(htable%data(ibucket)%next_ibucket)%key
           previous_ibucket = ibucket
           ibucket = htable%data(ibucket)%next_ibucket
