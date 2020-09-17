@@ -6,7 +6,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-add_executable(${PROJECT_NAME})
+add_executable(${PROJECT_NAME} "")
 
 find_package(MPI REQUIRED)      # MPI support
 include_directories(${MPI_Fortran_INCLUDE_PATH})
@@ -153,11 +153,15 @@ set_source_files_properties(${fortran_files} ${MPI_Fortran_COMPILE_FLAGS})
 
 # The Fortran source contains preprocessor directives which are enable differently for each compiler
 if (CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
- set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-cpp -recursive" )
+  set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-cpp -recursive" )
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
- set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none -fallow-argument-mismatch" )
+  if(CMAKE_Fortran_COMPILER_VERSION VERSION_LESS 10)
+    set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none" )
+  else()
+   set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none -fallow-argument-mismatch" )
+  endif()
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
- set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-e ZR" )
+  set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-e ZR" )
 endif()
 
 target_sources(${PROJECT_NAME} PRIVATE ${fortran_files})
