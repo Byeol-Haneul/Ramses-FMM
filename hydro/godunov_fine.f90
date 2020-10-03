@@ -431,7 +431,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               if(.not.associated(childp))then
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
+                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
                  if(.not.associated(gridp))then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
