@@ -9,13 +9,13 @@ subroutine close_cache(s,hash_dict)
   use ramses_commons, only: ramses_t
   use cache_commons
   use hash
+  use mdl_module
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
 #endif
   type(ramses_t)::s
   type(hash_table)::hash_dict
-#ifndef MDL2
   !
   ! This routine closes all cache operations.
   ! It purges all remaining flush messages.
@@ -28,12 +28,10 @@ subroutine close_cache(s,hash_dict)
   integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status
 #endif
   
-#ifndef WITHOUTMPI
-
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-#ifdef MDL20
+#ifdef MDL2
     call mdl_cache_close(mdl%mdl2,0)
-#else
+#elif !defined(WITHOUTMPI)
   ! EMPTY AND CLEAN THE CACHE
   do icache=1,m%ncache
      igrid=r%ngridmax+icache
@@ -106,23 +104,29 @@ subroutine close_cache(s,hash_dict)
 #endif
   end associate
   
-#endif
-#endif
 end subroutine close_cache
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
+! This function is called by MDL when a new grid is flushed
+! and it doesn't exist in the hash table. We allocate a new
+! grid and and return it. MDL will add the hash table entry.
 function create_grid(s,uhash,hash_key) result(gridp)
-  !USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_INT
-  use amr_parameters, only: ndim
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_ASSOCIATED
+  use amr_parameters, only: ndim, nhilbert, twotondim
   use ramses_commons, only: ramses_t
   use amr_commons, only: oct
   use mdl_module
+  use hilbert
+  use hash
   implicit none
   type(ramses_t)::s
   integer,value::uhash
+  integer::ilevel
   integer(kind=8),dimension(0:ndim)::hash_key
+  integer(kind=8),dimension(1:ndim)::ix
+  integer(kind=8),dimension(1:nhilbert)::hk
   type(oct),pointer::gridp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -137,6 +141,18 @@ function create_grid(s,uhash,hash_key) result(gridp)
       write(*,*)'Increase ngridmax'
       call mdl_abort(mdl)
     endif
+
+    ! TODO: We could do this here. Now the "unpack" or "init" routine does it.
+    gridp%lev=hash_key(0)
+    gridp%ckey(1:ndim)=hash_key(1:ndim)
+    ! TODO: Is the rest of this needed? It was done in nbors_utils.f90
+    ilevel=hash_key(0)
+    ix(1:ndim)=hash_key(1:ndim)
+    hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
+    gridp%hkey(1:nhilbert)=hk(1:nhilbert)
+    gridp%superoct=1
+    gridp%flag1(1:twotondim)=0
+    gridp%flag2(1:twotondim)=0
   end associate
 end function create_grid
 !##############################################################

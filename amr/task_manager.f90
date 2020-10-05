@@ -62,7 +62,7 @@ contains
 subroutine master(mdl,pst)
   use init_amr_module, only: r_set_add
   implicit none
-  type(mdl_t), target::mdl
+  type(*)::mdl
   type(pst_t)::pst
   call r_set_add(pst,mdl_threads(pst%s%mdl),1)
   call adaptive_loop(pst)
@@ -120,7 +120,7 @@ function worker_init(mdl) result(pst)
   integer(kind=8)::dummy8
   integer::ncpu
 #ifdef MDL2
-  type(real_mdl_t),target::mdl
+  type(c_ptr),value::mdl
   type(mdl_t),pointer::mdl_wrapper
 #else
   type(mdl_t),target::mdl
@@ -131,7 +131,7 @@ function worker_init(mdl) result(pst)
   allocate(pst%s)
 #ifdef MDL2
   allocate(mdl_wrapper)
-  mdl_wrapper%mdl2 => mdl
+  mdl_wrapper%mdl2 = mdl
   pst%s%mdl => mdl_wrapper
 #else
   pst%s%mdl => mdl

@@ -38,11 +38,6 @@ subroutine adaptive_loop(pst)
   ! Read initial particle properties from files
   if(r%pic)call m_input_part(pst)
 
-#ifdef MDL2
-  write(*,*)'I HAVE COME AS FAR AS I DARE!'
-  stop
-#endif
-
   ! Build initial AMR grid
   if(r%nrestart==0)then
      call m_init_refine_basegrid(pst) ! Build coarse grid

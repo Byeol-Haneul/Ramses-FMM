@@ -634,6 +634,9 @@ subroutine make_new_oct(s,parent,icell,ilevel)
      call hash_setp(m%grid_dict,hash_key,child)
   ! Otherwise, determine parent processor and use the cache
   else
+#ifdef MDL2
+     call get_grid_p(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
+#else
      grid_cpu = m%domain(ilevel)%get_rank(hk)
      ! If next cache line is occupied, free it.
      if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
@@ -649,6 +652,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
      if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
      ! Insert new grid in hash table
      call hash_setp(m%grid_dict,hash_key,child)
+#endif
   endif
 
   child%lev=ilevel

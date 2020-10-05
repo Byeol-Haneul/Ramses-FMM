@@ -390,6 +390,7 @@ subroutine build_mg(s,ifinelevel)
   use cache
   use multigrid_fine_coarse, only: pack_fetch_phi, unpack_fetch_phi
   use amr_commons, only: oct
+  use nbors_utils_p
   use hilbert
   use hash
   implicit none
@@ -408,7 +409,7 @@ subroutine build_mg(s,ifinelevel)
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
   logical::in_rank
-  type(oct),pointer::father
+  type(oct),pointer::father,child
   type(msg_small_realdp)::dummy_small_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -470,7 +471,7 @@ subroutine build_mg(s,ifinelevel)
 
               ! Set grid index to a virtual grid in local main memory
               ichild=m%ifree
-              
+              child => m%grid(ichild)
               ! Go to next main memory free line
               m%ifree=m%ifree+1
               if(m%ifree.GT.r%ngridmax)then
@@ -479,18 +480,21 @@ subroutine build_mg(s,ifinelevel)
                  write(*,*)'Increase ngridmax'
                  call mdl_abort(mdl)
               end if
+              ! Insert new grid in hash table
+              call hash_setp(m%mg_dict,hash_father,child)
 
            else
-#ifdef MDL2
-              stop
-#else
               ! Otherwise, determine parent processor and use the cache
               grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
+#ifdef MDL2
+              call get_grid_p(s,hash_father,m%mg_dict,child,flush_cache=.true.,fetch_cache=.false.)
+#else
               
               ! If next cache line is occupied, free it.
               if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%mg_dict)
               ! Set grid index to a virtual grid in local cache memory
               ichild=r%ngridmax+m%free_cache
+              child => m%grid(ichild)
               m%occupied(m%free_cache)=.true.
               m%parent_cpu(m%free_cache)=grid_cpu
               m%dirty(m%free_cache)=.true.
@@ -499,27 +503,25 @@ subroutine build_mg(s,ifinelevel)
               m%ncache=m%ncache+1
               if(m%free_cache.GT.r%ncachemax)m%free_cache=1
               if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+              ! Insert new grid in hash table
+              call hash_setp(m%mg_dict,hash_father,child)
 #endif
            endif
            
-           m%grid(ichild)%lev=icoarselevel
-           m%grid(ichild)%ckey(1:ndim)=cart_key(1:ndim)
-           m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
-           m%grid(ichild)%refined(1:twotondim)=.true.
-           m%grid(ichild)%flag1(1:twotondim)=0
-           m%grid(ichild)%flag2(1:twotondim)=0
-           m%grid(ichild)%superoct=1
+           child%lev=icoarselevel
+           child%ckey(1:ndim)=cart_key(1:ndim)
+           child%hkey(1:nhilbert)=hk(1:nhilbert)
+           child%refined(1:twotondim)=.true.
+           child%flag1(1:twotondim)=0
+           child%flag2(1:twotondim)=0
+           child%superoct=1
 
            ! Intitialize gravity variables
            do ind=1,twotondim
-              m%grid(ichild)%f(ind,1:ndim)=0
-              m%grid(ichild)%phi(ind)=0
-              m%grid(ichild)%phi_old(ind)=0
+              child%f(ind,1:ndim)=0
+              child%phi(ind)=0
+              child%phi_old(ind)=0
            enddo
-
-           ! Insert new grid in hash table
-           call hash_setp(m%mg_dict,hash_father,m%grid(ichild))
-           
         end if
      end do
      ! End loop over coarse neighbors
