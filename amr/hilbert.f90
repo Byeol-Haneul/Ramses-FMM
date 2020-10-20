@@ -203,11 +203,13 @@ contains
     nkey_local = ceiling(1.d0 * level / levels_per_key(ndim))
 
     do ibit = level - 1, 0, -1
+       if (.true.) then ! This prevents annoying bogus out of bounds message
        do ikey = nkey_local, 2, -1
           hkey(ikey) = ISHFT(hkey(ikey), left_shift)
           hkey(ikey) = ISHFT(hkey(ikey), right_shift)
           hkey(ikey) = hkey(ikey) + ISHFT(hkey(ikey - 1), big_shift)
        end do
+       endif
        hkey(1) = ISHFT(hkey(1), left_shift)
        hkey(1) = ISHFT(hkey(1), right_shift)
 
