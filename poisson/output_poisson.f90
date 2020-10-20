@@ -25,28 +25,30 @@ recursive subroutine r_output_poisson(pst,input,input_size)
      call r_output_poisson(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call output_poisson(pst%s%r,pst%s%g,pst%s%m,input%filename)
+     call output_poisson(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,input%filename)
   endif
 end subroutine r_output_poisson
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine output_poisson(r,g,m,filename)
+subroutine output_poisson(r,g,m,mdl,filename)
   use amr_parameters, only: ndim,flen
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
+  use mdl_module
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+  type(mdl_t)::mdl
   character(LEN=flen)::filename
 
   integer::ilevel,igrid,ilun
   character(LEN=5)::nchar
   character(LEN=flen)::fileloc
 
-  ilun=10!+g%ncpu+g%myid
+  ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
