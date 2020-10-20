@@ -311,7 +311,7 @@ recursive subroutine r_output_amr(pst,input_array,input_size,output_array,output
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
-     call output_amr(pst%s%r,pst%s%g,pst%s%m,filename)
+     call output_amr(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,filename)
   endif
 
 end subroutine r_output_amr
@@ -319,13 +319,15 @@ end subroutine r_output_amr
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_amr(r,g,m,filename)
+subroutine output_amr(r,g,m,mdl,filename)
   use amr_parameters, only: ndim,sp,dp,flen
   use amr_commons, only: run_t,global_t,mesh_t
+  use mdl_module
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+  type(mdl_t)::mdl
   character(LEN=flen)::filename
   !-----------------------------------
   ! Output amr grid in file
@@ -334,7 +336,7 @@ subroutine output_amr(r,g,m,filename)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
 
-  ilun=10!+g%myid
+  ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')

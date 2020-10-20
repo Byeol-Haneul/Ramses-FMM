@@ -16,8 +16,8 @@ subroutine m_update_time(pst,ilevel)
   integer::ilevel
 
   ! Local variables
-  real::ttend
-  real,save::ttstart=0.0
+  double precision::ttend
+  double precision,save::ttstart=0.0
   real(dp)::dt,econs,mcons
   integer::i,itest
   type(in_broadcast_aexp_t)::in_broadcast_aexp
@@ -28,7 +28,7 @@ subroutine m_update_time(pst,ilevel)
   dt=g%dtnew(ilevel)
   itest=0
 
-  if(ttstart.eq.0.0)call cpu_time(ttstart)
+  if(ttstart.eq.0.0) ttstart = mdl_wtime(mdl)
 
   !-------------------------------------------------------------
   ! At this point, IF nstep_coarse has JUST changed, all levels
@@ -105,8 +105,8 @@ subroutine m_update_time(pst,ilevel)
         do i=r%levelmin,r%nlevelmax
            call write_screen(m,i)
         end do
-        call cpu_time(ttend)
-        write(*,*)'Total elapsed time:',ttend-ttstart
+        ttend = mdl_wtime(mdl)
+        print '(A,F14.7)',' Total elapsed time:',ttend-ttstart
         call mdl_abort(mdl)
      end if
 

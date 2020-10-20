@@ -1,4 +1,6 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.5)
+cmake_policy(VERSION 3.5...3.14)
+
 project(ramses3d LANGUAGES Fortran CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -64,7 +66,6 @@ set(fortran_files
 	amr/title.f90
 	amr/units.f90
 	amr/refine_utils.f90
-	amr/nbors_utils.f90
 	amr/nbors_utils_p.f90
 	amr/flag_utils.f90
 	amr/smooth.f90
@@ -77,7 +78,6 @@ set(fortran_files
         amr/marshal.f90
 	amr/amr_parameters.f90
 	hydro/hydro_parameters.f90
-	amr/hash.f90
 	pm/pm_parameters.f90
 	pm/pm_commons.f90
 	amr/hilbert.f90
@@ -141,12 +141,12 @@ if(MDL2)
     CXX_STANDARD_REQUIRED YES
     CXX_EXTENSIONS NO
   )
-  list(APPEND fortran_files mdl2/mdl.f90 amr/mdlcache.f90 amr/nbors_utils_p.f90)
+  list(APPEND fortran_files mdl2/mdl.f90 amr/mdlcache.f90)
   target_link_libraries(${PROJECT_NAME} mdl2)
   target_sources(${PROJECT_NAME} PRIVATE amr/mdlcache.cxx)
   add_definitions(-DMDL2)
 else()
-  list(APPEND fortran_files mdl1/mdl.f90)
+  list(APPEND fortran_files mdl1/mdl.f90 amr/hash.f90 amr/nbors_utils.f90)
 endif(MDL2)
 
 set_source_files_properties(${fortran_files} ${MPI_Fortran_COMPILE_FLAGS})
@@ -160,6 +160,10 @@ elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
   else()
    set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none -fallow-argument-mismatch" )
   endif()
+  if(APPLE)
+    target_link_options(${PROJECT_NAME} PRIVATE -Wl,-no_compact_unwind)
+  endif(APPLE)
+
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
   set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-e ZR" )
 endif()

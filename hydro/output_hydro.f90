@@ -25,7 +25,7 @@ recursive subroutine r_output_hydro(pst,input_array,input_size,output_array,outp
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
-     call output_hydro(pst%s%r,pst%s%g,pst%s%m,filename)
+     call output_hydro(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,filename)
   endif
 
 end subroutine r_output_hydro
@@ -33,14 +33,16 @@ end subroutine r_output_hydro
 !###################################################
 !###################################################
 !###################################################
-subroutine output_hydro(r,g,m,filename)
+subroutine output_hydro(r,g,m,mdl,filename)
   use amr_parameters, only: ndim,flen
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
+  use mdl_module
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
+  type(mdl_t)::mdl
   character(LEN=flen)::filename
 
   integer::ilevel,igrid,ilun
@@ -49,7 +51,7 @@ subroutine output_hydro(r,g,m,filename)
 
 #ifdef HYDRO
 
-  ilun=10!+g%ncpu+g%myid
+  ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')

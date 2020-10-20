@@ -246,9 +246,13 @@ end subroutine lock_cache_p
 subroutine unlock_cache_p(s,child)
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use mdl_module
   implicit none
   type(ramses_t)::s
   type(oct),pointer::child
+#ifdef MDL2
+  call mdl_release(s%mdl%mdl2,0,child)
+#else
   !
   ! This routine unlocks a cache line because
   ! it has been updated and can be flushed.
@@ -261,6 +265,7 @@ subroutine unlock_cache_p(s,child)
      icache=child_grid-s%r%ngridmax
      s%m%locked(icache)=.false.
   endif
+#endif
 end subroutine unlock_cache_p
 !##############################################################
 !##############################################################
@@ -287,7 +292,8 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
   logical::absent
-#ifndef MDL2
+  logical(c_bool)::do_lock,modify,virtual
+  integer(kind=4) :: full_hash
   !
   ! This routine acquires the grid 
   ! corresponding to the input hash key.
@@ -306,6 +312,17 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
 #endif
  
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+#ifdef MDL2
+  full_hash = hash_func(hash_key)
+  do_lock = .false.
+  modify = flush_cache
+  virtual = .not.fetch_cache
+  if (present(lock)) then
+    if (lock) do_lock=.true.
+  endif
+  call c_f_pointer(cache_fetch(mdl%mdl2,0,hash=full_hash,key=hash_key,lock=do_lock,modify=modify,virtual=virtual),child)
+#else /* Not MDL2 */
 
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
@@ -530,9 +547,9 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   endif
 
 #endif
+#endif /* MDL2 */
 
   end associate
-#endif
 end subroutine get_grid_p
 !##############################################################
 !##############################################################

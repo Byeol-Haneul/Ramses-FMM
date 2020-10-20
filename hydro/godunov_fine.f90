@@ -273,8 +273,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
   integer::ii1min,ii1max,jj1min,jj1max,kk1min,kk1max
-  integer::i2min=0,i2max=0,j2min=0,j2max=0,k2min=0,k2max=0
-  integer::i3min=1,i3max=1,j3min=1,j3max=1,k3min=1,k3max=1
+  integer::i2min,i2max,j2min,j2max,k2min,k2max
+  integer::i3min,i3max,j3min,j3max,k3min,k3max
   integer,dimension(1:ndim)::ckey_corner,ckey
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
   integer,dimension(0:twondim)::ind_nbor
@@ -282,8 +282,24 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   real(dp)::dx,oneontwotondim
   real(dp),dimension(0:twondim  ,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
-  logical::okx=.true.,oky=.true.,okz=.true.
+  logical::okx,oky,okz
   type(oct),pointer::gridp,childp
+
+  i2min=0
+  i2max=0
+  j2min=0
+  j2max=0
+  k2min=0
+  k2max=0
+  i3min=1
+  i3max=1
+  j3min=1
+  j3max=1
+  k3min=1
+  k3max=1
+  okx=.true.
+  oky=.true.
+  okz=.true.
 
 #ifdef HYDRO
 
@@ -415,7 +431,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               if(.not.associated(childp))then
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
+                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
                  if(.not.associated(gridp))then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor

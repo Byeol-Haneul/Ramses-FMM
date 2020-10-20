@@ -263,6 +263,13 @@ module mdl_module
 #endif
     end subroutine mdl_initialize
 
+    double precision function mdl_wtime(mdl)
+      type(mdl_t)::mdl
+      real::tt
+      call cpu_time(tt)
+      mdl_wtime=tt
+    end function mdl_wtime
+
     integer function mdl_threads(mdl)
       type(mdl_t)::mdl
       mdl_threads = mdl%ncpu

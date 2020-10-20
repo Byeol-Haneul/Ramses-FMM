@@ -14,11 +14,11 @@ subroutine adaptive_loop(pst)
 
   ! Local variables
   integer::ilevel
-  real::tt1,tt2
+  double precision::tt1,tt2
 
   associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
   
-  call cpu_time(tt1)
+  tt1 = mdl_wtime(mdl)
 
   ! Read run parameters
   call m_read_params(pst)
@@ -38,11 +38,6 @@ subroutine adaptive_loop(pst)
   ! Read initial particle properties from files
   if(r%pic)call m_input_part(pst)
 
-#ifdef MDL2
-  write(*,*)'I HAVE COME AS FAR AS I DARE!'
-  stop
-#endif
-
   ! Build initial AMR grid
   if(r%nrestart==0)then
      call m_init_refine_basegrid(pst) ! Build coarse grid
@@ -52,8 +47,8 @@ subroutine adaptive_loop(pst)
   endif
 
   ! Timing since startup
-  call cpu_time(tt2)
-  write(*,*)'Time elapsed since startup:',tt2-tt1
+  tt2 = mdl_wtime(mdl)
+  print '(A,F14.7)',' Time elapsed since startup:',tt2-tt1
 
   ! Output mesh structure
   write(*,*)'Initial mesh structure'
@@ -69,7 +64,7 @@ subroutine adaptive_loop(pst)
 
   do ! Main time loop
 
-     call cpu_time(tt1)
+     tt1 = mdl_wtime(mdl)
 
      if(r%verbose)write(*,*)'Entering amr_step_coarse'
 
@@ -84,8 +79,8 @@ subroutine adaptive_loop(pst)
      ! New coarse time-step
      g%nstep_coarse=g%nstep_coarse+1
 
-     call cpu_time(tt2)
-     write(*,*)'Time elapsed since last coarse step:',tt2-tt1
+     tt2 = mdl_wtime(mdl)
+     print '(A,F14.7)',' Time elapsed since last coarse step:',tt2-tt1
      
   end do
 

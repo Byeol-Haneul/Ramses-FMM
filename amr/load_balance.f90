@@ -282,6 +282,7 @@ end subroutine r_load_balance
 !#########################################################################
 !#########################################################################
 subroutine load_balance(s,ilevel)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER
   use amr_parameters, only: ndim,twotondim,nhilbert,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -290,6 +291,7 @@ subroutine load_balance(s,ilevel)
   use cache_commons
   use cache
   use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use nbors_utils_p
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -335,6 +337,17 @@ subroutine load_balance(s,ilevel)
 
         ! Check if grid sits outside future processor boundaries
         if (.not. m%domain(ilev)%in_rank(m%grid(ioct)%hkey)) then
+#ifdef MDL2
+           ! Free grid from hash table
+           hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
+           call hash_free(m%grid_dict,hash_key)
+           ! Now construct a remote grid and clone the local
+           call get_grid_p(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
+           ! Copy all data to the new cache grid
+           child=m%grid(ioct)
+           ! Set grid level to zero to mark it as deleted
+           m%grid(ioct)%lev=0
+#else
            
            ! Determine the future processor
            hk = m%grid(ioct)%hkey(1:nhilbert)
@@ -364,7 +377,7 @@ subroutine load_balance(s,ilevel)
            
            ! Insert new cache grid in hash table
            call hash_setp(m%grid_dict,hash_key,m%grid(ichild))
-        
+#endif
         endif
 
      end do
