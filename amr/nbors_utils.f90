@@ -10,9 +10,10 @@ subroutine check_mail(s,comm_id,hash_dict)
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use cache_commons
-  use amr_commons, only: oct
+  use amr_commons, only: oct,nbor
   use hilbert
   use hash
+  use cache, only:cache_key_ptr,get_tile
   implicit none
 #ifndef WITHOUTMPI
   include 'mpif.h'
@@ -36,6 +37,8 @@ subroutine check_mail(s,comm_id,hash_dict)
   integer(kind=8), dimension(1:ndim)::ix
   integer(kind=8), dimension(0:ndim)::hash_key,hash_child
   type(oct),pointer::child
+  type(cache_key_ptr),dimension(1:ntilemax)::keys
+  type(nbor),dimension(1:ntilemax)::grid
 
 #ifndef WITHOUTMPI
 
@@ -70,30 +73,24 @@ subroutine check_mail(s,comm_id,hash_dict)
 
            ! Otherwise, assemble a proper reply with a complete tile
            else
-              igrid=(loc(child)-loc(s%m%grid(1)))/(loc(s%m%grid(2))-loc(s%m%grid(1)))+1
-
-              itile=(igrid-m%head_cache(ilevel))/ntilemax
-              ntile_reply=MIN(m%tail_cache(ilevel)-itile*ntilemax-m%head_cache(ilevel)+1,ntilemax)              
+              iskip=mdl%size_fetch_array*(grid_cpu-1)+1
+              ! Record the location of where we want the keys to be stored, then ask for a tile
+              do i=1,ntilemax
+                 ipos = iskip + 2 + (i-1)*(1+ndim+mdl%size_msg_array)
+                 keys(i)%p(0:ndim) => mdl%send_fetch_array(ipos:ipos+ndim)
+              end do
+              call get_tile(s,child,ntilemax,keys,grid,ntile_reply)
 
               ! Store type of reply and number of entries
-              iskip=mdl%size_fetch_array*(grid_cpu-1)+1
               mdl%send_fetch_array(iskip)=1
               iskip=iskip+1
               mdl%send_fetch_array(iskip)=ntile_reply
               iskip=iskip+1
-              
+
               ! Store data, depending on reply type
               do i=1,ntile_reply
-                 ipos=m%head_cache(ilevel)+itile*ntilemax+i-1
-                 
-                 ! Store message header
-                 mdl%send_fetch_array(iskip)=m%grid(ipos)%lev
-                 mdl%send_fetch_array(iskip+1:iskip+ndim)=m%grid(ipos)%ckey(1:ndim)
-                 iskip=iskip+1+ndim
-
-                 ! Store message content
-                 call pack_fetch%proc(m%grid(ipos),mdl%size_msg_array,mdl%send_fetch_array(iskip:iskip+mdl%size_msg_array-1))
-
+                 iskip=iskip+1+ndim ! Skip over the key already present
+                 call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch_array(iskip:iskip+mdl%size_msg_array-1))
                  iskip=iskip+mdl%size_msg_array
               end do
            endif

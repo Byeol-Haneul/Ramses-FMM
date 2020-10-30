@@ -1,5 +1,39 @@
 module cache
+  type cache_key_ptr
+     integer,dimension(:),pointer::p
+  end type cache_key_ptr
 contains
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine get_tile(s,child,nkey,keys,grid,ntile)
+  use ramses_commons, only: ramses_t
+  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim
+  use cache_commons, only: ntilemax
+  implicit none
+  type(ramses_t),intent(in)::s
+  type(oct),pointer,intent(in)::child
+  integer,value::nkey
+  type(cache_key_ptr),dimension(1:nkey),intent(inout)::keys
+  type(nbor),dimension(1:nkey),intent(out)::grid
+  integer,intent(out)::ntile
+  integer::igrid,itile,ilevel,ipos,i
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+    ilevel = child%lev
+    igrid=(loc(child)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
+    itile=(igrid-m%head_cache(ilevel))/ntilemax
+    ntile=MIN(m%tail_cache(ilevel)-itile*ntilemax-m%head_cache(ilevel)+1,ntilemax)
+    do i=1,ntile
+      ipos=m%head_cache(ilevel)+itile*ntilemax+i-1
+      keys(i)%p(0) = m%grid(ipos)%lev
+      keys(i)%p(1:ndim) = m%grid(ipos)%ckey(1:ndim)
+      grid(i)%p => m%grid(ipos)
+    end do
+  end associate
+end subroutine get_tile
 !##############################################################
 !##############################################################
 !##############################################################
