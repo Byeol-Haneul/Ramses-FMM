@@ -1,8 +1,10 @@
+module amr_step
+contains
 !#####################################################
 !#####################################################
 !#####################################################
 !#####################################################
-recursive subroutine m_amr_step(pst,ilevel,icount)
+recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use ramses_commons, only: pst_t
   use pm_parameters
   use flag_utils, only: m_flag_fine
@@ -26,6 +28,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
 
   type(pst_t)::pst
   integer::ilevel,icount
+  logical::done
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
@@ -134,10 +137,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   if(ilevel<r%nlevelmax)then
      if(m%noct_tot(ilevel+1)>0)then
         if(r%nsubcycle(ilevel)==2)then
-           call m_amr_step(pst,ilevel+1,1)
-           call m_amr_step(pst,ilevel+1,2)
+           call m_amr_step(pst,ilevel+1,1,done)
+	   if (done)return
+           call m_amr_step(pst,ilevel+1,2,done)
         else
-           call m_amr_step(pst,ilevel+1,1)
+           call m_amr_step(pst,ilevel+1,1,done)
         endif
      else 
         ! Otherwise, modify finer level time-step
@@ -151,11 +155,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
         call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
 
         ! Update time variable
-        call m_update_time(pst,ilevel)
+        call m_update_time(pst,ilevel,done)
      end if
   else
-     call m_update_time(pst,ilevel)
+     call m_update_time(pst,ilevel,done)
   end if
+  if (done)return
 
   !-----------
   ! Hydro step
@@ -212,3 +217,4 @@ recursive subroutine m_amr_step(pst,ilevel,icount)
   end associate
 
 end subroutine m_amr_step
+end module amr_step

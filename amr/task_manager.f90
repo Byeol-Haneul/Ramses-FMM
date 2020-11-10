@@ -143,7 +143,9 @@ function worker_init(mdl) result(pst)
   pst%s%g%ncpu=mdl_threads(pst%s%mdl)
 
   ! Input and Output sizes here are in BYTES!
+#ifndef MDL2
   call mdl_add_service(pst%s%mdl,MDL_CLEAN_STOP,             pst,C_FUNLOC(r_clean_stop),0,0)
+#endif
   call mdl_add_service(pst%s%mdl,MDL_SET_ADD,                pst,C_FUNLOC(r_set_add),storage_size(dummy)/8,0)
   call mdl_add_service(pst%s%mdl,MDL_BCAST_PARAMS,           pst,C_FUNLOC(r_broadcast_params),storage_size(pst%s%r)/8,0)
   call mdl_add_service(pst%s%mdl,MDL_BCAST_GLOBAL,           pst,C_FUNLOC(r_broadcast_global),storage_size(pst%s%g)/8,0)
@@ -232,8 +234,9 @@ end function worker_init
 subroutine worker_done(mdl,pst)
   type(mdl_t)::mdl
   type(pst_t),allocatable::pst
-  deallocate(pst%s)
-  deallocate(pst)
+  ! FIXME: These should be deallocatable, but they aren't ???
+  !deallocate(pst%s)
+  !deallocate(pst)
 end subroutine worker_done
 
 end subroutine mdl_init

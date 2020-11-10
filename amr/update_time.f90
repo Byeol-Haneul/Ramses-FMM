@@ -7,13 +7,14 @@ contains
 !################################################################
 !################################################################
 !################################################################
-subroutine m_update_time(pst,ilevel)
+subroutine m_update_time(pst,ilevel,done)
   use amr_parameters, only: dp,n_frw
   use ramses_commons, only: pst_t
   use mdl_module
   implicit none
   type(pst_t)::pst
   integer::ilevel
+  logical::done
 
   ! Local variables
   double precision::ttend
@@ -107,7 +108,9 @@ subroutine m_update_time(pst,ilevel)
         end do
         ttend = mdl_wtime(mdl)
         print '(A,F14.7)',' Total elapsed time:',ttend-ttstart
-        call mdl_abort(mdl)
+        done=.true.
+        return
+        !call mdl_abort(mdl)
      end if
 
   end if

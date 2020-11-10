@@ -9,8 +9,10 @@ subroutine adaptive_loop(pst)
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
   use init_refine_restart_module, only: m_init_refine_restart
+  use amr_step, only: m_amr_step
   implicit none
   type(pst_t)::pst
+  logical::done
 
   ! Local variables
   integer::ilevel
@@ -62,7 +64,8 @@ subroutine adaptive_loop(pst)
 
   write(*,*)'Starting time integration' 
 
-  do ! Main time loop
+  done = .false.
+  do while(.not.done)! Main time loop
 
      tt1 = mdl_wtime(mdl)
 
@@ -74,7 +77,7 @@ subroutine adaptive_loop(pst)
      g%eint_tot=0.0D0  ! Reset total internal energy
 
      ! Call base level
-     call m_amr_step(pst,r%levelmin,1)
+     call m_amr_step(pst,r%levelmin,1,done)
 
      ! New coarse time-step
      g%nstep_coarse=g%nstep_coarse+1
@@ -83,8 +86,6 @@ subroutine adaptive_loop(pst)
      print '(A,F14.7)',' Time elapsed since last coarse step:',tt2-tt1
      
   end do
-
-  call r_clean_stop(pst)
 
   return
 
