@@ -1,5 +1,72 @@
 module cache
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY: c_int32_t
+  type cache_key_ptr
+     integer(kind=8),dimension(:),pointer::p
+  end type cache_key_ptr
 contains
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine get_tile(s,child,nkey,keys,grid,ntile)
+  use ramses_commons, only: ramses_t
+  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim
+  use cache_commons, only: ntilemax
+  implicit none
+  type(ramses_t)::s
+  type(oct),pointer,intent(in)::child
+  integer,value::nkey
+  type(cache_key_ptr),dimension(1:nkey),intent(inout)::keys
+  type(nbor),dimension(1:nkey),intent(out)::grid
+  integer,intent(out)::ntile
+  integer::igrid,itile,ilevel,ipos,i
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+    ilevel = child%lev
+    igrid=(loc(child)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
+    itile=(igrid-m%head_cache(ilevel))/ntilemax
+    ntile=MIN(m%tail_cache(ilevel)-itile*ntilemax-m%head_cache(ilevel)+1,ntilemax)
+    do i=1,ntile
+      ipos=m%head_cache(ilevel)+itile*ntilemax+i-1
+      keys(i)%p(0) = m%grid(ipos)%lev
+      keys(i)%p(1:ndim) = m%grid(ipos)%ckey(1:ndim)
+      grid(i)%p => m%grid(ipos)
+    end do
+  end associate
+end subroutine get_tile
+
+integer(c_int32_t) function get_tile_stub(s,cchild,nkey,ckeys,cgrid)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_PTR, C_F_POINTER, C_LOC
+  use ramses_commons, only: ramses_t
+  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim
+!  use cache_commons, only: ntilemax
+  implicit none
+  type(ramses_t)::s
+  integer,value::nkey
+  type(c_ptr),value::cchild
+  type(c_ptr),dimension(1:nkey),intent(in)::ckeys
+  type(c_ptr),dimension(1:nkey),intent(out)::cgrid
+  integer::ntile
+
+  type(oct),pointer::child
+  type(cache_key_ptr),dimension(1:nkey)::keys
+  type(nbor),dimension(1:nkey)::grid
+  integer::i
+
+  call C_F_POINTER(cchild,child)
+  do i=1,nkey
+    call C_F_POINTER(ckeys(i),keys(i)%p,[ndim+1])
+    keys(i)%p(0:ndim)=>keys(i)%p ! Remap the bounds
+  end do
+  call get_tile(s,child,nkey,keys,grid,ntile)
+  do i=1,ntile
+    cgrid(i)=C_LOC(grid(i)%p)
+  end do
+  get_tile_stub = ntile
+end function get_tile_stub
+
 !##############################################################
 !##############################################################
 !##############################################################
@@ -222,11 +289,23 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
     m%domain_hilbert => hilbert
+
+    if (loc(m%domain_hilbert) .eq. loc(m%domain)) then
+      m%head_cache(r%levelmin:r%nlevelmax)=m%head
+      m%tail_cache(r%levelmin:r%nlevelmax)=m%tail
+    else if (loc(m%domain_hilbert) .eq. loc(m%domain_mg)) then
+      m%head_cache(1:r%nlevelmax)=m%head_mg
+      m%tail_cache(1:r%nlevelmax)=m%tail_mg
+    else
+      write(*,*) 'Unknown domain decomposition scheme'
+      stop
+    end if
+
 #ifdef MDL2
     modify = .false.
     if (present(combine)) modify = .true.
-    call ramses_cache_open(mdl%mdl2,0,table%mdl_cache_table,data_size*4,modify,&
-                      s,c_funloc(get_thread_id),&
+    call ramses_cache_open(mdl%mdl2,0,table%mdl_cache_table,c_funloc(hash_func),data_size*4,modify,&
+                      s,c_funloc(get_thread_id),c_funloc(get_tile_stub),&
                         pack_size*4,c_funloc(pack),c_funloc(unpack),&
                         c_funloc(init),&
                         pack_size*4,c_funloc(flush), c_funloc(combine),&
@@ -249,16 +328,16 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
 
     mdl%mail_counter=0
 
-    if (loc(m%domain_hilbert) .eq. loc(m%domain)) then
-      m%head_cache(r%levelmin:r%nlevelmax)=m%head
-      m%tail_cache(r%levelmin:r%nlevelmax)=m%tail
-    else if (loc(m%domain_hilbert) .eq. loc(m%domain_mg)) then
-      m%head_cache(1:r%nlevelmax)=m%head_mg
-      m%tail_cache(1:r%nlevelmax)=m%tail_mg
-    else
-      write(*,*) 'Unknown domain decomposition scheme'
-      stop
-    end if
+    ! if (loc(m%domain_hilbert) .eq. loc(m%domain)) then
+    !   m%head_cache(r%levelmin:r%nlevelmax)=m%head
+    !   m%tail_cache(r%levelmin:r%nlevelmax)=m%tail
+    ! else if (loc(m%domain_hilbert) .eq. loc(m%domain_mg)) then
+    !   m%head_cache(1:r%nlevelmax)=m%head_mg
+    !   m%tail_cache(1:r%nlevelmax)=m%tail_mg
+    ! else
+    !   write(*,*) 'Unknown domain decomposition scheme'
+    !   stop
+    ! end if
 
     if (.not.present(init) .and. present(flush)) then
       mdl%combiner_rule = COMBINER_CREATE

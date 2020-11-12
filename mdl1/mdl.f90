@@ -62,13 +62,14 @@ module mdl_module
 #endif  
     end subroutine mdl_abort
 
-    subroutine mdl_add_service(mdl,sid,p1,service,input_size,output_size)
+    subroutine mdl_add_service(mdl,sid,p1,service,input_size,output_size,name)
       USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_INT, C_FUNPTR, C_LOC
       type(mdl_t)::mdl
       integer::sid
       type(*),target::p1
       type(c_funptr), intent(in), value :: service
       integer :: input_size, output_size ! NOTE: size IN BYTES!!
+      character(len=*), intent(in),optional :: name
       mdl%callback(sid) = service
       mdl%p1opaque(sid) = c_loc(p1)
       mdl%input_size(sid) = input_size/4
@@ -290,4 +291,16 @@ module mdl_module
       mdl_cores = 1
     end function mdl_cores
 
+    subroutine mdl_mkdir_p(mdl,filedir)
+      use amr_parameters, only: flen
+      type(mdl_t)::mdl
+      character(len=*), intent(in) :: filedir
+      character(LEN=flen)::filecmd
+      filecmd='mkdir -p '//TRIM(filedir)
+#ifdef NOSYSTEM
+      call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',ierr)
+#else
+      call system(filecmd)
+#endif
+    end subroutine mdl_mkdir_p
 end module mdl_module

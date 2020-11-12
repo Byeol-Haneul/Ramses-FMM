@@ -79,7 +79,7 @@ module hash
        integer,dimension(1:msg_size), intent(in) :: msg_array
      end subroutine unpack_function_type
 
-    subroutine ramses_cache_open(mdl,cid,hash,nDataSize,modify,ctx,get_thread,&
+    subroutine ramses_cache_open(mdl,cid,hash,hash_func,nDataSize,modify,ctx,get_thread,get_tile,&
                           pack_size,pack,unpack,init,flush_size,flush,combine,create)&
                           BIND(C,NAME="ramses_cache_open")
       USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_INT, C_BOOL, C_PTR, C_FUNPTR
@@ -87,8 +87,9 @@ module hash
       integer(c_int), VALUE             :: cid,nDataSize,pack_size,flush_size
       logical(c_bool),value             :: modify
       type(c_ptr),value                 :: hash
+      type(c_funptr), intent(in), VALUE :: hash_func
       type(*),target                    :: ctx
-      type(c_funptr), intent(in), VALUE :: get_thread,pack,unpack,init,flush,combine,create
+      type(c_funptr), intent(in), VALUE :: get_thread,get_tile,pack,unpack,init,flush,combine,create
     end subroutine ramses_cache_open
 
   end interface

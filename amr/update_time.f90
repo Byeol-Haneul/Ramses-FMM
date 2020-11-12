@@ -7,13 +7,14 @@ contains
 !################################################################
 !################################################################
 !################################################################
-subroutine m_update_time(pst,ilevel)
+subroutine m_update_time(pst,ilevel,done)
   use amr_parameters, only: dp,n_frw
   use ramses_commons, only: pst_t
   use mdl_module
   implicit none
   type(pst_t)::pst
   integer::ilevel
+  logical::done
 
   ! Local variables
   double precision::ttend
@@ -107,7 +108,9 @@ subroutine m_update_time(pst,ilevel)
         end do
         ttend = mdl_wtime(mdl)
         print '(A,F14.7)',' Total elapsed time:',ttend-ttstart
-        call mdl_abort(mdl)
+        done=.true.
+        return
+        !call mdl_abort(mdl)
      end if
 
   end if
@@ -185,26 +188,6 @@ recursive subroutine r_broadcast_aexp(pst,input,input_size)
   endif
 
 end subroutine r_broadcast_aexp
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
-recursive subroutine r_clean_stop(pst)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1)
-     call r_clean_stop(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  endif
-  
-end subroutine r_clean_stop
 !##############################################################
 !##############################################################
 !##############################################################

@@ -9,6 +9,7 @@ subroutine m_output_frame(pst)
   use hydro_parameters, only: nvar
   use ramses_commons, only: pst_t
   use output_amr_module, only: output_info
+  use mdl_module, only: mdl_mkdir_p
   implicit none
   type(pst_t)::pst
 
@@ -38,14 +39,15 @@ subroutine m_output_frame(pst)
      call title(r%imov, istep_str)
      write(temp_string,'(I1)') ind_proj
      moviedir = 'movie'//trim(temp_string)//'/'
-     moviecmd = 'mkdir -p '//trim(moviedir)
+!     moviecmd = 'mkdir -p '//trim(moviedir)
      write(*,*) "Writing frame ", istep_str
      if(.not.g%withoutmkdir) then 
-#ifdef NOSYSTEM
-        call PXFMKDIR(TRIM(moviedir),LEN(TRIM(moviedir)),O'755',info)
-#else
-        call system(moviecmd)
-#endif
+       call mdl_mkdir_p(mdl,moviedir)
+! #ifdef NOSYSTEM
+!         call PXFMKDIR(TRIM(moviedir),LEN(TRIM(moviedir)),O'755',info)
+! #else
+!         call system(moviecmd)
+! #endif
      endif
      
      infofile = trim(moviedir)//'info_'//trim(istep_str)//'.txt'
