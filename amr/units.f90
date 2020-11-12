@@ -11,7 +11,7 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   !-----------------------------------------------------------------------
 
   ! Default units from namelist
-#if UNITS==default
+#ifdef UNITSdefault
   scale_d = r%units_density      ! scale_d converts mass density from user units into g/cc
   scale_t = r%units_time         ! scale_t converts time from user units into seconds
   scale_l = r%units_length       ! scale_l converts distance from user units into cm
@@ -21,7 +21,7 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 #endif
 
   ! Units for cosmological simulations are hard-coded
-#if UNITS==cosmo
+#ifdef UNITScosmo
   scale_d = g%omega_m * rhoc *(g%h0/100.)**2 / g%aexp**3
   scale_t = g%aexp**2 / (g%h0*1d5/3.08d24)
   scale_l = g%aexp * g%boxlen_ini * 3.08d24 / (g%h0/100)
@@ -30,7 +30,7 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_nH = X_H/mH * scale_d    ! scale_nH converts rho in user units into nH in H/cc
 #endif
 
-#if UNITS==coeur
+#ifdef UNITScoeur
   scale_d = 0.443201646421875d-17  ! scale_d converts mass density from user units into g/cc
   scale_t = 0.183887441975074d+13  !1/(G*d0)**0.5
   scale_l = 25*0.478712000000000d+18  !25*32000 AU

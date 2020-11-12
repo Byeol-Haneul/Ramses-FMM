@@ -27,11 +27,11 @@ set(NPRE 8)
 set(NVAR 5)
 set(NENER 0)
 set(SOLVER hydro)
-set(UNITS coeur)
-set(CONDINIT coeur)
+set(UNITS default)
+set(CONDINIT default)
 set(EXEC ramses)
 
-add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS=${UNITS} -DCONDINIT=${CONDINIT} -DHYDRO -DGRAV)
+add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT} -DHYDRO -DGRAV)
 
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/write_gitinfo.f90
