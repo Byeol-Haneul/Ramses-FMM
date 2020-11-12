@@ -10,6 +10,7 @@ subroutine m_dump_all(pst)
   use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
   use output_poisson_module, only: r_output_poisson,in_output_poisson_t
   use output_part_module, only: r_output_part
+  use mdl_module, only: mdl_mkdir_p
   implicit none
   type(pst_t)::pst
 
@@ -43,12 +44,13 @@ subroutine m_dump_all(pst)
   ! For 2D and 3D runs, output data to files
   if(ndim>1)then
      filedir='output_'//TRIM(nchar)//'/'
-     filecmd='mkdir -p '//TRIM(filedir)
-#ifdef NOSYSTEM
-     call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',ierr)
-#else
-     call system(filecmd)
-#endif
+     call mdl_mkdir_p(mdl,filedir)
+     ! filecmd='mkdir -p '//TRIM(filedir)
+! #ifdef NOSYSTEM
+!      call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',ierr)
+! #else
+!      call system(filecmd)
+! #endif
 
      !-----------------------
      ! Only master process

@@ -37,6 +37,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   integer(kind=8), dimension(1:ndim)::ix
   integer(kind=8), dimension(0:ndim)::hash_key,hash_child
   type(oct),pointer::child
+  integer(kind=8), dimension(0:ndim,1:ntilemax),target::raw_keys
   type(cache_key_ptr),dimension(1:ntilemax)::keys
   type(nbor),dimension(1:ntilemax)::grid
 
@@ -76,8 +77,9 @@ subroutine check_mail(s,comm_id,hash_dict)
               iskip=mdl%size_fetch_array*(grid_cpu-1)+1
               ! Record the location of where we want the keys to be stored, then ask for a tile
               do i=1,ntilemax
-                 ipos = iskip + 2 + (i-1)*(1+ndim+mdl%size_msg_array)
-                 keys(i)%p(0:ndim) => mdl%send_fetch_array(ipos:ipos+ndim)
+!                 ipos = iskip + 2 + (i-1)*(1+ndim+mdl%size_msg_array)
+!                 keys(i)%p(0:ndim) => mdl%send_fetch_array(ipos:ipos+ndim)
+                 keys(i)%p(0:ndim) => raw_keys(0:ndim,i)
               end do
               call get_tile(s,child,ntilemax,keys,grid,ntile_reply)
 
@@ -89,6 +91,7 @@ subroutine check_mail(s,comm_id,hash_dict)
 
               ! Store data, depending on reply type
               do i=1,ntile_reply
+                 mdl%send_fetch_array(iskip:iskip+ndim)=raw_keys(0:ndim,i)
                  iskip=iskip+1+ndim ! Skip over the key already present
                  call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch_array(iskip:iskip+mdl%size_msg_array-1))
                  iskip=iskip+mdl%size_msg_array
