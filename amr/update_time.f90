@@ -192,26 +192,6 @@ end subroutine r_broadcast_aexp
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_clean_stop(pst)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1)
-     call r_clean_stop(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  endif
-  
-end subroutine r_clean_stop
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
 subroutine writemem(usedmem)
   real::usedmem
 !  integer::getpagesize

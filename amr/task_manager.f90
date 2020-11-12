@@ -58,6 +58,28 @@ subroutine mdl_init
 #endif
 
 contains
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+#ifndef MDL2
+recursive subroutine r_clean_stop(pst)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1)
+     call r_clean_stop(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  endif
+  
+end subroutine r_clean_stop
+#endif
 
 subroutine master(mdl,pst)
   use init_amr_module, only: r_set_add
@@ -66,7 +88,9 @@ subroutine master(mdl,pst)
   type(pst_t)::pst
   call r_set_add(pst,mdl_threads(pst%s%mdl),1)
   call adaptive_loop(pst)
+#ifndef MDL2
   call r_clean_stop(pst)
+#endif
 end subroutine master
 
 function worker_init(mdl) result(pst)
@@ -83,7 +107,7 @@ function worker_init(mdl) result(pst)
   use input_part_ascii_module, only: r_input_part_ascii
   use input_part_restart_module, only: r_input_part_restart
   use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
-  use update_time_module, only: r_clean_stop, r_broadcast_aexp
+  use update_time_module, only: r_broadcast_aexp
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,&
                                         r_noct_used_max,r_gather_noct_max
   use init_refine_restart_module, only: r_init_refine_restart
@@ -346,26 +370,6 @@ subroutine mdl_wait(pst)
 #endif
 
 end subroutine mdl_wait
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
-recursive subroutine r_clean_stop(pst)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_STOP,pst%iUpper+1)
-     call r_clean_stop(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  endif
-  
-end subroutine r_clean_stop
 !##############################################################
 !##############################################################
 !##############################################################
