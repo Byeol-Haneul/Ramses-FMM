@@ -50,4 +50,5 @@ $ mpirun -np 8 bin/ramses3d namelist/mini-ramses_benchmarking/adiabatic_halo.nml
 
 Enjoy !
 
-Last update October 2022
+Last update October 2022 from stellar
+
