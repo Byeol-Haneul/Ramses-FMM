@@ -13,4 +13,4 @@ You can download the code by cloning the git repository using
 $ git clone https://bitbucket.org/ableuler/mini-ramses.git
 ```
 
-If you want to contribute to mini-ramses, you can either ask me (ableuler@physik.uzh.ch) for your personal new branch in this repository which I will give you write access to, or you can fork this repository. To bring changes back into the `develop` branch of mini-ramses, simply issue a pull request.
+If you want to contribute to mini-ramses, you can either ask me (ableuler@physik.uzh.ch) or Romain (romain.teyssier@gmail.com) for your personal new branch in this repository which I will give you write access to, or you can fork this repository. To bring changes back into the `develop` branch of mini-ramses, simply issue a pull request.
