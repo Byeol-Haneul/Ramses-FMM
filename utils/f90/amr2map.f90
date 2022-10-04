@@ -1,17 +1,17 @@
 program amr2map
-  use amr_commons
-  use hydro_commons
-  use hilbert
   !--------------------------------------------------------------------------
   ! This code projects RAMSES data onto a map.
   ! This is based in the MINI-RAMSES prototype.
   ! R. Teyssier, Zurich, 15/04/16.
   !--------------------------------------------------------------------------
+  use amr_parameters, only: ndim,nhilbert,flen,twondim,twotondim,threetondim,nvector,dp
+  use amr_commons, only: run_t,global_t,mesh_t
+  use hydro_parameters, only: nvar
   implicit none
   integer::n,i,j,k,type=0,domax=0
   integer::ivar,lmax=0
   integer::ilevel,idim,jdim,kdim,ldim,icell
-  integer::nlevelmaxs,nlevel
+  integer::nlevel
   integer::ind,icpu,ncpu_read
 
   integer::nx_sample=0,ny_sample=0
@@ -29,10 +29,13 @@ program amr2map
   real(KIND=8)::rho,map
   real(KIND=8)::metmax=0d0
 
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
   character(LEN=1)::proj='z'
   character(LEN=5)::nchar,ncharcpu
-  character(LEN=128)::nomfich,repository,outfich,mapfiletype='bin'
-  character(LEN=128)::file_amr,file_hydro
+  character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
+  character(LEN=flen)::file_amr,file_hydro
   logical::ok,ok_part,ok_cell,do_max
   logical::check_ramses_exist
 
@@ -69,14 +72,14 @@ program amr2map
   endif
 
   ! Read RAMSES params
-  call read_ramses_params(repository)
-  write(*,*)'time=',t
+  call read_ramses_params(r,g,m,repository)
+  write(*,*)'time=',g%t
 
   !------------------------------
   ! Set up geometry parameters
   !------------------------------
   if(lmax==0)then
-     lmax=nlevelmax
+     lmax=r%nlevelmax
   endif
   write(*,*)'Working resolution =',2**lmax
   zzmax=1.0
@@ -114,7 +117,7 @@ program amr2map
   !-----------------------------
   ! Allocate map hierarchy
   !-----------------------------
-  do ilevel=levelmin,lmax
+  do ilevel=r%levelmin,lmax
      nx_full=2**ilevel
      ny_full=2**ilevel
      imin=int(xxmin*dble(nx_full))+1
@@ -134,20 +137,22 @@ program amr2map
   !-----------------------------------------------
   ! Compute projected variables
   !----------------------------------------------
-  allocate(cpu_list(1:ncpu))
-
+  allocate(cpu_list(1:g%ncpu))
+  
   ! Loop over levels 
-  do ilevel=levelmin,lmax
+  do ilevel=r%levelmin,lmax
 
      dx=0.5**ilevel
      zmax=1.0/dx
      dxline=1
      if(ndim==3)dxline=dx
 
-     write(*,*)'ilevel=',ilevel,dx,zmax
+!     write(*,*)'ilevel=',ilevel,dx,zmax,ncpu_read
 
      ! Get cpu list within bounding box
-     call cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
+!     call cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
+     ncpu_read=1
+     cpu_list(1)=1
      
      ! Loop over processor files
      do k=1,ncpu_read
@@ -156,21 +161,24 @@ program amr2map
 
         ! Prepare reading the AMR file
         file_amr=TRIM(repository)//'/amr.out'//TRIM(ncharcpu)
+
+ !       write(*,*)'Reading '//TRIM(file_amr)
+
         noct_skip=0
         open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
-        do i=levelmin,ilevel-1
-           ipos=13+4*(i-levelmin)
+        do i=r%levelmin,ilevel-1
+           ipos=13+4*(i-r%levelmin)
            read(10,POS=ipos)noct_tmp
            noct_skip=noct_skip+noct_tmp
         end do
-        ipos=13+4*(ilevel-levelmin)
+        ipos=13+4*(ilevel-r%levelmin)
         read(10,POS=ipos)noct_file
-        iskip_amr=13+4*(nlevelmax-levelmin+1)+(4*ndim+4*twotondim)*noct_skip
+        iskip_amr=13+4*(r%nlevelmax-r%levelmin+1)+(4*ndim+4*twotondim)*noct_skip
 
         ! Prepare reading the HYDRO file
         file_hydro=TRIM(repository)//'/hydro.out'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
-        iskip_hydro=17+4*(nlevelmax-levelmin+1)+(8*twotondim*nvar)*noct_skip
+        iskip_hydro=17+4*(r%nlevelmax-r%levelmin+1)+(8*twotondim*nvar)*noct_skip
 
         ! Loop over useful octs in file
         do i=1,noct_file
@@ -287,7 +295,7 @@ program amr2map
      xmin=((ix-0.5)/2**lmax)
      do iy=jmin,jmax
         ymin=((iy-0.5)/2**lmax)
-        do ilevel=levelmin,lmax-1
+        do ilevel=r%levelmin,lmax-1
            ndom=2**ilevel
            i=int(xmin*ndom)+1
            j=int(ymin*ndom)+1
@@ -313,10 +321,10 @@ program amr2map
   write(*,*)'Writing map in '//TRIM(nomfich)
 
   if (mapfiletype=='bin')then
-     write(*,*)'unformatted binary file'
+     write(*,*)'as unformatted binary file'
      open(unit=20,file=nomfich,form='unformatted')
      if(nx_sample==0)then
-        write(20)t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
+        write(20)g%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
         write(20)imax-imin+1,jmax-jmin+1
         allocate(toto(imax-imin+1,jmax-jmin+1))
         if(do_max)then
@@ -327,7 +335,7 @@ program amr2map
         write(20)toto
      else
         if(ny_sample==0)ny_sample=nx_sample
-        write(20)t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
+        write(20)g%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
         write(20)nx_sample+1,ny_sample+1
         allocate(toto(0:nx_sample,0:ny_sample))
         do i=0,nx_sample
@@ -524,8 +532,9 @@ end subroutine title
 !================================================================
 !================================================================
 function check_ramses_exist(repository)
+  use amr_parameters, only: flen
   implicit none
-  character(LEN=128)::repository
+  character(LEN=flen)::repository
   logical::check_ramses_exist
   !-----------------------------------------------
   ! Check that RAMSES files are there
@@ -561,12 +570,14 @@ end function check_ramses_exist
 !================================================================
 !================================================================
 !================================================================
-subroutine read_ramses_params(repository)
-  use amr_commons
-  use hydro_commons
-  use poisson_commons
+subroutine read_ramses_params(r,g,m,repository)
+  use amr_parameters, only: ndim,nhilbert,flen
+  use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-  character(LEN=128)::repository
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  character(LEN=flen)::repository
   !-----------------------------------------------
   ! Read RAMSES parameters file
   !-----------------------------------------------
@@ -578,7 +589,7 @@ subroutine read_ramses_params(repository)
   ilun=10
   open(unit=ilun,file=nomfich,access="stream",action="read",form='unformatted')
   ! Read grid variables
-  read(ilun)ncpu
+  read(ilun)g%ncpu
   read(ilun)ndim2
   if(ndim.NE.ndim2)then
      write(*,*)'Recompile'
@@ -586,23 +597,23 @@ subroutine read_ramses_params(repository)
      write(*,*)'ndim in file=',ndim2
      stop
   endif
-  read(ilun)levelmin
-  read(ilun)nlevelmax
+  read(ilun)r%levelmin
+  read(ilun)r%nlevelmax
   ! Overwrite boxlen with value from file
-  read(ilun)boxlen
+  read(ilun)r%boxlen
   ! Read time variables
-  read(ilun)noutput,iout,ifout
-  read(ilun)tout(1:noutput)
-  read(ilun)aout(1:noutput)
-  read(ilun)t
-  read(ilun)dtold(1:nlevelmax)
-  read(ilun)dtnew(1:nlevelmax)
-  read(ilun)nstep,nstep_coarse
+  read(ilun)r%noutput,g%iout,g%ifout
+  read(ilun)r%tout(1:r%noutput)
+  read(ilun)r%aout(1:r%noutput)
+  read(ilun)g%t
+  read(ilun)g%dtold(1:r%nlevelmax)
+  read(ilun)g%dtnew(1:r%nlevelmax)
+  read(ilun)g%nstep,g%nstep_coarse
   ! Read various constants
-  read(ilun)const,mass_tot_0,rho_tot
-  read(ilun)omega_m,omega_l,omega_k,omega_b,h0,aexp_ini,boxlen_ini
-  read(ilun)aexp,hexp,aexp_old,epot_tot_int,epot_tot_old
-  read(ilun)mass_sph
+  read(ilun)g%const,g%mass_tot_0,g%rho_tot
+  read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
+  read(ilun)g%aexp,g%hexp,g%aexp_old,g%epot_tot_int,g%epot_tot_old
+  read(ilun)r%mass_sph
   read(ilun)nhilbert2
   if(nhilbert.NE.nhilbert2)then
      write(*,*)'Recompile'
@@ -610,9 +621,12 @@ subroutine read_ramses_params(repository)
      write(*,*)'nhilbert in file=',nhilbert2
      stop
   endif
-  allocate(bound_key_level(1:nhilbert,0:ncpu,1:nlevelmax+1))
-  do ilevel=levelmin,nlevelmax
-     read(ilun)bound_key_level(1:nhilbert,0:ncpu,ilevel)
+  allocate(m%domain(1:r%nlevelmax+1))
+  do ilevel=1,r%nlevelmax+1
+     call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu)
+  end do
+  do ilevel=r%levelmin,r%nlevelmax
+     read(ilun)m%domain(ilevel)%b(1:nhilbert,0:g%ncpu)
   end do
   close(ilun)
 
@@ -621,118 +635,118 @@ end subroutine read_ramses_params
 !================================================================
 !================================================================
 !================================================================
-subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
-  use amr_commons
-  use hilbert
-  implicit none
-  real(dp)::xmin,xmax,ymin,ymax,zmin,zmax
-  integer::ilevel,ncpu_read
-  integer,dimension(1:ncpu)::cpu_list
-  !----------------------------------------------
-  ! Set up Hilbert key for optimal file reading
-  !----------------------------------------------
-  logical,dimension(1:ncpu)::cpu_read
-  integer(kind=4),dimension(1:nvector),save::dummy_state
-  integer(kind=8),dimension(1:nvector,1:ndim)::ix
-  integer(kind=8),dimension(1:nvector,1:nhilbert)::hk
-  integer(kind=8),dimension(1:nhilbert)::one_key,order_min,order_max
-  integer(kind=8),dimension(1:nhilbert,1:8)::bounding_min,bounding_max
-  integer,dimension(1:8)::idom,jdom,kdom,cpu_min,cpu_max
-  real(dp)::dmax,dx,maxdom
-  integer::i,j,ilev,lmin,imin,imax,jmin,jmax,kmin,kmax,bit_length,ndom,impi
-  logical::ok1,ok2
 
-  ncpu_read=ncpu
-  do i=1,ncpu
-     cpu_list(i)=i
-  end do
-  return
-
-  dmax=max(xmax-xmin,ymax-ymin,zmax-zmin)
-  do ilev=1,nlevelmax
-     dx=0.5d0**ilev
-     if(dx.lt.dmax)exit
-  end do
-  lmin=MIN(ilev,ilevel)
-  bit_length=lmin-1
-  maxdom=2**bit_length
-  imin=0; imax=0; jmin=0; jmax=0; kmin=0; kmax=0
-  if(bit_length>0)then
-     imin=int(xmin*dble(maxdom))
-     imax=imin+1
-     jmin=int(ymin*dble(maxdom))
-     jmax=jmin+1
-     kmin=int(zmin*dble(maxdom))
-     kmax=kmin+1
-  endif
-  
-  ndom=1
-  if(bit_length>0)ndom=8
-  idom(1)=imin; idom(2)=imax
-  idom(3)=imin; idom(4)=imax
-  idom(5)=imin; idom(6)=imax
-  idom(7)=imin; idom(8)=imax
-  jdom(1)=jmin; jdom(2)=jmin
-  jdom(3)=jmax; jdom(4)=jmax
-  jdom(5)=jmin; jdom(6)=jmin
-  jdom(7)=jmax; jdom(8)=jmax
-  kdom(1)=kmin; kdom(2)=kmin
-  kdom(3)=kmin; kdom(4)=kmin
-  kdom(5)=kmax; kdom(6)=kmax
-  kdom(7)=kmax; kdom(8)=kmax
-  
-  one_key=0
-  one_key(1)=1
-  do i=1,ndom
-     if(bit_length>0)then
-        ix(1,1)=idom(i)
-        if(ndim>1)ix(1,2)=jdom(i)
-        if(ndim>2)ix(1,3)=kdom(i)
-        call hilbert_key(ix,hk,dummy_state,0,bit_length,1)
-        order_min(1:nhilbert)=hk(1,1:nhilbert)
-     else
-        order_min(1:nhilbert)=0
-     endif
-     bounding_min(1:nhilbert,i)=order_min
-     bounding_max(1:nhilbert,i)=order_min+one_key
-  end do
-
-  if(ilevel>bit_length+1)then
-     do ilev=bit_length+1,ilevel
-        do i=1,ndom
-           bounding_min(1:nhilbert,i)=refine_key(bounding_min(1:nhilbert,i),ilevel)
-        end do
-     end do
-  endif
-
-  cpu_min=0; cpu_max=0
-  do impi=1,ncpu
-     do i=1,ndom
-        ok1=ge_keys(bounding_min(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel))
-        ok2=gt_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_min(1:nhilbert,i))
-        if(ok1.and.ok2)then
-           cpu_min(i)=impi
-        endif
-        ok1=gt_keys(bounding_max(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel))
-        ok2=ge_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_max(1:nhilbert,i))
-        if(ok1.and.ok2)then
-           cpu_max(i)=impi
-        endif
-     end do
-  end do
-  
-  ncpu_read=0
-  do i=1,ndom
-     do j=cpu_min(i),cpu_max(i)
-        if(.not. cpu_read(j))then
-           ncpu_read=ncpu_read+1
-           cpu_list(ncpu_read)=j
-           cpu_read(j)=.true.
-        endif
-     enddo
-  enddo
-
-end subroutine cmp_cpu_list
+!!$subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
+!!$  use amr_parameters, only: ndim,nhilbert,flen
+!!$  implicit none
+!!$  real(dp)::xmin,xmax,ymin,ymax,zmin,zmax
+!!$  integer::ilevel,ncpu_read
+!!$  integer,dimension(1:1)::cpu_list
+!!$  !----------------------------------------------
+!!$  ! Set up Hilbert key for optimal file reading
+!!$  !----------------------------------------------
+!!$  logical,dimension(1:ncpu)::cpu_read
+!!$  integer(kind=4),dimension(1:nvector),save::dummy_state
+!!$  integer(kind=8),dimension(1:nvector,1:ndim)::ix
+!!$  integer(kind=8),dimension(1:nvector,1:nhilbert)::hk
+!!$  integer(kind=8),dimension(1:nhilbert)::one_key,order_min,order_max
+!!$  integer(kind=8),dimension(1:nhilbert,1:8)::bounding_min,bounding_max
+!!$  integer,dimension(1:8)::idom,jdom,kdom,cpu_min,cpu_max
+!!$  real(dp)::dmax,dx,maxdom
+!!$  integer::i,j,ilev,lmin,imin,imax,jmin,jmax,kmin,kmax,bit_length,ndom,impi
+!!$  logical::ok1,ok2
+!!$
+!!$  ncpu_read=1 !ncpu
+!!$  do i=1,ncpu
+!!$     cpu_list(i)=i
+!!$  end do
+!!$  return
+!!$
+!!$  dmax=max(xmax-xmin,ymax-ymin,zmax-zmin)
+!!$  do ilev=1,nlevelmax
+!!$     dx=0.5d0**ilev
+!!$     if(dx.lt.dmax)exit
+!!$  end do
+!!$  lmin=MIN(ilev,ilevel)
+!!$  bit_length=lmin-1
+!!$  maxdom=2**bit_length
+!!$  imin=0; imax=0; jmin=0; jmax=0; kmin=0; kmax=0
+!!$  if(bit_length>0)then
+!!$     imin=int(xmin*dble(maxdom))
+!!$     imax=imin+1
+!!$     jmin=int(ymin*dble(maxdom))
+!!$     jmax=jmin+1
+!!$     kmin=int(zmin*dble(maxdom))
+!!$     kmax=kmin+1
+!!$  endif
+!!$  
+!!$  ndom=1
+!!$  if(bit_length>0)ndom=8
+!!$  idom(1)=imin; idom(2)=imax
+!!$  idom(3)=imin; idom(4)=imax
+!!$  idom(5)=imin; idom(6)=imax
+!!$  idom(7)=imin; idom(8)=imax
+!!$  jdom(1)=jmin; jdom(2)=jmin
+!!$  jdom(3)=jmax; jdom(4)=jmax
+!!$  jdom(5)=jmin; jdom(6)=jmin
+!!$  jdom(7)=jmax; jdom(8)=jmax
+!!$  kdom(1)=kmin; kdom(2)=kmin
+!!$  kdom(3)=kmin; kdom(4)=kmin
+!!$  kdom(5)=kmax; kdom(6)=kmax
+!!$  kdom(7)=kmax; kdom(8)=kmax
+!!$  
+!!$  one_key=0
+!!$  one_key(1)=1
+!!$  do i=1,ndom
+!!$     if(bit_length>0)then
+!!$        ix(1,1)=idom(i)
+!!$        if(ndim>1)ix(1,2)=jdom(i)
+!!$        if(ndim>2)ix(1,3)=kdom(i)
+!!$        call hilbert_key(ix,hk,dummy_state,0,bit_length,1)
+!!$        order_min(1:nhilbert)=hk(1,1:nhilbert)
+!!$     else
+!!$        order_min(1:nhilbert)=0
+!!$     endif
+!!$     bounding_min(1:nhilbert,i)=order_min
+!!$     bounding_max(1:nhilbert,i)=order_min+one_key
+!!$  end do
+!!$
+!!$  if(ilevel>bit_length+1)then
+!!$     do ilev=bit_length+1,ilevel
+!!$        do i=1,ndom
+!!$           bounding_min(1:nhilbert,i)=refine_key(bounding_min(1:nhilbert,i),ilevel)
+!!$        end do
+!!$     end do
+!!$  endif
+!!$
+!!$  cpu_min=0; cpu_max=0
+!!$  do impi=1,ncpu
+!!$     do i=1,ndom
+!!$        ok1=ge_keys(bounding_min(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel))
+!!$        ok2=gt_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_min(1:nhilbert,i))
+!!$        if(ok1.and.ok2)then
+!!$           cpu_min(i)=impi
+!!$        endif
+!!$        ok1=gt_keys(bounding_max(1:nhilbert,i),bound_key_level(1:nhilbert,impi-1,ilevel))
+!!$        ok2=ge_keys(bound_key_level(1:nhilbert,impi,ilevel),bounding_max(1:nhilbert,i))
+!!$        if(ok1.and.ok2)then
+!!$           cpu_max(i)=impi
+!!$        endif
+!!$     end do
+!!$  end do
+!!$  
+!!$  ncpu_read=0
+!!$  do i=1,ndom
+!!$     do j=cpu_min(i),cpu_max(i)
+!!$        if(.not. cpu_read(j))then
+!!$           ncpu_read=ncpu_read+1
+!!$           cpu_list(ncpu_read)=j
+!!$           cpu_read(j)=.true.
+!!$        endif
+!!$     enddo
+!!$  enddo
+!!$
+!!$end subroutine cmp_cpu_list
 !================================================================
 !================================================================
 !================================================================
