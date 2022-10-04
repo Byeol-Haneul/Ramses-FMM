@@ -322,6 +322,7 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
     if (present(flush))     pack_flush%proc => flush
     if (present(combine)) unpack_flush%proc => combine
 
+#ifndef WITHOUTMPI
     do icpu=1,g%ncpu
       mdl%reply_id(icpu)=MPI_REQUEST_NULL
     end do
@@ -359,6 +360,7 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
   
     ! Post the first RECV for flush
     call MPI_IRECV(mdl%recv_flush_array,mdl%size_flush_array,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,mdl%flush_id,info)
+#endif
 #endif
   end associate
 
