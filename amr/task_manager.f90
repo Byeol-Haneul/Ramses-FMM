@@ -2,7 +2,6 @@
 !##############################################################
 !##############################################################
 !##############################################################
-
 subroutine mdl_init
   use call_back
   use amr_parameters, only: flen
@@ -80,7 +79,10 @@ recursive subroutine r_clean_stop(pst)
   
 end subroutine r_clean_stop
 #endif
-
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
 subroutine master(mdl,pst)
   use init_amr_module, only: r_set_add
   implicit none
@@ -92,7 +94,10 @@ subroutine master(mdl,pst)
   call r_clean_stop(pst)
 #endif
 end subroutine master
-
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
 function worker_init(mdl) result(pst)
   use ramses_commons, only: pst_t, ramses_t
   use call_back, only: ramses_function
@@ -255,7 +260,10 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),8,&
                       2*pst%s%r%nw_frame*pst%s%r%nh_frame*4,"output_frame")
 end function worker_init
-
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
 subroutine worker_done(mdl,pst)
   type(mdl_t)::mdl
   type(pst_t),allocatable::pst

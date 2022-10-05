@@ -50,7 +50,10 @@ module mdl_module
   PRIVATE :: mdl_get_reply_array, mdl_get_reply_scalar
 
   contains
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     subroutine mdl_abort(mdl)
       type(mdl_t)::mdl
 #ifndef WITHOUTMPI
@@ -61,7 +64,10 @@ module mdl_module
       stop
 #endif  
     end subroutine mdl_abort
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     subroutine mdl_add_service(mdl,sid,p1,service,input_size,output_size,name)
       USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_INT, C_FUNPTR, C_LOC
       type(mdl_t)::mdl
@@ -77,7 +83,10 @@ module mdl_module
       mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,input_size/4) ! Divide by four to get the number of Integers
 
     end subroutine mdl_add_service
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     integer function mdl_send_request_array(mdl,mdl_function_id,target_cpu,input_size,output_size,input_array)
       implicit none
       type(mdl_t)::mdl
@@ -120,7 +129,10 @@ module mdl_module
 #endif  
       mdl_send_request_array = target_cpu
     end function mdl_send_request_array
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     integer function mdl_send_request_scalar(mdl,mdl_function_id,target_cpu,input_size,output_size,input)
       USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_LOC, C_F_POINTER
       implicit none
@@ -179,7 +191,6 @@ module mdl_module
 #endif
       mdl_send_request_scalar = target_cpu
     end function mdl_send_request_scalar
-
     !##############################################################
     !##############################################################
     !##############################################################
@@ -209,7 +220,10 @@ module mdl_module
       call MPI_WAIT(output_id,output_status,info)
 #endif  
     end subroutine mdl_get_reply_array
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     subroutine mdl_get_reply_scalar(mdl,target_cpu,output_length,output)
       USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_LOC, C_F_POINTER
       implicit none
@@ -236,14 +250,12 @@ module mdl_module
 
       ! Wait for ISEND completion to free memory in corresponding MPI buffer
       call MPI_WAIT(output_id,output_status,info)
-!      if (present(output_length)) then
-!        call MPI_GET_COUNT(output_status, MPI_INTEGER, output_length, info)
-!        write(*,*) 'Length is',output_length
-!      endif
 #endif  
-
     end subroutine mdl_get_reply_scalar
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     subroutine mdl_initialize(mdl)
       type(mdl_t)::mdl
 
@@ -263,34 +275,52 @@ module mdl_module
       mdl%myid=1
 #endif
     end subroutine mdl_initialize
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     double precision function mdl_wtime(mdl)
       type(mdl_t)::mdl
       real::tt
       call cpu_time(tt)
       mdl_wtime=tt
     end function mdl_wtime
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     integer function mdl_threads(mdl)
       type(mdl_t)::mdl
       mdl_threads = mdl%ncpu
     end function mdl_threads
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     integer function mdl_self(mdl)
       type(mdl_t)::mdl
       mdl_self = mdl%myid
     end function mdl_self
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     integer function mdl_core(mdl)
       type(mdl_t)::mdl
       mdl_core = 1
     end function mdl_core
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     integer function mdl_cores(mdl)
       type(mdl_t)::mdl
       mdl_cores = 1
     end function mdl_cores
-
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
     subroutine mdl_mkdir_p(mdl,filedir)
       use amr_parameters, only: flen
       type(mdl_t)::mdl
@@ -303,4 +333,8 @@ module mdl_module
       call system(filecmd)
 #endif
     end subroutine mdl_mkdir_p
+    !##############################################################
+    !##############################################################
+    !##############################################################
+    !##############################################################
 end module mdl_module
