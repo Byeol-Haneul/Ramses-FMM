@@ -13,7 +13,7 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  integer::ind,ivar
+  integer::idim,ind,ivar
   type(msg_large_realdp)::msg
 
   do ind=1,twotondim
@@ -61,7 +61,7 @@ subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  integer::ind,ivar
+  integer::idim,ind,ivar
   type(msg_large_realdp)::msg
 
   grid%lev=hash_key(0)

@@ -10,6 +10,10 @@ UNITS = coeur
 NPRE = 8
 NVAR = 5
 NENER = 0
+COMPILER = GNU
+DEBUG = 0
+MPI = 0
+MPIF90 = mpif90
 SOLVER = hydro
 PATCH = 
 EXEC = ramses
@@ -21,70 +25,44 @@ BUILDDATE = $(shell date +"%D-%T")
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -DNVAR=$(NVAR) \
 	  -DNHILBERT=$(NHILBERT) -DHYDRO -DGRAV -DCONDINIT${CONDINIT} -DUNITS${UNITS}
 #############################################################################
-# Fortran compiler options and directives
-
-# --- No MPI, gfortran -------------------------------
-F90 = gfortran -O3 -frecord-marker=4 -fbacktrace -ffree-line-length-none -g
-FFLAGS = -x f95-cpp-input $(DEFINES) -DWITHOUTMPI
-
-# --- No MPI, tau ----------------------------------
-#F90 = tau_f90.sh -optKeepFiles -optPreProcess -optCPPOpts=$(DEFINES) -DWITHOUTMPI
-
-# --- No MPI, pgf90 ----------------------------------
-#F90 = pgf90
-#FFLAGS = -Mpreprocess $(DEFINES) -DWITHOUTMPI
-
-# --- No MPI, xlf ------------------------------------
-#F90 = xlf
-#FFLAGS = -WF,-DNDIM=$(NDIM),-DNPRE=$(NPRE),-DNVAR=$(NVAR),-DSOLVER$(SOLVER),-DWITHOUTMPI -qfree=f90 -qsuffix=f=f90 -qsuffix=cpp=f90
-
-# --- No MPI, f90 ------------------------------------
-#F90 = f90
-#FFLAGS = -O3 -g -cpp $(DEFINES) -DWITHOUTMPI
-
-# --- No MPI, ifort ----------------------------------
-#F90 = ifort
-#FFLAGS = -O3 -g -traceback -cpp $(DEFINES) -DWITHOUTMPI
-
-# --- MPI, gfortran syntax ------------------------------
-#F90 = mpif90 -frecord-marker=4 -O3 -ffree-line-length-none -g -fbacktrace 
-#FFLAGS = -x f95-cpp-input $(DEFINES)
-
-# --- MPI, gfortran DEBUG syntax ------------------------------ 
-#F90 = mpif90 -frecord-marker=4 -ffree-line-length-none -fbacktrace -g -O -fbounds-check -Wall
-#FFLAGS = -x f95-cpp-input -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan  $(DEFINES)    
-
-# --- MPI, pgf90 syntax ------------------------------
-#F90 = mpif90 -O3
-#FFLAGS = -Mpreprocess $(DEFINES)
-
-# --- MPI, ifort syntax ------------------------------
-#F90 = mpif90
-#FFLAGS = -cpp -check uninit -O3 -g -traceback -fpe0 -ftrapuv -check bounds  $(DEFINES) -DNOSYSTEM
-#F90 = mpif90 -f90=ifort
-#FFLAGS = -cpp -g -O2 -debug inline-debug-info -shared-intel -shared-libgcc $(DEFINES) -DNOSYSTEM
-#FFLAGS = -cpp -g -O2 -debug inline-debug-info -shared-intel -shared-libgcc -traceback -fpe0 -ftrapuv -check all $(DEFINES) -DNOSYSTEM
-# -DWITHOUTMPI
-# -check all -ftrapuv
-
-# --- MPI, ifort syntax, additional checks -----------
-#F90 = mpif90 -f90=ifort
-#FFLAGS = -warn all -O0 -g -traceback -fpe0 -ftrapuv -check bounds -cpp $(DEFINES) -DNOSYSTEM
-#FFLAGS = -cpp -fast -g  $(DEFINES) -DNOSYSTEM
-#FFLAGS = -cpp  $(DEFINES) -DNOSYSTEM    
-
-# --- MPI, ifort syntax ------------------------------
-#F90 = ftn
-#FFLAGS = -xAVX -g -traceback -fpp -fast $(DEFINES) -DNOSYSTEM #-DRT 
-
-# --- MPI, ifort syntax, additional checks -----------
-#F90 = ftn
-#FFLAGS = -O3 -g -traceback -fpe0 -ftrapuv -cpp $(DEFINES) -DNOSYSTEM #-DRT
-
+# GNU compiler (gfortran)
+ifeq ($(COMPILER),GNU)
+   FFLAGS = -x f95-cpp-input $(DEFINES)
+   ifeq ($(MPI),1)
+      F90 = $(MPIF90)
+   else
+      F90 = gfortran
+      FFLAGS += -DWITHOUTMPI
+   endif
+   F90 += -frecord-marker=4 -fbacktrace -ffree-line-length-none -g -fimplicit-none
+   ifeq ($(DEBUG),1)
+      F90 += -O0 -fbounds-check -Wuninitialized -Wall
+      FFLAGS += -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan
+   else
+      F90 += -O3
+   endif
+endif
+#############################################################################
+# Intel compiler
+ifeq ($(COMPILER),INTEL)
+   FFLAGS = -cpp $(DEFINES)
+   ifeq ($(MPI),1)
+      F90 = $(MPIF90)
+   else
+      F90 = ifort
+      FFLAGS += -DWITHOUTMPI
+   endif
+   F90 += -fp-model source
+   ifeq ($(DEBUG),1)
+      F90 += -warn all -O0 -g -traceback -check bounds
+      FFLAGS += -fpe0 -ftrapuv -init=zero -init=snan -init=arrays
+   else
+      F90 += -O3
+   endif
+endif
+#############################################################################
 C = ifort
 CFLAGS = -g -O3
-
-
 #############################################################################
 MOD = mod
 #############################################################################
