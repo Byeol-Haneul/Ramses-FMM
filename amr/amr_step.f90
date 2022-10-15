@@ -47,6 +47,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! balance grids and particles.
   !------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
+                                    call m_timer(pst,'refine','start')
      call m_refine_fine(pst,ilevel)
   endif
   
@@ -55,6 +56,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !------------------------
   if(ilevel==r%levelmin)then
      if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
+                                    call m_timer(pst,'output','start')
         call m_dump_all(pst)
      endif
   endif
@@ -75,6 +77,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !--------------------
   if(r%poisson)then
      if(ilevel==r%levelmin.or.icount>1)then
+                                    call m_timer(pst,'rho','start')
         call m_rho_fine(pst,ilevel)
      endif
   endif
@@ -85,6 +88,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 #ifdef GRAV
   if(r%poisson)then
 
+                                    call m_timer(pst,'poisson','start')
      ! Remove gravity source term with half time step and old force
      if(r%hydro)then
         call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
@@ -111,10 +115,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_force_fine(pst,ilevel,icount)
 
      ! Perform second kick for particles
+                                    call m_timer(pst,'particle - kckdrift','start')
      if(r%pic)call m_kick_drift_part(pst,ilevel,action_kick_only)
 
      ! Add gravity source term with half time step and new force
      if(r%hydro)then
+                                    call m_timer(pst,'poisson','start')
         call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
      end if
 
@@ -124,16 +130,19 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------
   ! Compute new time step
   !----------------------
+                                    call m_timer(pst,'courant','start')
   call m_newdt_fine(pst,ilevel)
   
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
+                                    call m_timer(pst,'hydro - set unew','start')
   if(r%hydro)call r_set_unew(pst,ilevel,1)
 
   !---------------------------
   ! Recursive call to amr_step
   !---------------------------
+                                    call m_timer(pst,'recursive call','start')
   if(ilevel<r%nlevelmax)then
      if(m%noct_tot(ilevel+1)>0)then
         if(r%nsubcycle(ilevel)==2)then
@@ -168,35 +177,43 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%hydro)then
 
      ! Hyperbolic solver
+                                    call m_timer(pst,'hydro - godunov','start')
      if(.not.r%static)call r_godunov_fine(pst,ilevel,1)
 
      ! Add gravity source terms to unew with half time step
+                                    call m_timer(pst,'hydro - gravity','start')
      if(r%poisson)call r_gravity_hydro_fine(pst,ilevel,1)
 
      ! Set uold equal to unew
+                                    call m_timer(pst,'hydro - set uold','start')
      call r_set_uold(pst,ilevel,1)
 
      ! Add gravity source terms to uold with half time step
      ! to complete the time step with old force (will be removed later)
+                                    call m_timer(pst,'poisson - synchro','start')
      if(r%poisson)call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
 
      ! Restriction operator
+                                    call m_timer(pst,'hydro - upload','start')
      call m_upload_fine(pst,ilevel)
   endif
 
   !----------------------------
   ! Compute cooling/heating
   !----------------------------
+                                    call m_timer(pst,'cooling','start')
   if(r%cooling)call r_cooling_fine(pst,ilevel,1)
 
   !-------------------------------------------
   ! Perform first kick and drift for particles
   !-------------------------------------------
+                                    call m_timer(pst,'particle - kickdrift','start')
   if(r%pic)call m_kick_drift_part(pst,ilevel,action_kick_drift)
 
   !-----------------------
   ! Compute refinement map
   !-----------------------
+                                    call m_timer(pst,'flag','start')
   if(.not.r%static)call m_flag_fine(pst,ilevel,icount)
 
   !-------------------------------
@@ -208,6 +225,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(icount==2)g%dtnew(ilevel-1)=g%dtold(ilevel)+g%dtnew(ilevel)
 
      ! Broadcast updated time step to all CPUs
+                                    call m_timer(pst,'recursive call','start')
      in_broadcast_dt%ilevel=ilevel-1
      in_broadcast_dt%dtnew=g%dtnew(ilevel-1)
      in_broadcast_dt%dtold=g%dtold(ilevel-1)

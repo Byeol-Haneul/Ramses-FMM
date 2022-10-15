@@ -76,6 +76,8 @@ subroutine m_dump_all(pst)
      call output_compil(filename)
      filename=TRIM(filedir)//'params.out'
      call output_params(r,g,m,filename)
+     filename=TRIM(filedir)//'timer.txt'
+     call m_output_timer(pst,.true.,filename)
 
      !-----------------------
      ! All slave processes
@@ -564,3 +566,7 @@ subroutine savegadget(filename)
 end subroutine savegadget
 #endif
 end module output_amr_module
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################

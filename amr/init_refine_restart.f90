@@ -257,7 +257,7 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
   logical,dimension(1:twotondim)::refined
   real(dp),dimension(1:twotondim,1:nvar)::uold
   real(dp),dimension(1:twotondim,1:ndim)::f
-  real(dp),dimension(1:twotondim)::phi
+  real(dp),dimension(1:twotondim)::phi,rho
 
   ! Set some constants
   one_key=0
@@ -371,9 +371,16 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
         ! Read values from GRAV files
         if(r%poisson)then
            ipos=iskip_grav+(8*twotondim*(ndim+1))*(i-1)
+#ifdef OUTPUT_PARTICLE_DENSITY
+           ipos=iskip_grav+(8*twotondim*(ndim+2))*(i-1)
+#endif
            read(11,POS=ipos)phi
            ipos=ipos+8*twotondim
            read(11,POS=ipos)f              
+#ifdef OUTPUT_PARTICLE_DENSITY
+           ipos=ipos+8*twotondim*ndim
+           read(11,POS=ipos)rho      
+#endif
         endif
         
         ! Create new oct in memory

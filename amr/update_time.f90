@@ -74,6 +74,11 @@ subroutine m_update_time(pst,ilevel,done)
         end do
 999     format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
 
+        !------------------------
+        ! Output timing data
+        !------------------------
+        call m_output_timer(pst,.false.,'dummy')
+
         !----------------------------------------------
         ! Output mass and energy conservation to screen
         !----------------------------------------------

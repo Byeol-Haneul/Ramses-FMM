@@ -64,6 +64,9 @@ subroutine output_poisson(r,g,m,mdl,filename)
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%phi
         write(ilun)m%grid(igrid)%f
+#ifdef OUTPUT_PARTICLE_DENSITY
+        write(ilun)m%grid(igrid)%rho
+#endif
      end do
   enddo
 #endif
