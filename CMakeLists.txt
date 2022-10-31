@@ -10,9 +10,14 @@ endif()
 
 add_executable(${PROJECT_NAME} "")
 
-find_package(MPI REQUIRED)      # MPI support
-include_directories(${MPI_Fortran_INCLUDE_PATH})
-target_link_libraries(${PROJECT_NAME} ${MPI_Fortran_LIBRARIES})
+find_package(MPI)      # MPI support
+if(MPI_FOUND)
+  include_directories(${MPI_Fortran_INCLUDE_PATH})
+  target_link_libraries(${PROJECT_NAME} ${MPI_Fortran_LIBRARIES})
+else()
+  message(STATUS "MPI library not found. Build without MPI")
+endif()
+
 
 if(EXISTS ${CMAKE_SOURCE_DIR}/mdl2)
   set(MDL2 true CACHE BOOL "Enable the new MDL version of RAMSES")
@@ -31,7 +36,11 @@ set(UNITS default)
 set(CONDINIT default)
 set(EXEC ramses)
 
-add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT} -DHYDRO -DGRAV)
+if(MPI_FOUND)
+  add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT} -DHYDRO -DGRAV)
+else()
+  add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT} -DHYDRO -DGRAV -DWITHOUTMPI)
+endif()
 
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/write_gitinfo.f90

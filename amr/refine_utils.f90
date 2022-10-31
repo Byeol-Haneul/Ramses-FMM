@@ -592,7 +592,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   type(oct),pointer::child
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-
+    
 #if !defined(WITHOUTMPI) && !defined(MDL2)
   ! If counter is good, check on incoming messages and perform actions
   if(mdl%mail_counter==32)then
@@ -601,7 +601,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   endif
   mdl%mail_counter=mdl%mail_counter+1
 #endif
-
+  
   !=================================
   ! Create new octs into main memory
   !=================================
@@ -612,17 +612,17 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   end do
   hash_key(0)=ilevel
   hash_key(1:ndim)=cart_key(1:ndim)
-
+  
   ! Compute Hilbert keys of new octs
   ix(1:ndim)=cart_key(1:ndim)
   hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
-
+  
   ! Check if grid sits inside processor boundaries
   if (m%domain(ilevel)%in_rank(hk)) then
-
+     
      ! Set grid index to a virtual grid in local main memory
      child => m%grid(m%ifree)
-
+     
      ! Go to next main memory free line
      m%ifree=m%ifree+1
      if(m%ifree.GT.r%ngridmax)then
@@ -632,7 +632,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
         call mdl_abort(mdl)
      end if
      call hash_setp(m%grid_dict,hash_key,child)
-  ! Otherwise, determine parent processor and use the cache
+     ! Otherwise, determine parent processor and use the cache
   else
 #ifdef MDL2
      call get_grid_p(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
@@ -654,7 +654,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
      call hash_setp(m%grid_dict,hash_key,child)
 #endif
   endif
-
+  
   child%lev=ilevel
   child%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
   child%hkey(1:nhilbert)=hk(1:nhilbert)
@@ -662,15 +662,15 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   child%flag1(1:twotondim)=0
   child%flag2(1:twotondim)=0
   child%superoct=1
-
+  
   ! Set status of parent cell to "refined"
   parent%refined(icell)=.true.
-
+  
   !=========================================================
   ! Inject parent hydro variables into new children ones
   !=========================================================     
 #ifdef HYDRO
-
+  
   ! Interpolate hydro variables
   do ivar=1,nvar
      do ind=1,twotondim
@@ -716,9 +716,9 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   enddo
   
 #endif
-
+  
   end associate
-     
+  
 end subroutine make_new_oct
 !###############################################################
 !###############################################################

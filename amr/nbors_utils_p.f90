@@ -342,7 +342,6 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
 
 #ifndef WITHOUTMPI
 
-
   ! Now we know child_grid=0
   child_grid = 0
 
