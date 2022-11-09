@@ -77,7 +77,7 @@ subroutine m_update_time(pst,ilevel,done)
         !------------------------
         ! Output timing data
         !------------------------
-        call m_output_timer(pst,.false.,'dummy')
+        if(r%verbose)call m_output_timer(pst,.false.,'dummy')
 
         !----------------------------------------------
         ! Output mass and energy conservation to screen

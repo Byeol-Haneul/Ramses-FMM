@@ -145,14 +145,14 @@ subroutine kick_drift_part(s,ilevel,action_part)
      
      ! Get parent cell at level ilevel using read-only cache
      ok_level=.true.
-     icell=0
      hash_nbor(0)=ilevel+1
+     icell=0
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         if(.not.associated(gridp(ind)%p))then
            ok_level=.false.
-           exit
+!           exit
         end if
      end do
      do ind=1,twotondim
@@ -213,7 +213,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
            call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(.not.associated(gridp(ind)%p))then
               ok_level=.false.
-              exit
+!              exit
            end if
         end do
         do ind=1,twotondim

@@ -8,6 +8,7 @@ nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
 verbose=.false.
+nsuperoct=0
 /
 
 &OUTPUT_PARAMS
@@ -17,12 +18,12 @@ aend=1.0
 
 &INIT_PARAMS
 filetype='grafic'
-initfile(1)='ic_files'
+initfile(1)='ics_ramses'
 /
 
 &AMR_PARAMS
-levelmin=8
-levelmax=19
+levelmin=7
+levelmax=15
 ngridmax=2000000
 npartmax=4000000
 nexpand=1,
