@@ -57,9 +57,20 @@ $ cd ..
 $ bin/ramses1d namelist/tube1d.nml
 ```
 
+5- Cosmological N body simulation in 3D
+
+```
+$ cd bin
+$ make clean
+$ make UNITS=cosmo CONDINIT=default
+$ cd ..
+$ utils/script/load_cosmo_ic.sh
+$ bin/ramses3d namelist/dmo.nml
+```
+
 You get the picture now ;-)
 
-To visualize the 2D results, compile the map making executable in the bin directory right after you compiled ramses.
+To visualize the 2D (resp. 3D) results, compile the map making executable in the bin directory right after you compiled ramses using NDIM=2 (resp. 3).
 
 ```
 $ cd bin
@@ -70,3 +81,4 @@ $ utils/py/map2img.py dens.map --log
 ```
 
 In the molecular cloud collapse case, you can also explore the movie1 directory and use the python function directly on any of the maps in there.
+

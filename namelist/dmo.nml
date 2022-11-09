@@ -8,7 +8,6 @@ nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
 verbose=.false.
-nsuperoct=0
 /
 
 &OUTPUT_PARAMS
