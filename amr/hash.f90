@@ -22,7 +22,7 @@ module hash
   type,bind(c) :: bucket
      !sequence
      integer(kind=8), dimension(0:ndim) :: key
-     type(c_ptr) :: valuep
+     type(C_PTR) :: valuep
      integer :: next_ibucket
   end type bucket     
 
@@ -167,7 +167,7 @@ contains
        do while (htable%data(ibucket)%next_ibucket .ne. 0)
           ! Check if key already exists - abort if so
           if (same_keys(htable%data(ibucket)%key(0:ndim),key(0:ndim)))then
-             write(*,*) "trying to insert already existing key: ",key,htable%data(ibucket)%valuep
+             write(*,*) "trying to insert already existing key: ",key !htable%data(ibucket)%valuep
              write(*,*) "existing key: ", htable%data(ibucket)%key(0:ndim)
              stop
           end if
