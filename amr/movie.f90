@@ -24,6 +24,10 @@ subroutine m_output_frame(pst)
   real(kind=8),dimension(:),allocatable::data_frame
   real(kind=8),dimension(:),allocatable::dens
   real(kind=4),dimension(:),allocatable::data_single
+#if NVAR>NDIM+2
+  integer::ll
+  character(LEN=5)::dummy
+#endif
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -345,9 +349,10 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
 #else
               xleft =xx(1)-dx_loc/2.
               xright=xx(1)+dx_loc/2.
+#if NDIM>1
               yleft =xx(2)-dx_loc/2.
               yright=xx(2)+dx_loc/2.
-              
+#endif              
               if(    xright.lt.xleft_frame.or.xleft.ge.xright_frame.or.&
                    & yright.lt.yleft_frame.or.yleft.ge.yright_frame)cycle
 #endif
@@ -430,7 +435,7 @@ subroutine set_movie_vars(r)
   ! This routine sets the movie vars from textual form
   type(run_t)::r
   
-#if NVAR>5
+#if NVAR>NDIM+2
   integer::ll
   character(LEN=5)::dummy
 #endif

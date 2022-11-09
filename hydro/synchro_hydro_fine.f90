@@ -163,25 +163,27 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
         d=max(m%grid(igrid)%unew(ind,1),r%smallr)
         u=0.0d0; v=0.0d0; w=0.0d0
         if(ndim>0)u=m%grid(igrid)%unew(ind,2)/d
-        if(ndim>1)v=m%grid(igrid)%unew(ind,3)/d
-        if(ndim>2)w=m%grid(igrid)%unew(ind,4)/d
+#if NDIM>1
+        v=m%grid(igrid)%unew(ind,3)/d
+#endif
+#if NDIM>2        
+        w=m%grid(igrid)%unew(ind,4)/d
+#endif
         e_kin=0.5d0*d*(u**2+v**2+w**2)
         e_prim=m%grid(igrid)%unew(ind,ndim+2)-e_kin
         d_old=max(m%grid(igrid)%uold(ind,1),r%smallr)
         fact=d_old/d*0.5d0*g%dtnew(ilevel)
 #ifdef GRAV
-        if(ndim>0)then
-           u=u+m%grid(igrid)%f(ind,1)*fact
-           m%grid(igrid)%unew(ind,2)=d*u
-        endif
-        if(ndim>1)then
-           v=v+m%grid(igrid)%f(ind,2)*fact
-           m%grid(igrid)%unew(ind,3)=d*v
-        end if
-        if(ndim>2)then
-           w=w+m%grid(igrid)%f(ind,3)*fact
-           m%grid(igrid)%unew(ind,4)=d*w
-        endif
+        u=u+m%grid(igrid)%f(ind,1)*fact
+        m%grid(igrid)%unew(ind,2)=d*u
+#if NDIM>1
+        v=v+m%grid(igrid)%f(ind,2)*fact
+        m%grid(igrid)%unew(ind,3)=d*v
+#endif
+#if NDIM>2
+        w=w+m%grid(igrid)%f(ind,3)*fact
+        m%grid(igrid)%unew(ind,4)=d*w
+#endif
 #endif
         e_kin=0.5d0*d*(u**2+v**2+w**2)
         m%grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin

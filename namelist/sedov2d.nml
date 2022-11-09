@@ -6,14 +6,13 @@ ncontrol=1
 nsubcycle=10*1,
 verbose=.false.
 nremap=10
-nsuperoct=5
-nstepmax=10
+nsuperoct=0
 /
 
 &AMR_PARAMS
-levelmin=14
-levelmax=14
-ngridmax=16000000
+levelmin=3
+levelmax=10
+ngridmax=100000
 boxlen=1.0
 /
 
@@ -34,7 +33,7 @@ p_region=1e-5,0.4
 
 &OUTPUT_PARAMS
 noutput=1
-tout=0.2
+tout=1.0
 /
 
 &HYDRO_PARAMS

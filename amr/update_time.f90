@@ -108,9 +108,7 @@ subroutine m_update_time(pst,ilevel,done)
      !---------------
      if(g%t>=r%tout(r%noutput).or.g%aexp>=r%aout(r%noutput).or.g%nstep_coarse>=r%nstepmax)then
         write(*,*)'Run completed'
-        do i=r%levelmin,r%nlevelmax
-           call write_screen(m,i)
-        end do
+        call write_screen(r,m)
         ttend = mdl_wtime(mdl)
         print '(A,F14.7)',' Total elapsed time:',ttend-ttstart
         done=.true.

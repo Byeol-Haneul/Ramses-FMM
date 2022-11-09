@@ -62,6 +62,8 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
 
   if(m%noct(ilevel)==0)return
 
+#if NDIM==3
+
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
@@ -259,6 +261,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   end do
   ! End loop over grids
 
+#endif
 end subroutine input_hydro_grafic
 !################################################################
 !################################################################

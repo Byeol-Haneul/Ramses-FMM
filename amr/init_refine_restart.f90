@@ -256,7 +256,7 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
   integer,dimension(1:ndim)::ckey
   logical,dimension(1:twotondim)::refined
   real(dp),dimension(1:twotondim,1:nvar)::uold
-  real(dp),dimension(1:twotondim,1:ndim)::f
+  real(dp),dimension(1:twotondim,1:3)::f
   real(dp),dimension(1:twotondim)::phi,rho
 
   ! Set some constants
@@ -350,7 +350,7 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
      if(r%poisson)then
         file_grav='output_'//TRIM(nchar)//'/grav.out'//TRIM(ncharcpu)
         open(unit=11,file=file_grav,access="stream",action="read",form='unformatted')
-        iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*(ndim+1))*nskip_file(icpu)
+        iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*4)*nskip_file(icpu)
      endif
 
      ! Loop over useful octs in file
@@ -370,15 +370,15 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
 
         ! Read values from GRAV files
         if(r%poisson)then
-           ipos=iskip_grav+(8*twotondim*(ndim+1))*(i-1)
+           ipos=iskip_grav+(8*twotondim*4)*(i-1)
 #ifdef OUTPUT_PARTICLE_DENSITY
-           ipos=iskip_grav+(8*twotondim*(ndim+2))*(i-1)
+           ipos=iskip_grav+(8*twotondim*5)*(i-1)
 #endif
            read(11,POS=ipos)phi
            ipos=ipos+8*twotondim
            read(11,POS=ipos)f              
 #ifdef OUTPUT_PARTICLE_DENSITY
-           ipos=ipos+8*twotondim*ndim
+           ipos=ipos+8*twotondim*3
            read(11,POS=ipos)rho      
 #endif
         endif

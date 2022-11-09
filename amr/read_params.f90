@@ -177,8 +177,8 @@ subroutine m_read_params(pst)
   real(dp)::T2_star=10.
   real(dp)::g_star=1.0
   real(dp)::n_star=1d100
-  logical::isothermal
-  logical::cooling
+  logical::isothermal=.false.
+  logical::cooling=.false.
   
   ! Interpolation parameters
   integer ::interpol_var=0

@@ -7,28 +7,23 @@ nsubcycle=3*1,2
 
 &AMR_PARAMS 
 levelmin=3
-levelmax=10
-ngridmax=2000
+levelmax=11
+ngridmax=4000
 nexpand=1
-boxlen=1.0
-/
-
-&BOUNDARY_PARAMS
-nboundary=2
-ibound_min=-1,+1
-ibound_max=-1,+1
-bound_type= 1, 1
+boxlen=2.0
 /
 
 &INIT_PARAMS
-nregion=2
+nregion=4
 region_type(1)='square'
 region_type(2)='square'
-x_center=0.25,0.75
-length_x=0.5,0.5
-d_region=1.0,0.125
-u_region=0.0,0.0
-p_region=1.0,0.1
+region_type(3)='square'
+region_type(4)='square'
+x_center=0.25,0.75,1.25,1.75
+length_x=0.5,0.5,0.5,0.5
+d_region=1.0,0.125,0.125,1.0
+u_region=0.0,0.0,0.0,0.0
+p_region=1.0,0.1,0.1,1.0
 /
 
 &OUTPUT_PARAMS

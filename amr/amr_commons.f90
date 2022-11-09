@@ -98,7 +98,7 @@ module amr_commons
      real(dp)::T2_star=10.
      real(dp)::g_star=1.0
      real(dp)::n_star=1d100
-     logical::isothermal
+     logical::isothermal=.false.
 
      ! Cosmological parameters
      real(dp)::omega_b=0.0D0  ! Omega Baryon

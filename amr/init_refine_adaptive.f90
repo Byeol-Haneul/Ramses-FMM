@@ -37,9 +37,7 @@ subroutine m_init_refine_adaptive(pst)
 
   end do
 
-  do ilevel=pst%s%r%levelmin,pst%s%r%nlevelmax
-     call write_screen(pst%s%m,ilevel)
-  end do
+  call write_screen(pst%s%r,pst%s%m)
 
 end subroutine m_init_refine_adaptive
 !###############################################

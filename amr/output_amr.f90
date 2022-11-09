@@ -31,9 +31,7 @@ subroutine m_dump_all(pst)
   if(r%verbose)write(*,*)'Entering dump_all'
 
   ! For 1D runs, output data to screen
-  do i=r%levelmin,r%nlevelmax
-     call write_screen(m,i)
-  end do
+  call write_screen(r,m)
 
   ! Increment output counters
   call title(g%ifout,nchar)

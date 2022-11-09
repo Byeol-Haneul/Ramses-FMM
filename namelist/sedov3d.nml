@@ -7,13 +7,13 @@ nremap=0
 nsubcycle=10*1
 verbose=.false.
 nstepmax=500
-nsuperoct=3
+nsuperoct=0
 /
 
 &AMR_PARAMS
-levelmin=3
-levelmax=7
-ngridmax=2000000
+levelmin=8
+levelmax=8
+ngridmax=20000000
 nexpand=1
 boxlen=0.5
 /
@@ -32,19 +32,20 @@ exp_region=10.0,10.0
 d_region=1.0,0.0
 u_region=0.0,0.0
 v_region=0.0,0.0
+w_region=0.0,0.0
 p_region=1e-5,0.4
 /
 
 &OUTPUT_PARAMS
 noutput=1
-tout=1e-3
+tout=2e-5
 /
 
 &HYDRO_PARAMS
 gamma=1.4
 courant_factor=0.8
 scheme='muscl'
-slope_type=0
+slope_type=1
 riemann='llf'
 /
 

@@ -9,10 +9,10 @@ nsubcycle=10*1
 
 &AMR_PARAMS
 levelmin=3
-levelmax=10
-ngridmax=1000
+levelmax=11
+ngridmax=2000
 nexpand=1
-boxlen=0.5
+boxlen=1.0
 /
 
 &INIT_PARAMS
@@ -43,12 +43,5 @@ riemann='hllc'
 err_grad_p=0.1
 interpol_var=0
 interpol_type=2
-/
-
-&BOUNDARY_PARAMS
-nboundary = 2
-ibound_min=-1,+1
-ibound_max=-1,+1
-bound_type= 1, 1
 /
 

@@ -15,7 +15,7 @@ module oct_commons
      real(kind=dp),dimension(1:twotondim)::rho
      real(kind=dp),dimension(1:twotondim)::phi
      real(kind=dp),dimension(1:twotondim)::phi_old
-     real(kind=dp),dimension(1:twotondim,1:ndim)::f
+     real(kind=dp),dimension(1:twotondim,1:3)::f
 #endif
 #ifdef HYDRO
      real(kind=dp),dimension(1:twotondim,1:nvar)::uold
