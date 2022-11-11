@@ -34,7 +34,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  integer,dimension(1:5)::input_array
   type(in_broadcast_dt_t)::in_broadcast_dt
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
@@ -66,7 +65,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------------
   if(r%movie) then
      if(r%imov.le.r%imovout)then 
-        if(g%aexp>=r%amovout(r%imov).or.g%t>=r%tmovout(r%imov))then
+        if(g%aexp>=r%aendmov*dble(r%imov)/dble(r%imovout).or.g%t>=r%tendmov*dble(r%imov)/dble(r%imovout))then
            call m_output_frame(pst)
         endif
      endif
@@ -147,7 +146,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(m%noct_tot(ilevel+1)>0)then
         if(r%nsubcycle(ilevel)==2)then
            call m_amr_step(pst,ilevel+1,1,done)
-	   if (done)return
+           if (done)return
            call m_amr_step(pst,ilevel+1,2,done)
         else
            call m_amr_step(pst,ilevel+1,1,done)

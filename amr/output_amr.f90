@@ -276,11 +276,11 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   if(r%imovout>0) then
      do i=2,r%imovout
         if(r%aendmov>0)then
-           if(g%aexp>r%amovout(i-1).and.g%aexp<r%amovout(i)) then
+           if(g%aexp>r%aendmov*dble(i-1)/dble(r%imovout).and.g%aexp<r%aendmov*dble(i)/dble(r%imovout)) then
               r%imov=i
            endif
         else
-           if(g%t>r%tmovout(i-1).and.g%t<r%tmovout(i)) then
+           if(g%t>r%tendmov*dble(i-1)/dble(r%imovout).and.g%t<r%tendmov*dble(i)/dble(r%imovout)) then
               r%imov=i
            endif
         endif

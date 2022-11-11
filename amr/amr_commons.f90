@@ -71,8 +71,6 @@ module amr_commons
      integer::imov=1       ! Initialize
      real(kind=8)::tendmov=0.
      real(kind=8)::aendmov=0.
-     real(kind=8),dimension(1:10000)::amovout
-     real(kind=8),dimension(1:10000)::tmovout
      character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
      integer,dimension(0:NVAR+2)::movie_vars=0
      character(len=5),dimension(0:NVAR+2)::movie_vars_txt=''

@@ -75,8 +75,6 @@ subroutine m_read_params(pst)
   integer::imovout=0             ! Increment for output times
   integer::imov=1                ! Initialize
   real(kind=8)::tendmov=0.,aendmov=0.
-  real(kind=8),dimension(1:10000)::amovout
-  real(kind=8),dimension(1:10000)::tmovout
   logical::movie=.false.
   logical::zoom_only=.false.
   integer::nw_frame=512 ! prev: nx_frame, width of frame in pixels
@@ -334,19 +332,7 @@ subroutine m_read_params(pst)
      end do
   endif
   noutput=MIN(noutput,MAXOUT)
-  tmovout=1d100
-  amovout=1d100
   if(imovout>0) then
-     if(tendmov>0)then
-        do i=1,imovout
-           tmovout(i)=tendmov*dble(i)/dble(imovout)
-        enddo
-     endif
-     if(aendmov>0)then
-        do i=1,imovout
-           amovout(i)=aendmov*dble(i)/dble(imovout)
-        enddo
-     endif
      if(tendmov==0.and.aendmov==0)movie=.false.
   endif
   
@@ -514,8 +500,6 @@ subroutine m_read_params(pst)
   s%r%imov=imov
   s%r%tendmov=tendmov
   s%r%aendmov=aendmov
-  s%r%amovout=amovout
-  s%r%tmovout=tmovout
   s%r%proj_axis=proj_axis
   s%r%movie_vars_txt=movie_vars_txt
   if(s%r%movie)call set_movie_vars(s%r)
