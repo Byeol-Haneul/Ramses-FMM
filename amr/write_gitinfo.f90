@@ -9,7 +9,7 @@ subroutine write_gitinfo
 
   write(*,*)' '
   write(*,'(" compile date = ",A)')TRIM(builddate)
-  write(*,'(" patch dir    = ",A)')TRIM(patchdir)
+!  write(*,'(" patch dir    = ",A)')TRIM(patchdir)
   write(*,'(" remote repo  = ",A)')TRIM(gitrepo)
   write(*,'(" local branch = ",A)')TRIM(gitbranch)
   write(*,'(" last commit  = ",A)')TRIM(githash)
