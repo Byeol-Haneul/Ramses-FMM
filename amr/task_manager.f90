@@ -125,25 +125,27 @@ function worker_init(mdl) result(pst)
   use input_hydro_condinit_module, only: r_input_hydro_condinit
   use input_hydro_grafic_module, only: r_input_hydro_grafic
   use upload_module, only: r_upload_fine
-  use rho_fine_module, only: r_multipole_leaf_cells,r_multipole_split_cells,r_broadcast_multipole,r_collect_multipole,&
-                            r_cic_multipole,r_cic_part,r_split_part,r_reset_rho
   use move_fine_module, only: r_kick_drift_part
   use output_amr_module, only: r_output_amr
   use output_hydro_module, only: r_output_hydro
   use output_poisson_module, only: r_output_poisson
   use output_part_module, only: r_output_part
   use synchro_hydro_fine_module, only: r_synchro_hydro_fine, r_gravity_hydro_fine
-  use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
   use nbors_utils_p, only: r_save_phi_old
   use courant_fine_module, only: r_courant_fine
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
   use newdt_fine_module, only: r_newdt_part,r_broadcast_dt
+#ifdef GRAV
+  use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
+  use rho_fine_module, only: r_multipole_leaf_cells,r_multipole_split_cells,r_broadcast_multipole,r_collect_multipole,&
+                            r_cic_multipole,r_cic_part,r_split_part,r_reset_rho
   use phi_fine_cg_module, only: r_cmp_pAp_cg,r_cmp_r2_cg,r_cmp_residual_cg,r_cmp_rhs_norm,&
                                 r_make_initial_phi,r_recurrence_on_p,r_recurrence_x_and_r
   use multigrid_fine_commons, only: r_init_mg,r_build_mg,r_cleanup_mg,r_make_mask,r_make_bc_rhs
   use multigrid_fine_coarse, only: r_restrict_mask,r_cmp_residual_mg,r_cmp_residual_norm2,r_restrict_residual,&
                                 r_reset_correction,r_set_scan_flag,r_gauss_seidel_mg,r_interpolate_and_correct
+#endif
   use movie_module, only: r_output_frame
   use amr_parameters, only: nhilbert
 
@@ -210,36 +212,37 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,   pst,C_FUNLOC(r_input_hydro_condinit),4,0,"input_hydro_condinit")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,     pst,C_FUNLOC(r_input_hydro_grafic),0,0,"input_hydro_grafic")
   call mdl_add_service(pst%s%mdl,MDL_UPLOAD_FINE,            pst,C_FUNLOC(r_upload_fine),4,0,"upload_fine")
-  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,   pst,C_FUNLOC(r_multipole_leaf_cells),4,0,"multipole_leaf_cells")
-  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,  pst,C_FUNLOC(r_multipole_split_cells),4,0,"multipole_split_cells")
-  call mdl_add_service(pst%s%mdl,MDL_RESET_RHO,              pst,C_FUNLOC(r_reset_rho),4,0,"reset_rho")
-  call mdl_add_service(pst%s%mdl,MDL_CIC_MULTIPOLE,          pst,C_FUNLOC(r_cic_multipole),4,0,"cic_multipole")
-  call mdl_add_service(pst%s%mdl,MDL_CIC_PART,               pst,C_FUNLOC(r_cic_part),0,0,"cic_part")
-  call mdl_add_service(pst%s%mdl,MDL_SPLIT_PART,             pst,C_FUNLOC(r_split_part),0,0,"split_part")
   call mdl_add_service(pst%s%mdl,MDL_KICK_DRIFT_PART,        pst,C_FUNLOC(r_kick_drift_part),0,0,"kick_drift_part")
   call mdl_add_service(pst%s%mdl,MDL_MASS_MIN_PART,          pst,C_FUNLOC(r_mass_min_part),0,8,"mass_min_part")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MP_MIN,       pst,C_FUNLOC(r_broadcast_mp_min),0,0,"broadcast_mp_min")
-  call mdl_add_service(pst%s%mdl,MDL_COLLECT_MULTIPOLE,      pst,C_FUNLOC(r_collect_multipole),4,storage_size(pst%s%g%multipole)/8,"collect_multipole")
-  call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,    pst,C_FUNLOC(r_broadcast_multipole),storage_size(pst%s%g%multipole)/8,0,"broadcast_multipole")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_AMR,             pst,C_FUNLOC(r_output_amr),flen,0,"output_amr")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_HYDRO,           pst,C_FUNLOC(r_output_hydro),flen,0,"output_hydro")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_POISSON,         pst,C_FUNLOC(r_output_poisson),flen,0,"output_poisson")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_PART,            pst,C_FUNLOC(r_output_part),flen,0,"output_part")
-  call mdl_add_service(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,     pst,C_FUNLOC(r_synchro_hydro_fine),3*4,0,"synchro_hydro_fine")
-  call mdl_add_service(pst%s%mdl,MDL_SAVE_PHI_OLD,           pst,C_FUNLOC(r_save_phi_old),1*4,0,"save_phi_old")
-  call mdl_add_service(pst%s%mdl,MDL_FORCE_ANALYTIC,         pst,C_FUNLOC(r_force_analytic),1*4,0,"force_analytic")
-  call mdl_add_service(pst%s%mdl,MDL_GRADIENT_PHI,           pst,C_FUNLOC(r_gradient_phi),2*4,0,"gradient_phi")
-  call mdl_add_service(pst%s%mdl,MDL_COMPUTE_EPOT,           pst,C_FUNLOC(r_compute_epot),1*4,8,"compute_epot")
-  call mdl_add_service(pst%s%mdl,MDL_COMPUTE_RHOMAX,         pst,C_FUNLOC(r_compute_rhomax),1*4,8,"compute_rhomax")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_AEXP,         pst,C_FUNLOC(r_broadcast_aexp),16,0,"broadcast_aexp")
   call mdl_add_service(pst%s%mdl,MDL_COURANT_FINE,           pst,C_FUNLOC(r_courant_fine),4,8*4,"courant_fine")
   call mdl_add_service(pst%s%mdl,MDL_GODUNOV_FINE,           pst,C_FUNLOC(r_godunov_fine),4,0,"godunov_fine")
   call mdl_add_service(pst%s%mdl,MDL_SET_UNEW,               pst,C_FUNLOC(r_set_unew),4,0,"set_unew")
   call mdl_add_service(pst%s%mdl,MDL_SET_UOLD,               pst,C_FUNLOC(r_set_uold),4,0,"set_uold")
-  call mdl_add_service(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,     pst,C_FUNLOC(r_gravity_hydro_fine),4,0,"gravity_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_COOLING_FINE,           pst,C_FUNLOC(r_cooling_fine),4,0,"cooling_fine")
   call mdl_add_service(pst%s%mdl,MDL_NEWDT_PART,             pst,C_FUNLOC(r_newdt_part),0,0,"newdt_part")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_DT,           pst,C_FUNLOC(r_broadcast_dt),24*4,0,"broadcast_dt")
+#ifdef GRAV
+  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,   pst,C_FUNLOC(r_multipole_leaf_cells),4,0,"multipole_leaf_cells")
+  call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,  pst,C_FUNLOC(r_multipole_split_cells),4,0,"multipole_split_cells")
+  call mdl_add_service(pst%s%mdl,MDL_RESET_RHO,              pst,C_FUNLOC(r_reset_rho),4,0,"reset_rho")
+  call mdl_add_service(pst%s%mdl,MDL_CIC_MULTIPOLE,          pst,C_FUNLOC(r_cic_multipole),4,0,"cic_multipole")
+  call mdl_add_service(pst%s%mdl,MDL_CIC_PART,               pst,C_FUNLOC(r_cic_part),0,0,"cic_part")
+  call mdl_add_service(pst%s%mdl,MDL_COLLECT_MULTIPOLE,      pst,C_FUNLOC(r_collect_multipole),4,storage_size(pst%s%g%multipole)/8,"collect_multipole")
+  call mdl_add_service(pst%s%mdl,MDL_COMPUTE_RHOMAX,         pst,C_FUNLOC(r_compute_rhomax),1*4,8,"compute_rhomax")
+  call mdl_add_service(pst%s%mdl,MDL_SPLIT_PART,             pst,C_FUNLOC(r_split_part),0,0,"split_part")
+  call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,    pst,C_FUNLOC(r_broadcast_multipole),storage_size(pst%s%g%multipole)/8,0,"broadcast_multipole")
+  call mdl_add_service(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,     pst,C_FUNLOC(r_synchro_hydro_fine),3*4,0,"synchro_hydro_fine")
+  call mdl_add_service(pst%s%mdl,MDL_SAVE_PHI_OLD,           pst,C_FUNLOC(r_save_phi_old),1*4,0,"save_phi_old")
+  call mdl_add_service(pst%s%mdl,MDL_FORCE_ANALYTIC,         pst,C_FUNLOC(r_force_analytic),1*4,0,"force_analytic")
+  call mdl_add_service(pst%s%mdl,MDL_GRADIENT_PHI,           pst,C_FUNLOC(r_gradient_phi),2*4,0,"gradient_phi")
+  call mdl_add_service(pst%s%mdl,MDL_COMPUTE_EPOT,           pst,C_FUNLOC(r_compute_epot),1*4,8,"compute_epot")
+  call mdl_add_service(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,     pst,C_FUNLOC(r_gravity_hydro_fine),4,0,"gravity_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_MAKE_INITIAL_PHI,       pst,C_FUNLOC(r_make_initial_phi),8,0,"make_initial_phi")
   call mdl_add_service(pst%s%mdl,MDL_RECURRENCE_ON_P,        pst,C_FUNLOC(r_recurrence_on_p),0,0,"recurrence_on_p")
   call mdl_add_service(pst%s%mdl,MDL_RECURRENCE_X_AND_R,     pst,C_FUNLOC(r_recurrence_x_and_r),0,0,"recurrence_x_and_r")
@@ -260,6 +263,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INTERPOLATE_AND_CORRECT,pst,C_FUNLOC(r_interpolate_and_correct),4,0,"interpolate_and_correct")
   call mdl_add_service(pst%s%mdl,MDL_SET_SCAN_FLAG,          pst,C_FUNLOC(r_set_scan_flag),8,0,"set_scan_flag")
   call mdl_add_service(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,     pst,C_FUNLOC(r_cmp_residual_norm2),4,8,"cmp_residual_norm2")
+#endif
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),8,&
                       2*pst%s%r%nw_frame*pst%s%r%nh_frame*4,"output_frame")
 end function worker_init

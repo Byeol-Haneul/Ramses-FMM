@@ -32,7 +32,7 @@ $ bin/ramses3d namelist/coeur.nml
 ```
 $ cd bin
 $ make clean
-$ make UNITS=default CONDINIT=default
+$ make GRAV=0 UNITS=default CONDINIT=default
 $ cd ..
 $ bin/ramses3d namelist/sedov3d.nml
 ```
@@ -42,7 +42,7 @@ $ bin/ramses3d namelist/sedov3d.nml
 ```
 $ cd bin
 $ make clean
-$ make NDIM=2 UNITS=default CONDINIT=default
+$ make NDIM=2 GRAV=0 UNITS=default CONDINIT=default
 $ cd ..
 $ bin/ramses2d namelist/sedov2d.nml
 ```
@@ -52,7 +52,7 @@ $ bin/ramses2d namelist/sedov2d.nml
 ```
 $ cd bin
 $ make clean
-$ make NDIM=1 UNITS=default CONDINIT=default
+$ make NDIM=1 GRAV=0 UNITS=default CONDINIT=default
 $ cd ..
 $ bin/ramses1d namelist/tube1d.nml
 ```
@@ -62,7 +62,7 @@ $ bin/ramses1d namelist/tube1d.nml
 ```
 $ cd bin
 $ make clean
-$ make UNITS=cosmo CONDINIT=default
+$ make HYDRO=0 UNITS=cosmo CONDINIT=default
 $ cd ..
 $ utils/script/load_cosmo_ic.sh
 $ bin/ramses3d namelist/dmo.nml

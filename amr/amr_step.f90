@@ -11,17 +11,19 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use update_time_module, only: m_update_time
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
+#ifdef GRAV
   use rho_fine_module, only: m_rho_fine
+  use phi_fine_cg_module, only: m_phi_fine_cg
+  use multigrid_fine_commons, only: multigrid
+  use force_fine_module, only: m_force_fine
+#endif
   use move_fine_module, only: m_kick_drift_part
   use output_amr_module, only: m_dump_all
   use synchro_hydro_fine_module, only: m_synchro_hydro_fine, r_gravity_hydro_fine
-  use force_fine_module, only: m_force_fine
   use nbors_utils_p, only: r_save_phi_old
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
-  use phi_fine_cg_module, only: m_phi_fine_cg
-  use multigrid_fine_commons, only: multigrid
   use movie_module, only: m_output_frame
 
   implicit none
@@ -74,13 +76,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !--------------------
   ! Poisson source term
   !--------------------
+#ifdef GRAV
   if(r%poisson)then
      if(ilevel==r%levelmin.or.icount>1)then
                                     call m_timer(pst,'rho','start')
         call m_rho_fine(pst,ilevel)
      endif
   endif
-
+#endif
   !---------------
   ! Gravity solver
   !---------------

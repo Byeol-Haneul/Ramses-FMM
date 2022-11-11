@@ -41,8 +41,8 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
   do ind=1,twotondim
      msg%realdp_poisson(ind,ndim+1)=grid%phi(ind)
      msg%realdp_poisson(ind,ndim+2)=grid%phi_old(ind)
-#endif
   end do
+#endif
 
   msg_array=transfer(msg,msg_array)
 

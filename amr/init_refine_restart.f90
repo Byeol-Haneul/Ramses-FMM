@@ -11,7 +11,9 @@ subroutine m_init_refine_restart(pst)
   use params_module, only: m_broadcast_params, m_broadcast_global
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
   use load_balance_module, only: r_broadcast_bound_key
+#ifdef GRAV
   use rho_fine_module, only: m_rho_fine
+#endif
   use output_amr_module, only: input_params
   implicit none
   type(pst_t)::pst
@@ -149,9 +151,11 @@ subroutine m_init_refine_restart(pst)
   ! Deallocate local variables
   deallocate(noct_file,noct_skip)
 
+#ifdef GRAV
   ! Compute total mass density from gas and particles on the grid
   call m_rho_fine(pst,r%levelmin)
-
+#endif
+  
   end associate
 
 end subroutine m_init_refine_restart

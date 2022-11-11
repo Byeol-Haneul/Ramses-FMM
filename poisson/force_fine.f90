@@ -7,6 +7,7 @@ contains
 !#########################################################
 !#########################################################
 !#########################################################
+#ifdef GRAV  
 subroutine m_force_fine(pst,ilevel,icount)
   use amr_parameters, only: ndim,twotondim,nvector,dp
   use ramses_commons, only: pst_t
@@ -24,8 +25,6 @@ subroutine m_force_fine(pst,ilevel,icount)
  
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%r%verbose)write(*,'("   Entering force_fine for level ",I2)')ilevel
-
-#ifdef GRAV  
 
   if(pst%s%r%gravity_type>0)then 
      ! Compute analytical gravity force
@@ -47,8 +46,6 @@ subroutine m_force_fine(pst,ilevel,icount)
   call r_compute_rhomax(pst,ilevel,1,rhomax,2)
   pst%s%g%rho_max(ilevel)=rhomax
   if(pst%s%r%verbose)write(*,'("   Maximum density done for level ",I2)')ilevel
-
-#endif  
 
 end subroutine m_force_fine
 !#########################################################
@@ -94,8 +91,6 @@ subroutine force_analytic(r,g,m,ilevel)
   real(dp)::dx
   real(dp),dimension(1:nvector,1:ndim)::xx,ff
  
-#ifdef GRAV  
-
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 
@@ -130,8 +125,6 @@ subroutine force_analytic(r,g,m,ilevel)
   end do
   ! End loop over grid
 
-#endif
-  
 end subroutine force_analytic
 !#########################################################
 !#########################################################
@@ -194,8 +187,6 @@ subroutine gradient_phi(s,ilevel,icount)
   real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
   type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
-
-#ifdef GRAV
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -330,8 +321,6 @@ subroutine gradient_phi(s,ilevel,icount)
 
   end associate
   
-#endif
-
 end subroutine gradient_phi
 !#########################################################
 !#########################################################
@@ -379,8 +368,6 @@ subroutine compute_epot(r,g,m,ilevel,epot)
   integer::igrid,ind,idim
   real(dp)::dx,fact,fourpi
  
-#ifdef GRAV  
-
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
   ! Local constants
@@ -405,8 +392,6 @@ subroutine compute_epot(r,g,m,ilevel,epot)
      ! End loop over cells
   end do
   ! End loop over grids
-
-#endif  
 
 end subroutine compute_epot
 !#########################################################
@@ -454,8 +439,6 @@ subroutine compute_rhomax(r,g,m,ilevel,rhomax)
   !----------------------------------------------------------
   integer::igrid,ind,idim
  
-#ifdef GRAV  
-
   ! Compute maximum total mass density
   rhomax=0D0
 
@@ -469,11 +452,10 @@ subroutine compute_rhomax(r,g,m,ilevel,rhomax)
   end do
   ! End loop over grids
 
-#endif  
-
 end subroutine compute_rhomax
 !#########################################################
 !#########################################################
 !#########################################################
 !#########################################################
+#endif
 end module force_fine_module

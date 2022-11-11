@@ -7,7 +7,9 @@ subroutine m_init_refine_adaptive(pst)
   use flag_utils, only:m_flag_fine
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
+#ifdef GRAV
   use rho_fine_module, only: m_rho_fine
+#endif
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
@@ -29,8 +31,10 @@ subroutine m_init_refine_adaptive(pst)
         endif
      end do
 
+#ifdef GRAV
      call m_rho_fine(pst,pst%s%r%levelmin)
-
+#endif
+     
      do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
         call m_flag_fine(pst,ilevel,2)
      end do

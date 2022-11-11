@@ -5,6 +5,8 @@
 NVECTOR = 32
 NDIM = 3
 NHILBERT = 1
+HYDRO = 1
+GRAV = 1
 CONDINIT = coeur
 UNITS = coeur
 NPRE = 8
@@ -23,7 +25,13 @@ GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -DNVAR=$(NVAR) \
-	  -DNHILBERT=$(NHILBERT) -DHYDRO -DGRAV -DCONDINIT${CONDINIT} -DUNITS${UNITS}
+	  -DNHILBERT=$(NHILBERT) -DCONDINIT${CONDINIT} -DUNITS${UNITS}
+ifeq ($(HYDRO),1)
+   DEFINES += -DHYDRO
+endif
+ifeq ($(GRAV),1)
+   DEFINES += -DGRAV
+endif
 #############################################################################
 # GNU compiler (gfortran)
 ifeq ($(COMPILER),GNU)
