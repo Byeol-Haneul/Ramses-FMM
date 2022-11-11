@@ -197,17 +197,8 @@ end subroutine r_broadcast_aexp
 !##############################################################
 subroutine writemem(usedmem)
   real::usedmem
-!  integer::getpagesize
-  integer::ipagesize
 
-#ifdef NOSYSTEM
-!  call PXFSYSCONF(_SC_PAGESIZE,ipagesize,ierror)
-  ipagesize=4096
-#else
-!  ipagesize = getpagesize()
-  ipagesize=4096
-#endif
-  usedmem=usedmem*ipagesize
+  usedmem=usedmem*4096
 
   if(usedmem>1024.**3.)then
      write(*,999)usedmem/1024.**3.
@@ -227,13 +218,21 @@ subroutine getmem(outmem)
   real::outmem
   character(len=300) :: dir, dir2, file
   integer::ind,j,nmem,read_status
+  logical::file_exists
+  
   file='/proc/self/stat'
-  open(unit=1,file=file,form='formatted',err=101)
-  read(1,'(A300)',IOSTAT=read_status)dir
-101  close(1)
+  inquire(file=file, exist=file_exists)
+  if (file_exists) then
+     open(unit=1,file=file,form='formatted')
+     read(1,'(A300)',IOSTAT=read_status)dir
+     close(1)
+  else
+     read_status=-1000
+  endif
+  
   if (read_status < 0)then
      outmem=0.
-     write(*,*)'Problem in checking free memory'
+     if (read_status .ne. -1000)write(*,*)'Problem in checking free memory'
   else
      ind=300
      j=0
@@ -246,7 +245,7 @@ subroutine getmem(outmem)
      ind=index(dir,' ')
      dir2=dir(1:ind)
      read(dir2,'(I12)')nmem
-     outmem=nmem
+     outmem=real(nmem,kind=4)
   end if
 
 end subroutine getmem

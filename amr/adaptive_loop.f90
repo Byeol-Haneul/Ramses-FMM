@@ -10,6 +10,7 @@ subroutine adaptive_loop(pst)
   use init_refine_basegrid_module, only: m_init_refine_basegrid
   use init_refine_restart_module, only: m_init_refine_restart
   use amr_step, only: m_amr_step
+  use update_time_module, only: getmem, writemem
   implicit none
   type(pst_t)::pst
   logical::done
@@ -17,6 +18,7 @@ subroutine adaptive_loop(pst)
   ! Local variables
   integer::ilevel
   double precision::tt1,tt2
+  real(kind=4)::core_mem
 
   associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
   
@@ -84,6 +86,9 @@ subroutine adaptive_loop(pst)
 
      tt2 = mdl_wtime(mdl)
      print '(A,F14.7)',' Time elapsed since last coarse step:',tt2-tt1
+
+     call getmem(core_mem)
+     call writemem(core_mem)
      
   end do
 
