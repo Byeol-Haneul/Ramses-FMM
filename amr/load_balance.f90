@@ -177,9 +177,11 @@ subroutine compute_new_bound_key(r,g,m,ilevel,noct,bound_key_target)
   use hilbert
   use hash
   use cache_commons
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h' 
   integer::info
 #endif
   type(run_t)::r
@@ -700,10 +702,10 @@ subroutine balance_part(s,ilevel)
   use domain_m, only: domain_t
   use rho_fine_module, only: sort_hilbert
   use hilbert
-  implicit none
 #ifndef WITHOUTMPI
-  include "mpif.h"
+  use mpi
 #endif
+  implicit none
   type(ramses_t)::s
   integer::ilevel
   !---------------------------------------------------------------------

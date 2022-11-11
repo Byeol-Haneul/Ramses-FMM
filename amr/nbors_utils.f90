@@ -14,9 +14,12 @@ subroutine check_mail(s,comm_id,hash_dict)
   use hilbert
   use hash
   use cache, only:cache_key_ptr,get_tile
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
 #endif
   type(ramses_t)::s
   type(hash_table)::hash_dict
@@ -132,7 +135,6 @@ subroutine check_mail(s,comm_id,hash_dict)
                  hash_child(0)=ilevel
                  hash_child(1:ndim)=mdl%recv_flush_array(iskip+1:iskip+ndim)
                  iskip=iskip+ndim+1
-
                  ! Get grid from hash table
                  call c_f_pointer(hash_getp(hash_dict,hash_child),child)
                  if(ASSOCIATED(child))then
@@ -232,9 +234,12 @@ subroutine destage(s,igrid,hash_dict)
   use ramses_commons, only: ramses_t
   use cache_commons
   use hash
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
 #endif
   type(ramses_t)::s
   type(hash_table)::hash_dict

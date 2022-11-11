@@ -79,9 +79,12 @@ subroutine close_cache(s,hash_dict)
   use cache_commons
   use hash
   use mdl_module
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
 #endif
   type(ramses_t)::s
   type(hash_table)::hash_dict
@@ -272,9 +275,12 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
   use domain_m, only: domain_t
   use hash
   use mdl_module
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
 #endif
   type(ramses_t)::s
   type(hash_table)::table

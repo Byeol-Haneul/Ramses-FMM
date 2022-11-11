@@ -565,9 +565,12 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   use cache_commons
   use hilbert
   use hash
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
 #endif
   type(ramses_t)::s
   integer::ilevel

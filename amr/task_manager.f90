@@ -13,9 +13,12 @@ subroutine mdl_init
 #else
   use ramses_commons, only: pst_t, ramses_t
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNLOC, C_SIZEOF
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
   integer::info
 #endif
   type(mdl_t),pointer::mdl
@@ -283,9 +286,12 @@ subroutine mdl_wait(pst)
   use call_back, only: call_back_f, ramses_function
   use mdl_module
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_F_PROCPOINTER, C_PTR, C_LOC, C_F_POINTER
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
   integer::info
 #endif
   type(pst_t)::pst

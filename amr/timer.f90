@@ -4,6 +4,9 @@
 !################################################################
 !=======================================================================
 real(kind=8) function wallclock()
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifdef WITHOUTMPI
   integer,      save :: tstart
@@ -16,7 +19,7 @@ real(kind=8) function wallclock()
   logical,      save :: first_call=.true.
   real(kind=8), save :: norm, offset=0.
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
 #endif
   !---------------------------------------------------------------------
   if (first_call) then

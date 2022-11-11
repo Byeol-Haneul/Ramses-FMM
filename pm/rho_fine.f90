@@ -663,6 +663,7 @@ subroutine cic_part(s,ilevel)
   integer::i,ipart,icell,ind,idim
   real(kind=8)::dx_loc,vol_loc,vol2
   type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
   
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
 
@@ -689,10 +690,11 @@ subroutine cic_part(s,ilevel)
   ix=0
   call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
+
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(m%grid(1)%rho)/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
                 pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
                 init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
@@ -779,10 +781,10 @@ subroutine cic_part(s,ilevel)
 
   end do
   ! End loop over particles
-  
+
   call close_cache(s,m%grid_dict)
 
-  end associate
+end associate
   
 end subroutine cic_part
 !################################################################

@@ -215,6 +215,7 @@ subroutine get_parent_cell_p(s,hash_key,hash_dict,gridp,ind,flush_cache,fetch_ca
      ind=ind+2**(idim-1)*ii(idim)
   end do
   call get_grid_p(s,hash_father,hash_dict,gridp,flush_cache=flush_cache,fetch_cache=fetch_cache,lock=lock)
+
 end subroutine get_parent_cell_p
 !###############################################################
 !###############################################################
@@ -281,9 +282,12 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   use cache_commons
   use hilbert
   use hash
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+!  include 'mpif.h'
 #endif
   type(ramses_t)::s
   type(oct),pointer::child
