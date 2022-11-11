@@ -258,8 +258,8 @@ subroutine m_read_params(pst)
   write(*,*)'_/    _/   _/    _/   _/    _/   _/    _/  _/         _/    _/ '
   write(*,*)'_/    _/   _/    _/   _/    _/    _/_/_/   _/_/_/_/    _/_/_/  '
   write(*,*)'                        Version 3.0                            '
-  write(*,*)'       written by Romain Teyssier (University of Zurich)       '
-  write(*,*)'               (c) CEA 1999-2007, UZH 2008-2014                '
+  write(*,*)'       written by Romain Teyssier (Princeton University)       '
+  write(*,*)'           (c) CEA 1999-2007, UZH 2008-2021, PU 2022           '
   write(*,*)' '
 
   ! Check nvar is not too small
