@@ -285,21 +285,9 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   logical::okx,oky,okz
   type(oct),pointer::gridp,childp
 
-  i2min=0
-  i2max=0
-  j2min=0
-  j2max=0
-  k2min=0
-  k2max=0
-  i3min=1
-  i3max=1
-  j3min=1
-  j3max=1
-  k3min=1
-  k3max=1
-  okx=.true.
-  oky=.true.
-  okz=.true.
+  i2min=0; i2max=0; j2min=0; j2max=0; k2min=0; k2max=0
+  i3min=1; i3max=1; j3min=1; j3max=1; k3min=1; k3max=1
+  okx=.true.; oky=.true.; okz=.true.
 
 #ifdef HYDRO
 
