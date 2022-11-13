@@ -18,7 +18,6 @@ subroutine mdl_init
 #endif
   implicit none
 #ifndef WITHOUTMPI
-!  include 'mpif.h'
   integer::info
 #endif
   type(mdl_t),pointer::mdl
@@ -295,7 +294,6 @@ subroutine mdl_wait(pst)
 #endif
   implicit none
 #ifndef WITHOUTMPI
-!  include 'mpif.h'
   integer::info
 #endif
   type(pst_t)::pst

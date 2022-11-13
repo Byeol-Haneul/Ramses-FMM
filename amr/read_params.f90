@@ -269,7 +269,37 @@ subroutine m_read_params(pst)
      write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
      call mdl_abort(s%mdl)
   endif
-
+#ifdef HYDRO
+  if(.not. hydro)then
+     write(*,*)'You are not using the hydro solver but'
+     write(*,*)'the code was compiled with HYDRO=1'
+     write(*,*)'Please recompile with HYDRO=0'
+     call mdl_abort(s%mdl)
+  endif
+#else
+  if(hydro)then
+     write(*,*)'You are using the hydro solver but'
+     write(*,*)'the code was compiled with HYDRO=0'
+     write(*,*)'Please recompile with HYDRO=1'
+     call mdl_abort(s%mdl)
+  endif  
+#endif
+#ifdef GRAV
+  if(.not. poisson)then
+     write(*,*)'You are not using the poisson solver but'
+     write(*,*)'the code was compiled with GRAV=1'
+     write(*,*)'Please recompile with GRAV=0'
+     call mdl_abort(s%mdl)
+  endif
+#else
+  if(poisson)then
+     write(*,*)'You are using the poisson solver but'
+     write(*,*)'the code was compiled with GRAV=0'
+     write(*,*)'Please recompile with GRAV=1'
+     call mdl_abort(s%mdl)
+  endif
+#endif
+  
   ! Write information about git version
   call write_gitinfo
 

@@ -286,9 +286,6 @@ subroutine get_grid_p(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   use mpi
 #endif
   implicit none
-#ifndef WITHOUTMPI
-!  include 'mpif.h'
-#endif
   type(ramses_t)::s
   type(oct),pointer::child
   logical::flush_cache,fetch_cache

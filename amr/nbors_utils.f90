@@ -18,9 +18,6 @@ subroutine check_mail(s,comm_id,hash_dict)
   use mpi
 #endif
   implicit none
-#ifndef WITHOUTMPI
-!  include 'mpif.h'
-#endif
   type(ramses_t)::s
   type(hash_table)::hash_dict
   integer::comm_id
@@ -238,9 +235,6 @@ subroutine destage(s,igrid,hash_dict)
   use mpi
 #endif
   implicit none
-#ifndef WITHOUTMPI
-!  include 'mpif.h'
-#endif
   type(ramses_t)::s
   type(hash_table)::hash_dict
   integer::igrid

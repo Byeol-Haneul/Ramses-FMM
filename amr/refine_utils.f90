@@ -569,9 +569,6 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   use mpi
 #endif
   implicit none
-#ifndef WITHOUTMPI
-!  include 'mpif.h'
-#endif
   type(ramses_t)::s
   integer::ilevel
   integer::icell

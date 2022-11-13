@@ -83,9 +83,6 @@ subroutine close_cache(s,hash_dict)
   use mpi
 #endif
   implicit none
-#ifndef WITHOUTMPI
-!  include 'mpif.h'
-#endif
   type(ramses_t)::s
   type(hash_table)::hash_dict
   !
@@ -279,9 +276,6 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
   use mpi
 #endif
   implicit none
-#ifndef WITHOUTMPI
-!  include 'mpif.h'
-#endif
   type(ramses_t)::s
   type(hash_table)::table
   type(domain_t),pointer,dimension(:)::hilbert

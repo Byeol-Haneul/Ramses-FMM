@@ -393,10 +393,10 @@ subroutine build_mg(s,ifinelevel)
   use nbors_utils_p
   use hilbert
   use hash
-  implicit none
 #ifndef WITHOUTMPI
-  include 'mpif.h'
+  use mpi
 #endif
+  implicit none
   type(ramses_t)::s
   integer,intent(in)::ifinelevel
   
