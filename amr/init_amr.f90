@@ -128,6 +128,7 @@ subroutine init_amr(mdl,r,g,m)
 
   allocate(m%domain(1:r%nlevelmax+1))
   do ilevel=1,r%nlevelmax+1
+     m%domain(ilevel)%ncpu=0
      call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu)
   end do
 
