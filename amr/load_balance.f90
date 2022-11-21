@@ -702,9 +702,7 @@ subroutine balance_part(s,ilevel)
   use domain_m, only: domain_t
   use rho_fine_module, only: sort_hilbert
   use hilbert
-#ifndef WITHOUTMPI
   use mpi
-#endif
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -715,10 +713,8 @@ subroutine balance_part(s,ilevel)
   ! and within the level, according to their Hilbert key.
   ! It can be used only if routine rho has been called once before.
   !---------------------------------------------------------------------
-#ifndef WITHOUTMPI
   integer::info
   integer,dimension(MPI_STATUS_SIZE,s%g%ncpu)::statuses
-#endif
   integer(kind=8),dimension(1:nhilbert)::hk_ref
   integer(kind=8),dimension(1:ndim)::ix_ref
 
@@ -750,8 +746,6 @@ subroutine balance_part(s,ilevel)
   real(dp)::mp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
-
-#ifndef WITHOUTMPI
 
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
   
@@ -1308,12 +1302,10 @@ subroutine balance_part(s,ilevel)
 
   end associate
   
-#endif
-
 end subroutine balance_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
 #endif
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
 end module load_balance_module
