@@ -356,7 +356,7 @@ subroutine mdl_wait(pst)
         
         ! Deallocate input array
 !        if(input_size>0)then
-           deallocate(input_array)
+        deallocate(input_array)
 !        endif
         
         ! Always send the output back to the source cpu (even if not allocated = handshake)
@@ -370,7 +370,7 @@ subroutine mdl_wait(pst)
 
         ! Deallocate output array
 !        if(output_size>0)then
-           deallocate(output_array)
+        deallocate(output_array)
 !        endif
         
         ! Post a new RECV for the next launch order
@@ -396,7 +396,7 @@ subroutine init_cache(mdl)
   implicit none
   type(mdl_t)::mdl
   
-  integer::ncpu
+  integer::ncpu,ibuf
   type(msg_large_realdp)::dummy_large_realdp
 
   ncpu=mdl_threads(mdl)
@@ -417,8 +417,25 @@ subroutine init_cache(mdl)
   allocate(mdl%send_request_array(1:mdl%size_request_array))
   allocate(mdl%recv_fetch_array(1:mdl%size_fetch_array))
   allocate(mdl%recv_flush_array(1:mdl%size_flush_array))
-  allocate(mdl%send_fetch_array(1:ncpu*mdl%size_fetch_array))
-  allocate(mdl%send_flush_array(1:ncpu*mdl%size_flush_array))
+
+  allocate(mdl%cpu2buf_fetch(1:ncpu))
+  allocate(mdl%cpu2buf_flush(1:ncpu))
+  allocate(mdl%send_fetch(1:ncpu))
+  allocate(mdl%send_flush(1:ncpu))
+
+  mdl%nbuffer_fetch=MIN(ncpu,nbuffermax)
+  mdl%nbuffer_flush=MIN(ncpu,nbuffermax)
+  do ibuf=1,mdl%nbuffer_fetch
+     allocate(mdl%send_fetch(ibuf)%array(mdl%size_fetch_array))
+  end do
+  do ibuf=1,mdl%nbuffer_flush
+     allocate(mdl%send_flush(ibuf)%array(mdl%size_flush_array))
+  end do
+
+  mdl%ibuffer_fetch=0
+  mdl%ibuffer_flush=0
+  mdl%cpu2buf_fetch=0
+  mdl%cpu2buf_flush=0
 
 #endif
 

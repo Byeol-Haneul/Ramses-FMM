@@ -3,6 +3,10 @@ module mdl_module
   use mdl_parameters
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNPTR, C_PTR
 
+  type ::comm_buff
+     integer(kind=4),dimension(:),allocatable::array
+  end type comm_buff
+
   type :: mdl_t
      
      integer,PRIVATE::myid
@@ -25,18 +29,27 @@ module mdl_module
      integer::size_flush_array
      integer::size_fetch_array
 
-     ! Message arrays
+     ! Message buffers
      integer(kind=4),dimension(:),allocatable::recv_request_array
      integer(kind=4),dimension(:),allocatable::send_request_array
      integer(kind=4),dimension(:),allocatable::recv_fetch_array
-     integer(kind=4),dimension(:),allocatable::send_fetch_array
      integer(kind=4),dimension(:),allocatable::recv_flush_array
-     integer(kind=4),dimension(:),allocatable::send_flush_array
+
+     ! Send buffers
+     integer(kind=4)::nbuffer_fetch
+     integer(kind=4)::nbuffer_flush
+     integer(kind=4)::ibuffer_fetch
+     integer(kind=4)::ibuffer_flush
+     integer(kind=4),dimension(:),allocatable::cpu2buf_fetch
+     integer(kind=4),dimension(:),allocatable::cpu2buf_flush
+     type(comm_buff),dimension(:),allocatable::send_fetch
+     type(comm_buff),dimension(:),allocatable::send_flush
 
      ! Callback functions
      type(c_funptr),dimension(0:100)::callback
      type(c_ptr),dimension(0:100)::p1opaque
      integer(kind=4),dimension(0:100)::input_size, output_size
+
   end type mdl_t
 
   interface mdl_send_request

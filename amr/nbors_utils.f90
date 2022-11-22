@@ -29,6 +29,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   ! unpacks it and combine it in the local memory.
   !
   integer::i,ind,ivar,idim,info,ipos,iskip,igrid,ichild,grid_cpu,ilevel,itile,ntile_reply,nflush
+  integer::buffer_size_fetch_array,buffer_size_msg_array,ibuf
   logical::comm_completed,request_received,flush_received=.false.
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status,comm_status
@@ -40,6 +41,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   integer(kind=8), dimension(0:ndim,1:ntilemax),target::raw_keys
   type(cache_key_ptr),dimension(1:ntilemax)::keys
   type(nbor),dimension(1:ntilemax)::grid
+  type(msg_large_realdp)::dummy_large_realdp
 
 #ifndef WITHOUTMPI
 
@@ -64,36 +66,53 @@ subroutine check_mail(s,comm_id,hash_dict)
            hash_key(1:ndim)=mdl%recv_request_array(2:ndim+1)
            call c_f_pointer(hash_getp(hash_dict,hash_key),child)
            grid_cpu=request_status(MPI_SOURCE)+1
-           
+
+           ! Identify the corresponding communication buffer
+           ibuf=mdl%cpu2buf_fetch(grid_cpu)
+
+           ! If none is available, get the next free one
+           if(ibuf==0)then
+              mdl%ibuffer_fetch=mdl%ibuffer_fetch+1
+              ! If there is no communication buffer left, allocate a new one
+              if(mdl%ibuffer_fetch>mdl%nbuffer_fetch)then
+                 mdl%nbuffer_fetch=mdl%nbuffer_fetch+1
+                 buffer_size_msg_array=storage_size(dummy_large_realdp)/32
+                 buffer_size_fetch_array=2+(1+ndim+buffer_size_msg_array)*ntilemax
+                 allocate(mdl%send_fetch(mdl%nbuffer_fetch)%array(1:buffer_size_fetch_array))
+              endif
+              mdl%cpu2buf_fetch(grid_cpu)=mdl%ibuffer_fetch
+              ibuf=mdl%ibuffer_fetch
+           endif
+
            ! If grid does not exist, send a null reply
            if(.not.ASSOCIATED(child))then
               
               ! Store type corresponding to a null reply
-              iskip=mdl%size_fetch_array*(grid_cpu-1)+1
-              mdl%send_fetch_array(iskip)=-1
+              iskip=1
+              mdl%send_fetch(ibuf)%array(iskip)=-1
 
            ! Otherwise, assemble a proper reply with a complete tile
            else
-              iskip=mdl%size_fetch_array*(grid_cpu-1)+1
+              iskip=1
               ! Record the location of where we want the keys to be stored, then ask for a tile
               do i=1,ntilemax
 !                 ipos = iskip + 2 + (i-1)*(1+ndim+mdl%size_msg_array)
-!                 keys(i)%p(0:ndim) => mdl%send_fetch_array(ipos:ipos+ndim)
+!                 keys(i)%p(0:ndim) => mdl%send_fetch(ibuf)%array(ipos:ipos+ndim)
                  keys(i)%p(0:ndim) => raw_keys(0:ndim,i)
               end do
               call get_tile(s,child,ntilemax,keys,grid,ntile_reply)
 
               ! Store type of reply and number of entries
-              mdl%send_fetch_array(iskip)=1
+              mdl%send_fetch(ibuf)%array(iskip)=1
               iskip=iskip+1
-              mdl%send_fetch_array(iskip)=ntile_reply
+              mdl%send_fetch(ibuf)%array(iskip)=ntile_reply
               iskip=iskip+1
 
               ! Store data, depending on reply type
               do i=1,ntile_reply
-                 mdl%send_fetch_array(iskip:iskip+ndim)=raw_keys(0:ndim,i)
+                 mdl%send_fetch(ibuf)%array(iskip:iskip+ndim)=raw_keys(0:ndim,i)
                  iskip=iskip+1+ndim ! Skip over the key already present
-                 call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch_array(iskip:iskip+mdl%size_msg_array-1))
+                 call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
                  iskip=iskip+mdl%size_msg_array
               end do
            endif
@@ -102,8 +121,8 @@ subroutine check_mail(s,comm_id,hash_dict)
            call MPI_WAIT(mdl%reply_id(grid_cpu),reply_status,info)
            
            ! Send back the reply
-           iskip=mdl%size_fetch_array*(grid_cpu-1)+1
-           call MPI_ISEND(mdl%send_fetch_array(iskip),mdl%size_fetch_array,MPI_INTEGER,grid_cpu-1,msg_tag,MPI_COMM_WORLD,mdl%reply_id(grid_cpu),info)
+           iskip=1
+           call MPI_ISEND(mdl%send_fetch(ibuf)%array(iskip),mdl%size_fetch_array,MPI_INTEGER,grid_cpu-1,msg_tag,MPI_COMM_WORLD,mdl%reply_id(grid_cpu),info)
            
            !=================================
            ! Post a new RECV for request
@@ -243,9 +262,11 @@ subroutine destage(s,igrid,hash_dict)
   ! It assembles flush messages, and when the message
   ! buffer is full, it sends it to the target CPU.
   !
-  integer::ind,ivar,idim,info,icache,iflush,grid_cpu
+  integer::ind,ivar,idim,info,icache,iflush,grid_cpu,ibuf
   integer::send_flush_id,iskip,nflush
+  integer::buffer_size_flush_array,buffer_size_msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
+  type(msg_large_realdp)::dummy_large_realdp
 
 #ifndef WITHOUTMPI
 
@@ -268,34 +289,51 @@ subroutine destage(s,igrid,hash_dict)
      grid_cpu=m%parent_cpu(icache)
      m%dirty(icache)=.false.
   
+     ! Identify the corresponding communication buffer
+     ibuf=mdl%cpu2buf_flush(grid_cpu)
+ 
+     ! If none is available, get the next free one
+     if(ibuf==0)then
+        mdl%ibuffer_flush=mdl%ibuffer_flush+1
+        ! If there is no communication buffer left, allocate a new one
+        if(mdl%ibuffer_flush>mdl%nbuffer_flush)then
+           mdl%nbuffer_flush=mdl%nbuffer_flush+1
+           buffer_size_msg_array=storage_size(dummy_large_realdp)/32
+           buffer_size_flush_array=1+(1+ndim+buffer_size_msg_array)*nflushmax
+           allocate(mdl%send_flush(mdl%nbuffer_flush)%array(1:buffer_size_flush_array))
+        endif
+        mdl%cpu2buf_flush(grid_cpu)=mdl%ibuffer_flush
+        ibuf=mdl%ibuffer_flush
+     endif
+
      ! Filling the flush buffer
-     iskip=mdl%size_flush_array*(grid_cpu-1)+1
-     nflush=mdl%send_flush_array(iskip)
+     iskip=1
+     nflush=mdl%send_flush(ibuf)%array(iskip)
 
      ! If buffer full, send it to remote CPU.
      if(nflush==nflushmax)then
         ! Post send
-        call MPI_ISSEND(mdl%send_flush_array(iskip),mdl%size_flush_array,MPI_INTEGER,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
+        call MPI_ISSEND(mdl%send_flush(ibuf)%array(iskip),mdl%size_flush_array,MPI_INTEGER,grid_cpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)
         ! While waiting for completion, check on incoming messages and perform actions
         call check_mail(s,send_flush_id,hash_dict)
         ! Reset counter
-        mdl%send_flush_array(iskip)=0
+        mdl%send_flush(ibuf)%array(iskip)=0
      endif
      
      ! Increment counter
-     mdl%send_flush_array(iskip)=mdl%send_flush_array(iskip)+1
+     mdl%send_flush(ibuf)%array(iskip)=mdl%send_flush(ibuf)%array(iskip)+1
 
      ! Skip to the last available position
-     iflush=mdl%send_flush_array(iskip)
+     iflush=mdl%send_flush(ibuf)%array(iskip)
      iskip=iskip+(1+ndim+mdl%size_msg_array)*(iflush-1)+1
      
      ! Pack message header
-     mdl%send_flush_array(iskip)=m%grid(igrid)%lev
-     mdl%send_flush_array(iskip+1:iskip+ndim)=m%grid(igrid)%ckey(1:ndim)
+     mdl%send_flush(ibuf)%array(iskip)=m%grid(igrid)%lev
+     mdl%send_flush(ibuf)%array(iskip+1:iskip+ndim)=m%grid(igrid)%ckey(1:ndim)
      iskip=iskip+ndim+1
 
      ! Pack message content
-     call pack_flush%proc(m%grid(igrid),mdl%size_msg_array,mdl%send_flush_array(iskip:iskip+mdl%size_msg_array-1))
+     call pack_flush%proc(m%grid(igrid),mdl%size_msg_array,mdl%send_flush(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
 
   endif
 

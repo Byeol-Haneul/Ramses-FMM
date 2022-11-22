@@ -19,6 +19,7 @@ module cache_commons
   ! Message size
   integer,parameter::ntilemax=16  ! Fetch message buffer size
   integer,parameter::nflushmax=128  ! Flush message buffer size
+  integer,parameter::nbuffermax=128  ! Initial number of send buffers
 
   ! Combiner rules
   integer,parameter::COMBINER_EXIST=1

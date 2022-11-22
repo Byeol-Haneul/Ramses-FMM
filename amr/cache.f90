@@ -89,7 +89,7 @@ subroutine close_cache(s,hash_dict)
   ! This routine closes all cache operations.
   ! It purges all remaining flush messages.
   !
-  integer::info,icache,igrid,icpu,iskip
+  integer::info,icache,igrid,icpu,ibuf,iskip
   integer::send_flush_id,nflush
   integer::dummy_int,close_tag=7,close_id
   integer(kind=8),dimension(0:ndim)::hash_child
@@ -98,9 +98,11 @@ subroutine close_cache(s,hash_dict)
 #endif
   
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
 #ifdef MDL2
-    call mdl_cache_close(mdl%mdl2,0)
+  call mdl_cache_close(mdl%mdl2,0)
 #elif !defined(WITHOUTMPI)
+
   ! EMPTY AND CLEAN THE CACHE
   do icache=1,m%ncache
      igrid=r%ngridmax+icache
@@ -125,14 +127,17 @@ subroutine close_cache(s,hash_dict)
 
   ! COMPLETE THE LAST FLUSH
   do icpu=1,g%ncpu
-     iskip=mdl%size_flush_array*(icpu-1)+1
-     nflush=mdl%send_flush_array(iskip)
-     if(nflush>0)then
-        ! Post send
-        call MPI_ISSEND(mdl%send_flush_array(iskip),mdl%size_flush_array,MPI_INTEGER,icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)  
-        ! While waiting for completion, check on incoming messages and perform actions
-        call check_mail(s,send_flush_id,hash_dict)
-        mdl%send_flush_array(iskip)=0
+     ibuf=mdl%cpu2buf_flush(icpu)
+     if(ibuf>0)then
+        iskip=1
+        nflush=mdl%send_flush(ibuf)%array(iskip)
+        if(nflush>0)then
+           ! Post send
+           call MPI_ISSEND(mdl%send_flush(ibuf)%array(iskip),mdl%size_flush_array,MPI_INTEGER,icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)
+           ! While waiting for completion, check on incoming messages and perform actions
+           call check_mail(s,send_flush_id,hash_dict)
+           mdl%send_flush(ibuf)%array(iskip)=0
+        endif
      endif
   end do
   
@@ -168,6 +173,14 @@ subroutine close_cache(s,hash_dict)
      call MPI_WAIT(mdl%reply_id(icpu),reply_status,info)
   end do
   
+  ! Reset cpu mapping to flush and fetch buffers
+  do icpu=1,g%ncpu
+     mdl%cpu2buf_fetch(icpu)=0
+     mdl%cpu2buf_flush(icpu)=0
+  end do
+  mdl%ibuffer_fetch=0
+  mdl%ibuffer_flush=0
+
   ! Barrier to prevent interference with the next cache
   call MPI_BARRIER(MPI_COMM_WORLD,info)
 #endif
@@ -352,9 +365,8 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
     mdl%size_fetch_array=2+(1+ndim+mdl%size_msg_array)*ntilemax
 
     ! Set communication counters to zero
-    do icpu=1,g%ncpu
-      iskip=mdl%size_flush_array*(icpu-1)+1
-      mdl%send_flush_array(iskip)=0
+    do icpu=1,mdl%nbuffer_flush
+      mdl%send_flush(icpu)%array(1)=0
     end do
   
     ! Post the first RECV for request
