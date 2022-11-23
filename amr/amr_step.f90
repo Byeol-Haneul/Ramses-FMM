@@ -56,9 +56,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Output results to files
   !------------------------
   if(ilevel==r%levelmin)then
-     if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
+     if(r%foutput>0)then
+        if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
                                     call m_timer(pst,'output','start')
-        call m_dump_all(pst)
+           call m_dump_all(pst)
+        endif
      endif
   endif
   
