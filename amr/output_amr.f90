@@ -10,7 +10,7 @@ subroutine m_dump_all(pst)
   use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
   use output_poisson_module, only: r_output_poisson,in_output_poisson_t
   use output_part_module, only: r_output_part
-  use mdl_module, only: mdl_mkdir_p
+  use mdl_module, only: mdl_mkdir_p, mdl_wtime
   implicit none
   type(pst_t)::pst
 
@@ -19,6 +19,7 @@ subroutine m_dump_all(pst)
 #ifdef NOSYSTEM
   integer::ierr
 #endif
+  double precision::ttend, ttstart=0.0
   character(LEN=5)::nchar
   character(LEN=flen)::filename,filedir,filecmd
   integer,dimension(1:flen/4)::input_array
@@ -53,7 +54,10 @@ subroutine m_dump_all(pst)
      !-----------------------
      ! Only master process
      !-----------------------
-
+     write(*,*)'Writing snapshot to disk in '//TRIM(filedir)
+     ttstart = mdl_wtime(mdl)
+     
+     if(r%verbose)write(*,*)'Writing header files'
      if(r%pic)then
         filename=TRIM(filedir)//'part_header.txt'
         call output_header(r,g,p,filename)
@@ -84,18 +88,21 @@ subroutine m_dump_all(pst)
      ! Output AMR data
      filename=TRIM(filedir)//'amr.out'
      input_array=transfer(filename,input_array)
+     if(r%verbose)write(*,*)'Writing AMR files'
      call r_output_amr(pst,input_array,flen/4,dummy,0)
      
      ! Output HYDRO data
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro.out'
         input_array=transfer(filename,input_array)
+        if(r%verbose)write(*,*)'Writing hydro files'
         call r_output_hydro(pst,input_array,flen/4,dummy,0)
      end if
 
      ! Output GRAV data
      if(r%poisson)then
         in_output_poisson%filename=TRIM(filedir)//'grav.out'
+        if(r%verbose)write(*,*)'Writing gravity files'
         call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
      end if
 
@@ -103,8 +110,13 @@ subroutine m_dump_all(pst)
      if(r%pic)then
         filename=TRIM(filedir)//'part.out'
         input_array=transfer(filename,input_array)
+        if(r%verbose)write(*,*)'Writing particle files'
         call r_output_part(pst,input_array,flen/4,dummy,0)
      end if
+
+     ttend = mdl_wtime(mdl)
+     write(*,*)'Done writing in ', ttend-ttstart,' seconds.'
+     
   end if
 
   end associate
