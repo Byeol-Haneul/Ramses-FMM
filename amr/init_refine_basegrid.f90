@@ -51,7 +51,6 @@ recursive subroutine r_collect_noct(pst,ilevel,input_size,noct,output_size)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-!  integer,VALUE::input_size
   integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::ilevel
@@ -84,9 +83,9 @@ recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
   integer,VALUE::input_size
   integer::output_size
   integer::ilevel
-  integer::noct_tot
+  integer(kind=8)::noct_tot
 
-  integer::next_noct_tot
+  integer(kind=8)::next_noct_tot
   integer::rID
 
   if(pst%nLower>0)then
@@ -95,7 +94,7 @@ recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_tot)
      noct_tot=noct_tot+next_noct_tot
   else
-     noct_tot=pst%s%m%noct(ilevel)
+     noct_tot=int(pst%s%m%noct(ilevel),kind=8)
   endif
 
 end subroutine r_noct_tot

@@ -142,7 +142,7 @@ subroutine init_amr(mdl,r,g,m)
   ! Set bounds for Hilbert keys for coarse levels
   do ilevel=1,r%levelmin
      m%ckey_max(ilevel)=2**(ilevel-1)
-     max_key=2**((ilevel-1)*ndim)
+     max_key=int(m%ckey_max(ilevel),kind=8)**ndim
      m%hkey_max(1,ilevel)=max_key
      do icpu=1,g%ncpu-1
         m%domain(ilevel)%b(1,icpu) = (icpu*max_key)/g%ncpu

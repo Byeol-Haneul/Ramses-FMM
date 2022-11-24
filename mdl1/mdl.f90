@@ -91,9 +91,9 @@ module mdl_module
       character(len=*), intent(in),optional :: name
       mdl%callback(sid) = service
       mdl%p1opaque(sid) = c_loc(p1)
-      mdl%input_size(sid) = input_size/4
+      mdl%input_size(sid) = input_size/4  ! Divide by four to get the number of Integers
       mdl%output_size(sid) = output_size/4
-      mdl%MDL_INPUT_MAXSIZE=MAX(mdl%MDL_INPUT_MAXSIZE,input_size/4) ! Divide by four to get the number of Integers
+      mdl%MDL_INPUT_MAXSIZE = MAX(mdl%MDL_INPUT_MAXSIZE,input_size/4)
 
     end subroutine mdl_add_service
     !##############################################################

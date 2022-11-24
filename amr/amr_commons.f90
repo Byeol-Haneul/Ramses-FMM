@@ -265,17 +265,17 @@ module amr_commons
 
   type mesh_t
      ! Level related arrays
-     integer,allocatable,dimension(:)::head      ! Starting index for each level 
-     integer,allocatable,dimension(:)::tail      ! Final index for each level 
-     integer,allocatable,dimension(:)::noct      ! Number of octs for each level
-     integer,allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
-     integer,allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
-     integer,allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
-     integer,allocatable,dimension(:)::ckey_max  ! Max. Cartesian key per level
+     integer(kind=4),allocatable,dimension(:)::head      ! Starting index for each level
+     integer(kind=4),allocatable,dimension(:)::tail      ! Final index for each level
+     integer(kind=4),allocatable,dimension(:)::noct      ! Number of octs for each level
+     integer(kind=4),allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
+     integer(kind=4),allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
+     integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
+     integer(kind=4),allocatable,dimension(:)::ckey_max  ! Max. Cartesian key per level
      integer(kind=8),allocatable,dimension(:,:)::hkey_max ! Max. Hilbert key
-     integer,allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
-     integer,allocatable,dimension(:)::tail_cache ! Final index in the cache for each level
-     integer::noct_used,noct_used_max,noct_used_tot ! Total used octs
+     integer(kind=4),allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
+     integer(kind=4),allocatable,dimension(:)::tail_cache ! Final index in the cache for each level
+     integer(kind=4)::noct_used,noct_used_max,noct_used_tot ! Total used octs in local memory
      
      ! Persistent array for the AMR grid
 !     type(oct),dimension(:),allocatable::grid
@@ -284,11 +284,10 @@ module amr_commons
      
      ! Arrays for the MG solver
      type(hash_table)::mg_dict     ! MG hash table
-     integer,allocatable,dimension(:)::head_mg ! Starting index for each level
-     integer,allocatable,dimension(:)::tail_mg ! Final index for each level
-     integer,allocatable,dimension(:)::noct_mg ! Number of octs for each level
-     integer,allocatable,dimension(:)::noct_tot_mg ! Total number of octs across cpu
-     integer::ifree_mg ! Starting index in free memory
+     integer(kind=4),allocatable,dimension(:)::head_mg ! Starting index for each level
+     integer(kind=4),allocatable,dimension(:)::tail_mg ! Final index for each level
+     integer(kind=4),allocatable,dimension(:)::noct_mg ! Number of octs for each level
+     integer(kind=4)::ifree_mg ! Starting index in free memory
 
      ! Software cache array for the AMR grid
      logical,allocatable,dimension(:)::dirty
