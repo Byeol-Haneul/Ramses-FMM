@@ -474,7 +474,7 @@ subroutine input_header(r,g,filename,npart_tot_file,ncpu_file)
   type(run_t)::r
   type(global_t)::g
   character(LEN=flen)::filename
-  integer(i8b)::npart_tot_file
+  integer(kind=8)::npart_tot_file
   integer::ncpu_file
 
   integer::ilun
@@ -513,10 +513,11 @@ subroutine savegadget(filename)
   integer::i, idim, ipart
   real:: gadgetvfact
   integer::info
-  integer(i8b)::npart_tot, npart_loc
+  integer(kind=8)::npart_tot
+  integer(kind=4)::npart_loc
   real, parameter:: RHOcrit = 2.7755d11
 
-  npart_tot=npart
+  npart_tot=int(npart,kind=8)
 
   allocate(pos(ndim, npart), vel(ndim, npart), ids(npart))
   gadgetvfact = 100.0 * boxlen_ini / aexp / SQRT(aexp)
@@ -529,11 +530,7 @@ subroutine savegadget(filename)
   header%redshift = 1.d0/aexp-1.d0
   header%flag_sfr = 0
   header%nparttotal = 0
-#ifndef LONGINT
-  header%nparttotal(2) = npart_tot
-#else
   header%nparttotal(2) = MOD(npart_tot,4294967296)
-#endif
   header%flag_cooling = 0
   header%numfiles = ncpu
   header%boxsize = boxlen_ini
@@ -543,11 +540,7 @@ subroutine savegadget(filename)
   header%flag_stellarage = 0
   header%flag_metals = 0
   header%totalhighword = 0
-#ifndef LONGINT
-  header%totalhighword(2) = 0
-#else
   header%totalhighword(2) = npart_tot/4294967296
-#endif
   header%flag_entropy_instead_u = 0
   header%flag_doubleprecision = 0
   header%flag_ic_info = 0

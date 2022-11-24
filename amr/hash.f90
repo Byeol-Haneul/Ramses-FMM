@@ -24,7 +24,7 @@ module hash
      integer(kind=8), dimension(0:ndim) :: key
      type(C_PTR) :: valuep
      integer :: next_ibucket
-  end type bucket     
+  end type bucket
 
   ! The actual hash table is an array of buckets
   type hash_table

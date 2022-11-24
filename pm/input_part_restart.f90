@@ -6,7 +6,7 @@ contains
 !#########################################################################
 subroutine m_input_part_restart(pst)
   use mdl_module
-  use amr_parameters, only: ndim,dp,i8b
+  use amr_parameters, only: ndim,dp
   use ramses_commons, only: pst_t
   use output_amr_module, only: input_header
   implicit none
@@ -17,7 +17,7 @@ subroutine m_input_part_restart(pst)
   !--------------------------------------------------------------------
   integer::icpu,ilun,ncpu_file
   integer::dummy(1)
-  integer(i8b)::npart_tot_file,npart_tot_check
+  integer(kind=8)::npart_tot_file,npart_tot_check
   character(LEN=5)::nchar,ncharcpu
   character(LEN=80)::file_head,file_part
   integer,allocatable,dimension(:)::npart_file
@@ -108,8 +108,9 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
   !------------------------------------------------------------
   integer::ipart,ipart_old
   integer::i,idim,icpu,ileft,iright,nrest,ipos
-  integer(i8b)::istart,iend,nleft,nright,npart_tot
-  integer(i8b),dimension(0:ncpu_file)::ncum_file
+  integer::istart,iend
+  integer(kind=8)::nleft,nright,npart_tot
+  integer(kind=8),dimension(0:ncpu_file)::ncum_file
 
   real(dp),allocatable,dimension(:)::xdp
   integer,allocatable,dimension(:)::isp

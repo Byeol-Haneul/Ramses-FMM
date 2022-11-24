@@ -26,6 +26,7 @@ module hydro_commons
      type(nbor),dimension(:,:,:,:),allocatable::nborloc
    contains
      procedure :: init => init_hydro_kernel
+     procedure :: size => size_hydro_kernel
   end type hydro_kernel_t
 
   type hydro_workspace_t
@@ -71,5 +72,38 @@ contains
     allocate(h%nborloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2,1:twondim))
     
   end subroutine init_hydro_kernel
+
+  function size_hydro_kernel(h)
+    use amr_parameters, only: ndim
+    use hydro_parameters, only: nvar
+    integer::size_hydro_kernel
+    class(hydro_kernel_t)::h
+
+    integer::nint
+
+    nint=0
+    nint=nint+size(transfer(h%uloc,(/1/)))
+    nint=nint+size(transfer(h%gloc,(/1/)))
+    nint=nint+size(transfer(h%qloc,(/1/)))
+    nint=nint+size(transfer(h%cloc,(/1/)))
+    nint=nint+size(transfer(h%okloc,(/1/)))
+    nint=nint+size(transfer(h%dq   ,(/1/)))
+    nint=nint+size(transfer(h%qm   ,(/1/)))
+    nint=nint+size(transfer(h%qp   ,(/1/)))
+    nint=nint+size(transfer(h%fx   ,(/1/)))
+    nint=nint+size(transfer(h%tx   ,(/1/)))
+
+    nint=nint+size(transfer(h%flux ,(/1/)))
+    nint=nint+size(transfer(h%tmp  ,(/1/)))
+    nint=nint+size(transfer(h%divu ,(/1/)))
+
+    nint=nint+size(transfer(h%childloc,(/1/)))
+    nint=nint+size(transfer(h%gridloc ,(/1/)))
+    nint=nint+size(transfer(h%cellloc ,(/1/)))
+    nint=nint+size(transfer(h%nborloc ,(/1/)))
+
+    size_hydro_kernel = nint
+
+  end function size_hydro_kernel
 
 end module hydro_commons

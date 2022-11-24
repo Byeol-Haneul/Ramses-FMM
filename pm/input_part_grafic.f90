@@ -5,7 +5,7 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_input_part_grafic(pst)
-  use amr_parameters, only: dp,i8b
+  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -46,7 +46,6 @@ end subroutine m_input_part_grafic
 !#########################################################################
 recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array,output_size)
   use mdl_module
-  use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -59,7 +58,7 @@ recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer(i8b)::npart_tot
+  integer(kind=8)::npart_tot
   integer::rID
 
   if(pst%nLower>0)then
@@ -77,24 +76,25 @@ end subroutine r_input_part_grafic
 !#########################################################################
 !#########################################################################
 subroutine input_part_grafic(r,g,p,npart_tot)
-  use amr_parameters, only: i8b,dp,ndim,twotondim
+  use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
-  integer(i8b)::npart_tot
+  integer(kind=8)::npart_tot
   !----------------------------------------------------
   ! Reading initial conditions from single GRAFIC file
   !----------------------------------------------------
-  integer::icpu,ipart,ipart_grafic,idim
+  integer::icpu,ipart,idim
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
   integer::plane_size
   real(dp)::dx,xx1,xx2,xx3
   real(kind=8)::dispmax=0.0
   integer,dimension(1:g%ncpu)::npart_loc
-  integer(i8b),dimension(1:g%ncpu+1)::start_ind
+  integer(kind=8)::ipart_grafic
+  integer(kind=8),dimension(1:g%ncpu+1)::start_ind
   real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
   character(LEN=80)::filename,filename_x
   character(LEN=5)::nchar

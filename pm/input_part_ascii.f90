@@ -6,7 +6,7 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_input_part_ascii(pst)
-  use amr_parameters, only: dp,i8b
+  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -15,7 +15,7 @@ subroutine m_input_part_ascii(pst)
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
-  integer(i8b)::npart_tot
+  integer(kind=8)::npart_tot
   character(LEN=80)::filename
   integer::dummy(1)
   integer,allocatable,dimension(:)::input_array
@@ -65,7 +65,6 @@ end subroutine m_input_part_ascii
 !#########################################################################
 recursive subroutine r_input_part_ascii(pst,input_array,input_size,output_array,output_size)
   use mdl_module
-  use amr_parameters, only: i8b
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -78,7 +77,7 @@ recursive subroutine r_input_part_ascii(pst,input_array,input_size,output_array,
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer(i8b)::npart_tot
+  integer(kind=8)::npart_tot
   integer::rID
 
   if(pst%nLower>0)then
@@ -97,7 +96,7 @@ end subroutine r_input_part_ascii
 !#########################################################################
 subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   use mdl_module
-  use amr_parameters, only: dp,i8b
+  use amr_parameters, only: dp
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -105,7 +104,7 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
-  integer(i8b)::npart_tot
+  integer(kind=8)::npart_tot
   !------------------------------------------------------------
   ! Allocate particle-based arrays.
   ! Read particles positions and velocities from various files
@@ -115,8 +114,9 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   !------------------------------------------------------------
   integer::jpart_loc
   integer::i,ilun,icpu
-  integer(i8b)::jpart,indglob
-  integer(i8b),dimension(1:g%ncpu+1)::start_ind
+  integer(kind=8)::indglob
+  integer(kind=8)::jpart
+  integer(kind=8),dimension(1:g%ncpu+1)::start_ind
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   character(LEN=80)::filename
 

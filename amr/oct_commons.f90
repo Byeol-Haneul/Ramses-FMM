@@ -4,27 +4,27 @@ module oct_commons
   
   ! New type for oct structure
   type oct
-     integer(kind=4)::lev
-     integer(kind=4),dimension(1:ndim)::ckey
-     integer(kind=8),dimension(1:nhilbert)::hkey
-     integer(kind=4),dimension(1:twotondim)::flag1
-     integer(kind=4),dimension(1:twotondim)::flag2
-     logical,dimension(1:twotondim)::refined
-     integer(kind=4)::superoct
-#ifdef GRAV
-     real(kind=dp),dimension(1:twotondim)::rho
-     real(kind=dp),dimension(1:twotondim)::phi
-     real(kind=dp),dimension(1:twotondim)::phi_old
-     real(kind=dp),dimension(1:twotondim,1:3)::f
-#endif
 #ifdef HYDRO
      real(kind=dp),dimension(1:twotondim,1:nvar)::uold
      real(kind=dp),dimension(1:twotondim,1:nvar)::unew
+#endif
+#ifdef GRAV
+     real(kind=dp),dimension(1:twotondim,1:3)::f
+     real(kind=dp),dimension(1:twotondim)::rho
+     real(kind=dp),dimension(1:twotondim)::phi
+     real(kind=dp),dimension(1:twotondim)::phi_old
 #endif
 #ifdef DUALENER
      real(kind=dp),dimension(1:twotondim)::divu
      real(kind=dp),dimension(1:twotondim)::enew
 #endif
+     integer(kind=8),dimension(1:nhilbert)::hkey
+     integer(kind=4),dimension(1:twotondim)::flag1
+     integer(kind=4),dimension(1:twotondim)::flag2
+     integer(kind=4),dimension(1:ndim)::ckey
+     logical,dimension(1:twotondim)::refined
+     integer(kind=4)::lev
+     integer(kind=4)::superoct
   end type oct
 
   type nbor

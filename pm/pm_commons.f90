@@ -4,7 +4,7 @@ module pm_commons
   type part_t
 
      integer :: npart=0     ! Actual number of particles in processor
-     integer :: npart_tot=0 ! Total number of particles in all processors
+     integer(kind=8):: npart_tot=0 ! Total number of particles in all processors
      integer :: npart_max=0 ! Maximum number of particles in all processors
      
      ! Particle dependent arrays

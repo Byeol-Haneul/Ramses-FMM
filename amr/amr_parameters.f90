@@ -15,12 +15,12 @@ module amr_parameters
   integer,parameter::MAXLEVEL=65
   integer,parameter::MAXREGION=100
   
-  ! Define integer types (for particle IDs mostly)
+  ! Define integer types (for particle IDs only)
   integer,parameter::i4b=4
 #ifndef LONGINT
-  integer,parameter::i8b=4  ! default long int are short int
+  integer,parameter::i8b=4  ! default particle IDs are short int
 #else
-  integer,parameter::i8b=8  ! long int are long int
+  integer,parameter::i8b=8  ! longint particle IDs are long int
 #endif
   integer,parameter::flen=80
   
