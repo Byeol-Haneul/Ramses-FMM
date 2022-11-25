@@ -176,7 +176,7 @@ function worker_init(mdl) result(pst)
   pst%s%g%myid=mdl_self(pst%s%mdl)
   pst%s%g%ncpu=mdl_threads(pst%s%mdl)
 
-  ! Input and Output sizes here are in BYTES!
+  ! Input and output sizes here are in BYTES!
 #ifndef MDL2
   call mdl_add_service(pst%s%mdl,MDL_CLEAN_STOP,             pst,C_FUNLOC(r_clean_stop),0,0,"clean_stop")
 #endif
@@ -189,7 +189,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INIT_PART,              pst,C_FUNLOC(r_init_part),0,0,"init_part")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_GRAFIC,      pst,C_FUNLOC(r_input_part_grafic),storage_size(pst%s%p%npart_tot)/8,0,"input_part_grafic")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ASCII,       pst,C_FUNLOC(r_input_part_ascii),storage_size(pst%s%p%npart_tot)/8,0,"input_part_ascii")
-  call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RESTART,     pst,C_FUNLOC(r_input_part_restart),MDL_MAX_CPU*4,0,"input_part_restart") ! number of integers
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RESTART,     pst,C_FUNLOC(r_input_part_restart),MDL_MAX_CPU*4,0,"input_part_restart") 
   call mdl_add_service(pst%s%mdl,MDL_NPART_MAX,              pst,C_FUNLOC(r_npart_max),0,4,"npart_max")
   call mdl_add_service(pst%s%mdl,MDL_INIT_FLAG,              pst,C_FUNLOC(r_init_flag),4,4,"init_flag")
   call mdl_add_service(pst%s%mdl,MDL_USER_FLAG,              pst,C_FUNLOC(r_user_flag),4,4,"user_flag")
@@ -215,6 +215,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MP_MIN,       pst,C_FUNLOC(r_broadcast_mp_min),0,0,"broadcast_mp_min")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_AMR,             pst,C_FUNLOC(r_output_amr),flen,0,"output_amr")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_HYDRO,           pst,C_FUNLOC(r_output_hydro),flen,0,"output_hydro")
+  call mdl_add_service(pst%s%mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),8,2*pst%s%r%nw_frame*pst%s%r%nh_frame*4,"output_frame")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_POISSON,         pst,C_FUNLOC(r_output_poisson),flen,0,"output_poisson")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_PART,            pst,C_FUNLOC(r_output_part),flen,0,"output_part")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_AEXP,         pst,C_FUNLOC(r_broadcast_aexp),16,0,"broadcast_aexp")
@@ -262,8 +263,6 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_SCAN_FLAG,          pst,C_FUNLOC(r_set_scan_flag),8,0,"set_scan_flag")
   call mdl_add_service(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,     pst,C_FUNLOC(r_cmp_residual_norm2),4,8,"cmp_residual_norm2")
 #endif
-  call mdl_add_service(pst%s%mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),8,&
-                      2*pst%s%r%nw_frame*pst%s%r%nh_frame*4,"output_frame")
 end function worker_init
 !##############################################################
 !##############################################################
