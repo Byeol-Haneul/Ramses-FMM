@@ -19,7 +19,6 @@ subroutine m_force_fine(pst,ilevel,icount)
   ! the maximum density rho_max, and the potential energy
   !----------------------------------------------------------
   integer::dummy(2)
-  integer,dimension(1:2)::input_array,output_array
   real(kind=8)::rhomax,epot
   type(in_gradient_phi_t)::in_gradient_phi
  

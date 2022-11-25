@@ -30,9 +30,6 @@ subroutine m_newdt_fine(pst,ilevel)
   !-----------------------------------------------------------
   real(dp)::dx,tff,fourpi,threepi2
   real(kind=8)::dt,ekin,vmax
-  integer,dimension(1:4)::dummy
-  integer,dimension(1:5)::input_array
-  integer,dimension(1:8)::output_array
   type(out_courant_fine_t)::out_courant_fine
   type(out_newdt_part_t)::out_newdt_part
   type(in_broadcast_dt_t)::in_broadcast_dt

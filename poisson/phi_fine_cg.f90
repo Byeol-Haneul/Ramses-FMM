@@ -38,8 +38,6 @@ subroutine m_phi_fine_cg(pst,ilevel,icount)
   real(kind=8)::r2,pAp,rhs_norm
   type(in_make_initial_phi_t)::in_make_initial_phi
   type(in_recurrence_t)::in_recurrence
-  integer,dimension(1:4)::input_array
-  integer,dimension(1:4)::output_array
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
     
@@ -851,7 +849,6 @@ recursive subroutine r_cmp_pAp_cg(pst,ilevel,input_size,pAp,output_size)
   ! Compute norm of residual 
   ! ------------------------------------------------------------------------
   integer::igrid,ind,ilevel
-  integer,dimension(1:output_size)::next_output_array
   real(kind=8)::pAp,next_pAp
   integer::rID
 
