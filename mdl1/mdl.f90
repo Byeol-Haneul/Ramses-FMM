@@ -280,7 +280,7 @@ module mdl_module
       call MPI_COMM_SIZE(MPI_COMM_WORLD,mdl%ncpu,info)
       mdl%myid=mdl%myid+1 ! Careful with this...
       if(mdl_self(mdl)==1)then
-        write(*,'(" Launching MPI with nproc = ",I4)')mdl%ncpu
+        write(*,'(" Launching MPI with nproc = ",I6)')mdl%ncpu
       endif
 #else
       write(*,'(" Serial execution (no MPI).")')

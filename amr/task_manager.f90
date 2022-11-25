@@ -116,7 +116,7 @@ function worker_init(mdl) result(pst)
   use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
   use update_time_module, only: r_broadcast_aexp
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,&
-                                        r_noct_used_max,r_gather_noct_max
+                                        r_noct_used_max
   use init_refine_restart_module, only: r_init_refine_restart
   use load_balance_module, only: r_load_balance,r_balance_part,r_broadcast_bound_key,r_collect_bound_key
   use refine_utils, only: r_refine_fine
@@ -195,11 +195,10 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_USER_FLAG,              pst,C_FUNLOC(r_user_flag),4,4,"user_flag")
   call mdl_add_service(pst%s%mdl,MDL_ENSURE_REF_RULES,       pst,C_FUNLOC(r_ensure_ref_rules),4,0,"ensure_ref_rules")
   call mdl_add_service(pst%s%mdl,MDL_COLLECT_NOCT,           pst,C_FUNLOC(r_collect_noct),4,ncpu*storage_size(dummy)/8,"collect_noct")
-  call mdl_add_service(pst%s%mdl,MDL_NOCT_TOT,               pst,C_FUNLOC(r_noct_tot),8,8,"noct_tot")
+  call mdl_add_service(pst%s%mdl,MDL_NOCT_TOT,               pst,C_FUNLOC(r_noct_tot),4,8,"noct_tot")
   call mdl_add_service(pst%s%mdl,MDL_NOCT_MIN,               pst,C_FUNLOC(r_noct_min),4,4,"noct_min")
   call mdl_add_service(pst%s%mdl,MDL_NOCT_MAX,               pst,C_FUNLOC(r_noct_max),4,4,"noct_max")
   call mdl_add_service(pst%s%mdl,MDL_NOCT_USED_MAX,          pst,C_FUNLOC(r_noct_used_max),4,4,"noct_used_max")
-  call mdl_add_service(pst%s%mdl,MDL_GATHER_NOCT_MAX,        pst,C_FUNLOC(r_gather_noct_max),0,0,"gather_noct_max")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,   pst,C_FUNLOC(r_init_refine_basegrid),4,0,"init_refine_basegrid")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RESTART,    pst,C_FUNLOC(r_init_refine_restart),0,2*nhilbert*(pst%s%g%ncpu+1)*4,"init_refine_restart")
   call mdl_add_service(pst%s%mdl,MDL_COLLECT_BOUND_KEY,      pst,C_FUNLOC(r_collect_bound_key),(MDL_MAX_CPU+1)*4,nhilbert*(ncpu+1)*storage_size(dummy8)/8,"collect_bound_key")

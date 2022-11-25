@@ -10,7 +10,7 @@ contains
 subroutine m_refine_fine(pst,ilevel)
   use mdl_module
   use ramses_commons, only: pst_t
-  use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
+  use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max,out_noct_tot_t
   use load_balance_module, only: m_load_balance, r_balance_part
   implicit none
   type(pst_t)::pst
@@ -23,6 +23,7 @@ subroutine m_refine_fine(pst,ilevel)
   type(out_refine_fine_t)::out_refine_fine
   integer,dimension(1:2)::noct
   integer,dimension(1)::alevel
+  type(out_noct_tot_t)::out_noct_tot
 
   associate(s=>pst%s)
   
@@ -43,7 +44,8 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),1)
+     call r_noct_tot(pst,ilev,1,out_noct_tot,2)
+     s%m%noct_tot(ilev)=out_noct_tot%noct_tot
      call r_noct_min(pst,ilev,1,s%m%noct_min(ilev),1)
      call r_noct_max(pst,ilev,1,s%m%noct_max(ilev),1)
   end do
@@ -56,7 +58,8 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
-     call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),1)
+     call r_noct_tot(pst,ilev,1,out_noct_tot,2)
+     s%m%noct_tot(ilev)=out_noct_tot%noct_tot
      call r_noct_min(pst,ilev,1,s%m%noct_min(ilev),1)
      call r_noct_max(pst,ilev,1,s%m%noct_max(ilev),1)
   end do
