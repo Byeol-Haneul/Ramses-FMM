@@ -60,7 +60,7 @@ subroutine adaptive_loop(pst)
      if(m%noct_tot(ilevel)>0)write(*,999)&
           & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl_threads(mdl)
   end do
-999 format(' Level ',I2,' has ',I10,' grids (',3(I8,','),')')
+999 format(' Level ',I2,' has ',I11,' grids (',3(I8,','),')')
 
   g%nstep_coarse_old=g%nstep_coarse
 
