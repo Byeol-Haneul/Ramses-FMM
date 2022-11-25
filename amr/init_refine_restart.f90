@@ -9,7 +9,7 @@ subroutine m_init_refine_restart(pst)
   use ramses_commons, only: pst_t
   use hilbert
   use params_module, only: m_broadcast_params, m_broadcast_global
-  use init_refine_basegrid_module, only:r_init_refine_basegrid,r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max,out_noct_tot_t
+  use init_refine_basegrid_module, only:r_init_refine_basegrid,r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
   use load_balance_module, only: r_broadcast_bound_key
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
@@ -31,7 +31,6 @@ subroutine m_init_refine_restart(pst)
   integer::ncpu_file,input_size,output_size
   integer,dimension(:),allocatable::noct_file,noct_skip
   integer,dimension(:),allocatable::input_array,output_array
-  type(out_noct_tot_t)::out_noct_tot
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -66,8 +65,7 @@ subroutine m_init_refine_restart(pst)
         call r_init_refine_basegrid(pst,ilevel,1)
         
         ! Get total, min and max grid count (only in master)
-        call r_noct_tot(pst,ilevel,1,out_noct_tot,2)
-        m%noct_tot(ilevel)=out_noct_tot%noct_tot
+        call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),2)
         call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
         call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
         
@@ -123,8 +121,7 @@ subroutine m_init_refine_restart(pst)
      deallocate(input_array,output_array)
 
      ! Get total, min and max grid count (only in master).
-     call r_noct_tot(pst,ilevel,1,out_noct_tot,2)
-     m%noct_tot(ilevel)=out_noct_tot%noct_tot
+     call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),2)
      call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
      call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
 

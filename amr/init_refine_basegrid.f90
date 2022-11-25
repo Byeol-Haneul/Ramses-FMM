@@ -1,9 +1,4 @@
 module init_refine_basegrid_module
-
-  type :: out_noct_tot_t
-     integer(kind=8)::noct_tot
-  end type out_noct_tot_t
-
 contains
 !#########################################################################
 !#########################################################################
@@ -20,8 +15,6 @@ subroutine m_init_refine_basegrid(pst)
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
   !--------------------------------------------------------------------
-  type(out_noct_tot_t)::output
-
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
   
   if(r%verbose)write(*,*)'Entering init_refine_basegrid'
@@ -30,8 +23,7 @@ subroutine m_init_refine_basegrid(pst)
   call r_init_refine_basegrid(pst,r%levelmin,1)
 
   ! Get total, min and max grid count (only in master).
-  call r_noct_tot(pst,r%levelmin,1,output,2)
-  m%noct_tot(r%levelmin) = output%noct_tot
+  call r_noct_tot(pst,r%levelmin,1,m%noct_tot(r%levelmin),2)
   call r_noct_min(pst,r%levelmin,1,m%noct_min(r%levelmin),1)
   call r_noct_max(pst,r%levelmin,1,m%noct_max(r%levelmin),1)
   call r_noct_used_max(pst,r%levelmin,1,m%noct_used_max,1)
@@ -80,7 +72,7 @@ end subroutine r_collect_noct
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_noct_tot(pst,ilevel,input_size,output,output_size)
+recursive subroutine r_noct_tot(pst,ilevel,input_size,noct_tot,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -88,18 +80,19 @@ recursive subroutine r_noct_tot(pst,ilevel,input_size,output,output_size)
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::output_size
-  type(out_noct_tot_t) output, next_output
-
   integer::ilevel
+  integer(kind=8)::noct_tot
+
+  integer(kind=8)::next_noct_tot
   integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_NOCT_TOT,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_noct_tot(pst%pLower,ilevel,input_size,output,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
-     output%noct_tot=output%noct_tot+next_output%noct_tot
+     call r_noct_tot(pst%pLower,ilevel,input_size,noct_tot,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_noct_tot)
+     noct_tot=noct_tot+next_noct_tot
   else
-     output%noct_tot=int(pst%s%m%noct(ilevel),kind=8)
+     noct_tot=int(pst%s%m%noct(ilevel),kind=8)
   endif
 
 end subroutine r_noct_tot
