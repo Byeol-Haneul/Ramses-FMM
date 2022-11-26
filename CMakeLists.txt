@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 cmake_policy(VERSION 3.5...3.14)
 
+include(CMakePrintHelpers)
+
 project(ramses3d LANGUAGES Fortran CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -18,7 +20,6 @@ else()
   message(STATUS "MPI library not found. Build without MPI")
 endif()
 
-
 if(EXISTS ${CMAKE_SOURCE_DIR}/mdl2)
   set(MDL2 true CACHE BOOL "Enable the new MDL version of RAMSES")
 else()
@@ -32,14 +33,26 @@ set(NPRE 8)
 set(NVAR 5)
 set(NENER 0)
 set(SOLVER hydro)
-set(UNITS default)
-set(CONDINIT default)
+set(UNITS coeur CACHE STRING "Set the unit system")
+set(CONDINIT coeur CACHE STRING "Set the initial conditions")
 set(EXEC ramses)
+set(GRAV true CACHE BOOL "Activate gravity solver")
+set(HYDRO true CACHE BOOL "Activate hydro solver")
 
-add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT} -DHYDRO -DGRAV)
+cmake_print_variables(UNITS CONDINIT GRAV HYDRO)
+
+add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT})
 
 if(NOT MPI_FOUND)
   add_definitions(-DWITHOUTMPI)
+endif()
+
+if(HYDRO)
+  add_definitions(-DHYDRO)
+endif()
+
+if(GRAV)
+  add_definitions(-DGRAV)
 endif()
 
 add_custom_command(
@@ -97,7 +110,6 @@ set(fortran_files
   amr/oct_commons.f90
   amr/amr_commons.f90
   poisson/poisson_parameters.f90
-  poisson/poisson_commons.f90
   amr/mdl_commons.f90
   amr/ramses_commons.f90
   amr/call_back.f90
