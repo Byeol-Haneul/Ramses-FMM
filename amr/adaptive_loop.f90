@@ -67,7 +67,7 @@ subroutine adaptive_loop(pst)
   write(*,*)'Starting time integration' 
 
   done = .false.
-  do while(.not.done)! Main time loop
+  do while(.not.done) ! Main time loop
 
      tt1 = mdl_wtime(mdl)
 
