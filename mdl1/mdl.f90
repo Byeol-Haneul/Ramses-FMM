@@ -87,12 +87,12 @@ module mdl_module
       integer::sid
       type(*),target::p1
       type(c_funptr), intent(in), value :: service
-      integer :: input_size, output_size ! NOTE: size IN BYTES!!
+      integer :: input_size, output_size ! NOTE: size in units of integer
       character(len=*), intent(in),optional :: name
       mdl%callback(sid) = service
       mdl%p1opaque(sid) = c_loc(p1)
-      mdl%input_size(sid) = input_size/4  ! Divide by four to get the number of Integers
-      mdl%output_size(sid) = output_size/4
+      mdl%input_size(sid) = input_size
+      mdl%output_size(sid) = output_size
       mdl%MDL_INPUT_MAXSIZE = MAX(mdl%MDL_INPUT_MAXSIZE,input_size/4)
 
     end subroutine mdl_add_service
