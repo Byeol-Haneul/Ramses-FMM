@@ -212,9 +212,7 @@ contains
     integer(kind=8) , dimension(0:ndim), intent(in) :: key
     type(C_PTR)                                     :: hash_getp
     logical,optional,                    intent(out):: absent
-
-    ! Function (not subroutine, could also be changed...? ) which retrieves the 
-    ! hash table value for a given key. If no entry exists, return 0
+    ! Function which retrieves the hash table value for a given key. If no entry exists, return 0.
     integer(kind=8) :: ibucket, full_hash
 
     if(present(absent)) absent = .false.
@@ -245,22 +243,24 @@ contains
   ! =============================================================================
 
   ! =============================================================================`
-  subroutine hash_get_vec(htable, keys, values, n)
+  function hash_getp_vec(htable, keys, absent, n)
+    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR, C_NULL_PTR, C_ASSOCIATED
+    use oct_commons
     implicit none
     type(hash_table),                                 intent(in) :: htable
     integer(kind = 8) , dimension(1:nvector, 0:ndim), intent(in) :: keys
-    integer, dimension(1:nvector)                , intent(inout) :: values
+    type(C_PTR),dimension(1:nvector)                             :: hash_getp_vec
+    logical, optional,dimension(1:nvector)       , intent(inout) :: absent
     integer                                                      :: n
-
-    ! Subroutine to obtain up to nvector values from the hash key at once.
+    ! Funxtion to obtain up to nvector values from the hash key at once.
     ! This subroutine is only valid if the simple hash is used.
-    
     integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
     integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys
     logical,           dimension(1:nvector)         :: ok
     integer :: i, idim, n_coll
 
-    stop
+    if(present(absent)) absent = .false.
+
     full_hash = 0
     do idim = 0, ndim
        do i = 1, n
@@ -274,7 +274,7 @@ contains
     
     do idim = 0, ndim
        do i = 1, n
-          !bucket_keys(i, idim) = htable%data(ibucket(i))%key(idim)
+          bucket_keys(i, idim) = htable%data(ibucket(i))%key(idim)
        end do
     end do
 
@@ -288,11 +288,17 @@ contains
     n_coll = 0
     do i = 1, n
        if (ok(i)) then
-          !values(i) = htable%data(ibucket(i))%value
+          hash_getp_vec(i) = htable%data(ibucket(i))%valuep
        else
           n_coll = n_coll + 1
        endif
     end do
+
+    if(present(absent))then
+       do i = 1, n
+          if(ok(i) .and. .not. C_ASSOCIATED(hash_getp_vec(i))) absent(i) = .true.
+       end do
+    end if
 
     if(n_coll == 0)return
 
@@ -302,17 +308,19 @@ contains
           do while( htable%data(ibucket(i))%next_ibucket > 0)
              ibucket(i) = htable%data(ibucket(i))%next_ibucket
              if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
-                !values(i) = htable%data(ibucket(i))%value
+                hash_getp_vec(i) = htable%data(ibucket(i))%valuep
                 ok(i) = .true.
+                if(present(absent) .and. .not. C_ASSOCIATED(hash_getp_vec(i))) absent(i)=.true.
              end if
           end do
           ! Nothing found...
           if (.not. ok(i))then
-             values(i) = 0
+             hash_getp_vec(i) = C_NULL_PTR
           end if
        end if
     end do
-  end subroutine hash_get_vec
+
+  end function hash_getp_vec
   ! =============================================================================  
   
   ! =============================================================================  
