@@ -93,7 +93,7 @@ subroutine m_read_params(pst)
 
   ! Refinement parameters for each level
   integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion
-  integer ,dimension(1:MAXLEVEL)::nsubcycle=2 ! Subcycling at each level
+  integer ,dimension(1:MAXLEVEL)::nsubcycle = 2 ! Subcycling at each level
   real(dp),dimension(1:MAXLEVEL)::m_refine =-1.0 ! Lagrangian threshold
   real(dp),dimension(1:MAXLEVEL)::r_refine =-1.0 ! Radius of refinement region
   real(dp),dimension(1:MAXLEVEL)::x_refine = 0.0 ! Center of refinement region

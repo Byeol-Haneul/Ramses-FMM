@@ -749,22 +749,22 @@ subroutine balance_part(s,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
   
-  !####################################################
+  !----------------------------------------------------
   ! Default for particle domains are grid domains
-  !####################################################
+  !----------------------------------------------------
   allocate(domain_part(ilevel:r%nlevelmax+1))
   do ilev=ilevel,r%nlevelmax+1
      call domain_part(ilev)%copy(m%domain(ilev))
   enddo
 
-  !###############################################
+  !-----------------------------------------------
   ! Determine particle domains if needed
-  !###############################################
+  !-----------------------------------------------
   if(part_memory)then
      
-     !#############################
+     !-----------------------------
      ! Allocate temporary work space
-     !#############################
+     !-----------------------------
      ncpu=g%ncpu
      myid=g%myid
      allocate(bound_key_new(1:nhilbert,0:ncpu))
@@ -796,9 +796,9 @@ subroutine balance_part(s,ilevel)
         if(g%myid==1.and.r%verbose)write(*,*)"====================================="
         if(g%myid==1.and.r%verbose)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
 
-        !#########################################################
+        !---------------------------------------------------------
         ! Sort particle according to current level Hilbert key
-        !#########################################################
+        !---------------------------------------------------------
         do i=p%headp(ilev),p%tailp(ilev)
            p%sortp(i)=i
         end do
@@ -816,9 +816,9 @@ subroutine balance_part(s,ilevel)
         unbalance=10
         iter=0
 
-        !#########################################################
+        !---------------------------------------------------------
         ! Find new Hilbert tick marks by dichotomy
-        !#########################################################
+        !---------------------------------------------------------
         do while (unbalance.GT.1)
            iter=iter+1
            
@@ -872,17 +872,17 @@ subroutine balance_part(s,ilevel)
         if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
         if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
 
-        !#########################################################
+        !---------------------------------------------------------
         ! Store new Hilbert tick marks after convergence
-        !#########################################################
+        !---------------------------------------------------------
         domain_part(ilev)%b(1:nhilbert,0:ncpu)=bound_key_target(1:nhilbert,0:ncpu)
 
      end do
      if(g%myid==1.and.r%verbose)write(*,*)"====================================="
 
-     !#############################
+     !-----------------------------
      ! Deallocate work space
-     !#############################
+     !-----------------------------
      deallocate(bound_key_target)
      deallocate(bound_key_new)
      deallocate(bound_key_left)
@@ -890,22 +890,22 @@ subroutine balance_part(s,ilevel)
      
   endif
 
-  !#################################
+  !---------------------------------
   ! Balance particles across cpus
-  !#################################
+  !---------------------------------
 
-  !#############################
+  !-----------------------------
   ! Allocate work space
-  !#############################
+  !-----------------------------
   allocate(send_cnt(1:g%ncpu))
   allocate(recv_cnt(1:g%ncpu))
   allocate(recv_oft(1:g%ncpu))
   allocate(send_oft(1:g%ncpu))
   allocate(offset_cpu(1:g%ncpu))
 
-  !#####################################
+  !-------------------------------------
   ! Compute number of particles to send
-  !#####################################
+  !-------------------------------------
   send_cnt=0
   count_loc=0
 
@@ -946,16 +946,16 @@ subroutine balance_part(s,ilevel)
   end do
   ! End loop over levels
 
-  !#####################################
+  !-------------------------------------
   ! Compute number of particles to receive
-  !#####################################
+  !-------------------------------------
   call MPI_ALLTOALL(send_cnt(1),1,MPI_INTEGER,recv_cnt(1),1,MPI_INTEGER,MPI_COMM_WORLD,info)
   send_cnt_tot=SUM(send_cnt)
   recv_cnt_tot=SUM(recv_cnt)
 
-  !#####################################
+  !-------------------------------------
   ! Compute offsets
-  !#####################################
+  !-------------------------------------
   recv_oft=0; send_oft=0
   offset_cpu(1)=p%headp(ilevel)-1+count_loc
   do icpu=2,g%ncpu
@@ -964,9 +964,9 @@ subroutine balance_part(s,ilevel)
      send_oft(icpu)=send_oft(icpu-1)+send_cnt(icpu-1)
   end do
 
-  !#####################################
+  !-------------------------------------
   ! Shift to the right particles to send
-  !#####################################
+  !-------------------------------------
   send_cnt=0
   count_loc=0
 
@@ -1009,9 +1009,9 @@ subroutine balance_part(s,ilevel)
   end do
   ! End loop over levels
 
-  !#####################################
+  !-------------------------------------
   ! Swap particles using new index table
-  !#####################################
+  !-------------------------------------
   do ipart=p%headp(ilevel),p%tailp(r%nlevelmax)
      do while(p%workp(ipart).NE.ipart)
         ! Swap new index
@@ -1041,21 +1041,21 @@ subroutine balance_part(s,ilevel)
      end do
   end do
 
-  !###################################################################
+  !-------------------------------------------------------------------
   ! Set new number of particles in local processor
-  !###################################################################
+  !-------------------------------------------------------------------
   p%npart=p%headp(ilevel)-1+count_loc+recv_cnt_tot
   p%tailp(r%nlevelmax)=p%npart
 
-  !###################################################################
+  !-------------------------------------------------------------------
   ! Swap particles positions, velocities and masses between processors
-  !###################################################################
+  !-------------------------------------------------------------------
   allocate(x_recv_buf(1:recv_cnt_tot))
   allocate(x_send_buf(1:send_cnt_tot))
 
-  !#########################
+  !-------------------------
   ! Swap positions
-  !#########################
+  !-------------------------
   do idim=1,ndim
 
   countrecv=0
@@ -1096,9 +1096,9 @@ subroutine balance_part(s,ilevel)
 
   end do
 
-  !#########################
+  !-------------------------
   ! Swap velocities
-  !#########################
+  !-------------------------
   do idim=1,ndim
 
   countrecv=0
@@ -1139,9 +1139,9 @@ subroutine balance_part(s,ilevel)
 
   end do
 
-  !#########################
+  !-------------------------
   ! Swap masses
-  !#########################
+  !-------------------------
   countrecv=0
   do icpu=1,g%ncpu
      nbuffer=recv_cnt(icpu)
@@ -1180,9 +1180,9 @@ subroutine balance_part(s,ilevel)
 
   deallocate(x_recv_buf,x_send_buf)
 
-  !#########################
+  !-------------------------
   ! Swap levels
-  !#########################
+  !-------------------------
   allocate(i_recv_buf(1:recv_cnt_tot))
   allocate(i_send_buf(1:send_cnt_tot))
 
@@ -1224,9 +1224,9 @@ subroutine balance_part(s,ilevel)
 
   deallocate(i_send_buf,i_recv_buf)
 
-  !#########################
+  !-------------------------
   ! Swap ids
-  !#########################
+  !-------------------------
   allocate(l_recv_buf(1:recv_cnt_tot))
   allocate(l_send_buf(1:send_cnt_tot))
 
@@ -1276,9 +1276,9 @@ subroutine balance_part(s,ilevel)
 
   deallocate(l_recv_buf,l_send_buf)
 
-  !#############################
+  !----------------------------
   ! Deallocate work space
-  !#############################
+  !----------------------------
   deallocate(send_cnt)
   deallocate(recv_cnt)
   deallocate(recv_oft)
@@ -1289,9 +1289,9 @@ subroutine balance_part(s,ilevel)
   end do
   deallocate(domain_part)
 
-  !##################################
+  !----------------------------------
   ! Put all particles in level ilevel
-  !##################################
+  !----------------------------------
   p%tailp(ilevel)=p%npart
   do ilev=ilevel+1,r%nlevelmax
      p%headp(ilev)=p%npart+1
@@ -1303,9 +1303,9 @@ subroutine balance_part(s,ilevel)
   end associate
   
 end subroutine balance_part
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
+!------------------------------------------------------------------------------
+!------------------------------------------------------------------------------
+!------------------------------------------------------------------------------
+!------------------------------------------------------------------------------
 #endif
 end module load_balance_module

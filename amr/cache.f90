@@ -28,10 +28,10 @@ subroutine get_tile(s,child,nkey,keys,grid,ntile)
     itile=(igrid-m%head_cache(ilevel))/ntilemax
     ntile=MIN(m%tail_cache(ilevel)-itile*ntilemax-m%head_cache(ilevel)+1,ntilemax)
     do i=1,ntile
-      ipos=m%head_cache(ilevel)+itile*ntilemax+i-1
-      keys(i)%p(0) = m%grid(ipos)%lev
-      keys(i)%p(1:ndim) = m%grid(ipos)%ckey(1:ndim)
-      grid(i)%p => m%grid(ipos)
+       ipos=m%head_cache(ilevel)+itile*ntilemax+i-1
+       keys(i)%p(0) = m%grid(ipos)%lev
+       keys(i)%p(1:ndim) = m%grid(ipos)%ckey(1:ndim)
+       grid(i)%p => m%grid(ipos)
     end do
   end associate
 end subroutine get_tile
