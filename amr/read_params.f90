@@ -51,7 +51,7 @@ subroutine m_read_params(pst)
   integer::ngridmax=0         ! Maximum number of grids
   integer::ncachemax=10000    ! Maximum number of cache lines
   real(dp)::boxlen=1.0D0      ! Cell sixe at level 0
-  real(dp)::Lx=0.0D0          ! Box length in actove domain along x direction
+  real(dp)::Lx=0.0D0          ! Box length in active domain along x direction
   integer,dimension(1:3)::boxmin=0 ! Min. Cartesian key for the box at levelmin
   integer,dimension(1:3)::boxmax=0 ! Max. Cartesian key for the box at levelmin
 
