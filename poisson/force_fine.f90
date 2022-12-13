@@ -104,7 +104,7 @@ subroutine force_analytic(r,g,m,ilevel)
         do idim=1,ndim
            nstride=2**(idim-1)
            do i=1,ngrid
-              xx(i,idim)=(2*m%grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx
+              xx(i,idim)=(2*m%grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
            end do
         end do
 
@@ -260,10 +260,10 @@ subroutine gradient_phi(s,ilevel,icount)
 
         ! Get neighboring grid
         hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
-        ! Periodic boundary conditons
+        ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
         enddo
         call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 

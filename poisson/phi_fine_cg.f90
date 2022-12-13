@@ -253,7 +253,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   ! This routine computes the residual for the Conjugate Gradient
   ! Poisson solver. The residual is stored in f(i,1) and f(i,2).
   !------------------------------------------------------------------
-  integer::i_nbor,igrid,idim,ind,igridn
+  integer::inbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   integer,dimension(1:8,1:8)::ccc
   real(dp)::dx2,fourpi,oneoversix,fact,residu
@@ -329,15 +329,15 @@ subroutine cmp_residual_cg(s,ilevel,icount)
      end do
 
      ! Get neighboring octs potential
-     do i_nbor=1,twondim
+     do inbor=1,twondim
 
         ! Get neighboring grid
-        hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
+        hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
 
-        ! Periodic boundary conditons
+        ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
         enddo
 
         ! Get neighbouring grid using a read-only cache
@@ -346,14 +346,14 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         ! If grid exists, then copy into array
         if(associated(gridp))then
            do ind=1,twotondim
-              phi_nbor(ind,i_nbor)=gridp%phi(ind)
+              phi_nbor(ind,inbor)=gridp%phi(ind)
            end do
 
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
            call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-           call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,i_nbor))
+           call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
            do ind=1,threetondim
               call unlock_cache_p(s,grid_nbor(ind)%p)
            end do
@@ -473,10 +473,10 @@ subroutine cmp_Ap_cg(s,ilevel)
         ! Get neighboring grid
         hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
 
-        ! Periodic boundary conditons
+        ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache

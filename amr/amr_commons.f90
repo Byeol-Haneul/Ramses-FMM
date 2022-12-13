@@ -44,7 +44,9 @@ module amr_commons
      integer::ncachemax=10000    ! Maximum number of cache lines
      integer::npartmax=0         ! Maximum number of particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
-     real(dp)::boxlen=1.0D0      ! Box length along x direction
+     real(dp)::boxlen=1.0D0      ! Cell size at level 0 (total box size)
+     real(dp)::Lx=0.0D0          ! Box length of active domain along x direction
+     integer,dimension(1:3)::boxmin,boxmax ! Min and max Cartesian keys at levelmin
           
      ! Poisson solver parameters
      real(dp)::epsilon=1.0D-4     ! Convergence criterion for Poisson solvers
@@ -56,8 +58,8 @@ module amr_commons
 
      ! Movie parameters
      integer::levelmax_frame=0
-     integer::nw_frame=512 ! prev: nx_frame, width of frame in pixels
-     integer::nh_frame=512 ! prev: ny_frame, height of frame in pixels
+     integer::nw_frame=512 ! width of frame in pixels
+     integer::nh_frame=512 ! height of frame in pixels
      integer::ivar_frame=1
      real(kind=8),dimension(1:20)::xcentre_frame=0d0
      real(kind=8),dimension(1:20)::ycentre_frame=0d0
@@ -228,6 +230,7 @@ module amr_commons
      integer::idelay=6
      integer::ixion=6
      integer::ichem=6
+     integer::iturb=6
 
      ! Executable identification
      CHARACTER(LEN=80)::builddate,patchdir
@@ -272,11 +275,15 @@ module amr_commons
      integer(kind=4),allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
      integer(kind=4),allocatable,dimension(:)::ckey_max  ! Max. Cartesian key per level
+     integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the domain
+     integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the domain
      integer(kind=8),allocatable,dimension(:,:)::hkey_max ! Max. Hilbert key
      integer(kind=4),allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
      integer(kind=4),allocatable,dimension(:)::tail_cache ! Final index in the cache for each level
      integer(kind=4)::noct_used,noct_used_max,noct_used_tot ! Total used octs in local memory
-     
+     integer(kind=4)::nx,ny,nz                   ! Size of mesh at levelmin
+     real(kind=8),allocatable,dimension(:)::skip ! Coordinates of lower left corner of the box
+
      ! Persistent array for the AMR grid
 !     type(oct),dimension(:),allocatable::grid
      type(oct),dimension(:),pointer::grid

@@ -401,10 +401,10 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
               hash_nbor(3)=ckey_corner(3)+k1-1
 #endif
-              ! Periodic boundary conditons
+              ! Periodic boundary conditions
               do idim=1,ndim
-                 if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-                 if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+                 if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
               enddo
               
               ! Set pointers to null

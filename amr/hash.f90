@@ -252,7 +252,7 @@ contains
     type(C_PTR),dimension(1:nvector)                             :: hash_getp_vec
     logical, optional,dimension(1:nvector)       , intent(inout) :: absent
     integer                                                      :: n
-    ! Funxtion to obtain up to nvector values from the hash key at once.
+    ! Function to obtain up to nvector values from the hash key at once.
     ! This subroutine is only valid if the simple hash is used.
     integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
     integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys

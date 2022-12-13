@@ -225,7 +225,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   real(dp)::xleft,xright,yleft,yright,zleft,zright
   real(dp)::xxleft,xxright,yyleft,yyright
   real(dp)::delx,dely,delz
-  real(dp)::dx_frame,dy_frame,dx,dx_loc,dx_min
+  real(dp)::dx_frame,dy_frame,dx
   real(dp)::dx_cell,dy_cell,dz_cell,dvol
   logical::ok
   real(dp),dimension(1:ndim)::xx
@@ -293,10 +293,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   do ilevel=r%levelmin,nlevelmax_frame
      
      ! Mesh size at level ilevel in coarse cell units
-     dx=0.5D0**ilevel
-     
-     dx_loc=dx*r%boxlen
-     dx_min=0.5D0**r%nlevelmax*r%boxlen
+     dx=r%boxlen/2**ilevel
      
      ! Loop over grids by vector sweeps
      do igrid=m%head(ilevel),m%tail(ilevel)
@@ -307,7 +304,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
            ! Compute cell centre position in code units
            do idim=1,ndim
               nstride=2**(idim-1)
-              xx(idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5d0)*dx_loc
+              xx(idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5d0)*dx
            end do
            
            ! Check if cell is to be considered
@@ -317,41 +314,41 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
               ! Check if the cell intersect the domain
 #if NDIM>2                 
               if(r%proj_axis(ind_proj:ind_proj).eq.'x')then
-                 xleft =xx(2)-dx_loc/2.0d0
-                 xright=xx(2)+dx_loc/2.0d0
-                 yleft =xx(3)-dx_loc/2.0d0
-                 yright=xx(3)+dx_loc/2.0d0
+                 xleft =xx(2)-dx/2.0d0
+                 xright=xx(2)+dx/2.0d0
+                 yleft =xx(3)-dx/2.0d0
+                 yright=xx(3)+dx/2.0d0
               elseif(r%proj_axis(ind_proj:ind_proj).eq.'y')then
-                 xleft =xx(1)-dx_loc/2.0d0
-                 xright=xx(1)+dx_loc/2.0d0
-                 yleft =xx(3)-dx_loc/2.0d0
-                 yright=xx(3)+dx_loc/2.0d0
+                 xleft =xx(1)-dx/2.0d0
+                 xright=xx(1)+dx/2.0d0
+                 yleft =xx(3)-dx/2.0d0
+                 yright=xx(3)+dx/2.0d0
               else
-                 xleft =xx(1)-dx_loc/2.0d0
-                 xright=xx(1)+dx_loc/2.0d0
-                 yleft =xx(2)-dx_loc/2.0d0
-                 yright=xx(2)+dx_loc/2.0d0
+                 xleft =xx(1)-dx/2.0d0
+                 xright=xx(1)+dx/2.0d0
+                 yleft =xx(2)-dx/2.0d0
+                 yright=xx(2)+dx/2.0d0
               endif
               
               if(r%proj_axis(ind_proj:ind_proj).eq.'x')then
-                 zleft =xx(1)-dx_loc/2.
-                 zright=xx(1)+dx_loc/2.
+                 zleft =xx(1)-dx/2.
+                 zright=xx(1)+dx/2.
               elseif(r%proj_axis(ind_proj:ind_proj).eq.'y')then
-                 zleft =xx(2)-dx_loc/2.
-                 zright=xx(2)+dx_loc/2.
+                 zleft =xx(2)-dx/2.
+                 zright=xx(2)+dx/2.
               else
-                 zleft =xx(3)-dx_loc/2.
-                 zright=xx(3)+dx_loc/2.
+                 zleft =xx(3)-dx/2.
+                 zright=xx(3)+dx/2.
               endif
               if(    xright.lt.xleft_frame.or.xleft.ge.xright_frame.or.&
                    & yright.lt.yleft_frame.or.yleft.ge.yright_frame.or.&
                    & zright.lt.zleft_frame.or.zleft.ge.zright_frame)cycle
 #else
-              xleft =xx(1)-dx_loc/2.
-              xright=xx(1)+dx_loc/2.
+              xleft =xx(1)-dx/2.
+              xright=xx(1)+dx/2.
 #if NDIM>1
-              yleft =xx(2)-dx_loc/2.
-              yright=xx(2)+dx_loc/2.
+              yleft =xx(2)-dx/2.
+              yright=xx(2)+dx/2.
 #endif              
               if(    xright.lt.xleft_frame.or.xleft.ge.xright_frame.or.&
                    & yright.lt.yleft_frame.or.yleft.ge.yright_frame)cycle

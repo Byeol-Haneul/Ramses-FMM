@@ -65,7 +65,7 @@ end subroutine r_init_amr
 !###############################################
 subroutine init_amr(mdl,r,g,m)
   use mdl_module
-  use amr_parameters, ONLY: nhilbert
+  use amr_parameters, ONLY: nhilbert,ndim
   use amr_commons, ONLY: run_t, global_t, mesh_t
   use hash
   use hilbert
@@ -81,7 +81,12 @@ subroutine init_amr(mdl,r,g,m)
   integer(kind=8)::max_key
   character(len=5)::nchar
   character(len=80)::file_params
-  integer::ncpu_file,levelmin_file,nlevelmax_file
+  real(kind=8)::dx
+  integer::idim,ncpu_file,levelmin_file,nlevelmax_file
+  integer(kind=8)::ngrid_tot,ikey
+  integer(kind=4)::ngrid,nremain
+  integer(kind=8),dimension(1:nhilbert)::hk
+  integer(kind=8),dimension(1:ndim)::ix
 
   ! Initial time step for each level
   g%dtold=0.0D0
@@ -126,6 +131,9 @@ subroutine init_amr(mdl,r,g,m)
   allocate(m%hkey_max(1:nhilbert,1:r%nlevelmax+1))
   m%hkey_max=0
 
+  allocate(m%box_ckey_min(1:3,1:r%nlevelmax))
+  allocate(m%box_ckey_max(1:3,1:r%nlevelmax))
+
   allocate(m%domain(1:r%nlevelmax+1))
   do ilevel=1,r%nlevelmax+1
      m%domain(ilevel)%ncpu=0
@@ -139,11 +147,64 @@ subroutine init_amr(mdl,r,g,m)
      stop
   endif
 
-  ! Set bounds for Hilbert keys for coarse levels
+  ! Set max. Cartesian and Hilbert keys for coarse levels
   do ilevel=1,r%levelmin
      m%ckey_max(ilevel)=2**(ilevel-1)
-     max_key=int(m%ckey_max(ilevel),kind=8)**ndim
-     m%hkey_max(1,ilevel)=max_key
+     m%hkey_max(1,ilevel)=int(m%ckey_max(ilevel),kind=8)**ndim
+  end do
+
+  ! Set max. Cartesian and Hilbert keys for fine levels
+  do ilevel=r%levelmin+1,r%nlevelmax+1
+     m%ckey_max(ilevel) = 2**(ilevel-1)
+     m%hkey_max(1:nhilbert,ilevel) = refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel-2)
+  end do
+
+  ! Bounding box for domain boundaries
+  ! Examples are: boxmin=1,1,1 boxmax=-1,-1,-1
+  ! Default is:   boxmin=0,0,0 boxmax=0,0,0
+  ! This sets the min. and max. Cartesian keys of the box
+  do ilevel=r%levelmin,r%nlevelmax
+     do idim=1,ndim
+        if(r%boxmin(idim).GE.0)then
+           m%box_ckey_min(idim,ilevel)=r%boxmin(idim)*2**(ilevel-r%levelmin)
+        else
+           m%box_ckey_min(idim,ilevel)=(m%ckey_max(r%levelmin)+r%boxmin(idim))*2**(ilevel-r%levelmin)
+        endif
+        if(r%boxmax(idim).LE.0)then
+           m%box_ckey_max(idim,ilevel)=(m%ckey_max(r%levelmin)+r%boxmax(idim))*2**(ilevel-r%levelmin)-1
+        else
+           m%box_ckey_max(idim,ilevel)=r%boxmax(idim)*2**(ilevel-r%levelmin)-1
+        endif
+     end do
+  end do
+
+  ! Number of octs across the grid at levelmin
+  m%nx = 1; m%ny = 1; m%nz = 1
+  m%nx = m%box_ckey_max(1,r%levelmin)-m%box_ckey_min(1,r%levelmin)+1
+#if NDIM>1
+  m%ny = m%box_ckey_max(2,r%levelmin)-m%box_ckey_min(2,r%levelmin)+1
+#endif
+#if NDIM>2
+  m%nz = m%box_ckey_max(3,r%levelmin)-m%box_ckey_min(3,r%levelmin)+1
+#endif
+
+  ! Size of the box in code units in the x-direction
+  if(r%Lx>0)then
+     r%boxlen = r%Lx/dble(m%nx)*m%ckey_max(r%levelmin)
+  else
+     r%Lx = r%boxlen*dble(m%nx)/m%ckey_max(r%levelmin)
+  endif
+
+  ! Coordinates of lower left corner of the box
+  allocate(m%skip(1:ndim))
+  dx=r%boxlen/2**(r%levelmin-1)
+  do idim=1,ndim
+     m%skip(idim)=m%box_ckey_min(idim,r%levelmin)*dx
+  end do
+
+  ! Set bounds for Hilbert keys for coarse levels
+  do ilevel=1,r%levelmin-1
+     max_key = m%hkey_max(1,ilevel)
      do icpu=1,g%ncpu-1
         m%domain(ilevel)%b(1,icpu) = (icpu*max_key)/g%ncpu
      end do
@@ -151,11 +212,57 @@ subroutine init_amr(mdl,r,g,m)
      m%domain(ilevel)%b(1,g%ncpu) = max_key
   end do
 
+  ! Set bounds for Hilbert keys for levelmin
+  ngrid_tot=int(m%nx,kind=8)*int(m%ny,kind=8)*int(m%nz,kind=8)
+  if(ngrid_tot.EQ.m%hkey_max(1,r%levelmin))then
+     do icpu=1,g%ncpu-1
+        m%domain(r%levelmin)%b(1,icpu) = (icpu*max_key)/g%ncpu
+     end do
+     m%domain(r%levelmin)%b(1,0) = 0
+     m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
+  else
+     ngrid=ngrid_tot/g%ncpu
+     nremain=ngrid_tot-int(ngrid,kind=8)*g%ncpu
+     igrid=0
+     icpu=1
+     do ikey=1, m%hkey_max(1,r%levelmin)-1
+        hk(1)=ikey
+        ix=hilbert_reverse(hk,r%levelmin-1)
+        if(ix(1).ge.m%box_ckey_min(1,r%levelmin).and.ix(1).le.m%box_ckey_max(1,r%levelmin))then
+#if NDIM>1
+        if(ix(2).ge.m%box_ckey_min(2,r%levelmin).and.ix(2).le.m%box_ckey_max(2,r%levelmin))then
+#endif
+#if NDIM>2
+        if(ix(3).ge.m%box_ckey_min(3,r%levelmin).and.ix(3).le.m%box_ckey_max(3,r%levelmin))then
+#endif
+           igrid=igrid+1
+           if(icpu.LE.nremain)then
+              if(igrid.EQ.ngrid+1)then
+                 m%domain(r%levelmin)%b(1,icpu:g%ncpu) = hk(1)+1
+                 igrid=0
+                 icpu=icpu+1
+              endif
+           else
+              if(igrid.EQ.ngrid)then
+                 m%domain(r%levelmin)%b(1,icpu:g%ncpu) = hk(1)+1
+                 igrid=0
+                 icpu=icpu+1
+              endif
+           endif
+#if NDIM>2
+        endif
+#endif
+#if NDIM>1
+        endif
+#endif
+        endif
+     end do
+     m%domain(r%levelmin)%b(1,0) = 0
+     m%domain(r%levelmin)%b(1,g%ncpu) = m%hkey_max(1,r%levelmin)
+  endif
+
   ! Set bounds for Hilbert keys for fine levels
   do ilevel=r%levelmin+1,r%nlevelmax+1
-     m%ckey_max(ilevel) = 2**(ilevel-1)
-     m%hkey_max(1:nhilbert,ilevel) = refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel-2)
-     ! Multiply the bounds by twotondim
      do icpu=0,g%ncpu
         m%domain(ilevel)%b(1:nhilbert,icpu) = refine_key(m%domain(ilevel-1)%b(1:nhilbert,icpu),ilevel-2)
      end do

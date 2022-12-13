@@ -49,10 +49,10 @@ subroutine get_threetondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind
   ! Gather twotondim neighboring father grids
   do inbor=1,twotondim
      hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
-     ! Periodic boundary conditons
+     ! Periodic boundary conditions
      do idim=1,ndim
-        if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-        if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+        if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+        if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
      enddo
      hash_father(1:ndim)=hash_nbor(1:ndim)/2
      ! Store lower left neighbor coordinates 
@@ -77,10 +77,10 @@ subroutine get_threetondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind
 #if NDIM>2
            hash_nbor(3)=hash_key(3)+k1
 #endif
-           ! Periodic boundary conditons
+           ! Periodic boundary conditions
            do idim=1,ndim
-              if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-              if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+              if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
            enddo
            ! Compute neighboring cell index
            hash_father(1:ndim)=hash_nbor(1:ndim)/2
@@ -92,9 +92,9 @@ subroutine get_threetondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind
            ind_nbor(inbor)=ind
            ! Compute neighboring grid index
            ii(1:ndim)=hash_father(1:ndim)-hash_ref(1:ndim)
-           ! Periodic boundary conditons
+           ! Periodic boundary conditions
            do idim=1,ndim
-              if(ii(idim)<0)ii(idim)=ii(idim)+m%ckey_max(ilevel-1)
+              if(ii(idim)<m%box_ckey_min(idim,ilevel-1))ii(idim)=ii(idim)+m%box_ckey_max(idim,ilevel-1)
            enddo
            ind=1
            do idim=1,ndim
@@ -161,11 +161,10 @@ subroutine get_twondim_nbor_parent_cell_p(s,hash_key,hash_dict,grid_nbor,ind_nbo
   ! Deal with neighboring father cells
   do inbor=1,twondim
      hash_nbor(1:ndim)=hash_key(1:ndim)+shift(1:ndim,inbor)
-
-     ! Periodic boundary conditons
+     ! Periodic boundary conditions
      do idim=1,ndim
-        if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-        if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+        if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+        if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
      enddo
      hash_father(1:ndim)=hash_nbor(1:ndim)/2
      ii(1:ndim)=hash_nbor(1:ndim)-2*hash_father(1:ndim)

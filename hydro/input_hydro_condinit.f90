@@ -62,7 +62,7 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
         do idim=1,ndim
            nstride=2**(idim-1)
            do i=1,ngrid
-              xx(i,idim)=(2*m%grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx
+              xx(i,idim)=(2*m%grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
            end do
         end do
         ! Call initial condition routine

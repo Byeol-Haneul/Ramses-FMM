@@ -328,7 +328,7 @@ subroutine multipole_leaf_cells(r,g,m,ilevel)
            ! Cell coordinates
            do idim=1,ndim
               nstride=2**(idim-1)
-              xx(idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx_loc
+              xx(idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx_loc-m%skip(idim)
            end do
 #ifdef HYDRO
            ! Add gas mass
@@ -401,7 +401,7 @@ subroutine multipole_split_cells(s,ilevel)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::ind,idim,ivar,nstride,ioct,icell
+  integer::ind,idim,ivar,ioct,icell
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key
   logical::leaf_cell
@@ -687,8 +687,8 @@ subroutine cic_multipole(s,ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
-           if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
+           if(ig(idim)<m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)
+           if(id(idim)>m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
         enddo
 
         ! Compute cloud volumes
@@ -862,8 +862,8 @@ subroutine cic_part(s,ilevel)
      
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
-        if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
+        if(ig(idim)<m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)
+        if(id(idim)>m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
      enddo
 
      ! Compute cloud volumes

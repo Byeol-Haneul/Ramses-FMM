@@ -63,11 +63,11 @@ subroutine hydro_flag(s,ilevel)
         ! replace it by its father cell
         do i_nbor=1,twondim
            hash_nbor(0)=hash_key(0)
-           ! Periodic boundary conditons
+           ! Periodic boundary conditions
            do idim=1,ndim
               hash_nbor(idim)=hash_key(idim)+shift(idim,i_nbor)
-              if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel+1)-1
-              if(hash_nbor(idim)==m%ckey_max(ilevel+1))hash_nbor(idim)=0
+              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel+1)
+              if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_min(idim,ilevel+1)
            enddo
            call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(associated(gridp))then

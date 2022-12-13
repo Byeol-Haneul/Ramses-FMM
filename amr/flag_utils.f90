@@ -366,10 +366,10 @@ subroutine ensure_ref_rules(s,ilevel)
 #if NDIM>2
               hash_nbor(3)=m%grid(igrid)%ckey(3)+k1-1
 #endif
-              ! Periodic boundary conditons
+              ! Periodic boundary conditions
               do idim=1,ndim
-                 if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-                 if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+                 if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
               enddo
 
               ! Get neighboring grid index

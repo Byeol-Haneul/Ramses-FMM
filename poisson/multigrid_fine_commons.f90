@@ -443,13 +443,13 @@ subroutine build_mg(s,ifinelevel)
 #endif
 
         hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
-        ! Periodic boundary conditons
+        ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ifinelevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ifinelevel))hash_nbor(idim)=0
+           if(hash_nbor(idim)<m%box_ckey_min(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_max(idim,ifinelevel)
+           if(hash_nbor(idim)>m%box_ckey_max(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_min(idim,ifinelevel)
         enddo
         hash_father(1:ndim)=hash_nbor(1:ndim)/2
-        
+
         ! Access hash table
         call c_f_pointer(hash_getp(m%mg_dict,hash_father),father)
 
@@ -836,10 +836,10 @@ subroutine make_bc_rhs(s,ilevel,icount)
         ! Get neighboring grid
         hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
         
-        ! Periodic boundary conditons
+        ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
+           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
         enddo
 
         ! Get neighbouring grid using read-only cache

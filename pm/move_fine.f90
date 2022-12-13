@@ -117,8 +117,8 @@ subroutine kick_drift_part(s,ilevel,action_part)
      
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
-        if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
+        if(ig(idim)<m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)
+        if(id(idim)>m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
      enddo
      
      ! Compute cells Cartesian key
@@ -178,8 +178,8 @@ subroutine kick_drift_part(s,ilevel,action_part)
         
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel)-1
-           if(id(idim)==m%ckey_max(ilevel))id(idim)=0
+           if(ig(idim)<m%box_ckey_min(idim,ilevel))ig(idim)=m%box_ckey_max(idim,ilevel)
+           if(id(idim)>m%box_ckey_max(idim,ilevel))id(idim)=m%box_ckey_min(idim,ilevel)
         enddo
         
         ! Compute cells Cartesian key

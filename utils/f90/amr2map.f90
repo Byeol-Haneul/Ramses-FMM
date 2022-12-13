@@ -151,18 +151,18 @@ program amr2map
 
      ! Get cpu list within bounding box
 !     call cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
-     ncpu_read=1
+     ncpu_read=g%ncpu
      cpu_list(1)=1
      
      ! Loop over processor files
      do k=1,ncpu_read
-        icpu=cpu_list(k)
+        icpu=k !cpu_list(k)
         call title(icpu,ncharcpu)
 
         ! Prepare reading the AMR file
         file_amr=TRIM(repository)//'/amr.out'//TRIM(ncharcpu)
 
- !       write(*,*)'Reading '//TRIM(file_amr)
+        write(*,*)'Reading '//TRIM(file_amr)
 
         noct_skip=0
         open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')

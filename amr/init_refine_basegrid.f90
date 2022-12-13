@@ -35,7 +35,7 @@ subroutine m_init_refine_basegrid(pst)
   ! Compute total mass density from gas and particles on the base grid
   call m_rho_fine(pst,r%levelmin)
 #endif
-  
+
   end associate
 
 end subroutine m_init_refine_basegrid
@@ -246,20 +246,34 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
      ! Compute Cartesian index from Hilbert index
      hk(1)=ikey
      ix=hilbert_reverse(hk,ilevel-1)
-     ! Insert new grid in main array
-     igrid=igrid+1
-     if(igrid==istart)m%head(ilevel)=istart
-     m%tail(ilevel)=igrid
-     m%noct(ilevel)=m%noct(ilevel)+1
-     m%noct_used=m%noct_used+1
-     m%grid(igrid)%lev=ilevel
-     m%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
-     m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
-     m%grid(igrid)%refined(1:twotondim)=.false.
-     ! Insert new grid in hash table
-     hash_key(0)=ilevel
-     hash_key(1:ndim)=ix(1:ndim)
-     call hash_setp(m%grid_dict,hash_key,m%grid(igrid))
+     if(ix(1).ge.m%box_ckey_min(1,ilevel).and.ix(1).le.m%box_ckey_max(1,ilevel))then
+#if NDIM>1
+     if(ix(2).ge.m%box_ckey_min(2,ilevel).and.ix(2).le.m%box_ckey_max(2,ilevel))then
+#endif
+#if NDIM>2
+     if(ix(3).ge.m%box_ckey_min(3,ilevel).and.ix(3).le.m%box_ckey_max(3,ilevel))then
+#endif
+        ! Insert new grid in main array
+        igrid=igrid+1
+        if(igrid==istart)m%head(ilevel)=istart
+        m%tail(ilevel)=igrid
+        m%noct(ilevel)=m%noct(ilevel)+1
+        m%noct_used=m%noct_used+1
+        m%grid(igrid)%lev=ilevel
+        m%grid(igrid)%ckey(1:ndim)=int(ix(1:ndim),kind=4)
+        m%grid(igrid)%hkey(1:nhilbert)=hk(1:nhilbert)
+        m%grid(igrid)%refined(1:twotondim)=.false.
+        ! Insert new grid in hash table
+        hash_key(0)=ilevel
+        hash_key(1:ndim)=ix(1:ndim)
+        call hash_setp(m%grid_dict,hash_key,m%grid(igrid))
+     endif
+#if NDIM>1
+     endif
+#endif
+#if NDIM>2
+     endif
+#endif
   end do
 
   !-----------

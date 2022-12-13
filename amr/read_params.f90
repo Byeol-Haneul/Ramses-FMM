@@ -50,7 +50,10 @@ subroutine m_read_params(pst)
   integer::nlevelmax=1        ! Maximum number of level
   integer::ngridmax=0         ! Maximum number of grids
   integer::ncachemax=10000    ! Maximum number of cache lines
-  real(dp)::boxlen=1.0D0      ! Box length along x direction
+  real(dp)::boxlen=1.0D0      ! Cell sixe at level 0
+  real(dp)::Lx=0.0D0          ! Box length in actove domain along x direction
+  integer,dimension(1:3)::boxmin=0 ! Min. Cartesian key for the box at levelmin
+  integer,dimension(1:3)::boxmax=0 ! Max. Cartesian key for the box at levelmin
 
   ! Step parameters
   integer::nrestart=0         ! New run or backup file number
@@ -77,8 +80,8 @@ subroutine m_read_params(pst)
   real(kind=8)::tendmov=0.,aendmov=0.
   logical::movie=.false.
   logical::zoom_only=.false.
-  integer::nw_frame=512 ! prev: nx_frame, width of frame in pixels
-  integer::nh_frame=512 ! prev: ny_frame, height of frame in pixels
+  integer::nw_frame=512 ! width of frame in pixels
+  integer::nh_frame=512 ! height of frame in pixels
   integer::levelmax_frame=0
   integer::ivar_frame=1
   real(kind=8),dimension(1:20)::xcentre_frame=0d0
@@ -211,7 +214,7 @@ subroutine m_read_params(pst)
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
-       & ,npartmax,nparttot,nexpand,boxlen
+       & ,npartmax,nparttot,nexpand,boxlen,Lx,boxmin,boxmax
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
        & ,cg_levelmin,cic_levelmax,fast_solver
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
@@ -506,6 +509,9 @@ subroutine m_read_params(pst)
   s%r%npartmax=npartmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
+  s%r%Lx=Lx
+  s%r%boxmin=boxmin
+  s%r%boxmax=boxmax
 
   s%r%epsilon=epsilon
   s%r%gravity_type=gravity_type
