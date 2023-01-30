@@ -14,6 +14,7 @@ module amr_parameters
   integer,parameter::MAXOUT=1000
   integer,parameter::MAXLEVEL=65
   integer,parameter::MAXREGION=100
+  integer,parameter::MAXBOUND=100
   
   ! Define integer types (for particle IDs only)
   integer,parameter::i4b=4

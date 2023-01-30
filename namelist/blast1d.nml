@@ -8,7 +8,7 @@ nsubcycle=10*1
 /
 
 &AMR_PARAMS
-levelmin=3
+levelmin=5
 levelmax=11
 ngridmax=2000
 nexpand=1
@@ -28,19 +28,20 @@ bound_xmax=1,0
 /
 
 &INIT_PARAMS
-nregion=2
+nregion=3
 region_type(1)='square'
-region_type(2)='point'
-x_center=0.5,0.0
-length_x=1.0,1.0
-d_region=1.0,0.0
-u_region=0.0,0.0
-p_region=1e-5,0.4
+region_type(2)='square'
+region_type(3)='square'
+x_center=0.05,0.5,0.95
+length_x= 0.1,0.8,0.1
+d_region= 1.0,1.0,1.0
+u_region= 0.0,0.0,0.0
+p_region=1.e3,0.01,1.e2
 /
 
 &OUTPUT_PARAMS
-noutput=5
-tout=0.0125,0.025,0.05,0.1,0.2
+noutput=8
+tout=0.006,0.016,0.026,0.028,0.030,0.032,0.034,0.038
 /
 
 &HYDRO_PARAMS
@@ -51,7 +52,9 @@ riemann='hllc'
 /
 
 &REFINE_PARAMS 
-err_grad_p=0.1
+err_grad_d=0.01
+err_grad_u=0.01
+err_grad_p=0.01
 interpol_var=0
 interpol_type=2
 /

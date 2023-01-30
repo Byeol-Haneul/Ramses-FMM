@@ -57,5 +57,6 @@ module cache_commons
   type(cache_f)       ::pack_flush
   type(cache_unpack_f)::unpack_flush
   type(cache_init_f)  ::init_flush
+  type(cache_bound_f) ::init_bound
   
 end module cache_commons

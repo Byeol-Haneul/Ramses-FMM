@@ -2,7 +2,6 @@
 !################################################################
 !################################################################
 !################################################################
-
 module flag_utils
 
 contains
@@ -136,7 +135,7 @@ subroutine init_flag(s,ilevel,nflag)
   hash_key(0)=ilevel+1
   do ichild=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
-     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
      ok=.false.
      ! Loop over cells
      do ind=1,twotondim
@@ -358,22 +357,24 @@ subroutine ensure_ref_rules(s,ilevel)
 
               ! Compute neighboring grid Cartesian index
 #if NDIM>0
-              hash_nbor(1)=m%grid(igrid)%ckey(1)+i1-1
+              hash_nbor(1)=m%grid(igrid)%ckey(1)+i1-3*(i1/2)
 #endif
 #if NDIM>1
-              hash_nbor(2)=m%grid(igrid)%ckey(2)+j1-1
+              hash_nbor(2)=m%grid(igrid)%ckey(2)+j1-3*(j1/2)
 #endif
 #if NDIM>2
-              hash_nbor(3)=m%grid(igrid)%ckey(3)+k1-1
+              hash_nbor(3)=m%grid(igrid)%ckey(3)+k1-3*(k1/2)
 #endif
               ! Periodic boundary conditions
               do idim=1,ndim
-                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-                 if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+                 if(r%periodic(idim))then
+                    if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+                    if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+                 endif
               enddo
 
               ! Get neighboring grid index
-              call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+              call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
               ok=ok.and.(associated(gridp))
 
            end do

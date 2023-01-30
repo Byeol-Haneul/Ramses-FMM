@@ -45,8 +45,10 @@ module amr_commons
      integer::npartmax=0         ! Maximum number of particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(dp)::boxlen=1.0D0      ! Cell size at level 0 (total box size)
-     real(dp)::Lx=0.0D0          ! Box length of active domain along x direction
-     integer,dimension(1:3)::boxmin,boxmax ! Min and max Cartesian keys at levelmin
+     real(dp)::box_size=0.0D0    ! Box length of active domain along x direction
+     integer::box_xmin,box_xmax  ! Min and max Cartesian keys at levelmin
+     integer::box_ymin,box_ymax  ! Min and max Cartesian keys at levelmin
+     integer::box_zmin,box_zmax  ! Min and max Cartesian keys at levelmin
           
      ! Poisson solver parameters
      real(dp)::epsilon=1.0D-4     ! Convergence criterion for Poisson solvers
@@ -165,6 +167,31 @@ module amr_commons
      character(LEN=20)::filetype='ascii'
      logical::multiple=.false.
      character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
+
+     ! Boundary conditions parameters
+     logical,dimension(1:NDIM)::periodic=.true.
+     integer::nbound=0
+     logical::no_inflow=.false.
+     integer,dimension(1:MAXBOUND)::bound_type=0
+     integer,dimension(1:MAXBOUND)::bound_dir=0
+     integer,dimension(1:MAXBOUND)::bound_shift=0
+     integer,dimension(1:MAXBOUND)::bound_xmin=0
+     integer,dimension(1:MAXBOUND)::bound_xmax=0
+     integer,dimension(1:MAXBOUND)::bound_ymin=0
+     integer,dimension(1:MAXBOUND)::bound_ymax=0
+     integer,dimension(1:MAXBOUND)::bound_zmin=0
+     integer,dimension(1:MAXBOUND)::bound_zmax=0
+     real(dp),dimension(1:MAXBOUND)::d_bound=0
+     real(dp),dimension(1:MAXBOUND)::p_bound=0
+     real(dp),dimension(1:MAXBOUND)::u_bound=0
+     real(dp),dimension(1:MAXBOUND)::v_bound=0
+     real(dp),dimension(1:MAXBOUND)::w_bound=0
+#if NENER>0
+     real(dp),dimension(1:MAXBOUND,1:NENER)::prad_bound=0
+#endif
+#if NVAR>NDIM+2+NENER
+     real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0
+#endif
      
   end type run_t
   

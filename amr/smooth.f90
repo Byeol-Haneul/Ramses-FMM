@@ -39,6 +39,7 @@ subroutine smooth_fine(s,ilevel,nflag)
   use cache_commons
   use cache
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
+  use boundaries, only: init_bound_flag
   use amr_commons, only: nbor
   use nbors_utils_p
   implicit none
@@ -96,7 +97,9 @@ subroutine smooth_fine(s,ilevel,nflag)
 
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-                pack=pack_fetch_flag,unpack=unpack_fetch_flag)
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
+                bound=init_bound_flag)
+
      ! Count neighbors and set flag2 accordingly
      do igrid=m%head(ilevel),m%tail(ilevel)
 
@@ -107,10 +110,12 @@ subroutine smooth_fine(s,ilevel,nflag)
            hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
            ! Periodic boundary conditions
            do idim=1,ndim
-              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-              if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+              if(r%periodic(idim))then
+                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+                 if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+              endif
            enddo
-           call get_grid_p(s,hash_nbor,m%grid_dict,gridn(i_nbor)%p,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_grid(s,hash_nbor,m%grid_dict,gridn(i_nbor)%p,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         end do
 
         ! Count neighbors and set flag2 accordingly        
@@ -130,7 +135,7 @@ subroutine smooth_fine(s,ilevel,nflag)
         end do
 
         do i_nbor=1,twondim
-           call unlock_cache_p(s,gridn(i_nbor)%p)
+           call unlock_cache(s,gridn(i_nbor)%p)
         end do
 
      end do

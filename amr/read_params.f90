@@ -26,6 +26,22 @@ subroutine m_read_params(pst)
   !--------------------------------------------------
   ! Namelist variables
   !--------------------------------------------------
+
+  ! Run control
+  logical::cosmo   =.false.   ! Cosmology activated
+  logical::pic     =.false.   ! Particle In Cell activated
+  logical::poisson =.false.   ! Poisson solver activated
+  logical::hydro   =.false.   ! Hydro activated
+  logical::verbose =.false.   ! Write everything
+  logical::debug   =.false.   ! Debug mode activated
+  logical::static  =.false.   ! Static mode activated
+
+  ! Step parameters
+  integer::nrestart=0         ! New run or backup file number
+  integer::nstepmax=1000000   ! Maximum number of time steps
+  integer::ncontrol=1         ! Write control variables
+  integer::nremap=0           ! Load balancing frequency (0: never)
+
   ! Maximum number of allocatable particles
   integer::npartmax=0 
 
@@ -35,15 +51,6 @@ subroutine m_read_params(pst)
   ! MPI domain overloading
   integer::overload=1
 
-  ! Run control
-  logical::verbose =.false.   ! Write everything
-  logical::hydro   =.false.   ! Hydro activated
-  logical::pic     =.false.   ! Particle In Cell activated
-  logical::poisson =.false.   ! Poisson solver activated
-  logical::cosmo   =.false.   ! Cosmology activated
-  logical::debug   =.false.   ! Debug mode activated
-  logical::static  =.false.   ! Static mode activated
-
   ! Mesh parameters
   integer::geom=1             ! 1: cartesian, 2: cylindrical, 3: spherical
   integer::levelmin=1         ! Full refinement up to levelmin
@@ -51,15 +58,13 @@ subroutine m_read_params(pst)
   integer::ngridmax=0         ! Maximum number of grids
   integer::ncachemax=10000    ! Maximum number of cache lines
   real(dp)::boxlen=1.0D0      ! Cell sixe at level 0
-  real(dp)::Lx=0.0D0          ! Box length in active domain along x direction
-  integer,dimension(1:3)::boxmin=0 ! Min. Cartesian key for the box at levelmin
-  integer,dimension(1:3)::boxmax=0 ! Max. Cartesian key for the box at levelmin
-
-  ! Step parameters
-  integer::nrestart=0         ! New run or backup file number
-  integer::nstepmax=1000000   ! Maximum number of time steps
-  integer::ncontrol=1         ! Write control variables
-  integer::nremap=0           ! Load balancing frequency (0: never)
+  real(dp)::box_size=0.0D0    ! Box length in active domain along x direction
+  integer::box_xmin=0         ! Min. Cartesian key for the box at levelmin in x direction
+  integer::box_xmax=0         ! Max. Cartesian key for the box at levelmin in x direction
+  integer::box_ymin=0         ! Min. Cartesian key for the box at levelmin in y direction
+  integer::box_ymax=0         ! Max. Cartesian key for the box at levelmin in y direction
+  integer::box_zmin=0         ! Min. Cartesian key for the box at levelmin in z direction
+  integer::box_zmax=0         ! Max. Cartesian key for the box at levelmin in z direction
 
   ! Output parameters
   integer::noutput=1          ! Total number of outputs
@@ -70,9 +75,6 @@ subroutine m_read_params(pst)
   ! Output times
   real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
   real(dp),dimension(1:MAXOUT)::tout=0.0       ! Output times
-
-  ! Physics parameters
-  logical ::pressure_fix=.false.
 
   ! Movie
   integer::imovout=0             ! Increment for output times
@@ -173,6 +175,7 @@ subroutine m_read_params(pst)
   real(dp)::smallr=1.d-10
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
+  logical ::pressure_fix=.false.
 
   ! Other hydro solver parameters
   real(dp)::T2_star=10.
@@ -185,25 +188,40 @@ subroutine m_read_params(pst)
   integer ::interpol_var=0
   integer ::interpol_type=1
 
-  ! Convergence criterion for Poisson solvers
-  real(dp)::epsilon=1.0D-4
-
-  ! Type of force computation
-  integer ::gravity_type=0
-
-  ! Gravity parameters
-  real(dp),dimension(1:10)::gravity_params=0.0
-
-  ! Maximum level for CIC dark matter interpolation
-  integer :: cic_levelmax=0
-
-  ! Min level for CG solver
+  ! Poisson solver parameters
+  real(dp)::epsilon=1.0D-4 ! Convergence criterion
+  integer ::gravity_type=0 ! Type of gravity calculations (see user guide)
+  real(dp),dimension(1:10)::gravity_params=0.0 ! Constant gravity parameters
+  integer :: cic_levelmax=0 ! Maximum level for CIC dark matter interpolation
+  integer :: cg_levelmin=999   ! Min level for CG solver
   ! level < cg_levelmin uses fine multigrid
   ! level >=cg_levelmin uses conjugate gradient
-  integer :: cg_levelmin=999
+  logical :: fast_solver = .false.   ! Fast solver with MPI pre-fetch (memory intensive)
 
-  ! Fast solver with MPI pre-fetch (memory intensive)
-  logical :: fast_solver = .false.
+  ! Boundary conditions parameters
+  integer::nbound=0
+  logical::no_inflow=.false.
+  logical,dimension(1:NDIM)::periodic=.true.
+  integer,dimension(1:MAXBOUND)::bound_type=0
+  integer,dimension(1:MAXBOUND)::bound_dir=0
+  integer,dimension(1:MAXBOUND)::bound_shift=0
+  integer,dimension(1:MAXBOUND)::bound_xmin=0
+  integer,dimension(1:MAXBOUND)::bound_xmax=0
+  integer,dimension(1:MAXBOUND)::bound_ymin=0
+  integer,dimension(1:MAXBOUND)::bound_ymax=0
+  integer,dimension(1:MAXBOUND)::bound_zmin=0
+  integer,dimension(1:MAXBOUND)::bound_zmax=0
+  real(dp),dimension(1:MAXBOUND)::d_bound=0
+  real(dp),dimension(1:MAXBOUND)::p_bound=0
+  real(dp),dimension(1:MAXBOUND)::u_bound=0
+  real(dp),dimension(1:MAXBOUND)::v_bound=0
+  real(dp),dimension(1:MAXBOUND)::w_bound=0
+#if NENER>0
+  real(dp),dimension(1:MAXBOUND,1:NENER)::prad_bound=0
+#endif
+#if NVAR>NDIM+2+NENER
+  real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0
+#endif
 
   !--------------------------------------------------
   ! Namelist definitions
@@ -214,7 +232,8 @@ subroutine m_read_params(pst)
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
-       & ,npartmax,nparttot,nexpand,boxlen,Lx,boxmin,boxmax
+       & ,npartmax,nparttot,nexpand,boxlen,box_size &
+       & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
        & ,cg_levelmin,cic_levelmax,fast_solver
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
@@ -247,9 +266,18 @@ subroutine m_read_params(pst)
        & ,interpol_var,interpol_type
   namelist/physics_params/cooling,units_density,units_time,units_length &
        & ,T2_star,g_star,n_star,isothermal
+  namelist/boundary_params/periodic,nbound,bound_type,bound_dir,bound_shift &
+       & ,bound_xmin,bound_xmax,bound_ymin,bound_ymax,bound_zmin,bound_zmax &
+#if NENER>0
+       & ,prad_bound &
+#endif
+#if NVAR>NDIM+2+NENER
+       & ,var_bound &
+#endif
+       & ,d_bound,u_bound,v_bound,w_bound,p_bound
 
   associate(s=>pst%s)
-  
+
   !--------------------------------------------------
   ! Advertise RAMSES
   !--------------------------------------------------
@@ -414,8 +442,11 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=physics_params,END=105)
 105 continue
+  rewind(1)
+  read(1,NML=boundary_params,END=106)
+106 continue
   close(1)
-  
+
   !-----------------
   ! Max size checks
   !-----------------
@@ -427,7 +458,7 @@ subroutine m_read_params(pst)
      write(*,*) 'Error: nregion>MAXREGION'
      call mdl_abort(s%mdl)
   end if
-  
+
   !-----------------------------------
   ! Rearrange level dependent arrays
   !-----------------------------------
@@ -509,9 +540,13 @@ subroutine m_read_params(pst)
   s%r%npartmax=npartmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
-  s%r%Lx=Lx
-  s%r%boxmin=boxmin
-  s%r%boxmax=boxmax
+  s%r%box_size=box_size
+  s%r%box_xmin=box_xmin
+  s%r%box_xmax=box_xmax
+  s%r%box_ymin=box_ymin
+  s%r%box_ymax=box_ymax
+  s%r%box_zmin=box_zmin
+  s%r%box_zmax=box_zmax
 
   s%r%epsilon=epsilon
   s%r%gravity_type=gravity_type
@@ -596,6 +631,7 @@ subroutine m_read_params(pst)
   s%r%filetype=filetype
   s%r%initfile=initfile
   s%r%multiple=multiple
+
   s%r%nregion=nregion
   s%r%region_type=region_type
   s%r%x_center=x_center
@@ -615,6 +651,30 @@ subroutine m_read_params(pst)
 #endif
 #if NVAR>NDIM+2+NENER
   s%r%var_region=var_region
+#endif
+
+  s%r%periodic=periodic
+  s%r%nbound=nbound
+  s%r%no_inflow=no_inflow
+  s%r%bound_dir=bound_dir
+  s%r%bound_type=bound_type
+  s%r%bound_shift=bound_shift
+  s%r%bound_xmin=bound_xmin
+  s%r%bound_xmax=bound_xmax
+  s%r%bound_ymin=bound_ymin
+  s%r%bound_ymax=bound_ymax
+  s%r%bound_zmin=bound_zmin
+  s%r%bound_zmax=bound_zmax
+  s%r%d_bound=d_bound
+  s%r%u_bound=u_bound
+  s%r%v_bound=v_bound
+  s%r%w_bound=w_bound
+  s%r%p_bound=p_bound
+#if NENER>0
+  s%r%prad_bound=prad_bound
+#endif
+#if NVAR>NDIM+2+NENER
+  s%r%var_bound=var_bound
 #endif
 
   ! Broadcast parameters to all CPUs.

@@ -200,7 +200,7 @@ recursive subroutine r_init_refine_basegrid(pst,ilevel,input_size)
      call r_init_refine_basegrid(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_refine_basegrid(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call init_refine_basegrid(pst%s,ilevel)
   endif
 
 end subroutine r_init_refine_basegrid
@@ -208,15 +208,14 @@ end subroutine r_init_refine_basegrid
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_basegrid(r,g,m,ilevel)
+subroutine init_refine_basegrid(s,ilevel)
+  use mdl_module, only: mdl_abort
   use amr_parameters, only: nhilbert,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use hilbert
   use hash, only: hash_setp
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel
   !-------------------------------------------------------
   ! This routine builds a fully refined Cartesian grid
@@ -227,9 +226,11 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
+  integer(kind=8),dimension(1:nhilbert,1:s%r%nlevelmax)::key_ref
   integer(kind=8),dimension(1:nhilbert)::coarse_key
-  integer,dimension(1:r%nlevelmax)::n_same,npatch
+  integer,dimension(1:s%r%nlevelmax)::n_same,npatch
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Compute starting grid index at that level
   if(ilevel.EQ.r%levelmin)then
@@ -246,15 +247,20 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
      ! Compute Cartesian index from Hilbert index
      hk(1)=ikey
      ix=hilbert_reverse(hk,ilevel-1)
-     if(ix(1).ge.m%box_ckey_min(1,ilevel).and.ix(1).le.m%box_ckey_max(1,ilevel))then
+     if(ix(1).ge.m%box_ckey_min(1,ilevel).and.ix(1).lt.m%box_ckey_max(1,ilevel))then
 #if NDIM>1
-     if(ix(2).ge.m%box_ckey_min(2,ilevel).and.ix(2).le.m%box_ckey_max(2,ilevel))then
+     if(ix(2).ge.m%box_ckey_min(2,ilevel).and.ix(2).lt.m%box_ckey_max(2,ilevel))then
 #endif
 #if NDIM>2
-     if(ix(3).ge.m%box_ckey_min(3,ilevel).and.ix(3).le.m%box_ckey_max(3,ilevel))then
+     if(ix(3).ge.m%box_ckey_min(3,ilevel).and.ix(3).lt.m%box_ckey_max(3,ilevel))then
 #endif
         ! Insert new grid in main array
         igrid=igrid+1
+        if(igrid.GT.r%ngridmax)then
+           write(*,*)'No more free memory'
+           write(*,*)'Increase ngridmax'
+           call mdl_abort(mdl)
+        end if
         if(igrid==istart)m%head(ilevel)=istart
         m%tail(ilevel)=igrid
         m%noct(ilevel)=m%noct(ilevel)+1
@@ -303,6 +309,8 @@ subroutine init_refine_basegrid(r,g,m,ilevel)
      end do
   end do
   
+  end associate
+
 end subroutine init_refine_basegrid
 !################################################################
 !################################################################

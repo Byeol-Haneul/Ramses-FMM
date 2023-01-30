@@ -334,7 +334,7 @@ module mdl_module
     !##############################################################
     !##############################################################
     !##############################################################
-    subroutine mdl_mkdir_p(mdl,filedir)
+    subroutine mdl_mkdir(mdl,filedir)
       use amr_parameters, only: flen
       type(mdl_t)::mdl
       character(len=*), intent(in) :: filedir
@@ -345,7 +345,7 @@ module mdl_module
 #else
       call system(filecmd)
 #endif
-    end subroutine mdl_mkdir_p
+    end subroutine mdl_mkdir
     !##############################################################
     !##############################################################
     !##############################################################

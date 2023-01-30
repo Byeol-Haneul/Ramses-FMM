@@ -210,7 +210,7 @@ recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_arr
      nskip_file=input_array(ncpu_file+5:2*ncpu_file+4)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
      bound_key=0
-     call init_refine_restart(pst%s%r,pst%s%g,pst%s%m,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key)
+     call init_refine_restart(pst%s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key)
      output_array=transfer(reshape(bound_key,[nhilbert*(pst%s%g%ncpu+1)]),output_array)
      deallocate(bound_key)
      deallocate(noct_file,nskip_file)
@@ -221,24 +221,23 @@ end subroutine r_init_refine_restart
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key_target)
+subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key_target)
   !--------------------------------------------------------------
   ! This routine builds from a RAMSES restart file
   ! the initial AMR grid.
   !--------------------------------------------------------------
+  use mdl_module, only: mdl_abort
   use amr_parameters, only: dp,nhilbert,ndim,twotondim,nvector
   use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t
   use hash
   use hilbert
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
+  type(ramses_t)::s
   integer::ilevel,ncpu_file
   integer::levelmin_file,nlevelmax_file
   integer,dimension(1:ncpu_file)::noct_file,nskip_file
-  integer(kind=8),dimension(1:nhilbert,0:g%ncpu)::bound_key_target
+  integer(kind=8),dimension(1:nhilbert,0:s%g%ncpu)::bound_key_target
 
   ! Local variables
   integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,ilun
@@ -252,9 +251,9 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:nhilbert,1:r%nlevelmax)::key_ref
+  integer(kind=8),dimension(1:nhilbert,1:s%r%nlevelmax)::key_ref
   integer(kind=8),dimension(1:nhilbert)::coarse_key,one_key
-  integer,dimension(1:r%nlevelmax)::n_same,npatch
+  integer,dimension(1:s%r%nlevelmax)::n_same,npatch
   integer(kind=8)::ipos
 
   integer,dimension(1:ndim)::ckey
@@ -262,6 +261,8 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
   real(dp),dimension(1:twotondim,1:nvar)::uold
   real(dp),dimension(1:twotondim,1:3)::f
   real(dp),dimension(1:twotondim)::phi,rho
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   ! Set some constants
   one_key=0
@@ -389,6 +390,11 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
         
         ! Create new oct in memory
         igrid=igrid+1
+        if(igrid.GT.r%ngridmax)then
+           write(*,*)'No more free memory'
+           write(*,*)'Increase ngridmax'
+           call mdl_abort(mdl)
+        end if
         if(igrid==igrid_start)m%head(ilevel)=igrid
         m%tail(ilevel)=igrid
         m%noct(ilevel)=m%noct(ilevel)+1
@@ -462,6 +468,8 @@ subroutine init_refine_restart(r,g,m,ilevel,ncpu_file,levelmin_file,nlevelmax_fi
         endif
      end do
   end do
+
+  end associate
 
 end subroutine init_refine_restart
 !################################################################

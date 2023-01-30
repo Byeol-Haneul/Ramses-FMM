@@ -194,8 +194,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
      ! Add gravity source terms to uold with half time step
      ! to complete the time step with old force (will be removed later)
+     if(r%poisson)then
                                     call m_timer(pst,'poisson - synchro','start')
-     if(r%poisson)call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+        call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+     endif
 
      ! Restriction operator
                                     call m_timer(pst,'hydro - upload','start')
@@ -205,14 +207,18 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------------
   ! Compute cooling/heating
   !----------------------------
+  if(r%cooling)then
                                     call m_timer(pst,'cooling','start')
-  if(r%cooling)call r_cooling_fine(pst,ilevel,1)
+     call r_cooling_fine(pst,ilevel,1)
+  endif
 
   !-------------------------------------------
   ! Perform first kick and drift for particles
   !-------------------------------------------
+  if(r%pic)then
                                     call m_timer(pst,'particle - kickdrift','start')
-  if(r%pic)call m_kick_drift_part(pst,ilevel,action_kick_drift)
+     call m_kick_drift_part(pst,ilevel,action_kick_drift)
+  endif
 
   !-----------------------
   ! Compute refinement map

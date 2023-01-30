@@ -189,7 +189,6 @@ subroutine check_mail(s,comm_id,hash_dict)
                     m%ifree=m%ifree+1
                     if(m%ifree.GT.r%ngridmax)then
                        write(*,*)'No more free memory'
-                       write(*,*)'while refining...'
                        write(*,*)'Increase ngridmax'
                        call mdl_abort(mdl)
                     endif
@@ -268,8 +267,6 @@ subroutine destage(s,igrid,hash_dict)
   integer(kind=8),dimension(0:ndim)::hash_key
   type(msg_large_realdp)::dummy_large_realdp
 
-#ifndef WITHOUTMPI
-
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   hash_key(0)=m%grid(igrid)%lev
@@ -281,6 +278,8 @@ subroutine destage(s,igrid,hash_dict)
   endif
 
   call hash_free(hash_dict,hash_key)
+
+#ifndef WITHOUTMPI
 
   ! Check if the destage requires a flush
   icache=igrid-r%ngridmax
@@ -336,10 +335,10 @@ subroutine destage(s,igrid,hash_dict)
      call pack_flush%proc(m%grid(igrid),mdl%size_msg_array,mdl%send_flush(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
 
   endif
+#endif
 
   end associate
 
-#endif
 #endif
 end subroutine destage
 !##############################################################

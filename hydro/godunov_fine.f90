@@ -33,6 +33,7 @@ subroutine godunov_fine(s,ilevel)
   use cache_commons
   use cache
   use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use boundaries, only: init_bound_refine
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -50,7 +51,8 @@ subroutine godunov_fine(s,ilevel)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
                 pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                init=init_flush_godunov, flush=pack_flush_godunov, combine=unpack_flush_godunov)
+                init=init_flush_godunov, flush=pack_flush_godunov,&
+                combine=unpack_flush_godunov, bound=init_bound_refine)
 
   ! Loop over active grids by vector sweeps
   igrid=m%head(ilevel)
@@ -268,7 +270,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ! coarser level if necessary.
   !-------------------------------------------------------------------
   integer::ivar,idim,ind_son,ind_oct
-  integer::igrid,icell,inbor
+  integer::igrid,icell,inbor,ipass
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -321,19 +323,55 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ckey_corner(1:ndim)=(m%grid(ind_grid)%ckey(1:ndim)/(i1max-1))*(i1max-1)
   ind_oct=ind_grid
 
-  ! Loop over 3x3x3 neighboring father cells
-  do k1=k1min,k1max
+  ! Loop over 3x3x3 neighboring father cells using 27 passes
+  do ipass = 1, threetondim
+
+  if(ipass == 1)then
+     ii1min = i1min+1; ii1max = i1max-1
+     jj1min = j1min; jj1max = j1max
+#if NDIM>1
+     jj1min = jj1min+1; jj1max = jj1max-1
+#endif
+     kk1min = k1min; kk1max = k1max;
+#if NDIM>2
+     kk1min = kk1min+1; kk1max = kk1max-1
+#endif
+  endif
+  if(MOD(ipass,3) == 2)then ! ipass = 2, 5, 8, 11, 14, 17, 20, 23, 26
+     ii1min = i1min; ii1max = i1min
+  endif
+  if(MOD(ipass,3) == 0)then ! ipass = 3, 6, 9, 12, 15, 18, 21, 24, 27
+     ii1min = i1max; ii1max = i1max
+  endif
+  if(MOD(ipass,9) == 4)then ! ipass = 4, 13, 22
+     ii1min = i1min+1; ii1max = i1max-1
+     jj1min = j1min; jj1max = j1min
+  endif
+  if(MOD(ipass,9) == 7)then ! ipass = 7, 16, 25
+     ii1min = i1min+1; ii1max = i1max-1
+     jj1min = j1max; jj1max = j1max
+  endif
+  if(ipass == 10)then
+     ii1min = i1min+1; ii1max = i1max-1
+     jj1min = j1min+1; jj1max = j1max-1
+     kk1min = k1min; kk1max = k1min
+  endif
+  if(ipass == 19)then
+     ii1min = i1min+1; ii1max = i1max-1
+     jj1min = j1min+1; jj1max = j1max-1
+     kk1min = k1max; kk1max = k1max
+  endif
+
+  do k1=kk1min,kk1max
 #if NDIM>2
      okz=(k1>k1min.and.k1<k1max)
 #endif
-     do j1=j1min,j1max
+     do j1=jj1min,jj1max
 #if NDIM>1
         oky=(j1>j1min.and.j1<j1max)
 #endif
-        do i1=i1min,i1max     
-#if NDIM>0
+        do i1=ii1min,ii1max
            okx=(i1>i1min.and.i1<i1max)
-#endif
            ! For inner octs only
            if(okx.and.oky.and.okz)then
 
@@ -342,9 +380,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 
               ! Store grid index
               ii1=1; jj1=1; kk1=1
-#if NDIM>0
               ii1=ckey(1)+1
-#endif
 #if NDIM>1
               jj1=ckey(2)+1
 #endif
@@ -361,9 +397,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     do i2=i2min,i2max
                        ind_son=1+i2+2*j2+4*k2
                        i3=1; j3=1; k3=1
-#if NDIM>0
                        i3=1+2*(ii1-1)+i2
-#endif
 #if NDIM>1
                        j3=1+2*(jj1-1)+j2
 #endif
@@ -392,9 +426,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
            ! For boundary octs only
            else
               ! Compute neighboring grid Cartesian index
-#if NDIM>0
               hash_nbor(1)=ckey_corner(1)+i1-1
-#endif
 #if NDIM>1
               hash_nbor(2)=ckey_corner(2)+j1-1
 #endif
@@ -403,8 +435,10 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 #endif
               ! Periodic boundary conditions
               do idim=1,ndim
-                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-                 if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+                 if(r%periodic(idim))then
+                    if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+                    if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+                 endif
               enddo
               
               ! Set pointers to null
@@ -415,11 +449,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               end do
 
               ! Get neighboring grid index with read-only cache
-              call get_grid_p(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              call get_grid(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
               if(.not.associated(childp))then
 
                  ! Get parent father cell with read-write cache
-                 call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+                 call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
                  if(.not.associated(gridp))then
                     write(*,*)'GODUNOV: parent_cell should exist'
                     write(*,*)'PE ',g%myid,hash_nbor
@@ -431,7 +465,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
 
                     ! Get 2ndim neighboring father cells with read-write cache
                     ! Note that possible cache grids are locked inside the routine
-                    call get_twondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.true.,fetch_cache=.true.)
+                    call get_twondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.true.,fetch_cache=.true.)
                     do inbor=0,twondim
                        do ivar=1,nvar
                           u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
@@ -461,9 +495,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     do i2=i2min,i2max                       
                        ind_son=1+i2+2*j2+4*k2
                        i3=1; j3=1; k3=1
-#if NDIM>0
                        i3=1+2*(i1-1)+i2
-#endif
 #if NDIM>1
                        j3=1+2*(j1-1)+j2
 #endif
@@ -521,6 +553,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      end do
   end do
   ! End over octs
+  end do
 
   !-----------------------------------------------
   ! Compute flux using second-order Godunov method
@@ -570,9 +603,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      if(idim==1)i0=1
      if(idim==2)j0=1
      if(idim==3)k0=1
-#if NDIM>0
      ii0=1
-#endif
 #if NDIM>1
      jj0=1
 #endif
@@ -591,9 +622,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     do i2=i2min,i2max
                        ind_son=1+i2+2*j2+4*k2
                        i3=1; j3=1; k3=1
-#if NDIM>0
                        i3=1+2*(i1-1)+i2
-#endif
 #if NDIM>1
                        j3=1+2*(j1-1)+j2
 #endif
@@ -624,7 +653,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      end do
   end do
 
-  ! If sitting in coarsest level, exit. 
+  ! If sitting in coarsest level, skip.
   if(ilevel>r%levelmin)then
 
   !--------------------------------------
@@ -637,9 +666,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      if(idim==1)i0=1
      if(idim==2)j0=1
      if(idim==3)k0=1
-#if NDIM>0
      ii0=1
-#endif
 #if NDIM>1
      jj0=1
 #endif
@@ -677,9 +704,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     do j2=j2min,j2max-j0
                        do i2=i2min,i2max-i0
                           i3=1; j3=1; k3=1
-#if NDIM>0
                           i3=1+2*(i1+i0-1)+i2
-#endif
 #if NDIM>1
                           j3=1+2*(j1+j0-1)+j2
 #endif
@@ -734,9 +759,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     do j2=j2min+j0,j2max
                        do i2=i2min+i0,i2max
                           i3=1; j3=1; k3=1
-#if NDIM>0
                           i3=1+2*(i1-i0-1)+i2
-#endif
 #if NDIM>1
                           j3=1+2*(j1-j0-1)+j2
 #endif
@@ -777,16 +800,16 @@ subroutine godfine1(s,ind_grid,ilevel,h)
            childp=>h%childloc(i1,j1,k1)%p
            ! Check that parent cell is not refined
            if(associated(childp))then
-              call unlock_cache_p(s,childp)
+              call unlock_cache(s,childp)
            else
               ! Get parent cell index
               gridp=>h%gridloc(i1,j1,k1)%p
-              call unlock_cache_p(s,gridp)
+              call unlock_cache(s,gridp)
               ! Get neighbouring parent oct index
               if(r%interpol_type>0)then
                  do inbor=1,twondim
                     gridp=>h%nborloc(i1,j1,k1,inbor)%p
-                    call unlock_cache_p(s,gridp)
+                    call unlock_cache(s,gridp)
                  end do
               endif
            endif
@@ -795,7 +818,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   end do
 
   end associate
-  
+
 #endif
 
 end subroutine godfine1
@@ -821,7 +844,7 @@ subroutine init_flush_godunov(grid,hash_key)
      enddo
   enddo
 #endif
-  
+
 end subroutine init_flush_godunov
 !###########################################################
 !###########################################################
@@ -846,7 +869,7 @@ subroutine pack_flush_godunov(grid,msg_size,msg_array)
      end do
   end do
 #endif
-  
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_godunov
@@ -878,7 +901,7 @@ subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
      end do
   end do
 #endif
-  
+
 end subroutine unpack_flush_godunov
 !###########################################################
 !###########################################################

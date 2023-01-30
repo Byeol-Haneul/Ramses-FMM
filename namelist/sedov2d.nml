@@ -11,9 +11,25 @@ nsuperoct=0
 
 &AMR_PARAMS
 levelmin=3
-levelmax=10
-ngridmax=100000
-boxlen=1.0
+levelmax=11
+ngridmax=800000
+box_size=1.0
+box_xmin=1
+box_ymin=1
+box_xmax=-1
+box_ymax=-1
+/
+
+&BOUNDARY_PARAMS
+nbound=4
+periodic=.false.,.false.
+bound_dir=1,1,2,2
+bound_type=1,1,1,1
+bound_shift=1,-1,1,-1
+bound_xmin= 0,-1, 0, 0
+bound_ymin= 1, 1, 0,-1
+bound_xmax= 1, 0, 0, 0
+bound_ymax=-1,-1, 1, 0
 /
 
 &INIT_PARAMS

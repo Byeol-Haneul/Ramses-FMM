@@ -336,12 +336,12 @@ subroutine cmp_residual_cg(s,ilevel,icount)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
+           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
 
         ! Get neighbouring grid using a read-only cache
-        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -352,10 +352,10 @@ subroutine cmp_residual_cg(s,ilevel,icount)
         ! Otherwise interpolate from coarser level
         else
            ! Get 3**ndim neighbouring parent cell using a read-only cache
-           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-           call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+           call interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
            do ind=1,threetondim
-              call unlock_cache_p(s,grid_nbor(ind)%p)
+              call unlock_cache(s,grid_nbor(ind)%p)
            end do
         endif
 
@@ -475,12 +475,12 @@ subroutine cmp_Ap_cg(s,ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
+           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -631,10 +631,10 @@ subroutine make_initial_phi(s,ilevel,icount)
         
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
         ! Get 3**ndim neghbouring parent cell using read-only cache
-        call get_threetondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-        call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
+        call get_threetondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+        call interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
         do ind=1,threetondim
-           call unlock_cache_p(s,grid_nbor(ind)%p)
+           call unlock_cache(s,grid_nbor(ind)%p)
         end do
 
         ! Loop over cells

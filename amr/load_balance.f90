@@ -344,7 +344,7 @@ subroutine load_balance(s,ilevel)
            hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
            call hash_free(m%grid_dict,hash_key)
            ! Now construct a remote grid and clone the local
-           call get_grid_p(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
+           call get_grid(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
            ! Copy all data to the new cache grid
            child=m%grid(ioct)
            ! Set grid level to zero to mark it as deleted

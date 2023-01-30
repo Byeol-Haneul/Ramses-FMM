@@ -423,7 +423,7 @@ subroutine multipole_split_cells(s,ilevel)
   do ioct=m%head(ilevel+1),m%tail(ilevel+1)
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      ! Get parent cell using a write-only cache
-     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 #ifdef HYDRO
      ! Average conservative variables
      do ivar=1,ndim+1
@@ -687,8 +687,8 @@ subroutine cic_multipole(s,ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(ig(idim)<m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)
-           if(id(idim)>m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
+           if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
+           if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
         enddo
 
         ! Compute cloud volumes
@@ -740,7 +740,7 @@ subroutine cic_multipole(s,ilevel)
         do inbor=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,inbor)
            ! Get parent cell using write-only cache
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
            if(associated(gridp))then
               gridp%rho(icell)=gridp%rho(icell)+mmm*vol(inbor)/vol_loc
            end if
@@ -862,8 +862,8 @@ subroutine cic_part(s,ilevel)
      
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(ig(idim)<m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)
-        if(id(idim)>m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
+        if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
+        if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
      enddo
 
      ! Compute cloud volumes
@@ -915,7 +915,7 @@ subroutine cic_part(s,ilevel)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
-        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
            vol2=p%mp(ipart)*vol(ind)/vol_loc
            gridp%rho(icell)=gridp%rho(icell)+vol2
@@ -1132,7 +1132,7 @@ subroutine split_part(s,ilevel)
      ix = int(p%xp(ipart,1:ndim)/(2*dx_loc))
      if(.NOT. ALL(ix.EQ.ix_ref))then
         hash_key(1:ndim)=ix(1:ndim)
-        call get_grid_p(s,hash_key,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_key,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
         ix_ref=ix
      endif
 

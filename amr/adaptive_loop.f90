@@ -85,7 +85,9 @@ subroutine adaptive_loop(pst)
      g%nstep_coarse=g%nstep_coarse+1
 
      tt2 = mdl_wtime(mdl)
-     if(.not. done)print '(A,F14.7)',' Time elapsed since last coarse step:',tt2-tt1
+     if(mod(g%nstep_coarse,r%ncontrol)==0)then
+        if(.not. done)print '(A,F14.7)',' Time elapsed since last coarse step:',tt2-tt1
+     endif
 
      call getmem(core_mem)
      call writemem(core_mem)

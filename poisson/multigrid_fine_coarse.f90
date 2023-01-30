@@ -97,7 +97,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
 
         ! Get parent cell using write-only cache
-        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+        call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 
         ! Convert mask value to volume fraction
         ngpmask=(1d0+m%grid(ichild)%f(ind,3))/2d0/dtwotondim
@@ -275,7 +275,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   ! Loop over grids
   do igrid=m%head_mg(ilevel),m%tail_mg(ilevel)
 
-     ! Get central oct potential
+     ! Get central oct potential and distance
      do ind=1,twotondim
         phi_nbor(ind,0)=m%grid(igrid)%phi(ind)
         dis_nbor(ind,0)=m%grid(igrid)%f(ind,3)
@@ -289,12 +289,12 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
+           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -505,20 +505,15 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
                      hilbert=m%domain_mg, pack_size=storage_size(dummy_twin_realdp)/32,&
                      pack=pack_fetch_mg,unpack=unpack_fetch_mg)
 
-
-
   hash_nbor(0)=ilevel
 
   ! Loop over grids
   do igrid=m%head_mg(ilevel),m%tail_mg(ilevel)
      
-     ! Loop over cells
+     ! Get central oct potential and distance
      do ind=1,twotondim
-
-        ! Get central oct potential and distance
         phi_nbor(ind,0)=m%grid(igrid)%phi(ind)
         dis_nbor(ind,0)=m%grid(igrid)%f(ind,3)
-
      end do
 
      ! Get neighboring octs potential
@@ -529,12 +524,12 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
+           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
 
-        ! Get neighbouring grid using a read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        ! Get neighbouring grid using read-only cache
+        call get_grid(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -545,7 +540,6 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
 
         ! Otherwise set to zero and outside
         else
-           
            do ind=1,twotondim
               phi_nbor(ind,inbor)=0.0
               dis_nbor(ind,inbor)=-1.0
@@ -731,7 +725,7 @@ subroutine restrict_residual(s,ifinelevel)
         hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
         
         ! Get parent cell using read-write cache
-        call get_parent_cell_p(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_key,m%mg_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
         
         ! Is coarse cell masked?
         if(gridp%f(icell,3)<=0d0)cycle
@@ -942,7 +936,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
      hash_key(1:ndim)=m%grid(ichild)%ckey(1:ndim)
      
      ! Get 3**ndim neighbouring parent cell using a read-only cache
-     call get_threetondim_nbor_parent_cell_p(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+     call get_threetondim_nbor_parent_cell(s,hash_key,m%mg_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
      
      ! Loop over cells
      do ind=1,twotondim
@@ -968,7 +962,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
      ! End loop over cells
      
      do ind=1,threetondim
-        call unlock_cache_p(s,grid_nbor(ind)%p)
+        call unlock_cache(s,grid_nbor(ind)%p)
      end do
      
      ! Add correction to fine level solution
@@ -1120,12 +1114,12 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
+           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,hash_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then

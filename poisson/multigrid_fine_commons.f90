@@ -99,6 +99,8 @@ subroutine multigrid(pst,ilevel,icount)
      end if
   end do
   
+  if(pst%s%r%verbose) print '(A)','Restrict mask up done '
+
   ! ---------------------------------------------------------------------
   ! Set scan flag (for optimisation)
   ! ---------------------------------------------------------------------
@@ -441,12 +443,13 @@ subroutine build_mg(s,ifinelevel)
         endif
         mdl%mail_counter=mdl%mail_counter+1
 #endif
-
+        ! Get neighboring grid
         hash_nbor(1:ndim)=hash_key(1:ndim)+shift_oct(1:ndim,inbor)
+
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_max(idim,ifinelevel)
-           if(hash_nbor(idim)>m%box_ckey_max(idim,ifinelevel))hash_nbor(idim)=m%box_ckey_min(idim,ifinelevel)
+           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ifinelevel)-1
+           if(hash_nbor(idim)==m%ckey_max(ifinelevel))hash_nbor(idim)=0
         enddo
         hash_father(1:ndim)=hash_nbor(1:ndim)/2
 
@@ -476,7 +479,7 @@ subroutine build_mg(s,ifinelevel)
               m%ifree=m%ifree+1
               if(m%ifree.GT.r%ngridmax)then
                  write(*,*)'No more free memory'
-                 write(*,*)'for multigrid...'
+                 write(*,*)'in multigrid'
                  write(*,*)'Increase ngridmax'
                  call mdl_abort(mdl)
               end if
@@ -487,7 +490,7 @@ subroutine build_mg(s,ifinelevel)
               ! Otherwise, determine parent processor and use the cache
               grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
 #ifdef MDL2
-              call get_grid_p(s,hash_father,m%mg_dict,child,flush_cache=.true.,fetch_cache=.false.)
+              call get_grid(s,hash_father,m%mg_dict,child,flush_cache=.true.,fetch_cache=.false.)
 #else
               
               ! If next cache line is occupied, free it.
@@ -838,12 +841,12 @@ subroutine make_bc_rhs(s,ilevel,icount)
         
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)
-           if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
+           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
         enddo
 
         ! Get neighbouring grid using read-only cache
-        call get_grid_p(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
+        call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array
         if(associated(gridp))then
@@ -856,10 +859,10 @@ subroutine make_bc_rhs(s,ilevel,icount)
         else
 
            ! Get 3**ndim neighbouring parent cells using read-only cache
-           call get_threetondim_nbor_parent_cell_p(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-           call interpol_phi_p(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
+           call get_threetondim_nbor_parent_cell(s,hash_nbor,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+           call interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_nbor(1,inbor))
            do ind=1,threetondim
-              call unlock_cache_p(s,grid_nbor(ind)%p)
+              call unlock_cache(s,grid_nbor(ind)%p)
            end do
            do ind=1,twotondim
               dis_nbor(ind,inbor)=-1.0

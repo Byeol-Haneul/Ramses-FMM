@@ -104,7 +104,7 @@ subroutine upload_fine(s,ilevel)
 
      ! Get cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+     call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 
      ! Average conservative variables
      do ivar=1,nvar

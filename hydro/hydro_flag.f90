@@ -12,6 +12,7 @@ subroutine hydro_flag(s,ilevel)
   use cache_commons
   use cache
   use nbors_utils_p
+  use boundaries, only: init_bound_refine
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -45,7 +46,8 @@ subroutine hydro_flag(s,ilevel)
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
-                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro)
+                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
+                     bound=init_bound_refine)
 
   ! Loop over active grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -66,17 +68,19 @@ subroutine hydro_flag(s,ilevel)
            ! Periodic boundary conditions
            do idim=1,ndim
               hash_nbor(idim)=hash_key(idim)+shift(idim,i_nbor)
-              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel+1)
-              if(hash_nbor(idim)>m%box_ckey_max(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_min(idim,ilevel+1)
+              if(r%periodic(idim))then
+                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel+1)-1
+                 if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_min(idim,ilevel+1)
+              endif
            enddo
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(associated(gridp))then
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
-              call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
            endif
@@ -96,7 +100,7 @@ subroutine hydro_flag(s,ilevel)
         end do
         
         do i_nbor=1,twondim
-           call unlock_cache_p(s,gridn(i_nbor)%p)
+           call unlock_cache(s,gridn(i_nbor)%p)
         end do
 
         ! Count only newly flagged cells

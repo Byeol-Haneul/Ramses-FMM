@@ -10,7 +10,7 @@ subroutine m_dump_all(pst)
   use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
   use output_poisson_module, only: r_output_poisson,in_output_poisson_t
   use output_part_module, only: r_output_part
-  use mdl_module, only: mdl_mkdir_p, mdl_wtime
+  use mdl_module, only: mdl_mkdir, mdl_wtime
   implicit none
   type(pst_t)::pst
 
@@ -31,8 +31,8 @@ subroutine m_dump_all(pst)
   if(g%nstep_coarse==0.and.r%nrestart>0)return
   if(r%verbose)write(*,*)'Entering dump_all'
 
-  ! For 1D runs, output data to screen
-  call write_screen(r,m)
+  ! For 1D serial runs, output data to screen
+  if(g%ncpu==1)call write_screen(r,m)
 
   ! Increment output counters
   call title(g%ifout,nchar)
@@ -43,7 +43,7 @@ subroutine m_dump_all(pst)
   ! For 2D and 3D runs, output data to files
   if(ndim>1)then
      filedir='output_'//TRIM(nchar)//'/'
-     call mdl_mkdir_p(mdl,filedir)
+     call mdl_mkdir(mdl,filedir)
      ! filecmd='mkdir -p '//TRIM(filedir)
 ! #ifdef NOSYSTEM
 !      call PXFMKDIR(TRIM(filedir),LEN(TRIM(filedir)),O'755',ierr)

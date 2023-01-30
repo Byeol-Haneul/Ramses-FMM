@@ -101,7 +101,7 @@ subroutine close_cache(s,hash_dict)
 
 #ifdef MDL2
   call mdl_cache_close(mdl%mdl2,0)
-#elif !defined(WITHOUTMPI)
+#else
 
   ! EMPTY AND CLEAN THE CACHE
   do icache=1,m%ncache
@@ -125,6 +125,7 @@ subroutine close_cache(s,hash_dict)
   m%free_null=1
   m%nnull=0
 
+#ifndef WITHOUTMPI
   ! COMPLETE THE LAST FLUSH
   do icpu=1,g%ncpu
      ibuf=mdl%cpu2buf_flush(icpu)
@@ -184,6 +185,7 @@ subroutine close_cache(s,hash_dict)
   ! Barrier to prevent interference with the next cache
   call MPI_BARRIER(MPI_COMM_WORLD,info)
 #endif
+#endif
   end associate
   
 end subroutine close_cache
@@ -219,7 +221,6 @@ function create_grid(s,uhash,hash_key) result(gridp)
     m%ifree=m%ifree+1
     if(m%ifree.GT.r%ngridmax)then
       write(*,*)'No more free memory'
-      write(*,*)'while refining...'
       write(*,*)'Increase ngridmax'
       call mdl_abort(mdl)
     endif
@@ -276,7 +277,7 @@ end function get_thread_id
 !##############################################################
 !##############################################################
 subroutine open_cache(s,table,data_size,hilbert,pack_size,&
-                         pack,unpack,init,flush,combine)
+                         pack,unpack,init,flush,combine,bound)
   USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_BOOL, C_FUNLOC, C_NULL_PTR
   use amr_parameters, only: ndim,nhilbert,twotondim
   use ramses_commons, only: ramses_t
@@ -295,9 +296,10 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
   integer::data_size,pack_size
   procedure(cache_function_unpack)::unpack
   procedure(cache_function)::pack
+  procedure(cache_function),optional::flush
   procedure(cache_function_init),optional::init
   procedure(cache_function_unpack),optional::combine
-  procedure(cache_function),optional::flush
+  procedure(cache_function_bound),optional::bound
   integer::info,icpu,iskip
   logical(C_BOOL)::modify
 
@@ -306,14 +308,14 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
     m%domain_hilbert => hilbert
 
     if (loc(m%domain_hilbert) .eq. loc(m%domain)) then
-      m%head_cache(r%levelmin:r%nlevelmax)=m%head
-      m%tail_cache(r%levelmin:r%nlevelmax)=m%tail
+       m%head_cache(r%levelmin:r%nlevelmax)=m%head
+       m%tail_cache(r%levelmin:r%nlevelmax)=m%tail
     else if (loc(m%domain_hilbert) .eq. loc(m%domain_mg)) then
-      m%head_cache(1:r%nlevelmax)=m%head_mg
-      m%tail_cache(1:r%nlevelmax)=m%tail_mg
+       m%head_cache(1:r%nlevelmax)=m%head_mg
+       m%tail_cache(1:r%nlevelmax)=m%tail_mg
     else
-      write(*,*) 'Unknown domain decomposition scheme'
-      stop
+       write(*,*) 'Unknown domain decomposition scheme'
+       stop
     end if
 
 #ifdef MDL2
@@ -332,9 +334,11 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
     unpack_fetch%proc => unpack
     init_flush%proc => null()
     pack_flush%proc => null()
+    init_bound%proc => null()
     unpack_flush%proc => null()
     if (present(init))      init_flush%proc => init
     if (present(flush))     pack_flush%proc => flush
+    if (present(bound))     init_bound%proc => bound
     if (present(combine)) unpack_flush%proc => combine
 
 #ifndef WITHOUTMPI

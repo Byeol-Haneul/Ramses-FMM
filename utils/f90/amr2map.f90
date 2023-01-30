@@ -162,7 +162,7 @@ program amr2map
         ! Prepare reading the AMR file
         file_amr=TRIM(repository)//'/amr.out'//TRIM(ncharcpu)
 
-        write(*,*)'Reading '//TRIM(file_amr)
+        write(*,*)'Reading '//TRIM(file_amr)//" for level ",ilevel
 
         noct_skip=0
         open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')

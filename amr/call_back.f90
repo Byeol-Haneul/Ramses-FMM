@@ -36,7 +36,12 @@ module call_back
        integer,dimension(1:msg_size),optional::msg_array
        integer(kind=8),dimension(0:ndim)::hash_key
      end subroutine cache_function_unpack
-
+     subroutine cache_function_bound(r,grid,grid_ref,ibound)
+       use amr_commons, only: run_t, oct
+       type(run_t)::r
+       type(oct)::grid, grid_ref
+       integer::ibound
+     end subroutine cache_function_bound
   end interface
 
   type cache_f
@@ -48,5 +53,8 @@ module call_back
   type cache_unpack_f
      procedure(cache_function_unpack),pointer,nopass::proc
   end type cache_unpack_f
+  type cache_bound_f
+     procedure(cache_function_bound),pointer,nopass::proc
+  end type cache_bound_f
      
 end module call_back

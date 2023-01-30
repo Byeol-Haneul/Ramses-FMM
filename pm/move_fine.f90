@@ -117,8 +117,8 @@ subroutine kick_drift_part(s,ilevel,action_part)
      
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(ig(idim)<m%box_ckey_min(idim,ilevel+1))ig(idim)=m%box_ckey_max(idim,ilevel+1)
-        if(id(idim)>m%box_ckey_max(idim,ilevel+1))id(idim)=m%box_ckey_min(idim,ilevel+1)
+        if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
+        if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
      enddo
      
      ! Compute cells Cartesian key
@@ -149,14 +149,14 @@ subroutine kick_drift_part(s,ilevel,action_part)
      icell=0
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         if(.not.associated(gridp(ind)%p))then
            ok_level=.false.
 !           exit
         end if
      end do
      do ind=1,twotondim
-        call unlock_cache_p(s,gridp(ind)%p)
+        call unlock_cache(s,gridp(ind)%p)
      end do
 
      ! If cloud is not fully inside level ilevel, re-do CIC at coarser level
@@ -178,8 +178,8 @@ subroutine kick_drift_part(s,ilevel,action_part)
         
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(ig(idim)<m%box_ckey_min(idim,ilevel))ig(idim)=m%box_ckey_max(idim,ilevel)
-           if(id(idim)>m%box_ckey_max(idim,ilevel))id(idim)=m%box_ckey_min(idim,ilevel)
+           if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel)-1
+           if(id(idim)==m%ckey_max(ilevel))id(idim)=0
         enddo
         
         ! Compute cells Cartesian key
@@ -210,14 +210,14 @@ subroutine kick_drift_part(s,ilevel,action_part)
         icell=0
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell_p(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(.not.associated(gridp(ind)%p))then
               ok_level=.false.
 !              exit
            end if
         end do
         do ind=1,twotondim
-           call unlock_cache_p(s,gridp(ind)%p)
+           call unlock_cache(s,gridp(ind)%p)
         end do
      end if
         

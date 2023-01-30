@@ -113,8 +113,8 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use marshal, only:pack_fetch_refine, unpack_fetch_refine,&
-                    pack_fetch_flag, unpack_fetch_flag
+  use marshal, only: pack_fetch_refine, unpack_fetch_refine, pack_fetch_flag, unpack_fetch_flag
+  use boundaries, only: init_bound_refine
   use cache_commons
   use cache
   use hash
@@ -164,7 +164,8 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                         hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
                         pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                        flush=pack_flush_refine, combine=unpack_flush_refine)
+                        flush=pack_flush_refine, combine=unpack_flush_refine,&
+                        bound=init_bound_refine)
 
      do ioct=m%head(ilev),m%tail(ilev)
         do ind=1,twotondim
@@ -200,7 +201,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      do ioct=m%head(ilev),m%tail(ilev)
         hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
         ! Get parent cell using a read-write cache
-        call get_parent_cell_p(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
+        call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
         if (.not.associated(gridp)) then
           write(*,*) 'FATAL: no parent'
           stop
@@ -627,7 +628,6 @@ subroutine make_new_oct(s,parent,icell,ilevel)
      m%ifree=m%ifree+1
      if(m%ifree.GT.r%ngridmax)then
         write(*,*)'No more free memory'
-        write(*,*)'while refining...'
         write(*,*)'Increase ngridmax'
         call mdl_abort(mdl)
      end if
@@ -635,7 +635,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
      ! Otherwise, determine parent processor and use the cache
   else
 #ifdef MDL2
-     call get_grid_p(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
+     call get_grid(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
 #else
      grid_cpu = m%domain(ilevel)%get_rank(hk)
      ! If next cache line is occupied, free it.
@@ -682,14 +682,14 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   if(r%interpol_type>0)then
      
      ! Get 2ndim neighboring father cells with read-only cache
-     call get_twondim_nbor_parent_cell_p(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+     call get_twondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
      do inbor=0,twondim
         do ivar=1,nvar
            u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
         end do
      end do
      do inbor=1,twondim
-        call unlock_cache_p(s,grid_nbor(inbor)%p)
+        call unlock_cache(s,grid_nbor(inbor)%p)
      end do
      
      ! Interpolate

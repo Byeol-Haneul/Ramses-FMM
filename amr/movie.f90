@@ -9,7 +9,7 @@ subroutine m_output_frame(pst)
   use hydro_parameters, only: nvar
   use ramses_commons, only: pst_t
   use output_amr_module, only: output_info
-  use mdl_module, only: mdl_mkdir_p
+  use mdl_module, only: mdl_mkdir
   implicit none
   type(pst_t)::pst
 
@@ -46,7 +46,7 @@ subroutine m_output_frame(pst)
 !     moviecmd = 'mkdir -p '//trim(moviedir)
      write(*,*) "Writing frame ", istep_str
      if(.not.g%withoutmkdir) then 
-       call mdl_mkdir_p(mdl,moviedir)
+       call mdl_mkdir(mdl,moviedir)
 ! #ifdef NOSYSTEM
 !         call PXFMKDIR(TRIM(moviedir),LEN(TRIM(moviedir)),O'755',info)
 ! #else
