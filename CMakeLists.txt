@@ -90,7 +90,7 @@ set(fortran_files
   amr/title.f90
   amr/units.f90
   amr/refine_utils.f90
-  amr/nbors_utils_p.f90
+  amr/nbors_utils.f90
   amr/flag_utils.f90
   amr/smooth.f90
   amr/amr_step.f90
@@ -99,6 +99,8 @@ set(fortran_files
   amr/movie.f90
   amr/task_manager.f90
   amr/cache.f90
+  amr/sort.f90
+  amr/boundaries.f90
   amr/marshal.f90
   amr/amr_parameters.f90
   hydro/hydro_parameters.f90
