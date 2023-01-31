@@ -252,7 +252,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   use amr_commons, only: nbor,oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use hydro_commons
   use hash
   implicit none

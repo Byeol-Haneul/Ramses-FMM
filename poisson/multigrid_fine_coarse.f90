@@ -54,7 +54,7 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use hilbert
@@ -230,7 +230,7 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use hilbert
@@ -458,7 +458,7 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use hilbert
@@ -676,7 +676,7 @@ subroutine restrict_residual(s,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use hilbert
@@ -880,7 +880,7 @@ subroutine interpolate_and_correct(s,ifinelevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use hilbert
@@ -1063,7 +1063,7 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use hilbert

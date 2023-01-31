@@ -293,7 +293,7 @@ subroutine load_balance(s,ilevel)
   use cache_commons
   use cache
   use marshal, only: pack_fetch_refine,unpack_fetch_refine
-  use nbors_utils_p
+  use nbors_utils
   implicit none
   type(ramses_t)::s
   integer::ilevel

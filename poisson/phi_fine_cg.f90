@@ -243,7 +243,7 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   implicit none
@@ -420,7 +420,7 @@ subroutine cmp_Ap_cg(s,ilevel)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   implicit none
@@ -556,7 +556,7 @@ subroutine make_initial_phi(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   implicit none

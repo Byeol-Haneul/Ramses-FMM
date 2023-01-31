@@ -130,7 +130,7 @@ function worker_init(mdl) result(pst)
   use output_poisson_module, only: r_output_poisson
   use output_part_module, only: r_output_part
   use synchro_hydro_fine_module, only: r_synchro_hydro_fine, r_gravity_hydro_fine
-  use nbors_utils_p, only: r_save_phi_old
+  use nbors_utils, only: r_save_phi_old
   use courant_fine_module, only: r_courant_fine
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine

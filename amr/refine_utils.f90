@@ -120,7 +120,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use hash
   use hilbert
   use call_back, only: cache_f
-  use nbors_utils_p
+  use nbors_utils
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -562,7 +562,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   use amr_commons, only:nbor,oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use hilbert
   use hash

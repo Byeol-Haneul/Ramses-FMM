@@ -65,7 +65,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
   use pm_parameters
   use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   implicit none

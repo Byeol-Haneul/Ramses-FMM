@@ -158,7 +158,7 @@ subroutine gradient_phi(s,ilevel,icount)
   use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol

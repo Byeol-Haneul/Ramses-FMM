@@ -392,7 +392,7 @@ subroutine build_mg(s,ifinelevel)
   use cache
   use multigrid_fine_coarse, only: pack_fetch_phi, unpack_fetch_phi
   use amr_commons, only: oct
-  use nbors_utils_p
+  use nbors_utils
   use hilbert
   use hash
 #ifndef WITHOUTMPI
@@ -747,7 +747,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol

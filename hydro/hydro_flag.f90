@@ -11,7 +11,7 @@ subroutine hydro_flag(s,ilevel)
   use hydro_parameters, only: nvar
   use cache_commons
   use cache
-  use nbors_utils_p
+  use nbors_utils
   use boundaries, only: init_bound_refine
   implicit none
   type(ramses_t)::s

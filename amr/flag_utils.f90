@@ -97,7 +97,7 @@ subroutine init_flag(s,ilevel,nflag)
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use cache_commons
   use cache
-  use nbors_utils_p
+  use nbors_utils
   implicit none
   type(ramses_t)::s
   integer::ilevel,nflag
@@ -309,7 +309,7 @@ subroutine ensure_ref_rules(s,ilevel)
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use cache_commons
   use cache
-  use nbors_utils_p
+  use nbors_utils
   implicit none
   type(ramses_t)::s
   integer::ilevel

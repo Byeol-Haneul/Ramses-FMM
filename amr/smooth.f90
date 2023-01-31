@@ -41,7 +41,7 @@ subroutine smooth_fine(s,ilevel,nflag)
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
   use boundaries, only: init_bound_flag
   use amr_commons, only: nbor
-  use nbors_utils_p
+  use nbors_utils
   implicit none
   type(ramses_t)::s
   integer::ilevel,nflag

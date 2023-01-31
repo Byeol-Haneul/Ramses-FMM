@@ -388,7 +388,7 @@ subroutine multipole_split_cells(s,ilevel)
   use amr_parameters, only: ndim,dp,twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
   use cache_commons
   use cache
@@ -610,7 +610,7 @@ subroutine cic_multipole(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
@@ -789,7 +789,7 @@ subroutine cic_part(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use cache
   use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
@@ -1089,7 +1089,7 @@ subroutine split_part(s,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,i8b
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
-  use nbors_utils_p
+  use nbors_utils
   use cache_commons
   use hilbert
   use cache
