@@ -75,7 +75,7 @@ To visualize the 2D and 3D results, compile the map making executable in the uti
 $ cd utils/f90
 $ gfortran amr2map.f90 -o amr2map
 $ cd ../..
-$ utils/f90/amr2map2d -inp output_00002 -out dens,map
+$ utils/f90/amr2map -inp output_00002 -out dens.map -typ 1
 $ utils/py/map2img.py dens.map --log
 ```
 
