@@ -141,9 +141,16 @@ subroutine m_output_frame(pst)
      if(ind_proj.eq.len(trim(r%proj_axis))) then 
         ! Increase counter and skip frames if timestep is large
         r%imov=r%imov+1
-        do while((r%aendmov*dble(r%imov)/dble(r%imovout)<g%aexp.or.r%tendmov*dble(r%imov)/dble(r%imovout)<g%t).and.(r%imov.lt.r%imovout))
-           r%imov=r%imov+1
-        end do
+        if(r%aendmov>0)then
+           do while((r%aendmov*dble(r%imov)/dble(r%imovout)<g%aexp).and.(r%imov.lt.r%imovout))
+              r%imov=r%imov+1
+           end do
+        end if
+        if(r%tendmov>0)then
+           do while((r%tendmov*dble(r%imov)/dble(r%imovout)<g%t).and.(r%imov.lt.r%imovout))
+              r%imov=r%imov+1
+           end do
+        end if
      endif
      
 #endif
