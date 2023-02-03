@@ -7,7 +7,6 @@ The mini-ramses repository is a fork of the [main RAMSES repository][1]. It was 
 
 A rapidly-evolving development of mini-ramses based on a completely changed data-structure is contained in the `develop` branch. This branch is work in progress, use it only if you know what you're doing ;)
 
-
 You can download the code by cloning the git repository using 
 ```
 $ git clone https://bitbucket.org/rteyssie/mini-ramses.git
@@ -70,15 +69,15 @@ $ bin/ramses3d namelist/dmo.nml
 
 You get the picture now ;-)
 
-To visualize the 2D (resp. 3D) results, compile the map making executable in the bin directory right after you compiled ramses using NDIM=2 (resp. 3).
+To visualize the 2D and 3D results, compile the map making executable in the utils/f90 directory.
 
 ```
-$ cd bin
-$ make NDIM=2 amr2map
-$ cd ..
-$ bin/amr2map2d -inp output_00002 -out dens,map
+$ cd utils/f90
+$ gfortran amr2map.f90 -o amr2map
+$ cd ../..
+$ utils/f90/amr2map2d -inp output_00002 -out dens,map
 $ utils/py/map2img.py dens.map --log
 ```
 
-In the molecular cloud collapse case, you can also explore the movie1 directory and use the python function directly on any of the maps in there.
+In the molecular cloud collapse case, you can also explore the movie1 directory and use the python function directly on any of the maps in there. If you have the MPI library properly installed on your system, you can repeat all the tests above using the MPI=1 compilation option.
 
