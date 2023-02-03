@@ -82,7 +82,7 @@ subroutine m_update_time(pst,ilevel,done)
         !----------------------------------------------
         ! Output mass and energy conservation to screen
         !----------------------------------------------
-        if(r%cooling.or.r%pressure_fix)then
+        if(r%hydro)then
            write(*,778)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot,g%eint_tot
         else
            write(*,777)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot
@@ -108,7 +108,6 @@ subroutine m_update_time(pst,ilevel,done)
      !---------------
      if(g%t>=r%tout(r%noutput).or.g%aexp>=r%aout(r%noutput).or.g%nstep_coarse>=r%nstepmax)then
         write(*,*)'Run completed'
-        call write_screen(r,m)
         ttend = mdl_wtime(mdl)
         print '(A,F14.7)',' Total elapsed time:',ttend-ttstart
         done=.true.

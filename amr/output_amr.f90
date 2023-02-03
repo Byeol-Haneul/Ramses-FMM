@@ -32,7 +32,7 @@ subroutine m_dump_all(pst)
   if(r%verbose)write(*,*)'Entering dump_all'
 
   ! For 1D serial runs, output data to screen
-  if(g%ncpu==1)call write_screen(r,m)
+  if(ndim==1.and.g%ncpu==1)call write_screen(r,m)
 
   ! Increment output counters
   call title(g%ifout,nchar)
@@ -41,7 +41,7 @@ subroutine m_dump_all(pst)
   g%output_done=.true.
 
   ! For 2D and 3D runs, output data to files
-  if(ndim>1)then
+  if(ndim>1.or.g%ncpu>1)then
      filedir='output_'//TRIM(nchar)//'/'
      call mdl_mkdir(mdl,filedir)
      ! filecmd='mkdir -p '//TRIM(filedir)

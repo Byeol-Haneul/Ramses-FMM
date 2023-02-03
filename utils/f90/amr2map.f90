@@ -2,12 +2,13 @@ program amr2map
   !--------------------------------------------------------------------------
   ! This code projects RAMSES data onto a map.
   ! This is based in the MINI-RAMSES prototype.
-  ! R. Teyssier, Zurich, 15/04/16.
+  ! R. Teyssier, Princeton, February 2nd 2023
   !--------------------------------------------------------------------------
-  use amr_parameters, only: ndim,nhilbert,flen,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
-  use hydro_parameters, only: nvar
   implicit none
+
+  integer,parameter::flen=90
+  
+  integer::ndim,twotondim,nvar
   integer::n,i,j,k,type=0,domax=0
   integer::ivar,lmax=0
   integer::ilevel,idim,jdim,kdim,ldim,icell
@@ -26,12 +27,9 @@ program amr2map
   real(KIND=8)::xmin=0,xmax=1,ymin=0,ymax=1,zmin=0,zmax=1
   real(KIND=8)::xxmin,xxmax,yymin,yymax,zzmin,zzmax
   real(KIND=8)::dx,dy,dz,xx,yy,zz
-  real(KIND=8)::rho,map
+  real(KIND=8)::rho,map,ekin,pres
   real(KIND=8)::metmax=0d0
 
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
   character(LEN=1)::proj='z'
   character(LEN=5)::nchar,ncharcpu
   character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
@@ -39,13 +37,12 @@ program amr2map
   logical::ok,ok_part,ok_cell,do_max
   logical::check_ramses_exist
 
-  real(KIND=4),dimension(:,:),allocatable::toto
-  real(KIND=8),dimension(:),allocatable::bound_key
+  real(KIND=4),dimension(:,:),allocatable::filemap
   integer,dimension(:),allocatable::cpu_list
 
-  integer,dimension(1:ndim)::ckey,cart_key
-  logical,dimension(1:twotondim)::refined
-  real(dp),dimension(1:twotondim,1:nvar)::uold
+  integer,dimension(:),allocatable::ckey,cart_key
+  logical,dimension(:),allocatable::refined
+  real(KIND=8),dimension(:,:),allocatable::uold
 
   type level  
      integer::ilevel
@@ -57,8 +54,22 @@ program amr2map
      integer::jmax
   end type level
 
+  type params
+     integer::ndim
+     integer::ncpu
+     integer::nvar
+     integer::levelmin
+     integer::nlevelmax
+     real(kind=8)::boxlen
+     real(kind=8)::t
+     real(kind=8)::gamma
+     integer::nhilbert
+     integer(kind=8),dimension(:,:,:),allocatable::bound_key
+  end type params
+  
   type(level),dimension(1:100)::mapgrid
-
+  type(params)::p
+  
   write(*,*)'Starting amr2map'
 
   ! Read amr2map parameters
@@ -72,19 +83,22 @@ program amr2map
   endif
 
   ! Read RAMSES params
-  call read_ramses_params(r,g,m,repository)
-  write(*,*)'time=',g%t
-
+  call read_ramses_params
+  write(*,*)'time=',p%t
+  ndim=p%ndim
+  twotondim=2**ndim
+  nvar=p%nvar
+  
   !------------------------------
   ! Set up geometry parameters
   !------------------------------
   if(lmax==0)then
-     lmax=r%nlevelmax
+     lmax=p%nlevelmax
   endif
   write(*,*)'Working resolution =',2**lmax
   zzmax=1.0
   zzmin=0.0
-  if(ndim>2)then
+  if(p%ndim>2)then
      if (proj=='x')then
         idim=2
         jdim=3
@@ -117,7 +131,7 @@ program amr2map
   !-----------------------------
   ! Allocate map hierarchy
   !-----------------------------
-  do ilevel=r%levelmin,lmax
+  do ilevel=p%levelmin,lmax
      nx_full=2**ilevel
      ny_full=2**ilevel
      imin=int(xxmin*dble(nx_full))+1
@@ -137,21 +151,24 @@ program amr2map
   !-----------------------------------------------
   ! Compute projected variables
   !----------------------------------------------
-  allocate(cpu_list(1:g%ncpu))
+  allocate(cpu_list(1:p%ncpu))
+  allocate(ckey(1:ndim),cart_key(1:ndim))
+  allocate(refined(1:twotondim))
+  allocate(uold(1:twotondim,1:nvar))
   
   ! Loop over levels 
-  do ilevel=r%levelmin,lmax
+  do ilevel=p%levelmin,lmax
 
      dx=0.5**ilevel
      zmax=1.0/dx
      dxline=1
      if(ndim==3)dxline=dx
 
-!     write(*,*)'ilevel=',ilevel,dx,zmax,ncpu_read
+!     write(*,*)'ilevel=',ilevel,dx,zmax
 
      ! Get cpu list within bounding box
 !     call cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
-     ncpu_read=g%ncpu
+     ncpu_read=p%ncpu
      cpu_list(1)=1
      
      ! Loop over processor files
@@ -162,23 +179,21 @@ program amr2map
         ! Prepare reading the AMR file
         file_amr=TRIM(repository)//'/amr.out'//TRIM(ncharcpu)
 
-        write(*,*)'Reading '//TRIM(file_amr)//" for level ",ilevel
-
         noct_skip=0
         open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
-        do i=r%levelmin,ilevel-1
-           ipos=13+4*(i-r%levelmin)
+        do i=p%levelmin,ilevel-1
+           ipos=13+4*(i-p%levelmin)
            read(10,POS=ipos)noct_tmp
            noct_skip=noct_skip+noct_tmp
         end do
-        ipos=13+4*(ilevel-r%levelmin)
+        ipos=13+4*(ilevel-p%levelmin)
         read(10,POS=ipos)noct_file
-        iskip_amr=13+4*(r%nlevelmax-r%levelmin+1)+(4*ndim+4*twotondim)*noct_skip
+        iskip_amr=13+4*(p%nlevelmax-p%levelmin+1)+(4*ndim+4*twotondim)*noct_skip
 
         ! Prepare reading the HYDRO file
         file_hydro=TRIM(repository)//'/hydro.out'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
-        iskip_hydro=17+4*(r%nlevelmax-r%levelmin+1)+(8*twotondim*nvar)*noct_skip
+        iskip_hydro=25+4*(p%nlevelmax-p%levelmin+1)+(8*twotondim*nvar)*noct_skip
 
         ! Loop over useful octs in file
         do i=1,noct_file
@@ -203,7 +218,7 @@ program amr2map
               ok_cell=.not.refined(ind).OR.ilevel.eq.lmax
 
               ! Get variable to map out
-              rho=uold(ind,1)
+              rho = uold(ind,1)
               select case (type)
               case (-1) ! Cpu map
                  map = icpu
@@ -222,10 +237,14 @@ program amr2map
               case (4) ! Mass weighted z-velocity
                  map = uold(ind,4)
               case (5) ! Temperature
+                 ekin = 0.5*uold(ind,2)**2/rho
+                 if(ndim>1)ekin = ekin+0.5*uold(ind,3)**2/rho
+                 if(ndim>2)ekin = ekin+0.5*uold(ind,4)**2/rho
+                 pres = (p%gamma-1)*(uold(ind,ndim+2)-ekin)
                  if(do_max)then
-                    map = uold(ind,5)/uold(ind,1)
+                    map = pres/rho
                  else
-                    map = uold(ind,5)
+                    map = pres
                  endif
               case default ! Passive scalar
                  if(do_max)then
@@ -239,7 +258,9 @@ program amr2map
               if(ok_cell)then
                  ix=cart_key(idim)+1
                  iy=cart_key(jdim)+1
-                 zz=(cart_key(kdim)+0.5)*dx
+                 if(ndim==3)then
+                    zz=(cart_key(kdim)+0.5)*dx
+                 endif
 
                  if(ndim==3)then
                     weight=(min(zz+dx/2.,zzmax)-max(zz-dx/2.,zzmin))/dx
@@ -295,7 +316,7 @@ program amr2map
      xmin=((ix-0.5)/2**lmax)
      do iy=jmin,jmax
         ymin=((iy-0.5)/2**lmax)
-        do ilevel=r%levelmin,lmax-1
+        do ilevel=p%levelmin,lmax-1
            ndom=2**ilevel
            i=int(xmin*ndom)+1
            j=int(ymin*ndom)+1
@@ -324,20 +345,20 @@ program amr2map
      write(*,*)'as unformatted binary file'
      open(unit=20,file=nomfich,form='unformatted')
      if(nx_sample==0)then
-        write(20)g%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
+        write(20)p%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
         write(20)imax-imin+1,jmax-jmin+1
-        allocate(toto(imax-imin+1,jmax-jmin+1))
+        allocate(filemap(imax-imin+1,jmax-jmin+1))
         if(do_max)then
-           toto=mapgrid(lmax)%map(imin:imax,jmin:jmax)
+           filemap=mapgrid(lmax)%map(imin:imax,jmin:jmax)
         else
-           toto=mapgrid(lmax)%map(imin:imax,jmin:jmax)/mapgrid(lmax)%rho(imin:imax,jmin:jmax)
+           filemap=mapgrid(lmax)%map(imin:imax,jmin:jmax)/mapgrid(lmax)%rho(imin:imax,jmin:jmax)
         endif
-        write(20)toto
+        write(20)filemap
      else
         if(ny_sample==0)ny_sample=nx_sample
-        write(20)g%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
+        write(20)p%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
         write(20)nx_sample+1,ny_sample+1
-        allocate(toto(0:nx_sample,0:ny_sample))
+        allocate(filemap(0:nx_sample,0:ny_sample))
         do i=0,nx_sample
            ix=int(dble(i)/dble(nx_sample)*dble(imax-imin+1))+imin
            ix=min(ix,imax)
@@ -345,13 +366,13 @@ program amr2map
               iy=int(dble(j)/dble(ny_sample)*dble(jmax-jmin+1))+jmin
               iy=min(iy,jmax)
               if(do_max)then
-                 toto(i,j)=mapgrid(lmax)%map(ix,iy)
+                 filemap(i,j)=mapgrid(lmax)%map(ix,iy)
               else
-                 toto(i,j)=mapgrid(lmax)%map(ix,iy)/mapgrid(lmax)%rho(ix,iy)
+                 filemap(i,j)=mapgrid(lmax)%map(ix,iy)/mapgrid(lmax)%rho(ix,iy)
               endif
            end do
         end do
-        write(20)toto
+        write(20)filemap
      endif
      close(20)
   endif
@@ -373,7 +394,7 @@ program amr2map
         end do
      else  
         if(ny_sample==0)ny_sample=nx_sample
-        allocate(toto(0:nx_sample,0:ny_sample))
+        allocate(filemap(0:nx_sample,0:ny_sample))
         do i=0,nx_sample
            ix=int(dble(i)/dble(nx_sample)*dble(imax-imin+1))+imin
            ix=min(ix,imax)
@@ -381,9 +402,9 @@ program amr2map
               iy=int(dble(j)/dble(ny_sample)*dble(jmax-jmin+1))+jmin
               iy=min(iy,jmax)
               if(do_max)then
-                 toto(i,j)=mapgrid(lmax)%map(ix,iy)
+                 filemap(i,j)=mapgrid(lmax)%map(ix,iy)
               else
-                 toto(i,j)=mapgrid(lmax)%map(ix,iy)/mapgrid(lmax)%rho(ix,iy)
+                 filemap(i,j)=mapgrid(lmax)%map(ix,iy)/mapgrid(lmax)%rho(ix,iy)
            endif
            end do
         end do
@@ -391,7 +412,7 @@ program amr2map
            do i=0,nx_sample
               xx=xxmin+dble(i)/dble(nx_sample)*(xxmax-xxmin)
               yy=yymin+dble(j)/dble(ny_sample)*(yymax-yymin)
-              write(20,*)xx,yy,toto(i,j)
+              write(20,*)xx,yy,filemap(i,j)
            end do
            write(20,*) " "
         end do
@@ -491,9 +512,87 @@ contains
 
     return
     
-  end subroutine read_params
-  
+  end subroutine read_params  
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
+  subroutine read_ramses_params
+    !-----------------------------------------------
+    ! Read RAMSES parameters file
+    !-----------------------------------------------
+    character(LEN=128)::nomfich
+    integer::ilun,ilevel,noutput,skip
+    
+    nomfich=TRIM(repository)//'/params.out'
+    
+    ilun=10
+    open(unit=ilun,file=nomfich,access="stream",action="read",form='unformatted')
+    read(ilun,POS=1)p%ncpu
+    read(ilun,POS=5)p%ndim
+    read(ilun,POS=9)p%levelmin
+    read(ilun,POS=13)p%nlevelmax
+    read(ilun,POS=17)p%boxlen
+    read(ilun,POS=25)noutput
+    skip=4*(9+4*noutput)+1
+    read(ilun,POS=skip)p%t
+    skip=skip+4*(2+4*p%nlevelmax+2+2*16)
+    read(ilun,POS=skip)p%nhilbert
+    allocate(p%bound_key(1:p%nhilbert,0:p%ncpu,p%levelmin:p%nlevelmax))
+    skip=skip+4
+    read(ilun,POS=skip)p%bound_key
+    close(ilun)
+    
+    file_hydro=TRIM(repository)//'/hydro.out00001'
+    open(unit=ilun,file=file_hydro,access="stream",action="read",form='unformatted')
+    read(ilun,POS=5)p%nvar
+    read(ilun,POS=9)p%gamma
+    close(ilun)
+
+  end subroutine read_ramses_params
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
 end program amr2map
+
+function check_ramses_exist(repository)
+  !-----------------------------------------------
+  ! Check that RAMSES files are there
+  !-----------------------------------------------
+  logical::check_ramses_exist
+  character(len=80)::repository
+  integer::ipos
+  character(LEN=5)::char
+  character(LEN=128)::nomfich
+  logical::ok
+  
+  check_ramses_exist=.true.
+  ipos=INDEX(repository,'output_')
+  nomfich=TRIM(repository)//'/hydro.out00001'
+  inquire(file=nomfich, exist=ok) ! verify input file 
+  if ( .not. ok ) then
+     print *,TRIM(nomfich)//' not found.'
+     check_ramses_exist=.false.
+  endif
+  nomfich=TRIM(repository)//'/amr.out00001'
+  inquire(file=nomfich, exist=ok) ! verify input file 
+  if ( .not. ok ) then
+     print *,TRIM(nomfich)//' not found.'
+     check_ramses_exist=.false.
+  endif
+  nomfich=TRIM(repository)//'/params.out'
+  inquire(file=nomfich, exist=ok) ! verify input file
+  if ( .not. ok ) then
+     print *,TRIM(nomfich)//' not found.'
+     check_ramses_exist=.false.
+  endif
+  
+end function check_ramses_exist
+!================================================================
+!================================================================
+!================================================================
+!================================================================
 
 !=======================================================================
 subroutine title(n,nchar)
@@ -527,114 +626,6 @@ subroutine title(n,nchar)
 
 
 end subroutine title
-!================================================================
-!================================================================
-!================================================================
-!================================================================
-function check_ramses_exist(repository)
-  use amr_parameters, only: flen
-  implicit none
-  character(LEN=flen)::repository
-  logical::check_ramses_exist
-  !-----------------------------------------------
-  ! Check that RAMSES files are there
-  !-----------------------------------------------
-  integer::ipos
-  character(LEN=5)::char
-  character(LEN=128)::nomfich
-  logical::ok
-
-  check_ramses_exist=.true.
-  ipos=INDEX(repository,'output_')
-  nomfich=TRIM(repository)//'/hydro.out00001'
-  inquire(file=nomfich, exist=ok) ! verify input file 
-  if ( .not. ok ) then
-     print *,TRIM(nomfich)//' not found.'
-     check_ramses_exist=.false.
-  endif
-  nomfich=TRIM(repository)//'/amr.out00001'
-  inquire(file=nomfich, exist=ok) ! verify input file 
-  if ( .not. ok ) then
-     print *,TRIM(nomfich)//' not found.'
-     check_ramses_exist=.false.
-  endif
-  nomfich=TRIM(repository)//'/params.out'
-  inquire(file=nomfich, exist=ok) ! verify input file
-  if ( .not. ok ) then
-     print *,TRIM(nomfich)//' not found.'
-     check_ramses_exist=.false.
-  endif
-
-end function check_ramses_exist
-!================================================================
-!================================================================
-!================================================================
-!================================================================
-subroutine read_ramses_params(r,g,m,repository)
-  use amr_parameters, only: ndim,nhilbert,flen
-  use amr_commons, only: run_t,global_t,mesh_t
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  character(LEN=flen)::repository
-  !-----------------------------------------------
-  ! Read RAMSES parameters file
-  !-----------------------------------------------
-  character(LEN=128)::nomfich
-  integer::ilun,ilevel,ndim2,nhilbert2
-
-  nomfich=TRIM(repository)//'/params.out'
-
-  ilun=10
-  open(unit=ilun,file=nomfich,access="stream",action="read",form='unformatted')
-  ! Read grid variables
-  read(ilun)g%ncpu
-  read(ilun)ndim2
-  if(ndim.NE.ndim2)then
-     write(*,*)'Recompile'
-     write(*,*)'ndim=',ndim
-     write(*,*)'ndim in file=',ndim2
-     stop
-  endif
-  read(ilun)r%levelmin
-  read(ilun)r%nlevelmax
-  ! Overwrite boxlen with value from file
-  read(ilun)r%boxlen
-  ! Read time variables
-  read(ilun)r%noutput,g%iout,g%ifout
-  read(ilun)r%tout(1:r%noutput)
-  read(ilun)r%aout(1:r%noutput)
-  read(ilun)g%t
-  read(ilun)g%dtold(1:r%nlevelmax)
-  read(ilun)g%dtnew(1:r%nlevelmax)
-  read(ilun)g%nstep,g%nstep_coarse
-  ! Read various constants
-  read(ilun)g%const,g%mass_tot_0,g%rho_tot
-  read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
-  read(ilun)g%aexp,g%hexp,g%aexp_old,g%epot_tot_int,g%epot_tot_old
-  read(ilun)r%mass_sph
-  read(ilun)nhilbert2
-  if(nhilbert.NE.nhilbert2)then
-     write(*,*)'Recompile'
-     write(*,*)'nhilbert=',nhilbert
-     write(*,*)'nhilbert in file=',nhilbert2
-     stop
-  endif
-  allocate(m%domain(1:r%nlevelmax+1))
-  do ilevel=1,r%nlevelmax+1
-     call m%domain(ilevel)%create(g%myid,g%ncpu,g%ncpu)
-  end do
-  do ilevel=r%levelmin,r%nlevelmax
-     read(ilun)m%domain(ilevel)%b(1:nhilbert,0:g%ncpu)
-  end do
-  close(ilun)
-
-end subroutine read_ramses_params
-!================================================================
-!================================================================
-!================================================================
-!================================================================
 
 !!$subroutine cmp_cpu_list(xmin,xmax,ymin,ymax,zmin,zmax,ilevel,ncpu_read,cpu_list)
 !!$  use amr_parameters, only: ndim,nhilbert,flen

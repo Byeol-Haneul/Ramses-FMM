@@ -106,9 +106,6 @@ ramses:	$(MODOBJ) ramses.o
 	rm write_makefile.f90
 	rm write_patch.f90
 
-amr2map:   amr_parameters.o timer.o hilbert.o domain_hilbert.o amr_commons.o hydro_parameters.o hydro_commons.o ../utils/f90/amr2map.f90
-	 $(F90) amr_parameters.o timer.o hilbert.o domain_hilbert.o amr_commons.o hydro_parameters.o hydro_commons.o ../utils/f90/amr2map.f90 -o amr2map$(NDIM)d
-
 #############################################################################
 write_gitinfo.o: FORCE
 	$(F90) $(FFLAGS) -DPATCH=\'$(PATCH)\' -DGITBRANCH=\'$(GITBRANCH)\' -DGITHASH=\'"$(GITHASH)"\' \

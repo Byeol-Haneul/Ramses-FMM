@@ -119,9 +119,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_force_fine(pst,ilevel,icount)
 
      ! Perform second kick for particles
+     if(r%pic)then
                                     call m_timer(pst,'particle - kickdrift','start')
-     if(r%pic)call m_kick_drift_part(pst,ilevel,action_kick_only)
-
+        call m_kick_drift_part(pst,ilevel,action_kick_only)
+     endif
      ! Add gravity source term with half time step and new force
      if(r%hydro)then
                                     call m_timer(pst,'poisson','start')
@@ -140,8 +141,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
+  if(r%hydro)then
                                     call m_timer(pst,'hydro - set unew','start')
-  if(r%hydro)call r_set_unew(pst,ilevel,1)
+     call r_set_unew(pst,ilevel,1)
+  endif
 
   !---------------------------
   ! Recursive call to amr_step
@@ -185,8 +188,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(.not.r%static)call r_godunov_fine(pst,ilevel,1)
 
      ! Add gravity source terms to unew with half time step
+     if(r%poisson)then
                                     call m_timer(pst,'hydro - gravity','start')
-     if(r%poisson)call r_gravity_hydro_fine(pst,ilevel,1)
+        call r_gravity_hydro_fine(pst,ilevel,1)
+     endif
 
      ! Set uold equal to unew
                                     call m_timer(pst,'hydro - set uold','start')
