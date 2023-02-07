@@ -193,7 +193,7 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
         w=w+r%constant_gravity(3)*fact
 #endif
 #endif
-        m%grid(igrid)%unew(ind,3)=d*v
+        m%grid(igrid)%unew(ind,2)=d*u
 #if NDIM>1
         m%grid(igrid)%unew(ind,3)=d*v
 #endif

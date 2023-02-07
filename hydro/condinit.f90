@@ -40,7 +40,7 @@ subroutine condinit(r,g,x,u,dx,nn)
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 #endif
 #ifdef CONDINITinsta
-  integer::i,j,id,iu,iv,iw,ip
+  integer::i,id,iu,iv,iw,ip,ix,iy
   real(dp)::x0,lambday,ky,lambdaz,kz,rho1,rho2,p0,v0,v1,v2
 #endif
   
@@ -100,6 +100,18 @@ subroutine condinit(r,g,x,u,dx,nn)
 #ifdef CONDINITinsta
   id=1; iu=2; iv=3; iw=4; ip=ndim+2
   x0=r%x_center(1)
+  if(r%constant_gravity(2) .ne. 0)then
+     ix=2
+     iy=1
+     iu=3
+     iv=2
+  else
+     ix=1
+     iy=2
+     iu=2
+     iv=3
+  endif
+
   lambday=0.25
   ky=2.*acos(-1.0d0)/lambday
   lambdaz=0.25
@@ -111,20 +123,20 @@ subroutine condinit(r,g,x,u,dx,nn)
   v0=0.1
   p0=10.
   do i=1,nn
-     if(x(i,1) < x0)then
+     if(x(i,ix) < x0)then
         q(i,id)=rho1
         q(i,iu)=0.0
-        if(ndim>1)q(i,iu)=v0*cos(ky*(x(i,2)-lambday/2.))*exp(+ky*(x(i,1)-x0))
+        if(ndim>1)q(i,iu)=v0*cos(ky*(x(i,iy)-lambday/2.))*exp(+ky*(x(i,ix)-x0))
         if(ndim>1)q(i,iv)=v1
         if(ndim>2)q(i,iw)=0.0D0
-        q(i,ip)=p0+rho1*r%constant_gravity(1)*x(i,1)
+        q(i,ip)=p0+rho1*r%constant_gravity(ix)*x(i,ix)
      else
         q(i,id)=rho2
         q(i,iu)=0.0
-        if(ndim>1)q(i,iu)=v0*cos(ky*(x(i,2)-lambday/2.))*exp(-ky*(x(i,1)-x0))
+        if(ndim>1)q(i,iu)=v0*cos(ky*(x(i,iy)-lambday/2.))*exp(-ky*(x(i,ix)-x0))
         if(ndim>1)q(i,iv)=v2
         if(ndim>2)q(i,iw)=0.0D0
-        q(i,ip)=p0+rho1*r%constant_gravity(1)*x0+rho2*r%constant_gravity(1)*(x(i,1)-x0)
+        q(i,ip)=p0+rho1*r%constant_gravity(ix)*x0+rho2*r%constant_gravity(ix)*(x(i,ix)-x0)
      endif
   end do
 #endif

@@ -52,18 +52,19 @@ plt.rcParams.update({'font.size': 22})
 px = 1/plt.rcParams['figure.dpi']
 
 fig, ax = plt.subplots(figsize=(1000*px,1000*px))
-plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+ax.set_aspect("equal")
+#plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
 ax.set_xlim([xmin,xmax])
 ax.set_ylim([ymin,ymax])
-plt.scatter(x,y,s=0.0001)
-ax.set_aspect("equal")
+plt.scatter(x,y,s=0.00001)
+print(xmin,xmax,ymin,ymax)
 rescale=np.maximum(xmax-xmin,ymax-ymin)
-plt.scatter(x,y,c=v,s=(dx*800/rescale)**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
+plt.scatter(x,y,c=v,s=(dx*1000/rescale)**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
 
-if args.log:
-    plt.colorbar(shrink=0.8,label="log density")
-else:
-    plt.colorbar(shrink=0.8,label="density")
+#if args.log:
+#    plt.colorbar(shrink=0.8,label="log density",location="bottom")
+#else:
+#    plt.colorbar(shrink=0.8,label="density",location="bottom")
 
 plt.xlabel("x")
 plt.ylabel("y")
