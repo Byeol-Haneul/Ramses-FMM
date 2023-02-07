@@ -91,6 +91,7 @@ module amr_commons
      logical ::pressure_fix=.false.
      character(LEN=10)::scheme='muscl'
      integer::riemann=1
+     real(dp),dimension(1:3)::constant_gravity
      
      ! Physics parameters
      logical::cooling =.false.   ! Cooling and heating activated

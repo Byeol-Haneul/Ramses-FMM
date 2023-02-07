@@ -176,6 +176,7 @@ subroutine m_read_params(pst)
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
   logical ::pressure_fix=.false.
+  real(dp),dimension(1:3)::constant_gravity=0.0d0
 
   ! Other hydro solver parameters
   real(dp)::T2_star=10.
@@ -191,7 +192,7 @@ subroutine m_read_params(pst)
   ! Poisson solver parameters
   real(dp)::epsilon=1.0D-4 ! Convergence criterion
   integer ::gravity_type=0 ! Type of gravity calculations (see user guide)
-  real(dp),dimension(1:10)::gravity_params=0.0 ! Constant gravity parameters
+  real(dp),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
   integer :: cic_levelmax=0 ! Maximum level for CIC dark matter interpolation
   integer :: cg_levelmin=999   ! Min level for CG solver
   ! level < cg_levelmin uses fine multigrid
@@ -252,7 +253,7 @@ subroutine m_read_params(pst)
        & ,d_region,u_region,v_region,w_region,p_region
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,niter_riemann,slope_type,difmag,gamma_rad &
-       & ,pressure_fix,scheme,riemann
+       & ,pressure_fix,scheme,riemann,constant_gravity
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
 #if NENER>0
@@ -588,6 +589,7 @@ subroutine m_read_params(pst)
   if(riemann=='llf')s%r%riemann=solver_llf
   if(riemann=='hll')s%r%riemann=solver_hll
   if(riemann=='hllc')s%r%riemann=solver_hllc
+  s%r%constant_gravity=constant_gravity
 
   s%r%cooling=cooling
   s%r%units_density=units_density

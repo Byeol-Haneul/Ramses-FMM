@@ -86,18 +86,19 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
   endif
 #endif
+
+  ! Remove gravity source term with half time step and old force
+  if(r%hydro)then
+                                    call m_timer(pst,'hydro - gravity','start')
+     call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
+  endif
+
   !---------------
-  ! Gravity solver
+  ! Poisson solver
   !---------------
 #ifdef GRAV
   if(r%poisson)then
-
                                     call m_timer(pst,'poisson','start')
-     ! Remove gravity source term with half time step and old force
-     if(r%hydro)then
-        call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
-     endif
-
      ! Save old potential for time-extrapolation at level boundaries
      call r_save_phi_old(pst,ilevel,1)
 
@@ -118,19 +119,21 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      ! Compute gravitational acceleration
      call m_force_fine(pst,ilevel,icount)
 
-     ! Perform second kick for particles
-     if(r%pic)then
-                                    call m_timer(pst,'particle - kickdrift','start')
-        call m_kick_drift_part(pst,ilevel,action_kick_only)
-     endif
-     ! Add gravity source term with half time step and new force
-     if(r%hydro)then
-                                    call m_timer(pst,'poisson','start')
-        call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
-     end if
-
   end if
 #endif
+
+  ! Perform second kick for particles
+  if(r%pic)then
+                                    call m_timer(pst,'particle - kickdrift','start')
+     call m_kick_drift_part(pst,ilevel,action_kick_only)
+  endif
+
+
+  ! Add gravity source term with half time step and new force
+  if(r%hydro)then
+                                    call m_timer(pst,'hydro - gravity','start')
+     call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+  end if
 
   !----------------------
   ! Compute new time step
@@ -188,10 +191,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(.not.r%static)call r_godunov_fine(pst,ilevel,1)
 
      ! Add gravity source terms to unew with half time step
-     if(r%poisson)then
                                     call m_timer(pst,'hydro - gravity','start')
-        call r_gravity_hydro_fine(pst,ilevel,1)
-     endif
+     call r_gravity_hydro_fine(pst,ilevel,1)
 
      ! Set uold equal to unew
                                     call m_timer(pst,'hydro - set uold','start')
@@ -199,10 +200,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
      ! Add gravity source terms to uold with half time step
      ! to complete the time step with old force (will be removed later)
-     if(r%poisson)then
-                                    call m_timer(pst,'poisson - synchro','start')
-        call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
-     endif
+                                    call m_timer(pst,'hydro - gravity','start')
+     call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
 
      ! Restriction operator
                                     call m_timer(pst,'hydro - upload','start')

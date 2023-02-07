@@ -36,9 +36,11 @@ module call_back
        integer,dimension(1:msg_size),optional::msg_array
        integer(kind=8),dimension(0:ndim)::hash_key
      end subroutine cache_function_unpack
-     subroutine cache_function_bound(r,grid,grid_ref,ibound)
-       use amr_commons, only: run_t, oct
+     subroutine cache_function_bound(r,g,m,grid,grid_ref,ibound)
+       use amr_commons, only: run_t, global_t, mesh_t, oct
        type(run_t)::r
+       type(global_t)::g
+       type(mesh_t)::m
        type(oct)::grid, grid_ref
        integer::ibound
      end subroutine cache_function_bound

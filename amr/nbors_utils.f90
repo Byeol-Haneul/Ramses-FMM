@@ -631,7 +631,7 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
 
         ! Set initialisation rule for boundary grid using reference grid
         if(associated(init_bound%proc))then
-           call init_bound%proc(r,m%grid(child_grid),child_ref,ibound)
+           call init_bound%proc(r,g,m,m%grid(child_grid),child_ref,ibound)
         endif
 
         ! Go to next free cache line

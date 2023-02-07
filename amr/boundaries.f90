@@ -67,11 +67,13 @@ contains
   !################################################################
   !################################################################
   !################################################################
-  subroutine init_bound_refine(r,grid,grid_ref,ibound)
-    use amr_parameters, only: ndim,twotondim,dp
+  subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
+    use amr_parameters, only: ndim, twotondim, dp, nvector
     use hydro_parameters, only: nvar, nener
-    use amr_commons, only: run_t, oct
+    use amr_commons, only: run_t, global_t, mesh_t, oct
     type(run_t)::r
+    type(global_t)::g
+    type(mesh_t)::m
     type(oct)::grid, grid_ref
     integer::ibound
 
@@ -101,8 +103,11 @@ contains
          &    5,6,7,8,5,6,7,8/),(/8,3/))
 
     integer::idim, ind, ivar
-    integer::type, dir, shift
+    integer::type, dir, shift, nstride
     real(dp)::reverse, ek_bound
+    real(dp),dimension(1:nvector,1:ndim)::xx
+    real(dp),dimension(1:nvector,1:nvar)::uu
+    real(dp)::dx
 
     type = r%bound_type(ibound)
     dir = r%bound_dir(ibound)
@@ -208,6 +213,48 @@ contains
 
     endif
 
+    ! Imposed BC from condinit
+    if(type == 4)then
+
+       ! Mesh size at level ilevel in code units
+       dx=r%boxlen/2**grid%lev
+       
+       do ind=1,twotondim
+          do idim=1,ndim
+             nstride=2**(idim-1)
+             xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+          end do
+          ! Call initial condition routine
+          call condinit(r,g,xx,uu,dx,1)
+          ! Scatter variables to main memory
+          do ivar=1,nvar
+             grid%uold(ind,ivar)=uu(1,ivar)
+          end do
+       end do
+
+    endif
+
+    ! Imposed BC from boundana
+    if(type == 5)then
+
+       ! Mesh size at level ilevel in code units
+       dx=r%boxlen/2**grid%lev
+       
+       do ind=1,twotondim
+          do idim=1,ndim
+             nstride=2**(idim-1)
+             xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+          end do
+          ! Call initial condition routine
+          call boundana(r,g,xx,uu,dx,ibound,1)
+          ! Scatter variables to main memory
+          do ivar=1,nvar
+             grid%uold(ind,ivar)=uu(1,ivar)
+          end do
+       end do
+
+    endif
+
 #endif
 
 #ifdef GRAV
@@ -228,11 +275,13 @@ contains
   !################################################################
   !################################################################
   !################################################################
-  subroutine init_bound_flag(r,grid,grid_ref,ibound)
+  subroutine init_bound_flag(r,g,m,grid,grid_ref,ibound)
     use amr_parameters, only: ndim,twotondim
     use hydro_parameters, only: nvar, nener
-    use amr_commons, only: run_t, oct
+    use amr_commons, only: run_t, global_t, mesh_t, oct
     type(run_t)::r
+    type(global_t)::g
+    type(mesh_t)::m
     type(oct)::grid, grid_ref
     integer::ibound
 

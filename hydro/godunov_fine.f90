@@ -515,6 +515,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                           do idim=1,ndim
                              h%gloc(i3,j3,k3,idim)=childp%f(ind_son,idim)
                           end do
+#else
+                          ! Gather gravitational acceleration
+                          do idim=1,ndim
+                             h%gloc(i3,j3,k3,idim)=r%constant_gravity(idim)
+                          end do
 #endif
                           ! Gather refinement flag
                           h%okloc(i3,j3,k3)=childp%refined(ind_son)
@@ -538,6 +543,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                           ! Gather gravitational acceleration
                           do idim=1,ndim
                              h%gloc(i3,j3,k3,idim)=gridp%f(icell,idim)
+                          end do
+#else
+                          ! Gather gravitational acceleration
+                          do idim=1,ndim
+                             h%gloc(i3,j3,k3,idim)=r%constant_gravity(idim)
                           end do
 #endif
                           ! Gather refinement flag

@@ -16,7 +16,6 @@ subroutine m_synchro_hydro_fine(pst,ilevel,dteff)
   !--------------------------------------------------------------
   integer,dimension(1:3)::input_array,dummy
   
-  if(.not. pst%s%r%poisson)return
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%r%verbose)write(*,'("   Entering synchro_hydro_fine for level",i2," and time step dt=",1PE12.5)')ilevel,dteff
 
@@ -76,7 +75,6 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
   real(dp)::ener
 
 #ifdef HYDRO
-
   ! Loop over octs
   do igrid=m%head(ilevel),m%tail(ilevel)
      ! Loop over cells
@@ -94,6 +92,11 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
            m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)+&
                 & max(m%grid(igrid)%uold(ind,1),r%smallr)*m%grid(igrid)%f(ind,idim)*dteff
         end do
+#else
+        do idim=1,ndim
+           m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)+&
+                & max(m%grid(igrid)%uold(ind,1),r%smallr)*r%constant_gravity(idim)*dteff
+        end do        
 #endif
         ! Update total energy
         do idim=1,ndim
@@ -175,15 +178,25 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
         fact=d_old/d*0.5d0*g%dtnew(ilevel)
 #ifdef GRAV
         u=u+m%grid(igrid)%f(ind,1)*fact
+#else
+        u=u+r%constant_gravity(1)*fact
+#endif
         m%grid(igrid)%unew(ind,2)=d*u
 #if NDIM>1
+#ifdef GRAV
         v=v+m%grid(igrid)%f(ind,2)*fact
+#else
+        v=v+r%constant_gravity(2)*fact
+#endif
         m%grid(igrid)%unew(ind,3)=d*v
 #endif
 #if NDIM>2
+#ifdef GRAV
         w=w+m%grid(igrid)%f(ind,3)*fact
-        m%grid(igrid)%unew(ind,4)=d*w
+#else
+        w=w+r%constant_gravity(3)*fact
 #endif
+        m%grid(igrid)%unew(ind,4)=d*w
 #endif
         e_kin=0.5d0*d*(u**2+v**2+w**2)
         m%grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin

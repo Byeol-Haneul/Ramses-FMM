@@ -45,7 +45,7 @@ ifeq ($(COMPILER),GNU)
    F90 += -frecord-marker=4 -fbacktrace -ffree-line-length-none -g -fimplicit-none
    ifeq ($(DEBUG),1)
       F90 += -O0 -fbounds-check -Wuninitialized -Wall
-      FFLAGS += -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan
+      FFLAGS += -fbacktrace -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan
    else
       F90 += -O3
    endif
@@ -96,7 +96,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 init_refine_adaptive.o init_refine_restart.o title.o units.o move_fine.o rho_ana.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
 	 input_hydro_condinit.o input_hydro_grafic.o init_flow_fine.o interpol_hydro.o \
-	 condinit.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
+	 condinit.o boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
 	 godunov_fine.o umuscl.o uplmde.o synchro_hydro_fine.o cooling_fine.o \
 	 task_manager.o amr_step.o adaptive_loop.o 
 

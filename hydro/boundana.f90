@@ -2,10 +2,13 @@
 !############################################################
 !############################################################
 !############################################################
-subroutine boundana(x,u,dx,ibound,ncell)
-  use amr_parameters, ONLY: dp,ndim,nvector
-  use hydro_parameters, ONLY: nvar,boundary_var
+subroutine boundana(r,g,x,u,dx,ibound,ncell)
+  use amr_parameters, only: dp, ndim, nvector
+  use hydro_parameters, only: nvar, nener
+  use amr_commons, only: run_t, global_t
   implicit none
+  type(run_t)::r
+  type(global_t)::g
   integer ::ibound                        ! Index of boundary region
   integer ::ncell                         ! Number of active cells
   real(dp)::dx                            ! Cell size
@@ -22,12 +25,6 @@ subroutine boundana(x,u,dx,ibound,ncell)
   !================================================================
   integer::ivar,i
 
-  do ivar=1,nvar
-     do i=1,ncell
-        u(i,ivar)=boundary_var(ibound,ivar)
-     end do
-  end do
-  
   ! Add here, if you wish, some user-defined boudary conditions
   ! ........
 
