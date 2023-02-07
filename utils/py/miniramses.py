@@ -827,6 +827,11 @@ def visu(x,y,dx,v,**kwargs):
     Authors: Romain Teyssier (Princeton University, October 2022)
     '''
 
+    xmin=np.min(x-dx/2)
+    xmax=np.max(x+dx/2)
+    ymin=np.min(y-dx/2)
+    ymax=np.max(y+dx/2)
+    
     log = kwargs.get("log",None)
     vmin = kwargs.get("vmin",None)
     vmax = kwargs.get("vmax",None)
@@ -841,15 +846,16 @@ def visu(x,y,dx,v,**kwargs):
     else:
         ind = np.arange(0,v.size)
 
-    plt.rcParams['figure.dpi'] = 58        
+    plt.rcParams['figure.dpi'] = 58
     px = 1/plt.rcParams['figure.dpi'] 
     fig, ax = plt.subplots(figsize=(1000*px,1000*px))
+    ax.set_xlim([xmin,xmax])
+    ax.set_ylim([ymin,ymax])
     plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
     plt.scatter(x,y,s=0.0001)
-    ymin, ymax = ax.get_ylim()
-        
+    rescale=np.maximum(xmax-xmin,ymax-ymin)        
     ax.set_aspect("equal")
-    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/(ymax-ymin))**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
+    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
     plt.colorbar(shrink=0.8)
 
 def mk_movie(**kwargs):

@@ -33,6 +33,11 @@ y=c.x[1]
 v=c.u[0]
 dx=c.dx
 
+xmin=np.min(x-dx/2)
+xmax=np.max(x+dx/2)
+ymin=np.min(y-dx/2)
+ymax=np.max(y+dx/2)
+
 if args.log:
     v = np.log10(abs(v))
 
@@ -48,11 +53,12 @@ px = 1/plt.rcParams['figure.dpi']
 
 fig, ax = plt.subplots(figsize=(1000*px,1000*px))
 plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+ax.set_xlim([xmin,xmax])
+ax.set_ylim([ymin,ymax])
 plt.scatter(x,y,s=0.0001)
-ymin, ymax = ax.get_ylim()
-
 ax.set_aspect("equal")
-plt.scatter(x,y,c=v,s=(dx*800/(ymax-ymin))**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
+rescale=np.maximum(xmax-xmin,ymax-ymin)
+plt.scatter(x,y,c=v,s=(dx*800/rescale)**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
 
 if args.log:
     plt.colorbar(shrink=0.8,label="log density")

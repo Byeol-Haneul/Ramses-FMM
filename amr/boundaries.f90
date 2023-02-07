@@ -181,7 +181,7 @@ contains
 
     endif
 
-    ! Imposed BC
+    ! Imposed BC from namelist constant values
     if(type == 3)then
 
        do ind=1,twotondim

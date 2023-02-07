@@ -124,7 +124,7 @@ subroutine condinit(r,g,x,u,dx,nn)
         if(ndim>1)q(i,iu)=v0*cos(ky*(x(i,2)-lambday/2.))*exp(-ky*(x(i,1)-x0))
         if(ndim>1)q(i,iv)=v2
         if(ndim>2)q(i,iw)=0.0D0
-        q(i,ip)=p0+rho1*r%constant_gravity(1)*x0+rho2*constant_gravity(1)*(x(i,1)-x0)
+        q(i,ip)=p0+rho1*r%constant_gravity(1)*x0+rho2*r%constant_gravity(1)*(x(i,1)-x0)
      endif
   end do
 #endif
