@@ -307,6 +307,7 @@ subroutine ensure_ref_rules(s,ilevel)
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
+  use boundaries, only: init_bound_flag
   use cache_commons
   use cache
   use nbors_utils
@@ -343,7 +344,8 @@ subroutine ensure_ref_rules(s,ilevel)
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-                pack=pack_fetch_flag,unpack=unpack_fetch_flag)
+                pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
+                bound=init_bound_flag)
 
   hash_nbor(0)=ilevel
   do igrid=m%head(ilevel),m%tail(ilevel)

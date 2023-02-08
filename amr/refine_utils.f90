@@ -184,7 +184,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
 
   end do
   ncreate=g%ncreate
-  
+
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
   ! but it is refined, then destroy the child grid.
@@ -591,9 +591,10 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   real(dp),dimension(1:twotondim,1:nvar)::u2
   type(nbor),dimension(0:twondim)::grid_nbor
   type(oct),pointer::child
+  logical::ok
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-    
+
 #if !defined(WITHOUTMPI) && !defined(MDL2)
   ! If counter is good, check on incoming messages and perform actions
   if(mdl%mail_counter==32)then
@@ -602,7 +603,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   endif
   mdl%mail_counter=mdl%mail_counter+1
 #endif
-  
+
   !=================================
   ! Create new octs into main memory
   !=================================
@@ -613,17 +614,17 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   end do
   hash_key(0)=ilevel
   hash_key(1:ndim)=cart_key(1:ndim)
-  
+
   ! Compute Hilbert keys of new octs
   ix(1:ndim)=cart_key(1:ndim)
   hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
-  
+
   ! Check if grid sits inside processor boundaries
   if (m%domain(ilevel)%in_rank(hk)) then
-     
+
      ! Set grid index to a virtual grid in local main memory
      child => m%grid(m%ifree)
-     
+
      ! Go to next main memory free line
      m%ifree=m%ifree+1
      if(m%ifree.GT.r%ngridmax)then
@@ -654,7 +655,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
      call hash_setp(m%grid_dict,hash_key,child)
 #endif
   endif
-  
+
   child%lev=ilevel
   child%ckey(1:ndim)=int(cart_key(1:ndim),kind=4)
   child%hkey(1:nhilbert)=hk(1:nhilbert)
@@ -662,46 +663,50 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   child%flag1(1:twotondim)=0
   child%flag2(1:twotondim)=0
   child%superoct=1
-  
+
   ! Set status of parent cell to "refined"
   parent%refined(icell)=.true.
-  
+
   !=========================================================
   ! Inject parent hydro variables into new children ones
   !=========================================================     
 #ifdef HYDRO
-  
+
   ! Interpolate hydro variables
   do ivar=1,nvar
      do ind=1,twotondim
         child%uold(ind,ivar)=parent%uold(icell,ivar)
      enddo
   end do
-  
+
   ! In case one wants to interpolate using high-order schemes
   if(r%interpol_type>0)then
-     
+
      ! Get 2ndim neighboring father cells with read-only cache
      call get_twondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+     ok=.false.
      do inbor=0,twondim
-        do ivar=1,nvar
-           u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
-        end do
+        ok=ok.and.associated(grid_nbor(inbor)%p)
      end do
+     if(ok)then
+        do inbor=0,twondim
+           do ivar=1,nvar
+              u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
+           end do
+        end do
+        ! Interpolate
+        call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
+        ! Store hydro variables
+        do ivar=1,nvar
+           do ind=1,twotondim
+              child%uold(ind,ivar)=u2(ind,ivar)
+           enddo
+        end do
+     endif
      do inbor=1,twondim
         call unlock_cache(s,grid_nbor(inbor)%p)
      end do
-     
-     ! Interpolate
-     call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
-     
-     ! Store hydro variables
-     do ivar=1,nvar
-        do ind=1,twotondim
-           child%uold(ind,ivar)=u2(ind,ivar)
-        enddo
-     end do
-     
+
   endif
   
 #endif

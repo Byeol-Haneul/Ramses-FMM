@@ -43,6 +43,10 @@ subroutine condinit(r,g,x,u,dx,nn)
   integer::i,id,iu,iv,iw,ip,ix,iy
   real(dp)::x0,lambday,ky,lambdaz,kz,rho1,rho2,p0,v0,v1,v2
 #endif
+#ifdef CONDINITdoublemach
+  integer::i,id,iu,iv,ip
+  real(dp)::pi,xp
+#endif
   
 #ifdef CONDINITdefault
   ! Call built-in initial condition generator
@@ -137,6 +141,25 @@ subroutine condinit(r,g,x,u,dx,nn)
         if(ndim>1)q(i,iv)=v2
         if(ndim>2)q(i,iw)=0.0D0
         q(i,ip)=p0+rho1*r%constant_gravity(ix)*x0+rho2*r%constant_gravity(ix)*(x(i,ix)-x0)
+     endif
+  end do
+#endif
+
+#ifdef CONDINITdoublemach
+  id=1; iu=2; iv=3; ip=ndim+2
+  pi=acos(-1.0d0)
+  do i=1,nn
+     xp=x(i,1)-x(i,2)/tan(pi/3.0)-10./sin(pi/3.0)*g%t
+     if(xp<1./6.)then
+        q(i,id)=8.
+        q(i,iu)=7.145
+        q(i,iv)=-4.125
+        q(i,ip)=116.5
+     else
+        q(i,id)=r%gamma
+        q(i,iu)=0.0
+        q(i,iv)=0.0
+        q(i,ip)=1.0
      endif
   end do
 #endif
