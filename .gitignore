@@ -5,3 +5,6 @@ bin/*
 # ignore utils executables
 utils/f90/*
 !utils/f90/*.f90
+# ignore python cache files
+utils/py/*
+!utils/py/*.py
