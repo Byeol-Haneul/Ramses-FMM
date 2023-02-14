@@ -81,12 +81,13 @@ LIBMPI =
 LIBS = $(LIBMPI)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):../$(SOLVER):../hydro:../pm:../poisson:../amr:../mdl1
+VPATH = $(PATCH):../$(SOLVER):../cooling:../hydro:../pm:../poisson:../amr:../mdl1
 #############################################################################
 
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
          hydro_commons.o amr_commons.o poisson_parameters.o \
+	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
 	 mdl_commons.o mdl.o ramses_commons.o call_back.o cache_commons.o cache.o gadgetreadfile.o write_makefile.o \
 	 boundaries.o write_patch.o  write_gitinfo.o output_hydro.o output_poisson.o output_part.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o \

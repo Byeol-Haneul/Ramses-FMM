@@ -2,9 +2,8 @@
 !! solve_cooling_ism is used if there is no RT
 !! Authors: Patrick Hennebelle, Benjamin Godard
 !=======================================================================
-subroutine solve_cooling_ism(nH,T2,dt,deltaT2,ncell)
+subroutine solve_cooling_ism(nH,T2,dt,deltaT2,gamma,mu_gas,ncell)
 !=======================================================================
-  use amr_parameters, only:mu_gas
   implicit none
   ! BRIDGE FUNCTION WITH SAME INTERFACE AS solve_cooling
   ! nH - hydrogen number density in PHYSICAL units
@@ -13,49 +12,44 @@ subroutine solve_cooling_ism(nH,T2,dt,deltaT2,ncell)
   ! deltaT2 - temperature change in K/mu (??)
   ! ncell - number of elements in the vector
   integer::ncell
-  real(kind=8)::dt
+  real(kind=8)::dt,gamma,mu_gas
   real(kind=8),dimension(1:ncell)::nH,T2,deltaT2
   real(kind=8)::NN,TT   ! Input/output variables to analytic function calc_temp
   real(kind=8)::TT_ini,mu
   integer::i
   ! mu = 1.4 for Hennebelle code
   mu = mu_gas    ! molecular weight
-  do i=1,ncell
+  do i = 1,ncell
      NN = nH(i)      ! H/cc
      TT = T2(i) * mu ! K
      TT_ini = TT
-     call calc_temp(NN,TT,dt)
+     call calc_temp(NN,TT,gamma,dt)
      deltaT2(i) = (TT - TT_ini) / mu
   end do
 end subroutine solve_cooling_ism
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-subroutine calc_temp(NN,TT,dt_tot)
+subroutine calc_temp(NN,TT,gamma,dt_tot)
   ! NN = number densisty collision partners (hydrogen) in H/cm3
   ! TT = temperature in Kelvin (T2*mu)
   ! dt_tot = timestep in s
-  use amr_parameters, only:dp
-  use hydro_parameters, only:gamma,smallr
-  use constants, only:kB
+  use constants, only: kB
   implicit none
 
-  real(dp) :: NN,TT,mu,dt_tot
+  real(kind=8) :: NN,TT,gamma,dt_tot
   integer  :: iter
-  real(dp) :: dt, time, dt_max, vardt
-  real(dp) :: TTold, dTemp, eps
-  real(dp) :: ref, ref2, varrel
-  real(dp) :: dRefdT, alpha_ct
+  real(kind=8) :: dt, time, dt_max, vardt
+  real(kind=8) :: TTold, dTemp, eps
+  real(kind=8) :: ref, ref2, varrel
+  real(kind=8) :: dRefdT, alpha_ct
 
   if( TT .le. 0) then
      TT = 50d0
      return
   endif
 
-  if (NN .le. smallr) then
-     if( NN .le. 0)  write(*,*) 'WARNING: problem density in calc_temp',NN
-     NN = smallr  
-  endif
+  if( NN .le. 0)  write(*,*) 'WARNING: problem density in calc_temp',NN
 
   vardt = 10d0**(0.1d0)
   varrel = 0.2d0
@@ -70,7 +64,6 @@ subroutine calc_temp(NN,TT,dt_tot)
   do while (time < dt_tot)
      if (TT .lt. 0) then
         write(*,*) 'WARNING: problem temperature in calc_temp',TT,NN
-        NN = max(NN,smallr)
         TT = min(4000d0/NN,8000d0)
      endif
 
@@ -122,11 +115,10 @@ subroutine cooling_high(T,n,ref)
   ! T = physical temperature in K
   ! n = number of Hydrogen atoms for collision / cm3
   ! ref = cooling rate
-  use amr_parameters, only:dp
   implicit none
 
-  real(dp) :: T,n,ref
-  real(dp) :: cold,hot,logT
+  real(kind=8) :: T,n,ref
+  real(kind=8) :: cold,hot,logT
 
   ! cooling rate based on Dopita and Sutherland
 
@@ -166,12 +158,11 @@ subroutine cooling_low(T,n,ref)
   ! n = number of Hydrogen atoms for collision / cm3
   ! ref = cooling rate
   ! TC: precision errors are significant here...
-  use amr_parameters, only:dp,rt
   implicit none
 
-  real(dp) :: T,n,ref
-  real(dp) :: cold,hot,cold_cII,cold_o,cold_h,cold_cII_m,cold_o_m,cold_rec
-  real(dp) :: param,G0,epsilon,bet,x,ne   ! x is the ionisation rate
+  real(kind=8) :: T,n,ref
+  real(kind=8) :: cold,hot,cold_cII,cold_o,cold_h,cold_cII_m,cold_o_m,cold_rec
+  real(kind=8) :: param,G0,epsilon,bet,x,ne   ! x is the ionisation rate
 
   ! Cooling and heating function computed from the cooling of 
   ! chemical elements
@@ -208,11 +199,7 @@ subroutine cooling_low(T,n,ref)
 
   ! Hydrogen-prompted cooling
   ! Formula from Spitzer 1978
-  ! NOTE - RT function handles hydrogen cooling out of equilibrium
-  cold_h = 0
-  if (.not. rt) then
-     cold_h = 7.3d-19 * x * exp(-118400/T)
-  endif
+  cold_h = 7.3d-19 * x * exp(-118400/T)
 
   ! Cooling from metastables metal lines
   ! Formulas from Hollenbach and McKee 1989 (ApJ 342, 306)

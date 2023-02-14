@@ -20,7 +20,7 @@ recursive subroutine r_init_time(pst)
      call r_init_time(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_time(pst%s%mdl,pst%s%r,pst%s%g)
+     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%c)
   endif
 
 end subroutine r_init_time
@@ -28,14 +28,17 @@ end subroutine r_init_time
 !###########################################################
 !###########################################################
 !###########################################################
-  subroutine init_time(mdl,r,g)
+  subroutine init_time(mdl,r,g,c)
   use mdl_module
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t
+  use cooling_module, only: cooling_t
+  use init_cooling_module, only: init_cooling
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
+  type(cooling_t)::c
 
   ! Local variables
   integer::i
@@ -82,6 +85,11 @@ end subroutine r_init_time
   else
      g%texp=g%t
   end if                                                                   
+
+  ! Initialize cooling model
+  if(r%cooling.and..not.r%cooling_ism)then
+     call init_cooling(r,g,c)
+  endif
 
 end subroutine init_time
 !###########################################################
@@ -235,7 +243,13 @@ subroutine init_cosmo(mdl,r,g)
            g%astart(ilevel)=astart0
            g%omega_m=omega_m0
            g%omega_l=omega_l0
-           if(r%hydro)g%omega_b=0.045 ! Be careful hard-coded !
+           if(r%hydro)then
+              if(r%omega_b>0)then
+                 g%omega_b=r%omega_b
+              else
+                 g%omega_b=0.045
+              endif
+           endif
            g%h0=h00
            g%aexp=MIN(g%aexp,g%astart(ilevel))
            g%nlevelmax_part=g%nlevelmax_part+1
@@ -245,8 +259,9 @@ subroutine init_cosmo(mdl,r,g)
      end do
 
      ! Compute initial expansion factor
-     if(g%aexp_ini.lt.1.0)then
-        g%aexp=g%aexp_ini
+     if(r%aexp_ini.lt.1.0)then
+        g%aexp=r%aexp_ini
+        g%aexp_ini=g%aexp
      else
         g%aexp_ini=g%aexp
      endif
@@ -318,12 +333,6 @@ subroutine init_cosmo(mdl,r,g)
   end if
   g%omega_k=1.d0-g%omega_l-g%omega_m
 
-  ! Save cosmological parameters into run parameters
-  r%omega_b=g%omega_b
-  r%omega_m=g%omega_m
-  r%omega_l=g%omega_l
-  r%omega_k=g%omega_k
-  
   ! Compute linear scaling factor between aexp and astart(ilevel)
   do ilevel=r%levelmin,g%nlevelmax_part
      g%dfact(ilevel)=d1a(mdl,g%aexp,g%omega_m,g%omega_l)/d1a(mdl,g%astart(ilevel),g%omega_m,g%omega_l)

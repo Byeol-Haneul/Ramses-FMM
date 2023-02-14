@@ -2,6 +2,7 @@ module ramses_commons
   use amr_commons, only: run_t,global_t,mesh_t
   use pm_commons, only: part_t
   use mdl_module, only: mdl_t
+  use cooling_module, only: cooling_t
 
   type ramses_t
 
@@ -9,6 +10,7 @@ module ramses_commons
      type(global_t)::g
      type(mesh_t)::m
      type(part_t)::p
+     type(cooling_t)::c
      type(mdl_t),pointer::mdl => null()
 
   end type ramses_t

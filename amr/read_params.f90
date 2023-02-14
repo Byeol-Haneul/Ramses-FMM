@@ -118,6 +118,7 @@ subroutine m_read_params(pst)
 
   ! Initial conditions parameters from grafic
   real(dp)::aexp_ini=10.
+  real(dp)::omega_b=0.045
 
   ! Initial condition regions parameters
   integer::nregion=0
@@ -182,8 +183,6 @@ subroutine m_read_params(pst)
   real(dp)::T2_star=10.
   real(dp)::g_star=1.0
   real(dp)::n_star=1d100
-  logical::isothermal=.false.
-  logical::cooling=.false.
   
   ! Interpolation parameters
   integer ::interpol_var=0
@@ -224,25 +223,43 @@ subroutine m_read_params(pst)
   real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0
 #endif
 
+  ! Cooling parameters
+  logical::cooling=.false.
+  logical::cooling_ism=.false.
+  logical::metal=.false.
+  logical::isothermal=.false. ! Force temperature to eos value
+  logical::haardt_madau=.false.
+  logical::self_shielding=.false.
+  real(dp)::J21=0d0,a_spec=1d0,z_ave=0d0,z_reion=8.5d0
+  integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
+  real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
+  real(dp)::T2max=1d50
+
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
+  ! Global run parameter
   namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
        & ,static,geom,overload,nsuperoct
+  ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output
+  ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen,box_size &
        & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
+  ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
        & ,cg_levelmin,cic_levelmax,fast_solver
+  ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
        & ,deltax_frame,deltay_frame,deltaz_frame,movie,zoom_only &
        & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars,movie_vars_txt
+  ! Initial conditions parameters
   namelist/init_params/filetype,initfile,multiple,nregion,region_type &
-       & ,x_center,y_center,z_center,aexp_ini &
+       & ,x_center,y_center,z_center,aexp_ini,omega_b &
        & ,length_x,length_y,length_z,exp_region &
 #if NENER>0
        & ,prad_region &
@@ -251,9 +268,11 @@ subroutine m_read_params(pst)
        & ,var_region &
 #endif
        & ,d_region,u_region,v_region,w_region,p_region
+  ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,niter_riemann,slope_type,difmag,gamma_rad &
        & ,pressure_fix,scheme,riemann,constant_gravity
+  ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
 #if NENER>0
@@ -265,8 +284,9 @@ subroutine m_read_params(pst)
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type
-  namelist/physics_params/cooling,units_density,units_time,units_length &
-       & ,T2_star,g_star,n_star,isothermal
+  ! Units parameters
+  namelist/units_params/units_density,units_time,units_length
+  ! Boundary conditions parameters
   namelist/boundary_params/periodic,nbound,bound_type,bound_dir,bound_shift &
        & ,bound_xmin,bound_xmax,bound_ymin,bound_ymax,bound_zmin,bound_zmax &
 #if NENER>0
@@ -276,6 +296,10 @@ subroutine m_read_params(pst)
        & ,var_bound &
 #endif
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
+  ! Cooling / basic chemistry parameters
+  namelist/cooling_params/cooling,metal,isothermal,haardt_madau,J21 &
+       & ,eos_type,eos_nH,eos_index,eos_T2 &
+       & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
 
   associate(s=>pst%s)
 
@@ -441,11 +465,14 @@ subroutine m_read_params(pst)
   rewind(1)
   if(hydro)read(1,NML=hydro_params)
   rewind(1)
-  read(1,NML=physics_params,END=105)
+  read(1,NML=units_params,END=105)
 105 continue
   rewind(1)
   read(1,NML=boundary_params,END=106)
 106 continue
+  rewind(1)
+  read(1,NML=cooling_params,END=107)
+107 continue
   close(1)
 
   !-----------------
@@ -591,14 +618,12 @@ subroutine m_read_params(pst)
   if(riemann=='hllc')s%r%riemann=solver_hllc
   s%r%constant_gravity=constant_gravity
 
-  s%r%cooling=cooling
   s%r%units_density=units_density
   s%r%units_time=units_time
   s%r%units_length=units_length
   s%r%T2_star=T2_star
   s%r%g_star=g_star
   s%r%n_star=n_star
-  s%r%isothermal=isothermal
 
   s%r%m_refine=m_refine
   s%r%r_refine=r_refine
@@ -633,6 +658,8 @@ subroutine m_read_params(pst)
   s%r%filetype=filetype
   s%r%initfile=initfile
   s%r%multiple=multiple
+  s%r%aexp_ini=aexp_ini
+  s%r%omega_b=omega_b
 
   s%r%nregion=nregion
   s%r%region_type=region_type
@@ -678,6 +705,22 @@ subroutine m_read_params(pst)
 #if NVAR>NDIM+2+NENER
   s%r%var_bound=var_bound
 #endif
+
+  s%r%cooling=cooling
+  s%r%cooling_ism=cooling_ism
+  s%r%metal=metal
+  s%r%isothermal=isothermal
+  s%r%haardt_madau=haardt_madau
+  s%r%self_shielding=self_shielding
+  s%r%J21=J21
+  s%r%a_spec=a_spec
+  s%r%z_ave=z_ave
+  s%r%z_reion=z_reion
+  s%r%eos_type=eos_type
+  s%r%eos_nH=eos_nH
+  s%r%eos_index=eos_index
+  s%r%eos_T2=eos_T2
+  s%r%T2max=T2max
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)

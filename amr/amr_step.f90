@@ -211,7 +211,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------------
   ! Compute cooling/heating
   !----------------------------
-  if(r%cooling)then
+  if(r%cooling.or.r%isothermal)then
                                     call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif

@@ -94,20 +94,16 @@ module amr_commons
      real(dp),dimension(1:3)::constant_gravity
      
      ! Physics parameters
-     logical::cooling =.false.   ! Cooling and heating activated
      real(dp)::units_density=1.0 ! [g/cm^3]
      real(dp)::units_time=1.0    ! [seconds]
      real(dp)::units_length=1.0  ! [cm]
      real(dp)::T2_star=10.
      real(dp)::g_star=1.0
      real(dp)::n_star=1d100
-     logical::isothermal=.false.
 
-     ! Cosmological parameters
+     ! Cosmological parameters (others are read from file)
      real(dp)::omega_b=0.0D0  ! Omega Baryon
-     real(dp)::omega_m=1.0D0  ! Omega Matter
-     real(dp)::omega_l=0.0D0  ! Omega Lambda
-     real(dp)::omega_k=0.0D0  ! Omega Curvature
+     real(dp)::aexp_ini=10.   ! Starting expansion factor
 
      ! Refinement parameters for each level
      real(dp),dimension(1:MAXLEVEL)::m_refine = -1.0 ! Lagrangian threshold
@@ -194,6 +190,18 @@ module amr_commons
      real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0
 #endif
      
+     ! Cooling parameters
+     logical::cooling=.false.
+     logical::cooling_ism=.false.
+     logical::metal=.false.
+     logical::isothermal=.false.
+     logical::haardt_madau=.false.
+     logical::self_shielding=.false.
+     real(dp)::J21=0d0,a_spec=1d0,z_ave=0d0,z_reion=8.5d0
+     integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
+     real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
+     real(dp)::T2max
+
   end type run_t
   
   type global_t
