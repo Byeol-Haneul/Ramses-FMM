@@ -2,7 +2,7 @@ subroutine write_gitinfo
   use amr_parameters, ONLY:builddate,patchdir,gitrepo,gitbranch,githash
 
   builddate = BUILDDATE
-  patchdir  = PATCH
+!  patchdir  = PATCH
   gitrepo   = GITREPO
   gitbranch = GITBRANCH
   githash   = GITHASH

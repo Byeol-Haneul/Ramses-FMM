@@ -41,7 +41,7 @@ subroutine m_init_refine_restart(pst)
 
   ! Read parameters from restart file
   call title(r%nrestart,nchar)
-  file_params='output_'//TRIM(nchar)//'/params.out'
+  file_params='output_'//TRIM(nchar)//'/params.bin'
   call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
   write(*,'(" Restart snapshot has levelmin=",I4)')levelmin_file
   write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
@@ -86,7 +86,7 @@ subroutine m_init_refine_restart(pst)
      ! Count number of octs in each CPU file
      do icpu=1,ncpu_file
         call title(icpu,ncharcpu)
-        file_amr='output_'//TRIM(nchar)//'/amr.out'//TRIM(ncharcpu)
+        file_amr='output_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
         ilun=10
         noct_skip(icpu)=0
         open(unit=ilun,file=file_amr,access="stream",action="read",form='unformatted')
@@ -340,20 +340,20 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      call title(icpu,ncharcpu)
      
      ! Prepare reading the AMR file
-     file_amr='output_'//TRIM(nchar)//'/amr.out'//TRIM(ncharcpu)
+     file_amr='output_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
      open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
      iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+(4*ndim+4*twotondim)*nskip_file(icpu)
 
      ! Prepare reading the HYDRO file
      if(r%hydro)then
-        file_hydro='output_'//TRIM(nchar)//'/hydro.out'//TRIM(ncharcpu)
+        file_hydro='output_'//TRIM(nchar)//'/hydro.'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
         iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvar)*nskip_file(icpu)
      endif
 
      ! Prepare reading the GRAV file
      if(r%poisson)then
-        file_grav='output_'//TRIM(nchar)//'/grav.out'//TRIM(ncharcpu)
+        file_grav='output_'//TRIM(nchar)//'/grav.'//TRIM(ncharcpu)
         open(unit=11,file=file_grav,access="stream",action="read",form='unformatted')
         iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*4)*nskip_file(icpu)
      endif

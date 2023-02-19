@@ -76,7 +76,7 @@ subroutine m_dump_all(pst)
      call output_namelist(filename)
      filename=TRIM(filedir)//'compilation.txt'
      call output_compil(filename)
-     filename=TRIM(filedir)//'params.out'
+     filename=TRIM(filedir)//'params.bin'
      call output_params(r,g,m,filename)
      filename=TRIM(filedir)//'timer.txt'
      call m_output_timer(pst,.true.,filename)
@@ -86,14 +86,14 @@ subroutine m_dump_all(pst)
      !-----------------------
 
      ! Output AMR data
-     filename=TRIM(filedir)//'amr.out'
+     filename=TRIM(filedir)//'amr.'
      input_array=transfer(filename,input_array)
      if(r%verbose)write(*,*)'Writing AMR files'
      call r_output_amr(pst,input_array,flen/4,dummy,0)
      
      ! Output HYDRO data
      if(r%hydro)then
-        filename=TRIM(filedir)//'hydro.out'
+        filename=TRIM(filedir)//'hydro.'
         input_array=transfer(filename,input_array)
         if(r%verbose)write(*,*)'Writing hydro files'
         call r_output_hydro(pst,input_array,flen/4,dummy,0)
@@ -101,14 +101,14 @@ subroutine m_dump_all(pst)
 
      ! Output GRAV data
      if(r%poisson)then
-        in_output_poisson%filename=TRIM(filedir)//'grav.out'
+        in_output_poisson%filename=TRIM(filedir)//'grav.'
         if(r%verbose)write(*,*)'Writing gravity files'
         call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
      end if
 
      ! Output PART data
      if(r%pic)then
-        filename=TRIM(filedir)//'part.out'
+        filename=TRIM(filedir)//'part.'
         input_array=transfer(filename,input_array)
         if(r%verbose)write(*,*)'Writing particle files'
         call r_output_part(pst,input_array,flen/4,dummy,0)
@@ -248,7 +248,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
 
   if(r%verbose)write(*,*)'Entering input_params'
 
-  ilun=10!+g%myid
+  ilun=10
   fileloc=TRIM(filename)
   open(unit=ilun,file=fileloc,access="stream"&
        & ,action="read",form='unformatted')

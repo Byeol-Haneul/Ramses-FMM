@@ -322,7 +322,7 @@ subroutine init_amr(mdl,r,g,m)
   if(r%nrestart>0)then
      ! Read parameters from restart file
      call title(r%nrestart,nchar)
-     file_params='output_'//TRIM(nchar)//'/params.out'
+     file_params='output_'//TRIM(nchar)//'/params.bin'
      call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
      if(g%myid==1)write(*,'(" Restarting from output number ",I8)')r%nrestart
      if(g%myid==1)write(*,'(" Restart snapshot has ",I8," files")')ncpu_file

@@ -37,7 +37,7 @@ subroutine m_input_part_restart(pst)
   npart_tot_check=0
   do icpu=1,ncpu_file
      call title(icpu,ncharcpu)
-     file_part='output_'//TRIM(nchar)//'/part.out'//TRIM(ncharcpu)
+     file_part='output_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
      ilun=10
      open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
      read(ilun,POS=5)npart_file(icpu)
@@ -173,7 +173,7 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
      
      ! Open the PART file
      call title(icpu,ncharcpu)
-     file_part='output_'//TRIM(nchar)//'/part.out'//TRIM(ncharcpu)
+     file_part='output_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
      open(unit=10,file=TRIM(file_part),access="stream",action="read",form='unformatted')
      
      ! Read positions

@@ -177,7 +177,7 @@ program amr2map
         call title(icpu,ncharcpu)
 
         ! Prepare reading the AMR file
-        file_amr=TRIM(repository)//'/amr.out'//TRIM(ncharcpu)
+        file_amr=TRIM(repository)//'/amr.'//TRIM(ncharcpu)
 
         noct_skip=0
         open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
@@ -191,7 +191,7 @@ program amr2map
         iskip_amr=13+4*(p%nlevelmax-p%levelmin+1)+(4*ndim+4*twotondim)*noct_skip
 
         ! Prepare reading the HYDRO file
-        file_hydro=TRIM(repository)//'/hydro.out'//TRIM(ncharcpu)
+        file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
         iskip_hydro=25+4*(p%nlevelmax-p%levelmin+1)+(8*twotondim*nvar)*noct_skip
 
@@ -524,7 +524,7 @@ contains
     character(LEN=128)::nomfich
     integer::ilun,ilevel,noutput,skip
     
-    nomfich=TRIM(repository)//'/params.out'
+    nomfich=TRIM(repository)//'/params.bin'
     
     ilun=10
     open(unit=ilun,file=nomfich,access="stream",action="read",form='unformatted')
@@ -543,7 +543,7 @@ contains
     read(ilun,POS=skip)p%bound_key
     close(ilun)
     
-    file_hydro=TRIM(repository)//'/hydro.out00001'
+    file_hydro=TRIM(repository)//'/hydro.00001'
     open(unit=ilun,file=file_hydro,access="stream",action="read",form='unformatted')
     read(ilun,POS=5)p%nvar
     read(ilun,POS=9)p%gamma
@@ -569,19 +569,19 @@ function check_ramses_exist(repository)
   
   check_ramses_exist=.true.
   ipos=INDEX(repository,'output_')
-  nomfich=TRIM(repository)//'/hydro.out00001'
+  nomfich=TRIM(repository)//'/hydro.00001'
   inquire(file=nomfich, exist=ok) ! verify input file 
   if ( .not. ok ) then
      print *,TRIM(nomfich)//' not found.'
      check_ramses_exist=.false.
   endif
-  nomfich=TRIM(repository)//'/amr.out00001'
+  nomfich=TRIM(repository)//'/amr.00001'
   inquire(file=nomfich, exist=ok) ! verify input file 
   if ( .not. ok ) then
      print *,TRIM(nomfich)//' not found.'
      check_ramses_exist=.false.
   endif
-  nomfich=TRIM(repository)//'/params.out'
+  nomfich=TRIM(repository)//'/params.bin'
   inquire(file=nomfich, exist=ok) ! verify input file
   if ( .not. ok ) then
      print *,TRIM(nomfich)//' not found.'

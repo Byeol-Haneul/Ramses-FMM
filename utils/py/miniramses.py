@@ -215,7 +215,7 @@ def rd_part(nout,**kwargs):
     npart = 0
     for icpu in cpulist:
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/part.out"+car2
+        filename = path+"output_"+car1+"/part."+car2
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         npart = npart + npart2
         
@@ -230,7 +230,7 @@ def rd_part(nout,**kwargs):
 
     for	icpu in	cpulist:
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/part.out"+car2
+        filename = path+"output_"+car1+"/part."+car2
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         
         for idim in range(0,ndim):
@@ -305,7 +305,7 @@ def rd_amr(nout,**kwargs):
 
         car1 = str(nout).zfill(5)
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/amr.out"+car2
+        filename = path+"output_"+car1+"/amr."+car2
 
         skip = 12
         for ilevel in range(levelmin-1,nlevelmax):
@@ -326,7 +326,7 @@ def rd_amr(nout,**kwargs):
 
         car1 = str(nout).zfill(5)
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/amr.out"+car2
+        filename = path+"output_"+car1+"/amr."+car2
 
         offset = 12 + 4*(nlevelmax+1-levelmin)
         for ilevel in range(levelmin-1,nlevelmax):
@@ -380,7 +380,7 @@ def rd_hydro(nout,**kwargs):
     
     # Get number of hydro variables
     car1 = str(nout).zfill(5)
-    filename = path+"output_"+car1+"/hydro.out00001"
+    filename = path+"output_"+car1+"/hydro.00001"
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
     gamma = np.fromfile(filename,dtype=np.float64,count=1,offset=8)[0]
     
@@ -400,7 +400,7 @@ def rd_hydro(nout,**kwargs):
     for icpu in cpulist:
 
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/hydro.out"+car2
+        filename = path+"output_"+car1+"/hydro."+car2
 
         skip = 24
         for ilevel in range(levelmin-1,nlevelmax):
@@ -420,7 +420,7 @@ def rd_hydro(nout,**kwargs):
     for icpu in cpulist:
 
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/hydro.out"+car2
+        filename = path+"output_"+car1+"/hydro."+car2
         offset = 24 + 4*(nlevelmax+1-levelmin)
         
         for ilevel in range(levelmin-1,nlevelmax):
