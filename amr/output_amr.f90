@@ -211,7 +211,8 @@ subroutine output_params(r,g,m,filename)
   ! Write various constants
   write(ilun)g%const,g%mass_tot_0,g%rho_tot
   write(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
-  write(ilun)g%aexp,g%hexp,g%aexp_old,g%epot_tot_int,g%epot_tot_old
+  write(ilun)g%aexp,g%texp,g%hexp
+  write(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   write(ilun)r%mass_sph
   ! Write cpu boundaries
   write(ilun)nhilbert
@@ -272,7 +273,8 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! Read various constants
   read(ilun)g%const,g%mass_tot_0,g%rho_tot
   read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
-  read(ilun)g%aexp,g%hexp,g%aexp_old,g%epot_tot_int,g%epot_tot_old
+  read(ilun)g%aexp,g%texp,g%hexp
+  read(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   read(ilun)mass_sph_file
   close(ilun)
   ! For cosmo runs only, as mass_sph is not set in the namelist
@@ -407,6 +409,7 @@ subroutine output_info(r,g,filename)
   ! Write physical parameters
   write(ilun,'("boxlen      =",E23.15)')r%boxlen
   write(ilun,'("time        =",E23.15)')g%t
+  write(ilun,'("texp        =",E23.15)')g%texp
   write(ilun,'("aexp        =",E23.15)')g%aexp
   write(ilun,'("H0          =",E23.15)')g%h0
   write(ilun,'("omega_m     =",E23.15)')g%omega_m

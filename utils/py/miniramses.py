@@ -594,11 +594,12 @@ def rd_info(nout,**kwargs):
     i.nlevelmax=int(info[3][1])
     i.boxlen=info[6][1]
     i.time=info[7][1]
-    i.aexp=info[8][1]
-    i.unit_l=info[14][1]
-    i.unit_d=info[15][1]
-    i.unit_t=info[16][1]    
-    
+    i.texp=info[8][1]
+    i.aexp=info[9][1]
+    i.unit_l=info[15][1]
+    i.unit_d=info[16][1]
+    i.unit_t=info[17][1]
+
     return i
 
 def hilbert3d(x,y,z,bit_length):
