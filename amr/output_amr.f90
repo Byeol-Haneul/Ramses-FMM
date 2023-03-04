@@ -416,6 +416,7 @@ subroutine output_info(r,g,filename)
   write(ilun,'("omega_l     =",E23.15)')g%omega_l
   write(ilun,'("omega_k     =",E23.15)')g%omega_k
   write(ilun,'("omega_b     =",E23.15)')g%omega_b
+  write(ilun,'("gamma       =",E23.15)')r%gamma
   write(ilun,'("unit_l      =",E23.15)')scale_l
   write(ilun,'("unit_d      =",E23.15)')scale_d
   write(ilun,'("unit_t      =",E23.15)')scale_t

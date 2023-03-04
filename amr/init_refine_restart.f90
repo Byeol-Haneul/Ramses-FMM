@@ -241,7 +241,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
   ! Local variables
   integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,ilun
-  integer::i,ind,istart,iend,noct_tmp,ilev,ioct
+  integer::i,ind,istart,iend,noct_tmp,ilev,ioct,nvarp
   integer::igrid,igrid_start,nleft,nright,ileft,iright
   character(LEN=80)::file_params,file_amr,file_hydro,file_grav
   character(LEN=5)::nchar,ncharcpu
@@ -267,6 +267,12 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   ! Set some constants
   one_key=0
   one_key(1)=1
+
+#ifdef OUTPUT_POISSON_DENSITY
+  nvarp=ndim+2
+#else
+  nvarp=ndim+1
+#endif
 
   ! Compute starting grid index at that level
   if(ilevel.EQ.r%levelmin)then
@@ -355,7 +361,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      if(r%poisson)then
         file_grav='output_'//TRIM(nchar)//'/grav.'//TRIM(ncharcpu)
         open(unit=11,file=file_grav,access="stream",action="read",form='unformatted')
-        iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*4)*nskip_file(icpu)
+        iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvarp)*nskip_file(icpu)
      endif
 
      ! Loop over useful octs in file
@@ -375,15 +381,12 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
         ! Read values from GRAV files
         if(r%poisson)then
-           ipos=iskip_grav+(8*twotondim*4)*(i-1)
-#ifdef OUTPUT_PARTICLE_DENSITY
-           ipos=iskip_grav+(8*twotondim*5)*(i-1)
-#endif
+           ipos=iskip_grav+(8*twotondim*nvarp)*(i-1)
            read(11,POS=ipos)phi
            ipos=ipos+8*twotondim
            read(11,POS=ipos)f              
-#ifdef OUTPUT_PARTICLE_DENSITY
-           ipos=ipos+8*twotondim*3
+#ifdef OUTPUT_POISSON_DENSITY
+           ipos=ipos+8*twotondim*ndim
            read(11,POS=ipos)rho      
 #endif
         endif

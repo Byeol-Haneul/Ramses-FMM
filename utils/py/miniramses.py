@@ -382,7 +382,6 @@ def rd_hydro(nout,**kwargs):
     car1 = str(nout).zfill(5)
     filename = path+"output_"+car1+"/hydro.00001"
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
-    gamma = np.fromfile(filename,dtype=np.float64,count=1,offset=8)[0]
     
     txt = "ncpu="+str(ncpu)+" ndim="+str(ndim)+" nlevelmax="+str(nlevelmax)+" nvar="+str(nvar)
     print(txt)
@@ -392,7 +391,6 @@ def rd_hydro(nout,**kwargs):
     for ilevel in range(0,nlevelmax):
         hydro.append(Hydro(ndim,nvar))
         hydro[ilevel].level = ilevel
-        hydro[ilevel].gamma = gamma
         
     numbl = np.zeros([nlevelmax,ncpu],dtype=np.int32)
     
@@ -402,7 +400,7 @@ def rd_hydro(nout,**kwargs):
         car2 = str(icpu).zfill(5)
         filename = path+"output_"+car1+"/hydro."+car2
 
-        skip = 24
+        skip = 16
         for ilevel in range(levelmin-1,nlevelmax):
             offset = skip+4*(ilevel+1-levelmin)
             numbl[ilevel,icpu-1] = np.fromfile(filename,dtype=np.int32,count=1,offset=offset)[0]
@@ -510,7 +508,6 @@ def rd_cell(nout,**kwargs):
 
     c = Cell(ndim,nvar)
     c.ncell = ncell
-    c.gamma = h[0].gamma
     
     for ilev in range(0,nlevelmax):
         dx = 0.5*boxlen/2**ilev
@@ -596,9 +593,10 @@ def rd_info(nout,**kwargs):
     i.time=info[7][1]
     i.texp=info[8][1]
     i.aexp=info[9][1]
-    i.unit_l=info[15][1]
-    i.unit_d=info[16][1]
-    i.unit_t=info[17][1]
+    i.gamma=info[15][1]
+    i.unit_l=info[16][1]
+    i.unit_d=info[17][1]
+    i.unit_t=info[18][1]
 
     return i
 

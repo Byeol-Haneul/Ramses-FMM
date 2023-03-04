@@ -53,7 +53,11 @@ subroutine output_poisson(r,g,m,mdl,filename)
   fileloc=TRIM(filename)//TRIM(nchar)
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
+#ifdef OUTPUT_POISSON_DENSITY
+  write(ilun)ndim+2
+#else
   write(ilun)ndim+1
+#endif
   write(ilun)r%levelmin
   write(ilun)r%nlevelmax
   do ilevel=r%levelmin,r%nlevelmax
@@ -64,7 +68,7 @@ subroutine output_poisson(r,g,m,mdl,filename)
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%phi
         write(ilun)m%grid(igrid)%f
-#ifdef OUTPUT_PARTICLE_DENSITY
+#ifdef OUTPUT_POISSON_DENSITY
         write(ilun)m%grid(igrid)%rho
 #endif
      end do

@@ -57,7 +57,6 @@ subroutine output_hydro(r,g,m,mdl,filename)
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
   write(ilun)nvar
-  write(ilun)r%gamma
   write(ilun)r%levelmin
   write(ilun)r%nlevelmax
   do ilevel=r%levelmin,r%nlevelmax
