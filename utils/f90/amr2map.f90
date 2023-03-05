@@ -193,7 +193,7 @@ program amr2map
         ! Prepare reading the HYDRO file
         file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
-        iskip_hydro=25+4*(p%nlevelmax-p%levelmin+1)+(8*twotondim*nvar)*noct_skip
+        iskip_hydro=17+4*(p%nlevelmax-p%levelmin+1)+(8*twotondim*nvar)*noct_skip
 
         ! Loop over useful octs in file
         do i=1,noct_file
@@ -537,6 +537,8 @@ contains
     skip=4*(9+4*noutput)+1
     read(ilun,POS=skip)p%t
     skip=skip+4*(2+4*p%nlevelmax+2+2*16)
+    read(ilun,POS=skip)p%gamma
+    skip=skip+8
     read(ilun,POS=skip)p%nhilbert
     allocate(p%bound_key(1:p%nhilbert,0:p%ncpu,p%levelmin:p%nlevelmax))
     skip=skip+4
@@ -546,7 +548,6 @@ contains
     file_hydro=TRIM(repository)//'/hydro.00001'
     open(unit=ilun,file=file_hydro,access="stream",action="read",form='unformatted')
     read(ilun,POS=5)p%nvar
-    read(ilun,POS=9)p%gamma
     close(ilun)
 
   end subroutine read_ramses_params

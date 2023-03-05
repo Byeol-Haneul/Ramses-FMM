@@ -214,6 +214,7 @@ subroutine output_params(r,g,m,filename)
   write(ilun)g%aexp,g%texp,g%hexp
   write(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   write(ilun)r%mass_sph
+  write(ilun)r%gamma
   ! Write cpu boundaries
   write(ilun)nhilbert
   do ilevel=r%levelmin,r%nlevelmax
@@ -244,7 +245,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   integer::ilun
   integer::ndim_file,noutput_file
   integer::noutput_min,nlevelmax_min
-  real(dp)::mass_sph_file
+  real(dp)::mass_sph_file,gamma_file
   character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering input_params'
@@ -276,6 +277,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   read(ilun)g%aexp,g%texp,g%hexp
   read(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   read(ilun)mass_sph_file
+  read(ilun)gamma_file
   close(ilun)
   ! For cosmo runs only, as mass_sph is not set in the namelist
   if(r%cosmo)r%mass_sph=mass_sph_file
