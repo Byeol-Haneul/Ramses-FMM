@@ -176,8 +176,13 @@ subroutine m_read_params(pst)
   real(dp)::smallr=1.d-10
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
-  logical ::pressure_fix=.false.
+  logical ::entropy=.false.
+  logical ::turb=.false.
+  real(dp)::dual_energy=-1
   real(dp),dimension(1:3)::constant_gravity=0.0d0
+
+  ! Non-thernal energies and passive scalars index
+  integer ::ieuler,inener,ientropy,imetal,iturb,ichem
 
   ! Other hydro solver parameters
   real(dp)::T2_star=10.
@@ -271,7 +276,7 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,niter_riemann,slope_type,difmag,gamma_rad &
-       & ,pressure_fix,scheme,riemann,constant_gravity
+       & ,dual_energy,entropy,turb,scheme,riemann,constant_gravity
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
@@ -529,7 +534,45 @@ subroutine m_read_params(pst)
      nml_ok=.false.
   endif
 #endif
-  
+
+  !--------------------------------------------------
+  ! Compute indices for passive scalars
+  ! and non-thermal energies
+  !--------------------------------------------------
+#ifdef SOLVERmhd
+  ieuler=8
+#else
+  ieuler=ndim+2
+#endif
+  inener=ieuler+1
+  ientropy=inener+nener
+  imetal=ientropy
+  if(entropy)imetal=ientropy+1
+  iturb=imetal
+  if(metal)then
+     iturb=imetal+1
+  endif
+  ichem=iturb
+  if(turb)then
+     ichem=iturb+1
+  endif
+#ifdef SOLVERmhd
+  if(hydro.and.(nvar>8) then
+#else
+  if(hydro.and.(nvar>ndim+2)) then
+#endif
+     write(*,'(A50)')"__________________________________________________"
+     write(*,*) 'Hydro var extra indices:'
+#if NENER>0
+                 write(*,*) '   inener   = ',inener
+#endif
+     if(entropy) write(*,*) '   ientropy = ',ientropy
+     if(metal)   write(*,*) '   imetal   = ',imetal
+     if(turb)    write(*,*) '   iturb    = ',iturb
+                 write(*,*) '   ichem    = ',ichem
+     write(*,'(A50)')"__________________________________________________"
+  endif
+
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'
      write(*,*)'Aborting...'
@@ -611,7 +654,14 @@ subroutine m_read_params(pst)
   s%r%slope_type=slope_type
   s%r%difmag=difmag
   s%r%gamma_rad=gamma_rad(1:nener)
-  s%r%pressure_fix=pressure_fix
+  s%r%dual_energy=dual_energy
+  s%r%entropy=entropy
+  s%r%turb=turb
+  s%r%inener=inener
+  s%r%ientropy=ientropy
+  s%r%imetal=imetal
+  s%r%ichem=ichem
+  s%r%iturb=iturb
   s%r%scheme=scheme
   if(riemann=='llf')s%r%riemann=solver_llf
   if(riemann=='hll')s%r%riemann=solver_hll

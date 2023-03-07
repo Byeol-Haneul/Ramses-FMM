@@ -61,6 +61,7 @@ module mdl_parameters
      enumerator::MDL_SET_UNEW
      enumerator::MDL_SET_UOLD
      enumerator::MDL_GRAVITY_HYDRO_FINE
+     enumerator::MDL_SOURCE_HYDRO_FINE
      enumerator::MDL_COOLING_FINE
      enumerator::MDL_NEWDT_PART
      enumerator::MDL_BROADCAST_DT

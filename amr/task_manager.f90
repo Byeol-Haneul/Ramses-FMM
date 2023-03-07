@@ -130,6 +130,7 @@ function worker_init(mdl) result(pst)
   use output_poisson_module, only: r_output_poisson
   use output_part_module, only: r_output_part
   use synchro_hydro_fine_module, only: r_synchro_hydro_fine, r_gravity_hydro_fine
+  use source_hydro_fine_module, only: r_source_hydro_fine
   use nbors_utils, only: r_save_phi_old
   use courant_fine_module, only: r_courant_fine
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
@@ -228,6 +229,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_DT,           pst,C_FUNLOC(r_broadcast_dt),24,0,"broadcast_dt")
   call mdl_add_service(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,     pst,C_FUNLOC(r_synchro_hydro_fine),3,0,"synchro_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,     pst,C_FUNLOC(r_gravity_hydro_fine),1,0,"gravity_hydro_fine")
+  call mdl_add_service(pst%s%mdl,MDL_SOURCE_HYDRO_FINE,      pst,C_FUNLOC(r_source_hydro_fine),1,0,"source_hydro_fine")
 #ifdef GRAV
   call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,   pst,C_FUNLOC(r_multipole_leaf_cells),1,0,"multipole_leaf_cells")
   call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,  pst,C_FUNLOC(r_multipole_split_cells),1,0,"multipole_split_cells")

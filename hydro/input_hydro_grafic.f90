@@ -162,8 +162,10 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      
      ! For cosmo runs, rescale initial conditions to code units
      if(r%cosmo)then
-        ! Compute approximate average temperature in K
-        g%T2_start=1.356d-2/g%aexp**2
+        if(.not. r%cooling)then
+           ! Compute approximate average temperature in K
+           g%T2_start=1.356d-2/g%aexp**2
+        endif
         if(ivar==1)init_array=(1.0+g%dfact(ilevel)*init_array)*g%omega_b/g%omega_m
         if(ivar==2)init_array=g%dfact(ilevel)*g%vfact(1)*dx_loc/g%dxini(ilevel)*init_array/g%vfact(ilevel)
         if(ivar==3)init_array=g%dfact(ilevel)*g%vfact(1)*dx_loc/g%dxini(ilevel)*init_array/g%vfact(ilevel)
@@ -222,6 +224,42 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      ! End loop over grids
   end if
   
+  !-------------------------------------
+  ! If required, compute initial entropy
+  !-------------------------------------
+  if(r%entropy)then
+     ! Loop over grids
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        ! Loop over cells
+        do ind=1,twotondim
+#ifdef HYDRO
+           ! Compute entropy from pressure and density
+           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,ndim+2)/m%grid(igrid)%uold(ind,1)**r%gamma
+#endif
+        end do
+        ! End loop over cells
+     end do
+     ! End loop over grids
+  end if
+
+  !-----------------------------------------
+  ! If required, compute initial metallicity
+  !-----------------------------------------
+  if(r%metal)then
+     ! Loop over grids
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        ! Loop over cells
+        do ind=1,twotondim
+#ifdef HYDRO
+           ! Compute metallicity using z_ave times solar unit
+           m%grid(igrid)%uold(ind,r%imetal)=r%z_ave*0.02
+#endif
+        end do
+        ! End loop over cells
+     end do
+     ! End loop over grids
+  end if
+
   !---------------------------------------------------
   ! Third step: compute initial conservative variables
   !---------------------------------------------------
@@ -249,7 +287,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
            m%grid(igrid)%uold(ind,idim+1)=rr*m%grid(igrid)%uold(ind,idim+1)
         end do
 #if NVAR>NDIM+2
-        ! Compute passive variable density
+        ! Compute passive scalar density
         do ivar=ndim+3,nvar
            rr=m%grid(igrid)%uold(ind,1)
            m%grid(igrid)%uold(ind,ivar)=rr*m%grid(igrid)%uold(ind,ivar)

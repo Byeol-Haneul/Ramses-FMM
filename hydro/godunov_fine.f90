@@ -120,38 +120,11 @@ subroutine set_unew(r,g,m,ilevel)
   !--------------------------------------------------------------------------
   integer::i
 
-#ifdef DUALENER
-#if NENER>0
-  integer::irad
-#endif
-  integer::ind
-  real(dp)::d,u,v,w,e
-#endif
-  
 #ifdef HYDRO
-
   ! Set unew to uold for myid cells
   do i=m%head(ilevel),m%tail(ilevel)
      m%grid(i)%unew = m%grid(i)%uold
-#ifdef DUALENER
-     do ind=1,twotondim
-        m%grid(i)%divu(ind) = 0.0d0
-        d=max(m%grid(i)%uold(ind,1),smallr)
-        u=0.0d0; v=0.0d0; w=0.0d0
-        if(ndim>0)u=m%grid(i)%uold(ind,2)/d
-        if(ndim>1)v=m%grid(i)%uold(ind,3)/d
-        if(ndim>2)w=m%grid(i)%uold(ind,4)/d
-        e=m%grid(i)%uold(ind,ndim+2)-0.5d0*d*(u**2+v**2+w**2)
-#if NENER>0
-        do irad=1,nener
-           e=e-m%grid(i)%uold(ind,ndim+2+irad)
-        end do
-#endif          
-        m%grid(i)%enew(ind)=e
-     end do
-#endif
   end do
-
 #endif
 
 end subroutine set_unew
@@ -195,50 +168,12 @@ subroutine set_uold(r,g,m,ilevel)
   ! after the hydro step.
   !---------------------------------------------------------
   integer::i
-  real(dp)::dx
-
-#ifdef DUALENER
-  integer::ind
-#if NENER>0
-  integer::irad
-#endif
-  real(dp)::d,u,v,w
-  real(dp)::e_kin,e_cons,e_prim,e_trunc,div,fact,d_old
-#endif
 
 #ifdef HYDRO
-
-  dx=r%boxlen/2**ilevel
-
   ! Set uold to unew
   do i=m%head(ilevel),m%tail(ilevel)
      m%grid(i)%uold=m%grid(i)%unew
-#ifdef DUALENER
-     do ind=1,twotondim
-        ! Correct total energy if internal energy is too small
-        d=max(m%grid(i)%uold(ind,1),smallr)
-        u=0.0d0; v=0.0d0; w=0.0d0
-        if(ndim>0)u=m%grid(i)%uold(ind,2)/d
-        if(ndim>1)v=m%grid(i)%uold(ind,3)/d
-        if(ndim>2)w=m%grid(i)%uold(ind,4)/d
-        e_kin=0.5d0*d*(u**2+v**2+w**2)
-#if NENER>0
-        do irad=1,nener
-           e_kin=e_kin+m%grid(i)%uold(ind,ndim+2+irad)
-        end do
-#endif
-        e_cons=m%grid(i)%uold(ind,ndim+2)-e_kin
-        e_prim=m%grid(i)%enew(ind)
-        ! Note: here divu=-div.u*dt
-        div=abs(m%grid(i)%divu(ind))*dx/dtnew(ilevel)
-        e_trunc=r%beta_fix*d*max(div,3.0d0*g%hexp*dx)**2
-        if(e_cons<e_trunc)then
-           m%grid(i)%uold(ind,ndim+2)=e_prim+e_kin
-        end if
-     end do
-#endif
   end do
-
 #endif
 
 end subroutine set_uold

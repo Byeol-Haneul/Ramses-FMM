@@ -88,10 +88,13 @@ module amr_commons
      integer ::slope_type=1
      real(dp)::difmag=0.0d0
      real(dp),dimension(1:nener)::gamma_rad=1.33333333334d0
-     logical ::pressure_fix=.false.
+     logical ::entropy=.false.
+     logical ::turb=.false.
+     real(dp)::dual_energy=-1
      character(LEN=10)::scheme='muscl'
      integer::riemann=1
      real(dp),dimension(1:3)::constant_gravity
+     integer::inener,ientropy,imetal,iturb,ichem
      
      ! Physics parameters
      real(dp)::units_density=1.0 ! [g/cm^3]

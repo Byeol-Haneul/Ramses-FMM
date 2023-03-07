@@ -164,6 +164,16 @@ subroutine condinit(r,g,x,u,dx,nn)
   end do
 #endif
 
+  ! Compute entropy if needed
+  if(r%entropy)then
+     q(1:nn,r%ientropy)=q(1:nn,ndim+2)/q(1:nn,1)**r%gamma
+  endif
+
+  ! Compute metallicity if needed
+  if(r%metal)then
+     q(1:nn,r%imetal)=r%z_ave*0.02
+  endif
+
   ! Convert primitive to conservative variables
   ! density -> density
   u(1:nn,1)=q(1:nn,1)

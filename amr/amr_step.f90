@@ -20,6 +20,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use move_fine_module, only: m_kick_drift_part
   use output_amr_module, only: m_dump_all
   use synchro_hydro_fine_module, only: m_synchro_hydro_fine, r_gravity_hydro_fine
+  use source_hydro_fine_module, only: r_source_hydro_fine
   use nbors_utils, only: r_save_phi_old
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
@@ -193,6 +194,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      ! Add gravity source terms to unew with half time step
                                     call m_timer(pst,'hydro - gravity','start')
      call r_gravity_hydro_fine(pst,ilevel,1)
+
+     ! Add other hydro source terms to unew
+                                    call m_timer(pst,'hydro - source','start')
+     call r_source_hydro_fine(pst,ilevel,1)
 
      ! Set uold equal to unew
                                     call m_timer(pst,'hydro - set uold','start')
