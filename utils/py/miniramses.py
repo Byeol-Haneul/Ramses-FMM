@@ -419,7 +419,7 @@ def rd_hydro(nout,**kwargs):
 
         car2 = str(icpu).zfill(5)
         filename = path+"output_"+car1+"/hydro."+car2
-        offset = 24 + 4*(nlevelmax+1-levelmin)
+        offset = 16 + 4*(nlevelmax+1-levelmin)
         
         for ilevel in range(levelmin-1,nlevelmax):
             ncache = numbl[ilevel,icpu-1]
