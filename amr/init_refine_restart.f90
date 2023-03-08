@@ -360,7 +360,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      ! Prepare reading the GRAV file
      if(r%poisson)then
         file_grav='output_'//TRIM(nchar)//'/grav.'//TRIM(ncharcpu)
-        open(unit=11,file=file_grav,access="stream",action="read",form='unformatted')
+        open(unit=12,file=file_grav,access="stream",action="read",form='unformatted')
         iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvarp)*nskip_file(icpu)
      endif
 
@@ -382,12 +382,12 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
         ! Read values from GRAV files
         if(r%poisson)then
            ipos=iskip_grav+(8*twotondim*nvarp)*(i-1)
-           read(11,POS=ipos)phi
+           read(12,POS=ipos)phi
            ipos=ipos+8*twotondim
-           read(11,POS=ipos)f              
+           read(12,POS=ipos)f
 #ifdef OUTPUT_POISSON_DENSITY
            ipos=ipos+8*twotondim*ndim
-           read(11,POS=ipos)rho      
+           read(12,POS=ipos)rho
 #endif
         endif
         
@@ -442,6 +442,9 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      close(10)
      if(r%hydro)then
         close(11)
+     endif
+     if(r%poisson)then
+        close(12)
      endif
   end do
   

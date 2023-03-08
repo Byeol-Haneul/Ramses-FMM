@@ -45,8 +45,8 @@ ifeq ($(COMPILER),GNU)
    endif
    F90 += -frecord-marker=4 -fbacktrace -ffree-line-length-none -g -fimplicit-none
    ifeq ($(DEBUG),1)
-      F90 += -O0 -fbounds-check -Wuninitialized -Wall
-      FFLAGS += -fbacktrace -ffpe-trap=zero,underflow,overflow,invalid -finit-real=nan
+      F90 += -O0 -fbounds-check
+      FFLAGS += -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
    else
       F90 += -O3
    endif

@@ -29,7 +29,7 @@ subroutine m_newdt_fine(pst,ilevel)
   ! This routine also compute the particle kinetic energy.
   !-----------------------------------------------------------
   real(dp)::dx,tff,fourpi,threepi2
-  real(kind=8)::dt,ekin,vmax
+  real(kind=8)::ekin,vmax
   type(out_courant_fine_t)::out_courant_fine
   type(out_newdt_part_t)::out_newdt_part
   type(in_broadcast_dt_t)::in_broadcast_dt
@@ -64,16 +64,19 @@ subroutine m_newdt_fine(pst,ilevel)
 
   ! Particle-based Courant condition
   if(r%pic)then
+     if(r%verbose)write(*,'("   Entering newdt_part for level ",I2)')ilevel
      call r_newdt_part(pst,ilevel,1,out_newdt_part,4)
      ekin=out_newdt_part%ekin
-     vmax=out_newdt_part%vmax
-     dt=r%courant_factor * dx/vmax
      g%ekin_tot=g%ekin_tot+ekin
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),dt)
+     vmax=out_newdt_part%vmax
+     if(vmax>0.0d0)then
+        g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%courant_factor*dx/vmax)
+     endif
   endif
 
   ! Hydro-based Courant condition
   if(r%hydro)then
+     if(r%verbose)write(*,'("   Entering newdt_hydro for level ",I2)')ilevel
      call r_courant_fine(pst,ilevel,1,out_courant_fine,8)
      g%mass_tot=g%mass_tot+out_courant_fine%mass
      g%ekin_tot=g%ekin_tot+out_courant_fine%ekin

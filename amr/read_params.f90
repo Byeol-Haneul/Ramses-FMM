@@ -569,7 +569,9 @@ subroutine m_read_params(pst)
      if(entropy) write(*,*) '   ientropy = ',ientropy
      if(metal)   write(*,*) '   imetal   = ',imetal
      if(turb)    write(*,*) '   iturb    = ',iturb
+     if(ichem.LE.nvar)then
                  write(*,*) '   ichem    = ',ichem
+     endif
      write(*,'(A50)')"__________________________________________________"
   endif
 

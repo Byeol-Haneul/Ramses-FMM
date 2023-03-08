@@ -32,7 +32,7 @@ end subroutine r_init_time
   use mdl_module
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t
-  use cooling_module, only: cooling_t
+  use cooling_module, only: cooling_t,set_table
   use init_cooling_module, only: init_cooling
   implicit none
   type(mdl_t)::mdl
@@ -89,6 +89,9 @@ end subroutine r_init_time
   ! Initialize cooling model
   if(r%cooling.and..not.r%cooling_ism)then
      call init_cooling(r,g,c)
+     if(r%cosmo)then
+        call set_table(c,dble(g%aexp))
+     endif
   endif
 
 end subroutine init_time
