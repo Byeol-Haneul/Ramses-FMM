@@ -536,7 +536,7 @@ contains
     read(ilun,POS=25)noutput
     skip=4*(9+4*noutput)+1
     read(ilun,POS=skip)p%t
-    skip=skip+4*(2+4*p%nlevelmax+2+2*16)
+    skip=skip+4*(2+4*p%nlevelmax+2+2*17)
     read(ilun,POS=skip)p%gamma
     skip=skip+8
     read(ilun,POS=skip)p%nhilbert

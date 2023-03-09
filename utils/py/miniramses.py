@@ -69,6 +69,7 @@ def rd_cool(filename):
         c.T2 = T2
         c.cool = clean(cool,n1,n2)
         c.heat = clean(heat,n1,n2)
+        c.metal = clean(metal,n1,n2)
         c.spec = clean_spec(n_spec,n1,n2)
         c.xion = c.spec[0]
         for i in range(0,n2):

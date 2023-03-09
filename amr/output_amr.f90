@@ -11,6 +11,7 @@ subroutine m_dump_all(pst)
   use output_poisson_module, only: r_output_poisson,in_output_poisson_t
   use output_part_module, only: r_output_part
   use mdl_module, only: mdl_mkdir, mdl_wtime
+  use cooling_module, only: output_cool
   implicit none
   type(pst_t)::pst
 
@@ -65,6 +66,10 @@ subroutine m_dump_all(pst)
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_file_descriptor.txt'
         call file_descriptor_hydro(r,filename)
+     end if
+     if(r%cooling)then
+        filename=TRIM(filedir)//'cooling.bin'
+        call output_cool(pst%s%c,filename)
      end if
      filename=TRIM(filedir)//'info.txt'
      call output_info(r,g,filename)

@@ -237,6 +237,19 @@ subroutine cooling_fine(r,g,m,c,ilevel)
            end do
         endif
 
+        ! Update entropy if dual energy scheme
+        if(r%entropy.and.r%dual_energy.GE.0)then
+           if(r%isothermal)then ! use only polytrope energy
+              do i=1,nleaf
+                 m%grid(ind_leaf(i))%uold(ind,r%ientropy) = (T2min(i))/nH(i)**(r%gamma-1)*(r%gamma-1)
+              end do
+           else if(r%cooling)then
+              do i=1,nleaf
+                 m%grid(ind_leaf(i))%uold(ind,r%ientropy) = (T2(i) + T2min(i))/nH(i)**(r%gamma-1)*(r%gamma-1)
+              end do
+           endif
+        endif
+
         ! Update total fluid energy
         if(r%isothermal)then ! use only polytrope energy
            do i=1,nleaf
