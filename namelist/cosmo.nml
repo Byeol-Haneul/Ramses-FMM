@@ -1,34 +1,61 @@
 
-&RUN_PARAMS 
+&RUN_PARAMS
 cosmo=.true.
 pic=.true.
 poisson=.true.
+hydro=.true.
 nrestart=0
-nremap=10
-nsubcycle=1,2
+nsubcycle=1,1,2
 ncontrol=1
+verbose=.false.
 /
 
 &OUTPUT_PARAMS
-noutput=10
-aout=0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0
+delta_aout=0.1
+aend=1.0
 /
 
 &INIT_PARAMS
 filetype='grafic'
-initfile(1)='/scratchdir/grafic_files'
+initfile(1)='ics_ramses'
 /
 
 &AMR_PARAMS
 levelmin=7
-levelmax=14
-ngridtot=2000000
-nparttot=3000000
-nexpand=1
+levelmax=15
+ngridmax=2000000
+npartmax=4000000
+nexpand=1,
 /
 
-&REFINE_PARAMS 
-m_refine=7*8.
+&POISSON_PARAMS
+epsilon=1.d-4
+fast_solver=.true.
 /
 
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.8
+slope_type=1
+dual_energy=0.2
+entropy=.true.
+scheme='muscl'
+riemann='hllc'
+/
+
+&COOLING_PARAMS
+cooling=.true.
+metal=.true.
+haardt_madau=.true.
+self_shielding=.true.
+z_ave=0.001
+z_reion=10
+/
+
+&REFINE_PARAMS
+m_refine=10*8.,
+interpol_var=1
+interpol_type=0
+/
 
