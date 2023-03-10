@@ -1,3 +1,10 @@
+This namelist performs a cosmological simulation with dark matter and gas.
+Only gas cooling is included here. You need a grafic file for the initial
+conditions. You can download one easily by executing in the command line
+the following script:
+> utils/script/load_cosmo_ic.sh
+To compile the code with MPI, type in the command line:
+> make MPI=1 UNITS=cosmo CONDINIT=default HYDRO=1 GRAV=1 NVAR=7
 
 &RUN_PARAMS
 cosmo=.true.
