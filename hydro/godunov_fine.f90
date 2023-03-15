@@ -526,13 +526,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     h%flux(i3,j3,k3,ivar,idim)=0.0d0
                  end if
               end do
-#ifdef DUALENER
-              do ivar=1,2
-                 if(h%okloc(i3-i0,j3-j0,k3-k0) .or. h%okloc(i3,j3,k3))then
-                    h%tmp(i3,j3,k3,ivar,idim)=0.0d0
-                 end if
-              end do
-#endif
            end do
         end do
      end do
@@ -580,16 +573,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                                & (h%flux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -h%flux(i3+i0,j3+j0,k3+k0,ivar,idim))
                        end do
-#ifdef DUALENER
-                       ! Update velocity divergence
-                       childp%divu(ind_son)=childp%divu(ind_son)+ &
-                            & (h%tmp(i3   ,j3   ,k3   ,1,idim) &
-                            & -h%tmp(i3+i0,j3+j0,k3+k0,1,idim))
-                       ! Update internal energy
-                       childp%enew(ind_son)=childp%enew(ind_son)+ &
-                            & (h%tmp(i3   ,j3   ,k3   ,2,idim) &
-                            & -h%tmp(i3+i0,j3+j0,k3+k0,2,idim))
-#endif
                     end do
                  end do
               end do
@@ -661,14 +644,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
                                   & -h%flux(i3,j3,k3,ivar,idim)*oneontwotondim
                           end do
-#ifdef DUALENER
-                          ! Update velocity divergence
-                          gridp%divu(icell)=gridp%divu(icell) &
-                               & -h%tmp(i3,j3,k3,1,idim)*oneontwotondim
-                          ! Update internal energy
-                          gridp%enew(icell)=gridp%enew(icell) &
-                               & -h%tmp(i3,j3,k3,2,idim)*oneontwotondim
-#endif
                        end do
                     end do
                  end do
@@ -716,14 +691,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
                                   & +h%flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
                           end do
-#ifdef DUALENER
-                          ! Update velocity divergence
-                          gridp%divu(icell)=gridp%divu(icell) &
-                               & +h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*oneontwotondim
-                          ! Update internal energy
-                          gridp%enew(icell)=gridp%enew(incell) &
-                               & +h%tmp(i3+i0,j3+j0,k3+k0,2,idim)*oneontwotondim
-#endif
                        end do
                     end do
                  end do

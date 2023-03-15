@@ -14,10 +14,6 @@ module oct_commons
      real(kind=dp),dimension(1:twotondim)::phi
      real(kind=dp),dimension(1:twotondim)::phi_old
 #endif
-#ifdef DUALENER
-     real(kind=dp),dimension(1:twotondim)::divu
-     real(kind=dp),dimension(1:twotondim)::enew
-#endif
      integer(kind=8),dimension(1:nhilbert)::hkey
      integer(kind=4),dimension(1:twotondim)::flag1
      integer(kind=4),dimension(1:twotondim)::flag2

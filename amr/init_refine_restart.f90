@@ -246,7 +246,8 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   character(LEN=80)::file_params,file_amr,file_hydro,file_grav
   character(LEN=5)::nchar,ncharcpu
 
-  integer,dimension(1:ncpu_file)::noct_cum,ntarget_cum
+  integer,dimension(1:ncpu_file)::noct_cum
+  integer,dimension(1:s%g%ncpu)::ntarget_cum
 
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
