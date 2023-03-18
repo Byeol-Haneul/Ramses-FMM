@@ -685,7 +685,10 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
 #ifndef WITHOUTMPI
-     call balance_part(pst%s,ilevel)
+     call balance_part(pst%s,pst%s%p,ilevel)
+     if(pst%s%r%star)then
+        call balance_part(pst%s,pst%s%s,ilevel)
+     endif
 #endif
   endif
 
@@ -695,9 +698,10 @@ end subroutine r_balance_part
 !#########################################################################
 !#########################################################################
 #ifndef WITHOUTMPI
-subroutine balance_part(s,ilevel)
+subroutine balance_part(s,p,ilevel)
   use amr_parameters, only: nhilbert,ndim,i8b,dp
   use pm_parameters, only: part_memory
+  use pm_commons, only: part_t
   use ramses_commons, only: ramses_t
   use domain_m, only: domain_t
   use rho_fine_module, only: sort_hilbert
@@ -705,6 +709,7 @@ subroutine balance_part(s,ilevel)
   use mpi
   implicit none
   type(ramses_t)::s
+  type(part_t)::p
   integer::ilevel
   !---------------------------------------------------------------------
   ! This routine will dispatch particles across processors according to
@@ -743,11 +748,11 @@ subroutine balance_part(s,ilevel)
   real(dp)::xpart_target,xcum_target
 
   real(dp),dimension(1:ndim)::xp_tmp,vp_tmp
-  real(dp)::mp_tmp
+  real(dp)::mp_tmp,zp_tmp,tp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
 
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   
   !----------------------------------------------------
   ! Default for particle domains are grid domains
@@ -1030,6 +1035,18 @@ subroutine balance_part(s,ilevel)
         mp_tmp=p%mp(ipart)
         p%mp(ipart)=p%mp(jpart)
         p%mp(jpart)=mp_tmp
+        ! Swap metallicity
+        if(allocated(p%zp))then
+           zp_tmp=p%zp(ipart)
+           p%zp(ipart)=p%zp(jpart)
+           p%zp(jpart)=zp_tmp
+        endif
+        ! Swap birth time
+        if(allocated(p%tp))then
+           tp_tmp=p%tp(ipart)
+           p%tp(ipart)=p%tp(jpart)
+           p%tp(jpart)=tp_tmp
+        endif
         ! Swap ids
         idp_tmp=p%idp(ipart)
         p%idp(ipart)=p%idp(jpart)
@@ -1177,6 +1194,91 @@ subroutine balance_part(s,ilevel)
 
   ! Wait for full completion of sends
   call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  !-------------------------
+  ! Swap metallicities
+  !-------------------------
+  if(allocated(p%zp))then
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%zp(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%zp(ipart)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
+
+  !-------------------------
+  ! Swap birth ages
+  !-------------------------
+  if(allocated(p%tp))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%tp(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%tp(ipart)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
 
   deallocate(x_recv_buf,x_send_buf)
 

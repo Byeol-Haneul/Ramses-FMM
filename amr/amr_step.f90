@@ -129,7 +129,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_kick_drift_part(pst,ilevel,action_kick_only)
   endif
 
-
   ! Add gravity source term with half time step and new force
   if(r%hydro)then
                                     call m_timer(pst,'hydro - gravity','start')
@@ -213,9 +212,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_upload_fine(pst,ilevel)
   endif
 
-  !----------------------------
+  !------------------------
   ! Compute cooling/heating
-  !----------------------------
+  !------------------------
   if(r%cooling.or.r%isothermal)then
                                     call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
@@ -227,6 +226,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%pic)then
                                     call m_timer(pst,'particle - kickdrift','start')
      call m_kick_drift_part(pst,ilevel,action_kick_drift)
+  endif
+
+  !----------------------------------
+  ! Star formation in leaf cells only
+  !----------------------------------
+  if(r%star.and.r%hydro)then
+                                    call m_timer(pst,'star - formation','start')
+     call r_star_formation(pst,ilevel)
   endif
 
   !-----------------------

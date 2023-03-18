@@ -24,6 +24,9 @@ recursive subroutine r_init_part(pst)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call init_part(pst%s%r,pst%s%g,pst%s%p)
+     if(pst%s%r%star)then
+        call init_star(pst%s%r,pst%s%g,pst%s%s)
+     end if
   endif
 
 end subroutine r_init_part
@@ -39,9 +42,9 @@ subroutine init_part(r,g,p)
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
-  !------------------------------
-  ! Allocate particle variables
-  !------------------------------
+  !---------------------------------
+  ! Allocate DM particle variables
+  !---------------------------------
   allocate(p%xp    (r%npartmax,ndim))
   allocate(p%vp    (r%npartmax,ndim))
   allocate(p%mp    (r%npartmax))
@@ -59,6 +62,40 @@ subroutine init_part(r,g,p)
   p%headp=1
   p%tailp=0
 end subroutine init_part
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine init_star(r,g,s)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::s
+  !-----------------------------------
+  ! Allocate star particle variables
+  !------------------------------------
+  allocate(s%xp    (r%nstarmax,ndim))
+  allocate(s%vp    (r%nstarmax,ndim))
+  allocate(s%mp    (r%nstarmax))
+  allocate(s%zp    (r%nstarmax))
+  allocate(s%tp    (r%nstarmax))
+  allocate(s%levelp(r%nstarmax))
+  allocate(s%idp   (r%nstarmax))
+  allocate(s%sortp (r%nstarmax))
+  allocate(s%workp (r%nstarmax))
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  allocate(s%phip  (r%nstarmax))
+#endif
+  ! Allocate pointers to particle levels
+  allocate(s%headp(r%levelmin:r%nlevelmax))
+  allocate(s%tailp(r%levelmin:r%nlevelmax))
+  ! No particle just yet
+  s%headp=1
+  s%tailp=0
+end subroutine init_star
 !#########################################################################
 !#########################################################################
 !#########################################################################

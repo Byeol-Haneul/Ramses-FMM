@@ -123,7 +123,12 @@ recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
      output%ekin=output%ekin+next_output%ekin
      output%vmax=MAX(output%vmax,next_output%vmax)
   else
+     output%vmax=0.0d0
+     output%ekin=0.0d0
      call newdt_part(pst%s%r,pst%s%g,pst%s%p,ilevel,output%ekin,output%vmax)
+     if(pst%s%r%star)then
+        call newdt_part(pst%s%r,pst%s%g,pst%s%s,ilevel,output%ekin,output%vmax)
+     endif
   endif
 
 end subroutine r_newdt_part
@@ -145,7 +150,6 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
   integer::ipart,idim
 
   ! Compute maximum particle velocity
-  vmax = 0.0d0
   do idim = 1, ndim
      do ipart = p%headp(ilevel), p%tailp(ilevel)
         vmax = MAX(vmax, ABS(p%vp(ipart, idim)))
@@ -153,7 +157,6 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
   end do
   
   ! Compute kinetic energy
-  ekin = 0.0d0
   do idim = 1, ndim
      do ipart = p%headp(ilevel), p%tailp(ilevel)
         ekin = ekin + 0.5D0 * p%mp(ipart) * p%vp(ipart, idim)**2

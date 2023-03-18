@@ -17,6 +17,7 @@ module amr_commons
      logical::pic     =.false.   ! Particle In Cell activated
      logical::poisson =.false.   ! Poisson solver activated
      logical::hydro   =.false.   ! Hydro activated
+     logical::star    =.false.   ! Stars and star formation activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
      integer::nrestart=0         ! New run or backup file number
@@ -42,7 +43,8 @@ module amr_commons
      integer::nlevelmax=1        ! Maximum number of level
      integer::ngridmax=0         ! Maximum number of grids
      integer::ncachemax=10000    ! Maximum number of cache lines
-     integer::npartmax=0         ! Maximum number of particles
+     integer::npartmax=0         ! Maximum number of DM particles
+     integer::nstarmax=0         ! Maximum number of star particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(dp)::boxlen=1.0D0      ! Cell size at level 0 (total box size)
      real(dp)::box_size=0.0D0    ! Box length of active domain along x direction
@@ -100,9 +102,6 @@ module amr_commons
      real(dp)::units_density=1.0 ! [g/cm^3]
      real(dp)::units_time=1.0    ! [seconds]
      real(dp)::units_length=1.0  ! [cm]
-     real(dp)::T2_star=10.
-     real(dp)::g_star=1.0
-     real(dp)::n_star=1d100
 
      ! Cosmological parameters (others are read from file)
      real(dp)::omega_b=0.0D0  ! Omega Baryon
@@ -204,6 +203,11 @@ module amr_commons
      integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
      real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
      real(dp)::T2max
+
+     ! Star formation parameters
+     real(dp)::T2_star=2e4
+     real(dp)::n_star=0.1
+     real(dp)::eps_star=0.01
 
   end type run_t
   

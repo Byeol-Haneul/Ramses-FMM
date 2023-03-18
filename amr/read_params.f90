@@ -19,6 +19,7 @@ subroutine m_read_params(pst)
   character(LEN=80)::cmdarg
   integer(kind=8)::ngridtot=0
   integer(kind=8)::nparttot=0
+  integer(kind=8)::nstartot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -32,6 +33,7 @@ subroutine m_read_params(pst)
   logical::pic     =.false.   ! Particle In Cell activated
   logical::poisson =.false.   ! Poisson solver activated
   logical::hydro   =.false.   ! Hydro activated
+  logical::star    =.false.   ! Stars and star formation activated
   logical::verbose =.false.   ! Write everything
   logical::debug   =.false.   ! Debug mode activated
   logical::static  =.false.   ! Static mode activated
@@ -44,6 +46,7 @@ subroutine m_read_params(pst)
 
   ! Maximum number of allocatable particles
   integer::npartmax=0 
+  integer::nstarmax=0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -184,11 +187,6 @@ subroutine m_read_params(pst)
   ! Non-thernal energies and passive scalars index
   integer ::ieuler,inener,ientropy,imetal,iturb,ichem
 
-  ! Other hydro solver parameters
-  real(dp)::T2_star=10.
-  real(dp)::g_star=1.0
-  real(dp)::n_star=1d100
-  
   ! Interpolation parameters
   integer ::interpol_var=0
   integer ::interpol_type=1
@@ -240,6 +238,11 @@ subroutine m_read_params(pst)
   real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
   real(dp)::T2max=1d50
 
+  ! Star formation parameters
+  real(dp)::T2_star=2e4
+  real(dp)::n_star=0.1
+  real(dp)::eps_star=0.01
+  
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
@@ -305,6 +308,8 @@ subroutine m_read_params(pst)
   namelist/cooling_params/cooling,metal,isothermal,haardt_madau,J21 &
        & ,eos_type,eos_nH,eos_index,eos_T2 &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
+  ! Star particles and star formation recipe
+  namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star
 
   associate(s=>pst%s)
 
@@ -320,7 +325,7 @@ subroutine m_read_params(pst)
   write(*,*)'_/    _/   _/    _/   _/    _/    _/_/_/   _/_/_/_/    _/_/_/  '
   write(*,*)'                        Version 3.0                            '
   write(*,*)'       written by Romain Teyssier (Princeton University)       '
-  write(*,*)'           (c) CEA 1999-2007, UZH 2008-2021, PU 2022           '
+  write(*,*)'        (c) CEA 1999-2007, UZH 2008-2021, PU 2022-2023         '
   write(*,*)' '
 
   ! Check nvar is not too small
@@ -426,6 +431,9 @@ subroutine m_read_params(pst)
   if(npartmax==0)then
      npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
   endif
+  if(nstarmax==0)then
+     nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
+  endif
 #ifdef HYDRO
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
@@ -478,6 +486,9 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=cooling_params,END=107)
 107 continue
+  rewind(1)
+  read(1,NML=star_params,END=108)
+108 continue
   close(1)
 
   !-----------------
@@ -587,6 +598,7 @@ subroutine m_read_params(pst)
   s%r%pic=pic
   s%r%poisson=poisson
   s%r%hydro=hydro
+  s%r%star=star
   s%r%verbose=verbose
   s%r%debug=debug
   s%r%nrestart=nrestart
@@ -611,6 +623,7 @@ subroutine m_read_params(pst)
   s%r%ngridmax=ngridmax
   s%r%ncachemax=ncachemax
   s%r%npartmax=npartmax
+  s%r%nstarmax=nstarmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size
@@ -673,9 +686,6 @@ subroutine m_read_params(pst)
   s%r%units_density=units_density
   s%r%units_time=units_time
   s%r%units_length=units_length
-  s%r%T2_star=T2_star
-  s%r%g_star=g_star
-  s%r%n_star=n_star
 
   s%r%m_refine=m_refine
   s%r%r_refine=r_refine
@@ -773,6 +783,10 @@ subroutine m_read_params(pst)
   s%r%eos_index=eos_index
   s%r%eos_T2=eos_T2
   s%r%T2max=T2max
+
+  s%r%T2_star=T2_star
+  s%r%n_star=n_star
+  s%r%eps_star=eps_star
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)

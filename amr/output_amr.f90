@@ -26,7 +26,7 @@ subroutine m_dump_all(pst)
   integer,dimension(1:flen/4)::input_array
   type(in_output_poisson_t)::in_output_poisson
 
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,s=>pst%s%s,mdl=>pst%s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -62,6 +62,10 @@ subroutine m_dump_all(pst)
      if(r%pic)then
         filename=TRIM(filedir)//'part_header.txt'
         call output_header(r,g,p,filename)
+        if(r%star)then
+           filename=TRIM(filedir)//'star_header.txt'
+           call output_header(r,g,s,filename)
+        endif
      endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_file_descriptor.txt'
@@ -111,9 +115,9 @@ subroutine m_dump_all(pst)
         call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
      end if
 
-     ! Output PART data
+     ! Output PART and STAR data
      if(r%pic)then
-        filename=TRIM(filedir)//'part.'
+        filename=TRIM(filedir) ! Note that suffix will be added later
         input_array=transfer(filename,input_array)
         if(r%verbose)write(*,*)'Writing particle files'
         call r_output_part(pst,input_array,flen/4,dummy,0)

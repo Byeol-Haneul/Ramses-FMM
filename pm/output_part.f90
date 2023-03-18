@@ -25,7 +25,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
-     call output_part(pst%s%r,pst%s%g,pst%s%p,filename)
+     call output_part(pst%s%r,pst%s%g,pst%s%p,filename//'part.')
+     if(pst%s%r%star)then
+        call output_part(pst%s%r,pst%s%g,pst%s%s,filename//'star.')
+     endif
   endif
 
 end subroutine r_output_part
@@ -51,7 +54,7 @@ subroutine output_part(r,g,p,filename)
   integer(i8b),allocatable,dimension(:)::ii8
   integer,allocatable,dimension(:)::ll
   
-  ilun=10!+2*g%ncpu+g%myid
+  ilun=10
 
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
@@ -80,6 +83,20 @@ subroutine output_part(r,g,p,filename)
      xdp(i)=p%mp(i)
   end do
   write(ilun)xdp
+  ! Write metalicity
+  if(allocated(p%zp))then
+     do i=1,p%npart
+        xdp(i)=p%zp(i)
+     end do
+     write(ilun)xdp
+  endif
+  ! Write birth time
+  if(allocated(p%tp))then
+     do i=1,p%npart
+        xdp(i)=p%tp(i)
+     end do
+     write(ilun)xdp
+  endif
   deallocate(xdp)
   ! Write identity
   allocate(ii8(1:p%npart))
@@ -109,4 +126,8 @@ subroutine output_part(r,g,p,filename)
   close(ilun)
 
 end subroutine output_part
+!#######################################################
+!#######################################################
+!#######################################################
+!#######################################################
 end module output_part_module

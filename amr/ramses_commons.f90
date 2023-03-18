@@ -10,6 +10,7 @@ module ramses_commons
      type(global_t)::g
      type(mesh_t)::m
      type(part_t)::p
+     type(part_t)::s
      type(cooling_t)::c
      type(mdl_t),pointer::mdl => null()
 

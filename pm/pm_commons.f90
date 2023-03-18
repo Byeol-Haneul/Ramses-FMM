@@ -1,6 +1,9 @@
 module pm_commons
   use amr_parameters, only: dp, i8b
 
+  integer,parameter::TYPE_DM=1
+  integer,parameter::TYPE_STAR=2
+
   type part_t
 
      integer :: npart=0     ! Actual number of particles in processor
@@ -11,6 +14,8 @@ module pm_commons
      real(dp),allocatable,dimension(:,:)   ::xp       ! Positions
      real(dp),allocatable,dimension(:,:)   ::vp       ! Velocities
      real(dp),allocatable,dimension(:)     ::mp       ! Masses
+     real(dp),allocatable,dimension(:)     ::zp       ! Metallicity
+     real(dp),allocatable,dimension(:)     ::tp       ! Formation times
 #ifdef OUTPUT_PARTICLE_POTENTIAL
      real(dp),allocatable,dimension(:)     ::phip     ! Potential
 #endif

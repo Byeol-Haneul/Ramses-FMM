@@ -23,7 +23,7 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
   input_array(1)=ilevel
   input_array(2)=action_part
   call r_kick_drift_part(pst,input_array,2,dummy,0)
-  
+
 end subroutine m_kick_drift_part
 !################################################################
 !################################################################
@@ -52,7 +52,10 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-     call kick_drift_part(pst%s,ilevel,action_part)
+     call kick_drift_part(pst%s,pst%s%p,ilevel,action_part)
+     if(pst%s%r%star)then
+        call kick_drift_part(pst%s,pst%s%s,ilevel,action_part)
+     endif
   endif
 
 end subroutine r_kick_drift_part
@@ -60,9 +63,10 @@ end subroutine r_kick_drift_part
 !################################################################
 !################################################################
 !################################################################
-subroutine kick_drift_part(s,ilevel,action_part)
+subroutine kick_drift_part(s,p,ilevel,action_part)
   use amr_parameters, only: dp,ndim,twotondim
   use pm_parameters
+  use pm_commons, only: part_t
   use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -70,6 +74,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
   use cache
   implicit none
   type(ramses_t)::s
+  type(part_t)::p
   integer::ilevel
   integer::action_part
   !
@@ -87,7 +92,7 @@ subroutine kick_drift_part(s,ilevel,action_part)
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
   
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 

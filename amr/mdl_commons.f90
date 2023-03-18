@@ -13,6 +13,7 @@ module mdl_parameters
      enumerator::MDL_INPUT_PART_GRAFIC
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_PART_RESTART
+     enumerator::MDL_INPUT_STAR_RESTART
      enumerator::MDL_NPART_MAX
      enumerator::MDL_INIT_FLAG
      enumerator::MDL_USER_FLAG

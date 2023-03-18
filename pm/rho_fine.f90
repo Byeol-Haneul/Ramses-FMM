@@ -164,7 +164,7 @@ subroutine m_rho_fine(pst,ilevel)
   ! their grid Hilbert order.
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
-  integer::i,input_size,dummy(2)
+  integer::i,input_size
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -777,7 +777,10 @@ recursive subroutine r_cic_part(pst,ilevel,input_size)
      call r_cic_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call cic_part(pst%s,ilevel)
+     call cic_part(pst%s,pst%s%p,ilevel)
+     if(pst%s%r%star)then
+        call cic_part(pst%s,pst%s%s,ilevel)
+     endif
   endif
 
 end subroutine r_cic_part
@@ -785,10 +788,11 @@ end subroutine r_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine cic_part(s,ilevel)
+subroutine cic_part(s,p,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
   use nbors_utils
   use cache_commons
   use cache
@@ -796,6 +800,7 @@ subroutine cic_part(s,ilevel)
   use hilbert
   implicit none
   type(ramses_t)::s
+  type(part_t)::p
   integer::ilevel
   !
   ! Local variables
@@ -809,7 +814,7 @@ subroutine cic_part(s,ilevel)
   type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
   
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p)
+  associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
@@ -1023,7 +1028,10 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      call r_split_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call split_part(pst%s,ilevel)
+     call split_part(pst%s,pst%s%p,ilevel)
+     if(pst%s%r%star)then
+        call split_part(pst%s,pst%s%s,ilevel)
+     endif
   endif
 
 end subroutine r_split_part
@@ -1085,16 +1093,18 @@ end subroutine unpack_fetch_split
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine split_part(s,ilevel)
+subroutine split_part(s,p,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,i8b
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
   use nbors_utils
   use cache_commons
   use hilbert
   use cache
   implicit none
   type(ramses_t)::s
+  type(part_t)::p
   integer::ilevel
   !
   ! Local variables
@@ -1110,8 +1120,8 @@ subroutine split_part(s,ilevel)
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
 
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,mdl=>s%mdl)
-    
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
