@@ -538,7 +538,7 @@ contains
     read(ilun,POS=skip)p%t
     skip=skip+4*(2+4*p%nlevelmax+2+2*17)
     read(ilun,POS=skip)p%gamma
-    skip=skip+8
+    skip=skip+8+48
     read(ilun,POS=skip)p%nhilbert
     allocate(p%bound_key(1:p%nhilbert,0:p%ncpu,p%levelmin:p%nlevelmax))
     skip=skip+4

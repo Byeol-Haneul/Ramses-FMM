@@ -224,6 +224,8 @@ subroutine output_params(r,g,m,filename)
   write(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   write(ilun)r%mass_sph
   write(ilun)r%gamma
+  ! Write RNG latest seed
+  write(ilun)r%seed
   ! Write cpu boundaries
   write(ilun)nhilbert
   do ilevel=r%levelmin,r%nlevelmax
@@ -287,6 +289,8 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   read(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   read(ilun)mass_sph_file
   read(ilun)gamma_file
+  ! Read RNG seed to restart the stream
+  read(ilun)r%seed
   close(ilun)
   ! For cosmo runs only, as mass_sph is not set in the namelist
   if(r%cosmo)r%mass_sph=mass_sph_file
@@ -471,7 +475,14 @@ subroutine output_header(r,g,p,filename)
   
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
-  write(ilun,'(a)',advance='no')'pos vel mass iord level '
+  write(ilun,'(a)',advance='no')'pos vel mass '
+  if(allocated(p%zp))then
+     write(ilun,'(a)',advance='no')'metallicity '
+  endif
+  if(allocated(p%tp))then
+     write(ilun,'(a)',advance='no')'age '
+  endif
+  write(ilun,'(a)',advance='no')'iord level '
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   write(ilun,'(a)',advance='no')'phi '
 #endif

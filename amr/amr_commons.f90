@@ -208,6 +208,8 @@ module amr_commons
      real(dp)::T2_star=2e4
      real(dp)::n_star=0.1
      real(dp)::eps_star=0.01
+     integer(kind=8),dimension(1:6)::seed
+     real(dp)::m_star=1
 
   end type run_t
   
@@ -238,6 +240,7 @@ module amr_commons
      real(dp)::t=0.0D0                             ! Time variable
      real(dp)::mass_tot=0.0D0                      ! Total gass mass
      real(dp)::mass_tot_0=0.0D0                    ! Initial total gas mass
+     real(dp)::mass_star_tot=0.0D0                 ! Total mass in new stars
      
      ! Level related arrays
      real(dp),dimension(1:MAXLEVEL)::dtold,dtnew ! Time step at each level

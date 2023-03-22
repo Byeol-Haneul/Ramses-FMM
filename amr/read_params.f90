@@ -242,7 +242,9 @@ subroutine m_read_params(pst)
   real(dp)::T2_star=2e4
   real(dp)::n_star=0.1
   real(dp)::eps_star=0.01
-  
+  integer(kind=8),dimension(1:6)::seed=(/123,456,789,1,1,1/)
+  real(dp)::m_star=1
+
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
@@ -309,7 +311,7 @@ subroutine m_read_params(pst)
        & ,eos_type,eos_nH,eos_index,eos_T2 &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
   ! Star particles and star formation recipe
-  namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star
+  namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
 
   associate(s=>pst%s)
 
@@ -787,6 +789,8 @@ subroutine m_read_params(pst)
   s%r%T2_star=T2_star
   s%r%n_star=n_star
   s%r%eps_star=eps_star
+  s%r%seed=seed
+  s%r%m_star=m_star
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)

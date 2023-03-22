@@ -1,4 +1,9 @@
 module input_part_restart_module
+
+  type :: out_input_star_t
+     real(kind=8)::mass
+  end type out_input_star_t
+
 contains
 !#########################################################################
 !#########################################################################
@@ -21,6 +26,7 @@ subroutine m_input_part_restart(pst)
   character(LEN=5)::nchar,ncharcpu
   character(LEN=80)::file_head,file_part
   integer,allocatable,dimension(:)::npart_file
+  type(out_input_star_t)::output
   
   if(pst%s%r%verbose)write(*,*)'Entering input_part_restart'
 
@@ -83,7 +89,8 @@ subroutine m_input_part_restart(pst)
   endif
 
   ! Call recursive slave routine
-  call r_input_star_restart(pst,npart_file,ncpu_file,dummy,0)
+  call r_input_star_restart(pst,npart_file,ncpu_file,output,2)
+  pst%s%g%mass_star_tot=output%mass
 
   ! Deallocate local array
   deallocate(npart_file)
@@ -290,7 +297,7 @@ end subroutine input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_star_restart(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_input_star_restart(pst,input_array,input_size,output,output_size)
   use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
@@ -300,7 +307,7 @@ recursive subroutine r_input_star_restart(pst,input_array,input_size,output_arra
   integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(out_input_star_t)::output, next_output
 
   integer::rID
 
@@ -311,10 +318,11 @@ recursive subroutine r_input_star_restart(pst,input_array,input_size,output_arra
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_star_restart(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     call r_input_star_restart(pst%pLower,input_array,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%mass=output%mass+next_output%mass
   else
-     call input_star_restart(pst%s%r,pst%s%g,pst%s%s,input_size,input_array)
+     call input_star_restart(pst%s%r,pst%s%g,pst%s%s,input_size,input_array,output%mass)
   endif
 
 end subroutine r_input_star_restart
@@ -322,7 +330,7 @@ end subroutine r_input_star_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_star_restart(r,g,p,ncpu_file,npart_file)
+subroutine input_star_restart(r,g,p,ncpu_file,npart_file,mstar_loc)
   use amr_parameters, only: ndim,dp,i8b
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
@@ -330,6 +338,7 @@ subroutine input_star_restart(r,g,p,ncpu_file,npart_file)
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
+  real(kind=8)::mstar_loc
   integer::ncpu_file
   integer,dimension(1:ncpu_file)::npart_file
   !------------------------------------------------------------
@@ -348,7 +357,7 @@ subroutine input_star_restart(r,g,p,ncpu_file,npart_file)
 
   character(LEN=5)::nchar,ncharcpu
   character(LEN=80)::file_part
-  
+
   !-------------------------------------
   ! Compute local particle number
   !-------------------------------------
@@ -433,9 +442,11 @@ subroutine input_star_restart(r,g,p,ncpu_file,npart_file)
      ipos=9+8*(ndim+ndim)*npart_file(icpu)+8*(istart-1)
      read(10,POS=ipos)xdp
      ipart=ipart_old
+     mstar_loc=0.0d0
      do i=istart,iend
         ipart=ipart+1
         p%mp(ipart)=xdp(i)
+        mstar_loc=mstar_loc+xdp(i)
      end do
 
      ! Read metallicity

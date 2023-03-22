@@ -16,7 +16,7 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
   
-  character(LEN=flen)::filename
+  character(LEN=flen)::filename,filename2
   integer::rID
 
   if(pst%nLower>0)then
@@ -25,9 +25,11 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
-     call output_part(pst%s%r,pst%s%g,pst%s%p,filename//'part.')
+     filename2=TRIM(filename)//'part.'
+     call output_part(pst%s%r,pst%s%g,pst%s%p,filename2)
      if(pst%s%r%star)then
-        call output_part(pst%s%r,pst%s%g,pst%s%s,filename//'star.')
+        filename2=TRIM(filename)//'star.'
+        call output_part(pst%s%r,pst%s%g,pst%s%s,filename2)
      endif
   endif
 

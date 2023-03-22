@@ -26,6 +26,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use cooling_fine_module, only: r_cooling_fine
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
   use movie_module, only: m_output_frame
+  use star_formation_module, only: out_star_formation_t, r_star_formation
 
   implicit none
 
@@ -38,6 +39,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
   type(in_broadcast_dt_t)::in_broadcast_dt
+  type(out_star_formation_t)::output_star
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
   
@@ -233,7 +235,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------------------
   if(r%star.and.r%hydro)then
                                     call m_timer(pst,'star - formation','start')
-     call r_star_formation(pst,ilevel)
+     call r_star_formation(pst,ilevel,1,output_star,2)
+     if(output_star%mass>0)then
+        g%mass_star_tot=g%mass_star_tot+output_star%mass
+        write(*,*)'Total mass in stars=',g%mass_star_tot
+     endif
   endif
 
   !-----------------------

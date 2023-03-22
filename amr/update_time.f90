@@ -45,6 +45,9 @@ subroutine m_update_time(pst,ilevel,done)
         mcons=0.0D0
      else
         mcons=(g%mass_tot-g%mass_tot_0)/g%mass_tot_0
+        if(r%star)then
+           mcons=(g%mass_tot+g%mass_star_tot-g%mass_tot_0)/g%mass_tot_0
+        endif
      end if
 
      !----------------------------
