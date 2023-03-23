@@ -1231,6 +1231,18 @@ subroutine split_part(s,p,ilevel)
         mp_tmp=p%mp(ipart)
         p%mp(ipart)=p%mp(jpart)
         p%mp(jpart)=mp_tmp
+        ! Swap metallicity
+        if(allocated(p%zp))then
+           mp_tmp=p%zp(ipart)
+           p%zp(ipart)=p%zp(jpart)
+           p%zp(jpart)=mp_tmp
+        endif
+        ! Swap age
+        if(allocated(p%tp))then
+           mp_tmp=p%tp(ipart)
+           p%tp(ipart)=p%tp(jpart)
+           p%tp(jpart)=mp_tmp
+        endif
         ! Swap ids
         idp_tmp=p%idp(ipart)
         p%idp(ipart)=p%idp(jpart)

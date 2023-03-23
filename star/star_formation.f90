@@ -191,6 +191,12 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
               s%vp(s%npart,1)=m%grid(igrid)%uold(ind,2)/d
               s%vp(s%npart,2)=m%grid(igrid)%uold(ind,3)/d
               s%vp(s%npart,3)=m%grid(igrid)%uold(ind,4)/d
+#ifdef GRAV
+              ! Remove half a kick (will be added later)
+              s%vp(s%npart,1)=s%vp(s%npart,1)-m%grid(igrid)%f(ind,1)*0.5d0*g%dtnew(ilevel)
+              s%vp(s%npart,2)=s%vp(s%npart,2)-m%grid(igrid)%f(ind,2)*0.5d0*g%dtnew(ilevel)
+              s%vp(s%npart,3)=s%vp(s%npart,3)-m%grid(igrid)%f(ind,3)*0.5d0*g%dtnew(ilevel)
+#endif
               ! Compute star particle mass
               s%mp(s%npart)=nstar*mstar
               ! Compute star particle birth time
@@ -215,6 +221,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         endif
      end do
   end do
+  s%tailp(r%nlevelmax)=s%tailp(r%nlevelmax)+nstar_loc
 
   !----------------------------------------------
   ! Get the new global seed to the final state
