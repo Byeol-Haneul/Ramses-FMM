@@ -238,7 +238,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call r_star_formation(pst,ilevel,1,output_star,2)
      if(output_star%mass>0)then
         g%mass_star_tot=g%mass_star_tot+output_star%mass
-        write(*,*)'Total mass in stars=',g%mass_star_tot
      endif
   endif
 

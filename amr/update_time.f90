@@ -90,6 +90,7 @@ subroutine m_update_time(pst,ilevel,done)
         else
            write(*,777)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot
         end if
+        if(r%star)write(*,*)'Total mass in stars=',g%mass_star_tot
 777     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2)
 778     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2)
 
