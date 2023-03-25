@@ -211,7 +211,7 @@ subroutine m_rho_fine(pst,ilevel)
         call r_reset_rho(pst,i,1)
      endif
 
-        ! Gas mass deposition using pseudo-particles
+     ! Gas mass deposition using pseudo-particles
      if(r%hydro.AND.m%noct_tot(i)>0)then
         if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
         call r_cic_multipole(pst,i,1)

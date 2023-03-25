@@ -159,12 +159,15 @@ def rd_histo(filename):
     return h
 
 class Part:
-    def __init__(self,nnp,nndim):
+    def __init__(self,nnp,nndim,star=False):
         self.np = nnp
         self.ndim = nndim
         self.xp = np.zeros([nndim,nnp])
         self.vp = np.zeros([nndim,nnp])
         self.mp = np.zeros([nnp])
+        if(star):
+            self.zp = np.zeros([nnp])
+            self.tp = np.zeros([nnp])
 
 def rd_part(nout,**kwargs):
     """This function reads a RAMSES particle file (unformatted Fortran binary) 
@@ -197,6 +200,7 @@ def rd_part(nout,**kwargs):
     center = kwargs.get("center")
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
+    star = kwargs.get("star",False)
 
     car1 = str(nout).zfill(5)
     i = rd_info(nout,path=path)
@@ -212,11 +216,16 @@ def rd_part(nout,**kwargs):
     #else:
     #    cpulist = range(1,ncpu+1)
     cpulist = range(1,ncpu+1)
+
+    if(star):
+        prefix="/star."
+    else:
+        prefix="/part."        
     
     npart = 0
     for icpu in cpulist:
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/part."+car2
+        filename = path+"output_"+car1+prefix+car2
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         npart = npart + npart2
         
@@ -224,14 +233,14 @@ def rd_part(nout,**kwargs):
     print(txt)
     print("Reading particle data...")
     
-    p = Part(npart,ndim)
+    p = Part(npart,ndim,star)
     p.np = npart
     p.ndim = ndim
     ipart = 0
 
     for	icpu in	cpulist:
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/part."+car2
+        filename = path+"output_"+car1+prefix+car2
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         
         for idim in range(0,ndim):
@@ -247,6 +256,15 @@ def rd_part(nout,**kwargs):
         offset = 8+npart2*8*ndim*2
         xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
         p.mp[ipart:ipart+npart2] = xp
+
+        if(star):
+            offset = 8+npart2*8*ndim*2+npart2*8
+            xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            p.zp[ipart:ipart+npart2] = xp
+
+            offset = 8+npart2*8*ndim*2+2*npart2*8
+            xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            p.tp[ipart:ipart+npart2] = xp
 
         ipart = ipart + npart2
 
