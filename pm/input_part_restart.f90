@@ -34,7 +34,7 @@ subroutine m_input_part_restart(pst)
   call title(pst%s%r%nrestart,nchar)
   file_head='output_'//TRIM(nchar)//'/part_header.txt'
   call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
-  write(*,'(" Restart snapshot has ",I8," particles")')npart_tot_file
+  write(*,'(" Restart snapshot has ",I8," DM particles")')npart_tot_file
 
   ! Allocate local array
   allocate(npart_file(1:ncpu_file))
@@ -67,7 +67,7 @@ subroutine m_input_part_restart(pst)
   call title(pst%s%r%nrestart,nchar)
   file_head='output_'//TRIM(nchar)//'/star_header.txt'
   call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
-  write(*,'(" Restart snapshot has ",I8," particles")')npart_tot_file
+  write(*,'(" Restart snapshot has ",I8," star particles")')npart_tot_file
 
   ! Allocate local array
   allocate(npart_file(1:ncpu_file))
@@ -90,6 +90,7 @@ subroutine m_input_part_restart(pst)
 
   ! Call recursive slave routine
   call r_input_star_restart(pst,npart_file,ncpu_file,output,2)
+  write(*,*)'Total mass in stars=',output%mass
   pst%s%g%mass_star_tot=output%mass
 
   ! Deallocate local array
@@ -317,7 +318,7 @@ recursive subroutine r_input_star_restart(pst,input_array,input_size,output,outp
   !--------------------------------------------------------------------
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,pst%iUpper+1,input_size,output_size,input_array)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_STAR_RESTART,pst%iUpper+1,input_size,output_size,input_array)
      call r_input_star_restart(pst%pLower,input_array,input_size,output,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
      output%mass=output%mass+next_output%mass
@@ -400,6 +401,7 @@ subroutine input_star_restart(r,g,p,ncpu_file,npart_file,mstar_loc)
   ! Loop over relevant files
   ipart=0
   ipart_old=0
+  mstar_loc=0.0d0
   call title(r%nrestart,nchar)
   do icpu=ileft,iright
      if(icpu>1)then
@@ -442,7 +444,6 @@ subroutine input_star_restart(r,g,p,ncpu_file,npart_file,mstar_loc)
      ipos=9+8*(ndim+ndim)*npart_file(icpu)+8*(istart-1)
      read(10,POS=ipos)xdp
      ipart=ipart_old
-     mstar_loc=0.0d0
      do i=istart,iend
         ipart=ipart+1
         p%mp(ipart)=xdp(i)

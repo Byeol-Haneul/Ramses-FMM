@@ -34,16 +34,16 @@ subroutine m_input_part(pst)
      write(*,*) 'Unsupported format file ' // pst%s%r%filetype
      call mdl_abort(pst%s%mdl)
   end select
-  
+
   ! Compute minimum particle mass
   call r_mass_min_part(pst,pst%s%r%levelmin,1,mp_min,2)
-  
+
   ! Broadcast minimum particle mass
   call r_broadcast_mp_min(pst,mp_min,2,dummy,0)
-  
+
   ! Computing maximum particle count (only in master)
   call r_npart_max(pst,pst%s%r%levelmin,1,pst%s%p%npart_max,1)
-  
+
 end subroutine m_input_part
 !#####################################################################
 !#####################################################################
