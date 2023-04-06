@@ -13,6 +13,7 @@ module oct_commons
      real(kind=dp),dimension(1:twotondim)::rho
      real(kind=dp),dimension(1:twotondim)::phi
      real(kind=dp),dimension(1:twotondim)::phi_old
+     real(kind=dp),dimension(1:twotondim)::nref
 #endif
      integer(kind=8),dimension(1:nhilbert)::hkey
      integer(kind=4),dimension(1:twotondim)::flag1

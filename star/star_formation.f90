@@ -65,7 +65,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   integer,dimension(1:g%ncpu)::nsite_cpu,nstar_cpu
   integer::i,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nstar,nstar_loc
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,tstar,mcell,mgas,PoissMean
+  real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,tstar,mcell,mgas,mask,PoissMean
 #ifdef SOLVERmhd
   integer::neul=5
 #else
@@ -114,6 +114,11 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         ! Select dense enough cells
         d = m%grid(igrid)%uold(ind,1)
         ok = ok .and. d > d0
+        ! Select cells in zoom region
+        if(r%ivar_refine>0)then
+           mask = m%grid(igrid)%uold(ind,r%ivar_refine)/d
+           ok = ok .and. mask > r%var_cut_refine
+        endif
         ! Count number of random numbers
         if(ok)then
            nsite=nsite+1

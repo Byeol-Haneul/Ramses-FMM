@@ -42,20 +42,16 @@ subroutine poisson_flag(s,ilevel)
         ok=.false.
 
         ! Flag cells with density beyond the threshold
-#ifdef HYDRO
-        if(r%mass_sph>0)then
-           if(r%m_refine(ilevel)>=0)then
-              ok=(ok .or. m%grid(igrid)%uold(ind,1)>=r%m_refine(ilevel)*d_scale)
-           endif
+#if defined(HYDRO) && !defined(GRAV)
+        if(r%mass_sph>0.and.r%m_refine(ilevel)>=0)then
+           ok=(ok .or. m%grid(igrid)%uold(ind,1)>=r%m_refine(ilevel)*d_scale)
         endif
 #endif
         
         ! Flag cells with density beyond the threshold
 #ifdef GRAV
-        if(r%pic.and.g%mp_min>0)then
-           if(r%m_refine(ilevel)>=0)then
-              ok=(ok .or. m%grid(igrid)%rho(ind)>=r%m_refine(ilevel)*dp_scale)
-           endif
+        if(r%pic.and.r%m_refine(ilevel)>=0)then
+           ok=(ok .or. m%grid(igrid)%nref(ind)>=r%m_refine(ilevel))
         endif
 #endif
 

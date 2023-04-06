@@ -572,6 +572,7 @@ subroutine reset_rho(r,g,m,ilevel)
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
         m%grid(igrid)%rho(ind)=0.0D0
+        m%grid(igrid)%nref(ind)=0.0D0
      end do
   end do
 #endif  
@@ -626,9 +627,9 @@ subroutine cic_multipole(s,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::inbor,igrid,ind,idim
   integer::icell
-  real(kind=8)::dx_loc,vol_loc,mmm
+  real(kind=8)::dx_loc,vol_loc,mmm,mask
   type(oct),pointer::gridp
-  type(msg_small_realdp)::dummy_small_realdp
+  type(msg_twin_realdp)::dummy_twin_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
     
@@ -640,7 +641,7 @@ subroutine cic_multipole(s,ilevel)
   hash_nbor(0)=ilevel+1
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
                 pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
                 init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
@@ -743,6 +744,16 @@ subroutine cic_multipole(s,ilevel)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
            if(associated(gridp))then
               gridp%rho(icell)=gridp%rho(icell)+mmm*vol(inbor)/vol_loc
+#ifdef HYDRO
+              if(r%ivar_refine>0)then
+                 mask=gridp%uold(icell,r%ivar_refine)/gridp%uold(icell,1) 
+                 if(mask.gt.r%var_cut_refine)then
+                    gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
+                 endif
+              else
+                 gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
+              endif
+#endif
            end if
         end do
 #endif     
@@ -810,9 +821,10 @@ subroutine cic_part(s,p,ilevel)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
-  real(kind=8)::dx_loc,vol_loc,vol2
+  real(kind=8)::dx_loc,vol_loc
   type(oct),pointer::gridp
-  type(msg_small_realdp)::dummy_small_realdp
+  type(msg_twin_realdp)::dummy_twin_realdp
+  logical::star
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -820,6 +832,9 @@ subroutine cic_part(s,p,ilevel)
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
+  ! Are particles stars?
+  star = allocated(p%tp)
+  
   ! Compute contribution to multipole
   if(ilevel==r%levelmin)then
      do i=1,p%npart
@@ -843,7 +858,7 @@ subroutine cic_part(s,p,ilevel)
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
                 pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
                 init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
@@ -922,8 +937,18 @@ subroutine cic_part(s,p,ilevel)
         ! Get parent cell using write-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
-           vol2=p%mp(ipart)*vol(ind)/vol_loc
-           gridp%rho(icell)=gridp%rho(icell)+vol2
+           gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           if(star)then
+              gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
+           else
+              if(r%mass_cut_refine>0)then
+                 if(p%mp(ipart)<r%mass_cut_refine)then
+                    gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+                 endif
+              else
+                 gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+              endif
+           endif
         endif
      end do
 #endif
@@ -953,6 +978,7 @@ subroutine init_flush_rho(grid,hash_key)
 #ifdef GRAV
   do ind=1,twotondim
      grid%rho(ind)=0.0
+     grid%nref(ind)=0.0
   end do
 #endif
   
@@ -964,17 +990,18 @@ end subroutine init_flush_rho
 subroutine pack_flush_rho(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use amr_commons, only: oct
-  use cache_commons, only: msg_small_realdp
+  use cache_commons, only: msg_twin_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind
-  type(msg_small_realdp)::msg
+  type(msg_twin_realdp)::msg
 
 #ifdef GRAV
   do ind=1,twotondim
-     msg%realdp(ind)=grid%rho(ind)
+     msg%realdp_phi(ind)=grid%rho(ind)
+     msg%realdp_dis(ind)=grid%nref(ind)
   end do
 #endif
 
@@ -988,14 +1015,14 @@ end subroutine pack_flush_rho
 subroutine unpack_flush_rho(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use amr_commons, only: oct
-  use cache_commons, only: msg_small_realdp
+  use cache_commons, only: msg_twin_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
-  type(msg_small_realdp)::msg
+  type(msg_twin_realdp)::msg
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
@@ -1003,7 +1030,8 @@ subroutine unpack_flush_rho(grid,msg_size,msg_array,hash_key)
   
 #ifdef GRAV
   do ind=1,twotondim
-     grid%rho(ind)=grid%rho(ind)+msg%realdp(ind)
+     grid%rho(ind)=grid%rho(ind)+msg%realdp_phi(ind)
+     grid%nref(ind)=grid%nref(ind)+msg%realdp_dis(ind)
   end do
 #endif
 
