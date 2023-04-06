@@ -60,6 +60,14 @@ z_ave=0.001
 z_reion=10
 /
 
+&STAR_PARAMS
+star=.true.
+nstarmax=2000000
+n_star=0.1
+eps_star=0.01
+m_star=1
+/
+
 &REFINE_PARAMS
 m_refine=10*8.,
 interpol_var=1
