@@ -100,36 +100,4 @@ end subroutine init_star
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine init_gas_part(r,g,p,ngas)
-  use amr_parameters, only: ndim
-  use amr_commons, only: run_t,global_t
-  use pm_commons, only: part_t
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(part_t)::p
-  !------------------------------------------
-  ! Allocate gadget gas particle variables
-  !------------------------------------------
-  allocate(p%xp    (r%ngasmax,ndim))
-  allocate(p%vp    (r%ngasmax,ndim))
-  allocate(p%mp    (r%ngasmax))
-  allocate(p%zp    (r%ngasmax))
-  allocate(p%up    (r%ngasmax))
-  allocate(p%levelp(r%ngasmax))
-  allocate(p%idp   (r%ngasmax))
-  allocate(p%sortp (r%ngasmax))
-  allocate(p%workp (r%ngasmax))
-
-  ! Allocate pointers to particle levels
-  allocate(p%headp(r%levelmin:r%nlevelmax))
-  allocate(p%tailp(r%levelmin:r%nlevelmax))
-  ! No particle just yet
-  p%headp=1
-  p%tailp=0
-end subroutine init_gas_part
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
 end module init_part_module

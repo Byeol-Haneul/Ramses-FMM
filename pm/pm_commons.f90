@@ -16,6 +16,7 @@ module pm_commons
      real(dp),allocatable,dimension(:)     ::mp       ! Masses
      real(dp),allocatable,dimension(:)     ::zp       ! Metallicity
      real(dp),allocatable,dimension(:)     ::tp       ! Formation times
+     real(dp),allocatable,dimension(:)     ::up       ! Specific energy
 #ifdef OUTPUT_PARTICLE_POTENTIAL
      real(dp),allocatable,dimension(:)     ::phip     ! Potential
 #endif
