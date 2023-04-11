@@ -16,13 +16,13 @@ subroutine m_input_part(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from many different initial conditions file formats.
   !--------------------------------------------------------------------
-  integer,dimension(1:2)::output_array,dummy
-  real(kind=8)::mp_min
 
   ! Input particle properties from files
   select case(pst%s%r%filetype)
   case ('grafic')
      call m_input_part_grafic(pst)
+  case ('grafic_zoom')
+     return
   case('ascii')
      call m_input_part_ascii(pst)
   case('gadget')
@@ -34,12 +34,6 @@ subroutine m_input_part(pst)
      write(*,*) 'Unsupported format file ' // pst%s%r%filetype
      call mdl_abort(pst%s%mdl)
   end select
-
-  ! Compute minimum particle mass
-  call r_mass_min_part(pst,pst%s%r%levelmin,1,mp_min,2)
-
-  ! Broadcast minimum particle mass
-  call r_broadcast_mp_min(pst,mp_min,2,dummy,0)
 
   ! Computing maximum particle count (only in master)
   call r_npart_max(pst,pst%s%r%levelmin,1,pst%s%p%npart_max,1)

@@ -13,7 +13,6 @@ subroutine m_input_part_grafic(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
-  integer::dummy(1)
   integer,allocatable,dimension(:)::input_array
 
   if(pst%s%r%verbose)write(*,*)'Entering input_part_grafic'
@@ -36,7 +35,7 @@ subroutine m_input_part_grafic(pst)
   ! Call recursive slave routine
   allocate(input_array(1:storage_size(pst%s%p%npart_tot)/32))
   input_array=transfer(pst%s%p%npart_tot,input_array)
-  call r_input_part_grafic(pst,input_array,storage_size(pst%s%p%npart_tot)/32,dummy,0)
+  call r_input_part_grafic(pst,input_array,storage_size(pst%s%p%npart_tot)/32)
   deallocate(input_array)
 
 end subroutine m_input_part_grafic
@@ -44,16 +43,14 @@ end subroutine m_input_part_grafic
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_input_part_grafic(pst,input_array,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
   integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
@@ -62,9 +59,9 @@ recursive subroutine r_input_part_grafic(pst,input_array,input_size,output_array
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_part_grafic(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_GRAFIC,pst%iUpper+1,input_size,0,input_array)
+     call r_input_part_grafic(pst%pLower,input_array,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      npart_tot=transfer(input_array,npart_tot)
      call input_part_grafic(pst%s%r,pst%s%g,pst%s%p,npart_tot)
@@ -147,7 +144,7 @@ subroutine input_part_grafic(r,g,p,npart_tot)
         end do
      end do
   end do
-  
+
   !--------------------------------------
   ! Allocate temporary arrays
   !--------------------------------------
@@ -161,17 +158,17 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   else
      if(g%myid==1)write(*,*)'File '//TRIM(filename_x)//' not found.'
   endif
-  
+
   !--------------------------------------
   ! Loop over displacements dimensions
   !--------------------------------------
   do idim=1,ndim
-     
+
      ! Read dark matter Zeldovich initial displacement field
      if(idim==1)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcx'
      if(idim==2)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcy'
      if(idim==3)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcz'
-     
+
      if(g%myid==1)write(*,*)'Reading file '//TRIM(filename)     
      open(10,file=filename,form='unformatted')
      rewind 10
@@ -185,7 +182,7 @@ subroutine input_part_grafic(r,g,p,npart_tot)
         if(idim==1)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscx'
         if(idim==2)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscy'
         if(idim==3)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscz'
-        
+ 
         if(g%myid==1)write(*,*)'Reading file '//TRIM(filename_x)
         open(11,file=filename_x,form='unformatted')
         rewind 11
@@ -228,14 +225,14 @@ subroutine input_part_grafic(r,g,p,npart_tot)
      ! End loop over planes
      close(10)
      if(read_pos)close(11)
-     
+
   end do
   ! End loop over dimensions
 
   ! Deallocate temporary array
   deallocate(init_plane)
   if(read_pos)deallocate(init_plane_x)
-  
+
   ! Move particle according to Zeldovich approximation
   if(.not. read_pos)then
      do ipart=1,p%npart

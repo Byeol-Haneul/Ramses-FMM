@@ -746,7 +746,7 @@ subroutine cic_multipole(s,ilevel)
               gridp%rho(icell)=gridp%rho(icell)+mmm*vol(inbor)/vol_loc
 #ifdef HYDRO
               if(r%ivar_refine>0)then
-                 mask=gridp%uold(icell,r%ivar_refine)/gridp%uold(icell,1) 
+                 mask=m%grid(igrid)%uold(ind,r%ivar_refine)/m%grid(igrid)%uold(ind,1)
                  if(mask.gt.r%var_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
                  endif

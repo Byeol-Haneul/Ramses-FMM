@@ -12,7 +12,7 @@ subroutine m_input_part_ascii(pst)
   type(pst_t)::pst
   !--------------------------------------------------------------------
   ! This routine is the master procedure to read and dispatch particles
-  ! from a Ramses restart file.
+  ! from an ascii file.
   !--------------------------------------------------------------------
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   integer(kind=8)::npart_tot

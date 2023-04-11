@@ -111,6 +111,7 @@ function worker_init(mdl) result(pst)
   use init_hydro_module, only: r_init_hydro
   use init_part_module, only: r_init_part
   use input_part_grafic_module, only: r_input_part_grafic
+  use input_part_zoom_module, only: r_input_part_zoom
   use input_part_ascii_module, only: r_input_part_ascii
   use input_part_restart_module, only: r_input_part_restart, r_input_star_restart
   use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
@@ -122,7 +123,7 @@ function worker_init(mdl) result(pst)
   use refine_utils, only: r_refine_fine
   use smooth_module, only: r_smooth_fine
   use input_hydro_condinit_module, only: r_input_hydro_condinit
-  use input_hydro_grafic_module, only: r_input_hydro_grafic
+  use input_hydro_grafic_module, only: r_input_hydro_grafic, r_input_refmap_grafic
   use upload_module, only: r_upload_fine
   use move_fine_module, only: r_kick_drift_part
   use output_amr_module, only: r_output_amr
@@ -190,6 +191,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INIT_HYDRO,             pst,C_FUNLOC(r_init_hydro),0,0,"init_hydro")
   call mdl_add_service(pst%s%mdl,MDL_INIT_PART,              pst,C_FUNLOC(r_init_part),0,0,"init_part")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_GRAFIC,      pst,C_FUNLOC(r_input_part_grafic),storage_size(pst%s%p%npart_tot)/32,0,"input_part_grafic")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ZOOM,        pst,C_FUNLOC(r_input_part_zoom),1,3,"input_part_zoom")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ASCII,       pst,C_FUNLOC(r_input_part_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_part_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RESTART,     pst,C_FUNLOC(r_input_part_restart),MDL_MAX_CPU,0,"input_part_restart")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_STAR_RESTART,     pst,C_FUNLOC(r_input_star_restart),MDL_MAX_CPU,2,"input_star_restart")
@@ -212,6 +214,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SMOOTH_FINE,            pst,C_FUNLOC(r_smooth_fine),1,1,"smooth_fine")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,   pst,C_FUNLOC(r_input_hydro_condinit),1,0,"input_hydro_condinit")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,     pst,C_FUNLOC(r_input_hydro_grafic),0,0,"input_hydro_grafic")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_REFMAP_GRAFIC,    pst,C_FUNLOC(r_input_refmap_grafic),0,0,"input_refmap_grafic")
   call mdl_add_service(pst%s%mdl,MDL_UPLOAD_FINE,            pst,C_FUNLOC(r_upload_fine),1,0,"upload_fine")
   call mdl_add_service(pst%s%mdl,MDL_KICK_DRIFT_PART,        pst,C_FUNLOC(r_kick_drift_part),0,0,"kick_drift_part")
   call mdl_add_service(pst%s%mdl,MDL_MASS_MIN_PART,          pst,C_FUNLOC(r_mass_min_part),0,2,"mass_min_part")

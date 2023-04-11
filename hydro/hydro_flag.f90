@@ -38,11 +38,11 @@ subroutine hydro_flag(s,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
-  hash_key(0)=ilevel+1
-
   if(    r%err_grad_d==-1.0.and.&
        & r%err_grad_p==-1.0.and.&
        & r%err_grad_u==-1.0)return
+
+  hash_key(0)=ilevel+1
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&

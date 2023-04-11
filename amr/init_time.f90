@@ -212,7 +212,7 @@ subroutine init_cosmo(mdl,r,g)
   end if
 
   SELECT CASE (r%filetype)
-  case ('grafic', 'ascii')
+  case ('grafic', 'grafic_zoom', 'ascii')
 
      ! Reading initial conditions parameters only
      g%aexp=2.0

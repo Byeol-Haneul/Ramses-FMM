@@ -14,7 +14,7 @@ subroutine poisson_flag(s,ilevel)
   ! This routine flag for refinement cells that satisfies
   ! some user-defined physical criteria at the level ilevel. 
   ! -------------------------------------------------------------------
-  real(dp)::dx_loc,vol_loc,d_scale,dp_scale,factG
+  real(dp)::dx_loc,vol_loc,d_scale,factG
   real(dp),dimension(1:nvar)::uu
   integer::igrid,ind,ivar
   logical::ok
@@ -30,7 +30,6 @@ subroutine poisson_flag(s,ilevel)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**3
   d_scale=r%mass_sph/vol_loc
-  dp_scale=g%mp_min/vol_loc
 
   ! Loop over active grids
   do igrid=m%head(ilevel),m%tail(ilevel)
@@ -42,15 +41,16 @@ subroutine poisson_flag(s,ilevel)
         ok=.false.
 
         ! Flag cells with density beyond the threshold
-#if defined(HYDRO) && !defined(GRAV)
+#ifndef GRAV
+#ifdef HYDRO
         if(r%mass_sph>0.and.r%m_refine(ilevel)>=0)then
            ok=(ok .or. m%grid(igrid)%uold(ind,1)>=r%m_refine(ilevel)*d_scale)
         endif
 #endif
-        
+#endif
         ! Flag cells with density beyond the threshold
 #ifdef GRAV
-        if(r%pic.and.r%m_refine(ilevel)>=0)then
+        if(r%m_refine(ilevel)>=0)then
            ok=(ok .or. m%grid(igrid)%nref(ind)>=r%m_refine(ilevel))
         endif
 #endif

@@ -11,6 +11,7 @@ module mdl_parameters
      enumerator::MDL_INIT_HYDRO
      enumerator::MDL_INIT_PART
      enumerator::MDL_INPUT_PART_GRAFIC
+     enumerator::MDL_INPUT_PART_ZOOM
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_PART_RESTART
      enumerator::MDL_INPUT_STAR_RESTART
@@ -34,6 +35,7 @@ module mdl_parameters
      enumerator::MDL_SMOOTH_FINE
      enumerator::MDL_INPUT_HYDRO_CONDINIT
      enumerator::MDL_INPUT_HYDRO_GRAFIC
+     enumerator::MDL_INPUT_REFMAP_GRAFIC
      enumerator::MDL_UPLOAD_FINE
      enumerator::MDL_MULTIPOLE_LEAF_CELLS
      enumerator::MDL_MULTIPOLE_SPLIT_CELLS

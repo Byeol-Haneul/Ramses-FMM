@@ -96,12 +96,12 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 mdl_commons.o mdl.o ramses_commons.o call_back.o cache_commons.o cache.o gadgetreadfile.o write_makefile.o \
 	 boundaries.o write_patch.o  write_gitinfo.o output_hydro.o output_poisson.o output_part.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o \
-	 init_hydro.o init_part.o init_amr.o smooth.o flag_utils.o \
-	 init_time.o read_params.o input_part_grafic.o input_part_ascii.o input_part_restart.o input_part.o \
+	 init_hydro.o init_part.o init_amr.o smooth.o flag_utils.o init_time.o read_params.o \
+	 input_part_grafic.o input_part_zoom.o input_part_ascii.o input_part_restart.o input_part.o \
+	 input_hydro_condinit.o input_hydro_grafic.o init_flow_fine.o interpol_hydro.o \
 	 update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 init_refine_adaptive.o init_refine_restart.o title.o units.o move_fine.o rho_ana.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
-	 input_hydro_condinit.o input_hydro_grafic.o init_flow_fine.o interpol_hydro.o \
 	 condinit.o boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
 	 star_formation.o \
 	 godunov_fine.o umuscl.o uplmde.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \

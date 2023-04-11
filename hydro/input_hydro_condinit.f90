@@ -4,23 +4,21 @@ contains
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_input_hydro_condinit(pst,ilevel,input_size,output_array,output_size)
+recursive subroutine r_input_hydro_condinit(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer::output_array
 
   integer::ilevel
   integer::rID
   
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,pst%iUpper+1,input_size,output_size,ilevel)
-     call r_input_hydro_condinit(pst%pLower,ilevel,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,pst%iUpper+1,input_size,0,ilevel)
+     call r_input_hydro_condinit(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call input_hydro_condinit(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif

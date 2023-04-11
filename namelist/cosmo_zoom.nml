@@ -1,10 +1,8 @@
-This namelist performs a cosmological simulation with dark matter and gas.
-Gas cooling and star formation are included.
-You need a grafic file for the initial conditions. You can download one easily
-by executing in the command line the following script:
-> utils/script/load_cosmo_ic.sh
+This namelist performs a cosmological zoom-in simulation with dark matter,
+star formation and gas dynamics. You need zoom-in grafic files for the
+initial conditions. You can generate such files using the MUSIC code.
 To compile the code with MPI, type in the command line:
-> make MPI=1 UNITS=cosmo CONDINIT=default HYDRO=1 GRAV=1 NVAR=7
+> make MPI=1 UNITS=cosmo CONDINIT=default HYDRO=1 GRAV=1 NVAR=8
 
 &RUN_PARAMS
 cosmo=.true.
@@ -12,7 +10,7 @@ pic=.true.
 poisson=.true.
 hydro=.true.
 nrestart=0
-nsubcycle=1,1,2
+nsubcycle=1,1,1,1,1,2
 ncontrol=1
 verbose=.false.
 /
@@ -23,16 +21,19 @@ aend=1.0
 /
 
 &INIT_PARAMS
-filetype='grafic'
-initfile(1)='ics_ramses'
+filetype='grafic_zoom'
+initfile(1)='ics_ramses/level_007'
+initfile(2)='ics_ramses/level_008'
+initfile(3)='ics_ramses/level_009'
+initfile(4)='ics_ramses/level_010'
 /
 
 &AMR_PARAMS
 levelmin=7
-levelmax=15
+levelmax=18
 ngridmax=2000000
 npartmax=4000000
-nexpand=1,
+nexpand=5,5,1,1
 /
 
 &POISSON_PARAMS
@@ -69,8 +70,11 @@ m_star=1
 /
 
 &REFINE_PARAMS
-m_refine=10*8.,
+m_refine=12*8.,
 interpol_var=1
 interpol_type=0
+ivar_refine=8
+var_cut_refine=0.01
+mass_cut_refine=2e-9
 /
 
