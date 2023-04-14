@@ -11,13 +11,11 @@ recursive subroutine r_init_part(pst)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-
-  integer::rID
-
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to allocate
   ! particle-based arrays.
   !--------------------------------------------------------------------
+  integer::rID
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_INIT_PART,pst%iUpper+1)
      call r_init_part(pst%pLower)
