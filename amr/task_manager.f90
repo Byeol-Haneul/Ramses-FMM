@@ -749,6 +749,7 @@ subroutine destage(s,igrid,hash_dict)
            buffer_size_msg_array=storage_size(dummy_large_realdp)/32
            buffer_size_flush_array=1+(1+ndim+buffer_size_msg_array)*nflushmax
            allocate(mdl%send_flush(mdl%nbuffer_flush)%array(1:buffer_size_flush_array))
+           mdl%send_flush(mdl%nbuffer_flush)%array(1)=0
         endif
         mdl%cpu2buf_flush(grid_cpu)=mdl%ibuffer_flush
         ibuf=mdl%ibuffer_flush
