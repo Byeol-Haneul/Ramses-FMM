@@ -78,6 +78,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   real(kind=8)::RngStream_RandUni
   logical::ok
 
+#if NDIM>2
 #ifdef HYDRO
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
@@ -262,6 +263,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   end do
   s%npart_tot=s%npart_tot+nstar_cum(g%ncpu)
 
+#endif
 #endif
 
 end subroutine star_formation

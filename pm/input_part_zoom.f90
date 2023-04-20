@@ -96,6 +96,8 @@ subroutine input_part_zoom(r,g,p,m)
   character(LEN=5)::nchar
   logical::ok,error,keep_part,read_pos=.false.
 
+#if NDIM>2
+  
   p%npart=0
   do ilevel=r%levelmin,g%nlevelmax_part
 
@@ -302,6 +304,8 @@ subroutine input_part_zoom(r,g,p,m)
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
 
+#endif
+  
 end subroutine input_part_zoom
 !#########################################################################
 !#########################################################################
