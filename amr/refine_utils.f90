@@ -36,10 +36,10 @@ subroutine m_refine_fine(pst,ilevel)
   call r_refine_fine(pst,ilevel,1,out_refine_fine,2)
 
   if(s%r%verbose)write(*,112)out_refine_fine%make
-112 format(' ==> Make ',i6,' sub-grids')
+112 format(' ==> Make ',i7,' sub-grids')
 
   if(s%r%verbose)write(*,113)out_refine_fine%kill
-113 format(' ==> Kill ',i6,' sub-grids')
+113 format(' ==> Kill ',i7,' sub-grids')
 
   ! Get total, min and max grid count (only in master)
   do ilev=ilevel+1,s%r%nlevelmax

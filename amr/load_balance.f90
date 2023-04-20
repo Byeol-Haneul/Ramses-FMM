@@ -72,6 +72,21 @@ subroutine m_load_balance(pst,ilevel)
         call r_broadcast_bound_key(pst,input_array,input_size,adummy,0)
         deallocate(input_array)
 
+     else
+
+        ! Level is empty: use the same domain decomposition as the coarser level
+        do icpu=0,g%ncpu
+           bound_key(1:nhilbert,icpu) = refine_key(m%domain(ilev-1)%b(1:nhilbert,icpu),ilev-2)
+        end do
+
+        ! Scatter new domain decomposition to all processors
+        input_size=2*nhilbert*(g%ncpu+1)+1
+        allocate(input_array(1:input_size))
+        input_array(1)=ilev
+        input_array(2:input_size)=transfer(reshape(bound_key,[nhilbert*(g%ncpu+1)]),input_array)
+        call r_broadcast_bound_key(pst,input_array,input_size,adummy,0)
+        deallocate(input_array)
+
      endif
 
   end do
