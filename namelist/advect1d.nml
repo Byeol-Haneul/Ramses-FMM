@@ -3,7 +3,6 @@ This namelist contains various input parameters for RAMSES runs
 &RUN_PARAMS
 hydro=.true.
 ncontrol=10000
-nremap=20
 /
 
 &AMR_PARAMS 
@@ -26,9 +25,8 @@ p_region=1.0,1.0
 /
 
 &OUTPUT_PARAMS
-output_mode=1
 noutput=1
-tout=10.0
+tout=1.0
 /
 
 &HYDRO_PARAMS

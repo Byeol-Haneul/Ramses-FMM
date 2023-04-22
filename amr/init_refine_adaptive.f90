@@ -52,8 +52,6 @@ subroutine m_init_refine_adaptive(pst)
      call m_input_part_zoom(pst)
   endif
 
-  call write_screen(pst%s%r,pst%s%m)
-
 end subroutine m_init_refine_adaptive
 !###############################################
 !###############################################
