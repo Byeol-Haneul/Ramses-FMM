@@ -40,9 +40,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-------------------------------------------------------------------!
   type(in_broadcast_dt_t)::in_broadcast_dt
   type(out_star_formation_t)::output_star
+  real(kind=8) :: tcurr=0
+  real(kind=8), save :: tprev=0.
+  real(kind=8), external :: wallclock
+  logical, save :: bkp_last_done=.false.
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
-  
+
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering amr_step",i1," for level",i2)')icount,ilevel
 
@@ -62,7 +66,20 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(r%foutput>0)then
         if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
                                     call m_timer(pst,'output','start')
-           call m_dump_all(pst)
+           call m_dump_all(pst,.false.)
+        endif
+     endif
+     tcurr=wallclock()
+     if(tcurr>tprev+r%bkp_time_hrs*3600)then
+                                    call m_timer(pst,'backup','start')
+        call m_dump_all(pst,.true.)
+        tprev=tcurr
+     endif
+     if(r%run_time_hrs>0.and..not.bkp_last_done)then
+        if(tcurr>r%run_time_hrs*3600-r%bkp_last_min*60)then
+                                    call m_timer(pst,'backup','start')
+           call m_dump_all(pst,.true.)
+           bkp_last_done=.true.
         endif
      endif
   endif

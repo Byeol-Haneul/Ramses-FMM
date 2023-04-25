@@ -37,7 +37,11 @@ module amr_commons
      real(dp),dimension(1:MAXOUT)::tout=0.0 ! Output times
      integer::output_mode=0      ! Output mode (for hires runs)
      logical::gadget_output=.false. ! Output in gadget format
-     
+     real(kind=8)::bkp_time_hrs=2   ! Backup file frequency in hours
+     real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
+     real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
+     integer::bkp_modulo=0       ! Use modulo for backup file count
+
      ! Mesh parameters
      integer::levelmin=1         ! Full refinement up to levelmin
      integer::nlevelmax=1        ! Maximum number of level
@@ -220,6 +224,7 @@ module amr_commons
 
      integer::iout=1             ! Increment for output times
      integer::ifout=1            ! Increment for output files
+     integer::ifbkp=1            ! Increment for backup files
 
      logical::output_done=.false.                  ! Output just performed
      logical::init=.false.                         ! Set up or run

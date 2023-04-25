@@ -74,6 +74,10 @@ subroutine m_read_params(pst)
   integer::foutput=1000000    ! Frequency of outputs
   integer::output_mode=0      ! Output mode (for hires runs)
   logical::gadget_output=.false. ! Output in gadget format
+  real(kind=8)::bkp_time_hrs=2   ! Backup file frequency in hours
+  real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
+  real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
+  integer::bkp_modulo         ! Use modulo for backup file count
 
   ! Output times
   real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
@@ -254,7 +258,8 @@ subroutine m_read_params(pst)
        & ,static,geom,overload,nsuperoct
   ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
-       & ,tend,delta_tout,aend,delta_aout,gadget_output
+       & ,tend,delta_tout,aend,delta_aout,gadget_output &
+       & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo
   ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen,box_size &
@@ -619,6 +624,10 @@ subroutine m_read_params(pst)
   s%r%tout=tout
   s%r%output_mode=output_mode
   s%r%gadget_output=gadget_output
+  s%r%run_time_hrs=run_time_hrs
+  s%r%bkp_time_hrs=bkp_time_hrs
+  s%r%bkp_last_min=bkp_last_min
+  s%r%bkp_modulo=bkp_modulo
 
   s%r%levelmin=levelmin
   s%r%nlevelmax=nlevelmax

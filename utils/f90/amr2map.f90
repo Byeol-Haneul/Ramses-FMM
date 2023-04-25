@@ -9,7 +9,7 @@ program amr2map
   integer,parameter::flen=90
   
   integer::ndim,twotondim,nvar
-  integer::n,i,j,k,type=0,domax=0
+  integer::n,i,j,k,type=0,domax=0,backup=0
   integer::ivar,lmax=0
   integer::ilevel,idim,jdim,kdim,ldim,icell
   integer::nlevel
@@ -34,7 +34,7 @@ program amr2map
   character(LEN=5)::nchar,ncharcpu
   character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
   character(LEN=flen)::file_amr,file_hydro
-  logical::ok,ok_part,ok_cell,do_max
+  logical::ok,ok_part,ok_cell,do_max,backup_file
   logical::check_ramses_exist
 
   real(KIND=4),dimension(:,:),allocatable::filemap
@@ -43,6 +43,7 @@ program amr2map
   integer,dimension(:),allocatable::ckey,cart_key
   logical,dimension(:),allocatable::refined
   real(KIND=8),dimension(:,:),allocatable::uold
+  real(KIND=4),dimension(:,:),allocatable::qold
 
   type level  
      integer::ilevel
@@ -154,8 +155,12 @@ program amr2map
   allocate(cpu_list(1:p%ncpu))
   allocate(ckey(1:ndim),cart_key(1:ndim))
   allocate(refined(1:twotondim))
-  allocate(uold(1:twotondim,1:nvar))
-  
+  if(backup_file)then
+     allocate(uold(1:twotondim,1:nvar))
+  else
+     allocate(qold(1:twotondim,1:nvar))
+  endif
+
   ! Loop over levels 
   do ilevel=p%levelmin,lmax
 
@@ -193,7 +198,11 @@ program amr2map
         ! Prepare reading the HYDRO file
         file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
-        iskip_hydro=17+4*(p%nlevelmax-p%levelmin+1)+(8*twotondim*nvar)*noct_skip
+        if(backup_file)then
+           iskip_hydro=17+4*(p%nlevelmax-p%levelmin+1)+(8*twotondim*nvar)*noct_skip
+        else
+           iskip_hydro=17+4*(p%nlevelmax-p%levelmin+1)+(4*twotondim*nvar)*noct_skip
+        endif
 
         ! Loop over useful octs in file
         do i=1,noct_file
@@ -203,9 +212,13 @@ program amr2map
            read(10,POS=ipos)ckey
            ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)+4*ndim
            read(10,POS=ipos)refined
-           ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
-           read(11,POS=ipos)uold
-
+           if(backup_file)then
+              ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
+              read(11,POS=ipos)uold
+           else
+              ipos=iskip_hydro+(4*twotondim*nvar)*(i-1)
+              read(11,POS=ipos)qold
+           endif
            ! Loop over 2**ndim cells
            do ind=1,twotondim
 
@@ -217,43 +230,80 @@ program amr2map
 
               ok_cell=.not.refined(ind).OR.ilevel.eq.lmax
 
-              ! Get variable to map out
-              rho = uold(ind,1)
-              select case (type)
-              case (-1) ! Cpu map
-                 map = icpu
-              case (0) ! Refinement map
-                 map = ilevel
-              case (1) ! Density map
-                 if(do_max)then
-                    map = uold(ind,1)
-                 else
-                    map = uold(ind,1)**2
-                 endif
-              case (2) ! Mass weighted x-velocity
-                 map = uold(ind,2)
-              case (3) ! Mass weighted y-velocity
-                 map = uold(ind,3)
-              case (4) ! Mass weighted z-velocity
-                 map = uold(ind,4)
-              case (5) ! Temperature
-                 ekin = 0.5*uold(ind,2)**2/rho
-                 if(ndim>1)ekin = ekin+0.5*uold(ind,3)**2/rho
-                 if(ndim>2)ekin = ekin+0.5*uold(ind,4)**2/rho
-                 pres = (p%gamma-1)*(uold(ind,ndim+2)-ekin)
-                 if(do_max)then
-                    map = pres/rho
-                 else
-                    map = pres
-                 endif
-              case default ! Passive scalar
-                 if(do_max)then
-                    map = uold(ind,type)/uold(ind,1)
-                 else
-                    map = uold(ind,type)
-                 endif
-                 metmax=max(metmax,uold(ind,type))
-              end select
+              if(backup_file)then
+                 ! Get variable to map out
+                 rho = uold(ind,1)
+                 select case (type)
+                 case (-1) ! Cpu map
+                    map = icpu
+                 case (0) ! Refinement map
+                    map = ilevel
+                 case (1) ! Density map
+                    if(do_max)then
+                       map = uold(ind,1)
+                    else
+                       map = uold(ind,1)**2
+                    endif
+                 case (2) ! Mass weighted x-velocity
+                    map = uold(ind,2)
+                 case (3) ! Mass weighted y-velocity
+                    map = uold(ind,3)
+                 case (4) ! Mass weighted z-velocity
+                    map = uold(ind,4)
+                 case (5) ! Temperature
+                    ekin = 0.5*uold(ind,2)**2/rho
+                    if(ndim>1)ekin = ekin+0.5*uold(ind,3)**2/rho
+                    if(ndim>2)ekin = ekin+0.5*uold(ind,4)**2/rho
+                    pres = (p%gamma-1)*(uold(ind,ndim+2)-ekin)
+                    if(do_max)then
+                       map = pres/rho
+                    else
+                       map = pres
+                    endif
+                 case default ! Passive scalar
+                    if(do_max)then
+                       map = uold(ind,type)/uold(ind,1)
+                    else
+                       map = uold(ind,type)
+                    endif
+                    metmax=max(metmax,uold(ind,type))
+                 end select
+              else
+                 ! Get variable to map out
+                 rho = qold(ind,1)
+                 select case (type)
+                 case (-1) ! Cpu map
+                    map = icpu
+                 case (0) ! Refinement map
+                    map = ilevel
+                 case (1) ! Density map
+                    if(do_max)then
+                       map = qold(ind,1)
+                    else
+                       map = qold(ind,1)**2
+                    endif
+                 case (2) ! Mass weighted x-velocity
+                    map = rho*qold(ind,2)
+                 case (3) ! Mass weighted y-velocity
+                    map = rho*qold(ind,3)
+                 case (4) ! Mass weighted z-velocity
+                    map = rho*qold(ind,4)
+                 case (5) ! Temperature
+                    pres = qold(ind,ndim+2)
+                    if(do_max)then
+                       map = pres/rho
+                    else
+                       map = pres
+                    endif
+                 case default ! Passive scalar
+                    if(do_max)then
+                       map = qold(ind,type)
+                    else
+                       map = rho*qold(ind,type)
+                    endif
+                    metmax=max(metmax,qold(ind,type))
+                 end select
+              endif
 
               if(ok_cell)then
                  ix=cart_key(idim)+1
@@ -447,6 +497,7 @@ contains
        print *, '                 [-typ type] '
        print *, '                 [-fil filetype] '
        print *, '                 [-max maxi] '
+       print *, '                 [-bkp backup] '
        print *, 'ex: amr2map -inp output_00001 -out map.dat'// &
             &   ' -dir z -xmi 0.1 -xma 0.7 -lma 12'
        print *, ' '
@@ -461,6 +512,8 @@ contains
        print *, ' '
        print *, ' maxi : 0 = average along line of sight (default)'
        print *, ' maxi : 1 = maximum along line of sight'
+       print *, ' backup : 0 = standard RAMSES output file (default)'
+       print *, ' backup : 1 = RAMSES restart file'
        stop
     end if
     
@@ -502,6 +555,8 @@ contains
           read (arg,*) mapfiletype
        case ('-max')
           read (arg,*) domax
+       case ('-bkp')
+          read (arg,*) backup
        case default
           print '("unknown option ",a2," ignored")', opt
        end select
@@ -509,7 +564,9 @@ contains
     
     do_max=.false.
     if(domax==1)do_max=.true.
-
+    backup_file=.false.
+    if(backup==1)backup_file=.true.
+    
     return
     
   end subroutine read_params  
@@ -534,7 +591,7 @@ contains
     read(ilun,POS=13)p%nlevelmax
     read(ilun,POS=17)p%boxlen
     read(ilun,POS=25)noutput
-    skip=4*(9+4*noutput)+1
+    skip=4*(10+4*noutput)+1
     read(ilun,POS=skip)p%t
     skip=skip+4*(2+4*p%nlevelmax+2+2*17)
     read(ilun,POS=skip)p%gamma

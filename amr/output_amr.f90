@@ -4,7 +4,7 @@ contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_dump_all(pst)
+subroutine m_dump_all(pst,write_bkp_file)
   use amr_parameters, only: ndim,flen
   use ramses_commons, only: pst_t
   use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
@@ -14,6 +14,7 @@ subroutine m_dump_all(pst)
   use cooling_module, only: output_cool
   implicit none
   type(pst_t)::pst
+  logical::write_bkp_file
 
   ! Local variables
   integer::i,dummy(1)
@@ -30,20 +31,38 @@ subroutine m_dump_all(pst)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
-  if(r%verbose)write(*,*)'Entering dump_all'
 
+  if(r%verbose)then
+     write(*,*)'Entering dump_all'
+     if(write_bkp_file)then
+        write(*,*)'writing restart files'
+     else
+        write(*,*)'writing output files'
+     endif
+  endif
   ! For 1D serial runs, output data to screen
   if(ndim==1.and.g%ncpu==1)call write_screen(r,m)
 
-  ! Increment output counters
-  call title(g%ifout,nchar)
-  g%ifout=g%ifout+1
-  if(g%t>=r%tout(g%iout).or.g%aexp>=r%aout(g%iout))g%iout=g%iout+1
-  g%output_done=.true.
+  if(write_bkp_file)then
+     ! Increment backup file counter
+     g%ifbkp=MOD(g%ifbkp-1,r%bkp_modulo)+1
+     call title(g%ifbkp,nchar)
+     g%ifbkp=g%ifbkp+1
+  else
+     ! Increment output file counter
+     call title(g%ifout,nchar)
+     g%ifout=g%ifout+1
+     if(g%t>=r%tout(g%iout).or.g%aexp>=r%aout(g%iout))g%iout=g%iout+1
+     g%output_done=.true.
+  endif
 
   ! For 2D and 3D runs, output data to files
   if(ndim>1.or.g%ncpu>1)then
-     filedir='output_'//TRIM(nchar)//'/'
+     if(write_bkp_file)then
+        filedir='backup_'//TRIM(nchar)//'/'
+     else
+        filedir='output_'//TRIM(nchar)//'/'
+     endif
      call mdl_mkdir(mdl,filedir)
      ! filecmd='mkdir -p '//TRIM(filedir)
 ! #ifdef NOSYSTEM
@@ -55,7 +74,11 @@ subroutine m_dump_all(pst)
      !-----------------------
      ! Only master process
      !-----------------------
-     write(*,*)'Writing snapshot to disk in '//TRIM(filedir)
+     if(write_bkp_file)then
+        write(*,*)'Writing backup file to disk in '//TRIM(filedir)
+     else
+        write(*,*)'Writing output file to disk in '//TRIM(filedir)
+     endif
      ttstart = mdl_wtime(mdl)
      
      if(r%verbose)write(*,*)'Writing header files'
@@ -69,7 +92,7 @@ subroutine m_dump_all(pst)
      endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_file_descriptor.txt'
-        call file_descriptor_hydro(r,filename)
+        call file_descriptor_hydro(r,filename,write_bkp_file)
      end if
      if(r%cooling)then
         filename=TRIM(filedir)//'cooling.bin'
@@ -210,7 +233,7 @@ subroutine output_params(r,g,m,filename)
   write(ilun)r%nlevelmax
   write(ilun)r%boxlen
   ! Write time variables
-  write(ilun)r%noutput,g%iout,g%ifout
+  write(ilun)r%noutput,g%iout,g%ifout,g%ifbkp
   write(ilun)r%tout(1:r%noutput)
   write(ilun)r%aout(1:r%noutput)
   write(ilun)g%t
@@ -273,7 +296,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! Overwrite boxlen with value from file
   read(ilun)r%boxlen
   ! Read time variables
-  read(ilun)noutput_file,g%iout,g%ifout
+  read(ilun)noutput_file,g%iout,g%ifout,g%ifbkp
   noutput_min=MIN(r%noutput,noutput_file)
   read(ilun)r%tout(1:noutput_min)
   read(ilun)r%aout(1:noutput_min)
@@ -363,13 +386,20 @@ subroutine output_amr(r,g,m,mdl,filename)
   !-----------------------------------
   ! Output amr grid in file
   !-----------------------------------  
-  integer::ilun,ilevel,igrid
+  integer::ilun,ierr,ilevel,igrid
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
+  logical::file_exist
 
   ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
+  inquire(file=fileloc, exist=file_exist)
+  if (file_exist) then
+     open(unit=ilun,file=fileloc,iostat=ierr)
+     write(*,*)g%myid,ierr
+     close(ilun,status="delete")
+  end if
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
   write(ilun)r%levelmin

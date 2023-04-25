@@ -25,7 +25,11 @@ recursive subroutine r_output_poisson(pst,input,input_size)
      call r_output_poisson(pst%pLower,input,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call output_poisson(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,input%filename)
+     if(index(input%filename,'output')==0)then
+        call backup_poisson(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,input%filename)
+     else
+        call output_poisson(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,input%filename)
+     endif
   endif
 end subroutine r_output_poisson
 !#########################################################
@@ -33,6 +37,61 @@ end subroutine r_output_poisson
 !#########################################################
 !#########################################################
 subroutine output_poisson(r,g,m,mdl,filename)
+  use amr_parameters, only: ndim,twotondim,flen
+  use hydro_parameters, only: nvar
+  use amr_commons, only: run_t,global_t,mesh_t
+  use mdl_module
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(mdl_t)::mdl
+  character(LEN=flen)::filename
+
+  integer::ilevel,igrid,ilun,ierr
+  character(LEN=5)::nchar
+  character(LEN=flen)::fileloc
+  logical::file_exist
+  real(kind=4),dimension(1:twotondim,1:ndim)::f
+  real(kind=4),dimension(1:twotondim)::rho
+  real(kind=4),dimension(1:twotondim)::phi
+
+  ilun=10+mdl_core(mdl)
+  call title(g%myid,nchar)
+  fileloc=TRIM(filename)//TRIM(nchar)
+  inquire(file=fileloc, exist=file_exist)
+  if (file_exist) then
+     open(unit=ilun,file=fileloc,iostat=ierr)
+     close(ilun,status="delete")
+  end if
+  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
+  write(ilun)ndim
+  write(ilun)ndim+2
+  write(ilun)r%levelmin
+  write(ilun)r%nlevelmax
+  do ilevel=r%levelmin,r%nlevelmax
+     write(ilun)m%noct(ilevel)
+  enddo
+#ifdef GRAV
+  do ilevel=r%levelmin,r%nlevelmax
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        phi=real(m%grid(igrid)%phi,kind=4)
+        f(1:twotondim,1:ndim)=real(m%grid(igrid)%f(1:twotondim,1:ndim),kind=4)
+        rho=real(m%grid(igrid)%rho,kind=4)
+        write(ilun)phi
+        write(ilun)f
+        write(ilun)rho
+     end do
+  enddo
+#endif
+  close(ilun)
+
+end subroutine output_poisson
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
+subroutine backup_poisson(r,g,m,mdl,filename)
   use amr_parameters, only: ndim,flen
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -44,20 +103,22 @@ subroutine output_poisson(r,g,m,mdl,filename)
   type(mdl_t)::mdl
   character(LEN=flen)::filename
 
-  integer::ilevel,igrid,ilun
+  integer::ilevel,igrid,ilun,ierr
   character(LEN=5)::nchar
   character(LEN=flen)::fileloc
+  logical::file_exist
 
   ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
+  inquire(file=fileloc, exist=file_exist)
+  if (file_exist) then
+     open(unit=ilun,file=fileloc,iostat=ierr)
+     close(ilun,status="delete")
+  end if
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
-#ifdef OUTPUT_POISSON_DENSITY
-  write(ilun)ndim+2
-#else
   write(ilun)ndim+1
-#endif
   write(ilun)r%levelmin
   write(ilun)r%nlevelmax
   do ilevel=r%levelmin,r%nlevelmax
@@ -68,13 +129,14 @@ subroutine output_poisson(r,g,m,mdl,filename)
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%phi
         write(ilun)m%grid(igrid)%f
-#ifdef OUTPUT_POISSON_DENSITY
-        write(ilun)m%grid(igrid)%rho
-#endif
      end do
   enddo
 #endif
   close(ilun)
      
-end subroutine output_poisson
+end subroutine backup_poisson
+!#########################################################
+!#########################################################
+!#########################################################
+!#########################################################
 end module output_poisson_module
