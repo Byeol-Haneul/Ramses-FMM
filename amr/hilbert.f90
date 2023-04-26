@@ -491,7 +491,6 @@ contains
     implicit none
     integer(kind=8), dimension(1:nhilbert) :: difference_keys
     integer(kind=8), intent(in), dimension(:) :: key_a, key_b
-    integer(kind=8) :: borrow=1_8
     ! This function assumes that key_a is always greater or equal than key_b
     ! and that key_a and key_b contain only positive integers
 
@@ -505,8 +504,8 @@ contains
     if(difference_keys(1).GE.0)then
        difference_keys(2) = key_a(2) - key_b(2)
     else
-       difference_keys(1) = difference_keys(1) - ishft(borrow, 63)
-       difference_keys(2) = key_a(2) - key_b(2) - borrow
+       difference_keys(1) = difference_keys(1) - ishft(1_8, 63)
+       difference_keys(2) = key_a(2) - key_b(2) - 1_8
     endif
 #endif
 
