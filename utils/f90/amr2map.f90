@@ -34,7 +34,8 @@ program amr2map
   character(LEN=5)::nchar,ncharcpu
   character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
   character(LEN=flen)::file_amr,file_hydro
-  logical::ok,ok_part,ok_cell,do_max,backup_file
+  logical::ok,ok_part,ok_cell,do_max
+  logical::backup_file=.false.
   logical::check_ramses_exist
 
   real(KIND=4),dimension(:,:),allocatable::filemap
@@ -82,6 +83,7 @@ program amr2map
      write(*,*)'Stopping.'
      stop
   endif
+  if(index(repository,'output')==0)backup_file=.true.
 
   ! Read RAMSES params
   call read_ramses_params
@@ -497,7 +499,6 @@ contains
        print *, '                 [-typ type] '
        print *, '                 [-fil filetype] '
        print *, '                 [-max maxi] '
-       print *, '                 [-bkp backup] '
        print *, 'ex: amr2map -inp output_00001 -out map.dat'// &
             &   ' -dir z -xmi 0.1 -xma 0.7 -lma 12'
        print *, ' '
@@ -512,8 +513,6 @@ contains
        print *, ' '
        print *, ' maxi : 0 = average along line of sight (default)'
        print *, ' maxi : 1 = maximum along line of sight'
-       print *, ' backup : 0 = standard RAMSES output file (default)'
-       print *, ' backup : 1 = RAMSES restart file'
        stop
     end if
     
@@ -555,8 +554,6 @@ contains
           read (arg,*) mapfiletype
        case ('-max')
           read (arg,*) domax
-       case ('-bkp')
-          read (arg,*) backup
        case default
           print '("unknown option ",a2," ignored")', opt
        end select
@@ -564,8 +561,6 @@ contains
     
     do_max=.false.
     if(domax==1)do_max=.true.
-    backup_file=.false.
-    if(backup==1)backup_file=.true.
     
     return
     

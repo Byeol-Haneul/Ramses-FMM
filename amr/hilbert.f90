@@ -454,14 +454,33 @@ contains
     use amr_parameters, only: ndim, nhilbert
     implicit none
     integer(kind=8), dimension(1:nhilbert) :: average_keys
+    integer(kind=8), dimension(1:nhilbert) :: sum_keys
     integer(kind=8), intent(in), dimension(:) :: key_a, key_b
+    ! This function assumes that key_a and key_b contain only positive integers
 
 #if NHILBERT == 1
-    average_keys(1) = (key_a(1) + key_b(1)) / 2
+    sum_keys(1) = key_a(1) + key_b(1)
+    average_keys(1) = ishft(sum_keys(1),-1) ! Avoid overflow
 #endif
-  
+
+#if NHILBERT == 2
+    ! Multi-precision arithmetics
+    sum_keys(1) = key_a(1) + key_b(1)
+    sum_keys(2) = key_a(2) + key_b(2)
+    if(sum_keys(2)==0)then
+       average_keys(2) = 0
+       average_keys(1) = ishft(sum_keys(1),-1) ! Avoid overflow
+    else
+       sum_keys(2) = sum_keys(2) + ishft(sum_keys(1),-63) ! Add the carry to the MS sum
+       sum_keys(1) = ibits(sum_keys(1),0,63)              ! Compute the LS sum
+       average_keys(2) = ishft(sum_keys(2),-1)            ! Avoid overflow
+       sum_keys(1) = sum_keys(1) + ishft(sum_keys(2), 63) ! Add back the shift
+       average_keys(1) = ishft(sum_keys(1),-1)            ! Avoid overflow
+    endif
+#endif
+
   end function average_keys
- 
+
   !================================================================
   !================================================================
   !================================================================
@@ -472,13 +491,27 @@ contains
     implicit none
     integer(kind=8), dimension(1:nhilbert) :: difference_keys
     integer(kind=8), intent(in), dimension(:) :: key_a, key_b
+    integer(kind=8) :: borrow=1_8
+    ! This function assumes that key_a is always greater or equal than key_b
+    ! and that key_a and key_b contain only positive integers
 
 #if NHILBERT == 1
-    difference_keys(1) = (key_a(1) - key_b(1))
+    difference_keys(1) = key_a(1) - key_b(1)
 #endif
-  
+
+#if NHILBERT == 2
+    ! Multi-precision arithmetics
+    difference_keys(1) = key_a(1) - key_b(1)
+    if(difference_keys(1).GE.0)then
+       difference_keys(2) = key_a(2) - key_b(2)
+    else
+       difference_keys(1) = difference_keys(1) - ishft(borrow, 63)
+       difference_keys(2) = key_a(2) - key_b(2) - borrow
+    endif
+#endif
+
   end function difference_keys
- 
+
   !================================================================
   !================================================================
   !================================================================

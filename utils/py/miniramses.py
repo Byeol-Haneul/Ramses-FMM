@@ -197,13 +197,14 @@ def rd_part(nout,**kwargs):
         print(np.max(p.xp[0]))
     """
     
+    backup = kwargs.get("backup",False)
     center = kwargs.get("center")
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
     star = kwargs.get("star",False)
 
     car1 = str(nout).zfill(5)
-    i = rd_info(nout,path=path)
+    i = rd_info(nout,path=path,backup=backup)
     ncpu = i.ncpu
     ndim = i.ndim
     levelmin = i.levelmin
@@ -225,14 +226,18 @@ def rd_part(nout,**kwargs):
     npart = 0
     for icpu in cpulist:
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+prefix+car2
+        if(backup):
+            filename = path+"backup_"+car1+prefix+car2
+        else:
+            filename = path+"output_"+car1+prefix+car2
+
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         npart = npart + npart2
-        
+
     txt = "Found "+str(npart)+" particles"
     print(txt)
     print("Reading particle data...")
-    
+
     p = Part(npart,ndim,star)
     p.np = npart
     p.ndim = ndim
@@ -240,30 +245,59 @@ def rd_part(nout,**kwargs):
 
     for	icpu in	cpulist:
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+prefix+car2
+        if(backup):
+            filename = path+"backup_"+car1+prefix+car2
+        else:
+            filename = path+"output_"+car1+prefix+car2
+
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         
         for idim in range(0,ndim):
-            offset = 8+idim*npart2*8
-            xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            if(backup):
+                offset = 8+idim*npart2*8
+                xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            else:
+                offset = 8+idim*npart2*4
+                xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+
             p.xp[idim,ipart:ipart+npart2] = xp
             
         for idim in range(0,ndim):
-            offset = 8+npart2*8*ndim+idim*npart2*8
-            xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            if(backup):
+                offset = 8+npart2*8*ndim+idim*npart2*8
+                xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            else:
+                offset = 8+npart2*4*ndim+idim*npart2*4
+                xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+
             p.vp[idim,ipart:ipart+npart2] = xp
 
-        offset = 8+npart2*8*ndim*2
-        xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+        if(backup):
+            offset = 8+npart2*8*ndim*2
+            xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+        else:
+            offset = 8+npart2*4*ndim*2
+            xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+
         p.mp[ipart:ipart+npart2] = xp
 
         if(star):
-            offset = 8+npart2*8*ndim*2+npart2*8
-            xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            if(backup):
+                offset = 8+npart2*8*ndim*2+npart2*8
+                xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            else:
+                offset = 8+npart2*4*ndim*2+npart2*4
+                xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+
             p.zp[ipart:ipart+npart2] = xp
 
-            offset = 8+npart2*8*ndim*2+2*npart2*8
-            xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            if(backup):
+                offset = 8+npart2*8*ndim*2+2*npart2*8
+                xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            else:
+                offset = 8+npart2*4*ndim*2+2*npart2*4
+                xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+
             p.tp[ipart:ipart+npart2] = xp
 
         ipart = ipart + npart2
@@ -288,12 +322,13 @@ class Level:
 
 def rd_amr(nout,**kwargs):
 
+    backup = kwargs.get("backup",False)
     center = kwargs.get("center")
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
 
     car1 = str(nout).zfill(5)
-    i = rd_info(nout,path=path)
+    i = rd_info(nout,path=path,backup=backup)
     ncpu = i.ncpu
     ndim = i.ndim
     levelmin = i.levelmin
@@ -301,6 +336,7 @@ def rd_amr(nout,**kwargs):
 
     txt = "ncpu="+str(ncpu)+" ndim="+str(ndim)+" nlevelmax="+str(nlevelmax)
     print(txt)
+    print("Time=",i.texp)
     print("Reading grid data...")
 
     #if ( not (center is None)  and not (radius is None) ):
@@ -324,7 +360,11 @@ def rd_amr(nout,**kwargs):
 
         car1 = str(nout).zfill(5)
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/amr."+car2
+
+        if(backup):
+            filename = path+"backup_"+car1+"/amr."+car2
+        else:
+            filename = path+"output_"+car1+"/amr."+car2
 
         skip = 12
         for ilevel in range(levelmin-1,nlevelmax):
@@ -345,7 +385,10 @@ def rd_amr(nout,**kwargs):
 
         car1 = str(nout).zfill(5)
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/amr."+car2
+        if(backup):
+            filename = path+"backup_"+car1+"/amr."+car2
+        else:
+            filename = path+"output_"+car1+"/amr."+car2
 
         offset = 12 + 4*(nlevelmax+1-levelmin)
         for ilevel in range(levelmin-1,nlevelmax):
@@ -378,12 +421,13 @@ class Hydro:
 
 def rd_hydro(nout,**kwargs):
 
+    backup = kwargs.get("backup",False)
     center = kwargs.get("center")
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
 
     car1 = str(nout).zfill(5)
-    i = rd_info(nout,path=path)
+    i = rd_info(nout,path=path,backup=backup)
     ncpu = i.ncpu
     ndim = i.ndim
     levelmin = i.levelmin
@@ -399,7 +443,11 @@ def rd_hydro(nout,**kwargs):
     
     # Get number of hydro variables
     car1 = str(nout).zfill(5)
-    filename = path+"output_"+car1+"/hydro.00001"
+    if(backup):
+        filename = path+"backup_"+car1+"/hydro.00001"
+    else:
+        filename = path+"output_"+car1+"/hydro.00001"
+
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
     
     txt = "ncpu="+str(ncpu)+" ndim="+str(ndim)+" nlevelmax="+str(nlevelmax)+" nvar="+str(nvar)
@@ -417,7 +465,10 @@ def rd_hydro(nout,**kwargs):
     for icpu in cpulist:
 
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/hydro."+car2
+        if(backup):
+            filename = path+"backup_"+car1+"/hydro."+car2
+        else:
+            filename = path+"output_"+car1+"/hydro."+car2
 
         skip = 16
         for ilevel in range(levelmin-1,nlevelmax):
@@ -437,13 +488,21 @@ def rd_hydro(nout,**kwargs):
     for icpu in cpulist:
 
         car2 = str(icpu).zfill(5)
-        filename = path+"output_"+car1+"/hydro."+car2
+        if(backup):
+            filename = path+"backup_"+car1+"/hydro."+car2
+        else:
+            filename = path+"output_"+car1+"/hydro."+car2
+
         offset = 16 + 4*(nlevelmax+1-levelmin)
         
         for ilevel in range(levelmin-1,nlevelmax):
             ncache = numbl[ilevel,icpu-1]
 
-            transfer = np.fromfile(filename,dtype=np.float64,count=nvartot*ncache,offset=offset)
+            if(backup):
+                transfer = np.fromfile(filename,dtype=np.float64,count=nvartot*ncache,offset=offset)
+            else:
+                transfer = np.fromfile(filename,dtype=np.float32,count=nvartot*ncache,offset=offset)
+
             transfer = np.reshape(transfer,(ncache,nvar,2**ndim))            
             transfer = np.transpose(transfer,(1,2,0))
 
@@ -451,12 +510,16 @@ def rd_hydro(nout,**kwargs):
             for ivar in range(0,nvar):
                 for ind in range(0,2**ndim):
                     hydro[ilevel].u[ivar,ind,iskip[ilevel]:iskip[ilevel]+ncache] = transfer[ivar,ind]
-                            
-            offset = offset + ncache*nvartot*8
+
+            if(backup):
+                offset = offset + ncache*nvartot*8
+            else:
+                offset = offset + ncache*nvartot*4
+
             iskip[ilevel] = iskip[ilevel] + ncache
 
     return hydro
-    
+
 class Cell:
     def __init__(self,nndim,nnvar):
         self.ncell = 0
@@ -594,10 +657,15 @@ class Info:
         
 def rd_info(nout,**kwargs):
     
+    backup = kwargs.get("backup",False)
     path = kwargs.get("path","./")
 
     car1 = str(nout).zfill(5)
-    filename = path+"output_"+car1+"/info.txt"
+    if(backup):
+        filename = path+"backup_"+car1+"/info.txt"
+    else:
+        filename = path+"output_"+car1+"/info.txt"
+
     info=ascii.read(filename,delimiter="=",format='no_header')
 
     ncpu=int(info[0][1])

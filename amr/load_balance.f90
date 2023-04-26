@@ -874,20 +874,22 @@ subroutine balance_part(s,p,ilevel)
                  bound_key_new(1:nhilbert,icpu)=average_keys(bound_key_right(1:nhilbert,icpu),bound_key_target(1:nhilbert,icpu))
                  bound_key_left(1:nhilbert,icpu)=bound_key_target(1:nhilbert,icpu)
               endif
+              ! Note that the right key is always larger than the left key
+              ! so the difference is always positive unless it overflows
               diff_key=difference_keys(bound_key_right(1:nhilbert,icpu),bound_key_left(1:nhilbert,icpu))
 #if NHILBERT==1
               unbalance=MAX(unbalance,ABS(diff_key(1)))
 #endif
 #if NHILBERT==2
-              unbalance=MAX(unbalance,ABS(diff_key(1))+1000*ABS(diff_key(2)))
+              unbalance=MAX(unbalance,ABS(diff_key(1))+ABS(2*diff_key(2)))
 #endif
 #if NHILBERT==3
-              unbalance=MAX(unbalance,ABS(diff_key(1))+1000*ABS(diff_key(2))+1000*ABS(diff_key(3)))
+              unbalance=MAX(unbalance,ABS(diff_key(1))+ABS(2*diff_key(2))+ABS(2*diff_key(3)))
 #endif
            end do
-                            
+
            bound_key_target=bound_key_new
-           
+
         end do
         if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,npart_cum
         if(g%myid==1.and.r%verbose)write(*,'("iter=",I4,1X,17(I10,1X))')iter,(int(dble(icpu)*xpart_target),icpu=0,ncpu)
