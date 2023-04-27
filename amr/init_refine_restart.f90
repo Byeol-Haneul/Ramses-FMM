@@ -41,7 +41,7 @@ subroutine m_init_refine_restart(pst)
 
   ! Read parameters from restart file
   call title(r%nrestart,nchar)
-  file_params='output_'//TRIM(nchar)//'/params.bin'
+  file_params='backup_'//TRIM(nchar)//'/params.bin'
   call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
   write(*,'(" Restart snapshot has levelmin=",I4)')levelmin_file
   write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
@@ -341,20 +341,20 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      call title(icpu,ncharcpu)
      
      ! Prepare reading the AMR file
-     file_amr='output_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
+     file_amr='backup_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
      open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
      iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+(4*ndim+4*twotondim)*nskip_file(icpu)
 
      ! Prepare reading the HYDRO file
      if(r%hydro)then
-        file_hydro='output_'//TRIM(nchar)//'/hydro.'//TRIM(ncharcpu)
+        file_hydro='backup_'//TRIM(nchar)//'/hydro.'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
         iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvar)*nskip_file(icpu)
      endif
 
      ! Prepare reading the GRAV file
      if(r%poisson)then
-        file_grav='output_'//TRIM(nchar)//'/grav.'//TRIM(ncharcpu)
+        file_grav='backup_'//TRIM(nchar)//'/grav.'//TRIM(ncharcpu)
         open(unit=12,file=file_grav,access="stream",action="read",form='unformatted')
         iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*(ndim+1))*nskip_file(icpu)
      endif

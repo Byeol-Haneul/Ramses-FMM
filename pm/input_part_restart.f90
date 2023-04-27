@@ -32,7 +32,7 @@ subroutine m_input_part_restart(pst)
 
   ! Read particle files header
   call title(pst%s%r%nrestart,nchar)
-  file_head='output_'//TRIM(nchar)//'/part_header.txt'
+  file_head='backup_'//TRIM(nchar)//'/part_header.txt'
   call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
   write(*,'(" Restart snapshot has ",I8," DM particles")')npart_tot_file
 
@@ -43,7 +43,7 @@ subroutine m_input_part_restart(pst)
   npart_tot_check=0
   do icpu=1,ncpu_file
      call title(icpu,ncharcpu)
-     file_part='output_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
+     file_part='backup_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
      ilun=10
      open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
      read(ilun,POS=5)npart_file(icpu)
@@ -65,7 +65,7 @@ subroutine m_input_part_restart(pst)
 
   ! Read star particle files header
   call title(pst%s%r%nrestart,nchar)
-  file_head='output_'//TRIM(nchar)//'/star_header.txt'
+  file_head='backup_'//TRIM(nchar)//'/star_header.txt'
   call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
   write(*,'(" Restart snapshot has ",I8," star particles")')npart_tot_file
 
@@ -76,7 +76,7 @@ subroutine m_input_part_restart(pst)
   npart_tot_check=0
   do icpu=1,ncpu_file
      call title(icpu,ncharcpu)
-     file_part='output_'//TRIM(nchar)//'/star.'//TRIM(ncharcpu)
+     file_part='backup_'//TRIM(nchar)//'/star.'//TRIM(ncharcpu)
      ilun=10
      open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
      read(ilun,POS=5)npart_file(icpu)
@@ -214,7 +214,7 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
      
      ! Open the PART file
      call title(icpu,ncharcpu)
-     file_part='output_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
+     file_part='backup_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
      open(unit=10,file=TRIM(file_part),access="stream",action="read",form='unformatted')
      
      ! Read positions
@@ -414,7 +414,7 @@ subroutine input_star_restart(r,g,p,ncpu_file,npart_file,mstar_loc)
      
      ! Open the PART file
      call title(icpu,ncharcpu)
-     file_part='output_'//TRIM(nchar)//'/star.'//TRIM(ncharcpu)
+     file_part='backup_'//TRIM(nchar)//'/star.'//TRIM(ncharcpu)
      open(unit=10,file=TRIM(file_part),access="stream",action="read",form='unformatted')
      
      ! Read positions

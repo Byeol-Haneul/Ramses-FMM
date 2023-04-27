@@ -397,7 +397,6 @@ subroutine output_amr(r,g,m,mdl,filename)
   inquire(file=fileloc, exist=file_exist)
   if (file_exist) then
      open(unit=ilun,file=fileloc,iostat=ierr)
-     write(*,*)g%myid,ierr
      close(ilun,status="delete")
   end if
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
