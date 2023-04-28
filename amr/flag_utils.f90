@@ -264,6 +264,15 @@ subroutine user_flag(s,ilevel,nflag)
   ! This routine flag for refinement cells that satisfies
   ! some user-defined physical criteria at the level ilevel. 
   ! -------------------------------------------------------------------
+  integer::level_lock
+
+  ! Unlock levels progressively
+  if(r%cosmo.and.r%cooling)then
+     if(ilevel.GT.g%nlevelmax_part+3)then
+        level_lock=r%nlevemax+int(log(g%aexp/0.8d0)/log(2d0))-1
+        if(ilevel.GT.level_lock)return
+     endif
+  endif
 
   ! Refinement rules for the gravity solver
   if(s%r%poisson)call poisson_flag(s,ilevel)
