@@ -267,9 +267,9 @@ subroutine user_flag(s,ilevel,nflag)
   integer::level_lock
 
   ! Unlock levels progressively
-  if(r%cosmo.and.r%cooling)then
-     if(ilevel.GT.g%nlevelmax_part+3)then
-        level_lock=r%nlevemax+int(log(g%aexp/0.8d0)/log(2d0))-1
+  if(s%r%cosmo.and.s%r%cooling)then
+     if(ilevel.GT.s%g%nlevelmax_part+3)then
+        level_lock=s%r%nlevelmax+int(log(s%g%aexp/0.8d0)/log(2d0))-1
         if(ilevel.GT.level_lock)return
      endif
   endif
