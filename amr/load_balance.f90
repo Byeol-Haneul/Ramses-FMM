@@ -815,6 +815,7 @@ subroutine balance_part(s,p,ilevel)
 
         if(g%myid==1.and.r%verbose)write(*,*)"====================================="
         if(g%myid==1.and.r%verbose)write(*,'("Level=",I4," npart=",I10)')ilev,npart_lev_tot
+        if(g%myid==1.and.r%verbose)write(*,'(17(I10,1X))')npart_cum
 
         !---------------------------------------------------------
         ! Sort particle according to current level Hilbert key

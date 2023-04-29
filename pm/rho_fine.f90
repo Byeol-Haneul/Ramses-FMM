@@ -192,14 +192,14 @@ subroutine m_rho_fine(pst,ilevel)
 
         ! Set multipoles in all leaf cells
         if(m%noct_tot(i)>0)then
-           if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i        
+           if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i
            call r_multipole_leaf_cells(pst,i,1)
         endif
 
         ! Average down multipoles in all split cells
         if(i<r%nlevelmax)then
            if(m%noct_tot(i+1)>0)then
-              if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i        
+              if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i
               call r_multipole_split_cells(pst,i,1)
            endif
         endif
@@ -1139,7 +1139,7 @@ subroutine split_part(s,p,ilevel)
   real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp
   integer,dimension(1:ndim)::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim)::hash_key
-  integer::i,ipart,jpart,idim,icell
+  integer::i,ipart,jpart,idim,icell,ilev
   integer::npart_coarse,npart_fine
   real(kind=8)::dx_loc,vol_loc
   real(dp)::mp_tmp
@@ -1214,9 +1214,12 @@ subroutine split_part(s,p,ilevel)
   ! End loop over particles
 
   call close_cache(s,m%grid_dict)
-  
+
   p%tailp(ilevel)=p%headp(ilevel)+npart_coarse-1
-  p%headp(ilevel+1)=p%tailp(ilevel)+1
+  do ilev=ilevel+1,r%nlevelmax
+     p%headp(ilev)=p%tailp(ilevel)+1
+     p%tailp(ilev)=p%npart
+  end do
 
   ! Loop over fine level particles
   ! This preserves the initial ordering after partioning
