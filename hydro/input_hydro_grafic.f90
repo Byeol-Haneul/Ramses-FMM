@@ -261,13 +261,13 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   !-----------------------------------------
   ! If required, compute refinement map
   !-----------------------------------------
+#ifdef GRAV
+#ifdef HYDRO
   if(r%ivar_refine>0)then
      ! Loop over grids
      do igrid=m%head(ilevel),m%tail(ilevel)
         ! Loop over cells
         do ind=1,twotondim
-#ifdef GRAV
-#ifdef HYDRO
            ! Compute initial refinement map for zoom-in simulations
            ! only if next level file exists
            if(r%initfile(ilevel+1) .ne.' ')then
@@ -275,13 +275,22 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
            else
               m%grid(igrid)%nref(ind)=0.0d0
            endif
-#endif
-#endif
         end do
         ! End loop over cells
      end do
      ! End loop over grids
+     if(r%pic_lock_refine)then
+        ! Loop over grids
+        do igrid=m%head(ilevel),m%tail(ilevel)
+           ! Loop over cells
+           do ind=1,twotondim
+              m%grid(igrid)%uold(ind,r%ivar_refine)=real(ilevel,kind=dp)
+           end do
+        end do
+     endif
   end if
+#endif
+#endif
 
   !---------------------------------------------------
   ! Third step: compute initial conservative variables

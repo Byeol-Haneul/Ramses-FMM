@@ -118,6 +118,7 @@ subroutine m_read_params(pst)
   real(dp)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
   integer::ivar_refine=-1 ! Variable index for refinement
   logical::aexp_lock_refine=.false.
+  logical::pic_lock_refine=.false.
 
   ! Default units
   real(dp)::units_density=1.0 ! [g/cm^3]
@@ -299,7 +300,8 @@ subroutine m_read_params(pst)
 #endif
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
-       & ,interpol_var,interpol_type,aexp_lock_refine
+       & ,interpol_var,interpol_type &
+       & ,aexp_lock_refine,pic_lock_refine
   ! Units parameters
   namelist/units_params/units_density,units_time,units_length
   ! Boundary conditions parameters
@@ -712,6 +714,7 @@ subroutine m_read_params(pst)
   s%r%mass_cut_refine=mass_cut_refine
   s%r%ivar_refine=ivar_refine
   s%r%aexp_lock_refine=aexp_lock_refine
+  s%r%pic_lock_refine=pic_lock_refine
 
   s%r%interpol_var=interpol_var
   s%r%interpol_type=interpol_type
