@@ -1,5 +1,3 @@
-! vim: fdm=marker
-
 module merger_parameters
   use amr_parameters, only:dp
 
@@ -38,7 +36,6 @@ module merger_commons
 
 end module merger_commons
 
-! {{{
 subroutine read_merger_params(g)
   use amr_commons, only: run_t, global_t
   use merger_parameters
@@ -134,7 +131,6 @@ subroutine read_merger_params(g)
   end if
 
 end subroutine read_merger_params
-! }}}
 
 !==================================================================================
 !=== hydro ic for a Toomre/exponential radial density profile merger (03/03/09) ===
@@ -265,9 +261,9 @@ subroutine condinit(r,g,x,u,dx,nn)
   vflowx=r%u_region(1)
   vflowy=r%v_region(1)
   vflowz=r%w_region(1)
-  phalo=r%p_region(1)
+  phalo=r%p_region(1) ! This is actually the temperature in K
   
-  dmin=rhohalo/scale_nH  !Get halo density from paramfile
+  dmin=rhohalo/scale_nH  ! Get halo density in H/cc from paramfile and convert to code units
   
   ! Loop over cells
   do i=1,nn
@@ -309,15 +305,16 @@ subroutine condinit(r,g,x,u,dx,nn)
         HH_max = hcut2
         rho_0 = rho_0_2
      end if
-     
+
      ! Cylindric radius : distance between the cell and the galactic rotation axis
      xx_rad = xx - dot_product(xx,axe_rot) * axe_rot
      rc = norm2(xx_rad)
-     
+
      ! vertical position absolute value
      abs_z = sqrt(rr**2 - rc**2)
-     
-     if(((rc-dx/2.0D0).lt.rdisk) .and. ((abs_z-dx/2.0D0) .lt. HH_max))then ! Cell in the disk : analytical density profile + rotation velocity
+
+     ! Cell in the disk : analytical density profile + rotation velocity
+     if(((rc-dx/2.0D0).lt.rdisk) .and. ((abs_z-dx/2.0D0) .lt. HH_max))then
         weight = (min(rc+dx/2.0D0,rdisk)-(rc-dx/2.0D0))/dx
         if (weight .NE. 1.0D0) then
            rc = rc + (weight-1.0D0)*dx/2.0D0
@@ -328,13 +325,13 @@ subroutine condinit(r,g,x,u,dx,nn)
         ! Density
         select case (rad_profile)
         case ('exponential')
-           q(i,1)= rho_0 * exp(-abs_z / HH) * exp(-rc / rgal) !<<<<<<<<<<<<<<----------------- Density profile
+           q(i,1)= rho_0 * exp(-abs_z / HH) * exp(-rc / rgal) 
         case ('Toomre')
            q(i,1)= rho_0 * exp(-abs_z / HH) / sqrt(1.0D0 + rc**2/rgal**2)
         case ('exponentialslab')
-           q(i,1)= (rho_0 * Gafr) * exp(-abs_z / HH) * exp(-rc / rgal) !<<<<<<----------------- Exponential Density Profile
-           if (rc.le.rslab.and.abs_z.le.(hslab/2.0d0)) then !<<<<<<<<<<<<<<<<<----------------- Criteria for Slab
-              q(i,1) = q(i,1) + denslab !<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<----------------- Adds Slab density to Exponential Density Profile
+           q(i,1)= (rho_0 * Gafr) * exp(-abs_z / HH) * exp(-rc / rgal)
+           if (rc.le.rslab.and.abs_z.le.(hslab/2.0d0)) then
+              q(i,1) = q(i,1) + denslab
            end if
         end select
         q(i,1) = max(weight * q(i,1), dmin)
@@ -382,7 +379,7 @@ subroutine condinit(r,g,x,u,dx,nn)
   ! Convert primitive to conservative variables
   ! density -> density
   u(1:nn,1)=q(1:nn,1)
-  ! velocity -> momentum : Omega = rho * V
+  ! velocity -> momentum
   u(1:nn,2)=q(1:nn,1)*q(1:nn,2)
 #if NDIM>1
   u(1:nn,3)=q(1:nn,1)*q(1:nn,3)
@@ -391,7 +388,6 @@ subroutine condinit(r,g,x,u,dx,nn)
   u(1:nn,4)=q(1:nn,1)*q(1:nn,4)
 #endif
   ! kinetic energy
-  ! Total system global velocity : 0
   u(1:nn,ndim+2)=0.0D0
   u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5D0*q(1:nn,1)*q(1:nn,2)**2
 #if NDIM>1
@@ -401,7 +397,7 @@ subroutine condinit(r,g,x,u,dx,nn)
   u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5D0*q(1:nn,1)*q(1:nn,4)**2
 #endif
   ! pressure -> total fluid energy
-  ! E = Ec + P / (gamma - 1)
+  ! E = Ekin + P / (gamma - 1)
   u(1:nn,ndim+2)=u(1:nn,ndim+2)+q(1:nn,ndim+2)/(r%gamma-1.0d0)
   ! passive scalars
   do ivar=ndim+3,nvar
@@ -469,9 +465,9 @@ contains
   end function norm2
   
 end subroutine condinit
-!------------------------------------------------------------------------------------- 
+!-------------------------------------------------------------------------------------
 ! Circular velocity files reading
-! {{{
+!-------------------------------------------------------------------------------------
 subroutine read_vcirc_files
   use merger_commons
   implicit none
@@ -487,7 +483,7 @@ subroutine read_vcirc_files
   do while (ierr==0)
      read(123,*,iostat=ierr)
      if(ierr==0) then
-        nvitesses = nvitesses + 1  ! Number of samples
+        nvitesses = nvitesses + 1 ! Number of samples
      end if
   end do
   allocate(Vcirc_dat1(nvitesses,2))
@@ -514,5 +510,4 @@ subroutine read_vcirc_files
   end do
   close(123)
 end subroutine read_vcirc_files
-! }}}
 !--------------------------------------------------------------------------------------
