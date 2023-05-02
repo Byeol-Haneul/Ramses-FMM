@@ -2,7 +2,7 @@ This namelist performs an isolated disk simulation with dark matter and gas.
 Gas cooling and star formation are included.
 You need a ascii file for the initial conditions. You can download one easily
 by executing in the command line the following script:
-> utils/script/load_cosmo_ic.sh
+> utils/script/load_agora_ic.sh
 To compile the code with MPI, type in the command line:
 > make NDIM=3 MPI=1 UNITS=merger PATCH=../patch/init/merger HYDRO=1 GRAV=1 NVAR=7
 
@@ -24,7 +24,7 @@ tend=1.0
 
 &INIT_PARAMS
 filetype='ascii'
-initfile(1)='IC'
+initfile(1)='agora/IC'
 d_region=1d-6
 p_region=1d6
 /
@@ -91,8 +91,8 @@ cut_height1=3.0
 cut_height2=0.9
 rad_profile='exponential'
 IG_density_factor=1.0D-5
-Vcirc_dat_file1='IC/Vcirc.dat'
-Vcirc_dat_file2='IC/Vcirc.dat'
+Vcirc_dat_file1='agora/IC/Vcirc.dat'
+Vcirc_dat_file2='agora/IC/Vcirc.dat'
 gal_axis1=0.0D0,0.0D0,1.0D0
 gal_axis2=0.0D0,0.0D0,1.0D0
 Vgal1=0.0D0,0.0D0,0.0D0
