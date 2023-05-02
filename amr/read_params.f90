@@ -77,7 +77,7 @@ subroutine m_read_params(pst)
   real(kind=8)::bkp_time_hrs=2   ! Backup file frequency in hours
   real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
   real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
-  integer::bkp_modulo         ! Use modulo for backup file count
+  integer::bkp_modulo=0       ! Use modulo for backup file count
 
   ! Output times
   real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors

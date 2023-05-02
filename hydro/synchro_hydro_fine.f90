@@ -159,6 +159,8 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
 
 #ifdef HYDRO
 
+  if(r%verbose.and.g%myid==1)write(*,'("   Entering gravity_hydro_fine for level ",I2)')ilevel
+
   ! Add gravity source term at time t with half time step
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim

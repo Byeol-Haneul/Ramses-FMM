@@ -89,9 +89,7 @@ end subroutine r_init_time
   ! Initialize cooling model
   if(r%cooling.and..not.r%cooling_ism)then
      call init_cooling(r,g,c)
-     if(r%cosmo)then
-        call set_table(c,dble(g%aexp))
-     endif
+     call set_table(c,dble(g%aexp))
   endif
 
 end subroutine init_time

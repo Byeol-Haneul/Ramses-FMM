@@ -39,4 +39,14 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_nH = 1.0/mH * scale_d    ! scale_nH converts rho in user units into nH in H/cc
 #endif
 
+#ifdef UNITSmerger
+  !Units are in kpc, Gyr, km/s and time is 0.98 Gyr
+  scale_l = 3.086568025d21
+  scale_d = 1.573391528d-26
+  scale_t = 1.0/sqrt(6.67d-8*scale_d)
+  scale_v = scale_l / scale_t
+  scale_T2 = mH/kB * scale_v**2
+  scale_nH = X_H/mH * scale_d
+#endif
+
 end subroutine units

@@ -45,7 +45,7 @@ subroutine m_dump_all(pst,write_bkp_file)
 
   if(write_bkp_file)then
      ! Increment backup file counter
-     g%ifbkp=MOD(g%ifbkp-1,r%bkp_modulo)+1
+     if(r%bkp_modulo>0)g%ifbkp=MOD(g%ifbkp-1,r%bkp_modulo)+1
      call title(g%ifbkp,nchar)
      g%ifbkp=g%ifbkp+1
   else

@@ -72,10 +72,12 @@ subroutine source_hydro_fine(s,ilevel)
   real(dp)::dx,phi_diss,div,divu
   real(dp)::d,u,v,w,d_old,sigma
   real(dp)::e_kin,e_cons,e_prim,e_turb,e_trunc
-  
+
 #ifdef HYDRO
 
   associate(r=>s%r,g=>s%g,m=>s%m)    
+
+  if(r%verbose.and.g%myid==1)write(*,'("   Entering source_hydro_fine for level ",I2)')ilevel
 
   hash_key(0)=ilevel+1
   dx=r%boxlen/2**ilevel

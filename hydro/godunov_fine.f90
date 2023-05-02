@@ -46,6 +46,8 @@ subroutine godunov_fine(s,ilevel)
   !--------------------------------------------------------------------------
   integer::igrid
 
+  if(s%r%verbose.and.s%g%myid==1)write(*,'("   Entering godunov_fine for level ",I2)')ilevel
+
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&

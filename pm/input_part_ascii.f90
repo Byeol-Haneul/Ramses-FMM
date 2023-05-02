@@ -17,7 +17,6 @@ subroutine m_input_part_ascii(pst)
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   integer(kind=8)::npart_tot
   character(LEN=80)::filename
-  integer::dummy(1)
   integer,allocatable,dimension(:)::input_array
 
   associate(s=>pst%s)
@@ -53,7 +52,7 @@ subroutine m_input_part_ascii(pst)
   ! Call recursive slave routine
   allocate(input_array(1:storage_size(npart_tot)/32))
   input_array=transfer(npart_tot,input_array)
-  call r_input_part_ascii(pst,input_array,storage_size(npart_tot)/32,dummy,0)
+  call r_input_part_ascii(pst,input_array,2)
   deallocate(input_array)
 
   end associate
@@ -63,16 +62,14 @@ end subroutine m_input_part_ascii
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_ascii(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_input_part_ascii(pst,input_array,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
   integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
   ! particles from a Ramses restart file.
@@ -81,9 +78,9 @@ recursive subroutine r_input_part_ascii(pst,input_array,input_size,output_array,
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_ASCII,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_part_ascii(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_ASCII,pst%iUpper+1,input_size,0,input_array)
+     call r_input_part_ascii(pst%pLower,input_array,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      npart_tot=transfer(input_array,npart_tot)
      call input_part_ascii(pst%s%mdl,pst%s%r,pst%s%g,pst%s%p,npart_tot)
@@ -127,12 +124,12 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   do icpu=1,g%ncpu+1
      start_ind(icpu)=1+((icpu-1)*npart_tot)/g%ncpu
   end do
-  
+
   !--------------------------------------
   ! Read ASCII initial conditions file
   !--------------------------------------  
   filename=TRIM(r%initfile(r%levelmin))//'/ic_part'
-  open(10+g%myid,file=filename,form='formatted')
+  open(10,file=filename,form='formatted')
   jpart=0
   indglob=0
   jpart_loc=0
@@ -162,15 +159,15 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   end do
 100 continue
   close(10)
-     
+
   p%npart=jpart_loc
-  
+
   ! Put all particles in levelmin
   p%headp=p%npart+1
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
-        
+
 end subroutine input_part_ascii
 !#########################################################################
 !#########################################################################

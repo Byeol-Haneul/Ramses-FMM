@@ -58,6 +58,8 @@ subroutine cooling_fine(r,g,m,c,ilevel)
 #endif
 
 #ifdef HYDRO
+  if(r%verbose.and.g%myid==1)write(*,'("   Entering cooling_fine for level ",I2)')ilevel
+
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
