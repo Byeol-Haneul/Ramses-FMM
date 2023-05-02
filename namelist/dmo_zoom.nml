@@ -1,8 +1,10 @@
 This namelist performs a cosmological zoom-in simulation with
 only dark matter. You need zoom-in grafic files for the
 initial conditions. You can generate such files using the MUSIC code.
+You can also download an example from tigress using:
+> ./utils/script/load_zoom_ic.sh
 To compile the code with MPI, type in the command line:
-> make MPI=1 UNITS=cosmo CONDINIT=default HYDRO=0 GRAV=1
+> make NDIM=3 MPI=1 UNITS=cosmo CONDINIT=default HYDRO=0 GRAV=1
 
 &RUN_PARAMS
 cosmo=.true.
@@ -22,10 +24,10 @@ aend=1.0
 
 &INIT_PARAMS
 filetype='grafic_zoom'
-initfile(1)='ics_ramses/level_007'
-initfile(2)='ics_ramses/level_008'
-initfile(3)='ics_ramses/level_009'
-initfile(4)='ics_ramses/level_010'
+initfile(1)='ics_zoom/level_007'
+initfile(2)='ics_zoom/level_008'
+initfile(3)='ics_zoom/level_009'
+initfile(4)='ics_zoom/level_010'
 /
 
 &AMR_PARAMS
@@ -38,7 +40,6 @@ nexpand=5,5,1,1
 
 &POISSON_PARAMS
 epsilon=1.d-4
-fast_solver=.true.
 /
 
 &REFINE_PARAMS
