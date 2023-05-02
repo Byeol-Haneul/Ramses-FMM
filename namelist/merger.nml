@@ -1,0 +1,102 @@
+This namelist performs an isolated disk simulation with dark matter and gas.
+Gas cooling and star formation are included.
+You need a ascii file for the initial conditions. You can download one easily
+by executing in the command line the following script:
+> utils/script/load_cosmo_ic.sh
+To compile the code with MPI, type in the command line:
+> make NDIM=3 MPI=1 UNITS=merger PATCH=../patch/init/merger HYDRO=1 GRAV=1 NVAR=7
+
+&RUN_PARAMS
+cosmo=.false.
+pic=.true.
+poisson=.true.
+hydro=.true.
+nrestart=0
+nsubcycle=1,1,2
+ncontrol=1
+verbose=.false.
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.05
+tend=1.0
+/
+
+&INIT_PARAMS
+filetype='ascii'
+initfile(1)='IC'
+d_region=1d-6
+p_region=1d6
+/
+
+&AMR_PARAMS
+levelmin=7
+levelmax=13
+ngridmax=2000000
+npartmax=4000000
+nexpand=1,
+boxlen=600.
+/
+
+&POISSON_PARAMS
+epsilon=1.d-4
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.8
+slope_type=1
+dual_energy=0.2
+entropy=.true.
+scheme='muscl'
+riemann='hllc'
+/
+
+&COOLING_PARAMS
+cooling=.true.
+metal=.true.
+haardt_madau=.true.
+self_shielding=.true.
+z_ave=1.0
+z_reion=10
+/
+
+&STAR_PARAMS
+star=.true.
+nstarmax=2000000
+n_star=10.
+eps_star=0.1
+m_star=1
+/
+
+&REFINE_PARAMS
+m_refine=10*8.,
+interpol_var=1
+interpol_type=0
+mass_sph=0.05
+/
+
+&MERGER_PARAMS
+gal_center1= 0.0D0 , 0.0D0 , 0.0D0
+gal_center2= 1.5D2 , 0.0D0 , 0.0D0
+Mgaz_disk1=18486.4039
+Mgaz_disk2=0.0D0
+typ_radius1=3.43218d0
+typ_radius2=1.0D0
+cut_radius1=2.0D1
+cut_radius2=1.0D0
+typ_height1=0.343218d0
+typ_height2=0.300
+cut_height1=3.0
+cut_height2=0.9
+rad_profile='exponential'
+IG_density_factor=1.0D-5
+Vcirc_dat_file1='IC/Vcirc.dat'
+Vcirc_dat_file2='IC/Vcirc.dat'
+gal_axis1=0.0D0,0.0D0,1.0D0
+gal_axis2=0.0D0,0.0D0,1.0D0
+Vgal1=0.0D0,0.0D0,0.0D0
+Vgal2=0.0D0,0.0D0,0.0D0
+Zgas=1.0
+/
+
