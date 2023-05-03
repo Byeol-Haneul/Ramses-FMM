@@ -251,6 +251,12 @@ subroutine m_read_params(pst)
   integer(kind=8),dimension(1:6)::seed=(/123,456,789,1,1,1/)
   real(dp)::m_star=1
 
+  ! Supernovae feedback parameters
+  real(dp)::e_SN=1d51
+  real(dp)::t_SN=20.
+  real(dp)::eta_SN=0.0 ! No feedback
+  real(dp)::yield_SN=0.1
+
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
@@ -320,6 +326,8 @@ subroutine m_read_params(pst)
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
+  ! Star particles and star formation recipe
+  namelist/feedback_params/e_SN,t_SN,eta_SN,yield_SN
 
   associate(s=>pst%s)
 
@@ -499,6 +507,9 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=star_params,END=108)
 108 continue
+  rewind(1)
+  read(1,NML=feedback_params,END=109)
+109 continue
   close(1)
 
   !-----------------
@@ -805,6 +816,11 @@ subroutine m_read_params(pst)
   s%r%eps_star=eps_star
   s%r%seed=seed
   s%r%m_star=m_star
+
+  s%r%e_SN=e_SN
+  s%r%t_SN=t_SN
+  s%r%eta_SN=eta_SN
+  s%r%yield_SN=yield_SN
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)

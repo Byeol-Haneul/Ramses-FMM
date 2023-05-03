@@ -27,6 +27,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
   use movie_module, only: m_output_frame
   use star_formation_module, only: out_star_formation_t, r_star_formation
+  use feedback_module, only: r_feedback
 
   implicit none
 
@@ -200,6 +201,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   end if
   if (done)return
 
+  !-----------
+  ! Feedback
+  !-----------
+  if(r%star.and.r%eta_SN>0)then
+                                    call m_timer(pst,'star - feedback','start')
+     call r_feedback(pst,ilevel,1)
+  endif
   !-----------
   ! Hydro step
   !-----------

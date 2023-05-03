@@ -86,7 +86,7 @@ endif
 LIBS = $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):../$(SOLVER):../star:../cooling:../hydro:../pm:../poisson:../amr:../mdl1
+VPATH = $(PATCH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../poisson:../amr:../mdl1
 #############################################################################
 
 # Modules
@@ -103,8 +103,8 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 init_refine_adaptive.o init_refine_restart.o title.o units.o move_fine.o rho_ana.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
 	 condinit.o boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
-	 star_formation.o \
 	 godunov_fine.o umuscl.o uplmde.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
+	 star_formation.o feedback.o \
 	 task_manager.o amr_step.o adaptive_loop.o 
 
 #############################################################################

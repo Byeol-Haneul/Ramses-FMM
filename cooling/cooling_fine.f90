@@ -239,7 +239,7 @@ subroutine cooling_fine(r,g,m,c,ilevel)
            end do
         endif
 
-        ! Update entropy if dual energy scheme
+        ! Update entropy if dual energy scheme is activated
         if(r%entropy.and.r%dual_energy.GE.0)then
            if(r%isothermal)then ! use only polytrope energy
               do i=1,nleaf

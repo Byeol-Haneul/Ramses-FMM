@@ -293,12 +293,8 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
   if(action_part==action_kick_drift)then
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
-           if(p%xp(ipart,idim)>r%boxlen)then
-              p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
-           end if
-           if(p%xp(ipart,idim)<0.d0)then
-              p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           end if
+           if(p%xp(ipart,idim)<   0.0d0 )p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
         end do
      end do
   end if

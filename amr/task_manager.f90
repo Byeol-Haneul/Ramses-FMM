@@ -137,6 +137,7 @@ function worker_init(mdl) result(pst)
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
   use star_formation_module, only: r_star_formation
+  use feedback_module, only: r_feedback
   use newdt_fine_module, only: r_newdt_part,r_broadcast_dt
 #ifdef GRAV
   use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
@@ -231,6 +232,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_UOLD,               pst,C_FUNLOC(r_set_uold),1,0,"set_uold")
   call mdl_add_service(pst%s%mdl,MDL_COOLING_FINE,           pst,C_FUNLOC(r_cooling_fine),1,0,"cooling_fine")
   call mdl_add_service(pst%s%mdl,MDL_STAR_FORMATION,         pst,C_FUNLOC(r_star_formation),1,2,"star_formation")
+  call mdl_add_service(pst%s%mdl,MDL_FEEDBACK,               pst,C_FUNLOC(r_feedback),1,2,"feedback")
   call mdl_add_service(pst%s%mdl,MDL_NEWDT_PART,             pst,C_FUNLOC(r_newdt_part),0,0,"newdt_part")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_DT,           pst,C_FUNLOC(r_broadcast_dt),24,0,"broadcast_dt")
   call mdl_add_service(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,     pst,C_FUNLOC(r_synchro_hydro_fine),3,0,"synchro_hydro_fine")

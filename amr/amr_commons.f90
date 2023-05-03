@@ -217,6 +217,12 @@ module amr_commons
      integer(kind=8),dimension(1:6)::seed
      real(dp)::m_star=1
 
+     ! Supernovae feedback parameters
+     real(dp)::e_SN=1d51
+     real(dp)::t_SN=20.
+     real(dp)::eta_SN=0.0 ! No feedback
+     real(dp)::yield_SN=0.1
+
   end type run_t
   
   type global_t
