@@ -65,7 +65,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   integer,dimension(1:g%ncpu)::nsite_cpu,nstar_cpu
   integer::i,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nstar,nstar_loc
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,tstar,mcell,mgas,mask,PoissMean
+  real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,tstar,mcell,mgas,mask,PoissMean,Rand
 #ifdef SOLVERmhd
   integer::neul=5
 #else
@@ -150,7 +150,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   ! Advance to the state corresponding to the current cpu
   if(g%myid>1)then
      if(nsite_cum(g%myid-1)>0)then
-        call RngStream_AdvanceState(gg,0_8,nsite_cum(g%myid-1))
+        call RngStream_AdvanceState(gg,0_8,2*nsite_cum(g%myid-1))
      endif
   endif
 
@@ -173,6 +173,8 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
            ! Poisson mean
            PoissMean=mgas/mstar
            call poissdev(RngStream_RandUni(gg),PoissMean,nstar)
+           ! Draw a second random number for the formation age
+           Rand=RngStream_RandUni(gg)
            ! Check that we don't empty the gas cell
            mgas=nstar*mstar
            if(mgas>0.9*mcell)then
@@ -205,12 +207,8 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
 #endif
               ! Compute star particle mass
               s%mp(s%npart)=nstar*mstar
-              ! Compute star particle birth time
-              if(r%cosmo)then
-                 s%tp(s%npart)=g%texp
-              else
-                 s%tp(s%npart)=g%t
-              endif
+              ! Compute star particle birth time using proper time
+              s%tp(s%npart)=g%texp+Rand*g%dtnew(ilevel)*g%aexp**2
               ! Compute star particle metallicity
               if(r%metal)then
                  s%zp(s%npart)=m%grid(igrid)%uold(ind,r%imetal)/d
@@ -223,6 +221,9 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
               ! Careful: this will not work for MHD or non-thermal energies
               ! Best is to remove the corresponding energies before and add them back after
               m%grid(igrid)%uold(ind,1:nvar)=m%grid(igrid)%uold(ind,1:nvar)*(d-dstar)/d
+
+!              write(*,'("star=",10(1PE14.7,1X))')d*scale_nH,g%texp,s%mp(s%npart),s%tp(s%npart),Rand,g%dtnew(ilevel)*g%aexp**2
+
            endif
         endif
      end do
@@ -236,7 +237,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   gg = RngStream_CreateStream('ramses_stream')
   ! Advance to the state corresponding to the final global state
   if(nsite_cum(g%ncpu)>0)then
-     call RngStream_AdvanceState(gg,0_8,nsite_cum(g%ncpu))
+     call RngStream_AdvanceState(gg,0_8,2*nsite_cum(g%ncpu))
   endif
   ! Get the new seed and store it
   call RngStream_GetState(gg,r%seed)

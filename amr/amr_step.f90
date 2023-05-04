@@ -27,7 +27,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
   use movie_module, only: m_output_frame
   use star_formation_module, only: out_star_formation_t, r_star_formation
-  use feedback_module, only: r_feedback
+  use feedback_module, only: out_feedback_t, r_feedback
 
   implicit none
 
@@ -41,6 +41,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-------------------------------------------------------------------!
   type(in_broadcast_dt_t)::in_broadcast_dt
   type(out_star_formation_t)::output_star
+  type(out_feedback_t)::output_fbk
   real(kind=8) :: tcurr=0
   real(kind=8), save :: tprev=0.
   real(kind=8), external :: wallclock
@@ -206,7 +207,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-----------
   if(r%star.and.r%eta_SN>0)then
                                     call m_timer(pst,'star - feedback','start')
-     call r_feedback(pst,ilevel,1)
+     call r_feedback(pst,ilevel,1,output_fbk,2)
+     if(output_fbk%mass>0)then
+        g%mass_star_tot=g%mass_star_tot-output_fbk%mass
+     endif
   endif
   !-----------
   ! Hydro step

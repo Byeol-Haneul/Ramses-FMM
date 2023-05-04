@@ -284,13 +284,6 @@ module amr_commons
      real(dp)::texp=0.0D0     ! Current proper time
      logical ::use_proper_time=.false.
      
-     ! Passive variables index
-     integer::imetal=6
-     integer::idelay=6
-     integer::ixion=6
-     integer::ichem=6
-     integer::iturb=6
-
      ! Executable identification
      CHARACTER(LEN=80)::builddate,patchdir
      CHARACTER(LEN=80)::gitrepo,gitbranch,githash

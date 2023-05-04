@@ -1,26 +1,34 @@
 module feedback_module
+
+    type :: out_feedback_t
+     real(kind=8)::mass
+  end type out_feedback_t
+
 contains
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-recursive subroutine r_feedback(pst,ilevel,input_size)
+recursive subroutine r_feedback(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::ilevel
+  integer::output_size
+  type(out_feedback_t)::output,next_output
 
+  integer::ilevel
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_FEEDBACK,pst%iUpper+1,input_size,0,ilevel)
-     call r_feedback(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
+     rID = mdl_send_request(pst%s%mdl,MDL_FEEDBACK,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_feedback(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%mass=output%mass+next_output%mass
   else
-     call thermal_feedback(pst%s,pst%s%s,ilevel)
+     call thermal_feedback(pst%s,pst%s%s,ilevel,output%mass)
   endif
 
 end subroutine r_feedback
@@ -28,7 +36,7 @@ end subroutine r_feedback
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine thermal_feedback(s,p,ilevel)
+subroutine thermal_feedback(s,p,ilevel,msn_loc)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -44,6 +52,7 @@ subroutine thermal_feedback(s,p,ilevel)
   type(ramses_t)::s
   type(part_t)::p
   integer::ilevel
+  real(kind=8)::msn_loc
   ! Local variables
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
@@ -72,6 +81,9 @@ subroutine thermal_feedback(s,p,ilevel)
 
   ! Supernovae specific energy from cgs to code units
   e_sn=r%e_SN/(10d0*2d33)/scale_v**2
+
+  ! Total mass of ejecta
+  msn_loc=0d0
 
   ! Open cache for array uold (fetch) and unew (flush)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
@@ -160,8 +172,13 @@ subroutine thermal_feedback(s,p,ilevel)
         gridp%unew(icell,r%ientropy)=gridp%unew(icell,r%ientropy)+ethermal/dold**(r%gamma-1)*(r%gamma-1)
      endif
 
+!     write(*,'("feedback ",6(1PE13.6,1X))')g%texp,dteff,birth_time,(dold+mloss)*scale_nH,ethermal/(dold+mloss)*scale_v**2/1.38d-16*1.66d-24,gridp%uold(icell,5)/dold*scale_v**2/1.38d-16*1.66d-24
+
      ! Update particle mass
      p%mp(ipart)=p%mp(ipart)-mejecta
+
+     ! Update total mass of ejecta
+     msn_loc=msn_loc+mejecta
 
   end do
   ! End loop over particles

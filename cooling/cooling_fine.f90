@@ -96,7 +96,7 @@ subroutine cooling_fine(r,g,m,c,ilevel)
         ! Compute metallicity in solar units
         if(r%metal)then
            do i=1,nleaf
-              Zsolar(i)=m%grid(ind_leaf(i))%uold(ind,g%imetal)/nH(i)/0.02d0
+              Zsolar(i)=m%grid(ind_leaf(i))%uold(ind,r%imetal)/nH(i)/0.02d0
            end do
         else
            do i=1,nleaf
