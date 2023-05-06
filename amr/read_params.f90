@@ -144,6 +144,7 @@ subroutine m_read_params(pst)
   logical::multiple=.false.
   character(LEN=20)::filetype='ascii'
   character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
+  real(dp)::ic_scale_m=1.0d0
 
   ! Refinement parameters for hydro
   real(dp)::err_grad_d=-1.0  ! Density gradient
@@ -284,6 +285,7 @@ subroutine m_read_params(pst)
   namelist/init_params/filetype,initfile,multiple,nregion,region_type &
        & ,x_center,y_center,z_center,aexp_ini,omega_b &
        & ,length_x,length_y,length_z,exp_region &
+       & ,ic_scale_m &
 #if NENER>0
        & ,prad_region &
 #endif
@@ -749,6 +751,7 @@ subroutine m_read_params(pst)
   s%r%multiple=multiple
   s%r%aexp_ini=aexp_ini
   s%r%omega_b=omega_b
+  s%r%ic_scale_m=ic_scale_m
 
   s%r%nregion=nregion
   s%r%region_type=region_type

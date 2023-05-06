@@ -151,7 +151,7 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
            p%vp(jpart_loc,1)=vv1
            p%vp(jpart_loc,2)=vv2
            p%vp(jpart_loc,3)=vv3
-           p%mp(jpart_loc  )=mm1
+           p%mp(jpart_loc  )=mm1*r_scale_m
            p%idp(jpart_loc )=indglob
            p%levelp(jpart_loc)=r%levelmin
         end if

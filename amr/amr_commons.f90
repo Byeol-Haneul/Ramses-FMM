@@ -172,6 +172,7 @@ module amr_commons
      character(LEN=20)::filetype='ascii'
      logical::multiple=.false.
      character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
+     real(dp)::ic_scale_m=1.0d0
 
      ! Boundary conditions parameters
      logical,dimension(1:NDIM)::periodic=.true.
