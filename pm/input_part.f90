@@ -5,6 +5,7 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_input_part(pst)
+  use amr_parameters, only: dp
   use mdl_module
   use ramses_commons, only: pst_t
   use input_part_grafic_module, only: m_input_part_grafic
@@ -16,6 +17,7 @@ subroutine m_input_part(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from many different initial conditions file formats.
   !--------------------------------------------------------------------
+  real(dp)::mp_min
 
   ! Input particle properties from files
   select case(pst%s%r%filetype)
@@ -37,6 +39,12 @@ subroutine m_input_part(pst)
 
   ! Computing maximum particle count (only in master)
   call r_npart_max(pst,pst%s%r%levelmin,1,pst%s%p%npart_max,1)
+
+  ! Compute minimum particle mass and initial coarse particle level
+  if(pst%s%r%aexp_lock_refine)then
+     call r_mass_min_part(pst,pst%s%r%levelmin,1,mp_min,2)
+     call r_broadcast_mp_min(pst,mp_min,2)
+  endif
 
 end subroutine m_input_part
 !#####################################################################
@@ -69,25 +77,34 @@ end subroutine r_mass_min_part
 !#####################################################################
 !#####################################################################
 !#####################################################################
-recursive subroutine r_broadcast_mp_min(pst,mp_min,input_size,output_array,output_size)
+recursive subroutine r_broadcast_mp_min(pst,mp_min,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:output_size)::output_array
-  real(kind=8)::mp_min
 
-  integer::rID
+  real(kind=8)::mp_min,mm1
+  integer::rID,ilevel
   
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MP_MIN,pst%iUpper+1,input_size,output_size,mp_min)
-     call r_broadcast_mp_min(pst%pLower,mp_min,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_MP_MIN,pst%iUpper+1,input_size,0,mp_min)
+     call r_broadcast_mp_min(pst%pLower,mp_min,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
      pst%s%g%mp_min=mp_min
+     if(pst%s%r%aexp_lock_refine)then
+        ilevel = 1
+        do while(.true.)
+           mm1 = 0.5d0**(3*ilevel)*(1.0d0-pst%s%g%omega_b/pst%s%g%omega_m)
+           if((mm1 > 0.90d0*mp_min).AND.(mm1 < 1.10d0*mp_min))then
+              pst%s%g%nlevelmax_part = ilevel
+              exit
+           endif
+           ilevel = ilevel+1
+        enddo
+     endif
   endif
 
 end subroutine r_broadcast_mp_min

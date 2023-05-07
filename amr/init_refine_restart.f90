@@ -86,7 +86,7 @@ subroutine m_init_refine_restart(pst)
      ! Count number of octs in each CPU file
      do icpu=1,ncpu_file
         call title(icpu,ncharcpu)
-        file_amr='output_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
+        file_amr='backup_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
         ilun=10
         noct_skip(icpu)=0
         open(unit=ilun,file=file_amr,access="stream",action="read",form='unformatted')

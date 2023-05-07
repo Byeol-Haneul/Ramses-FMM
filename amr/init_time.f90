@@ -306,7 +306,13 @@ subroutine init_cosmo(mdl,r,g)
      endif
      g%omega_m = gadgetheader%omega0
      g%omega_l = gadgetheader%omegalambda
-     if(r%hydro)g%omega_b=0.045 ! Be careful hard-coded !
+     if(r%hydro)then
+        if(r%omega_b>0)then
+           g%omega_b=r%omega_b
+        else
+           g%omega_b=0.045
+        endif
+     endif
      g%h0 = gadgetheader%hubbleparam * 100.d0
      g%boxlen_ini = gadgetheader%boxsize
      g%aexp = gadgetheader%time

@@ -178,6 +178,9 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
      p%npart=p%npart+1
      nleft=nleft+(g%myid-1)
      nright=nright+g%myid
+  else
+     nleft=nleft+nrest
+     nright=nright+nrest
   endif
   
   ! Compute interval of file to open for current process
@@ -377,6 +380,9 @@ subroutine input_star_restart(r,g,p,ncpu_file,npart_file,mstar_loc)
      p%npart=p%npart+1
      nleft=nleft+(g%myid-1)
      nright=nright+g%myid
+  else
+     nleft=nleft+nrest
+     nright=nright+nrest
   endif
   
   ! Compute interval of file to open for current process
