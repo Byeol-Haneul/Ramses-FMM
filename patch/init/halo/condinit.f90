@@ -3,13 +3,13 @@ module halo_parameters
 
   ! Galactic merger IC
   real(dp), dimension(3)::halo_center = 0.0D0
-  real(dp)::mass_200 = 1d12
+  real(dp)::v_200 = 150
   real(dp)::concentration = 10
-  real(dp)::halo_eps = 0.001
-  real(dp)::baryon_fraction = 0.16
-  real(dp)::halo_dmin = 1d-6
-  real(dp)::halo_pmin = 1d-6
-  real(dp)::halo_jmax = 0.1
+  real(dp)::baryon_fraction = 0.15
+  real(dp)::lambda = 0.04
+  real(dp)::halo_nmin = 1d-6
+  real(dp)::halo_tmin = 1d6
+  real(dp)::halo_eps = 0.01
   
 end module halo_parameters
 
@@ -29,8 +29,8 @@ subroutine read_halo_params(g)
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
-  namelist/halo_params/halo_center,mass_200,concentration &
-       & ,halo_eps,baryon_fraction,halo_dmin,halo_pmin,halo_jmax
+  namelist/halo_params/halo_center,v_200,concentration &
+       & ,halo_eps,baryon_fraction,halo_nmin,halo_tmin,lambda
 
   CALL getarg(1,infile)
   open(1,file=infile)
@@ -78,7 +78,7 @@ subroutine condinit(r,g,x,u,dx,nn)
   !================================================================
   integer::ivar,i
   real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
-  real(dp)::xx,yy,zz,rc,rr,v,xc,yc,zc,eps,rho,rrmin,rmax,rrmax,tol,c,minP
+  real(dp)::xx,yy,zz,rc,rr,v,xc,yc,zc,eps,rho,rrmin,rmax,rrmax,tol,c,pmin
   real(dp)::fc,PI,IN,factor,Mr,v200,Hub,M200,dmin,fb,zhalo,r200,rs,hsmall
   real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,rhos,rhocrit
   real(dp)::j_max
@@ -98,25 +98,24 @@ subroutine condinit(r,g,x,u,dx,nn)
   Hub = hsmall*100.0d0/1.0d3 ! [km/s/kpc]
   rhocrit = 3.0*Hub**2/8.0d0/pi ! in the internal 2.3262e5 Msun/kpc^3 as G=1
 
-  dmin = halo_dmin/scale_nH
-  minP = halo_pmin*dmin/scale_T
+  dmin = halo_nmin/scale_nH
+  pmin = dmin*halo_tmin/scale_T2
 
   ! Halo parameters from namelist
   eps = halo_eps ! small like 10 pc
-  xc = halo_center(1)
-  yc = halo_center(2)
-  zc = halo_center(3)  ! center of box
-  M200 = mass_200  ! in [Msun]
+  xc = halo_center(1)+r%boxlen/2
+  yc = halo_center(2)+r%boxlen/2
+  zc = halo_center(3)+r%boxlen/2
+  v200 = v_200 ! in [km/s]
+  r200 = v200/hsmall ! in [kpc]
+  M200 = (r200*hsmall/1.63d-2)**3/hsmall ! in [Msun]
   c = concentration ! concentration
-  j_max = halo_jmax  ! lambda
+  j_max = lambda*v200*r200  ! lambda -> specific ang. mom.
   fb = baryon_fraction ! baryon fraction
-  
-  r200 = (1.63d-2*(M200*hsmall)**(0.3333))/hsmall ! Navarro (1997), in [kpc] (not [kpc/h] !)
-  v200 = r200*hsmall ! in [km/s]
   rs = r200/c
   eps = eps/rs
 
-  M200 = M200/2.33d5 ! internal units
+  M200 = M200/2.3262d5 ! internal units
   tol = 1.0d-6
   rmax = 2.*r200/rs ! in units of rs
   rhos = rhocrit*200./3.0*c*c*c/(log(1d0+c)-c/(1d0+c))
@@ -144,7 +143,7 @@ subroutine condinit(r,g,x,u,dx,nn)
      rrmax = log(rmax)
 
      q(i,ndim+2) = romberg(rrmin,rrmax,tol)
-     q(i,ndim+2) = max(q(i,ndim+2),minP)
+     q(i,ndim+2) = max(q(i,ndim+2),pmin)
 
   enddo
 
