@@ -279,15 +279,6 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         ! End loop over cells
      end do
      ! End loop over grids
-     if(r%pic_lock_refine)then
-        ! Loop over grids
-        do igrid=m%head(ilevel),m%tail(ilevel)
-           ! Loop over cells
-           do ind=1,twotondim
-              m%grid(igrid)%uold(ind,r%ivar_refine)=real(ilevel,kind=dp)
-           end do
-        end do
-     endif
   end if
 #endif
 #endif

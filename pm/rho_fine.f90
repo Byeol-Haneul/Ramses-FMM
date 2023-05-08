@@ -747,14 +747,8 @@ subroutine cic_multipole(s,ilevel)
 #ifdef HYDRO
               if(r%ivar_refine>0)then
                  mask=m%grid(igrid)%uold(ind,r%ivar_refine)/m%grid(igrid)%uold(ind,1)
-                 if(r%pic_lock_refine)then
-                    if(mask.ge.real(ilevel+1,kind=dp).or.ilevel<=g%nlevelmax_part+3)then
-!                       gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
-                    endif
-                 else
-                    if(mask.gt.r%var_cut_refine)then
-                       gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
-                    endif
+                 if(mask.gt.r%var_cut_refine)then
+                    gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph
                  endif
               else
                  gridp%nref(icell)=gridp%nref(icell)+mmm*vol(inbor)/r%mass_sph

@@ -176,16 +176,6 @@ subroutine set_uold(r,g,m,ilevel)
   do i=m%head(ilevel),m%tail(ilevel)
      m%grid(i)%uold=m%grid(i)%unew
   end do
-
-  if(r%pic_lock_refine)then
-     if(r%ivar_refine>0)then
-        do ind=1,twotondim
-           do i=m%head(ilevel),m%tail(ilevel)
-              m%grid(i)%uold(ind,r%ivar_refine)=MAX(m%grid(i)%unew(ind,r%ivar_refine),m%grid(i)%unew(ind,1)*real(ilevel,kind=dp))
-           end do
-        end do
-     endif
-  endif
 #endif
 
 end subroutine set_uold
