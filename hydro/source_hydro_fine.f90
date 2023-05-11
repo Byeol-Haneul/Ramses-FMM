@@ -71,13 +71,24 @@ subroutine source_hydro_fine(s,ilevel)
   type(msg_realdp)::dummy_realdp
   real(dp)::dx,phi_diss,div,divu
   real(dp)::d,u,v,w,d_old,sigma
-  real(dp)::e_kin,e_cons,e_prim,e_turb,e_trunc
+  real(dp)::e_kin,e_cons,e_prim,e_turb,e_trunc,T2_cons,T2_fix
+  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
 
 #ifdef HYDRO
 
   associate(r=>s%r,g=>s%g,m=>s%m)    
 
   if(r%verbose.and.g%myid==1)write(*,'("   Entering source_hydro_fine for level ",I2)')ilevel
+
+  ! Conversion factor from user units to cgs units
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+
+  ! Maximum temperature for dual energy switch
+  if(r%T2_fix>0)then
+     T2_fix=r%T2_fix/scale_T2
+  else
+     T2_fix=1d100
+  endif
 
   hash_key(0)=ilevel+1
   dx=r%boxlen/2**ilevel
@@ -164,10 +175,11 @@ subroutine source_hydro_fine(s,ilevel)
            end do
 #endif
            e_cons=m%grid(igrid)%unew(ind,ndim+2)-e_kin
+           T2_cons=(r%gamma-1)*e_cons/d
            e_prim=m%grid(igrid)%unew(ind,r%ientropy)*d**(r%gamma-1.0)/(r%gamma-1.0)
            div=abs(divu)*dx
            e_trunc=r%dual_energy*d*max(abs(divu)*dx,3.0d0*g%hexp*dx)**2
-           if(e_cons<e_trunc)then
+           if(e_cons<e_trunc.AND.T2_cons<T2_fix)then
               m%grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin
            else
               m%grid(igrid)%unew(ind,r%ientropy)=e_cons/d**(r%gamma-1.0)*(r%gamma-1.0)

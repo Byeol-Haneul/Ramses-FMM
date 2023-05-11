@@ -97,6 +97,7 @@ module amr_commons
      logical ::entropy=.false.
      logical ::turb=.false.
      real(dp)::dual_energy=-1
+     real(dp)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'
      integer::riemann=1
      real(dp),dimension(1:3)::constant_gravity

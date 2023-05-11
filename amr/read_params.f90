@@ -189,6 +189,7 @@ subroutine m_read_params(pst)
   logical ::entropy=.false.
   logical ::turb=.false.
   real(dp)::dual_energy=-1
+  real(dp)::T2_fix=0d0
   real(dp),dimension(1:3)::constant_gravity=0.0d0
 
   ! Non-thernal energies and passive scalars index
@@ -296,7 +297,7 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,niter_riemann,slope_type,difmag,gamma_rad &
-       & ,dual_energy,entropy,turb,scheme,riemann,constant_gravity
+       & ,dual_energy,T2_fix,entropy,turb,scheme,riemann,constant_gravity
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
@@ -697,6 +698,7 @@ subroutine m_read_params(pst)
   s%r%difmag=difmag
   s%r%gamma_rad=gamma_rad(1:nener)
   s%r%dual_energy=dual_energy
+  s%r%T2_fix=T2_fix
   s%r%entropy=entropy
   s%r%turb=turb
   s%r%inener=inener
