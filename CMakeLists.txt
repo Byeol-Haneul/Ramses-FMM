@@ -3,7 +3,7 @@ cmake_policy(VERSION 3.5...3.14)
 
 include(CMakePrintHelpers)
 
-project(ramses3d LANGUAGES Fortran CXX)
+project(ramses LANGUAGES Fortran CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Release build with debug info selected")
@@ -27,19 +27,19 @@ else()
 endif()
 
 set(NVECTOR 32)
-set(NDIM 3)
+set(NDIM 1 CACHE STRING "Set the number of dimensions")
 set(NHILBERT 1)
 set(NPRE 8)
 set(NVAR 5)
 set(NENER 0)
 set(SOLVER hydro)
-set(UNITS coeur CACHE STRING "Set the unit system")
-set(CONDINIT coeur CACHE STRING "Set the initial conditions")
+set(UNITS default CACHE STRING "Set the unit system")
+set(CONDINIT default CACHE STRING "Set the initial conditions")
 set(EXEC ramses)
-set(GRAV true CACHE BOOL "Activate gravity solver")
+set(GRAV false CACHE BOOL "Activate gravity solver")
 set(HYDRO true CACHE BOOL "Activate hydro solver")
 
-cmake_print_variables(UNITS CONDINIT GRAV HYDRO)
+cmake_print_variables(NDIM NVAR UNITS CONDINIT GRAV HYDRO)
 
 add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT})
 
@@ -117,7 +117,9 @@ set(fortran_files
   amr/call_back.f90
   amr/cache_commons.f90
   pm/gadgetreadfile.f90
+  amr/rngstream.f90
   
+  hydro/boundana.f90
   hydro/init_hydro.f90
   hydro/init_flow_fine.f90
   hydro/input_hydro_condinit.f90
@@ -133,7 +135,7 @@ set(fortran_files
   hydro/uplmde.f90
   hydro/output_hydro.f90
   hydro/synchro_hydro_fine.f90
-  hydro/cooling_fine.f90
+  hydro/source_hydro_fine.f90
   
   pm/newdt_fine.f90
   pm/init_part.f90
@@ -141,6 +143,7 @@ set(fortran_files
   pm/input_part_restart.f90
   pm/input_part_ascii.f90
   pm/input_part_grafic.f90
+  pm/input_part_zoom.f90
   pm/rho_fine.f90
   pm/move_fine.f90
   poisson/rho_ana.f90
@@ -154,6 +157,15 @@ set(fortran_files
   poisson/poisson_flag.f90
   poisson/multigrid_fine_commons.f90
   poisson/multigrid_fine_coarse.f90
+
+  cooling/constants.f90
+  cooling/cooling_fine.f90
+  cooling/cooling_module.f90
+  cooling/cooling_module_ism.f90
+  cooling/init_cooling.f90
+
+  star/star_formation.f90
+  feedback/feedback.f90
   
   ${CMAKE_BINARY_DIR}/write_gitinfo.f90
   ${CMAKE_BINARY_DIR}/write_makefile.f90
