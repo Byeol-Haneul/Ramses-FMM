@@ -1,4 +1,6 @@
-This namelist contains various input parameters for RAMSES runs
+This namelist contains input parameters for the 1D blastwave test.
+Compile the cide using:
+> make NDIM=1 MPI=0 HYDRO=1 GRAV=0 UNITS=default CONDINIT=default
 
 &RUN_PARAMS 
 hydro=.true.
