@@ -23,51 +23,7 @@ print(path)
 
 
 c=ram.rd_cell(nout,path=path)
-
-#vmin = kwargs.get("vmin",None)
-#vmax = kwargs.get("vmax",None)
-#sort = kwargs.get("sort",None)
-
-x=c.x[0]
-y=c.x[1]
-v=c.u[0]
-dx=c.dx
-
-xmin=np.min(x-dx/2)
-xmax=np.max(x+dx/2)
-ymin=np.min(y-dx/2)
-ymax=np.max(y+dx/2)
-
-if args.log:
-    v = np.log10(abs(v))
-
-vmin=np.min(v)
-vmax=np.max(v)
-
-print("min=",vmin," max=",vmax)
-
-plt.rcParams['figure.dpi'] = 58
-plt.rcParams.update({'font.size': 22})
-
-px = 1/plt.rcParams['figure.dpi']
-
-fig, ax = plt.subplots(figsize=(1000*px,1000*px))
-ax.set_aspect("equal")
-#plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9)
-ax.set_xlim([xmin,xmax])
-ax.set_ylim([ymin,ymax])
-plt.scatter(x,y,s=0.00001)
-print(xmin,xmax,ymin,ymax)
-rescale=np.maximum(xmax-xmin,ymax-ymin)
-plt.scatter(x,y,c=v,s=(dx*1000/rescale)**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
-
-#if args.log:
-#    plt.colorbar(shrink=0.8,label="log density",location="bottom")
-#else:
-#    plt.colorbar(shrink=0.8,label="density",location="bottom")
-
-plt.xlabel("x")
-plt.ylabel("y")
+ram.visu(c.x[0],c.x[1],c.dx,c.u[0],sort=c.u[0],log=True)
 
 if args.out:
     plt.savefig(args.out)
