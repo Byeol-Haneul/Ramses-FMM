@@ -309,6 +309,9 @@ def rd_part(nout,**kwargs):
         p.mp = p.mp[r < radius]
         p.xp = p.xp[:,r < radius]
         p.vp = p.vp[:,r < radius]
+        if(star):
+            p.zp = p.zp[r < radius]
+            p.tp = p.tp[r < radius]
 
     return p
 
