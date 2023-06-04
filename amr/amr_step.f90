@@ -27,13 +27,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
   use movie_module, only: m_output_frame
   use star_formation_module, only: out_star_formation_t, r_star_formation
-  use feedback_module, only: out_feedback_t, r_feedback
+  use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
 
   implicit none
 
   type(pst_t)::pst
   integer::ilevel,icount
-  logical::done
+  logical::done,ok_fbk
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
@@ -42,6 +42,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   type(in_broadcast_dt_t)::in_broadcast_dt
   type(out_star_formation_t)::output_star
   type(out_feedback_t)::output_fbk
+  real(kind=8) :: mass_fbk
   real(kind=8) :: tcurr=0
   real(kind=8), save :: tprev=0.
   real(kind=8), external :: wallclock
@@ -51,6 +52,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering amr_step",i1," for level",i2)')icount,ilevel
+  g%isubcycle(ilevel)=icount ! only in master 
 
   !------------------------------
   ! Make new refinements and load
@@ -202,16 +204,38 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   end if
   if (done)return
 
-  !-----------
-  ! Feedback
-  !-----------
-  if(r%star.and.r%eta_SN>0)then
+  !------------------
+  ! Thermal feedback
+  !------------------
+  if(r%star.and.r%eta_SNII>0.and.r%thermal_feedback)then
                                     call m_timer(pst,'star - feedback','start')
-     call r_feedback(pst,ilevel,1,output_fbk,2)
+     call r_thermal_feedback(pst,ilevel,1,output_fbk,2)
      if(output_fbk%mass>0)then
         g%mass_star_tot=g%mass_star_tot-output_fbk%mass
      endif
   endif
+
+  !---------------------
+  ! Mechanical feedback
+  !---------------------
+  if(r%star.and.r%eta_SNII>0.and.r%mechanical_feedback)then
+     ok_fbk=.false.
+     if(ilevel==r%nlevelmax)then
+        ok_fbk=.true.
+     else
+        if(m%noct_tot(ilevel+1)==0)then
+           ok_fbk=.true.
+        endif
+     end if
+     if(ok_fbk)then
+                                    call m_timer(pst,'star - feedback','start')
+        call m_mechanical_feedback(pst,ilevel,mass_fbk)           
+        if(mass_fbk>0)then
+           g%mass_star_tot=g%mass_star_tot-mass_fbk
+        endif
+     endif
+  endif
+
   !-----------
   ! Hydro step
   !-----------

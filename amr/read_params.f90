@@ -254,11 +254,14 @@ subroutine m_read_params(pst)
   real(dp)::m_star=1
 
   ! Supernovae feedback parameters
-  real(dp)::e_SN=1d51
-  real(dp)::t_SN=20.
-  real(dp)::eta_SN=0.0 ! No feedback
-  real(dp)::yield_SN=0.1
-
+  real(dp)::M_SNII=10.
+  real(dp)::E_SNII=1d51
+  real(dp)::t_SNII=20.
+  real(dp)::eta_SNII=0.1
+  real(dp)::yield_SNII=0.1
+  logical::thermal_feedback=.false.
+  logical::mechanical_feedback=.false.
+  
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
@@ -330,7 +333,7 @@ subroutine m_read_params(pst)
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
-  namelist/feedback_params/e_SN,t_SN,eta_SN,yield_SN
+  namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
 
   associate(s=>pst%s)
 
@@ -822,10 +825,13 @@ subroutine m_read_params(pst)
   s%r%seed=seed
   s%r%m_star=m_star
 
-  s%r%e_SN=e_SN
-  s%r%t_SN=t_SN
-  s%r%eta_SN=eta_SN
-  s%r%yield_SN=yield_SN
+  s%r%M_SNII=M_SNII
+  s%r%E_SNII=E_SNII
+  s%r%t_SNII=t_SNII
+  s%r%eta_SNII=eta_SNII
+  s%r%yield_SNII=yield_SNII
+  s%r%thermal_feedback=thermal_feedback
+  s%r%mechanical_feedback=mechanical_feedback
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)

@@ -220,11 +220,14 @@ module amr_commons
      real(dp)::m_star=1
 
      ! Supernovae feedback parameters
-     real(dp)::e_SN=1d51
-     real(dp)::t_SN=20.
-     real(dp)::eta_SN=0.0 ! No feedback
-     real(dp)::yield_SN=0.1
-
+     real(dp)::M_SNII=10.
+     real(dp)::E_SNII=1d51
+     real(dp)::t_SNII=20.
+     real(dp)::eta_SNII=0.1
+     real(dp)::yield_SNII=0.1
+     logical::thermal_feedback=.false.
+     logical::mechanical_feedback=.false.
+     
   end type run_t
   
   type global_t
@@ -260,6 +263,7 @@ module amr_commons
      ! Level related arrays
      real(dp),dimension(1:MAXLEVEL)::dtold,dtnew ! Time step at each level
      real(dp),dimension(1:MAXLEVEL)::rho_max     ! Maximum density at each level
+     integer,dimension(1:MAXLEVEL)::isubcycle    ! Current subcycling step at each level
 
      ! Only one process can write at a time in an I/O group
      integer::IOGROUPSIZE=0           ! Main snapshot

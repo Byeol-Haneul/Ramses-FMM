@@ -47,7 +47,8 @@ epsilon=1.d-4
 gamma=1.6666667
 courant_factor=0.8
 slope_type=1
-dual_energy=0.01
+T2_fix=1d4
+dual_energy=0.2
 entropy=.true.
 scheme='muscl'
 riemann='hllc'
@@ -71,7 +72,7 @@ m_star=1
 /
 
 &FEEDBACK_PARAMS
-eta_SN=0.1
+thermal_feedback=.true.
 /
 
 &REFINE_PARAMS

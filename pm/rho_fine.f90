@@ -854,7 +854,6 @@ subroutine cic_part(s,p,ilevel)
   ix=0
   call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
-
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
