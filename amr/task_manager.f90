@@ -283,7 +283,7 @@ end function worker_init
 subroutine worker_done(mdl,pst)
   type(mdl_t)::mdl
   type(pst_t),allocatable::pst
-  ! FIXME: These should be deallocatable, but they aren't ???
+  ! FIXME: These should be deallocatable, but they are not ???
   !deallocate(pst%s)
   !deallocate(pst)
 end subroutine worker_done
