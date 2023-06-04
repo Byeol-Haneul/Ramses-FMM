@@ -207,7 +207,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !------------------
   ! Thermal feedback
   !------------------
-  if(r%star.and.r%eta_SNII>0.and.r%thermal_feedback)then
+  if(r%star.and.r%thermal_feedback)then
                                     call m_timer(pst,'star - feedback','start')
      call r_thermal_feedback(pst,ilevel,1,output_fbk,2)
      if(output_fbk%mass>0)then
@@ -218,7 +218,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !---------------------
   ! Mechanical feedback
   !---------------------
-  if(r%star.and.r%eta_SNII>0.and.r%mechanical_feedback)then
+  if(r%star.and.r%mechanical_feedback)then
      ok_fbk=.false.
      if(ilevel==r%nlevelmax)then
         ok_fbk=.true.

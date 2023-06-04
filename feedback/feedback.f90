@@ -282,7 +282,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   ! This is the RAMSES routine for supernovae feedback using
   ! only mechanical energy, no thermal energy.
   ! The routine is called every other time step and modify hydro variables unew.
-  ! Written by Taysun Kim (mini-ramses version in June 2023).
+  ! Written by Taysun Kimm (mini-ramses version in June 2023).
   !==================================================================
   ! Parameters
   ! Number of neighboring cells to deposit mass/momentum/energy
