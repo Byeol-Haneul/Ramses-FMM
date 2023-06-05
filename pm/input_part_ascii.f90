@@ -65,6 +65,7 @@ subroutine m_input_part_ascii(pst)
            read(10,*,end=102)xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
            if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
               nstar_tot=nstar_tot+1
+              s%g%mass_star_tot=s%g%mass_star_tot+mm1
            endif
         end do
 102     continue
@@ -78,8 +79,8 @@ subroutine m_input_part_ascii(pst)
      ! If no particle found, no need to read
      if(s%s%npart_tot>0)then
         ! Call recursive slave routine
-        allocate(input_array(1:storage_size(npart_tot)/32))
-        input_array=transfer(npart_tot,input_array)
+        allocate(input_array(1:storage_size(nstar_tot)/32))
+        input_array=transfer(nstar_tot,input_array)
         call r_input_star_ascii(pst,input_array,2)
         deallocate(input_array)
      endif
@@ -143,7 +144,7 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   integer::jpart_loc
   integer::i,ilun,icpu
   integer(kind=8)::indglob
-  integer(kind=8)::jpart
+  integer(kind=8)::jpart,npart,nremain
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   character(LEN=80)::filename
@@ -152,8 +153,15 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   ! Compute starting index for each cpu
   !--------------------------------------
   p%npart_tot=npart_tot
-  do icpu=1,g%ncpu+1
-     start_ind(icpu)=1+((icpu-1)*npart_tot)/g%ncpu
+  npart=npart_tot/g%ncpu
+  nremain=npart_tot-int(npart,kind=8)*g%ncpu
+  start_ind(1)=1
+  do icpu=1,g%ncpu
+     if(icpu.LE.nremain)then
+        start_ind(icpu+1)=start_ind(icpu)+npart+1
+     else
+        start_ind(icpu+1)=start_ind(icpu)+npart
+     endif
   end do
 
   !--------------------------------------
@@ -254,7 +262,7 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   integer::jpart_loc
   integer::i,ilun,icpu
   integer(kind=8)::indglob
-  integer(kind=8)::jpart
+  integer(kind=8)::jpart,npart,nremain
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind
   real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
   character(LEN=80)::filename
@@ -263,10 +271,17 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   ! Compute starting index for each cpu
   !--------------------------------------
   p%npart_tot=npart_tot
-  do icpu=1,g%ncpu+1
-     start_ind(icpu)=1+((icpu-1)*npart_tot)/g%ncpu
+  npart=npart_tot/g%ncpu
+  nremain=npart_tot-int(npart,kind=8)*g%ncpu
+  start_ind(1)=1
+  do icpu=1,g%ncpu
+     if(icpu.LE.nremain)then
+        start_ind(icpu+1)=start_ind(icpu)+npart+1
+     else
+        start_ind(icpu+1)=start_ind(icpu)+npart
+     endif
   end do
-
+  
   !--------------------------------------
   ! Read ASCII initial conditions file
   !--------------------------------------  
@@ -282,9 +297,9 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
         indglob=indglob+1
         if(jpart >= start_ind(g%myid) .and. jpart < start_ind(g%myid+1))then
            jpart_loc=jpart_loc+1
-           if(jpart_loc>r%npartmax)then
-              write(*,*)'Maximum number of particles incorrect'
-              write(*,*)'npartmax should be greater than',start_ind(2)
+           if(jpart_loc>r%nstarmax)then
+              write(*,*)'Maximum number of star particles incorrect'
+              write(*,*)'nstarmax should be greater than',start_ind(2)
               call mdl_abort(mdl)
            endif
            p%xp(jpart_loc,1)=xx1+r%boxlen/2.0

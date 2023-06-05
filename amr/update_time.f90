@@ -42,6 +42,9 @@ subroutine m_update_time(pst,ilevel,done)
      !--------------------------
      if(g%mass_tot_0==0.0D0)then
         g%mass_tot_0=g%mass_tot
+        if(r%star)then
+           g%mass_tot_0=g%mass_tot+g%mass_star_tot
+        endif
         mcons=0.0D0
      else
         mcons=(g%mass_tot-g%mass_tot_0)/g%mass_tot_0
@@ -90,7 +93,7 @@ subroutine m_update_time(pst,ilevel,done)
         else
            write(*,777)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot
         end if
-        if(r%star)write(*,'("Total mass in stars=",1PE14.7)')g%mass_star_tot
+        if(r%star)write(*,'(" Total mass in stars=",1PE14.7)')g%mass_star_tot
 777     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2)
 778     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2)
 

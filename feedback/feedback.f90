@@ -310,7 +310,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   real(dp)::f_LOAD,f_CANCEL,f_ESN
   integer,dimension(1:ndim)::ckey,ckey_ref,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  integer::i,j,k,ipart,icell,icelln,ind,idim,ivar,ipart_ref
+  integer::i,j,k,ipart,icellp,icelln,ind,idim,ivar,ipart_ref
   integer,dimension(1:ndim)::ix
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc
@@ -427,7 +427,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      if(ipart==0)cycle ! duplicate
 
      ! Set pointers to null
-     icell=0
+     icellp=0; icelln=0
      nullify(gridp)
      nullify(gridn)
      do j=1,nSNnei
@@ -441,7 +441,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      ! Get parent cell at level ilevel using cache
      hash_cell(0)=ilevel+1
      hash_cell(1:ndim)=ckey(1:ndim)
-     call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+     call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
 
      ok_level = associated(gridp)
      if(.not. ok_level)then
@@ -450,7 +450,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         stop
      endif
 
-     ok_leaf = .not. gridp%refined(icell)
+     ok_leaf = .not. gridp%refined(icellp)
      if(.not. ok_leaf)then
         write(*,*)"Something went wrong in mechanical_feedback"
         write(*,*)"Current level cell should be a leaf cell..."
@@ -469,15 +469,15 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      num_sn=mejecta/m_SN
 
      ! Compute central cell properties
-     d=max(gridp%uold(icell,1),r%smallr)
-     u=gridp%uold(icell,2)/d
-     v=gridp%uold(icell,3)/d
-     w=gridp%uold(icell,4)/d
-     e=gridp%uold(icell,5)
+     d=max(gridp%uold(icellp,1),r%smallr)
+     u=gridp%uold(icellp,2)/d
+     v=gridp%uold(icellp,3)/d
+     w=gridp%uold(icellp,4)/d
+     e=gridp%uold(icellp,5)
      ekk=0.5*d*(u**2+v**2+w**2)
      eth=e-ekk
      T2=eth/d*scale_T2*(r%gamma-1)
-     if(r%metal)z=gridp%uold(icell,r%imetal)/d
+     if(r%metal)z=gridp%uold(icellp,r%imetal)/d
 
      ! Collect all neighboring cell from hash table
      do j=1,nSNnei
@@ -486,15 +486,15 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         xnei(1:ndim)=xcen(1:ndim)+xSNnei(1:ndim,j)
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(xnei(idim)<   0.0d0 )xnei(idim)=xnei(idim)+r%boxlen
-           if(xnei(idim)>=r%boxlen)xnei(idim)=xnei(idim)-r%boxlen
+           if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
+           if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
         end do
 
         ! Get neighboring cell at ilevel
         ckey_nbor(1:ndim)=int(xnei(1:ndim))
         hash_nbor(0)=ilevel+1
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
 
         ! If missing, get neighboring cell at ilevel-1
         if(.not.associated(gridn))then
@@ -502,7 +502,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
            ckey_nbor(1:ndim)=int(2*xnei(1:ndim))
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_cell,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
 
         ! If refined, get neighboring cell at ilevel+1
         else if (gridn%refined(icelln))then
@@ -510,29 +510,30 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0d0)
            hash_nbor(0)=ilevel+2
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_cell,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
         endif
 
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln
         level_nbor(j) = hash_nbor(0)-1
+
      end do
 
      ! Update unew in central cell
-     gridp%unew(icell,1)=gridp%unew(icell,1)+dloss-(dloss+d)*f_LOAD
-     gridp%unew(icell,2)=gridp%unew(icell,2)+dloss*up-(dloss*up+d*u)*f_LOAD
-     gridp%unew(icell,3)=gridp%unew(icell,3)+dloss*vp-(dloss*vp+d*v)*f_LOAD
-     gridp%unew(icell,4)=gridp%unew(icell,4)+dloss*wp-(dloss*wp+d*w)*f_LOAD
-     gridp%unew(icell,5)=gridp%unew(icell,5)+ekloss-(ekloss+ekk+eth)*f_LOAD
+     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss-(dloss+d)*f_LOAD
+     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*up-(dloss*up+d*u)*f_LOAD
+     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*vp-(dloss*vp+d*v)*f_LOAD
+     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*wp-(dloss*wp+d*w)*f_LOAD
+     gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekloss-(ekloss+ekk+eth)*f_LOAD
 
      ! Update metals
-     if(r%metal)gridp%unew(icell,r%imetal)=gridp%unew(icell,r%imetal)+dzloss-(dzloss+d*z)*f_LOAD
+     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss-(dzloss+d*z)*f_LOAD
 
      ! Update passive scalars so that they don't change
      do ivar=6,nvar
         if(r%metal.and.ivar==r%imetal)cycle
-        q(ivar)=gridp%uold(icell,ivar)/max(gridp%uold(icell,1),r%smallr)
-        gridp%unew(icell,ivar)=gridp%unew(icell,ivar)+(dloss-(dloss+d)*f_LOAD)*q(ivar)
+        q(ivar)=gridp%uold(icellp,ivar)/max(gridp%uold(icellp,1),r%smallr)
+        gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-(dloss+d)*f_LOAD)*q(ivar)
      end do
 
      ! Update conservative variables in neighboring cells
@@ -544,13 +545,13 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
 
         ! Gather neighboring grid
         gridn => grid_nbor(j)%p
-        icell = icell_nbor(j)
+        icelln = icell_nbor(j)
 
         ! Neighboring cell properties
         vol_nei = dble(twotondim)**(ilevel-level_nbor(j))
         Z_nei = r%z_ave*0.02
-        d_nei = max(gridn%uold(icell,1),r%smallr)
-        if(r%metal) Z_nei = gridn%uold(icell,r%imetal)/d_nei
+        d_nei = max(gridn%uold(icelln,1),r%smallr)
+        if(r%metal) Z_nei = gridn%uold(icelln,r%imetal)/d_nei
 
         ! Compute actual mass ratio
         f_w_cell = (dm_load+d_nei/8d0)/dm_ejecta - 1d0
@@ -577,32 +578,31 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         p_solid = (1d0+f_w_cell)*dm_ejecta*vload
         ek_solid = p_solid*(vload*f_LOAD)/2d0
 
-        if(level_nbor(j).NE.ilevel)then
-           write(*,'(3(I3,1X),10(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),num_sn,nH_nei,f_w_cell,f_w_crit,p_solid
-        endif
+!        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),xcen(1:ndim)+xSNnei(1:ndim,j),dble(gridn%ckey(1:ndim)),dble(icelln),num_sn,nH_nei,f_w_cell,f_w_crit,p_solid
+!        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),vSNnei(1:ndim,j),num_sn,nH_nei,Z_nei,f_w_cell,f_w_crit,p_solid
         
         ! Add mass, momentum and energy coming from central cell loading
-        gridn%unew(icell,1)=gridn%unew(icell,1)+(dloss+d)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icell,2)=gridn%unew(icell,2)+(dloss*up+d*u)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icell,3)=gridn%unew(icell,3)+(dloss*vp+d*v)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icell,4)=gridn%unew(icell,4)+(dloss*wp+d*w)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icell,5)=gridn%unew(icell,5)+(ekloss+ekk+eth)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,1)=gridn%unew(icelln,1)+(dloss+d)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,2)=gridn%unew(icelln,2)+(dloss*up+d*u)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,3)=gridn%unew(icelln,3)+(dloss*vp+d*v)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,4)=gridn%unew(icelln,4)+(dloss*wp+d*w)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,5)=gridn%unew(icelln,5)+(ekloss+ekk+eth)*f_LOAD/dble(nSNnei)/vol_nei
 
         ! Add metals
         if(r%metal)then
-           gridn%unew(icell,r%imetal)=gridn%unew(icell,r%imetal)+(dzloss+d*z)*f_LOAD/dble(nSNnei)/vol_nei
+           gridn%unew(icelln,r%imetal)=gridn%unew(icelln,r%imetal)+(dzloss+d*z)*f_LOAD/dble(nSNnei)/vol_nei
         endif
 
         ! Add momentum and energy coming from the cold shell
-        gridn%unew(icell,2)=gridn%unew(icell,2)+p_solid*vSNnei(1,j)/vol_nei
-        gridn%unew(icell,3)=gridn%unew(icell,3)+p_solid*vSNnei(2,j)/vol_nei
-        gridn%unew(icell,4)=gridn%unew(icell,4)+p_solid*vSNnei(3,j)/vol_nei
-        gridn%unew(icell,5)=gridn%unew(icell,5)+ek_solid/vol_nei
+        gridn%unew(icelln,2)=gridn%unew(icelln,2)+p_solid*vSNnei(1,j)/vol_nei
+        gridn%unew(icelln,3)=gridn%unew(icelln,3)+p_solid*vSNnei(2,j)/vol_nei
+        gridn%unew(icelln,4)=gridn%unew(icelln,4)+p_solid*vSNnei(3,j)/vol_nei
+        gridn%unew(icelln,5)=gridn%unew(icelln,5)+ek_solid/vol_nei
 
         ! Update passive scalars coming from central cell loading
         do ivar=6,nvar
            if(r%metal.and.ivar==r%imetal)cycle
-           gridn%unew(icell,ivar)=gridn%unew(icell,ivar)+(dloss+d)*q(ivar)*f_LOAD/dble(nSNnei)/vol_nei
+           gridn%unew(icelln,ivar)=gridn%unew(icelln,ivar)+(dloss+d)*q(ivar)*f_LOAD/dble(nSNnei)/vol_nei
         end do
 
      end do
@@ -614,8 +614,6 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         gridn => grid_nbor(j)%p
         call unlock_cache(s,gridn)
      end do
-
-     !     write(*,'("feedback ",6(1PE13.6,1X))')g%texp,dteff,birth_time,(dold+mloss)*scale_nH,ethermal/(dold+mloss)*scale_v**2/1.38d-16*1.66d-24,gridp%uold(icell,5)/dold*scale_v**2/1.38d-16*1.66d-24
 
   end do
   ! End loop over SN cells
@@ -683,9 +681,13 @@ subroutine collect_sn(s,p,sn,ilevel,msn_loc)
 
   ! Last time step
   if (ilevel==r%levelmin)then
-     dteff = g%dtold(ilevel)
+     dteff = g%dtnew(ilevel)
   else
-     dteff = g%dtold(ilevel-1)
+     if(r%nsubcycle(ilevel-1)==1)then
+        dteff = g%dtnew(ilevel)
+     else
+        dteff = g%dtnew(ilevel)+g%dtold(ilevel)
+     endif
   endif
 
   ! Select only recently formed stars
