@@ -375,7 +375,8 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
 
   ! First collect supernovae stars into the current grid CPU domain 
   call collect_sn(s,p,sn,ilevel,msn_loc)
-
+  if(sn%npart>0)write(*,*)g%myid,' found ',sn%npart,' supernovae'
+  
   ! Sort supernovae stars according to their cell Hilbert key
   if(sn%npart>0)allocate(sn%sortp(1:sn%npart),sn%workp(1:sn%npart))
   do i=1,sn%npart
@@ -400,6 +401,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
            sn%zp(ipart_ref)=sn%zp(ipart_ref)+sn%zp(ipart)
            sn%vp(ipart_ref,1:ndim)=sn%vp(ipart_ref,1:ndim)+sn%vp(ipart,1:ndim)
            sn%sortp(i)=0
+           write(*,*)g%myid,' found duplicate'
         else
            ckey_ref=ckey
            ipart_ref=ipart
@@ -499,7 +501,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ! If missing, get neighboring cell at ilevel-1
         if(.not.associated(gridn))then
            call unlock_cache(s,gridn)
-           ckey_nbor(1:ndim)=int(2*xnei(1:ndim))
+           ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
@@ -507,7 +509,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ! If refined, get neighboring cell at ilevel+1
         else if (gridn%refined(icelln))then
            call unlock_cache(s,gridn)
-           ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0d0)
+           ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
            hash_nbor(0)=ilevel+2
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
@@ -520,25 +522,27 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      end do
 
      ! Update unew in central cell
-     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss-(dloss+d)*f_LOAD
-     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*up-(dloss*up+d*u)*f_LOAD
-     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*vp-(dloss*vp+d*v)*f_LOAD
-     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*wp-(dloss*wp+d*w)*f_LOAD
-     gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekloss-(ekloss+ekk+eth)*f_LOAD
+     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss-(dloss+d*0.)*f_LOAD
+     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*up-(dloss*up+d*u*0.)*f_LOAD
+     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*vp-(dloss*vp+d*v*0.)*f_LOAD
+     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*wp-(dloss*wp+d*w*0.)*f_LOAD
+     gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekloss-(ekloss+ekk*0.+eth*0.)*f_LOAD
 
      ! Update metals
-     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss-(dzloss+d*z)*f_LOAD
+     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss-(dzloss+d*z*0.)*f_LOAD
 
      ! Update passive scalars so that they don't change
      do ivar=6,nvar
         if(r%metal.and.ivar==r%imetal)cycle
         q(ivar)=gridp%uold(icellp,ivar)/max(gridp%uold(icellp,1),r%smallr)
-        gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-(dloss+d)*f_LOAD)*q(ivar)
+        gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-(dloss+d*0.)*f_LOAD)*q(ivar)
      end do
 
+     write(*,'(2(I3,1X),15(1PE14.7,1X))')g%myid,ilevel,xcen(1:3),num_sn,d,gridp%unew(icellp,1),d*scale_nH,dloss,f_LOAD
+     
      ! Update conservative variables in neighboring cells
      dm_ejecta = dloss*f_LOAD/dble(nSNnei)
-     dm_load = dm_ejecta + d*f_LOAD/dble(nSNnei)
+     dm_load = dm_ejecta + d*0.*f_LOAD/dble(nSNnei)
 
      ! Loop over solid angles
      do j=1,nSNnei
@@ -579,18 +583,18 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ek_solid = p_solid*(vload*f_LOAD)/2d0
 
 !        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),xcen(1:ndim)+xSNnei(1:ndim,j),dble(gridn%ckey(1:ndim)),dble(icelln),num_sn,nH_nei,f_w_cell,f_w_crit,p_solid
-!        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),vSNnei(1:ndim,j),num_sn,nH_nei,Z_nei,f_w_cell,f_w_crit,p_solid
+        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),vSNnei(1:ndim,j),num_sn,nH_nei,Z_nei,f_w_cell,f_w_crit,p_solid
         
         ! Add mass, momentum and energy coming from central cell loading
-        gridn%unew(icelln,1)=gridn%unew(icelln,1)+(dloss+d)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,2)=gridn%unew(icelln,2)+(dloss*up+d*u)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,3)=gridn%unew(icelln,3)+(dloss*vp+d*v)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,4)=gridn%unew(icelln,4)+(dloss*wp+d*w)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,5)=gridn%unew(icelln,5)+(ekloss+ekk+eth)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,1)=gridn%unew(icelln,1)+(dloss+d*0.)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,2)=gridn%unew(icelln,2)+(dloss*up+d*u*0.)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,3)=gridn%unew(icelln,3)+(dloss*vp+d*v*0.)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,4)=gridn%unew(icelln,4)+(dloss*wp+d*w*0.)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,5)=gridn%unew(icelln,5)+(ekloss+ekk*0.+eth*0.)*f_LOAD/dble(nSNnei)/vol_nei
 
         ! Add metals
         if(r%metal)then
-           gridn%unew(icelln,r%imetal)=gridn%unew(icelln,r%imetal)+(dzloss+d*z)*f_LOAD/dble(nSNnei)/vol_nei
+           gridn%unew(icelln,r%imetal)=gridn%unew(icelln,r%imetal)+(dzloss+d*z*0.)*f_LOAD/dble(nSNnei)/vol_nei
         endif
 
         ! Add momentum and energy coming from the cold shell
@@ -602,7 +606,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ! Update passive scalars coming from central cell loading
         do ivar=6,nvar
            if(r%metal.and.ivar==r%imetal)cycle
-           gridn%unew(icelln,ivar)=gridn%unew(icelln,ivar)+(dloss+d)*q(ivar)*f_LOAD/dble(nSNnei)/vol_nei
+           gridn%unew(icelln,ivar)=gridn%unew(icelln,ivar)+(dloss+d*0.)*q(ivar)*f_LOAD/dble(nSNnei)/vol_nei
         end do
 
      end do
