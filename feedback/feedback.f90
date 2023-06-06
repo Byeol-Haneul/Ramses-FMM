@@ -375,7 +375,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
 
   ! First collect supernovae stars into the current grid CPU domain 
   call collect_sn(s,p,sn,ilevel,msn_loc)
-  if(sn%npart>0)write(*,*)g%myid,' found ',sn%npart,' supernovae'
+!  if(sn%npart>0)write(*,*)g%myid,' found ',sn%npart,' supernovae'
   
   ! Sort supernovae stars according to their cell Hilbert key
   if(sn%npart>0)allocate(sn%sortp(1:sn%npart),sn%workp(1:sn%npart))
@@ -401,7 +401,6 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
            sn%zp(ipart_ref)=sn%zp(ipart_ref)+sn%zp(ipart)
            sn%vp(ipart_ref,1:ndim)=sn%vp(ipart_ref,1:ndim)+sn%vp(ipart,1:ndim)
            sn%sortp(i)=0
-           write(*,*)g%myid,' found duplicate'
         else
            ckey_ref=ckey
            ipart_ref=ipart
@@ -538,7 +537,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-(dloss+d*0.)*f_LOAD)*q(ivar)
      end do
 
-     write(*,'(2(I3,1X),15(1PE14.7,1X))')g%myid,ilevel,xcen(1:3),num_sn,d,gridp%unew(icellp,1),d*scale_nH,dloss,f_LOAD
+!     write(*,'(2(I3,1X),15(1PE14.7,1X))')g%myid,ilevel,xcen(1:3),num_sn,d,gridp%unew(icellp,1),d*scale_nH,dloss,f_LOAD
      
      ! Update conservative variables in neighboring cells
      dm_ejecta = dloss*f_LOAD/dble(nSNnei)
@@ -583,7 +582,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ek_solid = p_solid*(vload*f_LOAD)/2d0
 
 !        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),xcen(1:ndim)+xSNnei(1:ndim,j),dble(gridn%ckey(1:ndim)),dble(icelln),num_sn,nH_nei,f_w_cell,f_w_crit,p_solid
-        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),vSNnei(1:ndim,j),num_sn,nH_nei,Z_nei,f_w_cell,f_w_crit,p_solid
+!        write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),vSNnei(1:ndim,j),num_sn,nH_nei,Z_nei,f_w_cell,f_w_crit,p_solid
         
         ! Add mass, momentum and energy coming from central cell loading
         gridn%unew(icelln,1)=gridn%unew(icelln,1)+(dloss+d*0.)*f_LOAD/dble(nSNnei)/vol_nei
