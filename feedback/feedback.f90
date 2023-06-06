@@ -53,7 +53,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   type(part_t)::p
   integer::ilevel
   real(kind=8)::msn_loc
-  ! =================================================================
+  !==================================================================
   ! This is the RAMSES routine for supernovae feedback using
   ! a thermal energy dump. The routine is called at every time step
   ! and modify hydro variables unew.
@@ -278,7 +278,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   type(part_t)::p
   integer::ilevel
   real(kind=8)::msn_loc
-  ! =================================================================
+  !==================================================================
   ! This is the RAMSES routine for supernovae feedback using
   ! only mechanical energy, no thermal energy.
   ! The routine is called every other time step and modify hydro variables unew.
@@ -650,7 +650,13 @@ subroutine collect_sn(s,p,sn,ilevel,msn_loc)
   type(part_t)::p,sn
   integer::ilevel
   real(kind=8)::msn_loc
-
+  !==================================================================
+  ! This routine collect supernovae from star particles.
+  ! It modifies the star particle mass on output.
+  ! Supernovae are moved from the particle CPU domain to the grid
+  ! CPU domain in which they will explode.
+  ! Written by Romain Teyssier (mini-ramses version in June 2023).
+  !==================================================================
   integer::n_loc,n_tot,ipart,i,icpu,idim,info
   real(dp)::dteff,birth_time,dx_loc,t_SN
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
