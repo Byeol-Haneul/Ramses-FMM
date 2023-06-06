@@ -307,7 +307,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   real(dp)::vload,vload_rad,vol_nei
   real(dp),dimension(1:3,1:nSNnei)::xSNnei
   real(dp),dimension(1:3,1:nSNnei)::vSNnei
-  real(dp)::f_LOAD,f_CANCEL,f_ESN
+  real(dp)::f_LOAD,f_CANCEL,f_ESN,f_LOAD_CEN
   integer,dimension(1:ndim)::ckey,ckey_ref,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   integer::i,j,k,ipart,icellp,icelln,ind,idim,ivar,ipart_ref
@@ -329,7 +329,8 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Mechanical feedback parameters
-  f_LOAD = nSNnei / dble(nSNcen + nSNnei) ! mass loading factor
+  f_LOAD = nSNnei / dble(nSNcen + nSNnei) ! mass loading factor of the ejecta
+  f_LOAD_CEN = 0.0 ! mass loading factor of the central cell
   f_CANCEL = 0.9387 ! correction due to momentum cancellation.
   f_ESN = 0.676 ! Blondin et al. (98) at t=trad
 
@@ -522,27 +523,27 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      end do
 
      ! Update unew in central cell
-     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss-(dloss+d*0.)*f_LOAD
-     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*up-(dloss*up+d*u*0.)*f_LOAD
-     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*vp-(dloss*vp+d*v*0.)*f_LOAD
-     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*wp-(dloss*wp+d*w*0.)*f_LOAD
-     gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekloss-(ekloss+ekk*0.+eth*0.)*f_LOAD
+     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss-dloss*f_LOAD-d*f_LOAD_CEN
+     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*up-dloss*up*f_LOAD-d*u*f_LOAD_CEN
+     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*vp-dloss*vp*f_LOAD-d*v*f_LOAD_CEN
+     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*wp-dloss*wp*f_LOAD-d*w*f_LOAD_CEN
+     gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekloss-ekloss*f_LOAD-(ekk+eth)*f_LOAD_CEN
 
      ! Update metals
-     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss-(dzloss+d*z*0.)*f_LOAD
+     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss-dzloss*f_LOAD-d*z*f_LOAD_CEN
 
      ! Update passive scalars so that they don't change
      do ivar=6,nvar
         if(r%metal.and.ivar==r%imetal)cycle
         q(ivar)=gridp%uold(icellp,ivar)/max(gridp%uold(icellp,1),r%smallr)
-        gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-(dloss+d*0.)*f_LOAD)*q(ivar)
+        gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-dloss*f_LOAD-d*f_LOAD_CEN)*q(ivar)
      end do
 
      write(*,'(2(I3,1X),15(1PE14.7,1X))')g%myid,ilevel,xcen(1:3),num_sn,d,gridp%unew(icellp,1),d*scale_nH,dloss,f_LOAD
      
      ! Update conservative variables in neighboring cells
      dm_ejecta = dloss*f_LOAD/dble(nSNnei)
-     dm_load = dm_ejecta + d*0.*f_LOAD/dble(nSNnei)
+     dm_load = dm_ejecta + d*f_LOAD_CEN/dble(nSNnei)
 
      ! Loop over solid angles
      do j=1,nSNnei
@@ -586,28 +587,28 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         write(*,'(3(I3,1X),15(1PE14.7,1X))')g%myid,j,level_nbor(j),xcen(1:3),vSNnei(1:ndim,j),num_sn,nH_nei,Z_nei,f_w_cell,f_w_crit,p_solid
         
         ! Add mass, momentum and energy coming from central cell loading
-        gridn%unew(icelln,1)=gridn%unew(icelln,1)+(dloss+d*0.)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,2)=gridn%unew(icelln,2)+(dloss*up+d*u*0.)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,3)=gridn%unew(icelln,3)+(dloss*vp+d*v*0.)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,4)=gridn%unew(icelln,4)+(dloss*wp+d*w*0.)*f_LOAD/dble(nSNnei)/vol_nei
-        gridn%unew(icelln,5)=gridn%unew(icelln,5)+(ekloss+ekk*0.+eth*0.)*f_LOAD/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,1)=gridn%unew(icelln,1)+(dloss*f_LOAD+d*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,2)=gridn%unew(icelln,2)+(dloss*up*f_LOAD+d*u*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,3)=gridn%unew(icelln,3)+(dloss*vp*f_LOAD+d*v*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,4)=gridn%unew(icelln,4)+(dloss*wp*f_LOAD+d*w*f_LOAD_CEN)/dble(nSNnei)/vol_nei
+        gridn%unew(icelln,5)=gridn%unew(icelln,5)+(ekloss*f_LOAD+(ekk+eth)*f_LOAD_CEN)/dble(nSNnei)/vol_nei
 
         ! Add metals
         if(r%metal)then
-           gridn%unew(icelln,r%imetal)=gridn%unew(icelln,r%imetal)+(dzloss+d*z*0.)*f_LOAD/dble(nSNnei)/vol_nei
+           gridn%unew(icelln,r%imetal)=gridn%unew(icelln,r%imetal)+(dzloss*f_LOAD+d*z*f_LOAD_CEN)/dble(nSNnei)/vol_nei
         endif
+
+        ! Update passive scalars coming from central cell loading
+        do ivar=6,nvar
+           if(r%metal.and.ivar==r%imetal)cycle
+           gridn%unew(icelln,ivar)=gridn%unew(icelln,ivar)+(dloss*f_LOAD+d*f_LOAD_CEN)*q(ivar)/dble(nSNnei)/vol_nei
+        end do
 
         ! Add momentum and energy coming from the cold shell
         gridn%unew(icelln,2)=gridn%unew(icelln,2)+p_solid*vSNnei(1,j)/vol_nei
         gridn%unew(icelln,3)=gridn%unew(icelln,3)+p_solid*vSNnei(2,j)/vol_nei
         gridn%unew(icelln,4)=gridn%unew(icelln,4)+p_solid*vSNnei(3,j)/vol_nei
         gridn%unew(icelln,5)=gridn%unew(icelln,5)+ek_solid/vol_nei
-
-        ! Update passive scalars coming from central cell loading
-        do ivar=6,nvar
-           if(r%metal.and.ivar==r%imetal)cycle
-           gridn%unew(icelln,ivar)=gridn%unew(icelln,ivar)+(dloss+d*0.)*q(ivar)*f_LOAD/dble(nSNnei)/vol_nei
-        end do
 
      end do
      ! End loop over solid angle
