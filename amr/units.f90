@@ -23,8 +23,8 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   ! Units for cosmological simulations are hard-coded
 #ifdef UNITScosmo
   scale_d = g%omega_m * rhoc *(g%h0/100.)**2 / g%aexp**3
-  scale_t = g%aexp**2 / (g%h0*1d5/3.08d24)
-  scale_l = g%aexp * g%boxlen_ini * 3.08d24 / (g%h0/100)
+  scale_t = g%aexp**2 / (g%h0*1d5/3.0856776d24)
+  scale_l = g%aexp * g%boxlen_ini * 3.0856776d24 / (g%h0/100)
   scale_v = scale_l / scale_t    ! scale_v converts velocity in user units into cm/s
   scale_T2 = mH/kB * scale_v**2  ! scale_T2 converts (P/rho) in user unit into (T/mu) in Kelvin
   scale_nH = X_H/mH * scale_d    ! scale_nH converts rho in user units into nH in H/cc
