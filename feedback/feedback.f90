@@ -911,7 +911,7 @@ subroutine collect_sn(s,p,sn,ilevel,msn_loc)
      sn%xp=x_loc
      sn%vp=v_loc
      sn%mp=m_loc
-     sn%zp=z_tot
+     sn%zp=z_loc
   endif
 #endif
 
