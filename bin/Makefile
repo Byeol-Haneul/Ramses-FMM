@@ -26,7 +26,7 @@ GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -DNVAR=$(NVAR) \
-	  -DNHILBERT=$(NHILBERT) -DCONDINIT${CONDINIT} -DUNITS${UNITS}
+	-DNHILBERT=$(NHILBERT) -DCONDINIT${CONDINIT} -DUNITS${UNITS}
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
@@ -36,17 +36,20 @@ endif
 #############################################################################
 # GNU compiler (gfortran)
 ifeq ($(COMPILER),GNU)
-   FFLAGS = -x f95-cpp-input $(DEFINES)
+   FFLAGS = -cpp $(DEFINES)
    ifeq ($(MPI),1)
       F90 = $(MPIF90)
+      FC = gfortran
    else
       F90 = gfortran
+      FC = gfortran
       FFLAGS += -DWITHOUTMPI
    endif
-   F90 += -frecord-marker=4 -fbacktrace -ffree-line-length-none -g -fimplicit-none
+   F90 += -ffree-line-length-none -fimplicit-none
+   FC += -ffree-line-length-none -fimplicit-none
    ifeq ($(DEBUG),1)
       F90 += -O0 -fbounds-check
-      FFLAGS += -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
+      FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
    else
       F90 += -O3
    endif
@@ -57,11 +60,14 @@ ifeq ($(COMPILER),INTEL)
    FFLAGS = -cpp $(DEFINES)
    ifeq ($(MPI),1)
       F90 = $(MPIF90)
+      FC = ifort
    else
       F90 = ifort
+      FC = ifort
       FFLAGS += -DWITHOUTMPI
    endif
    F90 += -fp-model source
+   FC += -fp-model source
    ifeq ($(DEBUG),1)
       F90 += -warn all -O0 -g -traceback -check bounds
       FFLAGS += -fpe0 -ftrapuv -init=zero -init=snan -init=arrays
@@ -78,17 +84,14 @@ MOD = mod
 # MPI librairies
 LIBMPI = 
 #LIBMPI = -lfmpi -lmpi -lelan
-
 ifeq ($(HDF5),1)
    LIBHDF5 = -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
 endif
-
 LIBS = $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
 VPATH = $(PATCH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../poisson:../amr:../mdl1
 #############################################################################
-
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
          hydro_commons.o amr_commons.o poisson_parameters.o rngstream.o \
@@ -106,28 +109,25 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 godunov_fine.o umuscl.o uplmde.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 star_formation.o feedback.o \
 	 task_manager.o amr_step.o adaptive_loop.o 
-
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
 	$(F90) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
 	rm write_makefile.f90
 	rm write_patch.f90
-
 #############################################################################
 write_gitinfo.o: FORCE
-	$(F90) $(FFLAGS) -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \
--DGITREPO=\'"$(GITREPO)"\' -DBUILDDATE=\'"$(BUILDDATE)"\' -c ../amr/write_gitinfo.f90 -o $@
+	$(FC) -O0 -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \
+                -DGITREPO=\'"$(GITREPO)"\' -DBUILDDATE=\'"$(BUILDDATE)"\' -c ../amr/write_gitinfo.f90 -o $@
 write_makefile.o: FORCE
 	../utils/scripts/cr_write_makefile.sh $(MAKEFILE_LIST)
-	$(F90) $(FFLAGS) -c write_makefile.f90 -o $@
+	$(FC) -O0 -c write_makefile.f90 -o $@
 write_patch.o: FORCE
 	../utils/scripts/cr_write_patch.sh $(PATCH)
-	$(F90) $(FFLAGS) -c write_patch.f90 -o $@
+	$(FC) -O0 -c write_patch.f90 -o $@
 %.o:%.f90
 	$(F90) $(FFLAGS) -c $^ -o $@
 %.o:%.c
 	$(C) $(CFLAGS) -c $^ -o $@
-
 FORCE:
 #############################################################################
 clean :

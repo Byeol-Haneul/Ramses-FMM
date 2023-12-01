@@ -21,7 +21,7 @@ subroutine adaptive_loop(pst)
   real(kind=4)::core_mem
 
   associate(mdl=>pst%s%mdl,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
-  
+
   tt1 = mdl_wtime(mdl)
 
   ! Read run parameters
