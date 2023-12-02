@@ -3,6 +3,7 @@ module clfind_commons
 
     integer::ntest,itest
     real(dp),allocatable,dimension(:)::denp ! Density of the cells
+    integer,allocatable,dimension(:)::testp_sort ! Sort indices
 
     type peak_t
 
@@ -15,7 +16,7 @@ module clfind_commons
         real(dp),allocatable,dimension(:)     ::denp       ! Density
 
         integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
-        integer(i8b),allocatable,dimension(:) ::idp      ! Particle unique identifier
+        integer(kind=8),allocatable,dimension(:) ::idp      ! Particle unique identifier
         integer ,allocatable,dimension(:)     ::sortp    ! Sorted indices
         !integer ,allocatable,dimension(:)     ::workp    ! Work space
         
@@ -24,3 +25,4 @@ module clfind_commons
         !integer ,allocatable,dimension(:)::tailp    ! Particle levels tail
         
     end type peak_t
+end module clfind_commons

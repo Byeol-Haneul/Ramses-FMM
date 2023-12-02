@@ -5,10 +5,10 @@ contains
 subroutine clump_finder(r,g,m,create_output,keep_alive)
     use amr_parameters, only:dp,ndim,twotondim
     use amr_commons, only:run_t,global_t,mesh_t
-    use clfind_commons
     use hydro_parameters, only:nvar
     use rho_fine_module, only: m_rho_fine
-    use ramses_commons, only: pst_t
+    use clfind_commons
+    use ramses_commons, only: pst_t,ramses_t
     use mdl_module
     use mdl_parameters
 #ifndef WITHOUTMPI
@@ -20,7 +20,7 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
     type(global_t)::g
     type(mesh_t)::m
     type(peak_t)::p
-    !type(part_t)::s
+    type(ramses_t)::s
     logical::create_output,keep_alive
 #ifndef WITHOUTMPI
     integer::info
@@ -28,9 +28,9 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
 #endif
     integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum
     integer,dimension(1:g%ncpu)::nsite_cpu,nsite_cpu_all
-    integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite
+    integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level 
 
-    integer::istep,nskip,ilevel,nmove,nzero
+    integer::istep,nskip,ilevel,nmove,nzero,ipart,jpart,ip
     integer::i,levelmin_part
     integer(kind=8)::ntest_all,nmove_tot,nzero_tot
     integer(kind=8),dimension(1:g%ncpu)::ntest_cpu,ntest_cpu_all
@@ -39,7 +39,10 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
     real(kind=8)::d,d0
     integer::action,ivar_clump
     logical::ok
-    real(kind=8)::dx
+    real(kind=8)::dx,vol
+    integer::npeaks,npeaks_tot,npeaks_max 
+
+
 
     ! Set some constants
     dx=r%boxlen/2**ilevel
@@ -104,7 +107,7 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
 
 
     p%npart=ntest   
-    p%npart_tot=ntest_cum(g%cpu)
+    p%npart_tot=ntest_cum(g%ncpu)
     itest = 0
     do ilevel=r%levelmin,r%nlevelmax
         ! Loop over octs
@@ -177,14 +180,12 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
                 ip=ip+1
                 next_level = p%levelp(p%sortp(ipart+1))
                 now_level = p%levelp(p%sortp(ipart))
-                now_dens = p%denp(p%sortp(ipart))
-                now_xp = p%xp(p%sortp(ipart))
 
                 if(next_level /= now_level)then
-                    call neighborsearch(now_dens,now_xp,ind_max,ip,npeaks,now_level,1)
-                    do jpart=1,ip
-                        imaxp(ind_part(jpart))=ind_max(jpart)
-                    end do
+                    call neighborsearch(r,p,ip,npeaks,now_level)
+                    !do jpart=1,ip
+                    !    imaxp(ind_part(jpart))=ind_max(jpart)
+                    !end do
                     ip=0
                 endif
             end do
@@ -193,12 +194,23 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
 
 end subroutine clump_finder
 
-subroutine neighborsearch(xx,ind_cell,ind_max,np,count,ilevel,action)
-    use amr_commons
+subroutine neighborsearch(r,p,np,count,ilevel)
+    use mdl_module
+    use amr_parameters, only:dp,ndim,nvector
+    use amr_commons, only:run_t,mesh_t,oct
+    use clfind_commons
+    use ramses_commons, only: pst_t,ramses_t
+    use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
+    use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
+    use cache_commons
+    use cache
+    use nbors_utils
     implicit none
-    integer::np,count,ilevel,action
-    integer,dimension(1:nvector)::ind_max,ind_cell
-    real(dp),dimension(1:ncoarse+ngridmax*twotondim)::xx
+    type(ramses_t)::s
+    type(run_t)::r
+    type(peak_t)::p
+    type(mesh_t)::m
+    type(msg_twin_realdp)::dummy_twin_realdp
     !------------------------------------------------------------
     ! This routine constructs all neighboring leaf cells at levels
     ! ilevel-1, ilevel, ilevel+1.
@@ -206,65 +218,140 @@ subroutine neighborsearch(xx,ind_cell,ind_max,np,count,ilevel,action)
     ! further checks for the neighbor cells are called.
     ! xx is on input the array containing the density field
     !------------------------------------------------------------
-    integer::j,ind,nx_loc,i1,j1,k1,i2,j2,k2,i3,j3,k3,ix,iy,iz
-    integer::i1min,i1max,j1min,j1max,k1min,k1max
-    integer::i2min,i2max,j2min,j2max,k2min,k2max
-    integer::i3min,i3max,j3min,j3max,k3min,k3max
+    integer::np,count,ilevel,curr_level,x,y,z
+    integer::i,j,k,ind,nx_loc,ipart,icellp,icelln
     real(dp)::dx,dx_loc,scale,vol_loc
-    integer ,dimension(1:nvector)::clump_nr,indv,ind_grid,grid,ind_cell_coarse
-
-    real(dp),dimension(1:twotondim,1:3)::xc
+    integer ,dimension(1:nvector)::ind_grid,grid
     integer ,dimension(1:99)::cell_index,cell_levl,test_levl
     real(dp),dimension(1:99,1:ndim)::xtest,xrel
-    logical ,dimension(1:99)::ok
     real(dp),dimension(1:nvector)::density_max
     real(dp),dimension(1:3)::skip_loc
     logical ,dimension(1:nvector)::okpeak
-    integer ,dimension(1:nvector,1:threetondim),save::nbors_father_cells
-    integer ,dimension(1:threetondim)::nbors_father_cells_pass
-    integer ,dimension(1:nvector,1:twotondim),save::nbors_father_grids
     integer::ntestpos,ntp,idim,ipos
+    integer,dimension(1:ndim)::ckey,ckey_nbor
+    real(dp),dimension(1:ndim)::xcen,xnei
+    ! Number of neighboring cells to deposit mass/momentum/energy
+    integer, parameter::nPnei=48
+    real(dp),dimension(1:3,1:nPnei)::xPnei
+    type(oct),pointer::gridp,gridn
+    logical::ok_level,ok_leaf,ok
+    integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
 
+    
+    ! Arrays to define neighbors (center=[0,0,0])
+    ! normalized to dx = 1 = size of the central leaf cell in which a SN particle sits
+    ! from -0.75 to 0.75
+    ind=0
+    do k=1,4
+        do j=1,4
+            do i=1,4
+                ok=.true.
+                if((i==1.or.i==4).and.(j==1.or.j==4).and.(k==1.or.k==4)) ok=.false. ! edge
+                if((i==2.or.i==3).and.(j==2.or.j==3).and.(k==2.or.k==3)) ok=.false. ! centre
+                if(ok)then
+                    ind = ind+1
+                    x = (i-1)+0.5d0 - 2
+                    y = (j-1)+0.5d0 - 2
+                    z = (k-1)+0.5d0 - 2
+                    xPnei(1,ind) = x/2d0
+                    xPnei(2,ind) = y/2d0
+                    xPnei(3,ind) = z/2d0
+                endif
+            enddo
+        enddo
+    enddo
 
-    integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
-    integer,dimension(1:3,1:8)::shift_oct=reshape(&
-       & (/-1,-1,-1,+1,-1,-1,-1,+1,-1,+1,+1,-1,&
-       &   -1,-1,+1,+1,-1,+1,-1,+1,+1,+1,+1,+1/),(/3,8/))
-    integer,dimension(1:3,1:8)::start_oct=reshape(&
-       & (/ 1, 1, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1,&
-       &    1, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0/),(/3,8/))
 #if NDIM==3
     ! Mesh spacing in that level
     dx_loc=r%boxlen/2**ilevel
     vol_loc=dx_loc**ndim
-    ! Integer constants
-    i1min=0; i1max=1; j1min=0; j1max=1; k1min=0; k1max=1
-    i2min=0; i2max=2; j2min=0; j2max=2; k2min=0; k2max=2
-    i3min=0; i3max=3; j3min=0; j3max=3; k3min=0; k3max=3
-    ! Set position of cell centers relative to grid center
-    do ind=1,twotondim
-        iz=(ind-1)/4
-        iy=(ind-1-4*iz)/2
-        ix=(ind-1-2*iy-4*iz)
-        if(ndim>0)xc(ind,1)=(dble(ix)-0.5D0)
-        if(ndim>1)xc(ind,2)=(dble(iy)-0.5D0)
-        if(ndim>2)xc(ind,3)=(dble(iz)-0.5D0)
-    end do
 
     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
                 pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
                 init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
-    ! some preliminary action...
-    do j=1,np
-        ckey(1:ndim)=int(p%xp(p%sortp(j),1:ndim)/dx_loc)
-        !indv(j)=(ind_cell(j)-ncoarse-1)/ngridmax+1 ! cell position in grid
-        ind_grid(j)=ind_cell(j)-ncoarse-(indv(j)-1)*ngridmax ! grid index
-        density_max(j)=p%denp(p%sortp(j))*1.0001d0 ! get cell density (1.0001 probably not necessary)
-        ind_max(j)=ind_cell(j) !save cell index
-        !if (action.ge.4)clump_nr(j)=flag2(ind_cell(j)) ! save clump number
+
+    do i=1,np
+        ipart = p%sortp(i)
+        density_max(i)=p%denp(ipart) ! get cell density (1.0001 probably not necessary)
+
+        ! Set pointers to null
+        icellp=0; icelln=0
+        !nullify(gridp)
+        !nullify(gridn)
+        !do j=1,nPnei
+        !    nullify(grid_nbor(j)%p)
+        !end do
+
+        ! Find parent cell at level ilevel
+        ckey(1:ndim)=int(p%xp(ipart,1:ndim)/dx_loc)
+        xcen(1:ndim)=ckey(1:ndim)+0.5
+        ! Get parent cell at level ilevel using cache
+        hash_cell(0)=ilevel+1
+        hash_cell(1:ndim)=ckey(1:ndim)
+        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+
+        !ind_max(j)=ind_cell(j) !save cell index
+        ok_level = associated(gridp)
+        if(.not. ok_level)then
+            write(*,*)"Something went wrong in neighbor searching in peak finding"
+            write(*,*)"Current level grid should exist..."
+            stop
+        endif
+
+        ! Collect all neighboring cell from hash table
+        do j=1,nPnei
+            curr_level = ilevel+1
+            ! Compute neighboring cell coordinates
+            xnei(1:ndim)=xcen(1:ndim)+xPnei(1:ndim,j)
+            ! Periodic boundary conditions
+            do idim=1,ndim
+                if(xnei(idim)<0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
+                if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
+            end do
+            ! Get neighboring cell at ilevel
+            ckey_nbor(1:ndim)=int(xnei(1:ndim))
+            hash_nbor(0)=ilevel+1
+            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
+            call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+            ! If missing, get neighboring cell at ilevel-1
+            if(.not.associated(gridn))then
+                call unlock_cache(s,gridn)
+                ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
+                hash_nbor(0)=ilevel
+                hash_nbor(1:ndim)=ckey_nbor(1:ndim)
+                curr_level = ilevel
+                call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+            ! If refined, get neighboring cell at ilevel+1
+            else if (gridn%refined(icelln))then
+                call unlock_cache(s,gridn)
+                ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
+                hash_nbor(0)=ilevel+2
+                hash_nbor(1:ndim)=ckey_nbor(1:ndim)
+                curr_level = ilevel+2
+                call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+            endif
+            !TO DO:
+            ! if redfined, needs to loop for redfinding results
+            if (.not. gridn%refined(icelln))then
+                if(gridn%rho(icelln)>density_max(i))then
+                    okpeak=.false.                 ! cell is no peak
+                    density_max(i)=gridn%rho(icelln) ! change densest neighbor dens
+                    !change test particle properties
+                    p%levelp(ipart)=curr_level-1       ! Level
+                    ! Compute peak coordinate from cell centers
+                    p%xp(ipart,1)=(2*gridn%ckey(1)+MOD((icelln-1)  ,2)+0.5)*dx-m%skip(1) 
+                    p%xp(ipart,2)=(2*gridn%ckey(2)+MOD((icelln-1)/2,2)+0.5)*dx-m%skip(2)
+                    p%xp(ipart,3)=(2*gridn%ckey(3)+MOD((icelln-1)/4,2)+0.5)*dx-m%skip(3)
+                    p%denp(p%npart)=gridn%rho(icelln)
+                endif
+            endif
+        enddo
+        ! Unlock all octs
+        call unlock_cache(s,gridp)
     end do
 
+    call close_cache(s,m%grid_dict)
 #endif
 end subroutine neighborsearch
 end module clump_finder_module
