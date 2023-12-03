@@ -2,7 +2,9 @@ module clump_finder_module
 
 contains
 
-subroutine clump_finder(r,g,m,create_output,keep_alive)
+#if NDIM==3
+subroutine m_clump_finder(pst,create_output,keep_alive)
+!subroutine clump_finder(r,g,m,create_output,keep_alive)
     use amr_parameters, only:dp,ndim,twotondim
     use amr_commons, only:run_t,global_t,mesh_t
     use hydro_parameters, only:nvar
@@ -11,8 +13,13 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
     use ramses_commons, only: pst_t,ramses_t
     use mdl_module
     use mdl_parameters
+#ifdef GRAV
+  use rho_fine_module, only: m_rho_fine
+#endif
+  use hilbert
 #ifndef WITHOUTMPI
     use mpi
+    integer(i8b)::nmove_all,nzero_all
 #endif
     implicit none
     type(pst_t)::pst
@@ -26,15 +33,14 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
     integer::info
     integer,dimension(1:g%ncpu)::nsite_cpu_tot
 #endif
-    integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum
+    integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum,npeak_cum
     integer,dimension(1:g%ncpu)::nsite_cpu,nsite_cpu_all
     integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level 
 
     integer::istep,nskip,ilevel,nmove,nzero,ipart,jpart,ip
     integer::i,levelmin_part
     integer(kind=8)::ntest_all,nmove_tot,nzero_tot
-    integer(kind=8),dimension(1:g%ncpu)::ntest_cpu,ntest_cpu_all
-    integer,dimension(1:g%ncpu)::npeaks_per_cpu_tot
+    integer(kind=8),dimension(1:g%ncpu)::ntest_cpu,ntest_cpu_all,npeak_cpu,npeak_cpu_all
     logical::verbose_all=.false.
     real(kind=8)::d,d0
     integer::action,ivar_clump
@@ -43,15 +49,22 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
     integer::npeaks,npeaks_tot,npeaks_max 
 
 
+    if(r%verbose)write(*,*)' Entering clump_finder'
+
+    !-----------------------------------------------------------------------
+    ! Compute rho from gas density and/or dark matter and/or star particles
+    !-----------------------------------------------------------------------
+    call m_rho_fine(pst,r%levelmin)
+
 
     ! Set some constants
-    dx=r%boxlen/2**ilevel
-    vol=dx**ndim
+    !dx=r%boxlen/2**ilevel
+    !vol=dx**ndim
 
-    if (create_output) then
-        if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
-        if(g%nstep_coarse==0.and.r%nrestart>0)return
-    endif
+    !if (create_output) then
+    !    if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
+    !    if(g%nstep_coarse==0.and.r%nrestart>0)return
+    !endif
 
     ! if(r%verbose.and.g%myid==1)write(*,*)' Entering clump_finder'
 
@@ -104,6 +117,7 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
     do icpu=1,g%ncpu
         ntest_cum(icpu)=ntest_cum(icpu-1)+int(ntest_cpu(icpu),kind=8)
     end do
+    ntest_all = ntest_cum(g%ncpu)
 
 
     p%npart=ntest   
@@ -125,14 +139,18 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
                 ok = ok .and. d > d0
                 if(ok)then
                     if(ntest>0)then
+                        itest=itest+1
                         p%npart=p%npart+1                   ! Local 'test particle' index
                         p%levelp(p%npart)=ilevel        ! Level
                         ! Compute peak coordinate from cell centers
                         p%xp(p%npart,1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx-m%skip(1) 
                         p%xp(p%npart,2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx-m%skip(2)
                         p%xp(p%npart,3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx-m%skip(3)
+                        p%maxxp(p%npart,1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx-m%skip(1) 
+                        p%maxxp(p%npart,2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx-m%skip(2)
+                        p%maxxp(p%npart,3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx-m%skip(3)
                         p%denp(p%npart)=d ! Save density values here!
-                        !m%grid(igrid)%flag2(ind)=ntest  ! Initialize flag2 to GLOBAL test particle index
+                        !m%grid(igrid)%flag2(ind)=itest+ntest_cum(g%myid)  ! Initialize flag2 to GLOBAL test particle index
                     endif
                 endif
             end do
@@ -150,8 +168,8 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
     if (ntest>0) then
         allocate(testp_sort(ntest))
         do i=1,ntest
-        denp(i)=-p%denp(i)
-        testp_sort(i)=i
+            denp(i)=-p%denp(i)
+            testp_sort(i)=i
         end do
         call quick_sort_dp(denp(1),testp_sort(1),ntest)
         deallocate(denp)
@@ -183,16 +201,87 @@ subroutine clump_finder(r,g,m,create_output,keep_alive)
 
                 if(next_level /= now_level)then
                     call neighborsearch(r,p,ip,npeaks,now_level)
-                    !do jpart=1,ip
-                    !    imaxp(ind_part(jpart))=ind_max(jpart)
-                    !end do
                     ip=0
                 endif
             end do
+            if (ip>0)then
+                call neighborsearch(r,p,ip,npeaks,now_level)
+            endif
         endif
     endif
 
-end subroutine clump_finder
+!---------------------------------------------------------
+! Compute number of peaks across all CPUs.
+!---------------------------------------------------------
+    npeak_cpu=0
+    npeak_cpu(g%myid)=npeaks
+#ifndef WITHOUTMPI
+#ifndef LONGINT
+    call MPI_ALLREDUCE(npeak_cpu,npeak_cpu_all,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+#else
+    call MPI_ALLREDUCE(npeak_cpu,npeak_cpu_all,g%ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+#endif
+    npeak_cpu=npeak_cpu_all
+#endif
+    npeak_cum=0
+    do icpu=1,g%ncpu
+        npeak_cum(icpu)=npeak_cum(icpu-1)+int(npeak_cpu(icpu),kind=8)
+    end do
+#ifdef WITHOUTMPI
+    npeaks_tot=npeaks
+#else
+    npeaks_tot=npeak_cum(g%ncpu)
+#endif
+    if (myid==1.and.npeaks_tot>0) &
+        & write(*,'(" Total number of density peaks found=",I10)')npeaks_tot
+
+
+!----------------------------------------------------------------------
+! Flag peaks with global peak id using flag2 array
+! Compute peak density using max_dens array
+!----------------------------------------------------------------------
+ipeak = 0
+if(ntest>0)then
+    if(ivar_clump==0 .or. ivar_clump==-1)then
+        do i=1,ntest
+            ipart=p%sortp(i)
+            if(p%peak(ipart))then
+               ipeak=ipeak+1
+               ckey(1:ndim)=int(p%xp(ipart,1:ndim)/dx_loc)
+               ! Get parent cell at level ilevel using cache
+                hash_cell(0)=ilevel+1
+                hash_cell(1:ndim)=ckey(1:ndim)
+                call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.)
+                gridp%flag2(icellp)=ipeak+npeak_cum(g%myid)
+            endif
+        end do
+    else
+        if(hydro)then
+            call flag_peaks(uold(1,ivar_clump),nskip)
+        endif
+    endif
+endif
+
+
+
+!---------------------------------------------------------------------
+! Determine peak-patches around each peak
+! Main step:
+! - order cells in descending density
+! - get peak id from densest neighbor
+! - nmove is number of peak id's passed along
+! - done when nmove_tot=0 (for single core, only one sweep is necessary)
+!---------------------------------------------------------------------
+if (myid==1.and.ntest_all>0)write(*,*)'Finding peak patches'
+
+
+
+
+
+
+end subroutine m_clump_finder
+
+#endif
 
 subroutine neighborsearch(r,p,np,count,ilevel)
     use mdl_module
@@ -202,6 +291,9 @@ subroutine neighborsearch(r,p,np,count,ilevel)
     use ramses_commons, only: pst_t,ramses_t
     use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
     use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
+    use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
+    use marshal, only: pack_fetch_refine,unpack_fetch_refine
+    use boundaries, only: init_bound_refine
     use cache_commons
     use cache
     use nbors_utils
@@ -266,15 +358,23 @@ subroutine neighborsearch(r,p,np,count,ilevel)
     dx_loc=r%boxlen/2**ilevel
     vol_loc=dx_loc**ndim
 
-    call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+    if(r%hydro)then
+        call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
+                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+                init=init_flush_godunov, flush=pack_flush_godunov,&
+                combine=unpack_flush_godunov, bound=init_bound_refine)
+    else
+        call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
                 pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
                 init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
-
+    endif
+    okpeak = .true.
     do i=1,np
         ipart = p%sortp(i)
         density_max(i)=p%denp(ipart) ! get cell density (1.0001 probably not necessary)
-
+        p%peak(ipart)=okpeak(i)
         ! Set pointers to null
         icellp=0; icelln=0
         !nullify(gridp)
@@ -333,25 +433,41 @@ subroutine neighborsearch(r,p,np,count,ilevel)
             endif
             !TO DO:
             ! if redfined, needs to loop for redfinding results
+            
             if (.not. gridn%refined(icelln))then
-                if(gridn%rho(icelln)>density_max(i))then
-                    okpeak=.false.                 ! cell is no peak
-                    density_max(i)=gridn%rho(icelln) ! change densest neighbor dens
+                ! if hydro, use uold
+                if(r%hydro)then
+                    if(gridn%uold(icelln,ivar_clump)>density_max(i))then
+                        okpeak(i)=.false.                 ! cell is no peak
+                        density_max(i)=gridn%uold(icelln,ivar_clump) ! change densest neighbor dens
+                    endif
+                else
+                    if(gridn%rho(icelln)>density_max(i))then
+                        okpeak(i)=.false.                 ! cell is no peak
+                        density_max(i)=gridn%rho(icelln) ! change densest neighbor dens
+                    endif
+                endif
+                if(.not. okpeak(i))then
                     !change test particle properties
                     p%levelp(ipart)=curr_level-1       ! Level
                     ! Compute peak coordinate from cell centers
-                    p%xp(ipart,1)=(2*gridn%ckey(1)+MOD((icelln-1)  ,2)+0.5)*dx-m%skip(1) 
-                    p%xp(ipart,2)=(2*gridn%ckey(2)+MOD((icelln-1)/2,2)+0.5)*dx-m%skip(2)
-                    p%xp(ipart,3)=(2*gridn%ckey(3)+MOD((icelln-1)/4,2)+0.5)*dx-m%skip(3)
-                    p%denp(p%npart)=gridn%rho(icelln)
+                    p%maxxp(ipart,1)=(2*gridn%ckey(1)+MOD((icelln-1)  ,2)+0.5)*dx-m%skip(1) 
+                    p%maxxp(ipart,2)=(2*gridn%ckey(2)+MOD((icelln-1)/2,2)+0.5)*dx-m%skip(2)
+                    p%maxxp(ipart,3)=(2*gridn%ckey(3)+MOD((icelln-1)/4,2)+0.5)*dx-m%skip(3)
+                    p%denp(ipart)=gridn%rho(icelln)
+                    p%peak(ipart)=okpeak(i)
                 endif
             endif
         enddo
         ! Unlock all octs
         call unlock_cache(s,gridp)
     end do
-
     call close_cache(s,m%grid_dict)
+    do j=1,np
+        if(okpeak(j))then
+            count=count+1
+        endif
+    end do
 #endif
 end subroutine neighborsearch
 end module clump_finder_module

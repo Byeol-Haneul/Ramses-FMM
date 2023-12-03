@@ -18,6 +18,9 @@ module clfind_commons
         integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
         integer(kind=8),allocatable,dimension(:) ::idp      ! Particle unique identifier
         integer ,allocatable,dimension(:)     ::sortp    ! Sorted indices
+        logical ,allocatable,dimension(:)    ::peak        ! whether is a peak
+        real(dp),allocatable,dimension(:,:)   ::maxxp       ! Positions of neighbor-peaks
+        
         !integer ,allocatable,dimension(:)     ::workp    ! Work space
         
         ! Level dependent arrays
