@@ -8,10 +8,10 @@ image: cphyc/openmpi-iap
 pipelines:
   default:
     - step:     # Build hydro2d
-        name: Default version
+        name: hydro2d version
         script:
         - bash tests/build.hydro2d.sh
     - step:     # Build cosmo3d
-        name: RT version
+        name: cosmo3d version
         script:
         - bash tests/build.cosmo3d.sh
