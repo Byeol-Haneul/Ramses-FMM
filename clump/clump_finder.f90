@@ -6,7 +6,7 @@ contains
 subroutine m_clump_finder(pst,create_output,keep_alive)
 !subroutine clump_finder(r,g,m,create_output,keep_alive)
     use amr_parameters, only:dp,ndim,twotondim
-    use amr_commons, only:run_t,global_t,mesh_t,oct
+    use amr_commons, only:mesh_t,oct
     use hydro_parameters, only:nvar
     use rho_fine_module, only: m_rho_fine
     use clfind_commons
@@ -38,11 +38,11 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
     integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
     
     logical::verbose_all=.false.
-    real(kind=8)::d,d0
+    real(kind=8)::d
     integer::action,ivar_clump
     logical::ok
     real(kind=8)::dx,vol
-    integer::npeaks,npeaks_tot,npeaks_max,icellp,icelln,ntest,ntest_all
+    integer::npeaks,npeaks_tot,icellp,icelln,ntest,ntest_all
     integer,dimension(1:ndim)::ckey,ckey_nbor
     integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
     type(oct),pointer::gridp,gridn
@@ -83,16 +83,60 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
     do i=r%nlevelmax,r%levelmin,-1
         if(m%noct_tot(i)>0)then
             ! Collect local ntest from all CPU
-            call r_collect_test(pst,i,1)
+            call r_collect_test(pst,p,i,1)
         endif
     end do
 
-   call r_collect_peak(pst,r%levelmin,1)
+    call r_collect_peak(s,pst,r%levelmin,p,1)
 
-   call r_collect_saddle(pst,r%levelmin,1)
+    if(npeak_cum(g%ncpu)>0)then
+
+        ! initialize the clump type
+        call r_init_peak(pst,c,p,r%levelmin,1)
+
+        call r_collect_saddle(s,pst,p,r%levelmin,1)
+
+        !------------------------------------------
+        ! Merge irrelevant peaks
+        !------------------------------------------
+        if(g%myid==1.and.clinfo)write(*,*)"Now merging irrelevant peaks."
+
+        call merge_clumps('relevance')
 
 
+        !------------------------------------------
+        ! Compute clumps properties
+        !------------------------------------------
+        if(g%myid==1.and.clinfo)write(*,*)"Computing relevant clump properties."
+        !call compute_clump_properties()
 
+        !------------------------------------------
+        ! Merge clumps into haloes
+        !------------------------------------------
+        if(saddle_threshold>0)then
+            if(g%myid==1.and.clinfo)write(*,*)"Now merging peaks into halos."
+            call merge_clumps('saddleden')
+        endif
+
+        !------------------------------------------
+        ! Output clumps properties to file
+        !------------------------------------------
+        if(r%verbose)then
+            write(*,*)"Output status of peak memory."
+        endif
+        
+        !if(clinfo.and.saddle_threshold.LE.0)call write_clump_properties(.false.)
+        !if(create_output.and..not.unbind)then
+        !    if(g%myid==1)write(*,*)"Outputing clump properties to disc."
+            !call write_clump_properties(.true.)
+            !if(r%pic)call output_part_clump_id()
+            ! output the clump field
+            !if (output_clump_field)then
+            !    if(g%myid==1)write(*,*)"Outputing clump field to disc"
+            !    !call write_clump_field
+            !end if
+        !endif
+    endif
 
 end associate
 
@@ -100,11 +144,13 @@ end subroutine m_clump_finder
 
 #endif
 
-subroutine neighborsearch(r,p,np,count,ilevel)
+subroutine neighborsearch(s,r,p,np,count,ilevel,peak)
     use mdl_module
     use amr_parameters, only:dp,ndim,nvector
-    use amr_commons, only:run_t,mesh_t,oct
+    use amr_commons, only:run_t,mesh_t,oct,global_t
+    use ramses_commons, only: ramses_t
     use clfind_commons
+    use clump_merger, only: get_local_peak_id
     use ramses_commons, only: pst_t,ramses_t
     use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
     use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
@@ -117,6 +163,7 @@ subroutine neighborsearch(r,p,np,count,ilevel)
     implicit none
     type(ramses_t)::s
     type(run_t)::r
+    type(global_t)::g
     type(peak_t)::p
     type(mesh_t)::m
     type(msg_twin_realdp)::dummy_twin_realdp
@@ -129,7 +176,7 @@ subroutine neighborsearch(r,p,np,count,ilevel)
     ! xx is on input the array containing the density field
     !------------------------------------------------------------
     integer::np,count,ilevel,curr_level,x,y,z
-    integer::i,j,k,ind,nx_loc,ipart,icellp,icelln
+    integer::i,j,k,ind,nx_loc,ipart,icellp,icelln,ipeak,jpeak
     real(dp)::dx,dx_loc,scale,vol_loc
     integer ,dimension(1:nvector)::ind_grid,grid
     integer ,dimension(1:99)::cell_index,cell_levl,test_levl
@@ -143,8 +190,9 @@ subroutine neighborsearch(r,p,np,count,ilevel)
     ! Number of neighboring cells to deposit mass/momentum/energy
     integer, parameter::nPnei=48
     real(dp),dimension(1:3,1:nPnei)::xPnei
+    real(dp),dimension(1:nPnei)::av_dens
     type(oct),pointer::gridp,gridn
-    logical::ok_level,ok_leaf,ok
+    logical::ok_level,ok_leaf,ok,peak
     integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
     
 
@@ -254,27 +302,46 @@ subroutine neighborsearch(r,p,np,count,ilevel)
             ! if redfined, needs to loop for redfinding results
             
             if (.not. gridn%refined(icelln))then
-                ! if hydro, use uold
-                if(r%hydro)then
-                    if(gridn%uold(icelln,1)>density_max(i))then
-                        okpeak(i)=.false.                 ! cell is no peak
-                        density_max(i)=gridn%uold(icelln,1) ! change densest neighbor dens
+                if(peak)then
+                    ! if hydro, use uold
+                    if(r%hydro)then
+                        if(gridn%uold(icelln,1)>density_max(i))then
+                            okpeak(i)=.false.                 ! cell is no peak
+                            density_max(i)=gridn%uold(icelln,1) ! change densest neighbor dens
+                        endif
+                    else
+                        if(gridn%rho(icelln)>density_max(i))then
+                            okpeak(i)=.false.                 ! cell is no peak
+                            density_max(i)=gridn%rho(icelln) ! change densest neighbor dens
+                        endif
+                    endif
+                    if(.not. okpeak(i))then
+                        !change test particle properties
+                        p%levelpm(ipart)=curr_level-1       ! Level
+                        ! Compute peak coordinate from cell centers
+                        p%maxxp(ipart,1)=(2*gridn%ckey(1)+MOD((icelln-1)  ,2)+0.5)*dx_loc-m%skip(1) 
+                        p%maxxp(ipart,2)=(2*gridn%ckey(2)+MOD((icelln-1)/2,2)+0.5)*dx_loc-m%skip(2)
+                        p%maxxp(ipart,3)=(2*gridn%ckey(3)+MOD((icelln-1)/4,2)+0.5)*dx_loc-m%skip(3)
+                        p%denpm(ipart)=gridn%rho(icelln)
+                        p%peak(ipart)=okpeak(i)
                     endif
                 else
-                    if(gridn%rho(icelln)>density_max(i))then
-                        okpeak(i)=.false.                 ! cell is no peak
-                        density_max(i)=gridn%rho(icelln) ! change densest neighbor dens
+                    !neighboring cell is in a clump and is in another clump
+                    if(gridn%flag2(icelln)/=0 .and. gridn%flag2(icelln)/=p%pid(ipart))then
+                        if(r%hydro)then
+                            av_dens(j)=(gridn%uold(icelln,1)+p%denp(ipart))/2 !average density of cell and neighbor cell
+                        else
+                            av_dens(j)=(gridn%uold(icelln,1)+p%denp(ipart))/2 !average density of cell and neighbor cell
+                        endif
+                        call get_local_peak_id(g,p%pid(ipart),ipeak)
+                        call get_local_peak_id(g,gridn%flag2(icelln),jpeak)
+                        if (get_value(ipeak,jpeak,sparse_saddle_dens) < av_dens(j))then
+                            call set_value(ipeak,jpeak,av_dens(j),sparse_saddle_dens)
+                         endif
+                         if (get_value(jpeak,ipeak,sparse_saddle_dens) < av_dens(j))then
+                            call set_value(jpeak,ipeak,av_dens(j),sparse_saddle_dens)
+                         endif
                     endif
-                endif
-                if(.not. okpeak(i))then
-                    !change test particle properties
-                    p%levelpm(ipart)=curr_level-1       ! Level
-                    ! Compute peak coordinate from cell centers
-                    p%maxxp(ipart,1)=(2*gridn%ckey(1)+MOD((icelln-1)  ,2)+0.5)*dx_loc-m%skip(1) 
-                    p%maxxp(ipart,2)=(2*gridn%ckey(2)+MOD((icelln-1)/2,2)+0.5)*dx_loc-m%skip(2)
-                    p%maxxp(ipart,3)=(2*gridn%ckey(3)+MOD((icelln-1)/4,2)+0.5)*dx_loc-m%skip(3)
-                    p%denpm(ipart)=gridn%rho(icelln)
-                    p%peak(ipart)=okpeak(i)
                 endif
             endif
         enddo
@@ -295,7 +362,7 @@ end subroutine neighborsearch
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_collect_test(pst,ilevel,input_size)!ntest,output_size)
+recursive subroutine r_collect_test(pst,p,ilevel,input_size)!ntest,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -312,7 +379,7 @@ recursive subroutine r_collect_test(pst,ilevel,input_size)!ntest,output_size)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,0,ilevel)!,output_size,ilevel)
-     call r_collect_test(pst%pLower,ilevel,input_size)!,ntest,output_size)
+     call r_collect_test(pst%pLower,p,ilevel,input_size)!,ntest,output_size)
      call mdl_get_reply(pst%s%mdl,rID,0)!,output_size,next_ntest)
      !ntest=ntest+next_ntest
   else
@@ -336,7 +403,7 @@ subroutine collect_test(r,g,m,p,ilevel)!,ntest)
     integer,  intent(in)  :: ilevel
     !integer, intent(out)::ntest
     integer::ntest,ntest_all
-    integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum,npeak_cum
+    integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum
     integer,dimension(1:g%ncpu)::nsite_cpu,nsite_cpu_all
     integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level 
 
@@ -345,7 +412,7 @@ subroutine collect_test(r,g,m,p,ilevel)!,ntest)
     integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
     integer(kind=8),dimension(1:g%ncpu)::ntest_cpu,ntest_cpu_all,npeak_cpu,npeak_cpu_all
     logical::verbose_all=.false.
-    real(kind=8)::d,d0
+    real(kind=8)::d,dx_loc
     integer::action,ivar_clump
     logical::ok
     real(kind=8)::dx,vol
@@ -366,7 +433,7 @@ subroutine collect_test(r,g,m,p,ilevel)!,ntest)
 
             d = m%grid(igrid)%rho(ind)
             !endif
-            ok = ok .and. d > d0
+            ok = ok .and. d > density_threshold
             !count and flag !create 'testparticles'
             ! Compute test particle map
             m%grid(igrid)%flag2(ind) = 0
@@ -384,7 +451,6 @@ subroutine collect_test(r,g,m,p,ilevel)!,ntest)
                 p%maxxp(p%npart,3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
                 p%denp(p%npart)=d
                 p%denpm(ipart)=d
-                
                 m%grid(igrid)%flag2(ind) = 1   
             endif
         end do
@@ -425,7 +491,7 @@ subroutine collect_test(r,g,m,p,ilevel)!,ntest)
             denp(i)=-p%denp(i)
             testp_sort(i)=i
         end do
-        call quick_sort_dp(denp(1),testp_sort(1),ntest)
+        call quick_sort_dp(denp,testp_sort,ntest)
         deallocate(denp)
     endif
     
@@ -442,14 +508,15 @@ end subroutine collect_test
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_collect_peak(pst,ilevel,input_size)!ntest,output_size)
+recursive subroutine r_collect_peak(s,pst,p,ilevel,input_size)!ntest,output_size)
   use mdl_module
-  use ramses_commons, only: pst_t
+  use ramses_commons, only: pst_t,ramses_t
   use mdl_parameters
   use clfind_commons
   implicit none
   type(pst_t)::pst
   type(peak_t)::p
+  type(ramses_t)::s
   integer,VALUE::input_size
   integer::output_size
   integer::ilevel
@@ -458,10 +525,10 @@ recursive subroutine r_collect_peak(pst,ilevel,input_size)!ntest,output_size)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,0,ilevel)!,output_size,ilevel)
-     call r_collect_peak(pst%pLower,ilevel,input_size)!,ntest,output_size)
+     call r_collect_peak(s,pst%pLower,p,ilevel,input_size)!,ntest,output_size)
      call mdl_get_reply(pst%s%mdl,rID,0)!,output_size,next_ntest)
   else
-     call collect_peak(pst%s%r,pst%s%g,pst%s%m,p,ilevel)!,ntest)
+     call collect_peak(s,pst%s%r,pst%s%g,pst%s%m,p,ilevel)!,ntest)
   endif
 
 end subroutine r_collect_peak
@@ -469,9 +536,10 @@ end subroutine r_collect_peak
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine collect_peak(r,g,m,p,ilevel)
+subroutine collect_peak(s,r,g,m,p,ilevel)
     use amr_parameters, only: twotondim
     use amr_commons, only: run_t,global_t,mesh_t,oct
+    use ramses_commons, only: ramses_t
     use clfind_commons
     use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
     use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
@@ -482,6 +550,7 @@ subroutine collect_peak(r,g,m,p,ilevel)
     use cache
     use nbors_utils
     implicit none
+    type(ramses_t)::s
     type(run_t)::r
     type(global_t)::g
     type(mesh_t)::m
@@ -490,11 +559,12 @@ subroutine collect_peak(r,g,m,p,ilevel)
     type(msg_large_realdp)::dummy_large_realdp
     type(oct),pointer::gridp,gridn,gridpm
     integer,  intent(in)  :: ilevel
-    integer::npeaks,npeaks_tot,npeaks_max,icpu,next_level,now_level,ipart,ip
+    integer::npeaks,npeaks_tot,icpu,next_level,now_level
+    integer::ipart,jpart,ip,i,icellp,icellpm,ipeak
     integer(kind=8),dimension(1:g%ncpu)::npeak_cpu,npeak_cpu_all
-    integer(kind=8),dimension(0:g%ncpu)::npeak_cum
     integer,dimension(1:ndim)::ckey,ckey_nbor
     integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
+    real(dp)::dx_loc
     
     !-----------------------------------------------------------------------
     ! Count number of density peaks and share info across processors
@@ -527,12 +597,12 @@ subroutine collect_peak(r,g,m,p,ilevel)
         next_level = p%levelp(p%sortp(ipart+1))
         now_level = p%levelp(p%sortp(ipart))
         if(next_level /= now_level)then
-            call neighborsearch(r,p,ip,npeaks,now_level)
+            call neighborsearch(s,r,p,ip,npeaks,now_level,.true.)
             ip=0
         endif
     end do
     if (ip>0)then
-        call neighborsearch(r,p,ip,npeaks,now_level)
+        call neighborsearch(s,r,p,ip,npeaks,now_level,.true.)
     endif
 
     npeak_cpu=0
@@ -554,7 +624,7 @@ subroutine collect_peak(r,g,m,p,ilevel)
 #else
     npeaks_tot=npeak_cum(g%ncpu)
 #endif
-    if (myid==1.and.npeaks_tot>0) &
+    if (g%myid==1.and.npeaks_tot>0) &
         & write(*,'(" Total number of density peaks found=",I10)')npeaks_tot
     p%npeak_tot=npeaks_tot
 !----------------------------------------------------------------------
@@ -574,6 +644,7 @@ subroutine collect_peak(r,g,m,p,ilevel)
                 hash_cell(1:ndim)=ckey(1:ndim)
                 call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.)
                 gridp%flag2(icellp)=ipeak+npeak_cum(g%myid-1)
+                p%pid(ipart) = ipeak+npeak_cum(g%myid-1)
             endif
         end do
     endif
@@ -591,17 +662,18 @@ subroutine collect_peak(r,g,m,p,ilevel)
     if(p%npart>0)then
         do ipart=1,p%npart
             jpart=p%sortp(ipart)
-            if(p%peak(jpart).eq.0)then
+            if(.not. p%peak(jpart))then
                 dx_loc=r%boxlen/2**p%levelp(jpart)
                 ckey(1:ndim)=int(p%maxxp(jpart,1:ndim)/dx_loc)
-                hash_cell(0)=p%levelpm(ipart)+1
+                hash_cell(0)=p%levelpm(jpart)+1
                 hash_cell(1:ndim)=ckey(1:ndim)
                 call get_parent_cell(s,hash_cell,m%grid_dict,gridpm,icellpm,flush_cache=.true.,fetch_cache=.true.)
                 ckey(1:ndim)=int(p%xp(jpart,1:ndim)/dx_loc)
-                hash_cell(0)=p%levelp(ipart)+1
+                hash_cell(0)=p%levelp(jpart)+1
                 hash_cell(1:ndim)=ckey(1:ndim)
                 call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icellp,flush_cache=.true.,fetch_cache=.true.)
                 gridp%flag2(icellp) = gridpm%flag2(icellp)
+                p%pid(jpart) = gridpm%flag2(icellp)
             endif
         end do
     endif
@@ -614,14 +686,15 @@ end subroutine collect_peak
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_collect_saddle(pst,ilevel,input_size)!ntest,output_size)
+recursive subroutine r_collect_saddle(s,pst,p,ilevel,input_size)!ntest,output_size)
   use mdl_module
-  use ramses_commons, only: pst_t
+  use ramses_commons, only: pst_t,ramses_t
   use mdl_parameters
   use clfind_commons
   implicit none
   type(pst_t)::pst
   type(peak_t)::p
+  type(ramses_t)::s
   integer,VALUE::input_size
   integer::output_size
   integer::ilevel
@@ -630,10 +703,10 @@ recursive subroutine r_collect_saddle(pst,ilevel,input_size)!ntest,output_size)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,0,ilevel)!,output_size,ilevel)
-     call r_collect_saddle(pst%pLower,ilevel,input_size)!,ntest,output_size)
+     call r_collect_saddle(s,pst%pLower,p,ilevel,input_size)!,ntest,output_size)
      call mdl_get_reply(pst%s%mdl,rID,0)!,output_size,next_ntest)
   else
-     call collect_saddle(pst%s%r,pst%s%g,pst%s%m,p,ilevel)!,ntest)
+     call collect_saddle(s,pst%s%r,pst%s%g,pst%s%m,p,ilevel)!,ntest)
   endif
 
 end subroutine r_collect_saddle
@@ -642,16 +715,19 @@ end subroutine r_collect_saddle
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine collect_saddle(r,g,m,p,ilevel)
+subroutine collect_saddle(s,r,g,m,p,ilevel)
     use amr_commons
     use clfind_commons
-    use amr_commons, only: run_t
-    use clfind_commons
+    use amr_commons, only: run_t,global_t,mesh_t
+    use ramses_commons, only: ramses_t
     implicit none
     integer::ipart,jpart,ip,now_level,next_level,ilevel
     integer::dummyint
     type(run_t)::r
     type(peak_t)::p
+    type(global_t)::g
+    type(mesh_t)::m
+    type(ramses_t)::s
     !---------------------------------------------------------------------------
     ! subroutine which creates a npeaks**2 sized array of saddlepoint densities
     ! by looping over all testparticles and passing them to neighborcheck with
@@ -668,15 +744,85 @@ subroutine collect_saddle(r,g,m,p,ilevel)
         next_level=0 !level of next particle
         if(ipart<p%npart)next_level=p%levelp(jpart+1)
         if(next_level /= now_level)then
-            call neighborsearch(r,p,ip,dummyint,now_level)
+            call neighborsearch(s,r,p,ip,dummyint,now_level,.false.)
             ip=0
         endif
     end do
     if (ip>0)then
-        call neighborsearch(r,p,ip,npeaks,dummyint,now_level)
+        call neighborsearch(s,r,p,ip,dummyint,now_level,.false.)
     endif
 
 end subroutine collect_saddle
+
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_init_peak(pst,c,p,ilevel,input_size)!ntest,output_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  use clfind_commons
+  implicit none
+  type(pst_t)::pst
+  type(peak_t)::p
+  type(clump_t)::c
+  integer,VALUE::input_size
+  integer::output_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,0,ilevel)!,output_size,ilevel)
+     call r_init_peak(pst%pLower,c,p,ilevel,input_size)!,ntest,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)!,output_size,next_ntest)
+  else
+     call init_peak(c,p,ilevel)!,ntest)
+  endif
+
+end subroutine r_init_peak
+
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine init_peak(c,p,ilevel)
+    !use amr_commons
+    use clfind_commons
+    !use amr_commons, only: run_t,global_t,mesh_t
+    !use ramses_commons, only: ramses_t
+    implicit none
+    integer::ipart,jpart,ip,now_level,next_level,ilevel
+    integer::dummyint
+    type(peak_t)::p
+    type(clump_t)::c
+    !---------------------------------------------------------------------------
+    ! subroutine which initializes the clump used to merge 
+    ! the tpye property idp can be used to link clump with peak_t
+    !---------------------------------------------------------------------------
+    ip = 0
+    do i=1,p%npart
+        if(p%peak(i))then
+            ip=ip+1
+            c%npart=ip                  ! Local 'test particle' index
+            c%levelp(ip) = p%levelp(i)        ! Level
+            ! Compute peak coordinate from cell centers
+            c%xp(ip,1) = p%xp(i,1) 
+            c%xp(ip,2) = p%xp(i,2) 
+            c%xp(ip,3) = p%xp(i,3) 
+            c%denp(ip) = p%denp(i)   
+            c%pid = p%idp(i)
+            c%idp = i
+            c%idc = i
+        endif
+    enddo
+
+
+end subroutine init_peak
+
+
+
 
 end module clump_finder_module
 
