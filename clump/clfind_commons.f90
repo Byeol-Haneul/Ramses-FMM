@@ -33,6 +33,7 @@ module clfind_commons
         
         ! Particle dependent arrays
         real(dp),allocatable,dimension(:,:)   ::xp       ! Positions
+        real(dp),allocatable,dimension(:,:)   ::vel       ! uold 2:4
         real(dp),allocatable,dimension(:)     ::denp       ! Density
         real(dp),allocatable,dimension(:)     ::denpm       ! Density of the peak
 
@@ -66,7 +67,7 @@ module clfind_commons
 
         integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
         integer(kind=8),allocatable,dimension(:) ::idp      ! the reference id of the particle
-        integer(kind=8),allocatable,dimension(:) ::idc      ! the clump id in all processors
+        integer(kind=8),allocatable,dimension(:) ::idc      ! the clump id in all processors new_peak
         integer,allocatable,dimension(:) ::pid      ! the peak id in all processors
         integer ,allocatable,dimension(:)     ::sortp    ! Sorted indices
         integer,allocatable,dimension(:) ::alive     ! whether this peak is alive
@@ -78,9 +79,10 @@ module clfind_commons
         integer,allocatable,dimension(:) ::n_cell_halo   ! ind of halo
         integer,allocatable,dimension(:) ::n_cells   ! ind of halo
         real(dp),allocatable,dimension(:)     ::min_dens
+        real(dp),allocatable,dimension(:)     ::max_dens
         real(dp),allocatable,dimension(:)     ::clump_vol
-        real(dp),allocatable,dimension(:)     ::center_of_mass
-        real(dp),allocatable,dimension(:)     ::clump_velocity
+        real(dp),allocatable,dimension(:,:)     ::center_of_mass
+        real(dp),allocatable,dimension(:,:)     ::clump_velocity
         real(dp),allocatable,dimension(:)     ::halo_mass       ! halo mass
         real(dp),allocatable,dimension(:)     ::clump_mass       ! halo mass
 
