@@ -26,6 +26,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
     type(pst_t)::pst
     !type(run_t)::r
     type(peak_t)::p
+    type(clump_t)::c
     !type(global_t)::g
     !type(mesh_t)::m
     type(ramses_t)::s
@@ -101,21 +102,21 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         !------------------------------------------
         if(g%myid==1.and.clinfo)write(*,*)"Now merging irrelevant peaks."
 
-        call merge_clumps('relevance')
+        call r_merge_clumps(s,pst,c,p,'relevance',r%levelmin,1)
 
 
         !------------------------------------------
         ! Compute clumps properties
         !------------------------------------------
         if(g%myid==1.and.clinfo)write(*,*)"Computing relevant clump properties."
-        !call compute_clump_properties()
+        call compute_clump_properties(s,pst,c,p,r%levelmin,1)
 
         !------------------------------------------
         ! Merge clumps into haloes
         !------------------------------------------
         if(saddle_threshold>0)then
             if(g%myid==1.and.clinfo)write(*,*)"Now merging peaks into halos."
-            call merge_clumps('saddleden')
+            call r_merge_clumps(s,pst,c,p,'saddleden',r%levelmin,1)
         endif
 
         !------------------------------------------
@@ -125,17 +126,18 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
             write(*,*)"Output status of peak memory."
         endif
         
-        !if(clinfo.and.saddle_threshold.LE.0)call write_clump_properties(.false.)
-        !if(create_output.and..not.unbind)then
-        !    if(g%myid==1)write(*,*)"Outputing clump properties to disc."
-            !call write_clump_properties(.true.)
-            !if(r%pic)call output_part_clump_id()
+        if(clinfo.and.saddle_threshold.LE.0)call write_clump_properties(.false.)
+        if(create_output.and..not.unbind)then
+            ! if unbind, output will be written in unbinding() routine
+            if(g%myid==1)write(*,*)"Outputing clump properties to disc."
+            call write_clump_properties(.true.)
+            if(r%pic)call output_part_clump_id()
             ! output the clump field
-            !if (output_clump_field)then
-            !    if(g%myid==1)write(*,*)"Outputing clump field to disc"
-            !    !call write_clump_field
-            !end if
-        !endif
+            if (output_clump_field)then
+                if(g%myid==1)write(*,*)"Outputing clump field to disc"
+                call write_clump_field
+            end if
+        endif
     endif
 
 end associate
@@ -814,7 +816,7 @@ subroutine init_peak(c,p,ilevel)
             c%denp(ip) = p%denp(i)   
             c%pid = p%idp(i)
             c%idp = i
-            c%idc = i
+            c%idc = p%idp(i)
         endif
     enddo
 

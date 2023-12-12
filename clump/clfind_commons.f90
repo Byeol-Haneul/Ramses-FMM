@@ -7,6 +7,7 @@ module clfind_commons
     integer,allocatable,dimension(:)::npeak_cum !number of peak in all processors
     !integer(kind=8),dimension(0:g%ncpu)::npeak_cum !number of peak in all processors
     logical::clinfo=.false.
+    logical::unbind=.false.
     integer::npeaks_max
     ! Spare matrix for saddle points densities
     type(sparse_mat)::sparse_saddle_dens
@@ -15,6 +16,8 @@ module clfind_commons
     integer::nhash,hfree,hcollision
     integer,dimension(:),allocatable::gkey,nkey,hkey
 
+
+    real(dp)::tot_mass
 
     real(dp)::relevance_threshold=2
     real(dp)::density_threshold=-1
@@ -58,18 +61,26 @@ module clfind_commons
         
         ! Particle dependent arrays
         real(dp),allocatable,dimension(:,:)   ::xp       ! Positions
+        
         real(dp),allocatable,dimension(:)     ::denp       ! Density
 
         integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
-        integer(kind=8),allocatable,dimension(:) ::idp      ! the peak id in all processors
+        integer(kind=8),allocatable,dimension(:) ::idp      ! the reference id of the particle
         integer(kind=8),allocatable,dimension(:) ::idc      ! the clump id in all processors
-        integer,allocatable,dimension(:) ::pid     ! the reference id of the particle
+        integer,allocatable,dimension(:) ::pid      ! the peak id in all processors
         integer ,allocatable,dimension(:)     ::sortp    ! Sorted indices
         integer,allocatable,dimension(:) ::alive     ! whether this peak is alive
+
+        ! properties of clumps
+        real(dp),allocatable,dimension(:,:)   ::peak_pos       ! Positions
         integer,allocatable,dimension(:) ::lev_peak   ! peak levels
         integer,allocatable,dimension(:) ::ind_halo   ! ind of halo
         integer,allocatable,dimension(:) ::n_cell_halo   ! ind of halo
         integer,allocatable,dimension(:) ::n_cells   ! ind of halo
+        real(dp),allocatable,dimension(:)     ::min_dens
+        real(dp),allocatable,dimension(:)     ::clump_vol
+        real(dp),allocatable,dimension(:)     ::center_of_mass
+        real(dp),allocatable,dimension(:)     ::clump_velocity
         real(dp),allocatable,dimension(:)     ::halo_mass       ! halo mass
         real(dp),allocatable,dimension(:)     ::clump_mass       ! halo mass
 
