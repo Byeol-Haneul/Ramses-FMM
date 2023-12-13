@@ -236,7 +236,7 @@ subroutine m_rho_fine(pst,ilevel)
 
   !---------------------------------------------------------------------
   ! Collect multipole contribution from all CPU and broadcast rho_tot
-  !---------------------------------------------------------- -----------
+  !---------------------------------------------------------------------
   if(ilevel==r%levelmin)then
 
      ! Collect local multipole from all CPU

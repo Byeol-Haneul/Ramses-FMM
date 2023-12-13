@@ -108,7 +108,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 condinit.o boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
 	 godunov_fine.o umuscl.o uplmde.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 star_formation.o feedback.o \
-	 task_manager.o amr_step.o adaptive_loop.o sparse_mat.o clfind_commons.o clump_finder.o 
+	 task_manager.o amr_step.o adaptive_loop.o sparse_mat.o clfind_commons.o  clump_finder.o 
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
 	$(F90) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)

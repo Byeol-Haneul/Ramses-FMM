@@ -883,8 +883,6 @@ subroutine get_local_peak_id(g,global_peak_id,local_peak_id)
 end subroutine get_local_peak_id
 
 
-
-
 recursive subroutine r_compute_clump_properties(s,pst,c,p,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t,ramses_t
@@ -1676,7 +1674,6 @@ subroutine write_clump_properties(r,g,c,to_file)
     endif
   
 end subroutine write_clump_properties
-
 
 
 
