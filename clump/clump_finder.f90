@@ -1,146 +1,125 @@
 module clump_finder_module
-
 contains
-
 #if NDIM==3
 subroutine m_clump_finder(pst,create_output,keep_alive)
-!subroutine clump_finder(r,g,m,create_output,keep_alive)
-    use amr_parameters, only:dp,ndim,twotondim
-    use amr_commons, only:mesh_t,oct
-    use hydro_parameters, only:nvar
-    use rho_fine_module, only: m_rho_fine
-    use clfind_commons
-    use ramses_commons, only: pst_t,ramses_t
-    use mdl_module
-    use mdl_parameters
-    use nbors_utils
+  use amr_parameters, only: dp,ndim,twotondim
+  use amr_commons, only: mesh_t,oct
+  use hydro_parameters, only: nvar
+  use rho_fine_module, only: m_rho_fine
+  use clfind_commons
+  use ramses_commons, only: pst_t,ramses_t
+  use mdl_module
+  use mdl_parameters
+  use nbors_utils
+  use hilbert
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
-  use hilbert
 #ifndef WITHOUTMPI
-    use mpi
-    integer(i8b)::nmove_all,nzero_all
+  use mpi
+  integer(i8b)::nmove_all,nzero_all
 #endif
-    implicit none
-    type(pst_t)::pst
-    !type(run_t)::r
-    type(peak_t)::p
-    type(clump_t)::c
-    !type(global_t)::g
-    !type(mesh_t)::m
-    type(ramses_t)::s
-    logical::create_output,keep_alive
-    integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level 
-    !integer(kind=8),dimension(1:g%ncpu)::ntest_cpu
-    !integer(kind=8),dimension(1:g%ncpu)::npeak_cpu
-    integer::istep,nskip,ilevel,nmove,nzero,ipart,jpart,ip,ipeak
-    integer::i,levelmin_part
-    integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
-    
-    logical::verbose_all=.false.
-    real(kind=8)::d
-    integer::action,ivar_clump
-    logical::ok
-    real(kind=8)::dx,vol
-    integer::npeaks,npeaks_tot,icellp,icelln,ntest,ntest_all
-    integer,dimension(1:ndim)::ckey,ckey_nbor
-    integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-    type(oct),pointer::gridp,gridn
-    real(dp)::dx_loc,scale,vol_loc
-    associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
+  implicit none
+  type(pst_t)::pst
+  !type(run_t)::r
+  type(peak_t)::p
+  type(clump_t)::c
+  !type(global_t)::g
+  !type(mesh_t)::m
+  type(ramses_t)::s
+  logical::create_output,keep_alive
+  integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level 
+  !integer(kind=8),dimension(1:g%ncpu)::ntest_cpu
+  !integer(kind=8),dimension(1:g%ncpu)::npeak_cpu
+  integer::istep,nskip,ilevel,nmove,nzero,ipart,jpart,ip,ipeak
+  integer::i,levelmin_part
+  integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
+  
+  logical::verbose_all=.false.
+  real(kind=8)::d
+  integer::action,ivar_clump
+  logical::ok
+  real(kind=8)::dx,vol
+  integer::npeaks,npeaks_tot,icellp,icelln,ntest,ntest_all
+  integer,dimension(1:ndim)::ckey,ckey_nbor
+  integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
+  type(oct),pointer::gridp,gridn
+  real(dp)::dx_loc,scale,vol_loc
 #ifndef WITHOUTMPI
-    integer::info
-    !integer,dimension(1:g%ncpu)::nsite_cpu_tot,ntest_cpu_all,npeak_cpu_all,nsite_cpu_all
+  integer::info
+  !integer,dimension(1:g%ncpu)::nsite_cpu_tot,ntest_cpu_all,npeak_cpu_all,nsite_cpu_all
 #endif
-    !integer,dimension(0:g%ncpu)::nsite_cum,ntest_cum,npeak_cum
-    !integer,dimension(1:g%ncpu)::nsite_cpu
+  !integer,dimension(0:g%ncpu)::nsite_cum,ntest_cum,npeak_cum
+  !integer,dimension(1:g%ncpu)::nsite_cpu
+  
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
     
-    
-
-    if(r%verbose)write(*,*)' Entering clump_finder'
-
-    !-----------------------------------------------------------------------
-    ! Compute rho from gas density and/or dark matter and/or star particles
-    !-----------------------------------------------------------------------
-    call m_rho_fine(pst,r%levelmin)
-
-
-    ! Set some constants
-    !dx=r%boxlen/2**ilevel
-    !vol=dx**ndim
-
-    !if (create_output) then
-    !    if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
-    !    if(g%nstep_coarse==0.and.r%nrestart>0)return
-    !endif
-
-    ! if(r%verbose.and.g%myid==1)write(*,*)' Entering clump_finder'
-
-!---------------------------------------------------------
-! Compute number of test particle
-!---------------------------------------------------------
-! Loop over all finer levels from fine to coarse
-    do i=r%nlevelmax,r%levelmin,-1
-        if(m%noct_tot(i)>0)then
-            ! Collect local ntest from all CPU
-            call r_collect_test(pst,p,i,1)
-        endif
-    end do
-
-    call r_collect_peak(s,pst,p,r%levelmin,1)
-
-    if(npeak_cum(g%ncpu)>0)then
-
-        ! initialize the clump type
-        call r_init_peak(pst,c,p,r%levelmin,1)
-
-        call r_collect_saddle(s,pst,p,r%levelmin,1)
-
-        !------------------------------------------
-        ! Merge irrelevant peaks
-        !------------------------------------------
-        if(g%myid==1.and.clinfo)write(*,*)"Now merging irrelevant peaks."
-
-        call r_merge_clumps(s,pst,c,p,'relevance',r%levelmin,1)
-
-
-        !------------------------------------------
-        ! Compute clumps properties
-        !------------------------------------------
-        if(g%myid==1.and.clinfo)write(*,*)"Computing relevant clump properties."
-        call r_compute_clump_properties(s,pst,c,p,r%levelmin,1)
-
-        !------------------------------------------
-        ! Merge clumps into haloes
-        !------------------------------------------
-        if(saddle_threshold>0)then
-            if(g%myid==1.and.clinfo)write(*,*)"Now merging peaks into halos."
-            call r_merge_clumps(s,pst,c,p,'saddleden',r%levelmin,1)
-        endif
-
-        !------------------------------------------
-        ! Output clumps properties to file
-        !------------------------------------------
-        if(r%verbose)then
-            write(*,*)"Output status of peak memory."
-        endif
-        
-        !if(clinfo.and.saddle_threshold.LE.0)call write_clump_properties(r,g,mdl,c,.false.)
-        !if(create_output.and..not.unbind)then
-        !    ! if unbind, output will be written in unbinding() routine
-        !    if(g%myid==1)write(*,*)"Outputing clump properties to disc."
-        !    call write_clump_properties(r,g,mdl,c,.true.)
-            !if(r%pic)call output_part_clump_id()
-            ! output the clump field
-            !if (output_clump_field)then
-            !    if(g%myid==1)write(*,*)"Outputing clump field to disc"
-            !    call write_clump_field
-            !end if
-        !endif
-    endif
-
-end associate
+  if(r%verbose)write(*,*)' Entering clump_finder'
+  
+  !-----------------------------------------------------------------------
+  ! Compute rho from gas density and/or dark matter and/or star particles
+  !-----------------------------------------------------------------------
+  call m_rho_fine(pst,r%levelmin)
+  
+  !---------------------------------------------------------
+  ! Compute properties of all cells above density threshold
+  !---------------------------------------------------------
+  call r_collect_test(pst,p,r%levelmin,1)
+  
+  !---------------------------------------------------------
+  ! Compute properties of all density peaks
+  !---------------------------------------------------------
+  call r_collect_peak(pst,p,r%levelmin,1)
+  
+  if(npeak_cum(g%ncpu)>0)then
+     
+     ! initialize the clump type
+     call r_init_peak(pst,c,p,r%levelmin,1)
+     
+     call r_collect_saddle(s,pst,p,r%levelmin,1)
+     
+     !------------------------------------------
+     ! Merge irrelevant peaks
+     !------------------------------------------
+     if(clinfo)write(*,*)"Now merging irrelevant peaks."
+     call r_merge_clumps(s,pst,c,p,'relevance',r%levelmin,1)
+     
+     !------------------------------------------
+     ! Compute clumps properties
+     !------------------------------------------
+     if(clinfo)write(*,*)"Computing relevant clump properties."
+     call r_compute_clump_properties(s,pst,c,p,r%levelmin,1)
+     
+     !------------------------------------------
+     ! Merge clumps into haloes
+     !------------------------------------------
+     if(saddle_threshold>0)then
+        if(clinfo)write(*,*)"Now merging peaks into halos."
+        call r_merge_clumps(s,pst,c,p,'saddleden',r%levelmin,1)
+     endif
+     
+     !------------------------------------------
+     ! Output clumps properties to file
+     !------------------------------------------
+     if(r%verbose)then
+        write(*,*)"Output status of peak memory."
+     endif
+     
+     !if(clinfo.and.saddle_threshold.LE.0)call write_clump_properties(r,g,mdl,c,.false.)
+     !if(create_output.and..not.unbind)then
+     !    ! if unbind, output will be written in unbinding() routine
+     !    if(g%myid==1)write(*,*)"Outputing clump properties to disc."
+     !    call write_clump_properties(r,g,mdl,c,.true.)
+     !if(r%pic)call output_part_clump_id()
+     ! output the clump field
+     !if (output_clump_field)then
+     !    if(g%myid==1)write(*,*)"Outputing clump field to disc"
+     !    call write_clump_field
+     !end if
+     !endif
+  endif
+  
+  end associate
 
 end subroutine m_clump_finder
 
@@ -358,159 +337,152 @@ subroutine neighborsearch(s,r,p,np,count,ilevel,peak)
     end do
 #endif
 end subroutine neighborsearch
-
-
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_collect_test(pst,p,ilevel,input_size)!ntest,output_size)
+recursive subroutine r_collect_test(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
-  use clfind_commons
   implicit none
   type(pst_t)::pst
-  type(peak_t)::p
   integer,VALUE::input_size
-  integer::output_size
+
   integer::ilevel
-  real(kind=8)::ntest,next_ntest
-
   integer::rID
-
+  
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_RESET_RHO,pst%iUpper+1,input_size,0,ilevel)!,output_size,ilevel)
-     call r_collect_test(pst%pLower,p,ilevel,input_size)!,ntest,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)!,output_size,next_ntest)
-     !ntest=ntest+next_ntest
+     rID = mdl_send_request(pst%s%mdl,MDL_TEST_PARTICLE,pst%iUpper+1,input_size,0,ilevel)
+     call r_collect_test(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call collect_test(pst%s%r,pst%s%g,pst%s%m,p,ilevel)!,ntest)
+     call collect_test(pst%s%r,pst%s%g,pst%s%m,pst%s%c)
   endif
-
+  
 end subroutine r_collect_test
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine collect_test(r,g,m,p,ilevel)!,ntest)
-    use amr_parameters, only: twotondim
-    use amr_commons, only: run_t,global_t,mesh_t
-    use clfind_commons
-    implicit none
-    type(run_t)::r
-    type(global_t)::g
-    type(mesh_t)::m
-    type(peak_t)::p
-    integer,  intent(in)  :: ilevel
-    !integer, intent(out)::ntest
-    integer::ntest,ntest_all
-    integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum
-    integer,dimension(1:g%ncpu)::nsite_cpu,nsite_cpu_all
-    integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level 
+subroutine collect_test(r,g,m,c)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: run_t,global_t,mesh_t
+  use clfind_commons, only: clump_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(clump_t)::c
+  integer,  intent(in)  :: ilevel
+  integer::ntest,ntest_all
+  integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum
+  integer,dimension(1:g%ncpu)::nsite_cpu,nsite_cpu_all
+  integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level 
 
-    integer::istep,nskip,nmove,nzero,ipart,jpart,ip
-    integer::i,levelmin_part
-    integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
-    integer(kind=8),dimension(1:g%ncpu)::ntest_cpu,ntest_cpu_all,npeak_cpu,npeak_cpu_all
-    logical::verbose_all=.false.
-    real(kind=8)::d,dx_loc
-    integer::action,ivar_clump
-    logical::ok
-    real(kind=8)::dx,vol
-    ntest=0
-    dx_loc=r%boxlen/2**ilevel
+  integer::istep,nskip,nmove,nzero,ipart,jpart,ip
+  integer::i,levelmin_part
+  integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
+  integer(kind=8),dimension(1:g%ncpu)::ntest_cpu,ntest_cpu_all,npeak_cpu,npeak_cpu_all
+  logical::verbose_all=.false.
+  real(kind=8)::d,dx_loc
+  integer::action,ivar_clump
+  logical::ok
+  real(kind=8)::dx,vol
+
 #ifdef GRAV
-  ! Initialize density field to zero
-    do igrid=m%head(ilevel),m%tail(ilevel)
-        p%headp(ilevel)=ntest+1
+  !---------------------------------------------------------
+  ! Count and flag cells above threshold
+  !---------------------------------------------------------
+  c%ntest = 0
+  do ilevel=r%levelmin,r%nlevelmax
+     do igrid=m%head(ilevel),m%tail(ilevel)
         ! Loop over cells
         do ind=1,twotondim
-            ! Select leaf cells
-            ok = .not. m%grid(igrid)%refined(ind)
-            ! Select dense enough cells
-            !if(r%hydro)then
-            !    d = m%grid(igrid)%uold(ind,ivar_clump)
-            !else
-
-            d = m%grid(igrid)%rho(ind)
-            !endif
-            ok = ok .and. d > density_threshold
-            !count and flag !create 'testparticles'
-            ! Compute test particle map
-            m%grid(igrid)%flag2(ind) = 0
-            if(ok)then
-                ntest=ntest+1
-                p%npart=ntest                  ! Local 'test particle' index
-                p%levelp(p%npart)=ilevel        ! Level
-                p%levelpm(p%npart)=ilevel        ! Level
-                ! Compute peak coordinate from cell centers
-                p%xp(p%npart,1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1) 
-                p%xp(p%npart,2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
-                p%xp(p%npart,3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-                p%maxxp(p%npart,1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1) 
-                p%maxxp(p%npart,2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
-                p%maxxp(p%npart,3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-                p%denp(p%npart)=d
-                if(r%hydro)then
-                    p%vel(p%npart,1)=m%grid(igrid)%uold(ind,2)
-                    p%vel(p%npart,2)=m%grid(igrid)%uold(ind,3)
-                    p%vel(p%npart,3)=m%grid(igrid)%uold(ind,4)
-                endif
-                p%denpm(ipart)=d
-                m%grid(igrid)%flag2(ind) = 1   
-            endif
+           ! Select leaf cells
+           ok = .not. m%grid(igrid)%refined(ind)
+           d = m%grid(igrid)%rho(ind)
+           ok = ok .and. d > density_threshold
+           m%grid(igrid)%flag2(ind) = 0
+           if(ok)then
+              c%ntest=c%ntest+1
+              m%grid(igrid)%flag2(ind) = 1   
+           endif
         end do
-        p%tailp(ilevel)=ntest
-    end do
+     end do
+  end do
 
-    !---------------------------------------------------------
-    ! Compute number of test particles across all CPUs.
-    !---------------------------------------------------------
-    ntest_cpu=0
-    ntest_cpu(g%myid)=ntest
+  !---------------------------------------------------------
+  ! Compute number of test particles across all CPUs.
+  !---------------------------------------------------------
+  ntest_cpu=0; ntest_cpu_all=0
+  ntest_cpu(myid)=c%ntest
 #ifndef WITHOUTMPI
 #ifndef LONGINT
-    call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
 #else
-    call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,g%ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
 #endif
-    ntest_cpu=ntest_cpu_all
+  ntest_cpu(1)=ntest_cpu_all(1)
 #endif
-    ntest_cum=0
-    do icpu=1,g%ncpu
-        ntest_cum(icpu)=ntest_cum(icpu-1)+int(ntest_cpu(icpu),kind=8)
-    end do
-    ntest_all = ntest_cum(g%ncpu)
-    p%npart=ntest   
-    do i=1,ntest
-        p%idp(i)=ntest_cum(g%myid-1)+i
+  do icpu=2,ncpu
+     ntest_cpu(icpu)=ntest_cpu(icpu-1)+ntest_cpu_all(icpu)
+  end do
+  ntest_all=ntest_cpu(ncpu)
+  if(g%myid==1)then
+     if(ntest_all.gt.0.and.r%clinfo)then
+        write(*,'(" Total number of cells above threshold=",I12)')ntest_all
+     endif
+  end if
+  nskip=ntest_cpu(myid)-c%ntest
 
-    end do
-    p%npart_tot=ntest_cum(g%ncpu)
+  !---------------------------------------------------------
+  ! Allocate arrays for cells above threshold
+  !---------------------------------------------------------
+  if (c%ntest>0) then
+     allocate(c%dens(c%ntest),c%maxi(c%ntest),c%hkey(c%ntest,0:ndim))
+     c%dens=0d0; c%hkey=0; c%maxi=0
+  endif
 
-    !-----------------------------------------------------------------------
-    ! Sort cells above threshold according to their density
-    !-----------------------------------------------------------------------
-    if (ntest>0) then
-        allocate(testp_sort(ntest))
-        do i=1,ntest
-            denp(i)=-p%denp(i)
-            testp_sort(i)=i
+  !---------------------------------------------------------
+  ! Compute and store arrays for cells above threshold
+  !---------------------------------------------------------
+  itest=0
+  do ilevel=r%levelmin,r%nlevelmax ! Loop over levels
+     do igrid=m%head(ilevel),m%tail(ilevel) ! Loop over grids
+        do ind=1,twotondim ! Loop over cells
+           ok=.not.m%grid(igrid)%refined(ind) ! Select leaf cells
+           d=m%grid(igrid)%rho(ind)
+           ok=ok.and.d>density_threshold
+           if(ok)then
+              itest=itest+1
+              m%grid(igrid)%flag2(ind)=itest+nskip
+              c%dens(itest)=d
+              c%hkey(itest,0)=ilevel
+              c%hkey(itest,1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)
+              c%hkey(itest,2)=2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)
+              c%hkey(itest,3)=2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)
+           endif
         end do
-        call quick_sort_dp(denp,testp_sort,ntest)
-        deallocate(denp)
-    endif
-    
-    do i=1,ntest
-        p%sortp(i) = testp_sort(i)
-    end do
-    deallocate(testp_sort)
-
+     end do
+  end do
+  
+  !-----------------------------------------------------------------------
+  ! Sort cells above threshold according to their density
+  !-----------------------------------------------------------------------
+  if (c%ntest>0) then
+     allocate(c%sort(c%ntest))
+     do i=1,c%ntest
+        c%dens(i)=-c%dens(i)
+        c%sort(i)=i
+     end do
+     call quick_sort_dp(c%dens,c%sort,c%ntest)
+     deallocate(c%dens)
+  endif
+  
 #endif  
-
+  
 end subroutine collect_test
-
 !################################################################
 !################################################################
 !################################################################
