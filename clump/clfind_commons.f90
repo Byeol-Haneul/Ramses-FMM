@@ -8,6 +8,8 @@ module clfind_commons
     !integer(kind=8),dimension(0:g%ncpu)::npeak_cum !number of peak in all processors
     logical::clinfo=.false.
     logical::unbind=.false.
+    logical::output_clump=.false.
+    logical::output_clump_field=.false.
     integer::npeaks_max
     ! Spare matrix for saddle points densities
     type(sparse_mat)::sparse_saddle_dens

@@ -2,7 +2,7 @@ module clump_finder_module
 contains
 #if NDIM==3
 subroutine m_clump_finder(pst,create_output,keep_alive)
-  use amr_parameters, only: dp,ndim,twotondim
+  use amr_parameters, only: dp,ndim,twotondim,flen
   use amr_commons, only: mesh_t,oct
   use hydro_parameters, only: nvar
   use rho_fine_module, only: m_rho_fine
@@ -12,6 +12,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   use mdl_parameters
   use nbors_utils
   use hilbert
+  use output_part_module
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
@@ -45,6 +46,12 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   type(oct),pointer::gridp,gridn
   real(dp)::dx_loc,scale,vol_loc
+
+  character(LEN=5)::nchar
+  character(LEN=flen)::filename,filedir
+  integer,dimension(1:flen/4)::input_array
+  ! Local variables
+  integer::dummy(1)
 #ifndef WITHOUTMPI
   integer::info
   !integer,dimension(1:g%ncpu)::nsite_cpu_tot,ntest_cpu_all,npeak_cpu_all,nsite_cpu_all
@@ -112,11 +119,23 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      !    call write_clump_properties(r,g,mdl,c,.true.)
      !if(r%pic)call output_part_clump_id()
      ! output the clump field
-     !if (output_clump_field)then
-     !    if(g%myid==1)write(*,*)"Outputing clump field to disc"
-     !    call write_clump_field
-     !end if
-     !endif
+
+    if(output_clump)then
+        if(g%myid==1)write(*,*)"Outputing clump properties to disc"
+        filename=TRIM(filedir) ! Note that suffix will be added later
+        input_array=transfer(filename,input_array)
+        if(r%verbose)write(*,*)'Writing clump properties files'
+        call r_output_clump(pst,c,input_array,flen/4,dummy,0)
+    endif
+
+    if(output_clump_field)then
+        if(g%myid==1)write(*,*)"Outputing clump field to disc"
+        filename=TRIM(filedir)//'clumpfield.'
+        input_array=transfer(filename,input_array)
+        if(r%verbose)write(*,*)'Writing clumpfield files'
+        call r_output_clump_field(pst,input_array,flen/4,dummy,0)
+    end if
+    !endif
   endif
   
   end associate
