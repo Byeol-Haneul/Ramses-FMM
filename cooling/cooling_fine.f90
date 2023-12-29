@@ -20,7 +20,7 @@ recursive subroutine r_cooling_fine(pst,ilevel,input_size)
      call r_cooling_fine(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call cooling_fine(pst%s%r,pst%s%g,pst%s%m,pst%s%c,ilevel)
+     call cooling_fine(pst%s%r,pst%s%g,pst%s%m,pst%s%cool,ilevel)
   endif
 
 end subroutine r_cooling_fine
