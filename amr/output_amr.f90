@@ -96,7 +96,7 @@ subroutine m_dump_all(pst,write_bkp_file)
      end if
      if(r%cooling)then
         filename=TRIM(filedir)//'cooling.bin'
-        call output_cool(pst%s%c,filename)
+        call output_cool(pst%s%cool,filename)
      end if
      filename=TRIM(filedir)//'info.txt'
      call output_info(r,g,filename)

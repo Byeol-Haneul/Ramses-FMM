@@ -1,100 +1,44 @@
 module clfind_commons
     use amr_parameters, only: dp
     use sparse_matrix
-    !integer::ntest,itest
-    real(dp),allocatable,dimension(:)::denp ! Density of the cells
-    integer,allocatable,dimension(:)::testp_sort ! Sort indices
-    integer,allocatable,dimension(:)::npeak_cum !number of peak in all processors
-    !integer(kind=8),dimension(0:g%ncpu)::npeak_cum !number of peak in all processors
-    logical::clinfo=.false.
-    logical::unbind=.false.
-    logical::output_clump=.false.
-    logical::output_clump_field=.false.
-    integer::npeaks_max
-    ! Spare matrix for saddle points densities
-    type(sparse_mat)::sparse_saddle_dens
 
-    ! Hash table variables
-    integer::nhash,hfree,hcollision
-    integer,dimension(:),allocatable::gkey,nkey,hkey
-
-
-    real(dp)::tot_mass
-
+    ! These parameters should be defined in run_t::r
     real(dp)::relevance_threshold=2
     real(dp)::density_threshold=-1
     real(dp)::saddle_threshold=-1
     real(dp)::mass_threshold=0
 
-    type peak_t
-
-        integer :: npart=0     ! Actual number of particles in processor
-        integer(kind=8):: npart_tot=0 ! Total number of particles in all processors
-        integer(kind=8):: npeak_tot=0 ! Total number of peaks in all processors
-        !integer :: npart_max=0 ! Maximum number of particles in all processors
-        
-        ! Particle dependent arrays
-        real(dp),allocatable,dimension(:,:)   ::xp       ! Positions
-        real(dp),allocatable,dimension(:,:)   ::vel       ! uold 2:4
-        real(dp),allocatable,dimension(:)     ::denp       ! Density
-        real(dp),allocatable,dimension(:)     ::denpm       ! Density of the peak
-
-        integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
-        integer ,allocatable,dimension(:)     ::levelpm   ! Current level of peak
-        integer(kind=8),allocatable,dimension(:) ::idp      ! Particle unique identifier
-        integer,allocatable,dimension(:) ::pid     ! the peak id in all processors
-        integer ,allocatable,dimension(:)     ::sortp    ! Sorted indices
-        logical ,allocatable,dimension(:)    ::peak        ! whether is a peak
-        real(dp),allocatable,dimension(:,:)   ::maxxp       ! Positions of neighbor-peaks
-        
-        !integer ,allocatable,dimension(:)     ::workp    ! Work space
-        
-        ! Level dependent arrays
-        integer ,allocatable,dimension(:)::headp    ! Particle levels head
-        integer ,allocatable,dimension(:)::tailp    ! Particle levels tail
-        
-    end type peak_t
-
-
     type clump_t
 
-        integer :: npart=0     ! Actual number of particles in processor
-        integer(kind=8):: npeak_tot=0 ! Total number of peaks in all processors
-        !integer :: npart_max=0 ! Maximum number of particles in all processors
-        
-        ! Particle dependent arrays
-        real(dp),allocatable,dimension(:,:)   ::xp       ! Positions
-        
-        real(dp),allocatable,dimension(:)     ::denp       ! Density
+       integer :: ntest=0 ! Actual number of test particles in current processor
+       integer :: ntest_tot=0 ! Total number of test particles across all processors
+       integer,allocatable,dimension(:) :: grid ! Grid index of test particle
+       integer,allocatable,dimension(:) :: cell ! Cell index of test particle
+       integer,allocatable,dimension(:) :: level ! Level of test particle
+       integer,allocatable,dimension(:,:) :: hash ! Hash key of densest neighbor
 
-        integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
-        integer(kind=8),allocatable,dimension(:) ::idp      ! the reference id of the particle
-        integer(kind=8),allocatable,dimension(:) ::idc      ! the clump id in all processors new_peak
-        integer,allocatable,dimension(:) ::pid      ! the peak id in all processors
-        integer ,allocatable,dimension(:)     ::sortp    ! Sorted indices
-        integer,allocatable,dimension(:) ::alive     ! whether this peak is alive
+       integer :: npeak=0 ! Actual number of density peaks in current processor
+       integer :: npeak_tot=0 ! Total number of density peaks across all processors
+       integer,allocatable,dimension(:) :: npeak_cum ! Cumulative number of peak per processor
 
-        ! properties of clumps
-        real(dp),allocatable,dimension(:,:)   ::peak_pos       ! Positions
-        integer,allocatable,dimension(:) ::lev_peak   ! peak levels
-        integer,allocatable,dimension(:) ::ind_halo   ! ind of halo
-        integer,allocatable,dimension(:) ::n_cell_halo   ! ind of halo
-        integer,allocatable,dimension(:) ::n_cells   ! ind of halo
-        real(dp),allocatable,dimension(:)     ::min_dens
-        real(dp),allocatable,dimension(:)     ::max_dens
-        real(dp),allocatable,dimension(:)     ::clump_vol
-        real(dp),allocatable,dimension(:,:)     ::center_of_mass
-        real(dp),allocatable,dimension(:,:)     ::clump_velocity
-        real(dp),allocatable,dimension(:)     ::halo_mass       ! halo mass
-        real(dp),allocatable,dimension(:)     ::clump_mass       ! halo mass
+       integer :: npeak_max ! Maximum number of peaks per processor including ghost peaks
+       
+       integer::peak_recv_tot,peak_send_tot ! Peak communicator arrays
+       integer,allocatable,dimension(:)::peak_send_cnt,peak_send_oft
+       integer,allocatable,dimension(:)::peak_recv_cnt,peak_recv_oft
+       integer,allocatable,dimension(:)::peak_send_buf,peak_recv_buf
 
-        real(dp),allocatable,dimension(:) ::relevance     ! temp relevance list
+       type(sparse_mat) :: sparse_saddle_dens ! Spare matrix for saddle points densities
+       
+       integer :: nhash,hfree,hcollision  ! Hash table variables
+       integer,dimension(:),allocatable :: gkey,nkey,hkey
         
-        !integer ,allocatable,dimension(:)     ::workp    ! Work space
-        
-        ! Level dependent arrays
-        integer ,allocatable,dimension(:)::headp    ! Particle levels head
-        integer ,allocatable,dimension(:)::tailp    ! Particle levels tail
-        
+       ! Prime numbers for hash table
+       integer,dimension(0:30)::prime=(/2,3,7,13,23,53,97,193,389,769,1543,&
+            & 3079,6151,12289,24593,49157,98317,196613,393241,786433,1572869, &
+            & 3145739,6291469,12582917,25165843,50331653,100663319,201326611, &
+            & 402653189,805306457,1610612741/)
+       
     end type clump_t
+    
 end module clfind_commons

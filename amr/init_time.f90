@@ -20,7 +20,7 @@ recursive subroutine r_init_time(pst)
      call r_init_time(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%c)
+     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%cool)
   endif
 
 end subroutine r_init_time
