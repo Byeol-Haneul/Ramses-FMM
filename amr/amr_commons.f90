@@ -228,6 +228,13 @@ module amr_commons
      logical::thermal_feedback=.false.
      logical::mechanical_feedback=.false.
      
+     ! Clump finder parameters
+     logical::clump_finder=.false.
+     real(dp)::relevance_threshold=2
+     real(dp)::density_threshold=-1
+     real(dp)::saddle_threshold=-1
+     real(dp)::mass_threshold=0
+
   end type run_t
   
   type global_t

@@ -3,14 +3,13 @@
 ! every line of the matrix is saved as a linked list
 ! issues/improvements:
 !    -write a routine for quicker "maxmerging" two lines (outer loop calling "get_value" at each position
-!     is very iniefficient)
+!     is very inefficient)
 !    -disconnect a value which is set to zero rather than just writing zero into memory (not too bad since
-!    -have short lifetime)
+!     have short lifetime)
 !    -reuse disconnected space
 !----------------------------------------------------------------------------------------------
-
 module sparse_matrix
-  use amr_commons
+  use amr_parameters, only: dp
   implicit none
   type sparse_mat
      real(dp),allocatable,dimension(:)::val,maxval
@@ -59,7 +58,7 @@ contains
     integer::current,save_next
 
     if(mat%used.eq.NSPARSEMAX)then
-       write(*,*)'Maximum size reached',mat%used
+       write(*,*)'Maximum size of sparse matrix reached',mat%used
        stop
     endif
 
