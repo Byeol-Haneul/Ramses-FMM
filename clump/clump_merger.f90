@@ -238,7 +238,7 @@ subroutine build_peak_communicator(s)
 
   npeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(ipeak,icpu)
+     call get_local_peak_cpu(s,ipeak,icpu)
      npeak_alltoall(g%myid,icpu)=npeak_alltoall(g%myid,icpu)+1
   end do
   call MPI_ALLREDUCE(npeak_alltoall,npeak_alltoall_tot,g%ncpu*g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
@@ -272,7 +272,7 @@ subroutine build_peak_communicator(s)
   allocate(c%peak_recv_buf(1:c%peak_recv_tot))
   ipeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(ipeak,icpu)
+     call get_local_peak_cpu(s,ipeak,icpu)
      ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
      c%peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=c%gkey(ipeak)
   end do
@@ -680,7 +680,7 @@ subroutine virtual_peak_int(s,xx,action)
 
   ipeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(ipeak,icpu)
+     call get_local_peak_cpu(s,ipeak,icpu)
      ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
      int_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=xx(ipeak)
   end do
@@ -736,7 +736,7 @@ subroutine virtual_peak_dp(s,xx,action)
 
   ipeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(ipeak,icpu)
+     call get_local_peak_cpu(s,ipeak,icpu)
      ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
      dp_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=xx(ipeak)
   end do
@@ -794,7 +794,7 @@ subroutine virtual_saddle_max(s)
 
   ipeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(ipeak,icpu)
+     call get_local_peak_cpu(s,ipeak,icpu)
      ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
      dp_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=c%sparse_saddle_dens%maxval(ipeak)
      int_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=c%sparse_saddle_dens%maxloc(ipeak)
@@ -847,7 +847,7 @@ subroutine boundary_peak_int(s,xx)
        &             int_peak_send_buf,c%peak_send_cnt,c%peak_send_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
   ipeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(ipeak,icpu)
+     call get_local_peak_cpu(s,ipeak,icpu)
      ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
      xx(ipeak)=int_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))
   end do
@@ -888,7 +888,7 @@ subroutine boundary_peak_dp(s,xx)
        &             dp_peak_send_buf,c%peak_send_cnt,c%peak_send_oft,MPI_DOUBLE_PRECISION,MPI_COMM_WORLD,info)
   ipeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(ipeak,icpu)
+     call get_local_peak_cpu(s,ipeak,icpu)
      ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
      xx(ipeak)=dp_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))
   end do
@@ -987,7 +987,6 @@ subroutine compute_clump_properties(s)
   ! variables related to the size of a cell on a given level
   integer::nx_loc,ind,idim
   logical::periodic
-
 #ifndef WITHOUTMPI
   integer::i
   real(dp)::tot_mass_tot
@@ -997,7 +996,7 @@ subroutine compute_clump_properties(s)
   periodic=periodic.or.r%periodic(2)
   periodic=periodic.or.r%periodic(3)
 
-  !peak-patch related arrays before sharing information with other cpus
+  ! peak-patch related arrays before sharing information with other cpus
 
   c%min_dens=huge(zero)
   c%n_cells=0; c%n_cells_halo=0
@@ -1007,7 +1006,6 @@ subroutine compute_clump_properties(s)
 
   if(r%verbose)write(*,*)'Entering compute clump properties'
   
-
   !--------------------------------------------------------------------------
   ! loop over all cells above the threshold
   !--------------------------------------------------------------------------
@@ -1027,8 +1025,8 @@ subroutine compute_clump_properties(s)
       vol=(r%boxlen*dx_loc)**ndim
       
       xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
-      xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
-      xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
+      xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+      xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
 
       ! Number of leaf cells per clump
       c%n_cells(peak_nr)=c%n_cells(peak_nr)+1
@@ -1044,10 +1042,10 @@ subroutine compute_clump_properties(s)
 
       ! Clump center of mass location
       c%center_of_mass(peak_nr,1:3)=c%center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
-
+#ifdef HYDRO
       ! Clump center of mass velocity
       if (r%hydro)c%clump_velocity(peak_nr,1:3)=c%clump_velocity(peak_nr,1:3)+vol*m%grid(igrid)%uold(ind,2:4)
-
+#endif
     end if
   end do
 
@@ -1061,15 +1059,15 @@ subroutine compute_clump_properties(s)
     ind=c%peak_cell(ipeak)
     dx_loc=0.5D0**ilevel
     xcen(1) = 2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
-    xcen(2) = 2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5
-    xcen(3) = 2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5
+    xcen(2) = 2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5
+    xcen(3) = 2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
     !xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
-    !xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
-    !xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
+    !xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+    !xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
     call true_max(s,xcell,xcen,ilevel)
     c%peak_pos(ipeak,1:3)=xcell(1:3)
   end do
-  call build_peak_communicator
+  call build_peak_communicator(s)
 
 #ifndef WITHOUTMPI
   ! Collect results from all MPI domains
@@ -1138,8 +1136,8 @@ subroutine compute_clump_properties(s)
            dx_loc=r%boxlen*0.5D0**ilevel
            vol=(dx_loc)**ndim
            xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
-           xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
-           xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
+           xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+           xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
 
            do idim=1,ndim
               if (r%periodic(idim) .and. (xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
@@ -1154,7 +1152,7 @@ subroutine compute_clump_properties(s)
 
         end if
      end do
-     call build_peak_communicator
+     call build_peak_communicator(s)
 
 #ifndef WITHOUTMPI
      ! Collect results from all MPI domains
@@ -1165,6 +1163,7 @@ subroutine compute_clump_properties(s)
 
      ! Compute specific quantity
      do ipeak=1,c%npeak
+
         if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
            c%center_of_mass(ipeak,1:3)=c%center_of_mass(ipeak,1:3)/c%clump_mass(ipeak)
         end if
@@ -1180,9 +1179,8 @@ subroutine compute_clump_properties(s)
   end if
 
   end associate
+
 end subroutine compute_clump_properties
-
-
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -1319,7 +1317,4 @@ subroutine true_max(s,xcen,ilevel)
   end associate
 #endif
 end subroutine true_max
-
-
-
 #endif
