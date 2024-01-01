@@ -97,18 +97,18 @@ subroutine clump_finder(s)
   implicit none
   type(ramses_t)::s
 
-  ! Count and collect all cells above the prescribed debsity threshold
-  ! We call these cell test particles for the watershed algorithm
+  ! Count and collect all cells above the prescribed density threshold.
+  ! We call these cell test particles for the watershed algorithm.
   call collect_test(s)
 
-  ! Count and collect all density peaks
-  ! We also compute for each test particle the coordimates of its
+  ! Count and collect all density peaks.
+  ! We also compute for each test particle the coordinates of its
   ! densest neighbor.
   call collect_peak(s)
 
-  ! Perform a segmentation of the debsity field using the watershed
-  ! algoriothm. We get well defined peak patches around each peak.
-  ! As a result, each pair of neighboring peak partches are separated
+  ! Perform a segmentation of the density field using the watershed
+  ! algorithm. We get well defined peak patches around each peak.
+  ! As a result, each pair of neighboring peak patches are separated
   ! by their saddle surface.
   call collect_patch(s)
 
@@ -118,14 +118,14 @@ subroutine clump_finder(s)
   call build_peak_communicator(s)
 
   ! We build the saddle density matrix.
-  ! Each pair of peaks are connected by a unique saddle point.
+  ! Each pair of peaks is connected by a unique saddle point.
   ! The saddle point is the densest point on the saddle surface,
   call collect_saddle(s)
   ! Update the MPI communicator for peaks
   call build_peak_communicator(s)
 
   ! Merge peaks based on a relevance criterion.
-  ! Peaks that are due to random noise fluctuations or that
+  ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
   call merge_clumps(s,'relevance')
 
@@ -133,7 +133,7 @@ subroutine clump_finder(s)
   call compute_clump_properties(s)
 
   ! Merge all neighboring peaks above the prescribed density
-  ! threshold into halos. if their saddle point density is larger
+  ! threshold into halos, only if their saddle point density is larger
   ! that the prescribed saddle density threshold.
   call merge_clumps(s,'saddleden')
   

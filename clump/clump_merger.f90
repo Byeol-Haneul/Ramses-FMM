@@ -904,26 +904,86 @@ end subroutine boundary_peak_dp
 !################################################################
 !################################################################
 !################################################################
-subroutine compute_clump_properties(s)
-  use amr_commons, only: dp
+subroutine analyze_peak_memory(s)
+  use amr_commons, only: ramses_t
   use clfind_commons
-  use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
   use mpi_mod
+#endif
   implicit none
   type(ramses_t)::s
+  
 #ifndef WITHOUTMPI
   integer::info
 #endif
+  integer::i,j
+  integer,dimension(1:s%g%ncpu)::npeaks_all,npeaks_tot
+  integer,dimension(1:s%g%ncpu)::hfree_all,hfree_tot
+  integer,dimension(1:s%g%ncpu)::sparse_all,sparse_tot
+  integer,dimension(1:s%g%ncpu)::coll_all,coll_tot
 
-  associate(g=>s%g,r=>s%r,c=>s%c,m=s%m)
+  npeaks_all=0
+  npeaks_all(s%g%myid)=s%c%npeak
+  coll_all=0
+  coll_all(s%g%myid)=s%c%hcollision
+  hfree_all=0
+  hfree_all(s%g%myid)=s%c%hfree-s%c%npeak
+  sparse_all=0
+  sparse_all(s%g%myid)=s%c%sparse_saddle_dens%used
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(npeaks_all,npeaks_tot,s%g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(coll_all,coll_tot,s%g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(hfree_all,hfree_tot,s%g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(sparse_all,sparse_tot,s%g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+#else
+  npeaks_tot=npeaks_all
+  coll_tot=coll_all
+  hfree_tot=hfree_all
+  sparse_tot=sparse_all
+#endif
+  if(s%g%myid==1)then
+     write(*,*)'peaks per cpu'
+     do i=0,s%g%ncpu-1,10
+        write(*,'(256(I8,1X))')(npeaks_tot(j),j=i+1,min(i+10,s%g%ncpu))
+     end do
+     write(*,*)'ghost peaks per cpu'
+     do i=0,s%g%ncpu-1,10
+        write(*,'(256(I8,1X))')(hfree_tot(j),j=i+1,min(i+10,s%g%ncpu))
+     end do
+     write(*,*)'hash table collisions'
+     do i=0,s%g%ncpu-1,10
+        write(*,'(256(I8,1X))')(coll_tot(j),j=i+1,min(i+10,s%g%ncpu))
+     end do
+     write(*,*)'sparse matrix used'
+     do i=0,s%g%ncpu-1,10
+        write(*,'(256(I8,1X))')(sparse_tot(j),j=i+1,min(i+10,s%g%ncpu))
+     end do
+  end if
+end subroutine analyze_peak_memory
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine compute_clump_properties(s)
+  use amr_commons, only: ramses_t
+  use clfind_commons
+#ifndef WITHOUTMPI
+  use mpi_mod
+#endif
+  implicit none
+#ifndef WITHOUTMPI
+  integer::info
+#endif
+  type(ramses_t)::s
+>>>>>>> 9882ebe (Fix some typos.)
   !----------------------------------------------------------------------------
-  ! this subroutine performs a loop over all cells above the threshold and
+  ! This subroutine performs a loop over all cells above the threshold and
   ! collects the  relevant information. After some MPI communications,
   ! all necessary peak-patch properties are computed
   !----------------------------------------------------------------------------
   integer::ipart,grid,peak_nr,ilevel,global_peak_id,ipeak,plevel
   real(dp)::zero=0
-  !variables needed temporarily store cell properties
+  ! variables needed temporarily store cell properties
   real(dp)::d=0, vol=0
   ! variables related to the size of a cell on a given level
   integer::nx_loc,ind,idim
