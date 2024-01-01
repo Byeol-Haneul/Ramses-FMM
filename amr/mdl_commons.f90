@@ -53,6 +53,7 @@ module mdl_parameters
      enumerator::MDL_OUTPUT_HYDRO
      enumerator::MDL_OUTPUT_POISSON
      enumerator::MDL_OUTPUT_PART
+     enumerator::MDL_OUTPUT_CLUMP
      enumerator::MDL_SYNCHRO_HYDRO_FINE
      enumerator::MDL_SAVE_PHI_OLD
      enumerator::MDL_FORCE_ANALYTIC
