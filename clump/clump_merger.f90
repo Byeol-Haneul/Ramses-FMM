@@ -316,7 +316,7 @@ subroutine merge_clumps(s,action)
   integer::nmove_all,nsurvive_all,nzero_all
 #endif
 
-  associate(g=>s%g,r=>s%r,c=>s%c)
+  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
   if (r%verbose)then
      if(action.EQ.'relevance')then
