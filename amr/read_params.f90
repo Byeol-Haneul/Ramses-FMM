@@ -262,6 +262,13 @@ subroutine m_read_params(pst)
   logical::thermal_feedback=.false.
   logical::mechanical_feedback=.false.
   
+  ! Clump finder parameters
+  logical::clump_finder=.false.
+  real(dp)::relevance_threshold=2
+  real(dp)::density_threshold=-1
+  real(dp)::saddle_threshold=-1
+  real(dp)::mass_threshold=0
+
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
@@ -332,8 +339,10 @@ subroutine m_read_params(pst)
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
-  ! Star particles and star formation recipe
+  ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
+  ! Clump finder parameters
+  namelist/clump_params/relevance_threshold,density_threshold,saddle_threshold,mass_threshold
 
   associate(s=>pst%s)
 
@@ -516,6 +525,10 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=feedback_params,END=109)
 109 continue
+  rewind(1)
+  read(1,NML=clump_params,END=110)
+  clump_finder=.true.
+110 continue
   close(1)
 
   !-----------------
@@ -832,6 +845,12 @@ subroutine m_read_params(pst)
   s%r%yield_SNII=yield_SNII
   s%r%thermal_feedback=thermal_feedback
   s%r%mechanical_feedback=mechanical_feedback
+
+  s%r%clump_finder=clump_finder
+  s%r%relevance_threshold=relevance_threshold
+  s%r%density_threshold=density_threshold
+  s%r%saddle_threshold=saddle_threshold
+  s%r%mass_threshold=mass_threshold
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)
