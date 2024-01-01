@@ -975,7 +975,6 @@ subroutine compute_clump_properties(s)
   integer::info
 #endif
   type(ramses_t)::s
->>>>>>> 9882ebe (Fix some typos.)
   !----------------------------------------------------------------------------
   ! This subroutine performs a loop over all cells above the threshold and
   ! collects the  relevant information. After some MPI communications,
