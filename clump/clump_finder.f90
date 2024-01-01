@@ -1,7 +1,7 @@
 module clump_finder_module
 contains
 subroutine m_clump_finder(pst,create_output,keep_alive)
-  use output_part_module
+  use output_clump_module
   use ramses_commons, only: pst_t
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
@@ -32,34 +32,28 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   call r_clump_finder(pst,r%levelmin,1)
   
 
-! output the clump field
+  
 
-    if(output_clump)then
-        if(g%myid==1)write(*,*)"Outputing clump properties to disc"
-        filename=TRIM(filedir) ! Note that suffix will be added later
-        input_array=transfer(filename,input_array)
-        if(r%verbose)write(*,*)'Writing clump properties files'
-        call r_output_clump(pst,c,input_array,flen/4,dummy,0)
-    endif
-
-    if(output_clump_field)then
-        if(g%myid==1)write(*,*)"Outputing clump field to disc"
-        filename=TRIM(filedir)//'clumpfield.'
-        input_array=transfer(filename,input_array)
-        if(r%verbose)write(*,*)'Writing clumpfield files'
-        call r_output_clump_field(pst,input_array,flen/4,dummy,0)
-    end if
-    !endif
+  
 
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
-  if(create_output.and.g%output_done)then
-     call title(g%ifout-1,nchar)
-     filename='output_'//TRIM(nchar)//'/'
-     input_array=transfer(filename,input_array)
-     if(r%verbose)write(*,*)'Writing clump and halo files'
-     call r_output_clump(pst,input_array,flen/4,dummy,0)
+  ! output the clump field
+  if(output_clump)then
+    if(g%myid==1)write(*,*)"Outputing clump properties to disc"
+    filename=TRIM(filedir) ! Note that suffix will be added later
+    input_array=transfer(filename,input_array)
+    if(r%verbose)write(*,*)'Writing clump properties files'
+    call r_output_clump(pst,c,input_array,flen/4,dummy,0)
+  endif
+
+  if(output_clump_field)then
+    if(g%myid==1)write(*,*)"Outputing clump field to disc"
+    filename=TRIM(filedir)//'clumpfield.'
+    input_array=transfer(filename,input_array)
+    if(r%verbose)write(*,*)'Writing clumpfield files'
+    call r_output_clump_field(pst,input_array,flen/4,dummy,0)
   endif
 
   if(.not. keep_alive)then
@@ -198,7 +192,7 @@ subroutine collect_test(s)
   ! Compute number of test particles across all CPUs
   !-------------------------------------------------
   ntest_cpu=0; ntest_cpu_all=0
-  ntest_cpu(myid)=c%ntest
+  ntest_cpu(g%myid)=c%ntest
 #ifndef WITHOUTMPI
 #ifndef LONGINT
   call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
@@ -217,7 +211,7 @@ subroutine collect_test(s)
      endif
   end if
   c%ntest_tot=ntest_all
-  nskip=ntest_cpu(myid)-c%ntest
+  nskip=ntest_cpu(g%myid)-c%ntest
 
   if (c%ntest>0) then
 
@@ -315,8 +309,11 @@ subroutine collect_peak(s)
   integer(kind=8),dimension(1:g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  real(dp)::dx_loc
-  
+
+  real(dp),dimension(1:ndim)::xcen,xnei
+  integer, parameter::nSnei=48
+  real(dp),dimension(1:3,1:nPnei)::xSnei
+
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
@@ -466,7 +463,7 @@ subroutine collect_peak(s)
   allocate(c%peak_cell(c%npeak_max))
   allocate(c%peak_grid(c%npeak_max))
   allocate(c%max_dens(c%npeak_max))
-  max_dens=0d0; peak_cell=0; peak_grid=0
+  c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0
 
 end associate
 
@@ -537,7 +534,7 @@ subroutine collect_patch(s)
            ind=c%cell(itest)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
            if(m%grid(igrid)%flag1(ind).ne.gridn%flag1(icelln))nmove=nmove+1
-           m%grid(igrid)%flag1(ind).ne.gridn%flag1(icelln)
+           m%grid(igrid)%flag1(ind)=gridn%flag1(icelln)
            if(m%grid(igrid)%flag1(ind).eq.0)nzero=nzero+1
         endif
      end do
@@ -589,11 +586,14 @@ subroutine collect_saddle(s)
   type(oct),pointer::gridp,gridn,gridpm
   integer,  intent(in)  :: ilevel
   integer::npeaks,npeaks_tot,icpu,next_level,now_level
-  integer::ipart,jpart,ip,i,icellp,icellpm,ipeak
+  integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen
   integer(kind=8),dimension(1:g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  real(dp)::dx_loc
+  real(dp)::dens_cen
+  real(dp),dimension(1:ndim)::xcen,xnei
+  integer, parameter::nSnei=48
+  real(dp),dimension(1:3,1:nSnei)::xSnei
   
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
   !--------------------------------------------------------
