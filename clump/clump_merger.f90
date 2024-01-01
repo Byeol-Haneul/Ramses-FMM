@@ -356,7 +356,7 @@ subroutine merge_clumps(s,action)
   do while(nzero>0)
 
      ! Compute maximum saddle density for each clump
-     call get_max(s,c%hfree-1,sparse_saddle_dens)
+     call get_max(s,c%hfree-1,c%sparse_saddle_dens)
 
 #ifndef WITHOUTMPI
      ! Create new local duplicated peaks and update communicator
