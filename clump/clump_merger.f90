@@ -35,6 +35,7 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%av_dens(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
 
+  allocate(c%clump_velocity(1:c%npeaks_max,1:ndim))
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points
   !-------------------------------------------
@@ -53,7 +54,7 @@ subroutine allocate_peak_patch_arrays(s)
   c%hfree=c%npeak+1
   c%hcollision=0
   allocate(c%gkey(c%npeak+1:c%npeak_max))
-  allocate(c%nkey(npeak+1:c%npeak_max))
+  allocate(c%nkey(c%npeak+1:c%npeak_max))
   c%hkey=0; c%gkey=0; c%nkey=0
 
   !------------------------------------------------
@@ -561,12 +562,12 @@ subroutine merge_clumps(s,action)
      do itest=1,c%ntest
         igrid=c%grid(itest)
         ind=c%cell(itest)
-        global_peak_id=m%grid(igrod)%flag1(ind)
+        global_peak_id=m%grid(igrid)%flag1(ind)
         if (global_peak_id>0)then
            call get_local_peak_id(s,global_peak_id,ipeak)
            merge_to=c%new_peak(ipeak)
            call get_local_peak_id(merge_to,jpeak)
-           m%grid(igrod)%flag1(ind)=merge_to
+           m%grid(igrid)%flag1(ind)=merge_to
         end if
      end do
      call build_peak_communicator(s)
@@ -583,7 +584,7 @@ subroutine merge_clumps(s,action)
      do ilev=idepth-2,0,-1
         do ipeak=1,c%npeak
            if(c%lev_peak(ipeak)==ilev)then
-              merge_to=ind_halo(ipeak)
+              merge_to=c%ind_halo(ipeak)
               call get_local_peak_id(s,merge_to,jpeak)
               c%ind_halo(ipeak)=c%ind_halo(jpeak)
            endif
@@ -614,7 +615,7 @@ subroutine merge_clumps(s,action)
      end do
 
   endif
-
+  end associate
 end subroutine merge_clumps
 !################################################################
 !################################################################
@@ -898,162 +899,23 @@ subroutine boundary_peak_dp(s,xx)
   
 #endif
 end subroutine boundary_peak_dp
+
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine write_clump_map
-  use amr_commons
+subroutine compute_clump_properties(s)
+  use amr_commons, only: dp
   use clfind_commons
+  use ramses_commons, only: ramses_t
   use mpi_mod
   implicit none
-#ifndef WITHOUTMPI
-  integer::dummy_io,info2
-  integer,parameter::tag=1102
-#endif
-  !---------------------------------------------------------------------------
-  ! This routine writes a csv-file of cell center coordinates and clump number
-  ! for each cell which is in a clump. Makes only sense to be called when the
-  ! clump finder is called at output-writing and not for sink-formation.
-  !---------------------------------------------------------------------------
-
-  integer::ind,grid,ix,iy,iz,ipart,nx_loc,peak_nr
-  real(dp)::scale,dx
-  real(dp),dimension(1:3)::xcell,skip_loc
-  real(dp),dimension(1:twotondim,1:3)::xc
-  character(LEN=5)::myidstring,nchar,ncharcpu
-
-  nx_loc=(icoarse_max-icoarse_min+1)
-  skip_loc(1)=dble(icoarse_min)
-  skip_loc(2)=dble(jcoarse_min)
-  skip_loc(3)=dble(kcoarse_min)
-  scale=boxlen/dble(nx_loc)
-
-  do ind=1,twotondim
-     iz=(ind-1)/4
-     iy=(ind-1-4*iz)/2
-     ix=(ind-1-2*iy-4*iz)
-     xc(ind,1)=(dble(ix)-0.5D0)
-     xc(ind,2)=(dble(iy)-0.5D0)
-     xc(ind,3)=(dble(iz)-0.5D0)
-  end do
-
-  !prepare file output for peak map
-  ! Wait for the token
-#ifndef WITHOUTMPI
-     if(IOGROUPSIZE>0) then
-        if (mod(myid-1,IOGROUPSIZE)/=0) then
-           call MPI_RECV(dummy_io,1,MPI_INTEGER,myid-1-1,tag,&
-                & MPI_COMM_WORLD,MPI_STATUS_IGNORE,info2)
-        end if
-     endif
-#endif
-
-  call title(ifout,nchar)
-  call title(myid,myidstring)
-  if(IOGROUPSIZEREP>0)then
-     call title(((myid-1)/IOGROUPSIZEREP)+1,ncharcpu)
-     open(unit=20,file=TRIM('output_'//TRIM(nchar)//'/group_'//TRIM(ncharcpu)//'/clump_map.csv'//myidstring),form='formatted')
-  else
-     open(unit=20,file=TRIM('output_'//TRIM(nchar)//'/clump_map.csv'//myidstring),form='formatted')
-  endif
-  !loop parts
-  do ipart=1,ntest
-     peak_nr=flag2(icellp(ipart))
-     if (peak_nr /=0 ) then
-        ! Cell coordinates
-        ind=(icellp(ipart)-ncoarse-1)/ngridmax+1 ! cell position
-        grid=icellp(ipart)-ncoarse-(ind-1)*ngridmax ! grid index
-        dx=0.5D0**levp(ipart)
-        xcell(1:ndim)=(xg(grid,1:ndim)+xc(ind,1:ndim)*dx-skip_loc(1:ndim))*scale
-        !peak_map
-        write(20,'(1PE18.9E2,A,1PE18.9E2,A,1PE18.9E2A,I4,A,I8)')xcell(1),',',xcell(2),',',xcell(3),',',levp(ipart),',',peak_nr
-
-     end if
-  end do
-  close(20)
-
-  ! Send the token
-#ifndef WITHOUTMPI
-     if(IOGROUPSIZE>0) then
-        if(mod(myid,IOGROUPSIZE)/=0 .and.(myid.lt.ncpu))then
-           dummy_io=1
-           call MPI_SEND(dummy_io,1,MPI_INTEGER,myid-1+1,tag, &
-                & MPI_COMM_WORLD,info2)
-        end if
-     endif
-#endif
-
-end subroutine write_clump_map
-!################################################################
-!################################################################
-!################################################################
-subroutine analyze_peak_memory
-  use amr_commons
-  use clfind_commons
-  use mpi_mod
-  implicit none
+  type(ramses_t)::s
 #ifndef WITHOUTMPI
   integer::info
 #endif
-  integer::i,j
-  integer,dimension(1:ncpu)::npeak_all,npeak_tot
-  integer,dimension(1:ncpu)::hfree_all,hfree_tot
-  integer,dimension(1:ncpu)::sparse_all,sparse_tot
-  integer,dimension(1:ncpu)::coll_all,coll_tot
 
-  npeak_all=0
-  npeak_all(myid)=npeak
-  coll_all=0
-  coll_all(myid)=hcollision
-  hfree_all=0
-  hfree_all(myid)=hfree-npeak
-  sparse_all=0
-  sparse_all(myid)=sparse_saddle_dens%used
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(npeak_all,npeak_tot,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(coll_all,coll_tot,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(hfree_all,hfree_tot,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  call MPI_ALLREDUCE(sparse_all,sparse_tot,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#else
-  npeak_tot=npeak_all
-  coll_tot=coll_all
-  hfree_tot=hfree_all
-  sparse_tot=sparse_all
-#endif
-  if(myid==1)then
-     write(*,*)'peaks per cpu'
-     do i=0,ncpu-1,10
-        write(*,'(256(I8,1X))')(npeak_tot(j),j=i+1,min(i+10,ncpu))
-     end do
-     write(*,*)'ghost peaks per cpu'
-     do i=0,ncpu-1,10
-        write(*,'(256(I8,1X))')(hfree_tot(j),j=i+1,min(i+10,ncpu))
-     end do
-     write(*,*)'hash table collisions'
-     do i=0,ncpu-1,10
-        write(*,'(256(I8,1X))')(coll_tot(j),j=i+1,min(i+10,ncpu))
-     end do
-     write(*,*)'sparse matrix used'
-     do i=0,ncpu-1,10
-        write(*,'(256(I8,1X))')(sparse_tot(j),j=i+1,min(i+10,ncpu))
-     end do
-  end if
-end subroutine analyze_peak_memory
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine compute_clump_properties(xx)
-  use amr_commons
-  use hydro_commons, ONLY:uold
-  use clfind_commons
-  use mpi_mod
-  implicit none
-#ifndef WITHOUTMPI
-  integer::info
-#endif
-  real(dp),dimension(1:ncoarse+ngridmax*twotondim)::xx
+  associate(g=>s%g,r=>s%r,c=>s%c,m=s%m)
   !----------------------------------------------------------------------------
   ! this subroutine performs a loop over all cells above the threshold and
   ! collects the  relevant information. After some MPI communications,
@@ -1064,12 +926,7 @@ subroutine compute_clump_properties(xx)
   !variables needed temporarily store cell properties
   real(dp)::d=0, vol=0
   ! variables related to the size of a cell on a given level
-  real(dp)::dx,dx_loc,scale,vol_loc
-  real(dp),dimension(1:nlevelmax)::volume
-  real(dp),dimension(1:3)::skip_loc,xcell
-  real(dp),dimension(1:twotondim,1:3)::xc
-  integer::nx_loc,ind,ix,iy,iz,idim
-  logical,dimension(1:ndim)::period
+  integer::nx_loc,ind,idim
   logical::periodic
 
 #ifndef WITHOUTMPI
@@ -1077,147 +934,118 @@ subroutine compute_clump_properties(xx)
   real(dp)::tot_mass_tot
 #endif
 
-  period(1)=(nx==1)
-  period(2)=(ny==1)
-  period(3)=(nz==1)
-
-  periodic=period(1)
-  periodic=periodic.or.period(2)
-  periodic=periodic.or.period(3)
+  periodic=r%periodic(1)
+  periodic=periodic.or.r%periodic(2)
+  periodic=periodic.or.r%periodic(3)
 
   !peak-patch related arrays before sharing information with other cpus
 
-  min_dens=huge(zero)
-  n_cells=0; n_cells_halo=0
-  halo_mass=0d0; clump_mass=0d0; clump_vol=0d0
-  center_of_mass=0d0; clump_velocity=0d0
-  peak_pos=0d0
+  c%min_dens=huge(zero)
+  c%n_cells=0; c%n_cells_halo=0
+  c%halo_mass=0d0; c%clump_mass=0d0; c%clump_vol=0d0
+  c%center_of_mass=0d0; c%clump_velocity=0d0
+  c%peak_pos=0d0
 
-  if(verbose)write(*,*)'Entering compute clump properties'
-  !------------------------------------------
-  ! compute volume of a cell in a given level
-  !------------------------------------------
-  do ilevel=1,nlevelmax
-     ! Mesh spacing in that level
-     dx=0.5D0**ilevel
-     nx_loc=(icoarse_max-icoarse_min+1)
-     scale=boxlen/dble(nx_loc)
-     dx_loc=dx*scale
-     vol_loc=dx_loc**ndim
-     volume(ilevel)=vol_loc
-  end do
-
-  nx_loc=(icoarse_max-icoarse_min+1)
-  skip_loc(1)=dble(icoarse_min)
-  skip_loc(2)=dble(jcoarse_min)
-  skip_loc(3)=dble(kcoarse_min)
-  scale=boxlen/dble(nx_loc)
-
-  do ind=1,twotondim
-     iz=(ind-1)/4
-     iy=(ind-1-4*iz)/2
-     ix=(ind-1-2*iy-4*iz)
-     xc(ind,1)=(dble(ix)-0.5D0)
-     xc(ind,2)=(dble(iy)-0.5D0)
-     xc(ind,3)=(dble(iz)-0.5D0)
-  end do
+  if(r%verbose)write(*,*)'Entering compute clump properties'
+  
 
   !--------------------------------------------------------------------------
   ! loop over all cells above the threshold
   !--------------------------------------------------------------------------
-  do ipart=1,ntest
-     global_peak_id=flag2(icellp(ipart))
-     if (global_peak_id /=0 ) then
-        call get_local_peak_id(global_peak_id,peak_nr)
+  do itest=1,c%ntest
+    ilevel=c%level(itest)
+    igrid=c%grid(itest)
+    ind=c%cell(itest)
+    global_peak_id=m%grid(igrid)%flag1(ind)
 
-        ! Cell coordinates
-        ind=(icellp(ipart)-ncoarse-1)/ngridmax+1 ! cell position
-        grid=icellp(ipart)-ncoarse-(ind-1)*ngridmax ! grid index
-        dx=0.5D0**levp(ipart)
-        xcell(1:ndim)=(xg(grid,1:ndim)+xc(ind,1:ndim)*dx-skip_loc(1:ndim))*scale
+    if (global_peak_id /=0 ) then
+      call get_local_peak_id(s,global_peak_id,peak_nr)
 
-        ! gas density
-        if(ivar_clump==0 .or. ivar_clump==-1)then
-           d=xx(icellp(ipart))
-        else
-           if(hydro)then
-              d=uold(icellp(ipart),1)
-           endif
-        endif
+      d=m%grid(igrid)%rho(ind)
 
-        ! Cell volume
-        vol=volume(levp(ipart))
+      ! Cell volume
+      dx_loc=0.5D0**ilevel
+      vol=(r%boxlen*dx_loc)**ndim
+      
+      xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+      xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
+      xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
 
-        ! Number of leaf cells per clump
-        n_cells(peak_nr)=n_cells(peak_nr)+1
+      ! Number of leaf cells per clump
+      c%n_cells(peak_nr)=c%n_cells(peak_nr)+1
 
-        ! Min density
-        min_dens(peak_nr)=min(d,min_dens(peak_nr))
+      ! Min density
+      c%min_dens(peak_nr)=min(d,c%min_dens(peak_nr))
 
-        ! Clump mass
-        clump_mass(peak_nr)=clump_mass(peak_nr)+vol*d
+      ! Clump mass
+      c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*d
 
-        ! Clump volume
-        clump_vol(peak_nr)=clump_vol(peak_nr)+vol
+      ! Clump volume
+      c%clump_vol(peak_nr)=c%clump_vol(peak_nr)+vol
 
-        ! Clump center of mass location
-        center_of_mass(peak_nr,1:3)=center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
+      ! Clump center of mass location
+      c%center_of_mass(peak_nr,1:3)=c%center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
 
-        ! Clump center of mass velocity
-        if (hydro)clump_velocity(peak_nr,1:3)=clump_velocity(peak_nr,1:3)+vol*uold(icellp(ipart),2:4)
+      ! Clump center of mass velocity
+      if (r%hydro)c%clump_velocity(peak_nr,1:3)=c%clump_velocity(peak_nr,1:3)+vol*m%grid(igrid)%uold(ind,2:4)
 
-     end if
+    end if
   end do
 
   !--------------------------------------------------------------------------
   ! Loop over local peaks and identify true peak positions
   !--------------------------------------------------------------------------
-  do ipeak=1,npeak
+  do ipeak=1,c%npeak
      ! Peak cell coordinates
-     ind=(peak_cell(ipeak)-ncoarse-1)/ngridmax+1    ! cell position
-     grid=peak_cell(ipeak)-ncoarse-(ind-1)*ngridmax ! grid index
-     plevel=peak_cell_level(ipeak)
-     dx=0.5D0**plevel
-     xcell(1:ndim)=(xg(grid,1:ndim)+xc(ind,1:ndim)*dx-skip_loc(1:ndim))*scale
-     call true_max(xcell(1),xcell(2),xcell(3),plevel)
-     peak_pos(ipeak,1:3)=xcell(1:3)
+    ilevel=c%lev_peak(ipeak)
+    igrid=c%peak_grid(ipeak)
+    ind=c%peak_cell(ipeak)
+    dx_loc=0.5D0**ilevel
+    xcen(1) = 2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
+    xcen(2) = 2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5
+    xcen(3) = 2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5
+    !xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+    !xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
+    !xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
+    call true_max(s,xcell,xcen,ilevel)
+    c%peak_pos(ipeak,1:3)=xcell(1:3)
   end do
   call build_peak_communicator
 
 #ifndef WITHOUTMPI
   ! Collect results from all MPI domains
-  call virtual_peak_int(n_cells,'sum')
-  call virtual_peak_dp(min_dens,'min')
-  call virtual_peak_dp(clump_mass,'sum')
-  call virtual_peak_dp(clump_vol,'sum')
+  call virtual_peak_int(s,c%n_cells,'sum')
+  call virtual_peak_dp(s,c%min_dens,'min')
+  call virtual_peak_dp(s,c%clump_mass,'sum')
+  call virtual_peak_dp(s,c%clump_vol,'sum')
   do i=1,ndim
-     call virtual_peak_dp(center_of_mass(1,i),'sum')
-     call virtual_peak_dp(clump_velocity(1,i),'sum')
+     call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
+     call virtual_peak_dp(s,c%clump_velocity(1,i),'sum')
   end do
 #endif
 
   ! Compute specific quantities
-  do ipeak=1,npeak
-     if (relevance(ipeak)>0..and.n_cells(ipeak)>0)then
-        center_of_mass(ipeak,1:3)=center_of_mass(ipeak,1:3)/clump_mass(ipeak)
-        clump_velocity(ipeak,1:3)=clump_velocity(ipeak,1:3)/clump_mass(ipeak)
+  do ipeak=1,c%npeak
+     if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
+        c%center_of_mass(ipeak,1:3)=c%center_of_mass(ipeak,1:3)/c%clump_mass(ipeak)
+        c%clump_velocity(ipeak,1:3)=c%clump_velocity(ipeak,1:3)/c%clump_mass(ipeak)
      end if
   end do
 
 #ifndef WITHOUTMPI
   ! Scatter results to all MPI domains
   do i=1,ndim
-     call boundary_peak_dp(peak_pos(1,i))
-     call boundary_peak_dp(center_of_mass(1,i))
-     call boundary_peak_dp(clump_velocity(1,i))
+     call boundary_peak_dp(s,c%peak_pos(1,i))
+     call boundary_peak_dp(s,c%center_of_mass(1,i))
+     call boundary_peak_dp(s,c%clump_velocity(1,i))
   end do
 #endif
 
   ! Initialize halo mass to clump mass
-  halo_mass=clump_mass
+  c%halo_mass=c%clump_mass
 
   ! Calculate total mass above threshold
-  tot_mass=sum(clump_mass(1:npeak))
+  tot_mass=sum(c%clump_mass(1:c%npeak))
 
 #ifndef WITHOUTMPI
   call MPI_ALLREDUCE(tot_mass,tot_mass_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
@@ -1225,50 +1053,45 @@ subroutine compute_clump_properties(xx)
 #endif
 
   ! Compute further properties of the clumps
-  do ipeak=1,npeak
-     if (relevance(ipeak)>0..and.n_cells(ipeak)>0)then
-        av_dens(ipeak)=clump_mass(ipeak)/clump_vol(ipeak)
+  do ipeak=1,c%npeak
+     if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
+        c%av_dens(ipeak)=c%clump_mass(ipeak)/c%clump_vol(ipeak)
      end if
   end do
 
 #ifndef WITHOUTMPI
   ! Scatter results to all MPI domains
-  call boundary_peak_dp(av_dens)
+  call boundary_peak_dp(s,c%av_dens)
 #endif
 
   ! For periodic boxes, recompute center of mass relative to peak position
   if(periodic)then
-     center_of_mass=0d0;
-     do ipart=1,ntest
-        global_peak_id=flag2(icellp(ipart))
+     c%center_of_mass=0d0;
+     do itest=1,c%ntest
+        ilevel=c%level(itest)
+        igrid=c%grid(itest)
+        ind=c%cell(itest)
+        global_peak_id=m%grid(igrid)%flag1(ind)
         if (global_peak_id /=0 ) then
-           call get_local_peak_id(global_peak_id,peak_nr)
+           call get_local_peak_id(s,global_peak_id,peak_nr)
 
            ! Cell coordinates
-           ind=(icellp(ipart)-ncoarse-1)/ngridmax+1 ! cell position
-           grid=icellp(ipart)-ncoarse-(ind-1)*ngridmax ! grid index
-           dx=0.5D0**levp(ipart)
-           xcell(1:ndim)=(xg(grid,1:ndim)+xc(ind,1:ndim)*dx-skip_loc(1:ndim))*scale
+           dx_loc=r%boxlen*0.5D0**ilevel
+           vol=(dx_loc)**ndim
+           xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+           xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
+           xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
 
            do idim=1,ndim
-              if (period(idim) .and. (xcell(idim)-peak_pos(peak_nr,idim))>boxlen*0.5)xcell(idim)=xcell(idim)-boxlen
-              if (period(idim) .and. (xcell(idim)-peak_pos(peak_nr,idim))<boxlen*(-0.5))xcell(idim)=xcell(idim)+boxlen
+              if (r%periodic(idim) .and. (xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
+              if (r%periodic(idim) .and. (xcell(idim)-c%peak_pos(peak_nr,idim))<r%boxlen*(-0.5))xcell(idim)=xcell(idim)+r%boxlen
            end do
 
            ! gas density
-           if(ivar_clump==0 .or. ivar_clump==-1)then
-              d=xx(icellp(ipart))
-           else
-              if(hydro)then
-                 d=uold(icellp(ipart),1)
-              endif
-           endif
-
-           ! Cell volume
-           vol=volume(levp(ipart))
+           d=m%grid(igrid)%rho(ind)
 
            ! Clump center of mass location
-           center_of_mass(peak_nr,1:3)=center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
+           c%center_of_mass(peak_nr,1:3)=c%center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
 
         end if
      end do
@@ -1277,259 +1100,167 @@ subroutine compute_clump_properties(xx)
 #ifndef WITHOUTMPI
      ! Collect results from all MPI domains
      do i=1,ndim
-        call virtual_peak_dp(center_of_mass(1,i),'sum')
+        call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
      end do
 #endif
 
      ! Compute specific quantity
-     do ipeak=1,npeak
-        if (relevance(ipeak)>0..and.n_cells(ipeak)>0)then
-           center_of_mass(ipeak,1:3)=center_of_mass(ipeak,1:3)/clump_mass(ipeak)
+     do ipeak=1,c%npeak
+        if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
+           c%center_of_mass(ipeak,1:3)=c%center_of_mass(ipeak,1:3)/c%clump_mass(ipeak)
         end if
      end do
 
 #ifndef WITHOUTMPI
      ! Scatter results to all MPI domains
      do i=1,ndim
-        call boundary_peak_dp(center_of_mass(1,i))
+        call boundary_peak_dp(s,c%center_of_mass(1,i))
      end do
 #endif
 
   end if
+
+  end associate
 end subroutine compute_clump_properties
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine write_clump_properties(to_file)
+
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine true_max(s,xcen,ilevel)
   use amr_commons
-  use pm_commons,ONLY:mp
-  use hydro_commons,ONLY:mass_sph
-  use clfind_commons
-  use mpi_mod
+  use pm_commons
+  use hydro_commons
+  use ramses_commons, only: ramses_t
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
+  use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
+  use cache_commons
+  use cache
+  use nbors_utils
   implicit none
-#ifndef WITHOUTMPI
-  integer,parameter::tag=1101
-  integer::dummy_io,info,info2
-#endif
-  logical::to_file
-  !---------------------------------------------------------------------------
-  ! this routine writes the clump properties to screen and to file
-  !---------------------------------------------------------------------------
 
-  integer::i,j,jj,ilun,ilun2,n_rel,n_rel_tot,nx_loc
-  real(dp)::rel_mass,rel_mass_tot,scale,particle_mass=0
-  character(LEN=80)::fileloc,filedir
-  character(LEN=5)::nchar,ncharcpu
-  real(dp),dimension(1:npeak)::peakd
-  integer,dimension(1:npeak)::ind_sort
+  real(dp)::x,y,z
+  integer::ilevel
+  type(msg_twin_realdp)::dummy_twin_realdp
+  type(msg_large_realdp)::dummy_large_realdp
+  type(oct),pointer::gridp,gridn,gridpm
+  type(ramses_t)::s
 
-#ifndef WITHOUTMPI
-  real(dp)::particle_mass_tot
-#endif
+  !----------------------------------------------------------------------------
+  ! Description: This subroutine takes the cell of maximum density and computes
+  ! the true maximum by expanding the density around the cell center to second order.
+  !----------------------------------------------------------------------------
 
-  if (.not. to_file)return
+  integer::k,j,i,nx_loc,counter, ioft, n
+  integer,dimension(1:threetondim)::cell_index,cell_lev
+  real(dp)::det,dx,dx_loc,scale,disp_max,numerator
+  real(dp),dimension(-1:1,-1:1,-1:1)::cube3
+  real(dp),dimension(1:ndim)::xtest
+  real(dp),dimension(1:ndim)::gradient,displacement
+  real(dp),dimension(1:ndim,1:ndim)::hess,minor
+  real(dp),dimension(1:3,1:nSnei)::xSnei
+  real(dp),dimension(1:ndim)::xcen,xnei
+  integer, parameter::nSnei=27
+  real(dp)::smallreal=1d-100
 
-  nx_loc=(icoarse_max-icoarse_min+1)
-  scale=boxlen/dble(nx_loc)
-  if(ivar_clump==0 .or. ivar_clump==-1)then
-     particle_mass=MINVAL(mp, MASK=(mp > 0))
-#ifndef WITHOUTMPI
-     call MPI_ALLREDUCE(particle_mass,particle_mass_tot,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
-     particle_mass=particle_mass_tot
-#endif
-  else
-     if(hydro)then
-        particle_mass=mass_sph
-     endif
-  endif
+#if NDIM==3
 
-  ! sort clumps by peak density in ascending order
-  do i=1,npeak
-     peakd(i)=max_dens(i)
-     ind_sort(i)=i
+  associate(g=>s%g,r=>s%r,c=>s%c,m=s%m)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+        hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
+        pack=pack_fetch_phi, unpack=unpack_fetch_phi)
+
+  dx_loc=r%boxlen/2**ilevel
+  ind=0
+  do i=-1,1
+     do j=-1,1
+        do k=-1,1
+          ind = ind+1
+          xtest(1) = i+0.5d0
+          xtest(2) = j+0.5d0
+          xtest(3) = k+0.5d0
+          xSnei(1,ind) = xtest(1)/2d0
+          xSnei(2,ind) = xtest(2)/2d0
+          xSnei(3,ind) = xtest(3)/2d0
+          xnei(1:ndim)=xcen(1:ndim)+xSNnei(1:ndim,j)
+          ! Periodic boundary conditions
+          do idim=1,ndim
+            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
+            if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
+          end do
+          ! Get neighboring cell at ilevel
+          ckey_nbor(1:ndim)=int(xnei(1:ndim))
+          hash_nbor(0)=ilevel+1
+          hash_nbor(1:ndim)=ckey_nbor(1:ndim)
+          call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+          cube3(i,j,k)=gridn%rho(icelln)
+        end do
+     end do
   end do
-  call quick_sort_dp(peakd,ind_sort,npeak)
 
-  if(to_file)then
-     ilun=20
-     ilun2=22
-  else
-     ilun=6
-     ilun2=6
-  end if
+  call close_cache(s,m%grid_dict)
 
-  ! print results in descending order to screen/file
-  rel_mass=0
-  n_rel=0
+  ! Compute gradient
+  gradient(1)=0.5d0*(cube3(1,0,0)-cube3(-1,0,0))/dx_loc
+  gradient(2)=0.5d0*(cube3(0,1,0)-cube3(0,-1,0))/dx_loc
+  gradient(3)=0.5d0*(cube3(0,0,1)-cube3(0,0,-1))/dx_loc
 
-  if (to_file .eqv. .true.) then
-     ! first create directories
-     call title(ifout,nchar)
-     filedir='output_'//TRIM(nchar)
-     call create_output_dirs(filedir)
-     ! Wait for the token
-#ifndef WITHOUTMPI
-     if(IOGROUPSIZE>0) then
-        if (mod(myid-1,IOGROUPSIZE)/=0) then
-           call MPI_RECV(dummy_io,1,MPI_INTEGER,myid-1-1,tag,&
-                & MPI_COMM_WORLD,MPI_STATUS_IGNORE,info2)
-        end if
-     endif
-#endif
+  if (maxval(abs(gradient(1:ndim)))==0.)return
 
-     if(IOGROUPSIZEREP>0)then
-        call title(((myid-1)/IOGROUPSIZEREP)+1,ncharcpu)
-        fileloc=TRIM(filedir)//'/group_'//TRIM(ncharcpu)//'/clump_'//TRIM(nchar)//'.txt'
-     else
-        fileloc=TRIM(filedir)//'/clump_'//TRIM(nchar)//'.txt'
-     endif
-     call title(myid,nchar)
-     fileloc=TRIM(fileloc)//TRIM(nchar)
-     open(unit=ilun,file=fileloc,form='formatted')
+  ! Compute hessian
+  hess(1,1)=(cube3(1,0,0)+cube3(-1,0,0)-2*cube3(0,0,0))/dx_loc**2
+  hess(2,2)=(cube3(0,1,0)+cube3(0,-1,0)-2*cube3(0,0,0))/dx_loc**2
+  hess(3,3)=(cube3(0,0,1)+cube3(0,0,-1)-2*cube3(0,0,0))/dx_loc**2
 
-     if(saddle_threshold>0)then
-        call title(ifout,nchar)
-        if(IOGROUPSIZEREP>0)then
-           call title(((myid-1)/IOGROUPSIZEREP)+1,ncharcpu)
-           fileloc=TRIM(filedir)//'/group_'//TRIM(ncharcpu)//'/halo_'//TRIM(nchar)//'.txt'
-        else
-           fileloc=TRIM(filedir)//'/halo_'//TRIM(nchar)//'.txt'
-        endif
-        call title(myid,nchar)
-        fileloc=TRIM(fileloc)//TRIM(nchar)
-        open(unit=ilun2,file=fileloc,form='formatted')
-     endif
-  end if
+  hess(1,2)=0.25d0*(cube3(1,1,0)+cube3(-1,-1,0)-cube3(1,-1,0)-cube3(-1,1,0))/dx_loc**2
+  hess(2,1)=hess(1,2)
+  hess(1,3)=0.25d0*(cube3(1,0,1)+cube3(-1,0,-1)-cube3(1,0,-1)-cube3(-1,0,1))/dx_loc**2
+  hess(3,1)=hess(1,3)
+  hess(2,3)=0.25d0*(cube3(0,1,1)+cube3(0,-1,-1)-cube3(0,1,-1)-cube3(0,-1,1))/dx_loc**2
+  hess(3,2)=hess(2,3)
 
-  if (to_file .or. myid==1)then
-     write(ilun,'(144A)')'   index  halo   lev   parent      ncell    peak_x             peak_y             peak_z     '//&
-          '        rho-               rho+               rho_av             mass_cl            relevance   '
-     if(saddle_threshold>0)then
-        write(ilun2,'(135A)')'     index      ncell    peak_x             peak_y             peak_z     '//&
-             '        rho+               mass      '
-     endif
-  end if
+  ! Determinant
+  det=    hess(1,1)*hess(2,2)*hess(3,3)+hess(1,2)*hess(2,3)*hess(3,1)+hess(1,3)*hess(2,1)*hess(3,2) &
+      & -hess(1,1)*hess(2,3)*hess(3,2)-hess(1,2)*hess(2,1)*hess(3,3)-hess(1,3)*hess(2,2)*hess(3,1)
 
-  if (particlebased_clump_output) then ! write particle based data
-    do j=npeak,1,-1
-      jj=ind_sort(j)
-      if (relevance(jj) > relevance_threshold .and. clmp_mass_pb(jj) > mass_threshold*particle_mass)then
-        write(ilun,'(I8,X,I2,X,I10,X,I10,8(X,1PE18.9E2))')&
-               jj+ipeak_start(myid)&
-               ,lev_peak(jj)&
-               ,new_peak(jj)&
-               ,n_cells(jj)&
-#ifdef UNBINDINGCOM
-               ,clmp_com_pb(jj,1)&
-               ,clmp_com_pb(jj,2)&
-               ,clmp_com_pb(jj,3)&
-#else
-               ,peak_pos(jj,1)&
-               ,peak_pos(jj,2)&
-               ,peak_pos(jj,3)&
-#endif
-               ,min_dens(jj)&
-               ,max_dens(jj)&
-               ,clmp_mass_pb(jj)/clump_vol(jj)&
-               ,clmp_mass_pb(jj)&
-               ,relevance(jj)
-         rel_mass=rel_mass+clmp_mass_exclusive(jj)
-         n_rel=n_rel+1
-      end if
+  ! Matrix of minors
+  minor(1,1)=hess(2,2)*hess(3,3)-hess(2,3)*hess(3,2)
+  minor(2,2)=hess(1,1)*hess(3,3)-hess(1,3)*hess(3,1)
+  minor(3,3)=hess(1,1)*hess(2,2)-hess(1,2)*hess(2,1)
 
-      if(saddle_threshold>0)then
-        if(ind_halo(jj).EQ.jj+ipeak_start(myid).AND.clmp_mass_pb(jj) > mass_threshold*particle_mass)then
-           write(ilun2,'(I10,X,I10,5(X,1PE18.9E2))')&
-                  jj+ipeak_start(myid)&
-                  ,n_cells_halo(jj)&
-#ifdef UNBINDINGCOM
-                  ,clmp_com_pb(jj,1)&
-                  ,clmp_com_pb(jj,2)&
-                  ,clmp_com_pb(jj,3)&
-#else
-                  ,peak_pos(jj,1)&
-                  ,peak_pos(jj,2)&
-                  ,peak_pos(jj,3)&
-#endif
-                  ,max_dens(jj)&
-                  ,clmp_mass_pb(jj)
-        endif
-      endif
+  minor(1,2)=-1d0*(hess(2,1)*hess(3,3)-hess(2,3)*hess(3,1))
+  minor(2,1)=minor(1,2)
+  minor(1,3)=hess(2,1)*hess(3,2)-hess(2,2)*hess(3,1)
+  minor(3,1)=minor(1,3)
+  minor(2,3)=-1d0*(hess(1,1)*hess(3,2)-hess(1,2)*hess(3,1))
+  minor(3,2)=minor(2,3)
+
+  ! Displacement of the true max from the cell center
+  displacement=0
+  do i=1,ndim
+    do j=1,ndim
+        numerator = gradient(j)*minor(i,j)
+        if(numerator>0) displacement(i)=displacement(i)-numerator/(det+smallreal*numerator)
     end do
+  end do
 
-  else ! write cell based data
-
-    do j=npeak,1,-1
-       jj=ind_sort(j)
-       if (relevance(jj) > relevance_threshold .and. halo_mass(jj) > mass_threshold*particle_mass)then
-          write(ilun,'(I8,X,I8,1X,I2,X,I10,X,I10,8(X,1PE18.9E2))')&
-               jj+ipeak_start(myid)&
-               ,ind_halo(jj)&
-               ,lev_peak(jj)&
-               ,new_peak(jj)&
-               ,n_cells(jj)&
-               ,peak_pos(jj,1)&
-               ,peak_pos(jj,2)&
-               ,peak_pos(jj,3)&
-               ,min_dens(jj)&
-               ,max_dens(jj)&
-               ,clump_mass(jj)/clump_vol(jj)&
-               ,clump_mass(jj)&
-               ,relevance(jj)
-          rel_mass=rel_mass+clump_mass(jj)
-          n_rel=n_rel+1
-       end if
-       if(saddle_threshold>0)then
-          if(ind_halo(jj).EQ.jj+ipeak_start(myid).AND.halo_mass(jj) > mass_threshold*particle_mass)then
-             write(ilun2,'(I10,X,I10,5(X,1PE18.9E2))')&
-                  jj+ipeak_start(myid)&
-                  ,n_cells_halo(jj)&
-                  ,peak_pos(jj,1)&
-                  ,peak_pos(jj,2)&
-                  ,peak_pos(jj,3)&
-                  ,max_dens(jj)&
-                  ,halo_mass(jj)
-          endif
-       endif
-    end do
+  ! Clipping the displacement in order to keep max in the cell
+  disp_max=maxval(abs(displacement(1:ndim)))
+  if (disp_max > dx_loc*0.499999)then
+    displacement(1)=displacement(1)/disp_max*dx_loc*0.499999d0
+    displacement(2)=displacement(2)/disp_max*dx_loc*0.499999d0
+    displacement(3)=displacement(3)/disp_max*dx_loc*0.499999d0
   end if
 
-  if (to_file)then
-     close(ilun)
-     if(saddle_threshold>0)then
-        close(ilun2)
-     endif
-  end if
+  xcell(1)=xcen(1)*dx_loc+displacement(1)-m%skip(1)
+  xcell(2)=xcen(2)*dx_loc+displacement(2)-m%skip(2)
+  xcell(3)=xcen(3)*dx_loc+displacement(3)-m%skip(3)
 
-     ! Send the token
-#ifndef WITHOUTMPI
-     if(IOGROUPSIZE>0) then
-        if(mod(myid,IOGROUPSIZE)/=0 .and.(myid.lt.ncpu))then
-           dummy_io=1
-           call MPI_SEND(dummy_io,1,MPI_INTEGER,myid-1+1,tag, &
-                & MPI_COMM_WORLD,info2)
-        end if
-     endif
+  end associate
 #endif
+end subroutine true_max
 
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(n_rel,n_rel_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  n_rel=n_rel_tot
-  call MPI_ALLREDUCE(rel_mass,rel_mass_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  rel_mass=rel_mass_tot
-#else
-  n_rel_tot = n_rel
-  rel_mass_tot = rel_mass
-#endif
-  if(myid==1)then
-     if(clinfo)write(*,'(A,1PE12.5)')' Total mass [code units] above threshold =',tot_mass
-     if(clinfo)write(*,'(A,I10,A,1PE12.5)')' Total mass [code units] in',n_rel_tot,' listed clumps =',rel_mass_tot
-  endif
 
-end subroutine write_clump_properties
-!################################################################
-!################################################################
-!################################################################
-!################################################################
+
 #endif
