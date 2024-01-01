@@ -966,9 +966,10 @@ subroutine compute_clump_properties(s)
       ! Cell volume
       dx_loc=0.5D0**ilevel
       vol=(r%boxlen*dx_loc)**ndim
-      xcell(1) = (c%hkey(itest,1)+0.5)*dx_loc-m%skip(1)
-      xcell(2) = (c%hkey(itest,2)+0.5)*dx_loc-m%skip(2)
-      xcell(3) = (c%hkey(itest,3)+0.5)*dx_loc-m%skip(3)
+      
+      xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+      xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
+      xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
 
       ! Number of leaf cells per clump
       c%n_cells(peak_nr)=c%n_cells(peak_nr)+1
@@ -1077,9 +1078,9 @@ subroutine compute_clump_properties(s)
            ! Cell coordinates
            dx_loc=r%boxlen*0.5D0**ilevel
            vol=(dx_loc)**ndim
-           xcell(1) = (c%hkey(itest,1)+0.5)*dx_loc-m%skip(1)
-           xcell(2) = (c%hkey(itest,2)+0.5)*dx_loc-m%skip(2)
-           xcell(3) = (c%hkey(itest,3)+0.5)*dx_loc-m%skip(3)
+           xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+           xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(2)
+           xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(3)
 
            do idim=1,ndim
               if (r%periodic(idim) .and. (xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
