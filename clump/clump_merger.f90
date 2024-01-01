@@ -35,7 +35,6 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%av_dens(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
 
-  allocate(c%clump_velocity(1:c%npeaks_max,1:ndim))
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points
   !-------------------------------------------
@@ -994,20 +993,35 @@ subroutine compute_clump_properties(s)
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
-  periodic=r%periodic(1)
-  periodic=periodic.or.r%periodic(2)
-  periodic=periodic.or.r%periodic(3)
-
-  ! peak-patch related arrays before sharing information with other cpus
-
   c%min_dens=huge(zero)
   c%n_cells=0; c%n_cells_halo=0
   c%halo_mass=0d0; c%clump_mass=0d0; c%clump_vol=0d0
-  c%center_of_mass=0d0; c%clump_velocity=0d0
+  c%center_of_mass=0d0
   c%peak_pos=0d0
 
   if(r%verbose)write(*,*)'Entering compute clump properties'
   
+  !--------------------------------------------------------
+  ! Loop over local peaks and compute peak cell coordinates
+  !--------------------------------------------------------
+  do ipeak=1,c%npeak
+    ilevel=c%lev_peak(ipeak)
+    igrid=c%peak_grid(ipeak)
+    ind=c%peak_cell(ipeak)
+    dx_loc=r%boxlen/2**ilevel
+     ! Peak cell coordinates
+    xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+    xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+    xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
+    c%peak_pos(ipeak,1:3)=xcell(1:3)
+  end do
+#ifndef WITHOUTMPI
+  ! Scatter results to all MPI domains
+  do i=1,ndim
+     call boundary_peak_dp(s,c%peak_pos(1,i))
+  end do
+#endif
+
   !--------------------------------------------------------------------------
   ! loop over all cells above the threshold
   !--------------------------------------------------------------------------
@@ -1020,21 +1034,18 @@ subroutine compute_clump_properties(s)
     if (global_peak_id /=0 ) then
       call get_local_peak_id(s,global_peak_id,peak_nr)
 
+      ! Cell density
       d=m%grid(igrid)%rho(ind)
 
       ! Cell volume
-      dx_loc=0.5D0**ilevel
-      vol=(r%boxlen*dx_loc)**ndim
+      dx_loc=r%boxlen/2**ilevel
+      vol=dx_loc**ndim
       
-      xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
-      xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
-      xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-
       ! Number of leaf cells per clump
       c%n_cells(peak_nr)=c%n_cells(peak_nr)+1
 
-      ! Min density
-      c%min_dens(peak_nr)=min(d,c%min_dens(peak_nr))
+      ! Clump min density
+      c%min_dens(peak_nr)=min(c%min_dens(peak_nr),d)
 
       ! Clump mass
       c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*d
@@ -1042,32 +1053,21 @@ subroutine compute_clump_properties(s)
       ! Clump volume
       c%clump_vol(peak_nr)=c%clump_vol(peak_nr)+vol
 
+      ! Cell coordinates
+      xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+      xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+      xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
+
+      ! In case of periodic boundaries
+      do idim=1,ndim
+         if ((xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
+         if ((xcell(idim)-c%peak_pos(peak_nr,idim))<-r%boxlen*0.5)xcell(idim)=xcell(idim)+r%boxlen
+      end do
+
       ! Clump center of mass location
       c%center_of_mass(peak_nr,1:3)=c%center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
-#ifdef HYDRO
-      ! Clump center of mass velocity
-      if (r%hydro)c%clump_velocity(peak_nr,1:3)=c%clump_velocity(peak_nr,1:3)+vol*m%grid(igrid)%uold(ind,2:4)
-#endif
-    end if
-  end do
 
-  !--------------------------------------------------------------------------
-  ! Loop over local peaks and identify true peak positions
-  !--------------------------------------------------------------------------
-  do ipeak=1,c%npeak
-     ! Peak cell coordinates
-    ilevel=c%lev_peak(ipeak)
-    igrid=c%peak_grid(ipeak)
-    ind=c%peak_cell(ipeak)
-    dx_loc=0.5D0**ilevel
-    xcen(1) = 2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
-    xcen(2) = 2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5
-    xcen(3) = 2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
-    !xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
-    !xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
-    !xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-    call true_max(s,xcell,xcen,ilevel)
-    c%peak_pos(ipeak,1:3)=xcell(1:3)
+    end if
   end do
   call build_peak_communicator(s)
 
@@ -1079,7 +1079,6 @@ subroutine compute_clump_properties(s)
   call virtual_peak_dp(s,c%clump_vol,'sum')
   do i=1,ndim
      call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
-     call virtual_peak_dp(s,c%clump_velocity(1,i),'sum')
   end do
 #endif
 
@@ -1087,7 +1086,6 @@ subroutine compute_clump_properties(s)
   do ipeak=1,c%npeak
      if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
         c%center_of_mass(ipeak,1:3)=c%center_of_mass(ipeak,1:3)/c%clump_mass(ipeak)
-        c%clump_velocity(ipeak,1:3)=c%clump_velocity(ipeak,1:3)/c%clump_mass(ipeak)
      end if
   end do
 
@@ -1096,7 +1094,6 @@ subroutine compute_clump_properties(s)
   do i=1,ndim
      call boundary_peak_dp(s,c%peak_pos(1,i))
      call boundary_peak_dp(s,c%center_of_mass(1,i))
-     call boundary_peak_dp(s,c%clump_velocity(1,i))
   end do
 #endif
 
@@ -1122,63 +1119,6 @@ subroutine compute_clump_properties(s)
   ! Scatter results to all MPI domains
   call boundary_peak_dp(s,c%av_dens)
 #endif
-
-  ! For periodic boxes, recompute center of mass relative to peak position
-  if(periodic)then
-     c%center_of_mass=0d0;
-     do itest=1,c%ntest
-        ilevel=c%level(itest)
-        igrid=c%grid(itest)
-        ind=c%cell(itest)
-        global_peak_id=m%grid(igrid)%flag1(ind)
-        if (global_peak_id /=0 ) then
-           call get_local_peak_id(s,global_peak_id,peak_nr)
-
-           ! Cell coordinates
-           dx_loc=r%boxlen*0.5D0**ilevel
-           vol=(dx_loc)**ndim
-           xcell(1) = (2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
-           xcell(2) = (2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
-           xcell(3) = (2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-
-           do idim=1,ndim
-              if (r%periodic(idim) .and. (xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
-              if (r%periodic(idim) .and. (xcell(idim)-c%peak_pos(peak_nr,idim))<r%boxlen*(-0.5))xcell(idim)=xcell(idim)+r%boxlen
-           end do
-
-           ! gas density
-           d=m%grid(igrid)%rho(ind)
-
-           ! Clump center of mass location
-           c%center_of_mass(peak_nr,1:3)=c%center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
-
-        end if
-     end do
-     call build_peak_communicator(s)
-
-#ifndef WITHOUTMPI
-     ! Collect results from all MPI domains
-     do i=1,ndim
-        call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
-     end do
-#endif
-
-     ! Compute specific quantity
-     do ipeak=1,c%npeak
-
-        if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
-           c%center_of_mass(ipeak,1:3)=c%center_of_mass(ipeak,1:3)/c%clump_mass(ipeak)
-        end if
-     end do
-
-#ifndef WITHOUTMPI
-     ! Scatter results to all MPI domains
-     do i=1,ndim
-        call boundary_peak_dp(s,c%center_of_mass(1,i))
-     end do
-#endif
-
-  end if
 
   end associate
 
