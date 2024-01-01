@@ -992,6 +992,8 @@ subroutine compute_clump_properties(s)
   real(dp)::tot_mass_tot
 #endif
 
+  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
+
   periodic=r%periodic(1)
   periodic=periodic.or.r%periodic(2)
   periodic=periodic.or.r%periodic(3)
