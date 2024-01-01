@@ -132,14 +132,7 @@ subroutine output_clump(s,filename)
      xsp(i)=c%clump_vol(i)
   end do
   write(ilun)xsp
-  ! Write clump_velocity
-  do idim=1,ndim
-     do i=1,c%npeak
-        xsp(i)=c%clump_velocity(i,idim)
-     end do
-     write(ilun)xsp
-  end do
-  ! Write center_of_mass
+  ! Write center of mass
   do idim=1,ndim
      do i=1,c%npeak
         xsp(i)=c%center_of_mass(i,idim)
