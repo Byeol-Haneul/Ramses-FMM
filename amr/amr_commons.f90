@@ -230,6 +230,9 @@ module amr_commons
      
      ! Clump finder parameters
      logical::clump_finder=.false.
+     logical::clinfo = .false.
+     logical::output_clump=.false.
+     logical::output_clumpfield=.false.
      real(dp)::relevance_threshold=2
      real(dp)::density_threshold=-1
      real(dp)::saddle_threshold=-1
