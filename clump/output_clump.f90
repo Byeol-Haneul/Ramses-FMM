@@ -4,7 +4,7 @@ contains
 !###################################################
 !###################################################
 !###################################################
-recursive subroutine r_output_clump_field(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_output_clump(pst,input_array,input_size,output_array,output_size)
   use mdl_module
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
@@ -16,19 +16,21 @@ recursive subroutine r_output_clump_field(pst,input_array,input_size,output_arra
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
   
-  character(LEN=flen)::filename
+  character(LEN=flen)::filename,filename2
   integer::rID
-
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
-     call r_output_clump_field(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+    rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
+    call r_output_clump(pst%pLower,input_array,input_size,output_array,output_size)
+    call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
-     filename=transfer(input_array,filename)
-      call output_clump_field(pst%s,filename)
+    filename=transfer(input_array,filename)
+    filename2=TRIM(filename)//'clump.'
+    call output_clump_properties(s,filename2)
+    filename2=TRIM(filename)//'clump_field.'
+    call output_clump_field(s,filename2)
   endif
 
-end subroutine r_output_clump_field
+end subroutine r_output_clump
 !#######################################################
 !#######################################################
 !#######################################################
@@ -67,6 +69,7 @@ subroutine output_clump_field(s,filename)
   enddo
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
+        write(ilun)m%grid(igrid)%rho
         write(ilun)m%grid(igrid)%flag1
      end do
   enddo
@@ -75,37 +78,10 @@ subroutine output_clump_field(s,filename)
   end associate
      
 end subroutine output_clump_field
-!#######################################################
-!#######################################################
-!#######################################################
-!#######################################################
-recursive subroutine r_output_clump_properties(pst,input_array,input_size,output_array,output_size)
-  use mdl_module
-  use amr_parameters, only: flen
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
-
-  character(LEN=flen)::filename,filename2
-  integer::rID
-  if(pst%nLower>0)then
-    rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
-    call r_output_clump_properties(pst%pLower,input_array,input_size,output_array,output_size)
-    call mdl_get_reply(pst%s%mdl,rID,output_size)
-  else
-    filename=transfer(input_array,filename)
-    filename2=TRIM(filename)//'clump.'
-    call output_clump_properties(pst%s,filename2)
-  endif
-
-end subroutine r_output_clump_properties
-
-
+!###################################################
+!###################################################
+!###################################################
+!###################################################
 subroutine output_clump_properties(s,filename)
   use amr_parameters, only: ndim,dp,i8b,flen
   use hydro_parameters, only: nvar
@@ -182,7 +158,6 @@ subroutine output_clump_properties(s,filename)
       endif
    endif
   enddo
-
   close(ilun)
   if(r%saddle_threshold>0)then
       close(ilun2)
@@ -198,10 +173,8 @@ subroutine output_clump_properties(s,filename)
   rel_mass_tot = rel_mass
 #endif
   
-
   end associate
 end subroutine output_clump_properties
-
 !###################################################
 !###################################################
 !###################################################
