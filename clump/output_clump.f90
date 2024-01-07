@@ -31,53 +31,6 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   endif
 
 end subroutine r_output_clump
-!#######################################################
-!#######################################################
-!#######################################################
-!#######################################################
-subroutine output_clump_field(s,filename)
-  use amr_parameters, only: ndim,twotondim,flen,dp
-  use hydro_parameters, only: nvar
-  use ramses_commons, only: ramses_t
-  use mdl_module
-
-  implicit none
-  type(ramses_t)::s
-  character(LEN=flen)::filename
-
-  integer::ilevel,igrid,ilun,ierr,ivar,ind
-  character(LEN=5)::nchar
-  character(LEN=flen)::fileloc
-  logical::file_exist
-
-  associate(g=>s%g,r=>s%r,m=>s%m,mdl=>s%mdl)
-  ilun=10+mdl_core(mdl)
-  call title(g%myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
-  inquire(file=fileloc,exist=file_exist)
-  if (file_exist) then
-     open(unit=ilun,file=fileloc,iostat=ierr)
-     close(ilun,status="delete")
-  end if
-  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
-  write(ilun)ndim
-  write(ilun)nvar
-  write(ilun)r%levelmin
-  write(ilun)r%nlevelmax
-  do ilevel=r%levelmin,r%nlevelmax
-     write(ilun)m%noct(ilevel)
-  enddo
-  do ilevel=r%levelmin,r%nlevelmax
-     do igrid=m%head(ilevel),m%tail(ilevel)
-        write(ilun)m%grid(igrid)%rho
-        write(ilun)m%grid(igrid)%flag1
-     end do
-  enddo
-  close(ilun)
-
-  end associate
-     
-end subroutine output_clump_field
 !###################################################
 !###################################################
 !###################################################
@@ -175,6 +128,52 @@ subroutine output_clump_properties(s,filename)
   
   end associate
 end subroutine output_clump_properties
+!###################################################
+!###################################################
+!###################################################
+!###################################################
+subroutine output_clump_field(s,filename)
+  use amr_parameters, only: ndim,twotondim,flen,dp
+  use ramses_commons, only: ramses_t
+  use mdl_module
+  
+  implicit none
+  type(rasmes_t)::s
+  character(LEN=flen)::filename
+  
+  integer::ilevel,igrid,ilun,ierr,ivar,ind
+  character(LEN=5)::nchar
+  character(LEN=flen)::fileloc
+  logical::file_exist
+  
+  associate(g=>s%g,r=>s%r,m=>s%m,mdl=>s%mdl)
+
+  ilun=10+mdl_core(mdl)
+  call title(g%myid,nchar)
+  fileloc=TRIM(filename)//TRIM(nchar)
+  inquire(file=fileloc,exist=file_exist)
+  if (file_exist) then
+     open(unit=ilun,file=fileloc,iostat=ierr)
+     close(ilun,status="delete")
+  end if
+  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
+  write(ilun)ndim
+  write(ilun)2
+  write(ilun)r%levelmin
+  write(ilun)r%nlevelmax
+  do ilevel=r%levelmin,r%nlevelmax
+     write(ilun)m%noct(ilevel)
+  enddo
+  do ilevel=r%levelmin,r%nlevelmax
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        write(ilun)m%grid(igrid)%rho
+        write(ilun)m%grid(igrid)%flag1
+     end do
+  enddo
+  close(ilun)
+  
+end associate
+end subroutine output_clump_field
 !###################################################
 !###################################################
 !###################################################
