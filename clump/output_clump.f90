@@ -25,9 +25,9 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   else
     filename=transfer(input_array,filename)
     filename2=TRIM(filename)//'clump.'
-    call output_clump_properties(s,filename2)
+    call output_clump_properties(pst%s,filename2)
     filename2=TRIM(filename)//'clump_field.'
-    call output_clump_field(s,filename2)
+    call output_clump_field(pst%s,filename2)
   endif
 
 end subroutine r_output_clump
@@ -138,7 +138,7 @@ subroutine output_clump_field(s,filename)
   use mdl_module
   
   implicit none
-  type(rasmes_t)::s
+  type(ramses_t)::s
   character(LEN=flen)::filename
   
   integer::ilevel,igrid,ilun,ierr,ivar,ind
@@ -257,24 +257,14 @@ subroutine file_descriptor_clump(r,filename,write_bkp_file)
     write(ilun,'("variable #",I2,": center_of_mass_z")')ivar
   endif
 
-  ivar=2*ndim+12
-  write(ilun,'("variable #",I2,": clump_velocity_x")')ivar
-  if(ndim>1)then
-    ivar=2*ndim+13
-    write(ilun,'("variable #",I2,": clump_velocity_y")')ivar
-  endif
-  if(ndim>2)then
-    ivar=2*ndim+14
-    write(ilun,'("variable #",I2,": clump_velocity_z")')ivar
-  endif
 
-  ivar=3*ndim+13
+  ivar=2*ndim+12
   write(ilun,'("variable #",I2,": halo_mass")')ivar
 
-  ivar=3*ndim+14
+  ivar=2*ndim+13
   write(ilun,'("variable #",I2,": clump_mass")')ivar
 
-  ivar=3*ndim+15
+  ivar=2*ndim+14
   write(ilun,'("variable #",I2,": relevance")')ivar
   
   close(ilun)

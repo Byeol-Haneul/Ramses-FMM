@@ -41,21 +41,8 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ! Output clumps properties to file
   !------------------------------------------
   ! output the clump field
-  if(r%output_clump)then
-    if(g%myid==1)write(*,*)"Outputing clump properties to disc"
-    filename=TRIM(filedir) ! Note that suffix will be added later
-    input_array=transfer(filename,input_array)
-    if(r%verbose)write(*,*)'Writing clump properties files'
-    call r_output_clump_properties(pst,input_array,flen/4,dummy,0)
-  endif
-
-  if(r%output_clumpfield)then
-    if(g%myid==1)write(*,*)"Outputing clump field to disc"
-    filename=TRIM(filedir)//'clumpfield.'
-    input_array=transfer(filename,input_array)
-    if(r%verbose)write(*,*)'Writing clumpfield files'
-    call r_output_clump_field(pst,input_array,flen/4,dummy,0)
-  endif
+  call r_output_clump(pst,input_array,flen/4,dummy,0)
+  
 
   if(.not. keep_alive)then
      call r_deallocate_clump(pst,r%levelmin,1)
@@ -144,9 +131,8 @@ end subroutine clump_finder
 !################################################################
 !################################################################
 subroutine collect_test(s)
-  use amr_parameters, only: twotondim,ndim
+  use amr_parameters, only: twotondim,ndim,dp
   use ramses_commons, only: ramses_t
-  use clfind_commons, only: dens,isort,iswap
   implicit none
   type(ramses_t)::s
   !==================================================================
@@ -169,6 +155,9 @@ subroutine collect_test(s)
   integer::action,ivar_clump
   logical::ok
   real(kind=8)::dx,vol
+  real(dp),allocatable,dimension(:)::dens
+  integer,allocatable,dimension(:)::isort
+  integer,allocatable,dimension(:)::iswap
 
 #ifdef GRAV
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)

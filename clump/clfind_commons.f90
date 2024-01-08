@@ -2,16 +2,6 @@ module clfind_commons
     use amr_parameters, only: dp
     use sparse_matrix
 
-    real(dp),allocatable,dimension(:)::dens
-    integer,allocatable,dimension(:)::isort
-    integer,allocatable,dimension(:)::iswap
-    logical::output_clump,output_clumpfield
-    ! These parameters should be defined in run_t::r
-    !real(dp)::relevance_threshold=2
-    !real(dp)::density_threshold=-1
-    !real(dp)::saddle_threshold=-1
-    !real(dp)::mass_threshold=0
-
     type clump_t
 
        integer :: ntest=0 ! Actual number of test particles in current processor
@@ -43,7 +33,6 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: min_dens ! min density of the clump
        real(dp),allocatable,dimension(:) :: av_dens ! average density of the clump
        real(dp),allocatable,dimension(:) :: clump_vol ! volume of the clump
-       real(dp),allocatable,dimension(:,:) :: clump_velocity ! velocity of the clump
 
        integer::peak_recv_tot,peak_send_tot ! Peak communicator arrays
        integer,allocatable,dimension(:)::peak_send_cnt,peak_send_oft

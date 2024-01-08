@@ -35,7 +35,6 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%av_dens(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
 
-  allocate(c%clump_velocity(1:c%npeak_max,1:ndim))
 
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points
@@ -925,7 +924,7 @@ end subroutine boundary_peak_dp
 !################################################################
 !################################################################
 subroutine analyze_peak_memory(s)
-  use amr_commons, only: ramses_t
+  use ramses_commons, only: ramses_t
   use clfind_commons
   implicit none
   type(ramses_t)::s
