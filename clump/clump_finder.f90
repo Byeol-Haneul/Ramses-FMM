@@ -492,10 +492,6 @@ subroutine collect_patch(s)
 #endif
   implicit none
   type(ramses_t)::s
-  integer(kind=8),dimension(0:ndim)::hash_nbor
-  type(msg_twin_realdp)::dummy_int4
-  type(oct),pointer::gridn
-  integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nmove_tot,nzero,nzero_tot
   !==================================================================
   ! This is the clump finder routine for segmenting the density
   ! field into peak patches around each density peak.
@@ -505,6 +501,14 @@ subroutine collect_patch(s)
   ! - done when nmove_tot=0 (for single core, only one sweep is necessary)
   ! Written by Ziyong Wu (mini-ramses version December 2023).
   !==================================================================
+#ifndef WITHOUTMPI
+  integer::info
+  integer::nmove_all,nzero_all
+#endif
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  type(msg_twin_realdp)::dummy_int4
+  type(oct),pointer::gridn
+  integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nmove_tot,nzero,nzero_tot
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
   !----------------------------------------------------------------------
