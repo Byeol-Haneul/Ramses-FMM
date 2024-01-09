@@ -42,6 +42,8 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      filename='output_'//TRIM(nchar)//'/'
      input_array=transfer(filename,input_array)
      if(r%verbose)write(*,*)'Writing clump and halo files'
+     filename=TRIM(filename)//'clump_field_descriptor.txt'
+     call file_descriptor_clump(r,filename)
      call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
 

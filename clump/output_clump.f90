@@ -58,7 +58,7 @@ subroutine output_clump_properties(s,filename)
   ! Open clump file and write header
   !-------------------------------------
   ilun=10
-  fileloc=TRIM(filename)//'clump_'//TRIM(nchar)
+  fileloc=TRIM(filename)//'clump.'//TRIM(nchar)
   inquire(file=fileloc, exist=file_exist)
   if (file_exist) then
      open(unit=ilun,file=fileloc,iostat=ierr)
@@ -73,7 +73,7 @@ subroutine output_clump_properties(s,filename)
   !-------------------------------------
   if(r%saddle_threshold>0)then
      ilun2=20
-     fileloc=TRIM(filename)//'halo_'//TRIM(nchar)
+     fileloc=TRIM(filename)//'halo.'//TRIM(nchar)
      inquire(file=fileloc, exist=file_exist)
      if (file_exist) then
         open(unit=ilun2,file=fileloc,iostat=ierr)
@@ -147,7 +147,7 @@ subroutine output_clump_field(s,filename)
 
   ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
+  fileloc=TRIM(filename)//'clump_field.'//TRIM(nchar)
   inquire(file=fileloc,exist=file_exist)
   if (file_exist) then
      open(unit=ilun,file=fileloc,iostat=ierr)
@@ -178,14 +178,13 @@ end subroutine output_clump_field
 !###################################################
 !###################################################
 !###################################################
-subroutine file_descriptor_clump(r,filename,write_bkp_file)
+subroutine file_descriptor_clump(r,filename)
   use amr_parameters, only: ndim,flen
   use hydro_parameters, only: nvar,nener
   use amr_commons, only: run_t
   implicit none
   type(run_t)::r
   character(LEN=flen)::filename
-  logical::write_bkp_file
   
   character(LEN=flen)::fileloc
   integer::ivar,ilun
@@ -193,79 +192,16 @@ subroutine file_descriptor_clump(r,filename,write_bkp_file)
   if(r%verbose)write(*,*)'Entering file_descriptor_clump'
 
   ilun=11
-
-  ! Open file
   fileloc=TRIM(filename)
   open(unit=ilun,file=fileloc,form='formatted')
 
-  ! Write variable names in backup file
-  ! Write peak_grid,peak_cell,max_dens,lev_peak,new_peak,peak_pos,ind_halo,n_cell_halo,n_cells,min_dens,av_dens,clump_vol,center_of_mass,clump_velocity,halo_mass,clump_mass,relevance
-  write(ilun,'("nvar        =",I11)')nvar
+  write(ilun,'("nvar        =",I11)')2
+
   ivar=1
-  write(ilun,'("variable #",I2,": peak_grid")')ivar
+  write(ilun,'("variable #",I2,": density")')ivar
 
   ivar=2
-  write(ilun,'("variable #",I2,": peak_cell")')ivar
-
-  ivar=3
-  write(ilun,'("variable #",I2,": max_dens")')ivar
-
-  ivar=4
-  write(ilun,'("variable #",I2,": lev_peak")')ivar
-
-  ivar=5
-  write(ilun,'("variable #",I2,": new_peak")')ivar
-
-  ivar=6
-  write(ilun,'("variable #",I2,": peak_pos_x")')ivar
-  if(ndim>1)then
-    ivar=7
-    write(ilun,'("variable #",I2,": peak_pos_y")')ivar
-  endif
-  if(ndim>2)then
-    ivar=8
-    write(ilun,'("variable #",I2,": peak_pos_z")')ivar
-  endif
-
-  ivar=ndim+6
-  write(ilun,'("variable #",I2,": ind_halo")')ivar
-
-  ivar=ndim+7
-  write(ilun,'("variable #",I2,": n_cell_halo")')ivar
-
-  ivar=ndim+8
-  write(ilun,'("variable #",I2,": n_cells")')ivar
-
-  ivar=ndim+9
-  write(ilun,'("variable #",I2,": min_dens")')ivar
-
-  ivar=ndim+10
-  write(ilun,'("variable #",I2,": av_dens")')ivar
-
-  !clump_vol,center_of_mass,clump_velocity,halo_mass,clump_mass,relevance
-  ivar=ndim+11
-  write(ilun,'("variable #",I2,": clump_vol")')ivar
-
-  ivar=ndim+12
-  write(ilun,'("variable #",I2,": center_of_mass_x")')ivar
-  if(ndim>1)then
-    ivar=ndim+13
-    write(ilun,'("variable #",I2,": center_of_mass_y")')ivar
-  endif
-  if(ndim>2)then
-    ivar=ndim+14
-    write(ilun,'("variable #",I2,": center_of_mass_z")')ivar
-  endif
-
-
-  ivar=2*ndim+12
-  write(ilun,'("variable #",I2,": halo_mass")')ivar
-
-  ivar=2*ndim+13
-  write(ilun,'("variable #",I2,": clump_mass")')ivar
-
-  ivar=2*ndim+14
-  write(ilun,'("variable #",I2,": relevance")')ivar
+  write(ilun,'("variable #",I2,": clump ID")')ivar
   
   close(ilun)
 
