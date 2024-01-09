@@ -16,7 +16,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ! Local variables
   integer::dummy(1)
 
-#if NDIM==3
+#if NDIM==3 && defined(GRAV)
 
   associate(r=>pst%s%r,g=>pst%s%g)
 
@@ -31,19 +31,13 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ! Find relevant peak patches and halos
   !------------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
-  
-
-  
-
-  
-
+ 
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
   ! output the clump field
   call r_output_clump(pst,input_array,flen/4,dummy,0)
   
-
   if(.not. keep_alive)then
      call r_deallocate_clump(pst,r%levelmin,1)
   endif
@@ -85,6 +79,8 @@ subroutine clump_finder(s)
   implicit none
   type(ramses_t)::s
 
+#if NDIM==3 && defined(GRAV)
+
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
   call collect_test(s)
@@ -124,12 +120,14 @@ subroutine clump_finder(s)
   ! threshold into halos, only if their saddle point density is larger
   ! that the prescribed saddle density threshold.
   call merge_clumps(s,'saddleden')
-  
+
+#endif
 end subroutine clump_finder
 !################################################################
 !################################################################
 !################################################################
 !################################################################
+#if NDIM==3 && defined(GRAV)
 subroutine collect_test(s)
   use amr_parameters, only: twotondim,ndim,dp
   use ramses_commons, only: ramses_t
@@ -725,6 +723,6 @@ subroutine collect_saddle(s)
   end associate
 
 end subroutine collect_saddle
-
+#endif
 end module clump_finder_module
 
