@@ -808,7 +808,7 @@ subroutine virtual_saddle_max(s)
   use amr_commons
   use ramses_commons, only: ramses_t
 #ifndef WITHOUTMPI
-  use moi
+  use mpi
 #endif
   implicit none
   type(ramses_t)::s
