@@ -269,12 +269,6 @@ subroutine build_peak_communicator(s)
   end do
   call MPI_ALLREDUCE(npeak_alltoall,npeak_alltoall_tot,g%ncpu*g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
   npeak_alltoall=npeak_alltoall_tot
-!!$  if(myid==1)then
-!!$     write(*,'(129(I3,1X))')0,(j,j=1,ncpu)
-!!$     do icpu=1,ncpu
-!!$        write(*,'(129(I3,1X))')icpu,(npeak_alltoall(icpu,j),j=1,ncpu)
-!!$     end do
-!!$  end if
   if(.not. allocated(c%peak_send_cnt))then
      allocate(c%peak_send_cnt(1:g%ncpu),c%peak_send_oft(1:g%ncpu))
      allocate(c%peak_recv_cnt(1:g%ncpu),c%peak_recv_oft(1:g%ncpu))
@@ -779,17 +773,17 @@ subroutine virtual_peak_dp(s,xx,action)
   select case (action)
   case('sum')
      do j=1,c%peak_recv_tot
-        ipeak=c%peak_recv_buf(j)-c%npeak_cum(myid-1)
+        ipeak=c%peak_recv_buf(j)-c%npeak_cum(g%myid-1)
         xx(ipeak)=xx(ipeak)+dp_peak_recv_buf(j)
      end do
   case('min')
      do j=1,c%peak_recv_tot
-        ipeak=peak_recv_buf(j)-c%npeak_cum(myid-1)
+        ipeak=peak_recv_buf(j)-c%npeak_cum(g%myid-1)
         xx(ipeak)=MIN(xx(ipeak),dp_peak_recv_buf(j))
      end do
   case('max')
      do j=1,c%peak_recv_tot
-        ipeak=peak_recv_buf(j)-c%npeak_cum(myid-1)
+        ipeak=peak_recv_buf(j)-c%npeak_cum(g%myid-1)
         xx(ipeak)=MAX(xx(ipeak),dp_peak_recv_buf(j))
      end do
   end select
@@ -878,7 +872,7 @@ subroutine boundary_peak_int(s,xx)
   allocate(int_peak_send_buf(1:c%peak_send_tot))
   allocate(int_peak_recv_buf(1:c%peak_recv_tot))
   do j=1,c%peak_recv_tot
-     ipeak=c%peak_recv_buf(j)-c%npeak_cum(myid-1)
+     ipeak=c%peak_recv_buf(j)-c%npeak_cum(g%myid-1)
      int_peak_recv_buf(j)=xx(ipeak)
   end do
   call MPI_ALLTOALLV(int_peak_recv_buf,c%peak_recv_cnt,c%peak_recv_oft,MPI_INTEGER, &
@@ -921,7 +915,7 @@ subroutine boundary_peak_dp(s,xx)
   allocate(dp_peak_recv_buf(1:c%peak_recv_tot))
 
   do j=1,c%peak_recv_tot
-     ipeak=c%peak_recv_buf(j)-c%npeak_cum(myid-1)
+     ipeak=c%peak_recv_buf(j)-c%npeak_cum(g%myid-1)
      dp_peak_recv_buf(j)=xx(ipeak)
   end do
   call MPI_ALLTOALLV(dp_peak_recv_buf,c%peak_recv_cnt,c%peak_recv_oft,MPI_DOUBLE_PRECISION, &
