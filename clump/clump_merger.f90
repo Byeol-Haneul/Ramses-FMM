@@ -778,12 +778,12 @@ subroutine virtual_peak_dp(s,xx,action)
      end do
   case('min')
      do j=1,c%peak_recv_tot
-        ipeak=peak_recv_buf(j)-c%npeak_cum(g%myid-1)
+        ipeak=c%peak_recv_buf(j)-c%npeak_cum(g%myid-1)
         xx(ipeak)=MIN(xx(ipeak),dp_peak_recv_buf(j))
      end do
   case('max')
      do j=1,c%peak_recv_tot
-        ipeak=peak_recv_buf(j)-c%npeak_cum(g%myid-1)
+        ipeak=c%peak_recv_buf(j)-c%npeak_cum(g%myid-1)
         xx(ipeak)=MAX(xx(ipeak),dp_peak_recv_buf(j))
      end do
   end select
