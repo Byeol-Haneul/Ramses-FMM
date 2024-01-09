@@ -18,6 +18,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   
   character(LEN=flen)::filename,filename2
   integer::rID
+
   if(pst%nLower>0)then
     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
     call r_output_clump(pst%pLower,input_array,input_size,output_array,output_size)
@@ -40,30 +41,19 @@ subroutine output_clump_properties(s,filename)
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use clfind_commons
-#ifndef WITHOUTMPI
-  use mpi
-#endif
   implicit none
   type(ramses_t)::s
   character(LEN=flen)::filename
-  real(dp)::rel_mass,rel_mass_tot
-  real(dp)::particle_mass=0
-  integer::i,idim,ilun,ierr,ilun2,j,n_rel_tot,n_rel
+  !----------------------------------------------------------------
+  ! This routine output the clump properties for each processor
+  !----------------------------------------------------------------
+  integer::i,idim,ilun,ierr,ilun2,j
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   logical::file_exist
-#ifndef WITHOUTMPI
-  integer::info
-  real(dp)::particle_mass_tot
-#endif
 
   associate(r=>s%r,g=>s%g,c=>s%c,p=>s%p)
 
-  particle_mass=MINVAL(p%mp, MASK=(p%mp > 0))
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(particle_mass,particle_mass_tot,1,MPI_DOUBLE_PRECISION,MPI_MIN,MPI_COMM_WORLD,info)
-  particle_mass=particle_mass_tot
-#endif
   ilun=10
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
@@ -83,7 +73,7 @@ subroutine output_clump_properties(s,filename)
   write(ilun)c%npeak
 
   do j=1,c%npeak
-    if (c%relevance(j) > r%relevance_threshold .and. c%halo_mass(j) > r%mass_threshold*particle_mass)then
+    if (c%relevance(j) > r%relevance_threshold .and. c%halo_mass(j) > r%mass_threshold*g%mp_min)then
       write(ilun,'(I8,X,I2,X,I10,X,I10,8(X,1PE18.9E2))')&
         j+c%npeak_cum(g%myid-1)&
         ,c%lev_peak(j)&
@@ -97,12 +87,10 @@ subroutine output_clump_properties(s,filename)
         ,c%clump_mass(j)/c%clump_vol(j)&
         ,c%clump_mass(j)&
         ,c%relevance(j)
-      rel_mass=rel_mass+c%clump_mass(j)
-      n_rel=n_rel+1
     end if
 
     if(r%saddle_threshold>0)then
-      if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.c%halo_mass(j) > r%mass_threshold*particle_mass)then
+      if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.c%halo_mass(j) > r%mass_threshold*g%mp_min)then
          write(ilun2,'(I10,X,I10,5(X,1PE18.9E2))')&
           j+c%npeak_cum(g%myid-1)&
           ,c%n_cells_halo(j)&
@@ -118,18 +106,9 @@ subroutine output_clump_properties(s,filename)
   if(r%saddle_threshold>0)then
       close(ilun2)
   endif
-
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(n_rel,n_rel_tot,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  n_rel=n_rel_tot
-  call MPI_ALLREDUCE(rel_mass,rel_mass_tot,1,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,info)
-  rel_mass=rel_mass_tot
-#else
-  n_rel_tot = n_rel
-  rel_mass_tot = rel_mass
-#endif
   
   end associate
+
 end subroutine output_clump_properties
 !###################################################
 !###################################################
@@ -138,12 +117,13 @@ end subroutine output_clump_properties
 subroutine output_clump_field(s,filename)
   use amr_parameters, only: ndim,twotondim,flen,dp
   use ramses_commons, only: ramses_t
-  use mdl_module
-  
+  use mdl_module  
   implicit none
   type(ramses_t)::s
   character(LEN=flen)::filename
-  
+  !----------------------------------------------------------------
+  ! This routine output the peak patch fields for each processor
+  !----------------------------------------------------------------  
   integer::ilevel,igrid,ilun,ierr,ivar,ind
   character(LEN=5)::nchar
   character(LEN=flen)::fileloc
@@ -178,6 +158,7 @@ subroutine output_clump_field(s,filename)
   close(ilun)
   
 end associate
+
 end subroutine output_clump_field
 !###################################################
 !###################################################

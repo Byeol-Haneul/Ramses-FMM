@@ -41,10 +41,8 @@ subroutine m_input_part(pst)
   call r_npart_max(pst,pst%s%r%levelmin,1,pst%s%p%npart_max,1)
 
   ! Compute minimum particle mass and initial coarse particle level
-  if(pst%s%r%aexp_lock_refine)then
-     call r_mass_min_part(pst,pst%s%r%levelmin,1,mp_min,2)
-     call r_broadcast_mp_min(pst,mp_min,2)
-  endif
+  call r_mass_min_part(pst,pst%s%r%levelmin,1,mp_min,2)
+  call r_broadcast_mp_min(pst,mp_min,2)
 
 end subroutine m_input_part
 !#####################################################################

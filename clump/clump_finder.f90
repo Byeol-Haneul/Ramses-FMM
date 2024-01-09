@@ -10,10 +10,12 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   implicit none
   type(pst_t)::pst
   logical::create_output,keep_alive
-  
+  !-----------------------------------------------------------------------
+  ! This is the master routine for the RAMSES clump finder.
+  !-----------------------------------------------------------------------  
+  character(LEN=5)::nchar
   character(LEN=flen)::filename,filedir
   integer,dimension(1:flen/4)::input_array
-  ! Local variables
   integer::dummy(1)
 
 #if NDIM==3 && defined(GRAV)
@@ -35,9 +37,17 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
-  ! output the clump field
-  call r_output_clump(pst,input_array,flen/4,dummy,0)
-  
+  if(create_output.and.g%output_done)then
+     call title(g%ifout-1,nchar)
+     filename='output_'//TRIM(nchar)//'/'
+     input_array=transfer(filename,input_array)
+     if(r%verbose)write(*,*)'Writing clump and halo files'
+     call r_output_clump(pst,input_array,flen/4,dummy,0)
+  endif
+
+  !------------------------------------------
+  ! Deallocate all peak arrays if needed
+  !------------------------------------------
   if(.not. keep_alive)then
      call r_deallocate_clump(pst,r%levelmin,1)
   endif
@@ -81,44 +91,64 @@ subroutine clump_finder(s)
 
 #if NDIM==3 && defined(GRAV)
 
+  !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
+  !----------------------------------------------------------------------
   call collect_test(s)
 
+  !----------------------------------------------------------------------
   ! Count and collect all density peaks.
   ! We also compute for each test particle the coordinates of its
   ! densest neighbor.
+  !----------------------------------------------------------------------
   call collect_peak(s)
 
+  !----------------------------------------------------------------------
   ! Perform a segmentation of the density field using the watershed
   ! algorithm. We get well defined peak patches around each peak.
   ! As a result, each pair of neighboring peak patches are separated
   ! by their saddle surface.
+  !----------------------------------------------------------------------
   call collect_patch(s)
 
+  !----------------------------------------------------------------------
   ! Allocate all peak patch based arrays
+  !----------------------------------------------------------------------
   call allocate_peak_patch_arrays(s)
+  !----------------------------------------------------------------------
   ! Update the MPI communicator for peaks
+  !----------------------------------------------------------------------
   call build_peak_communicator(s)
 
+  !----------------------------------------------------------------------
   ! We build the saddle density matrix.
   ! Each pair of peaks is connected by a unique saddle point.
   ! The saddle point is the densest point on the saddle surface,
+  !----------------------------------------------------------------------
   call collect_saddle(s)
+  !----------------------------------------------------------------------
   ! Update the MPI communicator for peaks
+  !----------------------------------------------------------------------
   call build_peak_communicator(s)
 
+  !----------------------------------------------------------------------
   ! Merge peaks based on a relevance criterion.
   ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
+  !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
 
+  !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
+  !----------------------------------------------------------------------
   call compute_clump_properties(s)
 
+  !----------------------------------------------------------------------
   ! Merge all neighboring peaks above the prescribed density
   ! threshold into halos, only if their saddle point density is larger
   ! that the prescribed saddle density threshold.
+  !----------------------------------------------------------------------
   call merge_clumps(s,'saddleden')
 
 #endif
@@ -164,7 +194,9 @@ subroutine collect_test(s)
   integer,allocatable,dimension(:)::iswap
 
 #ifdef GRAV
+
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
   !---------------------------------------------------------
   ! Count cells above threshold. We name them test particles
   !---------------------------------------------------------
@@ -318,7 +350,9 @@ subroutine collect_peak(s)
   real(dp),dimension(1:3,1:nSnei)::xSnei
   real(dp)::dens_nbor,density_max,x,y,z
   logical::ok,ok_peak
+
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
+
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
   ! normalized to dx = 1 = size of the central leaf cell 
@@ -511,6 +545,7 @@ subroutine collect_patch(s)
   integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nmove_tot,nzero,nzero_tot
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
   !----------------------------------------------------------------------
   ! Flag peaks with global peak id using flag1 array
   !----------------------------------------------------------------------
@@ -617,7 +652,9 @@ subroutine collect_saddle(s)
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
   logical::ok
+
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
+
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
   ! normalized to dx = 1 = size of the central leaf cell 
