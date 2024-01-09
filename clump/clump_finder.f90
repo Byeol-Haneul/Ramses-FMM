@@ -142,6 +142,9 @@ subroutine collect_test(s)
   ! Count number of test particles and share info across processors
   ! Written by Ziyong Wu (mini-ramses version December 2023).
   !==================================================================
+#ifndef WITHOUTMPI
+  integer::info
+#endif
   integer::ntest,ntest_all
   integer(kind=8),dimension(0:s%g%ncpu)::nsite_cum,ntest_cum
   integer,dimension(1:s%g%ncpu)::nsite_cpu,nsite_cpu_all
@@ -150,7 +153,7 @@ subroutine collect_test(s)
   integer::ilevel
   integer::i,levelmin_part
   integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
-  integer(kind=8),dimension(1:s%g%ncpu)::ntest_cpu,ntest_cpu_all,npeak_cpu,npeak_cpu_all
+  integer(kind=8),dimension(1:s%g%ncpu)::ntest_cpu,ntest_cpu_all
   logical::verbose_all=.false.
   real(kind=8)::d,dx_loc
   integer::action,ivar_clump
@@ -296,6 +299,9 @@ subroutine collect_peak(s)
   ! Store the hash key of the densest neighbor for later usage.
   ! Written by Ziyong Wu (mini-ramses version December 2023).
   !==================================================================
+#ifndef WITHOUTMPI
+  integer::info
+#endif
   type(msg_twin_realdp)::dummy_twin_realdp
   type(msg_large_realdp)::dummy_large_realdp
   type(oct),pointer::gridp,gridn,gridpm
@@ -305,9 +311,6 @@ subroutine collect_peak(s)
   integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-#ifndef WITHOUTMPI
-  integer::info
-#endif
   real(dp),dimension(1:ndim)::xcen,xnei
   integer, parameter::nSnei=48
   type(nbor),dimension(1:nSnei) :: grid_nbor
