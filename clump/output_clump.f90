@@ -40,6 +40,9 @@ subroutine output_clump_properties(s,filename)
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use clfind_commons
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   character(LEN=flen)::filename
@@ -49,8 +52,8 @@ subroutine output_clump_properties(s,filename)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   logical::file_exist
-
 #ifndef WITHOUTMPI
+  integer::info
   real(dp)::particle_mass_tot
 #endif
 
