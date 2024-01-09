@@ -190,9 +190,9 @@ subroutine collect_test(s)
   ntest_cpu(g%myid)=c%ntest
 #ifndef WITHOUTMPI
 #ifndef LONGINT
-  call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
 #else
-  call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+  call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,g%ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
 #endif
   ntest_cpu(1)=ntest_cpu_all(1)
 #endif
@@ -456,7 +456,7 @@ subroutine collect_peak(s)
 #ifdef WITHOUTMPI
   npeaks_tot=c%npeak
 #else
-  npeaks_tot=npeak_cum(g%ncpu)
+  npeaks_tot=c%npeak_cum(g%ncpu)
 #endif
   if (g%myid==1.and.npeaks_tot>0) &
        & write(*,'(" Total number of density peaks found=",I10)')npeaks_tot
