@@ -16,7 +16,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   integer,dimension(1:input_size)::input_array
   integer,dimension(1:output_size)::output_array
   
-  character(LEN=flen)::filename,filename2
+  character(LEN=flen)::filename
   integer::rID
 
   if(pst%nLower>0)then
@@ -25,10 +25,8 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
     filename=transfer(input_array,filename)
-    filename2=TRIM(filename)//'clump.'
-    call output_clump_properties(pst%s,filename2)
-    filename2=TRIM(filename)//'clump_field.'
-    call output_clump_field(pst%s,filename2)
+    call output_clump_properties(pst%s,filename)
+    call output_clump_field(pst%s,filename)
   endif
 
 end subroutine r_output_clump
@@ -54,57 +52,73 @@ subroutine output_clump_properties(s,filename)
 
   associate(r=>s%r,g=>s%g,c=>s%c,p=>s%p)
 
-  ilun=10
   call title(g%myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
+
+  !-------------------------------------
+  ! Open clump file and write header
+  !-------------------------------------
+  ilun=10
+  fileloc=TRIM(filename)//'clump_'//TRIM(nchar)
   inquire(file=fileloc, exist=file_exist)
   if (file_exist) then
-    open(unit=ilun,file=fileloc,iostat=ierr)
-    close(ilun,status="delete")
-  end if
-
-  rel_mass=0
-  n_rel=0
-
-  open(unit=ilun,file=TRIM(fileloc),access="stream",action="write",form='unformatted')
+     open(unit=ilun,file=fileloc,iostat=ierr)
+     close(ilun,status="delete")
+  end if  
+  open(unit=ilun,file=TRIM(fileloc),form='formatted')
   rewind(ilun)
-  ! Write header
-  write(ilun)ndim
-  write(ilun)c%npeak
+  write(ilun,'(144A)')'   index  halo   lev   parent      ncell    peak_x             peak_y             peak_z     '//&
+          '        rho-               rho+               rho_av             mass_cl            relevance   '
+  !-------------------------------------
+  ! Open halo file and write header
+  !-------------------------------------
+  if(saddle_threshold>0)then
+     ilun2=20
+     fileloc=TRIM(filename)//'halo_'//TRIM(nchar)
+     inquire(file=fileloc, exist=file_exist)
+     if (file_exist) then
+        open(unit=ilun2,file=fileloc,iostat=ierr)
+        close(ilun2,status="delete")
+     end if
+     open(unit=ilun2,file=TRIM(fileloc),form='formatted')
+     rewind(ilun2)
+     write(ilun2,'(135A)')'     index      ncell    peak_x             peak_y             peak_z     '//&
+          '        rho+               mass      '
+  endif
 
   do j=1,c%npeak
-    if (c%relevance(j) > r%relevance_threshold .and. c%halo_mass(j) > r%mass_threshold*g%mp_min)then
-      write(ilun,'(I8,X,I2,X,I10,X,I10,8(X,1PE18.9E2))')&
-        j+c%npeak_cum(g%myid-1)&
-        ,c%lev_peak(j)&
-        ,c%new_peak(j)&
-        ,c%n_cells(j)&
-        ,c%peak_pos(j,1)&
-        ,c%peak_pos(j,2)&
-        ,c%peak_pos(j,3)&
-        ,c%min_dens(j)&
-        ,c%max_dens(j)&
-        ,c%clump_mass(j)/c%clump_vol(j)&
-        ,c%clump_mass(j)&
-        ,c%relevance(j)
-    end if
-
-    if(r%saddle_threshold>0)then
-      if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.c%halo_mass(j) > r%mass_threshold*g%mp_min)then
-         write(ilun2,'(I10,X,I10,5(X,1PE18.9E2))')&
-          j+c%npeak_cum(g%myid-1)&
-          ,c%n_cells_halo(j)&
-          ,c%peak_pos(j,1)&
-          ,c%peak_pos(j,2)&
-          ,c%peak_pos(j,3)&
-          ,c%max_dens(j)&
-          ,c%halo_mass(j)
-      endif
-   endif
+     if (c%relevance(j) > r%relevance_threshold .and. c%halo_mass(j) > r%mass_threshold*g%mp_min)then
+        write(ilun,'(I8,X,I2,X,I10,X,I10,8(X,1PE18.9E2))')&
+             j+c%npeak_cum(g%myid-1)&
+             ,c%lev_peak(j)&
+             ,c%new_peak(j)&
+             ,c%n_cells(j)&
+             ,c%peak_pos(j,1)&
+             ,c%peak_pos(j,2)&
+             ,c%peak_pos(j,3)&
+             ,c%min_dens(j)&
+             ,c%max_dens(j)&
+             ,c%clump_mass(j)/c%clump_vol(j)&
+             ,c%clump_mass(j)&
+             ,c%relevance(j)
+     end if
+     
+     if(r%saddle_threshold>0)then
+        if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.c%halo_mass(j) > r%mass_threshold*g%mp_min)then
+           write(ilun2,'(I10,X,I10,5(X,1PE18.9E2))')&
+                j+c%npeak_cum(g%myid-1)&
+                ,c%n_cells_halo(j)&
+                ,c%peak_pos(j,1)&
+                ,c%peak_pos(j,2)&
+                ,c%peak_pos(j,3)&
+                ,c%max_dens(j)&
+                ,c%halo_mass(j)
+        endif
+     endif
   enddo
+  
   close(ilun)
   if(r%saddle_threshold>0)then
-      close(ilun2)
+     close(ilun2)
   endif
   
   end associate
