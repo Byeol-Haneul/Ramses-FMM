@@ -71,7 +71,7 @@ subroutine output_clump_properties(s,filename)
   !-------------------------------------
   ! Open halo file and write header
   !-------------------------------------
-  if(saddle_threshold>0)then
+  if(r%saddle_threshold>0)then
      ilun2=20
      fileloc=TRIM(filename)//'halo_'//TRIM(nchar)
      inquire(file=fileloc, exist=file_exist)
