@@ -35,6 +35,7 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%av_dens(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
 
+
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points
   !-------------------------------------------
@@ -76,6 +77,30 @@ subroutine allocate_peak_patch_arrays(s)
   end associate
 
 end subroutine allocate_peak_patch_arrays
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+
+  integer::ilevel
+  integer::rID
+  
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
+     call r_deallocate_clump(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call deallocate_peak_patch_arrays(pst%s)
+  endif
+  
+end subroutine r_deallocate_clump
 !################################################################
 !################################################################
 !################################################################
@@ -205,8 +230,8 @@ subroutine get_local_peak_cpu(s,local_peak_id,peak_cpu)
      global_peak_id = c%gkey(local_peak_id)
      peak_cpu = g%ncpu
      do icpu = 1,g%ncpu
-        if(    global_peak_id > npeak_cum(icpu-1) .and. &
-             & global_peak_id <= npeak_cum(icpu))then
+        if(    global_peak_id > c%npeak_cum(icpu-1) .and. &
+             & global_peak_id <= c%npeak_cum(icpu))then
            peak_cpu = icpu
         endif
      end do
@@ -223,7 +248,6 @@ subroutine build_peak_communicator(s)
   use amr_commons
   use ramses_commons, only: ramses_t
   use clfind_commons
-  use mpi_mod
   implicit none
   type(ramses_t)::s
 
@@ -289,7 +313,7 @@ end subroutine build_peak_communicator
 subroutine merge_clumps(s,action)
   use amr_commons, only: dp
   use ramses_commons, only: ramses_t
-  use mpi_mod
+  use sparse_matrix
   implicit none
   type(ramses_t)::s
   character(len=9)::action
@@ -301,10 +325,10 @@ subroutine merge_clumps(s,action)
 #ifndef WITHOUTMPI
   integer::info
 #endif
-  integer::j,i,merge_to,ipart
+  integer::j,i,merge_to,ipart,igrid,ind,itest
   integer::current,nmove,ipeak,jpeak,iter
   integer::nsurvive,nzero,idepth
-  integer::ilev,global_peak_id
+  integer::ilev,global_peak_id,mergelevel_max
   real(dp)::value_iij,zero=0,relevance_peak
   integer,dimension(1:s%c%npeak_max)::alive,ind_sort
   real(dp),dimension(1:s%c%npeak_max)::peakd
@@ -421,7 +445,7 @@ subroutine merge_clumps(s,action)
      do ipeak=1,c%hfree-1
         if(alive(ipeak)>0)then
            merge_to=c%new_peak(ipeak)
-           if(ipeak.LE.npeak)then
+           if(ipeak.LE.c%npeak)then
               global_peak_id=c%npeak_cum(g%myid-1)+ipeak
            else
               global_peak_id=c%gkey(ipeak)
@@ -433,13 +457,13 @@ subroutine merge_clumps(s,action)
                  j=c%sparse_saddle_dens%col(current)
                  value_iij=c%sparse_saddle_dens%val(current) ! value of the matrix
                  ! Copy the value of density only if larger
-                 if(value_iij>get_value(s,jpeak,j,c%sparse_saddle_dens))then
-                    call set_value(s,jpeak,j,value_iij,c%sparse_saddle_dens)
-                    call set_value(s,j,jpeak,value_iij,c%sparse_saddle_dens)
+                 if(value_iij>get_value(jpeak,j,c%sparse_saddle_dens))then
+                    call set_value(jpeak,j,value_iij,c%sparse_saddle_dens)
+                    call set_value(j,jpeak,value_iij,c%sparse_saddle_dens)
                  end if
                  current=c%sparse_saddle_dens%next(current)
               end do
-              call set_value(s,jpeak,jpeak,zero,c%sparse_saddle_dens)
+              call set_value(jpeak,jpeak,zero,c%sparse_saddle_dens)
            end if
         endif
      end do
@@ -468,7 +492,7 @@ subroutine merge_clumps(s,action)
         do while(current>0) ! walk the line
            j=c%sparse_saddle_dens%col(current)
            if(alive(ipeak)==0 .or. alive(j)==0)then
-              call set_value(s,ipeak,j,zero,c%sparse_saddle_dens)
+              call set_value(ipeak,j,zero,c%sparse_saddle_dens)
            endif
            current=c%sparse_saddle_dens%next(current)
         end do
@@ -565,7 +589,7 @@ subroutine merge_clumps(s,action)
         if (global_peak_id>0)then
            call get_local_peak_id(s,global_peak_id,ipeak)
            merge_to=c%new_peak(ipeak)
-           call get_local_peak_id(merge_to,jpeak)
+           call get_local_peak_id(s,merge_to,jpeak)
            m%grid(igrid)%flag1(ind)=merge_to
         end if
      end do
@@ -661,7 +685,6 @@ end subroutine get_max
 subroutine virtual_peak_int(s,xx,action)
   use amr_commons
   use ramses_commons, only: ramses_t
-  use mpi_mod
   implicit none
   type(ramses_t)::s
   integer,dimension(1:s%c%npeak_max)::xx
@@ -717,7 +740,6 @@ end subroutine virtual_peak_int
 subroutine virtual_peak_dp(s,xx,action)
   use amr_commons, only: dp
   use ramses_commons, only: ramses_t
-  use mpi_mod
   implicit none
   type(ramses_t)::s
   real(dp),dimension(1:s%c%npeak_max)::xx
@@ -773,7 +795,6 @@ end subroutine virtual_peak_dp
 subroutine virtual_saddle_max(s)
   use amr_commons
   use ramses_commons, only: ramses_t
-  use mpi_mod
   implicit none
   type(ramses_t)::s
   
@@ -813,8 +834,9 @@ subroutine virtual_saddle_max(s)
 
   deallocate(dp_peak_send_buf,dp_peak_recv_buf)
   deallocate(int_peak_send_buf,int_peak_recv_buf)
-#endif
+
   end associate
+#endif
 
 end subroutine virtual_saddle_max
 !################################################################
@@ -824,9 +846,8 @@ end subroutine virtual_saddle_max
 subroutine boundary_peak_int(s,xx)
   use amr_commons
   use ramses_commons, only: ramses_t
-  use mpi_mod
   implicit none
-  type(ranses_t)::s
+  type(ramses_t)::s
   integer,dimension(1:s%c%npeak_max)::xx
 
 #ifndef WITHOUTMPI
@@ -863,8 +884,7 @@ end subroutine boundary_peak_int
 !################################################################
 subroutine boundary_peak_dp(s,xx)
   use amr_commons
-  use ranses_commons, only: ramses_t
-  use mpi_mod
+  use ramses_commons, only: ramses_t
   implicit none
   type(ramses_t)::s
   real(dp),dimension(1:s%c%npeak_max)::xx
@@ -904,11 +924,8 @@ end subroutine boundary_peak_dp
 !################################################################
 !################################################################
 subroutine analyze_peak_memory(s)
-  use amr_commons, only: ramses_t
+  use ramses_commons, only: ramses_t
   use clfind_commons
-#ifndef WITHOUTMPI
-  use mpi_mod
-#endif
   implicit none
   type(ramses_t)::s
   
@@ -964,11 +981,9 @@ end subroutine analyze_peak_memory
 !################################################################
 !################################################################
 subroutine compute_clump_properties(s)
-  use amr_commons, only: ramses_t
+  use amr_commons, only: dp,ndim
   use clfind_commons
-#ifndef WITHOUTMPI
-  use mpi_mod
-#endif
+  use ramses_commons, only: ramses_t
   implicit none
 #ifndef WITHOUTMPI
   integer::info
@@ -979,12 +994,15 @@ subroutine compute_clump_properties(s)
   ! collects the  relevant information. After some MPI communications,
   ! all necessary peak-patch properties are computed
   !----------------------------------------------------------------------------
-  integer::ipart,grid,peak_nr,ilevel,global_peak_id,ipeak,plevel
+  integer::ipart,grid,peak_nr,ilevel,global_peak_id,ipeak,plevel,igrid,itest,icelln,idim,ind
+  real(dp),dimension(1:3)::xcell
+  real(dp)::dx_loc,tot_mass
+  real(dp),dimension(1:ndim)::xcen
   real(dp)::zero=0
   ! variables needed temporarily store cell properties
   real(dp)::d=0, vol=0
   ! variables related to the size of a cell on a given level
-  integer::nx_loc,ind,idim
+  integer::nx_loc
   logical::periodic
 #ifndef WITHOUTMPI
   integer::i
@@ -1127,7 +1145,7 @@ end subroutine compute_clump_properties
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine true_max(s,xcen,ilevel)
+subroutine true_max(s,xcell,xcen,ilevel)
   use amr_commons
   use pm_commons
   use hydro_commons
@@ -1151,21 +1169,25 @@ subroutine true_max(s,xcen,ilevel)
   ! the true maximum by expanding the density around the cell center to second order.
   !----------------------------------------------------------------------------
 
-  integer::k,j,i,nx_loc,counter, ioft, n
+  integer::k,j,i,nx_loc,counter, ioft, n, icelln, idim, ind
   integer,dimension(1:threetondim)::cell_index,cell_lev
   real(dp)::det,dx,dx_loc,scale,disp_max,numerator
   real(dp),dimension(-1:1,-1:1,-1:1)::cube3
   real(dp),dimension(1:ndim)::xtest
   real(dp),dimension(1:ndim)::gradient,displacement
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer,dimension(1:ndim)::ckey_nbor
+  real(dp),dimension(1:3)::xcell
   real(dp),dimension(1:ndim,1:ndim)::hess,minor
+  integer, parameter::nSnei=27
   real(dp),dimension(1:3,1:nSnei)::xSnei
   real(dp),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=27
   real(dp)::smallreal=1d-100
 
 #if NDIM==3
 
-  associate(g=>s%g,r=>s%r,c=>s%c,m=s%m)
+  associate(g=>s%g,r=>s%r,c=>s%c,m=>s%m)
+
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
         hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
         pack=pack_fetch_phi, unpack=unpack_fetch_phi)
@@ -1182,7 +1204,7 @@ subroutine true_max(s,xcen,ilevel)
           xSnei(1,ind) = xtest(1)/2d0
           xSnei(2,ind) = xtest(2)/2d0
           xSnei(3,ind) = xtest(3)/2d0
-          xnei(1:ndim)=xcen(1:ndim)+xSNnei(1:ndim,j)
+          xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
           ! Periodic boundary conditions
           do idim=1,ndim
             if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)

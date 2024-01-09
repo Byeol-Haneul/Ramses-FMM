@@ -2,6 +2,7 @@ module clump_finder_module
 contains
 subroutine m_clump_finder(pst,create_output,keep_alive)
   use output_clump_module
+  use amr_parameters, only: flen
   use ramses_commons, only: pst_t
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
@@ -40,21 +41,8 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ! Output clumps properties to file
   !------------------------------------------
   ! output the clump field
-  if(output_clump)then
-    if(g%myid==1)write(*,*)"Outputing clump properties to disc"
-    filename=TRIM(filedir) ! Note that suffix will be added later
-    input_array=transfer(filename,input_array)
-    if(r%verbose)write(*,*)'Writing clump properties files'
-    call r_output_clump(pst,c,input_array,flen/4,dummy,0)
-  endif
-
-  if(output_clump_field)then
-    if(g%myid==1)write(*,*)"Outputing clump field to disc"
-    filename=TRIM(filedir)//'clumpfield.'
-    input_array=transfer(filename,input_array)
-    if(r%verbose)write(*,*)'Writing clumpfield files'
-    call r_output_clump_field(pst,input_array,flen/4,dummy,0)
-  endif
+  call r_output_clump(pst,input_array,flen/4,dummy,0)
+  
 
   if(.not. keep_alive)then
      call r_deallocate_clump(pst,r%levelmin,1)
@@ -143,7 +131,7 @@ end subroutine clump_finder
 !################################################################
 !################################################################
 subroutine collect_test(s)
-  use amr_parameters, only: twotondim
+  use amr_parameters, only: twotondim,ndim,dp
   use ramses_commons, only: ramses_t
   implicit none
   type(ramses_t)::s
@@ -154,19 +142,22 @@ subroutine collect_test(s)
   ! Written by Ziyong Wu (mini-ramses version December 2023).
   !==================================================================
   integer::ntest,ntest_all
-  integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntest_cum
-  integer,dimension(1:g%ncpu)::nsite_cpu,nsite_cpu_all
+  integer(kind=8),dimension(0:s%g%ncpu)::nsite_cum,ntest_cum
+  integer,dimension(1:s%g%ncpu)::nsite_cpu,nsite_cpu_all
   integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level
-  integer::istep,nskip,nmove,nzero,ipart,jpart,ip
+  integer::istep,nskip,nmove,nzero,ipart,jpart,ip,itest
   integer::ilevel
   integer::i,levelmin_part
   integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
-  integer(kind=8),dimension(1:g%ncpu)::ntest_cpu,ntest_cpu_all,npeak_cpu,npeak_cpu_all
+  integer(kind=8),dimension(1:s%g%ncpu)::ntest_cpu,ntest_cpu_all,npeak_cpu,npeak_cpu_all
   logical::verbose_all=.false.
   real(kind=8)::d,dx_loc
   integer::action,ivar_clump
   logical::ok
   real(kind=8)::dx,vol
+  real(dp),allocatable,dimension(:)::dens
+  integer,allocatable,dimension(:)::isort
+  integer,allocatable,dimension(:)::iswap
 
 #ifdef GRAV
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -179,7 +170,7 @@ subroutine collect_test(s)
         do ind=1,twotondim ! Loop over cells
            ok = .not. m%grid(igrid)%refined(ind) ! Select leaf cells
            d = m%grid(igrid)%rho(ind)
-           ok = ok .and. d > density_threshold
+           ok = ok .and. d > r%density_threshold
            m%grid(igrid)%flag1(ind) = 0
            if(ok)then
               c%ntest=c%ntest+1
@@ -201,10 +192,10 @@ subroutine collect_test(s)
 #endif
   ntest_cpu(1)=ntest_cpu_all(1)
 #endif
-  do icpu=2,ncpu
+  do icpu=2,g%ncpu
      ntest_cpu(icpu)=ntest_cpu(icpu-1)+ntest_cpu_all(icpu)
   end do
-  ntest_all=ntest_cpu(ncpu)
+  ntest_all=ntest_cpu(g%ncpu)
   if(g%myid==1)then
      if(ntest_all.gt.0.and.r%clinfo)then
         write(*,'(" Total number of cells above threshold=",I12)')ntest_all
@@ -231,7 +222,7 @@ subroutine collect_test(s)
            do ind=1,twotondim ! Loop over cells
               ok=.not.m%grid(igrid)%refined(ind) ! Select leaf cells
               d=m%grid(igrid)%rho(ind)
-              ok=ok.and.d>density_threshold
+              ok=ok.and.d>r%density_threshold
               if(ok)then
                  itest=itest+1
                  dens(itest)=d
@@ -283,13 +274,15 @@ end subroutine collect_test
 !###########################################################
 !###########################################################
 subroutine collect_peak(s)
-  use amr_parameters, only: twotondim
+  use amr_parameters, only: twotondim,ndim
+  use amr_commons, only:oct,nbor
   use ramses_commons, only: ramses_t
   use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
   use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
   use cache_commons
   use cache
   use nbors_utils
+
   implicit none
   type(ramses_t)::s
   !===================================================================
@@ -303,17 +296,20 @@ subroutine collect_peak(s)
   type(msg_twin_realdp)::dummy_twin_realdp
   type(msg_large_realdp)::dummy_large_realdp
   type(oct),pointer::gridp,gridn,gridpm
-  integer,  intent(in)  :: ilevel
-  integer::npeaks,npeaks_tot,icpu,next_level,now_level
+  integer::ilevel
+  integer::npeaks,npeaks_tot,icpu,next_level,now_level,icelln,idim,igrid,ind,itest,j,k
   integer::ipart,jpart,ip,i,icellp,icellpm,ipeak
-  integer(kind=8),dimension(1:g%ncpu)::npeak_cpu,npeak_cpu_all
+  integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-
+  
   real(dp),dimension(1:ndim)::xcen,xnei
   integer, parameter::nSnei=48
-  real(dp),dimension(1:3,1:nPnei)::xSnei
-
+  type(nbor),dimension(1:nSnei) :: grid_nbor
+  integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
+  real(dp),dimension(1:3,1:nSnei)::xSnei
+  real(dp)::dens_nbor,density_max,x,y,z
+  logical::ok,ok_peak
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
@@ -332,9 +328,9 @@ subroutine collect_peak(s)
               x = (i-1)+0.5d0 - 2
               y = (j-1)+0.5d0 - 2
               z = (k-1)+0.5d0 - 2
-              xPnei(1,ind) = x/2d0
-              xPnei(2,ind) = y/2d0
-              xPnei(3,ind) = z/2d0
+              xSnei(1,ind) = x/2d0
+              xSnei(2,ind) = y/2d0
+              xSnei(3,ind) = z/2d0
            endif
         enddo
      enddo
@@ -358,10 +354,10 @@ subroutine collect_peak(s)
      xcen(3)=2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
      
      ! Collect all neighboring cell from hash table
-     do j=1,nSNnei
+     do j=1,nSnei
         
         ! Compute neighboring cell coordinates
-        xnei(1:ndim)=xcen(1:ndim)+xSNnei(1:ndim,j)
+        xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
         ! Periodic boundary conditions
         do idim=1,ndim
            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
@@ -400,7 +396,7 @@ subroutine collect_peak(s)
      density_max=1.0001*m%grid(igrid)%rho(ind)
      ok_peak=.true.
      
-     do j=1,nSNnei
+     do j=1,nSnei
         gridn => grid_nbor(j)%p ! Gather neighboring grid
         icelln = icell_nbor(j)
         dens_nbor = gridn%rho(icelln)
@@ -421,7 +417,7 @@ subroutine collect_peak(s)
      endif
      
      ! Unlock neighboring grids
-     do j=1,nSNnei
+     do j=1,nSnei
         gridn => grid_nbor(j)%p
         call unlock_cache(s,gridn)
      end do
@@ -473,15 +469,22 @@ end subroutine collect_peak
 !################################################################
 !################################################################
 subroutine collect_patch(s)
-  use amr_parameters, only: twotondim
+  use amr_parameters, only: twotondim,ndim
+  use amr_commons,only: oct
   use ramses_commons, only: ramses_t
   use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
   use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
   use cache_commons
   use cache
   use nbors_utils
+  use boundaries, only: init_bound_flag
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
   implicit none
   type(ramses_t)::s
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  type(msg_twin_realdp)::dummy_int4
+  type(oct),pointer::gridn
+  integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nmove_tot,nzero,nzero_tot
   !==================================================================
   ! This is the clump finder routine for segmenting the density
   ! field into peak patches around each density peak.
@@ -496,7 +499,7 @@ subroutine collect_patch(s)
   !----------------------------------------------------------------------
   ! Flag peaks with global peak id using flag1 array
   !----------------------------------------------------------------------
-  do igrid=1,ngridmax
+  do igrid=1,r%ngridmax
      m%grid(igrid)%flag1(1:twotondim)=0
   end do
   ipeak = 0
@@ -555,7 +558,7 @@ subroutine collect_patch(s)
      nmove_tot=nmove_all
      nzero_tot=nzero_all
 #endif
-     if(c%ntest_tot>0.and.verbose)write(*,*)"istep=",istep,"nmove=",nmove_tot
+     if(c%ntest_tot>0.and.r%verbose)write(*,*)"istep=",istep,"nmove=",nmove_tot
   end do
   
   end associate
@@ -566,13 +569,15 @@ end subroutine collect_patch
 !###########################################################
 !###########################################################
 subroutine collect_saddle(s)
-  use amr_parameters, only: twotondim
+  use amr_parameters, only: twotondim,ndim
+  use amr_commons, only:oct,nbor
   use ramses_commons, only: ramses_t
   use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
   use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
   use cache_commons
   use cache
   use nbors_utils
+  use sparse_matrix
   implicit none
   type(ramses_t)::s
   !===================================================================
@@ -584,17 +589,19 @@ subroutine collect_saddle(s)
   type(msg_twin_realdp)::dummy_twin_realdp
   type(msg_large_realdp)::dummy_large_realdp
   type(oct),pointer::gridp,gridn,gridpm
-  integer,  intent(in)  :: ilevel
-  integer::npeaks,npeaks_tot,icpu,next_level,now_level
-  integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen
-  integer(kind=8),dimension(1:g%ncpu)::npeak_cpu,npeak_cpu_all
+  integer:: ilevel
+  integer::npeaks,npeaks_tot,icpu,next_level,now_level,icelln,idim,j,jpeak,k
+  integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen,peak_nbor
+  integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  real(dp)::dens_cen
+  real(dp)::dens_cen,dens_ave,dens_nbor,x,y,z
   real(dp),dimension(1:ndim)::xcen,xnei
   integer, parameter::nSnei=48
   real(dp),dimension(1:3,1:nSnei)::xSnei
-  
+  type(nbor),dimension(1:nSnei) :: grid_nbor
+  integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
+  logical::ok
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
@@ -613,9 +620,9 @@ subroutine collect_saddle(s)
               x = (i-1)+0.5d0 - 2
               y = (j-1)+0.5d0 - 2
               z = (k-1)+0.5d0 - 2
-              xPnei(1,ind) = x/2d0
-              xPnei(2,ind) = y/2d0
-              xPnei(3,ind) = z/2d0
+              xSnei(1,ind) = x/2d0
+              xSnei(2,ind) = y/2d0
+              xSnei(3,ind) = z/2d0
            endif
         enddo
      enddo
@@ -641,10 +648,10 @@ subroutine collect_saddle(s)
      xcen(3)=2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
      
      ! Collect all neighboring cell from hash table
-     do j=1,nSNnei
+     do j=1,nSnei
         
         ! Compute neighboring cell coordinates
-        xnei(1:ndim)=xcen(1:ndim)+xSNnei(1:ndim,j)
+        xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
         ! Periodic boundary conditions
         do idim=1,ndim
            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
@@ -680,7 +687,7 @@ subroutine collect_saddle(s)
         
      end do
      
-     do j=1,nSNnei
+     do j=1,nSnei
         gridn => grid_nbor(j)%p ! Gather neighboring grid
         icelln = icell_nbor(j)
 
@@ -695,18 +702,18 @@ subroutine collect_saddle(s)
         if(ok)then ! if all criteria met, replace saddle density array value
            call get_local_peak_id(s,peak_cen,ipeak)
            call get_local_peak_id(s,peak_nbor,jpeak)
-           if (get_value(s,ipeak,jpeak,c%sparse_saddle_matrix) < dens_ave)then
-              call set_value(s,ipeak,jpeak,dens_ave,c%sparse_saddle_matrix)
+           if (get_value(ipeak,jpeak,c%sparse_saddle_dens) < dens_ave)then
+              call set_value(ipeak,jpeak,dens_ave,c%sparse_saddle_dens)
            end if
-           if (get_value(s,jpeak,ipeak,c%sparse_saddle_matrix) < dens_ave)then
-              call set_value(s,jpeak,ipeak,dens_ave,c%sparse_saddle_matrix)
+           if (get_value(jpeak,ipeak,c%sparse_saddle_dens) < dens_ave)then
+              call set_value(jpeak,ipeak,dens_ave,c%sparse_saddle_dens)
            end if
         end if
      
      end do
      
      ! Unlock neighboring grids
-     do j=1,nSNnei
+     do j=1,nSnei
         gridn => grid_nbor(j)%p
         call unlock_cache(s,gridn)
      end do
