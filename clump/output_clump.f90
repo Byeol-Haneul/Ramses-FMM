@@ -164,12 +164,14 @@ subroutine output_clump_field(s,filename)
   do ilevel=r%levelmin,r%nlevelmax
      write(ilun)m%noct(ilevel)
   enddo
+#ifdef GRAV
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%rho
         write(ilun)m%grid(igrid)%flag1
      end do
   enddo
+#endif
   close(ilun)
   
 end associate
