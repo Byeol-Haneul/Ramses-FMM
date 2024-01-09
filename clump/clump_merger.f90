@@ -248,6 +248,9 @@ subroutine build_peak_communicator(s)
   use amr_commons
   use ramses_commons, only: ramses_t
   use clfind_commons
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
 
@@ -314,6 +317,9 @@ subroutine merge_clumps(s,action)
   use amr_commons, only: dp
   use ramses_commons, only: ramses_t
   use sparse_matrix
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   character(len=9)::action
@@ -685,6 +691,9 @@ end subroutine get_max
 subroutine virtual_peak_int(s,xx,action)
   use amr_commons
   use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   integer,dimension(1:s%c%npeak_max)::xx
@@ -740,6 +749,9 @@ end subroutine virtual_peak_int
 subroutine virtual_peak_dp(s,xx,action)
   use amr_commons, only: dp
   use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   real(dp),dimension(1:s%c%npeak_max)::xx
@@ -795,6 +807,9 @@ end subroutine virtual_peak_dp
 subroutine virtual_saddle_max(s)
   use amr_commons
   use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use moi
+#endif
   implicit none
   type(ramses_t)::s
   
@@ -846,6 +861,9 @@ end subroutine virtual_saddle_max
 subroutine boundary_peak_int(s,xx)
   use amr_commons
   use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   integer,dimension(1:s%c%npeak_max)::xx
@@ -885,6 +903,9 @@ end subroutine boundary_peak_int
 subroutine boundary_peak_dp(s,xx)
   use amr_commons
   use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   real(dp),dimension(1:s%c%npeak_max)::xx
@@ -926,6 +947,9 @@ end subroutine boundary_peak_dp
 subroutine analyze_peak_memory(s)
   use ramses_commons, only: ramses_t
   use clfind_commons
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   
@@ -984,6 +1008,9 @@ subroutine compute_clump_properties(s)
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
 #ifndef WITHOUTMPI
   integer::info

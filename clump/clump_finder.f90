@@ -131,6 +131,9 @@ end subroutine clump_finder
 subroutine collect_test(s)
   use amr_parameters, only: twotondim,ndim,dp
   use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   !==================================================================
@@ -280,7 +283,9 @@ subroutine collect_peak(s)
   use cache_commons
   use cache
   use nbors_utils
-
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   !===================================================================
@@ -300,7 +305,9 @@ subroutine collect_peak(s)
   integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  
+#ifndef WITHOUTMPI
+  integer::info
+#endif
   real(dp),dimension(1:ndim)::xcen,xnei
   integer, parameter::nSnei=48
   type(nbor),dimension(1:nSnei) :: grid_nbor
@@ -477,6 +484,9 @@ subroutine collect_patch(s)
   use nbors_utils
   use boundaries, only: init_bound_flag
   use marshal, only: pack_fetch_flag, unpack_fetch_flag
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   implicit none
   type(ramses_t)::s
   integer(kind=8),dimension(0:ndim)::hash_nbor
