@@ -96,6 +96,7 @@ module mdl_parameters
      enumerator::MDL_CMP_RESIDUAL_NORM2
      enumerator::MDL_OUTPUT_FRAME
      enumerator::MDL_CLUMP_FINDER
+     enumerator::MDL_CLUMP_DEALLOC
   end enum
   
   ! Maximum number of cpus
