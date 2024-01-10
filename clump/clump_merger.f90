@@ -93,7 +93,7 @@ recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
   integer::rID
   
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_DEALLOC,pst%iUpper+1,input_size,0,ilevel)
      call r_deallocate_clump(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
