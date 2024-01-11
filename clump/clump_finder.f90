@@ -1,4 +1,5 @@
 module clump_finder_module
+  use clump_merger_module
 contains
 subroutine m_clump_finder(pst,create_output,keep_alive)
   use output_clump_module
@@ -235,7 +236,7 @@ subroutine collect_test(s)
   end do
   ntest_all=ntest_cpu(g%ncpu)
   if(g%myid==1)then
-     if(ntest_all.gt.0.and.r%clinfo)then
+     if(ntest_all.gt.0.and.r%clump_info)then
         write(*,'(" Total number of cells above threshold=",I12)')ntest_all
      endif
   end if

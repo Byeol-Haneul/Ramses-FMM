@@ -149,6 +149,9 @@ function worker_init(mdl) result(pst)
   use multigrid_fine_coarse, only: r_restrict_mask,r_cmp_residual_mg,r_cmp_residual_norm2,r_restrict_residual,&
                                 r_reset_correction,r_set_scan_flag,r_gauss_seidel_mg,r_interpolate_and_correct
 #endif
+  use clump_finder_module, only: r_clump_finder
+  use clump_merger_module, only: r_deallocate_clump
+  use output_clump_module, only: r_output_clump
   use movie_module, only: r_output_frame
   use amr_parameters, only: nhilbert
 
@@ -223,6 +226,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MP_MIN,       pst,C_FUNLOC(r_broadcast_mp_min),0,0,"broadcast_mp_min")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_AMR,             pst,C_FUNLOC(r_output_amr),flen,0,"output_amr")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_HYDRO,           pst,C_FUNLOC(r_output_hydro),flen,0,"output_hydro")
+  call mdl_add_service(pst%s%mdl,MDL_OUTPUT_CLUMP,           pst,C_FUNLOC(r_output_clump),flen,0,"output_clump")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),2,2*pst%s%r%nw_frame*pst%s%r%nh_frame,"output_frame")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_POISSON,         pst,C_FUNLOC(r_output_poisson),flen/4,0,"output_poisson")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_PART,            pst,C_FUNLOC(r_output_part),flen/4,0,"output_part")
@@ -240,6 +244,8 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,     pst,C_FUNLOC(r_synchro_hydro_fine),3,0,"synchro_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,     pst,C_FUNLOC(r_gravity_hydro_fine),1,0,"gravity_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_SOURCE_HYDRO_FINE,      pst,C_FUNLOC(r_source_hydro_fine),1,0,"source_hydro_fine")
+  call mdl_add_service(pst%s%mdl,MDL_CLUMP_FINDER,           pst,C_FUNLOC(r_clump_finder),1,0,"clump_finder")
+  call mdl_add_service(pst%s%mdl,MDL_CLUMP_DEALLOC,          pst,C_FUNLOC(r_deallocate_clump),1,0,"deallocate_clump")
 #ifdef GRAV
   call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,   pst,C_FUNLOC(r_multipole_leaf_cells),1,0,"multipole_leaf_cells")
   call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,  pst,C_FUNLOC(r_multipole_split_cells),1,0,"multipole_split_cells")

@@ -28,7 +28,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use movie_module, only: m_output_frame
   use star_formation_module, only: out_star_formation_t, r_star_formation
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
-
+  use clump_finder_module, only: m_clump_finder
+  
   implicit none
 
   type(pst_t)::pst
@@ -86,6 +87,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            bkp_last_done=.true.
         endif
      endif
+  endif
+  
+  !----------------------------
+  ! Call the clump finder
+  !----------------------------
+  if(r%clump_finder.and.g%output_done)then
+     call m_clump_finder(pst,.true.,.false.) ! Create output and no need to keep alive
   endif
   
   !----------------------------

@@ -1,3 +1,29 @@
+module clump_merger_module
+contains
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+
+  integer::ilevel
+  integer::rID
+  
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_DEALLOC,pst%iUpper+1,input_size,0,ilevel)
+     call r_deallocate_clump(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call deallocate_peak_patch_arrays(pst%s)
+  endif
+  
+end subroutine r_deallocate_clump
 #if NDIM==3
 !################################################################
 !################################################################
@@ -34,7 +60,6 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%min_dens(1:c%npeak_max))
   allocate(c%av_dens(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
-
 
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points
@@ -77,30 +102,6 @@ subroutine allocate_peak_patch_arrays(s)
   end associate
 
 end subroutine allocate_peak_patch_arrays
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-
-  integer::ilevel
-  integer::rID
-  
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_DEALLOC,pst%iUpper+1,input_size,0,ilevel)
-     call r_deallocate_clump(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call deallocate_peak_patch_arrays(pst%s)
-  endif
-  
-end subroutine r_deallocate_clump
 !################################################################
 !################################################################
 !################################################################
@@ -1303,3 +1304,4 @@ subroutine true_max(s,xcell,xcen,ilevel)
 #endif
 end subroutine true_max
 #endif
+end module clump_merger_module

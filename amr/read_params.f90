@@ -264,9 +264,9 @@ subroutine m_read_params(pst)
   
   ! Clump finder parameters
   logical::clump_finder=.false.
-  logical::clinfo = .false.
+  logical::clump_info=.false.
   logical::output_clump=.false.
-  logical::output_clumpfield=.false.
+  logical::output_clump_field=.false.
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
@@ -279,7 +279,7 @@ subroutine m_read_params(pst)
   ! Global run parameter
   namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
-       & ,static,geom,overload,nsuperoct
+       & ,static,geom,overload,nsuperoct,clump_finder
   ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
@@ -346,7 +346,7 @@ subroutine m_read_params(pst)
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
-  namelist/clump_params/relevance_threshold,density_threshold,saddle_threshold,mass_threshold
+  namelist/clump_params/clump_info,output_clump,output_clump_field,relevance_threshold,density_threshold,saddle_threshold,mass_threshold
 
   associate(s=>pst%s)
 
@@ -531,7 +531,6 @@ subroutine m_read_params(pst)
 109 continue
   rewind(1)
   read(1,NML=clump_params,END=110)
-  clump_finder=.true.
 110 continue
   close(1)
 
@@ -851,6 +850,9 @@ subroutine m_read_params(pst)
   s%r%mechanical_feedback=mechanical_feedback
 
   s%r%clump_finder=clump_finder
+  s%r%clump_info=clump_info
+  s%r%output_clump=output_clump
+  s%r%output_clump_field=output_clump_field
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold
