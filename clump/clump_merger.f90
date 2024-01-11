@@ -73,7 +73,6 @@ subroutine deallocate_peak_patch_arrays(s)
   end associate
 
 end subroutine deallocate_peak_patch_arrays
-#if NDIM==3
 !################################################################
 !################################################################
 !################################################################
@@ -1017,7 +1016,7 @@ subroutine compute_clump_properties(s)
   ! all necessary peak-patch properties are computed
   !----------------------------------------------------------------------------
   integer::ipart,grid,peak_nr,ilevel,global_peak_id,ipeak,plevel,igrid,itest,icelln,idim,ind
-  real(dp),dimension(1:3)::xcell
+  real(dp),dimension(1:ndim)::xcell
   real(dp)::dx_loc,tot_mass
   real(dp),dimension(1:ndim)::xcen
   real(dp)::zero=0
@@ -1051,9 +1050,13 @@ subroutine compute_clump_properties(s)
     dx_loc=r%boxlen/2**ilevel
      ! Peak cell coordinates
     xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+#if NDIM>1
     xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+#endif
+#if NDIM>2
     xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-    c%peak_pos(ipeak,1:3)=xcell(1:3)
+#endif
+    c%peak_pos(ipeak,1:ndim)=xcell(1:ndim)
   end do
 #ifndef WITHOUTMPI
   ! Scatter results to all MPI domains
@@ -1075,8 +1078,9 @@ subroutine compute_clump_properties(s)
       call get_local_peak_id(s,global_peak_id,peak_nr)
 
       ! Cell density
+#ifdef GRAV
       d=m%grid(igrid)%rho(ind)
-
+#endif
       ! Cell volume
       dx_loc=r%boxlen/2**ilevel
       vol=dx_loc**ndim
@@ -1095,9 +1099,12 @@ subroutine compute_clump_properties(s)
 
       ! Cell coordinates
       xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+#if NDIM>1
       xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+#endif
+#if NDIM>2
       xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-
+#endif
       ! In case of periodic boundaries
       do idim=1,ndim
          if ((xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
@@ -1105,7 +1112,7 @@ subroutine compute_clump_properties(s)
       end do
 
       ! Clump center of mass location
-      c%center_of_mass(peak_nr,1:3)=c%center_of_mass(peak_nr,1:3)+vol*d*xcell(1:3)
+      c%center_of_mass(peak_nr,1:ndim)=c%center_of_mass(peak_nr,1:ndim)+vol*d*xcell(1:ndim)
 
     end if
   end do
@@ -1125,7 +1132,7 @@ subroutine compute_clump_properties(s)
   ! Compute specific quantities
   do ipeak=1,c%npeak
      if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
-        c%center_of_mass(ipeak,1:3)=c%center_of_mass(ipeak,1:3)/c%clump_mass(ipeak)
+        c%center_of_mass(ipeak,1:ndim)=c%center_of_mass(ipeak,1:ndim)/c%clump_mass(ipeak)
      end if
   end do
 
@@ -1167,141 +1174,4 @@ end subroutine compute_clump_properties
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine true_max(s,xcell,xcen,ilevel)
-  use amr_commons
-  use pm_commons
-  use hydro_commons
-  use ramses_commons, only: ramses_t
-  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
-  use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
-  use cache_commons
-  use cache
-  use nbors_utils
-  implicit none
-
-  real(dp)::x,y,z
-  integer::ilevel
-  type(msg_twin_realdp)::dummy_twin_realdp
-  type(msg_large_realdp)::dummy_large_realdp
-  type(oct),pointer::gridp,gridn,gridpm
-  type(ramses_t)::s
-
-  !----------------------------------------------------------------------------
-  ! Description: This subroutine takes the cell of maximum density and computes
-  ! the true maximum by expanding the density around the cell center to second order.
-  !----------------------------------------------------------------------------
-
-  integer::k,j,i,nx_loc,counter, ioft, n, icelln, idim, ind
-  integer,dimension(1:threetondim)::cell_index,cell_lev
-  real(dp)::det,dx,dx_loc,scale,disp_max,numerator
-  real(dp),dimension(-1:1,-1:1,-1:1)::cube3
-  real(dp),dimension(1:ndim)::xtest
-  real(dp),dimension(1:ndim)::gradient,displacement
-  integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer,dimension(1:ndim)::ckey_nbor
-  real(dp),dimension(1:3)::xcell
-  real(dp),dimension(1:ndim,1:ndim)::hess,minor
-  integer, parameter::nSnei=27
-  real(dp),dimension(1:3,1:nSnei)::xSnei
-  real(dp),dimension(1:ndim)::xcen,xnei
-  real(dp)::smallreal=1d-100
-
-#if NDIM==3
-
-  associate(g=>s%g,r=>s%r,c=>s%c,m=>s%m)
-
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-        hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
-        pack=pack_fetch_phi, unpack=unpack_fetch_phi)
-
-  dx_loc=r%boxlen/2**ilevel
-  ind=0
-  do i=-1,1
-     do j=-1,1
-        do k=-1,1
-          ind = ind+1
-          xtest(1) = i+0.5d0
-          xtest(2) = j+0.5d0
-          xtest(3) = k+0.5d0
-          xSnei(1,ind) = xtest(1)/2d0
-          xSnei(2,ind) = xtest(2)/2d0
-          xSnei(3,ind) = xtest(3)/2d0
-          xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
-          ! Periodic boundary conditions
-          do idim=1,ndim
-            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
-            if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
-          end do
-          ! Get neighboring cell at ilevel
-          ckey_nbor(1:ndim)=int(xnei(1:ndim))
-          hash_nbor(0)=ilevel+1
-          hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-          call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-          cube3(i,j,k)=gridn%rho(icelln)
-        end do
-     end do
-  end do
-
-  call close_cache(s,m%grid_dict)
-
-  ! Compute gradient
-  gradient(1)=0.5d0*(cube3(1,0,0)-cube3(-1,0,0))/dx_loc
-  gradient(2)=0.5d0*(cube3(0,1,0)-cube3(0,-1,0))/dx_loc
-  gradient(3)=0.5d0*(cube3(0,0,1)-cube3(0,0,-1))/dx_loc
-
-  if (maxval(abs(gradient(1:ndim)))==0.)return
-
-  ! Compute hessian
-  hess(1,1)=(cube3(1,0,0)+cube3(-1,0,0)-2*cube3(0,0,0))/dx_loc**2
-  hess(2,2)=(cube3(0,1,0)+cube3(0,-1,0)-2*cube3(0,0,0))/dx_loc**2
-  hess(3,3)=(cube3(0,0,1)+cube3(0,0,-1)-2*cube3(0,0,0))/dx_loc**2
-
-  hess(1,2)=0.25d0*(cube3(1,1,0)+cube3(-1,-1,0)-cube3(1,-1,0)-cube3(-1,1,0))/dx_loc**2
-  hess(2,1)=hess(1,2)
-  hess(1,3)=0.25d0*(cube3(1,0,1)+cube3(-1,0,-1)-cube3(1,0,-1)-cube3(-1,0,1))/dx_loc**2
-  hess(3,1)=hess(1,3)
-  hess(2,3)=0.25d0*(cube3(0,1,1)+cube3(0,-1,-1)-cube3(0,1,-1)-cube3(0,-1,1))/dx_loc**2
-  hess(3,2)=hess(2,3)
-
-  ! Determinant
-  det=    hess(1,1)*hess(2,2)*hess(3,3)+hess(1,2)*hess(2,3)*hess(3,1)+hess(1,3)*hess(2,1)*hess(3,2) &
-      & -hess(1,1)*hess(2,3)*hess(3,2)-hess(1,2)*hess(2,1)*hess(3,3)-hess(1,3)*hess(2,2)*hess(3,1)
-
-  ! Matrix of minors
-  minor(1,1)=hess(2,2)*hess(3,3)-hess(2,3)*hess(3,2)
-  minor(2,2)=hess(1,1)*hess(3,3)-hess(1,3)*hess(3,1)
-  minor(3,3)=hess(1,1)*hess(2,2)-hess(1,2)*hess(2,1)
-
-  minor(1,2)=-1d0*(hess(2,1)*hess(3,3)-hess(2,3)*hess(3,1))
-  minor(2,1)=minor(1,2)
-  minor(1,3)=hess(2,1)*hess(3,2)-hess(2,2)*hess(3,1)
-  minor(3,1)=minor(1,3)
-  minor(2,3)=-1d0*(hess(1,1)*hess(3,2)-hess(1,2)*hess(3,1))
-  minor(3,2)=minor(2,3)
-
-  ! Displacement of the true max from the cell center
-  displacement=0
-  do i=1,ndim
-    do j=1,ndim
-        numerator = gradient(j)*minor(i,j)
-        if(numerator>0) displacement(i)=displacement(i)-numerator/(det+smallreal*numerator)
-    end do
-  end do
-
-  ! Clipping the displacement in order to keep max in the cell
-  disp_max=maxval(abs(displacement(1:ndim)))
-  if (disp_max > dx_loc*0.499999)then
-    displacement(1)=displacement(1)/disp_max*dx_loc*0.499999d0
-    displacement(2)=displacement(2)/disp_max*dx_loc*0.499999d0
-    displacement(3)=displacement(3)/disp_max*dx_loc*0.499999d0
-  end if
-
-  xcell(1)=xcen(1)*dx_loc+displacement(1)-m%skip(1)
-  xcell(2)=xcen(2)*dx_loc+displacement(2)-m%skip(2)
-  xcell(3)=xcen(3)*dx_loc+displacement(3)-m%skip(3)
-
-  end associate
-#endif
-end subroutine true_max
-#endif
 end module clump_merger_module

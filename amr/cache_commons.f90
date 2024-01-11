@@ -36,6 +36,10 @@ module cache_commons
   type msg_small_realdp
      real(kind=dp),dimension(1:twotondim)::realdp
   end type msg_small_realdp
+  type msg_int4_small_realdp
+     integer(kind=4),dimension(1:twotondim)::int4
+     real(kind=dp),dimension(1:twotondim)::realdp
+  end type msg_int4_small_realdp
   type msg_twin_realdp
      real(kind=dp),dimension(1:twotondim)::realdp_phi
      real(kind=dp),dimension(1:twotondim)::realdp_dis

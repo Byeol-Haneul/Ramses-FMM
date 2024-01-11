@@ -316,11 +316,10 @@ subroutine collect_peak(s)
   use amr_parameters, only: twotondim,ndim
   use amr_commons, only:oct,nbor
   use ramses_commons, only: ramses_t
-  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
-  use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
   use cache_commons
   use cache
   use nbors_utils
+  use multigrid_fine_coarse, only: pack_fetch_rho, unpack_fetch_rho
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -337,9 +336,8 @@ subroutine collect_peak(s)
 #ifndef WITHOUTMPI
   integer::info
 #endif
-  type(msg_twin_realdp)::dummy_twin_realdp
-  type(msg_large_realdp)::dummy_large_realdp
-  type(oct),pointer::gridp,gridn,gridpm
+  type(msg_small_realdp)::dummy_small_realdp
+  type(oct),pointer::gridn
   integer::ilevel
   integer::npeaks,npeaks_tot,icpu,next_level,now_level,icelln,idim,igrid,ind,itest,j,k
   integer::ipart,jpart,ip,i,icellp,icellpm,ipeak
@@ -350,7 +348,7 @@ subroutine collect_peak(s)
   integer, parameter::nSnei=48
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
-  real(dp),dimension(1:3,1:nSnei)::xSnei
+  real(dp),dimension(1:ndim,1:nSnei)::xSnei
   real(dp)::dens_nbor,density_max,x,y,z
   logical::ok,ok_peak
 
@@ -385,8 +383,8 @@ subroutine collect_peak(s)
   ! Compute hash key of densest neighbor
   !----------------------------------------
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
-       pack=pack_fetch_phi, unpack=unpack_fetch_phi)
+       hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
+       pack=pack_fetch_rho, unpack=unpack_fetch_rho)
   
   c%npeak=0
   do itest=1,c%ntest
@@ -395,9 +393,12 @@ subroutine collect_peak(s)
      ind=c%cell(itest)
      
      xcen(1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
+#if NDIM>1
      xcen(2)=2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5
+#endif
+#if NDIM>1
      xcen(3)=2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
-     
+#endif
      ! Collect all neighboring cell from hash table
      do j=1,nSnei
         
@@ -451,8 +452,12 @@ subroutine collect_peak(s)
            ! Store hash key of densest neighbor
            c%hash(itest,0)=level_nbor(j)
            c%hash(itest,1)=2*gridn%ckey(1)+MOD((icelln-1)  ,2)
+#if NDIM>1
            c%hash(itest,2)=2*gridn%ckey(2)+MOD((icelln-1)/2,2)
+#endif
+#if NDIM>2
            c%hash(itest,3)=2*gridn%ckey(3)+MOD((icelln-1)/4,2)
+#endif
         endif
      end do
      
@@ -517,8 +522,6 @@ subroutine collect_patch(s)
   use amr_parameters, only: twotondim,ndim
   use amr_commons,only: oct
   use ramses_commons, only: ramses_t
-  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
-  use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
   use cache_commons
   use cache
   use nbors_utils
@@ -578,8 +581,7 @@ subroutine collect_patch(s)
      
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
           hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-          pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-          bound=init_bound_flag)
+          pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
      
      nmove=0
      nzero=0
@@ -625,8 +627,6 @@ subroutine collect_saddle(s)
   use amr_parameters, only: twotondim,ndim
   use amr_commons, only:oct,nbor
   use ramses_commons, only: ramses_t
-  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
-  use rho_fine_module, only:init_flush_rho,pack_flush_rho,unpack_flush_rho
   use cache_commons
   use cache
   use nbors_utils
@@ -639,9 +639,8 @@ subroutine collect_saddle(s)
   ! in the saddle point matrix in sparse matrix format.
   ! Written by Ziyong Wu (mini-ramses version December 2023).
   !==================================================================
-  type(msg_twin_realdp)::dummy_twin_realdp
-  type(msg_large_realdp)::dummy_large_realdp
-  type(oct),pointer::gridp,gridn,gridpm
+  type(msg_int4_small_realdp)::dummy_int4_small_realdp
+  type(oct),pointer::gridn
   integer:: ilevel
   integer::npeaks,npeaks_tot,icpu,next_level,now_level,icelln,idim,j,jpeak,k
   integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen,peak_nbor
@@ -651,7 +650,7 @@ subroutine collect_saddle(s)
   real(dp)::dens_cen,dens_ave,dens_nbor,x,y,z
   real(dp),dimension(1:ndim)::xcen,xnei
   integer, parameter::nSnei=48
-  real(dp),dimension(1:3,1:nSnei)::xSnei
+  real(dp),dimension(1:ndim,1:nSnei)::xSnei
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
   logical::ok
@@ -687,8 +686,8 @@ subroutine collect_saddle(s)
   ! Compute hash key of densest neighbor
   !----------------------------------------
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
-       pack=pack_fetch_phi, unpack=unpack_fetch_phi)
+       hilbert=m%domain,pack_size=storage_size(dummy_int4_small_realdp)/32,&
+       pack=pack_fetch_saddle, unpack=unpack_fetch_saddle)
   
   do itest=1,c%ntest
      ilevel=c%level(itest)
@@ -699,9 +698,12 @@ subroutine collect_saddle(s)
      dens_cen = m%grid(igrid)%rho(ind)
      
      xcen(1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
+#if NDIM>1
      xcen(2)=2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5
+#endif
+#if NDIM>2
      xcen(3)=2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
-     
+#endif
      ! Collect all neighboring cell from hash table
      do j=1,nSnei
         
@@ -780,6 +782,63 @@ subroutine collect_saddle(s)
   end associate
 
 end subroutine collect_saddle
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_saddle(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind
+  type(msg_int4_small_realdp)::msg
+
+  do ind=1,twotondim
+     msg%int4(ind)=grid%flag1(ind)
+  end do
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp(ind)=grid%rho(ind)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_saddle
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_saddle(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use amr_commons, only: oct
+  use cache_commons, only: msg_int4_small_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind
+  type(msg_int4_small_realdp)::msg
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+
+  do ind=1,twotondim
+     grid%flag1(ind)=msg%int4(ind)
+  end do
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%rho(ind)=msg%realdp(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_saddle
 !################################################################
 !################################################################
 !################################################################
