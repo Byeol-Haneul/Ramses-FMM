@@ -24,7 +24,55 @@ recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
   endif
   
 end subroutine r_deallocate_clump
-#if NDIM==3
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine deallocate_peak_patch_arrays(s)
+  use clfind_commons
+  use ramses_commons, only: ramses_t
+  use sparse_matrix
+  implicit none
+  type(ramses_t)::s
+
+  associate(g=>s%g,m=>s%m,c=>s%c)
+
+  ! Deallocate test particle arrays
+  deallocate(c%cell)
+  deallocate(c%grid)
+  deallocate(c%level)
+  deallocate(c%hash)
+
+  ! Deallocate peak patch arrays
+  deallocate(c%peak_cell)
+  deallocate(c%peak_grid)
+  deallocate(c%max_dens)
+
+  deallocate(c%n_cells)
+  deallocate(c%n_cells_halo)
+  deallocate(c%lev_peak)
+  deallocate(c%new_peak)
+  deallocate(c%ind_halo)
+  deallocate(c%halo_mass)
+  deallocate(c%clump_mass)
+  deallocate(c%relevance)
+
+  deallocate(c%clump_size)
+  deallocate(c%peak_pos)
+  deallocate(c%center_of_mass)
+  deallocate(c%min_dens)
+  deallocate(c%av_dens)
+  deallocate(c%clump_vol)
+
+  ! Deallocate sparse density matrix
+  call sparse_kill(c%sparse_saddle_dens)
+
+  ! Deallocate hash table
+  deallocate(c%hkey,c%gkey,c%nkey)
+
+  end associate
+
+end subroutine deallocate_peak_patch_arrays
 !################################################################
 !################################################################
 !################################################################
@@ -102,55 +150,7 @@ subroutine allocate_peak_patch_arrays(s)
   end associate
 
 end subroutine allocate_peak_patch_arrays
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine deallocate_peak_patch_arrays(s)
-  use clfind_commons
-  use ramses_commons, only: ramses_t
-  use sparse_matrix
-  implicit none
-  type(ramses_t)::s
-
-  associate(g=>s%g,m=>s%m,c=>s%c)
-
-  ! Deallocate test particle arrays
-  deallocate(c%cell)
-  deallocate(c%grid)
-  deallocate(c%level)
-  deallocate(c%hash)
-
-  ! Deallocate peak patch arrays
-  deallocate(c%peak_cell)
-  deallocate(c%peak_grid)
-  deallocate(c%max_dens)
-
-  deallocate(c%n_cells)
-  deallocate(c%n_cells_halo)
-  deallocate(c%lev_peak)
-  deallocate(c%new_peak)
-  deallocate(c%ind_halo)
-  deallocate(c%halo_mass)
-  deallocate(c%clump_mass)
-  deallocate(c%relevance)
-
-  deallocate(c%clump_size)
-  deallocate(c%peak_pos)
-  deallocate(c%center_of_mass)
-  deallocate(c%min_dens)
-  deallocate(c%av_dens)
-  deallocate(c%clump_vol)
-
-  ! Deallocate sparse density matrix
-  call sparse_kill(c%sparse_saddle_dens)
-
-  ! Deallocate hash table
-  deallocate(c%hkey,c%gkey,c%nkey)
-
-  end associate
-
-end subroutine deallocate_peak_patch_arrays
+#if NDIM==3
 !################################################################
 !################################################################
 !################################################################
