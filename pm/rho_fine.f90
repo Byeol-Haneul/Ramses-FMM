@@ -1,148 +1,5 @@
 module rho_fine_module
 contains
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
-  use amr_parameters, only: dp, ndim, twotondim
-  use amr_commons, only: run_t,global_t
-  use pm_commons, only: part_t
-  use hilbert, only: next_state_diagram_reverse,one_digit_diagram
-  implicit none
-  
-  type(run_t),intent(in)::r
-  type(global_t),intent(in)::g
-  type(part_t)::p
-  integer, intent(in) :: ilevel, final_level
-  integer, intent(in) :: head_part, tail_part
-  integer, dimension(1:ndim), intent(in) :: ix_coarse
-  integer, intent(in) :: cstate_coarse
-  
-  ! Description:
-  ! This subroutine sort particles along the Hilbert key at the resolution
-  ! set by final_level. It should be called first with ilevel=1
-  ! arrays in memory and that positions, 3-integer hilbert keys
-  ! and next_state are allocated as particle-based quantities.
-  
-  ! Iputs: 
-  ! - Head_part and tail_part are head and tail of particle distribution to work on.
-  ! - Array sortp must be initialized with sortp(i)=i between head_part and tail_part.
-  ! - Cartesian key of coarse cell in which these particles are contained.
-  ! - State of the coarse cell for Hilbert ordering
-  ! - Current and final level
-  
-  ! Example: 
-  ! ix=(/0,0,0/)
-  ! call sort_hilbert(1, npart, ix, 0, 1, nlevelmax) 
-  ! will sort all particles according to their Hilbert key at levelmax.
-  ! On output, array sortp is modified.
-  
-  ! Local variables
-  integer :: ip, ind_part, idim, ipart, new_ipart
-  integer :: ckey_max, cstate_fine, ind_cart_part, head_fine, tail_fine
-  real(dp) :: ckey_factor
-  integer, dimension(1:ndim) :: ix_fine, ix_ref, ix_part
-  integer, dimension(0:twotondim-1,1:ndim) :: ix, ix_child
-  integer, dimension(0:twotondim-1) :: nstate, sdigit, ind, ind_cart, ind_hilbert
-  integer, dimension(0:twotondim-1) :: numb_part, offset
-  
-  ! Compute particle position to cartesian key factor
-  ckey_max = 2**ilevel
-  ckey_factor = 2.0**ilevel / dble(r%boxlen)
-  
-  ! Initial Cartesian offset for fine cells
-  do idim = 1, ndim
-     ix_ref(idim) = ISHFT(ix_coarse(idim),1)
-  end do
-  
-  ! Compute the Hilbert index for fine cells
-  do ip = 0, twotondim-1
-     sdigit(ip) = ip
-  end do
-  
-  ! Compute lookup index in state diagrams
-  do ip = 0, twotondim-1
-     ind(ip) = cstate_coarse * twotondim + sdigit(ip)
-  end do
-  
-  ! Save next state
-  do ip = 0, twotondim-1
-     nstate(ip) = next_state_diagram_reverse(ind(ip))
-  end do
-  
-  ! Add one integer key digit each
-  do idim = 1, ndim
-     do ip = 0, twotondim-1
-        ix(ip, idim) = one_digit_diagram(ind(ip), idim)
-     end do
-  end do
-  
-  ! Compute Cartesian index for children cells
-  ind_cart = 0
-  do idim = 1, ndim
-     do ip = 0, twotondim-1
-        ix_child(ip, idim) = ix_ref(idim) + ix(ip, idim)
-        ind_cart(ip) = ind_cart(ip) + ix(ip, idim) * 2**(idim-1)
-     end do
-  end do
-  
-  ! Compute mapping from Cartesian to Hilbert order
-  ind_hilbert = 0
-  do ip = 0, twotondim-1
-     ind_hilbert(ind_cart(ip))=ip
-  end do
-  
-  ! Count particles per children cell
-  numb_part = 0
-  do ipart = head_part, tail_part
-     ind_part = p%sortp(ipart)
-     ind_cart_part = 0
-     do idim = 1,ndim
-        ix_part(idim) = int(p%xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
-        ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
-     end do
-     ip = ind_hilbert(ind_cart_part)
-     numb_part(ip) = numb_part(ip) + 1
-  end do
-  
-  offset = head_part-1
-  do ip = 1, twotondim-1
-     offset(ip) = offset(ip-1) + numb_part(ip-1)
-  end do
-  
-  ! Compute new sortp array
-  numb_part = 0
-  do ipart = head_part, tail_part
-     ind_part = p%sortp(ipart)
-     ind_cart_part = 0
-     do idim = 1,ndim
-        ix_part(idim) = int(p%xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
-        ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
-     end do
-     ip = ind_hilbert(ind_cart_part)
-     numb_part(ip) = numb_part(ip) + 1
-     new_ipart = offset(ip) + numb_part(ip)
-     p%workp(new_ipart) = ind_part
-  end do
-  do ipart = head_part,tail_part
-     p%sortp(ipart) = p%workp(ipart)
-  end do
-  
-  ! Recursive call
-  if(ilevel < final_level)then
-     do ip = 0, twotondim-1
-        if(numb_part(ip) > 0)then
-           head_fine = offset(ip) + 1
-           tail_fine = offset(ip) + numb_part(ip)
-           ix_fine(1:ndim) = ix_child(ip,1:ndim)
-           cstate_fine = nstate(ip)
-           call sort_hilbert(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
-        endif
-     end do
-  endif
-  
-end subroutine sort_hilbert
 !###############################################
 !###############################################
 !###############################################
@@ -1345,6 +1202,147 @@ recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
 
 end subroutine r_broadcast_multipole
 #endif
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
+  use amr_parameters, only: dp, ndim, twotondim
+  use amr_commons, only: run_t,global_t
+  use pm_commons, only: part_t
+  use hilbert, only: next_state_diagram_reverse,one_digit_diagram
+  implicit none
+  
+  type(run_t),intent(in)::r
+  type(global_t),intent(in)::g
+  type(part_t)::p
+  integer, intent(in) :: ilevel, final_level
+  integer, intent(in) :: head_part, tail_part
+  integer, dimension(1:ndim), intent(in) :: ix_coarse
+  integer, intent(in) :: cstate_coarse
+  
+  ! Description:
+  ! This subroutine sort particles along the Hilbert key at the resolution
+  ! set by final_level. It should be called first with ilevel=levelmin.
+  
+  ! Iputs: 
+  ! - Head_part and tail_part are head and tail of particle distribution to work on.
+  ! - Array sortp must be initialized with sortp(i)=i between head_part and tail_part.
+  ! - Cartesian key of coarse cell in which these particles are contained.
+  ! - State of the coarse cell for Hilbert ordering
+  ! - Current and final level
+  
+  ! Example: 
+  ! ix=(/0,0,0/)
+  ! call sort_hilbert(1, npart, ix, 0, 1, nlevelmax) 
+  ! will sort all particles according to their Hilbert key at levelmax.
+  ! On output, array sortp is modified.
+  
+  ! Local variables
+  integer :: ip, ind_part, idim, ipart, new_ipart
+  integer :: ckey_max, cstate_fine, ind_cart_part, head_fine, tail_fine
+  real(dp) :: ckey_factor
+  integer, dimension(1:ndim) :: ix_fine, ix_ref, ix_part
+  integer, dimension(0:twotondim-1,1:ndim) :: ix, ix_child
+  integer, dimension(0:twotondim-1) :: nstate, sdigit, ind, ind_cart, ind_hilbert
+  integer, dimension(0:twotondim-1) :: numb_part, offset
+  
+  ! Compute particle position to cartesian key factor
+  ckey_max = 2**ilevel
+  ckey_factor = 2.0**ilevel / dble(r%boxlen)
+  
+  ! Initial Cartesian offset for fine cells
+  do idim = 1, ndim
+     ix_ref(idim) = ISHFT(ix_coarse(idim),1)
+  end do
+  
+  ! Compute the Hilbert index for fine cells
+  do ip = 0, twotondim-1
+     sdigit(ip) = ip
+  end do
+  
+  ! Compute lookup index in state diagrams
+  do ip = 0, twotondim-1
+     ind(ip) = cstate_coarse * twotondim + sdigit(ip)
+  end do
+  
+  ! Save next state
+  do ip = 0, twotondim-1
+     nstate(ip) = next_state_diagram_reverse(ind(ip))
+  end do
+  
+  ! Add one integer key digit each
+  do idim = 1, ndim
+     do ip = 0, twotondim-1
+        ix(ip, idim) = one_digit_diagram(ind(ip), idim)
+     end do
+  end do
+  
+  ! Compute Cartesian index for children cells
+  ind_cart = 0
+  do idim = 1, ndim
+     do ip = 0, twotondim-1
+        ix_child(ip, idim) = ix_ref(idim) + ix(ip, idim)
+        ind_cart(ip) = ind_cart(ip) + ix(ip, idim) * 2**(idim-1)
+     end do
+  end do
+  
+  ! Compute mapping from Cartesian to Hilbert order
+  ind_hilbert = 0
+  do ip = 0, twotondim-1
+     ind_hilbert(ind_cart(ip))=ip
+  end do
+  
+  ! Count particles per children cell
+  numb_part = 0
+  do ipart = head_part, tail_part
+     ind_part = p%sortp(ipart)
+     ind_cart_part = 0
+     do idim = 1,ndim
+        ix_part(idim) = int(p%xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
+        ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
+     end do
+     ip = ind_hilbert(ind_cart_part)
+     numb_part(ip) = numb_part(ip) + 1
+  end do
+  
+  offset = head_part-1
+  do ip = 1, twotondim-1
+     offset(ip) = offset(ip-1) + numb_part(ip-1)
+  end do
+  
+  ! Compute new sortp array
+  numb_part = 0
+  do ipart = head_part, tail_part
+     ind_part = p%sortp(ipart)
+     ind_cart_part = 0
+     do idim = 1,ndim
+        ix_part(idim) = int(p%xp(ind_part,idim)*ckey_factor) - ix_ref(idim)
+        ind_cart_part = ind_cart_part + ix_part(idim) * 2**(idim-1)
+     end do
+     ip = ind_hilbert(ind_cart_part)
+     numb_part(ip) = numb_part(ip) + 1
+     new_ipart = offset(ip) + numb_part(ip)
+     p%workp(new_ipart) = ind_part
+  end do
+  do ipart = head_part,tail_part
+     p%sortp(ipart) = p%workp(ipart)
+  end do
+  
+  ! Recursive call
+  if(ilevel < final_level)then
+     do ip = 0, twotondim-1
+        if(numb_part(ip) > 0)then
+           head_fine = offset(ip) + 1
+           tail_fine = offset(ip) + numb_part(ip)
+           ix_fine(1:ndim) = ix_child(ip,1:ndim)
+           cstate_fine = nstate(ip)
+           call sort_hilbert(r,g,p,head_fine,tail_fine,ix_fine,cstate_fine,ilevel+1,final_level)
+        endif
+     end do
+  endif
+  
+end subroutine sort_hilbert
 !###############################################
 !###############################################
 !###############################################
