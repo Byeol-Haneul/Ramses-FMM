@@ -25,6 +25,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
     filename=transfer(input_array,filename)
+    write(*,'("output_clump:",L10)')pst%s%r%output_clump
     if(pst%s%r%output_clump)then
        call output_clump_properties(pst%s,filename)
     endif

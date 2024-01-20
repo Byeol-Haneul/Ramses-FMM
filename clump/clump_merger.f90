@@ -261,7 +261,6 @@ subroutine build_peak_communicator(s)
   integer,dimension(1:s%g%ncpu)::ipeak_alltoall
 
   associate(g=>s%g,c=>s%c)
-
   npeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
      call get_local_peak_cpu(s,ipeak,icpu)
@@ -598,7 +597,7 @@ subroutine merge_clumps(s,action)
   endif
 
   if(action.EQ.'saddleden')then
-
+    write(*,*)"testing 000"
      ! Compute peak index for the halo
      do ipeak=1,c%npeak
         c%ind_halo(ipeak)=c%new_peak(ipeak)
@@ -636,7 +635,7 @@ subroutine merge_clumps(s,action)
         call get_local_peak_id(s,merge_to,jpeak)
         c%halo_mass(ipeak)=c%halo_mass(jpeak)
      end do
-
+     write(*,*)"testing 100"
   endif
   end associate
 end subroutine merge_clumps
