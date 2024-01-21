@@ -5,10 +5,10 @@
 NVECTOR = 32
 NDIM = 3
 NHILBERT = 1
-HYDRO = 0
+HYDRO = 1
 GRAV = 1
-CONDINIT = default
-UNITS = cosmo
+CONDINIT = coeur
+UNITS = coeur
 NPRE = 8
 NVAR = 5
 NENER = 0
