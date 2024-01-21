@@ -704,6 +704,13 @@ subroutine collect_saddle(s)
      peak_cen = m%grid(igrid)%flag1(ind)
      dens_cen = m%grid(igrid)%rho(ind)
      
+     ! Set pointers to null
+     icelln=0
+     nullify(gridn)
+     do j=1,nSNnei
+        nullify(grid_nbor(j)%p)
+     end do
+
      xcen(1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
 #if NDIM>1
      xcen(2)=2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5
