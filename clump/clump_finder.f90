@@ -395,7 +395,7 @@ subroutine collect_peak(s)
      ! Set pointers to null
      icelln=0
      nullify(gridn)
-     do j=1,nSNnei
+     do j=1,nSnei
         nullify(grid_nbor(j)%p)
      end do
 
@@ -707,7 +707,7 @@ subroutine collect_saddle(s)
      ! Set pointers to null
      icelln=0
      nullify(gridn)
-     do j=1,nSNnei
+     do j=1,nSnei
         nullify(grid_nbor(j)%p)
      end do
 
