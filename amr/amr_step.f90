@@ -92,7 +92,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------------
   ! Call the clump finder
   !----------------------------
-  if(r%clump_finder.and.g%output_done)then
+  if(r%clump_finder.and.ilevel==r%levelmin.and.g%output_done)then
      call m_clump_finder(pst,.true.,.false.) ! Create output and no need to keep alive
   endif
   

@@ -37,6 +37,9 @@ subroutine deallocate_peak_patch_arrays(s)
 
   associate(g=>s%g,m=>s%m,c=>s%c)
 
+  ! Deallocate cumulative peak count CPU array
+  deallocate(c%npeak_cum)
+      
   ! Deallocate test particle arrays
   deallocate(c%cell)
   deallocate(c%grid)

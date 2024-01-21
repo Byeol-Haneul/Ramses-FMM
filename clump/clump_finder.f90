@@ -345,7 +345,7 @@ subroutine collect_peak(s)
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   real(dp),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=48
+  integer, parameter::nSnei=56
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
   real(dp),dimension(1:ndim,1:nSnei)::xSnei
@@ -392,11 +392,18 @@ subroutine collect_peak(s)
      igrid=c%grid(itest)
      ind=c%cell(itest)
      
+     ! Set pointers to null
+     icelln=0
+     nullify(gridn)
+     do j=1,nSNnei
+        nullify(grid_nbor(j)%p)
+     end do
+
      xcen(1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
 #if NDIM>1
      xcen(2)=2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5
 #endif
-#if NDIM>1
+#if NDIM>2
      xcen(3)=2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
 #endif
      ! Collect all neighboring cell from hash table
@@ -435,7 +442,7 @@ subroutine collect_peak(s)
         
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln
-        level_nbor(j) = hash_nbor(0)-1
+        level_nbor(j) = hash_nbor(0)
         
      end do
      
@@ -649,10 +656,10 @@ subroutine collect_saddle(s)
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   real(dp)::dens_cen,dens_ave,dens_nbor,x,y,z
   real(dp),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=48
+  integer, parameter::nSnei=56
   real(dp),dimension(1:ndim,1:nSnei)::xSnei
   type(nbor),dimension(1:nSnei) :: grid_nbor
-  integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
+  integer(kind=8),dimension(1:nSnei)::icell_nbor
   logical::ok
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
@@ -740,7 +747,6 @@ subroutine collect_saddle(s)
         
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln
-        level_nbor(j) = hash_nbor(0)-1
         
      end do
      
