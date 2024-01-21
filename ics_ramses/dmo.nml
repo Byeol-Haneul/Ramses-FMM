@@ -44,6 +44,6 @@ foutput=100
 
 &CLUMP_PARAMS
 clump_info=.true.
-output_clump=.true.
-output_clump_field=.true.
+output_clump=.false.
+output_clump_field=.false.
 /

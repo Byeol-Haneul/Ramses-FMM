@@ -104,14 +104,12 @@ subroutine clump_finder(s)
   ! We call these cell test particles for the watershed algorithm.
   !----------------------------------------------------------------------
   call collect_test(s)
-
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.
   ! We also compute for each test particle the coordinates of its
   ! densest neighbor.
   !----------------------------------------------------------------------
   call collect_peak(s)
-  write(*,'(" finish collect_peak")')
   !----------------------------------------------------------------------
   ! Perform a segmentation of the density field using the watershed
   ! algorithm. We get well defined peak patches around each peak.
@@ -119,51 +117,43 @@ subroutine clump_finder(s)
   ! by their saddle surface.
   !----------------------------------------------------------------------
   call collect_patch(s)
-  write(*,*)" finish collect_patch"
   !----------------------------------------------------------------------
   ! Allocate all peak patch based arrays
   !----------------------------------------------------------------------
   call allocate_peak_patch_arrays(s)
-  write(*,*)" finish allocate_peak_patch_arrays"
   !----------------------------------------------------------------------
   ! Update the MPI communicator for peaks
   !----------------------------------------------------------------------
   call build_peak_communicator(s)
-  write(*,*)" finish build_peak_communicator"
   !----------------------------------------------------------------------
   ! We build the saddle density matrix.
   ! Each pair of peaks is connected by a unique saddle point.
   ! The saddle point is the densest point on the saddle surface,
   !----------------------------------------------------------------------
   call collect_saddle(s)
-  write(*,*)"finish collect_saddle"
   !----------------------------------------------------------------------
   ! Update the MPI communicator for peaks
   !----------------------------------------------------------------------
   call build_peak_communicator(s)
-  write(*,*)" finish build_peak_communicator"
   !----------------------------------------------------------------------
   ! Merge peaks based on a relevance criterion.
   ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
-  write(*,*)" finish merge_clumps relevance"
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
   call compute_clump_properties(s)
-  write(*,*)" finish compute_clump_properties"
+
   !----------------------------------------------------------------------
   ! Merge all neighboring peaks above the prescribed density
   ! threshold into halos, only if their saddle point density is larger
   ! that the prescribed saddle density threshold.
   !----------------------------------------------------------------------
   call merge_clumps(s,'saddleden')
-
-  write(*,*)" finish merge_clumps"
 #endif
-write(*,*)" end merge_clumps"
+
 end subroutine clump_finder
 !################################################################
 !################################################################
@@ -354,7 +344,7 @@ subroutine collect_peak(s)
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   real(dp),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=48
+  integer, parameter::nSnei=56
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
   real(dp),dimension(1:ndim,1:nSnei)::xSnei
@@ -397,9 +387,7 @@ subroutine collect_peak(s)
        pack=pack_fetch_rho, unpack=unpack_fetch_rho)
   
   c%npeak=0
-  write(*,'("ntest",I10)')c%ntest
   do itest=1,c%ntest
-     write(*,'("itest: ",I10)')itest
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
@@ -488,15 +476,13 @@ subroutine collect_peak(s)
      end do
      
   end do
-  write(*,*)"close cache"
   call close_cache(s,m%grid_dict)
-  write(*,*)"finish close cache"
   !------------------------------------------------
   ! Compute total number of peaks across all CPUs
   ! Determine offset for global peak IDs
   !------------------------------------------------
   allocate(c%npeak_cum(0:g%ncpu))
-  npeak_cpu=0
+  npeak_cpu=0; npeak_cpu_all=0
   npeak_cpu(g%myid)=c%npeak
 #ifndef WITHOUTMPI
 #ifndef LONGINT
@@ -520,14 +506,13 @@ subroutine collect_peak(s)
   c%npeak_tot=npeaks_tot
   
   ! Compute the size of the peak-based arrays
-  c%npeak_max=MAX(MAXVAL(npeak_cpu),1000)
+  c%npeak_max=MAX(4*MAXVAL(npeak_cpu),1000)
   allocate(c%peak_cell(c%npeak_max))
   allocate(c%peak_grid(c%npeak_max))
   allocate(c%max_dens(c%npeak_max))
   c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0
-  write(*,'("npeaks_tot:",I10)')c%npeak_tot
-  write(*,'("npeak_max:",I10)')c%npeak_max
 end associate
+
 
 end subroutine collect_peak
 !################################################################
@@ -661,7 +646,7 @@ subroutine collect_saddle(s)
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   real(dp)::dens_cen,dens_ave,dens_nbor,x,y,z
   real(dp),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=48
+  integer, parameter::nSnei=56
   real(dp),dimension(1:ndim,1:nSnei)::xSnei
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor

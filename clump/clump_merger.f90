@@ -44,6 +44,7 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%hash)
 
   ! Deallocate peak patch arrays
+  deallocate(c%npeak_cum)
   deallocate(c%peak_cell)
   deallocate(c%peak_grid)
   deallocate(c%max_dens)
