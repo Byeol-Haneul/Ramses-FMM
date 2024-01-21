@@ -35,7 +35,6 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !------------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
  
-  write(*,'(" r_clump_finder")')
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
@@ -74,17 +73,12 @@ recursive subroutine r_clump_finder(pst,ilevel,input_size)
 
   integer::ilevel
   integer::rID
-  write(*,*)"test001"
   if(pst%nLower>0)then
-    write(*,*)"test002"
      rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
      call r_clump_finder(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
-     write(*,*)"test003"
   else
-    write(*,*)"test004"
      call clump_finder(pst%s)
-     write(*,*)"test005"
   endif
 
 end subroutine r_clump_finder
@@ -381,7 +375,6 @@ subroutine collect_peak(s)
   !----------------------------------------
   ! Compute hash key of densest neighbor
   !----------------------------------------
-  write(*,*)"open cache"
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
        pack=pack_fetch_rho, unpack=unpack_fetch_rho)
@@ -448,7 +441,6 @@ subroutine collect_peak(s)
         gridn => grid_nbor(j)%p ! Gather neighboring grid
         icelln = icell_nbor(j)
         dens_nbor = gridn%rho(icelln)
-        !write(*,'("gridn",F5.2)')gridn%rho(icelln)
         if(dens_nbor > density_max)then
            ok_peak=.false.
            density_max=dens_nbor
@@ -584,7 +576,6 @@ subroutine collect_patch(s)
      nmove=0
      nzero=0
      do itest=1,c%ntest
-        !if (g%myid==1.and.r%verbose)write(*,'("current itest:",I10)')itest
         hash_nbor=c%hash(itest,0:ndim)
         if(hash_nbor(0)>0)then
            igrid=c%grid(itest)
