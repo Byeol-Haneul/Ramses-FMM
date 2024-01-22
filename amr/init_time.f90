@@ -202,7 +202,7 @@ subroutine init_cosmo(mdl,r,g)
   logical::ok
   TYPE(gadgetheadertype) :: gadgetheader 
 
-  if(r%verbose)write(*,*)'Entering init_cosmo'
+  if(g%myid==1.and.r%verbose)write(*,*)'Entering init_cosmo'
 
   if(r%initfile(r%levelmin)==' ')then
      write(*,*)'You need to specifiy at least one level of initial condition'

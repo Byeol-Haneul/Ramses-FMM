@@ -5,16 +5,16 @@ module clfind_commons
     type clump_t
 
        integer :: ntest=0 ! Actual number of test particles in current processor
-       integer :: ntest_tot=0 ! Total number of test particles across all processors
+       integer(kind=8) :: ntest_tot=0 ! Total number of test particles across all processors
        integer,allocatable,dimension(:) :: cell ! Cell index of test particle
        integer,allocatable,dimension(:) :: grid ! Grid index of test particle
        integer,allocatable,dimension(:) :: level ! Level of test particle
        integer,allocatable,dimension(:,:) :: hash ! Hash key of densest neighbor
 
        integer :: npeak=0 ! Actual number of density peaks in current processor
-       integer :: npeak_tot=0 ! Total number of density peaks across all processors
        integer :: npeak_max ! Maximum number of peaks per processor including ghost peaks
-       integer,allocatable,dimension(:) :: npeak_cum ! Cumulative number of peak per processor
+       integer(kind=8) :: npeak_tot=0 ! Total number of density peaks across all processors
+       integer(kind=8),allocatable,dimension(:) :: npeak_cum ! Cumulative number of peak per processor
 
        integer,allocatable,dimension(:) :: peak_cell ! Cell index of peak
        integer,allocatable,dimension(:) :: peak_grid ! Grid index of peak

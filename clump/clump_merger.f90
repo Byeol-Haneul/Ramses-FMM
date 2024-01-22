@@ -344,7 +344,7 @@ subroutine merge_clumps(s,action)
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
-  if (r%verbose)then
+  if (r%verbose.and.g%myid==1)then
      if(action.EQ.'relevance')then
         write(*,*)'Now merging irrelevant clumps'
      endif
@@ -1041,7 +1041,7 @@ subroutine compute_clump_properties(s)
   c%center_of_mass=0d0
   c%peak_pos=0d0
 
-  if(r%verbose)write(*,*)'Entering compute clump properties'
+  if(g%myid==1.and.r%verbose)write(*,*)'Entering compute clump properties'
   
   !--------------------------------------------------------
   ! Loop over local peaks and compute peak cell coordinates

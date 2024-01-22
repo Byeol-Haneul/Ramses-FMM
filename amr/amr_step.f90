@@ -72,6 +72,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
                                     call m_timer(pst,'output','start')
            call m_dump_all(pst,.false.)
+           !----------------------------
+           ! Call the clump finder
+           !----------------------------
+           if(r%clump_finder)then ! Create output and no need to keep alive
+              call m_clump_finder(pst,.true.,.false.)
+           endif
         endif
      endif
      tcurr=wallclock()
@@ -87,13 +93,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            bkp_last_done=.true.
         endif
      endif
-  endif
-  
-  !----------------------------
-  ! Call the clump finder
-  !----------------------------
-  if(r%clump_finder.and.ilevel==r%levelmin.and.g%output_done)then
-     call m_clump_finder(pst,.true.,.false.) ! Create output and no need to keep alive
   endif
   
   !----------------------------

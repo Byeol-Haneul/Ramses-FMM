@@ -23,7 +23,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
 
   associate(r=>pst%s%r,g=>pst%s%g)
 
-  if(r%verbose)write(*,*)' Entering clump_finder'
+  if(r%verbose)write(*,*)'Entering clump_finder'
   
   !-----------------------------------------------------------------------
   ! Compute rho from gas density and/or dark matter and/or star particles
@@ -177,21 +177,19 @@ subroutine collect_test(s)
   !==================================================================
 #ifndef WITHOUTMPI
   integer::info
+  integer,dimension(1:s%g%ncpu)::ntest_cpu_all
 #endif
-  integer::ntest,ntest_all
-  integer(kind=8),dimension(0:s%g%ncpu)::nsite_cum,ntest_cum
-  integer,dimension(1:s%g%ncpu)::nsite_cpu,nsite_cpu_all
-  integer::ind,igrid,idim,icpu,ngrid,nleaf,nsite,now_level,next_level
-  integer::istep,nskip,nmove,nzero,ipart,jpart,ip,itest
-  integer::ilevel
-  integer::i,levelmin_part
-  integer(kind=8)::ntest_tot,nmove_tot,nzero_tot
-  integer(kind=8),dimension(1:s%g%ncpu)::ntest_cpu,ntest_cpu_all
+
+  integer::ind,igrid,idim,icpu,ngrid,nleaf,now_level,next_level
+  integer::istep,ipart,jpart,ip,itest
+  integer::ilevel,i,levelmin_part
+  integer,dimension(1:s%g%ncpu)::ntest_cpu
+  integer(kind=8),dimension(0:s%g%ncpu)::ntest_cum
   logical::verbose_all=.false.
-  real(kind=8)::d,dx_loc
   integer::action,ivar_clump
   logical::ok
   real(kind=8)::dx,vol
+  real(kind=8)::d,dx_loc
   real(dp),allocatable,dimension(:)::dens
   integer,allocatable,dimension(:)::isort
   integer,allocatable,dimension(:)::iswap
@@ -199,6 +197,8 @@ subroutine collect_test(s)
 #ifdef GRAV
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_test'
 
   !---------------------------------------------------------
   ! Count cells above threshold. We name them test particles
@@ -221,27 +221,23 @@ subroutine collect_test(s)
   !-------------------------------------------------
   ! Compute number of test particles across all CPUs
   !-------------------------------------------------
-  ntest_cpu=0; ntest_cpu_all=0
+  ntest_cpu=0
   ntest_cpu(g%myid)=c%ntest
+
 #ifndef WITHOUTMPI
-#ifndef LONGINT
   call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#else
-  call MPI_ALLREDUCE(ntest_cpu,ntest_cpu_all,g%ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
+  ntest_cpu=ntest_cpu_all
 #endif
-  ntest_cpu(1)=ntest_cpu_all(1)
-#endif
-  do icpu=2,g%ncpu
-     ntest_cpu(icpu)=ntest_cpu(icpu-1)+ntest_cpu_all(icpu)
+  ntest_cum=0
+  do icpu=1,g%ncpu
+     ntest_cum(icpu)=ntest_cum(icpu-1)+int(ntest_cpu(icpu),kind=8)
   end do
-  ntest_all=ntest_cpu(g%ncpu)
+  c%ntest_tot=ntest_cum(g%ncpu)
   if(g%myid==1)then
-     if(ntest_all.gt.0.and.r%clump_info)then
-        write(*,'(" Total number of cells above threshold=",I12)')ntest_all
+     if(c%ntest_tot.gt.0.and.(r%verbose.or.r%clump_info))then
+        write(*,'(" Total number of cells above threshold=",I12)')c%ntest_tot
      endif
   end if
-  c%ntest_tot=ntest_all
-  nskip=ntest_cpu(g%myid)-c%ntest
 
   if (c%ntest>0) then
 
@@ -319,7 +315,6 @@ subroutine collect_peak(s)
   use cache_commons
   use cache
   use nbors_utils
-  use multigrid_fine_coarse, only: pack_fetch_rho, unpack_fetch_rho
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -335,13 +330,14 @@ subroutine collect_peak(s)
   !==================================================================
 #ifndef WITHOUTMPI
   integer::info
+  integer,dimension(1:s%g%ncpu)::npeak_cpu_all
 #endif
-  type(msg_small_realdp)::dummy_small_realdp
+  type(msg_int4_small_realdp)::dummy_int4_small_realdp
   type(oct),pointer::gridn
   integer::ilevel
-  integer::npeaks,npeaks_tot,icpu,next_level,now_level,icelln,idim,igrid,ind,itest,j,k
+  integer::icpu,next_level,now_level,icelln,idim,igrid,ind,itest,j,k
   integer::ipart,jpart,ip,i,icellp,icellpm,ipeak
-  integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
+  integer,dimension(1:s%g%ncpu)::npeak_cpu
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   real(dp),dimension(1:ndim)::xcen,xnei
@@ -353,6 +349,8 @@ subroutine collect_peak(s)
   logical::ok,ok_peak
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
+
+  if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_peak'
 
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
@@ -383,8 +381,8 @@ subroutine collect_peak(s)
   ! Compute hash key of densest neighbor
   !----------------------------------------
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_small_realdp)/32,&
-       pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+       hilbert=m%domain,pack_size=storage_size(dummy_int4_small_realdp)/32,&
+       pack=pack_fetch_saddle, unpack=unpack_fetch_saddle)
   
   c%npeak=0
   do itest=1,c%ntest
@@ -480,7 +478,7 @@ subroutine collect_peak(s)
      end do
      
   end do
-  
+
   call close_cache(s,m%grid_dict)
   
   !------------------------------------------------
@@ -491,11 +489,7 @@ subroutine collect_peak(s)
   npeak_cpu=0
   npeak_cpu(g%myid)=c%npeak
 #ifndef WITHOUTMPI
-#ifndef LONGINT
   call MPI_ALLREDUCE(npeak_cpu,npeak_cpu_all,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#else
-  call MPI_ALLREDUCE(npeak_cpu,npeak_cpu_all,g%ncpu,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
   npeak_cpu=npeak_cpu_all
 #endif
   c%npeak_cum=0
@@ -503,13 +497,12 @@ subroutine collect_peak(s)
      c%npeak_cum(icpu)=c%npeak_cum(icpu-1)+int(npeak_cpu(icpu),kind=8)
   end do
 #ifdef WITHOUTMPI
-  npeaks_tot=c%npeak
+  c%npeak_tot=int(c%npeak,kind=8)
 #else
-  npeaks_tot=c%npeak_cum(g%ncpu)
+  c%npeak_tot=c%npeak_cum(g%ncpu)
 #endif
-  if (g%myid==1.and.npeaks_tot>0) &
-       & write(*,'(" Total number of density peaks found=",I10)')npeaks_tot
-  c%npeak_tot=npeaks_tot
+  if (g%myid==1.and.c%npeak_tot>0) &
+       & write(*,'(" Total number of density peaks found=",I10)')c%npeak_tot
   
   ! Compute the size of the peak-based arrays
   c%npeak_max=MAX(4*MAXVAL(npeak_cpu),1000)
@@ -550,14 +543,17 @@ subroutine collect_patch(s)
   !==================================================================
 #ifndef WITHOUTMPI
   integer::info
-  integer::nmove_all,nzero_all
+  integer(kind=8)::nmove_all,nzero_all
 #endif
   integer(kind=8),dimension(0:ndim)::hash_nbor
   type(msg_twin_realdp)::dummy_int4
   type(oct),pointer::gridn
-  integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nmove_tot,nzero,nzero_tot
+  integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nzero
+  integer(kind=8)::nmove_tot,nzero_tot
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_patch'
 
   !----------------------------------------------------------------------
   ! Flag peaks with global peak id using flag1 array
@@ -607,20 +603,15 @@ subroutine collect_patch(s)
      call close_cache(s,m%grid_dict)
      
      istep=istep+1
-     nmove_tot=nmove
-     nzero_tot=nzero
+     nmove_tot=int(nmove,kind=8)
+     nzero_tot=int(nzero,kind=8)
 #ifndef WITHOUTMPI
-#ifndef LONGINT
-     call MPI_ALLREDUCE(nmove_tot,nmove_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-     call MPI_ALLREDUCE(nzero_tot,nzero_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-#else
      call MPI_ALLREDUCE(nmove_tot,nmove_all,1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
      call MPI_ALLREDUCE(nzero_tot,nzero_all,1,MPI_INTEGER8,MPI_SUM,MPI_COMM_WORLD,info)
-#endif
      nmove_tot=nmove_all
      nzero_tot=nzero_all
 #endif
-     if(c%ntest_tot>0.and.r%verbose)write(*,*)"istep=",istep,"nmove=",nmove_tot
+     if(c%ntest_tot>0.and.r%verbose.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
   end do
   
   end associate
@@ -649,7 +640,7 @@ subroutine collect_saddle(s)
   type(msg_int4_small_realdp)::dummy_int4_small_realdp
   type(oct),pointer::gridn
   integer:: ilevel
-  integer::npeaks,npeaks_tot,icpu,next_level,now_level,icelln,idim,j,jpeak,k
+  integer::icpu,next_level,now_level,icelln,idim,j,jpeak,k
   integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen,peak_nbor
   integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
@@ -811,7 +802,14 @@ subroutine pack_fetch_saddle(grid,msg_size,msg_array)
   type(msg_int4_small_realdp)::msg
 
   do ind=1,twotondim
-     msg%int4(ind)=grid%flag1(ind)
+     msg%flg(ind)=grid%flag1(ind)
+  end do
+  do ind=1,twotondim
+     if(grid%refined(ind))then
+        msg%ref(ind)=1
+     else
+        msg%ref(ind)=0
+     endif
   end do
 #ifdef GRAV
   do ind=1,twotondim
@@ -843,7 +841,14 @@ subroutine unpack_fetch_saddle(grid,msg_size,msg_array,hash_key)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
-     grid%flag1(ind)=msg%int4(ind)
+     grid%flag1(ind)=msg%flg(ind)
+  end do
+  do ind=1,twotondim
+     if(msg%ref(ind)==1)then
+        grid%refined(ind)=.true.
+     else
+        grid%refined(ind)=.false.
+     endif
   end do
 #ifdef GRAV
   do ind=1,twotondim

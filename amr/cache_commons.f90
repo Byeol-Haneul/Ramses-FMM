@@ -37,7 +37,8 @@ module cache_commons
      real(kind=dp),dimension(1:twotondim)::realdp
   end type msg_small_realdp
   type msg_int4_small_realdp
-     integer(kind=4),dimension(1:twotondim)::int4
+     integer(kind=4),dimension(1:twotondim)::flg
+     integer(kind=4),dimension(1:twotondim)::ref
      real(kind=dp),dimension(1:twotondim)::realdp
   end type msg_int4_small_realdp
   type msg_twin_realdp
