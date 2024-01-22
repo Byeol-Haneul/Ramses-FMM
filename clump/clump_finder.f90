@@ -23,7 +23,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
 
   associate(r=>pst%s%r,g=>pst%s%g)
 
-  if(r%verbose)write(*,*)'Entering clump_finder'
+  write(*,*)'Entering clump finder'
   
   !-----------------------------------------------------------------------
   ! Compute rho from gas density and/or dark matter and/or star particles
@@ -38,13 +38,16 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
-  if(create_output.and.g%output_done)then
+  if(create_output)then
      call title(g%ifout-1,nchar)
      filename='output_'//TRIM(nchar)//'/'
      input_array=transfer(filename,input_array)
-     if(r%verbose)write(*,*)'Writing clump and halo files'
-     filename=TRIM(filename)//'clump_field_descriptor.txt'
-     call file_descriptor_clump(r,filename)
+     if(r%output_clump)write(*,*)'Writing clump properties files'
+     if(r%output_clump_field)then
+        write(*,*)'Writing clump field files'
+        filename=TRIM(filename)//'clump_field_descriptor.txt'
+        call file_descriptor_clump(r,filename)
+     endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
 
@@ -99,14 +102,14 @@ subroutine clump_finder(s)
   ! We call these cell test particles for the watershed algorithm.
   !----------------------------------------------------------------------
   call collect_test(s)
-
+  if(s%c%ntest_tot==0)return
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.
   ! We also compute for each test particle the coordinates of its
   ! densest neighbor.
   !----------------------------------------------------------------------
   call collect_peak(s)
-
+  if(s%c%npeak_tot==0)return
   !----------------------------------------------------------------------
   ! Perform a segmentation of the density field using the watershed
   ! algorithm. We get well defined peak patches around each peak.
@@ -114,7 +117,6 @@ subroutine clump_finder(s)
   ! by their saddle surface.
   !----------------------------------------------------------------------
   call collect_patch(s)
-
   !----------------------------------------------------------------------
   ! Allocate all peak patch based arrays
   !----------------------------------------------------------------------
@@ -123,7 +125,6 @@ subroutine clump_finder(s)
   ! Update the MPI communicator for peaks
   !----------------------------------------------------------------------
   call build_peak_communicator(s)
-
   !----------------------------------------------------------------------
   ! We build the saddle density matrix.
   ! Each pair of peaks is connected by a unique saddle point.
@@ -134,19 +135,16 @@ subroutine clump_finder(s)
   ! Update the MPI communicator for peaks
   !----------------------------------------------------------------------
   call build_peak_communicator(s)
-
   !----------------------------------------------------------------------
   ! Merge peaks based on a relevance criterion.
   ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
-
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
   call compute_clump_properties(s)
-
   !----------------------------------------------------------------------
   ! Merge all neighboring peaks above the prescribed density
   ! threshold into halos, only if their saddle point density is larger
@@ -236,10 +234,8 @@ subroutine collect_test(s)
   end do
   c%ntest_tot=ntest_cum(g%ncpu)
   if(g%myid==1)then
-     if(c%ntest_tot.gt.0.and.(r%verbose.or.r%clump_info))then
-        write(*,'(" Total number of cells above threshold=",I12)')c%ntest_tot
-     endif
-  end if
+     write(*,'(" Total number of cells above threshold=",I12)')c%ntest_tot
+  endif
 
   if (c%ntest>0) then
 
@@ -503,16 +499,12 @@ subroutine collect_peak(s)
 #else
   c%npeak_tot=c%npeak_cum(g%ncpu)
 #endif
-  if (g%myid==1.and.c%npeak_tot>0) &
+  if (g%myid==1) &
        & write(*,'(" Total number of density peaks found=",I10)')c%npeak_tot
   
-  ! Compute the size of the peak-based arrays
+  ! Compute the max size of the peak-based arrays
   c%npeak_max=MAX(4*MAXVAL(npeak_cpu),1000)
-  allocate(c%peak_cell(c%npeak_max))
-  allocate(c%peak_grid(c%npeak_max))
-  allocate(c%max_dens(c%npeak_max))
-  c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0
-
+  
 end associate
 
 end subroutine collect_peak
@@ -556,6 +548,14 @@ subroutine collect_patch(s)
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_patch'
+
+  !---------------------------------
+  ! Allocate peak based arrays
+  !---------------------------------
+  allocate(c%peak_cell(c%npeak_max))
+  allocate(c%peak_grid(c%npeak_max))
+  allocate(c%max_dens(c%npeak_max))
+  c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0
 
   !----------------------------------------------------------------------
   ! Flag peaks with global peak id using flag1 array

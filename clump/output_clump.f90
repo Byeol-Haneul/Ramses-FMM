@@ -70,7 +70,7 @@ subroutine output_clump_properties(s,filename)
   end if  
   open(unit=ilun,file=TRIM(fileloc),form='formatted')
   rewind(ilun)
-  write(ilun,'(144A)')'   index  halo   lev   parent      ncell    peak_x             peak_y             peak_z     '//&
+  write(ilun,'(144A)')'     index       halo  lev   parent      ncell    peak_x             peak_y             peak_z     '//&
           '        rho-               rho+               rho_av             mass_cl            relevance   '
   !-------------------------------------
   ! Open halo file and write header
@@ -108,7 +108,9 @@ subroutine output_clump_properties(s,filename)
      end if
      
      if(r%saddle_threshold>0)then
-        if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.c%halo_mass(j) > r%mass_threshold*g%mp_min)then
+        if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.&
+             & c%halo_mass(j) > r%mass_threshold*g%mp_min.AND. &
+             & c%relevance(j) > r%relevance_threshold)then
            write(ilun2,'(I10,X,I10,5(X,1PE18.9E2))')&
                 j+c%npeak_cum(g%myid-1)&
                 ,c%n_cells_halo(j)&
