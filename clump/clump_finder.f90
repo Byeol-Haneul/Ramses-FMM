@@ -152,7 +152,9 @@ subroutine clump_finder(s)
   ! threshold into halos, only if their saddle point density is larger
   ! that the prescribed saddle density threshold.
   !----------------------------------------------------------------------
-  call merge_clumps(s,'saddleden')
+  if(s%r%saddle_threshold>0)then
+     call merge_clumps(s,'saddleden')
+  endif
 
 #endif
 end subroutine clump_finder
