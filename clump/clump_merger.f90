@@ -47,6 +47,7 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%hash)
 
   ! Deallocate peak patch arrays
+  deallocate(c%npeak_cum)
   deallocate(c%peak_cell)
   deallocate(c%peak_grid)
   deallocate(c%max_dens)
@@ -264,7 +265,6 @@ subroutine build_peak_communicator(s)
   integer,dimension(1:s%g%ncpu)::ipeak_alltoall
 
   associate(g=>s%g,c=>s%c)
-
   npeak_alltoall=0
   do ipeak=c%npeak+1,c%hfree-1
      call get_local_peak_cpu(s,ipeak,icpu)
@@ -601,7 +601,6 @@ subroutine merge_clumps(s,action)
   endif
 
   if(action.EQ.'saddleden')then
-
      ! Compute peak index for the halo
      do ipeak=1,c%npeak
         c%ind_halo(ipeak)=c%new_peak(ipeak)
@@ -639,7 +638,6 @@ subroutine merge_clumps(s,action)
         call get_local_peak_id(s,merge_to,jpeak)
         c%halo_mass(ipeak)=c%halo_mass(jpeak)
      end do
-
   endif
   end associate
 end subroutine merge_clumps

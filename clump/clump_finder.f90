@@ -73,7 +73,6 @@ recursive subroutine r_clump_finder(pst,ilevel,input_size)
 
   integer::ilevel
   integer::rID
-  
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
      call r_clump_finder(pst%pLower,ilevel,input_size)
@@ -81,7 +80,7 @@ recursive subroutine r_clump_finder(pst,ilevel,input_size)
   else
      call clump_finder(pst%s)
   endif
-  
+
 end subroutine r_clump_finder
 !###########################################################
 !###########################################################
@@ -99,14 +98,12 @@ subroutine clump_finder(s)
   ! We call these cell test particles for the watershed algorithm.
   !----------------------------------------------------------------------
   call collect_test(s)
-
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.
   ! We also compute for each test particle the coordinates of its
   ! densest neighbor.
   !----------------------------------------------------------------------
   call collect_peak(s)
-
   !----------------------------------------------------------------------
   ! Perform a segmentation of the density field using the watershed
   ! algorithm. We get well defined peak patches around each peak.
@@ -114,7 +111,6 @@ subroutine clump_finder(s)
   ! by their saddle surface.
   !----------------------------------------------------------------------
   call collect_patch(s)
-
   !----------------------------------------------------------------------
   ! Allocate all peak patch based arrays
   !----------------------------------------------------------------------
@@ -123,7 +119,6 @@ subroutine clump_finder(s)
   ! Update the MPI communicator for peaks
   !----------------------------------------------------------------------
   call build_peak_communicator(s)
-
   !----------------------------------------------------------------------
   ! We build the saddle density matrix.
   ! Each pair of peaks is connected by a unique saddle point.
@@ -134,14 +129,12 @@ subroutine clump_finder(s)
   ! Update the MPI communicator for peaks
   !----------------------------------------------------------------------
   call build_peak_communicator(s)
-
   !----------------------------------------------------------------------
   ! Merge peaks based on a relevance criterion.
   ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
-
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
@@ -153,8 +146,8 @@ subroutine clump_finder(s)
   ! that the prescribed saddle density threshold.
   !----------------------------------------------------------------------
   call merge_clumps(s,'saddleden')
-
 #endif
+
 end subroutine clump_finder
 !################################################################
 !################################################################
@@ -391,9 +384,10 @@ subroutine collect_peak(s)
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     
+
      ! Set pointers to null
      icelln=0
+
      nullify(gridn)
      do j=1,nSnei
         nullify(grid_nbor(j)%p)
@@ -445,7 +439,6 @@ subroutine collect_peak(s)
         level_nbor(j) = hash_nbor(0)
         
      end do
-     
      density_max=1.0001*m%grid(igrid)%rho(ind)
      ok_peak=.true.
      
@@ -480,15 +473,13 @@ subroutine collect_peak(s)
      end do
      
   end do
-  
   call close_cache(s,m%grid_dict)
-  
   !------------------------------------------------
   ! Compute total number of peaks across all CPUs
   ! Determine offset for global peak IDs
   !------------------------------------------------
   allocate(c%npeak_cum(0:g%ncpu))
-  npeak_cpu=0
+  npeak_cpu=0; npeak_cpu_all=0
   npeak_cpu(g%myid)=c%npeak
 #ifndef WITHOUTMPI
 #ifndef LONGINT
@@ -517,8 +508,8 @@ subroutine collect_peak(s)
   allocate(c%peak_grid(c%npeak_max))
   allocate(c%max_dens(c%npeak_max))
   c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0
-
 end associate
+
 
 end subroutine collect_peak
 !################################################################
@@ -558,7 +549,6 @@ subroutine collect_patch(s)
   integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nmove_tot,nzero,nzero_tot
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
-
   !----------------------------------------------------------------------
   ! Flag peaks with global peak id using flag1 array
   !----------------------------------------------------------------------
@@ -585,11 +575,9 @@ subroutine collect_patch(s)
   nmove_tot=1
   istep=0
   do while (nmove_tot.gt.0)
-     
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
           hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
           pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
-     
      nmove=0
      nzero=0
      do itest=1,c%ntest
@@ -597,15 +585,14 @@ subroutine collect_patch(s)
         if(hash_nbor(0)>0)then
            igrid=c%grid(itest)
            ind=c%cell(itest)
+           hash_nbor(0) = hash_nbor(0)+1
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
            if(m%grid(igrid)%flag1(ind).ne.gridn%flag1(icelln))nmove=nmove+1
            m%grid(igrid)%flag1(ind)=gridn%flag1(icelln)
            if(m%grid(igrid)%flag1(ind).eq.0)nzero=nzero+1
         endif
      end do
-     
      call close_cache(s,m%grid_dict)
-     
      istep=istep+1
      nmove_tot=nmove
      nzero_tot=nzero
@@ -622,7 +609,6 @@ subroutine collect_patch(s)
 #endif
      if(c%ntest_tot>0.and.r%verbose)write(*,*)"istep=",istep,"nmove=",nmove_tot
   end do
-  
   end associate
     
 end subroutine collect_patch
@@ -663,7 +649,6 @@ subroutine collect_saddle(s)
   logical::ok
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
-
   !--------------------------------------------------------
   ! Arrays to define neighbors (center=[0,0,0])
   ! normalized to dx = 1 = size of the central leaf cell 
