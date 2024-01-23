@@ -18,6 +18,7 @@ module clfind_commons
 
        integer,allocatable,dimension(:) :: peak_cell ! Cell index of peak
        integer,allocatable,dimension(:) :: peak_grid ! Grid index of peak
+       integer,allocatable,dimension(:) :: peak_level ! Level of peak
        integer,allocatable,dimension(:) :: n_cells ! Number of AMR cells per peak patch
        integer,allocatable,dimension(:) :: n_cells_halo ! Number of AMR cells per halo
        integer,allocatable,dimension(:) :: lev_peak ! AMR level of the peak

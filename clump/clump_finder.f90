@@ -554,8 +554,9 @@ subroutine collect_patch(s)
   !---------------------------------
   allocate(c%peak_cell(c%npeak_max))
   allocate(c%peak_grid(c%npeak_max))
+  allocate(c%peak_level(c%npeak_max))
   allocate(c%max_dens(c%npeak_max))
-  c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0
+  c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0; c%peak_level=0
 
   !----------------------------------------------------------------------
   ! Flag peaks with global peak id using flag1 array
@@ -572,6 +573,7 @@ subroutine collect_patch(s)
         m%grid(igrid)%flag1(ind)=ipeak+c%npeak_cum(g%myid-1)
         c%peak_grid(ipeak)=igrid
         c%peak_cell(ipeak)=ind
+        c%peak_level(ipeak)=c%level(itest)
         c%max_dens(ipeak)=m%grid(igrid)%rho(ind)
      endif
   end do

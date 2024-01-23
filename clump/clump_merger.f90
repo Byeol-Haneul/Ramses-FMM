@@ -53,6 +53,7 @@ subroutine deallocate_peak_patch_arrays(s)
   ! Deallocate peak patch arrays
   deallocate(c%peak_cell)
   deallocate(c%peak_grid)
+  deallocate(c%peak_level)
   deallocate(c%max_dens)
 
   deallocate(c%n_cells)
@@ -1051,7 +1052,7 @@ subroutine compute_clump_properties(s)
   ! Loop over local peaks and compute peak cell coordinates
   !--------------------------------------------------------
   do ipeak=1,c%npeak
-    ilevel=c%lev_peak(ipeak)
+    ilevel=c%peak_level(ipeak)
     igrid=c%peak_grid(ipeak)
     ind=c%peak_cell(ipeak)
     dx_loc=r%boxlen/2**ilevel
