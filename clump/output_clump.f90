@@ -90,7 +90,8 @@ subroutine output_clump_properties(s,filename)
   endif
 
   do j=1,c%npeak
-     if (c%relevance(j) > r%relevance_threshold)then
+     if (c%relevance(j) > r%relevance_threshold.AND. &
+          & c%halo_mass(j) > r%mass_threshold*g%mp_min)then
         write(ilun,'(I10,X,I10,1X,I2,X,I10,X,I10,8(X,1PE18.9E2))')&
              j+c%npeak_cum(g%myid-1)&
              ,c%ind_halo(j)&
