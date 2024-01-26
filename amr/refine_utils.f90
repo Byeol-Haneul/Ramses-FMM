@@ -12,6 +12,7 @@ subroutine m_refine_fine(pst,ilevel)
   use ramses_commons, only: pst_t
   use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
   use load_balance_module, only: m_load_balance, r_balance_part
+  use mdl_module, only: mdl_wtime
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -20,6 +21,7 @@ subroutine m_refine_fine(pst,ilevel)
   ! from level ilevel to nlevelmax.
   !--------------------------------------------------------------------
   integer::ilev,dummy
+  double precision::ttend,ttstart
   type(out_refine_fine_t)::out_refine_fine
   integer,dimension(1:2)::noct
   integer,dimension(1)::alevel
@@ -67,8 +69,11 @@ subroutine m_refine_fine(pst,ilevel)
   ! Balance particles across cpus
   if(mdl_threads(s%mdl)>1.AND.ilevel==s%r%levelmin)then
      if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
-        if(s%r%verbose)write(*,*)'Entering balance_part for level',s%r%levelmin
+        write(*,*)'Load balancing particle distribution'
+        ttstart = mdl_wtime(mdl)
         call r_balance_part(pst,ilevel,1,dummy,0)
+        ttend = mdl_wtime(mdl)
+        print '(A,F14.7)',' Time elapsed load balancing:',ttend-ttstart
      endif
   endif
 
