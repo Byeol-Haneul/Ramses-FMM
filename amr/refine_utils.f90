@@ -70,9 +70,9 @@ subroutine m_refine_fine(pst,ilevel)
   if(mdl_threads(s%mdl)>1.AND.ilevel==s%r%levelmin)then
      if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
         write(*,*)'Load balancing particle distribution'
-        ttstart = mdl_wtime(mdl)
+        ttstart = mdl_wtime(s%mdl)
         call r_balance_part(pst,ilevel,1,dummy,0)
-        ttend = mdl_wtime(mdl)
+        ttend = mdl_wtime(s%mdl)
         print '(A,F14.7)',' Time elapsed load balancing:',ttend-ttstart
      endif
   endif
