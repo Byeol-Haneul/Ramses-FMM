@@ -341,10 +341,10 @@ program amr2map
   ! End loop over levels
 
   write(*,*)'Data read and projected.'
-  if(type==6.or.type==7)then
-     write(*,*)metmax
+  if(do_max)then
+     write(*,*)"Max=",metmax
   endif
-  
+
   nx_full=2**lmax
   ny_full=2**lmax
   imin=int(xxmin*dble(nx_full))+1

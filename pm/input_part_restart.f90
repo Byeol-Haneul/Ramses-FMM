@@ -34,7 +34,7 @@ subroutine m_input_part_restart(pst)
   call title(pst%s%r%nrestart,nchar)
   file_head='backup_'//TRIM(nchar)//'/part_header.txt'
   call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
-  write(*,'(" Restart snapshot has ",I8," DM particles")')npart_tot_file
+  write(*,'(" Restart snapshot has ",I12," DM particles")')npart_tot_file
 
   ! Allocate local array
   allocate(npart_file(1:ncpu_file))
@@ -67,7 +67,7 @@ subroutine m_input_part_restart(pst)
   call title(pst%s%r%nrestart,nchar)
   file_head='backup_'//TRIM(nchar)//'/star_header.txt'
   call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
-  write(*,'(" Restart snapshot has ",I8," star particles")')npart_tot_file
+  write(*,'(" Restart snapshot has ",I12," star particles")')npart_tot_file
 
   ! Allocate local array
   allocate(npart_file(1:ncpu_file))
