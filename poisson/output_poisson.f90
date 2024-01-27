@@ -53,7 +53,6 @@ subroutine output_poisson(r,g,m,mdl,filename)
   character(LEN=flen)::fileloc
   logical::file_exist
   real(kind=4),dimension(1:twotondim,1:ndim)::f
-  real(kind=4),dimension(1:twotondim)::rho
   real(kind=4),dimension(1:twotondim)::phi
 
   ilun=10+mdl_core(mdl)
@@ -66,7 +65,7 @@ subroutine output_poisson(r,g,m,mdl,filename)
   end if
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
-  write(ilun)ndim+2
+  write(ilun)ndim+1
   write(ilun)r%levelmin
   write(ilun)r%nlevelmax
   do ilevel=r%levelmin,r%nlevelmax
@@ -77,10 +76,8 @@ subroutine output_poisson(r,g,m,mdl,filename)
      do igrid=m%head(ilevel),m%tail(ilevel)
         phi=real(m%grid(igrid)%phi,kind=4)
         f(1:twotondim,1:ndim)=real(m%grid(igrid)%f(1:twotondim,1:ndim),kind=4)
-        rho=real(m%grid(igrid)%rho,kind=4)
         write(ilun)phi
         write(ilun)f
-        write(ilun)rho
      end do
   enddo
 #endif

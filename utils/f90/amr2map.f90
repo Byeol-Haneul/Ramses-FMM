@@ -9,7 +9,7 @@ program amr2map
   integer,parameter::flen=90
   
   integer::ndim,twotondim,nvar
-  integer::n,i,j,k,type=0,domax=0,dograv=0,backup=0
+  integer::n,i,j,k,type=0,dopeak=0,domax=0,dograv=0,backup=0
   integer::ivar,lmax=0
   integer::ilevel,idim,jdim,kdim,ldim,icell
   integer::nlevel
@@ -34,7 +34,7 @@ program amr2map
   character(LEN=5)::nchar,ncharcpu
   character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
   character(LEN=flen)::file_amr,file_hydro
-  logical::ok,ok_part,ok_cell,do_max,do_grav
+  logical::ok,ok_part,ok_cell,do_max,do_grav,do_peak
   logical::backup_file=.false.
   logical::check_ramses_exist
 
@@ -200,6 +200,8 @@ program amr2map
         ! Prepare reading the HYDRO file
         if(do_grav)then
            file_hydro=TRIM(repository)//'/grav.'//TRIM(ncharcpu)
+        else if(do_peak)then
+           file_hydro=TRIM(repository)//'/peak.'//TRIM(ncharcpu)
         else
            file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
         endif
@@ -238,11 +240,7 @@ program amr2map
 
               if(backup_file)then
                  ! Get variable to map out
-                 if(do_grav)then
-                    rho = uold(ind,5)
-                 else
-                    rho = uold(ind,1)
-                 endif
+                 rho = uold(ind,1)
                  select case (type)
                  case (-1) ! Cpu map
                     map = icpu
@@ -268,11 +266,7 @@ program amr2map
                  end select
               else
                  ! Get variable to map out
-                 if(do_grav)then
-                    rho = qold(ind,5)
-                 else
-                    rho = qold(ind,1)
-                 endif
+                 rho = qold(ind,1)
                  select case (type)
                  case (-1) ! Cpu map
                     map = icpu
@@ -544,6 +538,8 @@ contains
           read (arg,*) domax
        case ('-gra')
           read (arg,*) dograv
+       case ('-pk')
+          read (arg,*) dopeak
        case default
           print '("unknown option ",a2," ignored")', opt
        end select
@@ -553,6 +549,8 @@ contains
     if(domax==1)do_max=.true.
     do_grav=.false.
     if(dograv==1)do_grav=.true.
+    do_peak=.false.
+    if(dopeak==1)do_peak=.true.
     
     return
     
@@ -591,6 +589,8 @@ contains
     
     if(do_grav)then
        file_hydro=TRIM(repository)//'/grav.00001'
+    else if(do_peak)then
+       file_hydro=TRIM(repository)//'/peak.00001'
     else
        file_hydro=TRIM(repository)//'/hydro.00001'
     endif

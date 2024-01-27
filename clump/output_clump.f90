@@ -150,12 +150,14 @@ subroutine output_clump_field(s,filename)
   character(LEN=5)::nchar
   character(LEN=flen)::fileloc
   logical::file_exist
+  real(kind=4),dimension(1:twotondim)::flg
+  real(kind=4),dimension(1:twotondim)::rho
   
   associate(g=>s%g,r=>s%r,m=>s%m,mdl=>s%mdl)
 
   ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
-  fileloc=TRIM(filename)//'clump_field.'//TRIM(nchar)
+  fileloc=TRIM(filename)//'peak.'//TRIM(nchar)
   inquire(file=fileloc,exist=file_exist)
   if (file_exist) then
      open(unit=ilun,file=fileloc,iostat=ierr)
@@ -172,8 +174,10 @@ subroutine output_clump_field(s,filename)
 #ifdef GRAV
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
-        write(ilun)m%grid(igrid)%rho
-        write(ilun)m%grid(igrid)%flag1
+        rho=real(m%grid(igrid)%rho,kind=4)
+        flg=real(m%grid(igrid)%flag1,kind=4)
+        write(ilun)flg
+        write(ilun)rho
      end do
   enddo
 #endif
