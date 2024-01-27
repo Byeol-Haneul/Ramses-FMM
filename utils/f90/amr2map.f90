@@ -238,25 +238,17 @@ program amr2map
 
               if(backup_file)then
                  ! Get variable to map out
-                 rho = uold(ind,1)
+                 if(do_grav)then
+                    rho = uold(ind,5)
+                 else
+                    rho = uold(ind,1)
+                 endif
                  select case (type)
                  case (-1) ! Cpu map
                     map = icpu
                  case (0) ! Refinement map
                     map = ilevel
-                 case (1) ! Density map
-                    if(do_max)then
-                       map = uold(ind,1)
-                    else
-                       map = uold(ind,1)**2
-                    endif
-                 case (2) ! Mass weighted x-velocity
-                    map = uold(ind,2)
-                 case (3) ! Mass weighted y-velocity
-                    map = uold(ind,3)
-                 case (4) ! Mass weighted z-velocity
-                    map = uold(ind,4)
-                 case (5) ! Temperature
+                 case (15) ! Temperature
                     ekin = 0.5*uold(ind,2)**2/rho
                     if(ndim>1)ekin = ekin+0.5*uold(ind,3)**2/rho
                     if(ndim>2)ekin = ekin+0.5*uold(ind,4)**2/rho
@@ -268,33 +260,25 @@ program amr2map
                     endif
                  case default ! Passive scalar
                     if(do_max)then
-                       map = uold(ind,type)/uold(ind,1)
-                    else
                        map = uold(ind,type)
+                    else
+                       map = rho*uold(ind,type)
                     endif
                     metmax=max(metmax,uold(ind,type))
                  end select
               else
                  ! Get variable to map out
-                 rho = qold(ind,1)
+                 if(do_grav)then
+                    rho = qold(ind,5)
+                 else
+                    rho = qold(ind,1)
+                 endif
                  select case (type)
                  case (-1) ! Cpu map
                     map = icpu
                  case (0) ! Refinement map
                     map = ilevel
-                 case (1) ! Density map
-                    if(do_max)then
-                       map = qold(ind,1)
-                    else
-                       map = qold(ind,1)**2
-                    endif
-                 case (2) ! Mass weighted x-velocity
-                    map = rho*qold(ind,2)
-                 case (3) ! Mass weighted y-velocity
-                    map = rho*qold(ind,3)
-                 case (4) ! Mass weighted z-velocity
-                    map = rho*qold(ind,4)
-                 case (5) ! Temperature
+                 case (15) ! Temperature
                     pres = qold(ind,ndim+2)
                     if(do_max)then
                        map = pres/rho
