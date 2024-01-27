@@ -9,7 +9,7 @@ program amr2map
   integer,parameter::flen=90
   
   integer::ndim,twotondim,nvar
-  integer::n,i,j,k,type=0,domax=0,backup=0
+  integer::n,i,j,k,type=0,domax=0,dograv=0,backup=0
   integer::ivar,lmax=0
   integer::ilevel,idim,jdim,kdim,ldim,icell
   integer::nlevel
@@ -34,7 +34,7 @@ program amr2map
   character(LEN=5)::nchar,ncharcpu
   character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
   character(LEN=flen)::file_amr,file_hydro
-  logical::ok,ok_part,ok_cell,do_max
+  logical::ok,ok_part,ok_cell,do_max,do_grav
   logical::backup_file=.false.
   logical::check_ramses_exist
 
@@ -198,7 +198,11 @@ program amr2map
         iskip_amr=13+4*(p%nlevelmax-p%levelmin+1)+(4*ndim+4*twotondim)*noct_skip
 
         ! Prepare reading the HYDRO file
-        file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
+        if(do_grav)then
+           file_hydro=TRIM(repository)//'/grav.'//TRIM(ncharcpu)
+        else
+           file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
+        endif
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
         if(backup_file)then
            iskip_hydro=17+4*(p%nlevelmax-p%levelmin+1)+(8*twotondim*nvar)*noct_skip
@@ -554,6 +558,8 @@ contains
           read (arg,*) mapfiletype
        case ('-max')
           read (arg,*) domax
+       case ('-gra')
+          read (arg,*) dograv
        case default
           print '("unknown option ",a2," ignored")', opt
        end select
@@ -561,6 +567,8 @@ contains
     
     do_max=.false.
     if(domax==1)do_max=.true.
+    do_grav=.false.
+    if(dograv==1)do_grav=.true.
     
     return
     
@@ -597,7 +605,11 @@ contains
     read(ilun,POS=skip)p%bound_key
     close(ilun)
     
-    file_hydro=TRIM(repository)//'/hydro.00001'
+    if(do_grav)then
+       file_hydro=TRIM(repository)//'/grav.00001'
+    else
+       file_hydro=TRIM(repository)//'/hydro.00001'
+    endif
     open(unit=ilun,file=file_hydro,access="stream",action="read",form='unformatted')
     read(ilun,POS=5)p%nvar
     close(ilun)
@@ -618,13 +630,17 @@ function check_ramses_exist(repository)
   integer::ipos
   character(LEN=5)::char
   character(LEN=128)::nomfich
-  logical::ok
+  character(LEN=128)::nomfich_grav
+  logical::ok,ok_hydro,ok_grav
   
   check_ramses_exist=.true.
   ipos=INDEX(repository,'output_')
+  nomfich_grav=TRIM(repository)//'/grav.00001'
+  inquire(file=nomfich_grav, exist=ok_grav) ! verify input file 
   nomfich=TRIM(repository)//'/hydro.00001'
-  inquire(file=nomfich, exist=ok) ! verify input file 
-  if ( .not. ok ) then
+  inquire(file=nomfich, exist=ok_hydro) ! verify input file 
+  if ( .not. ok_grav .and. .not. ok_hydro ) then
+     print *,TRIM(nomfich_grav)//' not found.'
      print *,TRIM(nomfich)//' not found.'
      check_ramses_exist=.false.
   endif
