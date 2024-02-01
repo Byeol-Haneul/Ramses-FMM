@@ -272,20 +272,22 @@ program amr2map
                     map = icpu
                  case (0) ! Refinement map
                     map = ilevel
+                    metmax = max(metmax,map)
                  case (15) ! Temperature
                     pres = qold(ind,ndim+2)
                     if(do_max)then
                        map = pres/rho
+                       metmax = max(metmax,map)
                     else
                        map = pres
                     endif
                  case default ! Passive scalar
                     if(do_max)then
                        map = qold(ind,type)
+                       metmax = max(metmax,map)
                     else
                        map = rho*qold(ind,type)
                     endif
-                    metmax=max(metmax,qold(ind,type))
                  end select
               endif
 
