@@ -210,10 +210,10 @@ subroutine file_descriptor_clump(r,filename)
   write(ilun,'("nvar        =",I11)')2
 
   ivar=1
-  write(ilun,'("variable #",I2,": density")')ivar
+  write(ilun,'("variable #",I2,": peak ID")')ivar
 
   ivar=2
-  write(ilun,'("variable #",I2,": clump ID")')ivar
+  write(ilun,'("variable #",I2,": density")')ivar
   
   close(ilun)
 

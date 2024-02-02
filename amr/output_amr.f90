@@ -7,8 +7,8 @@ contains
 subroutine m_dump_all(pst,write_bkp_file)
   use amr_parameters, only: ndim,flen
   use ramses_commons, only: pst_t
-  use output_hydro_module, only: r_output_hydro, file_descriptor_hydro
-  use output_poisson_module, only: r_output_poisson,in_output_poisson_t
+  use output_hydro_module, only: r_output_hydro,file_descriptor_hydro
+  use output_poisson_module, only: r_output_poisson,in_output_poisson_t,file_descriptor_poisson
   use output_part_module, only: r_output_part
   use mdl_module, only: mdl_mkdir, mdl_wtime
   use cooling_module, only: output_cool
@@ -93,6 +93,10 @@ subroutine m_dump_all(pst,write_bkp_file)
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_file_descriptor.txt'
         call file_descriptor_hydro(r,filename,write_bkp_file)
+     end if
+     if(r%poisson)then
+        filename=TRIM(filedir)//'grav_file_descriptor.txt'
+        call file_descriptor_poisson(r,filename,write_bkp_file)
      end if
      if(r%cooling)then
         filename=TRIM(filedir)//'cooling.bin'

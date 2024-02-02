@@ -132,6 +132,48 @@ subroutine backup_poisson(r,g,m,mdl,filename)
   close(ilun)
      
 end subroutine backup_poisson
+!###################################################
+!###################################################
+!###################################################
+!###################################################
+subroutine file_descriptor_poisson(r,filename,write_bkp_file)
+  use amr_parameters, only: ndim,flen
+  use hydro_parameters, only: nvar,nener
+  use amr_commons, only: run_t
+  implicit none
+  type(run_t)::r
+  character(LEN=flen)::filename
+  logical::write_bkp_file
+
+  character(LEN=flen)::fileloc
+  integer::ivar,ilun
+
+  if(r%verbose)write(*,*)'Entering file_descriptor_poisson'
+
+  ilun=11
+
+  ! Open file
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')
+
+  ! Write variable names in backup file or in output file
+  write(ilun,'("nvar        =",I11)')ndim+1
+  ivar=1
+  write(ilun,'("variable #",I2,": potential")')ivar
+  ivar=2
+  write(ilun,'("variable #",I2,": accel_x")')ivar
+  if(ndim>1)then
+     ivar=3
+     write(ilun,'("variable #",I2,": accel_y")')ivar
+  endif
+  if(ndim>2)then
+     ivar=4
+     write(ilun,'("variable #",I2,": accel_z")')ivar
+  endif
+
+  close(ilun)
+
+end subroutine file_descriptor_poisson
 !#########################################################
 !#########################################################
 !#########################################################
