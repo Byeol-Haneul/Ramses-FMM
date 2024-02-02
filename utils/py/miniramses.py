@@ -1064,3 +1064,66 @@ def mk_movie(**kwargs):
     print(ok)
     return ok 
 
+class HaloCat:
+   """
+   This is the class for RAMSES halo catalogue.
+   """
+   def __init__(self):
+       """
+       This function initialize the halo catalogue.
+       """
+       self.x = np.empty(shape=(0))
+       self.y = np.empty(shape=(0))
+       self.z = np.empty(shape=(0))
+       self.m = np.empty(shape=(0))
+       self.rho = np.empty(shape=(0))
+       self.ncell = np.empty(shape=(0),dtype=int)
+       self.index = np.empty(shape=(0),dtype=int)
+
+def rd_halo(nout,**kwargs):
+   """
+   This function reads and compiles data for position, mass,
+   density, and index from the halo catalogue.
+   Args:
+       nout:output file number
+   author: Josiah Taylor
+   """
+   backup = kwargs.get("backup",False)
+   center = kwargs.get("center")
+   radius = kwargs.get("radius")
+   path = kwargs.get("path","./")
+   star = kwargs.get("star",False)
+
+   car1 = str(nout).zfill(5)
+   i = rd_info(nout,path=path,backup=backup)
+   ncpu = i.ncpu
+   ndim = i.ndim
+
+   list_x = []
+   list_y = []
+   list_z = []
+   list_rho = []
+   list_mass = []
+   list_index = []
+   output = str(nout).zfill(5)
+   cat = HaloCat()
+   for i in range(0, ncpu):
+       name = str(i+1).zfill(5)
+       file_name = "output_%s/halo.%s" % (output,name)
+       halo_cat = ascii.read(file_name)
+       x = halo_cat['peak_x']
+       y = halo_cat['peak_y']
+       z = halo_cat['peak_z']
+       rho = halo_cat['rho+']
+       mass = halo_cat['mass']
+       ncell = halo_cat['ncell']
+       index = halo_cat['index']
+       cat.x = np.append(cat.x,x)
+       cat.y = np.append(cat.y,y)
+       cat.z = np.append(cat.z,z)
+       cat.rho = np.append(cat.rho,rho)
+       cat.m = np.append(cat.m,mass)
+       cat.ncell = np.append(cat.ncell,ncell)
+       cat.index = np.append(cat.index,index)
+
+   return cat
