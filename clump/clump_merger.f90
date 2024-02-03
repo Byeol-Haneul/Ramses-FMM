@@ -589,7 +589,7 @@ subroutine merge_clumps(s,action)
         call boundary_peak_int(s,c%new_peak)
      end do
 
-     ! Update flag2 field
+     ! Update flag1 field
      do itest=1,c%ntest
         igrid=c%grid(itest)
         ind=c%cell(itest)
