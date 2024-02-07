@@ -87,7 +87,8 @@ subroutine init_amr(mdl,r,g,m)
   integer(kind=4)::ngrid,nremain
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
-
+  logical::file_exist
+  
   ! Initial time step for each level
   g%dtold=0.0D0
   g%dtnew=0.0D0
@@ -323,9 +324,15 @@ subroutine init_amr(mdl,r,g,m)
      ! Read parameters from restart file
      call title(r%nrestart,nchar)
      file_params='backup_'//TRIM(nchar)//'/params.bin'
-     call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
-     if(g%myid==1)write(*,'(" Restarting from backup number ",I8)')r%nrestart
-     if(g%myid==1)write(*,'(" Restart file has ",I8," files")')ncpu_file
+     inquire(file=file_params, exist=file_exist)
+     if(file_exist)then
+        call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
+        if(g%myid==1)write(*,'(" Restarting from backup number ",I8)')r%nrestart
+        if(g%myid==1)write(*,'(" Restart file has ",I8," files")')ncpu_file
+     else
+        if(g%myid==1)write(*,'(" Could not restart from file ",(A))')'backup_'//TRIM(nchar)
+        stop
+     endif
   endif
 
 end subroutine init_amr
