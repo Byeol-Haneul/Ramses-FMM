@@ -361,22 +361,6 @@ subroutine merge_clumps(s,action)
      endif
   endif
 
-  ! Initialize new_peak array to global peak id
-  ! All peaks are alive at the start
-  do i=1,c%npeak
-     c%new_peak(i)=c%npeak_cum(g%myid-1)+i
-     if(action.EQ.'relevance')then
-        alive(i)=1
-     endif
-     if(action.EQ.'saddleden')then
-        if(c%relevance(i)>r%relevance_threshold)then
-           alive(i)=1
-        else
-           alive(i)=0
-        endif
-     endif
-  end do
-
   ! Compute clump mass
   c%clump_mass=0
   do itest=1,c%ntest
@@ -401,6 +385,22 @@ subroutine merge_clumps(s,action)
   call virtual_peak_dp(s,c%clump_mass,'sum')
   call boundary_peak_dp(s,c%clump_mass)
 #endif
+
+  ! Initialize new_peak array to global peak id
+  ! All peaks are alive at the start
+  do i=1,c%npeak
+     c%new_peak(i)=c%npeak_cum(g%myid-1)+i
+     if(action.EQ.'relevance')then
+        alive(i)=1
+     endif
+     if(action.EQ.'saddleden')then
+        if(c%relevance(i)>r%relevance_threshold.and.c%clump_mass(i).GE.mass_min)then
+           alive(i)=1
+        else
+           alive(i)=0
+        endif
+     endif
+  end do
 
   ! Sort peaks by maximum peak density in ascending order
   do i=1,c%npeak
@@ -439,26 +439,31 @@ subroutine merge_clumps(s,action)
            ipeak=ind_sort(i)
            merge_to=c%new_peak(ipeak)
            if(alive(ipeak)>0)then
+              jpeak=ipeak
+              if(c%sparse_saddle_dens%maxloc(ipeak)>0)then
+                 call get_local_peak_id(s,c%sparse_saddle_dens%maxloc(ipeak),jpeak)
+              endif
               if(action.EQ.'relevance')then
                  if(c%sparse_saddle_dens%maxval(ipeak)>0)then
                     relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
                  else
                     relevance_peak=c%max_dens(ipeak)/r%density_threshold
                  end if
-                 do_merge=(relevance_peak<r%relevance_threshold.OR.c%clump_mass(ipeak)<mass_min)
+                 do_merge=relevance_peak<r%relevance_threshold
+                 do_merge=do_merge.OR.c%clump_mass(ipeak)<mass_min.OR.c%clump_mass(jpeak)<mass_min
               endif
               if(action.EQ.'saddleden')then
                  do_merge=(c%sparse_saddle_dens%maxval(ipeak)>r%saddle_threshold)
               endif
               if(do_merge)then
                  if(c%sparse_saddle_dens%maxloc(ipeak)>0)then
-                    call get_local_peak_id(s,c%sparse_saddle_dens%maxloc(ipeak),jpeak)
                     if(c%max_dens(jpeak)>c%max_dens(ipeak))then
                        merge_to=c%new_peak(jpeak)
                     else if(c%max_dens(jpeak)==c%max_dens(ipeak))then
                        merge_to=MIN(c%new_peak(ipeak),c%new_peak(jpeak))
                     endif
                  endif
+!                 write(*,*)iter,idepth,g%myid,ipeak,relevance_peak,c%clump_mass(ipeak),merge_to
               endif
            endif
            if(c%new_peak(ipeak).NE.merge_to)then
@@ -466,8 +471,9 @@ subroutine merge_clumps(s,action)
               c%new_peak(ipeak)=merge_to
            endif
         end do
-        ! Update boundary conditions for new_peak array
+        ! Update boundary conditions for new_peak and clump_mass arrays
         call boundary_peak_int(s,c%new_peak)
+        call boundary_peak_dp(s,c%clump_mass)
         iter=iter+1
 #ifndef WITHOUTMPI
         call MPI_ALLREDUCE(nmove,nmove_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
@@ -643,6 +649,8 @@ subroutine merge_clumps(s,action)
         end do
         call build_peak_communicator(s)
         call boundary_peak_int(s,c%new_peak)
+        call boundary_peak_dp(s,c%relevance)
+        call boundary_peak_dp(s,c%clump_mass)
      end do
 
      ! Update flag1 field
@@ -654,7 +662,11 @@ subroutine merge_clumps(s,action)
            call get_local_peak_id(s,global_peak_id,ipeak)
            merge_to=c%new_peak(ipeak)
            call get_local_peak_id(s,merge_to,jpeak)
-           m%grid(igrid)%flag1(ind)=merge_to
+           if(c%relevance(jpeak)>r%relevance_threshold.and.c%clump_mass(jpeak).GE.mass_min)then
+              m%grid(igrid)%flag1(ind)=merge_to
+           else
+              m%grid(igrid)%flag1(ind)=0
+           endif
         end if
      end do
      call build_peak_communicator(s)

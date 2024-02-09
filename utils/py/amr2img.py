@@ -31,19 +31,19 @@ clump = args.clump
 if clump==None:
     clump=False
 if xcenter==None:
-    xcenter=0.5
+    xcenter=None
 else:
     xcenter=float(xcenter)
 if ycenter==None:
-    ycenter=0.5
+    ycenter=None
 else:
     ycenter=float(ycenter)
 if zcenter==None:
-    zcenter=0.5
+    zcenter=None
 else:
     zcenter=float(zcenter)
 if radius==None:
-    radius=0.1
+    radius=None
 else:
     radius=float(radius)
 center=np.array([xcenter,ycenter,zcenter])
@@ -69,20 +69,22 @@ nout = args.nout
 print("Reading output number ",nout)
 print(path)
 
-print(center)
-print(radius)
-
 c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
 ram.visu(c.x[0],c.x[1],c.dx,c.u[ivar],sort=c.u[isort],log=True,vmin=vmin)
 
 if clump:
     h=ram.rd_clump(nout)
-    r = np.sqrt((h.x-center[0])**2+(h.y-center[1])**2+(h.z-center[2])**2)
-    nn = np.count_nonzero(r < radius)
-    xx = h.x[r < radius]
-    yy = h.y[r < radius]
-    zz = h.z[r < radius]
-    mm = h.m[r < radius]
+    if radius is not None:
+        r = np.sqrt((h.x-center[0])**2+(h.y-center[1])**2+(h.z-center[2])**2)
+        nn = np.count_nonzero(r < radius)
+        xx = h.x[r < radius]
+        yy = h.y[r < radius]
+        zz = h.z[r < radius]
+        mm = h.m[r < radius]
+    else:
+        xx = h.x
+        yy = h.y
+        
     plt.plot(xx,yy,'r.')
 
 if args.out:

@@ -616,6 +616,7 @@ subroutine collect_patch(s)
      nzero_tot=nzero_all
 #endif
      if(c%ntest_tot>0.and.r%verbose.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
+!     if(c%ntest_tot>0.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
   end do
   
   end associate
