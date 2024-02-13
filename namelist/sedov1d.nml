@@ -1,6 +1,6 @@
 This namelist contains input parameters for teh 1D Sedov test.
 Compile	the code with:
-> make NDIM=1 MPI=0 HYDRO=1 GRAV=0 UNITS=default CONDINIT=default
+make NDIM=1 MPI=0 HYDRO=1 GRAV=0 UNITS=default CONDINIT=default
 
 &RUN_PARAMS 
 hydro=.true.
