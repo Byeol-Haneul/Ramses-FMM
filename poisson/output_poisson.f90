@@ -28,7 +28,7 @@ recursive subroutine r_output_poisson(pst,input,input_size)
      if(index(input%filename,'output')==0)then
         call backup_poisson(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,input%filename)
      else
-        call output_poisson(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,input%filename)
+        call output_poisson(pst%s,input%filename)
      endif
   endif
 end subroutine r_output_poisson
@@ -36,43 +36,29 @@ end subroutine r_output_poisson
 !#########################################################
 !#########################################################
 !#########################################################
-subroutine output_poisson(r,g,m,mdl,filename)
+subroutine output_poisson(s,filename)
   use amr_parameters, only: ndim,twotondim,flen
-  use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t
+  use ramses_commons, only: ramses_t,open_file,close_file
   use mdl_module
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   character(LEN=flen)::filename
-
-  integer::ilevel,igrid,ilun,ierr
-  character(LEN=5)::nchar
-  character(LEN=flen)::fileloc
-  logical::file_exist
+  !-----------------------------------
+  ! Output grav data in file
+  !-----------------------------------
+  integer::ilevel,igrid,ilun
+  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim,1:ndim)::f
   real(kind=4),dimension(1:twotondim)::phi
 
-  ilun=10+mdl_core(mdl)
-  call title(g%myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
-  inquire(file=fileloc, exist=file_exist)
-  if (file_exist) then
-     open(unit=ilun,file=fileloc,iostat=ierr)
-     close(ilun,status="delete")
-  end if
-  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
-  write(ilun)ndim
-  write(ilun)ndim+1
-  write(ilun)r%levelmin
-  write(ilun)r%nlevelmax
-  do ilevel=r%levelmin,r%nlevelmax
-     write(ilun)m%noct(ilevel)
-  enddo
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
 #ifdef GRAV
+
+  call open_file(s,filename,nskip,ilun)
+
   do ilevel=r%levelmin,r%nlevelmax
+     write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
         phi=real(m%grid(igrid)%phi,kind=4)
         f(1:twotondim,1:ndim)=real(m%grid(igrid)%f(1:twotondim,1:ndim),kind=4)
@@ -80,8 +66,12 @@ subroutine output_poisson(r,g,m,mdl,filename)
         write(ilun)f
      end do
   enddo
+
+  call close_file(s,filename,nskip,ilun)
+
 #endif
-  close(ilun)
+
+  end associate
 
 end subroutine output_poisson
 !#########################################################

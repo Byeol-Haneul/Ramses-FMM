@@ -567,18 +567,20 @@ contains
     !-----------------------------------------------
     character(LEN=128)::nomfich
     integer::ilun,ilevel,noutput,skip
+    integer::nfile,ncpu
     
     nomfich=TRIM(repository)//'/params.bin'
     
     ilun=10
     open(unit=ilun,file=nomfich,access="stream",action="read",form='unformatted')
-    read(ilun,POS=1)p%ncpu
-    read(ilun,POS=5)p%ndim
-    read(ilun,POS=9)p%levelmin
-    read(ilun,POS=13)p%nlevelmax
-    read(ilun,POS=17)p%boxlen
-    read(ilun,POS=25)noutput
-    skip=4*(10+4*noutput)+1
+    read(ilun,POS=1)nfile
+    read(ilun,POS=5)ncpu
+    read(ilun,POS=9)p%ndim
+    read(ilun,POS=13)p%levelmin
+    read(ilun,POS=17)p%nlevelmax
+    read(ilun,POS=21)p%boxlen
+    read(ilun,POS=29)noutput
+    skip=4*(11+4*noutput)+1
     read(ilun,POS=skip)p%t
     skip=skip+4*(2+4*p%nlevelmax+2+2*17)
     read(ilun,POS=skip)p%gamma
@@ -588,7 +590,12 @@ contains
     skip=skip+4
     read(ilun,POS=skip)p%bound_key
     close(ilun)
-    
+
+    if(backup_file)then
+       p%ncpu=ncpu
+    else
+       p%ncpu=nfile
+    endif
     if(do_grav)then
        file_hydro=TRIM(repository)//'/grav.00001'
     else if(do_peak)then

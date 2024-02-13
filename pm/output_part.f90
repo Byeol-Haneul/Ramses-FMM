@@ -34,10 +34,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
         endif
      else
         filename2=TRIM(filename)//'part.'
-        call output_part(pst%s%r,pst%s%g,pst%s%p,filename2)
+        call output_part(pst%s,pst%s%p,filename2)
         if(pst%s%r%star)then
            filename2=TRIM(filename)//'star.'
-           call output_part(pst%s%r,pst%s%g,pst%s%s,filename2)
+           call output_part(pst%s,pst%s%s,filename2)
         endif
      endif
   endif
@@ -47,86 +47,93 @@ end subroutine r_output_part
 !#######################################################
 !#######################################################
 !#######################################################
-subroutine output_part(r,g,p,filename)
-  use amr_parameters, only: ndim,dp,i8b,flen
-  use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t
+subroutine output_part(s,p,filename)
+  use amr_parameters, only: ndim,i8b,flen
+  use ramses_commons, only: ramses_t,open_part_file,close_part_file
   use pm_commons, only: part_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
+  type(ramses_t)::s
   type(part_t)::p
   character(LEN=flen)::filename
-
-  integer::i,idim,ilun,ierr
-  character(LEN=flen)::fileloc
-  character(LEN=5)::nchar
+  !-----------------------------------
+  ! Output part data to file
+  !-----------------------------------
+  integer::i,idim,ilun,ivar
+  integer,dimension(1:p%nvaralloc+1)::nskip
   real(kind=4),allocatable,dimension(:)::xsp
   integer(i8b),allocatable,dimension(:)::ii8
   integer,allocatable,dimension(:)::ll
-  logical::file_exist
 
-  ilun=10
+  associate(r=>s%r,g=>s%g)
 
-  call title(g%myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
-  inquire(file=fileloc, exist=file_exist)
-  if (file_exist) then
-     open(unit=ilun,file=fileloc,iostat=ierr)
-     close(ilun,status="delete")
-  end if
-  open(unit=ilun,file=TRIM(fileloc),access="stream",action="write",form='unformatted')
-  rewind(ilun)
-  ! Write header
-  write(ilun)ndim
-  write(ilun)p%npart
+  call open_part_file(s,p,filename,nskip,ilun)
+
   ! Write position
   allocate(xsp(1:p%npart))
   do idim=1,ndim
      do i=1,p%npart
         xsp(i)=p%xp(i,idim)
      end do
+     write(ilun,POS=nskip(idim))
      write(ilun)xsp
   end do
+
   ! Write velocity
   do idim=1,ndim
      do i=1,p%npart
         xsp(i)=p%vp(i,idim)
      end do
+     write(ilun,POS=nskip(idim+ndim))
      write(ilun)xsp
   end do
+  ivar=2*ndim
+
   ! Write mass
   do i=1,p%npart
      xsp(i)=p%mp(i)
   end do
+  ivar=ivar+1
+  write(ilun,POS=nskip(ivar))
   write(ilun)xsp
-  ! Write metalicity
+
+  ! Write metallicity
   if(allocated(p%zp))then
      do i=1,p%npart
         xsp(i)=p%zp(i)
      end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
      write(ilun)xsp
   endif
+
   ! Write birth time
   if(allocated(p%tp))then
      do i=1,p%npart
         xsp(i)=p%tp(i)
      end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
      write(ilun)xsp
   endif
   deallocate(xsp)
+
   ! Write identity
   allocate(ii8(1:p%npart))
   do i=1,p%npart
      ii8(i)=p%idp(i)
   end do
+  ivar=ivar+1
+  write(ilun,POS=nskip(ivar))
   write(ilun)ii8
   deallocate(ii8)
+
   ! Write level
   allocate(ll(1:p%npart))
   do i=1,p%npart
      ll(i)=p%levelp(i)
   end do
+  ivar=ivar+1
+  write(ilun,POS=nskip(ivar))
   write(ilun)ll
   deallocate(ll)
 
@@ -136,11 +143,15 @@ subroutine output_part(r,g,p,filename)
   do i=1,p%npart
      xsp(i)=p%phip(i)
   end do
+  ivar=ivar+1
+  write(ilun,POS=nskip(ivar))
   write(ilun)xsp
   deallocate(xsp)
 #endif
 
-  close(ilun)
+  call close_part_file(s,p,filename,nskip,ilun)
+
+  end associate
 
 end subroutine output_part
 !#######################################################
@@ -149,7 +160,6 @@ end subroutine output_part
 !#######################################################
 subroutine backup_part(r,g,p,filename)
   use amr_parameters, only: ndim,dp,i8b,flen
-  use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -177,9 +187,11 @@ subroutine backup_part(r,g,p,filename)
   end if
   open(unit=ilun,file=TRIM(fileloc),access="stream",action="write",form='unformatted')
   rewind(ilun)
+
   ! Write header
   write(ilun)ndim
   write(ilun)p%npart
+
   ! Write position
   allocate(xdp(1:p%npart))
   do idim=1,ndim
@@ -188,6 +200,7 @@ subroutine backup_part(r,g,p,filename)
      end do
      write(ilun)xdp
   end do
+
   ! Write velocity
   do idim=1,ndim
      do i=1,p%npart
@@ -195,18 +208,21 @@ subroutine backup_part(r,g,p,filename)
      end do
      write(ilun)xdp
   end do
+
   ! Write mass
   do i=1,p%npart
      xdp(i)=p%mp(i)
   end do
   write(ilun)xdp
-  ! Write metalicity
+
+  ! Write metallicity
   if(allocated(p%zp))then
      do i=1,p%npart
         xdp(i)=p%zp(i)
      end do
      write(ilun)xdp
   endif
+
   ! Write birth time
   if(allocated(p%tp))then
      do i=1,p%npart
@@ -215,6 +231,7 @@ subroutine backup_part(r,g,p,filename)
      write(ilun)xdp
   endif
   deallocate(xdp)
+
   ! Write identity
   allocate(ii8(1:p%npart))
   do i=1,p%npart
@@ -222,6 +239,7 @@ subroutine backup_part(r,g,p,filename)
   end do
   write(ilun)ii8
   deallocate(ii8)
+
   ! Write level
   allocate(ll(1:p%npart))
   do i=1,p%npart

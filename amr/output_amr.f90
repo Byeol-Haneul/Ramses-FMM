@@ -91,11 +91,11 @@ subroutine m_dump_all(pst,write_bkp_file)
         endif
      endif
      if(r%hydro)then
-        filename=TRIM(filedir)//'hydro_file_descriptor.txt'
+        filename=TRIM(filedir)//'hydro_header.txt'
         call file_descriptor_hydro(r,filename,write_bkp_file)
      end if
      if(r%poisson)then
-        filename=TRIM(filedir)//'grav_file_descriptor.txt'
+        filename=TRIM(filedir)//'grav_header.txt'
         call file_descriptor_poisson(r,filename,write_bkp_file)
      end if
      if(r%cooling)then
@@ -231,6 +231,7 @@ subroutine output_params(r,g,m,filename)
   open(unit=ilun,file=fileloc,access="stream"&
        & ,action="write",form='unformatted')
   ! Write grid variables
+  write(ilun)r%nfile
   write(ilun)g%ncpu
   write(ilun)ndim
   write(ilun)r%levelmin
@@ -281,7 +282,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! are allowed to vary at restart.
   !-----------------------------------  
   integer::ilun
-  integer::ndim_file,noutput_file
+  integer::ndim_file,nfile_file,noutput_file
   integer::noutput_min,nlevelmax_min
   real(dp)::mass_sph_file,gamma_file
   character(LEN=flen)::fileloc
@@ -293,6 +294,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   open(unit=ilun,file=fileloc,access="stream"&
        & ,action="read",form='unformatted')
   ! Read grid variables
+  read(ilun)nfile_file
   read(ilun)ncpu_file
   read(ilun)ndim_file
   read(ilun)levelmin_file
@@ -369,7 +371,7 @@ recursive subroutine r_output_amr(pst,input_array,input_size,output_array,output
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
-     call output_amr(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,filename)
+     call output_amr(pst%s,filename)
   endif
 
 end subroutine r_output_amr
@@ -377,46 +379,35 @@ end subroutine r_output_amr
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_amr(r,g,m,mdl,filename)
-  use amr_parameters, only: ndim,sp,dp,flen
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine output_amr(s,filename)
+  use amr_parameters, only: ndim,flen
+  use ramses_commons, only: ramses_t,open_file,close_file
   use mdl_module
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   character(LEN=flen)::filename
   !-----------------------------------
   ! Output amr grid in file
   !-----------------------------------  
-  integer::ilun,ierr,ilevel,igrid
-  character(LEN=flen)::fileloc
-  character(LEN=5)::nchar
-  logical::file_exist
+  integer::ilun,ilevel,igrid
+  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
 
-  ilun=10+mdl_core(mdl)
-  call title(g%myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
-  inquire(file=fileloc, exist=file_exist)
-  if (file_exist) then
-     open(unit=ilun,file=fileloc,iostat=ierr)
-     close(ilun,status="delete")
-  end if
-  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
-  write(ilun)ndim
-  write(ilun)r%levelmin
-  write(ilun)r%nlevelmax
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  call open_file(s,filename,nskip,ilun)
+
   do ilevel=r%levelmin,r%nlevelmax
-     write(ilun)m%noct(ilevel)
-  end do
-  do ilevel=r%levelmin,r%nlevelmax
+     write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%ckey
         write(ilun)m%grid(igrid)%refined
      end do
   end do
-  close(ilun)  
+
+  call close_file(s,filename,nskip,ilun)
+
+  end associate
+
 end subroutine output_amr
 !#########################################################################
 !#########################################################################
@@ -446,6 +437,7 @@ subroutine output_info(r,g,filename)
   open(unit=ilun,file=fileloc,form='formatted')
   
   ! Write run parameters
+  write(ilun,'("nfile       =",I11)')r%nfile
   write(ilun,'("ncpu        =",I11)')g%ncpu
   write(ilun,'("ndim        =",I11)')ndim
   write(ilun,'("levelmin    =",I11)')r%levelmin
@@ -504,8 +496,12 @@ subroutine output_header(r,g,p,filename)
   write(ilun,*)p%npart_tot
   
   write(ilun,*)'Total number of files'
-  write(ilun,*)g%ncpu
-  
+  if(index(filename,'output')==0)then
+     write(ilun,*)g%ncpu
+  else
+     write(ilun,*)r%nfile
+  endif
+
   ! Keep track of what particle fields are present
   write(ilun,*)'Particle fields'
   write(ilun,'(a)',advance='no')'pos vel mass '

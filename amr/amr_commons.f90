@@ -41,6 +41,7 @@ module amr_commons
      real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
      real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
      integer::bkp_modulo=0       ! Use modulo for backup file count
+     integer::nfile=1            ! Number of file used per snapshot. Use -1 for nfile=ncpu
 
      ! Mesh parameters
      integer::levelmin=1         ! Full refinement up to levelmin

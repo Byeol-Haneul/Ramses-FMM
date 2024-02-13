@@ -45,7 +45,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      if(r%output_clump)write(*,*)'Writing clump properties files'
      if(r%output_clump_field)then
         write(*,*)'Writing clump field files'
-        filename=TRIM(filename)//'peak_file_descriptor.txt'
+        filename=TRIM(filename)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
      endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)

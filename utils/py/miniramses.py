@@ -677,17 +677,17 @@ def rd_info(nout,**kwargs):
     i = Info(ncpu)
 
     i.ncpu=ncpu
-    i.ndim=int(info[1][1])
-    i.levelmin=int(info[2][1])
-    i.nlevelmax=int(info[3][1])
-    i.boxlen=info[6][1]
-    i.time=info[7][1]
-    i.texp=info[8][1]
-    i.aexp=info[9][1]
-    i.gamma=info[15][1]
-    i.unit_l=info[16][1]
-    i.unit_d=info[17][1]
-    i.unit_t=info[18][1]
+    i.ndim=int(info[2][1])
+    i.levelmin=int(info[3][1])
+    i.nlevelmax=int(info[4][1])
+    i.boxlen=info[7][1]
+    i.time=info[8][1]
+    i.texp=info[9][1]
+    i.aexp=info[10][1]
+    i.gamma=info[16][1]
+    i.unit_l=info[17][1]
+    i.unit_d=info[18][1]
+    i.unit_t=info[19][1]
 
     return i
 
