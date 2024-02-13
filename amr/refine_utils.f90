@@ -8,11 +8,10 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_refine_fine(pst,ilevel)
-  use mdl_module
   use ramses_commons, only: pst_t
   use init_refine_basegrid_module, only:r_noct_max,r_noct_min,r_noct_tot,r_noct_used_max
   use load_balance_module, only: m_load_balance, r_balance_part
-  use mdl_module, only: mdl_wtime
+  use mdl_module
   implicit none
   type(pst_t)::pst
   integer::ilevel
