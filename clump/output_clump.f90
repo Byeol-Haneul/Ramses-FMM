@@ -51,7 +51,7 @@ subroutine output_clump_properties(s,filename)
   !----------------------------------------------------------------
   integer::ilun,j
   character(LEN=flen)::fileloc
-  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
 
   associate(r=>s%r,g=>s%g,c=>s%c)
 
@@ -125,7 +125,7 @@ subroutine output_clump_field(s,filename)
   ! This routine output the peak patch fields for each processor
   !----------------------------------------------------------------  
   integer::ilevel,igrid,ilun
-  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim)::flg
   real(kind=4),dimension(1:twotondim)::rho
 

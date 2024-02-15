@@ -19,9 +19,9 @@ program amr2map
   integer::imin,imax,jmin,jmax,kmin,kmax
   integer::nstride,nx_full,ny_full,lmin
   integer::ix,iy,iz,ndom,impi,bit_length,maxdom
-  integer::iskip_amr,iskip_hydro,noct_skip,noct_file,noct_tmp
+  integer::noct_file,noct_tmp
   integer,dimension(1:8)::idom,jdom,kdom,cpu_min,cpu_max
-  integer(kind=8)::ipos
+  integer(kind=8)::ipos,iskip_amr,iskip_hydro,noct_skip
 
   real(KIND=8)::dxline,weight
   real(KIND=8)::xmin=0,xmax=1,ymin=0,ymax=1,zmin=0,zmax=1
@@ -371,7 +371,9 @@ program amr2map
      end do
   end do
 
-  write(*,*)'Norm=',sum(mapgrid(lmax)%rho(imin:imax,jmin:jmax))/(imax-imin+1)/(jmax-jmin+1)
+  if(.not. do_max)then
+     write(*,*)'Norm=',sum(mapgrid(lmax)%rho(imin:imax,jmin:jmax))/(imax-imin+1)/(jmax-jmin+1)
+  endif
 
   ! Output file
   nomfich=TRIM(outfich)

@@ -394,7 +394,7 @@ subroutine output_amr(s,filename)
   ! Output amr grid to file
   !-----------------------------------  
   integer::ilun,ilevel,igrid
-  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
