@@ -28,7 +28,7 @@ recursive subroutine r_output_hydro(pst,input_array,input_size,output_array,outp
      if(index(filename,'output')==0)then
         call backup_hydro(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,filename)
      else
-        call output_hydro(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,filename)
+        call output_hydro(pst%s,filename)
      endif
   endif
 
@@ -37,46 +37,31 @@ end subroutine r_output_hydro
 !###################################################
 !###################################################
 !###################################################
-subroutine output_hydro(r,g,m,mdl,filename)
+subroutine output_hydro(s,filename)
   use amr_parameters, only: ndim,twotondim,flen,dp
   use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t
-  use mdl_module
+  use ramses_commons, only: ramses_t,open_file,close_file
   implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(mesh_t)::m
-  type(mdl_t)::mdl
+  type(ramses_t)::s
   character(LEN=flen)::filename
-
-  real(dp),dimension(1:twotondim,1:nvar)::uold
-  real(dp)::etot,ekin,dd,pp
-  real(dp),dimension(1:ndim)::vv
+  !-----------------------------------
+  ! Output hydro data in file
+  !-----------------------------------
+  integer::ilevel,igrid,ilun,ivar,ind
+  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim,1:nvar)::uout
-  integer::ilevel,igrid,ilun,ierr,ivar,ind
-  character(LEN=5)::nchar
-  character(LEN=flen)::fileloc
-  logical::file_exist
+  real(dp),dimension(1:twotondim,1:nvar)::uold
+  real(dp),dimension(1:ndim)::vv
+  real(dp)::etot,ekin,dd,pp
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
 #ifdef HYDRO
 
-  ilun=10+mdl_core(mdl)
-  call title(g%myid,nchar)
-  fileloc=TRIM(filename)//TRIM(nchar)
-  inquire(file=fileloc,exist=file_exist)
-  if (file_exist) then
-     open(unit=ilun,file=fileloc,iostat=ierr)
-     close(ilun,status="delete")
-  end if
-  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
-  write(ilun)ndim
-  write(ilun)nvar
-  write(ilun)r%levelmin
-  write(ilun)r%nlevelmax
+  call open_file(s,filename,nskip,ilun)
+
   do ilevel=r%levelmin,r%nlevelmax
-     write(ilun)m%noct(ilevel)
-  enddo
-  do ilevel=r%levelmin,r%nlevelmax
+     write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
         uold=m%grid(igrid)%uold
         do ind=1,twotondim
@@ -113,10 +98,13 @@ subroutine output_hydro(r,g,m,mdl,filename)
         write(ilun)uout
      end do
   enddo
-  close(ilun)
+
+  call close_file(s,filename,nskip,ilun)
 
 #endif
-     
+
+  end associate
+
 end subroutine output_hydro
 !###################################################
 !###################################################

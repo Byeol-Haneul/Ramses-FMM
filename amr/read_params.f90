@@ -78,6 +78,7 @@ subroutine m_read_params(pst)
   real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
   real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
   integer::bkp_modulo=0       ! Use modulo for backup file count
+  integer::nfile=1            ! Number of file per snapshot. Use -1 for nfile=ncpu
 
   ! Output times
   real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
@@ -283,7 +284,7 @@ subroutine m_read_params(pst)
   ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
-       & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo
+       & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
   ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen,box_size &
@@ -438,7 +439,9 @@ subroutine m_read_params(pst)
   if(imovout>0) then
      if(tendmov==0.and.aendmov==0)movie=.false.
   endif
-  
+  if(nfile==-1)nfile=s%g%ncpu
+  nfile=max(nfile,1)
+
   !--------------------------------------------------
   ! Check for errors in the namelist so far
   !--------------------------------------------------
@@ -664,6 +667,7 @@ subroutine m_read_params(pst)
   s%r%bkp_time_hrs=bkp_time_hrs
   s%r%bkp_last_min=bkp_last_min
   s%r%bkp_modulo=bkp_modulo
+  s%r%nfile=nfile
 
   s%r%levelmin=levelmin
   s%r%nlevelmax=nlevelmax

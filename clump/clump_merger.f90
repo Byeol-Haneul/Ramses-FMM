@@ -316,7 +316,7 @@ end subroutine build_peak_communicator
 !#########################################################################
 !#########################################################################
 subroutine merge_clumps(s,action)
-  use amr_commons, only: dp
+  use amr_commons, only: dp, ndim
   use ramses_commons, only: ramses_t
   use sparse_matrix
 #ifndef WITHOUTMPI
@@ -336,8 +336,9 @@ subroutine merge_clumps(s,action)
   integer::j,i,merge_to,ipart,igrid,ind,itest
   integer::current,nmove,ipeak,jpeak,iter
   integer::nsurvive,nzero,idepth
-  integer::ilev,global_peak_id,mergelevel_max
+  integer::ilev,ilevel,global_peak_id,mergelevel_max
   real(dp)::value_iij,zero=0,relevance_peak
+  real(dp)::d,dx_loc,vol,mass_min
   integer,dimension(1:s%c%npeak_max)::alive,ind_sort
   real(dp),dimension(1:s%c%npeak_max)::peakd
   logical::do_merge=.false.
@@ -349,6 +350,8 @@ subroutine merge_clumps(s,action)
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
+  mass_min=g%mp_min*r%mass_threshold
+
   if (r%verbose.and.g%myid==1)then
      if(action.EQ.'relevance')then
         write(*,*)'Now merging irrelevant clumps'
@@ -358,6 +361,31 @@ subroutine merge_clumps(s,action)
      endif
   endif
 
+  ! Compute clump mass
+  c%clump_mass=0
+  do itest=1,c%ntest
+     ilevel=c%level(itest)
+     igrid=c%grid(itest)
+     ind=c%cell(itest)
+     global_peak_id=m%grid(igrid)%flag1(ind)
+     if (global_peak_id>0) then
+        call get_local_peak_id(s,global_peak_id,ipeak)
+#ifdef GRAV
+        d=m%grid(igrid)%rho(ind) ! Cell density
+#endif
+        dx_loc=r%boxlen/2**ilevel ! Cell size
+        vol=dx_loc**ndim  ! Cell volume
+        c%clump_mass(ipeak)=c%clump_mass(ipeak)+vol*d
+     end if
+  end do
+#ifndef WITHOUTMPI
+  ! Update communicator with possibly new remote peaks imported locally
+  call build_peak_communicator(s)
+  ! Collect results from all MPI domains
+  call virtual_peak_dp(s,c%clump_mass,'sum')
+  call boundary_peak_dp(s,c%clump_mass)
+#endif
+
   ! Initialize new_peak array to global peak id
   ! All peaks are alive at the start
   do i=1,c%npeak
@@ -366,7 +394,7 @@ subroutine merge_clumps(s,action)
         alive(i)=1
      endif
      if(action.EQ.'saddleden')then
-        if(c%relevance(i)>r%relevance_threshold)then
+        if(c%relevance(i)>r%relevance_threshold.and.c%clump_mass(i).GE.mass_min)then
            alive(i)=1
         else
            alive(i)=0
@@ -411,26 +439,31 @@ subroutine merge_clumps(s,action)
            ipeak=ind_sort(i)
            merge_to=c%new_peak(ipeak)
            if(alive(ipeak)>0)then
+              jpeak=ipeak
+              if(c%sparse_saddle_dens%maxloc(ipeak)>0)then
+                 call get_local_peak_id(s,c%sparse_saddle_dens%maxloc(ipeak),jpeak)
+              endif
               if(action.EQ.'relevance')then
                  if(c%sparse_saddle_dens%maxval(ipeak)>0)then
                     relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
                  else
                     relevance_peak=c%max_dens(ipeak)/r%density_threshold
                  end if
-                 do_merge=(relevance_peak<r%relevance_threshold)
+                 do_merge=relevance_peak<r%relevance_threshold
+                 do_merge=do_merge.OR.c%clump_mass(ipeak)<mass_min.OR.c%clump_mass(jpeak)<mass_min
               endif
               if(action.EQ.'saddleden')then
                  do_merge=(c%sparse_saddle_dens%maxval(ipeak)>r%saddle_threshold)
               endif
               if(do_merge)then
                  if(c%sparse_saddle_dens%maxloc(ipeak)>0)then
-                    call get_local_peak_id(s,c%sparse_saddle_dens%maxloc(ipeak),jpeak)
                     if(c%max_dens(jpeak)>c%max_dens(ipeak))then
                        merge_to=c%new_peak(jpeak)
                     else if(c%max_dens(jpeak)==c%max_dens(ipeak))then
                        merge_to=MIN(c%new_peak(ipeak),c%new_peak(jpeak))
                     endif
                  endif
+!                 write(*,*)iter,idepth,g%myid,ipeak,relevance_peak,c%clump_mass(ipeak),merge_to
               endif
            endif
            if(c%new_peak(ipeak).NE.merge_to)then
@@ -438,8 +471,9 @@ subroutine merge_clumps(s,action)
               c%new_peak(ipeak)=merge_to
            endif
         end do
-        ! Update boundary conditions for new_peak array
+        ! Update boundary conditions for new_peak and clump_mass arrays
         call boundary_peak_int(s,c%new_peak)
+        call boundary_peak_dp(s,c%clump_mass)
         iter=iter+1
 #ifndef WITHOUTMPI
         call MPI_ALLREDUCE(nmove,nmove_all,1,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
@@ -449,7 +483,7 @@ subroutine merge_clumps(s,action)
      end do
 
      ! Transfer matrix elements of merged peaks to surviving peaks
-     ! Create new local duplicated peaks and update communicator
+     ! Create new local duplicated (remote) peaks and update communicator
      do ipeak=1,c%hfree-1
         if(alive(ipeak)>0)then
            merge_to=c%new_peak(ipeak)
@@ -477,6 +511,23 @@ subroutine merge_clumps(s,action)
      end do
      call build_peak_communicator(s)
 
+     if(action.EQ.'relevance')then
+
+        ! Update merged peak mass using halo mass
+        c%halo_mass=0
+        do ipeak=1,c%npeak
+           if(alive(ipeak)>0)then
+              merge_to=c%new_peak(ipeak)
+              call get_local_peak_id(s,merge_to,jpeak)
+              c%halo_mass(jpeak)=c%halo_mass(jpeak)+c%clump_mass(ipeak)
+           endif
+        end do
+        call build_peak_communicator(s)
+        call virtual_peak_dp(s,c%halo_mass,'sum')
+        call boundary_peak_dp(s,c%halo_mass)
+
+     endif
+
      ! Set alive to zero for newly merged peaks
      nzero=0
      nsurvive=0
@@ -493,6 +544,17 @@ subroutine merge_clumps(s,action)
         endif
      end do
      call boundary_peak_int(s,alive)
+
+     if(action.EQ.'relevance')then
+
+        ! Assign halo mass to alive peak mass
+        do ipeak=1,c%npeak
+           if(alive(ipeak)>0)then
+              c%clump_mass(ipeak)=c%halo_mass(ipeak)
+           endif
+        end do
+
+     endif
 
      ! Remove all matrix elements corresponding to merged peaks
      do ipeak=1,c%hfree-1
@@ -587,9 +649,11 @@ subroutine merge_clumps(s,action)
         end do
         call build_peak_communicator(s)
         call boundary_peak_int(s,c%new_peak)
+        call boundary_peak_dp(s,c%relevance)
+        call boundary_peak_dp(s,c%clump_mass)
      end do
 
-     ! Update flag2 field
+     ! Update flag1 field
      do itest=1,c%ntest
         igrid=c%grid(itest)
         ind=c%cell(itest)
@@ -598,7 +662,11 @@ subroutine merge_clumps(s,action)
            call get_local_peak_id(s,global_peak_id,ipeak)
            merge_to=c%new_peak(ipeak)
            call get_local_peak_id(s,merge_to,jpeak)
-           m%grid(igrid)%flag1(ind)=merge_to
+           if(c%relevance(jpeak)>r%relevance_threshold.and.c%clump_mass(jpeak).GE.mass_min)then
+              m%grid(igrid)%flag1(ind)=merge_to
+           else
+              m%grid(igrid)%flag1(ind)=0
+           endif
         end if
      end do
      call build_peak_communicator(s)
@@ -638,7 +706,7 @@ subroutine merge_clumps(s,action)
      call boundary_peak_dp(s,c%halo_mass)
      call virtual_peak_int(s,c%n_cells_halo,'sum')
      call boundary_peak_int(s,c%n_cells_halo)
-     ! Assign back halo mass to peak
+     ! Assign back halo mass to peak halo mass
      do ipeak=1,c%npeak
         merge_to=c%ind_halo(ipeak)
         call get_local_peak_id(s,merge_to,jpeak)

@@ -203,7 +203,7 @@ subroutine cooling_fine(r,g,m,c,ilevel)
         if(r%cooling)then
            if(r%cooling_ism) then
               ! Use cooling from cooling_module_frig described in Audit & Hennebelle 2005
-              call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,1.4,nleaf)
+              call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,1.4d0,nleaf)
            else
               ! Use classical ramses cooling
               call solve_cooling(c,nH,T2,Zsolar,boost,dtcool,delta_T2,nleaf)

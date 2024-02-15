@@ -9,6 +9,7 @@ module pm_commons
      integer :: npart=0     ! Actual number of particles in processor
      integer(kind=8):: npart_tot=0 ! Total number of particles in all processors
      integer :: npart_max=0 ! Maximum number of particles in all processors
+     integer :: nvaralloc ! Number of allocated variables
      
      ! Particle dependent arrays
      real(dp),allocatable,dimension(:,:)   ::xp       ! Positions

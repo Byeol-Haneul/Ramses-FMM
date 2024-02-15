@@ -424,6 +424,7 @@ class Hydro:
 
 def rd_hydro(nout,**kwargs):
 
+    prefix = kwargs.get("prefix","hydro")
     backup = kwargs.get("backup",False)
     center = kwargs.get("center")
     radius = kwargs.get("radius")
@@ -447,15 +448,15 @@ def rd_hydro(nout,**kwargs):
     # Get number of hydro variables
     car1 = str(nout).zfill(5)
     if(backup):
-        filename = path+"backup_"+car1+"/hydro.00001"
+        filename = path+"backup_"+car1+"/"+prefix+".00001"
     else:
-        filename = path+"output_"+car1+"/hydro.00001"
+        filename = path+"output_"+car1+"/"+prefix+".00001"
 
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
     
     txt = "ncpu="+str(ncpu)+" ndim="+str(ndim)+" nlevelmax="+str(nlevelmax)+" nvar="+str(nvar)
     print(txt)
-    print("Reading hydro data...")
+    print("Reading "+prefix+" data...")
 
     hydro=[]
     for ilevel in range(0,nlevelmax):
@@ -469,9 +470,9 @@ def rd_hydro(nout,**kwargs):
 
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"backup_"+car1+"/hydro."+car2
+            filename = path+"backup_"+car1+"/"+prefix+"."+car2
         else:
-            filename = path+"output_"+car1+"/hydro."+car2
+            filename = path+"output_"+car1+"/"+prefix+"."+car2
 
         skip = 16
         for ilevel in range(levelmin-1,nlevelmax):
@@ -492,9 +493,9 @@ def rd_hydro(nout,**kwargs):
 
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"backup_"+car1+"/hydro."+car2
+            filename = path+"backup_"+car1+"/"+prefix+"."+car2
         else:
-            filename = path+"output_"+car1+"/hydro."+car2
+            filename = path+"output_"+car1+"/"+prefix+"."+car2
 
         offset = 16 + 4*(nlevelmax+1-levelmin)
         
@@ -676,17 +677,17 @@ def rd_info(nout,**kwargs):
     i = Info(ncpu)
 
     i.ncpu=ncpu
-    i.ndim=int(info[1][1])
-    i.levelmin=int(info[2][1])
-    i.nlevelmax=int(info[3][1])
-    i.boxlen=info[6][1]
-    i.time=info[7][1]
-    i.texp=info[8][1]
-    i.aexp=info[9][1]
-    i.gamma=info[15][1]
-    i.unit_l=info[16][1]
-    i.unit_d=info[17][1]
-    i.unit_t=info[18][1]
+    i.ndim=int(info[2][1])
+    i.levelmin=int(info[3][1])
+    i.nlevelmax=int(info[4][1])
+    i.boxlen=info[7][1]
+    i.time=info[8][1]
+    i.texp=info[9][1]
+    i.aexp=info[10][1]
+    i.gamma=info[16][1]
+    i.unit_l=info[17][1]
+    i.unit_d=info[18][1]
+    i.unit_t=info[19][1]
 
     return i
 
@@ -927,7 +928,11 @@ def visu(x,y,dx,v,**kwargs):
     sort = kwargs.get("sort",None)
 
     if( not (log is None)):
-        v = np.log10(abs(v))
+        if vmin==None:
+            v = np.log10(abs(v))
+        else:
+            v = np.log10(abs(v+float(vmin)))            
+        
     print("min=",np.min(v)," max=",np.max(v))
 
     if( not (sort is None)):
@@ -1064,3 +1069,129 @@ def mk_movie(**kwargs):
     print(ok)
     return ok 
 
+class HaloCat:
+   """
+   This is the class for RAMSES halo catalogue.
+   """
+   def __init__(self):
+       """
+       This function initialize the halo catalogue.
+       """
+       self.x = np.empty(shape=(0))
+       self.y = np.empty(shape=(0))
+       self.z = np.empty(shape=(0))
+       self.m = np.empty(shape=(0))
+       self.rho = np.empty(shape=(0))
+       self.ncell = np.empty(shape=(0),dtype=int)
+       self.index = np.empty(shape=(0),dtype=int)
+
+def rd_halo(nout,**kwargs):
+   """
+   This function reads and compiles data for position, mass,
+   density, and index from the halo catalogue.
+   Args:
+       nout:output file number
+   author: Josiah Taylor
+   """
+   backup = kwargs.get("backup",False)
+   center = kwargs.get("center")
+   radius = kwargs.get("radius")
+   path = kwargs.get("path","./")
+
+   car1 = str(nout).zfill(5)
+   i = rd_info(nout,path=path,backup=backup)
+   ncpu = i.ncpu
+   ndim = i.ndim
+
+   output = str(nout).zfill(5)
+   cat = HaloCat()
+   for i in range(0, ncpu):
+       name = str(i+1).zfill(5)
+       file_name = "output_%s/halo.%s" % (output,name)
+       halo_cat = ascii.read(file_name)
+       x = halo_cat['peak_x']
+       y = halo_cat['peak_y']
+       z = halo_cat['peak_z']
+       mass = halo_cat['mass']
+       rho = halo_cat['rho+']
+       ncell = halo_cat['ncell']
+       index = halo_cat['index']
+       cat.x = np.append(cat.x,x)
+       cat.y = np.append(cat.y,y)
+       cat.z = np.append(cat.z,z)
+       cat.rho = np.append(cat.rho,rho)
+       cat.m = np.append(cat.m,mass)
+       cat.ncell = np.append(cat.ncell,ncell)
+       cat.index = np.append(cat.index,index)
+
+   return cat
+
+class ClumpCat:
+   """
+   This is the class for RAMSES halo catalogue.
+   """
+   def __init__(self):
+       """
+       This function initialize the halo catalogue.
+       """
+       self.x = np.empty(shape=(0))
+       self.y = np.empty(shape=(0))
+       self.z = np.empty(shape=(0))
+       self.m = np.empty(shape=(0))
+       self.rhop = np.empty(shape=(0))
+       self.rhom = np.empty(shape=(0))
+       self.rhos = np.empty(shape=(0))
+       self.ncell = np.empty(shape=(0),dtype=int)
+       self.halo = np.empty(shape=(0),dtype=int)
+       self.index = np.empty(shape=(0),dtype=int)
+       self.parent = np.empty(shape=(0),dtype=int)
+
+def rd_clump(nout,**kwargs):
+   """
+   This function reads and compiles data for position, mass,
+   density, and index from the halo catalogue.
+   Args:
+       nout:output file number
+   author: Josiah Taylor
+   """
+   backup = kwargs.get("backup",False)
+   center = kwargs.get("center")
+   radius = kwargs.get("radius")
+   path = kwargs.get("path","./")
+
+   car1 = str(nout).zfill(5)
+   i = rd_info(nout,path=path,backup=backup)
+   ncpu = i.ncpu
+   ndim = i.ndim
+
+   output = str(nout).zfill(5)
+   cat = ClumpCat()
+   for i in range(0, ncpu):
+       name = str(i+1).zfill(5)
+       file_name = "output_%s/clump.%s" % (output,name)
+       halo_cat = ascii.read(file_name)
+       x = halo_cat['peak_x']
+       y = halo_cat['peak_y']
+       z = halo_cat['peak_z']
+       mass = halo_cat['mass_cl']
+       rhop = halo_cat['rho+']
+       rhom = halo_cat['rho-']
+       rhos = halo_cat['relevance']
+       rhos = rhop/rhos
+       ncell = halo_cat['ncell']
+       halo = halo_cat['halo']
+       index = halo_cat['index']
+       parent = halo_cat['parent']
+       cat.x = np.append(cat.x,x)
+       cat.y = np.append(cat.y,y)
+       cat.z = np.append(cat.z,z)
+       cat.m = np.append(cat.m,mass)
+       cat.rhop = np.append(cat.rhop,rhop)
+       cat.rhom = np.append(cat.rhom,rhom)
+       cat.rhos = np.append(cat.rhos,rhos)
+       cat.ncell = np.append(cat.ncell,ncell)
+       cat.halo = np.append(cat.halo,halo)
+       cat.index = np.append(cat.index,index)
+       cat.parent = np.append(cat.parent,parent)
+
+   return cat

@@ -3,6 +3,7 @@
 !#########################################################################
 !#########################################################################
 subroutine m_init_refine_adaptive(pst)
+  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use flag_utils, only: m_flag_fine
   use refine_utils, only: m_refine_fine
@@ -11,6 +12,7 @@ subroutine m_init_refine_adaptive(pst)
   use rho_fine_module, only: m_rho_fine
 #endif
   use input_part_zoom_module, only: m_input_part_zoom
+  use input_part_module, only: r_mass_min_part, r_broadcast_mp_min
   use input_hydro_grafic_module, only: r_input_refmap_grafic
   implicit none
   type(pst_t)::pst
@@ -18,6 +20,7 @@ subroutine m_init_refine_adaptive(pst)
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
   !--------------------------------------------------------------------
+  real(dp)::mp_min
   integer::istep,ilevel
 
   write(*,*)'Building initial adaptive grid'
@@ -50,6 +53,9 @@ subroutine m_init_refine_adaptive(pst)
 
   if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%pic)then
      call m_input_part_zoom(pst)
+     ! Compute minimum particle mass and initial coarse particle level
+     call r_mass_min_part(pst,pst%s%r%levelmin,1,mp_min,2)
+     call r_broadcast_mp_min(pst,mp_min,2)
   endif
 
 end subroutine m_init_refine_adaptive

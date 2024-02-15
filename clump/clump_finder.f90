@@ -45,7 +45,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      if(r%output_clump)write(*,*)'Writing clump properties files'
      if(r%output_clump_field)then
         write(*,*)'Writing clump field files'
-        filename=TRIM(filename)//'clump_field_descriptor.txt'
+        filename=TRIM(filename)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
      endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)
@@ -616,6 +616,7 @@ subroutine collect_patch(s)
      nzero_tot=nzero_all
 #endif
      if(c%ntest_tot>0.and.r%verbose.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
+!     if(c%ntest_tot>0.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
   end do
   
   end associate

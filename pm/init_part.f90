@@ -48,11 +48,14 @@ subroutine init_part(r,g,p)
   allocate(p%mp    (r%npartmax))
   allocate(p%levelp(r%npartmax))
   allocate(p%idp   (r%npartmax))
-  allocate(p%sortp (r%npartmax))
-  allocate(p%workp (r%npartmax))
+  p%nvaralloc=2*ndim+3
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(p%phip  (r%npartmax))
+  p%nvaralloc=p%nvaralloc+1
 #endif
+  ! ALlocate workspace variables
+  allocate(p%sortp (r%npartmax))
+  allocate(p%workp (r%npartmax))
   ! Allocate pointers to particle levels
   allocate(p%headp(r%levelmin:r%nlevelmax))
   allocate(p%tailp(r%levelmin:r%nlevelmax))
@@ -82,11 +85,14 @@ subroutine init_star(r,g,s)
   allocate(s%tp    (r%nstarmax))
   allocate(s%levelp(r%nstarmax))
   allocate(s%idp   (r%nstarmax))
-  allocate(s%sortp (r%nstarmax))
-  allocate(s%workp (r%nstarmax))
+  s%nvaralloc=2*ndim+5
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(s%phip  (r%nstarmax))
+  s%nvaralloc=p%nvaralloc+1
 #endif
+  ! Allocate workspace variables
+  allocate(s%sortp (r%nstarmax))
+  allocate(s%workp (r%nstarmax))
   ! Allocate pointers to particle levels
   allocate(s%headp(r%levelmin:r%nlevelmax))
   allocate(s%tailp(r%levelmin:r%nlevelmax))

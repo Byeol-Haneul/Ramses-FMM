@@ -1,6 +1,6 @@
 This namelist contains various input parameters for the sedov2d test.
 Compile using:
->make NDIM=2 MPI=1 UNITS=default CONDINIT=default GRAV=0 HYDRO=1
+make NDIM=2 MPI=1 UNITS=default CONDINIT=default GRAV=0 HYDRO=1
 
 &RUN_PARAMS 
 hydro=.true.
