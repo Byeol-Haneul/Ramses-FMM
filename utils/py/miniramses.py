@@ -1195,3 +1195,40 @@ def rd_clump(nout,**kwargs):
        cat.parent = np.append(cat.parent,parent)
 
    return cat
+
+class GraficFile:
+    """
+    Thid is the empty class for grafic files data
+    """
+
+def rd_grafic(filein):
+
+    with FortranFile(filein, 'r') as f:
+        recl = ["i4", "i4", "i4", "f4", "f4", "f4", "f4", "f4", "f4", "f4", "f4"] 
+        n1, n2, n3, dx, x1, x2, x3, a, omega_m, omega_l, h0 = f.read_record(*recl)
+        n1=int(n1[0])
+        n2=int(n2[0])
+        n3=int(n3[0])
+        print("Reading file "+filein)
+        print("Found array of size=",n1,n2,n3)
+        dat = np.zeros((n1,n2,n3))
+        for k in range(n3):
+            plane = f.read_reals('f4')
+            dat[:,:,k] = plane.reshape((n1,n2))
+
+    out = GraficFile()
+    out.n1=n1
+    out.n2=n2
+    out.n3=n3
+    out.dx=dx[0]
+    out.x1=x1[0]
+    out.x2=x2[0]
+    out.x3=x3[0]
+    out.omega_m=omega_m[0]
+    out.omega_l=omega_l[0]
+    out.h0=h0[0]
+    out.data=np.array(dat)
+
+    return out
+
+    
