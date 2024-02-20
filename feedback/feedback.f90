@@ -496,24 +496,25 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ckey_nbor(1:ndim)=int(xnei(1:ndim))
         hash_nbor(0)=ilevel+1
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
         ! If missing, get neighboring cell at ilevel-1
         if(.not.associated(gridn))then
-           call unlock_cache(s,gridn)
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
 
         ! If refined, get neighboring cell at ilevel+1
         else if (gridn%refined(icelln))then
-           call unlock_cache(s,gridn)
            ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
            hash_nbor(0)=ilevel+2
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
         endif
+
+        ! Lock grid in cache
+        call lock_grid(s,gridn)
 
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln

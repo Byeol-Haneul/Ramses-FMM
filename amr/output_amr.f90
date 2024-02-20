@@ -35,9 +35,9 @@ subroutine m_dump_all(pst,write_bkp_file)
   if(r%verbose)then
      write(*,*)'Entering dump_all'
      if(write_bkp_file)then
-        write(*,*)'writing restart files'
+        write(*,*)'Writing restart files'
      else
-        write(*,*)'writing output files'
+        write(*,*)'Writing output files'
      endif
   endif
   ! For 1D serial runs, output data to screen

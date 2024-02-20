@@ -179,7 +179,6 @@ subroutine collect_test(s)
   integer::info
   integer,dimension(1:s%g%ncpu)::ntest_cpu_all
 #endif
-
   integer::ind,igrid,idim,icpu,ngrid,nleaf,now_level,next_level
   integer::istep,ipart,jpart,ip,itest
   integer::ilevel,i,levelmin_part
@@ -412,30 +411,31 @@ subroutine collect_peak(s)
            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
            if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
         end do
-        
+
         ! Get neighboring cell at ilevel
         ckey_nbor(1:ndim)=int(xnei(1:ndim))
         hash_nbor(0)=ilevel+1
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
         
         ! If missing, get neighboring cell at ilevel-1
         if(.not.associated(gridn))then
-           call unlock_cache(s,gridn)
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
            
            ! If refined, get neighboring cell at ilevel+1
         else if (gridn%refined(icelln))then
-           call unlock_cache(s,gridn)
            ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
            hash_nbor(0)=ilevel+2
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
         endif
-        
+
+        ! Lock grid in cache
+        call lock_cache(s,gridn)
+
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln
         level_nbor(j) = hash_nbor(0)
@@ -505,7 +505,7 @@ subroutine collect_peak(s)
   ! Compute the max size of the peak-based arrays
   c%npeak_max=MAX(4*MAXVAL(npeak_cpu),1000)
   
-end associate
+  end associate
 
 end subroutine collect_peak
 !################################################################
@@ -724,30 +724,31 @@ subroutine collect_saddle(s)
            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
            if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
         end do
-        
+
         ! Get neighboring cell at ilevel
         ckey_nbor(1:ndim)=int(xnei(1:ndim))
         hash_nbor(0)=ilevel+1
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
         
         ! If missing, get neighboring cell at ilevel-1
         if(.not.associated(gridn))then
-           call unlock_cache(s,gridn)
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
            
            ! If refined, get neighboring cell at ilevel+1
         else if (gridn%refined(icelln))then
-           call unlock_cache(s,gridn)
            ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
            hash_nbor(0)=ilevel+2
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
         endif
-        
+
+        ! Lock grid in cache
+        call lock_cache(s,gridn)
+
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln
         
