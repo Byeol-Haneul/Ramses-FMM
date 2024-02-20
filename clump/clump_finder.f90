@@ -23,7 +23,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
 
 #if NDIM==3 && defined(GRAV)
 
-  associate(r=>pst%s%r,g=>pst%s%g)
+  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl)
 
   write(*,*)'Entering clump finder'
   ttstart = mdl_wtime(mdl)
