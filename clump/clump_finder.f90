@@ -4,6 +4,7 @@ contains
 subroutine m_clump_finder(pst,create_output,keep_alive)
   use output_clump_module
   use amr_parameters, only: flen
+  use mdl_module, only: mdl_wtime
   use ramses_commons, only: pst_t
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
@@ -17,6 +18,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   character(LEN=5)::nchar
   character(LEN=flen)::filename,filedir
   integer,dimension(1:flen/4)::input_array
+  double precision::ttend, ttstart=0.0
   integer::dummy(1)
 
 #if NDIM==3 && defined(GRAV)
@@ -24,7 +26,8 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   associate(r=>pst%s%r,g=>pst%s%g)
 
   write(*,*)'Entering clump finder'
-  
+  ttstart = mdl_wtime(mdl)
+
   !-----------------------------------------------------------------------
   ! Compute rho from gas density and/or dark matter and/or star particles
   !-----------------------------------------------------------------------
@@ -57,6 +60,9 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   if(.not. keep_alive)then
      call r_deallocate_clump(pst,r%levelmin,1)
   endif
+
+  ttend = mdl_wtime(mdl)
+  print '(A,F14.7)',' Time elapsed in finding clumps:',ttend-ttstart
 
   end associate
 
