@@ -514,7 +514,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         endif
 
         ! Lock grid in cache
-        call lock_grid(s,gridn)
+        call lock_cache(s,gridn)
 
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln
