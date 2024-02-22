@@ -16,6 +16,8 @@ module mdl_parameters
      enumerator::MDL_INPUT_STAR_ASCII
      enumerator::MDL_INPUT_PART_RESTART
      enumerator::MDL_INPUT_STAR_RESTART
+     enumerator::MDL_INPUT_PART_GADGET
+     enumerator::MDL_DEALLOCATE_GAS
      enumerator::MDL_NPART_MAX
      enumerator::MDL_INIT_FLAG
      enumerator::MDL_USER_FLAG
@@ -36,6 +38,7 @@ module mdl_parameters
      enumerator::MDL_SMOOTH_FINE
      enumerator::MDL_INPUT_HYDRO_CONDINIT
      enumerator::MDL_INPUT_HYDRO_GRAFIC
+     enumerator::MDL_INPUT_HYDRO_GADGET
      enumerator::MDL_INPUT_REFMAP_GRAFIC
      enumerator::MDL_UPLOAD_FINE
      enumerator::MDL_MULTIPOLE_LEAF_CELLS

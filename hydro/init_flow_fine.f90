@@ -6,6 +6,7 @@ subroutine m_init_flow_fine(pst,ilevel)
   use ramses_commons, only: pst_t
   use input_hydro_condinit_module, only: r_input_hydro_condinit
   use input_hydro_grafic_module, only: r_input_hydro_grafic
+  use input_hydro_gadget_module, only: r_input_hydro_gadget
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -36,6 +37,10 @@ subroutine m_init_flow_fine(pst,ilevel)
         ! Read external grafic files 
         if(s%r%verbose)write(*,*)'Reading initial conditions from grafic file'
         call r_input_hydro_grafic(pst,ilevel,1)
+     else if (s%r%filetype=='gadget')then
+        ! Read external gadget files
+        if(s%r%verbose)write(*,*)'Reading initial conditions from gadget file'
+        call r_input_hydro_gadget(pst,ilevel,1)
      else
         ! Use internal-defined or user-defined functions
         if(s%r%verbose)write(*,*)'Computing initial conditions from analytical model'

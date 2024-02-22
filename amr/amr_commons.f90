@@ -239,6 +239,25 @@ module amr_commons
      real(dp)::saddle_threshold=-1
      real(dp)::mass_threshold=0
 
+     ! Gadget initial conditions parameters
+     character(len=flen)::ic_file, ic_format
+     integer,dimension(1:6)::ic_skip_type=-1
+     character(len=4)::ic_head_name = 'HEAD'
+     character(len=4)::ic_pos_name = 'POS '
+     character(len=4)::ic_vel_name = 'VEL '
+     character(len=4)::ic_id_name = 'ID  '
+     character(len=4)::ic_mass_name = 'MASS'
+     character(len=4)::ic_u_name = 'U   '
+     character(len=4)::ic_metal_name = 'Z   '
+     character(len=4)::ic_age_name = 'AGE '
+     real(dp)::gadget_scale_l = 3.085677581282D21 ! Gadget units in cgs
+     real(dp)::gadget_scale_v = 1.0D5
+     real(dp)::gadget_scale_m = 1.9891D43
+     real(dp)::gadget_scale_t = 1.0D6*365*24*3600
+     real(dp)::IG_rho = 1.0D-6
+     real(dp)::IG_T2 = 1.0D7
+     real(dp)::IG_metal = 0.01
+
   end type run_t
   
   type global_t

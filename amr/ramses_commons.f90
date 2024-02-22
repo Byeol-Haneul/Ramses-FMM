@@ -12,6 +12,7 @@ module ramses_commons
      type(mesh_t)::m
      type(part_t)::p
      type(part_t)::s
+     type(part_t)::gas
      type(clump_t)::c
      type(cooling_t)::cool
      type(mdl_t),pointer::mdl => null()

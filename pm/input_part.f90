@@ -11,6 +11,7 @@ subroutine m_input_part(pst)
   use input_part_grafic_module, only: m_input_part_grafic
   use input_part_ascii_module, only: m_input_part_ascii
   use input_part_restart_module, only: m_input_part_restart
+  use input_part_gadget_module, only: m_input_part_gadget
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
@@ -28,8 +29,7 @@ subroutine m_input_part(pst)
   case('ascii')
      call m_input_part_ascii(pst)
   case('gadget')
-     write(*,*)'Gadget format not supported yet'
-     call mdl_abort(pst%s%mdl)
+     call m_input_part_gadget(pst)
   case('restart')
      call m_input_part_restart(pst)
   case DEFAULT
