@@ -109,11 +109,12 @@ function worker_init(mdl) result(pst)
   use params_module, only: r_broadcast_params,r_broadcast_global
   use init_time_module, only: r_init_time
   use init_hydro_module, only: r_init_hydro
-  use init_part_module, only: r_init_part
+  use init_part_module, only: r_init_part, r_deallocate_gas
   use input_part_grafic_module, only: r_input_part_grafic
   use input_part_zoom_module, only: r_input_part_zoom
   use input_part_ascii_module, only: r_input_part_ascii, r_input_star_ascii
   use input_part_restart_module, only: r_input_part_restart, r_input_star_restart
+  use input_part_gadget_module, only: r_input_part_gadget
   use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
   use update_time_module, only: r_broadcast_aexp
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,&
@@ -124,6 +125,7 @@ function worker_init(mdl) result(pst)
   use smooth_module, only: r_smooth_fine
   use input_hydro_condinit_module, only: r_input_hydro_condinit
   use input_hydro_grafic_module, only: r_input_hydro_grafic, r_input_refmap_grafic
+  use input_hydro_gadget_module, only: r_input_hydro_gadget
   use upload_module, only: r_upload_fine
   use move_fine_module, only: r_kick_drift_part
   use output_amr_module, only: r_output_amr
@@ -200,6 +202,8 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INPUT_STAR_ASCII,       pst,C_FUNLOC(r_input_star_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_star_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RESTART,     pst,C_FUNLOC(r_input_part_restart),MDL_MAX_CPU,0,"input_part_restart")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_STAR_RESTART,     pst,C_FUNLOC(r_input_star_restart),MDL_MAX_CPU,2,"input_star_restart")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_GADGET,      pst,C_FUNLOC(r_input_part_gadget),MDL_MAX_CPU,6,"input_part_gadget")
+  call mdl_add_service(pst%s%mdl,MDL_DEALLOCATE_GAS,         pst,C_FUNLOC(r_deallocate_gas),MDL_MAX_CPU,0,"input_part_gadget")
   call mdl_add_service(pst%s%mdl,MDL_NPART_MAX,              pst,C_FUNLOC(r_npart_max),0,1,"npart_max")
   call mdl_add_service(pst%s%mdl,MDL_INIT_FLAG,              pst,C_FUNLOC(r_init_flag),1,1,"init_flag")
   call mdl_add_service(pst%s%mdl,MDL_USER_FLAG,              pst,C_FUNLOC(r_user_flag),1,1,"user_flag")
@@ -220,6 +224,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,   pst,C_FUNLOC(r_input_hydro_condinit),1,0,"input_hydro_condinit")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,     pst,C_FUNLOC(r_input_hydro_grafic),0,0,"input_hydro_grafic")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_REFMAP_GRAFIC,    pst,C_FUNLOC(r_input_refmap_grafic),0,0,"input_refmap_grafic")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_GADGET,     pst,C_FUNLOC(r_input_hydro_gadget),0,0,"input_hydro_gadget")
   call mdl_add_service(pst%s%mdl,MDL_UPLOAD_FINE,            pst,C_FUNLOC(r_upload_fine),1,0,"upload_fine")
   call mdl_add_service(pst%s%mdl,MDL_KICK_DRIFT_PART,        pst,C_FUNLOC(r_kick_drift_part),0,0,"kick_drift_part")
   call mdl_add_service(pst%s%mdl,MDL_MASS_MIN_PART,          pst,C_FUNLOC(r_mass_min_part),0,2,"mass_min_part")

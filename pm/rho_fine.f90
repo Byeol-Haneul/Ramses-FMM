@@ -83,9 +83,11 @@ subroutine m_rho_fine(pst,ilevel)
   if(r%pic)then
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
+           if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
            call r_cic_part(pst,i,1)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
+           if(r%verbose)write(*,'(" Split particles for level ",I2)')i
            call r_split_part(pst,i,1)
         endif
      end do
@@ -1142,7 +1144,7 @@ subroutine split_part(s,p,ilevel)
   end do
 
   end associate
-  
+
 end subroutine split_part
 !##############################################################################
 !##############################################################################

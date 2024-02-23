@@ -47,7 +47,7 @@ subroutine output_poisson(s,filename)
   ! Output grav data in file
   !-----------------------------------
   integer::ilevel,igrid,ilun
-  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim,1:ndim)::f
   real(kind=4),dimension(1:twotondim)::phi
 

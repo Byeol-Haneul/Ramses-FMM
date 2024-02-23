@@ -16,7 +16,8 @@ parser.add_argument("--xcen", help="specify the image center x-coordinate")
 parser.add_argument("--ycen", help="specify the image center y-coordinate")
 parser.add_argument("--zcen", help="specify the image center z-coordinate")
 parser.add_argument("--rad", help="specify the image radius")
-parser.add_argument("--clump", help="specify the image radius")
+parser.add_argument("--clump", help="specify if clumps are overplotted")
+parser.add_argument("--dir", help="specify the projection axis")
 args = parser.parse_args()
 # path the the file
 path = args.path
@@ -28,8 +29,12 @@ xcenter = args.xcen
 ycenter = args.ycen
 zcenter = args.zcen
 clump = args.clump
+axis = args.dir
+
 if clump==None:
     clump=False
+if axis==None:
+    axis="z"
 if xcenter==None:
     xcenter=None
 else:
@@ -69,8 +74,15 @@ nout = args.nout
 print("Reading output number ",nout)
 print(path)
 
+if axis=="x":
+    ii=2; jj=3
+if axis=="y":
+    ii=1; jj=3
+if axis=="z":
+    ii=1; jj=2
+
 c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
-ram.visu(c.x[0],c.x[1],c.dx,c.u[ivar],sort=c.u[isort],log=True,vmin=vmin)
+ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=True,vmin=vmin)
 
 if clump:
     h=ram.rd_clump(nout)
@@ -84,8 +96,13 @@ if clump:
     else:
         xx = h.x
         yy = h.y
-        
-    plt.plot(xx,yy,'r.')
+        zz = h.z
+    if axis=="x":
+        plt.plot(xx,zz,'r.')
+    if axis=="y":
+        plt.plot(yy,zz,'r.')
+    if axis=="z":
+        plt.plot(xx,yy,'r.')
 
 if args.out:
     plt.savefig(args.out)

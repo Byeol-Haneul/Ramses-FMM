@@ -35,9 +35,9 @@ subroutine m_dump_all(pst,write_bkp_file)
   if(r%verbose)then
      write(*,*)'Entering dump_all'
      if(write_bkp_file)then
-        write(*,*)'writing restart files'
+        write(*,*)'Writing restart files'
      else
-        write(*,*)'writing output files'
+        write(*,*)'Writing output files'
      endif
   endif
   ! For 1D serial runs, output data to screen
@@ -371,7 +371,11 @@ recursive subroutine r_output_amr(pst,input_array,input_size,output_array,output
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
-     call output_amr(pst%s,filename)
+     if(index(filename,'output')==0)then
+        call backup_amr(pst%s%r,pst%s%g,pst%s%m,pst%s%mdl,filename)
+     else
+        call output_amr(pst%s,filename)
+     endif
   endif
 
 end subroutine r_output_amr
@@ -387,10 +391,10 @@ subroutine output_amr(s,filename)
   type(ramses_t)::s
   character(LEN=flen)::filename
   !-----------------------------------
-  ! Output amr grid in file
+  ! Output amr grid to file
   !-----------------------------------  
   integer::ilun,ilevel,igrid
-  integer,dimension(s%r%levelmin:s%r%nlevelmax)::nskip
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -409,6 +413,52 @@ subroutine output_amr(s,filename)
   end associate
 
 end subroutine output_amr
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine backup_amr(r,g,m,mdl,filename)
+  use amr_parameters, only: ndim,sp,dp,flen
+  use amr_commons, only: run_t,global_t,mesh_t
+  use mdl_module
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(mdl_t)::mdl
+  character(LEN=flen)::filename
+  !-----------------------------------
+  ! Output amr grid to restart file
+  !-----------------------------------
+  integer::ilun,ierr,ilevel,igrid
+  character(LEN=flen)::fileloc
+  character(LEN=5)::nchar
+  logical::file_exist
+
+  ilun=10+mdl_core(mdl)
+  call title(g%myid,nchar)
+  fileloc=TRIM(filename)//TRIM(nchar)
+  inquire(file=fileloc, exist=file_exist)
+  if (file_exist) then
+     open(unit=ilun,file=fileloc,iostat=ierr)
+     close(ilun,status="delete")
+  end if
+  open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
+  write(ilun)ndim
+  write(ilun)r%levelmin
+  write(ilun)r%nlevelmax
+  do ilevel=r%levelmin,r%nlevelmax
+     write(ilun)m%noct(ilevel)
+  end do
+  do ilevel=r%levelmin,r%nlevelmax
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        write(ilun)m%grid(igrid)%ckey
+        write(ilun)m%grid(igrid)%refined
+     end do
+  end do
+  close(ilun)
+
+end subroutine backup_amr
 !#########################################################################
 !#########################################################################
 !#########################################################################

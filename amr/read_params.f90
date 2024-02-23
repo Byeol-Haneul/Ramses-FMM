@@ -262,7 +262,7 @@ subroutine m_read_params(pst)
   real(dp)::yield_SNII=0.1
   logical::thermal_feedback=.false.
   logical::mechanical_feedback=.false.
-  
+
   ! Clump finder parameters
   logical::clump_finder=.false.
   logical::clump_info=.false.
@@ -272,7 +272,25 @@ subroutine m_read_params(pst)
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
   real(dp)::mass_threshold=0
-  
+
+  ! Gadget initial conditions parameters
+  character(len=flen)::ic_file, ic_format
+  integer,dimension(1:6)::ic_skip_type=-1
+  character(len=4)::ic_head_name = 'HEAD'
+  character(len=4)::ic_pos_name = 'POS '
+  character(len=4)::ic_vel_name = 'VEL '
+  character(len=4)::ic_id_name = 'ID  '
+  character(len=4)::ic_mass_name = 'MASS'
+  character(len=4)::ic_u_name = 'U   '
+  character(len=4)::ic_metal_name = 'Z   '
+  character(len=4)::ic_age_name = 'AGE '
+  real(dp)::gadget_scale_l = 3.085677581282D21 ! Gadget units in cgs
+  real(dp)::gadget_scale_v = 1.0D5
+  real(dp)::gadget_scale_m = 1.9891D43
+  real(dp)::gadget_scale_t = 1.0D6*365*24*3600
+  real(dp)::IG_rho = 1.0D-6
+  real(dp)::IG_T2 = 1.0D7
+  real(dp)::IG_metal = 0.01
 
   !--------------------------------------------------
   ! Namelist definitions
@@ -347,7 +365,14 @@ subroutine m_read_params(pst)
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
-  namelist/clump_params/clump_info,output_clump,output_clump_field,relevance_threshold,density_threshold,saddle_threshold,mass_threshold
+  namelist/clump_params/clump_info,output_clump,output_clump_field &
+       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold
+  ! Gadget initial conditions parameters
+  namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
+       & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
+       & ,ic_u_name,ic_metal_name,ic_age_name &
+       & ,gadget_scale_l, gadget_scale_v, gadget_scale_m ,gadget_scale_t &
+       & ,ic_skip_type
 
   associate(s=>pst%s)
 
@@ -535,6 +560,9 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=clump_params,END=110)
 110 continue
+  rewind(1)
+  read(1,NML=gadget_params,END=111)
+111 continue
   close(1)
 
   !-----------------
@@ -862,11 +890,30 @@ subroutine m_read_params(pst)
   s%r%saddle_threshold=saddle_threshold
   s%r%mass_threshold=mass_threshold
 
+  s%r%ic_file=ic_file
+  s%r%ic_format=ic_format
+  s%r%IG_rho=IG_rho
+  s%r%IG_T2=IG_T2
+  s%r%IG_metal=IG_metal
+  s%r%ic_head_name=ic_head_name
+  s%r%ic_pos_name=ic_pos_name
+  s%r%ic_vel_name=ic_vel_name
+  s%r%ic_id_name=ic_id_name
+  s%r%ic_mass_name=ic_mass_name
+  s%r%ic_u_name=ic_u_name
+  s%r%ic_metal_name=ic_metal_name
+  s%r%ic_age_name=ic_age_name
+  s%r%gadget_scale_l=gadget_scale_l
+  s%r%gadget_scale_v=gadget_scale_v
+  s%r%gadget_scale_m=gadget_scale_m
+  s%r%gadget_scale_t=gadget_scale_t
+  s%r%ic_skip_type=ic_skip_type
+
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)
 
   end associate
-  
+
 end subroutine m_read_params
 !#########################################################################
 !#########################################################################

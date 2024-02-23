@@ -11,6 +11,7 @@ subroutine m_init_refine_adaptive(pst)
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
+  use init_part_module, only: r_deallocate_gas
   use input_part_zoom_module, only: m_input_part_zoom
   use input_part_module, only: r_mass_min_part, r_broadcast_mp_min
   use input_hydro_grafic_module, only: r_input_refmap_grafic
@@ -50,6 +51,11 @@ subroutine m_init_refine_adaptive(pst)
      end do
 
   end do
+
+  if(pst%s%r%filetype=='gadget'.and.pst%s%r%hydro)then
+     ! Deallocate gas particles after gadget IC completed
+     call r_deallocate_gas(pst)
+  endif
 
   if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%pic)then
      call m_input_part_zoom(pst)

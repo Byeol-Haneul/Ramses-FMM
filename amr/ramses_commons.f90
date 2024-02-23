@@ -12,6 +12,7 @@ module ramses_commons
      type(mesh_t)::m
      type(part_t)::p
      type(part_t)::s
+     type(part_t)::gas
      type(clump_t)::c
      type(cooling_t)::cool
      type(mdl_t),pointer::mdl => null()
@@ -41,7 +42,7 @@ subroutine open_file(s,filename,nskip,ilun)
 #endif
   type(ramses_t)::s
   character(len=flen),intent(in)::filename
-  integer,dimension(s%r%levelmin:s%r%nlevelmax),intent(out)::nskip
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax),intent(out)::nskip
   integer,intent(out)::ilun
 #ifndef WITHOUTMPI
   integer::info,reqsend,reqrecv,tag1=100,tag2=200
@@ -50,8 +51,9 @@ subroutine open_file(s,filename,nskip,ilun)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   integer,dimension(1:s%r%nfile+1)::istart
-  integer::i,ifile,ncpufile,nremain,ilevel,ierr,iskip=0
-  integer,dimension(s%r%levelmin:s%r%nlevelmax)::noct
+  integer::i,ifile,ncpufile,nremain,ilevel,ierr
+  integer(kind=8)::iskip=0
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::noct
   logical::file_exist
   
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -79,17 +81,17 @@ subroutine open_file(s,filename,nskip,ilun)
   if(g%myid.EQ.istart(ifile+1)-1)then
      noct=m%noct
      if(g%myid.GT.istart(ifile))then
-     call MPI_ISEND(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
+     call MPI_ISEND(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
      endif
   elseif(g%myid.GT.istart(ifile))then
-     call MPI_IRECV(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
+     call MPI_IRECV(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
      noct=noct+m%noct
-     call MPI_ISEND(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
+     call MPI_ISEND(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
   elseif(g%myid.EQ.istart(ifile))then
-     call MPI_IRECV(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
+     call MPI_IRECV(noct,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
      noct=noct+m%noct
   else
@@ -127,7 +129,12 @@ subroutine open_file(s,filename,nskip,ilun)
         write(ilun)r%levelmin
         write(ilun)r%nlevelmax
         do ilevel=r%levelmin,r%nlevelmax
-           write(ilun)noct(ilevel)
+           if(noct(ilevel)>2147483647_8)then
+              write(*,*)'Too many octs at level=',ilevel
+              write(*,*)'Increase nfile=',r%nfile
+              stop
+           endif
+           write(ilun)int(noct(ilevel),kind=4)
         end do
      endif
 
@@ -147,7 +154,7 @@ subroutine open_file(s,filename,nskip,ilun)
   elseif(g%myid.GT.istart(ifile))then
 
 #ifndef WITHOUTMPI
-     call MPI_IRECV(nskip,r%nlevelmax-r%levelmin+1,MPI_INTEGER,g%myid-2,tag2,MPI_COMM_WORLD,reqrecv,info)
+     call MPI_IRECV(nskip,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid-2,tag2,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
 #endif
      ilun=10+istart(ifile)
@@ -184,7 +191,7 @@ subroutine close_file(s,filename,nskip,ilun)
 #endif
   type(ramses_t)::s
   character(len=flen),intent(in)::filename
-  integer,dimension(s%r%levelmin:s%r%nlevelmax),intent(inout)::nskip
+  integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax),intent(inout)::nskip
   integer,intent(in)::ilun
 #ifndef WITHOUTMPI
   integer::info,reqsend,tag2=200
@@ -192,7 +199,8 @@ subroutine close_file(s,filename,nskip,ilun)
 #endif
   integer,dimension(1:s%r%nfile+1)::istart
   integer::ncpufile,nremain
-  integer::i,iskip,ifile,ilevel
+  integer::i,ifile,ilevel
+  integer(kind=8)::iskip
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -229,7 +237,7 @@ subroutine close_file(s,filename,nskip,ilun)
      end do
 
 #ifndef WITHOUTMPI
-     call MPI_ISEND(nskip,r%nlevelmax-r%levelmin+1,MPI_INTEGER,g%myid,tag2,MPI_COMM_WORLD,reqsend,info)
+     call MPI_ISEND(nskip,r%nlevelmax-r%levelmin+1,MPI_INTEGER8,g%myid,tag2,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
 #endif
   end if
@@ -250,7 +258,7 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   type(ramses_t)::s
   type(part_t)::p
   character(len=flen),intent(in)::filename
-  integer, dimension(1:p%nvaralloc+1),intent(out)::nskip
+  integer(kind=8), dimension(1:p%nvaralloc+1),intent(out)::nskip
   integer, intent(out)::ilun
 #ifndef WITHOUTMPI
   integer::info,reqsend,reqrecv,tag1=100,tag2=200
@@ -260,7 +268,7 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   character(LEN=5)::nchar
   integer,dimension(1:s%r%nfile+1)::istart
   integer::i,ivar,ifile,ncpufile,nremain,ilevel,ierr
-  integer::npart
+  integer(kind=8)::npart
   logical::file_exist
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -288,17 +296,17 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   if(g%myid.EQ.istart(ifile+1)-1)then
      npart=p%npart
      if(g%myid.GT.istart(ifile))then
-     call MPI_ISEND(npart,1,MPI_INTEGER,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
+     call MPI_ISEND(npart,1,MPI_INTEGER8,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
      endif
   elseif(g%myid.GT.istart(ifile))then
-     call MPI_IRECV(npart,1,MPI_INTEGER,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
+     call MPI_IRECV(npart,1,MPI_INTEGER8,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
      npart=npart+p%npart
-     call MPI_ISEND(npart,1,MPI_INTEGER,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
+     call MPI_ISEND(npart,1,MPI_INTEGER8,g%myid-2,tag1,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
   elseif(g%myid.EQ.istart(ifile))then
-     call MPI_IRECV(npart,1,MPI_INTEGER,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
+     call MPI_IRECV(npart,1,MPI_INTEGER8,g%myid,tag1,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
      npart=npart+p%npart
   else
@@ -321,7 +329,12 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
      open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
 
      write(ilun)ndim
-     write(ilun)npart
+     if(npart>2147483647_8)then
+        write(*,*)'Too many particles in output_part'
+        write(*,*)'Increase nfile=',r%nfile
+        stop
+     endif
+     write(ilun)int(npart,kind=4)
      nskip(1)=9
 
      ! Positions
@@ -360,7 +373,7 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   elseif(g%myid.GT.istart(ifile))then
 
 #ifndef WITHOUTMPI
-     call MPI_IRECV(nskip,p%nvaralloc+1,MPI_INTEGER,g%myid-2,tag2,MPI_COMM_WORLD,reqrecv,info)
+     call MPI_IRECV(nskip,p%nvaralloc+1,MPI_INTEGER8,g%myid-2,tag2,MPI_COMM_WORLD,reqrecv,info)
      call MPI_WAIT(reqrecv,reqstatus,info)
 #endif
      ilun=10+istart(ifile)
@@ -391,7 +404,7 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
   type(ramses_t)::s
   type(part_t)::p
   character(len=flen),intent(in)::filename
-  integer, dimension(1:p%nvaralloc+1),intent(inout)::nskip
+  integer(kind=8), dimension(1:p%nvaralloc+1),intent(inout)::nskip
   integer, intent(in)::ilun
 #ifndef WITHOUTMPI
   integer::info,reqsend,tag2=200
@@ -460,7 +473,7 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
 #endif
 
 #ifndef WITHOUTMPI
-     call MPI_ISEND(nskip,p%nvaralloc+1,MPI_INTEGER,g%myid,tag2,MPI_COMM_WORLD,reqsend,info)
+     call MPI_ISEND(nskip,p%nvaralloc+1,MPI_INTEGER8,g%myid,tag2,MPI_COMM_WORLD,reqsend,info)
      call MPI_WAIT(reqsend,reqstatus,info)
 #endif
   end if

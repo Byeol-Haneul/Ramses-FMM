@@ -59,7 +59,7 @@ subroutine output_part(s,p,filename)
   ! Output part data to file
   !-----------------------------------
   integer::i,idim,ilun,ivar
-  integer,dimension(1:p%nvaralloc+1)::nskip
+  integer(kind=8),dimension(1:p%nvaralloc+1)::nskip
   real(kind=4),allocatable,dimension(:)::xsp
   integer(i8b),allocatable,dimension(:)::ii8
   integer,allocatable,dimension(:)::ll

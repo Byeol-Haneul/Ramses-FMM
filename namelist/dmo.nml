@@ -14,6 +14,7 @@ nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
 verbose=.false.
+clump_finder=.true.
 /
 
 &OUTPUT_PARAMS
@@ -40,5 +41,14 @@ epsilon=1.d-4
 
 &REFINE_PARAMS
 m_refine=10*8.,
+/
+
+&CLUMP_PARAMS
+density_threshold=80
+relevance_threshold=3
+saddle_threshold=200
+mass_threshold=10
+output_clump=.true.
+output_clump_field=.true.
 /
 
