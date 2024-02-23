@@ -24,7 +24,7 @@ module amr_commons
      integer::ncontrol=1         ! Write control variables
      integer::nstepmax=1000000   ! Maximum number of time steps
      integer,dimension(1:MAXLEVEL)::nsubcycle=2 ! Subcycling at each level
-     integer::nremap=0           ! Load balancing frequency (0: never)
+     integer::nremap=10          ! Load balancing frequency (0: never)
      logical::static  =.false.   ! Static mode activated     
      integer::geom    =1         ! 1: cartesian, 2: cylindrical, 3: spherical
      integer::overload=1         ! MPI domain overloading

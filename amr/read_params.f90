@@ -42,7 +42,7 @@ subroutine m_read_params(pst)
   integer::nrestart=0         ! New run or backup file number
   integer::nstepmax=1000000   ! Maximum number of time steps
   integer::ncontrol=1         ! Write control variables
-  integer::nremap=0           ! Load balancing frequency (0: never)
+  integer::nremap=10          ! Particle load balancing frequency (0: never)
 
   ! Maximum number of allocatable particles
   integer::npartmax=0 
@@ -297,7 +297,7 @@ subroutine m_read_params(pst)
   !--------------------------------------------------
   ! Global run parameter
   namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
-       & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
+       & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap,nbalance &
        & ,static,geom,overload,nsuperoct,clump_finder
   ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &

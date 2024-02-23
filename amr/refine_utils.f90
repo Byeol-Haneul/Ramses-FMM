@@ -67,7 +67,7 @@ subroutine m_refine_fine(pst,ilevel)
 
   ! Balance particles across cpus
   if(mdl_threads(s%mdl)>1.AND.ilevel==s%r%levelmin)then
-     if(s%r%pic.AND.mod(s%g%nstep_coarse,10)==1)then
+     if(s%r%pic.AND.mod(s%g%nstep_coarse,s%r%nremap)==0.AND.s%g%nstep_coarse>0)then
         write(*,*)'Load balancing particle distribution'
         ttstart = mdl_wtime(s%mdl)
         call r_balance_part(pst,ilevel,1,dummy,0)
