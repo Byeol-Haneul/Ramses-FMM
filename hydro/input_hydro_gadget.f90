@@ -210,6 +210,9 @@ subroutine input_hydro_gadget(s,ilevel)
   ! Compute total energy
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
+        if(r%entropy) then
+           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,ndim+2)*(r%gamma-1)/m%grid(igrid)%uold(ind,1)**(r%gamma-1)
+        endif
         ekin=0d0
         do idim=1,ndim
            ekin=ekin+0.5*m%grid(igrid)%uold(ind,idim+1)**2/m%grid(igrid)%uold(ind,1)
