@@ -297,7 +297,7 @@ subroutine m_read_params(pst)
   !--------------------------------------------------
   ! Global run parameter
   namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
-       & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap,nbalance &
+       & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
        & ,static,geom,overload,nsuperoct,clump_finder
   ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
