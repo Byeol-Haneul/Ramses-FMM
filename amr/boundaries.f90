@@ -1,7 +1,7 @@
 module boundaries
 contains
   subroutine get_bound(s,ix,ilevel,ibound)
-    use amr_parameters, only: ndim,nhilbert,twotondim
+    use amr_parameters, only: ndim,twotondim
     use ramses_commons, only: ramses_t
     implicit none
     type(ramses_t)::s

@@ -98,9 +98,9 @@ if clump:
         yy = h.y
         zz = h.z
     if axis=="x":
-        plt.plot(xx,zz,'r.')
-    if axis=="y":
         plt.plot(yy,zz,'r.')
+    if axis=="y":
+        plt.plot(xx,zz,'r.')
     if axis=="z":
         plt.plot(xx,yy,'r.')
 
