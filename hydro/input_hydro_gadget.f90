@@ -60,6 +60,7 @@ subroutine input_hydro_gadget(s,ilevel)
 
   if(m%noct(ilevel)==0)return
 
+#ifdef HYDRO
   !------------------------------------
   ! Reset conservative variables unew
   !------------------------------------
@@ -220,7 +221,7 @@ subroutine input_hydro_gadget(s,ilevel)
         m%grid(igrid)%uold(ind,ndim+2)=m%grid(igrid)%uold(ind,ndim+2)+ekin
      end do
   end do
-
+#endif
   end associate
 
 end subroutine input_hydro_gadget
