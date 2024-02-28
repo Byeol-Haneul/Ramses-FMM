@@ -63,6 +63,7 @@ contains
     ncpu = domain%ncpu
 !    idom = modulo(domain%d2r(idom)-1,ncpu)+1
 !    rank = modulo(domain%d2r(idom)-1,ncpu)+1
+!    rank = get_domain_lin(domain,key)
     rank = get_domain_bis(domain,key)
   end function get_rank
 

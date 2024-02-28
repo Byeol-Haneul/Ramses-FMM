@@ -76,7 +76,7 @@ subroutine m_load_balance(pst,ilevel)
 
         ! Level is empty: use the same domain decomposition as the coarser level
         do icpu=0,g%ncpu
-           bound_key(1:nhilbert,icpu) = refine_key(m%domain(ilev-1)%b(1:nhilbert,icpu),ilev-2)
+           bound_key(1:nhilbert,icpu) = refine_key(m%domain(ilev-1)%b(1:nhilbert,icpu),ilev)
         end do
 
         ! Scatter new domain decomposition to all processors

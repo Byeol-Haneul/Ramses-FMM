@@ -52,6 +52,8 @@ subroutine m_init_refine_restart(pst)
   ! Broadcast global variables to all CPUs.
   call m_broadcast_global(pst)  
   
+  if(r%verbose)write(*,*)'Broadcast completed'
+
   ! Compute the proper level interval
   levelmin_max=MAX(r%levelmin,levelmin_file)
   nlevelmax_min=MIN(r%nlevelmax,nlevelmax_file)

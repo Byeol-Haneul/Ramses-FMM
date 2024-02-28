@@ -157,7 +157,7 @@ subroutine init_amr(mdl,r,g,m)
   ! Set max. Cartesian and Hilbert keys for fine levels
   do ilevel=r%levelmin+1,r%nlevelmax+1
      m%ckey_max(ilevel)=2**(ilevel-1)
-     m%hkey_max(1:nhilbert,ilevel)=refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel-2)
+     m%hkey_max(1:nhilbert,ilevel)=refine_key(m%hkey_max(1:nhilbert,ilevel-1),ilevel)
   end do
 
   ! Bounding box for domain boundaries
@@ -297,7 +297,7 @@ subroutine init_amr(mdl,r,g,m)
   ! Set bounds for Hilbert keys for fine levels
   do ilevel=r%levelmin+1,r%nlevelmax+1
      do icpu=0,g%ncpu
-        m%domain(ilevel)%b(1:nhilbert,icpu) = refine_key(m%domain(ilevel-1)%b(1:nhilbert,icpu),ilevel-2)
+        m%domain(ilevel)%b(1:nhilbert,icpu) = refine_key(m%domain(ilevel-1)%b(1:nhilbert,icpu),ilevel)
      end do
   end do
 
