@@ -159,6 +159,13 @@ subroutine clump_finder(s)
   if(s%r%saddle_threshold>0)then
      call merge_clumps(s,'saddleden')
   endif
+  !----------------------------------------------------------------------
+  ! Remove all peaks that are below the relevance threshold
+  ! or the mass threshold in the flag1 global peak ID field.
+  !----------------------------------------------------------------------
+  if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
+     call trim_clumps(s)
+  endif
 
 #endif
 end subroutine clump_finder
@@ -622,7 +629,7 @@ subroutine collect_patch(s)
      nzero_tot=nzero_all
 #endif
      if(c%ntest_tot>0.and.r%verbose.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
-!     if(c%ntest_tot>0.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
+!     if(c%ntest_tot>0.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot,"nzero=",nzero_tot
   end do
   
   end associate
