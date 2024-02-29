@@ -118,7 +118,7 @@ subroutine source_hydro_fine(s,ilevel)
                  if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_min(idim,ilevel+1)
               endif
            enddo
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.)
            if(associated(gridp))then
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
@@ -126,11 +126,13 @@ subroutine source_hydro_fine(s,ilevel)
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
-              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.)
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
               dxn(i_nbor)=1.5*dx
            endif
+           ! Lock grid in cache
+           call lock_cache(s,gridn(i_nbor)%p)
         end do
 
         ! Loop over dimensions
