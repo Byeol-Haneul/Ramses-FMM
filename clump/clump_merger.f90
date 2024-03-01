@@ -264,33 +264,28 @@ subroutine build_peak_communicator(s)
 
 #ifndef WITHOUTMPI
   integer::info,ipeak,icpu
-  integer,dimension(1:s%g%ncpu,1:s%g%ncpu)::npeak_alltoall
-  integer,dimension(1:s%g%ncpu,1:s%g%ncpu)::npeak_alltoall_tot
   integer,dimension(1:s%g%ncpu)::ipeak_alltoall
 
   associate(g=>s%g,c=>s%c)
 
-  npeak_alltoall=0
-  do ipeak=c%npeak+1,c%hfree-1
-     call get_local_peak_cpu(s,ipeak,icpu)
-     npeak_alltoall(g%myid,icpu)=npeak_alltoall(g%myid,icpu)+1
-  end do
-  call MPI_ALLREDUCE(npeak_alltoall,npeak_alltoall_tot,g%ncpu*g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
-  npeak_alltoall=npeak_alltoall_tot
   if(.not. allocated(c%peak_send_cnt))then
      allocate(c%peak_send_cnt(1:g%ncpu),c%peak_send_oft(1:g%ncpu))
      allocate(c%peak_recv_cnt(1:g%ncpu),c%peak_recv_oft(1:g%ncpu))
   endif
-  c%peak_send_cnt=0; c%peak_send_oft=0; c%peak_send_tot=0
-  c%peak_recv_cnt=0; c%peak_recv_oft=0; c%peak_recv_tot=0
+  c%peak_send_cnt=0
+  do ipeak=c%npeak+1,c%hfree-1
+     call get_local_peak_cpu(s,ipeak,icpu)
+     c%peak_send_cnt(icpu)=c%peak_send_cnt(icpu)+1
+  end do
+  call MPI_ALLTOALL(c%peak_send_cnt,1,MPI_INTEGER,c%peak_recv_cnt,1,MPI_INTEGER,MPI_COMM_WORLD,info)
+  c%peak_send_oft=0; c%peak_send_tot=0
+  c%peak_recv_oft=0; c%peak_recv_tot=0
   do icpu=1,g%ncpu
-     c%peak_send_cnt(icpu)=npeak_alltoall(g%myid,icpu)
-     c%peak_recv_cnt(icpu)=npeak_alltoall(icpu,g%myid)
      c%peak_send_tot=c%peak_send_tot+c%peak_send_cnt(icpu)
      c%peak_recv_tot=c%peak_recv_tot+c%peak_recv_cnt(icpu)
      if(icpu<g%ncpu)then
-        c%peak_send_oft(icpu+1)=c%peak_send_oft(icpu)+npeak_alltoall(g%myid,icpu)
-        c%peak_recv_oft(icpu+1)=c%peak_recv_oft(icpu)+npeak_alltoall(icpu,g%myid)
+        c%peak_send_oft(icpu+1)=c%peak_send_oft(icpu)+c%peak_send_cnt(icpu)
+        c%peak_recv_oft(icpu+1)=c%peak_recv_oft(icpu)+c%peak_recv_cnt(icpu)
      endif
   end do
   if(allocated(c%peak_send_buf))then
@@ -306,7 +301,7 @@ subroutine build_peak_communicator(s)
   end do
   call MPI_ALLTOALLV(c%peak_send_buf,c%peak_send_cnt,c%peak_send_oft,MPI_INTEGER, &
        &             c%peak_recv_buf,c%peak_recv_cnt,c%peak_recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
-  
+
   end associate
 
 #endif
