@@ -46,7 +46,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      filename='output_'//TRIM(nchar)//'/'
      input_array=transfer(filename,input_array)
      if(r%output_clump)write(*,*)'Writing clump properties files'
-     if(r%output_clump_field)then
+     if(r%output_peak)then
         write(*,*)'Writing clump field files'
         filename=TRIM(filename)//'peak_header.txt'
         call file_descriptor_clump(r,filename)

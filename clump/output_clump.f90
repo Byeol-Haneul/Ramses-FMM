@@ -28,7 +28,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
     if(pst%s%r%output_clump)then
        call output_clump_properties(pst%s,filename)
     endif
-    if(pst%s%r%output_clump_field)then
+    if(pst%s%r%output_peak)then
        fileloc=TRIM(filename)//'peak.'
        call output_clump_field(pst%s,fileloc)
     endif
