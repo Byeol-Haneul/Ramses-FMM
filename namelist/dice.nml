@@ -1,0 +1,92 @@
+This namelist performs an isolated disk simulation with dark matter and gas.
+Gas cooling and star formation are included.
+You need a GADGET file for the initial conditions. You can create one
+using the DICE code (https://bitbucket.org/vperret/dice).
+To compile the code with MPI, type in bin/ the command line:
+make NDIM=3 MPI=1 UNITS=default CONDINIT=default HYDRO=1 GRAV=1 NVAR=7
+
+&RUN_PARAMS
+cosmo=.false.
+pic=.true.
+poisson=.true.
+hydro=.true.
+nrestart=0
+nsubcycle=1,1,2
+ncontrol=1
+verbose=.false.
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.05
+tend=1.0
+/
+
+&INIT_PARAMS
+filetype='gadget'
+initfile(1)='.'
+/
+
+&AMR_PARAMS
+levelmin=7
+levelmax=14
+ngridmax=2000000
+npartmax=4000000
+nexpand=1,
+boxlen=320.
+/
+
+&POISSON_PARAMS
+epsilon=1.d-4
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.8
+slope_type=1
+dual_energy=0.2
+entropy=.true.
+scheme='muscl'
+riemann='hllc'
+/
+
+&COOLING_PARAMS
+cooling=.true.
+metal=.true.
+haardt_madau=.true.
+self_shielding=.true.
+z_ave=1.0
+z_reion=10
+/
+
+&STAR_PARAMS
+star=.true.
+nstarmax=2000000
+n_star=10.
+eps_star=0.1
+m_star=1
+/
+
+&REFINE_PARAMS
+mass_sph=1e-6
+m_refine=10*8.
+interpol_var=1
+interpol_type=0
+/
+
+&UNITS_PARAMS
+units_density = 0.677025430198932E-22 ! 1e9 Msol/kpc^3
+units_time    = 0.470430312423675E+15 ! G=1
+units_length  = 0.308567758128200E+22 ! kpc
+/
+
+&GADGET_PARAMS
+ic_file='agora.g2'    ! Name of the initial conditions file
+ic_format='Gadget2'   ! Format of the initial conditions. 'Gadget1' or 'Gadget2'
+IG_rho=1.0D-6         ! Intergalactic gas density
+IG_T2=1.0D7           ! Intergalactic gas temperature
+IG_metal=0.0          ! Intergalactic gas metallicity
+gadget_scale_v = 1.0D5
+gadget_scale_m = 1.9891D43
+gadget_scale_l = 3.085677581282D21
+/
+
