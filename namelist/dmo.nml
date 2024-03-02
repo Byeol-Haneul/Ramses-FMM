@@ -49,6 +49,6 @@ relevance_threshold=3
 saddle_threshold=200
 mass_threshold=10
 output_clump=.true.
-output_clump_field=.true.
+output_peak=.true.
 /
 
