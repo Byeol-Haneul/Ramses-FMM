@@ -469,12 +469,17 @@ contains
     character(len=4)   :: opt
     character(len=128) :: arg
     LOGICAL       :: bad, ok
+    real(kind=8)  :: xcen=0.5,ycen=0.5,zcen=0.5,rad=0
     
     n = iargc()
     if (n < 4) then
        print *, 'usage: amr2map   -inp  input_dir'
        print *, '                 -out  output_file'
        print *, '                 [-dir axis] '
+       print *, '                 [-xce xcen] '
+       print *, '                 [-yce ycen] '
+       print *, '                 [-zce zcen] '
+       print *, '                 [-rad rad] '
        print *, '                 [-xmi xmin] '
        print *, '                 [-xma xmax] '
        print *, '                 [-ymi ymin] '
@@ -516,6 +521,14 @@ contains
           outfich = trim(arg)
        case ('-dir')
           proj = trim(arg) 
+       case ('-xce')
+          read (arg,*) xcen
+       case ('-yce')
+          read (arg,*) ycen
+       case ('-zce')
+          read (arg,*) zcen
+       case ('-rad')
+          read (arg,*) rad
        case ('-xmi')
           read (arg,*) xmin
        case ('-xma')
@@ -555,6 +568,15 @@ contains
     if(dograv==1)do_grav=.true.
     do_peak=.false.
     if(dopeak==1)do_peak=.true.
+
+    if(rad>0)then
+       xmin=xcen-rad
+       xmax=xcen+rad
+       ymin=ycen-rad
+       ymax=ycen+rad
+       zmin=zcen-rad
+       zmax=zcen+rad
+    endif
     
     return
     
