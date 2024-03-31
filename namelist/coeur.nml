@@ -1,3 +1,8 @@
+This is the RAMSES parameter file for 3D core collapse test.
+Compile the code with:
+
+make NDIM=3 MPI=1 GRAV=1 HYDRO=1 UNITS=coeur CONDINIT=coeur
+
 &RUN_PARAMS 
 hydro=.true.
 poisson=.true.
