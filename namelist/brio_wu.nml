@@ -1,6 +1,6 @@
 This is the RAMSES parameter file for the Brio & Wu (1988) MHD shock tube test.
 Compile the code with:
-make NDIM=1 HYDRO=1 MHD=1 GRAV=0 UNITS=default CONDINIT=default
+make NDIM=1 HYDRO=1 MHD=1
 
 &RUN_PARAMS
 hydro=.true.

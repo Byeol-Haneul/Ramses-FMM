@@ -52,7 +52,7 @@ end subroutine read_halo_params
 !===============================
 !=== hydro ic for a NFW halo ===
 !===============================
-subroutine condinit(r,g,x,u,dx,nn)
+subroutine condinit(r,g,x,q,dx,nn)
   use amr_parameters, only: dp, ndim, nvector
   use hydro_parameters, only: nvar, nener
   use halo_parameters
@@ -60,24 +60,21 @@ subroutine condinit(r,g,x,u,dx,nn)
   implicit none
   type(run_t)::r
   type(global_t)::g
-  integer ::nn                            ! Number of cells
-  real(dp)::dx                            ! Cell size
-  real(dp),dimension(1:nvector,1:nvar)::u ! Conservative variables
-  real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
+  integer ::nn                             ! Number of cells
+  real(dp)::dx                             ! Cell size
+  real(dp),dimension(1:nvector,1:nprim)::q ! Primitive variables
+  real(dp),dimension(1:nvector,1:ndim)::x  ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
-  ! Positions are in user units:
-  ! x(i,1:3) are in [0,boxlen]**ndim.
-  ! U is the conservative variable vector. Conventions are here:
-  ! U(i,1): d, U(i,2:ndim+1): d.u,d.v,d.w and U(i,ndim+2): E.
-  ! Q is the primitive variable vector. Conventions are here:
-  ! Q(i,1): d, Q(i,2:ndim+1):u,v,w and Q(i,ndim+2): P.
-  ! If nvar >= ndim+3, remaining variables are treated as passive
-  ! scalars in the hydro solver.
-  ! U(:,:) and Q(:,:) are in user units.
+  ! Positions are in user (aka code) units:
+  ! x(i,1:ndim) are in [0,boxlen]**ndim.
+  ! Q is the primitve variable vector. Conventions are here:
+  ! Q(i,1): d, Q(i,2:4): d.u,d.v,d.w and Q(i,5): P.
+  ! If nvar >= 6, remaining variables are treated as passive
+  ! scalars or non-thermal energies in the hydro solver.
+  ! Q(:,:) are in user (aka code) units.
   !================================================================
   integer::ivar,i
-  real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
   real(dp)::xx,yy,zz,rc,rr,v,xc,yc,zc,eps,rho,rrmin,rmax,rrmax,tol,c,pmin
   real(dp)::fc,PI,IN,factor,Mr,v200,Hub,M200,dmin,fb,zhalo,r200,rs,hsmall
   real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,rhos,rhocrit
@@ -136,53 +133,26 @@ subroutine condinit(r,g,x,u,dx,nn)
      Mr = 4.*pi*rhos*rs**3*(log(1+rr)-(rr/(1.+rr)))  ! M(<r)
      v = j_max*Mr/M200/(rr*rs)
 
-     q(i,ndim-1) = -v*yy/rc
-     q(i,ndim  ) = +v*xx/rc
+     q(i,2) = -v*yy/rc
+     q(i,3) = +v*xx/rc
 
      rrmin = log(rr)
      rrmax = log(rmax)
 
-     q(i,ndim+2) = romberg(rrmin,rrmax,tol)
-     q(i,ndim+2) = max(q(i,ndim+2),pmin)
+     q(i,5) = romberg(rrmin,rrmax,tol)
+     q(i,5) = max(q(i,5),pmin)
 
   enddo
 
-  q(1:nn,ndim+1)=0.0
+  q(1:nn,4) = 0.0
 
   if(r%metal) then
-     q(1:nn,r%imetal)=r%z_ave*0.02d0
+     q(1:nn,r%imetal) = r%z_ave*0.02d0
   endif
 
   if(r%entropy)then
-     q(1:nn,r%ientropy)=q(1:nn,ndim+2)/q(1:nn,1)**r%gamma
+     q(1:nn,r%ientropy) = q(1:nn,5)/q(1:nn,1)**r%gamma
   endif
-
-  ! Convert primitive to conservative variables
-  ! density -> density
-  u(1:nn,1)=q(1:nn,1)
-  ! velocity -> momentum
-  u(1:nn,2)=q(1:nn,1)*q(1:nn,2)
-#if NDIM>1
-  u(1:nn,3)=q(1:nn,1)*q(1:nn,3)
-#endif
-#if NDIM>2
-  u(1:nn,4)=q(1:nn,1)*q(1:nn,4)
-#endif
-  ! kinetic energy
-  u(1:nn,ndim+2)=0.0d0
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5*q(1:nn,1)*q(1:nn,2)**2
-#if NDIM>1
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5*q(1:nn,1)*q(1:nn,3)**2
-#endif
-#if NDIM>2
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5*q(1:nn,1)*q(1:nn,4)**2
-#endif
-  ! pressure -> total fluid energy
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+q(1:nn,ndim+2)/(r%gamma-1.0d0)
-  ! passive scalars
-  do ivar=ndim+3,nvar
-     u(1:nn,ivar)=q(1:nn,1)*q(1:nn,ivar)
-  end do
 
 contains
   !ccccccccccccccccccccccccccccccccccccccccccccccccccccc

@@ -65,7 +65,7 @@ subroutine m_newdt_fine(pst,ilevel)
   ! Particle-based Courant condition
   if(r%pic)then
      if(r%verbose)write(*,'("   Entering newdt_part for level ",I2)')ilevel
-     call r_newdt_part(pst,ilevel,1,out_newdt_part,4)
+     call r_newdt_part(pst,ilevel,1,out_newdt_part,storage_size(out_newdt_part)/32)
      ekin=out_newdt_part%ekin
      g%ekin_tot=g%ekin_tot+ekin
      vmax=out_newdt_part%vmax
@@ -77,10 +77,11 @@ subroutine m_newdt_fine(pst,ilevel)
   ! Hydro-based Courant condition
   if(r%hydro)then
      if(r%verbose)write(*,'("   Entering newdt_hydro for level ",I2)')ilevel
-     call r_courant_fine(pst,ilevel,1,out_courant_fine,8)
+     call r_courant_fine(pst,ilevel,1,out_courant_fine,storage_size(out_courant_fine)/32)
      g%mass_tot=g%mass_tot+out_courant_fine%mass
      g%ekin_tot=g%ekin_tot+out_courant_fine%ekin
      g%eint_tot=g%eint_tot+out_courant_fine%eint
+     g%emag_tot=g%emag_tot+out_courant_fine%emag
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),out_courant_fine%dt)
   endif  
   

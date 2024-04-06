@@ -26,7 +26,7 @@ dat = dat.reshape(ny, nx)
 dat = np.transpose(dat)
 # plot the map
 my_dpi = 96
-fig, ax = plt.subplots(figsize=(nx/my_dpi, ny/my_dpi), dpi=my_dpi)
+fig, ax = plt.subplots(figsize=(512/my_dpi, 512/my_dpi), dpi=my_dpi)
 
 if args.log:
     dat=np.log10(dat)

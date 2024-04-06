@@ -12,7 +12,7 @@ subroutine rho_ana(x,d,dx,gravity_params)
   !================================================================
   ! This routine generates analytical Poisson source term.
   ! Positions are in user units:
-  ! x(1:3) are in [0,boxlen]**ndim.
+  ! x(1:ndim) are in [0,boxlen]**ndim.
   ! d is the density field in user units.
   !================================================================
   real(dp)::dmass,emass,xmass,ymass,zmass,rr,rx,ry,rz,dd

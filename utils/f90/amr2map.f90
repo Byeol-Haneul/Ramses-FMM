@@ -248,9 +248,9 @@ program amr2map
                     map = ilevel
                  case (15) ! Temperature
                     ekin = 0.5*uold(ind,2)**2/rho
-                    if(ndim>1)ekin = ekin+0.5*uold(ind,3)**2/rho
-                    if(ndim>2)ekin = ekin+0.5*uold(ind,4)**2/rho
-                    pres = (p%gamma-1)*(uold(ind,ndim+2)-ekin)
+                    ekin = ekin+0.5*uold(ind,3)**2/rho
+                    ekin = ekin+0.5*uold(ind,4)**2/rho
+                    pres = (p%gamma-1)*(uold(ind,5)-ekin)
                     if(do_max)then
                        map = pres/rho
                     else
@@ -274,12 +274,20 @@ program amr2map
                     map = ilevel
                     metmax = max(metmax,map)
                  case (15) ! Temperature
-                    pres = qold(ind,ndim+2)
+                    pres = qold(ind,5)
                     if(do_max)then
                        map = pres/rho
                        metmax = max(metmax,map)
                     else
                        map = pres
+                    endif
+                 case (16) ! Magnetic pressure
+                    pres = qold(ind,6)**2+qold(ind,7)**2+qold(ind,8)**2
+                    if(do_max)then
+                       map = pres
+                       metmax = max(metmax,map)
+                    else
+                       map = rho*pres
                     endif
                  case default ! Passive scalar
                     if(do_max)then

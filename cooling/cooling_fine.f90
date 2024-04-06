@@ -48,11 +48,6 @@ subroutine cooling_fine(r,g,m,c,ilevel)
   integer,dimension(1:nvector)::ind_leaf
   real(kind=8),dimension(1:nvector)::nH,T2,delta_T2,ekk,err,emag
   real(kind=8),dimension(1:nvector)::T2min,Zsolar,boost
-#ifdef SOLVERmhd
-  integer::neul=5
-#else
-  integer::neul=ndim+2
-#endif
 #if NENER>0
   integer::irad
 #endif
@@ -104,39 +99,45 @@ subroutine cooling_fine(r,g,m,c,ilevel)
            end do
         endif
 
-        ! Compute gas pressure (thermal+polytrope)
+        ! Total energy
         do i=1,nleaf
-           T2(i)=m%grid(ind_leaf(i))%uold(ind,neul)
+           T2(i)=m%grid(ind_leaf(i))%uold(ind,5)
         end do
+
+        ! Kinetic energy
         do i=1,nleaf
            ekk(i)=0.0d0
         end do
-        do idim=2,neul-1
+        do idim=1,3
            do i=1,nleaf
-              ekk(i)=ekk(i)+0.5d0*m%grid(ind_leaf(i))%uold(ind,idim)**2/nH(i)
+              ekk(i)=ekk(i)+0.5d0*m%grid(ind_leaf(i))%uold(ind,idim+1)**2/nH(i)
            end do
         end do
+
+        ! Non-thermal energies
         do i=1,nleaf
            err(i)=0.0d0
         end do
 #if NENER>0
-        do irad=0,nener-1
+        do irad=1,nener
            do i=1,nleaf
-              err(i)=err(i)+m%grid(ind_leaf(i))%uold(ind,inener+irad)
+              err(i)=err(i)+m%grid(ind_leaf(i))%uold(ind,5+irad)
            end do
         end do
 #endif
+        ! Magnetic energy
         do i=1,nleaf
            emag(i)=0.0d0
         end do
-#ifdef SOLVERmhd
+#ifdef MHD
         do idim=1,3
            do i=1,nleaf
-              emag(i)=emag(i)+0.125d0*(m%grid(ind_leaf(i))%uold(ind,idim+5) &
-                   &                  +m%grid(ind_leaf(i))%uold(ind,idim+nvar))**2
+              emag(i)=emag(i)+0.125d0*(m%grid(ind_leaf(i))%bold(ind,idim) &
+                   &                  +m%grid(ind_leaf(i))%bold(ind,idim+3))**2
            end do
         end do
 #endif
+        ! Gas thermal pressure
         do i=1,nleaf
            T2(i)=(r%gamma-1.0d0)*(T2(i)-ekk(i)-err(i)-emag(i))
         end do
@@ -210,7 +211,7 @@ subroutine cooling_fine(r,g,m,c,ilevel)
            endif
         endif
 
-        ! Compute rho
+        ! Compute rho in code units
         do i=1,nleaf
            nH(i) = nH(i)/scale_nH
         end do
@@ -255,11 +256,11 @@ subroutine cooling_fine(r,g,m,c,ilevel)
         ! Update total fluid energy
         if(r%isothermal)then ! use only polytrope energy
            do i=1,nleaf
-              m%grid(ind_leaf(i))%uold(ind,neul) = T2min(i) + ekk(i) + err(i) + emag(i)
+              m%grid(ind_leaf(i))%uold(ind,5) = T2min(i) + ekk(i) + err(i) + emag(i)
            end do
         else if(r%cooling)then ! add polytrope to thermal energy
            do i=1,nleaf
-              m%grid(ind_leaf(i))%uold(ind,neul) = T2(i) + T2min(i) + ekk(i) + err(i) + emag(i)
+              m%grid(ind_leaf(i))%uold(ind,5) = T2(i) + T2min(i) + ekk(i) + err(i) + emag(i)
            end do
         endif
 

@@ -70,8 +70,8 @@ subroutine source_hydro_fine(s,ilevel)
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
   real(dp)::dx,phi_diss,div,divu
-  real(dp)::d,u,v,w,d_old,sigma
-  real(dp)::e_kin,e_cons,e_prim,e_turb,e_trunc,T2_cons,T2_fix
+  real(dp)::d,u,v,w,bx,by,bz,d_old,sigma
+  real(dp)::e_kin,e_mag,e_cons,e_prim,e_turb,e_trunc,T2_cons,T2_fix
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
 
 #ifdef HYDRO
@@ -159,30 +159,36 @@ subroutine source_hydro_fine(s,ilevel)
         ! Add -pdV term to non-thermal energies
 #if NENER>0
         do irad=1,nener
-           m%grid(igrid)%unew(ind,ndim+2+irad)=m%grid(igrid)%unew(ind,ndim+2+irad) &
-                & -(r%gamma_rad(irad)-1.0d0)*m%grid(igrid)%uold(ind,ndim+2+irad)*divu*g%dtnew(ilevel)
+           m%grid(igrid)%unew(ind,5+irad)=m%grid(igrid)%unew(ind,5+irad) &
+                & -(r%gamma_rad(irad)-1.0d0)*m%grid(igrid)%uold(ind,5+irad)*divu*g%dtnew(ilevel)
         end do
 #endif     
         ! Correct total energy if internal energy is too small
         if(r%entropy.and.r%dual_energy.GE.0)then
            d=max(m%grid(igrid)%unew(ind,1),r%smallr)
-           u=0; v=0; w=0
-           if(ndim>0)u=m%grid(igrid)%unew(ind,2)/d
-           if(ndim>1)v=m%grid(igrid)%unew(ind,3)/d
-           if(ndim>2)w=m%grid(igrid)%unew(ind,4)/d
+           u=m%grid(igrid)%unew(ind,2)/d
+           v=m%grid(igrid)%unew(ind,3)/d
+           w=m%grid(igrid)%unew(ind,4)/d
            e_kin=0.5d0*d*(u**2+v**2+w**2)
 #if NENER>0
            do irad=1,nener
-              e_kin=e_kin+m%grid(igrid)%unew(ind,ndim+2+irad)
+              e_kin=e_kin+m%grid(igrid)%unew(ind,5+irad)
            end do
 #endif
-           e_cons=m%grid(igrid)%unew(ind,ndim+2)-e_kin
+           e_mag=0.0d0
+#ifdef MHD
+           bx=0.5d0*(m%grid(igrid)%bnew(ind,1)+m%grid(igrid)%bnew(ind,4))
+           by=0.5d0*(m%grid(igrid)%bnew(ind,2)+m%grid(igrid)%bnew(ind,5))
+           bz=0.5d0*(m%grid(igrid)%bnew(ind,3)+m%grid(igrid)%bnew(ind,6))
+           e_mag=0.5d0*(bx**2+by**2+bz**2)
+#endif
+           e_cons=m%grid(igrid)%unew(ind,5)-e_kin-e_mag
            T2_cons=(r%gamma-1)*e_cons/d
            e_prim=m%grid(igrid)%unew(ind,r%ientropy)*d**(r%gamma-1.0)/(r%gamma-1.0)
            div=abs(divu)*dx
            e_trunc=r%dual_energy*d*max(abs(divu)*dx,3.0d0*g%hexp*dx)**2
            if(e_cons<e_trunc.AND.T2_cons<T2_fix)then
-              m%grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin
+              m%grid(igrid)%unew(ind,5)=e_prim+e_kin+e_mag
            else
               m%grid(igrid)%unew(ind,r%ientropy)=e_cons/d**(r%gamma-1.0)*(r%gamma-1.0)
            end if

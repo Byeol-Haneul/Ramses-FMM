@@ -1,13 +1,13 @@
 This namelist contains various input parameters for the
 double Mach reflection test.
 To compile the code, type in directory bin:
-make NDIM=2 MPI=1 UNITS=default CONDINIT=doublemach HYDRO=1 GRAV=0
+make NDIM=2 MPI=1 INIT=DOUBLEMACH HYDRO=1
 
 &RUN_PARAMS 
 hydro=.true.
 nrestart=0
 ncontrol=1
-nsubcycle=10*1,
+nsubcycle=1,2
 verbose=.false.
 nremap=10
 nsuperoct=0

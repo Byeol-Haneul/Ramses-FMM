@@ -24,6 +24,22 @@ module hydro_commons
      type(nbor),dimension(:,:,:),allocatable::childloc
      type(nbor),dimension(:,:,:),allocatable::gridloc
      type(nbor),dimension(:,:,:,:),allocatable::nborloc
+#ifdef MHD
+     real(dp),dimension(:,:,:,:),allocatable::bloc
+     real(dp),dimension(:,:,:),allocatable::emfx
+     real(dp),dimension(:,:,:),allocatable::emfy
+     real(dp),dimension(:,:,:),allocatable::emfz
+     real(dp),dimension(:,:,:),allocatable::Ex
+     real(dp),dimension(:,:,:),allocatable::Ey
+     real(dp),dimension(:,:,:),allocatable::Ez
+     real(dp),dimension(:,:,:,:),allocatable::bf
+     real(dp),dimension(:,:,:,:,:),allocatable::dbf
+     real(dp),dimension(:,:,:,:,:),allocatable::qRT
+     real(dp),dimension(:,:,:,:,:),allocatable::qRB
+     real(dp),dimension(:,:,:,:,:),allocatable::qLT
+     real(dp),dimension(:,:,:,:,:),allocatable::qLB
+     type(nbor),dimension(:,:,:,:),allocatable::nborsonloc
+#endif
    contains
      procedure :: init => init_hydro_kernel
      procedure :: size => size_hydro_kernel
@@ -53,24 +69,39 @@ contains
     
     allocate(h%uloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
     allocate(h%gloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:ndim))
-    allocate(h%qloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
+    allocate(h%qloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim))
     allocate(h%cloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
     allocate(h%okloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
-    allocate(h%dq   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
-    allocate(h%qm   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
-    allocate(h%qp   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar,1:ndim))
-    allocate(h%fx   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
-    allocate(h%tx   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:2   ))
+    allocate(h%dq   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:ndim))
+    allocate(h%qm   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:ndim))
+    allocate(h%qp   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:ndim))
+    allocate(h%fx   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim))
+    allocate(h%tx   (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:2    ))
 
-    allocate(h%flux(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:nvar,1:ndim))
-    allocate(h%tmp (h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:2   ,1:ndim))
+    allocate(h%flux(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:nprim,1:ndim))
+    allocate(h%tmp (h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:2    ,1:ndim))
     allocate(h%divu(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2))
 
     allocate(h%childloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
     allocate(h%gridloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
     allocate(h%cellloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
     allocate(h%nborloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2,1:twondim))
-    
+#ifdef MHD
+    allocate(h%bloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:6))
+    allocate(h%emfx(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2))
+    allocate(h%emfy(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2))
+    allocate(h%emfz(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2))
+    allocate(h%Ex(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
+    allocate(h%Ey(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
+    allocate(h%Ez(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
+    allocate(h%bf(h%iu1:h%iu2+1,h%ju1:h%ju2+1,h%ku1:h%ku2+1,1:3))
+    allocate(h%dbf(h%iu1:h%iu2+1,h%ju1:h%ju2+1,h%ku1:h%ku2+1,1:3,1:2))
+    allocate(h%qRT(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:3))
+    allocate(h%qRB(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:3))
+    allocate(h%qLT(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:3))
+    allocate(h%qLB(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:3))
+    allocate(h%nborsonloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2,1:twondim))
+#endif
   end subroutine init_hydro_kernel
 
   function size_hydro_kernel(h)
@@ -101,7 +132,22 @@ contains
     nint=nint+size(transfer(h%gridloc ,(/1/)))
     nint=nint+size(transfer(h%cellloc ,(/1/)))
     nint=nint+size(transfer(h%nborloc ,(/1/)))
-
+#ifdef MHD
+    nint=nint+size(transfer(h%bloc,(/1/)))
+    nint=nint+size(transfer(h%emfx,(/1/)))
+    nint=nint+size(transfer(h%emfy,(/1/)))
+    nint=nint+size(transfer(h%emfz,(/1/)))
+    nint=nint+size(transfer(h%Ex  ,(/1/)))
+    nint=nint+size(transfer(h%Ey  ,(/1/)))
+    nint=nint+size(transfer(h%Ez  ,(/1/)))
+    nint=nint+size(transfer(h%bf  ,(/1/)))
+    nint=nint+size(transfer(h%dbf ,(/1/)))
+    nint=nint+size(transfer(h%qRT ,(/1/)))
+    nint=nint+size(transfer(h%qRB ,(/1/)))
+    nint=nint+size(transfer(h%qLT ,(/1/)))
+    nint=nint+size(transfer(h%qLB ,(/1/)))
+    nint=nint+size(transfer(h%nborsonloc,(/1/)))
+#endif
     size_hydro_kernel = nint
 
   end function size_hydro_kernel

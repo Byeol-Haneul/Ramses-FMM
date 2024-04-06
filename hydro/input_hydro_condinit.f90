@@ -40,15 +40,28 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   
   ! Local variables
   integer::igrid,ngrid,ind,idim,nstride,i,ivar
+  integer::nfine,ii,jj,kk
   real(dp),dimension(1:nvector,1:ndim)::xx
-  real(dp),dimension(1:nvector,1:nvar)::uu
-  real(dp)::dx
+#ifdef MHD
+  real(dp),dimension(1:nvector,1:nvar+3-ndim)::qq
+  real(dp),dimension(1:nvector,1:ndim)::xll,xrl,xlr,xrr
+  real(dp),dimension(1:nvector)::axll,axrl,axlr,axrr
+  real(dp),dimension(1:nvector)::ayll,ayrl,aylr,ayrr
+  real(dp),dimension(1:nvector)::azll,azrl,azlr,azrr
+#else
+  real(dp),dimension(1:nvector,1:nvar)::qq
+#endif
+  real(dp)::dx,dxmin
+  real(dp)::rr,vx,vy,vz,pp
+  real(dp)::bx,by,bz
+  real(dp)::eint,ekin,emag,erad
 
   if(m%noct(ilevel)==0)return
 
-  !----------------------------------------------------
-  ! Compute initial conditions from subroutine condinit
-  !----------------------------------------------------
+  !-----------------------------------------------------------
+  ! Compute hydro primitive variables from subroutine condinit
+  !-----------------------------------------------------------
+#ifdef HYDRO
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
   ! Loop over grids by vector sweeps
@@ -64,19 +77,243 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
            end do
         end do
         ! Call initial condition routine
-        call condinit(r,g,xx,uu,dx,ngrid)
-#ifdef HYDRO
-        ! Scatter variables to main memory
+        call condinit(r,g,xx,qq,dx,ngrid)
+        ! Scatter primitive variables to main memory
         do ivar=1,nvar
            do i=1,ngrid
-              m%grid(igrid+i-1)%uold(ind,ivar)=uu(i,ivar)
+              m%grid(igrid+i-1)%uold(ind,ivar)=qq(i,ivar)
            end do
         end do
+#ifdef MHD
+#if NDIM==1
+        do i=1,ngrid
+           m%grid(igrid+i-1)%bold(ind,1)=r%A_ave
+           m%grid(igrid+i-1)%bold(ind,4)=r%A_ave
+           m%grid(igrid+i-1)%bold(ind,2)=qq(i,nvar+1)
+           m%grid(igrid+i-1)%bold(ind,5)=qq(i,nvar+1)
+           m%grid(igrid+i-1)%bold(ind,3)=qq(i,nvar+2)
+           m%grid(igrid+i-1)%bold(ind,6)=qq(i,nvar+2)
+        end do
+#endif
+#if NDIM==2
+        do i=1,ngrid
+           m%grid(igrid+i-1)%bold(ind,3)=qq(i,nvar+1)
+           m%grid(igrid+i-1)%bold(ind,6)=qq(i,nvar+1)
+        end do
+#endif
 #endif
      end do
      ! End loop over cells
   end do
   ! End loop over grids
+#endif
+
+  !------------------------------------------------------------------------------
+  ! Compute magnetic field from vector potential from subroutine vecpotentialinit
+  !------------------------------------------------------------------------------
+#ifdef MHD
+#if NDIM>1
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**ilevel
+  dxmin=r%boxlen/2**r%nlevelmax
+  nfine=2**(r%nlevelmax-ilevel)
+  ! Loop over grids by vector sweeps
+  do igrid=m%head(ilevel),m%tail(ilevel),nvector
+     ngrid=MIN(nvector,m%tail(ilevel)-igrid+1)
+#if NDIM==2
+     do ii=0,1 ! Loop over cells
+        do jj=0,1
+           ind=1+ii+2*jj
+           do i=1,ngrid ! Compute 4 edges positions in code units
+              xll(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii  )*dx-m%skip(1)
+              xll(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj  )*dx-m%skip(2)
+              xrl(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii+1)*dx-m%skip(1)
+              xrl(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj  )*dx-m%skip(2)
+              xlr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii  )*dx-m%skip(1)
+              xlr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj+1)*dx-m%skip(2)
+              xrr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii+1)*dx-m%skip(1)
+              xrr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj+1)*dx-m%skip(2)
+           end do
+           call vecpotentialinit(r,g,xll,azll,3,ngrid)
+           call vecpotentialinit(r,g,xrl,azrl,3,ngrid)
+           call vecpotentialinit(r,g,xlr,azlr,3,ngrid)
+           call vecpotentialinit(r,g,xrr,azrr,3,ngrid)
+           do i=1,ngrid
+              ! bx = d Az / dy
+              m%grid(igrid+i-1)%bold(ind,1)=(azlr(i)-azll(i))/dx
+              m%grid(igrid+i-1)%bold(ind,4)=(azrr(i)-azrl(i))/dx
+              ! by = - d Az / dx
+              m%grid(igrid+i-1)%bold(ind,2)=-(azrl(i)-azll(i))/dx
+              m%grid(igrid+i-1)%bold(ind,5)=-(azrr(i)-azlr(i))/dx
+           end do
+        end do
+     end do ! End loop over cells
+#endif
+#if NDIM==3
+     do ii=0,1 ! Loop over cells
+        do jj=0,1
+           do kk=0,1
+              ind=1+ii+2*jj+4*kk
+              axll(1:ngrid)=0.0d0; axrl(1:ngrid)=0.0d0; axlr(1:ngrid)=0.0d0; axrr(1:ngrid)=0.0d0
+              ayll(1:ngrid)=0.0d0; ayrl(1:ngrid)=0.0d0; aylr(1:ngrid)=0.0d0; ayrr(1:ngrid)=0.0d0
+              azll(1:ngrid)=0.0d0; azrl(1:ngrid)=0.0d0; azlr(1:ngrid)=0.0d0; azrr(1:ngrid)=0.0d0
+              ! Ax
+              do i=1,ngrid ! Compute edge position in code units
+                 xll(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii)*dx-m%skip(1)+dxmin/2
+                 xrl(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii)*dx-m%skip(1)+dxmin/2
+                 xlr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii)*dx-m%skip(1)+dxmin/2
+                 xrr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii)*dx-m%skip(1)+dxmin/2
+                 xll(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj  )*dx-m%skip(2)
+                 xll(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk  )*dx-m%skip(3)
+                 xrl(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj+1)*dx-m%skip(2)
+                 xrl(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk  )*dx-m%skip(3)
+                 xlr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj  )*dx-m%skip(2)
+                 xlr(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk+1)*dx-m%skip(3)
+                 xrr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj+1)*dx-m%skip(2)
+                 xrr(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk+1)*dx-m%skip(3)
+              end do
+              do l=1,nfine
+                 call vecpotentialinit(r,g,xll,ax,1,ngrid)
+                 axll(1:ngrid)=axll(1:ngrid)+ax(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xrl,ax,1,ngrid)
+                 axrl(1:ngrid)=axrl(1:ngrid)+ax(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xlr,ax,1,ngrid)
+                 axlr(1:ngrid)=axlr(1:ngrid)+ax(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xrr,ax,1,ngrid)
+                 axrr(1:ngrid)=axrr(1:ngrid)+ax(1:ngrid)/dble(nfine)
+                 xll(1:ngrid,1)=xll(1:ngrid,1)+dxmin
+                 xrl(1:ngrid,1)=xrl(1:ngrid,1)+dxmin
+                 xrl(1:ngrid,1)=xlr(1:ngrid,1)+dxmin
+                 xrr(1:ngrid,1)=xrr(1:ngrid,1)+dxmin
+              end do
+              ! Ay
+              do i=1,ngrid ! Compute edge position in code units
+                 xll(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj)*dx-m%skip(2)+dxmin/2
+                 xrl(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj)*dx-m%skip(2)+dxmin/2
+                 xlr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj)*dx-m%skip(2)+dxmin/2
+                 xrr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj)*dx-m%skip(2)+dxmin/2
+                 xll(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii  )*dx-m%skip(1)
+                 xll(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk  )*dx-m%skip(3)
+                 xrl(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii+1)*dx-m%skip(1)
+                 xrl(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk  )*dx-m%skip(3)
+                 xlr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii  )*dx-m%skip(1)
+                 xlr(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk+1)*dx-m%skip(3)
+                 xrr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii+1)*dx-m%skip(1)
+                 xrr(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk+1)*dx-m%skip(3)
+              end do
+              do l=1,nfine
+                 call vecpotentialinit(r,g,xll,ay,2,ngrid)
+                 ayll(1:ngrid)=ayll(1:ngrid)+ay(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xrl,ay,2,ngrid)
+                 ayrl(1:ngrid)=ayrl(1:ngrid)+ay(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xlr,ay,2,ngrid)
+                 aylr(1:ngrid)=aylr(1:ngrid)+ay(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xrr,ay,2,ngrid)
+                 ayrr(1:ngrid)=ayrr(1:ngrid)+ay(1:ngrid)/dble(nfine)
+                 xll(1:ngrid,2)=xll(1:ngrid,2)+dxmin
+                 xrl(1:ngrid,2)=xrl(1:ngrid,2)+dxmin
+                 xrl(1:ngrid,2)=xlr(1:ngrid,2)+dxmin
+                 xrr(1:ngrid,2)=xrr(1:ngrid,2)+dxmin
+              end do
+              ! Az
+              do i=1,ngrid ! Compute edge position in code units
+                 xll(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk)*dx-m%skip(3)+dxmin/2
+                 xrl(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk)*dx-m%skip(3)+dxmin/2
+                 xlr(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk)*dx-m%skip(3)+dxmin/2
+                 xrr(i,3)=(2*m%grid(igrid+i-1)%ckey(3)+kk)*dx-m%skip(3)+dxmin/2
+                 xll(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii  )*dx-m%skip(1)
+                 xll(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj  )*dx-m%skip(2)
+                 xrl(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii+1)*dx-m%skip(1)
+                 xrl(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj  )*dx-m%skip(2)
+                 xlr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii  )*dx-m%skip(1)
+                 xlr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj+1)*dx-m%skip(2)
+                 xrr(i,1)=(2*m%grid(igrid+i-1)%ckey(1)+ii+1)*dx-m%skip(1)
+                 xrr(i,2)=(2*m%grid(igrid+i-1)%ckey(2)+jj+1)*dx-m%skip(2)
+              end do
+              do l=1,nfine
+                 call vecpotentialinit(r,g,xll,az,3,ngrid)
+                 azll(1:ngrid)=azll(1:ngrid)+az(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xrl,az,3,ngrid)
+                 azrl(1:ngrid)=azrl(1:ngrid)+az(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xlr,az,3,ngrid)
+                 azlr(1:ngrid)=azlr(1:ngrid)+az(1:ngrid)/dble(nfine)
+                 call vecpotentialinit(r,g,xrr,az,3,ngrid)
+                 azrr(1:ngrid)=azrr(1:ngrid)+az(1:ngrid)/dble(nfine)
+                 xll(1:ngrid,3)=xll(1:ngrid,3)+dxmin
+                 xrl(1:ngrid,3)=xrl(1:ngrid,3)+dxmin
+                 xrl(1:ngrid,3)=xlr(1:ngrid,3)+dxmin
+                 xrr(1:ngrid,3)=xrr(1:ngrid,3)+dxmin
+              end do
+              do i=1,ngrid
+                 ! bx = d Az / dy - d Ay /dz
+                 m%grid(igrid+i-1)%bold(ind,1)=(azlr(i)-azll(i)-(aylr(i)-ayll(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,4)=(azrr(i)-azrl(i)-(ayrr(i)-ayrl(i)))/dx
+                 ! by = d Ax / dz - d Az /dx
+                 m%grid(igrid+i-1)%bold(ind,2)=(axlr(i)-axll(i)-(azrl(i)-azll(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,5)=(axrr(i)-axrl(i)-(azrr(i)-azlr(i)))/dx
+                 ! bz = d Ay / dx - d Ax /dy
+                 m%grid(igrid+i-1)%bold(ind,3)=(ayrl(i)-ayll(i)-(axrl(i)-axll(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,6)=(ayrr(i)-aylr(i)-(axrr(i)-axlr(i)))/dx
+              end do
+           end do
+        end do
+     end do ! End loop over cells
+#endif
+  end do
+  ! End loop over grids
+#endif
+#endif
+  !--------------------------------------------
+  ! Convert primitive to conservative variables
+  !--------------------------------------------
+#ifdef HYDRO
+  dx=r%boxlen/2**ilevel
+  ! Loop over grids
+  do igrid=m%head(ilevel),m%tail(ilevel)
+     ! Loop over cells
+     do ind=1,twotondim
+
+        ! Compute kinetic and internal energy densities
+        rr=m%grid(igrid)%uold(ind,1)
+        vx=m%grid(igrid)%uold(ind,2)
+        vy=m%grid(igrid)%uold(ind,3)
+        vz=m%grid(igrid)%uold(ind,4)
+        pp=m%grid(igrid)%uold(ind,5)
+        ekin=0.5d0*rr*(vx**2+vy**2+vz**2)
+        eint=pp/(r%gamma-1.0)
+        emag=0.0d0
+#ifdef MHD
+        ! Compute magnetic energy for all cells
+        bx=0.5d0*(m%grid(igrid)%bold(ind,1)+m%grid(igrid)%bold(ind,4))
+        by=0.5d0*(m%grid(igrid)%bold(ind,2)+m%grid(igrid)%bold(ind,5))
+        bz=0.5d0*(m%grid(igrid)%bold(ind,3)+m%grid(igrid)%bold(ind,6))
+        emag=0.5d0*(bx**2+by**2+bz**2)
+#endif
+        erad=0.0d0
+#if NENER>0
+        ! Compute non-thermal energy densities
+        do irad=1,nener
+           m%grid(igrid)%uold(ind,5+irad)=m%grid(igrid)%uold(ind,5+irad)/(gamma_rad(irad)-1.0d0)
+           erad=erad+m%grid(igrid)%uold(ind,5+irad)
+        end do
+#endif
+        ! Compute total fluid energy density
+        m%grid(igrid)%uold(ind,5)=eint+ekin+erad+emag
+        ! Compute momentum density
+        do idim=1,3
+           m%grid(igrid)%uold(ind,idim+1)=rr*m%grid(igrid)%uold(ind,idim+1)
+        end do
+#if NVAR>5+NENER
+        ! Compute passive scalar density
+        do ivar=6+nener,nvar
+           m%grid(igrid)%uold(ind,ivar)=rr*m%grid(igrid)%uold(ind,ivar)
+        enddo
+#endif
+     end do
+     ! End loop over cells
+  end do
+  ! End loop over grids
+#endif
 
 end subroutine input_hydro_condinit
 !################################################################
@@ -92,13 +329,17 @@ subroutine region_condinit(r,g,x,q,dx,nn)
   type(global_t)::g
   integer ::nn
   real(dp)::dx
+#ifdef MHD
+  real(dp),dimension(1:nvector,1:nvar+3-ndim)::q
+#else
   real(dp),dimension(1:nvector,1:nvar)::q
+#endif
   real(dp),dimension(1:nvector,1:ndim)::x
   !----------------------------------------------------
   ! This routine sets simple pre-defined initial
   ! conditions, like points, squares, etc.
   !----------------------------------------------------
-#if NVAR>NDIM+2
+#if NVAR>5
   integer::ivar
 #endif
   integer::i,k
@@ -107,17 +348,21 @@ subroutine region_condinit(r,g,x,q,dx,nn)
   ! Set some (tiny) default values in case n_region=0
   q(1:nn,1)=r%smallr
   q(1:nn,2)=0.0d0
-#if NDIM>1
   q(1:nn,3)=0.0d0
-#endif
-#if NDIM>2
   q(1:nn,4)=0.0d0
-#endif
-  q(1:nn,ndim+2)=r%smallr*r%smallc**2/r%gamma
-#if NVAR>NDIM+2
-  do ivar=ndim+3,nvar
+  q(1:nn,5)=r%smallr*r%smallc**2/r%gamma
+#if NVAR>5
+  do ivar=6,nvar
      q(1:nn,ivar)=0.0d0
   enddo
+#endif
+#ifdef MHD
+#if NDIM<3
+  q(1:nn,nvar+1)=0.0d0
+#if NDIM==1
+  q(1:nn,nvar+2)=0.0d0
+#endif
+#endif
 #endif
 
   ! Loop over initial conditions regions
@@ -148,22 +393,27 @@ subroutine region_condinit(r,g,x,q,dx,nn)
            if(rad<1.0)then
               q(i,1)=r%d_region(k)
               q(i,2)=r%u_region(k)
-#if NDIM>1
               q(i,3)=r%v_region(k)
-#endif
-#if NDIM>2
               q(i,4)=r%w_region(k)
-#endif
-              q(i,ndim+2)=r%p_region(k)
+              q(i,5)=r%p_region(k)
 #if NENER>0
-              do ivar=1,nener
-                 q(i,ndim+2+ivar)=r%prad_region(k,ivar)
+              do ivar=6,5+nener
+                 q(i,ivar)=r%prad_region(k,ivar-5)
               enddo
 #endif
-#if NVAR>NDIM+2+NENER
-              do ivar=ndim+3+nener,nvar
-                 q(i,ivar)=r%var_region(k,ivar-ndim-2-nener)
+#if NVAR>5+NENER
+              do ivar=6+nener,nvar
+                 q(i,ivar)=r%var_region(k,ivar-5-nener)
               end do
+#endif
+#ifdef MHD
+#if NDIM==1
+              q(i,nvar+1)=r%B_region(k)
+              q(i,nvar+2)=r%C_region(k)
+#endif
+#if NDIM==2
+              q(i,nvar+1)=r%C_region(k)
+#endif
 #endif
            end if
         end do
@@ -188,21 +438,17 @@ subroutine region_condinit(r,g,x,q,dx,nn)
            ! ADD to primitive variables the region values
            q(i,1)=q(i,1)+r%d_region(k)*weight/vol
            q(i,2)=q(i,2)+r%u_region(k)*weight
-#if NDIM>1
            q(i,3)=q(i,3)+r%v_region(k)*weight
-#endif
-#if NDIM>2
            q(i,4)=q(i,4)+r%w_region(k)*weight
-#endif
-           q(i,ndim+2)=q(i,ndim+2)+r%p_region(k)*weight/vol
+           q(i,5)=q(i,5)+r%p_region(k)*weight/vol
 #if NENER>0
-           do ivar=1,nener
-              q(i,ndim+2+ivar)=q(i,ndim+2+ivar)+r%prad_region(k,ivar)*weight/vol
+           do ivar=6,5+nener
+              q(i,ivar)=q(ivar)+r%prad_region(k,ivar-5)*weight/vol
            enddo
 #endif
-#if NVAR>NDIM+2+NENER
-           do ivar=ndim+3+nener,nvar
-              q(i,ivar)=r%var_region(k,ivar-ndim-2-nener)
+#if NVAR>5+NENER
+           do ivar=6+nener,nvar
+              q(i,ivar)=r%var_region(k,ivar-5-nener)
            end do
 #endif
         end do

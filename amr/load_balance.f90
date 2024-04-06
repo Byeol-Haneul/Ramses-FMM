@@ -613,6 +613,10 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
   end do
 #endif
   
+#ifdef MHD
+  msg%realdp_mhd=grid%bold
+#endif
+
 #ifdef GRAV
   do ind=1,twotondim
      do idim=1,ndim
@@ -666,6 +670,10 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
   end do
 #endif
   
+#ifdef MHD
+  grid%bold=msg%realdp_mhd
+#endif
+
 #ifdef GRAV
   do ind=1,twotondim
      do idim=1,ndim

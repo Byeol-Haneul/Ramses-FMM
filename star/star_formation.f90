@@ -66,11 +66,6 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   integer::i,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nstar,nstar_loc
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,tstar,mcell,mgas,mask,PoissMean,Rand
-#ifdef SOLVERmhd
-  integer::neul=5
-#else
-  integer::neul=ndim+2
-#endif
 #if NENER>0
   integer::irad
 #endif

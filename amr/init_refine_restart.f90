@@ -262,6 +262,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   integer,dimension(1:ndim)::ckey
   logical,dimension(1:twotondim)::refined
   real(dp),dimension(1:twotondim,1:nvar)::uold
+  real(dp),dimension(1:twotondim,1:6)::bold
   real(dp),dimension(1:twotondim,1:3)::f
   real(dp),dimension(1:twotondim)::phi,rho
 
@@ -351,7 +352,11 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      if(r%hydro)then
         file_hydro='backup_'//TRIM(nchar)//'/hydro.'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
+#ifdef MHD
+        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*(nvar+6))*nskip_file(icpu)
+#else
         iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvar)*nskip_file(icpu)
+#endif
      endif
 
      ! Prepare reading the GRAV file
@@ -372,8 +377,15 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
         ! Read values from HYDRO files
         if(r%hydro)then
+#ifdef MHD
+           ipos=iskip_hydro+(8*twotondim*(nvar+6))*(i-1)
+#else
            ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
+#endif
            read(11,POS=ipos)uold
+#ifdef MHD
+           read(11,POS=ipos)bold
+#endif
         endif
 
         ! Read values from GRAV files
@@ -404,6 +416,9 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
         if(r%hydro)then
            m%grid(igrid)%uold=uold
         endif
+#endif
+#ifdef MHD
+        m%grid(igrid)%bold=bold
 #endif
 #ifdef GRAV
         if(r%poisson)then

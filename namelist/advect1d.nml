@@ -1,6 +1,6 @@
 This namelist contains input parameters for a simple 1D advection test.
 Compile the code with:
-make NDIM=1 MPI=0 HYDRO=1 GRAV=0 UNITS=default CONDINIT=default
+make NDIM=1 HYDRO=1
 
 &RUN_PARAMS
 hydro=.true.

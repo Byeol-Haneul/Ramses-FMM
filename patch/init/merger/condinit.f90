@@ -61,7 +61,7 @@ subroutine read_merger_params(g)
        & ,typ_radius1, typ_radius2, cut_radius1, cut_radius2 &
        & ,typ_height1, typ_height2, cut_height1, cut_height2 &
        & ,rad_profile, Vcirc_dat_file1, Vcirc_dat_file2 &
-       & ,gal_axis1, gal_axis2, Vgal1, Vgal2,Zgas,HIfr,rslab,hslab
+       & ,gal_axis1, gal_axis2, Vgal1, Vgal2, Zgas, HIfr, rslab, hslab
 
   CALL getarg(1,infile)
   open(1,file=infile)
@@ -135,7 +135,7 @@ end subroutine read_merger_params
 !==================================================================================
 !=== hydro ic for a Toomre/exponential radial density profile merger (03/03/09) ===
 !==================================================================================
-subroutine condinit(r,g,x,u,dx,nn)
+subroutine condinit(r,g,x,q,dx,nn)
   use amr_parameters, only: dp, ndim, nvector
   use hydro_parameters, only: nvar, nener
   use merger_commons
@@ -143,21 +143,19 @@ subroutine condinit(r,g,x,u,dx,nn)
   implicit none
   type(run_t)::r
   type(global_t)::g
-  integer ::nn                            ! Number of cells
-  real(dp)::dx                            ! Cell size
-  real(dp),dimension(1:nvector,1:nvar)::u ! Conservative variables
-  real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
+  integer ::nn                             ! Number of cells
+  real(dp)::dx                             ! Cell size
+  real(dp),dimension(1:nvector,1:nprim)::q ! Conservative variables
+  real(dp),dimension(1:nvector,1:ndim)::x  ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
-  ! Positions are in user units:
-  ! x(i,1:3) are in [0,boxlen]**ndim.
-  ! U is the conservative variable vector. Conventions are here:
-  ! U(i,1): d, U(i,2:ndim+1): d.u,d.v,d.w and U(i,ndim+2): E.
+  ! Positions are in user (aka code) units:
+  ! x(i,1:ndim) are in [0,boxlen]**ndim.
   ! Q is the primitive variable vector. Conventions are here:
-  ! Q(i,1): d, Q(i,2:ndim+1):u,v,w and Q(i,ndim+2): P.
-  ! If nvar >= ndim+3, remaining variables are treated as passive
-  ! scalars in the hydro solver.
-  ! U(:,:) and Q(:,:) are in user units.
+  ! Q(i,1): d, Q(i,2:4):u,v,w and Q(i,5): P.
+  ! If nvar >= 6, remaining variables are treated as passive
+  ! scalars or non-thermnal energies in the hydro solver.
+  ! Q(:,:) are in user (aka code) units.
   !================================================================
   integer::ivar,i, ind_gal,j
   real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
@@ -336,14 +334,14 @@ subroutine condinit(r,g,x,u,dx,nn)
         end select
         q(i,1) = max(weight * q(i,1), dmin)
         ! P = rho * a**2 = rho * Cs**2
-        q(i,ndim+2)=a2*q(i,1)        
+        q(i,5)=a2*q(i,1)        
         ! Metals
         if(r%metal)then
            q(i,r%imetal)=r%z_ave*0.02
         endif
         ! Entropy
         if(r%entropy)then
-           q(i,r%ientropy)=q(i,ndim+2)/q(i,1)**r%gamma
+           q(i,r%ientropy)=q(i,5)/q(i,1)**r%gamma
         endif
         ! V = Vrot * (u_rot^xx_rad)/r + Vx_gal        
         !  -> Vrot = sqrt(Vcirc**2 - 3*Cs² + r/rho * grad(rho) * Cs²)
@@ -356,53 +354,24 @@ subroutine condinit(r,g,x,u,dx,nn)
            Vrot = sqrt(max(Vcirc**2 - 3.0D0*a2 - rc/rgal * a2,0.0D0))
         end select
         Vrot = weight * Vrot
-        q(i,ndim-1:ndim+1) = Vrot * vect_prod(axe_rot,xx_rad)/rc + vgal
+        q(i,2:4) = Vrot * vect_prod(axe_rot,xx_rad)/rc + vgal
      else ! Cell out of the gaseous disk : density = peanut and velocity = V_gal
         q(i,1)=dmin
-        q(i,ndim+2)=q(i,1)*phalo/scale_T2
-        ! V = Vgal
-        q(i,ndim-1:ndim+1)=vgal
+        q(i,5)=q(i,1)*phalo/scale_T2
+        ! Background flow
+        q(i,2)=vflowx
+        q(i,3)=vflowy
+        q(i,4)=vflowz
         ! Metals
         if(r%metal)then
            q(i,r%imetal)=r%z_ave*0.02
         endif
         ! Entropy
         if(r%entropy)then
-           q(i,r%ientropy)=q(i,ndim+2)/q(i,1)**r%gamma
+           q(i,r%ientropy)=q(i,5)/q(i,1)**r%gamma
         endif
-        ! Background flow
-        q(i,ndim-1)=vflowx
-        q(i,ndim)=vflowy
-        q(i,ndim+1)=vflowz
      endif
   enddo
-  ! Convert primitive to conservative variables
-  ! density -> density
-  u(1:nn,1)=q(1:nn,1)
-  ! velocity -> momentum
-  u(1:nn,2)=q(1:nn,1)*q(1:nn,2)
-#if NDIM>1
-  u(1:nn,3)=q(1:nn,1)*q(1:nn,3)
-#endif
-#if NDIM>2
-  u(1:nn,4)=q(1:nn,1)*q(1:nn,4)
-#endif
-  ! kinetic energy
-  u(1:nn,ndim+2)=0.0D0
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5D0*q(1:nn,1)*q(1:nn,2)**2
-#if NDIM>1
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5D0*q(1:nn,1)*q(1:nn,3)**2
-#endif
-#if NDIM>2
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+0.5D0*q(1:nn,1)*q(1:nn,4)**2
-#endif
-  ! pressure -> total fluid energy
-  ! E = Ekin + P / (gamma - 1)
-  u(1:nn,ndim+2)=u(1:nn,ndim+2)+q(1:nn,ndim+2)/(r%gamma-1.0d0)
-  ! passive scalars
-  do ivar=ndim+3,nvar
-     u(1:nn,ivar)=q(1:nn,1)*q(1:nn,ivar)
-  end do
 
 contains
 

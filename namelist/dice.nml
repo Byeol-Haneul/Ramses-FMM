@@ -3,7 +3,7 @@ Gas cooling and star formation are included.
 You need a GADGET file for the initial conditions. You can create one
 using the DICE code (https://bitbucket.org/vperret/dice).
 To compile the code with MPI, type in bin/ the command line:
-make NDIM=3 MPI=1 UNITS=default CONDINIT=default HYDRO=1 GRAV=1 NVAR=7
+make NDIM=3 MPI=1 HYDRO=1 GRAV=1 NVAR=7
 
 &RUN_PARAMS
 cosmo=.false.

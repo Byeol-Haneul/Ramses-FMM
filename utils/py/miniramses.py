@@ -655,6 +655,68 @@ def load_cell(filename):
 
     return c
 
+class Snap1d:
+    pass
+
+def rd_log(filename,**kwargs):
+    """This function reads the standard ouput (aka log file)
+    as produced by the RAMSES code for 1D simulations.
+
+    Args:
+        filename: the log file name (usually run.log).
+
+    Optional args:
+
+        None
+
+    Returns:
+        A variable r (class Run) object defined as:
+            c.ncell: number of AMR cells.
+            c.lev: level of refinement of the cells.
+            c.x: coordinates of the cells.
+            c.d: density of the cells.
+            c.u: velocity field x-component.
+            c.v: velocity field y-component.
+            c.w: velocity field z-component.
+            c.d: pressure of the cells.
+            c.A: magnetic field x-component.
+            c.B: magnetic field y-component.
+            c.C: magnetic field z-component.
+
+    Example:
+        import ramses_io as ram
+        r = ram.rd_log("run.log")
+        plt.plot(r["x"],r["d"]))
+    """
+    cmd="grep -n Output "+filename+" > /tmp/out.txt"
+    os.system(cmd)
+    lines = ascii.read("/tmp/out.txt")
+    print("Found "+str(len(lines))+" output(s)")
+
+    r=[]
+    for out in range(0,len(lines)):
+
+        i = int(lines["col1"][out][:-1])
+        n = int(lines["col3"][out])
+
+        data = ascii.read(filename,header_start=i-3,data_start=i-2,data_end=i+n-2)
+
+        r.append(Snap1d())
+        r[out].ncell=n
+        r[out].lev=np.array(data["lev"],dtype='int')
+        r[out].x=np.array(data["x"])
+        r[out].d=np.array(data["d"])
+        r[out].p=np.array(data["P"])
+        r[out].u=np.array(data["u"])
+        if len(data.columns)>5:
+            r[out].v=np.array(data["v"])
+            r[out].w=np.array(data["w"])
+            r[out].A=np.array(data["A"])
+            r[out].B=np.array(data["B"])
+            r[out].C=np.array(data["C"])
+
+    return r
+
 class Info:
     def __init__(self,nncpu):
         self.bound_key = np.zeros(shape=(nncpu+1),dtype=np.double)

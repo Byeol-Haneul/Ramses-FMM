@@ -16,6 +16,7 @@ subroutine poisson_flag(s,ilevel)
   ! -------------------------------------------------------------------
   real(dp)::dx_loc,vol_loc,d_scale,factG
   real(dp),dimension(1:nvar)::uu
+  real(dp),dimension(1:6)::bb
   integer::igrid,ind,ivar
   logical::ok
 
@@ -61,7 +62,13 @@ subroutine poisson_flag(s,ilevel)
            do ivar=1,nvar
               uu(ivar)=m%grid(igrid)%uold(ind,ivar)
            end do
-           call jeans_length_refine(r,uu,factG,dx_loc,r%jeans_refine(ilevel),ok)
+           bb=0.0
+#ifdef MHD
+           do ivar=1,6
+              bb(ivar)=m%grid(igrid)%bold(ind,ivar)
+           end do
+#endif
+           call jeans_length_refine(r,uu,bb,factG,dx_loc,r%jeans_refine(ilevel),ok)
 #endif
         endif
         
@@ -81,7 +88,7 @@ end subroutine poisson_flag
 !#####################################################################
 !#####################################################################
 !#####################################################################
-subroutine jeans_length_refine(r,uu,factG,size_cell,n_jeans,ok)
+subroutine jeans_length_refine(r,uu,bb,factG,size_cell,n_jeans,ok)
   use amr_parameters, only: ndim,dp,twopi
   use amr_commons, only: run_t
   use hydro_parameters, only: nvar
@@ -89,6 +96,7 @@ subroutine jeans_length_refine(r,uu,factG,size_cell,n_jeans,ok)
   implicit none
   type(run_t)::r
   real(dp)::uu(1:nvar)
+  real(dp)::bb(1:6)
   real(dp)::n_jeans,factG,size_cell
   logical ::ok
   ! 
@@ -97,18 +105,19 @@ subroutine jeans_length_refine(r,uu,factG,size_cell,n_jeans,ok)
 
   ! compute the thermal energy
   dens = max( uu(1) , r%smallr )
-  etherm = uu(ndim+2)
+  etherm = uu(5)
   etherm = etherm - 0.5d0*uu(2)**2/dens
-#if NDIM > 1
   etherm = etherm - 0.5d0*uu(3)**2/dens
-#endif
-#if NDIM > 2
   etherm = etherm - 0.5d0*uu(4)**2/dens
-#endif
 #if NENER>0
   do irad=1,nener
-     etherm=etherm-uu(ndim+2+irad)
+     etherm=etherm-uu(5+irad)
   end do
+#endif
+#ifdef MHD
+  etherm=etherm-0125d0*(bb(1)+bb(4))**2
+  etherm=etherm-0125d0*(bb(2)+bb(5))**2
+  etherm=etherm-0125d0*(bb(3)+bb(6))**2
 #endif
 
   ! compute the temperature

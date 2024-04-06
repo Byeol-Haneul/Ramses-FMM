@@ -155,11 +155,21 @@ subroutine m_read_params(pst)
   real(dp)::floor_u=1.d-10   ! Velocity floor
   real(dp)::floor_p=1.d-10   ! Pressure floor
   real(dp)::mass_sph=0.0D0   ! mass_sph
+#ifdef MHD
+  real(dp)::err_grad_b2=-1.0
+  real(dp)::err_grad_A=-1.0
+  real(dp)::err_grad_B=-1.0
+  real(dp)::err_grad_C=-1.0
+  real(dp)::floor_b2=1.d-10
+  real(dp)::floor_A=1.d-10
+  real(dp)::floor_B=1.d-10
+  real(dp)::floor_C=1.d-10
+#endif
 #if NENER>0
   real(dp),dimension(1:NENER)::err_grad_prad=-1.0
 #endif
-#if NVAR>NDIM+2+NENER
-  real(dp),dimension(1:NVAR-NDIM-2)::err_grad_var=-1.0
+#if NVAR>5+NENER
+  real(dp),dimension(1:NVAR-5-NENER)::err_grad_var=-1.0
 #endif
   real(dp),dimension(1:MAXLEVEL)::jeans_refine=-1.0
 
@@ -172,10 +182,14 @@ subroutine m_read_params(pst)
 #if NENER>0
   real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
 #endif
-#if NVAR>NDIM+2+NENER
-  real(dp),dimension(1:MAXREGION,1:NVAR-NDIM-2-NENER)::var_region=0.0
+#if NVAR>5+NENER
+  real(dp),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
 #endif
-
+#ifdef MHD
+  real(dp),dimension(1:MAXREGION)::B_region=0.
+  real(dp),dimension(1:MAXREGION)::C_region=0.
+  real(dp)::A_ave=0.,B_ave=0.,C_ave=0.
+#endif
   ! Hydro solver parameters
   integer ::niter_riemann=10
   integer ::slope_type=1
@@ -187,6 +201,7 @@ subroutine m_read_params(pst)
   real(dp)::smallr=1.d-10
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
+  character(LEN=10)::riemann2d='llf'
   logical ::entropy=.false.
   logical ::turb=.false.
   real(dp)::dual_energy=-1
@@ -194,7 +209,7 @@ subroutine m_read_params(pst)
   real(dp),dimension(1:3)::constant_gravity=0.0d0
 
   ! Non-thernal energies and passive scalars index
-  integer ::ieuler,inener,ientropy,imetal,iturb,ichem
+  integer ::inener,ientropy,imetal,iturb,ichem
 
   ! Interpolation parameters
   integer ::interpol_var=0
@@ -231,8 +246,8 @@ subroutine m_read_params(pst)
 #if NENER>0
   real(dp),dimension(1:MAXBOUND,1:NENER)::prad_bound=0
 #endif
-#if NVAR>NDIM+2+NENER
-  real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0
+#if NVAR>5+NENER
+  real(dp),dimension(1:MAXBOUND,1:NVAR-5-NENER)::var_bound=0
 #endif
 
   ! Cooling parameters
@@ -323,21 +338,28 @@ subroutine m_read_params(pst)
 #if NENER>0
        & ,prad_region &
 #endif
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
        & ,var_region &
+#endif
+#ifdef MHD
+       & ,B_region,C_region,A_ave,B_ave,C_ave &
 #endif
        & ,d_region,u_region,v_region,w_region,p_region
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,niter_riemann,slope_type,difmag,gamma_rad &
-       & ,dual_energy,T2_fix,entropy,turb,scheme,riemann,constant_gravity
+       & ,dual_energy,T2_fix,entropy,turb,scheme,riemann,riemann2d,constant_gravity
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
+#ifdef MHD
+       & ,err_grad_b2,err_grad_A,err_grad_B,err_grad_C &
+       & ,floor_b2,floor_A,floor_B,floor_C &
+#endif
 #if NENER>0
        & ,err_grad_prad &
 #endif
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
        & ,err_grad_var &
 #endif
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
@@ -352,7 +374,7 @@ subroutine m_read_params(pst)
 #if NENER>0
        & ,prad_bound &
 #endif
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
        & ,var_bound &
 #endif
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
@@ -393,9 +415,9 @@ subroutine m_read_params(pst)
 
   ! Check nvar is not too small
   write(*,'(" Using solver = hydro with nvar = ",I2," and ndim = ",I1)')nvar,ndim
-  if(nvar<ndim+2)then
-     write(*,*)'You should have: nvar>=ndim+2'
-     write(*,'(" Please recompile with -DNVAR=",I2)')ndim+2
+  if(nvar<5)then
+     write(*,*)'You should have: nvar>=5'
+     write(*,'(" Please recompile with -DNVAR=5")')
      call mdl_abort(s%mdl)
   endif
   
@@ -466,6 +488,7 @@ subroutine m_read_params(pst)
   endif
   if(nfile==-1)nfile=s%g%ncpu
   nfile=max(nfile,1)
+  nfile=min(nfile,s%g%ncpu)
 
   !--------------------------------------------------
   ! Check for errors in the namelist so far
@@ -613,8 +636,8 @@ subroutine m_read_params(pst)
   ! Check for non-thermal energies
   !--------------------------------------------------
 #if NENER>0
-  if(nvar<(ndim+2+nener))then
-     write(*,*)'Error: non-thermal energy need nvar >= ndim+2+nener'
+  if(nvar<5+nener)then
+     write(*,*)'Error: non-thermal energy need nvar >= 5+nener'
      write(*,*)'Modify NENER and recompile'
      nml_ok=.false.
   endif
@@ -624,12 +647,7 @@ subroutine m_read_params(pst)
   ! Compute indices for passive scalars
   ! and non-thermal energies
   !--------------------------------------------------
-#ifdef SOLVERmhd
-  ieuler=8
-#else
-  ieuler=ndim+2
-#endif
-  inener=ieuler+1
+  inener=6
   ientropy=inener+nener
   imetal=ientropy
   if(entropy)imetal=ientropy+1
@@ -641,11 +659,7 @@ subroutine m_read_params(pst)
   if(turb)then
      ichem=iturb+1
   endif
-#ifdef SOLVERmhd
-  if(hydro.and.(nvar>8) then
-#else
-  if(hydro.and.(nvar>ndim+2)) then
-#endif
+  if(hydro.and.(nvar>5)) then
      write(*,'(A50)')"__________________________________________________"
      write(*,*) 'Hydro var extra indices:'
 #if NENER>0
@@ -758,9 +772,26 @@ subroutine m_read_params(pst)
   s%r%ichem=ichem
   s%r%iturb=iturb
   s%r%scheme=scheme
+#ifndef MHD
   if(riemann=='llf')s%r%riemann=solver_llf
   if(riemann=='hll')s%r%riemann=solver_hll
   if(riemann=='hllc')s%r%riemann=solver_hllc
+#endif
+#ifdef MHD
+  if(riemann=='llf')s%r%riemann=solver_llf
+  if(riemann=='hll')s%r%riemann=solver_hll
+  if(riemann=='hlld')s%r%riemann=solver_hlld
+  if(riemann=='roe')s%r%riemann=solver_roe
+  if(riemann=='upwind')s%r%riemann=solver_upwind
+#endif
+#ifdef MHD
+  if(riemann2d=='llf')s%r%riemann2d=solver2d_llf
+  if(riemann2d=='hllf')s%r%riemann2d=solver2d_hllf
+  if(riemann2d=='hlla')s%r%riemann2d=solver2d_hlla
+  if(riemann2d=='hlld')s%r%riemann2d=solver2d_hlld
+  if(riemann2d=='roe')s%r%riemann2d=solver2d_roe
+  if(riemann2d=='upwind')s%r%riemann2d=solver2d_upwind
+#endif
   s%r%constant_gravity=constant_gravity
 
   s%r%units_density=units_density
@@ -791,10 +822,20 @@ subroutine m_read_params(pst)
   s%r%floor_u=floor_u
   s%r%floor_p=floor_p
   s%r%mass_sph=mass_sph
+#ifdef MHD
+  s%r%err_grad_b2=err_grad_b2
+  s%r%err_grad_A=err_grad_A
+  s%r%err_grad_B=err_grad_B
+  s%r%err_grad_C=err_grad_C
+  s%r%floor_b2=floor_b2
+  s%r%floor_A=floor_A
+  s%r%floor_B=floor_B
+  s%r%floor_C=floor_C
+#endif
 #if NENER>0
   s%r%err_grad_prad=err_grad_prad
 #endif
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
   s%r%err_grad_var=err_grad_var
 #endif
 
@@ -823,8 +864,15 @@ subroutine m_read_params(pst)
 #if NENER>0
   s%r%prad_region=prad_region
 #endif
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
   s%r%var_region=var_region
+#endif
+#ifdef MHD
+  s%r%B_region=B_region
+  s%r%C_region=C_region
+  s%r%A_ave=A_ave
+  s%r%B_ave=B_ave
+  s%r%C_ave=C_ave
 #endif
 
   s%r%periodic=periodic
@@ -847,7 +895,7 @@ subroutine m_read_params(pst)
 #if NENER>0
   s%r%prad_bound=prad_bound
 #endif
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
   s%r%var_bound=var_bound
 #endif
 

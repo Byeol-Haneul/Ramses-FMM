@@ -16,11 +16,11 @@ subroutine boundana(r,g,x,u,dx,ibound,ncell)
   real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine generates boundary conditions for RAMSES.
-  ! Positions are in user units:
-  ! x(i,1:3) are in [0,boxlen]**ndim.
+  ! Positions are in user (aka code) units:
+  ! x(i,1:ndim) are in [0,boxlen]**ndim.
   ! U is the conservative variable vector. Conventions are here:
-  ! U(i,1): d, U(i,2:ndim+1): d.u,d.v,d.w and U(i,ndim+2): E.
-  ! U is in user units.
+  ! U(i,1): d, U(i,2:4): d.u,d.v,d.w and U(i,5): E.
+  ! U is in user (aka code) units.
   ! ibound is the index of the boundary region defined in the namelist.
   !================================================================
   integer::ivar,i

@@ -2,36 +2,50 @@
 # If you have problems with this makefile, contact Romain.Teyssier@gmail.com
 #############################################################################
 # Compilation time parameters
-NVECTOR = 32
-NDIM = 3
-NHILBERT = 1
-HYDRO = 1
-GRAV = 1
-CONDINIT = coeur
-UNITS = coeur
-NPRE = 8
-NVAR = 5
-NENER = 0
 COMPILER = GNU
-DEBUG = 0
+NHILBERT = 1
+NVECTOR = 32
+NPRE = 8
+NDIM = 3
+NVAR = 5
+HYDRO = 1
+MHD = 0
+GRAV = 0
 MPI = 0
+INIT =
+UNITS =
+NENER =
+PATCH =
+DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
 SOLVER = hydro
-PATCH = 
 EXEC = ramses
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
-DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNENER=$(NENER) -DNVAR=$(NVAR) \
-	-DNHILBERT=$(NHILBERT) -DCONDINIT${CONDINIT} -DUNITS${UNITS}
+DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNVAR=$(NVAR) -DNHILBERT=$(NHILBERT)
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
+ifeq ($(MHD),1)
+   DEFINES += -DMHD
+endif
 ifeq ($(GRAV),1)
    DEFINES += -DGRAV
+endif
+ifneq ($(NENER),)
+   DEFINES += -DNENER=$(NENER)
+endif
+#############################################################################
+# Set proper units and initial conditions
+ifneq ($(INIT),)
+   DEFINES += -DINIT=$(INIT)
+endif
+ifneq ($(UNITS),)
+   DEFINES += -DUNITS=$(UNITS)
 endif
 #############################################################################
 # GNU compiler (gfortran)
@@ -106,8 +120,9 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
 	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
-	 godunov_fine.o umuscl.o uplmde.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
-	 input_hydro_condinit.o condinit.o input_hydro_grafic.o input_hydro_gadget.o init_flow_fine.o \
+	 godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
+	 input_hydro_condinit.o input_hydro_grafic.o input_hydro_gadget.o init_flow_fine.o \
+	 condinit.o vecpotentialinit.o \
 	 init_refine_adaptive.o init_refine_restart.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
 	 task_manager.o amr_step.o adaptive_loop.o \

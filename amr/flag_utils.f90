@@ -122,7 +122,7 @@ subroutine init_flag(s,ilevel,nflag)
      end do
   end do
   !---------------------------------------------------------
-  ! Set flag1 to 1 if cell is refined and  contains a 
+  ! Set flag1 to 1 if cell is refined and contains a
   ! flagged son or a refined son.
   ! This ensures that refinement rules are satisfied.
   !---------------------------------------------------------

@@ -74,11 +74,19 @@ subroutine upload_fine(s,ilevel)
 #endif
   integer::ioct,ind,ivar,icell,idim
   integer(kind=8),dimension(0:ndim)::hash_key
-  real(dp)::average,ekin,erad
+  integer,dimension(1:6,1:4)::hh
+  real(dp)::average,ekin,erad,emag
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 
 #ifdef HYDRO
+
+  hh(1,1:4)=(/1,3,5,7/)
+  hh(2,1:4)=(/2,4,6,8/)
+  hh(3,1:4)=(/1,2,5,6/)
+  hh(4,1:4)=(/3,4,7,8/)
+  hh(5,1:4)=(/1,2,3,4/)
+  hh(6,1:4)=(/5,6,7,8/)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -91,6 +99,15 @@ subroutine upload_fine(s,ilevel)
            endif
         end do
      end do
+#ifdef MHD
+     do ivar=1,6
+        do ind=1,twotondim
+           if(m%grid(ioct)%refined(ind))then
+              m%grid(ioct)%bold(ind,ivar)=0.0
+           endif
+        end do
+     end do
+#endif
   end do
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
@@ -102,7 +119,7 @@ subroutine upload_fine(s,ilevel)
   hash_key(0)=ilevel+1
   do ioct=m%head(ilevel+1),m%tail(ilevel+1)
 
-     ! Get cell and grid index
+     ! Get parent cell and grid index
      hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
 
@@ -112,56 +129,101 @@ subroutine upload_fine(s,ilevel)
         do ind=1,twotondim
            average=average+m%grid(ioct)%uold(ind,ivar)
         end do
-        ! Scatter result to cell
+        ! Scatter result to parent cell
         gridp%uold(icell,ivar)=average/dble(twotondim)
      end do
 
+     ! Average cell-centered magnetic field
+#ifdef MHD
+#if NDIM<3
+     ! Average cell-centered Bz
+     average=0.0d0
+     do ind=1,twotondim
+        average=average+m%grid(ioct)%bold(ind,3)
+     end do
+     ! Scatter result to parent cell
+     gridp%bold(icell,3)=average/dble(twotondim)
+     gridp%bold(icell,6)=average/dble(twotondim)
+#if NDIM==1
+     ! Average cell-centered Bx and By
+     do idim=1,2
+        average=0.0d0
+        do ind=1,twotondim
+           average=average+m%grid(ioct)%bold(ind,idim)
+        end do
+        ! Scatter result to parentcell
+        gridp%bold(icell,idim)=average/dble(twotondim)
+        gridp%bold(icell,idim+3)=average/dble(twotondim)
+     end do
+#endif
+#endif
+#endif
+
+     ! Average face-centered magnetic field
+#ifdef MHD
+#if NDIM>1
+     ! Loop over dimensions
+     do idim=1,ndim
+        ! Left magnetic field in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%grid(ioct)%bold(hh(2*idim-1,ind),idim)
+        end do
+        gridp%bold(icell,idim)=average/dble(twotondim/2)
+        ! Right magnetic field in parent cell
+        average=0.0d0
+        do ind=1,twotondim/2
+           average=average+m%grid(ioct)%bold(hh(2*idim,ind),idim+3)
+        end do
+        gridp%bold(icell,idim+3)=average/dble(twotondim/2)
+     end do
+#endif
+#endif
+
      ! Average internal energy instead of total energy
-     if(r%interpol_var==1 .or. r%interpol_var==2)then
+     if(r%interpol_var==1)then
         average=0.0d0
         do ind=1,twotondim
            ekin=0.0d0
-           do idim=1,ndim
+           do idim=1,3
               ekin=ekin+0.5d0*m%grid(ioct)%uold(ind,idim+1)**2/max(m%grid(ioct)%uold(ind,1),r%smallr)
            end do
+           emag=0.0d0
+#ifdef MHD
+           do idim=1,3
+              emag=emag+0.125d0*(m%grid(ioct)%bold(ind,idim)+m%grid(ioct)%bold(ind,idim+3))
+           end do
+#endif
            erad=0.0d0
 #if NENER>0
            do irad=1,nener
-              erad=erad+m%grid(ioct)%uold(ind,ndim+2+irad)
+              erad=erad+m%grid(ioct)%uold(ind,5+irad)
            end do
 #endif
-           average=average+m%grid(ioct)%uold(ind,ndim+2)-ekin-erad
+           average=average+m%grid(ioct)%uold(ind,5)-ekin-erad-emag
         end do
-        ! Scatter result to cell
+        ! Scatter result to parent cell
         ekin=0.0d0
-        do idim=1,ndim
+        do idim=1,3
            ekin=ekin+0.5d0*gridp%uold(icell,idim+1)**2/max(gridp%uold(icell,1),r%smallr)
         end do
+        emag=0.0d0
+#ifdef MHD
+        do idim=1,3
+           emag=emag+0.125d0*(gridp%bold(icell,idim)+gridp%bold(icell,idim+3))
+        end do
+#endif
         erad=0.0d0
 #if NENER>0
         do irad=1,nener
-           erad=erad+gridp%uold(icell,ndim+2+irad)
+           erad=erad+gridp%uold(icell,5+irad)
         end do
 #endif
-        gridp%uold(icell,ndim+2)=average/dble(twotondim)+ekin+erad
+        gridp%uold(icell,5)=average/dble(twotondim)+ekin+erad+emag
      endif
   end do
 
   call close_cache(s,m%grid_dict)
-
-  ! Set conservative variable to zero in refined cells
-  do ioct=m%head(ilevel),m%tail(ilevel)
-     do ivar=1,nvar
-        do ind=1,twotondim
-           if(m%grid(ioct)%uold(ind,1)==0.0)then
-              write(*,*)'Sorry zero density cell'
-              write(*,*)m%grid(ioct)%uold(ind,1:nvar)
-              write(*,*)m%grid(ioct)%refined(ind)
-              call mdl_abort(mdl)
-           endif
-        end do
-     end do
-  end do
 
   end associate
 
@@ -190,6 +252,9 @@ subroutine init_flush_upload(grid,hash_key)
      end do
   end do
 #endif
+#ifdef MHD
+  grid%bold=0.0d0
+#endif
   
 end subroutine init_flush_upload
 !##########################################################################
@@ -214,6 +279,10 @@ subroutine pack_flush_upload(grid,msg_size,msg_array)
         msg%realdp(ind,ivar)=grid%uold(ind,ivar)
      end do
   end do
+#endif
+
+#ifdef MHD
+  msg%realdp_mhd=grid%bold
 #endif
 
   msg_array=transfer(msg,msg_array)
@@ -245,6 +314,16 @@ subroutine unpack_flush_upload(grid,msg_size,msg_array,hash_key)
      do ind=1,twotondim
         if(grid%refined(ind))then
            grid%uold(ind,ivar)=grid%uold(ind,ivar)+msg%realdp(ind,ivar)
+        endif
+     end do
+  end do
+#endif
+
+#ifdef MHD
+  do ivar=1,6
+     do ind=1,twotondim
+        if(grid%refined(ind))then
+           grid%bold(ind,ivar)=grid%bold(ind,ivar)+msg%realdp_mhd(ind,ivar)
         endif
      end do
   end do

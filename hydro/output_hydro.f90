@@ -39,7 +39,7 @@ end subroutine r_output_hydro
 !###################################################
 subroutine output_hydro(s,filename)
   use amr_parameters, only: ndim,twotondim,flen,dp
-  use hydro_parameters, only: nvar
+  use hydro_parameters, only: nvar,nprim,nener,ie
   use ramses_commons, only: ramses_t,open_file,close_file
   implicit none
   type(ramses_t)::s
@@ -47,12 +47,14 @@ subroutine output_hydro(s,filename)
   !-----------------------------------
   ! Output hydro data in file
   !-----------------------------------
-  integer::ilevel,igrid,ilun,ivar,ind
+  integer::ilevel,igrid,ilun,irad,m,ind
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(kind=4),dimension(1:twotondim,1:nvar)::uout
+  real(kind=4),dimension(1:twotondim,1:nprim)::qout
+  real(dp),dimension(1:twotondim,1:nprim)::qold
   real(dp),dimension(1:twotondim,1:nvar)::uold
-  real(dp),dimension(1:ndim)::vv
-  real(dp)::etot,ekin,dd,pp
+  real(dp),dimension(1:twotondim,1:6)::bold
+  real(dp)::vx,vy,vz,bx,by,bz
+  real(dp)::etot,ekin,emag,erad,dd,pp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -61,41 +63,74 @@ subroutine output_hydro(s,filename)
   call open_file(s,filename,nskip,ilun)
 
   do ilevel=r%levelmin,r%nlevelmax
+
      write(ilun,POS=nskip(ilevel))
+
      do igrid=m%head(ilevel),m%tail(ilevel)
+
         uold=m%grid(igrid)%uold
+#ifdef MHD
+        bold=m%grid(igrid)%bold
+#endif
         do ind=1,twotondim
+
            ! Compute density
            dd=uold(ind,1)
+
            ! Compute velocity
-           vv(1:ndim)=uold(ind,2:ndim+1)/dd
+           vx=uold(ind,2)/dd
+           vy=uold(ind,3)/dd
+           vz=uold(ind,4)/dd
+
            ! Compute kinetic energy
-           ekin=0.
-#if NDIM>0
-           ekin=ekin+0.5*dd*vv(1)**2
+           ekin=0.5*dd*(vx**2+vy**2+vz**2)
+           emag=0.0
+#ifdef MHD
+           ! Compute cell-centered magnetic field
+           bx=0.5*(bold(ind,1)+bold(ind,4))
+           by=0.5*(bold(ind,2)+bold(ind,5))
+           bz=0.5*(bold(ind,3)+bold(ind,6))
+           emag=0.5*(bx**2+by**2+bz**2)
 #endif
-#if NDIM>1
-           ekin=ekin+0.5*dd*vv(2)**2
-#endif
-#if NDIM>2
-           ekin=ekin+0.5*dd*vv(3)**2
+           erad=0.0
+#if NENER>0
+           ! Compute non-thermal energy
+           do irad=1,nener
+              erad=erad+uold(ind,5+irad)
+           end do
 #endif
            ! Compute pressure
-           etot=uold(ind,ndim+2)
-           pp=(r%gamma-1)*(etot-ekin)
-           ! Store as primitive variables
-           uold(ind,1)=dd
-           uold(ind,2:ndim+1)=vv
-           uold(ind,ndim+2)=pp
-#if NVAR>NDIM+2+NENER
+           etot=uold(ind,5)
+           pp=(r%gamma-1)*(etot-ekin-emag-erad)
+
+           ! Store primitive variables
+           qold(ind,1)=dd
+           qold(ind,2)=vx
+           qold(ind,3)=vy
+           qold(ind,4)=vz
+           qold(ind,5)=pp
+#ifdef MHD
+           qold(ind,6)=bx
+           qold(ind,7)=by
+           qold(ind,8)=bz
+           ! If one want to output instead the divergence in 2D
+           ! qold(ind,8)=abs(bold(ind,5)-bold(ind,2)+bold(ind,4)-bold(ind,1))/r%boxlen/0.5**ilevel
+#endif
+#if NENER>0
+           do irad=1,nener
+              qold(ind,ie+irad)=(r%gamma_rad(irad)-1)*uold(ind,5+irad)
+           end do
+#endif
+#if NVAR>5+NENER
            ! Compute passive scalars
-           do ivar=ndim+3,nvar
-              uold(ind,ivar)=uold(ind,ivar)/dd
+           do n=1,nvar-5-nener
+              qold(ind,ie+nener+n)=uold(ind,5+nener+n)/dd
            end do
 #endif
         end do
-        uout=real(uold,kind=4)
-        write(ilun)uout
+        qout=real(qold,kind=4)
+        write(ilun)qout
+
      end do
   enddo
 
@@ -139,7 +174,11 @@ subroutine backup_hydro(r,g,m,mdl,filename)
   end if
   open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
   write(ilun)ndim
+#ifdef MHD
+  write(ilun)nvar+6
+#else
   write(ilun)nvar
+#endif
   write(ilun)r%levelmin
   write(ilun)r%nlevelmax
   do ilevel=r%levelmin,r%nlevelmax
@@ -148,6 +187,9 @@ subroutine backup_hydro(r,g,m,mdl,filename)
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
         write(ilun)m%grid(igrid)%uold
+#ifdef MHD
+        write(ilun)m%grid(igrid)%bold
+#endif
      end do
   enddo
   close(ilun)
@@ -161,7 +203,7 @@ end subroutine backup_hydro
 !###################################################
 subroutine file_descriptor_hydro(r,filename,write_bkp_file)
   use amr_parameters, only: ndim,flen
-  use hydro_parameters, only: nvar,nener
+  use hydro_parameters, only: nvar,nener,nprim,ie
   use amr_commons, only: run_t
   implicit none
   type(run_t)::r
@@ -186,27 +228,37 @@ subroutine file_descriptor_hydro(r,filename,write_bkp_file)
      write(ilun,'("variable #",I2,": density")')ivar
      ivar=2
      write(ilun,'("variable #",I2,": momentum_x")')ivar
-     if(ndim>1)then
-        ivar=3
-        write(ilun,'("variable #",I2,": momentum_y")')ivar
-     endif
-     if(ndim>2)then
-        ivar=4
-        write(ilun,'("variable #",I2,": momentum_z")')ivar
-     endif
+     ivar=3
+     write(ilun,'("variable #",I2,": momentum_y")')ivar
+     ivar=4
+     write(ilun,'("variable #",I2,": momentum_z")')ivar
+     ivar=5
+     write(ilun,'("variable #",I2,": total_energy")')ivar
 #if NENER>0
      ! Non-thermal pressures
-     do ivar=ndim+2,ndim+1+nener
-        write(ilun,'("variable #",I2,": non_thermal_energy_",I1)')ivar,ivar-ndim-1
+     do ivar=6,5+nener
+        write(ilun,'("variable #",I2,": non_thermal_energy_",I1)')ivar,ivar-5
      end do
 #endif
-     ivar=ndim+2+nener
-     write(ilun,'("variable #",I2,": total_energy")')ivar
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
      ! Passive scalars
-     do ivar=ndim+3+nener,nvar
-        write(ilun,'("variable #",I2,": density_scalar_",I1)')ivar,ivar-ndim-2-nener
+     do ivar=6+nener,nvar
+        write(ilun,'("variable #",I2,": density_scalar_",I1)')ivar,ivar-5-nener
      end do
+#endif
+#ifdef MHD
+     ivar=nvar+1
+     write(ilun,'("variable #",I2,": left_magnetic_field_x")')ivar
+     ivar=nvar+2
+     write(ilun,'("variable #",I2,": left_magnetic_field_y")')ivar
+     ivar=nvar+3
+     write(ilun,'("variable #",I2,": left_magnetic_field_z")')ivar
+     ivar=nvar+4
+     write(ilun,'("variable #",I2,": right_magnetic_field_x")')ivar
+     ivar=nvar+5
+     write(ilun,'("variable #",I2,": right_magnetic_field_y")')ivar
+     ivar=nvar+6
+     write(ilun,'("variable #",I2,": right_magnetic_field_z")')ivar
 #endif
   else
      ! Write variable names in output file
@@ -215,26 +267,28 @@ subroutine file_descriptor_hydro(r,filename,write_bkp_file)
      write(ilun,'("variable #",I2,": density")')ivar
      ivar=2
      write(ilun,'("variable #",I2,": velocity_x")')ivar
-     if(ndim>1)then
-        ivar=3
-        write(ilun,'("variable #",I2,": velocity_y")')ivar
-     endif
-     if(ndim>2)then
-        ivar=4
-        write(ilun,'("variable #",I2,": velocity_z")')ivar
-     endif
+     ivar=3
+     write(ilun,'("variable #",I2,": velocity_y")')ivar
+     ivar=4
+     write(ilun,'("variable #",I2,": velocity_z")')ivar
+     ivar=5
+     write(ilun,'("variable #",I2,": thermal_pressure")')ivar
+     ivar=6
+     write(ilun,'("variable #",I2,": magnetic_field_x")')ivar
+     ivar=7
+     write(ilun,'("variable #",I2,": magnetic_field_y")')ivar
+     ivar=8
+     write(ilun,'("variable #",I2,": magnetic_field_z")')ivar
 #if NENER>0
      ! Non-thermal pressures
-     do ivar=ndim+2,ndim+1+nener
-        write(ilun,'("variable #",I2,": non_thermal_pressure_",I1)')ivar,ivar-ndim-1
+     do ivar=ie+1,ie+nener
+        write(ilun,'("variable #",I2,": non_thermal_pressure_",I1)')ivar,ivar-ie
      end do
 #endif
-     ivar=ndim+2+nener
-     write(ilun,'("variable #",I2,": thermal_pressure")')ivar
-#if NVAR>NDIM+2+NENER
+#if NVAR>5+NENER
      ! Passive scalars
-     do ivar=ndim+3+nener,nvar
-        write(ilun,'("variable #",I2,": scalar_",I1)')ivar,ivar-ndim-2-nener
+     do ivar=ie+1+nener,nprim
+        write(ilun,'("variable #",I2,": scalar_",I1)')ivar,ivar-ie-nener
      end do
 #endif
   endif

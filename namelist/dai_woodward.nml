@@ -1,6 +1,6 @@
 This is the RAMSES parameter file for the Dai & Woodward (1998) MHD shock tube test.
 Compile the code with:
-make NDIM=1 HYDRO=1 MHD=1 GRAV=0 UNITS=default CONDINIT=default
+make NDIM=1 HYDRO=1 MHD=1
 
 &RUN_PARAMS
 hydro=.true.
@@ -52,7 +52,7 @@ tout=0.2
 gamma=1.66666667
 courant_factor=0.8
 slope_type=2
-riemann='roe_mhd'
+riemann='roe'
 /
 
 &REFINE_PARAMS 

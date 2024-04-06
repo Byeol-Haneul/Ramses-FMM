@@ -100,7 +100,8 @@ module amr_commons
      real(dp)::dual_energy=-1
      real(dp)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'
-     integer::riemann=1
+     integer::riemann=0
+     integer::riemann2d=0
      real(dp),dimension(1:3)::constant_gravity
      integer::inener,ientropy,imetal,iturb,ichem
      
@@ -139,13 +140,23 @@ module amr_commons
      real(dp)::floor_u=1.d-10   ! Velocity floor
      real(dp)::floor_p=1.d-10   ! Pressure floor
      real(dp)::mass_sph=0.0D0   ! mass_sph
+#ifdef MHD
+     real(dp)::err_grad_b2=-1.0
+     real(dp)::err_grad_A=-1.0
+     real(dp)::err_grad_B=-1.0
+     real(dp)::err_grad_C=-1.0
+     real(dp)::floor_b2=1.d-10
+     real(dp)::floor_A=1.d-10
+     real(dp)::floor_B=1.d-10
+     real(dp)::floor_C=1.d-10
+#endif
 #if NENER>0
      real(dp),dimension(1:NENER)::err_grad_prad=-1.0
 #endif
-#if NVAR>NDIM+2+NENER
-     real(dp),dimension(1:NVAR-NDIM-2)::err_grad_var=-1.0
+#if NVAR>5+NENER
+     real(dp),dimension(1:NVAR-5-NENER)::err_grad_var=-1.0
 #endif
-          
+
      ! Initial condition regions parameters
      integer::nregion=0
      character(LEN=10),dimension(1:MAXREGION)::region_type='square'
@@ -166,10 +177,14 @@ module amr_commons
 #if NENER>0
      real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
 #endif
-#if NVAR>NDIM+2+NENER
-     real(dp),dimension(1:MAXREGION,1:NVAR-NDIM-2-NENER)::var_region=0.0
+#if NVAR>5+NENER
+     real(dp),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
 #endif
-     
+#ifdef MHD
+     real(dp),dimension(1:MAXREGION)::B_region=0.
+     real(dp),dimension(1:MAXREGION)::C_region=0.
+     real(dp)::A_ave=0.,B_ave=0.,C_ave=0.
+#endif
      ! Initial condition files for each level
      character(LEN=20)::filetype='ascii'
      logical::multiple=.false.
@@ -190,17 +205,20 @@ module amr_commons
      integer,dimension(1:MAXBOUND)::bound_zmin=0
      integer,dimension(1:MAXBOUND)::bound_zmax=0
      real(dp),dimension(1:MAXBOUND)::d_bound=0
-     real(dp),dimension(1:MAXBOUND)::p_bound=0
      real(dp),dimension(1:MAXBOUND)::u_bound=0
      real(dp),dimension(1:MAXBOUND)::v_bound=0
      real(dp),dimension(1:MAXBOUND)::w_bound=0
+     real(dp),dimension(1:MAXBOUND)::p_bound=0
 #if NENER>0
      real(dp),dimension(1:MAXBOUND,1:NENER)::prad_bound=0
 #endif
-#if NVAR>NDIM+2+NENER
-     real(dp),dimension(1:MAXBOUND,1:NVAR-NDIM-2-NENER)::var_bound=0
+#if NVAR>5+NENER
+     real(dp),dimension(1:MAXBOUND,1:NVAR-5-NENER)::var_bound=0
 #endif
-     
+#ifdef MHD
+     real(dp),dimension(1:MAXBOUND)::B_bound=0
+     real(dp),dimension(1:MAXBOUND)::C_bound=0
+#endif
      ! Cooling parameters
      logical::cooling=.false.
      logical::cooling_ism=.false.
@@ -276,9 +294,9 @@ module amr_commons
      integer::nstep_coarse_old=0                   ! Old coarse step
      integer::nflag,ncreate,nkill                  ! Refinements
      
-     real(dp)::emag_tot=0.0D0                      ! Total magnetic energy
      real(dp)::ekin_tot=0.0D0                      ! Total kinetic energy
      real(dp)::eint_tot=0.0D0                      ! Total internal energy
+     real(dp)::emag_tot=0.0D0                      ! Total magnetic energy
      real(dp)::epot_tot=0.0D0                      ! Total potential energy
      real(dp)::epot_tot_old=0.0D0                  ! Old potential energy
      real(dp)::epot_tot_int=0.0D0                  ! Time integrated potential

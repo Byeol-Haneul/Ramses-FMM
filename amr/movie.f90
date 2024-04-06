@@ -24,7 +24,7 @@ subroutine m_output_frame(pst)
   real(kind=8),dimension(:),allocatable::data_frame
   real(kind=8),dimension(:),allocatable::dens
   real(kind=4),dimension(:),allocatable::data_single
-#if NVAR>NDIM+2
+#if NVAR>5
   integer::ll
   character(LEN=5)::dummy
 #endif
@@ -60,12 +60,10 @@ subroutine m_output_frame(pst)
      moviefiles(1) = trim(moviedir)//'dens_'//trim(istep_str)//'.map'
      moviefiles(2) = trim(moviedir)//'vx_'//trim(istep_str)//'.map'
      moviefiles(3) = trim(moviedir)//'vy_'//trim(istep_str)//'.map'
-#if NDIM>2
      moviefiles(4) = trim(moviedir)//'vz_'//trim(istep_str)//'.map'
-#endif
-     moviefiles(ndim+2) = trim(moviedir)//'temp_'//trim(istep_str)//'.map'
-#if NVAR>NDIM+2
-     do ll=ndim+3,NVAR
+     moviefiles(5) = trim(moviedir)//'temp_'//trim(istep_str)//'.map'
+#if NVAR>5
+     do ll=6,NVAR
         write(dummy,'(I3.1)') ll
         moviefiles(ll) = trim(moviedir)//'var'//trim(adjustl(dummy))//'_'//trim(istep_str)//'.map'
      end do
@@ -399,7 +397,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                     else if(ind_var==1)then
                        ! Compute mass-weighted mean density
                        map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)**2
-                    else if(ind_var==(ndim+2))then
+                    else if(ind_var==5)then
                        ! Compute mass-weighted mean temperature
                        ! Kinetic energy
                        ekk=0.0d0
@@ -407,7 +405,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                           ekk=ekk+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
                        enddo
                        ! Pressure
-                       temp=(r%gamma-1.0d0)*(m%grid(igrid)%uold(ind,ndim+2)-ekk)
+                       temp=(r%gamma-1.0d0)*(m%grid(igrid)%uold(ind,5)-ekk)
                        ! Temperature in K
                        temp=max(temp/max(m%grid(igrid)%uold(ind,1),r%smallr),r%smallc**2)*scale_T2
                        map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)*temp
@@ -439,7 +437,7 @@ subroutine set_movie_vars(r)
   ! This routine sets the movie vars from textual form
   type(run_t)::r
   
-#if NVAR>NDIM+2
+#if NVAR>5
   integer::ll
   character(LEN=5)::dummy
 #endif
@@ -447,12 +445,10 @@ subroutine set_movie_vars(r)
   if(ANY(r%movie_vars_txt=='dens '))r%movie_vars(1)=1
   if(ANY(r%movie_vars_txt=='vx   '))r%movie_vars(2)=1
   if(ANY(r%movie_vars_txt=='vy   '))r%movie_vars(3)=1
-#if NDIM>2
   if(ANY(r%movie_vars_txt=='vz   '))r%movie_vars(4)=1
-#endif
-  if(ANY(r%movie_vars_txt=='temp '))r%movie_vars(ndim+2)=1
-#if NVAR>NDIM+2
-  do ll=ndim+3,NVAR
+  if(ANY(r%movie_vars_txt=='temp '))r%movie_vars(5)=1
+#if NVAR>5
+  do ll=6,NVAR
      write(dummy,'(I3.1)') ll
      if(ANY(r%movie_vars_txt=='var'//trim(adjustl(dummy))//' '))r%movie_vars(ll)=1
   end do

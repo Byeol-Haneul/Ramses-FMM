@@ -168,7 +168,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         if(ivar==2)init_array=g%dfact(ilevel)*g%vfact(1)*dx_loc/g%dxini(ilevel)*init_array/g%vfact(ilevel)
         if(ivar==3)init_array=g%dfact(ilevel)*g%vfact(1)*dx_loc/g%dxini(ilevel)*init_array/g%vfact(ilevel)
         if(ivar==4)init_array=g%dfact(ilevel)*g%vfact(1)*dx_loc/g%dxini(ilevel)*init_array/g%vfact(ilevel)
-        if(ivar==ndim+2)init_array=(1.0+init_array)*g%T2_start/scale_T2
+        if(ivar==5)init_array=(1.0+init_array)*g%T2_start/scale_T2
      endif
      
      ! Loop over cells
@@ -214,7 +214,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
            rr=max(m%grid(igrid)%uold(ind,1),0.1*g%omega_b/g%omega_m)
            m%grid(igrid)%uold(ind,1)=rr
            ! Compute pressure from temperature and density
-           m%grid(igrid)%uold(ind,ndim+2)=m%grid(igrid)%uold(ind,1)*m%grid(igrid)%uold(ind,ndim+2)
+           m%grid(igrid)%uold(ind,5)=m%grid(igrid)%uold(ind,1)*m%grid(igrid)%uold(ind,5)
 #endif
         end do
         ! End loop over cells
@@ -232,7 +232,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         do ind=1,twotondim
 #ifdef HYDRO
            ! Compute entropy from pressure and density
-           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,ndim+2)/m%grid(igrid)%uold(ind,1)**r%gamma
+           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)/m%grid(igrid)%uold(ind,1)**r%gamma
 #endif
         end do
         ! End loop over cells
@@ -294,24 +294,20 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         ! Compute total energy density
         rr=m%grid(igrid)%uold(ind,1)
         vx=m%grid(igrid)%uold(ind,2)
-#if NDIM>1
         vy=m%grid(igrid)%uold(ind,3)
-#endif
-#if NDIM>2
         vz=m%grid(igrid)%uold(ind,4)
-#endif
-        pp=m%grid(igrid)%uold(ind,ndim+2)
+        pp=m%grid(igrid)%uold(ind,5)
         ek=0.5d0*rr*(vx**2+vy**2+vz**2)
         ei=pp/(r%gamma-1.0)
-        m%grid(igrid)%uold(ind,ndim+2)=ei+ek
+        m%grid(igrid)%uold(ind,5)=ei+ek
         ! Compute momentum density
-        do idim=1,ndim
+        do idim=1,3
            rr=m%grid(igrid)%uold(ind,1)
            m%grid(igrid)%uold(ind,idim+1)=rr*m%grid(igrid)%uold(ind,idim+1)
         end do
-#if NVAR>NDIM+2
+#if NVAR>5
         ! Compute passive scalar density
-        do ivar=ndim+3,nvar
+        do ivar=6,nvar
            rr=m%grid(igrid)%uold(ind,1)
            m%grid(igrid)%uold(ind,ivar)=rr*m%grid(igrid)%uold(ind,ivar)
         enddo

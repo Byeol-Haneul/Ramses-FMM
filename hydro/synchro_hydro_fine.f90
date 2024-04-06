@@ -71,7 +71,7 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
   ! Add gravity source terms to uold with time step dteff.
   !--------------------------------------------------------------
   integer::igrid,ind
-  integer::idim,neul=ndim+2
+  integer::idim
   real(dp)::ener
 
 #ifdef HYDRO
@@ -81,8 +81,8 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
      do ind=1,twotondim
 
         ! Remove kinetic energy from total energy
-        ener=m%grid(igrid)%uold(ind,neul)
-        do idim=1,ndim
+        ener=m%grid(igrid)%uold(ind,5)
+        do idim=1,3
            ener=ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
         end do
   
@@ -99,10 +99,10 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
         end do        
 #endif
         ! Update total energy
-        do idim=1,ndim
+        do idim=1,3
            ener=ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
         end do
-        m%grid(igrid)%uold(ind,neul)=ener
+        m%grid(igrid)%uold(ind,5)=ener
 
      end do
      ! End loop over cells
@@ -168,14 +168,10 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
         d=max(m%grid(igrid)%unew(ind,1),r%smallr)
         u=0.0d0; v=0.0d0; w=0.0d0
         u=m%grid(igrid)%unew(ind,2)/d
-#if NDIM>1
         v=m%grid(igrid)%unew(ind,3)/d
-#endif
-#if NDIM>2        
         w=m%grid(igrid)%unew(ind,4)/d
-#endif
         e_kin=0.5d0*d*(u**2+v**2+w**2)
-        e_prim=m%grid(igrid)%unew(ind,ndim+2)-e_kin
+        e_prim=m%grid(igrid)%unew(ind,5)-e_kin
         d_old=max(m%grid(igrid)%uold(ind,1),r%smallr)
         fact=d_old/d*0.5d0*g%dtnew(ilevel)
 #ifdef GRAV
@@ -196,14 +192,10 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
 #endif
 #endif
         m%grid(igrid)%unew(ind,2)=d*u
-#if NDIM>1
         m%grid(igrid)%unew(ind,3)=d*v
-#endif
-#if NDIM>2
         m%grid(igrid)%unew(ind,4)=d*w
-#endif
         e_kin=0.5d0*d*(u**2+v**2+w**2)
-        m%grid(igrid)%unew(ind,ndim+2)=e_prim+e_kin
+        m%grid(igrid)%unew(ind,5)=e_prim+e_kin
      end do
   end do
 

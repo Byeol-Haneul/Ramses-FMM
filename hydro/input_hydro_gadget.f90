@@ -160,10 +160,10 @@ subroutine input_hydro_gadget(s,ilevel)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
            gridp%unew(icell,1)=gridp%unew(icell,1)+p%mp(ipart)*vol(ind)/vol_loc
-           do idim=1,ndim
+           do idim=1,3
               gridp%unew(icell,idim+1)=gridp%unew(icell,idim+1)+p%mp(ipart)*p%vp(ipart,idim)*vol(ind)/vol_loc
            end do
-           gridp%unew(icell,ndim+2)=gridp%unew(icell,ndim+2)+p%mp(ipart)*p%up(ipart)*vol(ind)/vol_loc
+           gridp%unew(icell,5)=gridp%unew(icell,5)+p%mp(ipart)*p%up(ipart)*vol(ind)/vol_loc
            if(r%metal) then
               gridp%unew(icell,r%imetal)=gridp%unew(icell,r%imetal)+p%mp(ipart)*p%zp(ipart)*vol(ind)/vol_loc
            endif
@@ -197,7 +197,7 @@ subroutine input_hydro_gadget(s,ilevel)
            if(m%grid(igrid)%uold(ind,1)<r%IG_rho/scale_nH)then
               m%grid(igrid)%uold(ind,ivar)=0.0
               if(ivar.eq.1)m%grid(igrid)%uold(ind,ivar)=max(r%IG_rho/scale_nH,r%smallr)
-              if(ivar.eq.ndim+2)m%grid(igrid)%uold(ind,ivar)=r%IG_T2/scale_T2/(r%gamma-1)*max(r%IG_rho/scale_nH,r%smallr)
+              if(ivar.eq.5)m%grid(igrid)%uold(ind,ivar)=r%IG_T2/scale_T2/(r%gamma-1)*max(r%IG_rho/scale_nH,r%smallr)
               if(r%metal)then
                  if(ivar.eq.r%imetal)m%grid(igrid)%uold(ind,ivar)=r%IG_metal*max(r%IG_rho/scale_nH,r%smallr)
               endif
@@ -212,13 +212,13 @@ subroutine input_hydro_gadget(s,ilevel)
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
         if(r%entropy) then
-           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,ndim+2)*(r%gamma-1)/m%grid(igrid)%uold(ind,1)**(r%gamma-1)
+           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)*(r%gamma-1)/m%grid(igrid)%uold(ind,1)**(r%gamma-1)
         endif
         ekin=0d0
-        do idim=1,ndim
+        do idim=1,3
            ekin=ekin+0.5*m%grid(igrid)%uold(ind,idim+1)**2/m%grid(igrid)%uold(ind,1)
         end do
-        m%grid(igrid)%uold(ind,ndim+2)=m%grid(igrid)%uold(ind,ndim+2)+ekin
+        m%grid(igrid)%uold(ind,5)=m%grid(igrid)%uold(ind,5)+ekin
      end do
   end do
 #endif

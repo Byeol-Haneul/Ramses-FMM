@@ -1,6 +1,6 @@
 This namelist contains input parameters a 2D Rayleigh-Taylor test.
 Compile the code with:
-make NDIM=2 MPI=1 UNITS=default CONDINIT=insta GRAV=0 HYDRO=1
+make NDIM=2 MPI=1 INIT=INSTA HYDRO=1
 
 &RUN_PARAMS 
 hydro=.true.

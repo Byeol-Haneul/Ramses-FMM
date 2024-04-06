@@ -4,7 +4,7 @@ initial conditions. You can generate such files using the MUSIC code.
 You can also download an example from tigress using:
 ./utils/script/load_zoom_ic.sh
 To compile the code with MPI, type in the command line:
-make NDIM=3 MPI=1 UNITS=cosmo CONDINIT=default HYDRO=0 GRAV=1
+make NDIM=3 MPI=1 UNITS=COSMO HYDRO=0 GRAV=1
 
 &RUN_PARAMS
 cosmo=.true.

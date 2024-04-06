@@ -32,6 +32,9 @@ module cache_commons
   type msg_realdp
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=dp),dimension(1:twotondim,1:nvar)::realdp
+#ifdef MHD
+     real(kind=dp),dimension(1:twotondim,1:6)::realdp_mhd
+#endif
   end type msg_realdp
   type msg_small_realdp
      real(kind=dp),dimension(1:twotondim)::realdp
@@ -53,7 +56,12 @@ module cache_commons
   type msg_large_realdp
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=dp),dimension(1:twotondim,1:nvar)::realdp_hydro
+#ifdef MHD
+     real(kind=dp),dimension(1:twotondim,1:6)::realdp_mhd
+#endif
+#ifdef GRAV
      real(kind=dp),dimension(1:twotondim,1:ndim+2)::realdp_poisson
+#endif
   end type msg_large_realdp
 
   ! Cache call back functions

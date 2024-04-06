@@ -107,7 +107,8 @@ contains
     real(dp)::reverse, ek_bound
     real(dp),dimension(1:nvector,1:ndim)::xx
     real(dp),dimension(1:nvector,1:nvar)::uu
-    real(dp)::dx
+    real(dp),dimension(1:nvector,1:nvar)::qq
+    real(dp)::dx,rr,vx,vy,vz,pp,eint,ekin,emag,erad
 
     type = r%bound_type(ibound)
     dir = r%bound_dir(ibound)
@@ -146,6 +147,24 @@ contains
                 grid%uold(ind,ivar)=grid_ref%uold(ind1_right(ind,dir),ivar)*reverse
              end do
           end do
+#ifdef MHD
+#if NDIM==1
+          do ind=1,twotondim
+             grid%bold(ind,1)=r%A_ave
+             grid%bold(ind,4)=r%A_ave
+             grid%bold(ind,2)=grid_ref%bold(ind1_right(ind,dir),2)
+             grid%bold(ind,5)=grid_ref%bold(ind1_right(ind,dir),5)
+             grid%bold(ind,3)=grid_ref%bold(ind1_right(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind1_right(ind,dir),6)
+          end do
+#endif
+#if NDIM==2
+          do ind=1,twotondim
+             grid%bold(ind,3)=grid_ref%bold(ind1_right(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind1_right(ind,dir),6)
+          end do
+#endif
+#endif
        endif
 
        if(shift==-1)then
@@ -156,6 +175,24 @@ contains
                 grid%uold(ind,ivar)=grid_ref%uold(ind1_left(ind,dir),ivar)*reverse
              end do
           end do
+#ifdef MHD
+#if NDIM==1
+          do ind=1,twotondim
+             grid%bold(ind,1)=r%A_ave
+             grid%bold(ind,4)=r%A_ave
+             grid%bold(ind,2)=grid_ref%bold(ind1_left(ind,dir),2)
+             grid%bold(ind,5)=grid_ref%bold(ind1_left(ind,dir),5)
+             grid%bold(ind,3)=grid_ref%bold(ind1_left(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind1_left(ind,dir),6)
+          end do
+#endif
+#if NDIM==2
+          do ind=1,twotondim
+             grid%bold(ind,3)=grid_ref%bold(ind1_left(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind1_left(ind,dir),6)
+          end do
+#endif
+#endif
        endif
 
     endif
@@ -169,6 +206,24 @@ contains
                 grid%uold(ind,ivar)=grid_ref%uold(ind2_right(ind,dir),ivar)
              end do
           end do
+#ifdef MHD
+#if NDIM==1
+          do ind=1,twotondim
+             grid%bold(ind,1)=r%A_ave
+             grid%bold(ind,4)=r%A_ave
+             grid%bold(ind,2)=grid_ref%bold(ind2_right(ind,dir),2)
+             grid%bold(ind,5)=grid_ref%bold(ind2_right(ind,dir),5)
+             grid%bold(ind,3)=grid_ref%bold(ind2_right(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind2_right(ind,dir),6)
+          end do
+#endif
+#if NDIM==2
+          do ind=1,twotondim
+             grid%bold(ind,3)=grid_ref%bold(ind2_right(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind2_right(ind,dir),6)
+          end do
+#endif
+#endif
        endif
 
        if(shift==-1)then
@@ -177,6 +232,24 @@ contains
                 grid%uold(ind,ivar)=grid_ref%uold(ind2_left(ind,dir),ivar)
              end do
           end do
+#ifdef MHD
+#if NDIM==1
+          do ind=1,twotondim
+             grid%bold(ind,1)=r%A_ave
+             grid%bold(ind,4)=r%A_ave
+             grid%bold(ind,2)=grid_ref%bold(ind2_left(ind,dir),2)
+             grid%bold(ind,5)=grid_ref%bold(ind2_left(ind,dir),5)
+             grid%bold(ind,3)=grid_ref%bold(ind2_left(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind2_left(ind,dir),6)
+          end do
+#endif
+#if NDIM==2
+          do ind=1,twotondim
+             grid%bold(ind,3)=grid_ref%bold(ind2_left(ind,dir),3)
+             grid%bold(ind,6)=grid_ref%bold(ind2_left(ind,dir),6)
+          end do
+#endif
+#endif
        endif
 
     endif
@@ -187,27 +260,37 @@ contains
        do ind=1,twotondim
 
           grid%uold(ind,1)=r%d_bound(ibound)
-          grid%uold(ind,2)=r%u_bound(ibound)
+          grid%uold(ind,2)=r%d_bound(ibound)*r%u_bound(ibound)
           ek_bound=0.5d0*r%d_bound(ibound)*r%u_bound(ibound)**2
-#if NDIM>1
-          grid%uold(ind,3)=r%v_bound(ibound)
+          grid%uold(ind,3)=r%d_bound(ibound)*r%v_bound(ibound)
           ek_bound=ek_bound+0.5d0*r%d_bound(ibound)*r%v_bound(ibound)**2
-#endif
-#if NDIM>2
-          grid%uold(ind,4)=r%w_bound(ibound)
+          grid%uold(ind,4)=r%d_bound(ibound)*r%w_bound(ibound)
           ek_bound=ek_bound+0.5d0*r%d_bound(ibound)*r%w_bound(ibound)**2
-#endif
 #if NENER>0
           do ivar=1,nener
-             grid%uold(ind,ndim+2+ivar)=r%prad_bound(ibound,ivar)/(r%gamma_rad(ivar)-1.0d0)
+             grid%uold(ind,5+ivar)=r%prad_bound(ibound,ivar)/(r%gamma_rad(ivar)-1.0d0)
              ek_bound=ek_bound+r%prad_bound(ibound,ivar)/(r%gamma_rad(ivar)-1.0d0)
           enddo
 #endif
-          grid%uold(ind,ndim+2)=ek_bound+r%p_bound(ibound)/(r%gamma-1.0d0)
-#if NVAR>NDIM+2+NENER
-          do ivar=ndim+nener+3,nvar
-             grid%uold(ind,ivar)=r%d_bound(ibound)*r%var_bound(ibound,ivar-ndim-2-nener)
+          grid%uold(ind,5)=r%p_bound(ibound)/(r%gamma-1.0d0)+ek_bound
+#if NVAR>5+NENER
+          do ivar=6+nener,nvar
+             grid%uold(ind,ivar)=r%d_bound(ibound)*r%var_bound(ibound,ivar-5-nener)
           end do
+#endif
+#ifdef MHD
+#if NDIM==1
+          grid%bold(ind,1)=r%A_ave
+          grid%bold(ind,4)=r%A_ave
+          grid%bold(ind,2)=r%B_bound(ibound)
+          grid%bold(ind,5)=r%B_bound(ibound)
+          grid%bold(ind,3)=r%C_bound(ibound)
+          grid%bold(ind,6)=r%C_bound(ibound)
+#endif
+#if NDIM==2
+          grid%bold(ind,3)=r%C_bound(ibound)
+          grid%bold(ind,6)=r%C_bound(ibound)
+#endif
 #endif
        end do
 
@@ -225,8 +308,39 @@ contains
              xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
           end do
           ! Call initial condition routine
-          call condinit(r,g,xx,uu,dx,1)
-          ! Scatter variables to main memory
+          call condinit(r,g,xx,qq,dx,1)
+          ! Compute kinetic and internal energy densities
+          rr=qq(1,1)
+          vx=qq(1,2)
+          vy=qq(1,3)
+          vz=qq(1,4)
+          pp=qq(1,5)
+          ekin=0.5d0*rr*(vx**2+vy**2+vz**2)
+          eint=pp/(r%gamma-1.0)
+          emag=0.0d0
+          erad=0.0d0
+#if NENER>0
+          ! Compute non-thermal energy densities
+          do irad=1,nener
+             uu(1,5+irad)=qq(1,5+irad)/(gamma_rad(irad)-1.0d0)
+             erad=erad+uu(1,5+irad)
+          end do
+#endif
+#if NVAR>5+NENER
+          ! Compute passive scalar density
+          do ivar=6+nener,nvar
+             uu(1,ivar)=rr*qq(1,ivar)
+          enddo
+#endif
+          ! Compute density
+          uu(1,1)=qq(1,1)
+          ! Compute momentum density
+          do idim=1,3
+             uu(1,idim+1)=rr*qq(1,idim+1)
+          end do
+          ! Compute total fluid energy density
+          uu(1,5)=eint+ekin+erad+emag
+          ! Convert to conservative variables
           do ivar=1,nvar
              grid%uold(ind,ivar)=uu(1,ivar)
           end do

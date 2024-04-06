@@ -29,6 +29,9 @@ subroutine hydro_flag(s,ilevel)
   integer,dimension(1:twondim)::igridn,icelln
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
   real(dp),dimension(1:nvar)::uug,uum,uud
+#ifdef MHD
+  real(dp),dimension(1:6)::bbg,bbm,bbd
+#endif
   logical::ok
   type(nbor),dimension(1:twondim)::gridn
   type(oct),pointer::gridp
@@ -39,6 +42,12 @@ subroutine hydro_flag(s,ilevel)
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   if(    r%err_grad_d==-1.0.and.&
+#ifdef MHD
+       & r%err_grad_A==-1.0.and.&
+       & r%err_grad_B==-1.0.and.&
+       & r%err_grad_C==-1.0.and.&
+       & r%err_grad_B2==-1.0.and.&
+#endif       
        & r%err_grad_p==-1.0.and.&
        & r%err_grad_u==-1.0)return
 
@@ -95,8 +104,22 @@ subroutine hydro_flag(s,ilevel)
               uug(ivar)=gridn(2*idim-1)%p%uold(icellg,ivar)
               uum(ivar)=m%grid(igrid)%uold(ind,ivar)
               uud(ivar)=gridn(2*idim)%p%uold(icelld,ivar)
+!              write(*,*)'EULER',idim,ivar,uug(ivar),uum(ivar),uud(ivar)
            end do
+#ifdef MHD
+           ! Gather MHD variables
+           do ivar=1,6
+              icellg=icelln(2*idim-1)
+              icelld=icelln(2*idim  )
+              bbg(ivar)=gridn(2*idim-1)%p%bold(icellg,ivar)
+              bbm(ivar)=m%grid(igrid)%bold(ind,ivar)
+              bbd(ivar)=gridn(2*idim)%p%bold(icelld,ivar)
+!              write(*,*)'INDUCTION',idim,ivar,bbg(ivar),bbm(ivar),bbd(ivar)
+           end do
+           call hydro_refine(r,uug,uum,uud,bbg,bbm,bbd,ok)
+#else
            call hydro_refine(r,uug,uum,uud,ok)
+#endif
         end do
         
         do i_nbor=1,twondim
@@ -151,6 +174,10 @@ subroutine pack_fetch_hydro(grid,msg_size,msg_array)
   end do
 #endif
 
+#ifdef MHD
+  msg%realdp_mhd=grid%bold
+#endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_fetch_hydro
@@ -189,6 +216,10 @@ subroutine unpack_fetch_hydro(grid,msg_size,msg_array,hash_key)
         grid%uold(ind,ivar)=msg%realdp(ind,ivar)
      end do
   end do
+#endif
+
+#ifdef MHD
+  grid%bold=msg%realdp_mhd
 #endif
 
 end subroutine unpack_fetch_hydro

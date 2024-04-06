@@ -123,7 +123,11 @@ subroutine open_file(s,filename,nskip,ilun)
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
         write(ilun)ndim
+#ifdef MHD
+        if(index(filename,'hydro').NE.0)write(ilun)nvar+3
+#else
         if(index(filename,'hydro').NE.0)write(ilun)nvar
+#endif
         if(index(filename,'grav').NE.0)write(ilun)ndim+1
         if(index(filename,'peak').NE.0)write(ilun)2
         write(ilun)r%levelmin
@@ -146,7 +150,11 @@ subroutine open_file(s,filename,nskip,ilun)
      do ilevel=r%levelmin,r%nlevelmax
         nskip(ilevel)=iskip
         if(index(filename,'amr').NE.0)iskip=iskip+(4*ndim+4*twotondim)*noct(ilevel)
+#ifdef MHD
+        if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*(nvar+3))*noct(ilevel)
+#else
         if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*nvar)*noct(ilevel)
+#endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*noct(ilevel)
         if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*2)*noct(ilevel)
      end do
@@ -230,7 +238,11 @@ subroutine close_file(s,filename,nskip,ilun)
      do ilevel=r%levelmin,r%nlevelmax
         iskip=nskip(ilevel)
         if(index(filename,'amr').NE.0)iskip=iskip+(4*ndim+4*twotondim)*m%noct(ilevel)
+#ifdef MHD
+        if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*(nvar+3))*m%noct(ilevel)
+#else
         if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*nvar)*m%noct(ilevel)
+#endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*m%noct(ilevel)
         if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*2)*m%noct(ilevel)
         nskip(ilevel)=iskip

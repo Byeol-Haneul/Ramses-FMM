@@ -26,7 +26,7 @@ subroutine m_refine_fine(pst,ilevel)
   integer,dimension(1)::alevel
 
   associate(s=>pst%s)
-  
+
   if(ilevel==s%r%nlevelmax)return
   if(s%m%noct_tot(ilevel)==0)return
 
@@ -154,7 +154,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_int4)::dummy_int4
-  
+
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   !---------------------------------------------------
@@ -185,6 +185,17 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      end do
 
      call close_cache(s,m%grid_dict)
+
+     ! Set status of parent cell to "refined"
+     do ioct=m%head(ilev),m%tail(ilev)
+        do ind=1,twotondim
+           ok   = m%grid(ioct)%flag1(ind)==1 .and. &
+                & .not.m%grid(ioct)%refined(ind)
+           if(ok)then
+              m%grid(ioct)%refined(ind)=.true.
+           endif
+        end do
+     end do
 
   end do
   ncreate=g%ncreate
@@ -402,7 +413,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
 
   end associate
 
-
 end subroutine refine_fine
 !###############################################################
 !###############################################################
@@ -428,6 +438,10 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
   end do
 #endif
   
+#ifdef MHD
+  msg%realdp_mhd=grid%bold
+#endif
+
 #ifdef GRAV
   do idim=1,ndim
      do ind=1,twotondim
@@ -476,6 +490,10 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
   end do
 #endif
   
+#ifdef MHD
+  grid%bold=msg%realdp_mhd
+#endif
+
 #ifdef GRAV
   do ind=1,twotondim
      do idim=1,ndim
@@ -590,9 +608,20 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   integer(kind=8),dimension(1:ndim)::ix
   integer(kind=8),dimension(1:ndim)::cart_key
   integer(kind=8),dimension(0:ndim)::hash_key
+#ifdef MHD
+  real(dp),dimension(0:twondim,1:6)::b1
+  real(dp),dimension(1:twotondim,1:6)::b2
+  real(dp),dimension(1:twondim,1:twotondim,1:6)::b3
+  logical,dimension(1:twondim)::refined
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  type(oct),pointer::gridn
+#endif
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
   real(dp),dimension(0:twondim,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
+  real(dp)::bx_central,by_central,bz_central
   type(nbor),dimension(0:twondim)::grid_nbor
   type(oct),pointer::child
   logical::ok
@@ -669,55 +698,97 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   child%superoct=1
 
   ! Set status of parent cell to "refined"
-  parent%refined(icell)=.true.
+!  parent%refined(icell)=.true.
 
-  !=========================================================
-  ! Inject parent hydro variables into new children ones
-  !=========================================================     
+  !====================================
+  ! Interplotate parent hydro variables
+  !====================================
 #ifdef HYDRO
-
-  ! Interpolate hydro variables
-  do ivar=1,nvar
-     do ind=1,twotondim
-        child%uold(ind,ivar)=parent%uold(icell,ivar)
-     enddo
+  ! Get 2ndim neighboring father cells with read-only cache
+  call get_twondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+  ok=.true.
+  do inbor=0,twondim
+     ok=ok.and.associated(grid_nbor(inbor)%p)
   end do
-
-  ! In case one wants to interpolate using high-order schemes
-  if(r%interpol_type>0)then
-
-     ! Get 2ndim neighboring father cells with read-only cache
-     call get_twondim_nbor_parent_cell(s,hash_key,m%grid_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
-     ok=.false.
-     do inbor=0,twondim
-        ok=ok.and.associated(grid_nbor(inbor)%p)
+  if(.not. ok)then
+     write(*,*)"OUPS parent neighbors should exist"
+     write(*,*)hash_key
+     write(*,*)associated(grid_nbor(0)%p)
+     do idim=1,ndim
+        write(*,*)associated(grid_nbor(2*idim-1)%p)
+        write(*,*)associated(grid_nbor(2*idim)%p)
      end do
-     if(ok)then
-        do inbor=0,twondim
-           do ivar=1,nvar
-              u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
+     call mdl_abort(mdl)
+  endif
+  ! Store parent cell hydro variables
+  do inbor=0,twondim
+     do ivar=1,nvar
+        u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
+     end do
+  end do
+#ifdef MHD
+  ! Store parent cell MHD variables
+  do inbor=0,twondim
+     do ivar=1,6
+        b1(inbor,ivar)=grid_nbor(inbor)%p%bold(ind_nbor(inbor),ivar)
+     end do
+  end do
+  ! Get neighboring children grids
+  hash_nbor(0)=ilevel
+  do inbor=1,twondim
+     hash_nbor(1:ndim)=hash_key(1:ndim)+shift(1:ndim,inbor)
+     ! Periodic boundary conditions
+     do idim=1,ndim
+        if(r%periodic(idim))then
+           if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+           if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+        endif
+     enddo
+     nullify(gridn)
+     if(grid_nbor(inbor)%p%refined(ind_nbor(inbor)))then
+        call get_grid(s,hash_nbor,m%grid_dict,gridn,flush_cache=.false.,fetch_cache=.true.)
+     endif
+     refined(inbor)=associated(gridn)
+     if(refined(inbor))then
+        do ind=1,twotondim
+           do ivar=1,6
+              b3(inbor,ind,ivar)=gridn%bold(ind,ivar)
            end do
         end do
-        ! Interpolate
-        call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
-        ! Store hydro variables
-        do ivar=1,nvar
-           do ind=1,twotondim
-              child%uold(ind,ivar)=u2(ind,ivar)
-           enddo
-        end do
      endif
-     do inbor=1,twondim
-        call unlock_cache(s,grid_nbor(inbor)%p)
-     end do
-
-  endif
+  end do
+  ! Interpolate using MHD variables
+  call interpol_mhd(u1,u2,b1,b2,b3,refined,r%interpol_var,r%interpol_type,r%smallr)
+#else
+  ! Interpolate using hydro variables
+  call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
+#endif
+  ! Store children cell hydro variables
+  do ivar=1,nvar
+     do ind=1,twotondim
+        child%uold(ind,ivar)=u2(ind,ivar)
+     enddo
+  end do
+#ifdef MHD
+  ! Store children cell MHD variables
+  do ivar=1,6
+     do ind=1,twotondim
+        child%bold(ind,ivar)=b2(ind,ivar)
+     enddo
+  end do
+#endif
+  do inbor=1,twondim
+     call unlock_cache(s,grid_nbor(inbor)%p)
+  end do
   
 #endif
   
+  !================================
+  ! Inject parent gravity variables
+  !================================
 #ifdef GRAV
   
-  ! Interpolate (straight injection) gravity variables
+  ! Straight injection for gravity variables
   do ind=1,twotondim
      child%f(ind,1:ndim)=parent%f(icell,1:ndim)
      child%phi(ind)=parent%phi(icell)
@@ -725,9 +796,9 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   enddo
   
 #endif
-  
+
   end associate
-  
+
 end subroutine make_new_oct
 !###############################################################
 !###############################################################

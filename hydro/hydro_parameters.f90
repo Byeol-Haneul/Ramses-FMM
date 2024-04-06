@@ -8,15 +8,33 @@ module hydro_parameters
   integer,parameter::nener=NENER
 #endif
 #ifndef NVAR
-  integer,parameter::nvar=ndim+2+nener
+  integer,parameter::nvar=5+nener
 #else
   integer,parameter::nvar=NVAR
+#endif
+
+#ifdef MHD
+  integer,parameter::nprim=NVAR+3
+  integer,parameter::ie=8
+#else
+  integer,parameter::nprim=NVAR
+  integer,parameter::ie=5
 #endif
 
   integer,parameter::solver_llf=1
   integer,parameter::solver_hll=2
   integer,parameter::solver_hllc=3
-  
+  integer,parameter::solver_hlld=4
+  integer,parameter::solver_roe=5
+  integer,parameter::solver_upwind=6
+
+  integer,parameter::solver2d_llf=1
+  integer,parameter::solver2d_hllf=2
+  integer,parameter::solver2d_hlla=3
+  integer,parameter::solver2d_hlld=4
+  integer,parameter::solver2d_roe=5
+  integer,parameter::solver2d_upwind=6
+
 end module hydro_parameters
 
 module const

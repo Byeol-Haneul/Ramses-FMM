@@ -8,6 +8,10 @@ module oct_commons
      real(kind=dp),dimension(1:twotondim,1:nvar)::uold
      real(kind=dp),dimension(1:twotondim,1:nvar)::unew
 #endif
+#ifdef MHD
+     real(kind=dp),dimension(1:twotondim,1:6)::bold
+     real(kind=dp),dimension(1:twotondim,1:6)::bnew
+#endif
 #ifdef GRAV
      real(kind=dp),dimension(1:twotondim,1:3)::f
      real(kind=dp),dimension(1:twotondim)::rho

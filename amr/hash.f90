@@ -160,7 +160,7 @@ contains
        endif
        htable%data(ibucket)%key(0:ndim) = key(0:ndim)
        htable%nfree = htable%nfree - 1
-       
+
     else if (htable%nfree_chain>0)then
 
        ! Bucket is not empty, walk through linked list
