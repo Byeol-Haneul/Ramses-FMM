@@ -62,7 +62,7 @@ $ bin/ramses3d namelist/dmo.nml
 ```
 $ cd bin
 $ make clean
-$ make NDIM=3 HYDRO=1 UNITS=COEUR INIT=COEUR
+$ make NDIM=3 HYDRO=1 GRAV=1 UNITS=COEUR INIT=COEUR
 $ cd ..
 $ bin/ramses3d namelist/coeur.nml
 ```
