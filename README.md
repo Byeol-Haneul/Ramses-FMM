@@ -16,55 +16,55 @@ If you want to contribute to mini-ramses, you can either ask me (romain.teyssier
 
 To compile and execute the standard test cases, please follow these steps.
 
-1- Molecular core test in 3D:
+1- Shock tube test in 1D:
 
 ```
 $ cd bin
 $ make clean
-$ make
-$ cd ..
-$ bin/ramses3d namelist/coeur.nml
-```
-
-2- Sedov explosion test in 3D:
-
-```
-$ cd bin
-$ make clean
-$ make GRAV=0 UNITS=default CONDINIT=default
-$ cd ..
-$ bin/ramses3d namelist/sedov3d.nml
-```
-
-3- Sedov explosion in 2D:
-
-```
-$ cd bin
-$ make clean
-$ make NDIM=2 GRAV=0 UNITS=default CONDINIT=default
-$ cd ..
-$ bin/ramses2d namelist/sedov2d.nml
-```
-
-4- Shock tube test in 1D:
-
-```
-$ cd bin
-$ make clean
-$ make NDIM=1 GRAV=0 UNITS=default CONDINIT=default
+$ make NDIM=1 HYDRO=1
 $ cd ..
 $ bin/ramses1d namelist/tube1d.nml
 ```
 
-5- Cosmological N body simulation in 3D
+2- Sedov explosion in 2D:
 
 ```
 $ cd bin
 $ make clean
-$ make HYDRO=0 UNITS=cosmo CONDINIT=default
+$ make NDIM=2 HYDRO=1
+$ cd ..
+$ bin/ramses2d namelist/sedov2d.nml
+```
+
+3- Sedov explosion test in 3D:
+
+```
+$ cd bin
+$ make clean
+$ make NDIM=3 HYDRO=1
+$ cd ..
+$ bin/ramses3d namelist/sedov3d.nml
+```
+
+4- Cosmological N body simulation in 3D
+
+```
+$ cd bin
+$ make clean
+$ make NDIM=3 HYDRO=0 GRAV=1 UNITS=COSMO
 $ cd ..
 $ utils/script/load_cosmo_ic.sh
 $ bin/ramses3d namelist/dmo.nml
+```
+
+5- Molecular core test in 3D:
+
+```
+$ cd bin
+$ make clean
+$ make NDIM=3 HYDRO=1 UNITS=COEUR INIT=COEUR
+$ cd ..
+$ bin/ramses3d namelist/coeur.nml
 ```
 
 You get the picture now ;-)
@@ -79,5 +79,6 @@ $ utils/f90/amr2map -inp output_00002 -out dens.map -typ 1
 $ utils/py/map2img.py dens.map --log
 ```
 
-In the molecular cloud collapse case, you can also explore the movie1 directory and use the python function directly on any of the maps in there. If you have the MPI library properly installed on your system, you can repeat all the tests above using the MPI=1 compilation option.
+In the molecular cloud collapse case, you can also explore the movie1 directory and use the python function directly on any of the maps in there. 
+If you have the MPI library properly installed on your system, you can repeat all the tests above using the MPI=1 compilation option.
 
