@@ -465,7 +465,7 @@ subroutine trace2d(q,dq,qm,qp, &
 #endif
        & dx,dy,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
   use amr_parameters, only:dp, ndim
-  use hydro_parameters, only: nprim, nener
+  use hydro_parameters, only: nprim, nener, ie
   use const
   implicit none
 
@@ -812,7 +812,7 @@ end subroutine trace2d
 #if NDIM>2
 subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
   use amr_parameters, only: dp, ndim
-  use hydro_parameters, only: nprim, nener
+  use hydro_parameters, only: nprim, nener, ie
   use const
   implicit none
 
@@ -1286,7 +1286,7 @@ subroutine ctoprim(uin,q,c,gravin, &
 #endif
      & dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
   use amr_parameters, only: dp, ndim
-  use hydro_parameters, only: nvar, nprim, nener
+  use hydro_parameters, only: nvar, nprim, nener, ie
   use const
   implicit none
 

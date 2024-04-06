@@ -47,7 +47,7 @@ subroutine output_hydro(s,filename)
   !-----------------------------------
   ! Output hydro data in file
   !-----------------------------------
-  integer::ilevel,igrid,ilun,irad,m,ind
+  integer::ilevel,igrid,ilun,irad,n,ind
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim,1:nprim)::qout
   real(dp),dimension(1:twotondim,1:nprim)::qold

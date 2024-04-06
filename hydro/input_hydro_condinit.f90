@@ -30,7 +30,7 @@ end subroutine r_input_hydro_condinit
 !#########################################################################
 subroutine input_hydro_condinit(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,nvector
-  use hydro_parameters, only: nvar
+  use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
