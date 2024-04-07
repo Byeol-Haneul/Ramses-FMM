@@ -36,7 +36,17 @@ $ cd ..
 $ bin/ramses2d namelist/sedov2d.nml
 ```
 
-3- Sedov explosion test in 3D:
+3- Magnetic loop advection in 2D:
+
+```
+$ cd bin
+$ make clean
+$ make NDIM=2 HYDRO=1 MHD=1 INIT=LOOP
+$ cd ..
+$ bin/ramses2d namelist/loop.nml
+```
+
+4- Sedov explosion test in 3D:
 
 ```
 $ cd bin
@@ -46,7 +56,7 @@ $ cd ..
 $ bin/ramses3d namelist/sedov3d.nml
 ```
 
-4- Cosmological N body simulation in 3D
+5- Cosmological N body simulation in 3D
 
 ```
 $ cd bin
@@ -57,7 +67,7 @@ $ utils/script/load_cosmo_ic.sh
 $ bin/ramses3d namelist/dmo.nml
 ```
 
-5- Molecular core test in 3D:
+6- Molecular core test in 3D:
 
 ```
 $ cd bin
