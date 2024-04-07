@@ -12,7 +12,7 @@ nsuperoct=0
 
 &AMR_PARAMS
 levelmin=7
-levelmax=10
+levelmax=9
 ngridmax=80000
 nexpand=1
 boxlen=2
