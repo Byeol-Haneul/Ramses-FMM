@@ -40,11 +40,12 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   
   ! Local variables
   integer::igrid,ngrid,ind,idim,nstride,i,ivar
-  integer::nfine,ii,jj,kk
+  integer::l,nfine,ii,jj,kk
   real(dp),dimension(1:nvector,1:ndim)::xx
 #ifdef MHD
   real(dp),dimension(1:nvector,1:nvar+3-ndim)::qq
   real(dp),dimension(1:nvector,1:ndim)::xll,xrl,xlr,xrr
+  real(dp),dimension(1:nvector)::ax,ay,az
   real(dp),dimension(1:nvector)::axll,axrl,axlr,axrr
   real(dp),dimension(1:nvector)::ayll,ayrl,aylr,ayrr
   real(dp),dimension(1:nvector)::azll,azrl,azlr,azrr

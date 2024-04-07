@@ -810,7 +810,11 @@ end subroutine trace2d
 !###########################################################
 !###########################################################
 #if NDIM>2
-subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+subroutine trace3d(q,dq,qm,qp, &
+#ifdef MHD
+     & bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB, &
+#endif
+     & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener, ie
   use const
@@ -824,6 +828,17 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
+#ifdef MHD
+  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
+  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
+  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ey
+  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ez
+  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRT
+  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRB
+  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLT
+  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLB
+#endif
 
   ! declare local variables
   integer::i, j, k, n
@@ -835,6 +850,22 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
   real(dp)::dry, duy, dvy, dwy, dpy
   real(dp)::drz, duz, dvz, dwz, dpz
   real(dp)::sr0, su0, sv0, sw0, sp0
+#ifdef MHD
+  integer::iA, iB, iC
+  real(dp)::A, B, C
+  real(dp)::dAx, dBx, dCx
+  real(dp)::dAy, dBy, dCy
+  real(dp)::dAz, dBz, dCz
+  real(dp)::sA0, sB0, sC0
+  real(dp)::AL, AR, BL, BR, CL, CR
+  REAL(dp)::dALy, dARy, dALz, dARz
+  REAL(dp)::dBLx, dBRx, dBLz, dBRz
+  REAL(dp)::dCLx, dCRx, dCLy, dCRy
+  real(dp)::sAL0, sAR0, sBL0, sBR0, sCL0, sCR0
+  REAL(dp)::ELL, ELR, ERL, ERR
+  REAL(dp)::FLL, FLR, FRL, FRR
+  REAL(dp)::GLL, GLR, GRL, GRR
+#endif
 #if NENER>0
   integer::irad
   real(dp),dimension(1:nener)::e, dex, dey, dez, se0
@@ -846,16 +877,104 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
   ir=1; iu=2; iv=3; iw=4; ip=5
 
+#ifdef MHD
+  iA=6; iB=7; iC=8
+  DO k = klo, ku2
+     DO j = jlo, ju2
+        DO i = ilo, iu2
+           v = 0.25*(q(i,j-1,k-1,iv)+q(i,j-1,k,iv)+q(i,j,k-1,iv)+q(i,j,k,iv))
+           w = 0.25*(q(i,j-1,k-1,iw)+q(i,j-1,k,iw)+q(i,j,k-1,iw)+q(i,j,k,iw))
+           B = 0.5*(bf(i,j,k-1,2)+bf(i,j,k,2))
+           C = 0.5*(bf(i,j-1,k,3)+bf(i,j,k,3))
+           Ex(i,j,k)=v*C-w*B
+
+           u = 0.25*(q(i-1,j,k-1,iu)+q(i-1,j,k,iu)+q(i,j,k-1,iu)+q(i,j,k,iu))
+           w = 0.25*(q(i-1,j,k-1,iw)+q(i-1,j,k,iw)+q(i,j,k-1,iw)+q(i,j,k,iw))
+           A = 0.5*(bf(i,j,k-1,1)+bf(i,j,k,1))
+           C = 0.5*(bf(i-1,j,k,3)+bf(i,j,k,3))
+           Ey(i,j,k)=w*A-u*C
+
+           u = 0.25*(q(i-1,j-1,k,iu)+q(i-1,j,k,iu)+q(i,j-1,k,iu)+q(i,j,k,iu))
+           v = 0.25*(q(i-1,j-1,k,iv)+q(i-1,j,k,iv)+q(i,j-1,k,iv)+q(i,j,k,iv))
+           A = 0.5*(bf(i,j-1,k,1)+bf(i,j,k,1))
+           B = 0.5*(bf(i-1,j,k,2)+bf(i,j,k,2))
+           Ez(i,j,k)=u*B-v*A
+        END DO
+     END DO
+  END DO
+#endif
   do k = klo, khi
      do j = jlo, jhi
         do i = ilo, ihi
-           
+#ifdef MHD
+           ! Face centered variables
+           AL =  bf(i  ,j  ,k  ,1)
+           AR =  bf(i+1,j  ,k  ,1)
+           BL =  bf(i  ,j  ,k  ,2)
+           BR =  bf(i  ,j+1,k  ,2)
+           CL =  bf(i  ,j  ,k  ,3)
+           CR =  bf(i  ,j  ,k+1,3)
+
+           ! Face centered TVD slopes in transverse direction
+           dALy = half * dbf(i  ,j  ,k  ,1,1)
+           dARy = half * dbf(i+1,j  ,k  ,1,1)
+           dALz = half * dbf(i  ,j  ,k  ,1,2)
+           dARz = half * dbf(i+1,j  ,k  ,1,2)
+
+           dBLx = half * dbf(i  ,j  ,k  ,2,1)
+           dBRx = half * dbf(i  ,j+1,k  ,2,1)
+           dBLz = half * dbf(i  ,j  ,k  ,2,2)
+           dBRz = half * dbf(i  ,j+1,k  ,2,2)
+
+           dCLx = half * dbf(i  ,j  ,k  ,3,1)
+           dCRx = half * dbf(i  ,j  ,k+1,3,1)
+           dCLy = half * dbf(i  ,j  ,k  ,3,2)
+           dCRy = half * dbf(i  ,j  ,k+1,3,2)
+
+           ! Edge centered electric field Ex = vC-wB
+           ELL = Ex(i,j  ,k  )
+           ELR = Ex(i,j  ,k+1)
+           ERL = Ex(i,j+1,k  )
+           ERR = Ex(i,j+1,k+1)
+
+           ! Edge centered electric field Ey = wA-uC
+           FLL = Ey(i  ,j,k  )
+           FLR = Ey(i  ,j,k+1)
+           FRL = Ey(i+1,j,k  )
+           FRR = Ey(i+1,j,k+1)
+
+           ! Edge centered electric field Ez = uB-vA
+           GLL = Ez(i  ,j  ,k)
+           GLR = Ez(i  ,j+1,k)
+           GRL = Ez(i+1,j  ,k)
+           GRR = Ez(i+1,j+1,k)
+
+           ! Face-centered predicted states
+           sAL0 = +(GLR-GLL)*dtdx*half -(FLR-FLL)*dtdx*half
+           sAR0 = +(GRR-GRL)*dtdx*half -(FRR-FRL)*dtdx*half
+           sBL0 = -(GRL-GLL)*dtdx*half +(ELR-ELL)*dtdx*half
+           sBR0 = -(GRR-GLR)*dtdx*half +(ERR-ERL)*dtdx*half
+           sCL0 = +(FRL-FLL)*dtdx*half -(ERL-ELL)*dtdx*half
+           sCR0 = +(FRR-FLR)*dtdx*half -(ERR-ELR)*dtdx*half
+
+           AL = AL + sAL0
+           AR = AR + sAR0
+           BL = BL + sBL0
+           BR = BR + sBR0
+           CL = CL + sCL0
+           CR = CR + sCR0
+#endif
            ! Cell centered values
            r = q(i,j,k,ir)
            u = q(i,j,k,iu)
            v = q(i,j,k,iv)
            w = q(i,j,k,iw)
            p = q(i,j,k,ip)
+#ifdef MHD
+           A = q(i,j,k,iA)
+           B = q(i,j,k,iB)
+           C = q(i,j,k,iC)
+#endif
 #if NENER>0
            do irad=1,nener
               e(irad) = q(i,j,k,ie+irad)
@@ -867,6 +986,10 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            dvx = half*dq(i,j,k,iv,1)
            dwx = half*dq(i,j,k,iw,1)
            dpx = half*dq(i,j,k,ip,1)
+#ifdef MHD
+           dBx = half*dq(i,j,k,iB,1)
+           dCx = half*dq(i,j,k,iC,1)
+#endif
 #if NENER>0
            do irad=1,nener
               dex(irad) = half*dq(i,j,k,ie+irad,1)
@@ -877,6 +1000,10 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            dvy = half*dq(i,j,k,iv,2)
            dwy = half*dq(i,j,k,iw,2)
            dpy = half*dq(i,j,k,ip,2)
+#ifdef MHD
+           dAy = half*dq(i,j,k,iA,2)
+           dCy = half*dq(i,j,k,iC,2)
+#endif
 #if NENER>0
            do irad=1,nener
               dey(irad) = half*dq(i,j,k,ie+irad,2)
@@ -887,6 +1014,10 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            dvz = half*dq(i,j,k,iv,3)
            dwz = half*dq(i,j,k,iw,3)
            dpz = half*dq(i,j,k,ip,3)
+#ifdef MHD
+           dAz = half*dq(i,j,k,iA,3)
+           dBz = half*dq(i,j,k,iB,3)
+#endif
 #if NENER>0
            do irad=1,nener
               dez(irad) = half*dq(i,j,k,ie+irad,3)
@@ -898,6 +1029,11 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            sv0 = -u*dvx-v*dvy-w*dvz - (dpy        )/r
            sw0 = -u*dwx-v*dwy-w*dwz - (dpz        )/r
            sp0 = -u*dpx-v*dpy-w*dpz - (dux+dvy+dwz)*gamma*p
+#ifdef MHD
+           su0 = su0 + (-(B*dBx+C*dCx)/r) + (B*dAy/r) + (C*dAz/r)
+           sv0 = sv0 + (A*dBx/r) + (-(A*dAy+C*dCy)/r) + (C*dBz/r)
+           sw0 = sw0 + (A*dCx/r) + (B*dCy/r) + (-(A*dAz+B*dBz)/r)
+#endif
 #if NENER>0
            do irad=1,nener
               su0 = su0 - (dex(irad))/r
@@ -913,6 +1049,11 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            v = v + sv0*dtdx
            w = w + sw0*dtdx
            p = p + sp0*dtdx
+#ifdef MHD
+           A = 0.5*(AL+AR)
+           B = 0.5*(BL+BR)
+           C = 0.5*(CL+CR)
+#endif
 #if NENER>0
            do irad=1,nener
               e(irad)=e(irad)+se0(irad)*dtdx
@@ -925,6 +1066,11 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            qp(i,j,k,iw,1) = w - dwx
            qp(i,j,k,ip,1) = p - dpx
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=q(i,j,k,ir)
+#ifdef MHD
+           qp(i,j,k,iA,1) = AL
+           qp(i,j,k,iB,1) = B - dBx
+           qp(i,j,k,iC,1) = C - dCx
+#endif
 #if NENER>0
            do irad=1,nener
               qp(i,j,k,ie+irad,1) = e(irad) - dex(irad)
@@ -937,6 +1083,11 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            qm(i,j,k,iw,1) = w + dwx
            qm(i,j,k,ip,1) = p + dpx
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=q(i,j,k,ir)
+#ifdef MHD
+           qm(i,j,k,iA,1) = AR
+           qm(i,j,k,iB,1) = B + dBx
+           qm(i,j,k,iC,1) = C + dCx
+#endif
 #if NENER>0
            do irad=1,nener
               qm(i,j,k,ie+irad,1) = e(irad) + dex(irad)
@@ -949,6 +1100,11 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            qp(i,j,k,iw,2) = w - dwy
            qp(i,j,k,ip,2) = p - dpy
            if(qp(i,j,k,ir,2)<smallr)qp(i,j,k,ir,2)=q(i,j,k,ir)
+#ifdef MHD
+           qp(i,j,k,iA,2) = A - dAy
+           qp(i,j,k,iB,2) = BL
+           qp(i,j,k,iC,2) = C - dCy
+#endif
 #if NENER>0
            do irad=1,nener
               qp(i,j,k,ie+irad,2) = e(irad) - dey(irad)
@@ -961,6 +1117,11 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            qm(i,j,k,iw,2) = w + dwy
            qm(i,j,k,ip,2) = p + dpy
            if(qm(i,j,k,ir,2)<smallr)qm(i,j,k,ir,2)=q(i,j,k,ir)
+#ifdef MHD
+           qm(i,j,k,iA,2) = A + dAy
+           qm(i,j,k,iB,2) = BR
+           qm(i,j,k,iC,2) = C + dCy
+#endif
 #if NENER>0
            do irad=1,nener
               qm(i,j,k,ie+irad,2) = e(irad) + dey(irad)
@@ -973,6 +1134,11 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            qp(i,j,k,iw,3) = w - dwz
            qp(i,j,k,ip,3) = p - dpz
            if(qp(i,j,k,ir,3)<smallr)qp(i,j,k,ir,3)=q(i,j,k,ir)
+#ifdef MHD
+           qp(i,j,k,iA,3) = A - dAz
+           qp(i,j,k,iB,3) = B - dBz
+           qp(i,j,k,iC,3) = CL
+#endif
 #if NENER>0
            do irad=1,nener
               qp(i,j,k,ie+irad,3) = e(irad) - dez(irad)
@@ -985,10 +1151,197 @@ subroutine trace3d(q,dq,qm,qp,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_ra
            qm(i,j,k,iw,3) = w + dwz
            qm(i,j,k,ip,3) = p + dpz
            if(qm(i,j,k,ir,3)<smallr)qm(i,j,k,ir,3)=q(i,j,k,ir)
+#ifdef MHD
+           qm(i,j,k,iA,3) = A + dAz
+           qm(i,j,k,iB,3) = B + dBz
+           qm(i,j,k,iC,3) = CR
+#endif
 #if NENER>0
            do irad=1,nener
               qm(i,j,k,ie+irad,3) = e(irad) + dez(irad)
            end do
+#endif
+#ifdef MHD
+           ! X-edge averaged right-top corner state (RT->LL)
+           qRT(i,j,k,ir,1) = r + (+dry+drz)
+           qRT(i,j,k,iu,1) = u + (+duy+duz)
+           qRT(i,j,k,iv,1) = v + (+dvy+dvz)
+           qRT(i,j,k,iw,1) = w + (+dwy+dwz)
+           qRT(i,j,k,ip,1) = p + (+dpy+dpz)
+           qRT(i,j,k,iA,1) = A + (+dAy+dAz)
+           qRT(i,j,k,iB,1) = BR+ (   +dBRz)
+           qRT(i,j,k,iC,1) = CR+ (+dCRy   )
+           if (qRT(i,j,k,ir,1)<smallr) qRT(i,j,k,ir,1)=r
+#if NENER>0
+           do irad=1,nener
+              qRT(i,j,k,iC+irad,1) = e(irad) + (+dey(irad)+dez(irad))
+           end do
+#endif
+           ! X-edge averaged right-bottom corner state (RB->LR)
+           qRB(i,j,k,ir,1) = r + (+dry-drz)
+           qRB(i,j,k,iu,1) = u + (+duy-duz)
+           qRB(i,j,k,iv,1) = v + (+dvy-dvz)
+           qRB(i,j,k,iw,1) = w + (+dwy-dwz)
+           qRB(i,j,k,ip,1) = p + (+dpy-dpz)
+           qRB(i,j,k,iA,1) = A + (+dAy-dAz)
+           qRB(i,j,k,iB,1) = BR+ (   -dBRz)
+           qRB(i,j,k,iC,1) = CL+ (+dCLy   )
+           if (qRB(i,j,k,ir,1)<smallr) qRB(i,j,k,ir,1)=r
+#if NENER>0
+           do irad=1,nener
+              qRB(i,j,k,iC+irad,1) = e(irad) + (+dey(irad)-dez(irad))
+           end do
+#endif
+           ! X-edge averaged left-top corner state (LT->RL)
+           qLT(i,j,k,ir,1) = r + (-dry+drz)
+           qLT(i,j,k,iu,1) = u + (-duy+duz)
+           qLT(i,j,k,iv,1) = v + (-dvy+dvz)
+           qLT(i,j,k,iw,1) = w + (-dwy+dwz)
+           qLT(i,j,k,ip,1) = p + (-dpy+dpz)
+           qLT(i,j,k,iA,1) = A + (-dAy+dAz)
+           qLT(i,j,k,iB,1) = BL+ (   +dBLz)
+           qLT(i,j,k,iC,1) = CR+ (-dCRy   )
+           if (qLT(i,j,k,ir,1)<smallr) qLT(i,j,k,ir,1)=r
+#if NENER>0
+           do irad=1,nener
+              qLT(i,j,k,iC+irad,1) = e(irad) + (-dey(irad)+dez(irad))
+           end do
+#endif
+           ! X-edge averaged left-bottom corner state (LB->RR)
+           qLB(i,j,k,ir,1) = r + (-dry-drz)
+           qLB(i,j,k,iu,1) = u + (-duy-duz)
+           qLB(i,j,k,iv,1) = v + (-dvy-dvz)
+           qLB(i,j,k,iw,1) = w + (-dwy-dwz)
+           qLB(i,j,k,ip,1) = p + (-dpy-dpz)
+           qLB(i,j,k,iA,1) = A + (-dAy-dAz)
+           qLB(i,j,k,iB,1) = BL+ (   -dBLz)
+           qLB(i,j,k,iC,1) = CL+ (-dCLy   )
+           if (qLB(i,j,k,ir,1)<smallr) qLB(i,j,k,ir,1)=r
+#if NENER>0
+           do irad=1,nener
+              qLB(i,j,k,iC+irad,1) = e(irad) + (-dey(irad)-dez(irad))
+           end do
+#endif
+           ! Y-edge averaged right-top corner state (RT->LL)
+           qRT(i,j,k,ir,2) = r + (+drx+drz)
+           qRT(i,j,k,iu,2) = u + (+dux+duz)
+           qRT(i,j,k,iv,2) = v + (+dvx+dvz)
+           qRT(i,j,k,iw,2) = w + (+dwx+dwz)
+           qRT(i,j,k,ip,2) = p + (+dpx+dpz)
+           qRT(i,j,k,iA,2) = AR+ (   +dARz)
+           qRT(i,j,k,iB,2) = B + (+dBx+dBz)
+           qRT(i,j,k,iC,2) = CR+ (+dCRx   )
+           if (qRT(i,j,k,ir,2)<smallr) qRT(i,j,k,ir,2)=r
+#if NENER>0
+           do irad=1,nener
+              qRT(i,j,k,iC+irad,2) = e(irad) + (+dex(irad)+dez(irad))
+           end do
+#endif
+           ! Y-edge averaged right-bottom corner state (RB->LR)
+           qRB(i,j,k,ir,2) = r + (+drx-drz)
+           qRB(i,j,k,iu,2) = u + (+dux-duz)
+           qRB(i,j,k,iv,2) = v + (+dvx-dvz)
+           qRB(i,j,k,iw,2) = w + (+dwx-dwz)
+           qRB(i,j,k,ip,2) = p + (+dpx-dpz)
+           qRB(i,j,k,iA,2) = AR+ (   -dARz)
+           qRB(i,j,k,iB,2) = B + (+dBx-dBz)
+           qRB(i,j,k,iC,2) = CL+ (+dCLx   )
+           if (qRB(i,j,k,ir,2)<smallr) qRB(i,j,k,ir,2)=r
+#if NENER>0
+           do irad=1,nener
+              qRB(i,j,k,iC+irad,2) = e(irad) + (+dex(irad)-dez(irad))
+           end do
+#endif
+           ! Y-edge averaged left-top corner state (LT->RL)
+           qLT(i,j,k,ir,2) = r + (-drx+drz)
+           qLT(i,j,k,iu,2) = u + (-dux+duz)
+           qLT(i,j,k,iv,2) = v + (-dvx+dvz)
+           qLT(i,j,k,iw,2) = w + (-dwx+dwz)
+           qLT(i,j,k,ip,2) = p + (-dpx+dpz)
+           qLT(i,j,k,iA,2) = AL+ (   +dALz)
+           qLT(i,j,k,iB,2) = B + (-dBx+dBz)
+           qLT(i,j,k,iC,2) = CR+ (-dCRx   )
+           if (qLT(i,j,k,ir,2)<smallr) qLT(i,j,k,ir,2)=r
+#if NENER>0
+           do irad=1,nener
+              qLT(i,j,k,iC+irad,2) = e(irad) + (-dex(irad)+dez(irad))
+           end do
+#endif
+           ! Y-edge averaged left-bottom corner state (LB->RR)
+           qLB(i,j,k,ir,2) = r + (-drx-drz)
+           qLB(i,j,k,iu,2) = u + (-dux-duz)
+           qLB(i,j,k,iv,2) = v + (-dvx-dvz)
+           qLB(i,j,k,iw,2) = w + (-dwx-dwz)
+           qLB(i,j,k,ip,2) = p + (-dpx-dpz)
+           qLB(i,j,k,iA,2) = AL+ (   -dALz)
+           qLB(i,j,k,iB,2) = B + (-dBx-dBz)
+           qLB(i,j,k,iC,2) = CL+ (-dCLx   )
+           if (qLB(i,j,k,ir,2)<smallr) qLB(i,j,k,ir,2)=r
+#if NENER>0
+           do irad=1,nener
+              qLB(i,j,k,iC+irad,2) = e(irad) + (-dex(irad)-dez(irad))
+           end do
+#endif
+           ! Z-edge averaged right-top corner state (RT->LL)
+           qRT(i,j,k,ir,3) = r + (+drx+dry)
+           qRT(i,j,k,iu,3) = u + (+dux+duy)
+           qRT(i,j,k,iv,3) = v + (+dvx+dvy)
+           qRT(i,j,k,iw,3) = w + (+dwx+dwy)
+           qRT(i,j,k,ip,3) = p + (+dpx+dpy)
+           qRT(i,j,k,iA,3) = AR+ (   +dARy)
+           qRT(i,j,k,iB,3) = BR+ (+dBRx   )
+           qRT(i,j,k,iC,3) = C + (+dCx+dCy)
+           if (qRT(i,j,k,ir,3)<smallr) qRT(i,j,k,ir,3)=r
+#if NENER>0
+           do irad=1,nener
+              qRT(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)+dey(irad))
+           end do
+#endif
+           ! Z-edge averaged right-bottom corner state (RB->LR)
+           qRB(i,j,k,ir,3) = r + (+drx-dry)
+           qRB(i,j,k,iu,3) = u + (+dux-duy)
+           qRB(i,j,k,iv,3) = v + (+dvx-dvy)
+           qRB(i,j,k,iw,3) = w + (+dwx-dwy)
+           qRB(i,j,k,ip,3) = p + (+dpx-dpy)
+           qRB(i,j,k,iA,3) = AR+ (   -dARy)
+           qRB(i,j,k,iB,3) = BL+ (+dBLx   )
+           qRB(i,j,k,iC,3) = C + (+dCx-dCy)
+           if (qRB(i,j,k,ir,3)<smallr) qRB(i,j,k,ir,3)=r
+#if NENER>0
+           do irad=1,nener
+              qRB(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)-dey(irad))
+           end do
+#endif
+           ! Z-edge averaged left-top corner state (LT->RL)
+           qLT(i,j,k,ir,3) = r + (-drx+dry)
+           qLT(i,j,k,iu,3) = u + (-dux+duy)
+           qLT(i,j,k,iv,3) = v + (-dvx+dvy)
+           qLT(i,j,k,iw,3) = w + (-dwx+dwy)
+           qLT(i,j,k,ip,3) = p + (-dpx+dpy)
+           qLT(i,j,k,iA,3) = AL+ (   +dALy)
+           qLT(i,j,k,iB,3) = BR+ (-dBRx   )
+           qLT(i,j,k,iC,3) = C + (-dCx+dCy)
+           if (qLT(i,j,k,ir,3)<smallr) qLT(i,j,k,ir,3)=r
+#if NENER>0
+           do irad=1,nener
+              qLT(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)+dey(irad))
+           end do
+#endif
+           ! Z-edge averaged left-bottom corner state (LB->RR)
+           qLB(i,j,k,ir,3) = r + (-drx-dry)
+           qLB(i,j,k,iu,3) = u + (-dux-duy)
+           qLB(i,j,k,iv,3) = v + (-dvx-dvy)
+           qLB(i,j,k,iw,3) = w + (-dwx-dwy)
+           qLB(i,j,k,ip,3) = p + (-dpx-dpy)
+           qLB(i,j,k,iA,3) = AL+ (   -dALy)
+           qLB(i,j,k,iB,3) = BL+ (-dBLx   )
+           qLB(i,j,k,iC,3) = C + (-dCx-dCy)
+           if (qLB(i,j,k,ir,3)<smallr) qLB(i,j,k,ir,3)=r
+#if NENER>0
+           do irad=1,nener
+              qLB(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)-dey(irad))
+           end do
+#endif
 #endif
         end do
      end do
