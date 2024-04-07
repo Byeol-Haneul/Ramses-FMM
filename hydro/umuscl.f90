@@ -555,15 +555,15 @@ subroutine trace2d(q,dq,qm,qp, &
            ERR = Ez(i+1,j+1,k)
 
            ! Face-centered predicted states
-           sAL0 = +(ELR-ELL)*dtdx*half
-           sAR0 = +(ERR-ERL)*dtdx*half
-           sBL0 = -(ERL-ELL)*dtdx*half
-           sBR0 = -(ERR-ELR)*dtdx*half
+           sAL0 = +(ELR-ELL)
+           sAR0 = +(ERR-ERL)
+           sBL0 = -(ERL-ELL)
+           sBR0 = -(ERR-ELR)
            
-           AL = AL + sAL0
-           AR = AR + sAR0
-           BL = BL + sBL0
-           BR = BR + sBR0
+           AL = AL + sAL0*dtdx*half
+           AR = AR + sAR0*dtdx*half
+           BL = BL + sBL0*dtdx*half
+           BR = BR + sBR0*dtdx*half
 #endif
            ! Cell centered values
            r = q(i,j,k,ir)
@@ -908,28 +908,28 @@ subroutine trace3d(q,dq,qm,qp, &
         do i = ilo, ihi
 #ifdef MHD
            ! Face centered variables
-           AL =  bf(i  ,j  ,k  ,1)
-           AR =  bf(i+1,j  ,k  ,1)
-           BL =  bf(i  ,j  ,k  ,2)
-           BR =  bf(i  ,j+1,k  ,2)
-           CL =  bf(i  ,j  ,k  ,3)
-           CR =  bf(i  ,j  ,k+1,3)
+           AL = bf(i  ,j  ,k  ,1)
+           AR = bf(i+1,j  ,k  ,1)
+           BL = bf(i  ,j  ,k  ,2)
+           BR = bf(i  ,j+1,k  ,2)
+           CL = bf(i  ,j  ,k  ,3)
+           CR = bf(i  ,j  ,k+1,3)
 
            ! Face centered TVD slopes in transverse direction
-           dALy = half * dbf(i  ,j  ,k  ,1,1)
-           dARy = half * dbf(i+1,j  ,k  ,1,1)
-           dALz = half * dbf(i  ,j  ,k  ,1,2)
-           dARz = half * dbf(i+1,j  ,k  ,1,2)
+           dALy = half*dbf(i  ,j  ,k  ,1,1)
+           dARy = half*dbf(i+1,j  ,k  ,1,1)
+           dALz = half*dbf(i  ,j  ,k  ,1,2)
+           dARz = half*dbf(i+1,j  ,k  ,1,2)
 
-           dBLx = half * dbf(i  ,j  ,k  ,2,1)
-           dBRx = half * dbf(i  ,j+1,k  ,2,1)
-           dBLz = half * dbf(i  ,j  ,k  ,2,2)
-           dBRz = half * dbf(i  ,j+1,k  ,2,2)
+           dBLx = half*dbf(i  ,j  ,k  ,2,1)
+           dBRx = half*dbf(i  ,j+1,k  ,2,1)
+           dBLz = half*dbf(i  ,j  ,k  ,2,2)
+           dBRz = half*dbf(i  ,j+1,k  ,2,2)
 
-           dCLx = half * dbf(i  ,j  ,k  ,3,1)
-           dCRx = half * dbf(i  ,j  ,k+1,3,1)
-           dCLy = half * dbf(i  ,j  ,k  ,3,2)
-           dCRy = half * dbf(i  ,j  ,k+1,3,2)
+           dCLx = half*dbf(i  ,j  ,k  ,3,1)
+           dCRx = half*dbf(i  ,j  ,k+1,3,1)
+           dCLy = half*dbf(i  ,j  ,k  ,3,2)
+           dCRy = half*dbf(i  ,j  ,k+1,3,2)
 
            ! Edge centered electric field Ex = vC-wB
            ELL = Ex(i,j  ,k  )
@@ -950,19 +950,19 @@ subroutine trace3d(q,dq,qm,qp, &
            GRR = Ez(i+1,j+1,k)
 
            ! Face-centered predicted states
-           sAL0 = +(GLR-GLL)*dtdx*half -(FLR-FLL)*dtdx*half
-           sAR0 = +(GRR-GRL)*dtdx*half -(FRR-FRL)*dtdx*half
-           sBL0 = -(GRL-GLL)*dtdx*half +(ELR-ELL)*dtdx*half
-           sBR0 = -(GRR-GLR)*dtdx*half +(ERR-ERL)*dtdx*half
-           sCL0 = +(FRL-FLL)*dtdx*half -(ERL-ELL)*dtdx*half
-           sCR0 = +(FRR-FLR)*dtdx*half -(ERR-ELR)*dtdx*half
+           sAL0 = +(GLR-GLL) -(FLR-FLL)
+           sAR0 = +(GRR-GRL) -(FRR-FRL)
+           sBL0 = -(GRL-GLL) +(ELR-ELL)
+           sBR0 = -(GRR-GLR) +(ERR-ERL)
+           sCL0 = +(FRL-FLL) -(ERL-ELL)
+           sCR0 = +(FRR-FLR) -(ERR-ELR)
 
-           AL = AL + sAL0
-           AR = AR + sAR0
-           BL = BL + sBL0
-           BR = BR + sBR0
-           CL = CL + sCL0
-           CR = CR + sCR0
+           AL = AL + sAL0*dtdx*half
+           AR = AR + sAR0*dtdx*half
+           BL = BL + sBL0*dtdx*half
+           BR = BR + sBR0*dtdx*half
+           CL = CL + sCL0*dtdx*half
+           CR = CR + sCR0*dtdx*half
 #endif
            ! Cell centered values
            r = q(i,j,k,ir)
