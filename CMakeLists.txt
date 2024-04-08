@@ -10,12 +10,25 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-add_executable(${PROJECT_NAME} "")
+set(NVECTOR 32)
+set(NHILBERT 1)
+set(NDIM 2 CACHE STRING "Set the number of dimensions")
+set(EXEC ramses${NDIM}d)
+set(NPRE 8)
+set(NVAR 5)
+set(NENER 0)
+set(UNITS DEF CACHE STRING "Set the unit system")
+set(INIT DEF CACHE STRING "Set the initial conditions")
+set(GRAV false CACHE BOOL "Activate gravity solver")
+set(HYDRO true CACHE BOOL "Activate hydro solver")
+set(MHD false CACHE BOOL "Activate MHD solver")
+
+add_executable(${EXEC} "")
 
 find_package(MPI)      # MPI support
 if(MPI_FOUND)
   include_directories(${MPI_Fortran_INCLUDE_PATH})
-  target_link_libraries(${PROJECT_NAME} ${MPI_Fortran_LIBRARIES})
+  target_link_libraries(${EXEC} ${MPI_Fortran_LIBRARIES})
 else()
   message(STATUS "MPI library not found. Build without MPI")
 endif()
@@ -26,22 +39,9 @@ else()
   set(MDL2 false CACHE BOOL "Enable the new MDL version of RAMSES")
 endif()
 
-set(NVECTOR 32)
-set(NDIM 1 CACHE STRING "Set the number of dimensions")
-set(NHILBERT 1)
-set(NPRE 8)
-set(NVAR 5)
-set(NENER 0)
-set(SOLVER hydro)
-set(UNITS default CACHE STRING "Set the unit system")
-set(CONDINIT default CACHE STRING "Set the initial conditions")
-set(EXEC ramses)
-set(GRAV false CACHE BOOL "Activate gravity solver")
-set(HYDRO true CACHE BOOL "Activate hydro solver")
+cmake_print_variables(NDIM NVAR UNITS INIT GRAV HYDRO MHD)
 
-cmake_print_variables(NDIM NVAR UNITS CONDINIT GRAV HYDRO)
-
-add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS${UNITS} -DCONDINIT${CONDINIT})
+add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS=${UNITS} -DINIT=${INIT})
 
 if(NOT MPI_FOUND)
   add_definitions(-DWITHOUTMPI)
@@ -53,6 +53,10 @@ endif()
 
 if(GRAV)
   add_definitions(-DGRAV)
+endif()
+
+if(MHD)
+  add_definitions(-DMHD)
 endif()
 
 add_custom_command(
@@ -124,6 +128,7 @@ set(fortran_files
   hydro/init_flow_fine.f90
   hydro/input_hydro_condinit.f90
   hydro/input_hydro_grafic.f90
+  hydro/input_hydro_gadget.f90
   hydro/interpol_hydro.f90
   hydro/condinit.f90
   hydro/hydro_flag.f90
@@ -132,7 +137,6 @@ set(fortran_files
   hydro/courant_fine.f90
   hydro/godunov_fine.f90
   hydro/umuscl.f90
-  hydro/uplmde.f90
   hydro/output_hydro.f90
   hydro/synchro_hydro_fine.f90
   hydro/source_hydro_fine.f90
@@ -143,6 +147,7 @@ set(fortran_files
   pm/input_part_restart.f90
   pm/input_part_ascii.f90
   pm/input_part_grafic.f90
+  pm/input_part_gadget.f90
   pm/input_part_zoom.f90
   pm/rho_fine.f90
   pm/move_fine.f90
@@ -205,12 +210,12 @@ elseif (CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
    set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-x f95-cpp-input -frecursive -frecord-marker=4 -ffree-line-length-none -fallow-argument-mismatch" )
   endif()
   if(APPLE)
-    target_link_options(${PROJECT_NAME} PRIVATE -Wl,-no_compact_unwind)
+    target_link_options(${EXEC} PRIVATE -Wl,-no_compact_unwind)
   endif(APPLE)
 
 elseif (CMAKE_Fortran_COMPILER_ID MATCHES "Cray")
   set_source_files_properties( ${fortran_files} PROPERTIES COMPILE_FLAGS "-e ZR" )
 endif()
 
-target_sources(${PROJECT_NAME} PRIVATE ${fortran_files})
+target_sources(${EXEC} PRIVATE ${fortran_files})
 
