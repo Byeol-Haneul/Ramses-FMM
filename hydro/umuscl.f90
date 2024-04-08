@@ -950,12 +950,12 @@ subroutine trace3d(q,dq,qm,qp, &
            GRR = Ez(i+1,j+1,k)
 
            ! Face-centered predicted states
-           sAL0 = +(GLR-GLL) -(FLR-FLL)
-           sAR0 = +(GRR-GRL) -(FRR-FRL)
-           sBL0 = -(GRL-GLL) +(ELR-ELL)
-           sBR0 = -(GRR-GLR) +(ERR-ERL)
-           sCL0 = +(FRL-FLL) -(ERL-ELL)
-           sCR0 = +(FRR-FLR) -(ERR-ELR)
+           sAL0 = + (GLR-GLL) - (FLR-FLL)
+           sAR0 = + (GRR-GRL) - (FRR-FRL)
+           sBL0 = - (GRL-GLL) + (ELR-ELL)
+           sBR0 = - (GRR-GLR) + (ERR-ERL)
+           sCL0 = + (FRL-FLL) - (ERL-ELL)
+           sCR0 = + (FRR-FLR) - (ERR-ELR)
 
            AL = AL + sAL0*dtdx*half
            AR = AR + sAR0*dtdx*half
