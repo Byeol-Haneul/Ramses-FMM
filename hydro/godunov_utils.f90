@@ -595,8 +595,8 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
 
   REAL(dp)::SL,SR
   REAL(dp)::entho
-  REAL(dp)::rl,pl,ul,vl,wl,ecinl,etotl,el,ptotl
-  REAL(dp)::rr,pr,ur,vr,wr,ecinr,etotr,er,ptotr
+  REAL(dp)::rl,pl,ul,vl,wl,ekinl,etotl,el,ptotl
+  REAL(dp)::rr,pr,ur,vr,wr,ekinr,etotr,er,ptotr
   REAL(dp)::cfastl,rcl,rstarl,estarl
   REAL(dp)::cfastr,rcr,rstarr,estarr
   REAL(dp)::etotstarl,etotstarr
@@ -620,8 +620,8 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   Pl=max(qleft(5),rl*smallp)
   
   el=Pl*entho
-  ecinl=half*rl*(ul*ul+vl*vl+wl*wl)
-  etotl=el+ecinl
+  ekinl=half*rl*(ul*ul+vl*vl+wl*wl)
+  etotl=el+ekinl
 #if NENER>0
   do irad=1,nener
      eradl(irad)=qleft(5+irad)/(gamma_rad(irad)-one)
@@ -641,8 +641,8 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   Pr=max(qright(5),rr*smallp)
   
   er=Pr*entho
-  ecinr=half*rr*(ur*ur+vr*vr+wr*wr)
-  etotr=er+ecinr
+  ekinr=half*rr*(ur*ur+vr*vr+wr*wr)
+  etotr=er+ekinr
 #if NENER>0
   do irad=1,nener
      eradr(irad)=qright(5+irad)/(gamma_rad(irad)-one)
@@ -925,8 +925,8 @@ SUBROUTINE riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
 
   REAL(dp)::SL,SR,SAL,SAR
   REAL(dp)::entho,A,sgnm
-  REAL(dp)::rl,pl,ul,vl,wl,cl,ecinl,emagl,etotl,ptotl,vdotbl,bl,el
-  REAL(dp)::rr,pr,ur,vr,wr,cr,ecinr,emagr,etotr,ptotr,vdotbr,br,er
+  REAL(dp)::rl,pl,ul,vl,wl,cl,ekinl,emagl,etotl,ptotl,vdotbl,bl,el
+  REAL(dp)::rr,pr,ur,vr,wr,cr,ekinr,emagr,etotr,ptotr,vdotbr,br,er
   REAL(dp)::cfastl,calfvenl,rcl,rstarl,vstarl,wstarl,bstarl,cstarl,vdotbstarl
   REAL(dp)::cfastr,calfvenr,rcr,rstarr,vstarr,wstarr,bstarr,cstarr,vdotbstarr
   REAL(dp)::sqrrstarl,etotstarl,etotstarstarl
@@ -951,9 +951,9 @@ SUBROUTINE riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   ! Left variables
   rl=qleft(1); ul=qleft(2); vl=qleft(3); wl=qleft(4);
   Pl=qleft(5); Bl=qleft(7); Cl=qleft(8)
-  ecinl = half*(ul*ul+vl*vl+wl*wl)*rl
+  ekinl = half*(ul*ul+vl*vl+wl*wl)*rl
   emagl = half*(A*A+Bl*Bl+Cl*Cl)
-  etotl = Pl*entho+ecinl+emagl
+  etotl = Pl*entho+ekinl+emagl
   Ptotl = Pl + emagl
   vdotBl= ul*A+vl*Bl+wl*cl
 #if NENER>0
@@ -968,9 +968,9 @@ SUBROUTINE riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   ! Right variables
   rr=qright(1); ur=qright(2); vr=qright(3); wr=qright(4)
   Pr=qright(5); Br=qright(7); Cr=qright(8)
-  ecinr = half*(ur*ur+vr*vr+wr*wr)*rr
+  ekinr = half*(ur*ur+vr*vr+wr*wr)*rr
   emagr = half*(A*A+Br*Br+Cr*Cr)
-  etotr = Pr*entho+ecinr+emagr
+  etotr = Pr*entho+ekinr+emagr
   Ptotr = Pr + emagr
   vdotBr= ur*A+vr*Br+wr*Cr
 #if NENER>0
@@ -1208,15 +1208,15 @@ SUBROUTINE find_mhd_flux(qvar,cvar,ff,gamma,gamma_rad)
   INTEGER :: ivar
   REAL(dp),DIMENSION(1:nprim  ):: qvar
   REAL(dp),DIMENSION(1:nprim+1):: cvar,ff
-  REAL(dp) :: ecin,emag,etot,d,u,v,w,A,B,C,P,Ptot,entho
+  REAL(dp) :: ekin,emag,etot,d,u,v,w,A,B,C,P,Ptot,entho
 
   ! Local variables
   entho = one/(gamma-one)
   d=qvar(1); u=qvar(2); v=qvar(3); w=qvar(4)
   P=qvar(5); A=qvar(6); B=qvar(7); C=qvar(8)
-  ecin = half*(u*u+v*v+w*w)*d
+  ekin = half*(u*u+v*v+w*w)*d
   emag = half*(A*A+B*B+C*C)
-  etot = P*entho+ecin+emag
+  etot = P*entho+ekin+emag
   Ptot = P + emag
 #if NENER>0
   do irad = 1,nener
