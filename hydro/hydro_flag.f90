@@ -104,7 +104,6 @@ subroutine hydro_flag(s,ilevel)
               uug(ivar)=gridn(2*idim-1)%p%uold(icellg,ivar)
               uum(ivar)=m%grid(igrid)%uold(ind,ivar)
               uud(ivar)=gridn(2*idim)%p%uold(icelld,ivar)
-!              write(*,*)'EULER',idim,ivar,uug(ivar),uum(ivar),uud(ivar)
            end do
 #ifdef MHD
            ! Gather MHD variables
@@ -114,7 +113,6 @@ subroutine hydro_flag(s,ilevel)
               bbg(ivar)=gridn(2*idim-1)%p%bold(icellg,ivar)
               bbm(ivar)=m%grid(igrid)%bold(ind,ivar)
               bbd(ivar)=gridn(2*idim)%p%bold(icelld,ivar)
-!              write(*,*)'INDUCTION',idim,ivar,bbg(ivar),bbm(ivar),bbd(ivar)
            end do
            call hydro_refine(r,uug,uum,uud,bbg,bbm,bbd,ok)
 #else

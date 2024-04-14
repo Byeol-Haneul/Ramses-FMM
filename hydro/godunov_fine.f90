@@ -614,7 +614,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   call unsplit(h%uloc,h%gloc,h%qloc,h%cloc,&
        & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
 #ifdef MHD
-       & h%bloc,h%emfx,h%emfy,h%emfz,h%bf,h%dbf,h%Ex,h%Ey,h%Ez,h%qRT,h%qRB,h%qLT,h%qLB, &
+       & h%bloc,h%emfx,h%emfy,h%emfz,h%bf,h%dbf,h%Ex,h%Ey,h%Ez,h%qRT,h%qRB,h%qLT,h%qLB,&
+       & r%etamag,r%induction, &
 #endif
        & dx,dx,dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
@@ -642,6 +643,8 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      end do
   end do
 #ifdef MHD
+  ! In case of pure induction, set Euler fluxes to zero
+  if(r%induction)h%flux=0.0d0
 #if NDIM>1
   !---------------------------------------------------
   ! Reset electromotive force along z at refined edges
@@ -762,6 +765,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   end do
 #ifdef MHD
 #if NDIM>1
+
   !----------------------------------------
   ! Induction system update at level ilevel
   !----------------------------------------
@@ -825,6 +829,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     dflux_z=( h%emfx(i3,j3,k3+1)-h%emfx(i3,j3+1,k3+1) ) &
                          & -( h%emfy(i3,j3,k3+1)-h%emfy(i3+1,j3,k3+1) )
                     childp%bnew(ind_son,6)=childp%bnew(ind_son,6)+dflux_z
+
 #endif
                  end do
               end do
@@ -1182,16 +1187,17 @@ subroutine godfine1(s,ind_grid,ilevel,h)
            ok1=associated(h%childloc(i1  ,j1,k1-1)%p); grid1=>h%gridloc(i1  ,j1,k1-1)%p; icell1=h%cellloc(i1  ,j1,k1-1)
            ok2=associated(h%childloc(i1-1,j1,k1-1)%p); grid2=>h%gridloc(i1-1,j1,k1-1)%p; icell2=h%cellloc(i1-1,j1,k1-1)
            ok3=associated(h%childloc(i1-1,j1,k1  )%p); grid3=>h%gridloc(i1-1,j1,k1  )%p; icell3=h%cellloc(i1-1,j1,k1  )
+
            if(.not.ok1 .or. .not.ok3)then
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3,j3,k3)+h%emfy(i3,j3+1,k3))*0.25*weight
-              if(ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)-dflux
-              if(ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)-dflux
-              if(ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)-dflux
-              if(ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)+dflux
-              if(ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)+dflux
-              if(ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)+dflux
+              if(.not.ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)-dflux
+              if(.not.ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)-dflux
+              if(.not.ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)-dflux
+              if(.not.ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)+dflux
+              if(.not.ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)+dflux
+              if(.not.ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)+dflux
            endif
 
            ! Update coarse Bx and Bz using fine EMFy on X=0 and Z=1 grid edge
@@ -1202,12 +1208,12 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3,j3,k3+2)+h%emfy(i3,j3+1,k3+2))*0.25*weight
-              if(ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)-dflux
-              if(ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)+dflux
-              if(ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)+dflux
-              if(ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)+dflux
-              if(ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)+dflux
-              if(ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)-dflux
+              if(.not.ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)-dflux
+              if(.not.ok1)grid1%bnew(icell1,6)=grid1%bnew(icell1,6)+dflux
+              if(.not.ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)+dflux
+              if(.not.ok2)grid2%bnew(icell2,4)=grid2%bnew(icell2,4)+dflux
+              if(.not.ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)+dflux
+              if(.not.ok3)grid3%bnew(icell3,3)=grid3%bnew(icell3,3)-dflux
            endif
 
            ! Update coarse Bx and Bz using fine EMFy on X=1 and Z=1 grid edge
@@ -1218,12 +1224,12 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3+2,j3,k3+2)+h%emfy(i3+2,j3+1,k3+2))*0.25*weight
-              if(ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)+dflux
-              if(ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)+dflux
-              if(ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)+dflux
-              if(ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)-dflux
-              if(ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)-dflux
-              if(ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)-dflux
+              if(.not.ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)+dflux
+              if(.not.ok1)grid1%bnew(icell1,4)=grid1%bnew(icell1,4)+dflux
+              if(.not.ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)+dflux
+              if(.not.ok2)grid2%bnew(icell2,3)=grid2%bnew(icell2,3)-dflux
+              if(.not.ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)-dflux
+              if(.not.ok3)grid3%bnew(icell3,1)=grid3%bnew(icell3,1)-dflux
            endif
 
            ! Update coarse Bx and Bz using fine EMFy on X=1 and Z=0 grid edge
@@ -1234,12 +1240,12 @@ subroutine godfine1(s,ind_grid,ilevel,h)
               weight=1.0
               if(ok1 .or. ok2 .or. ok3)weight=0.5
               dflux=(h%emfy(i3+2,j3,k3)+h%emfy(i3+2,j3+1,k3))*0.25*weight
-              if(ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)+dflux
-              if(ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)-dflux
-              if(ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)-dflux
-              if(ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)-dflux
-              if(ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)-dflux
-              if(ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)+dflux
+              if(.not.ok1)grid1%bnew(icell1,1)=grid1%bnew(icell1,1)+dflux
+              if(.not.ok1)grid1%bnew(icell1,3)=grid1%bnew(icell1,3)-dflux
+              if(.not.ok2)grid2%bnew(icell2,6)=grid2%bnew(icell2,6)-dflux
+              if(.not.ok2)grid2%bnew(icell2,1)=grid2%bnew(icell2,1)-dflux
+              if(.not.ok3)grid3%bnew(icell3,4)=grid3%bnew(icell3,4)-dflux
+              if(.not.ok3)grid3%bnew(icell3,6)=grid3%bnew(icell3,6)+dflux
            endif
 #endif
         end do

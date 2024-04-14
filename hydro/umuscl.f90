@@ -20,18 +20,20 @@
 ! ----------------------------------------------------------------
 subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
-     & bin,emfx,emfy,emfz,bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB, &
+     & bin,emfx,emfy,emfz,bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB,&
+     & etamag,induction, &
 #endif
      & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,&
      & gamma,gamma_rad,smallr,smallc,slope_type,riemann,riemann2d,difmag)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nvar, nprim, nener
   use const
-  implicit none 
+  implicit none
 
   ! Input parameters
   real(dp)::dx,dy,dz,dt
-  real(dp)::gamma,smallr,smallc,difmag
+  real(dp)::gamma,smallr,smallc,difmag,etamag
+  logical::induction
   real(dp),dimension(1:nener)::gamma_rad
   integer::slope_type,riemann,riemann2d
   integer::iu1,iu2,ju1,ju2,ku1,ku2
@@ -125,6 +127,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   call trace3d(qin,dq,qm,qp,&
 #ifdef MHD
        & bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB, &
+       & induction, &
 #endif
        & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
 #endif
@@ -272,10 +275,20 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
      call cmpdivu(qin,divu,dx,dy,dz,&
           & iu1,iu2,ju1,ju2,ku1,ku2,&
           & if1,if2,jf1,jf2,kf1,kf2)
-     call consup(uin,flux,divu,dt,&
+     call cmpdiff(uin,flux,divu,dt,&
+#ifdef MHD
+          & bin, &
+#endif
           & iu1,iu2,ju1,ju2,ku1,ku2,&
           & if1,if2,jf1,jf2,kf1,kf2,difmag)
   endif
+#ifdef MHD
+!  if(etamag>0.0)then
+!     call cmpcurrent(bf,emfx,emfy,emfz,dx,dy,dz,dt,&
+!          & iu1,iu2,ju1,ju2,ku1,ku2,&
+!          & if1,if2,jf1,jf2,kf1,kf2,etamag)
+!  endif
+#endif
 
 end subroutine unsplit
 !###########################################################
@@ -813,6 +826,7 @@ end subroutine trace2d
 subroutine trace3d(q,dq,qm,qp, &
 #ifdef MHD
      & bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB, &
+     & induction, &
 #endif
      & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
   use amr_parameters, only: dp, ndim
@@ -829,6 +843,7 @@ subroutine trace3d(q,dq,qm,qp, &
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
 #ifdef MHD
+  logical::induction
   real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
   real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
   REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
@@ -1033,6 +1048,11 @@ subroutine trace3d(q,dq,qm,qp, &
            su0 = su0 + (-(B*dBx+C*dCx)/r) + (B*dAy/r) + (C*dAz/r)
            sv0 = sv0 + (A*dBx/r) + (-(A*dAy+C*dCy)/r) + (C*dBz/r)
            sw0 = sw0 + (A*dCx/r) + (B*dCy/r) + (-(A*dAz+B*dBz)/r)
+           if(induction)then
+              su0=0
+              sv0=0
+              sw0=0
+           endif
 #endif
 #if NENER>0
            do irad=1,nener
@@ -1342,6 +1362,23 @@ subroutine trace3d(q,dq,qm,qp, &
               qLB(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)-dey(irad))
            end do
 #endif
+!!$           ! In case of pure induction, overwrite corner velocities
+!!$           if(induction)then
+!!$              do n=1,3
+!!$                 qRT(i,j,k,iu,n) = q(i,j,k,iu)
+!!$                 qRB(i,j,k,iu,n) = q(i,j,k,iu)
+!!$                 qLT(i,j,k,iu,n) = q(i,j,k,iu)
+!!$                 qLB(i,j,k,iu,n) = q(i,j,k,iu)
+!!$                 qRT(i,j,k,iv,n) = q(i,j,k,iv)
+!!$                 qRB(i,j,k,iv,n) = q(i,j,k,iv)
+!!$                 qLT(i,j,k,iv,n) = q(i,j,k,iv)
+!!$                 qLB(i,j,k,iv,n) = q(i,j,k,iv)
+!!$                 qRT(i,j,k,iw,n) = q(i,j,k,iw)
+!!$                 qRB(i,j,k,iw,n) = q(i,j,k,iw)
+!!$                 qLT(i,j,k,iw,n) = q(i,j,k,iw)
+!!$                 qLB(i,j,k,iw,n) = q(i,j,k,iw)
+!!$              end do
+!!$           endif
 #endif
         end do
      end do
@@ -2300,11 +2337,14 @@ end subroutine cmpdivu
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine consup(uin,flux,div,dt,&
+subroutine cmpdiff(uin,flux,div,dt,&
+#ifdef MHD
+     & bin, &
+#endif
      & iu1,iu2,ju1,ju2,ku1,ku2,&
      & if1,if2,jf1,jf2,kf1,kf2,difmag)
   use amr_parameters, only: dp, ndim
-  use hydro_parameters, only: nvar, nprim
+  use hydro_parameters, only: nvar, nprim, ie
   use const
   implicit none
   ! Add diffusive flux where flow is compressing
@@ -2312,6 +2352,9 @@ subroutine consup(uin,flux,div,dt,&
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
+#ifdef MHD
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
+#endif
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nprim,1:ndim)::flux
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
 
@@ -2321,7 +2364,7 @@ subroutine consup(uin,flux,div,dt,&
 
   factor=half**(ndim-1)
 
-  do n = 1, nvar
+  do n = 1, nprim
      do k = kf1, MAX(kf1,ku2-2)
         do j = jf1, MAX(jf1, ju2-2)
            do i = if1, if2
@@ -2333,7 +2376,15 @@ subroutine consup(uin,flux,div,dt,&
               div1 = div1 + factor*(div(i,j,k+1)+div(i,j+1,k+1))
 #endif
               div1 = difmag*min(zero,div1)
-              flux(i,j,k,n,1) = flux(i,j,k,n,1) + dt*div1*(uin(i,j,k,n) - uin(i-1,j,k,n))
+              if(n.LE.5)then
+                 flux(i,j,k,n,1) = flux(i,j,k,n,1) + dt*div1*(uin(i,j,k,n) - uin(i-1,j,k,n))
+#ifdef MHD
+              else if(n.LE.8)then
+                 flux(i,j,k,n,1) = flux(i,j,k,n,1) + dt*div1*(bin(i,j,k,n-5) - bin(i-1,j,k,n-5))
+#endif
+              else
+                 flux(i,j,k,n,1) = flux(i,j,k,n,1) + dt*div1*(uin(i,j,k,n+5-ie) - uin(i-1,j,k,n+5-ie))
+              endif
            end do
         end do
      end do
@@ -2348,7 +2399,15 @@ subroutine consup(uin,flux,div,dt,&
               div1 = div1 + factor*(div(i,j,k+1) + div(i+1,j,k+1))
 #endif
               div1 = difmag*min(zero,div1)
-              flux(i,j,k,n,2) = flux(i,j,k,n,2) + dt*div1*(uin(i,j,k,n) - uin(i,j-1,k,n))
+              if(n.LE.5)then
+                 flux(i,j,k,n,2) = flux(i,j,k,n,2) + dt*div1*(uin(i,j,k,n) - uin(i,j-1,k,n))
+#ifdef MHD
+              else if(n.LE.8)then
+                 flux(i,j,k,n,2) = flux(i,j,k,n,2) + dt*div1*(bin(i,j,k,n-5) - bin(i,j-1,k,n-5))
+#endif
+              else
+                 flux(i,j,k,n,2) = flux(i,j,k,n,2) + dt*div1*(uin(i,j,k,n+5-ie) - uin(i,j-1,k,n+5-ie))
+              end if
            end do
         end do
      end do
@@ -2360,7 +2419,15 @@ subroutine consup(uin,flux,div,dt,&
            do i = iu1+2, iu2-2
               div1 = factor*(div(i,j  ,k) + div(i+1,j  ,k) + div(i,j+1,k) + div(i+1,j+1,k))
               div1 = difmag*min(zero,div1)
-              flux(i,j,k,n,3) = flux(i,j,k,n,3) + dt*div1*(uin(i,j,k,n) - uin(i,j,k-1,n))
+              if(n.LE.5)then
+                 flux(i,j,k,n,3) = flux(i,j,k,n,3) + dt*div1*(uin(i,j,k,n) - uin(i,j,k-1,n))
+#ifdef MHD
+              else if(n.LE.8)then
+                 flux(i,j,k,n,3) = flux(i,j,k,n,3) + dt*div1*(bin(i,j,k,n-5) - bin(i,j,k-1,n-5))
+#endif
+              else
+                 flux(i,j,k,n,3) = flux(i,j,k,n,3) + dt*div1*(uin(i,j,k,n+5-ie) - uin(i,j,k-1,n+5-ie))
+              end if
            end do
         end do
      end do
@@ -2368,4 +2435,69 @@ subroutine consup(uin,flux,div,dt,&
 
   end do
 
-end subroutine consup
+end subroutine cmpdiff
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine cmpcurrent(bf,Ex,Ey,Ez,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,etamag)
+  use amr_parameters,ONLY:dp
+  implicit none
+  integer::iu1,iu2,ju1,ju2,ku1,ku2
+  integer::if1,if2,jf1,jf2,kf1,kf2
+  real(dp),dimension(iu1:iu2+1,ju1+1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(dp),dimension(iu1:iu2,jf1:jf2,kf1:kf2)::Ex
+  real(dp),dimension(if1:if2,ju1:ju2,kf1:kf2)::Ey
+  real(dp),dimension(if1:if2,jf1:jf2,ku1:ku2)::Ez
+  real(dp)::dx,dy,dz,dt,etamag
+  ! Add to EMF -eta J where J = nabla x B
+  real(dp)::dBx_arete_dy,dBx_arete_dz
+  real(dp)::dBy_arete_dx,dBy_arete_dz
+  real(dp)::dBz_arete_dx,dBz_arete_dy
+  real(dp)::fact
+  integer::i,j,k
+  integer::ilo,ihi,jlo,jhi,klo,khi
+
+  ilo=iu1+2; ihi=iu2-2
+  jlo=ju1+2; jhi=ju2-2
+  klo=ku1+2; khi=ku2-2
+  fact=etamag*dt/dx/dx
+
+  ! Edge along x-axis
+  do k=kf1,kf2
+     do j=jf1,jf2
+        do i=ilo,ihi
+           dBz_arete_dy=(bf(i,j,k,3)-bf(i,j-1,k,3))
+           dBy_arete_dz=(bf(i,j,k,2)-bf(i,j,k-1,2))
+           Ex(i,j,k)=Ex(i,j,k)-(dBz_arete_dy-dBy_arete_dz)*fact
+        enddo
+     enddo
+  enddo
+
+  ! Edge along y-axis
+  do k=kf1,kf2
+     do j=jlo,jhi
+        do i=if1,if2
+           dBx_arete_dz=(bf(i,j,k,1)-bf(i,j,k-1,1))
+           dBz_arete_dx=(bf(i,j,k,3)-bf(i-1,j,k,3))
+           Ey(i,j,k)=Ey(i,j,k)-(dBx_arete_dz-dBz_arete_dx)*fact
+        enddo
+     enddo
+  enddo
+
+  ! Edge along z-axis
+  do k=klo,khi
+     do j=jf1,jf2
+        do i=if1,if2
+           dBy_arete_dx=(bf(i,j,k,2)-bf(i-1,j,k,2))
+           dBx_arete_dy=(bf(i,j,k,1)-bf(i,j-1,k,1))
+           Ez(i,j,k)=Ez(i,j,k)-(dBy_arete_dx-dBx_arete_dy)*fact
+        enddo
+     enddo
+  enddo
+
+end subroutine cmpcurrent
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################

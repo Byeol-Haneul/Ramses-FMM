@@ -85,9 +85,9 @@ subroutine hydro_refine(r,ug,um,ud,ok)
 #endif
 
   ! Thermal pressure
-  ug(5) = (r%gamma-one)*(ug(5)-eking-emagg-eradg)
-  um(5) = (r%gamma-one)*(um(5)-ekinm-emagm-eradm)
-  ud(5) = (r%gamma-one)*(ud(5)-ekind-emagd-eradd)
+  pg = (r%gamma-one)*(ug(5)-eking-emagg-eradg)
+  pm = (r%gamma-one)*(um(5)-ekinm-emagm-eradm)
+  pd = (r%gamma-one)*(ud(5)-ekind-emagd-eradd)
 
   ! Passive scalars
 #if NVAR>5+NENER
@@ -108,7 +108,6 @@ subroutine hydro_refine(r,ug,um,ud,ok)
   end if
 
   if(r%err_grad_p >= 0.)then
-     pg=ug(5); pm=um(5); pd=ud(5)
      error=2.0d0*MAX( &
           & ABS((pd-pm)/(pd+pm+r%floor_p)), &
           & ABS((pm-pg)/(pm+pg+r%floor_p)) )
@@ -116,16 +115,26 @@ subroutine hydro_refine(r,ug,um,ud,ok)
   end if
 
   if(r%err_grad_u >= 0.)then
-     do idim=1,3
-        vg=ug(idim+1); vm=um(idim+1); vd=ud(idim+1)
-        cg=sqrt(max(r%gamma*ug(5)/ug(1),r%floor_u**2))
-        cm=sqrt(max(r%gamma*um(5)/um(1),r%floor_u**2))
-        cd=sqrt(max(r%gamma*ud(5)/ud(1),r%floor_u**2))
-        error=2.0d0*MAX( &
-             & ABS((vd-vm)/(cd+cm+ABS(vd)+ABS(vm)+r%floor_u)) , &
-             & ABS((vm-vg)/(cm+cg+ABS(vm)+ABS(vg)+r%floor_u)) )
-        ok = ok .or. error > r%err_grad_u
-     end do
+     if(r%induction)then
+        do idim=1,3
+           vg=ug(idim+1); vm=um(idim+1); vd=ud(idim+1)
+           error=2.0d0*MAX( &
+                & ABS((vd-vm)/(ABS(vd)+ABS(vm)+r%floor_u)) , &
+                & ABS((vm-vg)/(ABS(vm)+ABS(vg)+r%floor_u)) )
+           ok = ok .or. error > r%err_grad_u
+        end do
+     else
+        do idim=1,3
+           vg=ug(idim+1); vm=um(idim+1); vd=ud(idim+1)
+           cg=sqrt(max(r%gamma*pg/ug(1),r%floor_u**2))
+           cm=sqrt(max(r%gamma*pm/um(1),r%floor_u**2))
+           cd=sqrt(max(r%gamma*pd/ud(1),r%floor_u**2))
+           error=2.0d0*MAX( &
+                & ABS((vd-vm)/(cd+cm+ABS(vd)+ABS(vm)+r%floor_u)) , &
+                & ABS((vm-vg)/(cm+cg+ABS(vm)+ABS(vg)+r%floor_u)) )
+           ok = ok .or. error > r%err_grad_u
+        end do
+     end if
   end if
 
 #ifdef MHD
@@ -266,11 +275,17 @@ subroutine cmpdt(r,uu,bb,gg,dx,dt)
 
   ! Compute wave speed (note that we use ndim here, not 3)
   ctot = zero
-  do idim = 1,ndim
-     c2 = half*(b2/uu(1)+a2)
-     cfast2 = c2+sqrt(c2**2-a2*bb(idim)**2/uu(1))
-     ctot = ctot+abs(uu(idim+1))+sqrt(cfast2)
-  end do
+  if(r%induction)then
+     do idim = 1,ndim
+        ctot = ctot+abs(uu(idim+1))+r%smallc
+     end do
+  else
+     do idim = 1,ndim
+        c2 = half*(b2/uu(1)+a2)
+        cfast2 = c2+sqrt(c2**2-a2*bb(idim)**2/uu(1))
+        ctot = ctot+abs(uu(idim+1))+sqrt(cfast2)
+     end do
+  endif
 
   ! Compute gravity strength ratio
   uu(1) = zero

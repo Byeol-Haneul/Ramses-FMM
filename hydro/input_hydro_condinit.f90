@@ -247,14 +247,14 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
               end do
               do i=1,ngrid
                  ! bx = d Az / dy - d Ay /dz
-                 m%grid(igrid+i-1)%bold(ind,1)=(azlr(i)-azll(i)-(aylr(i)-ayll(i)))/dx
-                 m%grid(igrid+i-1)%bold(ind,4)=(azrr(i)-azrl(i)-(ayrr(i)-ayrl(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,1)=r%A_ave+(azlr(i)-azll(i)-(aylr(i)-ayll(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,4)=r%A_ave+(azrr(i)-azrl(i)-(ayrr(i)-ayrl(i)))/dx
                  ! by = d Ax / dz - d Az /dx
-                 m%grid(igrid+i-1)%bold(ind,2)=(axlr(i)-axll(i)-(azrl(i)-azll(i)))/dx
-                 m%grid(igrid+i-1)%bold(ind,5)=(axrr(i)-axrl(i)-(azrr(i)-azlr(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,2)=r%B_ave+(axlr(i)-axll(i)-(azrl(i)-azll(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,5)=r%B_ave+(axrr(i)-axrl(i)-(azrr(i)-azlr(i)))/dx
                  ! bz = d Ay / dx - d Ax /dy
-                 m%grid(igrid+i-1)%bold(ind,3)=(ayrl(i)-ayll(i)-(axrl(i)-axll(i)))/dx
-                 m%grid(igrid+i-1)%bold(ind,6)=(ayrr(i)-aylr(i)-(axrr(i)-axlr(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,3)=r%C_ave+(ayrl(i)-ayll(i)-(axrl(i)-axll(i)))/dx
+                 m%grid(igrid+i-1)%bold(ind,6)=r%C_ave+(ayrr(i)-aylr(i)-(axrr(i)-axlr(i)))/dx
               end do
            end do
         end do

@@ -34,6 +34,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #define INSTA 2
 #define DOUBLEMACH 3
 #define OT 4
+#define PONO 5
 
   integer::i
 #if INIT==COEUR
@@ -48,6 +49,8 @@ subroutine condinit(r,g,x,q,dx,nn)
   real(dp)::pi,xp
 #elif INIT==OT
   real(dp)::pi,xc,yc
+#elif INIT==PONO
+  real(dp)::xx,yy,zz,vx,vy,vz,rr,tt,omega,R0,twopi
 #else
   ! Call built-in initial condition generator
   call region_condinit(r,g,x,q,dx,nn)
@@ -177,6 +180,40 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,4)=0.0
      q(i,5)=5.0/(12.0*pi)
      q(i,6)=0.0
+  end do
+#endif
+
+#if INIT==PONO
+  R0=1.0
+  twopi=2d0*ACOS(-1d0)
+  do i=1,nn
+     q(i,1)=1.0
+     q(i,5)=1.0*(r%gamma-1.0)
+     xx=x(i,1)-r%boxlen/2.
+     yy=x(i,2)-r%boxlen/2.
+     rr = SQRT(xx**2+yy**2)
+     if(rr < 1.0)then
+        omega=0.609711
+        vz=0.792624
+     else
+        omega=0.0
+        vz=0.0
+     endif
+     if(rr > 0.0)then
+        if(yy > 0.0)then
+           tt=acos(xx/rr)
+        else
+           tt=-acos(xx/rr)+twopi
+        endif
+        vx=-sin(tt)*rr*omega
+        vy=+cos(tt)*rr*omega
+     else
+        vx=0.0
+        vy=0.0
+     endif
+     q(i,2)=vx
+     q(i,3)=vy
+     q(i,4)=vz
   end do
 #endif
 

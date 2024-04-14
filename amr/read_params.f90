@@ -197,11 +197,13 @@ subroutine m_read_params(pst)
   real(dp),dimension(1:512)::gamma_rad=1.33333333334d0
   real(dp)::courant_factor=0.5d0
   real(dp)::difmag=0.0d0
+  real(dp)::etamag=0.0d0
   real(dp)::smallc=1.d-10
   real(dp)::smallr=1.d-10
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
   character(LEN=10)::riemann2d='llf'
+  logical ::induction=.false.
   logical ::entropy=.false.
   logical ::turb=.false.
   real(dp)::dual_energy=-1
@@ -347,8 +349,8 @@ subroutine m_read_params(pst)
        & ,d_region,u_region,v_region,w_region,p_region
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
-       & ,niter_riemann,slope_type,difmag,gamma_rad &
-       & ,dual_energy,T2_fix,entropy,turb,scheme,riemann,riemann2d,constant_gravity
+       & ,niter_riemann,slope_type,difmag,etamag,gamma_rad &
+       & ,dual_energy,T2_fix,induction,entropy,turb,scheme,riemann,riemann2d,constant_gravity
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
@@ -761,9 +763,11 @@ subroutine m_read_params(pst)
   s%r%niter_riemann=niter_riemann
   s%r%slope_type=slope_type
   s%r%difmag=difmag
+  s%r%etamag=etamag
   s%r%gamma_rad=gamma_rad(1:nener)
   s%r%dual_energy=dual_energy
   s%r%T2_fix=T2_fix
+  s%r%induction=induction
   s%r%entropy=entropy
   s%r%turb=turb
   s%r%inener=inener

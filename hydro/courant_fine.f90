@@ -72,7 +72,9 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
   emag=0.0D0
   dt=dx/r%smallc
 
-  ! Loop over active grids by vector sweeps
+ if(r%induction)call reset_init(r,g,m,ilevel)
+
+ ! Loop over active grids by vector sweeps
   do igrid=m%head(ilevel),m%tail(ilevel)
      ! Loop over cells
      do ind=1,twotondim                
@@ -128,6 +130,7 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
            ! Compute CFL time-step
            call cmpdt(r,uu,bb,gg,dx,dt_lev)
            dt=min(dt,dt_lev)
+
         endif
 
      end do
@@ -138,6 +141,100 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
 #endif
 
 end subroutine courant_fine
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine reset_init(r,g,m,ilevel)
+  use amr_parameters, only: dp,nvector,ndim,twotondim
+  use hydro_parameters, only: nvar, nener
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
+  !----------------------------------------------------------------------
+  ! Using the Courant-Friedrich-Levy stability condition,               !
+  ! this routine computes the maximum allowed time-step.                !
+  !----------------------------------------------------------------------
+  ! Local variables
+  integer::igrid,ngrid,ind,idim,nstride,i,ivar
+  integer::l,nfine,ii,jj,kk
+  real(dp),dimension(1:nvector,1:ndim)::xx
+#ifdef MHD
+  real(dp),dimension(1:nvector,1:nvar+3-ndim)::qq
+#else
+  real(dp),dimension(1:nvector,1:nvar)::qq
+#endif
+  real(dp)::dx,dxmin
+  real(dp)::rr,vx,vy,vz,pp
+  real(dp)::bx,by,bz
+  real(dp)::eint,ekin,emag,erad
+
+#ifdef HYDRO
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**ilevel
+  ! Loop over grids by vector sweeps
+  do igrid=m%head(ilevel),m%tail(ilevel),nvector
+     ngrid=MIN(nvector,m%tail(ilevel)-igrid+1)
+     ! Loop over cells
+     do ind=1,twotondim
+        ! Compute cell centre position in code units
+        do idim=1,ndim
+           nstride=2**(idim-1)
+           do i=1,ngrid
+              xx(i,idim)=(2*m%grid(igrid+i-1)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+           end do
+        end do
+        ! Call initial condition routine
+        call condinit(r,g,xx,qq,dx,ngrid)
+        ! Comvert to conservative variables
+        do i=1,ngrid
+           rr=qq(i,1)
+           vx=qq(i,2)
+           vy=qq(i,3)
+           vz=qq(i,4)
+           pp=qq(i,5)
+           ekin=0.5d0*rr*(vx**2+vy**2+vz**2)
+           eint=pp/(r%gamma-1.0)
+           emag=0.0d0
+#ifdef MHD
+           ! Compute magnetic energy for all cells
+           bx=0.5d0*(m%grid(igrid+i-1)%bold(ind,1)+m%grid(igrid+i-1)%bold(ind,4))
+           by=0.5d0*(m%grid(igrid+i-1)%bold(ind,2)+m%grid(igrid+i-1)%bold(ind,5))
+           bz=0.5d0*(m%grid(igrid+i-1)%bold(ind,3)+m%grid(igrid+i-1)%bold(ind,6))
+           emag=0.5d0*(bx**2+by**2+bz**2)
+#endif
+           erad=0.0d0
+#if NENER>0
+           ! Compute non-thermal energy densities
+           do irad=1,nener
+              m%grid(igrid+i-1)%uold(ind,5+irad)=qq(i,5+irad)/(gamma_rad(irad)-1.0d0)
+              erad=erad+m%grid(igrid+i-1)%uold(ind,5+irad)
+           end do
+#endif
+           ! Compute total fluid energy density
+           m%grid(igrid+i-1)%uold(ind,5)=eint+ekin+erad+emag
+           ! Compute momentum density
+           do idim=1,3
+              m%grid(igrid+i-1)%uold(ind,idim+1)=rr*qq(i,idim+1)
+           end do
+           ! Compute mass density
+           m%grid(igrid+i-1)%uold(ind,1)=rr
+#if NVAR>5+NENER
+           ! Compute passive scalar density
+           do ivar=6+nener,nvar
+              m%grid(igrid+i-1)%uold(ind,ivar)=rr*qq(i,ivar)
+           enddo
+#endif
+        end do
+     end do
+  end do
+#endif
+
+end subroutine reset_init
 !###########################################################
 !###########################################################
 !###########################################################

@@ -171,7 +171,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------
                                     call m_timer(pst,'courant','start')
   call m_newdt_fine(pst,ilevel)
-  
+
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
