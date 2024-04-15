@@ -51,10 +51,10 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
 
   ! Face-centered magnetic field
-  real(dp),dimension(iu1:iu2+1,ju1+1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
 
   ! Face-centered magnetic field slopes
-  real(dp),dimension(iu1:iu2+1,ju1+1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
+  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
 
   ! Output electromotive force
   REAL(dp),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfx
@@ -283,11 +283,11 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
           & if1,if2,jf1,jf2,kf1,kf2,difmag)
   endif
 #ifdef MHD
-!  if(etamag>0.0)then
-!     call cmpcurrent(bf,emfx,emfy,emfz,dx,dy,dz,dt,&
-!          & iu1,iu2,ju1,ju2,ku1,ku2,&
-!          & if1,if2,jf1,jf2,kf1,kf2,etamag)
-!  endif
+  if(etamag>0.0)then
+     call cmpcurrent(bf,emfx,emfy,emfz,dx,dy,dz,dt,&
+          & iu1,iu2,ju1,ju2,ku1,ku2,&
+          & if1,if2,jf1,jf2,kf1,kf2,etamag)
+  endif
 #endif
 
 end subroutine unsplit
@@ -2440,15 +2440,15 @@ end subroutine cmpdiff
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cmpcurrent(bf,Ex,Ey,Ez,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,etamag)
+subroutine cmpcurrent(bf,emfx,emfy,emfz,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,etamag)
   use amr_parameters,ONLY:dp
   implicit none
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
-  real(dp),dimension(iu1:iu2+1,ju1+1:ju2+1,ku1:ku2+1,1:3)::bf
-  real(dp),dimension(iu1:iu2,jf1:jf2,kf1:kf2)::Ex
-  real(dp),dimension(if1:if2,ju1:ju2,kf1:kf2)::Ey
-  real(dp),dimension(if1:if2,jf1:jf2,ku1:ku2)::Ez
+  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfx
+  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfy
+  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfz
   real(dp)::dx,dy,dz,dt,etamag
   ! Add to EMF -eta J where J = nabla x B
   real(dp)::dBx_arete_dy,dBx_arete_dz
@@ -2469,7 +2469,7 @@ subroutine cmpcurrent(bf,Ex,Ey,Ez,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf
         do i=ilo,ihi
            dBz_arete_dy=(bf(i,j,k,3)-bf(i,j-1,k,3))
            dBy_arete_dz=(bf(i,j,k,2)-bf(i,j,k-1,2))
-           Ex(i,j,k)=Ex(i,j,k)-(dBz_arete_dy-dBy_arete_dz)*fact
+           emfx(i,j,k)=emfx(i,j,k)-(dBz_arete_dy-dBy_arete_dz)*fact
         enddo
      enddo
   enddo
@@ -2480,7 +2480,7 @@ subroutine cmpcurrent(bf,Ex,Ey,Ez,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf
         do i=if1,if2
            dBx_arete_dz=(bf(i,j,k,1)-bf(i,j,k-1,1))
            dBz_arete_dx=(bf(i,j,k,3)-bf(i-1,j,k,3))
-           Ey(i,j,k)=Ey(i,j,k)-(dBx_arete_dz-dBz_arete_dx)*fact
+           emfy(i,j,k)=emfy(i,j,k)-(dBx_arete_dz-dBz_arete_dx)*fact
         enddo
      enddo
   enddo
@@ -2491,7 +2491,7 @@ subroutine cmpcurrent(bf,Ex,Ey,Ez,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf
         do i=if1,if2
            dBy_arete_dx=(bf(i,j,k,2)-bf(i-1,j,k,2))
            dBx_arete_dy=(bf(i,j,k,1)-bf(i,j-1,k,1))
-           Ez(i,j,k)=Ez(i,j,k)-(dBy_arete_dx-dBx_arete_dy)*fact
+           emfz(i,j,k)=emfz(i,j,k)-(dBy_arete_dx-dBx_arete_dy)*fact
         enddo
      enddo
   enddo
