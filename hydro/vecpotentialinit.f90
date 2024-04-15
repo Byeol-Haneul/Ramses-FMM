@@ -44,7 +44,9 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
   do i = 1,nn
      xx = x(i,1)-r%boxlen/2.0
      yy = x(i,2)-r%boxlen/2.0
-     A(i) = A0*max(R0-sqrt(xx**2+yy**2),0.0_dp)
+     if(idim==1)A(i) = 0.0
+     if(idim==2)A(i) = 0.0
+     if(idim==3)A(i) = A0*max(R0-sqrt(xx**2+yy**2),0.0_dp)
   end do
 #endif
 
@@ -73,9 +75,9 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
            tt=-acos(xx/rr)+twopi
         endif
         A(i) = A0*(2d0-rr)*rr*cos(tt)*sin(twopi*zz/r%boxlen)
-        if(idim==1)A(i)=A(i)*cos(tt)
-        if(idim==2)A(i)=A(i)*sin(tt)
-        if(idim==3)A(i)=0.0
+        if(idim==1)A(i) = A(i)*cos(tt)
+        if(idim==2)A(i) = A(i)*sin(tt)
+        if(idim==3)A(i) = 0.0
      else
         A(i)=0.0
      endif

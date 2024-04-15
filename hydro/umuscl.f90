@@ -57,9 +57,9 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   real(dp),dimension(iu1:iu2+1,ju1+1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
 
   ! Output electromotive force
-  REAL(dp),DIMENSION(iu1:iu2,jf1:jf2,kf1:kf2)::emfx
-  REAL(dp),DIMENSION(if1:if2,ju1:ju2,kf1:kf2)::emfy
-  REAL(dp),DIMENSION(if1:if2,jf1:jf2,ku1:ku2)::emfz
+  REAL(dp),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfx
+  REAL(dp),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfy
+  REAL(dp),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfz
 
   ! Intermediate electromotive force
   REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
@@ -1761,7 +1761,7 @@ subroutine ctoprim(uin,q,c,gravin, &
            q(i,j,k,2) = uin(i,j,k,2)*oneoverrho
            q(i,j,k,3) = uin(i,j,k,3)*oneoverrho
            q(i,j,k,4) = uin(i,j,k,4)*oneoverrho
-           
+
            ! Compute specific kinetic energy
            ekin =        half*q(i,j,k,1)*q(i,j,k,2)**2
            ekin = ekin + half*q(i,j,k,1)*q(i,j,k,3)**2

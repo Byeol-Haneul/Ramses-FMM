@@ -829,7 +829,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                     dflux_z=( h%emfx(i3,j3,k3+1)-h%emfx(i3,j3+1,k3+1) ) &
                          & -( h%emfy(i3,j3,k3+1)-h%emfy(i3+1,j3,k3+1) )
                     childp%bnew(ind_son,6)=childp%bnew(ind_son,6)+dflux_z
-
 #endif
                  end do
               end do
