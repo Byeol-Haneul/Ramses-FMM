@@ -184,7 +184,7 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
                  axrr(1:ngrid)=axrr(1:ngrid)+ax(1:ngrid)/dble(nfine)
                  xll(1:ngrid,1)=xll(1:ngrid,1)+dxmin
                  xrl(1:ngrid,1)=xrl(1:ngrid,1)+dxmin
-                 xrl(1:ngrid,1)=xlr(1:ngrid,1)+dxmin
+                 xlr(1:ngrid,1)=xlr(1:ngrid,1)+dxmin
                  xrr(1:ngrid,1)=xrr(1:ngrid,1)+dxmin
               end do
               ! Ay
@@ -213,7 +213,7 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
                  ayrr(1:ngrid)=ayrr(1:ngrid)+ay(1:ngrid)/dble(nfine)
                  xll(1:ngrid,2)=xll(1:ngrid,2)+dxmin
                  xrl(1:ngrid,2)=xrl(1:ngrid,2)+dxmin
-                 xrl(1:ngrid,2)=xlr(1:ngrid,2)+dxmin
+                 xlr(1:ngrid,2)=xlr(1:ngrid,2)+dxmin
                  xrr(1:ngrid,2)=xrr(1:ngrid,2)+dxmin
               end do
               ! Az
@@ -242,7 +242,7 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
                  azrr(1:ngrid)=azrr(1:ngrid)+az(1:ngrid)/dble(nfine)
                  xll(1:ngrid,3)=xll(1:ngrid,3)+dxmin
                  xrl(1:ngrid,3)=xrl(1:ngrid,3)+dxmin
-                 xrl(1:ngrid,3)=xlr(1:ngrid,3)+dxmin
+                 xlr(1:ngrid,3)=xlr(1:ngrid,3)+dxmin
                  xrr(1:ngrid,3)=xrr(1:ngrid,3)+dxmin
               end do
               do i=1,ngrid
