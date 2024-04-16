@@ -124,13 +124,13 @@ subroutine set_unew(r,g,m,ilevel)
 
 #ifdef HYDRO
   ! Set unew to uold for myid cells
-  do i=m%head(ilevel),m%tail(ilevel)
+  do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%unew = m%grid(i)%uold
   end do
 #endif
 #ifdef MHD
   ! Set bnew to bold for myid cells
-  do i=m%head(ilevel),m%tail(ilevel)
+  do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%bnew = m%grid(i)%bold
   end do
 #endif
@@ -179,14 +179,14 @@ subroutine set_uold(r,g,m,ilevel)
 
 #ifdef HYDRO
   ! Set uold to unew
-  do i=m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%uold=m%grid(i)%unew
+  do i = m%head(ilevel),m%tail(ilevel)
+     m%grid(i)%uold = m%grid(i)%unew
   end do
 #endif
 #ifdef MHD
   ! Set bold to bnew
-  do i=m%head(ilevel),m%tail(ilevel)
-     m%grid(i)%bold=m%grid(i)%bnew
+  do i = m%head(ilevel),m%tail(ilevel)
+     m%grid(i)%bold = m%grid(i)%bnew
   end do
 #endif
 

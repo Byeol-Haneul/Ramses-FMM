@@ -901,19 +901,19 @@ subroutine trace3d(q,dq,qm,qp, &
            w = 0.25*(q(i,j-1,k-1,iw)+q(i,j-1,k,iw)+q(i,j,k-1,iw)+q(i,j,k,iw))
            B = 0.5*(bf(i,j,k-1,2)+bf(i,j,k,2))
            C = 0.5*(bf(i,j-1,k,3)+bf(i,j,k,3))
-           Ex(i,j,k)=v*C-w*B
+           Ex(i,j,k) = v*C-w*B
 
            u = 0.25*(q(i-1,j,k-1,iu)+q(i-1,j,k,iu)+q(i,j,k-1,iu)+q(i,j,k,iu))
            w = 0.25*(q(i-1,j,k-1,iw)+q(i-1,j,k,iw)+q(i,j,k-1,iw)+q(i,j,k,iw))
            A = 0.5*(bf(i,j,k-1,1)+bf(i,j,k,1))
            C = 0.5*(bf(i-1,j,k,3)+bf(i,j,k,3))
-           Ey(i,j,k)=w*A-u*C
+           Ey(i,j,k) = w*A-u*C
 
            u = 0.25*(q(i-1,j-1,k,iu)+q(i-1,j,k,iu)+q(i,j-1,k,iu)+q(i,j,k,iu))
            v = 0.25*(q(i-1,j-1,k,iv)+q(i-1,j,k,iv)+q(i,j-1,k,iv)+q(i,j,k,iv))
            A = 0.5*(bf(i,j-1,k,1)+bf(i,j,k,1))
            B = 0.5*(bf(i-1,j,k,2)+bf(i,j,k,2))
-           Ez(i,j,k)=u*B-v*A
+           Ez(i,j,k) = u*B-v*A
         END DO
      END DO
   END DO
@@ -1362,23 +1362,6 @@ subroutine trace3d(q,dq,qm,qp, &
               qLB(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)-dey(irad))
            end do
 #endif
-!!$           ! In case of pure induction, overwrite corner velocities
-!!$           if(induction)then
-!!$              do n=1,3
-!!$                 qRT(i,j,k,iu,n) = q(i,j,k,iu)
-!!$                 qRB(i,j,k,iu,n) = q(i,j,k,iu)
-!!$                 qLT(i,j,k,iu,n) = q(i,j,k,iu)
-!!$                 qLB(i,j,k,iu,n) = q(i,j,k,iu)
-!!$                 qRT(i,j,k,iv,n) = q(i,j,k,iv)
-!!$                 qRB(i,j,k,iv,n) = q(i,j,k,iv)
-!!$                 qLT(i,j,k,iv,n) = q(i,j,k,iv)
-!!$                 qLB(i,j,k,iv,n) = q(i,j,k,iv)
-!!$                 qRT(i,j,k,iw,n) = q(i,j,k,iw)
-!!$                 qRB(i,j,k,iw,n) = q(i,j,k,iw)
-!!$                 qLT(i,j,k,iw,n) = q(i,j,k,iw)
-!!$                 qLB(i,j,k,iw,n) = q(i,j,k,iw)
-!!$              end do
-!!$           endif
 #endif
         end do
      end do
