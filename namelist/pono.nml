@@ -5,6 +5,7 @@ make NDIM=3 MPI=1 HYDRO=1 MHD=1 INIT=PONO
 hydro=.true.
 ncontrol=1
 nsubcycle=4*1,2
+verbose=.false.
 /
 
 &AMR_PARAMS
@@ -19,8 +20,8 @@ boxlen=8.055
 /
 
 &OUTPUT_PARAMS
-delta_tout=2.
-tend=200.0
+delta_tout=2.0
+tend=200.
 /
 
 &HYDRO_PARAMS
@@ -35,6 +36,7 @@ etamag=0.0025
 
 &REFINE_PARAMS
 err_grad_u=0.1
+floor_u=1.0
 interpol_var=0
 interpol_type=2
 /
