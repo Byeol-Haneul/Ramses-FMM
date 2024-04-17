@@ -1553,7 +1553,7 @@ subroutine cmp_mag_flx(qRT,irt1,irt2,jrt1,jrt2,krt1,krt2, &
   integer::ilt1,ilt2,jlt1,jlt2,klt1,klt2
   integer::ilb1,ilb2,jlb1,jlb2,klb1,klb2
   integer::ilo,ihi,jlo,jhi,klo,khi
-  real(dp)::gamma,smallr,smallc,difmag
+  real(dp)::gamma,smallr,smallc
   real(dp),dimension(1:nener)::gamma_rad
   integer::riemann2d
   real(dp),dimension(irt1:irt2,jrt1:jrt2,krt1:krt2,1:nprim,1:3)::qRT
