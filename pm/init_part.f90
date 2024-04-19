@@ -35,7 +35,7 @@ end subroutine r_init_part
 subroutine init_part(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
-  use pm_parameter, only: DM_TYPE
+  use pm_parameters, only: DM_TYPE
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
@@ -72,7 +72,7 @@ end subroutine init_part
 subroutine init_star(r,g,s)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
-  use pm_parameter, only: STAR_TYPE
+  use pm_parameters, only: STAR_TYPE
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
