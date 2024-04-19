@@ -10,7 +10,10 @@ module halo_parameters
   real(dp)::halo_nmin = 1d-6
   real(dp)::halo_tmin = 1d6
   real(dp)::halo_eps = 0.01
-  
+  real(dp)::B_s = 0
+  character(len=16)::mag_topology='constant' ! magnetic topology = 'toroidal','dipole','quadrupole'
+  integer::mag_type
+
 end module halo_parameters
 
 subroutine read_halo_params(g)
@@ -30,7 +33,8 @@ subroutine read_halo_params(g)
   ! Namelist definitions
   !--------------------------------------------------
   namelist/halo_params/halo_center,v_200,concentration &
-       & ,halo_eps,baryon_fraction,halo_nmin,halo_tmin,lambda
+       & ,halo_eps,baryon_fraction,halo_nmin,halo_tmin,lambda &
+       & ,B_s,mag_topology
 
   CALL getarg(1,infile)
   open(1,file=infile)
@@ -42,6 +46,12 @@ subroutine read_halo_params(g)
 107 continue
   close(1)
 
+  mag_type=0
+  if(mag_topology=='constant')mag_type=0
+  if(mag_topology=='toroidal')mag_type=1
+  if(mag_topology=='dipole')mag_type=2
+  if(mag_topology=='quadrupoole')mag_type=3
+  
   if(.not. nml_ok)then
      if(g%myid==1)write(*,*)'Too many errors in the namelist'
      if(g%myid==1)write(*,*)'Aborting...'
@@ -51,6 +61,7 @@ subroutine read_halo_params(g)
 end subroutine read_halo_params
 !===============================
 !=== hydro ic for a NFW halo ===
+!==== only valid for NDIM=3 ====
 !===============================
 subroutine condinit(r,g,x,q,dx,nn)
   use amr_parameters, only: dp, ndim, nvector
@@ -62,7 +73,7 @@ subroutine condinit(r,g,x,q,dx,nn)
   type(global_t)::g
   integer ::nn                             ! Number of cells
   real(dp)::dx                             ! Cell size
-  real(dp),dimension(1:nvector,1:nprim)::q ! Primitive variables
+  real(dp),dimension(1:nvector,1:nvar)::q  ! Primitive variables
   real(dp),dimension(1:nvector,1:ndim)::x  ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
@@ -117,7 +128,7 @@ subroutine condinit(r,g,x,q,dx,nn)
   rmax = 2.*r200/rs ! in units of rs
   rhos = rhocrit*200./3.0*c*c*c/(log(1d0+c)-c/(1d0+c))
   
-  do i=1,nn ! we are now workin in [kpc], see units
+  do i = 1,nn ! we are now workin in [kpc], see units
      xx = x(i,1)-xc
      yy = x(i,2)-yc
      zz = x(i,3)-zc

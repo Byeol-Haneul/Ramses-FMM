@@ -5,4 +5,7 @@ module pm_parameters
   integer,parameter :: action_kick_only = 1
   integer,parameter :: action_kick_drift = 2  
 
+  integer,parameter :: DM_TYPE = 0
+  integer,parameter :: STAR_TYPE = 1
+
 end module pm_parameters

@@ -43,6 +43,7 @@ subroutine init_part(r,g,p)
   !---------------------------------
   ! Allocate DM particle variables
   !---------------------------------
+  p%type=DM_TYPE
   allocate(p%xp    (r%npartmax,ndim))
   allocate(p%vp    (r%npartmax,ndim))
   allocate(p%mp    (r%npartmax))
@@ -78,6 +79,7 @@ subroutine init_star(r,g,s)
   !-----------------------------------
   ! Allocate star particle variables
   !------------------------------------
+  s%type=STAR_TYPE
   allocate(s%xp    (r%nstarmax,ndim))
   allocate(s%vp    (r%nstarmax,ndim))
   allocate(s%mp    (r%nstarmax))
