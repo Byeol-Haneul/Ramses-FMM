@@ -273,12 +273,14 @@ subroutine file_descriptor_hydro(r,filename,write_bkp_file)
      write(ilun,'("variable #",I2,": velocity_z")')ivar
      ivar=5
      write(ilun,'("variable #",I2,": thermal_pressure")')ivar
+#ifdef MHD
      ivar=6
      write(ilun,'("variable #",I2,": magnetic_field_x")')ivar
      ivar=7
      write(ilun,'("variable #",I2,": magnetic_field_y")')ivar
      ivar=8
      write(ilun,'("variable #",I2,": magnetic_field_z")')ivar
+#endif
 #if NENER>0
      ! Non-thermal pressures
      do ivar=ie+1,ie+nener
