@@ -98,7 +98,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   real(kind=4)::dummy_real,x(1:3),v(1:3),z,ipbar
   logical::file_exist,skip(6)
   
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,s=>s%s,gas=>s%gas,mdl=>s%mdl)  
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,gas=>s%gas,mdl=>s%mdl,s=>s%s)
 
   ! Reading header of the Gadget file
   filename = TRIM(r%initfile(r%levelmin))//'/'//TRIM(r%ic_file)
