@@ -4,7 +4,7 @@
 !##########################################################################
 subroutine interpol_hydro(u1,u2,interpol_var,interpol_type,smallr)
   use amr_parameters, only: dp, ndim,twotondim,twondim
-  use hydro_parameters, only: nvar
+  use hydro_parameters, only: nvar, nener
   implicit none
   integer::interpol_var,interpol_type
   real(dp)::smallr
@@ -113,7 +113,7 @@ end subroutine interpol_hydro
 !##########################################################################
 subroutine interpol_mhd(u1,u2,B1,B2,B3,refined,interpol_var,interpol_type,smallr)
   use amr_parameters, only: dp,ndim,twotondim,twondim
-  use hydro_parameters, only: nvar
+  use hydro_parameters, only: nvar, nener
   implicit none
   integer::interpol_var,interpol_type
   real(dp)::smallr

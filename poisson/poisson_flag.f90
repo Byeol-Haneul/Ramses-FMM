@@ -91,7 +91,7 @@ end subroutine poisson_flag
 subroutine jeans_length_refine(r,uu,bb,factG,size_cell,n_jeans,ok)
   use amr_parameters, only: ndim,dp,twopi
   use amr_commons, only: run_t
-  use hydro_parameters, only: nvar
+  use hydro_parameters, only: nvar, nener
   use const
   implicit none
   type(run_t)::r
@@ -99,7 +99,8 @@ subroutine jeans_length_refine(r,uu,bb,factG,size_cell,n_jeans,ok)
   real(dp)::bb(1:6)
   real(dp)::n_jeans,factG,size_cell
   logical ::ok
-  ! 
+  !
+  integer::irad
   real(dp)::lamb_jeans
   real(dp)::dens,tempe,etherm
 

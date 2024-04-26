@@ -39,7 +39,7 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   integer::ilevel
   
   ! Local variables
-  integer::igrid,ngrid,ind,idim,nstride,i,ivar
+  integer::igrid,ngrid,ind,idim,nstride,i,ivar,irad
   integer::l,nfine,ii,jj,kk
   real(dp),dimension(1:nvector,1:ndim)::xx
 #ifdef MHD
@@ -294,7 +294,7 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
 #if NENER>0
         ! Compute non-thermal energy densities
         do irad=1,nener
-           m%grid(igrid)%uold(ind,5+irad)=m%grid(igrid)%uold(ind,5+irad)/(gamma_rad(irad)-1.0d0)
+           m%grid(igrid)%uold(ind,5+irad)=m%grid(igrid)%uold(ind,5+irad)/(r%gamma_rad(irad)-1.0d0)
            erad=erad+m%grid(igrid)%uold(ind,5+irad)
         end do
 #endif
@@ -444,7 +444,7 @@ subroutine region_condinit(r,g,x,q,dx,nn)
            q(i,5)=q(i,5)+r%p_region(k)*weight/vol
 #if NENER>0
            do ivar=6,5+nener
-              q(i,ivar)=q(ivar)+r%prad_region(k,ivar-5)*weight/vol
+              q(i,ivar)=q(i,ivar)+r%prad_region(k,ivar-5)*weight/vol
            enddo
 #endif
 #if NVAR>5+NENER

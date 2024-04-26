@@ -102,7 +102,7 @@ contains
          &    3,4,3,4,7,8,7,8,&
          &    5,6,7,8,5,6,7,8/),(/8,3/))
 
-    integer::idim, ind, ivar
+    integer::idim, ind, ivar, irad
     integer::type, dir, shift, nstride
     real(dp)::reverse, ek_bound
     real(dp),dimension(1:nvector,1:ndim)::xx
@@ -322,7 +322,7 @@ contains
 #if NENER>0
           ! Compute non-thermal energy densities
           do irad=1,nener
-             uu(1,5+irad)=qq(1,5+irad)/(gamma_rad(irad)-1.0d0)
+             uu(1,5+irad)=qq(1,5+irad)/(r%gamma_rad(irad)-1.0d0)
              erad=erad+uu(1,5+irad)
           end do
 #endif

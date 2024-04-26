@@ -31,6 +31,7 @@ end subroutine r_cooling_fine
 subroutine cooling_fine(r,g,m,c,ilevel)
   use constants
   use amr_parameters, only:dp,ndim,nvector,twotondim
+  use hydro_parameters, only: nener
   use amr_commons, only:run_t,global_t,mesh_t
   use cooling_module, only:cooling_t,solve_cooling,T2_min_fix,set_table
   implicit none

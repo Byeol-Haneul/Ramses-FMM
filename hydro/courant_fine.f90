@@ -42,7 +42,7 @@ end subroutine r_courant_fine
 !###########################################################
 subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
   use amr_parameters, only: dp,nvector,ndim,twotondim
-  use hydro_parameters, only: nvar
+  use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
@@ -159,7 +159,7 @@ subroutine reset_init(r,g,m,ilevel)
   ! this routine computes the maximum allowed time-step.                !
   !----------------------------------------------------------------------
   ! Local variables
-  integer::igrid,ngrid,ind,idim,nstride,i,ivar
+  integer::igrid,ngrid,ind,idim,nstride,i,ivar,irad
   integer::l,nfine,ii,jj,kk
   real(dp),dimension(1:nvector,1:ndim)::xx
 #ifdef MHD
@@ -211,7 +211,7 @@ subroutine reset_init(r,g,m,ilevel)
 #if NENER>0
            ! Compute non-thermal energy densities
            do irad=1,nener
-              m%grid(igrid+i-1)%uold(ind,5+irad)=qq(i,5+irad)/(gamma_rad(irad)-1.0d0)
+              m%grid(igrid+i-1)%uold(ind,5+irad)=qq(i,5+irad)/(r%gamma_rad(irad)-1.0d0)
               erad=erad+m%grid(igrid+i-1)%uold(ind,5+irad)
            end do
 #endif
