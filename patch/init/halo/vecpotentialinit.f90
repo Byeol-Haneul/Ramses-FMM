@@ -66,7 +66,7 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
         if(idim==2)A(i)=+B_s*xx*dnfw**two3rd
         if(idim==3)A(i)=0
 
-     case (3) ! dipole
+     case (3) ! quadrupole
         if(idim==1)A(i)=-B_s*zz*dnfw**two3rd*yy/rc
         if(idim==2)A(i)=+B_s*zz*dnfw**two3rd*xx/rc
         if(idim==3)A(i)=0
