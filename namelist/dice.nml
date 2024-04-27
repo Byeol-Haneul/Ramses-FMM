@@ -2,6 +2,8 @@ This namelist performs an isolated disk simulation with dark matter and gas.
 Gas cooling and star formation are included.
 You need a GADGET file for the initial conditions. You can create one
 using the DICE code (https://bitbucket.org/vperret/dice).
+You can also download from tigress by executing in the command line the following script:
+./utils/scripts/load_agora_ic.sh
 To compile the code with MPI, type in bin/ the command line:
 make NDIM=3 MPI=1 HYDRO=1 GRAV=1 NVAR=7
 
@@ -23,7 +25,7 @@ tend=1.0
 
 &INIT_PARAMS
 filetype='gadget'
-initfile(1)='.'
+initfile(1)='agora/IC'
 /
 
 &AMR_PARAMS
@@ -67,7 +69,7 @@ m_star=1
 /
 
 &REFINE_PARAMS
-mass_sph=1e-6
+mass_sph=1e-5
 m_refine=10*8.
 interpol_var=1
 interpol_type=0
@@ -80,11 +82,11 @@ units_length  = 0.308567758128200E+22 ! kpc
 /
 
 &GADGET_PARAMS
-ic_file='agora.g2'    ! Name of the initial conditions file
-ic_format='Gadget2'   ! Format of the initial conditions. 'Gadget1' or 'Gadget2'
-IG_rho=1.0D-6         ! Intergalactic gas density
-IG_T2=1.0D7           ! Intergalactic gas temperature
-IG_metal=0.0          ! Intergalactic gas metallicity
+ic_file='agora_sigma20.g2' ! Name of the initial conditions file
+ic_format='Gadget2'        ! Format of the initial conditions. 'Gadget1' or 'Gadget2'
+IG_rho=1.0D-6              ! Intergalactic gas density
+IG_T2=1.0D7                ! Intergalactic gas temperature
+IG_metal=0.0               ! Intergalactic gas metallicity
 gadget_scale_v = 1.0D5
 gadget_scale_m = 1.9891D43
 gadget_scale_l = 3.085677581282D21
