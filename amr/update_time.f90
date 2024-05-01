@@ -89,13 +89,18 @@ subroutine m_update_time(pst,ilevel,done)
         ! Output mass and energy conservation to screen
         !----------------------------------------------
         if(r%hydro)then
+#ifdef MHD
+           write(*,779)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot,g%eint_tot,g%emag_tot
+#else
            write(*,778)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot,g%eint_tot
+#endif
         else
            write(*,777)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot
         end if
         if(r%star)write(*,'(" Total mass in stars=",1PE14.7)')g%mass_star_tot
 777     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2)
 778     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2)
+779     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2,' emag=',1pe9.2)
 
         !----------------------------------------------
         ! Output fine step information and used memory

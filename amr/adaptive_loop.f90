@@ -77,6 +77,7 @@ subroutine adaptive_loop(pst)
      g%ekin_tot=0.0D0  ! Reset total kinetic energy
      g%mass_tot=0.0D0  ! Reset total mass
      g%eint_tot=0.0D0  ! Reset total internal energy
+     g%emag_tot=0.0D0  ! Reset total magnetic energy
 
      ! Call base level
      call m_amr_step(pst,r%levelmin,1,done)
