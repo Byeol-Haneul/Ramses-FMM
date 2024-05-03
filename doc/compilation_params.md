@@ -2,6 +2,17 @@ We discuss here the various compilation time parameters. These parameters are us
 You can compile the code by setting these parameters to your preffered value using:
 `make PARAM=value`. You can see many examples in the directory `namelist/`.
 
+<style>
+table th:first-of-type {
+    width: 10%;
+}
+table th:nth-of-type(2) {
+    width: 10%;
+}
+table th:nth-of-type(3) {
+    width: 50%;
+}
+</style>
 
 | Variable name, syntax, default value | Type | Description |
 |:------------------------------------ |:---- |:----------- |
