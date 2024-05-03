@@ -4,7 +4,7 @@ You can compile the code by setting these parameters to your preffered value usi
 
 | Variable name, syntax, default value | Type | Description |
 | -------- | ---- | ----------------- |
-| `COMPILER=GNU` | `GNU` or `INTEL` | This sets the Fortran compiler you would like to use. Only 2 options are available, namely `gfortran` from the Gnu Compiler Collection and `ifort` from Intel, Inc. |
+| `COMPILER=GNU                     `| `GNU` or `INTEL` | This sets the Fortran compiler you would like to use. Only 2 options are available, namely `gfortran` from the Gnu Compiler Collection and `ifort` from Intel, Inc. |
 | `EXEC=ramses`  | `string` | This sets the name of the executable for the compiled code. The number of dimensions used at compilation via parameter `NDIM` is appended at the end. |
 | `NHILBERT = 1`   | `1`, `2` or `3`  | This sets the number of long integers uswed to code the Hilbert key. This choice sets also the maximum level of refinement. In 3D, `NHILBERT=1` corresponds to `levelmax<21`, `NHILBERT=2` to `levelmax<42` and `NHILBERT=3` to `levelmax<63`.|
 | `NVECTOR = 32`   | `integer`  | This sets the size of the vector sweeps used in many subroutines of the code. This is used for optimization purposes. This is highly problem and architecture dependant. |
