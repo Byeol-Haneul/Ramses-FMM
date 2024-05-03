@@ -368,7 +368,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
      ! Loop over useful octs in file
      do i=istart,iend
-        
+
         ! Read values from AMR files
         ipos=iskip_amr+(4*ndim+4*twotondim)*(i-1)
         read(10,POS=ipos)ckey
@@ -384,6 +384,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 #endif
            read(11,POS=ipos)uold
 #ifdef MHD
+           ipos=ipos+8*twotondim*nvar
            read(11,POS=ipos)bold
 #endif
         endif
@@ -395,7 +396,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
            ipos=ipos+8*twotondim
            read(12,POS=ipos)f
         endif
-        
+
         ! Create new oct in memory
         igrid=igrid+1
         if(igrid.GT.r%ngridmax)then
@@ -412,21 +413,20 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
         m%grid(igrid)%lev=ilevel
         m%grid(igrid)%ckey=ckey
         m%grid(igrid)%refined=refined
-#ifdef HYDRO
         if(r%hydro)then
+#ifdef HYDRO
            m%grid(igrid)%uold=uold
-        endif
 #endif
 #ifdef MHD
-        m%grid(igrid)%bold=bold
+           m%grid(igrid)%bold=bold
 #endif
+        endif
 #ifdef GRAV
         if(r%poisson)then
            m%grid(igrid)%phi=phi
            m%grid(igrid)%f=f
         endif
 #endif
-        
         ! Set flag1 to preserve refinements
         do ind=1,twotondim
            if(m%grid(igrid)%refined(ind))then
