@@ -2,19 +2,7 @@ We discuss here the various compilation time parameters. These parameters are us
 You can compile the code by setting these parameters to your preffered value using:
 `make PARAM=value`. You can see many examples in the directory `namelist/`.
 
-<style>
-table th:first-of-type {
-    width: 10%;
-}
-table th:nth-of-type(2) {
-    width: 10%;
-}
-table th:nth-of-type(3) {
-    width: 50%;
-}
-</style>
-
-| Variable name, syntax, default value | Type | Description |
+| Variable name with syntax and default value | Type | Description |
 |:------------------------------------ |:---- |:----------- |
 | `COMPILER = GNU` | `GNU` or `INTEL` | This sets the Fortran compiler you would like to use. Only 2 options are available, namely `gfortran` from the Gnu Compiler Collection and `ifort` from Intel, Inc. |
 | `EXEC = ramses`  | `string` | This sets the name of the executable for the compiled code. The number of dimensions used at compilation via parameter `NDIM` is appended at the end. |
