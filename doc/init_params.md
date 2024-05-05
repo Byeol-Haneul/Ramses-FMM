@@ -2,7 +2,7 @@ This sets of parameters, contained in the namelist block `&INIT_PARAMS`. This is
  
 | Variable name, syntax, default value | Fortran type | Description |
 |:---------------------------- |:------------- |:------------------------- |
-| `initfile= ` | `80*char` | Directory where IC files are stored.
+| `initfile=' ' ` | `80*char` | Directory where IC files are stored.
 | `filetype='ascii'`  | `20*char` | Type of initial conditions file for particles and gas cells. Possible choices are `ascii`, `gadget`, `grafic` or `grafic_zoom`. Default value is `ascii`. In this case, only particles are read in the ascii file called `ic_part`, `ic_star`or `ic_sink`. For gas cells, initial conditions are set using file `condinit.f90` via compilation time parameters or via a patch. |
 | `nregion=1`  | `integer` | Number of independent regions in the computational box used to set up initial flow variables. |
 | `region_type='square'`  | `10*char` | Geometry defining each region. `square` defines a generalized ellipsoidal shape, while `point` defines a delta function. |
