@@ -1,6 +1,6 @@
 We discuss here the various compilation time parameters. These parameters are used with the Makefile available in directory `bin/`.
 You can compile the code by setting these parameters to your preffered value using:
-`make PARAM=value`. You can see many examples in the directory `namelist/`.
+`make PARAM=value`. You can see many examples in the directory `namelist/`. For example, to compile the code for a galaxy formation cosmological zoom simulation, go in directory `bin/` and type the commande `make NDIM=3 MPI=1 UNITS=COSMO HYDRO=1 GRAV=1 NVAR=8`.
 
 | Variable, name, syntax, default value | Type | Description |
 | -------- | ---- | ----------------- |
