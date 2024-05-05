@@ -2,7 +2,7 @@ This namelist is called &HYDRO_PARAMS, and is used to specify runtime parameters
 
 | Variable name, syntax, default value | Fortran type  | Description               |
 |:---------------------------- |:------------- |:------------------------- |
-| `gamma=1.4`&nbsp;&nbsp;&nbsp;&nbsp;           |  `Real`&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    | Adiabatic exponent for the perfect gas EOS |
+| `gamma=1.4`&nbsp;&nbsp;&nbsp;&nbsp;           |  `Real`&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;    | Adiabatic exponent for the perfect gas EOS |
 | `gamma_rad=1.333`     |  `Real array` | Adiabatic exponent for each non-thermal pressure EOS (used only if `NENER>1`) |
 | `courant_factor=0.5`  |  `Real`    | CFL number for time step control (less than 1) |
 | `constant_gravity=0.0` |  `Real array` | 3-component of the constant gravitational acceleration in case `poisson=.false.` |
