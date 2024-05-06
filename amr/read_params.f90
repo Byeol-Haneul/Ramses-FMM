@@ -193,6 +193,7 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   integer ::niter_riemann=10
   integer ::slope_type=1
+  integer ::slope_mag_type=-1
   real(dp)::gamma=1.4d0
   real(dp),dimension(1:512)::gamma_rad=1.33333333334d0
   real(dp)::courant_factor=0.5d0
@@ -349,7 +350,7 @@ subroutine m_read_params(pst)
        & ,d_region,u_region,v_region,w_region,p_region
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
-       & ,niter_riemann,slope_type,difmag,etamag,gamma_rad &
+       & ,niter_riemann,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
        & ,dual_energy,T2_fix,induction,entropy,turb,scheme,riemann,riemann2d,constant_gravity
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
@@ -762,6 +763,11 @@ subroutine m_read_params(pst)
   s%r%smallr=smallr
   s%r%niter_riemann=niter_riemann
   s%r%slope_type=slope_type
+  if(slope_mag_type<0)then
+     s%r%slope_mag_type=slope_type
+  else
+     s%r%slope_mag_type=slope_mag_type
+  endif
   s%r%difmag=difmag
   s%r%etamag=etamag
   s%r%gamma_rad=gamma_rad(1:nener)

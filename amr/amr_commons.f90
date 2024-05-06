@@ -93,6 +93,7 @@ module amr_commons
      real(dp)::smallr=1.d-10
      integer ::niter_riemann=10
      integer ::slope_type=1
+     integer ::slope_mag_type=1
      real(dp)::difmag=0.0d0
      real(dp)::etamag=0.0d0
      real(dp),dimension(1:nener)::gamma_rad=1.33333333334d0
