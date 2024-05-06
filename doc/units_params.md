@@ -1,4 +1,4 @@
-The namelist block `&UNITS_PARAMS` is used to specify the unit system to convert code units into cgs units and vice-versa. This is the default unit system used in the code.
+The namelist block `&UNITS_PARAMS` is used to specify the unit system to convert code units into cgs units and vice-versa. This is the default unit system used in the code. In most cases, units are irrelevant unless you need to use the cooling routines or any of the small-scale physics subgrid models.
 
 | Variable name | Fortran type | Default value  | Description      |
 |:------------------- |:-------|:----- |:------------------------- |
