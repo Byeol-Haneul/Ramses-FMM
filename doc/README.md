@@ -19,6 +19,10 @@ We describe the meaning and default values of the namelist variables in each of 
 
 [Hydro and MHD solver parameters](./hydro_params.md): Parameters controlling the second-order Godunov solver (aka MUSCL-Hancock) for solving the Euler and ideal MHD equations.
 
+[Mesh refinement parameters](./refine_params.md): Parameters controlling the refinement strategy of the AMR grid. 
+
+[Unit system parameters](./units_params.md): Parameters controlling the conversion between code units and cgs units.
+
 
 
 
