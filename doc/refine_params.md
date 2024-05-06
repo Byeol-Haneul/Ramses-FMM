@@ -2,7 +2,7 @@ The block named `&REFINE_PARAMS` contains the parameters related to grid refinem
 
 | Variable name | Fortran type | Default value  | Description               |
 |:------------------- |:-------|:----- |:------------------------- |
-| `interpol_var`      | `int`  | 0     | Variables used to perform interpolation (prolongation) and averaging (restriction). `interpol_type=0`: conservatives; `interpol_type=1`: primitives |
+| `interpol_var`      | `int`&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  | 0     | Variables used to perform interpolation (prolongation) and averaging (restriction). `interpol_type=0`: conservatives; `interpol_type=1`: primitives |
 | `interpol_type`     | `int`  | 1     | Type of slope limiter used in the interpolation scheme for newly refined cells. `interpol_type=0`: Straight injection (1st order), `interpol_type=1`: MinMod limiter, `interpol_type=2`: MonCen limiter, `interpol_type=3`: unlimited central slope. |
 | `x_refine`          | `real array` | 0.0   | Geometry-based strategy: center of the refined region at each level of the AMR grid. |
 | `y_refine`          | `real array` | 0.0   | Geometry-based strategy: center of the refined region at each level of the AMR grid. |
