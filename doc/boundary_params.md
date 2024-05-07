@@ -2,7 +2,7 @@ The block named `&BOUNDARY_PARAMS` contains the parameters related to boundary c
 
 | Variable name      | Fortran type    | Default value         | Description      |
 |:-------------------|:----------------|:----------------------|:-----------------|
-| `periodic`         | `logical array`&nbsp;&nbsp;&nbsp;&nbsp; | (.true.,.true,.true.) | Turn on and off periodic boundary conditions along each axis. If `periodic(idim)=.false.`, the user must provide correct boundary conditions information in the corresponding direction.  |
+| `periodic`         | `logical`&nbsp;`array`&nbsp;&nbsp;&nbsp;&nbsp; | (.true.,.true,.true.) | Turn on and off periodic boundary conditions along each axis. If `periodic(idim)=.false.`, the user must provide correct boundary conditions information in the corresponding direction.  |
 | `nbound`           | `int`           | 0                     | Number of regions used to set the boundary conditions. In most cases, you need 2 BC regions (one on the left and one on the right) per non-periodic dimension.  |
 | `bound_dir`        | `int array`     | (0,0,...,0)           | Dimension `idim` of the axis defining the BC region. Possible values are `bound_dir=1`, `2` or `3`  |
 | `bound_shift`      | `int array`     | (0,0,...,0)           | Direction of the reference cells used to compute ghost cells in the the BC region. Possible choices for each region are: `bound_shift=1` for a region sitting on the left side of the domain, `bound_shift=1` for a region sitting on the right side of the domain. |                                                                                          |
