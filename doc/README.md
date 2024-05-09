@@ -23,6 +23,13 @@ We describe the meaning and default values of the namelist variables in each of 
 
 [Unit system parameters](./units_params.md): Parameters controlling the conversion between code units and cgs units.
 
+[Boundary conditions parameters](./boundary_params.md): Parameters controlling the boundary conditions of the hydro solver.
+
+[Cooling parameters](./cooling_params.md): Parameters controlling the cooling function used in the code.
+
+
+
+
 
 
 
