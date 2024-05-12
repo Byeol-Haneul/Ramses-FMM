@@ -27,6 +27,11 @@ We describe the meaning and default values of the namelist variables in each of 
 
 [Cooling parameters](./cooling_params.md): Parameters controlling the cooling function used in the code.
 
+[Star formation parameters](./star_params.md): Parameters controlling the subgrid star formation model used in the code.
+
+[Clump finder parameters](./clump_params.md): Parameters controlling the clump finder.
+
+
 
 
 
