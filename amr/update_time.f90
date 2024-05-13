@@ -143,7 +143,7 @@ subroutine m_update_time(pst,ilevel,done)
         endif
      end if
   end if
-888 format(' Fine step=',i6,' t=',1pe12.5,' dt=',1pe10.3,' a=',1pe10.3,' mem=',0pF4.1,'% ',0pF4.1,'%')
+888 format(' Fine step=',i7,' t=',1pe12.5,' dt=',1pe10.3,' a=',1pe10.3,' mem=',0pF4.1,'% ',0pF4.1,'%')
  
   !------------------------
   ! Update time variables
