@@ -275,24 +275,24 @@ program amr2map
                     metmax = max(metmax,map)
                  case (15) ! Temperature
                     pres = qold(ind,5)
+                    metmax = max(metmax,pres/rho)
                     if(do_max)then
                        map = pres/rho
-                       metmax = max(metmax,map)
                     else
                        map = pres
                     endif
                  case (16) ! Magnetic pressure
                     pres = qold(ind,6)**2+qold(ind,7)**2+qold(ind,8)**2
+                    metmax = max(metmax,pres)
                     if(do_max)then
                        map = pres
-                       metmax = max(metmax,map)
                     else
                        map = rho*pres
                     endif
                  case default ! Passive scalar
+                    metmax = max(metmax,qold(ind,type))
                     if(do_max)then
                        map = qold(ind,type)
-                       metmax = max(metmax,map)
                     else
                        map = rho*qold(ind,type)
                     endif
@@ -345,9 +345,16 @@ program amr2map
   ! End loop over levels
 
   write(*,*)'Data read and projected.'
-  if(do_max)then
-     write(*,*)"Max=",metmax
-  endif
+  select case (type)
+  case (0) ! Refinement map
+     write(*,*)"Max level of refinement =",metmax
+  case (15) ! Temperature
+     write(*,*)"Max sound speed =",sqrt(metmax)
+  case (16) ! Magnetic pressure
+     write(*,*)"Max field strngth =",sqrt(metmax)
+  case default ! Passive scalar
+     write(*,*)"Max variable",type,"=",metmax
+  end select
 
   nx_full=2**lmax
   ny_full=2**lmax
