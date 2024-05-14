@@ -620,7 +620,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
        & dx,dx,dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2,&
-       & r%gamma,r%gamma_rad,r%smallr,r%smallc,r%slope_type,r%riemann,r%riemann2d,r%difmag)
+       & r%gamma,r%gamma_rad,r%smallr,r%smallc,r%slope_type,r%slope_mag_type,r%riemann,r%riemann2d,r%difmag)
 
   !-------------------------------------------------
   ! Reset flux along direction at refined interfaces

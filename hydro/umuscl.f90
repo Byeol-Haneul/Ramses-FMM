@@ -24,7 +24,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
      & etamag,induction, &
 #endif
      & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,&
-     & gamma,gamma_rad,smallr,smallc,slope_type,riemann,riemann2d,difmag)
+     & gamma,gamma_rad,smallr,smallc,slope_type,slope_mag_type,riemann,riemann2d,difmag)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nvar, nprim, nener
   use const
@@ -35,7 +35,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   real(dp)::gamma,smallr,smallc,difmag,etamag
   logical::induction
   real(dp),dimension(1:nener)::gamma_rad
-  integer::slope_type,riemann,riemann2d
+  integer::slope_type,slope_mag_type,riemann,riemann2d
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
 
@@ -110,7 +110,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
        & bf,dbf, &
 #endif
-       & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
+       & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type,slope_mag_type)
 
   ! Compute 3D traced-states in all three directions
 #if NDIM==1
@@ -1818,7 +1818,7 @@ subroutine uslope(q,dq, &
 #ifdef MHD
      & bf,dbf, &
 #endif
-     & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type)
+     & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type,slope_mag_type)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim
   use const
@@ -1826,7 +1826,7 @@ subroutine uslope(q,dq, &
   ! routine arguments
   real(dp)::dx,dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-  integer::slope_type
+  integer::slope_type,slope_mag_type
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
 #ifdef MHD
@@ -1990,16 +1990,16 @@ subroutine uslope(q,dq, &
   endif
 
 #ifdef MHD
-  if (slope_type==0) then
+  if (slope_mag_type==0) then
      dbf = zero
-  else if (slope_type==1 .or. slope_type==2.or. slope_type==3) then
+  else if (slope_mag_type==1 .or. slope_mag_type==2.or. slope_mag_type==3) then
      ! Face-centered Bx slope along direction Y
      do k = klo, khi
         do j = jlo, jhi
            do i = ilo, ihi+1
-              dlft = MIN(slope_type,2)*(bf(i,j  ,k,1) - bf(i,j-1,k,1))
-              drgt = MIN(slope_type,2)*(bf(i,j+1,k,1) - bf(i,j  ,k,1))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i,j  ,k,1) - bf(i,j-1,k,1))
+              drgt = MIN(slope_mag_type,2)*(bf(i,j+1,k,1) - bf(i,j  ,k,1))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one, dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
@@ -2012,9 +2012,9 @@ subroutine uslope(q,dq, &
      do k = klo, khi
         do j = jlo, jhi+1
            do i = ilo, ihi
-              dlft = MIN(slope_type,2)*(bf(i  ,j,k,2) - bf(i-1,j,k,2))
-              drgt = MIN(slope_type,2)*(bf(i+1,j,k,2) - bf(i  ,j,k,2))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i  ,j,k,2) - bf(i-1,j,k,2))
+              drgt = MIN(slope_mag_type,2)*(bf(i+1,j,k,2) - bf(i  ,j,k,2))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one, dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
@@ -2177,26 +2177,26 @@ subroutine uslope(q,dq, &
   endif
 
 #ifdef MHD
-  if(slope_type==0)then
+  if(slope_mag_type==0)then
      dbf = zero
-  else if(slope_type==1.or.slope_type==2.or.slope_type==3)then  ! minmod or moncen
+  else if(slope_mag_type==1.or.slope_mag_type==2.or.slope_mag_type==3)then  ! minmod or moncen
      ! Face-centered Bx slopes along direction Y and Z
      do k = klo, khi
         do j = jlo, jhi
            do i = ilo, ihi+1
               ! Slopes along first coordinate direction
-              dlft = MIN(slope_type,2)*(bf(i,j  ,k,1) - bf(i,j-1,k,1))
-              drgt = MIN(slope_type,2)*(bf(i,j+1,k,1) - bf(i,j  ,k,1))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i,j  ,k,1) - bf(i,j-1,k,1))
+              drgt = MIN(slope_mag_type,2)*(bf(i,j+1,k,1) - bf(i,j  ,k,1))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one, dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
               if((dlft*drgt)<=zero)dlim=zero
               dbf(i,j,k,1,1) = dsgn*min(dlim,abs(dcen))
               ! Slopes along second coordinate direction
-              dlft = MIN(slope_type,2)*(bf(i,j,k  ,1) - bf(i,j,k-1,1))
-              drgt = MIN(slope_type,2)*(bf(i,j,k+1,1) - bf(i,j,k  ,1))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i,j,k  ,1) - bf(i,j,k-1,1))
+              drgt = MIN(slope_mag_type,2)*(bf(i,j,k+1,1) - bf(i,j,k  ,1))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one,dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
@@ -2210,18 +2210,18 @@ subroutine uslope(q,dq, &
         do j = jlo, jhi+1
            do i = ilo, ihi
               ! Slopes along first coordinate direction
-              dlft = MIN(slope_type,2)*(bf(i  ,j,k,2) - bf(i-1,j,k,2))
-              drgt = MIN(slope_type,2)*(bf(i+1,j,k,2) - bf(i  ,j,k,2))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i  ,j,k,2) - bf(i-1,j,k,2))
+              drgt = MIN(slope_mag_type,2)*(bf(i+1,j,k,2) - bf(i  ,j,k,2))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one, dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
               if((dlft*drgt)<=zero)dlim=zero
               dbf(i,j,k,2,1) = dsgn*min(dlim,abs(dcen))
               ! Slopes along second coordinate direction
-              dlft = MIN(slope_type,2)*(bf(i,j,k  ,2) - bf(i,j,k-1,2))
-              drgt = MIN(slope_type,2)*(bf(i,j,k+1,2) - bf(i,j,k  ,2))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i,j,k  ,2) - bf(i,j,k-1,2))
+              drgt = MIN(slope_mag_type,2)*(bf(i,j,k+1,2) - bf(i,j,k  ,2))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one,dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
@@ -2235,18 +2235,18 @@ subroutine uslope(q,dq, &
         do j = jlo, jhi
            do i = ilo, ihi
               ! Slopes along first coordinate direction
-              dlft = MIN(slope_type,2)*(bf(i  ,j,k,3) - bf(i-1,j,k,3))
-              drgt = MIN(slope_type,2)*(bf(i+1,j,k,3) - bf(i  ,j,k,3))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i  ,j,k,3) - bf(i-1,j,k,3))
+              drgt = MIN(slope_mag_type,2)*(bf(i+1,j,k,3) - bf(i  ,j,k,3))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one, dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
               if((dlft*drgt)<=zero)dlim=zero
               dbf(i,j,k,3,1) = dsgn*min(dlim,abs(dcen))
               ! Slopes along second coordinate direction
-              dlft = MIN(slope_type,2)*(bf(i,j  ,k,3) - bf(i,j-1,k,3))
-              drgt = MIN(slope_type,2)*(bf(i,j+1,k,3) - bf(i,j  ,k,3))
-              dcen = half*(dlft+drgt)/MIN(slope_type,2)
+              dlft = MIN(slope_mag_type,2)*(bf(i,j  ,k,3) - bf(i,j-1,k,3))
+              drgt = MIN(slope_mag_type,2)*(bf(i,j+1,k,3) - bf(i,j  ,k,3))
+              dcen = half*(dlft+drgt)/MIN(slope_mag_type,2)
               dsgn = sign(one,dcen)
               slop = min(abs(dlft),abs(drgt))
               dlim = slop
