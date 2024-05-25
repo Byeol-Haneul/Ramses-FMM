@@ -203,7 +203,7 @@ subroutine m_read_params(pst)
   real(dp)::smallr=1.d-10
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
-  character(LEN=10)::riemann2d='llf'
+  character(LEN=10)::riemann2d='none'
   logical ::induction=.false.
   logical ::entropy=.false.
   logical ::turb=.false.
@@ -782,6 +782,7 @@ subroutine m_read_params(pst)
   s%r%ichem=ichem
   s%r%iturb=iturb
   s%r%scheme=scheme
+  s%r%constant_gravity=constant_gravity
 #ifndef MHD
   if(riemann=='llf')s%r%riemann=solver_llf
   if(riemann=='hll')s%r%riemann=solver_hll
@@ -795,14 +796,15 @@ subroutine m_read_params(pst)
   if(riemann=='upwind')s%r%riemann=solver_upwind
 #endif
 #ifdef MHD
+  if(riemann2d=='none')riemann2d=riemann
   if(riemann2d=='llf')s%r%riemann2d=solver2d_llf
+  if(riemann2d=='hll')s%r%riemann2d=solver2d_hllf
   if(riemann2d=='hllf')s%r%riemann2d=solver2d_hllf
   if(riemann2d=='hlla')s%r%riemann2d=solver2d_hlla
   if(riemann2d=='hlld')s%r%riemann2d=solver2d_hlld
   if(riemann2d=='roe')s%r%riemann2d=solver2d_roe
   if(riemann2d=='upwind')s%r%riemann2d=solver2d_upwind
 #endif
-  s%r%constant_gravity=constant_gravity
 
   s%r%units_density=units_density
   s%r%units_time=units_time
