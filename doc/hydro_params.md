@@ -15,6 +15,6 @@ This namelist is called &HYDRO_PARAMS, and is used to specify runtime parameters
 | `turb=.false.` |  `Logical`    | Solve the turbulent kinetic energy equation using a standard LES model using an additional passive scalar. You must compile the code with `NVAR>5`. |
 | `induction=.false.` |  `Logical`    | Limit the MHD solver to the induction equation. The velocity field is set in the initial conditions but none of the hydro variables are updated. |
 | `entropy=.false.` |  `Logical`    | Solve for the conservation of entropy using an additional passive scalar. You must compile the code with `NVAR>5`. It can also be used in conjunction with the `dual_energy` parameter. |
-| `dual_energy=-1` |  `Real`    | Activate dual energy scheme for high-Mach flows if `dual_energy>=0`. Useful to prevent negative temperatures. The chosen value is used to set the fraction of the energy truncation error. It must be used in conjunction with ``entropy=.true.`. |
+| `dual_energy=-1` |  `Real`    | Activate dual energy scheme for high-Mach flows if `dual_energy>=0`. Useful to prevent negative temperatures. The chosen value is used to set the fraction of the energy truncation error. Recommended values are between `0.0` and `0.5`. It must be used in conjunction with `entropy=.true.`. |
 | `difmag=0d0` |  `Real`    | Add explicit diffusion for all volume-averaged conservative variable. | 
 | `etamag=0d0` |  `Real`    | Add explicit magnetic diffusivity (Ohm's law). |
