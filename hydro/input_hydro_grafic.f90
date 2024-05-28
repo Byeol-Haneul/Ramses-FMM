@@ -60,8 +60,6 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
 
   if(m%noct(ilevel)==0)return
 
-#if NDIM==3
-
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
@@ -74,23 +72,35 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   !-------------------------------------------------------------------------
   ! First step: compute level boundaries in terms of initial condition array
   !-------------------------------------------------------------------------
-  i1_min=g%n1(ilevel)+1; i1_max=0
-  i2_min=g%n2(ilevel)+1; i2_max=0
-  i3_min=g%n3(ilevel)+1; i3_max=0
+  i1_min=g%n1(ilevel); i1_max=1
+  i2_min=g%n2(ilevel); i2_max=1
+  i3_min=g%n3(ilevel); i3_max=1
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
         ! Coordinates in normalised units (between 0 and 1)
         xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx
+#if NDIM>1
         xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx
+#endif
+#if NDIM>2
         xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx
+#endif
         ! Scale to integer coordinates in the frame of the file
         xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
+#if NDIM>1
         xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
+#endif
+#if NDIM>2
         xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
+#endif
         ! Compute min and max
         i1_min=MIN(i1_min,int(xx1)+1); i1_max=MAX(i1_max,int(xx1)+1)
+#if NDIM>1
         i2_min=MIN(i2_min,int(xx2)+1); i2_max=MAX(i2_max,int(xx2)+1)
+#endif
+#if NDIM>2
         i3_min=MIN(i3_min,int(xx3)+1); i3_max=MAX(i3_max,int(xx3)+1)
+#endif
      end do
   end do
   error=.false.
@@ -176,16 +186,29 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         do ind=1,twotondim
            ! Coordinates in normalised units (between 0 and 1)
            xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx
+#if NDIM>1
            xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx
+#endif
+#if NDIM>2
            xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx
+#endif
            ! Scale to integer coordinates in the frame of the file
            xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
+#if NDIM>1
            xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
+#endif
+#if NDIM>2
            xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
+#endif
            ! Compute integer coordinates in the frame of the file
            i1=int(xx1)+1
+           i2=1; i3=1
+#if NDIM>1
            i2=int(xx2)+1
+#endif
+#if NDIM>2
            i3=int(xx3)+1
+#endif
 #ifdef HYDRO
            ! Scatter to corresponding primitive variable
            m%grid(igrid)%uold(ind,ivar)=init_array(i1,i2,i3)
@@ -318,7 +341,6 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   end do
   ! End loop over grids
 
-#endif
 end subroutine input_hydro_grafic
 !################################################################
 !################################################################

@@ -146,9 +146,18 @@ subroutine init_file(mdl,r,g)
   end do
 
   ! Check compatibility with run parameters
+#if NDIM==3
   if(         g%n1(r%levelmin).NE.2**r%levelmin &
        & .or. g%n2(r%levelmin).NE.2**r%levelmin &
-       & .or. g%n3(r%levelmin).NE.2**r%levelmin) then 
+       & .or. g%n3(r%levelmin).NE.2**r%levelmin) then
+#endif
+#if NDIM==2
+  if(         g%n1(r%levelmin).NE.2**r%levelmin &
+       & .or. g%n2(r%levelmin).NE.2**r%levelmin) then
+#endif
+#if NDIM==1
+  if(         g%n1(r%levelmin).NE.2**r%levelmin) then
+#endif
      write(*,*)'coarser grid is not compatible with initial conditions file'
      write(*,*)'Found    n1=',g%n1(r%levelmin),&
           &            ' n2=',g%n2(r%levelmin),&
