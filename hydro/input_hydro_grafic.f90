@@ -78,12 +78,12 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
         ! Coordinates in normalised units (between 0 and 1)
-        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx
+        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
 #if NDIM>1
-        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx
+        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
 #endif
 #if NDIM>2
-        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx
+        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
 #endif
         ! Scale to integer coordinates in the frame of the file
         xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
@@ -185,12 +185,12 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      do igrid=m%head(ilevel),m%tail(ilevel)
         do ind=1,twotondim
            ! Coordinates in normalised units (between 0 and 1)
-           xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx
+           xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
 #if NDIM>1
-           xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx
+           xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
 #endif
 #if NDIM>2
-           xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx
+           xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
 #endif
            ! Scale to integer coordinates in the frame of the file
            xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)

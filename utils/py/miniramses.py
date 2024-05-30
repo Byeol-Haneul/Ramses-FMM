@@ -1084,7 +1084,7 @@ def mk_movie(**kwargs):
     fname = kwargs.get("fname","frame")
     mvname = kwargs.get("mvname","movie")
     
-    cmd="curl https://communications.princeton.edu/sites/g/files/toruqf1876/files/styles/freeform_750w/public/media/pusig2-size-web-range_1.jpg > logo_essai.jpg"
+    cmd="curl https://tigress-web.princeton.edu/~rt3504/DAT/logo_essai.jpg --output logo_essai.jpg"
     os.system(cmd)
     concom = "convert logo_essai.jpg -resize 280x200 logo_essai.png"
     os.system(concom)
@@ -1099,7 +1099,7 @@ def mk_movie(**kwargs):
         
         if (not (cbar is None)):
             px = 1/plt.rcParams['figure.dpi']
-            fig, ax = plt.subplots(figsize=(1001*px,1001*px))
+            fig, ax = plt.subplots(figsize=(1000*px,1000*px))
             plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
             print(np.min(array),np.max(array))
             shw = ax.imshow(array, cmap = cmap, vmin=vmin, vmax=vmax, origin="lower", extent=[0,bsize,0,bsize])
@@ -1112,11 +1112,11 @@ def mk_movie(**kwargs):
             plt.imshow(array, cmap = cmap)#if you wish to graph model in a specific way, modify this program
 
         ax = plt.gca()
-        txt = f'a = {time:4.2f}' + tunit
+        txt = f't = {time:4.2f}' + tunit
         label = ax.set_xlabel(txt, fontsize = 18, color = "black")
         ax.xaxis.set_label_coords(0.1, 0.95)
         ax.tick_params(axis='both', labelsize=18)
-        newname = str(fname)+ str(snapshot) + ".png" 
+        newname = str(fname)+ str(snapshot).zfill(fill) + ".png"
         print(newname)
         plt.savefig(newname) #saves created images as pngs under the name that was given
         if snapshot == start:
@@ -1125,7 +1125,7 @@ def mk_movie(**kwargs):
         com = "convert logo_essai.png -bordercolor white -border 0.1 " + newname + " +swap -geometry +100+850 -composite " + newname
         os.system(com)
     print("Input files converted into frames: done")
-    moviecom = "ffmpeg -y -r 30 -f image2 -s 1000x1000 -start_number " +str(start)+" -i " + str(fname) + "%d.png" + " -vcodec libx264 -crf 25  -pix_fmt yuv420p " + str(mvname) + ".mp4" 
+    moviecom = "ffmpeg -y -r 30 -f image2 -s 1000x1000 -start_number " +str(start)+" -i " + str(fname) + "%05d.png" + " -vcodec libx264 -crf 25  -pix_fmt yuv420p " + str(mvname) + ".mp4" 
     os.system(moviecom)
     ok = "Movie: done"
     print(ok)

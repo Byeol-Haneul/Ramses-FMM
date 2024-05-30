@@ -20,7 +20,7 @@ recursive subroutine r_init_time(pst)
      call r_init_time(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%cool)
+     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m,pst%s%cool)
   endif
 
 end subroutine r_init_time
@@ -28,16 +28,17 @@ end subroutine r_init_time
 !###########################################################
 !###########################################################
 !###########################################################
-  subroutine init_time(mdl,r,g,c)
+  subroutine init_time(mdl,r,g,m,c)
   use mdl_module
   use amr_parameters, only: n_frw
-  use amr_commons, only: run_t,global_t
+  use amr_commons, only: run_t,global_t,mesh_t
   use cooling_module, only: cooling_t,set_table
   use init_cooling_module, only: init_cooling
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
+  type(mesh_t)::m
   type(cooling_t)::c
 
   ! Local variables
@@ -50,7 +51,7 @@ end subroutine r_init_time
      else
         ! Get parameters from input files
         if(r%initfile(r%levelmin).ne.' '.and.r%filetype.eq.'grafic')then
-           call init_file(mdl,r,g)
+           call init_file(mdl,r,g,m)
         endif
         g%t=0.0
         g%aexp=1.0
@@ -97,14 +98,15 @@ end subroutine init_time
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine init_file(mdl,r,g)
+subroutine init_file(mdl,r,g,m)
   use amr_parameters, only: sp
-  use amr_commons, only: run_t,global_t
+  use amr_commons, only: run_t,global_t,mesh_t
   use mdl_module
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
+  type(mesh_t)::m
   !------------------------------------------------------
   ! Read geometrical parameters in the initial condition files.
   ! Initial conditions are supposed to be made by 
@@ -147,24 +149,24 @@ subroutine init_file(mdl,r,g)
 
   ! Check compatibility with run parameters
 #if NDIM==3
-  if(         g%n1(r%levelmin).NE.2**r%levelmin &
-       & .or. g%n2(r%levelmin).NE.2**r%levelmin &
-       & .or. g%n3(r%levelmin).NE.2**r%levelmin) then
+  if(         g%n1(r%levelmin).NE.2*m%nx &
+       & .or. g%n2(r%levelmin).NE.2*m%ny &
+       & .or. g%n3(r%levelmin).NE.2*m%nz) then
 #endif
 #if NDIM==2
-  if(         g%n1(r%levelmin).NE.2**r%levelmin &
-       & .or. g%n2(r%levelmin).NE.2**r%levelmin) then
+  if(         g%n1(r%levelmin).NE.2*m%nx &
+       & .or. g%n2(r%levelmin).NE.2*m%ny) then
 #endif
 #if NDIM==1
-  if(         g%n1(r%levelmin).NE.2**r%levelmin) then
+  if(         g%n1(r%levelmin).NE.2*m%nx) then
 #endif
      write(*,*)'coarser grid is not compatible with initial conditions file'
      write(*,*)'Found    n1=',g%n1(r%levelmin),&
           &            ' n2=',g%n2(r%levelmin),&
           &            ' n3=',g%n3(r%levelmin)
-     write(*,*)'Expected n1=',2**r%levelmin &
-          &           ,' n2=',2**r%levelmin &
-          &           ,' n3=',2**r%levelmin
+     write(*,*)'Expected n1=',2*m%nx &
+          &           ,' n2=',2*m%ny &
+          &           ,' n3=',2*m%nz
      call mdl_abort(mdl)
   end if
 
