@@ -462,12 +462,12 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   ! Rescale from Gadget code units to Ramses code units
   if(r%pic)call rescale_gadget(r,g,p)
   if(r%hydro)call rescale_gadget(r,g,gas)
-  if(r%star)call rescale_gadget(r,g,s)
+  if(r%star)call rescale_gadget(r,g,star)
 
   ! Trim particles that are outside of the Ramses box
   if(r%pic)call trim_box(r,g,p)
   if(r%hydro)call trim_box(r,g,gas)
-  if(r%star)call trim_box(r,g,s)
+  if(r%star)call trim_box(r,g,star)
 
   ! Compute total mass in star, gas and dark matter
   mstar=0.; mhalo=0.; mgas=0.
@@ -478,7 +478,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   ! Put all particles inside levelmin 
   if(r%pic)call init_tree(r,p)
   if(r%hydro)call init_tree(r,gas)
-  if(r%star)call init_tree(r,s)
+  if(r%star)call init_tree(r,star)
 
   end associate
 

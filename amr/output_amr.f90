@@ -87,7 +87,7 @@ subroutine m_dump_all(pst,write_bkp_file)
         call output_header(r,g,p,filename)
         if(r%star)then
            filename=TRIM(filedir)//'star_header.txt'
-           call output_header(r,g,s,filename)
+           call output_header(r,g,star,filename)
         endif
      endif
      if(r%hydro)then
