@@ -7,5 +7,6 @@ module pm_parameters
 
   integer,parameter :: DM_TYPE = 0
   integer,parameter :: STAR_TYPE = 1
+  integer,parameter :: SINK_TYPE = 2
 
 end module pm_parameters

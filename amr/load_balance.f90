@@ -710,7 +710,7 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
 #ifndef WITHOUTMPI
      call balance_part(pst%s,pst%s%p,ilevel)
      if(pst%s%r%star)then
-        call balance_part(pst%s,pst%s%s,ilevel)
+        call balance_part(pst%s,pst%s%star,ilevel)
      endif
 #endif
   endif

@@ -20,6 +20,7 @@ subroutine m_read_params(pst)
   integer(kind=8)::ngridtot=0
   integer(kind=8)::nparttot=0
   integer(kind=8)::nstartot=0
+  integer(kind=8)::nsinktot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -34,6 +35,7 @@ subroutine m_read_params(pst)
   logical::poisson =.false.   ! Poisson solver activated
   logical::hydro   =.false.   ! Hydro activated
   logical::star    =.false.   ! Stars and star formation activated
+  logical::sink    =.false.   ! Sinks and sink formation activated
   logical::verbose =.false.   ! Write everything
   logical::debug   =.false.   ! Debug mode activated
   logical::static  =.false.   ! Static mode activated
@@ -47,6 +49,7 @@ subroutine m_read_params(pst)
   ! Maximum number of allocatable particles
   integer::npartmax=0 
   integer::nstarmax=0
+  integer::nsinkmax=0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -387,6 +390,8 @@ subroutine m_read_params(pst)
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
+  ! Star particles and star formation recipe
+  namelist/sink_params/sink,nsinkmax,nsinktot
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -525,6 +530,9 @@ subroutine m_read_params(pst)
   if(nstarmax==0)then
      nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
   endif
+  if(nsinkmax==0)then
+     nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
+  endif
 #ifdef HYDRO
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
@@ -589,6 +597,8 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=gadget_params,END=111)
 111 continue
+  read(1,NML=sink_params,END=112)
+112 continue
   close(1)
 
   !-----------------
@@ -690,6 +700,7 @@ subroutine m_read_params(pst)
   s%r%poisson=poisson
   s%r%hydro=hydro
   s%r%star=star
+  s%r%sink=sink
   s%r%verbose=verbose
   s%r%debug=debug
   s%r%nrestart=nrestart
@@ -720,6 +731,7 @@ subroutine m_read_params(pst)
   s%r%ncachemax=ncachemax
   s%r%npartmax=npartmax
   s%r%nstarmax=nstarmax
+  s%r%nsinkmax=nsinkmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size

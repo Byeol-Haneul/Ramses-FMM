@@ -23,7 +23,10 @@ recursive subroutine r_init_part(pst)
   else
      call init_part(pst%s%r,pst%s%g,pst%s%p)
      if(pst%s%r%star)then
-        call init_star(pst%s%r,pst%s%g,pst%s%s)
+        call init_star(pst%s%r,pst%s%g,pst%s%star)
+     end if
+     if(pst%s%r%sink)then
+        call init_sink(pst%s%r,pst%s%g,pst%s%sink)
      end if
   endif
 
@@ -69,7 +72,7 @@ end subroutine init_part
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine init_star(r,g,s)
+subroutine init_star(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_parameters, only: STAR_TYPE
@@ -77,64 +80,102 @@ subroutine init_star(r,g,s)
   implicit none
   type(run_t)::r
   type(global_t)::g
-  type(part_t)::s
+  type(part_t)::p
   !-----------------------------------
   ! Allocate star particle variables
   !------------------------------------
-  s%type=STAR_TYPE
-  allocate(s%xp    (r%nstarmax,ndim))
-  allocate(s%vp    (r%nstarmax,ndim))
-  allocate(s%mp    (r%nstarmax))
-  allocate(s%zp    (r%nstarmax))
-  allocate(s%tp    (r%nstarmax))
-  allocate(s%levelp(r%nstarmax))
-  allocate(s%idp   (r%nstarmax))
-  s%nvaralloc=2*ndim+5
+  p%type=STAR_TYPE
+  allocate(p%xp    (r%nstarmax,ndim))
+  allocate(p%vp    (r%nstarmax,ndim))
+  allocate(p%mp    (r%nstarmax))
+  allocate(p%zp    (r%nstarmax))
+  allocate(p%tp    (r%nstarmax))
+  allocate(p%levelp(r%nstarmax))
+  allocate(p%idp   (r%nstarmax))
+  p%nvaralloc=2*ndim+5
 #ifdef OUTPUT_PARTICLE_POTENTIAL
-  allocate(s%phip  (r%nstarmax))
-  s%nvaralloc=p%nvaralloc+1
+  allocate(p%phip  (r%nstarmax))
+  p%nvaralloc=p%nvaralloc+1
 #endif
   ! Allocate workspace variables
-  allocate(s%sortp (r%nstarmax))
-  allocate(s%workp (r%nstarmax))
+  allocate(p%sortp (r%nstarmax))
+  allocate(p%workp (r%nstarmax))
   ! Allocate pointers to particle levels
-  allocate(s%headp(r%levelmin:r%nlevelmax))
-  allocate(s%tailp(r%levelmin:r%nlevelmax))
+  allocate(p%headp(r%levelmin:r%nlevelmax))
+  allocate(p%tailp(r%levelmin:r%nlevelmax))
   ! No particle just yet
-  s%headp=1
-  s%tailp=0
+  p%headp=1
+  p%tailp=0
 end subroutine init_star
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine allocate_gas(r,g,gas)
+subroutine init_sink(r,g,p)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t
+  use pm_parameters, only: SINK_TYPE
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  !-----------------------------------
+  ! Allocate sink particle variables
+  !------------------------------------
+  p%type=SINK_TYPE
+  allocate(p%xp    (r%nsinkmax,ndim))
+  allocate(p%vp    (r%nsinkmax,ndim))
+  allocate(p%mp    (r%nsinkmax))
+  allocate(p%tp    (r%nsinkmax))
+  allocate(p%levelp(r%nsinkmax))
+  allocate(p%idp   (r%nsinkmax))
+  p%nvaralloc=2*ndim+4
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  allocate(p%phip  (r%nsinkmax))
+  p%nvaralloc=p%nvaralloc+1
+#endif
+  ! Allocate workspace variables
+  allocate(p%sortp (r%nsinkmax))
+  allocate(p%workp (r%nsinkmax))
+  ! Allocate pointers to particle levels
+  allocate(p%headp(r%levelmin:r%nlevelmax))
+  allocate(p%tailp(r%levelmin:r%nlevelmax))
+  ! No particle just yet
+  p%headp=1
+  p%tailp=0
+end subroutine init_sink
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine allocate_gas(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  type(part_t)::gas
+  type(part_t)::p
   !-----------------------------------
   ! Allocate gas sph particle variables
   !------------------------------------
-  allocate(gas%xp    (gas%npart,ndim))
-  allocate(gas%vp    (gas%npart,ndim))
-  allocate(gas%mp    (gas%npart))
-  allocate(gas%zp    (gas%npart))
-  allocate(gas%up    (gas%npart))
-  allocate(gas%levelp(gas%npart))
-  gas%nvaralloc=2*ndim+5
+  allocate(p%xp    (p%npart,ndim))
+  allocate(p%vp    (p%npart,ndim))
+  allocate(p%mp    (p%npart))
+  allocate(p%zp    (p%npart))
+  allocate(p%up    (p%npart))
+  allocate(p%levelp(p%npart))
+  p%nvaralloc=2*ndim+5
   ! Allocate workspace variables
-  allocate(gas%sortp (gas%npart))
-  allocate(gas%workp (gas%npart))
+  allocate(p%sortp (p%npart))
+  allocate(p%workp (p%npart))
   ! Allocate pointers to particle levels
-  allocate(gas%headp(r%levelmin:r%nlevelmax))
-  allocate(gas%tailp(r%levelmin:r%nlevelmax))
+  allocate(p%headp(r%levelmin:r%nlevelmax))
+  allocate(p%tailp(r%levelmin:r%nlevelmax))
   ! No particle just yet
-  gas%headp=1
-  gas%tailp=0
+  p%headp=1
+  p%tailp=0
 end subroutine allocate_gas
 !#########################################################################
 !#########################################################################
@@ -164,29 +205,29 @@ end subroutine r_deallocate_gas
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine deallocate_gas(r,g,gas)
+subroutine deallocate_gas(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  type(part_t)::gas
+  type(part_t)::p
   !-----------------------------------------
   ! Deallocate gas sph particle variables
   !-----------------------------------------
-  deallocate(gas%xp)
-  deallocate(gas%vp)
-  deallocate(gas%mp)
-  deallocate(gas%zp)
-  deallocate(gas%up)
-  deallocate(gas%levelp)
-  deallocate(gas%sortp)
-  deallocate(gas%workp)
-  deallocate(gas%headp)
-  deallocate(gas%tailp)
-  gas%nvaralloc=0
-  gas%npart=0
+  deallocate(p%xp)
+  deallocate(p%vp)
+  deallocate(p%mp)
+  deallocate(p%zp)
+  deallocate(p%up)
+  deallocate(p%levelp)
+  deallocate(p%sortp)
+  deallocate(p%workp)
+  deallocate(p%headp)
+  deallocate(p%tailp)
+  p%nvaralloc=0
+  p%npart=0
 end subroutine deallocate_gas
 !#########################################################################
 !#########################################################################

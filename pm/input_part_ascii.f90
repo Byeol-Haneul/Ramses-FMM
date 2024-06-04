@@ -69,15 +69,15 @@ subroutine m_input_part_ascii(pst)
            endif
         end do
 102     continue
-        s%s%npart_tot=nstar_tot
-        write(*,*)'Found nstar_tot=',s%s%npart_tot
+        s%star%npart_tot=nstar_tot
+        write(*,*)'Found nstar_tot=',s%star%npart_tot
         close(10)
      else
-        s%s%npart_tot=0
+        s%star%npart_tot=0
      endif
 
      ! If no particle found, no need to read
-     if(s%s%npart_tot>0)then
+     if(s%star%npart_tot>0)then
         ! Call recursive slave routine
         allocate(input_array(1:storage_size(nstar_tot)/32))
         input_array=transfer(nstar_tot,input_array)
@@ -233,7 +233,7 @@ recursive subroutine r_input_star_ascii(pst,input_array,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      npart_tot=transfer(input_array,npart_tot)
-     call input_star_ascii(pst%s%mdl,pst%s%r,pst%s%g,pst%s%s,npart_tot)
+     call input_star_ascii(pst%s%mdl,pst%s%r,pst%s%g,pst%s%star,npart_tot)
   endif
 
 end subroutine r_input_star_ascii

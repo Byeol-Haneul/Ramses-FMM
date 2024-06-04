@@ -326,7 +326,7 @@ recursive subroutine r_input_star_restart(pst,input_array,input_size,output,outp
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
      output%mass=output%mass+next_output%mass
   else
-     call input_star_restart(pst%s%r,pst%s%g,pst%s%s,input_size,input_array,output%mass)
+     call input_star_restart(pst%s%r,pst%s%g,pst%s%star,input_size,input_array,output%mass)
   endif
 
 end subroutine r_input_star_restart

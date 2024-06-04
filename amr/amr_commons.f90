@@ -18,6 +18,7 @@ module amr_commons
      logical::poisson =.false.   ! Poisson solver activated
      logical::hydro   =.false.   ! Hydro activated
      logical::star    =.false.   ! Stars and star formation activated
+     logical::sink    =.false.   ! Sinks and sink formation activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
      integer::nrestart=0         ! New run or backup file number
@@ -50,6 +51,7 @@ module amr_commons
      integer::ncachemax=10000    ! Maximum number of cache lines
      integer::npartmax=0         ! Maximum number of DM particles
      integer::nstarmax=0         ! Maximum number of star particles
+     integer::nsinkmax=0         ! Maximum number of sink particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(dp)::boxlen=1.0D0      ! Cell size at level 0 (total box size)
      real(dp)::box_size=0.0D0    ! Box length of active domain along x direction

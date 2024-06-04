@@ -649,7 +649,7 @@ recursive subroutine r_cic_part(pst,ilevel,input_size)
   else
      call cic_part(pst%s,pst%s%p,ilevel)
      if(pst%s%r%star)then
-        call cic_part(pst%s,pst%s%s,ilevel)
+        call cic_part(pst%s,pst%s%star,ilevel)
      endif
   endif
 
@@ -916,7 +916,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
   else
      call split_part(pst%s,pst%s%p,ilevel)
      if(pst%s%r%star)then
-        call split_part(pst%s,pst%s%s,ilevel)
+        call split_part(pst%s,pst%s%star,ilevel)
      endif
   endif
 

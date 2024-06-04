@@ -28,7 +28,7 @@ recursive subroutine r_thermal_feedback(pst,ilevel,input_size,output,output_size
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
      output%mass=output%mass+next_output%mass
   else
-     call thermal_feedback(pst%s,pst%s%s,ilevel,output%mass)
+     call thermal_feedback(pst%s,pst%s%star,ilevel,output%mass)
   endif
 
 end subroutine r_thermal_feedback
@@ -251,7 +251,7 @@ recursive subroutine r_mechanical_feedback(pst,ilevel,input_size,output,output_s
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
      output%mass=output%mass+next_output%mass
   else
-     call mechanical_feedback(pst%s,pst%s%s,ilevel,output%mass)
+     call mechanical_feedback(pst%s,pst%s%star,ilevel,output%mass)
   endif
 
 end subroutine r_mechanical_feedback

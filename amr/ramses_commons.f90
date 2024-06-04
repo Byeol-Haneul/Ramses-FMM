@@ -11,7 +11,8 @@ module ramses_commons
      type(global_t)::g
      type(mesh_t)::m
      type(part_t)::p
-     type(part_t)::s
+     type(part_t)::star
+     type(part_t)::sink
      type(part_t)::gas
      type(clump_t)::c
      type(cooling_t)::cool

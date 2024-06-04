@@ -54,7 +54,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      action_part=input_array(2)
      call kick_drift_part(pst%s,pst%s%p,ilevel,action_part)
      if(pst%s%r%star)then
-        call kick_drift_part(pst%s,pst%s%s,ilevel,action_part)
+        call kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
      endif
   endif
 

@@ -28,7 +28,7 @@ recursive subroutine r_star_formation(pst,ilevel,input_size,output,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
      output%mass=output%mass+next_output%mass
   else
-     call star_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%s,ilevel,output%mass)
+     call star_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%star,ilevel,output%mass)
   endif
 
 end subroutine r_star_formation

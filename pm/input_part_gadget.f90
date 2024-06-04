@@ -98,7 +98,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   real(kind=4)::dummy_real,x(1:3),v(1:3),z,ipbar
   logical::file_exist,skip(6)
   
-  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,gas=>s%gas,mdl=>s%mdl,s=>s%s)
+  associate(r=>s%r,g=>s%g,m=>s%m,p=>s%p,gas=>s%gas,mdl=>s%mdl,star=>s%star)
 
   ! Reading header of the Gadget file
   filename = TRIM(r%initfile(r%levelmin))//'/'//TRIM(r%ic_file)
@@ -381,42 +381,42 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   ! Read star particles
   if(r%star.and.nstar>0.and..not.skip(3))then
      if(g%myid==1)write(*,'(A)') " Reading star particles..."
-     s%npart=nstar/g%ncpu
-     istar=(g%myid-1)*s%npart
-     nrest=nstar-s%npart*g%ncpu
+     star%npart=nstar/g%ncpu
+     istar=(g%myid-1)*star%npart
+     nrest=nstar-star%npart*g%ncpu
      if(g%myid.LE.nrest)then
-        s%npart=s%npart+1
+        star%npart=star%npart+1
         istar=istar+(g%myid-1)
      else
         istar=istar+nrest
      endif
-     do i=1,s%npart
+     do i=1,star%npart
         kpart = ngas+nhalo+istar+i
         read(1,POS=pos_blck+3*sizeof(dummy_real)*(kpart-1))x
-        s%xp(i,1:3)=x
+        star%xp(i,1:3)=x
         read(1,POS=vel_blck+3*sizeof(dummy_real)*(kpart-1))v
-        s%vp(i,1:3)=v
+        star%vp(i,1:3)=v
         if(mass_blck.ne.-1) then
            kpart = ngas+nhalo+istar+i
            read(1,POS=mass_blck+sizeof(dummy_real)*(kpart-1))z
-           s%mp(i)=z
+           star%mp(i)=z
         endif
         if(id_blck.ne.-1) then
            kpart = ngas+nhalo+istar+i
            read(1,POS=id_blck+sizeof(dummy_int)*(kpart-1))id
-           s%idp(i)=id
+           star%idp(i)=id
         endif
         if(metal_blck.ne.-1) then
            kpart = ngas+nhalo+istar+i
            read(1,POS=metal_blck+sizeof(dummy_real)*(kpart-1))z
-           gas%zp(i)=z
+           star%zp(i)=z
         endif
         if(age_blck.ne.-1) then
            kpart = istar+i
            read(1,POS=age_blck+sizeof(dummy_real)*(kpart-1))z
-           gas%tp(i)=z
+           star%tp(i)=z
         endif
-        if(i.ge.ipbar*(s%npart/49.0))then
+        if(i.ge.ipbar*(star%npart/49.0))then
            if(g%myid==1)write(*,'(A1)',advance='no') "_"
            ipbar=ipbar+1.0
         endif
@@ -431,13 +431,13 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   if(mass_blck.eq.-1)then
      if(r%pic)p%mp(1:p%npart)=header%mass(2)
      if(r%hydro)gas%mp(1:gas%npart)=header%mass(1)
-     if(r%star)s%mp(1:s%npart)=header%mass(3)
+     if(r%star)star%mp(1:star%npart)=header%mass(3)
   endif
 
   ! Set particle level to levelmin
   if(r%pic)p%levelp(1:p%npart)=r%levelmin
   if(r%hydro)gas%levelp(1:gas%npart)=r%levelmin
-  if(r%star)s%levelp(1:s%npart)=r%levelmin
+  if(r%star)star%levelp(1:star%npart)=r%levelmin
 
   ! Compute ids if missing id block
   if(id_blck.eq.-1)then
@@ -447,8 +447,8 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
         end do
      endif
      if(r%star)then
-        do i=1,s%npart
-           s%idp(i)=istar+i
+        do i=1,star%npart
+           star%idp(i)=istar+i
         end do
      end if
   endif
@@ -456,7 +456,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   ! Put default metallicity if missing metal block
   if(metal_blck.eq.-1)then
      if(r%hydro)gas%zp(1:gas%npart)=0.02*r%z_ave
-     if(r%star)s%zp(1:s%npart)=0.02*r%z_ave
+     if(r%star)star%zp(1:star%npart)=0.02*r%z_ave
   endif
 
   ! Rescale from Gadget code units to Ramses code units
@@ -471,7 +471,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
 
   ! Compute total mass in star, gas and dark matter
   mstar=0.; mhalo=0.; mgas=0.
-  if(r%star)mstar=sum(s%mp(1:s%npart))
+  if(r%star)mstar=sum(star%mp(1:star%npart))
   if(r%pic)mhalo=sum(p%mp(1:p%npart))
   if(r%hydro)mgas=sum(gas%mp(1:gas%npart))
   
