@@ -47,6 +47,8 @@ def rd_cool(filename):
 
     Returns:
         A cooling table (Cool) object.
+
+    Authors: Romain Teyssier (Princeton University, October 2022)
     """
     with FortranFile(filename, 'r') as f:
         n1, n2 = f.read_ints('i')
@@ -99,6 +101,13 @@ def rd_map(filename):
 
     Returns:
         A map (class Map) object.
+
+    Example:
+        import miniramses as ram
+        map = ram.rd_map("dens.map")
+        plt.imshow(map.data,origin="lower")
+
+    Authors: Romain Teyssier (Princeton University, October 2022)
     """
     with FortranFile(filename, 'r') as f:
         t, dx, dy, dz = f.read_reals('f8')
@@ -138,6 +147,13 @@ def rd_histo(filename):
 
     Returns:
         A histogram (class Histo) object.
+
+    Example:
+        import miniramses as ram
+        h = ram.rd_histo("histo.dat")
+        plt.imshow(h.data,origin="lower")
+    
+    Authors: Romain Teyssier (Princeton University, October 2022)
     """
     with FortranFile(filename, 'r') as f:
         nx, ny = f.read_ints('i')
@@ -192,9 +208,11 @@ def rd_part(nout,**kwargs):
             p.mp: array containing the particle masses
 
     Example:
-        import ramses_io as ram
+        import miniramses as ram
         p = ram.rd_part(12,center=[0.5,0.5,0.5],radius=0.1)
         print(np.max(p.xp[0]))
+    
+    Authors: Romain Teyssier (Princeton University, October 2022)
     """
     
     backup = kwargs.get("backup",False)
@@ -557,9 +575,11 @@ def rd_cell(nout,**kwargs):
             c.dx: array containing the individual AMR cell sizes.
 
     Example:
-        import ramses_io as ram
+        import miniramses as ram
         c = ram.rd_cell(12,center=[0.5,0.5,0.5],radius=0.1)
         print(np.max(c.dx))
+
+    Authors: Romain Teyssier (Princeton University, October 2022)
     """
     
     path = kwargs.get("path","./")
@@ -684,9 +704,11 @@ def rd_log(filename,**kwargs):
             c.C: magnetic field z-component.
 
     Example:
-        import ramses_io as ram
+        import miniramses as ram
         r = ram.rd_log("run.log")
         plt.plot(r["x"],r["d"]))
+    
+    Authors: Romain Teyssier (Princeton University, October 2022)
     """
     cmd="grep -n Output "+filename+" > /tmp/out.txt"
     os.system(cmd)
@@ -972,9 +994,10 @@ def visu(x,y,dx,v,**kwargs):
     
     Exemple:
     
-        Example for a 3D RAMSES dataset uaing variable c from the object Cell. 
-
-        ram.visu(c.x[0],c.x[2],c.dx,c.u[0],sort=c.u[0],log=1,vmin=-3,vmax=1)
+        Example for a 2D or 3D RAMSES dataset using variable c from the object Cell. 
+        import miniramses as ram
+        c=ram.rd_cell(2)
+        ram.visu(c.x[0],c.x[1],c.dx,c.u[0],sort=c.u[0],log=1,vmin=-3,vmax=1)
 
     Authors: Romain Teyssier (Princeton University, October 2022)
     '''
@@ -1016,8 +1039,8 @@ def visu(x,y,dx,v,**kwargs):
 
 def mk_movie(**kwargs):
     '''The function mk_movie() takes 2D data files containing maps and converts them into a sequence of images, 
-    before combining them into a movie. 
-    It requires a standard set of python packages and the Linux packages ffmpeg and convert (ImageMagick).
+    before combining them into a movie. It requires a standard set of python packages and the Linux packages
+    ffmpeg and convert (ImageMagick).
     
     Args:
     
@@ -1032,7 +1055,8 @@ def mk_movie(**kwargs):
     
         prefix: starting name of a typical file. Ex: if you have 50 files, called "fig01.npy", "fig02.npy" … "fig50.npy", write in "fig".
     
-        fill: This is for the zfill parameter. If your files are standardized into "fig001.npy", "fig002.npy"… "fig100.npy", write in 3, for example. If this is not how your files are formatted, write in the number 1.
+        fill: This is for the zfill parameter. If your files are standardized into "fig001.npy", "fig002.npy"… "fig100.npy",
+            write in 3, for example. If this is not how your files are formatted, write in the number 1.
     
         suffix: suffix at the end of a file: Ex: ".npy", ".map", etc…
     
@@ -1040,7 +1064,8 @@ def mk_movie(**kwargs):
     
         cbar: write "YES" for this parameter if you want your figure to have a colorbar. Write anything else if not.
     
-        cbunit: units of the colormapping to be displayed next to the colorbar: Ex: "Concentration [code units]" If you do not plan on using a colorbar, write in any script.
+        cbunit: units of the colormapping to be displayed next to the colorbar: Ex: "Concentration [code units]"
+              If you do not plan on using a colorbar, write in any script.
     
         tunit: units of time displayed by rd_img. Ex: "seconds", "minutes", "hours", "[code units]"
     
@@ -1055,16 +1080,17 @@ def mk_movie(**kwargs):
         info: a string stating that the movie was done.
     
     Exemple:
-    
-        info = mk_movie(start=100,stop=2000,path="../movie1",prefix="dens_",fill=5,suffix=".map",cmap="Reds", 
+
+        import miniramses as ram
+        info = ram.mk_movie(start=100,stop=2000,path="../movie1",prefix="dens_",fill=5,suffix=".map",cmap="Reds", 
                 cbar="YES", cbunit="log Density [H/cc]", tunit="Gyr",
                 fname="img", mvname="movie", vmin=-1, vmax=6)
-    
     
     By default, the movie's framerate is 30 frames per second, at a resolution of 420p
     You can edit this function and its parameters according to what fits your model best.
     
     As it runs, the function will print the files it is currently converting.
+
     Authors: Thomas Decugis and Romain Teyssier (Princeton University, October 2022)
     '''
     start = kwargs.get("start",1)
@@ -1264,7 +1290,22 @@ class GraficFile:
     """
 
 def rd_grafic(filein):
+    """This function reads a grafic file (unformatted Fortran binary)
+    as produced by the MUSIC code.
 
+    Args:
+        filename: the complete path (including the name) of the input grafic file.
+
+    Returns:
+        A grafic (class GraficFile) object.
+
+    Example:
+        import miniramses as ram
+        g = ram.rd_grafic("ic_deltab")
+        plt.imshow(g.data[:,:,0],origin="lower")
+
+    Authors: Romain Teyssier (Princeton University, October 2022)
+    """
     with FortranFile(filein, 'r') as f:
         recl = ["i4", "i4", "i4", "f4", "f4", "f4", "f4", "f4", "f4", "f4", "f4"] 
         n1, n2, n3, dx, x1, x2, x3, a, omega_m, omega_l, h0 = f.read_record(*recl)
@@ -1293,4 +1334,37 @@ def rd_grafic(filein):
 
     return out
 
-    
+def wr_grafic(dat,header1,header2,fileout):
+    """This function writes a grafic file (unformatted Fortran binary)
+    which is the file format produced e.g. by the MUSIC code.
+
+    Args:
+        dat: a 3D numpy array of type "f4"
+
+        header1: a 1D numpy array with 3 elements of type "i4". It should contain the 3 dimensions of the input array.
+
+        header2: a 1D mumpy array with 8 elements of type "f4". It should contain dx, xoff1, xoff2, xoff3 and 4 additional constants,
+
+        filename: the complete path (including the name) of the output grafic file.
+
+    Returns:
+        Nothing
+
+    Example:
+        import miniramses as ram
+        dat = np.zeros((512,512,512),dtype="f4")
+        dx = 1./512.
+        header1 = np.array([512,512,512],dtype="i4")
+        header2 = np.array([dx,0,0,0,0,0,0,0],dtype="f4")
+        ram.wr_grafic(dat,header1,header2,"ic_d")
+
+    Authors: Romain Teyssier (Princeton University, October 2022)
+    """
+    with FortranFile(fileout, 'w') as f:
+        f.write_record(header1,header2)
+        n3 = int(header1[2])
+        for k in range(n3):
+            plane = dat[:, :, k]
+            f.write_record(plane.T)
+
+
