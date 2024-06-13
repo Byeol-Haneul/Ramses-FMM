@@ -52,7 +52,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype)
         filename=TRIM(filename)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
      endif
-     call r_output_clump(pst,input_array,flen/4,dummy,0)
+     call r_output_clump(pst,input_array,flen/4,dummy,0,rtype)
   endif
 
   !------------------------------------------
