@@ -257,6 +257,7 @@ module amr_commons
      logical::clump_info=.false.
      logical::output_clump=.false.
      logical::output_peak=.false.
+     integer::ivar_clump=0
      real(dp)::relevance_threshold=2
      real(dp)::density_threshold=-1
      real(dp)::saddle_threshold=-1
