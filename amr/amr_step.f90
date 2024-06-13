@@ -77,7 +77,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            !----------------------------
            if(r%clump_finder)then ! Create output and no need to keep alive
                                     call m_timer(pst,'clump','start')
-              call m_clump_finder(pst,.true.,.false.,1,0)
+              call m_clump_finder(pst,.true.,.false.,r%ivar_clump,0)
            endif
         endif
      endif

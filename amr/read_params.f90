@@ -289,6 +289,7 @@ subroutine m_read_params(pst)
   logical::clump_info=.false.
   logical::output_clump=.false.
   logical::output_peak=.false.
+  integer::ivar_clump=0
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
@@ -396,7 +397,7 @@ subroutine m_read_params(pst)
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
   namelist/clump_params/clump_info,output_clump,output_peak &
-       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold
+       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold,ivar_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
@@ -961,6 +962,7 @@ subroutine m_read_params(pst)
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold
   s%r%mass_threshold=mass_threshold
+  s%r%ivar_clump=ivar_clump
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format
