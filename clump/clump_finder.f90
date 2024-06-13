@@ -1,7 +1,7 @@
 module clump_finder_module
   use clump_merger_module
 contains
-subroutine m_clump_finder(pst,create_output,keep_alive,rtype)
+subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
   use output_clump_module
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
@@ -20,7 +20,9 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype)
   integer,dimension(1:flen/4)::input_array
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
-  integer::rtype
+  integer::rtype,sink
+  integer,allocatable,dimension(:)::input_array_sink
+
 
 #if NDIM==3 && defined(GRAV)
 
@@ -37,12 +39,16 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype)
   !------------------------------------------
   ! Find relevant peak patches and halos
   !------------------------------------------
-  call r_clump_finder(pst,r%levelmin,1)
+  allocate(input_array_sink(1:2))
+  input_array_sink(1)=r%levelmin
+  input_array_sink(2)=sink
+  call r_clump_finder(pst,input_array_sink,1)
+
  
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
-  if(create_output)then
+  if(create_output.and.(sink==0))then
      call title(g%ifout-1,nchar)
      filename='output_'//TRIM(nchar)//'/'
      input_array=transfer(filename,input_array)
@@ -52,7 +58,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype)
         filename=TRIM(filename)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
      endif
-     call r_output_clump(pst,input_array,flen/4,dummy,0,rtype)
+     call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
 
   !------------------------------------------
@@ -73,23 +79,25 @@ end subroutine m_clump_finder
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_clump_finder(pst,ilevel,input_size)
+recursive subroutine r_clump_finder(pst,input_array,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
+  integer,dimension(1:input_size)::input_array
 
-  integer::ilevel
+  integer::ilevel,sink
   integer::rID
-  
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
-     call r_clump_finder(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,input_array)
+     call r_clump_finder(pst%pLower,input_array,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call clump_finder(pst%s)
+     ilevel = input_array(1)
+     sink = input_array(2)
+     call clump_finder(pst%s,sink)
   endif
   
 end subroutine r_clump_finder
@@ -97,10 +105,11 @@ end subroutine r_clump_finder
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine clump_finder(s)
+subroutine clump_finder(s,sink)
   use ramses_commons, only: ramses_t
   implicit none
   type(ramses_t)::s
+  integer::sink
 
 #if NDIM==3 && defined(GRAV)
 
@@ -148,24 +157,26 @@ subroutine clump_finder(s)
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
-  !----------------------------------------------------------------------
-  ! Compute relevant peak properties such as mass and number of cells
-  !----------------------------------------------------------------------
-  call compute_clump_properties(s)
-  !----------------------------------------------------------------------
-  ! Merge all neighboring peaks above the prescribed density
-  ! threshold into halos, only if their saddle point density is larger
-  ! that the prescribed saddle density threshold.
-  !----------------------------------------------------------------------
-  if(s%r%saddle_threshold>0)then
-     call merge_clumps(s,'saddleden')
-  endif
-  !----------------------------------------------------------------------
-  ! Remove all peaks that are below the relevance threshold
-  ! or the mass threshold in the flag1 global peak ID field.
-  !----------------------------------------------------------------------
-  if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
-     call trim_clumps(s)
+  if(sink==0)then
+    !----------------------------------------------------------------------
+    ! Compute relevant peak properties such as mass and number of cells
+    !----------------------------------------------------------------------
+    call compute_clump_properties(s)
+    !----------------------------------------------------------------------
+    ! Merge all neighboring peaks above the prescribed density
+    ! threshold into halos, only if their saddle point density is larger
+    ! that the prescribed saddle density threshold.
+    !----------------------------------------------------------------------
+    if(s%r%saddle_threshold>0)then
+        call merge_clumps(s,'saddleden')
+    endif
+    !----------------------------------------------------------------------
+    ! Remove all peaks that are below the relevance threshold
+    ! or the mass threshold in the flag1 global peak ID field.
+    !----------------------------------------------------------------------
+    if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
+        call trim_clumps(s)
+    endif
   endif
 
 #endif

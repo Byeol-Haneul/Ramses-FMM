@@ -22,6 +22,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
   integer::i,input_size,rtype ! rtype 1 all 2 dm 3 star 4 gas
+  integer,allocatable,dimension(:)::input_array
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
@@ -83,7 +84,10 @@ subroutine m_rho_fine(pst,ilevel,rtype)
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
-           call r_cic_part(pst,i,1,rtype)
+           allocate(input_array(1:2))
+           input_array(1)=i
+           input_array(2)=rtype
+           call r_cic_part(pst,input_array,2)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
@@ -630,25 +634,31 @@ end subroutine cic_multipole
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_cic_part(pst,ilevel,input_size,rtype)
+recursive subroutine r_cic_part(pst,input_array,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::ilevel
+  integer::ilevel,rtype
+  integer,dimension(1:input_size)::input_array
+  
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,ilevel)
-     call r_cic_part(pst%pLower,ilevel,input_size,rtype)
+     rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,input_array)
+     call r_cic_part(pst%pLower,input_array,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call cic_part(pst%s,pst%s%p,ilevel,rtype)
-     if(pst%s%r%star)then
-        call cic_part(pst%s,pst%s%star,ilevel,rtype)
+     ilevel=input_array(1)
+     rtype=input_array(2)
+     if(rtype.ne.2)then
+        call cic_part(pst%s,pst%s%p,ilevel)
+     endif
+     if((pst%s%r%star).and.(rtype.ne.1))then
+        call cic_part(pst%s,pst%s%star,ilevel)
      endif
   endif
 
@@ -657,7 +667,7 @@ end subroutine r_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine cic_part(s,p,ilevel,rtype)
+subroutine cic_part(s,p,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -683,7 +693,7 @@ subroutine cic_part(s,p,ilevel,rtype)
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
   logical::star
-  integer::rtype ! rtype 1 all 2 dm 3 star 4 gas
+  !integer::rtype ! rtype 1 all 2 dm 3 star 4 gas
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -795,13 +805,7 @@ subroutine cic_part(s,p,ilevel,rtype)
         ! Get parent cell using write-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
-           if(rtype == 1)then
-              gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           elseif((rtype == 2).and.(.not. star))then
-              gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           elseif((rtype == 3).and.(star))then
-              gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           endif
+           gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
            if(star)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
            else

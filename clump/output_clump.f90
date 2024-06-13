@@ -4,7 +4,7 @@ contains
 !###################################################
 !###################################################
 !###################################################
-recursive subroutine r_output_clump(pst,input_array,input_size,output_array,output_size,rtype)
+recursive subroutine r_output_clump(pst,input_array,input_size,output_array,output_size)
   use mdl_module
   use amr_parameters, only: flen
   use ramses_commons, only: pst_t
@@ -17,7 +17,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename,fileloc
-  integer::rID,rtype
+  integer::rID
 
   if(pst%nLower>0)then
     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
@@ -26,18 +26,10 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   else
     filename=transfer(input_array,filename)
     if(pst%s%r%output_clump)then
-       call output_clump_properties(pst%s,filename,rtype)
+       call output_clump_properties(pst%s,filename)
     endif
     if(pst%s%r%output_peak)then
-        if(rtype == 1)then
-            fileloc=TRIM(filename)//'peak.'
-        elseif(rtype == 2)then
-            fileloc=TRIM(filename)//'peak_dm.'
-        elseif(rtype == 3)then
-            fileloc=TRIM(filename)//'peak_star.'
-        elseif(rtype == 4)then
-            fileloc=TRIM(filename)//'peak_gas.'
-        endif
+       fileloc=TRIM(filename)//'peak.'
        call output_clump_field(pst%s,fileloc)
     endif
   endif
@@ -47,7 +39,7 @@ end subroutine r_output_clump
 !###################################################
 !###################################################
 !###################################################
-subroutine output_clump_properties(s,filename,rtype)
+subroutine output_clump_properties(s,filename)
   use amr_parameters, only: flen
   use ramses_commons, only: ramses_t,open_file,close_file
   use clfind_commons
@@ -57,22 +49,14 @@ subroutine output_clump_properties(s,filename,rtype)
   !----------------------------------------------------------------
   ! This routine output the clump properties for each processor
   !----------------------------------------------------------------
-  integer::ilun,j,rtype
+  integer::ilun,j
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
 
   associate(r=>s%r,g=>s%g,c=>s%c)
 
   ! Write clump file
-    if(rtype == 1)then
-        fileloc=TRIM(filename)//'clump.'
-    elseif(rtype == 2)then
-        fileloc=TRIM(filename)//'clump_dm.'
-    elseif(rtype == 3)then
-        fileloc=TRIM(filename)//'clump_star.'
-    elseif(rtype == 4)then
-        fileloc=TRIM(filename)//'clump_gas.'
-    endif
+  fileloc=TRIM(filename)//'clump.'
 
   call open_file(s,fileloc,nskip,ilun)
 
@@ -102,15 +86,7 @@ subroutine output_clump_properties(s,filename,rtype)
   ! Write halo file
   if(r%saddle_threshold>0)then
 
-    if(rtype == 1)then
-        fileloc=TRIM(filename)//'halo.'
-    elseif(rtype == 2)then
-        fileloc=TRIM(filename)//'halo_dm.'
-    elseif(rtype == 3)then
-        fileloc=TRIM(filename)//'halo_star.'
-    elseif(rtype == 4)then
-        fileloc=TRIM(filename)//'halo_gas.'
-    endif
+     fileloc=TRIM(filename)//'halo.'
 
      call open_file(s,fileloc,nskip,ilun)
 
