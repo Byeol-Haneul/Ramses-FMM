@@ -43,6 +43,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
   input_array_sink(1)=r%levelmin
   input_array_sink(2)=sink
   call r_clump_finder(pst,input_array_sink,1)
+  deallocate(input_array_sink)
 
  
   !------------------------------------------
