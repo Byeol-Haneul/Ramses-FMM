@@ -88,6 +88,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
            input_array(1)=i
            input_array(2)=rtype
            call r_cic_part(pst,input_array,2)
+           deallocate(input_array)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
