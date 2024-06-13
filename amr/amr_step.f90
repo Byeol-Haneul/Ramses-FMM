@@ -114,7 +114,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%poisson)then
      if(ilevel==r%levelmin.or.icount>1)then
                                     call m_timer(pst,'rho','start')
-        call m_rho_fine(pst,ilevel)
+        call m_rho_fine(pst,ilevel,0)
      endif
   endif
 #endif
