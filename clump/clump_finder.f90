@@ -1,7 +1,7 @@
 module clump_finder_module
   use clump_merger_module
 contains
-subroutine m_clump_finder(pst,create_output,keep_alive)
+subroutine m_clump_finder(pst,create_output,keep_alive,rtype)
   use output_clump_module
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
@@ -20,6 +20,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   integer,dimension(1:flen/4)::input_array
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
+  integer::rtype
 
 #if NDIM==3 && defined(GRAV)
 
@@ -31,7 +32,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !-----------------------------------------------------------------------
   ! Compute rho from gas density and/or dark matter and/or star particles
   !-----------------------------------------------------------------------
-  call m_rho_fine(pst,r%levelmin)
+  call m_rho_fine(pst,r%levelmin,rtype)
   
   !------------------------------------------
   ! Find relevant peak patches and halos

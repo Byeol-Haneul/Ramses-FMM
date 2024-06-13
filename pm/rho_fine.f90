@@ -5,7 +5,7 @@ contains
 !###############################################
 !###############################################
 #ifdef GRAV
-subroutine m_rho_fine(pst,ilevel)
+subroutine m_rho_fine(pst,ilevel,rtype)
   use amr_parameters, only: dp,ndim
   use ramses_commons, only: pst_t
   use amr_commons, only: multipole_t
@@ -21,8 +21,7 @@ subroutine m_rho_fine(pst,ilevel)
   ! their grid Hilbert order.
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
-  integer::i,input_size
-
+  integer::i,input_size,rtype ! rtype 1 all 2 dm 3 star 4 gas
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
@@ -69,7 +68,7 @@ subroutine m_rho_fine(pst,ilevel)
      endif
 
      ! Gas mass deposition using pseudo-particles
-     if(r%hydro.AND.m%noct_tot(i)>0)then
+     if(r%hydro.AND.m%noct_tot(i)>0.AND.(rtype==1 .or. rtype==4))then
         if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
         call r_cic_multipole(pst,i,1)
      endif
@@ -80,11 +79,11 @@ subroutine m_rho_fine(pst,ilevel)
   !-------------------------------------------------------
   ! Compute particle contribution to density field
   !-------------------------------------------------------
-  if(r%pic)then
+  if(r%pic.AND.(rtype.ne.4))then
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
-           call r_cic_part(pst,i,1)
+           call r_cic_part(pst,i,1,rtype)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
@@ -631,7 +630,7 @@ end subroutine cic_multipole
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_cic_part(pst,ilevel,input_size)
+recursive subroutine r_cic_part(pst,ilevel,input_size,rtype)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -644,12 +643,12 @@ recursive subroutine r_cic_part(pst,ilevel,input_size)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,ilevel)
-     call r_cic_part(pst%pLower,ilevel,input_size)
+     call r_cic_part(pst%pLower,ilevel,input_size,rtype)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call cic_part(pst%s,pst%s%p,ilevel)
+     call cic_part(pst%s,pst%s%p,ilevel,rtype)
      if(pst%s%r%star)then
-        call cic_part(pst%s,pst%s%star,ilevel)
+        call cic_part(pst%s,pst%s%star,ilevel,rtype)
      endif
   endif
 
@@ -658,7 +657,7 @@ end subroutine r_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine cic_part(s,p,ilevel)
+subroutine cic_part(s,p,ilevel,rtype)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -684,6 +683,7 @@ subroutine cic_part(s,p,ilevel)
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
   logical::star
+  integer::rtype ! rtype 1 all 2 dm 3 star 4 gas
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -795,7 +795,13 @@ subroutine cic_part(s,p,ilevel)
         ! Get parent cell using write-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
-           gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           if(rtype == 1)then
+              gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           elseif((rtype == 2).and.(.not. star))then
+              gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           elseif((rtype == 3).and.(star))then
+              gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           endif
            if(star)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
            else
