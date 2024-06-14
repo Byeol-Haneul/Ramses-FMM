@@ -927,7 +927,7 @@ recursive subroutine r_split_part(pst,input_array,input_size)
   ilevel=input_array(1)
   rtype=input_array(2)
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,0,ilevel)
+     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,0,input_array)
      call r_split_part(pst%pLower,input_array,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
