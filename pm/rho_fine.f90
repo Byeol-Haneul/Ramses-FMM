@@ -655,10 +655,10 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-     if(rtype.ne.2)then
+     if(rtype.ne.3)then
         call cic_part(pst%s,pst%s%p,ilevel)
      endif
-     if((pst%s%r%star).and.(rtype.ne.1))then
+     if((pst%s%r%star).and.(rtype.ne.2))then
         call cic_part(pst%s,pst%s%star,ilevel)
      endif
   endif
