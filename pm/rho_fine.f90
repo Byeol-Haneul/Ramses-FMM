@@ -22,7 +22,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
   integer::i,input_size,rtype ! rtype 1 all 2 dm 3 star 4 gas
-  integer,allocatable,dimension(:)::input_array
+  integer,dimension(1:2)::input_array
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(.not. r%poisson)return
@@ -84,19 +84,15 @@ subroutine m_rho_fine(pst,ilevel,rtype)
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
-           allocate(input_array(1:2))
            input_array(1)=i
            input_array(2)=rtype
            call r_cic_part(pst,input_array,2)
-           deallocate(input_array)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
-           allocate(input_array(1:2))
            input_array(1)=i
            input_array(2)=rtype
            call r_split_part(pst,input_array,2)
-           deallocate(input_array)
         endif
      end do
   endif
