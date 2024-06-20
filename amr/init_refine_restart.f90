@@ -155,7 +155,7 @@ subroutine m_init_refine_restart(pst)
 
 #ifdef GRAV
   ! Compute total mass density from gas and particles on the grid
-  call m_rho_fine(pst,r%levelmin,0)
+  call m_rho_fine(pst,r%levelmin,1)
 #endif
   
   end associate

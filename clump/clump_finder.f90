@@ -21,7 +21,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
   integer::rtype,sink
-  integer,allocatable,dimension(:)::input_array_sink
+  integer,dimension(1:2)::input_array_sink
 
 
 #if NDIM==3 && defined(GRAV)
@@ -39,11 +39,9 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
   !------------------------------------------
   ! Find relevant peak patches and halos
   !------------------------------------------
-  allocate(input_array_sink(1:2))
   input_array_sink(1)=r%levelmin
   input_array_sink(2)=sink
   call r_clump_finder(pst,input_array_sink,1)
-  deallocate(input_array_sink)
 
  
   !------------------------------------------
