@@ -52,6 +52,9 @@ module amr_parameters
   ! Expansion factor look-up table size
   integer,parameter::n_frw=1000
 
+  ! Number of bins for halo mass profiles
+  integer, parameter::nbin=10
+
   ! Useful constants
   real(kind=8),parameter ::twopi   = 6.2831853d0
   real(kind=8),parameter ::hplanck = 6.6260702d-27

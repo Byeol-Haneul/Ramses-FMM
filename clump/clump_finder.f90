@@ -26,7 +26,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
 
 #if NDIM==3 && defined(GRAV)
 
-  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star)
 
   write(*,*)'Entering clump finder'
   ttstart = mdl_wtime(mdl)
@@ -58,6 +58,14 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
         write(*,*)'Writing clump field files'
         filename=TRIM(filename)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
+     endif
+     if(r%output_peak_part.and.r%pic)then
+        filename=TRIM(filedir)//'peak_part_header.txt'
+        call output_peak_header(r,g,p,filename)
+     endif
+     if(r%output_peak_star.and.r%star)then
+        filename=TRIM(filedir)//'peak_star_header.txt'
+        call output_peak_header(r,g,star,filename)
      endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
@@ -179,6 +187,10 @@ subroutine clump_finder(s,sink)
         call trim_clumps(s)
     endif
   endif
+  !----------------------------------------------------------------------
+  ! Compute additional halo or particle-based clump properties.
+  !----------------------------------------------------------------------
+  call particle_clump_properties(s)
 
 #endif
 end subroutine clump_finder
@@ -566,7 +578,7 @@ subroutine collect_patch(s)
   integer(kind=8)::nmove_all,nzero_all
 #endif
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  type(msg_twin_realdp)::dummy_int4
+  type(msg_int4)::dummy_int4
   type(oct),pointer::gridn
   integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nzero
   integer(kind=8)::nmove_tot,nzero_tot

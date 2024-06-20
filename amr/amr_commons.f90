@@ -258,6 +258,8 @@ module amr_commons
      logical::output_clump=.false.
      logical::output_peak=.false.
      integer::ivar_clump=0
+     logical::output_peak_part=.false.
+     logical::output_peak_star=.false.
      real(dp)::relevance_threshold=2
      real(dp)::density_threshold=-1
      real(dp)::saddle_threshold=-1
@@ -313,6 +315,7 @@ module amr_commons
      real(dp)::mass_tot=0.0D0                      ! Total gass mass
      real(dp)::mass_tot_0=0.0D0                    ! Initial total gas mass
      real(dp)::mass_star_tot=0.0D0                 ! Total mass in new stars
+     real(dp)::mass_sink_tot=0.0D0                 ! Total mass in new sinks
      
      ! Level related arrays
      real(dp),dimension(1:MAXLEVEL)::dtold,dtnew ! Time step at each level
