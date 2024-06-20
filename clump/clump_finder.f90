@@ -94,8 +94,8 @@ recursive subroutine r_clump_finder(pst,ilevel,input_size)
   integer::ilevel
   integer::rID
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,input_array)
-     call r_clump_finder(pst%pLower,input_array,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
+     call r_clump_finder(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call clump_finder(pst%s)
