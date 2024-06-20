@@ -157,25 +157,25 @@ subroutine clump_finder(s)
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
-    !----------------------------------------------------------------------
-    ! Compute relevant peak properties such as mass and number of cells
-    !----------------------------------------------------------------------
-    call compute_clump_properties(s)
-    !----------------------------------------------------------------------
-    ! Merge all neighboring peaks above the prescribed density
-    ! threshold into halos, only if their saddle point density is larger
-    ! that the prescribed saddle density threshold.
-    !----------------------------------------------------------------------
-    if(s%r%saddle_threshold>0)then
-        call merge_clumps(s,'saddleden')
-    endif
-    !----------------------------------------------------------------------
-    ! Remove all peaks that are below the relevance threshold
-    ! or the mass threshold in the flag1 global peak ID field.
-    !----------------------------------------------------------------------
-    if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
-        call trim_clumps(s)
-    endif
+  !----------------------------------------------------------------------
+  ! Compute relevant peak properties such as mass and number of cells
+  !----------------------------------------------------------------------
+  call compute_clump_properties(s)
+  !----------------------------------------------------------------------
+  ! Merge all neighboring peaks above the prescribed density
+  ! threshold into halos, only if their saddle point density is larger
+  ! that the prescribed saddle density threshold.
+  !----------------------------------------------------------------------
+  if(s%r%saddle_threshold>0)then
+    call merge_clumps(s,'saddleden')
+  endif
+  !----------------------------------------------------------------------
+  ! Remove all peaks that are below the relevance threshold
+  ! or the mass threshold in the flag1 global peak ID field.
+  !----------------------------------------------------------------------
+  if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
+    call trim_clumps(s)
+  endif
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
