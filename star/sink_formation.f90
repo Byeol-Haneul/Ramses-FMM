@@ -13,7 +13,7 @@ recursive subroutine m_sink_formation(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_module, only: mdl_wtime
-  use clump_finder_module, only: m_clump_finder
+  use clump_finder_module, only: m_sink_finder
   use clump_merger_module, only: r_deallocate_clump
   use mdl_parameters
   implicit none
@@ -27,7 +27,7 @@ recursive subroutine m_sink_formation(pst)
   !----------------------------
   ! Call the clump finder
   !----------------------------
-  call m_clump_finder(pst,.false.,.true.) ! Create no output and need to keep alive
+  call m_sink_finder(pst,.true.,pst%s%r%ivar_clump) ! Create no output and need to keep alive
 
   !----------------------------
   ! Create sink particles
