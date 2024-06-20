@@ -72,6 +72,13 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%av_dens)
   deallocate(c%clump_vol)
 
+  deallocate(c%halo_maxmass)
+  deallocate(c%ind_maxmass)
+  deallocate(c%particle_mass)
+  deallocate(c%peak_vel)
+  deallocate(c%max_dist)
+  deallocate(c%mass_bin)
+
   ! Deallocate sparse density matrix
   call sparse_kill(c%sparse_saddle_dens)
 
@@ -86,7 +93,7 @@ end subroutine deallocate_peak_patch_arrays
 !################################################################
 !################################################################
 subroutine allocate_peak_patch_arrays(s)
-  use amr_parameters, ONLY: ndim, dp
+  use amr_parameters, ONLY: ndim, dp, nbin
   use clfind_commons
   use ramses_commons, ONLY: ramses_t
   use sparse_matrix
@@ -116,6 +123,13 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%min_dens(1:c%npeak_max))
   allocate(c%av_dens(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
+
+  allocate(c%halo_maxmass(1:c%npeak_max))
+  allocate(c%ind_maxmass(1:c%npeak_max))
+  allocate(c%particle_mass(1:c%npeak_max))
+  allocate(c%peak_vel(1:c%npeak_max,1:ndim))
+  allocate(c%max_dist(1:c%npeak_max))
+  allocate(c%mass_bin(1:c%npeak_max,1:nbin))
 
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points
@@ -812,6 +826,60 @@ end subroutine virtual_peak_dp
 !################################################################
 !################################################################
 !################################################################
+subroutine virtual_peak_max(s)
+  use amr_commons
+  use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  implicit none
+  type(ramses_t)::s
+
+#ifndef WITHOUTMPI
+  integer::info,icpu
+  real(kind=8),allocatable,dimension(:)::dp_peak_send_buf,dp_peak_recv_buf
+  integer,allocatable,dimension(:)::int_peak_send_buf,int_peak_recv_buf
+  integer::ipeak,jpeak,j
+  integer,dimension(1:s%g%ncpu)::ipeak_alltoall
+
+  associate(g=>s%g,c=>s%c)
+
+  allocate(int_peak_send_buf(1:c%peak_send_tot))
+  allocate(int_peak_recv_buf(1:c%peak_recv_tot))
+  allocate(dp_peak_send_buf(1:c%peak_send_tot))
+  allocate(dp_peak_recv_buf(1:c%peak_recv_tot))
+
+  ipeak_alltoall=0
+  do ipeak=c%npeak+1,c%hfree-1
+     call get_local_peak_cpu(s,ipeak,icpu)
+     ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
+     dp_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=c%halo_maxmass(ipeak)
+     int_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=c%ind_maxmass(ipeak)
+  end do
+  call MPI_ALLTOALLV(dp_peak_send_buf,c%peak_send_cnt,c%peak_send_oft,MPI_DOUBLE_PRECISION, &
+       &             dp_peak_recv_buf,c%peak_recv_cnt,c%peak_recv_oft,MPI_DOUBLE_PRECISION,MPI_COMM_WORLD,info)
+  call MPI_ALLTOALLV(int_peak_send_buf,c%peak_send_cnt,c%peak_send_oft,MPI_INTEGER, &
+       &             int_peak_recv_buf,c%peak_recv_cnt,c%peak_recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  do j=1,c%peak_recv_tot
+     ipeak=c%peak_recv_buf(j)-c%npeak_cum(g%myid-1)
+     if(c%halo_maxmass(ipeak)<dp_peak_recv_buf(j))then
+        c%halo_maxmass(ipeak)=dp_peak_recv_buf(j)
+        c%ind_maxmass(ipeak)=int_peak_recv_buf(j)
+        call get_local_peak_id(s,int_peak_recv_buf(j),jpeak)
+     endif
+  end do
+
+  deallocate(dp_peak_send_buf,dp_peak_recv_buf)
+  deallocate(int_peak_send_buf,int_peak_recv_buf)
+
+  end associate
+#endif
+
+end subroutine virtual_peak_max
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine virtual_saddle_max(s)
   use amr_commons
   use ramses_commons, only: ramses_t
@@ -1244,6 +1312,350 @@ subroutine trim_clumps(s)
   end associate
 
 end subroutine trim_clumps
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine particle_clump_properties(s)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use boundaries, only: init_bound_flag
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  !==================================================================
+  ! This routine computes various clump properties.
+  ! In particular, it computes for each particle its parent peak id.
+  ! This is used to compute mass profiles for each halo.
+  ! This is also stored in the peak_part and peak_star files.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !==================================================================
+  ! Local variables
+  integer,dimension(1:ndim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_cell
+  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer::global_peak_id,global_halo_id,global_center_id
+  integer::local_peak_id,ipeak,jpeak,merge_to,no_halo,npart
+  integer::halo_nr,peak_nr,center_nr
+  real(dp)::dx_loc,rmin,rmax,dist,xx
+  type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
+  logical::ok_level,ok_leaf
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%p,star=>s%star)
+
+  if(r%pic)then
+
+     !========================================
+     ! Reads peak id of dark mater particles
+     !========================================
+     call particle_peak_id(s,p,no_halo)
+
+     ! Update peak communicator
+     call build_peak_communicator(s)
+
+     ! Sort particles according to global clump id
+     call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
+
+     !=========================================
+     ! Compute peak velocity based on particles
+     !=========================================
+     c%particle_mass=0
+     c%peak_vel=0
+     do i=1+no_halo,p%npart
+        ! Get peak id
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        if (global_peak_id /=0 ) then
+           call get_local_peak_id(s,global_peak_id,peak_nr)
+           c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
+           c%particle_mass(peak_nr)=c%particle_mass(peak_nr)+p%mp(ipart)
+        endif
+     end do
+#ifndef WITHOUTMPI
+     ! Collect results from all MPI domains
+     call virtual_peak_dp(s,c%particle_mass,'sum')
+     do idim=1,ndim
+        call virtual_peak_dp(s,c%peak_vel(1,idim),'sum')
+     end do
+#endif
+     ! Compute specific quantities
+     do ipeak=1,c%npeak
+        if (c%particle_mass(ipeak)>0)then
+           c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%particle_mass(ipeak)
+        end if
+     end do
+#ifndef WITHOUTMPI
+     ! Scatter results to all MPI domains
+     call boundary_peak_dp(s,c%particle_mass)
+     do idim=1,ndim
+        call boundary_peak_dp(s,c%peak_vel(1,idim))
+     end do
+#endif
+
+  endif
+
+  !============================================
+  ! Compute most massive peak inside haloes
+  !============================================
+  if(r%saddle_threshold>0)then
+
+     c%halo_maxmass=0
+     c%ind_maxmass=0
+     do ipeak=1,c%npeak
+        global_peak_id=c%npeak_cum(g%myid-1)+ipeak
+        merge_to=c%ind_halo(ipeak)
+        call get_local_peak_id(s,merge_to,jpeak)
+        if(c%halo_maxmass(jpeak)<c%clump_mass(ipeak))then
+           c%ind_maxmass(jpeak)=global_peak_id
+        endif
+        c%halo_maxmass(jpeak)=MAX(c%halo_maxmass(jpeak),c%clump_mass(ipeak))
+     end do
+#ifndef WITHOUTMPI
+     ! Update peak communicator
+     call build_peak_communicator(s)
+     ! Collect results from all MPI domains
+     call virtual_peak_max(s)
+     ! Scatter results to all MPI domains
+     call boundary_peak_dp(s,c%halo_maxmass)
+     call boundary_peak_int(s,c%ind_maxmass)
+     call boundary_peak_int(s,c%ind_halo)
+     do idim=1,ndim
+        call boundary_peak_dp(s,c%peak_pos(1,idim))
+     end do
+#endif
+
+  endif
+
+  !=========================================
+  ! Compute particle cumulative mass profile
+  !=========================================
+  if(r%saddle_threshold>0.and.r%pic)then
+
+     ! Find halo particle farthest away
+     c%max_dist=0d0
+     do i=1+no_halo,p%npart
+        ! Get peak id
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        if (global_peak_id /=0 ) then
+           call get_local_peak_id(s,global_peak_id,peak_nr)
+           ! Get halo id
+           global_halo_id=c%ind_halo(peak_nr)
+           call get_local_peak_id(s,global_halo_id,halo_nr)
+           ! Get central peak id
+           global_center_id=c%ind_maxmass(halo_nr)
+           call get_local_peak_id(s,global_center_id,center_nr)
+           ! Compute distance to peak center
+           dist=0
+           do idim=1,ndim
+              xx=p%xp(ipart,idim)-c%peak_pos(center_nr,idim)
+              ! Periodic boundary conditions
+              if(xx>0.5*r%boxlen)xx=xx-r%boxlen
+              if(xx<-0.5*r%boxlen)xx=xx+r%boxlen
+              dist=dist+xx**2
+           end do
+           dist=sqrt(dist)
+           c%max_dist(halo_nr)=MAX(c%max_dist(halo_nr),dist)
+        endif
+     end do
+#ifndef WITHOUTMPI
+     ! Update peak communicator
+     call build_peak_communicator(s)
+     ! Collect results from all MPI domains
+     call virtual_peak_dp(s,c%max_dist,'max')
+     ! Scatter results to all MPI domains
+     call boundary_peak_dp(s,c%max_dist)
+#endif
+     ! Compute mass profile in shells
+     c%mass_bin=0d0
+     do i=1+no_halo,p%npart
+        ! Get peak id
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        if (global_peak_id /=0 ) then
+           call get_local_peak_id(s,global_peak_id,peak_nr)
+           ! Get halo id
+           global_halo_id=c%ind_halo(peak_nr)
+           call get_local_peak_id(s,global_halo_id,halo_nr)
+           ! Get central peak id
+           global_center_id=c%ind_maxmass(halo_nr)
+           call get_local_peak_id(s,global_center_id,center_nr)
+           ! Compute distance to peak center
+           dist=0
+           do idim=1,ndim
+              xx=p%xp(ipart,idim)-c%peak_pos(center_nr,idim)
+              ! Periodic boundary conditions
+              if(xx>0.5*r%boxlen)xx=xx-r%boxlen
+              if(xx<-0.5*r%boxlen)xx=xx+r%boxlen
+              dist=dist+xx**2
+           end do
+           dist=sqrt(dist)
+           ibin=1
+           do
+              ! We use a simple linear binning as the mass is usually propto r
+              if(dist<=dble(ibin)/dble(nbin)*c%max_dist(halo_nr))then
+                 c%mass_bin(halo_nr,ibin)=c%mass_bin(halo_nr,ibin)+p%mp(ipart)
+                 exit
+              else
+                 ibin=ibin+1
+              endif
+           end do
+        endif
+     end do
+#ifndef WITHOUTMPI
+     do ibin=1,nbin
+        ! Collect results from all MPI domains
+        call virtual_peak_dp(s,c%mass_bin(1,ibin),'sum')
+        ! Scatter results to all MPI domains
+        call boundary_peak_dp(s,c%mass_bin(1,ibin))
+     end do
+#endif
+     ! Compute cumulative mass
+     do ipeak=1,c%npeak
+        if(c%ind_halo(ipeak).EQ.ipeak+c%npeak_cum(g%myid-1).AND. &
+             & c%halo_mass(ipeak) > r%mass_threshold*g%mp_min.AND. &
+             & c%relevance(ipeak) > r%relevance_threshold)then
+           do ibin=1,nbin-1
+              c%mass_bin(ipeak,ibin+1)=c%mass_bin(ipeak,ibin+1)+c%mass_bin(ipeak,ibin)
+           end do
+        endif
+     end do
+#ifndef WITHOUTMPI
+     do ibin=1,nbin
+        ! Scatter results to all MPI domains
+        call boundary_peak_dp(s,c%mass_bin(1,ibin))
+     end do
+#endif
+
+  endif
+
+  !===================================================
+  ! Recompute particle peak id for outputting in files
+  !===================================================
+  if(r%output_peak_part.and.r%pic)then
+     call particle_peak_id(s,p,no_halo)
+  endif
+  if(r%output_peak_star.and.r%star)then
+     call particle_peak_id(s,star,no_halo)
+  endif
+
+  end associate
+
+end subroutine particle_clump_properties
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine particle_peak_id(s,p,no_halo)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use boundaries, only: init_bound_flag
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::no_halo
+  !==================================================================
+  ! This routine reads from the grid peak map (flag1) the peak id
+  ! of the input particle object. It could be dark matter or stars.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !==================================================================
+  ! Local variables
+  integer,dimension(1:ndim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_cell
+  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer::global_peak_id,global_halo_id,global_center_id
+  integer::local_peak_id,ipeak,jpeak,merge_to
+  integer::halo_nr,peak_nr,center_nr
+  real(dp)::dx_loc,rmin,rmax,dist,xx
+  type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
+  logical::ok_level,ok_leaf
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Open cache for array flag1 (fetch)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+       pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
+
+  ! Loop over particles
+  no_halo=0
+  do ilevel=r%levelmin,r%nlevelmax
+
+     ! Mesh spacing in that level
+     dx_loc=r%boxlen/2**ilevel
+
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+        ok_level=.true.
+
+        ! Find parent cell at level ilevel
+        do idim=1,ndim
+           ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
+        end do
+
+        ! Get parent cell at level ilevel using cache
+        hash_cell(0)=ilevel+1
+        hash_cell(1:ndim)=ckey(1:ndim)
+        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+
+        ! If cell does not exist at current level, then find cell at coarser level
+        if(.not.associated(gridp))then
+
+           ! NGP at level ilevel-1
+           do idim=1,ndim
+              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+           end do
+
+           ! Get parent cell at level ilevel-1 using cache
+           hash_cell(0)=ilevel
+           hash_cell(1:ndim)=ckey(1:ndim)
+           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+           if(.not.associated(gridp))ok_level=.false.
+
+        end if
+
+        if(.not. ok_level)then
+           write(*,*)"Something went wrong in particle_clump_properties"
+           write(*,*)"Current level grid and coarser grid both dont exist..."
+           stop
+        endif
+
+        ! Read flag1 value
+        global_peak_id=gridp%flag1(icell)
+        if (global_peak_id>0)then
+           call get_local_peak_id(s,global_peak_id,local_peak_id)
+        else
+           no_halo=no_halo+1
+        end if
+
+        ! Store global peak id in workp array
+        p%sortp(ipart)=ipart
+        p%workp(ipart)=global_peak_id
+
+     end do
+     ! End loop over particles
+  end do
+  ! End loop over levels
+
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine particle_peak_id
 !##############################################################################
 !##############################################################################
 !##############################################################################

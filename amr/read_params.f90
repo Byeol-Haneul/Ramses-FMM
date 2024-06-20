@@ -289,6 +289,8 @@ subroutine m_read_params(pst)
   logical::clump_info=.false.
   logical::output_clump=.false.
   logical::output_peak=.false.
+  logical::output_peak_part=.false.
+  logical::output_peak_star=.false.
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
@@ -395,7 +397,7 @@ subroutine m_read_params(pst)
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
-  namelist/clump_params/clump_info,output_clump,output_peak &
+  namelist/clump_params/clump_info,output_clump,output_peak,output_peak_part,output_peak_star &
        & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
@@ -957,6 +959,8 @@ subroutine m_read_params(pst)
   s%r%clump_info=clump_info
   s%r%output_clump=output_clump
   s%r%output_peak=output_peak
+  s%r%output_peak_part=output_peak_part
+  s%r%output_peak_star=output_peak_star
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold

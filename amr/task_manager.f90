@@ -139,6 +139,7 @@ function worker_init(mdl) result(pst)
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
   use star_formation_module, only: r_star_formation
+  use sink_formation_module, only: r_sink_formation
   use feedback_module, only: r_thermal_feedback, r_mechanical_feedback
   use newdt_fine_module, only: r_newdt_part,r_broadcast_dt
 #ifdef GRAV
@@ -242,6 +243,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_UOLD,               pst,C_FUNLOC(r_set_uold),1,0,"set_uold")
   call mdl_add_service(pst%s%mdl,MDL_COOLING_FINE,           pst,C_FUNLOC(r_cooling_fine),1,0,"cooling_fine")
   call mdl_add_service(pst%s%mdl,MDL_STAR_FORMATION,         pst,C_FUNLOC(r_star_formation),1,2,"star_formation")
+  call mdl_add_service(pst%s%mdl,MDL_SINK_FORMATION,         pst,C_FUNLOC(r_sink_formation),1,2,"sink_formation")
   call mdl_add_service(pst%s%mdl,MDL_THERMAL_FEEDBACK,       pst,C_FUNLOC(r_thermal_feedback),1,2,"thermal_feedback")
   call mdl_add_service(pst%s%mdl,MDL_MECHANICAL_FEEDBACK,    pst,C_FUNLOC(r_mechanical_feedback),1,2,"mechanical_feedback")
   call mdl_add_service(pst%s%mdl,MDL_NEWDT_PART,             pst,C_FUNLOC(r_newdt_part),0,0,"newdt_part")

@@ -72,6 +72,7 @@ module mdl_parameters
      enumerator::MDL_SOURCE_HYDRO_FINE
      enumerator::MDL_COOLING_FINE
      enumerator::MDL_STAR_FORMATION
+     enumerator::MDL_SINK_FORMATION
      enumerator::MDL_THERMAL_FEEDBACK
      enumerator::MDL_MECHANICAL_FEEDBACK
      enumerator::MDL_NEWDT_PART

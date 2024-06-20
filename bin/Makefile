@@ -124,7 +124,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 input_hydro_condinit.o input_hydro_grafic.o input_hydro_gadget.o init_flow_fine.o \
 	 condinit.o vecpotentialinit.o \
 	 init_refine_adaptive.o init_refine_restart.o title.o units.o move_fine.o rho_ana.o \
-	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
+	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o sink_formation.o \
 	 task_manager.o amr_step.o adaptive_loop.o \
 	 write_patch.o  write_gitinfo.o write_makefile.o
 #############################################################################

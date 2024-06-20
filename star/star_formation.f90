@@ -160,6 +160,11 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         ! Select dense enough cells
         d = m%grid(igrid)%uold(ind,1)
         ok = ok .and. d > d0
+        ! Select cells in zoom region
+        if(r%ivar_refine>0)then
+           mask = m%grid(igrid)%uold(ind,r%ivar_refine)/d
+           ok = ok .and. mask > r%var_cut_refine
+        endif
         ! Draw Poisson process based on local SF rate
         if(ok)then
            mcell=d*vol

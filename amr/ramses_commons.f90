@@ -115,12 +115,14 @@ subroutine open_file(s,filename,nskip,ilun)
 
      if(index(filename,'clump').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(144A)')'     index       halo  lev   parent      ncell    peak_x             peak_y             peak_z     '//&
-             '        rho-               rho+               rho_av             mass_cl            relevance   '
+        write(ilun,'(240A)')'     index       halo  lev   parent      ncell    pos_x              pos_y              pos_z      '//&
+             '        vel_x              vel_y              vel_z              rho-               rho+               rho_av     '//&
+             '        mass_cl            relevance   '
      elseif(index(filename,'halo').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(135A)')'     index      ncell    peak_x             peak_y             peak_z     '//&
-             '        rho+               mass      '
+        write(ilun,'(364A)')'     index      ncell    pos_x              pos_y              pos_z      '//&
+             '        vel_x              vel_y              vel_z              rho+               mass       '//&
+             '        radius             r200b              rvir               cvir       '
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
         write(ilun)ndim

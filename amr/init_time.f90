@@ -346,7 +346,7 @@ subroutine init_cosmo(mdl,r,g)
   if(g%myid==1)then
      write(*,'(" Cosmological parameters:")')
      write(*,'(" aexp=",1pe10.3," H0=",1pe10.3," km s-1 Mpc-1")')g%aexp,g%h0
-     write(*,'(" omega_m=",F7.3," omega_l=",F7.3)')g%omega_m,g%omega_l
+     write(*,'(" omega_m=",F7.3," omega_l=",F7.3," omega_b=",F7.3)')g%omega_m,g%omega_l,g%omega_b
      write(*,'(" box size=",1pe10.3," h-1 Mpc")')g%boxlen_ini
   end if
   g%omega_k=1.d0-g%omega_l-g%omega_m
