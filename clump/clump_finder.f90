@@ -1,7 +1,7 @@
 module clump_finder_module
   use clump_merger_module
 contains
-subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
+subroutine m_clump_finder(pst,create_output,keep_alive,rtype)
   use output_clump_module
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
@@ -20,8 +20,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
   integer,dimension(1:flen/4)::input_array
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
-  integer::rtype,sink
-  integer,dimension(1:2)::input_array_sink
+  integer::rtype
 
 
 #if NDIM==3 && defined(GRAV)
@@ -39,15 +38,13 @@ subroutine m_clump_finder(pst,create_output,keep_alive,rtype,sink)
   !------------------------------------------
   ! Find relevant peak patches and halos
   !------------------------------------------
-  input_array_sink(1)=r%levelmin
-  input_array_sink(2)=sink
-  call r_clump_finder(pst,input_array_sink,1)
+  call r_clump_finder(pst,r%levelmin,1)
 
  
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
-  if(create_output.and.(sink==0))then
+  if(create_output)then
      call title(g%ifout-1,nchar)
      filename='output_'//TRIM(nchar)//'/'
      input_array=transfer(filename,input_array)
@@ -86,25 +83,22 @@ end subroutine m_clump_finder
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_clump_finder(pst,input_array,input_size)
+recursive subroutine r_clump_finder(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer,dimension(1:input_size)::input_array
 
-  integer::ilevel,sink
+  integer::ilevel
   integer::rID
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,input_array)
      call r_clump_finder(pst%pLower,input_array,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel = input_array(1)
-     sink = input_array(2)
-     call clump_finder(pst%s,sink)
+     call clump_finder(pst%s)
   endif
   
 end subroutine r_clump_finder
@@ -112,11 +106,10 @@ end subroutine r_clump_finder
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine clump_finder(s,sink)
+subroutine clump_finder(s)
   use ramses_commons, only: ramses_t
   implicit none
   type(ramses_t)::s
-  integer::sink
 
 #if NDIM==3 && defined(GRAV)
 
@@ -164,7 +157,6 @@ subroutine clump_finder(s,sink)
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
-  if(sink==0)then
     !----------------------------------------------------------------------
     ! Compute relevant peak properties such as mass and number of cells
     !----------------------------------------------------------------------
@@ -184,7 +176,6 @@ subroutine clump_finder(s,sink)
     if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
         call trim_clumps(s)
     endif
-  endif
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
