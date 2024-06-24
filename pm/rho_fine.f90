@@ -694,7 +694,6 @@ subroutine cic_part(s,p,ilevel)
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
   logical::star
-  !integer::rtype ! rtype 1 all 2 dm 3 star 4 gas
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -920,7 +919,7 @@ recursive subroutine r_split_part(pst,input_array,input_size)
   integer,dimension(1:input_size)::input_array
 
   integer::rID
-  
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,0,input_array)
      call r_split_part(pst%pLower,input_array,input_size)

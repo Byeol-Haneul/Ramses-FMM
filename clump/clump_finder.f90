@@ -37,6 +37,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ! Find relevant peak patches and halos
   !------------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
+  
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
@@ -892,6 +893,5 @@ end subroutine unpack_fetch_saddle
 !################################################################
 !################################################################
 #endif
-
 end module clump_finder_module
 
