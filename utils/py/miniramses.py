@@ -1165,13 +1165,19 @@ class HaloCat:
        """
        This function initialize the halo catalogue.
        """
+       self.index = np.empty(shape=(0),dtype=int)
+       self.ncell = np.empty(shape=(0),dtype=int)
        self.x = np.empty(shape=(0))
        self.y = np.empty(shape=(0))
        self.z = np.empty(shape=(0))
-       self.m = np.empty(shape=(0))
-       self.rho = np.empty(shape=(0))
-       self.ncell = np.empty(shape=(0),dtype=int)
-       self.index = np.empty(shape=(0),dtype=int)
+       self.u = np.empty(shape=(0))
+       self.v = np.empty(shape=(0))
+       self.w = np.empty(shape=(0))
+       self.dmax = np.empty(shape=(0))
+       self.mass = np.empty(shape=(0))
+       self.r200b = np.empty(shape=(0))
+       self.rvir = np.empty(shape=(0))
+       self.cvir = np.empty(shape=(0))
 
 def rd_halo(nout,**kwargs):
    """
@@ -1197,20 +1203,32 @@ def rd_halo(nout,**kwargs):
        name = str(i+1).zfill(5)
        file_name = "output_%s/halo.%s" % (output,name)
        halo_cat = ascii.read(file_name)
-       x = halo_cat['peak_x']
-       y = halo_cat['peak_y']
-       z = halo_cat['peak_z']
-       mass = halo_cat['mass']
-       rho = halo_cat['rho+']
-       ncell = halo_cat['ncell']
        index = halo_cat['index']
+       ncell = halo_cat['ncell']
+       x = halo_cat['pos_x']
+       y = halo_cat['pos_y']
+       z = halo_cat['pos_z']
+       u = halo_cat['vel_x']
+       v = halo_cat['vel_y']
+       w = halo_cat['vel_z']
+       dmax = halo_cat['rho+']
+       mass = halo_cat['mass']
+       r200b = halo_cat['r200b']
+       rvir = halo_cat['rvir']
+       cvir = halo_cat['cvir']
+       cat.index = np.append(cat.index,index)
+       cat.ncell = np.append(cat.ncell,ncell)
        cat.x = np.append(cat.x,x)
        cat.y = np.append(cat.y,y)
        cat.z = np.append(cat.z,z)
-       cat.rho = np.append(cat.rho,rho)
-       cat.m = np.append(cat.m,mass)
-       cat.ncell = np.append(cat.ncell,ncell)
-       cat.index = np.append(cat.index,index)
+       cat.u = np.append(cat.u,u)
+       cat.v = np.append(cat.v,v)
+       cat.w = np.append(cat.w,w)
+       cat.dmax = np.append(cat.dmax,dmax)
+       cat.mass = np.append(cat.mass,mass)
+       cat.r200b = np.append(cat.r200b,r200b)
+       cat.rvir = np.append(cat.rvir,rvir)
+       cat.cvir = np.append(cat.cvir,cvir)
 
    return cat
 
@@ -1222,17 +1240,20 @@ class ClumpCat:
        """
        This function initialize the halo catalogue.
        """
+       self.index = np.empty(shape=(0),dtype=int)
+       self.halo = np.empty(shape=(0),dtype=int)
+       self.parent = np.empty(shape=(0),dtype=int)
+       self.ncell = np.empty(shape=(0),dtype=int)
        self.x = np.empty(shape=(0))
        self.y = np.empty(shape=(0))
        self.z = np.empty(shape=(0))
-       self.m = np.empty(shape=(0))
-       self.rhop = np.empty(shape=(0))
-       self.rhom = np.empty(shape=(0))
-       self.rhos = np.empty(shape=(0))
-       self.ncell = np.empty(shape=(0),dtype=int)
-       self.halo = np.empty(shape=(0),dtype=int)
-       self.index = np.empty(shape=(0),dtype=int)
-       self.parent = np.empty(shape=(0),dtype=int)
+       self.u = np.empty(shape=(0))
+       self.v = np.empty(shape=(0))
+       self.w = np.empty(shape=(0))
+       self.mass = np.empty(shape=(0))
+       self.dmax = np.empty(shape=(0))
+       self.dmin = np.empty(shape=(0))
+       self.dsad = np.empty(shape=(0))
 
 def rd_clump(nout,**kwargs):
    """
@@ -1258,29 +1279,35 @@ def rd_clump(nout,**kwargs):
        name = str(i+1).zfill(5)
        file_name = "output_%s/clump.%s" % (output,name)
        halo_cat = ascii.read(file_name)
-       x = halo_cat['peak_x']
-       y = halo_cat['peak_y']
-       z = halo_cat['peak_z']
-       mass = halo_cat['mass_cl']
-       rhop = halo_cat['rho+']
-       rhom = halo_cat['rho-']
-       rhos = halo_cat['relevance']
-       rhos = rhop/rhos
-       ncell = halo_cat['ncell']
-       halo = halo_cat['halo']
        index = halo_cat['index']
+       halo = halo_cat['halo']
        parent = halo_cat['parent']
+       ncell = halo_cat['ncell']
+       x = halo_cat['pos_x']
+       y = halo_cat['pos_y']
+       z = halo_cat['pos_z']
+       u = halo_cat['vel_x']
+       v = halo_cat['vel_y']
+       w = halo_cat['vel_z']
+       mass = halo_cat['mass_cl']
+       dmax = halo_cat['rho+']
+       dmin = halo_cat['rho-']
+       dsad = halo_cat['relevance']
+       dsad = dmax/dsad
+       cat.index = np.append(cat.index,index)
+       cat.halo = np.append(cat.halo,halo)
+       cat.parent = np.append(cat.parent,parent)
+       cat.ncell = np.append(cat.ncell,ncell)
        cat.x = np.append(cat.x,x)
        cat.y = np.append(cat.y,y)
        cat.z = np.append(cat.z,z)
-       cat.m = np.append(cat.m,mass)
-       cat.rhop = np.append(cat.rhop,rhop)
-       cat.rhom = np.append(cat.rhom,rhom)
-       cat.rhos = np.append(cat.rhos,rhos)
-       cat.ncell = np.append(cat.ncell,ncell)
-       cat.halo = np.append(cat.halo,halo)
-       cat.index = np.append(cat.index,index)
-       cat.parent = np.append(cat.parent,parent)
+       cat.u = np.append(cat.u,u)
+       cat.v = np.append(cat.v,v)
+       cat.w = np.append(cat.w,w)
+       cat.mass = np.append(cat.mass,mass)
+       cat.dmax = np.append(cat.dmax,dmax)
+       cat.dmin = np.append(cat.dmin,dmin)
+       cat.dsad = np.append(cat.dsad,dsad)
 
    return cat
 
