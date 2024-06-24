@@ -21,7 +21,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   ! their grid Hilbert order.
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
-  integer::i,input_size,rtype ! rtype 1 all 2 dm 3 star 4 gas
+  integer::i,input_size,rtype ! rtype 0 all 1 dm 2 star 3 gas
   integer,dimension(1:2)::input_array
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -69,7 +69,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
      endif
 
      ! Gas mass deposition using pseudo-particles
-     if(r%hydro.AND.m%noct_tot(i)>0.AND.(rtype==1 .or. rtype==4))then
+     if(r%hydro.AND.m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==3))then
         if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
         call r_cic_multipole(pst,i,1)
      endif
@@ -80,7 +80,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   !-------------------------------------------------------
   ! Compute particle contribution to density field
   !-------------------------------------------------------
-  if(r%pic.AND.(rtype.ne.4))then
+  if(r%pic.AND.(rtype.ne.3))then
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
@@ -655,10 +655,10 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-     if(rtype.ne.3)then
+     if(rtype.ne.2)then
         call cic_part(pst%s,pst%s%p,ilevel)
      endif
-     if((pst%s%r%star).and.(rtype.ne.2))then
+     if((pst%s%r%star).and.(rtype.ne.1))then
         call cic_part(pst%s,pst%s%star,ilevel)
      endif
   endif
@@ -928,10 +928,10 @@ recursive subroutine r_split_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-     if(rtype.ne.3)then
+     if(rtype.ne.2)then
         call split_part(pst%s,pst%s%p,ilevel)
      endif
-     if((pst%s%r%star).and.(rtype.ne.2))then
+     if((pst%s%r%star).and.(rtype.ne.1))then
         call split_part(pst%s,pst%s%star,ilevel)
      endif
   endif

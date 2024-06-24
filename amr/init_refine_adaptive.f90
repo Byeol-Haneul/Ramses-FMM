@@ -42,7 +42,7 @@ subroutine m_init_refine_adaptive(pst)
 
 #ifdef GRAV
      if(pst%s%r%filetype.NE.'grafic_zoom')then
-        call m_rho_fine(pst,pst%s%r%levelmin,1)
+        call m_rho_fine(pst,pst%s%r%levelmin,0)
      endif
 #endif
 
