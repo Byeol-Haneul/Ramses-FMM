@@ -21,7 +21,6 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
 
-
 #if NDIM==3 && defined(GRAV)
 
   associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star)
@@ -32,13 +31,12 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !-----------------------------------------------------------------------
   ! Compute rho from gas density and/or dark matter and/or star particles
   !-----------------------------------------------------------------------
-  call m_rho_fine(pst,r%levelmin,r%ivar_clump) 
+  call m_rho_fine(pst,r%levelmin,r%rtype_clump) 
   
   !------------------------------------------
   ! Find relevant peak patches and halos
   !------------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
-
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------

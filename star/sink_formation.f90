@@ -262,7 +262,6 @@ subroutine m_sink_finder(pst,keep_alive)
     integer,dimension(1:flen/4)::input_array
     double precision::ttend, ttstart=0.0
     integer::dummy(1)
-    integer::rtype
   
   
 #if NDIM==3 && defined(GRAV)
@@ -275,7 +274,7 @@ subroutine m_sink_finder(pst,keep_alive)
     !-----------------------------------------------------------------------
     ! Compute rho from gas density and/or dark matter and/or star particles
     !-----------------------------------------------------------------------
-    call m_rho_fine(pst,r%levelmin,r%ivar_sink)
+    call m_rho_fine(pst,r%levelmin,r%rtype_sink)
     
     !------------------------------------------
     ! Find relevant peak patches and halos
@@ -375,6 +374,15 @@ subroutine m_sink_finder(pst,keep_alive)
     ! have similar peak density values are merged into relevant peaks
     !----------------------------------------------------------------------
     call merge_clumps(s,'relevance')
+    !----------------------------------------------------------------------
+    ! Compute relevant peak properties such as mass and number of cells
+    !----------------------------------------------------------------------
+    call compute_clump_properties(s)
+    !----------------------------------------------------------------------
+    ! Compute additional halo or particle-based clump properties.
+    !----------------------------------------------------------------------
+    call particle_clump_properties(s)
+
 #endif
   end subroutine sink_finder
 
