@@ -297,6 +297,9 @@ subroutine m_read_params(pst)
   real(dp)::saddle_threshold=-1
   real(dp)::mass_threshold=0
 
+  ! Sink parameters
+  integer::ivar_sink=0
+
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
   integer,dimension(1:6)::ic_skip_type=-1
@@ -394,7 +397,7 @@ subroutine m_read_params(pst)
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
-  namelist/sink_params/sink,nsinkmax,nsinktot
+  namelist/sink_params/sink,nsinkmax,nsinktot,ivar_sink
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -967,6 +970,8 @@ subroutine m_read_params(pst)
   s%r%saddle_threshold=saddle_threshold
   s%r%mass_threshold=mass_threshold
   s%r%ivar_clump=ivar_clump
+
+  s%r%ivar_sink=ivar_sink
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format

@@ -265,6 +265,9 @@ module amr_commons
      real(dp)::saddle_threshold=-1
      real(dp)::mass_threshold=0
 
+     ! Sink parameters
+     integer::ivar_sink=0
+
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format
      integer,dimension(1:6)::ic_skip_type=-1
