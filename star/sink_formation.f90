@@ -248,6 +248,7 @@ subroutine m_sink_finder(pst,keep_alive)
     use amr_parameters, only: flen
     use mdl_module, only: mdl_wtime
     use ramses_commons, only: pst_t
+    use clump_merger_module, only: r_deallocate_clump
 #ifdef GRAV
     use rho_fine_module, only: m_rho_fine
 #endif
