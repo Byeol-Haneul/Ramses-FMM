@@ -289,12 +289,16 @@ subroutine m_read_params(pst)
   logical::clump_info=.false.
   logical::output_clump=.false.
   logical::output_peak=.false.
+  integer::rho_type_clump=0
   logical::output_peak_part=.false.
   logical::output_peak_star=.false.
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
   real(dp)::mass_threshold=0
+
+  ! Sink parameters
+  integer::rho_type_sink=0
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -393,12 +397,12 @@ subroutine m_read_params(pst)
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
-  namelist/sink_params/sink,nsinkmax,nsinktot
+  namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
   namelist/clump_params/clump_info,output_clump,output_peak,output_peak_part,output_peak_star &
-       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold
+       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
@@ -965,6 +969,9 @@ subroutine m_read_params(pst)
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold
   s%r%mass_threshold=mass_threshold
+  s%r%rho_type_clump=rho_type_clump
+
+  s%r%rho_type_sink=rho_type_sink
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format

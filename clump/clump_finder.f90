@@ -31,13 +31,13 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !-----------------------------------------------------------------------
   ! Compute rho from gas density and/or dark matter and/or star particles
   !-----------------------------------------------------------------------
-  call m_rho_fine(pst,r%levelmin)
+  call m_rho_fine(pst,r%levelmin,r%rho_type_clump) 
   
   !------------------------------------------
   ! Find relevant peak patches and halos
   !------------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
- 
+
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
@@ -90,7 +90,7 @@ recursive subroutine r_clump_finder(pst,ilevel,input_size)
 
   integer::ilevel
   integer::rID
-  
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
      call r_clump_finder(pst%pLower,ilevel,input_size)
@@ -165,14 +165,14 @@ subroutine clump_finder(s)
   ! that the prescribed saddle density threshold.
   !----------------------------------------------------------------------
   if(s%r%saddle_threshold>0)then
-     call merge_clumps(s,'saddleden')
+    call merge_clumps(s,'saddleden')
   endif
   !----------------------------------------------------------------------
   ! Remove all peaks that are below the relevance threshold
   ! or the mass threshold in the flag1 global peak ID field.
   !----------------------------------------------------------------------
   if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
-     call trim_clumps(s)
+    call trim_clumps(s)
   endif
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
@@ -210,7 +210,7 @@ subroutine collect_test(s)
   integer,dimension(1:s%g%ncpu)::ntest_cpu
   integer(kind=8),dimension(0:s%g%ncpu)::ntest_cum
   logical::verbose_all=.false.
-  integer::action,ivar_clump
+  integer::action
   logical::ok
   real(kind=8)::dx,vol
   real(kind=8)::d,dx_loc

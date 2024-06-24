@@ -33,7 +33,7 @@ subroutine m_init_refine_basegrid(pst)
 
 #ifdef GRAV
   ! Compute total mass density from gas and particles on the base grid
-  call m_rho_fine(pst,r%levelmin)
+  call m_rho_fine(pst,r%levelmin,0)
 #endif
 
   end associate

@@ -13,7 +13,6 @@ recursive subroutine m_sink_formation(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_module, only: mdl_wtime
-  use clump_finder_module, only: m_clump_finder
   use clump_merger_module, only: r_deallocate_clump
   use mdl_parameters
   implicit none
@@ -27,7 +26,7 @@ recursive subroutine m_sink_formation(pst)
   !----------------------------
   ! Call the clump finder
   !----------------------------
-  call m_clump_finder(pst,.false.,.true.) ! Create no output and need to keep alive
+  call m_sink_finder(pst,.true.) ! Create no output and need to keep alive
 
   !----------------------------
   ! Create sink particles
@@ -244,4 +243,147 @@ subroutine sink_formation(r,g,m,p,c,ilevel,msink_loc)
 #endif
 
 end subroutine sink_formation
+
+subroutine m_sink_finder(pst,keep_alive)
+    use amr_parameters, only: flen
+    use mdl_module, only: mdl_wtime
+    use ramses_commons, only: pst_t
+#ifdef GRAV
+    use rho_fine_module, only: m_rho_fine
+#endif
+    implicit none
+    type(pst_t)::pst
+    logical::keep_alive
+    !-----------------------------------------------------------------------
+    ! This is the master routine for the RAMSES clump finder.
+    !-----------------------------------------------------------------------  
+    character(LEN=5)::nchar
+    character(LEN=flen)::filename,filedir
+    integer,dimension(1:flen/4)::input_array
+    double precision::ttend, ttstart=0.0
+    integer::dummy(1)
+  
+  
+#if NDIM==3 && defined(GRAV)
+  
+    associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star)
+  
+    write(*,*)'Entering clump finder'
+    ttstart = mdl_wtime(mdl)
+  
+    !-----------------------------------------------------------------------
+    ! Compute rho from gas density and/or dark matter and/or star particles
+    !-----------------------------------------------------------------------
+    call m_rho_fine(pst,r%levelmin,r%rho_type_sink)
+    
+    !------------------------------------------
+    ! Find relevant peak patches and halos
+    !------------------------------------------
+    call r_sink_finder(pst,r%levelmin,1)
+  
+    !------------------------------------------
+    ! Deallocate all peak arrays if needed
+    !------------------------------------------
+    if(.not. keep_alive)then
+       call r_deallocate_clump(pst,r%levelmin,1)
+    endif
+  
+    ttend = mdl_wtime(mdl)
+    print '(A,F14.7)',' Time elapsed in finding clumps:',ttend-ttstart
+  
+    end associate
+#endif
+  
+  end subroutine m_sink_finder
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+  recursive subroutine r_sink_finder(pst,ilevel,input_size)
+    use mdl_module
+    use ramses_commons, only: pst_t
+    use mdl_parameters
+    implicit none
+    type(pst_t)::pst
+    integer,VALUE::input_size
+  
+    integer::ilevel
+    integer::rID
+    if(pst%nLower>0)then
+       rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
+       call r_sink_finder(pst%pLower,ilevel,input_size)
+       call mdl_get_reply(pst%s%mdl,rID,0)
+    else
+       call sink_finder(pst%s)
+    endif
+    
+  end subroutine r_sink_finder
+  !###########################################################
+  !###########################################################
+  !###########################################################
+  !###########################################################
+  subroutine sink_finder(s)
+    use ramses_commons, only: ramses_t
+    use clump_finder_module
+    implicit none
+    type(ramses_t)::s
+  
+#if NDIM==3 && defined(GRAV)
+  
+    !----------------------------------------------------------------------
+    ! Count and collect all cells above the prescribed density threshold.
+    ! We call these cell test particles for the watershed algorithm.
+    !----------------------------------------------------------------------
+    call collect_test(s)
+    if(s%c%ntest_tot==0)return
+    !----------------------------------------------------------------------
+    ! Count and collect all density peaks.
+    ! We also compute for each test particle the coordinates of its
+    ! densest neighbor.
+    !----------------------------------------------------------------------
+    call collect_peak(s)
+    if(s%c%npeak_tot==0)return
+    !----------------------------------------------------------------------
+    ! Perform a segmentation of the density field using the watershed
+    ! algorithm. We get well defined peak patches around each peak.
+    ! As a result, each pair of neighboring peak patches are separated
+    ! by their saddle surface.
+    !----------------------------------------------------------------------
+    call collect_patch(s)
+    !----------------------------------------------------------------------
+    ! Allocate all peak patch based arrays
+    !----------------------------------------------------------------------
+    call allocate_peak_patch_arrays(s)
+    !----------------------------------------------------------------------
+    ! Update the MPI communicator for peaks
+    !----------------------------------------------------------------------
+    call build_peak_communicator(s)
+    !----------------------------------------------------------------------
+    ! We build the saddle density matrix.
+    ! Each pair of peaks is connected by a unique saddle point.
+    ! The saddle point is the densest point on the saddle surface,
+    !----------------------------------------------------------------------
+    call collect_saddle(s)
+    !----------------------------------------------------------------------
+    ! Update the MPI communicator for peaks
+    !----------------------------------------------------------------------
+    call build_peak_communicator(s)
+    !----------------------------------------------------------------------
+    ! Merge peaks based on a relevance criterion.
+    ! Peaks that are due to random noise fluctuations or peaks that
+    ! have similar peak density values are merged into relevant peaks
+    !----------------------------------------------------------------------
+    call merge_clumps(s,'relevance')
+    !----------------------------------------------------------------------
+    ! Compute relevant peak properties such as mass and number of cells
+    !----------------------------------------------------------------------
+    call compute_clump_properties(s)
+    !----------------------------------------------------------------------
+    ! Compute additional halo or particle-based clump properties.
+    !----------------------------------------------------------------------
+    call particle_clump_properties(s)
+
+#endif
+  end subroutine sink_finder
+
 end module sink_formation_module
