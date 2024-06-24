@@ -1433,15 +1433,12 @@ subroutine particle_clump_properties(s)
            dist=dist+xx**2
         end do
         dist=sqrt(dist)
-        ibin=1
         rad=2d0*(c%halo_mass(halo_nr)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
-        do
+        do ibin=1,nbin
            ! We use a simple linear binning as the mass is usually propto r
            if(dist<=dble(ibin)/dble(nbin)*rad)then
               c%mass_bin(halo_nr,ibin)=c%mass_bin(halo_nr,ibin)+p%mp(ipart)
               exit
-           else
-              ibin=ibin+1
            endif
         end do
      endif
