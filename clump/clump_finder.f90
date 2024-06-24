@@ -43,12 +43,12 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !------------------------------------------
   if(create_output)then
      call title(g%ifout-1,nchar)
-     filename='output_'//TRIM(nchar)//'/'
-     input_array=transfer(filename,input_array)
+     filedir='output_'//TRIM(nchar)//'/'
+     input_array=transfer(filedir,input_array)
      if(r%output_clump)write(*,*)'Writing clump properties files'
      if(r%output_peak)then
         write(*,*)'Writing clump field files'
-        filename=TRIM(filename)//'peak_header.txt'
+        filename=TRIM(filedir)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
      endif
      if(r%output_peak_part.and.r%pic)then
@@ -177,7 +177,7 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
-  call particle_clump_properties(s)
+  if(s%r%pic)call particle_clump_properties(s)
 
 #endif
 end subroutine clump_finder

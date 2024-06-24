@@ -34,11 +34,8 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: min_dens ! min density of the clump
        real(dp),allocatable,dimension(:) :: av_dens ! average density of the clump
        real(dp),allocatable,dimension(:) :: clump_vol ! volume of the clump
-       real(dp),allocatable,dimension(:) :: halo_maxmass ! maximum clump mass in halo
-       integer,allocatable,dimension(:) :: ind_maxmass ! clump id with maximum mass in halo
        real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark mater particles
        real(dp),allocatable,dimension(:,:) :: peak_vel ! clump velocity using directly dark mater particles
-       real(dp),allocatable,dimension(:) :: max_dist ! maximum particle distance inside parent halo
        real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo
 
        integer::peak_recv_tot,peak_send_tot ! Peak communicator arrays

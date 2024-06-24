@@ -122,7 +122,7 @@ subroutine open_file(s,filename,nskip,ilun)
         open(unit=ilun,file=fileloc,form='formatted')
         write(ilun,'(364A)')'     index      ncell    pos_x              pos_y              pos_z      '//&
              '        vel_x              vel_y              vel_z              rho+               mass       '//&
-             '        radius             r200b              rvir               cvir       '
+             '        r200b              rvir               cvir       '
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
         write(ilun)ndim

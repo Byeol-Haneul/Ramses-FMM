@@ -63,12 +63,10 @@ subroutine output_clump_properties(s,filename)
   ! This routine output the clump properties for each processor
   !----------------------------------------------------------------
   integer::ilun,j
-  integer::global_center_id,center_nr
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(dp)::rad,r200b,rvir,concentration
   real(dp),dimension(1:nbin)::mbin
-  real(dp),dimension(1:ndim)::center_pos,peak_pos,center_vel
 
   associate(r=>s%r,g=>s%g,c=>s%c)
 
@@ -87,12 +85,8 @@ subroutine output_clump_properties(s,filename)
              ,c%lev_peak(j)&
              ,c%new_peak(j)&
              ,c%n_cells(j)&
-             ,c%peak_pos(j,1)&
-             ,c%peak_pos(j,2)&
-             ,c%peak_pos(j,3)&
-             ,c%peak_vel(j,1)&
-             ,c%peak_vel(j,2)&
-             ,c%peak_vel(j,3)&
+             ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
+             ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
              ,c%min_dens(j)&
              ,c%max_dens(j)&
              ,c%clump_mass(j)/c%clump_vol(j)&
@@ -114,22 +108,19 @@ subroutine output_clump_properties(s,filename)
         if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.&
              & c%halo_mass(j) > r%mass_threshold*g%mp_min.AND. &
              & c%relevance(j) > r%relevance_threshold)then
-           global_center_id=c%ind_maxmass(j)
-           call get_local_peak_id(s,global_center_id,center_nr)
-           center_pos(1)=c%peak_pos(center_nr,1)
-           center_pos(2)=c%peak_pos(center_nr,2)
-           center_pos(3)=c%peak_pos(center_nr,3)
-           center_vel(1)=c%peak_vel(center_nr,1)
-           center_vel(2)=c%peak_vel(center_nr,2)
-           center_vel(3)=c%peak_vel(center_nr,3)
            mbin=c%mass_bin(j,1:nbin)
-           rad=c%max_dist(j)
+           rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
            call halo_mass_def(s,mbin,rad,r200b,rvir,concentration)
-           write(ilun,'(I10,X,I10,15(X,1PE18.9E2))')&
-                j+c%npeak_cum(g%myid-1),c%n_cells_halo(j)&
-                ,center_pos(1),center_pos(2),center_pos(3)&
-                ,center_vel(1),center_vel(2),center_vel(3)&
-                ,c%max_dens(j),c%halo_mass(j),rad,r200b,rvir,concentration
+           write(ilun,'(I10,X,I10,11(X,1PE18.9E2))')&
+                j+c%npeak_cum(g%myid-1)&
+                ,c%n_cells_halo(j)&
+                ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
+                ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
+                ,c%max_dens(j)&
+                ,c%halo_mass(j)&
+                ,r200b&
+                ,rvir&
+                ,concentration
         endif
      enddo
 
