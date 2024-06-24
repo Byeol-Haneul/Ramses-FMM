@@ -274,7 +274,7 @@ subroutine m_sink_finder(pst,keep_alive)
     !-----------------------------------------------------------------------
     ! Compute rho from gas density and/or dark matter and/or star particles
     !-----------------------------------------------------------------------
-    call m_rho_fine(pst,r%levelmin,r%rtype_sink)
+    call m_rho_fine(pst,r%levelmin,r%rho_type_sink)
     
     !------------------------------------------
     ! Find relevant peak patches and halos

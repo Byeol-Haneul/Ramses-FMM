@@ -31,13 +31,13 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !-----------------------------------------------------------------------
   ! Compute rho from gas density and/or dark matter and/or star particles
   !-----------------------------------------------------------------------
-  call m_rho_fine(pst,r%levelmin,r%rtype_clump) 
+  call m_rho_fine(pst,r%levelmin,r%rho_type_clump) 
   
   !------------------------------------------
   ! Find relevant peak patches and halos
   !------------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
-  
+
   !------------------------------------------
   ! Output clumps properties to file
   !------------------------------------------
