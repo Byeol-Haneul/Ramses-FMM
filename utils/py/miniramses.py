@@ -175,7 +175,7 @@ def rd_histo(filename):
     return h
 
 class Part:
-    def __init__(self,nnp,nndim,star=False):
+    def __init__(self,nnp,nndim,star=False,peak=False):
         self.np = nnp
         self.ndim = nndim
         self.xp = np.zeros([nndim,nnp])
@@ -184,7 +184,9 @@ class Part:
         if(star):
             self.zp = np.zeros([nnp])
             self.tp = np.zeros([nnp])
-
+        if(peak):
+            self.pid = np.zeros([nnp],dtype=np.int32)
+            
 def rd_part(nout,**kwargs):
     """This function reads a RAMSES particle file (unformatted Fortran binary) 
     as produced by the RAMSES code in the snapshot directory output_00* 
@@ -195,7 +197,8 @@ def rd_part(nout,**kwargs):
 
     Optional args:
 
-        center: a numpy array containing the coordinates of the center of the sphere restricting the region to read in data.
+        center: a numpy array containing the coordinates of the center of the sphere restricting
+                the region to read in data.
 
         radius: the radius of the sphere restricting the region to read in data.
 
@@ -220,6 +223,7 @@ def rd_part(nout,**kwargs):
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
     star = kwargs.get("star",False)
+    peak = kwargs.get("peak",False)
 
     car1 = str(nout).zfill(5)
     i = rd_info(nout,path=path,backup=backup)
@@ -236,11 +240,10 @@ def rd_part(nout,**kwargs):
     #    cpulist = range(1,ncpu+1)
     cpulist = range(1,ncpu+1)
 
+    prefix="/part."        
     if(star):
         prefix="/star."
-    else:
-        prefix="/part."        
-    
+
     npart = 0
     for icpu in cpulist:
         car2 = str(icpu).zfill(5)
@@ -256,11 +259,11 @@ def rd_part(nout,**kwargs):
     print(txt)
     print("Reading particle data...")
 
-    p = Part(npart,ndim,star)
+    p = Part(npart,ndim,star,peak)
     p.np = npart
     p.ndim = ndim
-    ipart = 0
 
+    ipart = 0
     for	icpu in	cpulist:
         car2 = str(icpu).zfill(5)
         if(backup):
@@ -320,6 +323,20 @@ def rd_part(nout,**kwargs):
 
         ipart = ipart + npart2
 
+    if(peak):
+        prefix="/peak_part."        
+        if(star):
+            prefix="/peak_star."
+        ipart = 0
+        for icpu in cpulist:
+            car2 = str(icpu).zfill(5)
+            filename = path+"output_"+car1+prefix+car2
+            npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
+            offset = 8
+            pid = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
+            p.pid[ipart:ipart+npart2] = pid
+            ipart = ipart + npart2
+    
     if ( not (center is None)  and not (radius is None) ):
         # Filtering particles
         r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
@@ -330,6 +347,8 @@ def rd_part(nout,**kwargs):
         if(star):
             p.zp = p.zp[r < radius]
             p.tp = p.tp[r < radius]
+        if(peak):
+            p.pid = p.pid[r < radius]
 
     return p
 

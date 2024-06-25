@@ -57,20 +57,21 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%max_dens)
 
   deallocate(c%n_cells)
-  deallocate(c%n_cells_halo)
   deallocate(c%lev_peak)
   deallocate(c%new_peak)
-  deallocate(c%ind_halo)
-  deallocate(c%halo_mass)
-  deallocate(c%clump_mass)
   deallocate(c%relevance)
 
+  deallocate(c%n_cells_halo)
+  deallocate(c%ind_halo)
+  deallocate(c%halo_mass)
+
+  deallocate(c%clump_mass)
+  deallocate(c%clump_vol)
   deallocate(c%clump_size)
   deallocate(c%peak_pos)
   deallocate(c%center_of_mass)
   deallocate(c%min_dens)
   deallocate(c%av_dens)
-  deallocate(c%clump_vol)
 
   deallocate(c%particle_mass)
   deallocate(c%peak_vel)
@@ -106,20 +107,21 @@ subroutine allocate_peak_patch_arrays(s)
   ! Allocate peak-patch_properties
   !-------------------------------
   allocate(c%n_cells(1:c%npeak_max))
-  allocate(c%n_cells_halo(1:c%npeak_max))
   allocate(c%lev_peak(1:c%npeak_max))
   allocate(c%new_peak(c%npeak_max))
-  allocate(c%ind_halo(1:c%npeak_max))
-  allocate(c%halo_mass(1:c%npeak_max))
-  allocate(c%clump_mass(1:c%npeak_max))
   allocate(c%relevance(1:c%npeak_max))
 
+  allocate(c%n_cells_halo(1:c%npeak_max))
+  allocate(c%ind_halo(1:c%npeak_max))
+  allocate(c%halo_mass(1:c%npeak_max))
+
+  allocate(c%clump_mass(1:c%npeak_max))
   allocate(c%clump_size(1:c%npeak_max,1:ndim))
+  allocate(c%clump_vol(1:c%npeak_max))
   allocate(c%peak_pos(1:c%npeak_max,1:ndim))
   allocate(c%center_of_mass(1:c%npeak_max,1:ndim))
   allocate(c%min_dens(1:c%npeak_max))
   allocate(c%av_dens(1:c%npeak_max))
-  allocate(c%clump_vol(1:c%npeak_max))
 
   allocate(c%particle_mass(1:c%npeak_max))
   allocate(c%peak_vel(1:c%npeak_max,1:ndim))
@@ -447,7 +449,7 @@ subroutine merge_clumps(s,action)
               c%new_peak(ipeak)=merge_to
            endif
         end do
-        ! Update boundary conditions for new_peak and clump_mass arrays
+        ! Update boundary conditions for new_peak array
         call boundary_peak_int(s,c%new_peak)
         iter=iter+1
 #ifndef WITHOUTMPI
