@@ -347,6 +347,6 @@ subroutine sink_clump(s)
   endif
   
 #endif
-end subroutine sink_finder
+end subroutine sink_clump
 
 end module sink_formation_module
