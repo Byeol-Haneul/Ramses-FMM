@@ -54,12 +54,12 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      endif
      if(r%output_peak_part.and.r%pic)then
         ! Re-compute particle peak id for outputting in files
-        call particle_peak_id(s,p,no_halo)
+        call particle_peak_id(pst%s,p,no_halo)
         filename=TRIM(filedir)//'peak_part_header.txt'
         call output_peak_header(r,g,p,filename)
      endif
      if(r%output_peak_star.and.r%star)then
-        call particle_peak_id(s,star,no_halo)
+        call particle_peak_id(pst%s,star,no_halo)
         filename=TRIM(filedir)//'peak_star_header.txt'
         call output_peak_header(r,g,star,filename)
      endif
