@@ -1195,7 +1195,7 @@ subroutine compute_clump_properties(s,rtype)
       c%center_of_mass(peak_nr,1:ndim)=c%center_of_mass(peak_nr,1:ndim)+vol*d*xcell(1:ndim)
       ! Clump velocity for gas
       if (r%hydro.AND.(rtype.eq.3))then !(rtype.eq.0).or.
-        c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+vol*m%grid(igrid)%uold(ind,2:4)
+        c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+vol*m%grid(igrid)%uold(ind,2:ndim+1)
       endif
     end if
   end do
