@@ -1201,7 +1201,7 @@ def rd_halo(nout,**kwargs):
    cat = HaloCat()
    for i in range(0, ncpu):
        name = str(i+1).zfill(5)
-       file_name = "output_%s/halo.%s" % (output,name)
+       file_name = path+"output_%s/halo.%s" % (output,name)
        halo_cat = ascii.read(file_name)
        index = halo_cat['index']
        ncell = halo_cat['ncell']
@@ -1277,7 +1277,7 @@ def rd_clump(nout,**kwargs):
    cat = ClumpCat()
    for i in range(0, ncpu):
        name = str(i+1).zfill(5)
-       file_name = "output_%s/clump.%s" % (output,name)
+       file_name = path+"output_%s/clump.%s" % (output,name)
        halo_cat = ascii.read(file_name)
        index = halo_cat['index']
        halo = halo_cat['halo']
