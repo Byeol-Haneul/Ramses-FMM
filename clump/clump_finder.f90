@@ -20,6 +20,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   integer,dimension(1:flen/4)::input_array
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
+  integer::no_halo
 
 #if NDIM==3 && defined(GRAV)
 
@@ -52,10 +53,13 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         call file_descriptor_clump(r,filename)
      endif
      if(r%output_peak_part.and.r%pic)then
+        ! Re-compute particle peak id for outputting in files
+        call particle_peak_id(s,p,no_halo)
         filename=TRIM(filedir)//'peak_part_header.txt'
         call output_peak_header(r,g,p,filename)
      endif
      if(r%output_peak_star.and.r%star)then
+        call particle_peak_id(s,star,no_halo)
         filename=TRIM(filedir)//'peak_star_header.txt'
         call output_peak_header(r,g,star,filename)
      endif
@@ -158,7 +162,7 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
-  call compute_clump_properties(s)
+  call compute_clump_properties(s,s%r%rho_type_clump)
   !----------------------------------------------------------------------
   ! Merge all neighboring peaks above the prescribed density
   ! threshold into halos, only if their saddle point density is larger
@@ -177,8 +181,13 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
-  if(s%r%pic)call particle_clump_properties(s)
-
+  if(s%r%pic.AND.(s%r%rho_type_clump.ne.3))then
+    if(s%r%rho_type_clump.ne.2)then
+      call particle_clump_properties(s,s%p)
+    elseif(s%r%rho_type_clump.ne.1)then
+      call particle_clump_properties(s,s%star)
+    endif
+  endif
 #endif
 end subroutine clump_finder
 !################################################################
