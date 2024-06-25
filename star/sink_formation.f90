@@ -378,11 +378,15 @@ subroutine m_sink_finder(pst,keep_alive)
     !----------------------------------------------------------------------
     ! Compute relevant peak properties such as mass and number of cells
     !----------------------------------------------------------------------
-    call compute_clump_properties(s)
+    call compute_clump_properties(s,s%r%rho_type_sink)
     !----------------------------------------------------------------------
     ! Compute additional halo or particle-based clump properties.
     !----------------------------------------------------------------------
-    call particle_clump_properties(s)
+    if(s%r%rho_type_sink.ne.2)then
+      call particle_clump_properties(s,s%p)
+    elseif(s%r%rho_type_sink.ne.1)then
+      call particle_clump_properties(s,s%star)
+    endif
 
 #endif
   end subroutine sink_finder
