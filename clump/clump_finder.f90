@@ -29,19 +29,19 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   write(*,*)'Entering clump finder'
   ttstart = mdl_wtime(mdl)
 
-  !-----------------------------------------------------------------------
-  ! Compute rho from gas density and/or dark matter and/or star particles
-  !-----------------------------------------------------------------------
+  !--------------------------------------------------------------
+  ! Compute rho from gas density or dark matter or star particles
+  !--------------------------------------------------------------
   call m_rho_fine(pst,r%levelmin,r%rho_type_clump) 
   
-  !------------------------------------------
+  !-------------------------------------
   ! Find relevant peak patches and halos
-  !------------------------------------------
+  !-------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
 
-  !------------------------------------------
+  !---------------------------------
   ! Output clumps properties to file
-  !------------------------------------------
+  !---------------------------------
   if(create_output)then
      call title(g%ifout-1,nchar)
      filedir='output_'//TRIM(nchar)//'/'
@@ -52,8 +52,8 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         filename=TRIM(filedir)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
      endif
+     ! Compute particle peak id for outputting to file
      if(r%output_peak_part.and.r%pic)then
-        ! Re-compute particle peak id for outputting in files
         call particle_peak_id(pst%s,p,no_halo)
         filename=TRIM(filedir)//'peak_part_header.txt'
         call output_peak_header(r,g,p,filename)
@@ -181,12 +181,11 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
-  if(s%r%pic.AND.(s%r%rho_type_clump.ne.3))then
-    if(s%r%rho_type_clump.ne.2)then
-      call particle_clump_properties(s,s%p)
-    elseif(s%r%rho_type_clump.ne.1)then
-      call particle_clump_properties(s,s%star)
-    endif
+  if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
+     call particle_clump_properties(s,s%p)
+  endif
+  if(s%r%star.and.s%r%rho_type_clump.eq.2)then
+     call particle_clump_properties(s,s%star)
   endif
 #endif
 end subroutine clump_finder
