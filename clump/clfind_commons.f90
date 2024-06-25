@@ -37,7 +37,10 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark mater particles
        real(dp),allocatable,dimension(:,:) :: peak_vel ! clump velocity using directly dark mater particles
        real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo
-
+       logical,allocatable,dimension(:) :: occupied ! is peak occupied by a sink particle
+       logical,allocatable,dimension(:) :: form_peak ! does peak form a new sink particle
+       real(dp),allocatable,dimension(:) :: var_refine ! refinement mask variable in peak patch
+       
        integer::peak_recv_tot,peak_send_tot ! Peak communicator arrays
        integer,allocatable,dimension(:)::peak_send_cnt,peak_send_oft
        integer,allocatable,dimension(:)::peak_recv_cnt,peak_recv_oft

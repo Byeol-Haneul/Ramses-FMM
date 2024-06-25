@@ -77,6 +77,10 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%peak_vel)
   deallocate(c%mass_bin)
 
+  deallocate(c%occupied)
+  deallocate(c%var_refine)
+  deallocate(c%form_sink)
+
   ! Deallocate sparse density matrix
   call sparse_kill(c%sparse_saddle_dens)
 
@@ -126,6 +130,10 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%particle_mass(1:c%npeak_max))
   allocate(c%peak_vel(1:c%npeak_max,1:ndim))
   allocate(c%mass_bin(1:c%npeak_max,1:nbin))
+
+  allocate(c%occupied(1:c%npeak_max))
+  allocate(c%var_refine(1:c%npeak_max))
+  allocate(c%form_sink(1:c%npeak_max))
 
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points

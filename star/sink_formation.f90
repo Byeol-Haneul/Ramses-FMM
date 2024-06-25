@@ -137,11 +137,9 @@ subroutine sink_formation(r,g,m,p,c,ilevel,msink_loc)
      if(c%clump_mass(j)<=r%mass_threshold*g%mp_min)ok=.false.
      if(c%occupied(j))ok=.false.
      if(r%ivar_refine>0.and.c%var_refine(j)<=r%var_cut_refine)ok=.false.
-     endif
-     if(ok)then
-        c%form_sink(j)=ok
-        nsite=nsite+1
-     endif
+     ! Set sink formation flag
+     c%form_sink(j)=ok
+     if(ok)nsite=nsite+1
   end do
 
   !---------------------------------------------------------
