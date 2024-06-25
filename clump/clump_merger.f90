@@ -1076,7 +1076,7 @@ end subroutine analyze_peak_memory
 !################################################################
 !################################################################
 !################################################################
-subroutine compute_clump_properties(s)
+subroutine compute_clump_properties(s,rtype)
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
@@ -1088,6 +1088,7 @@ subroutine compute_clump_properties(s)
   integer::info
 #endif
   type(ramses_t)::s
+  integer::rtype
   !----------------------------------------------------------------------------
   ! This subroutine performs a loop over all cells above the threshold and
   ! collects the  relevant information. After some MPI communications,
@@ -1191,7 +1192,10 @@ subroutine compute_clump_properties(s)
 
       ! Clump center of mass location
       c%center_of_mass(peak_nr,1:ndim)=c%center_of_mass(peak_nr,1:ndim)+vol*d*xcell(1:ndim)
-
+      ! Clump velocity for gas
+      if (r%hydro.AND.((rtype.eq.0).or.(rtype.eq.3)))then
+        c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+vol*m%grid(igrid)%uold(ind,2:4)
+      endif
     end if
   end do
   call build_peak_communicator(s)
@@ -1211,6 +1215,9 @@ subroutine compute_clump_properties(s)
   do ipeak=1,c%npeak
      if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
         c%center_of_mass(ipeak,1:ndim)=c%center_of_mass(ipeak,1:ndim)/c%clump_mass(ipeak)
+        if (r%hydro.AND.((rtype.eq.0).or.(rtype.eq.3)))then
+            c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%clump_mass(ipeak)
+        endif
      end if
   end do
 
@@ -1312,10 +1319,10 @@ end subroutine trim_clumps
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_clump_properties(s)
+subroutine particle_clump_properties(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
-  use ramses_commons, only: ramses_t
+  use ramses_commons, only: ramses_t,part_t
   use nbors_utils
   use cache_commons
   use cache
@@ -1324,6 +1331,7 @@ subroutine particle_clump_properties(s)
   use hilbert
   implicit none
   type(ramses_t)::s
+  type(part_t)::p
   !==================================================================
   ! This routine computes various clump properties.
   ! In particular, it computes for each particle its parent peak id.
@@ -1342,7 +1350,7 @@ subroutine particle_clump_properties(s)
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%p,star=>s%star)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)!,p=>s%p,star=>s%star
 
   !---------------------------------------
   ! Reads peak id of dark matter particles
@@ -1471,7 +1479,7 @@ subroutine particle_clump_properties(s)
      call particle_peak_id(s,p,no_halo)
   endif
   if(r%output_peak_star.and.r%star)then
-     call particle_peak_id(s,star,no_halo)
+     call particle_peak_id(s,s%star,no_halo)
   endif
 
   end associate

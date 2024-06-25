@@ -158,7 +158,7 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
-  call compute_clump_properties(s)
+  call compute_clump_properties(s,s%r%rho_type_clump)
   !----------------------------------------------------------------------
   ! Merge all neighboring peaks above the prescribed density
   ! threshold into halos, only if their saddle point density is larger
@@ -177,8 +177,13 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
-  if(s%r%pic)call particle_clump_properties(s)
-
+  if(s%r%pic.AND.(s%r%rho_type_clump.ne.3))then
+    if(s%r%rho_type_clump.ne.2)then
+      call particle_clump_properties(s,s%p)
+    elseif(s%r%rho_type_clump.ne.1)then
+      call particle_clump_properties(s,s%star)
+    endif
+  endif
 #endif
 end subroutine clump_finder
 !################################################################
