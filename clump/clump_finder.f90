@@ -20,6 +20,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   integer,dimension(1:flen/4)::input_array
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
+  integer::no_halo
 
 #if NDIM==3 && defined(GRAV)
 
@@ -52,10 +53,13 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         call file_descriptor_clump(r,filename)
      endif
      if(r%output_peak_part.and.r%pic)then
+        ! Re-compute particle peak id for outputting in files
+        call particle_peak_id(s,p,no_halo)
         filename=TRIM(filedir)//'peak_part_header.txt'
         call output_peak_header(r,g,p,filename)
      endif
      if(r%output_peak_star.and.r%star)then
+        call particle_peak_id(s,s%star,no_halo)
         filename=TRIM(filedir)//'peak_star_header.txt'
         call output_peak_header(r,g,star,filename)
      endif

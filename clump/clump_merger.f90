@@ -1208,6 +1208,7 @@ subroutine compute_clump_properties(s,rtype)
   call virtual_peak_dp(s,c%clump_vol,'sum')
   do i=1,ndim
      call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
+     call virtual_peak_dp(s,c%peak_vel(1,i),'sum')
   end do
 #endif
 
@@ -1226,6 +1227,7 @@ subroutine compute_clump_properties(s,rtype)
   do i=1,ndim
      call boundary_peak_dp(s,c%peak_pos(1,i))
      call boundary_peak_dp(s,c%center_of_mass(1,i))
+     call boundary_peak_dp(s,c%peak_vel(1,i))
   end do
 #endif
 
@@ -1350,7 +1352,7 @@ subroutine particle_clump_properties(s,p)
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
 
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)!,p=>s%p,star=>s%star
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
   !---------------------------------------
   ! Reads peak id of dark matter particles
@@ -1472,15 +1474,7 @@ subroutine particle_clump_properties(s,p)
 
   endif
 
-  !----------------------------------------------------
-  ! Re-compute particle peak id for outputting in files
-  !----------------------------------------------------
-  if(r%output_peak_part)then
-     call particle_peak_id(s,p,no_halo)
-  endif
-  if(r%output_peak_star.and.r%star)then
-     call particle_peak_id(s,s%star,no_halo)
-  endif
+  
 
   end associate
 
