@@ -1116,6 +1116,7 @@ subroutine compute_clump_properties(s,rtype)
   c%halo_mass=0d0; c%clump_mass=0d0; c%clump_vol=0d0
   c%center_of_mass=0d0
   c%peak_pos=0d0
+  c%peak_vel=0d0
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering compute clump properties'
   
@@ -1324,7 +1325,8 @@ end subroutine trim_clumps
 subroutine particle_clump_properties(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
-  use ramses_commons, only: ramses_t,part_t
+  use ramses_commons, only: ramses_t
+  use pm_commons, only:part_t
   use nbors_utils
   use cache_commons
   use cache

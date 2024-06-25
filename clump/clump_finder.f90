@@ -59,7 +59,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         call output_peak_header(r,g,p,filename)
      endif
      if(r%output_peak_star.and.r%star)then
-        call particle_peak_id(s,s%star,no_halo)
+        call particle_peak_id(s,star,no_halo)
         filename=TRIM(filedir)//'peak_star_header.txt'
         call output_peak_header(r,g,star,filename)
      endif
