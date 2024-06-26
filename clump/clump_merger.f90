@@ -1125,7 +1125,7 @@ subroutine compute_clump_properties(s,rtype)
   c%min_dens=huge(zero)
   c%n_cells=0; c%n_cells_halo=0
   c%halo_mass=0d0; c%clump_mass=0d0; c%clump_vol=0d0
-  c%center_of_mass=0d0; c%peak_pos=0d0; c%peak_vel=0d0
+  c%center_of_mass=0d0; c%peak_pos=0d0; c%peak_vel=0d0; c%peak_acc=0d0
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering compute clump properties'
 
@@ -1139,17 +1139,23 @@ subroutine compute_clump_properties(s,rtype)
      dx_loc=r%boxlen/2**ilevel
      ! Peak cell coordinates and acceleration
      xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
-     accel(1)=m%grid(igrid)%f(ind,1)
 #if NDIM>1
      xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
-     accel(2)=m%grid(igrid)%f(ind,2)
 #endif
 #if NDIM>2
      xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
-     accel(3)=m%grid(igrid)%f(ind,3)
 #endif
      c%peak_pos(ipeak,1:ndim)=xcell(1:ndim)
+#ifdef GRAV
+     accel(1)=m%grid(igrid)%f(ind,1)
+#if NDIM>1
+     accel(2)=m%grid(igrid)%f(ind,2)
+#endif
+#if NDIM>2
+     accel(3)=m%grid(igrid)%f(ind,3)
+#endif
      c%peak_acc(ipeak,1:ndim)=accel(1:ndim)
+#endif
   end do
 #ifndef WITHOUTMPI
   ! Scatter results to all MPI domains
