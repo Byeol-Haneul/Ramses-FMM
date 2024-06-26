@@ -105,7 +105,7 @@ subroutine sink_formation(r,g,m,p,c,ilevel,msink_loc)
 #endif
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,nsink_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,nsink_cpu
-  integer::i,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nsink,nsink_loc
+  integer::i,j,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nsink,nsink_loc
   integer::peak_nr
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dx,vol,factG,f,d,mask
