@@ -32,12 +32,20 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            filename2=TRIM(filename)//'star.'
            call backup_part(pst%s%r,pst%s%g,pst%s%star,filename2)
         endif
+        if(pst%s%r%sink)then
+           filename2=TRIM(filename)//'sink.'
+           call backup_part(pst%s%r,pst%s%g,pst%s%sink,filename2)
+        endif
      else
         filename2=TRIM(filename)//'part.'
         call output_part(pst%s,pst%s%p,filename2)
         if(pst%s%r%star)then
            filename2=TRIM(filename)//'star.'
            call output_part(pst%s,pst%s%star,filename2)
+        endif
+        if(pst%s%r%star)then
+           filename2=TRIM(filename)//'sink.'
+           call output_part(pst%s,pst%s%sink,filename2)
         endif
      endif
   endif

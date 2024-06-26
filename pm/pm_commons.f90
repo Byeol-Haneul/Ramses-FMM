@@ -1,35 +1,32 @@
 module pm_commons
-  use amr_parameters, only: dp, i8b
 
-  integer,parameter::TYPE_DM=1
-  integer,parameter::TYPE_STAR=2
+  use amr_parameters, only: dp, i8b
 
   type part_t
 
-     integer :: type       ! Particle type
-     integer :: npart=0     ! Actual number of particles in processor
+     integer :: type ! Particle type
+     integer :: npart=0 ! Actual number of particles in processor
      integer(kind=8):: npart_tot=0 ! Total number of particles in all processors
      integer :: npart_max=0 ! Maximum number of particles in all processors
      integer :: nvaralloc ! Number of allocated variables
      
      ! Particle dependent arrays
-     real(dp),allocatable,dimension(:,:)   ::xp       ! Positions
-     real(dp),allocatable,dimension(:,:)   ::vp       ! Velocities
-     real(dp),allocatable,dimension(:)     ::mp       ! Masses
+     real(dp),allocatable,dimension(:,:)   ::xp       ! Position
+     real(dp),allocatable,dimension(:,:)   ::vp       ! Velocity
+     real(dp),allocatable,dimension(:,:)   ::fp       ! Acceleration
+     real(dp),allocatable,dimension(:)     ::mp       ! Mass
      real(dp),allocatable,dimension(:)     ::zp       ! Metallicity
-     real(dp),allocatable,dimension(:)     ::tp       ! Formation times
+     real(dp),allocatable,dimension(:)     ::tp       ! Formation time
      real(dp),allocatable,dimension(:)     ::up       ! Specific energy
-#ifdef OUTPUT_PARTICLE_POTENTIAL
      real(dp),allocatable,dimension(:)     ::phip     ! Potential
-#endif
      integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
      integer(i8b),allocatable,dimension(:) ::idp      ! Particle unique identifier
-     integer ,allocatable,dimension(:)     ::sortp    ! Sorted indices
+     integer ,allocatable,dimension(:)     ::sortp    ! Sorted index
      integer ,allocatable,dimension(:)     ::workp    ! Work space
      
      ! Level dependent arrays
-     integer ,allocatable,dimension(:)::headp    ! Particle levels head
-     integer ,allocatable,dimension(:)::tailp    ! Particle levels tail
+     integer ,allocatable,dimension(:)::headp    ! First particle in level
+     integer ,allocatable,dimension(:)::tailp    ! Last particle in level
      
   end type part_t
 

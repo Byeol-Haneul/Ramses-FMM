@@ -27,7 +27,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   integer,dimension(1:flen/4)::input_array
   type(in_output_poisson_t)::in_output_poisson
 
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star,sink=>pst%s%sink,mdl=>pst%s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -88,6 +88,10 @@ subroutine m_dump_all(pst,write_bkp_file)
         if(r%star)then
            filename=TRIM(filedir)//'star_header.txt'
            call output_header(r,g,star,filename)
+        endif
+        if(r%sink)then
+           filename=TRIM(filedir)//'sink_header.txt'
+           call output_header(r,g,sink,filename)
         endif
      endif
      if(r%hydro)then

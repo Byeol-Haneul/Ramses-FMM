@@ -158,14 +158,18 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
            write(*,*)'Increase nsinkmax in the namelist'
            stop
         endif
-        ! Compute sink particle coordinate from cell centers
+        ! Compute sink particle position from peak position
         p%xp(p%npart,1)=c%peak_pos(j,1)
         p%xp(p%npart,2)=c%peak_pos(j,2)
         p%xp(p%npart,3)=c%peak_pos(j,3)
-        ! Compute sink particle velocity from clump velocity
+        ! Compute sink particle velocity from peak velocity
         p%vp(p%npart,1)=c%peak_vel(j,1)
-        p%vp(p%npart,2)=c%peak_vel(j,1)
-        p%vp(p%npart,3)=c%peak_vel(j,1)
+        p%vp(p%npart,2)=c%peak_vel(j,2)
+        p%vp(p%npart,3)=c%peak_vel(j,3)
+        ! Compute sink particle old force from peak acceleration
+        p%fp(p%npart,1)=c%peak_acc(j,1)
+        p%fp(p%npart,2)=c%peak_acc(j,2)
+        p%fp(p%npart,3)=c%peak_acc(j,3)
         ! Compute sink particle mass
         p%mp(p%npart)=0
         ! Compute sink particle birth time using proper time

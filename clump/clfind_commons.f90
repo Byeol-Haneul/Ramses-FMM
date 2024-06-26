@@ -30,12 +30,13 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: relevance ! Relevance (prominence) of the peak
        real(dp),allocatable,dimension(:,:) :: clump_size ! Size of clump
        real(dp),allocatable,dimension(:,:) :: peak_pos ! position of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_vel ! velocity of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_acc ! acceleration of the peak
        real(dp),allocatable,dimension(:,:) :: center_of_mass ! position of the center of mass
        real(dp),allocatable,dimension(:) :: min_dens ! min density of the clump
        real(dp),allocatable,dimension(:) :: av_dens ! average density of the clump
        real(dp),allocatable,dimension(:) :: clump_vol ! volume of the clump
        real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark mater particles
-       real(dp),allocatable,dimension(:,:) :: peak_vel ! clump velocity using directly dark mater particles
        real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo
        integer,allocatable,dimension(:) :: occupied ! is peak occupied by a sink particle
        integer,allocatable,dimension(:) :: form_sink ! does peak form a new sink particle

@@ -75,6 +75,7 @@ subroutine deallocate_peak_patch_arrays(s)
 
   deallocate(c%particle_mass)
   deallocate(c%peak_vel)
+  deallocate(c%peak_acc)
   deallocate(c%mass_bin)
 
   deallocate(c%occupied)
@@ -129,6 +130,7 @@ subroutine allocate_peak_patch_arrays(s)
 
   allocate(c%particle_mass(1:c%npeak_max))
   allocate(c%peak_vel(1:c%npeak_max,1:ndim))
+  allocate(c%peak_acc(1:c%npeak_max,1:ndim))
   allocate(c%mass_bin(1:c%npeak_max,1:nbin))
 
   allocate(c%occupied(1:c%npeak_max))
@@ -1105,9 +1107,8 @@ subroutine compute_clump_properties(s,rtype)
   ! all necessary peak-patch properties are computed
   !----------------------------------------------------------------------------
   integer::ipart,grid,peak_nr,ilevel,global_peak_id,ipeak,plevel,igrid,itest,icelln,idim,ind
-  real(dp),dimension(1:ndim)::xcell
+  real(dp),dimension(1:ndim)::xcell,accel
   real(dp)::dx_loc,tot_mass
-  real(dp),dimension(1:ndim)::xcen
   real(dp)::zero=0
   ! variables needed temporarily store cell properties
   real(dp)::d=0, vol=0
@@ -1136,15 +1137,19 @@ subroutine compute_clump_properties(s,rtype)
      igrid=c%peak_grid(ipeak)
      ind=c%peak_cell(ipeak)
      dx_loc=r%boxlen/2**ilevel
-     ! Peak cell coordinates
+     ! Peak cell coordinates and acceleration
      xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+     accel(1)=m%grid(igrid)%f(ind,1)
 #if NDIM>1
      xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+     accel(2)=m%grid(igrid)%f(ind,2)
 #endif
 #if NDIM>2
      xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
+     accel(3)=m%grid(igrid)%f(ind,3)
 #endif
      c%peak_pos(ipeak,1:ndim)=xcell(1:ndim)
+     c%peak_acc(ipeak,1:ndim)=accel(1:ndim)
   end do
 #ifndef WITHOUTMPI
   ! Scatter results to all MPI domains
