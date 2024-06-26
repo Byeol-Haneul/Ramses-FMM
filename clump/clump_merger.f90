@@ -1367,9 +1367,9 @@ subroutine particle_clump_properties(s,p)
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
-  !---------------------------------------
-  ! Reads peak id of dark matter particles
-  !---------------------------------------
+  !---------------------------------
+  ! Reads peak id of input particles
+  !---------------------------------
   call particle_peak_id(s,p,no_halo)
 
   !--------------------------------------------

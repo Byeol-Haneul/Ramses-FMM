@@ -68,7 +68,7 @@ recursive subroutine r_sink_formation(pst,ilevel,input_size,output,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
      output%mass=output%mass+next_output%mass
   else
-     call sink_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%sink,pst%s%c,ilevel,output%mass)
+     call sink_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%sink,pst%s%c,output%mass)
   endif
 
 end subroutine r_sink_formation
@@ -76,7 +76,7 @@ end subroutine r_sink_formation
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine sink_formation(r,g,m,p,c,ilevel,msink_loc)
+subroutine sink_formation(r,g,m,p,c,msink_loc)
   use rng
   use constants
   use hydro_parameters, only:nvar
@@ -93,11 +93,10 @@ subroutine sink_formation(r,g,m,p,c,ilevel,msink_loc)
   type(mesh_t)::m
   type(part_t)::p
   type(clump_t)::c
-  integer::ilevel
   real(kind=8)::msink_loc
   !-------------------------------------------------------------------
-  ! Spawn star particles according to various star formation models.
-  ! We use a random Poisson process.
+  ! Spawn sink particles from clumps using various formation criteria.
+  ! We use the RAMSES clump finder PHEW for the clumps detection.
   !-------------------------------------------------------------------
 #ifndef WITHOUTMPI
   integer::info
@@ -105,40 +104,28 @@ subroutine sink_formation(r,g,m,p,c,ilevel,msink_loc)
 #endif
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,nsink_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,nsink_cpu
-  integer::i,j,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nsink,nsink_loc
+  integer::i,j,icpu,nsite,nsink,nsink_loc
   integer::peak_nr
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(kind=8)::dx,vol,factG,f,d,mask
-#if NENER>0
-  integer::irad
-#endif
   logical::ok
 
 #if NDIM>2
-  ! Conversion factor from user units to cgs units
-  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-
-  ! Set some constants
-  dx=r%boxlen/2**ilevel
-  vol=dx**ndim
-  factG=1d0
-  if(r%cosmo)factG=3d0/4d0/twopi*g%omega_m*g%aexp
-
-  !---------------------------------------------------------
-  ! Count potential sink formation sites.
-  !---------------------------------------------------------
+  !---------------------------
+  ! Count sink formation sites
+  !---------------------------
   nsite=0
-  c%form_sink=.false.
+  c%form_sink=0
   ! Loop over peaks
   do j=1,c%npeak
      ok=.true.
+     !-------------------------------------
      ! Add here all sink formation criteria
+     !-------------------------------------
      if(c%relevance(j)<=r%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=r%mass_threshold*g%mp_min)ok=.false.
-     if(c%occupied(j))ok=.false.
-     if(r%ivar_refine>0.and.c%var_refine(j)<=r%var_cut_refine)ok=.false.
+     if(c%occupied(j)==1)ok=.false.
+!     if(r%ivar_refine>0.and.c%var_refine(j)<=r%var_cut_refine)ok=.false.
      ! Set sink formation flag
-     c%form_sink(j)=ok
+     if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
   end do
 
@@ -163,7 +150,7 @@ subroutine sink_formation(r,g,m,p,c,ilevel,msink_loc)
   msink_loc=0.0d0
   ! Loop over peaks
   do j=1,c%npeak
-     if(c%form_sink(j))then
+     if(c%form_sink(j).eq.1)then
         nsink_loc=nsink_loc+1
         p%npart=p%npart+1
         if(p%npart>r%nsinkmax)then
@@ -281,6 +268,7 @@ end subroutine r_sink_clump
 subroutine sink_clump(s)
   use ramses_commons, only: ramses_t
   use clump_finder_module
+  use clump_merger_module
   implicit none
   type(ramses_t)::s
   
@@ -343,8 +331,53 @@ subroutine sink_clump(s)
   if(s%r%rho_type_sink.eq.2)then  
      call particle_clump_properties(s,s%star)
   endif
-  
+  !---------------------------------------------
+  ! Determine which peaks are occupied by a sink
+  !---------------------------------------------
+  call occupied_peak(s)
+
 #endif
 end subroutine sink_clump
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine occupied_peak(s)
+  use ramses_commons, only: ramses_t
+  use clump_merger_module
+  implicit none
+  type(ramses_t)::s
+  integer::i,no_peak,global_peak_id,peak_nr
 
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
+
+  !--------------------------------
+  ! Reads peak id of sink particles
+  !--------------------------------
+  call particle_peak_id(s,p,no_peak)
+  !---------------------------
+  ! Flag occupied peaks with 1
+  !---------------------------
+  c%occupied=0
+  do i=1,p%npart
+     global_peak_id=p%workp(i)
+     if (global_peak_id /=0 ) then
+        call get_local_peak_id(s,global_peak_id,peak_nr)
+        c%occupied(peak_nr)=1
+     end if
+  end do
+#ifndef WITHOUTMPI
+  ! Update peak communicator
+  call build_peak_communicator(s)
+  ! Collect results from all MPI domains
+  call virtual_peak_int(s,c%occupied,'max')
+#endif
+
+  end associate
+
+end subroutine occupied_peak
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
 end module sink_formation_module
