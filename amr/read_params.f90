@@ -603,6 +603,7 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=gadget_params,END=111)
 111 continue
+  rewind(1)
   read(1,NML=sink_params,END=112)
 112 continue
   close(1)
