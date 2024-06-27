@@ -27,20 +27,19 @@ recursive subroutine m_sink_formation(pst)
   ! Find sink formation sites
   !----------------------------
   call m_formation_site(pst)
-
-  !----------------------------
-  ! Create sink particles
-  !----------------------------
-  call r_sink_formation(pst,pst%s%r%levelmin,1,output_sink,2)
-  if(output_sink%mass>0)then
-     pst%s%g%mass_sink_tot=pst%s%g%mass_sink_tot+output_sink%mass
+  if(pst%s%c%npeak_tot>0)then
+    !----------------------------
+    ! Create sink particles
+    !----------------------------
+    call r_sink_formation(pst,pst%s%r%levelmin,1,output_sink,2)
+    if(output_sink%mass>0)then
+        pst%s%g%mass_sink_tot=pst%s%g%mass_sink_tot+output_sink%mass
+    endif
   endif
-
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
   call r_deallocate_clump(pst,pst%s%r%levelmin,1)
-
   ttend = mdl_wtime(pst%s%mdl)
   print '(A,F14.7)',' Time elapsed in creating sinks:',ttend-ttstart
 
@@ -213,7 +212,6 @@ subroutine m_formation_site(pst)
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
   use ramses_commons, only: pst_t
-  use clump_merger_module, only: r_deallocate_clump
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif

@@ -43,7 +43,7 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            filename2=TRIM(filename)//'star.'
            call output_part(pst%s,pst%s%star,filename2)
         endif
-        if(pst%s%r%star)then
+        if(pst%s%r%sink)then
            filename2=TRIM(filename)//'sink.'
            call output_part(pst%s,pst%s%sink,filename2)
         endif
