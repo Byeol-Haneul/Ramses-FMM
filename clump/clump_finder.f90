@@ -119,7 +119,7 @@ subroutine clump_finder(s)
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
   !----------------------------------------------------------------------
-  call collect_test(s)
+  call collect_test(s,r%clump_density_threshold)
   if(s%c%ntest_tot==0)return
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.
@@ -158,7 +158,7 @@ subroutine clump_finder(s)
   ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
-  call merge_clumps(s,'relevance')
+  call merge_clumps(s,'relevance',r%clump_mass_threshold,r%clump_relevance_threshold,r%clump_density_threshold,r%clump_saddle_threshold)
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
@@ -168,24 +168,24 @@ subroutine clump_finder(s)
   ! threshold into halos, only if their saddle point density is larger
   ! that the prescribed saddle density threshold.
   !----------------------------------------------------------------------
-  if(s%r%saddle_threshold>0)then
-    call merge_clumps(s,'saddleden')
+  if(s%r%clump_saddle_threshold>0)then
+    call merge_clumps(s,'saddleden',r%clump_mass_threshold,r%clump_relevance_threshold,r%clump_density_threshold,r%clump_saddle_threshold)
   endif
   !----------------------------------------------------------------------
   ! Remove all peaks that are below the relevance threshold
   ! or the mass threshold in the flag3 global peak ID field.
   !----------------------------------------------------------------------
-  if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
-    call trim_clumps(s)
+  if(s%r%clump_saddle_threshold>0.or.s%r%clump_mass_threshold>0)then
+    call trim_clumps(s,r%clump_relevance_threshold,r%clump_mass_threshold)
   endif
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
   if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
-     call particle_clump_properties(s,s%p)
+     call particle_clump_properties(s,s%p,r%clump_saddle_threshold,r%clump_mass_threshold,r%clump_relevance_threshold)
   endif
   if(s%r%star.and.s%r%rho_type_clump.eq.2)then
-     call particle_clump_properties(s,s%star)
+     call particle_clump_properties(s,s%star,r%clump_saddle_threshold,r%clump_mass_threshold,r%clump_relevance_threshold)
   endif
 #endif
 end subroutine clump_finder
@@ -194,7 +194,7 @@ end subroutine clump_finder
 !################################################################
 !################################################################
 #if NDIM==3 && defined(GRAV)
-subroutine collect_test(s)
+subroutine collect_test(s,density_threshold)
   use amr_parameters, only: twotondim,ndim,dp
   use ramses_commons, only: ramses_t
 #ifndef WITHOUTMPI
@@ -202,6 +202,7 @@ subroutine collect_test(s)
 #endif
   implicit none
   type(ramses_t)::s
+  real(dp)::density_threshold
   !==================================================================
   ! This is the clump finder routine for collecting test particles
   ! also known as all cells above the prescribed density threshold.
@@ -241,7 +242,7 @@ subroutine collect_test(s)
         do ind=1,twotondim ! Loop over cells
            ok = .not. m%grid(igrid)%refined(ind) ! Select leaf cells
            d = m%grid(igrid)%rho(ind)
-           ok = ok .and. d > r%density_threshold
+           ok = ok .and. d > density_threshold
            m%grid(igrid)%flag3(ind) = 0
            if(ok)then
               c%ntest=c%ntest+1
@@ -287,7 +288,7 @@ subroutine collect_test(s)
            do ind=1,twotondim ! Loop over cells
               ok=.not.m%grid(igrid)%refined(ind) ! Select leaf cells
               d=m%grid(igrid)%rho(ind)
-              ok=ok.and.d>r%density_threshold
+              ok=ok.and.d>density_threshold
               if(ok)then
                  itest=itest+1
                  dens(itest)=d

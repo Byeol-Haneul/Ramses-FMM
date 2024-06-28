@@ -330,7 +330,7 @@ end subroutine build_peak_communicator
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine merge_clumps(s,action)
+subroutine merge_clumps(s,action,mass_threshold,relevance_threshold,density_threshold,saddle_threshold)
   use amr_commons, only: dp, ndim
   use ramses_commons, only: ramses_t
   use sparse_matrix
@@ -340,6 +340,7 @@ subroutine merge_clumps(s,action)
   implicit none
   type(ramses_t)::s
   character(len=9)::action
+  real(dp)::mass_threshold,relevance_threshold,density_threshold,saddle_threshold
   !---------------------------------------------------------
   ! This routine merges the irrelevant clumps
   ! - clumps are sorted by ascending max density
@@ -365,7 +366,7 @@ subroutine merge_clumps(s,action)
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
-  mass_min=g%mp_min*r%mass_threshold
+  mass_min=g%mp_min*mass_threshold
 
   if (r%verbose.and.g%myid==1)then
      if(action.EQ.'relevance')then
@@ -384,7 +385,7 @@ subroutine merge_clumps(s,action)
         alive(i)=1
      endif
      if(action.EQ.'saddleden')then
-        if(c%relevance(i)>r%relevance_threshold)then
+        if(c%relevance(i)>relevance_threshold)then
            alive(i)=1
         else
            alive(i)=0
@@ -437,12 +438,12 @@ subroutine merge_clumps(s,action)
                  if(c%sparse_saddle_dens%maxval(ipeak)>0)then
                     relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
                  else
-                    relevance_peak=c%max_dens(ipeak)/r%density_threshold
+                    relevance_peak=c%max_dens(ipeak)/density_threshold
                  end if
-                 do_merge=relevance_peak<r%relevance_threshold
+                 do_merge=relevance_peak<relevance_threshold
               endif
               if(action.EQ.'saddleden')then
-                 do_merge=(c%sparse_saddle_dens%maxval(ipeak)>r%saddle_threshold)
+                 do_merge=(c%sparse_saddle_dens%maxval(ipeak)>saddle_threshold)
               endif
               if(do_merge)then
                  if(c%sparse_saddle_dens%maxloc(ipeak)>0)then
@@ -589,7 +590,7 @@ subroutine merge_clumps(s,action)
            if (c%sparse_saddle_dens%maxval(ipeak)>0)then
               relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
            else
-              relevance_peak=c%max_dens(ipeak)/r%density_threshold
+              relevance_peak=c%max_dens(ipeak)/density_threshold
            end if
            c%relevance(ipeak)=relevance_peak
         else
@@ -1088,7 +1089,7 @@ end subroutine analyze_peak_memory
 !################################################################
 !################################################################
 !################################################################
-subroutine compute_clump_properties(s,rtype)
+subroutine compute_clump_properties(s,rtype,sink)
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
@@ -1101,6 +1102,7 @@ subroutine compute_clump_properties(s,rtype)
 #endif
   type(ramses_t)::s
   integer::rtype
+  integer::sink
   !----------------------------------------------------------------------------
   ! This subroutine performs a loop over all cells above the threshold and
   ! collects the  relevant information. After some MPI communications,
@@ -1284,12 +1286,13 @@ end subroutine compute_clump_properties
 !################################################################
 !################################################################
 !################################################################
-subroutine trim_clumps(s)
+subroutine trim_clumps(s,relevance_threshold,mass_threshold)
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
   implicit none
   type(ramses_t)::s
+  real(dp)::relevance_threshold,mass_threshold
   !----------------------------------------------------------------------------
   ! This subroutine remove all clumps and halos that are considered irrelevant.
   ! They are removed because their relevance (or peakiness) is below the
@@ -1329,9 +1332,9 @@ subroutine trim_clumps(s)
      global_peak_id=m%grid(igrid)%flag3(ind)
      if (global_peak_id /=0 ) then
         call get_local_peak_id(s,global_peak_id,ipeak)
-        if(c%relevance(ipeak).LE.r%relevance_threshold.OR.&
-             & c%clump_mass(ipeak).LE.r%mass_threshold*g%mp_min.OR.&
-             & c%halo_mass(ipeak).LE.r%mass_threshold*g%mp_min)then
+        if(c%relevance(ipeak).LE.relevance_threshold.OR.&
+             & c%clump_mass(ipeak).LE.mass_threshold*g%mp_min.OR.&
+             & c%halo_mass(ipeak).LE.mass_threshold*g%mp_min)then
            m%grid(igrid)%flag3(ind)=0
         endif
      endif
@@ -1344,7 +1347,7 @@ end subroutine trim_clumps
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_clump_properties(s,p)
+subroutine particle_clump_properties(s,p,saddle_threshold,mass_threshold,relevance_threshold)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -1358,6 +1361,7 @@ subroutine particle_clump_properties(s,p)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
+  real(dp)::saddle_threshold,mass_threshold,relevance_threshold
   !==================================================================
   ! This routine computes various clump properties.
   ! In particular, it computes for each particle its parent peak id.
@@ -1419,7 +1423,7 @@ subroutine particle_clump_properties(s,p)
      end if
   end do
 
-  if(r%saddle_threshold>0)then        
+  if(saddle_threshold>0)then        
 
 #ifndef WITHOUTMPI
   !-----------------------------------------
@@ -1488,8 +1492,8 @@ subroutine particle_clump_properties(s,p)
   ! Compute cumulative mass
   do ipeak=1,c%npeak
      if(c%ind_halo(ipeak).EQ.ipeak+c%npeak_cum(g%myid-1).AND. &
-          & c%halo_mass(ipeak) > r%mass_threshold*g%mp_min.AND. &
-          & c%relevance(ipeak) > r%relevance_threshold)then
+          & c%halo_mass(ipeak) > mass_threshold*g%mp_min.AND. &
+          & c%relevance(ipeak) > relevance_threshold)then
         do ibin=1,nbin-1
            c%mass_bin(ipeak,ibin+1)=c%mass_bin(ipeak,ibin+1)+c%mass_bin(ipeak,ibin)
         end do

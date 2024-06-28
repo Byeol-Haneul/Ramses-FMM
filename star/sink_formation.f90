@@ -119,8 +119,8 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      !-------------------------------------
      ! Add here all sink formation criteria
      !-------------------------------------
-     if(c%relevance(j)<=r%relevance_threshold)ok=.false.
-     if(c%clump_mass(j)<=r%mass_threshold*g%mp_min)ok=.false.
+     if(c%relevance(j)<=r%sink_relevance_threshold)ok=.false.
+     if(c%clump_mass(j)<=r%sink_mass_threshold*g%mp_min)ok=.false.
      if(c%occupied(j)==1)ok=.false.
 !     if(r%ivar_refine>0.and.c%var_refine(j)<=r%var_cut_refine)ok=.false.
      ! Set sink formation flag
@@ -280,7 +280,7 @@ subroutine sink_clump(s)
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
   !----------------------------------------------------------------------
-  call collect_test(s)
+  call collect_test(s,r%sink_density_threshold)
   if(s%c%ntest_tot==0)return
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.
@@ -319,7 +319,7 @@ subroutine sink_clump(s)
   ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
-  call merge_clumps(s,'relevance')
+  call merge_clumps(s,'relevance',r%sink_mass_threshold,r%sink_relevance_threshold,r%sink_density_threshold,r%sink_saddle_threshold)
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
@@ -328,10 +328,10 @@ subroutine sink_clump(s)
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
   if(s%r%rho_type_sink.eq.1)then
-     call particle_clump_properties(s,s%p)
+     call particle_clump_properties(s,s%p,r%sink_saddle_threshold,r%sink_mass_threshold,r%sink_relevance_threshold)
   endif
   if(s%r%rho_type_sink.eq.2)then  
-     call particle_clump_properties(s,s%star)
+     call particle_clump_properties(s,s%star,r%sink_saddle_threshold,r%sink_mass_threshold,r%sink_relevance_threshold)
   endif
   !---------------------------------------------
   ! Determine which peaks are occupied by a sink
