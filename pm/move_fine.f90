@@ -4,13 +4,14 @@ contains
 !################################################################
 !################################################################
 !################################################################
-subroutine m_kick_drift_part(pst,ilevel,action_part)
+subroutine m_kick_drift_part(pst,ilevel,action_part,ptype)
   use amr_parameters, only: ndim,dp,twotondim
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
   integer::ilevel
   integer::action_part
+  integer::ptype
   !--------------------------------------------------------------
   ! Move particles according to kick-drift leap frog scheme.
   !--------------------------------------------------------------
@@ -22,7 +23,8 @@ subroutine m_kick_drift_part(pst,ilevel,action_part)
 
   input_array(1)=ilevel
   input_array(2)=action_part
-  call r_kick_drift_part(pst,input_array,2,dummy,0)
+  input_array(3)=ptype
+  call r_kick_drift_part(pst,input_array,3,dummy,0)
 
 end subroutine m_kick_drift_part
 !################################################################
@@ -44,6 +46,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   integer::ilevel
   integer::action_part
   integer::rID
+  integer::ptype
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_KICK_DRIFT_PART,pst%iUpper+1,input_size,output_size,input_array)
@@ -52,11 +55,14 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-     call kick_drift_part(pst%s,pst%s%p,ilevel,action_part)
-     if(pst%s%r%star)then
+     ptype=input_array(3)
+     if(ptype.eq.0 .or. ptype.eq.1)then
+       call kick_drift_part(pst%s,pst%s%p,ilevel,action_part)
+     endif
+     if(pst%s%r%star.and.(ptype.eq.0 .or. ptype.eq.2))then
         call kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
      endif
-     if(pst%s%r%sink)then
+     if(pst%s%r%sink.and.(ptype.eq.0 .or. ptype.eq.3))then
         call kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
      endif
   endif

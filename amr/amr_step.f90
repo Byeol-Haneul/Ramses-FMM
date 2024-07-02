@@ -158,7 +158,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Perform second kick for particles
   if(r%pic)then
                                     call m_timer(pst,'particle - kickdrift','start')
-     call m_kick_drift_part(pst,ilevel,action_kick_only)
+     call m_kick_drift_part(pst,ilevel,action_kick_only,0)
   endif
 
   ! Add gravity source term with half time step and new force
@@ -289,7 +289,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-------------------------------------------
   if(r%pic)then
                                     call m_timer(pst,'particle - kickdrift','start')
-     call m_kick_drift_part(pst,ilevel,action_kick_drift)
+     call m_kick_drift_part(pst,ilevel,action_kick_drift,0)
   endif
 
   !----------------------------------
