@@ -145,7 +145,11 @@ subroutine condinit(r,g,x,q,dx,nn)
   type(global_t)::g
   integer ::nn                             ! Number of cells
   real(dp)::dx                             ! Cell size
-  real(dp),dimension(1:nvector,1:nprim)::q ! Conservative variables
+#ifdef MHD
+  real(dp),dimension(1:nvector,1:nvar+3-ndim)::q ! Primitive variables
+#else
+  real(dp),dimension(1:nvector,1:nvar)::q ! Primitive variables
+#endif
   real(dp),dimension(1:nvector,1:ndim)::x  ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
@@ -158,7 +162,6 @@ subroutine condinit(r,g,x,q,dx,nn)
   ! Q(:,:) are in user (aka code) units.
   !================================================================
   integer::ivar,i, ind_gal,j
-  real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
   real(dp)::v,M,rho,dzz,zint, HH, rdisk, dpdr,dmax
   real(dp)::rc, rr, rr1, rr2, abs_z, hcar1, hcar2, hcut1, hcut2
   real(dp), dimension(3)::vgal, axe_rot, xx1, xx2, xx, xx_rad, xc1, xc2, vg1, vg2
