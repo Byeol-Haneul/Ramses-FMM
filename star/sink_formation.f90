@@ -31,9 +31,11 @@ recursive subroutine m_sink_formation(pst)
   !----------------------------
   ! Create sink particles
   !----------------------------
-  call r_sink_formation(pst,pst%s%r%levelmin,1,output_sink,2)
-  if(output_sink%mass>0)then
-     pst%s%g%mass_sink_tot=pst%s%g%mass_sink_tot+output_sink%mass
+  if(pst%s%c%npeak_tot>0)then
+     call r_sink_formation(pst,pst%s%r%levelmin,1,output_sink,2)
+     if(output_sink%mass>0)then
+        pst%s%g%mass_sink_tot=pst%s%g%mass_sink_tot+output_sink%mass
+     endif
   endif
 
   !------------------------------
@@ -163,9 +165,9 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
         p%xp(p%npart,2)=c%peak_pos(j,2)
         p%xp(p%npart,3)=c%peak_pos(j,3)
         ! Compute sink particle velocity from peak velocity
-        p%vp(p%npart,1)=c%peak_vel(j,1)
-        p%vp(p%npart,2)=c%peak_vel(j,2)
-        p%vp(p%npart,3)=c%peak_vel(j,3)
+        p%vp(p%npart,1)=c%peak_vel(j,1)-c%peak_acc(j,1)*0.5d0*g%dtnew(c%peak_level(j))
+        p%vp(p%npart,2)=c%peak_vel(j,2)-c%peak_acc(j,2)*0.5d0*g%dtnew(c%peak_level(j))
+        p%vp(p%npart,3)=c%peak_vel(j,3)-c%peak_acc(j,3)*0.5d0*g%dtnew(c%peak_level(j))
         ! Compute sink particle old force from peak acceleration
         p%fp(p%npart,1)=c%peak_acc(j,1)
         p%fp(p%npart,2)=c%peak_acc(j,2)
@@ -175,7 +177,7 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
         ! Compute sink particle birth time using proper time
         p%tp(p%npart)=g%texp
         ! Compute level
-        p%levelp(p%npart)=r%nlevelmax
+        p%levelp(p%npart)=c%peak_level(j)
      endif
   end do
   p%tailp(r%nlevelmax)=p%tailp(r%nlevelmax)+nsink_loc
