@@ -4,6 +4,11 @@ module clfind_commons
 
     type clump_t
 
+       real(dp)::relevance_threshold=2
+       real(dp)::density_threshold=-1
+       real(dp)::saddle_threshold=-1
+       real(dp)::mass_threshold=0
+
        integer :: ntest=0 ! Actual number of test particles in current processor
        integer(kind=8) :: ntest_tot=0 ! Total number of test particles across all processors
        integer,allocatable,dimension(:) :: cell ! Cell index of test particle

@@ -365,7 +365,7 @@ subroutine merge_clumps(s,action)
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
-  mass_min=g%mp_min*r%mass_threshold
+  mass_min=g%mp_min*c%mass_threshold
 
   if (r%verbose.and.g%myid==1)then
      if(action.EQ.'relevance')then
@@ -384,7 +384,7 @@ subroutine merge_clumps(s,action)
         alive(i)=1
      endif
      if(action.EQ.'saddleden')then
-        if(c%relevance(i)>r%relevance_threshold)then
+        if(c%relevance(i)>c%relevance_threshold)then
            alive(i)=1
         else
            alive(i)=0
@@ -437,12 +437,12 @@ subroutine merge_clumps(s,action)
                  if(c%sparse_saddle_dens%maxval(ipeak)>0)then
                     relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
                  else
-                    relevance_peak=c%max_dens(ipeak)/r%density_threshold
+                    relevance_peak=c%max_dens(ipeak)/c%density_threshold
                  end if
-                 do_merge=relevance_peak<r%relevance_threshold
+                 do_merge=relevance_peak<c%relevance_threshold
               endif
               if(action.EQ.'saddleden')then
-                 do_merge=(c%sparse_saddle_dens%maxval(ipeak)>r%saddle_threshold)
+                 do_merge=(c%sparse_saddle_dens%maxval(ipeak)>c%saddle_threshold)
               endif
               if(do_merge)then
                  if(c%sparse_saddle_dens%maxloc(ipeak)>0)then
@@ -589,7 +589,7 @@ subroutine merge_clumps(s,action)
            if (c%sparse_saddle_dens%maxval(ipeak)>0)then
               relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
            else
-              relevance_peak=c%max_dens(ipeak)/r%density_threshold
+              relevance_peak=c%max_dens(ipeak)/c%density_threshold
            end if
            c%relevance(ipeak)=relevance_peak
         else
@@ -1329,9 +1329,9 @@ subroutine trim_clumps(s)
      global_peak_id=m%grid(igrid)%flag1(ind)
      if (global_peak_id /=0 ) then
         call get_local_peak_id(s,global_peak_id,ipeak)
-        if(c%relevance(ipeak).LE.r%relevance_threshold.OR.&
-             & c%clump_mass(ipeak).LE.r%mass_threshold*g%mp_min.OR.&
-             & c%halo_mass(ipeak).LE.r%mass_threshold*g%mp_min)then
+        if(c%relevance(ipeak).LE.c%relevance_threshold.OR.&
+             & c%clump_mass(ipeak).LE.c%mass_threshold*g%mp_min.OR.&
+             & c%halo_mass(ipeak).LE.c%mass_threshold*g%mp_min)then
            m%grid(igrid)%flag1(ind)=0
         endif
      endif
@@ -1419,7 +1419,7 @@ subroutine particle_clump_properties(s,p)
      end if
   end do
 
-  if(r%saddle_threshold>0)then        
+  if(c%saddle_threshold>0)then        
 
 #ifndef WITHOUTMPI
   !-----------------------------------------
@@ -1488,8 +1488,8 @@ subroutine particle_clump_properties(s,p)
   ! Compute cumulative mass
   do ipeak=1,c%npeak
      if(c%ind_halo(ipeak).EQ.ipeak+c%npeak_cum(g%myid-1).AND. &
-          & c%halo_mass(ipeak) > r%mass_threshold*g%mp_min.AND. &
-          & c%relevance(ipeak) > r%relevance_threshold)then
+          & c%halo_mass(ipeak) > c%mass_threshold*g%mp_min.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold)then
         do ibin=1,nbin-1
            c%mass_bin(ipeak,ibin+1)=c%mass_bin(ipeak,ibin+1)+c%mass_bin(ipeak,ibin)
         end do

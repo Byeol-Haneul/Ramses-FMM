@@ -279,7 +279,14 @@ subroutine sink_clump(s)
   type(ramses_t)::s
   
 #if NDIM==3 && defined(GRAV)
-  
+
+  !-----------------------------------------------
+  ! Store clump finder parameters in clump object.
+  !-----------------------------------------------
+  s%c%relevance_threshold = 3
+  s%c%density_threshold = 80
+  s%c%saddle_threshold = -1
+  s%c%mass_threshold = 100
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
