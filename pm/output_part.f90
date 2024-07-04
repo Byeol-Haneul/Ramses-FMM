@@ -247,7 +247,7 @@ subroutine backup_part(r,g,p,filename)
   if(allocated(p%fp))then
      do idim=1,ndim
         do i=1,p%npart
-           xdp(i)=p%fp(i)
+           xdp(i)=p%fp(i,idim)
         end do
         write(ilun)xdp
      end do
