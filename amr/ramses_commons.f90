@@ -282,7 +282,7 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   integer,dimension(1:s%r%nfile+1)::istart
-  integer::i,ivar,ifile,ncpufile,nremain,ilevel,ierr
+  integer::i,idim,ivar,ifile,ncpufile,nremain,ilevel,ierr
   integer(kind=8)::npart
   logical::file_exist
 
@@ -368,6 +368,13 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar+1)=nskip(ivar)+4*npart
      endif
+     ! Acceleration
+     if(allocated(p%fp))then
+        do idim=1,ndim
+           ivar=ivar+1
+           nskip(ivar+1)=nskip(ivar)+4*npart
+        end do
+     endif
      ! Birth times
      if(allocated(p%tp))then
         ivar=ivar+1
@@ -427,7 +434,7 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
 #endif
   integer,dimension(1:s%r%nfile+1)::istart
   integer::ncpufile,nremain
-  integer::i,ivar,ifile,ilevel
+  integer::i,ivar,idim,ifile,ilevel
 
   associate(r=>s%r,g=>s%g)
 
@@ -469,6 +476,13 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      if(allocated(p%zp))then
         ivar=ivar+1
         nskip(ivar)=nskip(ivar)+4*p%npart
+     endif
+     ! Accelerations
+     if(allocated(p%fp))then
+        do idim=1,ndim
+           ivar=ivar+1
+           nskip(ivar)=nskip(ivar)+4*p%npart
+        end do
      endif
      ! Birth times
      if(allocated(p%tp))then

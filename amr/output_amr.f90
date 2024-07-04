@@ -562,6 +562,9 @@ subroutine output_header(r,g,p,filename)
   if(allocated(p%zp))then
      write(ilun,'(a)',advance='no')'metallicity '
   endif
+  if(allocated(p%fp))then
+     write(ilun,'(a)',advance='no')'accel '
+  endif
   if(allocated(p%tp))then
      write(ilun,'(a)',advance='no')'age '
   endif
