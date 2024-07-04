@@ -122,8 +122,8 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      !-------------------------------------
      ! Add here all sink formation criteria
      !-------------------------------------
-     if(c%relevance(j)<=r%relevance_threshold)ok=.false.
-     if(c%clump_mass(j)<=r%mass_threshold*g%mp_min)ok=.false.
+     if(c%relevance(j)<=c%relevance_threshold)ok=.false.
+     if(c%clump_mass(j)<=c%mass_threshold*g%mp_min)ok=.false.
      if(c%occupied(j)==1)ok=.false.
 !     if(r%ivar_refine>0.and.c%var_refine(j)<=r%var_cut_refine)ok=.false.
      ! Set sink formation flag
