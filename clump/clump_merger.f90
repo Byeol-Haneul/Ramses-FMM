@@ -1358,7 +1358,6 @@ subroutine particle_clump_properties(s,p)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  real(dp)::saddle_threshold,mass_threshold,relevance_threshold
   !==================================================================
   ! This routine computes various clump properties.
   ! In particular, it computes for each particle its parent peak id.
