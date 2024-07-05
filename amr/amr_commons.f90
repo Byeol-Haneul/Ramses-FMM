@@ -260,14 +260,10 @@ module amr_commons
      integer::rho_type_clump=0
      logical::output_peak_part=.false.
      logical::output_peak_star=.false.
-     real(dp)::clump_relevance_threshold=2
-     real(dp)::clump_density_threshold=-1
-     real(dp)::clump_saddle_threshold=-1
-     real(dp)::clump_mass_threshold=0
-     real(dp)::sink_relevance_threshold=2
-     real(dp)::sink_density_threshold=-1
-     real(dp)::sink_saddle_threshold=-1
-     real(dp)::sink_mass_threshold=0
+     real(dp)::relevance_threshold=2
+     real(dp)::density_threshold=-1
+     real(dp)::saddle_threshold=-1
+     real(dp)::mass_threshold=0
 
      ! Sink parameters
      integer::rho_type_sink=0

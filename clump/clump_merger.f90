@@ -1089,7 +1089,7 @@ end subroutine analyze_peak_memory
 !################################################################
 !################################################################
 !################################################################
-subroutine compute_clump_properties(s,rtype,sink)
+subroutine compute_clump_properties(s,rtype)
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
@@ -1102,7 +1102,6 @@ subroutine compute_clump_properties(s,rtype,sink)
 #endif
   type(ramses_t)::s
   integer::rtype
-  integer::sink
   !----------------------------------------------------------------------------
   ! This subroutine performs a loop over all cells above the threshold and
   ! collects the  relevant information. After some MPI communications,
@@ -1286,13 +1285,12 @@ end subroutine compute_clump_properties
 !################################################################
 !################################################################
 !################################################################
-subroutine trim_clumps(s,relevance_threshold,mass_threshold)
+subroutine trim_clumps(s)
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
   implicit none
   type(ramses_t)::s
-  real(dp)::relevance_threshold,mass_threshold
   !----------------------------------------------------------------------------
   ! This subroutine remove all clumps and halos that are considered irrelevant.
   ! They are removed because their relevance (or peakiness) is below the
