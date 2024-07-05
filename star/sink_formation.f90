@@ -42,6 +42,7 @@ recursive subroutine m_sink_formation(pst)
   ! Deallocate all peak arrays
   !------------------------------
   call r_deallocate_clump(pst,pst%s%r%levelmin,1)
+
   ttend = mdl_wtime(pst%s%mdl)
   print '(A,F14.7)',' Time elapsed in creating sinks:',ttend-ttstart
 
@@ -289,7 +290,7 @@ subroutine sink_clump(s)
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
   !----------------------------------------------------------------------
-  call collect_test(s,r%sink_density_threshold)
+  call collect_test(s)
   if(s%c%ntest_tot==0)return
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.
@@ -328,7 +329,7 @@ subroutine sink_clump(s)
   ! Peaks that are due to random noise fluctuations or peaks that
   ! have similar peak density values are merged into relevant peaks
   !----------------------------------------------------------------------
-  call merge_clumps(s,'relevance',r%sink_mass_threshold,r%sink_relevance_threshold,r%sink_density_threshold,r%sink_saddle_threshold)
+  call merge_clumps(s,'relevance')
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
@@ -337,10 +338,10 @@ subroutine sink_clump(s)
   ! Compute additional halo or particle-based clump properties.
   !----------------------------------------------------------------------
   if(s%r%rho_type_sink.eq.1)then
-     call particle_clump_properties(s,s%p,r%sink_saddle_threshold,r%sink_mass_threshold,r%sink_relevance_threshold)
+     call particle_clump_properties(s,s%p)
   endif
   if(s%r%rho_type_sink.eq.2)then  
-     call particle_clump_properties(s,s%star,r%sink_saddle_threshold,r%sink_mass_threshold,r%sink_relevance_threshold)
+     call particle_clump_properties(s,s%star)
   endif
   !---------------------------------------------
   ! Determine which peaks are occupied by a sink

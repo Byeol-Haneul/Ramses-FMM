@@ -126,7 +126,7 @@ subroutine clump_finder(s)
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
   !----------------------------------------------------------------------
-  call collect_test(s,r%clump_density_threshold)
+  call collect_test(s)
   if(s%c%ntest_tot==0)return
   !----------------------------------------------------------------------
   ! Count and collect all density peaks.

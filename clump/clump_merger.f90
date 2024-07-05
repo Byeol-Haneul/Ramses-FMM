@@ -330,7 +330,7 @@ end subroutine build_peak_communicator
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine merge_clumps(s,action,mass_threshold,relevance_threshold,density_threshold,saddle_threshold)
+subroutine merge_clumps(s,action)
   use amr_commons, only: dp, ndim
   use ramses_commons, only: ramses_t
   use sparse_matrix
@@ -340,7 +340,6 @@ subroutine merge_clumps(s,action,mass_threshold,relevance_threshold,density_thre
   implicit none
   type(ramses_t)::s
   character(len=9)::action
-  real(dp)::mass_threshold,relevance_threshold,density_threshold,saddle_threshold
   !---------------------------------------------------------
   ! This routine merges the irrelevant clumps
   ! - clumps are sorted by ascending max density
