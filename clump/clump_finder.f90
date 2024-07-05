@@ -201,7 +201,7 @@ end subroutine clump_finder
 !################################################################
 !################################################################
 #if NDIM==3 && defined(GRAV)
-subroutine collect_test(s,density_threshold)
+subroutine collect_test(s)
   use amr_parameters, only: twotondim,ndim,dp
   use ramses_commons, only: ramses_t
 #ifndef WITHOUTMPI
@@ -209,7 +209,6 @@ subroutine collect_test(s,density_threshold)
 #endif
   implicit none
   type(ramses_t)::s
-  real(dp)::density_threshold
   !==================================================================
   ! This is the clump finder routine for collecting test particles
   ! also known as all cells above the prescribed density threshold.

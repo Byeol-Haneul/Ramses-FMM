@@ -296,7 +296,6 @@ subroutine m_read_params(pst)
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
   real(dp)::mass_threshold=0
-  
 
   ! Sink parameters
   integer::rho_type_sink=0

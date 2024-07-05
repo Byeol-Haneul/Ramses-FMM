@@ -164,7 +164,7 @@ subroutine allocate_peak_patch_arrays(s)
   do itest=1,c%ntest
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     global_peak_id=m%grid(igrid)%flag3(ind) ! global peak id
+     global_peak_id=m%grid(igrid)%flag1(ind) ! global peak id
      if (global_peak_id>0)then
         call get_local_peak_id(s,global_peak_id,local_peak_id)
      end if
@@ -612,16 +612,16 @@ subroutine merge_clumps(s,action,mass_threshold,relevance_threshold,density_thre
         call boundary_peak_dp(s,c%relevance)
      end do
 
-     ! Update flag3 field
+     ! Update flag1 field
      do itest=1,c%ntest
         igrid=c%grid(itest)
         ind=c%cell(itest)
-        global_peak_id=m%grid(igrid)%flag3(ind)
+        global_peak_id=m%grid(igrid)%flag1(ind)
         if (global_peak_id>0)then
            call get_local_peak_id(s,global_peak_id,ipeak)
            merge_to=c%new_peak(ipeak)
            call get_local_peak_id(s,merge_to,jpeak)
-           m%grid(igrid)%flag3(ind)=merge_to
+           m%grid(igrid)%flag1(ind)=merge_to
         end if
      end do
      call build_peak_communicator(s)
@@ -1172,7 +1172,7 @@ subroutine compute_clump_properties(s,rtype)
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     global_peak_id=m%grid(igrid)%flag3(ind)
+     global_peak_id=m%grid(igrid)%flag1(ind)
      
      if (global_peak_id /=0 ) then
         call get_local_peak_id(s,global_peak_id,peak_nr)
@@ -1295,7 +1295,7 @@ subroutine trim_clumps(s)
   ! This subroutine remove all clumps and halos that are considered irrelevant.
   ! They are removed because their relevance (or peakiness) is below the
   ! relevance threshold or because their mass is too small.
-  ! The flag3 array is modified accordingly.
+  ! The flag1 array is modified accordingly.
   !----------------------------------------------------------------------------
   integer::global_peak_id,ipeak,jpeak,igrid,ilevel,ind,itest
 
@@ -1310,7 +1310,7 @@ subroutine trim_clumps(s)
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     global_peak_id=m%grid(igrid)%flag3(ind)
+     global_peak_id=m%grid(igrid)%flag1(ind)
      if (global_peak_id /=0 ) then
         call get_local_peak_id(s,global_peak_id,ipeak)
      endif
@@ -1327,7 +1327,7 @@ subroutine trim_clumps(s)
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     global_peak_id=m%grid(igrid)%flag3(ind)
+     global_peak_id=m%grid(igrid)%flag1(ind)
      if (global_peak_id /=0 ) then
         call get_local_peak_id(s,global_peak_id,ipeak)
         if(c%relevance(ipeak).LE.c%relevance_threshold.OR.&
@@ -1523,7 +1523,7 @@ subroutine particle_peak_id(s,p,no_peak)
   type(part_t)::p
   integer::no_peak
   !==================================================================
-  ! This routine reads from the grid peak map (flag3) the peak id
+  ! This routine reads from the grid peak map (flag1) the peak id
   ! of the input particle object. It could be dark matter or stars.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
   !==================================================================
@@ -1541,7 +1541,7 @@ subroutine particle_peak_id(s,p,no_peak)
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
-  ! Open cache for array flag3 (fetch)
+  ! Open cache for array flag1 (fetch)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
        pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
@@ -1589,8 +1589,8 @@ subroutine particle_peak_id(s,p,no_peak)
            stop
         endif
 
-        ! Read flag3 value
-        global_peak_id=gridp%flag3(icell)
+        ! Read flag1 value
+        global_peak_id=gridp%flag1(icell)
         if (global_peak_id>0)then
            call get_local_peak_id(s,global_peak_id,local_peak_id)
         else
