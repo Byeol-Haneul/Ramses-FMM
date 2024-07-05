@@ -144,6 +144,7 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
+  use pm_parameters, only: SINK_TYPE
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -153,12 +154,25 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
 
   integer::ipart,idim
 
-  ! Compute maximum particle velocity
-  do idim = 1, ndim
-     do ipart = p%headp(ilevel), p%tailp(ilevel)
-        vmax = MAX(vmax, ABS(p%vp(ipart, idim)))
-     end do
-  end do
+  if (p%type.eq.SINK_TYPE)then
+    ! Compute maximum particle velocity
+    do idim = 1, ndim
+        do ipart = p%headp(ilevel), p%tailp(ilevel)
+            if(r%sink_descent)then
+              vmax = MAX(vmax, ABS(p%vp(ipart, idim))+p%graddescent_over_dt(ipart))
+            else
+              vmax = MAX(vmax, ABS(p%vp(ipart, idim)))
+            endif
+        end do
+    end do
+  else
+    ! Compute maximum particle velocity
+    do idim = 1, ndim
+        do ipart = p%headp(ilevel), p%tailp(ilevel)
+            vmax = MAX(vmax, ABS(p%vp(ipart, idim)))
+        end do
+    end do
+  endif
   
   ! Compute kinetic energy
   do idim = 1, ndim

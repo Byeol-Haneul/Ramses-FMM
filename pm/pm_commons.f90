@@ -23,6 +23,7 @@ module pm_commons
      integer(i8b),allocatable,dimension(:) ::idp      ! Particle unique identifier
      integer ,allocatable,dimension(:)     ::sortp    ! Sorted index
      integer ,allocatable,dimension(:)     ::workp    ! Work space
+     real(dp),allocatable,dimension(:)    :: graddescent_over_dt
      
      ! Level dependent arrays
      integer ,allocatable,dimension(:)::headp    ! First particle in level

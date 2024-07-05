@@ -396,27 +396,26 @@ subroutine move_sink(s)
     use ramses_commons, only: ramses_t
     use amr_parameters, only: dp,ndim,twotondim,twopi
     use move_fine_module, only: m_kick_drift_part
-    use pm_parameters, only: action_kick_only,action_kick_drift
+    use pm_parameters, only: action_kick_only,action_kick_drift,
   implicit none
   type(ramses_t)::s
-  real(dp)::dx_min
-  real(dp),dimension(1:r%nsinkmax,1:ndim)    ::xsinkold,vsinkold,fsinkold
-  
+  real(dp)::dx_min,fsink_norm,gamma_grad_descent
+  real(dp),dimension(1:r%nsinkmax,1:ndim)    ::xsinkold,vsinkold,fsinkold,xsink_graddescent
+   
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
 #if NDIM==3
-#endif
-  end associate
+  allocate(p%graddescent_over_dt(1:r%nsinkmax))
   dx_min=r%boxlen/2**r%nlevelmax/r%aexp
   xsinkold(1:p%npart,1:ndim) = p%xp(1:p%npart,1:ndim)
   vsinkold(1:p%npart,1:ndim) = p%vp(1:p%npart,1:ndim)
   fsinkold(1:p%npart,1:ndim) = p%fp(1:p%npart,1:ndim)
   call m_kick_drift_part(pst,ilevel,action_kick_only,3)
   call m_kick_drift_part(pst,ilevel,action_kick_drift,3)
-  if (sink_descent) then
+  if (r%sink_descent) then
     xsink_graddescent(1:p%npart,1:ndim)=0.0
     fsink_norm=NORM2(p(isink,1:ndim))
     gamma_grad_descent = 0.0d0
-    graddescent_over_dt = 0.0d0
+    p%graddescent_over_dt = 0.0d0
     do idim=1,ndim
         gamma_grad_descent = gamma_grad_descent + (p%xp(isink,idim)-xsinkold(isink,idim))*(p%fp(isink,idim)-fsinkold(isink,idim))
     enddo
@@ -431,10 +430,12 @@ subroutine move_sink(s)
         ! Uopdate the sink position
         p%xp(isink,1:ndim)=p%xp(isink,1:ndim)+ xsink_graddescent(isink,1:ndim)
         ! Store the descent velocity for the time-stepping
-        graddescent_over_dt(isink) = NORM2(xsink_graddescent(isink,1:ndim))/g%dtnew(ilevel)
+        p%graddescent_over_dt(isink) = NORM2(xsink_graddescent(isink,1:ndim))/g%dtnew(ilevel)
      endif
   endif
-
+  deallocate(p%graddescent_over_dt)
+#endif
+  end associate
 
 end subroutine
 
