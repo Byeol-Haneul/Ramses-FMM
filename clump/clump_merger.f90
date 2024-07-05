@@ -1347,7 +1347,7 @@ end subroutine trim_clumps
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_clump_properties(s,p,saddle_threshold,mass_threshold,relevance_threshold)
+subroutine particle_clump_properties(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t

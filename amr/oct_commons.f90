@@ -22,8 +22,6 @@ module oct_commons
      integer(kind=8),dimension(1:nhilbert)::hkey
      integer(kind=4),dimension(1:twotondim)::flag1
      integer(kind=4),dimension(1:twotondim)::flag2
-     ! TODO: there is a bug here for clump finder, use a new array flag3 temporary.
-     integer(kind=4),dimension(1:twotondim)::flag3
      integer(kind=4),dimension(1:ndim)::ckey
      logical,dimension(1:twotondim)::refined
      integer(kind=4)::lev
