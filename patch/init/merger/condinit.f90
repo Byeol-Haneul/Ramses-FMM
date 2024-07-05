@@ -145,7 +145,11 @@ subroutine condinit(r,g,x,q,dx,nn)
   type(global_t)::g
   integer ::nn                             ! Number of cells
   real(dp)::dx                             ! Cell size
-  real(dp),dimension(1:nvector,1:nvar)::q ! Conservative variables
+#ifdef MHD
+  real(dp),dimension(1:nvector,1:nvar+3-ndim)::q ! Primitive variables
+#else
+  real(dp),dimension(1:nvector,1:nvar)::q ! Primitive variables
+#endif
   real(dp),dimension(1:nvector,1:ndim)::x  ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
@@ -158,7 +162,6 @@ subroutine condinit(r,g,x,q,dx,nn)
   ! Q(:,:) are in user (aka code) units.
   !================================================================
   integer::ivar,i, ind_gal,j
-  !real(dp),dimension(1:nvector,1:nvar),save::q   ! Primitive variables
   real(dp)::v,M,rho,dzz,zint, HH, rdisk, dpdr,dmax
   real(dp)::rc, rr, rr1, rr2, abs_z, hcar1, hcar2, hcut1, hcut2
   real(dp), dimension(3)::vgal, axe_rot, xx1, xx2, xx, xx_rad, xc1, xc2, vg1, vg2
@@ -344,7 +347,7 @@ subroutine condinit(r,g,x,q,dx,nn)
            q(i,r%ientropy)=q(i,5)/q(i,1)**r%gamma
         endif
         ! V = Vrot * (u_rot^xx_rad)/r + Vx_gal        
-        !  -> Vrot = sqrt(Vcirc**2 - 3*Cs² + r/rho * grad(rho) * Cs²)
+        !  -> Vrot = sqrt(Vcirc**2 - 3*Csï¿½ + r/rho * grad(rho) * Csï¿½)
         select case (rad_profile)
         case ('exponential')
            Vrot = sqrt(max(Vcirc**2 - 3.0D0*a2 - rc/rgal * a2,0.0D0))

@@ -97,6 +97,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
   endif
   
+  !-------------------------
+  ! Sink formation in clumps
+  !-------------------------
+  if(r%sink.and.ilevel==r%levelmin)then
+                                    call m_timer(pst,'sink - formation','start')
+     call m_sink_formation(pst)
+  endif
+
   !----------------------------
   ! Output frame to movie dump
   !----------------------------
@@ -301,14 +309,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(output_star%mass>0)then
         g%mass_star_tot=g%mass_star_tot+output_star%mass
      endif
-  endif
-
-  !-------------------------
-  ! Sink formation in clumps
-  !-------------------------
-  if(r%sink.and.ilevel==r%levelmin)then
-                                    call m_timer(pst,'sink - formation','start')
-     call m_sink_formation(pst)
   endif
 
   !-----------------------

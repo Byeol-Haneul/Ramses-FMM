@@ -114,6 +114,18 @@ subroutine output_part(s,p,filename)
      write(ilun)xsp
   endif
 
+  ! Write acceleration
+  if(allocated(p%fp))then
+     do idim=1,ndim
+        do i=1,p%npart
+           xsp(i)=p%fp(i,idim)
+        end do
+        ivar=ivar+1
+        write(ilun,POS=nskip(ivar))
+        write(ilun)xsp
+     end do
+  endif
+
   ! Write birth time
   if(allocated(p%tp))then
      do i=1,p%npart
@@ -229,6 +241,16 @@ subroutine backup_part(r,g,p,filename)
         xdp(i)=p%zp(i)
      end do
      write(ilun)xdp
+  endif
+
+  ! Write acceleration
+  if(allocated(p%fp))then
+     do idim=1,ndim
+        do i=1,p%npart
+           xdp(i)=p%fp(i,idim)
+        end do
+        write(ilun)xdp
+     end do
   endif
 
   ! Write birth time
