@@ -274,7 +274,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
             vsinkold(1:p%npart,1:ndim) = p%vp(1:p%npart,1:ndim)
 
             ! Update velocity
-            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+p%fp(ipart,1:ndim)*0.5d0*g%dtnew(ilevel)
+            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
             
             ! Update position
             p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
@@ -284,15 +284,15 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 
             gamma_grad_descent = 0.0d0
             do idim=1,ndim
-                gamma_grad_descent = gamma_grad_descent + (p%xp(ipart,idim)-xsinkold(ipart,idim))*(p%fp(ipart,idim)-ff(idim))
+                gamma_grad_descent = gamma_grad_descent + (p%xp(ipart,idim)-xsinkold(ipart,idim))*(ff(idim)-p%fp(idim))
             enddo
             if(gamma_grad_descent>0.0)then
-                gamma_grad_descent = r%fudge_graddescent*g%dtnew(ilevel)*SQRT(ABS(gamma_grad_descent)/(NORM2(p%fp(ipart,1:ndim)-ff(1:ndim)))**2)
+                gamma_grad_descent = r%fudge_graddescent*g%dtnew(ilevel)*SQRT(ABS(gamma_grad_descent)/(NORM2(ff(1:ndim)-p%fp(ipart,1:ndim)))**2)
                 ! Require thatthe sink cannot move more than half a grid
                 if(gamma_grad_descent*fsink_norm>dx_min/2.0) then
-                    xsink_graddescent(ipart,1:ndim) = p%fp(ipart,1:ndim) * dx_min/2.0/fsink_norm
+                    xsink_graddescent(ipart,1:ndim) = ff(1:ndim) * dx_min/2.0/fsink_norm
                 else
-                    xsink_graddescent(ipart,1:ndim) = p%fp(ipart,1:ndim) * gamma_grad_descent
+                    xsink_graddescent(ipart,1:ndim) = ff(1:ndim) * gamma_grad_descent
                 endif
                 ! Uopdate the sink position
                 p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+ xsink_graddescent(ipart,1:ndim)
