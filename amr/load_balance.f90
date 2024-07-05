@@ -712,6 +712,9 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
      if(pst%s%r%star)then
         call balance_part(pst%s,pst%s%star,ilevel)
      endif
+     if(pst%s%r%sink)then
+        call balance_part(pst%s,pst%s%sink,ilevel)
+     endif
 #endif
   endif
 
@@ -770,7 +773,7 @@ subroutine balance_part(s,p,ilevel)
   integer,dimension(1:s%g%ncpu)::npart_cpu,npart_cpu_tot
   real(dp)::xpart_target,xcum_target
 
-  real(dp),dimension(1:ndim)::xp_tmp,vp_tmp
+  real(dp),dimension(1:ndim)::xp_tmp,vp_tmp,fp_tmp
   real(dp)::mp_tmp,zp_tmp,tp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
@@ -1067,6 +1070,12 @@ subroutine balance_part(s,p,ilevel)
            p%zp(ipart)=p%zp(jpart)
            p%zp(jpart)=zp_tmp
         endif
+        ! Swap acceleration
+        if(allocated(p%fp))then
+           fp_tmp(1:ndim)=p%fp(ipart,1:ndim)
+           p%fp(ipart,1:ndim)=p%fp(jpart,1:ndim)
+           p%fp(jpart,1:ndim)=fp_tmp(1:ndim)
+        endif
         ! Swap birth time
         if(allocated(p%tp))then
            tp_tmp=p%tp(ipart)
@@ -1225,6 +1234,7 @@ subroutine balance_part(s,p,ilevel)
   ! Swap metallicities
   !-------------------------
   if(allocated(p%zp))then
+
      countrecv=0
      do icpu=1,g%ncpu
         nbuffer=recv_cnt(icpu)
@@ -1260,6 +1270,53 @@ subroutine balance_part(s,p,ilevel)
 
      ! Wait for full completion of sends
      call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
+
+  !-------------------------
+  ! Swap accelerations
+  !-------------------------
+  if(allocated(p%fp))then
+
+     do idim=1,ndim
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%fp(ipart,idim)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%fp(ipart,idim)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+     end do
 
   endif
 
@@ -1431,9 +1488,9 @@ subroutine balance_part(s,p,ilevel)
   end associate
   
 end subroutine balance_part
-!------------------------------------------------------------------------------
-!------------------------------------------------------------------------------
-!------------------------------------------------------------------------------
-!------------------------------------------------------------------------------
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 #endif
 end module load_balance_module
