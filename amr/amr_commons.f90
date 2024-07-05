@@ -267,6 +267,9 @@ module amr_commons
 
      ! Sink parameters
      integer::rho_type_sink=0
+     logical::sink_descent=.false.
+     real(dp)::fudge_graddescent=1.0d0
+     real(dp)::sink_soft=2
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format

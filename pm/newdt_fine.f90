@@ -154,7 +154,7 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
 
   integer::ipart,idim
 
-  if (p%type.eq.SINK_TYPE)then
+  if (p%type==SINK_TYPE)then
     ! Compute maximum particle velocity
     do idim = 1, ndim
         do ipart = p%headp(ilevel), p%tailp(ilevel)

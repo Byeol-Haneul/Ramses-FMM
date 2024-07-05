@@ -1,5 +1,7 @@
 module pm_parameters
 
+  use amr_parameters, only: dp
+
   logical,parameter :: part_memory=.true. ! Optimize particle memory distribution
 
   integer,parameter :: action_kick_only = 1

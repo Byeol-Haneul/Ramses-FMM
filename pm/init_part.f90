@@ -139,9 +139,13 @@ subroutine init_sink(r,g,p)
   ! Allocate workspace variables
   allocate(p%sortp (r%nsinkmax))
   allocate(p%workp (r%nsinkmax))
+  ! Allocate descent velocity
+  allocate(p%graddescent_over_dt(r%nsinkmax))
   ! Allocate pointers to particle levels
   allocate(p%headp(r%levelmin:r%nlevelmax))
   allocate(p%tailp(r%levelmin:r%nlevelmax))
+
+  
   ! No particle just yet
   p%headp=1
   p%tailp=0

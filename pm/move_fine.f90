@@ -4,14 +4,13 @@ contains
 !################################################################
 !################################################################
 !################################################################
-subroutine m_kick_drift_part(pst,ilevel,action_part,ptype)
+subroutine m_kick_drift_part(pst,ilevel,action_part)
   use amr_parameters, only: ndim,dp,twotondim
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
   integer::ilevel
   integer::action_part
-  integer::ptype
   !--------------------------------------------------------------
   ! Move particles according to kick-drift leap frog scheme.
   !--------------------------------------------------------------
@@ -23,8 +22,7 @@ subroutine m_kick_drift_part(pst,ilevel,action_part,ptype)
 
   input_array(1)=ilevel
   input_array(2)=action_part
-  input_array(3)=ptype
-  call r_kick_drift_part(pst,input_array,3,dummy,0)
+  call r_kick_drift_part(pst,input_array,2,dummy,0)
 
 end subroutine m_kick_drift_part
 !################################################################
@@ -55,14 +53,11 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-     ptype=input_array(3)
-     if(ptype.eq.0 .or. ptype.eq.1)then
-       call kick_drift_part(pst%s,pst%s%p,ilevel,action_part)
-     endif
-     if(pst%s%r%star.and.(ptype.eq.0 .or. ptype.eq.2))then
+     call kick_drift_part(pst%s,pst%s%p,ilevel,action_part)
+     if(pst%s%r%star)then
         call kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
      endif
-     if(pst%s%r%sink.and.(ptype.eq.0 .or. ptype.eq.3))then
+     if(pst%s%r%sink)then
         call kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
      endif
   endif
@@ -100,6 +95,9 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
+  real(dp)::dx_min,fsink_norm,gamma_grad_descent
+  real(dp),dimension(1:s%r%nsinkmax,1:ndim)    ::xsinkold,vsinkold,fsinkold,xsink_graddescent
+   
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -269,12 +267,47 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 
      ! Perform kick, or drift, or both
      if(action_part==action_kick_drift)then
+        if(p%type==SINK_TYPE.and.r%sink_descent)then
 
-        ! Update velocity
-        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
-        
-        ! Update position
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+            dx_min=r%boxlen/2**r%nlevelmax/g%aexp
+            xsinkold(1:p%npart,1:ndim) = p%xp(1:p%npart,1:ndim)
+            vsinkold(1:p%npart,1:ndim) = p%vp(1:p%npart,1:ndim)
+
+            ! Update velocity
+            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+p%fp(ipart,1:ndim)*0.5d0*g%dtnew(ilevel)
+            
+            ! Update position
+            p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+
+            xsink_graddescent(1:p%npart,1:ndim)=0.0
+            fsink_norm=NORM2(ff(1:ndim))
+
+            gamma_grad_descent = 0.0d0
+            do idim=1,ndim
+                gamma_grad_descent = gamma_grad_descent + (p%xp(ipart,idim)-xsinkold(ipart,idim))*(p%fp(ipart,idim)-ff(idim))
+            enddo
+            if(gamma_grad_descent>0.0)then
+                gamma_grad_descent = r%fudge_graddescent*g%dtnew(ilevel)*SQRT(ABS(gamma_grad_descent)/(NORM2(p%fp(ipart,1:ndim)-ff(1:ndim)))**2)
+                ! Require thatthe sink cannot move more than half a grid
+                if(gamma_grad_descent*fsink_norm>dx_min/2.0) then
+                    xsink_graddescent(ipart,1:ndim) = p%fp(ipart,1:ndim) * dx_min/2.0/fsink_norm
+                else
+                    xsink_graddescent(ipart,1:ndim) = p%fp(ipart,1:ndim) * gamma_grad_descent
+                endif
+                ! Uopdate the sink position
+                p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+ xsink_graddescent(ipart,1:ndim)
+                ! Store the descent velocity for the time-stepping
+                p%graddescent_over_dt(ipart) = NORM2(xsink_graddescent(ipart,1:ndim))/g%dtnew(ilevel)
+            endif
+        else
+            ! Update velocity
+            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+            
+            ! Update position
+            p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+        endif
+
+
 
      else if(action_part.EQ.action_kick_only)then
 
