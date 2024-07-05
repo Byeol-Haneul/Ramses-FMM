@@ -180,7 +180,7 @@ subroutine clump_finder(s)
   endif
   !----------------------------------------------------------------------
   ! Remove all peaks that are below the relevance threshold
-  ! or the mass threshold in the flag3 global peak ID field.
+  ! or the mass threshold in the flag1 global peak ID field.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0.or.s%c%mass_threshold>0)then
     call trim_clumps(s)
@@ -600,10 +600,10 @@ subroutine collect_patch(s)
   c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0; c%peak_level=0
 
   !----------------------------------------------------------------------
-  ! Flag peaks with global peak id using flag3 array
+  ! Flag peaks with global peak id using flag1 array
   !----------------------------------------------------------------------
   do igrid=1,r%ngridmax
-     m%grid(igrid)%flag3(1:twotondim)=0
+     m%grid(igrid)%flag1(1:twotondim)=0
   end do
   ipeak = 0
   do itest=1,c%ntest
@@ -611,7 +611,7 @@ subroutine collect_patch(s)
         ipeak=ipeak+1
         igrid=c%grid(itest)
         ind=c%cell(itest)
-        m%grid(igrid)%flag3(ind)=ipeak+c%npeak_cum(g%myid-1)
+        m%grid(igrid)%flag1(ind)=ipeak+c%npeak_cum(g%myid-1)
         c%peak_grid(ipeak)=igrid
         c%peak_cell(ipeak)=ind
         c%peak_level(ipeak)=c%level(itest)
@@ -639,9 +639,9 @@ subroutine collect_patch(s)
            igrid=c%grid(itest)
            ind=c%cell(itest)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
-           if(m%grid(igrid)%flag3(ind).ne.gridn%flag3(icelln))nmove=nmove+1
-           m%grid(igrid)%flag3(ind)=gridn%flag3(icelln)
-           if(m%grid(igrid)%flag3(ind).eq.0)nzero=nzero+1
+           if(m%grid(igrid)%flag1(ind).ne.gridn%flag1(icelln))nmove=nmove+1
+           m%grid(igrid)%flag1(ind)=gridn%flag1(icelln)
+           if(m%grid(igrid)%flag1(ind).eq.0)nzero=nzero+1
         endif
      end do
      
@@ -738,7 +738,7 @@ subroutine collect_saddle(s)
      igrid=c%grid(itest)
      ind=c%cell(itest)
 
-     peak_cen = m%grid(igrid)%flag3(ind)
+     peak_cen = m%grid(igrid)%flag1(ind)
      dens_cen = m%grid(igrid)%rho(ind)
      
      ! Set pointers to null
@@ -799,7 +799,7 @@ subroutine collect_saddle(s)
         gridn => grid_nbor(j)%p ! Gather neighboring grid
         icelln = icell_nbor(j)
 
-        peak_nbor = gridn%flag3(icelln)
+        peak_nbor = gridn%flag1(icelln)
         dens_nbor = gridn%rho(icelln)
         
         ok = peak_cen/=0
@@ -849,7 +849,7 @@ subroutine pack_fetch_saddle(grid,msg_size,msg_array)
   type(msg_int4_small_realdp)::msg
 
   do ind=1,twotondim
-     msg%flg(ind)=grid%flag3(ind)
+     msg%flg(ind)=grid%flag1(ind)
   end do
   do ind=1,twotondim
      if(grid%refined(ind))then
@@ -888,7 +888,7 @@ subroutine unpack_fetch_saddle(grid,msg_size,msg_array,hash_key)
   msg=transfer(msg_array,msg)
 
   do ind=1,twotondim
-     grid%flag3(ind)=msg%flg(ind)
+     grid%flag1(ind)=msg%flg(ind)
   end do
   do ind=1,twotondim
      if(msg%ref(ind)==1)then
