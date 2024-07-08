@@ -284,7 +284,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 
             gamma_grad_descent = 0.0d0
             do idim=1,ndim
-                gamma_grad_descent = gamma_grad_descent + (p%xp(ipart,idim)-xsinkold(ipart,idim))*(ff(idim)-p%fp(idim))
+                gamma_grad_descent = gamma_grad_descent + (p%xp(ipart,idim)-xsinkold(ipart,idim))*(ff(idim)-p%fp(ipart,idim))
             enddo
             if(gamma_grad_descent>0.0)then
                 gamma_grad_descent = r%fudge_graddescent*g%dtnew(ilevel)*SQRT(ABS(gamma_grad_descent)/(NORM2(ff(1:ndim)-p%fp(ipart,1:ndim)))**2)
