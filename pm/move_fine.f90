@@ -268,45 +268,11 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 
      ! Perform kick, or drift, or both
      if(action_part==action_kick_drift)then
-        if(p%type==SINK_TYPE.and.r%sink_descent)then
-
-            dx_min=r%boxlen/2**r%nlevelmax/g%aexp
-            xsinkold(1:p%npart,1:ndim) = p%xp(1:p%npart,1:ndim)
-            vsinkold(1:p%npart,1:ndim) = p%vp(1:p%npart,1:ndim)
-
-            ! Update velocity
-            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+        ! Update velocity
+        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
             
-            ! Update position
-            p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-
-            xsink_graddescent(1:p%npart,1:ndim)=0.0
-            fsink_norm=NORM2(ff(1:ndim))
-
-            gamma_grad_descent = 0.0d0
-            do idim=1,ndim
-                gamma_grad_descent = gamma_grad_descent + (p%xp(ipart,idim)-xsinkold(ipart,idim))*(ff(idim)-p%fp(ipart,idim))
-            enddo
-            if(gamma_grad_descent>0.0)then
-                gamma_grad_descent = r%fudge_graddescent*g%dtnew(ilevel)*SQRT(ABS(gamma_grad_descent)/(NORM2(ff(1:ndim)-p%fp(ipart,1:ndim)))**2)
-                ! Require thatthe sink cannot move more than half a grid
-                if(gamma_grad_descent*fsink_norm>dx_min/2.0) then
-                    xsink_graddescent(ipart,1:ndim) = ff(1:ndim) * dx_min/2.0/fsink_norm
-                else
-                    xsink_graddescent(ipart,1:ndim) = ff(1:ndim) * gamma_grad_descent
-                endif
-                ! Uopdate the sink position
-                p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+ xsink_graddescent(ipart,1:ndim)
-                ! Store the descent velocity for the time-stepping
-                p%graddescent_over_dt(ipart) = NORM2(xsink_graddescent(ipart,1:ndim))/g%dtnew(ilevel)
-            endif
-        else
-            ! Update velocity
-            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
-            
-            ! Update position
-            p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-        endif
+        ! Update position
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
 
 
 
