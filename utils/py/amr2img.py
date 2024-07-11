@@ -11,6 +11,7 @@ parser.add_argument("--log", help="plot log variable",action="store_true")
 parser.add_argument("--out", help="output a png image")
 parser.add_argument("--pref", help="specify a file prefix")
 parser.add_argument("--min", help="specify a minimum variable value")
+parser.add_argument("--max", help="specify a maximum variable value")
 parser.add_argument("--var", help="specify a variable number")
 parser.add_argument("--xcen", help="specify the image center x-coordinate")
 parser.add_argument("--ycen", help="specify the image center y-coordinate")
@@ -24,12 +25,14 @@ path = args.path
 prefix = args.pref
 ivar = args.var
 vmin = args.min
+vmax = args.max
 radius = args.rad
 xcenter = args.xcen
 ycenter = args.ycen
 zcenter = args.zcen
 clump = args.clump
 axis = args.dir
+log = args.log
 
 if clump==None:
     clump=False
@@ -52,6 +55,10 @@ if radius==None:
 else:
     radius=float(radius)
 center=np.array([xcenter,ycenter,zcenter])
+
+log0=None
+if log:
+    log0=1
 
 if ivar==None:
     ivar=0
@@ -82,7 +89,7 @@ if axis=="z":
     ii=1; jj=2
 
 c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
-ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=True,vmin=vmin)
+ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax)
 
 if clump:
     h=ram.rd_clump(nout)
