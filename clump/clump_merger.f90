@@ -88,6 +88,10 @@ subroutine deallocate_peak_patch_arrays(s)
   ! Deallocate hash table
   deallocate(c%hkey,c%gkey,c%nkey)
 
+  ! reset test_total and peak_total to zero
+  c%ntest_tot=0
+  c%npeak_tot=0
+
   end associate
 
 end subroutine deallocate_peak_patch_arrays

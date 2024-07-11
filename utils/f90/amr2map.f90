@@ -224,7 +224,7 @@ program amr2map
               ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
               read(11,POS=ipos)uold
            else
-              ipos=iskip_hydro+(4*twotondim*nvar)*(i-1)
+              ipos=iskip_hydro+(4*twotondim*nvar)*int((i-1),kind=8)
               read(11,POS=ipos)qold
            endif
            ! Loop over 2**ndim cells

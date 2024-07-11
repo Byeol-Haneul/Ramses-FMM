@@ -91,6 +91,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc,dteff
+  real(kind=8)::gamma,norm2,fnorm,delta
   real(dp),dimension(1:ndim)::ff
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
@@ -308,6 +309,35 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
         endif
 
 
+
+        ! For sink particle only
+        if(p%type==SINK_TYPE.and.r%sink_descent)then
+
+           ! Compute gradient descent coefficients
+           gamma = 0d0
+           norm2 = 0d0
+           fnorm = 0d0
+           do idim=1,ndim
+              gamma = gamma + p%vp(ipart,idim)*(ff(idim)-p%fp(ipart,idim))
+              norm2 = norm2 + (ff(idim)-p%fp(ipart,idim))**2
+              fnorm = fnorm + ff(idim)**2
+           enddo
+           gamma = gamma*g%dtnew(ilevel) ! cm2 s-2
+           fnorm = sqrt(fnorm)
+           delta = 0d0
+           if(norm2>0)then
+              delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)/norm2)*fnorm,0.5d0*dx_loc)
+           endif
+
+           ! Update particle positions
+           if(fnorm>0)then
+              p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + ff(1:ndim)/fnorm*delta
+           endif
+
+           ! Store old force
+           p%fp(ipart,1:ndim)=ff(1:ndim)
+
+        endif
 
      else if(action_part.EQ.action_kick_only)then
 

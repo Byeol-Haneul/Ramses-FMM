@@ -347,7 +347,7 @@ subroutine condinit(r,g,x,q,dx,nn)
            q(i,r%ientropy)=q(i,5)/q(i,1)**r%gamma
         endif
         ! V = Vrot * (u_rot^xx_rad)/r + Vx_gal        
-        !  -> Vrot = sqrt(Vcirc**2 - 3*Cs� + r/rho * grad(rho) * Cs�)
+        !  -> Vrot = sqrt(Vcirc**2 - 3*Cs**2 + r/rho * grad(rho) * Cs**2)
         select case (rad_profile)
         case ('exponential')
            Vrot = sqrt(max(Vcirc**2 - 3.0D0*a2 - rc/rgal * a2,0.0D0))
