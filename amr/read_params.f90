@@ -299,6 +299,8 @@ subroutine m_read_params(pst)
 
   ! Sink parameters
   integer::rho_type_sink=0
+  logical::sink_descent=.false.
+  real(dp)::fudge_descent=0.5d0
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -397,7 +399,7 @@ subroutine m_read_params(pst)
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
-  namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink
+  namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -973,6 +975,8 @@ subroutine m_read_params(pst)
   s%r%rho_type_clump=rho_type_clump
 
   s%r%rho_type_sink=rho_type_sink
+  s%r%sink_descent=sink_descent
+  s%r%fudge_descent=fudge_descent
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format
