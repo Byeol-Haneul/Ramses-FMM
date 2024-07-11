@@ -32,12 +32,20 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            filename2=TRIM(filename)//'star.'
            call backup_part(pst%s%r,pst%s%g,pst%s%star,filename2)
         endif
+        if(pst%s%r%sink)then
+           filename2=TRIM(filename)//'sink.'
+           call backup_part(pst%s%r,pst%s%g,pst%s%sink,filename2)
+        endif
      else
         filename2=TRIM(filename)//'part.'
         call output_part(pst%s,pst%s%p,filename2)
         if(pst%s%r%star)then
            filename2=TRIM(filename)//'star.'
            call output_part(pst%s,pst%s%star,filename2)
+        endif
+        if(pst%s%r%sink)then
+           filename2=TRIM(filename)//'sink.'
+           call output_part(pst%s,pst%s%sink,filename2)
         endif
      endif
   endif
@@ -104,6 +112,18 @@ subroutine output_part(s,p,filename)
      ivar=ivar+1
      write(ilun,POS=nskip(ivar))
      write(ilun)xsp
+  endif
+
+  ! Write acceleration
+  if(allocated(p%fp))then
+     do idim=1,ndim
+        do i=1,p%npart
+           xsp(i)=p%fp(i,idim)
+        end do
+        ivar=ivar+1
+        write(ilun,POS=nskip(ivar))
+        write(ilun)xsp
+     end do
   endif
 
   ! Write birth time
@@ -221,6 +241,16 @@ subroutine backup_part(r,g,p,filename)
         xdp(i)=p%zp(i)
      end do
      write(ilun)xdp
+  endif
+
+  ! Write acceleration
+  if(allocated(p%fp))then
+     do idim=1,ndim
+        do i=1,p%npart
+           xdp(i)=p%fp(i,idim)
+        end do
+        write(ilun)xdp
+     end do
   endif
 
   ! Write birth time

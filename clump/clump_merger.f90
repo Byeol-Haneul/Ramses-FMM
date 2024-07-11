@@ -57,20 +57,30 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%max_dens)
 
   deallocate(c%n_cells)
-  deallocate(c%n_cells_halo)
   deallocate(c%lev_peak)
   deallocate(c%new_peak)
-  deallocate(c%ind_halo)
-  deallocate(c%halo_mass)
-  deallocate(c%clump_mass)
   deallocate(c%relevance)
 
+  deallocate(c%n_cells_halo)
+  deallocate(c%ind_halo)
+  deallocate(c%halo_mass)
+
+  deallocate(c%clump_mass)
+  deallocate(c%clump_vol)
   deallocate(c%clump_size)
   deallocate(c%peak_pos)
   deallocate(c%center_of_mass)
   deallocate(c%min_dens)
   deallocate(c%av_dens)
-  deallocate(c%clump_vol)
+
+  deallocate(c%particle_mass)
+  deallocate(c%peak_vel)
+  deallocate(c%peak_acc)
+  deallocate(c%mass_bin)
+
+  deallocate(c%occupied)
+  deallocate(c%var_refine)
+  deallocate(c%form_sink)
 
   ! Deallocate sparse density matrix
   call sparse_kill(c%sparse_saddle_dens)
@@ -86,7 +96,7 @@ end subroutine deallocate_peak_patch_arrays
 !################################################################
 !################################################################
 subroutine allocate_peak_patch_arrays(s)
-  use amr_parameters, ONLY: ndim, dp
+  use amr_parameters, ONLY: ndim, dp, nbin
   use clfind_commons
   use ramses_commons, ONLY: ramses_t
   use sparse_matrix
@@ -102,20 +112,30 @@ subroutine allocate_peak_patch_arrays(s)
   ! Allocate peak-patch_properties
   !-------------------------------
   allocate(c%n_cells(1:c%npeak_max))
-  allocate(c%n_cells_halo(1:c%npeak_max))
   allocate(c%lev_peak(1:c%npeak_max))
   allocate(c%new_peak(c%npeak_max))
-  allocate(c%ind_halo(1:c%npeak_max))
-  allocate(c%halo_mass(1:c%npeak_max))
-  allocate(c%clump_mass(1:c%npeak_max))
   allocate(c%relevance(1:c%npeak_max))
 
+  allocate(c%n_cells_halo(1:c%npeak_max))
+  allocate(c%ind_halo(1:c%npeak_max))
+  allocate(c%halo_mass(1:c%npeak_max))
+
+  allocate(c%clump_mass(1:c%npeak_max))
   allocate(c%clump_size(1:c%npeak_max,1:ndim))
+  allocate(c%clump_vol(1:c%npeak_max))
   allocate(c%peak_pos(1:c%npeak_max,1:ndim))
   allocate(c%center_of_mass(1:c%npeak_max,1:ndim))
   allocate(c%min_dens(1:c%npeak_max))
   allocate(c%av_dens(1:c%npeak_max))
-  allocate(c%clump_vol(1:c%npeak_max))
+
+  allocate(c%particle_mass(1:c%npeak_max))
+  allocate(c%peak_vel(1:c%npeak_max,1:ndim))
+  allocate(c%peak_acc(1:c%npeak_max,1:ndim))
+  allocate(c%mass_bin(1:c%npeak_max,1:nbin))
+
+  allocate(c%occupied(1:c%npeak_max))
+  allocate(c%var_refine(1:c%npeak_max))
+  allocate(c%form_sink(1:c%npeak_max))
 
   !-------------------------------------------
   ! Initialize sparse matrix for saddle points
@@ -345,7 +365,7 @@ subroutine merge_clumps(s,action)
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
-  mass_min=g%mp_min*r%mass_threshold
+  mass_min=g%mp_min*c%mass_threshold
 
   if (r%verbose.and.g%myid==1)then
      if(action.EQ.'relevance')then
@@ -364,7 +384,7 @@ subroutine merge_clumps(s,action)
         alive(i)=1
      endif
      if(action.EQ.'saddleden')then
-        if(c%relevance(i)>r%relevance_threshold)then
+        if(c%relevance(i)>c%relevance_threshold)then
            alive(i)=1
         else
            alive(i)=0
@@ -417,12 +437,12 @@ subroutine merge_clumps(s,action)
                  if(c%sparse_saddle_dens%maxval(ipeak)>0)then
                     relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
                  else
-                    relevance_peak=c%max_dens(ipeak)/r%density_threshold
+                    relevance_peak=c%max_dens(ipeak)/c%density_threshold
                  end if
-                 do_merge=relevance_peak<r%relevance_threshold
+                 do_merge=relevance_peak<c%relevance_threshold
               endif
               if(action.EQ.'saddleden')then
-                 do_merge=(c%sparse_saddle_dens%maxval(ipeak)>r%saddle_threshold)
+                 do_merge=(c%sparse_saddle_dens%maxval(ipeak)>c%saddle_threshold)
               endif
               if(do_merge)then
                  if(c%sparse_saddle_dens%maxloc(ipeak)>0)then
@@ -439,7 +459,7 @@ subroutine merge_clumps(s,action)
               c%new_peak(ipeak)=merge_to
            endif
         end do
-        ! Update boundary conditions for new_peak and clump_mass arrays
+        ! Update boundary conditions for new_peak array
         call boundary_peak_int(s,c%new_peak)
         iter=iter+1
 #ifndef WITHOUTMPI
@@ -569,7 +589,7 @@ subroutine merge_clumps(s,action)
            if (c%sparse_saddle_dens%maxval(ipeak)>0)then
               relevance_peak=c%max_dens(ipeak)/c%sparse_saddle_dens%maxval(ipeak)
            else
-              relevance_peak=c%max_dens(ipeak)/r%density_threshold
+              relevance_peak=c%max_dens(ipeak)/c%density_threshold
            end if
            c%relevance(ipeak)=relevance_peak
         else
@@ -812,6 +832,62 @@ end subroutine virtual_peak_dp
 !################################################################
 !################################################################
 !################################################################
+subroutine virtual_peak_max(s,xx,ii)
+  use amr_commons
+  use ramses_commons, only: ramses_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  implicit none
+  type(ramses_t)::s
+  real(dp),dimension(1:s%c%npeak_max)::xx
+  integer ,dimension(1:s%c%npeak_max)::ii
+
+#ifndef WITHOUTMPI
+  integer::info,icpu
+  real(kind=8),allocatable,dimension(:)::dp_peak_send_buf,dp_peak_recv_buf
+  integer,allocatable,dimension(:)::int_peak_send_buf,int_peak_recv_buf
+  integer::ipeak,jpeak,j
+  integer,dimension(1:s%g%ncpu)::ipeak_alltoall
+
+  associate(g=>s%g,c=>s%c)
+
+  allocate(int_peak_send_buf(1:c%peak_send_tot))
+  allocate(int_peak_recv_buf(1:c%peak_recv_tot))
+  allocate(dp_peak_send_buf(1:c%peak_send_tot))
+  allocate(dp_peak_recv_buf(1:c%peak_recv_tot))
+
+  ipeak_alltoall=0
+  do ipeak=c%npeak+1,c%hfree-1
+     call get_local_peak_cpu(s,ipeak,icpu)
+     ipeak_alltoall(icpu)=ipeak_alltoall(icpu)+1
+     dp_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=xx(ipeak)
+     int_peak_send_buf(c%peak_send_oft(icpu)+ipeak_alltoall(icpu))=ii(ipeak)
+  end do
+  call MPI_ALLTOALLV(dp_peak_send_buf,c%peak_send_cnt,c%peak_send_oft,MPI_DOUBLE_PRECISION, &
+       &             dp_peak_recv_buf,c%peak_recv_cnt,c%peak_recv_oft,MPI_DOUBLE_PRECISION,MPI_COMM_WORLD,info)
+  call MPI_ALLTOALLV(int_peak_send_buf,c%peak_send_cnt,c%peak_send_oft,MPI_INTEGER, &
+       &             int_peak_recv_buf,c%peak_recv_cnt,c%peak_recv_oft,MPI_INTEGER,MPI_COMM_WORLD,info)
+  do j=1,c%peak_recv_tot
+     ipeak=c%peak_recv_buf(j)-c%npeak_cum(g%myid-1)
+     if(xx(ipeak)<dp_peak_recv_buf(j))then
+        xx(ipeak)=dp_peak_recv_buf(j)
+        ii(ipeak)=int_peak_recv_buf(j)
+        call get_local_peak_id(s,int_peak_recv_buf(j),jpeak)
+     endif
+  end do
+
+  deallocate(dp_peak_send_buf,dp_peak_recv_buf)
+  deallocate(int_peak_send_buf,int_peak_recv_buf)
+
+  end associate
+#endif
+
+end subroutine virtual_peak_max
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine virtual_saddle_max(s)
   use amr_commons
   use ramses_commons, only: ramses_t
@@ -1012,7 +1088,7 @@ end subroutine analyze_peak_memory
 !################################################################
 !################################################################
 !################################################################
-subroutine compute_clump_properties(s)
+subroutine compute_clump_properties(s,rtype)
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
@@ -1024,15 +1100,15 @@ subroutine compute_clump_properties(s)
   integer::info
 #endif
   type(ramses_t)::s
+  integer::rtype
   !----------------------------------------------------------------------------
   ! This subroutine performs a loop over all cells above the threshold and
   ! collects the  relevant information. After some MPI communications,
   ! all necessary peak-patch properties are computed
   !----------------------------------------------------------------------------
   integer::ipart,grid,peak_nr,ilevel,global_peak_id,ipeak,plevel,igrid,itest,icelln,idim,ind
-  real(dp),dimension(1:ndim)::xcell
+  real(dp),dimension(1:ndim)::xcell,accel
   real(dp)::dx_loc,tot_mass
-  real(dp),dimension(1:ndim)::xcen
   real(dp)::zero=0
   ! variables needed temporarily store cell properties
   real(dp)::d=0, vol=0
@@ -1049,28 +1125,37 @@ subroutine compute_clump_properties(s)
   c%min_dens=huge(zero)
   c%n_cells=0; c%n_cells_halo=0
   c%halo_mass=0d0; c%clump_mass=0d0; c%clump_vol=0d0
-  c%center_of_mass=0d0
-  c%peak_pos=0d0
+  c%center_of_mass=0d0; c%peak_pos=0d0; c%peak_vel=0d0; c%peak_acc=0d0
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering compute clump properties'
-  
+
   !--------------------------------------------------------
   ! Loop over local peaks and compute peak cell coordinates
   !--------------------------------------------------------
   do ipeak=1,c%npeak
-    ilevel=c%peak_level(ipeak)
-    igrid=c%peak_grid(ipeak)
-    ind=c%peak_cell(ipeak)
-    dx_loc=r%boxlen/2**ilevel
-     ! Peak cell coordinates
-    xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+     ilevel=c%peak_level(ipeak)
+     igrid=c%peak_grid(ipeak)
+     ind=c%peak_cell(ipeak)
+     dx_loc=r%boxlen/2**ilevel
+     ! Peak cell coordinates and acceleration
+     xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
 #if NDIM>1
-    xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+     xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
 #endif
 #if NDIM>2
-    xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
+     xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
 #endif
-    c%peak_pos(ipeak,1:ndim)=xcell(1:ndim)
+     c%peak_pos(ipeak,1:ndim)=xcell(1:ndim)
+#ifdef GRAV
+     accel(1)=m%grid(igrid)%f(ind,1)
+#if NDIM>1
+     accel(2)=m%grid(igrid)%f(ind,2)
+#endif
+#if NDIM>2
+     accel(3)=m%grid(igrid)%f(ind,3)
+#endif
+     c%peak_acc(ipeak,1:ndim)=accel(1:ndim)
+#endif
   end do
 #ifndef WITHOUTMPI
   ! Scatter results to all MPI domains
@@ -1083,52 +1168,58 @@ subroutine compute_clump_properties(s)
   ! loop over all cells above the threshold
   !--------------------------------------------------------------------------
   do itest=1,c%ntest
-    ilevel=c%level(itest)
-    igrid=c%grid(itest)
-    ind=c%cell(itest)
-    global_peak_id=m%grid(igrid)%flag1(ind)
-
-    if (global_peak_id /=0 ) then
-      call get_local_peak_id(s,global_peak_id,peak_nr)
-
-      ! Cell density
+     ilevel=c%level(itest)
+     igrid=c%grid(itest)
+     ind=c%cell(itest)
+     global_peak_id=m%grid(igrid)%flag1(ind)
+     
+     if (global_peak_id /=0 ) then
+        call get_local_peak_id(s,global_peak_id,peak_nr)
+        
+        ! Cell density
 #ifdef GRAV
-      d=m%grid(igrid)%rho(ind)
+        d=m%grid(igrid)%rho(ind)
 #endif
-      ! Cell volume
-      dx_loc=r%boxlen/2**ilevel
-      vol=dx_loc**ndim
-      
-      ! Number of leaf cells per clump
-      c%n_cells(peak_nr)=c%n_cells(peak_nr)+1
-
-      ! Clump min density
-      c%min_dens(peak_nr)=min(c%min_dens(peak_nr),d)
-
-      ! Clump mass
-      c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*d
-
-      ! Clump volume
-      c%clump_vol(peak_nr)=c%clump_vol(peak_nr)+vol
-
-      ! Cell coordinates
-      xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
+        ! Cell volume
+        dx_loc=r%boxlen/2**ilevel
+        vol=dx_loc**ndim
+        
+        ! Number of leaf cells per clump
+        c%n_cells(peak_nr)=c%n_cells(peak_nr)+1
+        
+        ! Clump min density
+        c%min_dens(peak_nr)=min(c%min_dens(peak_nr),d)
+        
+        ! Clump mass
+        c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*d
+        
+        ! Clump volume
+        c%clump_vol(peak_nr)=c%clump_vol(peak_nr)+vol
+        
+        ! Cell coordinates
+        xcell(1)=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx_loc-m%skip(1)
 #if NDIM>1
-      xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
+        xcell(2)=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx_loc-m%skip(2)
 #endif
 #if NDIM>2
-      xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
+        xcell(3)=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx_loc-m%skip(3)
 #endif
-      ! In case of periodic boundaries
-      do idim=1,ndim
-         if ((xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
-         if ((xcell(idim)-c%peak_pos(peak_nr,idim))<-r%boxlen*0.5)xcell(idim)=xcell(idim)+r%boxlen
-      end do
-
-      ! Clump center of mass location
-      c%center_of_mass(peak_nr,1:ndim)=c%center_of_mass(peak_nr,1:ndim)+vol*d*xcell(1:ndim)
-
-    end if
+        ! In case of periodic boundaries
+        do idim=1,ndim
+           if ((xcell(idim)-c%peak_pos(peak_nr,idim))>r%boxlen*0.5)xcell(idim)=xcell(idim)-r%boxlen
+           if ((xcell(idim)-c%peak_pos(peak_nr,idim))<-r%boxlen*0.5)xcell(idim)=xcell(idim)+r%boxlen
+        end do
+        
+        ! Clump center of mass location
+        c%center_of_mass(peak_nr,1:ndim)=c%center_of_mass(peak_nr,1:ndim)+vol*d*xcell(1:ndim)
+        
+        ! Clump velocity for gas
+#ifdef HYDRO
+        if (r%hydro.AND.rtype.eq.3)then
+           c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+vol*m%grid(igrid)%uold(ind,2:ndim+1)
+        endif
+#endif        
+     end if
   end do
   call build_peak_communicator(s)
 
@@ -1140,6 +1231,7 @@ subroutine compute_clump_properties(s)
   call virtual_peak_dp(s,c%clump_vol,'sum')
   do i=1,ndim
      call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
+     call virtual_peak_dp(s,c%peak_vel(1,i),'sum')
   end do
 #endif
 
@@ -1147,6 +1239,9 @@ subroutine compute_clump_properties(s)
   do ipeak=1,c%npeak
      if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
         c%center_of_mass(ipeak,1:ndim)=c%center_of_mass(ipeak,1:ndim)/c%clump_mass(ipeak)
+        if (r%hydro.AND.rtype.eq.3)then
+           c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%clump_mass(ipeak)
+        endif
      end if
   end do
 
@@ -1155,6 +1250,7 @@ subroutine compute_clump_properties(s)
   do i=1,ndim
      call boundary_peak_dp(s,c%peak_pos(1,i))
      call boundary_peak_dp(s,c%center_of_mass(1,i))
+     call boundary_peak_dp(s,c%peak_vel(1,i))
   end do
 #endif
 
@@ -1233,9 +1329,9 @@ subroutine trim_clumps(s)
      global_peak_id=m%grid(igrid)%flag1(ind)
      if (global_peak_id /=0 ) then
         call get_local_peak_id(s,global_peak_id,ipeak)
-        if(c%relevance(ipeak).LE.r%relevance_threshold.OR.&
-             & c%clump_mass(ipeak).LE.r%mass_threshold*g%mp_min.OR.&
-             & c%halo_mass(ipeak).LE.r%mass_threshold*g%mp_min)then
+        if(c%relevance(ipeak).LE.c%relevance_threshold.OR.&
+             & c%clump_mass(ipeak).LE.c%mass_threshold*g%mp_min.OR.&
+             & c%halo_mass(ipeak).LE.c%mass_threshold*g%mp_min)then
            m%grid(igrid)%flag1(ind)=0
         endif
      endif
@@ -1244,6 +1340,275 @@ subroutine trim_clumps(s)
   end associate
 
 end subroutine trim_clumps
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine particle_clump_properties(s,p)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_commons, only:part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use boundaries, only: init_bound_flag
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  !==================================================================
+  ! This routine computes various clump properties.
+  ! In particular, it computes for each particle its parent peak id.
+  ! This is used to compute mass profiles for each halo.
+  ! This is also stored in the peak_part and peak_star files.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !==================================================================
+  ! Local variables
+  integer,dimension(1:ndim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_cell
+  integer::i,ipeak,ipart,icell,ind,idim,ibin,ilevel
+  integer::global_peak_id,global_halo_id
+  integer::halo_nr,peak_nr,no_halo
+  real(dp)::dist,xx,rad
+  type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
+  logical::ok_level,ok_leaf
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  !---------------------------------
+  ! Reads peak id of input particles
+  !---------------------------------
+  call particle_peak_id(s,p,no_halo)
+
+  !--------------------------------------------
+  ! Sort particles according to global clump id
+  !--------------------------------------------
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
+
+  !-----------------------------------------
+  ! Compute peak velocity based on particles
+  !-----------------------------------------
+  c%particle_mass=0
+  c%peak_vel=0
+  do i=1+no_halo,p%npart
+     ! Get peak id
+     ipart=p%sortp(i)
+     global_peak_id=p%workp(i)
+     if (global_peak_id /=0 ) then
+        call get_local_peak_id(s,global_peak_id,peak_nr)
+        c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
+        c%particle_mass(peak_nr)=c%particle_mass(peak_nr)+p%mp(ipart)
+     endif
+  end do
+#ifndef WITHOUTMPI
+  ! Update peak communicator
+  call build_peak_communicator(s)
+  ! Collect results from all MPI domains
+  call virtual_peak_dp(s,c%particle_mass,'sum')
+  do idim=1,ndim
+     call virtual_peak_dp(s,c%peak_vel(1,idim),'sum')
+  end do
+#endif
+  ! Compute specific quantities
+  do ipeak=1,c%npeak
+     if (c%particle_mass(ipeak)>0)then
+        c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%particle_mass(ipeak)
+     end if
+  end do
+
+  if(c%saddle_threshold>0)then        
+
+#ifndef WITHOUTMPI
+  !-----------------------------------------
+  ! Bring new halos into local memory
+  !-----------------------------------------
+  call boundary_peak_int(s,c%ind_halo)
+  do i=1+no_halo,p%npart
+     global_peak_id=p%workp(i)
+     if (global_peak_id /=0 ) then
+        call get_local_peak_id(s,global_peak_id,peak_nr)
+        global_halo_id=c%ind_halo(peak_nr)
+        call get_local_peak_id(s,global_halo_id,halo_nr)
+     endif
+  end do
+  ! Build new communicator
+  call build_peak_communicator(s)
+  ! Update local values for remote peaks
+  call boundary_peak_int(s,c%ind_halo)
+  call boundary_peak_dp(s,c%halo_mass)
+  do idim=1,ndim
+     call boundary_peak_dp(s,c%peak_pos(1,idim))
+  end do
+#endif
+
+  !--------------------------------
+  ! Compute mass profile in shells
+  !--------------------------------
+  c%mass_bin=0d0
+  do i=1+no_halo,p%npart
+     ! Get peak id
+     ipart=p%sortp(i)
+     global_peak_id=p%workp(i)
+     if (global_peak_id /=0 ) then
+        call get_local_peak_id(s,global_peak_id,peak_nr)
+        ! Get halo id
+        global_halo_id=c%ind_halo(peak_nr)
+        call get_local_peak_id(s,global_halo_id,halo_nr)
+        ! Compute distance to halo center
+        dist=0
+        do idim=1,ndim
+           xx=p%xp(ipart,idim)-c%peak_pos(halo_nr,idim)
+           ! Periodic boundary conditions
+           if(xx>0.5*r%boxlen)xx=xx-r%boxlen
+           if(xx<-0.5*r%boxlen)xx=xx+r%boxlen
+           dist=dist+xx**2
+        end do
+        dist=sqrt(dist)
+        rad=2d0*(c%halo_mass(halo_nr)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
+        do ibin=1,nbin
+           ! We use a simple linear binning as the mass is usually propto r
+           if(dist<=dble(ibin)/dble(nbin)*rad)then
+              c%mass_bin(halo_nr,ibin)=c%mass_bin(halo_nr,ibin)+p%mp(ipart)
+              exit
+           endif
+        end do
+     endif
+  end do
+#ifndef WITHOUTMPI
+  do ibin=1,nbin
+     ! Collect results from all MPI domains
+     call virtual_peak_dp(s,c%mass_bin(1,ibin),'sum')
+     ! Update local values for remote peaks
+     call boundary_peak_dp(s,c%mass_bin(1,ibin))
+  end do
+#endif
+  ! Compute cumulative mass
+  do ipeak=1,c%npeak
+     if(c%ind_halo(ipeak).EQ.ipeak+c%npeak_cum(g%myid-1).AND. &
+          & c%halo_mass(ipeak) > c%mass_threshold*g%mp_min.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold)then
+        do ibin=1,nbin-1
+           c%mass_bin(ipeak,ibin+1)=c%mass_bin(ipeak,ibin+1)+c%mass_bin(ipeak,ibin)
+        end do
+     endif
+  end do
+
+  endif
+
+  end associate
+
+end subroutine particle_clump_properties
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine particle_peak_id(s,p,no_peak)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use boundaries, only: init_bound_flag
+  use marshal, only: pack_fetch_flag, unpack_fetch_flag
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::no_peak
+  !==================================================================
+  ! This routine reads from the grid peak map (flag1) the peak id
+  ! of the input particle object. It could be dark matter or stars.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !==================================================================
+  ! Local variables
+  integer,dimension(1:ndim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_cell
+  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer::global_peak_id
+  integer::local_peak_id,ipeak,jpeak,merge_to
+  integer::halo_nr,peak_nr
+  real(dp)::dx_loc,rmin,rmax,dist,xx
+  type(oct),pointer::gridp
+  type(msg_int4)::dummy_int4
+  logical::ok_level,ok_leaf
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Open cache for array flag1 (fetch)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
+       pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
+
+  ! Loop over particles
+  no_peak=0
+  do ilevel=r%levelmin,r%nlevelmax
+
+     ! Mesh spacing in that level
+     dx_loc=r%boxlen/2**ilevel
+
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+        ok_level=.true.
+
+        ! Find parent cell at level ilevel
+        do idim=1,ndim
+           ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
+        end do
+
+        ! Get parent cell at level ilevel using cache
+        hash_cell(0)=ilevel+1
+        hash_cell(1:ndim)=ckey(1:ndim)
+        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+
+        ! If cell does not exist at current level, then find cell at coarser level
+        if(.not.associated(gridp))then
+
+           ! NGP at level ilevel-1
+           do idim=1,ndim
+              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+           end do
+
+           ! Get parent cell at level ilevel-1 using cache
+           hash_cell(0)=ilevel
+           hash_cell(1:ndim)=ckey(1:ndim)
+           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+           if(.not.associated(gridp))ok_level=.false.
+
+        end if
+
+        if(.not. ok_level)then
+           write(*,*)"Something went wrong in particle_clump_properties"
+           write(*,*)"Current level grid and coarser grid both dont exist..."
+           stop
+        endif
+
+        ! Read flag1 value
+        global_peak_id=gridp%flag1(icell)
+        if (global_peak_id>0)then
+           call get_local_peak_id(s,global_peak_id,local_peak_id)
+        else
+           no_peak=no_peak+1
+        end if
+
+        ! Store global peak id in workp array
+        p%sortp(ipart)=ipart
+        p%workp(ipart)=global_peak_id
+
+     end do
+     ! End loop over particles
+  end do
+  ! End loop over levels
+
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine particle_peak_id
 !##############################################################################
 !##############################################################################
 !##############################################################################

@@ -115,12 +115,14 @@ subroutine open_file(s,filename,nskip,ilun)
 
      if(index(filename,'clump').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(144A)')'     index       halo  lev   parent      ncell    peak_x             peak_y             peak_z     '//&
-             '        rho-               rho+               rho_av             mass_cl            relevance   '
+        write(ilun,'(240A)')'     index       halo  lev   parent      ncell    pos_x              pos_y              pos_z      '//&
+             '        vel_x              vel_y              vel_z              rho-               rho+               rho_av     '//&
+             '        mass_cl            relevance   '
      elseif(index(filename,'halo').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(135A)')'     index      ncell    peak_x             peak_y             peak_z     '//&
-             '        rho+               mass      '
+        write(ilun,'(364A)')'     index      ncell    pos_x              pos_y              pos_z      '//&
+             '        vel_x              vel_y              vel_z              rho+               mass       '//&
+             '        r200b              rvir               cvir       '
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
         write(ilun)ndim
@@ -280,7 +282,7 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   integer,dimension(1:s%r%nfile+1)::istart
-  integer::i,ivar,ifile,ncpufile,nremain,ilevel,ierr
+  integer::i,idim,ivar,ifile,ncpufile,nremain,ilevel,ierr
   integer(kind=8)::npart
   logical::file_exist
 
@@ -366,6 +368,13 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar+1)=nskip(ivar)+4*npart
      endif
+     ! Acceleration
+     if(allocated(p%fp))then
+        do idim=1,ndim
+           ivar=ivar+1
+           nskip(ivar+1)=nskip(ivar)+4*npart
+        end do
+     endif
      ! Birth times
      if(allocated(p%tp))then
         ivar=ivar+1
@@ -425,7 +434,7 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
 #endif
   integer,dimension(1:s%r%nfile+1)::istart
   integer::ncpufile,nremain
-  integer::i,ivar,ifile,ilevel
+  integer::i,ivar,idim,ifile,ilevel
 
   associate(r=>s%r,g=>s%g)
 
@@ -467,6 +476,13 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      if(allocated(p%zp))then
         ivar=ivar+1
         nskip(ivar)=nskip(ivar)+4*p%npart
+     endif
+     ! Accelerations
+     if(allocated(p%fp))then
+        do idim=1,ndim
+           ivar=ivar+1
+           nskip(ivar)=nskip(ivar)+4*p%npart
+        end do
      endif
      ! Birth times
      if(allocated(p%tp))then

@@ -126,11 +126,12 @@ subroutine init_sink(r,g,p)
   p%type=SINK_TYPE
   allocate(p%xp    (r%nsinkmax,ndim))
   allocate(p%vp    (r%nsinkmax,ndim))
+  allocate(p%fp    (r%nsinkmax,ndim))
   allocate(p%mp    (r%nsinkmax))
   allocate(p%tp    (r%nsinkmax))
   allocate(p%levelp(r%nsinkmax))
   allocate(p%idp   (r%nsinkmax))
-  p%nvaralloc=2*ndim+4
+  p%nvaralloc=3*ndim+4
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(p%phip  (r%nsinkmax))
   p%nvaralloc=p%nvaralloc+1

@@ -20,36 +20,48 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   integer,dimension(1:flen/4)::input_array
   double precision::ttend, ttstart=0.0
   integer::dummy(1)
+  integer::no_halo
 
 #if NDIM==3 && defined(GRAV)
 
-  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star)
 
   write(*,*)'Entering clump finder'
   ttstart = mdl_wtime(mdl)
 
-  !-----------------------------------------------------------------------
-  ! Compute rho from gas density and/or dark matter and/or star particles
-  !-----------------------------------------------------------------------
-  call m_rho_fine(pst,r%levelmin)
+  !--------------------------------------------------------------
+  ! Compute rho from gas density or dark matter or star particles
+  !--------------------------------------------------------------
+  call m_rho_fine(pst,r%levelmin,r%rho_type_clump) 
   
-  !------------------------------------------
+  !-------------------------------------
   ! Find relevant peak patches and halos
-  !------------------------------------------
+  !-------------------------------------
   call r_clump_finder(pst,r%levelmin,1)
- 
-  !------------------------------------------
+
+  !---------------------------------
   ! Output clumps properties to file
-  !------------------------------------------
+  !---------------------------------
   if(create_output)then
      call title(g%ifout-1,nchar)
-     filename='output_'//TRIM(nchar)//'/'
-     input_array=transfer(filename,input_array)
+     filedir='output_'//TRIM(nchar)//'/'
+     input_array=transfer(filedir,input_array)
      if(r%output_clump)write(*,*)'Writing clump properties files'
      if(r%output_peak)then
         write(*,*)'Writing clump field files'
-        filename=TRIM(filename)//'peak_header.txt'
+        filename=TRIM(filedir)//'peak_header.txt'
         call file_descriptor_clump(r,filename)
+     endif
+     ! Compute particle peak id for outputting to file
+     if(r%output_peak_part.and.r%pic)then
+        call particle_peak_id(pst%s,p,no_halo)
+        filename=TRIM(filedir)//'peak_part_header.txt'
+        call output_peak_header(r,g,p,filename)
+     endif
+     if(r%output_peak_star.and.r%star)then
+        call particle_peak_id(pst%s,star,no_halo)
+        filename=TRIM(filedir)//'peak_star_header.txt'
+        call output_peak_header(r,g,star,filename)
      endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
@@ -82,7 +94,7 @@ recursive subroutine r_clump_finder(pst,ilevel,input_size)
 
   integer::ilevel
   integer::rID
-  
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
      call r_clump_finder(pst%pLower,ilevel,input_size)
@@ -103,6 +115,13 @@ subroutine clump_finder(s)
 
 #if NDIM==3 && defined(GRAV)
 
+  !-----------------------------------------------
+  ! Store clump finder parameters in clump object.
+  !-----------------------------------------------
+  s%c%relevance_threshold = s%r%relevance_threshold
+  s%c%density_threshold = s%r%density_threshold
+  s%c%saddle_threshold = s%r%saddle_threshold
+  s%c%mass_threshold = s%r%mass_threshold
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
@@ -150,23 +169,31 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   ! Compute relevant peak properties such as mass and number of cells
   !----------------------------------------------------------------------
-  call compute_clump_properties(s)
+  call compute_clump_properties(s,s%r%rho_type_clump)
   !----------------------------------------------------------------------
   ! Merge all neighboring peaks above the prescribed density
   ! threshold into halos, only if their saddle point density is larger
   ! that the prescribed saddle density threshold.
   !----------------------------------------------------------------------
-  if(s%r%saddle_threshold>0)then
-     call merge_clumps(s,'saddleden')
+  if(s%c%saddle_threshold>0)then
+    call merge_clumps(s,'saddleden')
   endif
   !----------------------------------------------------------------------
   ! Remove all peaks that are below the relevance threshold
   ! or the mass threshold in the flag1 global peak ID field.
   !----------------------------------------------------------------------
-  if(s%r%saddle_threshold>0.or.s%r%mass_threshold>0)then
-     call trim_clumps(s)
+  if(s%c%saddle_threshold>0.or.s%c%mass_threshold>0)then
+    call trim_clumps(s)
   endif
-
+  !----------------------------------------------------------------------
+  ! Compute additional halo or particle-based clump properties.
+  !----------------------------------------------------------------------
+  if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
+     call particle_clump_properties(s,s%p)
+  endif
+  if(s%r%star.and.s%r%rho_type_clump.eq.2)then
+     call particle_clump_properties(s,s%star)
+  endif
 #endif
 end subroutine clump_finder
 !################################################################
@@ -198,7 +225,7 @@ subroutine collect_test(s)
   integer,dimension(1:s%g%ncpu)::ntest_cpu
   integer(kind=8),dimension(0:s%g%ncpu)::ntest_cum
   logical::verbose_all=.false.
-  integer::action,ivar_clump
+  integer::action
   logical::ok
   real(kind=8)::dx,vol
   real(kind=8)::d,dx_loc
@@ -221,7 +248,7 @@ subroutine collect_test(s)
         do ind=1,twotondim ! Loop over cells
            ok = .not. m%grid(igrid)%refined(ind) ! Select leaf cells
            d = m%grid(igrid)%rho(ind)
-           ok = ok .and. d > r%density_threshold
+           ok = ok .and. d > c%density_threshold
            m%grid(igrid)%flag1(ind) = 0
            if(ok)then
               c%ntest=c%ntest+1
@@ -267,7 +294,7 @@ subroutine collect_test(s)
            do ind=1,twotondim ! Loop over cells
               ok=.not.m%grid(igrid)%refined(ind) ! Select leaf cells
               d=m%grid(igrid)%rho(ind)
-              ok=ok.and.d>r%density_threshold
+              ok=ok.and.d>c%density_threshold
               if(ok)then
                  itest=itest+1
                  dens(itest)=d
@@ -553,7 +580,7 @@ subroutine collect_patch(s)
   integer(kind=8)::nmove_all,nzero_all
 #endif
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  type(msg_twin_realdp)::dummy_int4
+  type(msg_int4)::dummy_int4
   type(oct),pointer::gridn
   integer::icelln,igrid,ind,ipeak,istep,itest,nmove,nzero
   integer(kind=8)::nmove_tot,nzero_tot

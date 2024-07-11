@@ -27,6 +27,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use newdt_fine_module, only: m_newdt_fine,r_broadcast_dt,in_broadcast_dt_t
   use movie_module, only: m_output_frame
   use star_formation_module, only: out_star_formation_t, r_star_formation
+  use sink_formation_module, only: m_sink_formation
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
   
@@ -96,6 +97,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
   endif
   
+  !-------------------------
+  ! Sink formation in clumps
+  !-------------------------
+  if(r%sink.and.ilevel==r%levelmin)then
+                                    call m_timer(pst,'sink - formation','start')
+     call m_sink_formation(pst)
+  endif
+
   !----------------------------
   ! Output frame to movie dump
   !----------------------------
@@ -114,7 +123,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%poisson)then
      if(ilevel==r%levelmin.or.icount>1)then
                                     call m_timer(pst,'rho','start')
-        call m_rho_fine(pst,ilevel)
+        call m_rho_fine(pst,ilevel,0)
      endif
   endif
 #endif

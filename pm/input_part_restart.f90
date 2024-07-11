@@ -14,6 +14,7 @@ subroutine m_input_part_restart(pst)
   use amr_parameters, only: ndim,dp
   use ramses_commons, only: pst_t
   use output_amr_module, only: input_header
+  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
@@ -21,7 +22,6 @@ subroutine m_input_part_restart(pst)
   ! from a Ramses restart file.
   !--------------------------------------------------------------------
   integer::icpu,ilun,ncpu_file
-  integer::dummy(1)
   integer(kind=8)::npart_tot_file,npart_tot_check
   character(LEN=5)::nchar,ncharcpu
   character(LEN=80)::file_head,file_part
@@ -37,10 +37,11 @@ subroutine m_input_part_restart(pst)
   write(*,'(" Restart snapshot has ",I12," DM particles")')npart_tot_file
 
   ! Allocate local array
-  allocate(npart_file(1:ncpu_file))
+  allocate(npart_file(0:ncpu_file))
 
   ! Read number of particles in each file
   npart_tot_check=0
+  npart_file(0)=DM_TYPE
   do icpu=1,ncpu_file
      call title(icpu,ncharcpu)
      file_part='backup_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
@@ -56,64 +57,108 @@ subroutine m_input_part_restart(pst)
   endif
 
   ! Call recursive slave routine
-  call r_input_part_restart(pst,npart_file,ncpu_file,dummy,0)
+  call r_input_part_restart(pst,npart_file,ncpu_file+1,output,2)
+  write(*,*)'Total mass in dark matter=',output%mass
 
   ! Deallocate local array
   deallocate(npart_file)
 
-  if(.not. pst%s%r%star)return
+  if(pst%s%r%star)then
 
-  ! Read star particle files header
-  call title(pst%s%r%nrestart,nchar)
-  file_head='backup_'//TRIM(nchar)//'/star_header.txt'
-  call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
-  write(*,'(" Restart snapshot has ",I12," star particles")')npart_tot_file
+     ! Read star particle files header
+     call title(pst%s%r%nrestart,nchar)
+     file_head='backup_'//TRIM(nchar)//'/star_header.txt'
+     call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
+     write(*,'(" Restart snapshot has ",I12," star particles")')npart_tot_file
 
-  ! Allocate local array
-  allocate(npart_file(1:ncpu_file))
+     ! Allocate local array
+     allocate(npart_file(0:ncpu_file))
 
-  ! Read number of particles in each file
-  npart_tot_check=0
-  do icpu=1,ncpu_file
-     call title(icpu,ncharcpu)
-     file_part='backup_'//TRIM(nchar)//'/star.'//TRIM(ncharcpu)
-     ilun=10
-     open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
-     read(ilun,POS=5)npart_file(icpu)
-     npart_tot_check=npart_tot_check+npart_file(icpu)
-     close(ilun)
-  end do
-  if(npart_tot_check.NE.npart_tot_file)then
-     write(*,*)' Input file corrupted'
-     call mdl_abort(pst%s%mdl)
+     ! Read number of particles in each file
+     npart_tot_check=0
+     npart_file(0)=STAR_TYPE
+     do icpu=1,ncpu_file
+        call title(icpu,ncharcpu)
+        file_part='backup_'//TRIM(nchar)//'/star.'//TRIM(ncharcpu)
+        ilun=10
+        open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
+        read(ilun,POS=5)npart_file(icpu)
+        npart_tot_check=npart_tot_check+npart_file(icpu)
+        close(ilun)
+     end do
+     if(npart_tot_check.NE.npart_tot_file)then
+        write(*,*)' Input file corrupted'
+        call mdl_abort(pst%s%mdl)
+     endif
+
+     ! Call recursive slave routine
+     call r_input_part_restart(pst,npart_file,ncpu_file+1,output,2)
+     write(*,*)'Total mass in stars=',output%mass
+     pst%s%g%mass_star_tot=output%mass
+
+     ! Deallocate local array
+     deallocate(npart_file)
+
   endif
 
-  ! Call recursive slave routine
-  call r_input_star_restart(pst,npart_file,ncpu_file,output,2)
-  write(*,*)'Total mass in stars=',output%mass
-  pst%s%g%mass_star_tot=output%mass
+  if(pst%s%r%sink)then
 
-  ! Deallocate local array
-  deallocate(npart_file)
+     ! Read star particle files header
+     call title(pst%s%r%nrestart,nchar)
+     file_head='backup_'//TRIM(nchar)//'/sink_header.txt'
+     call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
+     write(*,'(" Restart snapshot has ",I12," sink particles")')npart_tot_file
+
+     ! Allocate local array
+     allocate(npart_file(0:ncpu_file))
+
+     ! Read number of particles in each file
+     npart_tot_check=0
+     npart_file(0)=SINK_TYPE
+     do icpu=1,ncpu_file
+        call title(icpu,ncharcpu)
+        file_part='backup_'//TRIM(nchar)//'/sink.'//TRIM(ncharcpu)
+        ilun=10
+        open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
+        read(ilun,POS=5)npart_file(icpu)
+        npart_tot_check=npart_tot_check+npart_file(icpu)
+        close(ilun)
+     end do
+     if(npart_tot_check.NE.npart_tot_file)then
+        write(*,*)' Input file corrupted'
+        call mdl_abort(pst%s%mdl)
+     endif
+
+     ! Call recursive slave routine
+     call r_input_part_restart(pst,npart_file,ncpu_file+1,output,2)
+     write(*,*)'Total mass in sinks=',output%mass
+     pst%s%g%mass_sink_tot=output%mass
+
+     ! Deallocate local array
+     deallocate(npart_file)
+
+  endif
 
 end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-recursive subroutine r_input_part_restart(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_input_part_restart(pst,input_array,input_size,output,output_size)
   use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
+  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::output_size
   integer,dimension(1:input_size)::input_array
-  integer,dimension(1:output_size)::output_array
+  type(out_input_star_t)::output, next_output
 
   integer::rID
+  integer::part_type
 
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
@@ -122,10 +167,20 @@ recursive subroutine r_input_part_restart(pst,input_array,input_size,output_arra
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_INPUT_PART_RESTART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_part_restart(pst%pLower,input_array,input_size,output_array,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size)
+     call r_input_part_restart(pst%pLower,input_array,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%mass=output%mass+next_output%mass
   else
-     call input_part_restart(pst%s%r,pst%s%g,pst%s%p,input_size,input_array)
+     part_type=input_array(1)
+     if(part_type==DM_TYPE)then
+        call input_part_restart(pst%s%r,pst%s%g,pst%s%p,input_size-1,input_array(2:input_size),output%mass)
+     endif
+     if(part_type==STAR_TYPE)then
+        call input_part_restart(pst%s%r,pst%s%g,pst%s%star,input_size-1,input_array(2:input_size),output%mass)
+     endif
+     if(part_type==SINK_TYPE)then
+        call input_part_restart(pst%s%r,pst%s%g,pst%s%sink,input_size-1,input_array(2:input_size),output%mass)
+     endif
   endif
 
 end subroutine r_input_part_restart
@@ -133,14 +188,16 @@ end subroutine r_input_part_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
+subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
   use amr_parameters, only: ndim,dp,i8b
   use amr_commons, only: run_t,global_t
+  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
+  real(kind=8)::mpart_loc
   integer::ncpu_file
   integer,dimension(1:ncpu_file)::npart_file
   !------------------------------------------------------------
@@ -148,7 +205,7 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
   ! restart file and allocate particle-based arrays.
   !------------------------------------------------------------
   integer::ipart,ipart_old
-  integer::i,idim,icpu,ileft,iright,nrest,ipos
+  integer::i,idim,icpu,ileft,iright,nrest,ipos,iskip
   integer::istart,iend
   integer(kind=8)::nleft,nright,npart_tot
   integer(kind=8),dimension(0:ncpu_file)::ncum_file
@@ -158,6 +215,7 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
   integer(i8b),allocatable,dimension(:)::isp8
 
   character(LEN=5)::nchar,ncharcpu
+  character(LEN=10)::prefix
   character(LEN=80)::file_part
   
   !-------------------------------------
@@ -202,9 +260,15 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
      end do
   endif
   
+  ! Determine prefix based on particle type
+  if(p%type==DM_TYPE)prefix='part'
+  if(p%type==STAR_TYPE)prefix='star'
+  if(p%type==SINK_TYPE)prefix='sink'
+  
   ! Loop over relevant files
   ipart=0
   ipart_old=0
+  mpart_loc=0.0d0
   call title(r%nrestart,nchar)
   do icpu=ileft,iright
      if(icpu>1)then
@@ -214,51 +278,95 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
         istart=nleft+1
         iend=MIN(nright,npart_file(icpu))
      endif
-     
-     ! Open the PART file
+
+     ! Open the particle file
      call title(icpu,ncharcpu)
-     file_part='backup_'//TRIM(nchar)//'/part.'//TRIM(ncharcpu)
+     file_part='backup_'//TRIM(nchar)//'/'//TRIM(prefix)//'.'//TRIM(ncharcpu)
      open(unit=10,file=TRIM(file_part),access="stream",action="read",form='unformatted')
-     
+
+     iskip=9
+
      ! Read positions
      allocate(xdp(istart:iend))
      do idim=1,ndim
-        ipos=9+8*(idim-1)*npart_file(icpu)+8*(istart-1)
+        ipos=iskip+8*(istart-1)
         read(10,POS=ipos)xdp
         ipart=ipart_old
         do i=istart,iend
            ipart=ipart+1
            p%xp(ipart,idim)=xdp(i)
         end do
+        iskip=iskip+8*npart_file(icpu)
      end do
-     
+
      ! Read velocities
      do idim=1,ndim
-        ipos=9+8*(ndim+idim-1)*npart_file(icpu)+8*(istart-1)
+        ipos=iskip+8*(istart-1)
         read(10,POS=ipos)xdp
         ipart=ipart_old
         do i=istart,iend
            ipart=ipart+1
            p%vp(ipart,idim)=xdp(i)
         end do
+        iskip=iskip+8*npart_file(icpu)
      end do
-     
+
      ! Read masses
-     ipos=9+8*(ndim+ndim)*npart_file(icpu)+8*(istart-1)
+     ipos=iskip+8*(istart-1)
      read(10,POS=ipos)xdp
      ipart=ipart_old
      do i=istart,iend
         ipart=ipart+1
         p%mp(ipart)=xdp(i)
+        mpart_loc=mpart_loc+xdp(i)
      end do
+     iskip=iskip+8*npart_file(icpu)
+
+     ! Read metallicity
+     if(allocated(p%zp))then
+        ipos=iskip+8*(istart-1)
+        read(10,POS=ipos)xdp
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%zp(ipart)=xdp(i)
+        end do
+        iskip=iskip+8*npart_file(icpu)
+     endif
+
+     ! Read accelerations
+     if(allocated(p%fp))then
+        do idim=1,ndim
+           ipos=iskip+8*(istart-1)
+           read(10,POS=ipos)xdp
+           ipart=ipart_old
+           do i=istart,iend
+              ipart=ipart+1
+              p%fp(ipart,idim)=xdp(i)
+           end do
+           iskip=iskip+8*npart_file(icpu)
+        end do
+     endif
+
+     ! Read birth time
+     if(allocated(p%tp))then
+        ipos=iskip+8*(istart-1)
+        read(10,POS=ipos)xdp
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%tp(ipart)=xdp(i)
+        end do
+        iskip=iskip+8*npart_file(icpu)
+     endif
      deallocate(xdp)
-     
+
      ! Read identity
      allocate(isp8(istart:iend))
 #ifndef LONGINT
-     ipos=9+8*(ndim+ndim+1)*npart_file(icpu)+4*(istart-1)
+     ipos=iskip+4*(istart-1)
 #else
-     ipos=9+8*(ndim+ndim+1)*npart_file(icpu)+8*(istart-1)
+     ipos=iskip+8*(istart-1)
 #endif
      read(10,POS=ipos)isp8
      ipart=ipart_old
@@ -266,15 +374,16 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
         ipart=ipart+1
         p%idp(ipart)=isp8(i)
      end do
+#ifndef LONGINT
+     iskip=iskip+4*npart_file(icpu)
+#else
+     iskip=iskip+8*npart_file(icpu)
+#endif
      deallocate(isp8)
-     
+
      ! Read level
      allocate(isp(istart:iend))
-#ifndef LONGINT
-     ipos=9+8*(ndim+ndim+1)*npart_file(icpu)+4*npart_file(icpu)+4*(istart-1)
-#else
-     ipos=9+8*(ndim+ndim+1)*npart_file(icpu)+8*npart_file(icpu)+4*(istart-1)
-#endif
+     ipos=iskip+4*(istart-1)
      read(10,POS=ipos)isp
      ipart=ipart_old
      do i=istart,iend
@@ -282,11 +391,11 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
         p%levelp(ipart)=isp(i)
      end do
      deallocate(isp)
-     
+
      ! Close the PART file
      close(10)
      ipart_old=ipart
-     
+
   end do
   ! End loop over files
 
@@ -297,228 +406,6 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file)
   p%tailp(r%levelmin)=p%npart
         
 end subroutine input_part_restart
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-recursive subroutine r_input_star_restart(pst,input_array,input_size,output,output_size)
-  use mdl_module
-  use amr_parameters, only: dp
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::output_size
-  integer,dimension(1:input_size)::input_array
-  type(out_input_star_t)::output, next_output
-
-  integer::rID
-
-  !--------------------------------------------------------------------
-  ! This routine is the recursive slave procedure to read and dispatch
-  ! particles from a Ramses restart file.
-  !--------------------------------------------------------------------
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_STAR_RESTART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_input_star_restart(pst%pLower,input_array,input_size,output,output_size)
-     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
-     output%mass=output%mass+next_output%mass
-  else
-     call input_star_restart(pst%s%r,pst%s%g,pst%s%star,input_size,input_array,output%mass)
-  endif
-
-end subroutine r_input_star_restart
-!#########################################################################
-!#########################################################################
-!#########################################################################
-!#########################################################################
-subroutine input_star_restart(r,g,p,ncpu_file,npart_file,mstar_loc)
-  use amr_parameters, only: ndim,dp,i8b
-  use amr_commons, only: run_t,global_t
-  use pm_commons, only: part_t
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(part_t)::p
-  real(kind=8)::mstar_loc
-  integer::ncpu_file
-  integer,dimension(1:ncpu_file)::npart_file
-  !------------------------------------------------------------
-  ! Read particles positions and velocities from a Ramses 
-  ! restart file and allocate particle-based arrays.
-  !------------------------------------------------------------
-  integer::ipart,ipart_old
-  integer::i,idim,icpu,ileft,iright,nrest,ipos
-  integer::istart,iend
-  integer(kind=8)::nleft,nright,npart_tot
-  integer(kind=8),dimension(0:ncpu_file)::ncum_file
-
-  real(dp),allocatable,dimension(:)::xdp
-  integer,allocatable,dimension(:)::isp
-  integer(i8b),allocatable,dimension(:)::isp8
-
-  character(LEN=5)::nchar,ncharcpu
-  character(LEN=80)::file_part
-
-  !-------------------------------------
-  ! Compute local particle number
-  !-------------------------------------
-  ncum_file(0)=0
-  do icpu=1,ncpu_file
-     ncum_file(icpu)=ncum_file(icpu-1)+npart_file(icpu)
-  end do
-  npart_tot=ncum_file(ncpu_file)
-  p%npart_tot=npart_tot
-  
-  p%npart=npart_tot/g%ncpu
-  nleft=(g%myid-1)*p%npart
-  nright=g%myid*p%npart
-  nrest=npart_tot-p%npart*g%ncpu
-  if(g%myid.LE.nrest)then
-     p%npart=p%npart+1
-     nleft=nleft+(g%myid-1)
-     nright=nright+g%myid
-  else
-     nleft=nleft+nrest
-     nright=nright+nrest
-  endif
-  
-  ! Compute interval of file to open for current process
-  ileft=0
-  iright=-1
-  if(nright.GT.nleft)then
-     do icpu=1,ncpu_file
-        if(icpu>1)then
-           if(ncum_file(icpu).GT.nleft.AND.ncum_file(icpu-1).LT.nright)then
-              if(ileft==0)ileft=icpu
-              iright=MAX(icpu,iright)
-           endif
-        else
-           if(ncum_file(icpu).GT.nleft)then
-              if(ileft==0)ileft=icpu
-              iright=MAX(icpu,iright)
-           endif
-        endif
-     end do
-  endif
-  
-  ! Loop over relevant files
-  ipart=0
-  ipart_old=0
-  mstar_loc=0.0d0
-  call title(r%nrestart,nchar)
-  do icpu=ileft,iright
-     if(icpu>1)then
-        istart=MAX(nleft-ncum_file(icpu-1),0)+1
-        iend=MIN(nright-ncum_file(icpu-1),npart_file(icpu))
-     else
-        istart=nleft+1
-        iend=MIN(nright,npart_file(icpu))
-     endif
-     
-     ! Open the PART file
-     call title(icpu,ncharcpu)
-     file_part='backup_'//TRIM(nchar)//'/star.'//TRIM(ncharcpu)
-     open(unit=10,file=TRIM(file_part),access="stream",action="read",form='unformatted')
-     
-     ! Read positions
-     allocate(xdp(istart:iend))
-     do idim=1,ndim
-        ipos=9+8*(idim-1)*npart_file(icpu)+8*(istart-1)
-        read(10,POS=ipos)xdp
-        ipart=ipart_old
-        do i=istart,iend
-           ipart=ipart+1
-           p%xp(ipart,idim)=xdp(i)
-        end do
-     end do
-     
-     ! Read velocities
-     do idim=1,ndim
-        ipos=9+8*(ndim+idim-1)*npart_file(icpu)+8*(istart-1)
-        read(10,POS=ipos)xdp
-        ipart=ipart_old
-        do i=istart,iend
-           ipart=ipart+1
-           p%vp(ipart,idim)=xdp(i)
-        end do
-     end do
-     
-     ! Read masses
-     ipos=9+8*(ndim+ndim)*npart_file(icpu)+8*(istart-1)
-     read(10,POS=ipos)xdp
-     ipart=ipart_old
-     do i=istart,iend
-        ipart=ipart+1
-        p%mp(ipart)=xdp(i)
-        mstar_loc=mstar_loc+xdp(i)
-     end do
-
-     ! Read metallicity
-     ipos=9+8*(ndim+ndim+1)*npart_file(icpu)+8*(istart-1)
-     read(10,POS=ipos)xdp
-     ipart=ipart_old
-     do i=istart,iend
-        ipart=ipart+1
-        p%zp(ipart)=xdp(i)
-     end do
-
-     ! Read birth time
-     ipos=9+8*(ndim+ndim+2)*npart_file(icpu)+8*(istart-1)
-     read(10,POS=ipos)xdp
-     ipart=ipart_old
-     do i=istart,iend
-        ipart=ipart+1
-        p%tp(ipart)=xdp(i)
-     end do
-     deallocate(xdp)
-     
-     ! Read identity
-     allocate(isp8(istart:iend))
-#ifndef LONGINT
-     ipos=9+8*(ndim+ndim+3)*npart_file(icpu)+4*(istart-1)
-#else
-     ipos=9+8*(ndim+ndim+3)*npart_file(icpu)+8*(istart-1)
-#endif
-     read(10,POS=ipos)isp8
-     ipart=ipart_old
-     do i=istart,iend
-        ipart=ipart+1
-        p%idp(ipart)=isp8(i)
-     end do
-     deallocate(isp8)
-     
-     ! Read level
-     allocate(isp(istart:iend))
-#ifndef LONGINT
-     ipos=9+8*(ndim+ndim+3)*npart_file(icpu)+4*npart_file(icpu)+4*(istart-1)
-#else
-     ipos=9+8*(ndim+ndim+3)*npart_file(icpu)+8*npart_file(icpu)+4*(istart-1)
-#endif
-     read(10,POS=ipos)isp
-     ipart=ipart_old
-     do i=istart,iend
-        ipart=ipart+1
-        p%levelp(ipart)=isp(i)
-     end do
-     deallocate(isp)
-     
-     ! Close the STAR file
-     close(10)
-     ipart_old=ipart
-     
-  end do
-  ! End loop over files
-
-  ! Put all particles in levelmin
-  p%headp=p%npart+1
-  p%tailp=p%npart
-  p%headp(r%levelmin)=1
-  p%tailp(r%levelmin)=p%npart
-        
-end subroutine input_star_restart
 !#########################################################################
 !#########################################################################
 !#########################################################################

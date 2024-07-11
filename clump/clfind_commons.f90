@@ -4,6 +4,11 @@ module clfind_commons
 
     type clump_t
 
+       real(dp)::relevance_threshold=2
+       real(dp)::density_threshold=-1
+       real(dp)::saddle_threshold=-1
+       real(dp)::mass_threshold=0
+
        integer :: ntest=0 ! Actual number of test particles in current processor
        integer(kind=8) :: ntest_tot=0 ! Total number of test particles across all processors
        integer,allocatable,dimension(:) :: cell ! Cell index of test particle
@@ -30,11 +35,18 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: relevance ! Relevance (prominence) of the peak
        real(dp),allocatable,dimension(:,:) :: clump_size ! Size of clump
        real(dp),allocatable,dimension(:,:) :: peak_pos ! position of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_vel ! velocity of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_acc ! acceleration of the peak
        real(dp),allocatable,dimension(:,:) :: center_of_mass ! position of the center of mass
        real(dp),allocatable,dimension(:) :: min_dens ! min density of the clump
        real(dp),allocatable,dimension(:) :: av_dens ! average density of the clump
        real(dp),allocatable,dimension(:) :: clump_vol ! volume of the clump
-
+       real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark mater particles
+       real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo
+       integer,allocatable,dimension(:) :: occupied ! is peak occupied by a sink particle
+       integer,allocatable,dimension(:) :: form_sink ! does peak form a new sink particle
+       real(dp),allocatable,dimension(:) :: var_refine ! refinement mask variable in peak patch
+       
        integer::peak_recv_tot,peak_send_tot ! Peak communicator arrays
        integer,allocatable,dimension(:)::peak_send_cnt,peak_send_oft
        integer,allocatable,dimension(:)::peak_recv_cnt,peak_recv_oft
