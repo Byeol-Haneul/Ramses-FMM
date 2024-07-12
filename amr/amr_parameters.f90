@@ -11,6 +11,7 @@ module amr_parameters
   integer,parameter::dp=kind(1.0D0) ! real*8
 #endif
 #endif
+
   integer,parameter::MAXOUT=1000
   integer,parameter::MAXLEVEL=65
   integer,parameter::MAXREGION=100

@@ -26,7 +26,6 @@ subroutine adaptive_loop(pst)
 
   ! Read run parameters
   call m_read_params(pst)
-
   ! Initialize grid variables
   call r_init_amr(pst)
 

@@ -9,7 +9,7 @@ program amr2map
   integer,parameter::flen=90
   
   integer::ndim,twotondim,nvar
-  integer::n,i,j,k,type=0,dopeak=0,domax=0,dograv=0,backup=0
+  integer::n,i,j,k,type=0,dopeak=0,domax=0,dograv=0,dort=0,backup=0
   integer::ivar,lmax=0
   integer::ilevel,idim,jdim,kdim,ldim,icell
   integer::nlevel
@@ -34,7 +34,7 @@ program amr2map
   character(LEN=5)::nchar,ncharcpu
   character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
   character(LEN=flen)::file_amr,file_hydro
-  logical::ok,ok_part,ok_cell,do_max,do_grav,do_peak
+  logical::ok,ok_part,ok_cell,do_max,do_grav,do_peak,do_rt
   logical::backup_file=.false.
   logical::check_ramses_exist
 
@@ -202,6 +202,8 @@ program amr2map
            file_hydro=TRIM(repository)//'/grav.'//TRIM(ncharcpu)
         else if(do_peak)then
            file_hydro=TRIM(repository)//'/peak.'//TRIM(ncharcpu)
+        else if(do_rt)then
+           file_hydro=TRIM(repository)//'/rt.'//TRIM(ncharcpu)
         else
            file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
         endif
@@ -211,7 +213,6 @@ program amr2map
         else
            iskip_hydro=17+4*(p%nlevelmax-p%levelmin+1)+(4*twotondim*nvar)*noct_skip
         endif
-
         ! Loop over useful octs in file
         do i=1,noct_file
 
@@ -572,6 +573,8 @@ contains
           read (arg,*) dograv
        case ('-pk')
           read (arg,*) dopeak
+       case ('-rt')
+          read (arg,*) dort
        case default
           print '("unknown option ",a2," ignored")', opt
        end select
@@ -583,6 +586,8 @@ contains
     if(dograv==1)do_grav=.true.
     do_peak=.false.
     if(dopeak==1)do_peak=.true.
+    do_rt=.false.
+    if(dort==1)do_rt=.true.
 
     if(rad>0)then
        xmin=xcen-rad
@@ -639,6 +644,8 @@ contains
        file_hydro=TRIM(repository)//'/grav.00001'
     else if(do_peak)then
        file_hydro=TRIM(repository)//'/peak.00001'
+    else if(do_rt)then
+       file_hydro=TRIM(repository)//'/rt.00001'
     else
        file_hydro=TRIM(repository)//'/hydro.00001'
     endif
