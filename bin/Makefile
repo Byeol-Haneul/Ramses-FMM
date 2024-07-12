@@ -10,11 +10,14 @@ NDIM = 3
 NVAR = 5
 HYDRO = 1
 MHD = 0
+RT = 0
 GRAV = 0
 MPI = 0
 INIT =
 UNITS =
 NENER =
+NRTGROUPS =
+NIONS =
 PATCH =
 DEBUG = 0
 HDF5 = 0
@@ -39,6 +42,10 @@ ifeq ($(GRAV),1)
 endif
 ifneq ($(NENER),)
    DEFINES += -DNENER=$(NENER)
+endif
+ifeq ($(RT),1)
+   DEFINES += -DRT
+   #DEFINES += -DRT -DNIONS=$(NIONS) -DNGROUPS=$(NGROUPS)
 endif
 #############################################################################
 # Set proper units and initial conditions
@@ -127,10 +134,14 @@ LIBS = $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
 VPATH = $(PATCH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1
+ifeq ($(RT),1)
+   VPATH += ../rt:
+endif
 #############################################################################
 # Modules
-MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
-         hydro_commons.o amr_commons.o poisson_parameters.o rngstream.o \
+MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o \
+	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
+   hydro_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
 	 mdl_commons.o mdl.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
@@ -150,6 +161,9 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 sink_formation.o tree_formation.o \
 	 task_manager.o amr_step.o adaptive_loop.o \
 	 write_gitinfo.o
+ifeq ($(RT),1)
+	 MODOBJ += rt_units.o init_rt_fine.o rt_condinit.o
+endif
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
 	$(F90) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)

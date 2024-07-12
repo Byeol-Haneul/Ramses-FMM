@@ -1,6 +1,9 @@
 module oct_commons
   use amr_parameters
   use hydro_parameters
+#ifdef RT
+  use rt_parameters, only: nrtvar
+#endif
   
   ! New type for oct structure
   type oct
@@ -11,6 +14,10 @@ module oct_commons
 #ifdef MHD
      real(kind=dp),dimension(1:twotondim,1:6)::bold
      real(kind=dp),dimension(1:twotondim,1:6)::bnew
+#endif
+#ifdef RT
+     real(kind=dp),dimension(1:twotondim,1:nrtvar)::rtuold
+     real(kind=dp),dimension(1:twotondim,1:nrtvar)::rtunew
 #endif
 #ifdef GRAV
      real(kind=dp),dimension(1:twotondim,1:3)::f

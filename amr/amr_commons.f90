@@ -5,6 +5,9 @@ module amr_commons
   use hydro_commons
   use hash
   use domain_m
+#ifdef RT
+  use rt_parameters,only: nrtgroups
+#endif
   
   type multipole_t
     real(dp),dimension(1:ndim+1)::q
@@ -17,6 +20,7 @@ module amr_commons
      logical::pic     =.false.   ! Particle In Cell activated
      logical::poisson =.false.   ! Poisson solver activated
      logical::hydro   =.false.   ! Hydro activated
+     logical::rt      =.false.   ! RT activated
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
@@ -300,6 +304,101 @@ module amr_commons
      real(dp)::IG_rho = 1.0D-6
      real(dp)::IG_T2 = 1.0D7
      real(dp)::IG_metal = 0.01
+
+#ifdef RT
+    ! RT_PARAMS namelist. Some parameters are not (yet) used
+    logical::rt_advect=.false.           ! Advection of photons?                           !
+    logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
+    real(dp)::units_Np=1.0               ! [#/cm^3]
+    real(dp)::smallNp=1d-50              ! Floor value for photon number densities         !
+    !real(dp)::rt_Tconst=-1               ! If pos. use this value for all T-depend. rates  !
+    !logical::rt_isTconst=.false.         ! Const rates activated?                          !
+    logical::rt_star=.false.             ! Activate radiation from star particles?         !
+    !logical::rt_AGN=.false.              ! Activate radiation from sink particles          !
+    !real(dp)::rt_esc_frac=1d0            ! Escape fraction of light from stellar particles !
+    logical::rt_is_init_xion=.false.     ! Initialize ionization from T profile?           !
+    !character(LEN=10)::rt_flux_scheme='glf'                                                !
+    !logical::rt_use_hll=.false.          ! Use hll flux (or the default glf)               !
+    logical::rt_is_outflow_bound=.false. ! Make all boundaries=outflow for RT              !
+    real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
+    !logical::rt_refine=.false.           ! Refine on RT-related conditions?                !
+    !real(dp)::rt_err_grad_n=-1.0         ! Photon number density gradient for refinement   !
+    !real(dp)::rt_floor_n=1d-10           ! Photon number density floor for refinement      !
+    !real(dp)::rt_err_grad_xHI=-1.0       ! Ionization state gradient for refinement        !
+    !real(dp)::rt_err_grad_xHII=-1.0      ! Ionization state gradient for refinement        !
+    !real(dp)::rt_refine_aexp=-1.0        ! Start a for RT gradient refinement              !
+    real(dp)::rt_floor_xHI=1d-10         ! Ionization state floor for refinement           !
+    real(dp)::rt_floor_xHII=1d-10        ! Ionization state floor for refinement           !
+    real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT        !
+    !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
+    integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
+                                         ! gravity/etc timestep                            !
+    logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
+    !logical::rt_isDiffuseUVsrc=.false.  ! UV emission from low-density cells              !
+    !real(dp)::rt_UVsrc_nHmax=-1d0       ! Density threshold for UV emission               !
+    logical::upload_equilibrium_x=.true. ! Enforce equilibrium xion when uploading         !
+    !integer::heat_unresolved_HII=0      ! Subgrid model heating unresolved HII regions    !
+    !integer::iHIIheat=6                 ! Var index for HII heating                       !
+    !logical::cosmic_rays=.false.         ! Include cosmic ray ionisation                   !
+
+    !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                            !
+    !character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
+    !character(LEN=128)::uv_file=''       ! File containing stellar energy distributions    !
+
+    ! RT_GROUPS namelist--------------------------------------------------------------------
+    integer::sedprops_update=-1                      ! Update sedprops from star populations
+    ! negative: never update, 0:update on init, pos x: update every x coarse steps
+    logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
+    ! Grop props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev).
+    ! Indexes nrtgroups, nIons stand for photon group vs species (e.g. 1=H, 2=He).
+    integer,dimension(nrtgroups)::iGroups=1                          ! Start indices of groups
+    real(dp),dimension(nrtgroups,nIons)::group_csn=0, group_cse=0    !    Cross sections (cm2)
+    real(dp),dimension(nrtgroups)::group_egy=0                       !  Avg photon energy (ev)
+    !real(dp),dimension(nrtgroups)::group_egy_AGNfrac=0               !  Fraction of AGN energy
+    real(dp),dimension(nrtgroups)::groupL0=13.60                     ! Wavelength lower limits
+    real(dp),dimension(nrtgroups)::groupL1=0                         ! Wavelength upper limits
+    integer,dimension(nIons)::spec2group=0                 !Ion -> group # in recombinations
+
+    ! Imposed boundary condition variables
+    real(dp),dimension(1:MAXBOUND,1:nrtvar)::rt_boundary_var
+    real(dp),dimension(1:MAXBOUND)::rt_n_bound=0.0d0
+    real(dp),dimension(1:MAXBOUND)::rt_u_bound=0.0d0
+    real(dp),dimension(1:MAXBOUND)::rt_v_bound=0.0d0
+    real(dp),dimension(1:MAXBOUND)::rt_w_bound=0.0d0
+
+    ! Initial condition RT regions parameters----------------------------------------------
+    integer                           ::rt_nregion=0
+    character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
+    real(dp),dimension(1:MAXREGION)   ::rt_reg_x_center=0.
+    real(dp),dimension(1:MAXREGION)   ::rt_reg_y_center=0.
+    real(dp),dimension(1:MAXREGION)   ::rt_reg_z_center=0.
+    real(dp),dimension(1:MAXREGION)   ::rt_reg_length_x=1.E10
+    real(dp),dimension(1:MAXREGION)   ::rt_reg_length_y=1.E10
+    real(dp),dimension(1:MAXREGION)   ::rt_reg_length_z=1.E10
+    real(dp),dimension(1:MAXREGION)   ::rt_exp_region=2.0
+    integer,dimension(1:MAXREGION)    ::rt_reg_group=1
+    real(dp),dimension(1:MAXREGION) ::rt_n_region=0.                    ! Photon density
+    real(dp),dimension(1:MAXREGION) ::rt_u_region=0.                    !    Photon flux
+    real(dp),dimension(1:MAXREGION) ::rt_v_region=0.                    !    Photon flux
+    real(dp),dimension(1:MAXREGION) ::rt_w_region=0.                    !    Photon flux
+
+    ! RT source regions parameters----------------------------------------------------------
+    integer                           ::rt_nsource=0
+    character(LEN=10),dimension(1:MAXREGION)::rt_source_type='square'
+    real(dp),dimension(1:MAXREGION)   ::rt_src_x_center=0.
+    real(dp),dimension(1:MAXREGION)   ::rt_src_y_center=0.
+    real(dp),dimension(1:MAXREGION)   ::rt_src_z_center=0.
+    real(dp),dimension(1:MAXREGION)   ::rt_src_length_x=1.E10
+    real(dp),dimension(1:MAXREGION)   ::rt_src_length_y=1.E10
+    real(dp),dimension(1:MAXREGION)   ::rt_src_length_z=1.E10
+    real(dp),dimension(1:MAXREGION)   ::rt_exp_source=2.0
+    integer, dimension(1:MAXREGION)   ::rt_src_group=1  
+    integer, dimension(1:MAXREGION)   ::rt_src_trace_group=1
+    real(dp),dimension(1:MAXREGION)   ::rt_n_source=0.                      ! Photon density
+    real(dp),dimension(1:MAXREGION)   ::rt_u_source=0.                      !    Photon flux
+    real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                      !    Photon flux
+    real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                      !    Photon flux
+#endif !ifdef RT
 
   end type run_t
   

@@ -74,9 +74,9 @@ module mdl_module
      type(comm_buff),dimension(:),allocatable::send_flush_clump
 
      ! Callback functions
-     type(c_funptr),dimension(0:100)::callback
-     type(c_ptr),dimension(0:100)::p1opaque
-     integer(kind=4),dimension(0:100)::input_size, output_size
+     type(c_funptr),dimension(0:200)::callback
+     type(c_ptr),dimension(0:200)::p1opaque
+     integer(kind=4),dimension(0:200)::input_size, output_size
 
   end type mdl_t
 

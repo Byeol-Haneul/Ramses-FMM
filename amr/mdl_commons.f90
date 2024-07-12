@@ -105,6 +105,11 @@ module mdl_parameters
      enumerator::MDL_OUTPUT_FRAME
      enumerator::MDL_CLUMP_FINDER
      enumerator::MDL_CLUMP_DEALLOC
+#ifdef RT
+     enumerator::MDL_INPUT_RT_CONDINIT
+     enumerator::MDL_UPLOAD_RT_FINE
+     enumerator::MDL_OUTPUT_RT
+#endif
   end enum
   
   ! Maximum number of cpus
