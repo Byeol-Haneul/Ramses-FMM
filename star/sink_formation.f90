@@ -204,6 +204,8 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
   end do
   p%npart_tot=p%npart_tot+nsink_cum(g%ncpu)
 
+  if(g%myid==1)write(*,*)'New sinks =',nsink_cum(g%ncpu),'Number of sinks =',p%npart_tot
+
 #endif
 
 end subroutine sink_formation
@@ -255,9 +257,10 @@ recursive subroutine r_sink_clump(pst,ilevel,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  
   integer::ilevel
+
   integer::rID
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_SINK_CLUMP,pst%iUpper+1,input_size,0,ilevel)
      call r_sink_clump(pst%pLower,ilevel,input_size)

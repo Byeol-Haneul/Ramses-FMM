@@ -30,7 +30,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ttstart = mdl_wtime(mdl)
 
   !--------------------------------------------------------------
-  ! Compute rho from gas density or dark matter or star particles
+  ! Compute rho from dark matter or stars or sinks or gas density
   !--------------------------------------------------------------
   call m_rho_fine(pst,r%levelmin,r%rho_type_clump) 
   
@@ -191,6 +191,9 @@ subroutine clump_finder(s)
   endif
   if(s%r%star.and.s%r%rho_type_clump.eq.2)then
      call particle_clump_properties(s,s%star)
+  endif
+  if(s%r%sink.and.s%r%rho_type_clump.eq.3)then
+     call particle_clump_properties(s,s%sink)
   endif
 #endif
 end subroutine clump_finder

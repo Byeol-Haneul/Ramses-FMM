@@ -11,10 +11,10 @@ recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-
   integer::ilevel
+
   integer::rID
-  
+
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_DEALLOC,pst%iUpper+1,input_size,0,ilevel)
      call r_deallocate_clump(pst%pLower,ilevel,input_size)
@@ -22,7 +22,7 @@ recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
   else
      call deallocate_peak_patch_arrays(pst%s)
   endif
-  
+
 end subroutine r_deallocate_clump
 !################################################################
 !################################################################
@@ -1215,7 +1215,7 @@ subroutine compute_clump_properties(s,rtype)
         
         ! Clump velocity for gas
 #ifdef HYDRO
-        if (r%hydro.AND.rtype.eq.3)then
+        if (r%hydro.AND.rtype.eq.4)then
            c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+vol*m%grid(igrid)%uold(ind,2:ndim+1)
         endif
 #endif        
@@ -1239,7 +1239,7 @@ subroutine compute_clump_properties(s,rtype)
   do ipeak=1,c%npeak
      if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
         c%center_of_mass(ipeak,1:ndim)=c%center_of_mass(ipeak,1:ndim)/c%clump_mass(ipeak)
-        if (r%hydro.AND.rtype.eq.3)then
+        if (r%hydro.AND.rtype.eq.4)then
            c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%clump_mass(ipeak)
         endif
      end if
@@ -1582,7 +1582,7 @@ subroutine particle_peak_id(s,p,no_peak)
         end if
 
         if(.not. ok_level)then
-           write(*,*)"Something went wrong in particle_clump_properties"
+           write(*,*)"Something went wrong in particle_clump_id"
            write(*,*)"Current level grid and coarser grid both dont exist..."
            stop
         endif

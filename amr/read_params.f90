@@ -289,7 +289,7 @@ subroutine m_read_params(pst)
   logical::clump_info=.false.
   logical::output_clump=.false.
   logical::output_peak=.false.
-  integer::rho_type_clump=0
+  integer::rho_type_clump=1
   logical::output_peak_part=.false.
   logical::output_peak_star=.false.
   real(dp)::relevance_threshold=2
@@ -298,7 +298,7 @@ subroutine m_read_params(pst)
   real(dp)::mass_threshold=0
 
   ! Sink parameters
-  integer::rho_type_sink=0
+  integer::rho_type_sink=1
   logical::sink_descent=.false.
   real(dp)::fudge_descent=0.5d0
 
