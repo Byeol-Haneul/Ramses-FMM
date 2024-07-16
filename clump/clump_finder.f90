@@ -42,7 +42,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !---------------------------------
   ! Output clumps properties to file
   !---------------------------------
-  if(create_output)then
+  if(create_output.and.pst%s%c%npeak_tot>0)then
      call title(g%ifout-1,nchar)
      filedir='output_'//TRIM(nchar)//'/'
      input_array=transfer(filedir,input_array)
@@ -54,12 +54,10 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      endif
      ! Compute particle peak id for outputting to file
      if(r%output_peak_part.and.r%pic)then
-        call particle_peak_id(pst%s,p,no_halo)
         filename=TRIM(filedir)//'peak_part_header.txt'
         call output_peak_header(r,g,p,filename)
      endif
      if(r%output_peak_star.and.r%star)then
-        call particle_peak_id(pst%s,star,no_halo)
         filename=TRIM(filedir)//'peak_star_header.txt'
         call output_peak_header(r,g,star,filename)
      endif
