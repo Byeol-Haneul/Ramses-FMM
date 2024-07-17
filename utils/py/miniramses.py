@@ -223,6 +223,7 @@ def rd_part(nout,**kwargs):
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
     star = kwargs.get("star",False)
+    sink = kwargs.get("sink",False)
     peak = kwargs.get("peak",False)
 
     car1 = str(nout).zfill(5)
@@ -243,6 +244,8 @@ def rd_part(nout,**kwargs):
     prefix="/part."        
     if(star):
         prefix="/star."
+    if(sink):
+        prefix="/sink."
 
     npart = 0
     for icpu in cpulist:
@@ -327,6 +330,8 @@ def rd_part(nout,**kwargs):
         prefix="/peak_part."        
         if(star):
             prefix="/peak_star."
+        if(sink):
+            prefix="/peak_sink."
         ipart = 0
         for icpu in cpulist:
             car2 = str(icpu).zfill(5)

@@ -257,7 +257,7 @@ module amr_commons
      logical::clump_info=.false.
      logical::output_clump=.false.
      logical::output_peak=.false.
-     integer::rho_type_clump=0
+     integer::rho_type_clump=1
      logical::output_peak_part=.false.
      logical::output_peak_star=.false.
      real(dp)::relevance_threshold=2
@@ -266,9 +266,9 @@ module amr_commons
      real(dp)::mass_threshold=0
 
      ! Sink parameters
-     integer::rho_type_sink=0
-     logical::sink_descent
-     real(dp)::fudge_descent
+     integer::rho_type_sink=1
+     logical::sink_descent=.false.
+     real(dp)::fudge_descent=0.5d0
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format

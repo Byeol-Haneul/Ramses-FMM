@@ -30,7 +30,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ttstart = mdl_wtime(mdl)
 
   !--------------------------------------------------------------
-  ! Compute rho from gas density or dark matter or star particles
+  ! Compute rho from dark matter or stars or sinks or gas density
   !--------------------------------------------------------------
   call m_rho_fine(pst,r%levelmin,r%rho_type_clump) 
   
@@ -42,7 +42,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !---------------------------------
   ! Output clumps properties to file
   !---------------------------------
-  if(create_output)then
+  if(create_output.and.pst%s%c%npeak_tot>0)then
      call title(g%ifout-1,nchar)
      filedir='output_'//TRIM(nchar)//'/'
      input_array=transfer(filedir,input_array)
@@ -54,12 +54,10 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      endif
      ! Compute particle peak id for outputting to file
      if(r%output_peak_part.and.r%pic)then
-        call particle_peak_id(pst%s,p,no_halo)
         filename=TRIM(filedir)//'peak_part_header.txt'
         call output_peak_header(r,g,p,filename)
      endif
      if(r%output_peak_star.and.r%star)then
-        call particle_peak_id(pst%s,star,no_halo)
         filename=TRIM(filedir)//'peak_star_header.txt'
         call output_peak_header(r,g,star,filename)
      endif
@@ -193,6 +191,9 @@ subroutine clump_finder(s)
   endif
   if(s%r%star.and.s%r%rho_type_clump.eq.2)then
      call particle_clump_properties(s,s%star)
+  endif
+  if(s%r%sink.and.s%r%rho_type_clump.eq.3)then
+     call particle_clump_properties(s,s%sink)
   endif
 #endif
 end subroutine clump_finder

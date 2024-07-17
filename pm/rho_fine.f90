@@ -12,6 +12,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   implicit none
   type(pst_t)::pst
   integer::ilevel
+  integer::rtype ! rtype 0=all, 1=dm, 2=star, 3=sink, 4=gas
   !------------------------------------------------------------------
   ! This master routine computes the mass density field to be used
   ! as source term in the Poisson solver.
@@ -21,7 +22,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   ! their grid Hilbert order.
   !------------------------------------------------------------------
   type(multipole_t)::multipole_tot
-  integer::i,input_size,rtype ! rtype 0 all 1 dm 2 star 3 gas
+  integer::i,input_size
   integer,dimension(1:2)::input_array
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -69,7 +70,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
      endif
 
      ! Gas mass deposition using pseudo-particles
-     if(r%hydro.AND.m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==3))then
+     if(r%hydro.AND.m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
         if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
         call r_cic_multipole(pst,i,1)
      endif
@@ -80,7 +81,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   !-------------------------------------------------------
   ! Compute particle contribution to density field
   !-------------------------------------------------------
-  if(r%pic.AND.(rtype.ne.3))then
+  if(r%pic)then
      do i=ilevel,r%nlevelmax
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
@@ -90,9 +91,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         endif
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
-           input_array(1)=i
-           input_array(2)=rtype
-           call r_split_part(pst,input_array,2)
+           call r_split_part(pst,i,1)
         endif
      end do
   endif
@@ -126,6 +125,7 @@ recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::ilevel
+
   integer::rID
 
   if(pst%nLower>0)then
@@ -642,11 +642,10 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::ilevel,rtype
   integer,dimension(1:input_size)::input_array
-  
 
   integer::rID
+  integer::ilevel,rtype
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_CIC_PART,pst%iUpper+1,input_size,0,input_array)
@@ -655,12 +654,9 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-     if(rtype.ne.2)then
-        call cic_part(pst%s,pst%s%p,ilevel)
-     endif
-     if((pst%s%r%star).and.(rtype.ne.1))then
-        call cic_part(pst%s,pst%s%star,ilevel)
-     endif
+     call cic_part(pst%s,pst%s%p,ilevel,rtype)
+     if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
+     if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
   endif
 
 end subroutine r_cic_part
@@ -668,10 +664,11 @@ end subroutine r_cic_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine cic_part(s,p,ilevel)
+subroutine cic_part(s,p,ilevel,rtype)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use pm_parameters
   use pm_commons, only: part_t
   use nbors_utils
   use cache_commons
@@ -681,7 +678,7 @@ subroutine cic_part(s,p,ilevel)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  integer::ilevel
+  integer::ilevel,rtype
   !
   ! Local variables
   real(dp),dimension(1:ndim)::x,dd,dg
@@ -704,6 +701,18 @@ subroutine cic_part(s,p,ilevel)
   ! Are particles stars?
   star = allocated(p%tp)
   
+  ! Sort particle according to current level Hilbert key
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     p%sortp(i)=i
+  end do
+  ix=0
+  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+
+  ! Don't deposit mass depending on rho action type
+  if(p%type.eq.  DM_TYPE.and.rtype.NE.0.and.rtype.NE.1)return
+  if(p%type.eq.STAR_TYPE.and.rtype.NE.0.and.rtype.NE.2)return
+  if(p%type.eq.SINK_TYPE.and.rtype.NE.0.and.rtype.NE.3)return
+
   ! Compute contribution to multipole
   if(ilevel==r%levelmin)then
      do i=1,p%npart
@@ -715,13 +724,6 @@ subroutine cic_part(s,p,ilevel)
         end do
      end do
   endif
-
-  ! Sort particle according to current level Hilbert key
-  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
-     p%sortp(i)=i
-  end do
-  ix=0
-  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
@@ -908,31 +910,25 @@ end subroutine unpack_flush_rho
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_split_part(pst,input_array,input_size)
+recursive subroutine r_split_part(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
-  integer::ilevel,rtype
-  integer,dimension(1:input_size)::input_array
+  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,0,input_array)
-     call r_split_part(pst%pLower,input_array,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_SPLIT_PART,pst%iUpper+1,input_size,0,ilevel)
+     call r_split_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     ilevel=input_array(1)
-     rtype=input_array(2)
-     if(rtype.ne.2)then
-        call split_part(pst%s,pst%s%p,ilevel)
-     endif
-     if((pst%s%r%star).and.(rtype.ne.1))then
-        call split_part(pst%s,pst%s%star,ilevel)
-     endif
+     call split_part(pst%s,pst%s%p,ilevel)
+     if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
+     if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
   endif
 
 end subroutine r_split_part

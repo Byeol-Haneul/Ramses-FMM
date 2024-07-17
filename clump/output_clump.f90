@@ -18,33 +18,35 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename,fileloc
-  integer::rID
+  integer::rID,no_halo
 
   if(pst%nLower>0)then
-    rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
-    call r_output_clump(pst%pLower,input_array,input_size,output_array,output_size)
-    call mdl_get_reply(pst%s%mdl,rID,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
+     call r_output_clump(pst%pLower,input_array,input_size,output_array,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
-    filename=transfer(input_array,filename)
-    ! Write clump and halo properties
-    if(pst%s%r%output_clump)then
-       call output_clump_properties(pst%s,filename)
-    endif
-    ! Write peak id of AMR cells
-    if(pst%s%r%output_peak)then
-       fileloc=TRIM(filename)//'peak.'
-       call output_clump_field(pst%s,fileloc)
-    endif
-    if(pst%s%r%output_peak_part.and.pst%s%r%pic)then
-       fileloc=TRIM(filename)//'peak_part.'
-       ! Write peak id of dark matter particles
-       call output_peak_part(pst%s,pst%s%p,fileloc)
-    endif
-    if(pst%s%r%output_peak_star.and.pst%s%r%star)then
-       fileloc=TRIM(filename)//'peak_star.'
-       ! Write peak id of star particles
-       call output_peak_part(pst%s,pst%s%star,fileloc)
-    endif
+     filename=transfer(input_array,filename)
+     ! Write clump and halo properties
+     if(pst%s%r%output_clump)then
+        call output_clump_properties(pst%s,filename)
+     endif
+     ! Write peak id of AMR cells
+     if(pst%s%r%output_peak)then
+        fileloc=TRIM(filename)//'peak.'
+        call output_clump_field(pst%s,fileloc)
+     endif
+     ! Computing and write peak id for dark matter particles'
+     if(pst%s%r%output_peak_part.and.pst%s%r%pic)then
+        fileloc=TRIM(filename)//'peak_part.'
+        call particle_peak_id(pst%s,pst%s%p,no_halo)
+        call output_peak_part(pst%s,pst%s%p,fileloc)
+     endif
+     ! Computing and write peak id for star particles'
+     if(pst%s%r%output_peak_star.and.pst%s%r%star)then
+        fileloc=TRIM(filename)//'peak_star.'
+        call particle_peak_id(pst%s,pst%s%star,no_halo)
+        call output_peak_part(pst%s,pst%s%star,fileloc)
+     endif
   endif
 
 end subroutine r_output_clump
