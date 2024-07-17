@@ -406,7 +406,7 @@ subroutine m_read_params(pst)
   namelist/clump_params/clump_finder,clump_info &
        & ,output_clump,output_peak,output_peak_part,output_peak_star &
        & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold &
-       7 ,rho_type_clump
+       & ,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
