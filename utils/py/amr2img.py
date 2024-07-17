@@ -118,7 +118,7 @@ if clump:
 if sink:
     s=ram.rd_part(nout,sink=True)
     if radius is not None:
-        r = np.sqrt((s.xp[0]-center[0])**2+(s.c[1]-center[1])**2+(s.xp[2]-center[2])**2)
+        r = np.sqrt((s.xp[0]-center[0])**2+(s.xp[1]-center[1])**2+(s.xp[2]-center[2])**2)
         nn = np.count_nonzero(r < radius)
         xx = s.xp[0][r < radius]
         yy = s.xp[1][r < radius]
