@@ -18,6 +18,7 @@ parser.add_argument("--ycen", help="specify the image center y-coordinate")
 parser.add_argument("--zcen", help="specify the image center z-coordinate")
 parser.add_argument("--rad", help="specify the image radius")
 parser.add_argument("--clump", help="specify if clumps are overplotted")
+parser.add_argument("--sink", help="specify if sinks are overplotted")
 parser.add_argument("--dir", help="specify the projection axis")
 args = parser.parse_args()
 # path the the file
@@ -31,11 +32,14 @@ xcenter = args.xcen
 ycenter = args.ycen
 zcenter = args.zcen
 clump = args.clump
+sink = args.sink
 axis = args.dir
 log = args.log
 
 if clump==None:
     clump=False
+if sink==None:
+    sink=False
 if axis==None:
     axis="z"
 if xcenter==None:
@@ -104,6 +108,26 @@ if clump:
         xx = h.x
         yy = h.y
         zz = h.z
+    if axis=="x":
+        plt.plot(yy,zz,'r.')
+    if axis=="y":
+        plt.plot(xx,zz,'r.')
+    if axis=="z":
+        plt.plot(xx,yy,'r.')
+
+if sink:
+    s=ram.rd_part(nout,sink=True)
+    if radius is not None:
+        r = np.sqrt((s.xp[0]-center[0])**2+(s.c[1]-center[1])**2+(s.xp[2]-center[2])**2)
+        nn = np.count_nonzero(r < radius)
+        xx = s.xp[0][r < radius]
+        yy = s.xp[1][r < radius]
+        zz = s.xp[2][r < radius]
+        mm = s.mp[r < radius]
+    else:
+        xx = s.xp[0]
+        yy = s.xp[1]
+        zz = s.xp[2]
     if axis=="x":
         plt.plot(yy,zz,'r.')
     if axis=="y":
