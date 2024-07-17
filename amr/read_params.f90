@@ -327,7 +327,7 @@ subroutine m_read_params(pst)
   ! Global run parameter
   namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
-       & ,static,geom,overload,nsuperoct,clump_finder
+       & ,static,geom,overload,nsuperoct
   ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
@@ -403,8 +403,10 @@ subroutine m_read_params(pst)
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
-  namelist/clump_params/clump_info,output_clump,output_peak,output_peak_part,output_peak_star &
-       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold,rho_type_clump
+  namelist/clump_params/clump_finder,clump_info &
+       & ,output_clump,output_peak,output_peak_part,output_peak_star &
+       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold &
+       7 ,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
