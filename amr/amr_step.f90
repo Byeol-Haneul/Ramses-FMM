@@ -31,6 +31,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use tree_formation_module, only: m_tree_formation
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
+#ifdef RT
+  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
+#endif
   
   implicit none
 
@@ -198,6 +201,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call r_set_unew(pst,ilevel,1)
   endif
 
+#ifdef RT
+  if(ilevel==r%levelmin) call update_rt_c(pst%s%r,pst%s%g)
+  ! Set rtunew equal to rtuold
+                               call m_timer(pst,'rt - set rtunew','start')
+  if(r%rt)call r_set_rtunew(pst,ilevel,1)
+#endif
+
   !---------------------------
   ! Recursive call to amr_step
   !---------------------------
@@ -292,6 +302,23 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
                                     call m_timer(pst,'hydro - upload','start')
      call m_upload_fine(pst,ilevel)
   endif
+
+#ifdef RT
+  if(r%rt)then
+
+     ! Hyperbolic solver
+                                    call m_timer(pst,'rt - godunov','start')
+     if(r%rt_advect)call r_rt_godunov_fine(pst,ilevel,1)
+
+     ! Set rtuold equal to rtunew
+                                    call m_timer(pst,'rt - set rtuold','start')
+     call r_set_rtuold(pst,ilevel,1)
+
+     ! Restriction operator
+                                    call m_timer(pst,'rt - upload','start')
+     !!call m_rt_upload_fine(pst,ilevel)  ! joki: later
+  endif
+#endif
 
   !------------------------
   ! Compute cooling/heating

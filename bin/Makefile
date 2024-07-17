@@ -153,7 +153,9 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o \
 	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
 	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
-	 godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
+	 godunov_fine.o \
+	 rt_flux_module.o rt_godunov_fine.o \
+	 umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 input_hydro_condinit.o input_hydro_grafic.o input_hydro_gadget.o init_flow_fine.o \
 	 condinit.o vecpotentialinit.o init_refine_adaptive.o init_refine_restart.o \
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \

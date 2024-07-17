@@ -109,6 +109,10 @@ module mdl_parameters
      enumerator::MDL_INPUT_RT_CONDINIT
      enumerator::MDL_UPLOAD_RT_FINE
      enumerator::MDL_OUTPUT_RT
+     enumerator::MDL_RT_GODUNOV_FINE
+     enumerator::MDL_SET_RTUNEW
+     enumerator::MDL_SET_RTUOLD
+
 #endif
   end enum
   

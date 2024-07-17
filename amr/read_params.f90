@@ -9,7 +9,7 @@ subroutine m_read_params(pst)
   use mdl_module
   use movie_module, only: set_movie_vars
 #ifdef RT
-  use rt_parameters, only: nrtgroups, nrtvar
+  use rt_parameters, only: nrtgroups, nrtvar, rt_c_cgs, rt_c, rt_c2
 #endif
   implicit none
   type(pst_t)::pst
@@ -770,6 +770,8 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=rt_params,END=113)
 113 continue
+  rt_c_cgs = clight * rt_c_fraction
+  call update_rt_c(pst%s%r,pst%s%g)
 #endif
   close(1)
 

@@ -18,6 +18,9 @@ subroutine m_newdt_fine(pst,ilevel)
   use amr_parameters, only: dp,nvector
   use ramses_commons, only: pst_t
   use courant_fine_module, only: r_courant_fine, out_courant_fine_t
+#ifdef RT
+  use rt_parameters,only:rt_c
+#endif
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -85,7 +88,14 @@ subroutine m_newdt_fine(pst,ilevel)
      g%eint_tot=g%eint_tot+out_courant_fine%eint
      g%emag_tot=g%emag_tot+out_courant_fine%emag
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),out_courant_fine%dt)
-  endif  
+  endif
+
+#ifdef RT
+  if(r%rt)then
+     if(r%verbose)write(*,'("   Entering newdt_rt for level ",I2)')ilevel
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),0.8*dx/3d0/rt_c)
+  endif
+#endif
   
   ! Adaptive time step condition
   if(ilevel>r%levelmin)then

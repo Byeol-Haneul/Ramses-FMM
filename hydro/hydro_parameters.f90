@@ -73,7 +73,7 @@ module rt_parameters
   integer,parameter::nrtgroups=1
 #endif
   integer,parameter::nrtvar=nrtgroups*(1+ndim) ! # of RT variables (photon density and flux)
-  real(dp)::rt_c=1.                  !   Reduced lightspeed in code units
+  real(dp)::rt_c=1.,rt_c2                      !   Reduced lightspeed in code units
   real(dp)::rt_c_cgs=clight          !   Reduced lightspeed [cm s-1]
 
 end module rt_parameters

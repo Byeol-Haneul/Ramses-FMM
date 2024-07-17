@@ -53,3 +53,26 @@ end subroutine m_init_rt_fine
 !###############################################
 !###############################################
 
+#ifdef RT
+!*************************************************************************
+SUBROUTINE update_rt_c(r,g)
+
+! Update the speed of light for radiative transfer, in code units.
+! This cannot be just a constant, since scale_v changes with time in
+! cosmological simulations.
+!-------------------------------------------------------------------------
+  use rt_parameters,only: rt_c, rt_c2, rt_c_cgs
+  !use amr_parameters, only:dp, nvector, ndim
+  use amr_commons, only: run_t, global_t, dp
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  !use amr_commons
+  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  integer::i
+!-------------------------------------------------------------------------
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  rt_c=rt_c_cgs/scale_v
+  rt_c2=rt_c**2
+END SUBROUTINE update_rt_c
+#endif
