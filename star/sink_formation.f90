@@ -38,6 +38,8 @@ recursive subroutine m_sink_formation(pst)
      endif
   endif
 
+  call dump_sink_particles(pst)
+
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
@@ -47,6 +49,37 @@ recursive subroutine m_sink_formation(pst)
   print '(A,F14.7)',' Time elapsed in creating sinks:',ttend-ttstart
 
 end subroutine m_sink_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine dump_sink_particles(pst)
+  use amr_parameters, only: ndim,flen
+  use ramses_commons, only: pst_t
+  use output_part_module, only: r_output_sink
+  use mdl_module, only: mdl_mkdir
+  implicit none
+  type(pst_t)::pst
+  ! Local variables
+  integer::i,dummy(1)
+  character(LEN=flen)::filename,filedir,filecmd
+  integer,dimension(1:flen/4)::input_array
+  character(len=20) :: str
+
+  filedir='output/'
+  call mdl_mkdir(pst%s%mdl,filedir)
+  write(str, '(I0)') pst%s%g%nstep_coarse
+  filedir='output/'//TRIM(str)//'_'
+
+  filename=TRIM(filedir) ! Note that suffix will be added later
+  input_array=transfer(filename,input_array)
+  if(pst%s%r%verbose)write(*,*)'Writing particle files'
+  call r_output_sink(pst,input_array,flen/4,dummy,0)
+
+
+
+end subroutine dump_sink_particles
+
 !###########################################################
 !###########################################################
 !###########################################################
