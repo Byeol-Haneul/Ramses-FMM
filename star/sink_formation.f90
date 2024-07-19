@@ -57,6 +57,7 @@ subroutine dump_sink_particles(pst)
   use amr_parameters, only: ndim,flen
   use ramses_commons, only: pst_t
   use output_part_module, only: r_output_sink
+  use output_clump_module, only: r_output_clump
   use mdl_module, only: mdl_mkdir
   implicit none
   type(pst_t)::pst
