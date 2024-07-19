@@ -103,7 +103,7 @@ if clump:
         xx = h.x[r < radius]
         yy = h.y[r < radius]
         zz = h.z[r < radius]
-        mm = h.m[r < radius]
+        mm = h.mass[r < radius]
     else:
         xx = h.x
         yy = h.y

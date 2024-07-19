@@ -344,8 +344,11 @@ subroutine sink_clump(s)
   if(s%r%rho_type_sink.eq.1)then
      call particle_clump_properties(s,s%p)
   endif
-  if(s%r%rho_type_sink.eq.2)then  
+  if(s%r%rho_type_sink.eq.2)then
      call particle_clump_properties(s,s%star)
+  endif
+  if(s%r%rho_type_sink.eq.3)then
+     call particle_clump_properties(s,s%sink)
   endif
   !---------------------------------------------
   ! Determine which peaks are occupied by a sink

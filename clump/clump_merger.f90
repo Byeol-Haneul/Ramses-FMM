@@ -1125,8 +1125,10 @@ subroutine compute_clump_properties(s,rtype)
   c%min_dens=huge(zero)
   c%n_cells=0; c%n_cells_halo=0
   c%halo_mass=0d0; c%clump_mass=0d0; c%clump_vol=0d0
-  c%center_of_mass=0d0; c%peak_pos=0d0; c%peak_vel=0d0; c%peak_acc=0d0
-
+  c%center_of_mass=0d0; c%peak_pos=0d0; c%peak_acc=0d0
+  if (r%hydro.AND.rtype.eq.4)then
+     c%peak_vel=0d0
+  endif
   if(g%myid==1.and.r%verbose)write(*,*)'Entering compute clump properties'
 
   !--------------------------------------------------------
@@ -1231,7 +1233,9 @@ subroutine compute_clump_properties(s,rtype)
   call virtual_peak_dp(s,c%clump_vol,'sum')
   do i=1,ndim
      call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
-     call virtual_peak_dp(s,c%peak_vel(1,i),'sum')
+     if (r%hydro.AND.rtype.eq.4)then
+        call virtual_peak_dp(s,c%peak_vel(1,i),'sum')
+     endif
   end do
 #endif
 
@@ -1250,7 +1254,9 @@ subroutine compute_clump_properties(s,rtype)
   do i=1,ndim
      call boundary_peak_dp(s,c%peak_pos(1,i))
      call boundary_peak_dp(s,c%center_of_mass(1,i))
-     call boundary_peak_dp(s,c%peak_vel(1,i))
+     if (r%hydro.AND.rtype.eq.4)then
+        call boundary_peak_dp(s,c%peak_vel(1,i))
+     endif
   end do
 #endif
 

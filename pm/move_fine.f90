@@ -286,18 +286,18 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
            gamma = gamma*g%dtnew(ilevel) ! cm2 s-2
            fnorm = sqrt(fnorm)
            delta = 0d0
-!!$           if(norm2>0)then
-!!$              delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)/norm2)*fnorm,0.5d0*dx_loc)
-!!$           endif
-           delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)),0.5d0*dx_loc)
+           if(norm2>0)then
+              delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)/norm2)*fnorm,0.5d0*dx_loc)
+           endif
+!!$           delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)),0.5d0*dx_loc)
 
            ! Update particle positions
-!!$           if(fnorm>0)then
-!!$              p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + ff(1:ndim)/fnorm*delta
-!!$           endif
-           if(norm2>0)then
-              p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + (ff(1:ndim)-p%fp(ipart,1:ndim))/sqrt(norm2)*delta
+           if(fnorm>0)then
+              p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + ff(1:ndim)/fnorm*delta
            endif
+!!$           if(norm2>0)then
+!!$              p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + (ff(1:ndim)-p%fp(ipart,1:ndim))/sqrt(norm2)*delta
+!!$           endif
 
            ! Store old force
            p%fp(ipart,1:ndim)=ff(1:ndim)
