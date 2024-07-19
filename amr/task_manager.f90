@@ -131,7 +131,7 @@ function worker_init(mdl) result(pst)
   use output_amr_module, only: r_output_amr
   use output_hydro_module, only: r_output_hydro
   use output_poisson_module, only: r_output_poisson
-  use output_part_module, only: r_output_part
+  use output_part_module, only: r_output_part,r_output_sink
   use synchro_hydro_fine_module, only: r_synchro_hydro_fine, r_gravity_hydro_fine
   use source_hydro_fine_module, only: r_source_hydro_fine
   use nbors_utils, only: r_save_phi_old
