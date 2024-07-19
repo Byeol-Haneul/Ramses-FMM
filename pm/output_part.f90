@@ -20,8 +20,8 @@ recursive subroutine r_output_sink(pst,input_array,input_size,output_array,outpu
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_PART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_output_part(pst%pLower,input_array,input_size,output_array,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_SINK,pst%iUpper+1,input_size,output_size,input_array)
+     call r_output_sink(pst%pLower,input_array,input_size,output_array,output_size)
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
      filename=transfer(input_array,filename)
