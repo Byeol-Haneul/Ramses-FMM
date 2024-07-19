@@ -74,6 +74,9 @@ subroutine dump_sink_particles(pst)
   filename=TRIM(filedir) ! Note that suffix will be added later
   input_array=transfer(filename,input_array)
   if(pst%s%r%verbose)write(*,*)'Writing particle files'
+  if(pst%s%c%npeak_tot>0)then
+    call r_output_clump(pst,input_array,flen/4,dummy,0)
+  endif
   call r_output_sink(pst,input_array,flen/4,dummy,0)
 
 
