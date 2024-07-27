@@ -356,17 +356,6 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
 
     mdl%mail_counter=0
 
-    ! if (loc(m%domain_hilbert) .eq. loc(m%domain)) then
-    !   m%head_cache(r%levelmin:r%nlevelmax)=m%head
-    !   m%tail_cache(r%levelmin:r%nlevelmax)=m%tail
-    ! else if (loc(m%domain_hilbert) .eq. loc(m%domain_mg)) then
-    !   m%head_cache(1:r%nlevelmax)=m%head_mg
-    !   m%tail_cache(1:r%nlevelmax)=m%tail_mg
-    ! else
-    !   write(*,*) 'Unknown domain decomposition scheme'
-    !   stop
-    ! end if
-
     if (.not.present(init) .and. present(flush)) then
       mdl%combiner_rule = COMBINER_CREATE
     else

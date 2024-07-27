@@ -520,11 +520,6 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
                     child_grid=ichild
                  endif
 
-                 ! Store the grid coordinates for the entire tile
-                 ! TODO: THIS IS NOW DONE IN UNPACK / INIT and seems to work (but should be checked)
-                 !m%grid(ichild)%lev=hash_child(0)
-                 !m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
-
                  ! Unpack response to fetch request
                  call unpack_fetch%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_fetch_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
 
