@@ -91,7 +91,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc,dteff
-  real(kind=8)::gamma,norm2,fnorm,delta
+  real(kind=8)::gamma,norm2,fnorm,delta,grad2
   real(dp),dimension(1:ndim)::ff,grad
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
@@ -304,7 +304,11 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
            if(norm2>0)then
               grad = (ff(1:ndim)-p%fp(ipart,1:ndim))/sqrt(norm2)*delta
               p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + grad
-              p%graddescent_over_dt(ipart) = NORM2(grad)/g%dtnew(ilevel) 
+              grad2 = 0
+              do idim=1,ndim
+                grad2 = grad2 + grad(idim)**2
+              enddo
+              p%graddescent_over_dt(ipart) = sqrt(grad2)/g%dtnew(ilevel) 
            endif
 
            ! Store old force
