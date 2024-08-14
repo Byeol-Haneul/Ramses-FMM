@@ -97,59 +97,95 @@ subroutine close_cache(s,hash_dict)
   ! This routine closes all cache operations.
   ! It purges all remaining flush messages.
   !
-  integer::info,icache,igrid,icpu,ibuf,iskip
-  integer::send_flush_id,nflush
+  integer::info,icache,igrid,icpu,ibuf,iskip,ipeak
+  integer::send_flush_id,send_flush_id_clump,nflush
   integer::dummy_int,close_tag=7,close_id
   integer(kind=8),dimension(0:ndim)::hash_child
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status
+  integer,dimension(MPI_STATUS_SIZE)::reply_status_clump,request_status_clump,flush_status_clump
 #endif
   
-  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
 #ifdef MDL2
   call mdl_cache_close(mdl%mdl2,0)
 #else
 
-  ! EMPTY AND CLEAN THE CACHE
-  do icache=1,m%ncache
-     igrid=r%ngridmax+icache
-     m%locked(icache)=.false.
-     if(m%occupied(icache))call destage(s,igrid,hash_dict)
-     m%occupied(icache)=.false.
-     m%dirty(icache)=.false.
-  end do
-  m%free_cache=1
-  m%ncache=0
+  ! EMPTY AND CLEAN THE GRID CACHE
+  if(mdl%cache_opened)then
+     do icache=1,m%ncache
+        igrid=r%ngridmax+icache
+        m%locked(icache)=.false.
+        if(m%occupied(icache))call destage(s,igrid,hash_dict)
+        m%occupied(icache)=.false.
+        m%dirty(icache)=.false.
+     end do
+     m%free_cache=1
+     m%ncache=0
+     do icache=1,m%nnull
+        if(m%occupied_null(icache))then
+           hash_child(0)=m%lev_null(icache)
+           hash_child(1:ndim)=m%ckey_null(1:ndim,icache)
+           call hash_free(hash_dict,hash_child)
+        endif
+        m%occupied_null(icache)=.false.
+     end do
+     m%free_null=1
+     m%nnull=0
+  endif
 
-  do icache=1,m%nnull
-     if(m%occupied_null(icache))then
-        hash_child(0)=m%lev_null(icache)
-        hash_child(1:ndim)=m%ckey_null(1:ndim,icache)
-        call hash_free(hash_dict,hash_child)
-     endif
-     m%occupied_null(icache)=.false.
-  end do
-  m%free_null=1
-  m%nnull=0
+  ! EMPTY AND CLEAN THE CLUMP CACHE
+  if(mdl%cache_opened_clump)then
+     do icache=1,c%ncache
+        ipeak=c%npeak+icache
+        c%locked(icache)=.false.
+        if(c%occupied(icache))call destage_clump(s,ipeak,hash_dict)
+        c%occupied(icache)=.false.
+        c%dirty(icache)=.false.
+     end do
+     c%free_cache=1
+     c%ncache=0
+  endif
 
 #ifndef WITHOUTMPI
-  ! COMPLETE THE LAST FLUSH
-  do icpu=1,g%ncpu
-     ibuf=mdl%cpu2buf_flush(icpu)
-     if(ibuf>0)then
-        iskip=1
-        nflush=mdl%send_flush(ibuf)%array(iskip)
-        if(nflush>0)then
-           ! Post send
-           call MPI_ISSEND(mdl%send_flush(ibuf)%array(iskip),mdl%size_flush_array,MPI_INTEGER,icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)
-           ! While waiting for completion, check on incoming messages and perform actions
-           call check_mail(s,send_flush_id,hash_dict)
-           mdl%send_flush(ibuf)%array(iskip)=0
+
+  if(mdl%cache_opened)then
+     ! COMPLETE THE LAST GRID FLUSH
+     do icpu=1,g%ncpu
+        ibuf=mdl%cpu2buf_flush(icpu)
+        if(ibuf>0)then
+           iskip=1
+           nflush=mdl%send_flush(ibuf)%array(iskip)
+           if(nflush>0)then
+              ! Post send
+              call MPI_ISSEND(mdl%send_flush(ibuf)%array(iskip),mdl%size_flush_array,MPI_INTEGER,icpu-1,flush_tag,MPI_COMM_WORLD,send_flush_id,info)
+              ! While waiting for completion, check on incoming messages and perform actions
+              call check_mail(s,send_flush_id,hash_dict)
+              mdl%send_flush(ibuf)%array(iskip)=0
+           endif
         endif
-     endif
-  end do
-  
+     end do
+  endif
+
+  if(mdl%cache_opened_clump)then
+     ! COMPLETE THE LAST CLUMP FLUSH
+     do icpu=1,g%ncpu
+        ibuf=mdl%cpu2buf_flush_clump(icpu)
+        if(ibuf>0)then
+           iskip=1
+           nflush=mdl%send_flush_clump(ibuf)%array(iskip)
+           if(nflush>0)then
+              ! Post send
+              call MPI_ISSEND(mdl%send_flush_clump(ibuf)%array(iskip),mdl%size_flush_array_clump,MPI_INTEGER,icpu-1,flush_tag_clump,MPI_COMM_WORLD,send_flush_id_clump,info)
+              ! While waiting for completion, check on incoming messages and perform actions
+              call check_mail(s,send_flush_id_clump,hash_dict)
+              mdl%send_flush_clump(ibuf)%array(iskip)=0
+           endif
+        endif
+     end do
+  endif
+
   ! CHECK-IN CHECK-OUT
   if(g%myid.NE.1)then
      call MPI_ISEND(dummy_int,1,MPI_INTEGER,0,close_tag,MPI_COMM_WORLD,close_id,info)
@@ -171,28 +207,57 @@ subroutine close_cache(s,hash_dict)
   call MPI_BARRIER(MPI_COMM_WORLD,info)
   call check_mail(s,MPI_REQUEST_NULL,hash_dict)
 
-  ! Finally CANCEL THE 2 RECV
-  call MPI_CANCEL(mdl%request_id,info)
-  call MPI_CANCEL(mdl%flush_id,info)
+  ! Finally CANCEL THE 2 GRID RECV
+  if(mdl%cache_opened)then
 
-  ! Test to free memory in corresponding MPI buffer
-  call MPI_WAIT(mdl%request_id,request_status,info)
-  call MPI_WAIT(mdl%flush_id,flush_status,info)
-  do icpu=1,g%ncpu
-     call MPI_WAIT(mdl%reply_id(icpu),reply_status,info)
-  end do
-  
-  ! Reset cpu mapping to flush and fetch buffers
-  do icpu=1,g%ncpu
-     mdl%cpu2buf_fetch(icpu)=0
-     mdl%cpu2buf_flush(icpu)=0
-  end do
-  mdl%ibuffer_fetch=0
-  mdl%ibuffer_flush=0
+     call MPI_CANCEL(mdl%request_id,info)
+     call MPI_CANCEL(mdl%flush_id,info)
+
+     ! Test to free memory in corresponding MPI buffer
+     call MPI_WAIT(mdl%request_id,request_status,info)
+     call MPI_WAIT(mdl%flush_id,flush_status,info)
+     do icpu=1,g%ncpu
+        call MPI_WAIT(mdl%reply_id(icpu),reply_status,info)
+     end do
+
+     ! Reset cpu mapping to flush and fetch buffers
+     do icpu=1,g%ncpu
+        mdl%cpu2buf_fetch(icpu)=0
+        mdl%cpu2buf_flush(icpu)=0
+     end do
+     mdl%ibuffer_fetch=0
+     mdl%ibuffer_flush=0
+  endif
+
+  ! Finally CANCEL THE 2 CLUMP RECV
+  if(mdl%cache_opened_clump)then
+
+     call MPI_CANCEL(mdl%request_id_clump,info)
+     call MPI_CANCEL(mdl%flush_id_clump,info)
+
+     ! Test to free memory in corresponding MPI buffer
+     call MPI_WAIT(mdl%request_id_clump,request_status_clump,info)
+     call MPI_WAIT(mdl%flush_id_clump,flush_status_clump,info)
+     do icpu=1,g%ncpu
+        call MPI_WAIT(mdl%reply_id_clump(icpu),reply_status_clump,info)
+     end do
+
+     ! Reset cpu mapping to flush and fetch buffers
+     do icpu=1,g%ncpu
+        mdl%cpu2buf_fetch_clump(icpu)=0
+        mdl%cpu2buf_flush_clump(icpu)=0
+     end do
+     mdl%ibuffer_fetch_clump=0
+     mdl%ibuffer_flush_clump=0
+  endif
 
   ! Barrier to prevent interference with the next cache
   call MPI_BARRIER(MPI_COMM_WORLD,info)
 #endif
+
+  mdl%cache_opened=.false.
+  mdl%cache_opened_clump=.false.
+
 #endif
   end associate
   
@@ -348,6 +413,7 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
     if (present(flush))     pack_flush%proc => flush
     if (present(bound))     init_bound%proc => bound
     if (present(combine)) unpack_flush%proc => combine
+    mdl%cache_opened=.true.
 
 #ifndef WITHOUTMPI
     do icpu=1,g%ncpu
@@ -380,6 +446,75 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
   end associate
 
 end subroutine open_cache
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine open_cache_clump(s,pack_size,pack,unpack,init,flush,combine)
+  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_BOOL, C_FUNLOC, C_NULL_PTR
+  use amr_parameters, only: ndim,nhilbert,twotondim
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  use call_back, only: cache_function, cache_f
+  use domain_m, only: domain_t
+  use hash
+  use mdl_module
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  implicit none
+  type(ramses_t)::s
+  integer::pack_size
+  procedure(cache_function_clump),optional::pack
+  procedure(cache_function_unpack_clump),optional::unpack
+  procedure(cache_function_clump),optional::flush
+  procedure(cache_function_init_clump),optional::init
+  procedure(cache_function_unpack_clump),optional::combine
+  integer::info,icpu,iskip
+
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+  mdl%size_msg_array_clump = pack_size
+
+  pack_fetch_clump%proc => null()
+  unpack_fetch_clump%proc => null()
+  init_flush_clump%proc => null()
+  pack_flush_clump%proc => null()
+  unpack_flush_clump%proc => null()
+  if (present(pack))      pack_fetch_clump%proc => pack
+  if (present(unpack))  unpack_fetch_clump%proc => unpack
+  if (present(init))      init_flush_clump%proc => init
+  if (present(flush))     pack_flush_clump%proc => flush
+  if (present(combine)) unpack_flush_clump%proc => combine
+
+  mdl%cache_opened_clump = .true.
+
+#ifndef WITHOUTMPI
+  do icpu=1,g%ncpu
+     mdl%reply_id_clump(icpu)=MPI_REQUEST_NULL
+  end do
+
+  mdl%mail_counter=0
+
+  mdl%size_request_array_clump=2
+  mdl%size_flush_array_clump=1+(2+mdl%size_msg_array_clump)*nflushmax
+  mdl%size_fetch_array_clump=2+(2+mdl%size_msg_array_clump)*ntilemax
+
+  ! Set communication counters to zero
+  do icpu=1,mdl%nbuffer_flush_clump
+     mdl%send_flush_clump(icpu)%array(1)=0
+  end do
+
+  ! Post the first RECV for request
+  call MPI_IRECV(mdl%recv_request_array_clump,mdl%size_request_array_clump,MPI_INTEGER,MPI_ANY_SOURCE,request_tag_clump,MPI_COMM_WORLD,mdl%request_id_clump,info)\
+
+  ! Post the first RECV for flush
+  call MPI_IRECV(mdl%recv_flush_array_clump,mdl%size_flush_array_clump,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag_clump,MPI_COMM_WORLD,mdl%flush_id_clump,info)
+#endif
+
+  end associate
+
+end subroutine open_cache_clump
 !##############################################################
 !##############################################################
 !##############################################################

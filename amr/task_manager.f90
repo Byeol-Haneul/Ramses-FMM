@@ -418,20 +418,20 @@ subroutine init_cache(mdl)
   use cache_commons
   implicit none
   type(mdl_t)::mdl
-  
+
   integer::ncpu,ibuf
   type(msg_large_realdp)::dummy_large_realdp
 
   ncpu=mdl_threads(mdl)
-  
-#ifndef WITHOUTMPI  
+
+#ifndef WITHOUTMPI
 
   ! Allocate all communication and cache-related variables
   allocate(mdl%reply_id(1:ncpu))
 
   ! Compute largest possible message size
   mdl%size_request_array=1+ndim
-  mdl%size_msg_array=storage_size(dummy_large_realdp)/32
+  mdl%size_msg_array=storage_size(dummy_large_realdp)/32 ! Largest message size
   mdl%size_flush_array=1+(1+ndim+mdl%size_msg_array)*nflushmax
   mdl%size_fetch_array=2+(1+ndim+mdl%size_msg_array)*ntilemax
 
@@ -463,6 +463,132 @@ subroutine init_cache(mdl)
 #endif
 
 end subroutine init_cache
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine kill_cache(mdl)
+  use mdl_module
+  use cache_commons
+  implicit none
+  type(mdl_t)::mdl
+
+  integer::ibuf
+
+#ifndef WITHOUTMPI
+
+  do ibuf=1,mdl%nbuffer_fetch
+     deallocate(mdl%send_fetch(ibuf)%array)
+  end do
+  do ibuf=1,mdl%nbuffer_flush
+     deallocate(mdl%send_flush(ibuf)%array)
+  end do
+
+  deallocate(mdl%cpu2buf_fetch)
+  deallocate(mdl%cpu2buf_flush)
+  deallocate(mdl%send_fetch)
+  deallocate(mdl%send_flush)
+
+  deallocate(mdl%recv_request_array)
+  deallocate(mdl%send_request_array)
+  deallocate(mdl%recv_fetch_array)
+  deallocate(mdl%recv_flush_array)
+
+  deallocate(mdl%reply_id)
+
+#endif
+
+end subroutine kill_cache
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine init_cache_clump(mdl)
+  use mdl_module
+  use cache_commons
+  implicit none
+  type(mdl_t)::mdl
+
+  integer::ncpu,ibuf
+  type(msg_prop_clump)::dummy_large_clump
+
+  ncpu=mdl_threads(mdl)
+
+#ifndef WITHOUTMPI
+
+  ! Allocate all communication and cache-related variables
+  allocate(mdl%reply_id_clump(1:ncpu))
+
+  ! Compute largest possible message size
+  mdl%size_request_array_clump=2
+  mdl%size_msg_array_clump=storage_size(dummy_large_clump)/32 ! Largest message size
+  mdl%size_flush_array_clump=1+(2+mdl%size_msg_array_clump)*nflushmax
+  mdl%size_fetch_array_clump=2+(2+mdl%size_msg_array_clump)*ntilemax
+
+  ! Allocate large enough message communication buffers
+  allocate(mdl%recv_request_array_clump(1:mdl%size_request_array_clump))
+  allocate(mdl%send_request_array_clump(1:mdl%size_request_array_clump))
+  allocate(mdl%recv_fetch_array_clump(1:mdl%size_fetch_array_clump))
+  allocate(mdl%recv_flush_array_clump(1:mdl%size_flush_array_clump))
+
+  allocate(mdl%cpu2buf_fetch_clump(1:ncpu))
+  allocate(mdl%cpu2buf_flush_clump(1:ncpu))
+  allocate(mdl%send_fetch_clump(1:ncpu))
+  allocate(mdl%send_flush_clump(1:ncpu))
+
+  mdl%nbuffer_fetch_clump=MIN(ncpu,nbuffermax)
+  mdl%nbuffer_flush_clump=MIN(ncpu,nbuffermax)
+  do ibuf=1,mdl%nbuffer_fetch_clump
+     allocate(mdl%send_fetch_clump(ibuf)%array(mdl%size_fetch_array_clump))
+  end do
+  do ibuf=1,mdl%nbuffer_flush_clump
+     allocate(mdl%send_flush_clump(ibuf)%array(mdl%size_flush_array_clump))
+  end do
+
+  mdl%ibuffer_fetch_clump=0
+  mdl%ibuffer_flush_clump=0
+  mdl%cpu2buf_fetch_clump=0
+  mdl%cpu2buf_flush_clump=0
+
+#endif
+
+end subroutine init_cache_clump
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine kill_cache_clump(mdl)
+  use mdl_module
+  use cache_commons
+  implicit none
+  type(mdl_t)::mdl
+
+  integer::ibuf
+
+#ifndef WITHOUTMPI
+
+  do ibuf=1,mdl%nbuffer_fetch_clump
+     deallocate(mdl%send_fetch_clump(ibuf)%array)
+  end do
+  do ibuf=1,mdl%nbuffer_flush_clump
+     deallocate(mdl%send_flush_clump(ibuf)%array)
+  end do
+
+  deallocate(mdl%cpu2buf_fetch_clump)
+  deallocate(mdl%cpu2buf_flush_clump)
+  deallocate(mdl%send_fetch_clump)
+  deallocate(mdl%send_flush_clump)
+
+  deallocate(mdl%recv_request_array_clump)
+  deallocate(mdl%send_request_array_clump)
+  deallocate(mdl%recv_fetch_array_clump)
+  deallocate(mdl%recv_flush_array_clump)
+
+  deallocate(mdl%reply_id_clump)
+
+#endif
+
+end subroutine kill_cache_clump
 #endif
 !##############################################################
 !##############################################################
@@ -494,199 +620,297 @@ subroutine check_mail(s,comm_id,hash_dict)
   ! It can be a flush message, and the routine
   ! unpacks it and combine it in the local memory.
   !
-  integer::i,ind,ivar,idim,info,ipos,iskip,igrid,ichild,grid_cpu,ilevel,itile,ntile_reply,nflush
-  integer::buffer_size_fetch_array,buffer_size_msg_array,ibuf
+  integer::i,ind,ivar,idim,info,ipos,iskip,igrid,ichild
+  integer::grid_cpu,peak_cpu,ilevel,itile,ntile_reply,nflush,ibuf
+  integer::buffer_size_fetch_array,buffer_size_msg_array
+  integer::buffer_size_fetch_array_clump,buffer_size_msg_array_clump
   logical::comm_completed,request_received,flush_received=.false.
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::reply_status,request_status,flush_status,comm_status
+  integer,dimension(MPI_STATUS_SIZE)::reply_status_clump,request_status_clump,flush_status_clump
 #endif
   integer(kind=8), dimension(1:nhilbert)::hk
   integer(kind=8), dimension(1:ndim)::ix
   integer(kind=8), dimension(0:ndim)::hash_key,hash_child
+  integer(kind=8)::global_peak_id
+  integer::local_peak_id
   type(oct),pointer::child
   integer(kind=8), dimension(0:ndim,1:ntilemax),target::raw_keys
   type(cache_key_ptr),dimension(1:ntilemax)::keys
   type(nbor),dimension(1:ntilemax)::grid
   type(msg_large_realdp)::dummy_large_realdp
+  type(msg_prop_clump)::dummy_large_clump
 
 #ifndef WITHOUTMPI
 
-  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
   comm_completed=.false.
   do while (.not. comm_completed)
 
-     ! USE A NESTED DO WHILE LOOP FOR THE 2 ADD. TESTS
+     ! USE A NESTED DO WHILE LOOP FOR THE FOLLOWING TESTS
 
-     !===========================
-     ! Check for incoming request
-     !===========================
-     request_received=.true.
-     do while(request_received)
-        call MPI_TEST(mdl%request_id,request_received,request_status,info)
-        if(request_received)then
+     if(mdl%cache_opened)then
+        !===========================
+        ! Check for incoming request
+        !===========================
+        request_received=.true.
+        do while(request_received)
+           call MPI_TEST(mdl%request_id,request_received,request_status,info)
+           if(request_received)then
 
-           ! Assemble a reply and send it back
-           ilevel=mdl%recv_request_array(1)
-           hash_key(0)=ilevel
-           hash_key(1:ndim)=mdl%recv_request_array(2:ndim+1)
-           call c_f_pointer(hash_getp(hash_dict,hash_key),child)
-           grid_cpu=request_status(MPI_SOURCE)+1
+              ! Assemble a reply and send it back
+              ilevel=mdl%recv_request_array(1)
+              hash_key(0)=ilevel
+              hash_key(1:ndim)=mdl%recv_request_array(2:ndim+1)
+              call c_f_pointer(hash_getp(hash_dict,hash_key),child)
+              grid_cpu=request_status(MPI_SOURCE)+1
 
-           ! Identify the corresponding communication buffer
-           ibuf=mdl%cpu2buf_fetch(grid_cpu)
+              ! Identify the corresponding communication buffer
+              ibuf=mdl%cpu2buf_fetch(grid_cpu)
 
-           ! If none is available, get the next free one
-           if(ibuf==0)then
-              mdl%ibuffer_fetch=mdl%ibuffer_fetch+1
-              ! If there is no communication buffer left, allocate a new one
-              if(mdl%ibuffer_fetch>mdl%nbuffer_fetch)then
-                 mdl%nbuffer_fetch=mdl%nbuffer_fetch+1
-                 buffer_size_msg_array=storage_size(dummy_large_realdp)/32
-                 buffer_size_fetch_array=2+(1+ndim+buffer_size_msg_array)*ntilemax
-                 allocate(mdl%send_fetch(mdl%nbuffer_fetch)%array(1:buffer_size_fetch_array))
+              ! If none is available, get the next free one
+              if(ibuf==0)then
+                 mdl%ibuffer_fetch=mdl%ibuffer_fetch+1
+                 ! If there is no communication buffer left, allocate a new one
+                 if(mdl%ibuffer_fetch>mdl%nbuffer_fetch)then
+                    mdl%nbuffer_fetch=mdl%nbuffer_fetch+1
+                    buffer_size_msg_array=storage_size(dummy_large_realdp)/32 ! Largest message size
+                    buffer_size_fetch_array=2+(1+ndim+buffer_size_msg_array)*ntilemax
+                    allocate(mdl%send_fetch(mdl%nbuffer_fetch)%array(1:buffer_size_fetch_array))
+                 endif
+                 mdl%cpu2buf_fetch(grid_cpu)=mdl%ibuffer_fetch
+                 ibuf=mdl%ibuffer_fetch
               endif
-              mdl%cpu2buf_fetch(grid_cpu)=mdl%ibuffer_fetch
-              ibuf=mdl%ibuffer_fetch
+
+              ! If grid does not exist, send a null reply
+              if(.not.ASSOCIATED(child))then
+
+                 ! Store type corresponding to a null reply
+                 iskip=1
+                 mdl%send_fetch(ibuf)%array(iskip)=-1
+
+                 ! Otherwise, assemble a proper reply with a complete tile
+              else
+                 iskip=1
+                 ! Record the location of where we want the keys to be stored, then ask for a tile
+                 do i=1,ntilemax
+                    keys(i)%p(0:ndim) => raw_keys(0:ndim,i)
+                 end do
+                 call get_tile(s,child,ntilemax,keys,grid,ntile_reply)
+
+                 ! Store type of reply and number of entries
+                 mdl%send_fetch(ibuf)%array(iskip)=1
+                 iskip=iskip+1
+                 mdl%send_fetch(ibuf)%array(iskip)=ntile_reply
+                 iskip=iskip+1
+
+                 ! Store data, depending on reply type
+                 do i=1,ntile_reply
+                    mdl%send_fetch(ibuf)%array(iskip:iskip+ndim)=raw_keys(0:ndim,i)
+                    iskip=iskip+1+ndim ! Skip over the key already present
+                    call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
+                    iskip=iskip+mdl%size_msg_array
+                 end do
+              endif
+
+              ! Wait for the old SEND to free memory in corresponding MPI buffer
+              call MPI_WAIT(mdl%reply_id(grid_cpu),reply_status,info)
+
+              ! Send back the reply
+              iskip=1
+              call MPI_ISEND(mdl%send_fetch(ibuf)%array(iskip),mdl%size_fetch_array,MPI_INTEGER,grid_cpu-1,msg_tag,MPI_COMM_WORLD,mdl%reply_id(grid_cpu),info)
+
+              !=================================
+              ! Post a new RECV for request
+              !=================================
+              call MPI_IRECV(mdl%recv_request_array,mdl%size_request_array,MPI_INTEGER,MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,mdl%request_id,info)
+
            endif
+        end do
 
-           ! If grid does not exist, send a null reply
-           if(.not.ASSOCIATED(child))then
+        !=========================
+        ! Check for incoming flush
+        !=========================
+        flush_received=.true.
+        do while(flush_received)
+           call MPI_TEST(mdl%flush_id,flush_received,flush_status,info)
+           if(flush_received)then
 
-              ! Store type corresponding to a null reply
+              ! Combine received data to local memory only if grid exists
+              if(mdl%combiner_rule.eq.COMBINER_EXIST)then
+                 iskip=1
+                 nflush=mdl%recv_flush_array(iskip)
+                 iskip=iskip+1
+
+                 do i=1,nflush
+                    ilevel=mdl%recv_flush_array(iskip)
+                    hash_child(0)=ilevel
+                    hash_child(1:ndim)=mdl%recv_flush_array(iskip+1:iskip+ndim)
+                    iskip=iskip+ndim+1
+                    ! Get grid from hash table
+                    call c_f_pointer(hash_getp(hash_dict,hash_child),child)
+                    if(ASSOCIATED(child))then
+                       call unpack_flush%proc(child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
+                    endif
+
+                    iskip=iskip+mdl%size_msg_array
+
+                 end do
+
+              endif
+
+              ! Combine received data to local memory only if grid does not exist
+              if(mdl%combiner_rule.eq.COMBINER_CREATE)then
+                 iskip=1
+                 nflush=mdl%recv_flush_array(iskip)
+                 iskip=iskip+1
+
+                 do i=1,nflush
+                    ilevel=mdl%recv_flush_array(iskip)
+                    hash_child(0)=ilevel
+                    hash_child(1:ndim)=mdl%recv_flush_array(iskip+1:iskip+ndim)
+                    iskip=iskip+ndim+1
+
+                    ! Create new grid if grid does not exist
+                    if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
+
+                       ! Compute Hilbert keys of new octs
+                       ix(1:ndim)=hash_child(1:ndim)
+                       hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
+
+                       ! Set grid index to a virtual grid in local main memory
+                       ichild=m%ifree
+
+                       ! Go to next main memory free line
+                       m%ifree=m%ifree+1
+                       if(m%ifree.GT.r%ngridmax)then
+                          write(*,*)'No more free memory'
+                          write(*,*)'Increase ngridmax'
+                          call mdl_abort(mdl)
+                       endif
+                       m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
+                       m%grid(ichild)%superoct=1
+                       m%grid(ichild)%flag1(1:twotondim)=0
+                       m%grid(ichild)%flag2(1:twotondim)=0
+
+                       ! Insert new grid in hash table
+                       call hash_setp(hash_dict,hash_child,m%grid(ichild))
+
+                       ! Unpack message content
+                       call unpack_flush%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
+
+                    endif
+
+                    iskip=iskip+mdl%size_msg_array
+
+                 end do
+
+              endif
+
+              !=================================
+              ! Post a new RECV for flush
+              !=================================
+              call MPI_IRECV(mdl%recv_flush_array,mdl%size_flush_array,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,mdl%flush_id,info)
+
+           endif
+        end do
+     endif
+
+     if(mdl%cache_opened_clump)then
+        !=================================
+        ! Check for incoming clump request
+        !=================================
+        request_received=.true.
+        do while(request_received)
+           call MPI_TEST(mdl%request_id_clump,request_received,request_status_clump,info)
+           if(request_received)then
+
+              ! Assemble a reply and send it back
+              global_peak_id=transfer(mdl%recv_request_array_clump(1:2),global_peak_id)
+              local_peak_id=global_peak_id-c%npeak_cum(g%myid-1)
+              peak_cpu=request_status_clump(MPI_SOURCE)+1
+
+              ! Identify the corresponding communication buffer
+              ibuf=mdl%cpu2buf_fetch_clump(peak_cpu)
+
+              ! If none is available, get the next free one or allocate a new one
+              if(ibuf==0)then
+                 mdl%ibuffer_fetch_clump=mdl%ibuffer_fetch_clump+1
+                 if(mdl%ibuffer_fetch_clump>mdl%nbuffer_fetch_clump)then
+                    mdl%nbuffer_fetch_clump=mdl%nbuffer_fetch_clump+1
+                    buffer_size_msg_array_clump=storage_size(dummy_large_clump)/32 ! Largest message size
+                    buffer_size_fetch_array_clump=2+(2+buffer_size_msg_array_clump)*ntilemax
+                    allocate(mdl%send_fetch_clump(mdl%nbuffer_fetch_clump)%array(1:buffer_size_fetch_array_clump))
+                 endif
+                 mdl%cpu2buf_fetch_clump(peak_cpu)=mdl%ibuffer_fetch_clump
+                 ibuf=mdl%ibuffer_fetch_clump
+              endif
+
+              ! Assemble a proper reply with a complete tile
               iskip=1
-              mdl%send_fetch(ibuf)%array(iskip)=-1
-
-           ! Otherwise, assemble a proper reply with a complete tile
-           else
-              iskip=1
-              ! Record the location of where we want the keys to be stored, then ask for a tile
-              do i=1,ntilemax
-!                 ipos = iskip + 2 + (i-1)*(1+ndim+mdl%size_msg_array)
-!                 keys(i)%p(0:ndim) => mdl%send_fetch(ibuf)%array(ipos:ipos+ndim)
-                 keys(i)%p(0:ndim) => raw_keys(0:ndim,i)
-              end do
-              call get_tile(s,child,ntilemax,keys,grid,ntile_reply)
+              itile=(local_peak_id-1)/ntilemax
+              ntile_reply=MIN(c%npeak-itile*ntilemax,ntilemax)
 
               ! Store type of reply and number of entries
-              mdl%send_fetch(ibuf)%array(iskip)=1
+              mdl%send_fetch_clump(ibuf)%array(iskip)=1
               iskip=iskip+1
-              mdl%send_fetch(ibuf)%array(iskip)=ntile_reply
+              mdl%send_fetch_clump(ibuf)%array(iskip)=ntile_reply
               iskip=iskip+1
 
               ! Store data, depending on reply type
               do i=1,ntile_reply
-                 mdl%send_fetch(ibuf)%array(iskip:iskip+ndim)=raw_keys(0:ndim,i)
-                 iskip=iskip+1+ndim ! Skip over the key already present
-                 call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
-                 iskip=iskip+mdl%size_msg_array
+                 local_peak_id=itile*ntilemax+i
+                 global_peak_id=c%npeak_cum(g%myid-1)+local_peak_id
+                 mdl%send_fetch_clump(ibuf)%array(iskip:iskip+1)=transfer(global_peak_id,local_peak_id,2)
+                 iskip=iskip+2
+                 call pack_fetch_clump%proc(c,local_peak_id,mdl%size_msg_array_clump,mdl%send_fetch_clump(ibuf)%array(iskip:iskip+mdl%size_msg_array_clump-1))
+                 iskip=iskip+mdl%size_msg_array_clump
               end do
-           endif
 
-           ! Wait for the old SEND to free memory in corresponding MPI buffer
-           call MPI_WAIT(mdl%reply_id(grid_cpu),reply_status,info)
+              ! Wait for the old SEND to free memory in corresponding MPI buffer
+              call MPI_WAIT(mdl%reply_id_clump(peak_cpu),reply_status_clump,info)
 
-           ! Send back the reply
-           iskip=1
-           call MPI_ISEND(mdl%send_fetch(ibuf)%array(iskip),mdl%size_fetch_array,MPI_INTEGER,grid_cpu-1,msg_tag,MPI_COMM_WORLD,mdl%reply_id(grid_cpu),info)
-
-           !=================================
-           ! Post a new RECV for request
-           !=================================
-           call MPI_IRECV(mdl%recv_request_array,mdl%size_request_array,MPI_INTEGER,MPI_ANY_SOURCE,request_tag,MPI_COMM_WORLD,mdl%request_id,info)
-
-        endif
-     end do
-
-     !=========================
-     ! Check for incoming flush
-     !=========================
-     flush_received=.true.
-     do while(flush_received)
-        call MPI_TEST(mdl%flush_id,flush_received,flush_status,info)
-        if(flush_received)then
-
-           ! Combine received data to local memory only if grid exists
-           if(mdl%combiner_rule.eq.COMBINER_EXIST)then
+              ! Send back the reply
               iskip=1
-              nflush=mdl%recv_flush_array(iskip)
-              iskip=iskip+1
+              call MPI_ISEND(mdl%send_fetch_clump(ibuf)%array(iskip),mdl%size_fetch_array_clump,MPI_INTEGER,peak_cpu-1,msg_tag_clump,MPI_COMM_WORLD,mdl%reply_id_clump(peak_cpu),info)
 
-              do i=1,nflush
-                 ilevel=mdl%recv_flush_array(iskip)
-                 hash_child(0)=ilevel
-                 hash_child(1:ndim)=mdl%recv_flush_array(iskip+1:iskip+ndim)
-                 iskip=iskip+ndim+1
-                 ! Get grid from hash table
-                 call c_f_pointer(hash_getp(hash_dict,hash_child),child)
-                 if(ASSOCIATED(child))then
-                    call unpack_flush%proc(child,mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
-                 endif
-
-                 iskip=iskip+mdl%size_msg_array
-
-              end do
+              !=================================
+              ! Post a new RECV for request
+              !=================================
+              call MPI_IRECV(mdl%recv_request_array_clump,mdl%size_request_array_clump,MPI_INTEGER,MPI_ANY_SOURCE,request_tag_clump,MPI_COMM_WORLD,mdl%request_id_clump,info)
 
            endif
+        end do
 
-           ! Combine received data to local memory only if grid does not exist
-           if(mdl%combiner_rule.eq.COMBINER_CREATE)then
+        !===============================
+        ! Check for incoming clump flush
+        !===============================
+        flush_received=.true.
+        do while(flush_received)
+           call MPI_TEST(mdl%flush_id_clump,flush_received,flush_status_clump,info)
+           if(flush_received)then
+
+              ! Combine received data to local memory
               iskip=1
-              nflush=mdl%recv_flush_array(iskip)
+              nflush=mdl%recv_flush_array_clump(iskip)
               iskip=iskip+1
-
               do i=1,nflush
-                 ilevel=mdl%recv_flush_array(iskip)
-                 hash_child(0)=ilevel
-                 hash_child(1:ndim)=mdl%recv_flush_array(iskip+1:iskip+ndim)
-                 iskip=iskip+ndim+1
-
-                 ! Create new grid if grid does not exist
-                 if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
-
-                    ! Compute Hilbert keys of new octs
-                    ix(1:ndim)=hash_child(1:ndim)
-                    hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
-
-                    ! Set grid index to a virtual grid in local main memory
-                    ichild=m%ifree
-
-                    ! Go to next main memory free line
-                    m%ifree=m%ifree+1
-                    if(m%ifree.GT.r%ngridmax)then
-                       write(*,*)'No more free memory'
-                       write(*,*)'Increase ngridmax'
-                       call mdl_abort(mdl)
-                    endif
-                    ! TODO: THIS IS NOW DONE IN UNPACK / INIT and seems to work (but should be checked)
-                    !m%grid(ichild)%lev=hash_child(0)
-                    !m%grid(ichild)%ckey(1:ndim)=hash_child(1:ndim)
-                    m%grid(ichild)%hkey(1:nhilbert)=hk(1:nhilbert)
-                    m%grid(ichild)%superoct=1
-                    m%grid(ichild)%flag1(1:twotondim)=0
-                    m%grid(ichild)%flag2(1:twotondim)=0
-
-                    ! Insert new grid in hash table
-                    call hash_setp(hash_dict,hash_child,m%grid(ichild))
-
-                    ! Unpack message content
-                    call unpack_flush%proc(m%grid(ichild),mdl%size_msg_array,mdl%recv_flush_array(iskip:iskip+mdl%size_msg_array-1),hash_child)
-
-                 endif
-
-                 iskip=iskip+mdl%size_msg_array
-
+                 global_peak_id=transfer(mdl%recv_flush_array_clump(iskip:iskip+1),global_peak_id)
+                 iskip=iskip+2
+                 local_peak_id=global_peak_id-c%npeak_cum(g%myid-1)
+                 call unpack_flush_clump%proc(c,local_peak_id,mdl%size_msg_array_clump,mdl%recv_flush_array_clump(iskip:iskip+mdl%size_msg_array_clump-1))
+                 iskip=iskip+mdl%size_msg_array_clump
               end do
 
+              !=================================
+              ! Post a new RECV for flush
+              !=================================
+              call MPI_IRECV(mdl%recv_flush_array_clump,mdl%size_flush_array_clump,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag_clump,MPI_COMM_WORLD,mdl%flush_id_clump,info)
+
            endif
-
-           !=================================
-           ! Post a new RECV for flush
-           !=================================
-           call MPI_IRECV(mdl%recv_flush_array,mdl%size_flush_array,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,mdl%flush_id,info)
-
-        endif
-     end do
+        end do
+     endif
 
      !=================================
      ! Check for input comm. completion
@@ -763,7 +987,7 @@ subroutine destage(s,igrid,hash_dict)
         ! If there is no communication buffer left, allocate a new one
         if(mdl%ibuffer_flush>mdl%nbuffer_flush)then
            mdl%nbuffer_flush=mdl%nbuffer_flush+1
-           buffer_size_msg_array=storage_size(dummy_large_realdp)/32
+           buffer_size_msg_array=storage_size(dummy_large_realdp)/32 ! Largest message size
            buffer_size_flush_array=1+(1+ndim+buffer_size_msg_array)*nflushmax
            allocate(mdl%send_flush(mdl%nbuffer_flush)%array(1:buffer_size_flush_array))
            mdl%send_flush(mdl%nbuffer_flush)%array(1)=0
@@ -808,6 +1032,108 @@ subroutine destage(s,igrid,hash_dict)
 
 #endif
 end subroutine destage
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+subroutine destage_clump(s,local_peak_id,hash_dict)
+#ifndef MDL2
+  use amr_parameters, only: ndim,nhilbert,twotondim
+  use hydro_parameters, only: nvar
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  use hash
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  implicit none
+  type(ramses_t)::s
+  type(hash_table)::hash_dict
+  integer::local_peak_id
+  !
+  ! This routine frees the clump cache memory.
+  ! It assembles flush messages, and when the message
+  ! buffer is full, it sends it to the target CPU.
+  !
+  integer::ind,ivar,idim,info,icache,iflush,peak_cpu,ibuf
+  integer::send_flush_id_clump,iskip,nflush
+  integer::buffer_size_flush_array_clump,buffer_size_msg_array_clump
+  integer(kind=8)::global_peak_id
+  type(msg_large_clump)::dummy_large_clump
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
+
+  ! Free hash table at global peak position
+  icache = local_peak_id-c%npeak
+  global_peak_id = c%gid(icache)
+
+  if(hash_getp_simple(c%peak_dict,global_peak_id) == 0)then
+     write(*,*)'PE ',g%myid,' trying to free non existing peak'
+     stop
+  endif
+
+  call hash_free_simple(c%peak_dict,global_peak_id)
+
+#ifndef WITHOUTMPI
+
+  ! Check if the destage requires a flush
+  if(c%dirty(icache))then
+     peak_cpu=c%parent_cpu(icache)
+     c%dirty(icache)=.false.
+
+     ! Identify the corresponding communication buffer
+     ibuf=mdl%cpu2buf_flush_clump(peak_cpu)
+
+     ! If none is available, get the next free one
+     if(ibuf==0)then
+        mdl%ibuffer_flush_clump=mdl%ibuffer_flush_clump+1
+        ! If there is no communication buffer left, allocate a new one
+        if(mdl%ibuffer_flush_clump>mdl%nbuffer_flush_clump)then
+           mdl%nbuffer_flush_clump=mdl%nbuffer_flush_clump+1
+           buffer_size_msg_array_clump=storage_size(dummy_large_clump)/32 ! Largest message size
+           buffer_size_flush_array_clump=1+(2+buffer_size_msg_array_clump)*nflushmax
+           allocate(mdl%send_flush_clump(mdl%nbuffer_flush_clump)%array(1:buffer_size_flush_array_clump))
+           mdl%send_flush_clump(mdl%nbuffer_flush_clump)%array(1)=0
+        endif
+        mdl%cpu2buf_flush_clump(peak_cpu)=mdl%ibuffer_flush_clump
+        ibuf=mdl%ibuffer_flush_clump
+     endif
+
+     ! Filling the flush buffer
+     iskip=1
+     nflush=mdl%send_flush_clump(ibuf)%array(iskip)
+
+     ! If buffer full, send it to remote CPU.
+     if(nflush==nflushmax)then
+        ! Post send
+        call MPI_ISSEND(mdl%send_flush_clump(ibuf)%array(iskip),mdl%size_flush_array_clump,MPI_INTEGER,peak_cpu-1,flush_tag_clump,MPI_COMM_WORLD,send_flush_id_clump,info)
+        ! While waiting for completion, check on incoming messages and perform actions
+        call check_mail(s,send_flush_id_clump,hash_dict)
+        ! Reset counter
+        mdl%send_flush_clump(ibuf)%array(iskip)=0
+     endif
+
+     ! Increment counter
+     mdl%send_flush_clump(ibuf)%array(iskip)=mdl%send_flush_clump(ibuf)%array(iskip)+1
+
+     ! Skip to the last available position
+     iflush=mdl%send_flush_clump(ibuf)%array(iskip)
+     iskip=iskip+(2+mdl%size_msg_array_clump)*(iflush-1)+1
+
+     ! Pack message header
+     mdl%send_flush_clump(ibuf)%array(iskip:iskip+1)=transfer(global_peak_id,local_peak_id,2)
+     iskip=iskip+2
+
+     ! Pack message content
+     call pack_flush_clump%proc(c,local_peak_id,mdl%size_msg_array_clump,mdl%send_flush_clump(ibuf)%array(iskip:iskip+mdl%size_msg_array_clump-1))
+
+  endif
+#endif
+
+  end associate
+
+#endif
+end subroutine destage_clump
 !##############################################################
 !##############################################################
 !##############################################################

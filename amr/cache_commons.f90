@@ -2,9 +2,10 @@ module cache_commons
   use amr_parameters, only: dp,ndim,twotondim
   use hydro_parameters, only: nvar
   use call_back
-  
+
   ! Communication-related taghs
   integer::flush_tag=1000,msg_tag=100,request_tag=10
+  integer::flush_tag_clump=2000,msg_tag_clump=200,request_tag_clump=20
 
   ! Software cache parameters
   integer,parameter::operation_initflag=1,operation_upload=2,operation_godunov=3,operation_smooth=4
@@ -15,7 +16,7 @@ module cache_commons
   integer,parameter::operation_split=19,operation_kick=20
 
   integer,parameter::domain_decompos_amr=1,domain_decompos_mg=2
-  
+
   ! Message size
   integer,parameter::ntilemax=16  ! Fetch message buffer size
   integer,parameter::nflushmax=128  ! Flush message buffer size
@@ -24,7 +25,7 @@ module cache_commons
   ! Combiner rules
   integer,parameter::COMBINER_EXIST=1
   integer,parameter::COMBINER_CREATE=2
-  
+
   ! Message element type
   type msg_int4
      integer(kind=4),dimension(1:twotondim)::int4
@@ -63,6 +64,31 @@ module cache_commons
      real(kind=dp),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
   end type msg_large_realdp
+  type msg_large_clump
+     integer(kind=4)::int4
+     real(kind=dp)::realdp
+  end type msg_large_clump
+  type msg_saddle_clump
+     integer(kind=8)::nbor
+     real(kind=dp)::dens
+  end type msg_saddle_clump
+  type msg_merge_clump
+     integer(kind=8)::npeak
+     integer(kind=8)::nhalo
+     real(kind=dp)::mdens
+  end type msg_merge_clump
+  type msg_halo_clump
+     integer::ncell
+     real(kind=dp)::mhalo
+  end type msg_halo_clump
+  type msg_prop_clump
+     integer::ncell
+     real(kind=dp)::dens
+     real(kind=dp)::mass
+     real(kind=dp)::vol
+     real(kind=dp),dimension(1:ndim)::pos
+     real(kind=dp),dimension(1:ndim)::vel
+  end type msg_prop_clump
 
   ! Cache call back functions
   type(cache_f)       ::pack_fetch
@@ -71,5 +97,11 @@ module cache_commons
   type(cache_unpack_f)::unpack_flush
   type(cache_init_f)  ::init_flush
   type(cache_bound_f) ::init_bound
-  
+
+  type(cache_f_clump)       ::pack_fetch_clump
+  type(cache_unpack_f_clump)::unpack_fetch_clump
+  type(cache_f_clump)       ::pack_flush_clump
+  type(cache_unpack_f_clump)::unpack_flush_clump
+  type(cache_init_f_clump)  ::init_flush_clump
+
 end module cache_commons

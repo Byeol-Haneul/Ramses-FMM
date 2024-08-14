@@ -124,7 +124,7 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      !-------------------------------------
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=c%mass_threshold*g%mp_min)ok=.false.
-     if(c%occupied(j)==1)ok=.false.
+     if(c%occupied_sink(j)==1)ok=.false.
 !     if(r%ivar_refine>0.and.c%var_refine(j)<=r%var_cut_refine)ok=.false.
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
@@ -315,19 +315,10 @@ subroutine sink_clump(s)
   !----------------------------------------------------------------------
   call allocate_peak_patch_arrays(s)
   !----------------------------------------------------------------------
-  ! Update the MPI communicator for peaks
-  !----------------------------------------------------------------------
-  call build_peak_communicator(s)
-  !----------------------------------------------------------------------
-  ! We build the saddle density matrix.
-  ! Each pair of peaks is connected by a unique saddle point.
-  ! The saddle point is the densest point on the saddle surface,
+  ! We compute the densest saddle point and its corresponding
+  ! neighboring peak.
   !----------------------------------------------------------------------
   call collect_saddle(s)
-  !----------------------------------------------------------------------
-  ! Update the MPI communicator for peaks
-  !----------------------------------------------------------------------
-  call build_peak_communicator(s)
   !----------------------------------------------------------------------
   ! Merge peaks based on a relevance criterion.
   ! Peaks that are due to random noise fluctuations or peaks that
@@ -364,9 +355,14 @@ end subroutine sink_clump
 subroutine occupied_peak(s)
   use ramses_commons, only: ramses_t
   use clump_merger_module
+  use cache_commons, only: msg_saddle_clump
+  use cache
   implicit none
   type(ramses_t)::s
-  integer::i,no_peak,global_peak_id,peak_nr
+  integer::i,no_peak,peak_nr
+  integer(kind=8)::global_peak_id
+
+  type(msg_saddle_clump)::dummy_saddle_clump
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
 
@@ -374,27 +370,75 @@ subroutine occupied_peak(s)
   ! Reads peak id of sink particles
   !--------------------------------
   call particle_peak_id(s,p,no_peak)
-  !---------------------------
-  ! Flag occupied peaks with 1
-  !---------------------------
-  c%occupied=0
+  
+  !------------------------------------
+  ! Flag occupied peaks with sink count
+  !------------------------------------
+  c%occupied_sink=0
+  call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
+       init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
   do i=1,p%npart
      global_peak_id=p%workp(i)
      if (global_peak_id /=0 ) then
-        call get_local_peak_id(s,global_peak_id,peak_nr)
-        c%occupied(peak_nr)=1
+        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.false.,flush_cache=.true.)
+        c%occupied_sink(peak_nr)=c%occupied_sink(peak_nr)+1
      end if
   end do
-#ifndef WITHOUTMPI
-  ! Update peak communicator
-  call build_peak_communicator(s)
-  ! Collect results from all MPI domains
-  call virtual_peak_int(s,c%occupied,'max')
-#endif
-
+  call close_cache(s,m%grid_dict)
+  
   end associate
 
 end subroutine occupied_peak
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_occupied(c,local_peak_id)
+  use clfind_commons, only: clump_t
+  type(clump_t)::c
+  integer::local_peak_id
+
+  c%occupied_sink(local_peak_id)=0
+
+end subroutine init_flush_occupied
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_occupied(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_saddle_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  
+  type(msg_saddle_clump)::msg
+  
+  msg%nbor=c%occupied_sink(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_occupied
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_occupied(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_saddle_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_saddle_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%occupied_sink(local_peak_id)=c%occupied_sink(local_peak_id)+msg%nbor
+
+end subroutine unpack_flush_occupied
 !##############################################################################
 !##############################################################################
 !##############################################################################

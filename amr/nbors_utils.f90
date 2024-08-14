@@ -482,7 +482,7 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
            ! Loop over tiles
            do i=1,ntile_response
 
-              ! If next cache line is occupied, free it.
+              ! Find next available cache line
               if(m%locked(m%free_cache))then
                  icounter=0
                  do while(m%locked(m%free_cache))
@@ -507,6 +507,7 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
               ! If grid does not already exist, create it in local memory
               if(.not.C_ASSOCIATED(hash_getp(hash_dict,hash_child)))then
 
+                 ! If next cache line is occupied, free it.
                  if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,hash_dict)
 
                  call hash_setp(hash_dict,hash_child,m%grid(ichild))

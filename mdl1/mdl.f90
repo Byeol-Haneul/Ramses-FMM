@@ -8,17 +8,23 @@ module mdl_module
   end type comm_buff
 
   type :: mdl_t
-     
+
      integer,PRIVATE::myid
      integer,PRIVATE::ncpu
 
      integer::MDL_INPUT_MAXSIZE=1
      integer,dimension(:),allocatable::mpi_input_buffer
-     
+
+     ! Cache opened or closed
+     logical::cache_opened=.false.
+     logical::cache_opened_clump=.false.
+
      ! Communication-related objects
      integer::mail_counter
      integer::request_id,flush_id
+     integer::request_id_clump,flush_id_clump
      integer,dimension(:),allocatable::reply_id
+     integer,dimension(:),allocatable::reply_id_clump
 
      ! Adopted combiner rule
      integer::combiner_rule
@@ -29,11 +35,23 @@ module mdl_module
      integer::size_flush_array
      integer::size_fetch_array
 
+     ! Message sizes clump
+     integer::size_msg_array_clump
+     integer::size_request_array_clump
+     integer::size_flush_array_clump
+     integer::size_fetch_array_clump
+
      ! Message buffers
      integer(kind=4),dimension(:),allocatable::recv_request_array
      integer(kind=4),dimension(:),allocatable::send_request_array
      integer(kind=4),dimension(:),allocatable::recv_fetch_array
      integer(kind=4),dimension(:),allocatable::recv_flush_array
+
+     ! Message buffers clump
+     integer(kind=4),dimension(:),allocatable::recv_request_array_clump
+     integer(kind=4),dimension(:),allocatable::send_request_array_clump
+     integer(kind=4),dimension(:),allocatable::recv_fetch_array_clump
+     integer(kind=4),dimension(:),allocatable::recv_flush_array_clump
 
      ! Send buffers
      integer(kind=4)::nbuffer_fetch
@@ -44,6 +62,16 @@ module mdl_module
      integer(kind=4),dimension(:),allocatable::cpu2buf_flush
      type(comm_buff),dimension(:),allocatable::send_fetch
      type(comm_buff),dimension(:),allocatable::send_flush
+
+     ! Send buffers clump
+     integer(kind=4)::nbuffer_fetch_clump
+     integer(kind=4)::nbuffer_flush_clump
+     integer(kind=4)::ibuffer_fetch_clump
+     integer(kind=4)::ibuffer_flush_clump
+     integer(kind=4),dimension(:),allocatable::cpu2buf_fetch_clump
+     integer(kind=4),dimension(:),allocatable::cpu2buf_flush_clump
+     type(comm_buff),dimension(:),allocatable::send_fetch_clump
+     type(comm_buff),dimension(:),allocatable::send_flush_clump
 
      ! Callback functions
      type(c_funptr),dimension(0:100)::callback
@@ -115,12 +143,12 @@ module mdl_module
       integer,dimension(1:32)::header=0
 
 !      write(*,*)'ARRAY:',mdl_function_id,input_size
-      if (mdl%input_size(mdl_function_id) .lt. input_size) then
+!      if (mdl%input_size(mdl_function_id) .lt. input_size) then
 !        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' INPUT SIZE:',input_size,'MAX:',mdl%input_size(mdl_function_id)
-      end if
-      if (mdl%output_size(mdl_function_id) .lt. output_size) then
+!      end if
+!      if (mdl%output_size(mdl_function_id) .lt. output_size) then
 !        write(*,*) 'BROKEN PROMISE: function_id=',mdl_function_id,' OUTPUT SIZE:',output_size,'MAX:',mdl%output_size(mdl_function_id)
-      end if
+!      end if
 !      if (mod(input_size,4).ne.0) then
 !        write(*,*) 'SUSPICIOUS SIZE: function_id=',mdl_function_id,'SIZE:',input_size
 !      end if
@@ -131,7 +159,7 @@ module mdl_module
       header(3)=output_size
       mdl%mpi_input_buffer(1:32)=header
       if(input_size>0)then
-        mdl%mpi_input_buffer(33:32+input_size)=input_array
+         mdl%mpi_input_buffer(33:32+input_size)=input_array
       endif
 
       ! Send input array to the target cpu

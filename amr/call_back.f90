@@ -44,6 +44,25 @@ module call_back
        type(oct)::grid, grid_ref
        integer::ibound
      end subroutine cache_function_bound
+     subroutine cache_function_clump(c,local_peak_id,msg_size,msg_array)
+       use clfind_commons, only: clump_t
+       type(clump_t)::c
+       integer::local_peak_id
+       integer::msg_size
+       integer,dimension(1:msg_size),optional::msg_array
+     end subroutine cache_function_clump
+     subroutine cache_function_init_clump(c,local_peak_id)
+       use clfind_commons, only: clump_t
+       type(clump_t)::c
+       integer::local_peak_id
+     end subroutine cache_function_init_clump
+     subroutine cache_function_unpack_clump(c,local_peak_id,msg_size,msg_array)
+       use clfind_commons, only: clump_t
+       type(clump_t)::c
+       integer::local_peak_id
+       integer::msg_size
+       integer,dimension(1:msg_size),optional::msg_array
+     end subroutine cache_function_unpack_clump
   end interface
 
   type cache_f
@@ -58,5 +77,14 @@ module call_back
   type cache_bound_f
      procedure(cache_function_bound),pointer,nopass::proc
   end type cache_bound_f
+  type cache_f_clump
+     procedure(cache_function_clump),pointer,nopass::proc
+  end type cache_f_clump
+  type cache_init_f_clump
+     procedure(cache_function_init_clump),pointer,nopass::proc
+  end type cache_init_f_clump
+  type cache_unpack_f_clump
+     procedure(cache_function_unpack_clump),pointer,nopass::proc
+  end type cache_unpack_f_clump
      
 end module call_back

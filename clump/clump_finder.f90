@@ -145,19 +145,9 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   call allocate_peak_patch_arrays(s)
   !----------------------------------------------------------------------
-  ! Update the MPI communicator for peaks
-  !----------------------------------------------------------------------
-  call build_peak_communicator(s)
-  !----------------------------------------------------------------------
-  ! We build the saddle density matrix.
-  ! Each pair of peaks is connected by a unique saddle point.
-  ! The saddle point is the densest point on the saddle surface,
+  ! Compute the maximum density saddle point and its corresonding peak.
   !----------------------------------------------------------------------
   call collect_saddle(s)
-  !----------------------------------------------------------------------
-  ! Update the MPI communicator for peaks
-  !----------------------------------------------------------------------
-  call build_peak_communicator(s)
   !----------------------------------------------------------------------
   ! Merge peaks based on a relevance criterion.
   ! Peaks that are due to random noise fluctuations or peaks that
@@ -174,14 +164,14 @@ subroutine clump_finder(s)
   ! that the prescribed saddle density threshold.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-    call merge_clumps(s,'saddleden')
+     call merge_clumps(s,'saddleden')
   endif
   !----------------------------------------------------------------------
   ! Remove all peaks that are below the relevance threshold
   ! or the mass threshold in the flag1 global peak ID field.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0.or.s%c%mass_threshold>0)then
-    call trim_clumps(s)
+     call trim_clumps(s)
   endif
   !----------------------------------------------------------------------
   ! Compute additional halo or particle-based clump properties.
@@ -400,7 +390,6 @@ subroutine collect_peak(s)
      do j=1,4
         do i=1,4
            ok=.true.
-           !             if((i==1.or.i==4).and.(j==1.or.j==4).and.(k==1.or.k==4)) ok=.false. ! edge
            if((i==2.or.i==3).and.(j==2.or.j==3).and.(k==2.or.k==3)) ok=.false. ! centre
            if(ok)then
               ind = ind+1
@@ -540,11 +529,7 @@ subroutine collect_peak(s)
 #else
   c%npeak_tot=c%npeak_cum(g%ncpu)
 #endif
-  if (g%myid==1) &
-       & write(*,'(" Total number of density peaks found=",I10)')c%npeak_tot
-  
-  ! Compute the max size of the peak-based arrays
-  c%npeak_max=MAX(4*MAXVAL(npeak_cpu),1000)
+  if (g%myid==1)write(*,'(" Total number of density peaks found=",I10)')c%npeak_tot
   
   end associate
 
@@ -591,17 +576,17 @@ subroutine collect_patch(s)
   if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_patch'
 
   !---------------------------------
-  ! Allocate peak based arrays
+  ! Allocate first peak based arrays
   !---------------------------------
-  allocate(c%peak_cell(c%npeak_max))
-  allocate(c%peak_grid(c%npeak_max))
-  allocate(c%peak_level(c%npeak_max))
-  allocate(c%max_dens(c%npeak_max))
+  allocate(c%peak_cell(c%npeak+c%ncachemax))
+  allocate(c%peak_grid(c%npeak+c%ncachemax))
+  allocate(c%peak_level(c%npeak+c%ncachemax))
+  allocate(c%max_dens(c%npeak+c%ncachemax))
   c%max_dens=0d0; c%peak_cell=0; c%peak_grid=0; c%peak_level=0
 
-  !----------------------------------------------------------------------
+  !-------------------------------------------------
   ! Flag peaks with global peak id using flag1 array
-  !----------------------------------------------------------------------
+  !-------------------------------------------------
   do igrid=1,r%ngridmax
      m%grid(igrid)%flag1(1:twotondim)=0
   end do
@@ -618,19 +603,19 @@ subroutine collect_patch(s)
         c%max_dens(ipeak)=m%grid(igrid)%rho(ind)
      endif
   end do
-  
-  !-----------------------------------------------------------------------
+
+  !----------------------------------------
   ! Determine peak-patches around each peak
-  !-----------------------------------------------------------------------
+  !----------------------------------------
   if (g%myid==1.and.c%ntest_tot>0)write(*,*)'Finding peak patches'
   nmove_tot=1
   istep=0
   do while (nmove_tot.gt.0)
-     
+
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
           hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
           pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
-     
+
      nmove=0
      nzero=0
      do itest=1,c%ntest
@@ -644,9 +629,9 @@ subroutine collect_patch(s)
            if(m%grid(igrid)%flag1(ind).eq.0)nzero=nzero+1
         endif
      end do
-     
+
      call close_cache(s,m%grid_dict)
-     
+
      istep=istep+1
      nmove_tot=int(nmove,kind=8)
      nzero_tot=int(nzero,kind=8)
@@ -657,257 +642,14 @@ subroutine collect_patch(s)
      nzero_tot=nzero_all
 #endif
      if(c%ntest_tot>0.and.r%verbose.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot
-!     if(c%ntest_tot>0.and.g%myid==1)write(*,*)"istep=",istep,"nmove=",nmove_tot,"nzero=",nzero_tot
   end do
-  
+
   end associate
-    
+
 end subroutine collect_patch
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine collect_saddle(s)
-  use amr_parameters, only: twotondim,ndim
-  use amr_commons, only:oct,nbor
-  use ramses_commons, only: ramses_t
-  use cache_commons
-  use cache
-  use nbors_utils
-  use sparse_matrix
-  implicit none
-  type(ramses_t)::s
-  !===================================================================
-  ! This is the clump finder routine for collecting saddle points
-  ! between each neighboring patches. Store the saddle points
-  ! in the saddle point matrix in sparse matrix format.
-  ! Written by Ziyong Wu (mini-ramses version December 2023).
-  !==================================================================
-  type(msg_int4_small_realdp)::dummy_int4_small_realdp
-  type(oct),pointer::gridn
-  integer:: ilevel
-  integer::icpu,next_level,now_level,icelln,idim,j,jpeak,k
-  integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen,peak_nbor
-  integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
-  integer,dimension(1:ndim)::ckey,ckey_nbor
-  integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  real(dp)::dens_cen,dens_ave,dens_nbor,x,y,z
-  real(dp),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=56
-  real(dp),dimension(1:ndim,1:nSnei)::xSnei
-  type(nbor),dimension(1:nSnei) :: grid_nbor
-  integer(kind=8),dimension(1:nSnei)::icell_nbor
-  logical::ok
-
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    
-
-  !--------------------------------------------------------
-  ! Arrays to define neighbors (center=[0,0,0])
-  ! normalized to dx = 1 = size of the central leaf cell 
-  ! from -0.75 to 0.75
-  !--------------------------------------------------------
-  ind=0
-  do k=1,4
-     do j=1,4
-        do i=1,4
-           ok=.true.
-           !             if((i==1.or.i==4).and.(j==1.or.j==4).and.(k==1.or.k==4)) ok=.false. ! edge
-           if((i==2.or.i==3).and.(j==2.or.j==3).and.(k==2.or.k==3)) ok=.false. ! centre
-           if(ok)then
-              ind = ind+1
-              x = (i-1)+0.5d0 - 2
-              y = (j-1)+0.5d0 - 2
-              z = (k-1)+0.5d0 - 2
-              xSnei(1,ind) = x/2d0
-              xSnei(2,ind) = y/2d0
-              xSnei(3,ind) = z/2d0
-           endif
-        enddo
-     enddo
-  enddo
-  
-  !----------------------------------------
-  ! Compute hash key of densest neighbor
-  !----------------------------------------
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain,pack_size=storage_size(dummy_int4_small_realdp)/32,&
-       pack=pack_fetch_saddle, unpack=unpack_fetch_saddle)
-  
-  do itest=1,c%ntest
-     ilevel=c%level(itest)
-     igrid=c%grid(itest)
-     ind=c%cell(itest)
-
-     peak_cen = m%grid(igrid)%flag1(ind)
-     dens_cen = m%grid(igrid)%rho(ind)
-     
-     ! Set pointers to null
-     icelln=0
-     nullify(gridn)
-     do j=1,nSnei
-        nullify(grid_nbor(j)%p)
-     end do
-
-     xcen(1)=2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5
-#if NDIM>1
-     xcen(2)=2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5
-#endif
-#if NDIM>2
-     xcen(3)=2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5
-#endif
-     ! Collect all neighboring cell from hash table
-     do j=1,nSnei
-        
-        ! Compute neighboring cell coordinates
-        xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
-        ! Periodic boundary conditions
-        do idim=1,ndim
-           if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
-           if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
-        end do
-
-        ! Get neighboring cell at ilevel
-        ckey_nbor(1:ndim)=int(xnei(1:ndim))
-        hash_nbor(0)=ilevel+1
-        hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
-        
-        ! If missing, get neighboring cell at ilevel-1
-        if(.not.associated(gridn))then
-           ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
-           hash_nbor(0)=ilevel
-           hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
-           
-           ! If refined, get neighboring cell at ilevel+1
-        else if (gridn%refined(icelln))then
-           ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
-           hash_nbor(0)=ilevel+2
-           hash_nbor(1:ndim)=ckey_nbor(1:ndim)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
-        endif
-
-        ! Lock grid in cache
-        call lock_cache(s,gridn)
-
-        grid_nbor(j)%p => gridn
-        icell_nbor(j) = icelln
-        
-     end do
-     
-     do j=1,nSnei
-        gridn => grid_nbor(j)%p ! Gather neighboring grid
-        icelln = icell_nbor(j)
-
-        peak_nbor = gridn%flag1(icelln)
-        dens_nbor = gridn%rho(icelln)
-        
-        ok = peak_cen/=0
-        ok = ok .and. peak_nbor/=0
-        ok = ok .and. peak_cen/=peak_nbor
-        dens_ave = 0.5*(dens_cen+dens_nbor)
-
-        if(ok)then ! if all criteria met, replace saddle density array value
-           call get_local_peak_id(s,peak_cen,ipeak)
-           call get_local_peak_id(s,peak_nbor,jpeak)
-           if (get_value(ipeak,jpeak,c%sparse_saddle_dens) < dens_ave)then
-              call set_value(ipeak,jpeak,dens_ave,c%sparse_saddle_dens)
-           end if
-           if (get_value(jpeak,ipeak,c%sparse_saddle_dens) < dens_ave)then
-              call set_value(jpeak,ipeak,dens_ave,c%sparse_saddle_dens)
-           end if
-        end if
-     
-     end do
-     
-     ! Unlock neighboring grids
-     do j=1,nSnei
-        gridn => grid_nbor(j)%p
-        call unlock_cache(s,gridn)
-     end do
-     
-  end do
-  
-  call close_cache(s,m%grid_dict)
-    
-  end associate
-
-end subroutine collect_saddle
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_fetch_saddle(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
-  use amr_commons, only: oct
-  use cache_commons, only: msg_int4_small_realdp
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  integer::ind
-  type(msg_int4_small_realdp)::msg
-
-  do ind=1,twotondim
-     msg%flg(ind)=grid%flag1(ind)
-  end do
-  do ind=1,twotondim
-     if(grid%refined(ind))then
-        msg%ref(ind)=1
-     else
-        msg%ref(ind)=0
-     endif
-  end do
-#ifdef GRAV
-  do ind=1,twotondim
-     msg%realdp(ind)=grid%rho(ind)
-  end do
-#endif
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_fetch_saddle
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_fetch_saddle(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use amr_commons, only: oct
-  use cache_commons, only: msg_int4_small_realdp
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-  integer(kind=8),dimension(0:ndim)::hash_key
-
-  integer::ind
-  type(msg_int4_small_realdp)::msg
-
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
-  msg=transfer(msg_array,msg)
-
-  do ind=1,twotondim
-     grid%flag1(ind)=msg%flg(ind)
-  end do
-  do ind=1,twotondim
-     if(msg%ref(ind)==1)then
-        grid%refined(ind)=.true.
-     else
-        grid%refined(ind)=.false.
-     endif
-  end do
-#ifdef GRAV
-  do ind=1,twotondim
-     grid%rho(ind)=msg%realdp(ind)
-  end do
-#endif
-
-end subroutine unpack_fetch_saddle
 !################################################################
 !################################################################
 !################################################################
 !################################################################
 #endif
 end module clump_finder_module
-

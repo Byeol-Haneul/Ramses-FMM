@@ -110,7 +110,7 @@ VPATH = $(PATCH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../p
 MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
          hydro_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
-	 mdl_commons.o mdl.o sparse_mat.o clfind_commons.o ramses_commons.o \
+	 mdl_commons.o mdl.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o \

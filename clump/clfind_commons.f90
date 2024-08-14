@@ -1,6 +1,6 @@
 module clfind_commons
     use amr_parameters, only: dp
-    use sparse_matrix
+    use hash
 
     type clump_t
 
@@ -24,6 +24,7 @@ module clfind_commons
        integer,allocatable,dimension(:) :: peak_cell ! Cell index of peak
        integer,allocatable,dimension(:) :: peak_grid ! Grid index of peak
        integer,allocatable,dimension(:) :: peak_level ! Level of peak
+       integer,allocatable,dimension(:) :: saddle_nbor ! Neighboring densest saddle peak global id
        integer,allocatable,dimension(:) :: n_cells ! Number of AMR cells per peak patch
        integer,allocatable,dimension(:) :: n_cells_halo ! Number of AMR cells per halo
        integer,allocatable,dimension(:) :: lev_peak ! AMR level of the peak
@@ -33,6 +34,7 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: halo_mass ! Total halo mass
        real(dp),allocatable,dimension(:) :: clump_mass ! Mass inside peak patch
        real(dp),allocatable,dimension(:) :: relevance ! Relevance (prominence) of the peak
+       real(dp),allocatable,dimension(:) :: saddle_dens ! Density of the densest saddle point
        real(dp),allocatable,dimension(:,:) :: clump_size ! Size of clump
        real(dp),allocatable,dimension(:,:) :: peak_pos ! position of the peak
        real(dp),allocatable,dimension(:,:) :: peak_vel ! velocity of the peak
@@ -43,26 +45,21 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: clump_vol ! volume of the clump
        real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark mater particles
        real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo
-       integer,allocatable,dimension(:) :: occupied ! is peak occupied by a sink particle
+       integer,allocatable,dimension(:) :: occupied_sink ! is peak occupied by a sink particle
        integer,allocatable,dimension(:) :: form_sink ! does peak form a new sink particle
        real(dp),allocatable,dimension(:) :: var_refine ! refinement mask variable in peak patch
-       
-       integer::peak_recv_tot,peak_send_tot ! Peak communicator arrays
-       integer,allocatable,dimension(:)::peak_send_cnt,peak_send_oft
-       integer,allocatable,dimension(:)::peak_recv_cnt,peak_recv_oft
-       integer,allocatable,dimension(:)::peak_send_buf,peak_recv_buf
 
-       type(sparse_mat) :: sparse_saddle_dens ! Spare matrix for saddle points densities
-       
-       integer :: nhash,hfree,hcollision  ! Hash table variables
-       integer,dimension(:),allocatable :: gkey,nkey,hkey
-        
-       ! Prime numbers for hash table
-       integer,dimension(0:30)::prime=(/2,3,7,13,23,53,97,193,389,769,1543,&
-            & 3079,6151,12289,24593,49157,98317,196613,393241,786433,1572869, &
-            & 3145739,6291469,12582917,25165843,50331653,100663319,201326611, &
-            & 402653189,805306457,1610612741/)
-       
+       ! Software cache array for peaks
+       integer :: ncachemax=1000
+       integer :: free_cache,ncache,ifree
+       logical,allocatable,dimension(:) :: dirty
+       logical,allocatable,dimension(:) :: occupied
+       logical,allocatable,dimension(:) :: locked
+       integer,allocatable,dimension(:) :: parent_cpu
+       integer(kind=8),allocatable,dimension(:) :: gid
+
+       type(hash_simple)::peak_dict ! Peak hash table
+
     end type clump_t
-    
+
 end module clfind_commons
