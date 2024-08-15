@@ -1160,11 +1160,18 @@ subroutine compute_clump_properties(s,rtype)
 #endif
      c%peak_acc(ipeak,1:ndim)=accel(1:ndim)
 #endif
+             ! Clump velocity for gas
+#ifdef HYDRO
+     if (r%hydro.AND.rtype.eq.4)then
+        c%peak_vel(ipeak,1:ndim)=m%grid(igrid)%uold(ind,2:ndim+1)
+     endif
+#endif     
   end do
 #ifndef WITHOUTMPI
   ! Scatter results to all MPI domains
   do i=1,ndim
      call boundary_peak_dp(s,c%peak_pos(1,i))
+     call boundary_peak_dp(s,c%peak_vel(1,i))
   end do
 #endif
 
@@ -1216,13 +1223,7 @@ subroutine compute_clump_properties(s,rtype)
         
         ! Clump center of mass location
         c%center_of_mass(peak_nr,1:ndim)=c%center_of_mass(peak_nr,1:ndim)+vol*d*xcell(1:ndim)
-        
-        ! Clump velocity for gas
-#ifdef HYDRO
-        if (r%hydro.AND.rtype.eq.4)then
-           c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+vol*m%grid(igrid)%uold(ind,2:ndim+1)
-        endif
-#endif        
+           
      end if
   end do
   call build_peak_communicator(s)
@@ -1235,7 +1236,6 @@ subroutine compute_clump_properties(s,rtype)
   call virtual_peak_dp(s,c%clump_vol,'sum')
   do i=1,ndim
      call virtual_peak_dp(s,c%center_of_mass(1,i),'sum')
-     call virtual_peak_dp(s,c%peak_vel(1,i),'sum')
   end do
 #endif
 
@@ -1243,9 +1243,6 @@ subroutine compute_clump_properties(s,rtype)
   do ipeak=1,c%npeak
      if (c%relevance(ipeak)>0..and.c%n_cells(ipeak)>0)then
         c%center_of_mass(ipeak,1:ndim)=c%center_of_mass(ipeak,1:ndim)/c%clump_mass(ipeak)
-        if (r%hydro.AND.rtype.eq.4)then
-           c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%clump_mass(ipeak)
-        endif
      end if
   end do
 
@@ -1254,7 +1251,6 @@ subroutine compute_clump_properties(s,rtype)
   do i=1,ndim
      call boundary_peak_dp(s,c%peak_pos(1,i))
      call boundary_peak_dp(s,c%center_of_mass(1,i))
-     call boundary_peak_dp(s,c%peak_vel(1,i))
   end do
 #endif
 
