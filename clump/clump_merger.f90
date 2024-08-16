@@ -1163,7 +1163,7 @@ subroutine compute_clump_properties(s,rtype)
              ! Clump velocity for gas
 #ifdef HYDRO
      if (r%hydro.AND.rtype.eq.4)then
-        c%peak_vel(ipeak,1:ndim)=m%grid(igrid)%uold(ind,2:ndim+1)
+        c%peak_vel(ipeak,1:ndim)=m%grid(igrid)%uold(ind,2:ndim+1)/max(m%grid(igrid)%uold(ind,1),1.0d-10)
      endif
 #endif     
   end do
