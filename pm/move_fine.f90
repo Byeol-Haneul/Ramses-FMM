@@ -310,7 +310,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
               do idim=1,ndim
                 grad2 = grad2 + grad(idim)**2
               enddo
-              p%graddescent_over_dt(ipart) = sqrt(grad2)/g%dtnew(ilevel) 
+              p%graddescent_over_dt(ipart) = 0!sqrt(grad2)/g%dtnew(ilevel) 
            endif
 
            ! Store old force
