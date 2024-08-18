@@ -294,7 +294,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 !!$           if(norm2>0)then
 !!$              delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)/norm2)*fnorm,0.5d0*dx_loc)
 !!$           endif
-           delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)),0.5d0*dx_loc)
+           !delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)/norm2)*fnorm,0.5d0*dx_loc)
 
            ! Update particle positions
 !!$           if(fnorm>0)then
@@ -302,7 +302,9 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 !!$           endif
            grad = 0
            if(norm2>0)then
-              grad = (ff(1:ndim)-p%fp(ipart,1:ndim))/sqrt(norm2)*delta
+              delta = MIN(r%fudge_descent*g%dtnew(ilevel)*sqrt(abs(gamma)/norm2)*fnorm,0.5d0*dx_loc)
+              grad = ff(1:ndim) * delta/fnorm
+              !grad = (ff(1:ndim)-p%fp(ipart,1:ndim))/sqrt(norm2)*delta
               p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + grad
               grad2 = 0
               do idim=1,ndim
