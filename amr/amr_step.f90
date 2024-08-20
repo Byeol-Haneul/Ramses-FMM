@@ -33,6 +33,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use clump_finder_module, only: m_clump_finder
 #ifdef RT
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
+  use update_rt_c_module, only: m_update_rt_c
 #endif
   
   implicit none
@@ -202,7 +203,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   endif
 
 #ifdef RT
-  if(ilevel==r%levelmin) call update_rt_c(pst%s%r,pst%s%g)
+  if(ilevel==r%levelmin) call m_update_rt_c(pst)
   ! Set rtunew equal to rtuold
                                call m_timer(pst,'rt - set rtunew','start')
   if(r%rt)call r_set_rtunew(pst,ilevel,1)

@@ -164,6 +164,7 @@ function worker_init(mdl) result(pst)
   use upload_rt_module, only: r_upload_rt_fine
   use output_rt_module, only: r_output_rt
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
+  use update_rt_c_module, only: r_broadcast_rt_c
 #endif
 
   implicit none
@@ -308,6 +309,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_RT_GODUNOV_FINE,        pst,C_FUNLOC(r_rt_godunov_fine),1,0,"rt_godunov_fine")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUNEW,             pst,C_FUNLOC(r_set_rtunew),1,0,"set_rtunew")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUOLD,             pst,C_FUNLOC(r_set_rtuold),1,0,"set_rtuold")
+  call mdl_add_service(pst%s%mdl,MDL_BROADCAST_RT_C,         pst,C_FUNLOC(r_broadcast_rt_c),1,0,"broadcast_rt_c")
 #endif
 end function worker_init
 !##############################################################
