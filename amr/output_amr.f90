@@ -159,12 +159,12 @@ subroutine m_dump_all(pst,write_bkp_file)
 
 #ifdef RT
      ! Output RT data
-     !if(r%rt)then
+     if(r%rt)then
         filename=TRIM(filedir)//'rt.'
         input_array=transfer(filename,input_array)
         if(r%verbose)write(*,*)'Writing RT files'
         call r_output_rt(pst,input_array,flen/4,dummy,0)
-     !end if
+     end if
 #endif
 
      ttend = mdl_wtime(mdl)
