@@ -11,6 +11,10 @@ subroutine adaptive_loop(pst)
   use init_refine_restart_module, only: m_init_refine_restart
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
+#ifdef RT
+  use update_rt_c_module,only: m_update_rt_c
+#endif
+
   implicit none
   type(pst_t)::pst
   logical::done
@@ -26,6 +30,11 @@ subroutine adaptive_loop(pst)
 
   ! Read run parameters
   call m_read_params(pst)
+
+#ifdef RT
+  call m_update_rt_c(pst)
+#endif
+
   ! Initialize grid variables
   call r_init_amr(pst)
 

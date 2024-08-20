@@ -744,8 +744,6 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=rt_params,END=113)
 113 continue
-  rt_c_cgs = clight * rt_c_fraction
-  call update_rt_c(pst%s%r,pst%s%g)
 #endif
   close(1)
 
