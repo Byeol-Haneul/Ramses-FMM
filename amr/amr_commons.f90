@@ -273,6 +273,10 @@ module amr_commons
      integer::rho_type_sink=1
      logical::sink_descent=.false.
      real(dp)::fudge_descent=0.5d0
+     real(dp)::sink_relevance_threshold=3
+     real(dp)::sink_density_threshold=80
+     real(dp)::sink_saddle_threshold=-1
+     real(dp)::sink_mass_threshold=100
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format

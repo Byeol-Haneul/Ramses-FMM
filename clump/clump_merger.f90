@@ -104,6 +104,10 @@ subroutine deallocate_peak_patch_arrays(s)
   ! Deallocate cache comms
   call kill_cache_clump(s%mdl)
 
+  ! reset test_total and peak_total to zero
+  c%ntest_tot=0
+  c%npeak_tot=0
+
   end associate
 
 end subroutine deallocate_peak_patch_arrays
