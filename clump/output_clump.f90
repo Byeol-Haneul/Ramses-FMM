@@ -79,8 +79,8 @@ subroutine output_clump_properties(s,filename)
 
   do j=1,c%npeak
      if (c%relevance(j) > c%relevance_threshold.AND. &
-          & c%clump_mass(j) > c%mass_threshold*g%mp_min.AND. &
-          & c%halo_mass(j) > c%mass_threshold*g%mp_min)then
+          & c%clump_mass(j) > c%mass_threshold.AND. &
+          & c%halo_mass(j) > c%mass_threshold)then
         write(ilun,'(I10,X,I10,1X,I2,X,I10,X,I10,11(X,1PE18.9E2))')&
              j+c%npeak_cum(g%myid-1)&
              ,c%ind_halo(j)&
@@ -108,7 +108,7 @@ subroutine output_clump_properties(s,filename)
 
      do j=1,c%npeak
         if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.&
-             & c%halo_mass(j) > c%mass_threshold*g%mp_min.AND. &
+             & c%halo_mass(j) > c%mass_threshold.AND. &
              & c%relevance(j) > c%relevance_threshold)then
            mbin=c%mass_bin(j,1:nbin)
            rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)

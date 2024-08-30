@@ -123,9 +123,8 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      ! Add here all sink formation criteria
      !-------------------------------------
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
-     if(c%clump_mass(j)<=c%mass_threshold*g%mp_min)ok=.false.
-     if(c%occupied_sink(j)==1)ok=.false.
-!     if(r%ivar_refine>0.and.c%var_refine(j)<=r%var_cut_refine)ok=.false.
+     if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
+     if(c%occupied_sink(j)>0)ok=.false.
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
@@ -289,7 +288,7 @@ subroutine sink_clump(s)
   s%c%relevance_threshold = 3
   s%c%density_threshold = 80
   s%c%saddle_threshold = -1
-  s%c%mass_threshold = 100
+  s%c%mass_threshold = 10*s%g%mp_min
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.

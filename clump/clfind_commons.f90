@@ -35,19 +35,21 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: clump_mass ! Mass inside peak patch
        real(dp),allocatable,dimension(:) :: relevance ! Relevance (prominence) of the peak
        real(dp),allocatable,dimension(:) :: saddle_dens ! Density of the densest saddle point
-       real(dp),allocatable,dimension(:,:) :: clump_size ! Size of clump
        real(dp),allocatable,dimension(:,:) :: peak_pos ! position of the peak
        real(dp),allocatable,dimension(:,:) :: peak_vel ! velocity of the peak
        real(dp),allocatable,dimension(:,:) :: peak_acc ! acceleration of the peak
-       real(dp),allocatable,dimension(:,:) :: center_of_mass ! position of the center of mass
        real(dp),allocatable,dimension(:) :: min_dens ! min density of the clump
-       real(dp),allocatable,dimension(:) :: av_dens ! average density of the clump
        real(dp),allocatable,dimension(:) :: clump_vol ! volume of the clump
+       real(dp),allocatable,dimension(:) :: max_peak_mass ! Maximum peak mass inside halo
+       integer,allocatable,dimension(:) :: ind_max_mass ! Corresponding Peak ID
+       integer,allocatable,dimension(:) :: ind_halo_1 ! Peak ID of the halo most massive peak
+       integer,allocatable,dimension(:) :: ind_halo_2 ! Peak ID of the halo second most massive peak
+       integer,allocatable,dimension(:) :: ind_halo_3 ! Peak ID of the halo third most massive peak
+
        real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark mater particles
        real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo
        integer,allocatable,dimension(:) :: occupied_sink ! is peak occupied by a sink particle
        integer,allocatable,dimension(:) :: form_sink ! does peak form a new sink particle
-       real(dp),allocatable,dimension(:) :: var_refine ! refinement mask variable in peak patch
 
        ! Software cache array for peaks
        integer :: ncachemax=1000

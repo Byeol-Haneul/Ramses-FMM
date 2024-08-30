@@ -47,7 +47,7 @@ clump_finder=.true.
 density_threshold=80
 relevance_threshold=3
 saddle_threshold=200
-mass_threshold=10
+mass_threshold=4.8e-6
 output_clump=.true.
 output_peak=.true.
 /

@@ -135,46 +135,33 @@ subroutine clump_finder(s)
   if(s%c%npeak_tot==0)return
   !----------------------------------------------------------------------
   ! Perform a segmentation of the density field using the watershed
-  ! algorithm. We get well defined peak patches around each peak.
-  ! As a result, each pair of neighboring peak patches are separated
+  ! algorithm. We get well defined peak-patches around each peak.
+  ! As a result, each pair of neighboring peak-patches are separated
   ! by their saddle surface.
   !----------------------------------------------------------------------
   call collect_patch(s)
   !----------------------------------------------------------------------
-  ! Allocate all peak patch based arrays
+  ! Allocate all peak-patch based arrays.
   !----------------------------------------------------------------------
   call allocate_peak_patch_arrays(s)
   !----------------------------------------------------------------------
-  ! Compute the maximum density saddle point and its corresonding peak.
+  ! Compute the maximum density saddle point and its corresponding
+  ! unique neighboring peak.
   !----------------------------------------------------------------------
   call collect_saddle(s)
   !----------------------------------------------------------------------
-  ! Merge peaks based on a relevance criterion.
-  ! Peaks that are due to random noise fluctuations or peaks that
-  ! have similar peak density values are merged into relevant peaks
+  ! Merge peak-patches based on a relevance criterion.
+  ! Peak-patches that are due to random noise fluctuations are merged
+  ! into relevant peak-patches.
   !----------------------------------------------------------------------
   call merge_clumps(s,'relevance')
   !----------------------------------------------------------------------
-  ! Compute relevant peak properties such as mass and number of cells
+  ! Compute peak-patches properties such as mass, number of cells...
+  ! Global peak-patch ids are stored into flag2 for possible later use.
   !----------------------------------------------------------------------
   call compute_clump_properties(s,s%r%rho_type_clump)
   !----------------------------------------------------------------------
-  ! Merge all neighboring peaks above the prescribed density
-  ! threshold into halos, only if their saddle point density is larger
-  ! that the prescribed saddle density threshold.
-  !----------------------------------------------------------------------
-  if(s%c%saddle_threshold>0)then
-     call merge_clumps(s,'saddleden')
-  endif
-  !----------------------------------------------------------------------
-  ! Remove all peaks that are below the relevance threshold
-  ! or the mass threshold in the flag1 global peak ID field.
-  !----------------------------------------------------------------------
-  if(s%c%saddle_threshold>0.or.s%c%mass_threshold>0)then
-     call trim_clumps(s)
-  endif
-  !----------------------------------------------------------------------
-  ! Compute additional halo or particle-based clump properties.
+  ! Compute particle-based peak-patch properties.
   !----------------------------------------------------------------------
   if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
      call particle_clump_properties(s,s%p)
@@ -185,6 +172,26 @@ subroutine clump_finder(s)
   if(s%r%sink.and.s%r%rho_type_clump.eq.3)then
      call particle_clump_properties(s,s%sink)
   endif
+  !----------------------------------------------------------------------
+  ! Merge all neighboring peak-patches above the prescribed density
+  ! threshold into halo-patches, if their saddle point density is larger
+  ! that the prescribed saddle density threshold.
+  ! Global halo-patch ids are stored into flag1 for possible later use.
+  !----------------------------------------------------------------------
+  if(s%c%saddle_threshold>0)then
+     call merge_clumps(s,'saddleden')
+  endif
+  !----------------------------------------------------------------------
+  ! Compute the 3 most massive central clumps in each halo (if any).
+  !----------------------------------------------------------------------
+  if(s%c%saddle_threshold>0)then
+     call central_in_halos(s)
+  endif
+  !----------------------------------------------------------------------
+  ! Remove all peak-patches that are below the relevance threshold or
+  ! the mass threshold by setting the flag2 field to zero.
+  !----------------------------------------------------------------------
+  call trim_clumps(s)
 #endif
 end subroutine clump_finder
 !################################################################
@@ -240,7 +247,6 @@ subroutine collect_test(s)
            ok = .not. m%grid(igrid)%refined(ind) ! Select leaf cells
            d = m%grid(igrid)%rho(ind)
            ok = ok .and. d > c%density_threshold
-           m%grid(igrid)%flag1(ind) = 0
            if(ok)then
               c%ntest=c%ntest+1
            endif
@@ -589,6 +595,7 @@ subroutine collect_patch(s)
   !-------------------------------------------------
   do igrid=1,r%ngridmax
      m%grid(igrid)%flag1(1:twotondim)=0
+     m%grid(igrid)%flag2(1:twotondim)=0
   end do
   ipeak = 0
   do itest=1,c%ntest

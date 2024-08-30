@@ -89,6 +89,12 @@ module cache_commons
      real(kind=dp),dimension(1:ndim)::pos
      real(kind=dp),dimension(1:ndim)::vel
   end type msg_prop_clump
+  type msg_maxmass_clump
+     integer(kind=8)::ind
+     integer(kind=8)::ind1
+     integer(kind=8)::ind2
+     real(kind=dp)::mass
+  end type msg_maxmass_clump
 
   ! Cache call back functions
   type(cache_f)       ::pack_fetch
