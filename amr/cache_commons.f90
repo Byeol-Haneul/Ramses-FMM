@@ -89,6 +89,16 @@ module cache_commons
      real(kind=dp),dimension(1:ndim)::pos
      real(kind=dp),dimension(1:ndim)::vel
   end type msg_prop_clump
+  type msg_prop_sink
+     integer::ncell
+     real(kind=dp)::dens
+     real(kind=dp)::mass
+     real(kind=dp)::mass2
+     real(kind=dp)::vol
+     real(kind=dp),dimension(1:ndim)::pos
+     real(kind=dp),dimension(1:ndim)::vel
+     real(kind=dp),dimension(1:ndim)::vel2
+  end type msg_prop_sink
   type msg_maxmass_clump
      integer(kind=8)::ind
      integer(kind=8)::ind1

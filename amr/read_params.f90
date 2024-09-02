@@ -305,6 +305,7 @@ subroutine m_read_params(pst)
   real(dp)::sink_density_threshold=80
   real(dp)::sink_saddle_threshold=-1
   real(dp)::sink_mass_threshold=100
+  real(dp)::d_sink=500
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -404,7 +405,7 @@ subroutine m_read_params(pst)
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
   namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
-  & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold,sink_mass_threshold
+  & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold,sink_mass_threshold,d_sink
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -988,6 +989,7 @@ subroutine m_read_params(pst)
   s%r%sink_density_threshold=sink_density_threshold
   s%r%sink_saddle_threshold=sink_saddle_threshold
   s%r%sink_mass_threshold=sink_mass_threshold
+  s%r%d_sink=d_sink
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format

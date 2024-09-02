@@ -35,6 +35,12 @@ module clfind_commons
        real(dp),allocatable,dimension(:) :: clump_mass ! Mass inside peak patch
        real(dp),allocatable,dimension(:) :: relevance ! Relevance (prominence) of the peak
        real(dp),allocatable,dimension(:) :: saddle_dens ! Density of the densest saddle point
+       real(dp),allocatable,dimension(:,:) :: center_of_mass ! position of the clump with mass weight
+       real(dp),allocatable,dimension(:,:) :: clump_vel ! velocity of the clump
+       real(dp),allocatable,dimension(:) :: clump_mass_all ! all particle mass in the clump
+       real(dp),allocatable,dimension(:) :: kinetic_support ! kinetic_support of the clump
+       real(dp),allocatable,dimension(:) :: grav_term ! grav_term of the clump
+       real(dp),allocatable,dimension(:) :: Icl_dd ! Icl_dd of the clump
        real(dp),allocatable,dimension(:,:) :: peak_pos ! position of the peak
        real(dp),allocatable,dimension(:,:) :: peak_vel ! velocity of the peak
        real(dp),allocatable,dimension(:,:) :: peak_acc ! acceleration of the peak

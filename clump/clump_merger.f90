@@ -89,6 +89,12 @@ subroutine deallocate_peak_patch_arrays(s)
   if(r%sink)then
      deallocate(c%occupied_sink)
      deallocate(c%form_sink)
+     deallocate(c%center_of_mass)
+     deallocate(c%clump_mass_all)
+     deallocate(c%clump_vel)
+     deallocate(c%kinetic_support)
+     deallocate(c%grav_term)
+     deallocate(c%Icl_dd)
   endif
 
   ! Deallocate hash table
@@ -142,6 +148,7 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%peak_pos(1:c%npeak_max,1:ndim))
   allocate(c%peak_vel(1:c%npeak_max,1:ndim))
   allocate(c%peak_acc(1:c%npeak_max,1:ndim))
+  
 
   allocate(c%min_dens(1:c%npeak_max))
   allocate(c%n_cells(1:c%npeak_max))
@@ -167,6 +174,12 @@ subroutine allocate_peak_patch_arrays(s)
   if(r%sink)then
      allocate(c%occupied_sink(1:c%npeak_max))
      allocate(c%form_sink(1:c%npeak_max))
+     allocate(c%center_of_mass(1:c%npeak_max,1:ndim))
+     allocate(c%clump_mass_all(1:c%npeak_max))
+     allocate(c%clump_vel(1:c%npeak_max,1:ndim))
+     allocate(c%kinetic_support(1:c%npeak_max))
+     allocate(c%grav_term(1:c%npeak_max))
+     allocate(c%Icl_dd(1:c%npeak_max))
   endif
 
   !--------------------
@@ -1797,6 +1810,8 @@ subroutine particle_clump_properties(s,p)
   integer::halo_nr,peak_nr,no_halo
   real(dp)::dist,xx,rad,dx_loc,r2
   real(dp),dimension(1:ndim)::xpart
+  real(dp),dimension(1:ndim)::rrel,vrel
+
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -1815,9 +1830,20 @@ subroutine particle_clump_properties(s,p)
   !-----------------------------------------
   c%particle_mass=0
   c%peak_vel=0
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+  if(r%sink)then
+    c%center_of_mass=0
+    c%clump_vel=0
+    c%clump_mass_all=0
+  endif
+  if(r%sink)then
+    call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_sink,unpack=unpack_fetch_sink,&
+       init=init_flush_sink,flush=pack_flush_sink,combine=unpack_flush_sink)
+  else
+    call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_part,unpack=unpack_fetch_part,&
        init=init_flush_part,flush=pack_flush_part,combine=unpack_flush_part)
+  endif
   do i=1+no_halo,p%npart
      ! Get peak id
      ipart=p%sortp(i)
@@ -1834,6 +1860,11 @@ subroutine particle_clump_properties(s,p)
         end do
         ilevel=c%peak_level(peak_nr)
         dx_loc=r%boxlen/2**ilevel
+        if(r%sink)then
+          c%center_of_mass(peak_nr,1:ndim)=c%center_of_mass(peak_nr,1:ndim)+p%mp(ipart)*p%xp(ipart,1:ndim)
+          c%clump_vel(peak_nr,1:ndim)=c%clump_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
+          c%clump_mass_all(peak_nr)=c%clump_mass_all(peak_nr)+p%mp(ipart)
+        endif
         ! Keep only particles within a 2-cell radius
         if(r2<=4d0*dx_loc**2)then
            c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
@@ -1848,7 +1879,36 @@ subroutine particle_clump_properties(s,p)
      if (c%particle_mass(ipeak)>0)then
         c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%particle_mass(ipeak)
      end if
+     if (r%sink .and. c%clump_mass_all(ipeak)>0)then
+        c%center_of_mass(ipeak,1:ndim)=c%center_of_mass(ipeak,1:ndim)/c%clump_mass_all(ipeak)
+        c%clump_vel(ipeak,1:ndim)=c%clump_vel(ipeak,1:ndim)/c%clump_mass_all(ipeak)
+     endif
   end do
+
+  ! Compute virality
+  if(r%sink)then
+    call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_vir,unpack=unpack_fetch_vir,&
+       init=init_flush_vir,flush=pack_flush_vir,combine=unpack_flush_vir)
+    do i=1+no_halo,p%npart
+        ! Get peak id
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        if (global_peak_id /=0 ) then
+        call get_peak(s,global_peak_id,peak_nr,flush_cache=.true.,fetch_cache=.true.)
+        rrel(1:3)=p%xp(ipart,1:ndim)-c%center_of_mass(peak_nr,1:ndim)
+        vrel(1:3)=p%vp(ipart,1:ndim)-c%clump_vel(peak_nr,1:ndim)
+        do idim=1,ndim
+            c%kinetic_support(peak_nr)= c%kinetic_support(peak_nr)  + vrel(idim)**2         * p%mp(ipart)
+            c%grav_term(peak_nr)      = c%grav_term(peak_nr)        + p%fp(ipart,idim) * rrel(idim) * p%mp(ipart)
+            enddo
+        endif
+    enddo
+    call close_cache(s,m%grid_dict)
+    c%Icl_dd(1:c%npeak)=2*(c%grav_term(1:c%npeak)+c%kinetic_support(1:c%npeak))
+  endif
+  
+
 
   end associate
 
@@ -1878,6 +1938,48 @@ end subroutine pack_fetch_part
 !################################################################
 !################################################################
 !################################################################
+subroutine pack_fetch_sink(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg%pos(1:ndim)=c%peak_pos(local_peak_id,1:ndim)
+    msg%vol=c%peak_level(local_peak_id)
+  
+    msg_array=transfer(msg,msg_array)
+  
+  end subroutine pack_fetch_sink
+  !################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_vir(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg%pos(1:ndim)=c%center_of_mass(local_peak_id,1:ndim)
+    msg%vel(1:ndim)=c%clump_vel(local_peak_id,1:ndim)
+  
+    msg_array=transfer(msg,msg_array)
+  
+  end subroutine pack_fetch_vir
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine unpack_fetch_part(c,local_peak_id,msg_size,msg_array)
   use amr_commons, only: ndim
   use clfind_commons, only: clump_t
@@ -1899,6 +2001,48 @@ end subroutine unpack_fetch_part
 !################################################################
 !################################################################
 !################################################################
+subroutine unpack_fetch_sink(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg=transfer(msg_array,msg)
+  
+    c%peak_pos(local_peak_id,1:ndim)=msg%pos(1:ndim)
+    c%peak_level(local_peak_id)=msg%vol
+  
+  end subroutine unpack_fetch_sink
+  !################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_vir(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg=transfer(msg_array,msg)
+  
+    c%center_of_mass(local_peak_id,1:ndim)=msg%pos(1:ndim)
+    c%clump_vel(local_peak_id,1:ndim)=msg%vel(1:ndim)
+  
+  end subroutine unpack_fetch_vir
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine init_flush_part(c,local_peak_id)
   use amr_commons, only: ndim
   use clfind_commons, only: clump_t
@@ -1909,6 +2053,37 @@ subroutine init_flush_part(c,local_peak_id)
   c%peak_vel(local_peak_id,1:ndim)=0d0
 
 end subroutine init_flush_part
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_sink(c,local_peak_id)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    type(clump_t)::c
+    integer::local_peak_id
+  
+    c%particle_mass(local_peak_id)=0
+    c%peak_vel(local_peak_id,1:ndim)=0d0
+    c%center_of_mass(local_peak_id,1:ndim)=0d0
+    c%clump_vel(local_peak_id,1:ndim)=0d0
+    c%clump_mass_all(local_peak_id)=0
+  
+  end subroutine init_flush_sink
+  !################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_vir(c,local_peak_id)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    type(clump_t)::c
+    integer::local_peak_id
+  
+    c%kinetic_support(local_peak_id)=0
+    c%grav_term(local_peak_id)=0d0
+  
+  end subroutine init_flush_vir
 !################################################################
 !################################################################
 !################################################################
@@ -1934,6 +2109,51 @@ end subroutine pack_flush_part
 !################################################################
 !################################################################
 !################################################################
+subroutine pack_flush_sink(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg%mass=c%particle_mass(local_peak_id)
+    msg%vel(1:ndim)=c%peak_vel(local_peak_id,1:ndim)
+    msg%mass2=c%clump_mass_all(local_peak_id)
+    msg%vel2(1:ndim)=c%clump_vel(local_peak_id,1:ndim)
+    msg%pos(1:ndim)=c%center_of_mass(local_peak_id,1:ndim)
+  
+    msg_array=transfer(msg,msg_array)
+  
+  end subroutine pack_flush_sink
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_vir(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg%mass=c%kinetic_support(local_peak_id)
+    msg%mass2=c%grav_term(local_peak_id)
+  
+    msg_array=transfer(msg,msg_array)
+  
+  end subroutine pack_flush_vir
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine unpack_flush_part(c,local_peak_id,msg_size,msg_array)
   use amr_commons, only: ndim
   use clfind_commons, only: clump_t
@@ -1951,6 +2171,55 @@ subroutine unpack_flush_part(c,local_peak_id,msg_size,msg_array)
   c%peak_vel(local_peak_id,1:ndim)=c%peak_vel(local_peak_id,1:ndim)+msg%vel(1:ndim)
 
 end subroutine unpack_flush_part
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_sink(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg=transfer(msg_array,msg)
+  
+    c%particle_mass(local_peak_id)=c%particle_mass(local_peak_id)+msg%mass
+    c%peak_vel(local_peak_id,1:ndim)=c%peak_vel(local_peak_id,1:ndim)+msg%vel(1:ndim)
+
+    c%clump_mass_all(local_peak_id)=c%clump_mass_all(local_peak_id)+msg%mass2
+    c%clump_vel(local_peak_id,1:ndim)=c%clump_vel(local_peak_id,1:ndim)+msg%vel2(1:ndim)
+    c%center_of_mass(local_peak_id,1:ndim)=c%center_of_mass(local_peak_id,1:ndim)+msg%pos(1:ndim)
+  
+  end subroutine unpack_flush_sink
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+  subroutine unpack_flush_vir(c,local_peak_id,msg_size,msg_array)
+    use amr_commons, only: ndim
+    use clfind_commons, only: clump_t
+    use cache_commons, only: msg_prop_sink
+    type(clump_t)::c
+    integer::local_peak_id
+    integer::msg_size
+    integer,dimension(1:msg_size),optional::msg_array
+  
+    type(msg_prop_sink)::msg
+  
+    msg=transfer(msg_array,msg)
+
+    msg%mass=c%kinetic_support(local_peak_id)
+    msg%mass2=c%grav_term(local_peak_id)
+  
+    c%kinetic_support(local_peak_id)=c%kinetic_support(local_peak_id)+msg%mass
+    c%grav_term(local_peak_id)=c%grav_term(local_peak_id)+msg%mass2
+  
+  end subroutine unpack_flush_vir
 !##############################################################################
 !##############################################################################
 !##############################################################################

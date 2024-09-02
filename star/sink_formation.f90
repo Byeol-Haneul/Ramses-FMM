@@ -159,6 +159,12 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      !-------------------------------------
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
+     ! Peak has to be dense enough
+     if(c%max_dens(j)<=r%d_sink)ok=.false.
+     ! Clump has to contain at least one cell
+     if(c%n_cells(j)<=0)ok=.false.
+     ! Clump has to be virialized
+     if(c%Icl_dd(j)>=0.)ok=.false.
      if(c%occupied_sink(j)>0)ok=.false.
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
