@@ -188,8 +188,9 @@ subroutine clump_finder(s)
      call central_in_halos(s)
   endif
   !----------------------------------------------------------------------
-  ! Remove all peak-patches that are below the relevance threshold or
-  ! the mass threshold by setting the flag2 field to zero.
+  ! Remove all peak-patches (resp. all halo-patches) that are below
+  ! the relevance threshold or the mass threshold by setting their
+  ! flag2 (resp. flag1) fields to zero.
   !----------------------------------------------------------------------
   call trim_clumps(s)
 #endif
