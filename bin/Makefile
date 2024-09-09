@@ -126,22 +126,14 @@ MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.
 	 init_refine_adaptive.o init_refine_restart.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o sink_formation.o \
 	 task_manager.o amr_step.o adaptive_loop.o \
-	 write_patch.o  write_gitinfo.o write_makefile.o
+	 write_gitinfo.o
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
 	$(F90) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
-	rm write_makefile.f90
-	rm write_patch.f90
 #############################################################################
 write_gitinfo.o: FORCE
 	$(FC) -O0 -cpp -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \
                 -DGITREPO=\'"$(GITREPO)"\' -DBUILDDATE=\'"$(BUILDDATE)"\' -c ../amr/write_gitinfo.f90 -o $@
-write_makefile.o: FORCE
-	../utils/scripts/cr_write_makefile.sh $(MAKEFILE_LIST)
-	$(FC) -O0 -c write_makefile.f90 -o $@
-write_patch.o: FORCE
-	../utils/scripts/cr_write_patch.sh $(PATCH)
-	$(FC) -O0 -c write_patch.f90 -o $@
 %.o:%.f90
 	$(F90) $(FFLAGS) -c $^ -o $@
 %.o:%.c

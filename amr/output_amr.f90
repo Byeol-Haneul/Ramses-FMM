@@ -108,10 +108,6 @@ subroutine m_dump_all(pst,write_bkp_file)
      end if
      filename=TRIM(filedir)//'info.txt'
      call output_info(r,g,filename)
-     filename=TRIM(filedir)//'makefile.txt'
-     call output_makefile(filename)
-     filename=TRIM(filedir)//'patches.txt'
-     call output_patch(filename)
      filename=TRIM(filedir)//'namelist.txt'
      call output_namelist(filename)
      filename=TRIM(filedir)//'compilation.txt'
