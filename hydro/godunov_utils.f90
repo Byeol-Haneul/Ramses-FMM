@@ -312,7 +312,7 @@ subroutine riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   implicit none
   ! dummy arguments
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(1:nprim)::qleft,qright
   real(dp),dimension(1:nprim+1)::fgdnv
 
@@ -457,7 +457,7 @@ subroutine riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
 
   ! dummy arguments
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(1:nprim)::qleft,qright
   real(dp),dimension(1:nprim+1)::fgdnv
 
@@ -604,7 +604,7 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
 
   ! dummy arguments
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(1:nprim)::qleft,qright
   real(dp),dimension(1:nprim+1)::fgdnv
 
@@ -816,7 +816,7 @@ SUBROUTINE riemann_upwind_mhd(qleft,qright,fgdnv,zero_flux,gamma,gamma_rad,small
   IMPLICIT NONE
   REAL(dp)::zero_flux
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
   REAL(dp),DIMENSION(1:nprim+1)::fgdnv
 
@@ -856,7 +856,7 @@ SUBROUTINE riemann_llf_mhd(qleft,qright,fgdnv,zero_flux,gamma,gamma_rad,smallr,s
   IMPLICIT NONE
   ! 1D local Lax-Friedrich Riemann solver
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp)::zero_flux
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
 
@@ -897,7 +897,7 @@ SUBROUTINE riemann_hll_mhd(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   IMPLICIT NONE
   ! 1D HLL Riemann solver
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
   REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fgdnv
   REAL(dp),DIMENSION(1:nprim+1)::uleft,uright
@@ -934,7 +934,7 @@ SUBROUTINE riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   IMPLICIT NONE
   ! HLLD Riemann solver (Miyoshi & Kusano, 2005, JCP, 208, 315)
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
   REAL(dp),DIMENSION(1:nprim+1)::fgdnv
 
@@ -1216,7 +1216,7 @@ SUBROUTINE find_mhd_flux(qvar,cvar,ff,gamma,gamma_rad)
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1, Btransverse1, Vtransverse2, Btransverse2
   real(dp)::gamma
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
 #if NENER>0
   INTEGER :: irad
 #endif
@@ -1299,7 +1299,7 @@ SUBROUTINE find_speed_info(qvar,vel_info,gamma,gamma_rad)
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1,Btransverse1,Vtransverse2,Btransverse2
   real(dp)::gamma
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
 #if NENER>0
   INTEGER :: irad
 #endif
@@ -1335,7 +1335,7 @@ SUBROUTINE find_speed_fast(qvar,vel_info,gamma,gamma_rad)
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1,Btransverse1,Vtransverse2,Btransverse2
   real(dp)::gamma
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
 #if NENER>0
   INTEGER :: irad
 #endif
@@ -1388,7 +1388,7 @@ SUBROUTINE riemann_roe_mhd(qleft,qright,fmean,zero_flux,gamma,gamma_rad,smallr,s
   IMPLICIT NONE
 
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
 
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
   REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fmean
@@ -1621,7 +1621,7 @@ subroutine eigenvalues(d,vx,vy,vz,p,bx,by,bz,lambda,gamma,gamma_rad,smallr,small
 !   lambda  = eigenvalues
 !
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),intent(IN)::d, vx, vy, vz, p
   real(dp),intent(IN)::bx, by, bz
   real(dp),dimension(1:7),intent(OUT)::lambda
@@ -1683,7 +1683,7 @@ SUBROUTINE eigen_cons(d,vx,vy,vz,h,Bx,by,bz,Xfac,Yfac,lambda,rem,lem,gamma,gamma
 !   lem     = left  eigenmatrix
 !
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL (dp) :: d, vx, vy, vz, h
   REAL (dp) :: Bx, by, bz, Xfac, Yfac
 
@@ -1921,7 +1921,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
   ! HLLD 2D Riemann solver (Miyoshi & Kusano, 2005, JCP, 208, 315)
   IMPLICIT NONE
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 
@@ -2133,7 +2133,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
   ! HLL 2D Riemann solver using the fast magnetosonic speed
   IMPLICIT NONE
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 
@@ -2237,7 +2237,7 @@ subroutine riemann2d_hll_alfven(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
   ! HLL 2D Riemann solver using the Alfven speed
   IMPLICIT NONE
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 
@@ -2294,7 +2294,7 @@ subroutine riemann2d_simple(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc,irie
   IMPLICIT NONE
   integer::iriemann2d
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 

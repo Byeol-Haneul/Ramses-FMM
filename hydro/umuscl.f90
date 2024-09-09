@@ -34,7 +34,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   real(dp)::dx,dy,dz,dt
   real(dp)::gamma,smallr,smallc,difmag,etamag
   logical::induction
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   integer::slope_type,slope_mag_type,riemann,riemann2d
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
@@ -304,7 +304,7 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
   real(dp)::dx, dt
   integer::iu1, iu2, ju1, ju2, ku1, ku2
   real(dp)::gamma, smallr, smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
@@ -485,7 +485,7 @@ subroutine trace2d(q,dq,qm,qp, &
   real(dp)::dx, dy, dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
@@ -837,7 +837,7 @@ subroutine trace3d(q,dq,qm,qp, &
   real(dp)::dx, dy, dz, dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
@@ -1421,7 +1421,7 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
   integer::ip1,ip2,jp1,jp2,kp1,kp2
   integer::ilo,ihi,jlo,jhi,klo,khi
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   integer::riemann
   real(dp),dimension(im1:im2,jm1:jm2,km1:km2,1:nprim,1:ndim)::qm
   real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nprim,1:ndim)::qp
@@ -1554,7 +1554,7 @@ subroutine cmp_mag_flx(qRT,irt1,irt2,jrt1,jrt2,krt1,krt2, &
   integer::ilb1,ilb2,jlb1,jlb2,klb1,klb2
   integer::ilo,ihi,jlo,jhi,klo,khi
   real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   integer::riemann2d
   real(dp),dimension(irt1:irt2,jrt1:jrt2,krt1:krt2,1:nprim,1:3)::qRT
   real(dp),dimension(irb1:irb2,jrb1:jrb2,krb1:krb2,1:nprim,1:3)::qRB
@@ -1666,7 +1666,7 @@ subroutine ctoprim(uin,q,c,gravin, &
   real(dp)::dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   real(dp)::smallr,smallc,gamma
-  real(dp),dimension(1:nener)::gamma_rad
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
 #ifdef MHD
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin

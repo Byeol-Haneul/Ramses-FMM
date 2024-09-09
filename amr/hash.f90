@@ -216,7 +216,7 @@ contains
     implicit none
     type(hash_table),                    intent(inout) :: htable
     integer(kind=8) , dimension(0:ndim), intent(in)    :: key
-    type(*),optional,target,             intent(in)    :: val    
+    type(*),optional,target,             intent(in)    :: val
     
     ! Add a key/value pair to the hash table. If there is already a key/value
     ! pair stored for this key, return an error message.

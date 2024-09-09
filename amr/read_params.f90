@@ -793,7 +793,7 @@ subroutine m_read_params(pst)
   endif
   s%r%difmag=difmag
   s%r%etamag=etamag
-  s%r%gamma_rad=gamma_rad(1:nener)
+  s%r%gamma_rad=gamma_rad(1:nener+1)
   s%r%dual_energy=dual_energy
   s%r%T2_fix=T2_fix
   s%r%induction=induction
