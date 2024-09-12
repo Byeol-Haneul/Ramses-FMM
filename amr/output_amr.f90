@@ -189,19 +189,88 @@ end subroutine output_namelist
 !#########################################################################
 !#########################################################################
 subroutine output_compil(filename)
-  use amr_parameters, only: flen
   use amr_commons
   use pm_commons
   use hydro_commons
   implicit none
+  real(dp)::xxx
   character(LEN=flen)::filename
+  character(LEN=30)::mystring
   ! Copy compilation details to output directory
   OPEN(UNIT=11, FILE=filename, FORM='formatted')
   write(11,'(" compile date = ",A)')TRIM(builddate)
-  write(11,'(" patch dir    = ",A)')TRIM(patchdir)
   write(11,'(" remote repo  = ",A)')TRIM(gitrepo)
   write(11,'(" local branch = ",A)')TRIM(gitbranch)
   write(11,'(" last commit  = ",A)')TRIM(githash)
+  write(11,'(" PATCH = ",A)')TRIM(patchdir)
+  write(mystring,*)nhilbert
+  write(11,'(" NHILBERT = ",A)')adjustl(mystring)
+  write(mystring,*)nvector
+  write(11,'(" NVECTOR = ",A)')adjustl(mystring)
+  write(mystring,*)ndim
+  write(11,'(" NDIM = ",A)')adjustl(mystring)
+  if(sizeof(xxx)==8)then
+     write(11,'(" NPRE = 8")')
+  else
+     write(11,'(" NPRE = 4")')
+  endif
+  write(mystring,*)nvar
+  write(11,'(" NVAR = ",A)')adjustl(mystring)
+  write(mystring,*)nener
+  write(11,'(" NENER = ",A)')adjustl(mystring)
+#ifdef HYDRO
+  write(11,'(" HYDRO = 1")')
+#else
+  write(11,'(" HYDRO = 0")')
+#endif
+#ifdef GRAV
+  write(11,'(" GRAV = 1")')
+#else
+  write(11,'(" GRAV = 0")')
+#endif
+#ifdef MHD
+  write(11,'(" MHD = 1")')
+#else
+  write(11,'(" MHD = 0")')
+#endif
+#ifdef WITHOUTMPI
+  write(11,'(" MPI = 0")')
+#else
+  write(11,'(" MPI = 1")')
+#endif
+#define COEUR 1
+#define COSMO 2
+#define MERGER 3
+#if UNITS==COSMO
+  write(11,'(" UNITS = COSMO")')
+#elif UNITS==COEUR
+  write(11,'(" UNITS = COEUR")')
+#elif UNITS==MERGER
+  write(11,'(" UNITS = MERGER")')
+#else
+  write(11,'(" UNITS = ")')
+#endif
+#define INSTA 2
+#define DOUBLEMACH 3
+#define LOOP 4
+#define OT 5
+#define PONO 6
+#if INIT==COEUR
+  write(11,'(" INIT = COEUR")')
+#elif INIT==INSTA
+  write(11,'(" INIT = INSTA")')
+#elif INIT==DOUBLEMACH
+  write(11,'(" INIT = DOUBLEMACH")')
+#elif INIT==LOOP
+  write(11,'(" INIT = LOOP")')
+#elif INIT==OT
+  write(11,'(" INIT = OT")')
+#elif INIT==PONO
+  write(11,'(" INIT = PONO")')
+#else
+  write(11,'(" INIT = ")')
+#endif
+
   CLOSE(11)
 end subroutine output_compil
 !#########################################################################

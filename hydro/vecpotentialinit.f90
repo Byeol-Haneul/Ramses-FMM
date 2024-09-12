@@ -20,9 +20,9 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
   ! to direction idim.
   ! A(:) is in user (aka code) units.
   !================================================================
-#define LOOP 1
-#define OT 2
-#define PONO 3
+#define LOOP 4
+#define OT 5
+#define PONO 6
   integer::i
 #if INIT==LOOP
   real(dp)::R0, A0, xx, yy
