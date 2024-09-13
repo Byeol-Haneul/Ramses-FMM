@@ -61,6 +61,15 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         filename=TRIM(filedir)//'peak_star_header.txt'
         call output_peak_header(r,g,star,filename)
      endif
+     ! Compute particle halo id for outputting to file
+     if(r%output_halo_part.and.r%pic)then
+        filename=TRIM(filedir)//'halo_part_header.txt'
+        call output_halo_header(r,g,p,filename)
+     endif
+     if(r%output_halo_star.and.r%star)then
+        filename=TRIM(filedir)//'halo_star_header.txt'
+        call output_halo_header(r,g,star,filename)
+     endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
 
@@ -182,15 +191,23 @@ subroutine clump_finder(s)
      call merge_clumps(s,'saddleden')
   endif
   !----------------------------------------------------------------------
-  ! Compute the 3 most massive central clumps in each halo (if any).
+  ! Find the 3 most massive central clumps in each halo (if any).
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
      call central_in_halos(s)
   endif
   !----------------------------------------------------------------------
-  ! Remove all peak-patches (resp. all halo-patches) that are below
+  ! Split particles among centrals. Central peak id stored in workp.
+  !----------------------------------------------------------------------
+  if(s%c%saddle_threshold>0)then
+     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
+        call particle_split_centrals(s,s%p)
+     endif
+  endif
+  !----------------------------------------------------------------------
+  ! Remove all peak-patches (resp. halo-patches) that are below
   ! the relevance threshold or the mass threshold by setting their
-  ! flag2 (resp. flag1) fields to zero.
+  ! flag2 (resp. flag1) field values to zero.
   !----------------------------------------------------------------------
   call trim_clumps(s)
 #endif
@@ -536,8 +553,9 @@ subroutine collect_peak(s)
 #else
   c%npeak_tot=c%npeak_cum(g%ncpu)
 #endif
-  if (g%myid==1)write(*,'(" Total number of density peaks found=",I10)')c%npeak_tot
-  
+  if (g%myid==1)then
+     write(*,'(" Total number of density peaks found=",I10)')c%npeak_tot
+  endif
   end associate
 
 end subroutine collect_peak

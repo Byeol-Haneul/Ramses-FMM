@@ -45,6 +45,7 @@ module clfind_commons
        integer,allocatable,dimension(:) :: ind_halo_1 ! Peak ID of the halo most massive peak
        integer,allocatable,dimension(:) :: ind_halo_2 ! Peak ID of the halo second most massive peak
        integer,allocatable,dimension(:) :: ind_halo_3 ! Peak ID of the halo third most massive peak
+       integer,allocatable,dimension(:) :: ind_central ! Peak ID of the central the peak bealongs to
 
        real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark mater particles
        real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo

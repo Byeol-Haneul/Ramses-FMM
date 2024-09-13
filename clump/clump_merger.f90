@@ -4,203 +4,6 @@ contains
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_DEALLOC,pst%iUpper+1,input_size,0,ilevel)
-     call r_deallocate_clump(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call deallocate_peak_patch_arrays(pst%s)
-  endif
-
-end subroutine r_deallocate_clump
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine deallocate_peak_patch_arrays(s)
-  use clfind_commons
-  use ramses_commons, only: ramses_t
-  use hash, only: reset_entire_hash_simple
-  implicit none
-  type(ramses_t)::s
-
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
-
-  ! Deallocate test particle arrays
-  if(c%ntest>0)then
-     deallocate(c%cell)
-     deallocate(c%grid)
-     deallocate(c%level)
-     deallocate(c%hash)
-  endif
-  if(c%ntest_tot==0)return
-
-  ! Deallocate cumulative peak count CPU array
-  deallocate(c%npeak_cum)
-  if(c%npeak_tot==0)return
-
-  ! Deallocate peak-patch arrays
-  deallocate(c%peak_cell)
-  deallocate(c%peak_grid)
-  deallocate(c%peak_level)
-  deallocate(c%max_dens)
-
-  deallocate(c%saddle_dens)
-  deallocate(c%saddle_nbor)
-
-  deallocate(c%lev_peak)
-  deallocate(c%new_peak)
-  deallocate(c%relevance)
-
-  deallocate(c%peak_pos)
-  deallocate(c%peak_vel)
-  deallocate(c%peak_acc)
-
-  deallocate(c%min_dens)
-  deallocate(c%n_cells)
-  deallocate(c%clump_mass)
-  deallocate(c%clump_vol)
-  deallocate(c%particle_mass)
-
-  ! Deallocate halo-patch arrays
-  deallocate(c%halo_mass)
-  deallocate(c%ind_halo)
-  deallocate(c%n_cells_halo)
-
-  deallocate(c%mass_bin)
-
-  deallocate(c%max_peak_mass)
-  deallocate(c%ind_max_mass)
-  deallocate(c%ind_halo_1)
-  deallocate(c%ind_halo_2)
-  deallocate(c%ind_halo_3)
-
-  if(r%sink)then
-     deallocate(c%occupied_sink)
-     deallocate(c%form_sink)
-  endif
-
-  ! Deallocate hash table
-  call reset_entire_hash_simple(c%peak_dict)
-
-  ! Dellocate cache memory
-  deallocate(c%dirty)
-  deallocate(c%locked)
-  deallocate(c%occupied)
-  deallocate(c%parent_cpu)
-  deallocate(c%gid)
-
-  ! Deallocate cache comms
-  call kill_cache_clump(s%mdl)
-
-  end associate
-
-end subroutine deallocate_peak_patch_arrays
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine allocate_peak_patch_arrays(s)
-  use amr_parameters, ONLY: ndim, dp, nbin
-  use clfind_commons
-  use ramses_commons, ONLY: ramses_t
-  implicit none
-  type(ramses_t)::s
-  
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
-
-  !------------------------------------------
-  ! Compute the max size of peak-based arrays
-  !------------------------------------------
-  c%npeak_max=c%npeak+c%ncachemax
-
-  !-------------------------------
-  ! Allocate peak-patch properties
-  !-------------------------------
-  allocate(c%saddle_dens(1:c%npeak_max))
-  allocate(c%saddle_nbor(1:c%npeak_max))
-
-  allocate(c%lev_peak(1:c%npeak_max))
-  allocate(c%new_peak(c%npeak_max))
-  allocate(c%relevance(1:c%npeak_max))
-
-  allocate(c%peak_pos(1:c%npeak_max,1:ndim))
-  allocate(c%peak_vel(1:c%npeak_max,1:ndim))
-  allocate(c%peak_acc(1:c%npeak_max,1:ndim))
-
-  allocate(c%min_dens(1:c%npeak_max))
-  allocate(c%n_cells(1:c%npeak_max))
-  allocate(c%clump_mass(1:c%npeak_max))
-  allocate(c%clump_vol(1:c%npeak_max))
-  allocate(c%particle_mass(1:c%npeak_max))
-
-  !-------------------------------
-  ! Allocate halo-patch properties
-  !-------------------------------
-  allocate(c%halo_mass(1:c%npeak_max))
-  allocate(c%ind_halo(1:c%npeak_max))
-  allocate(c%n_cells_halo(1:c%npeak_max))
-
-  allocate(c%mass_bin(1:c%npeak_max,1:nbin))
-
-  allocate(c%max_peak_mass(1:c%npeak_max))
-  allocate(c%ind_max_mass(1:c%npeak_max))
-  allocate(c%ind_halo_1(1:c%npeak_max))
-  allocate(c%ind_halo_2(1:c%npeak_max))
-  allocate(c%ind_halo_3(1:c%npeak_max))
-
-  if(r%sink)then
-     allocate(c%occupied_sink(1:c%npeak_max))
-     allocate(c%form_sink(1:c%npeak_max))
-  endif
-
-  !--------------------
-  ! Allocate hash table
-  !--------------------
-  call init_empty_hash_simple(c%peak_dict,c%ncachemax)
-
-  !----------------------
-  ! Allocate cache memory
-  !----------------------
-  allocate(c%dirty(1:c%ncachemax))
-  allocate(c%locked(1:c%ncachemax))
-  allocate(c%occupied(1:c%ncachemax))
-  allocate(c%parent_cpu(1:c%ncachemax))
-  allocate(c%gid(1:c%ncachemax))
-  c%dirty=.false.
-  c%locked=.false.
-  c%occupied=.false.
-  c%free_cache=1
-  c%ncache=0
-
-  !---------------------
-  ! Allocate cache comms
-  !---------------------
-  call init_cache_clump(s%mdl)
-
-  !------------------------------------------------
-  ! Initialize all peak based arrays for clump finder
-  !------------------------------------------------
-  c%lev_peak=0; c%new_peak=0; c%ind_halo=0; c%relevance=1
-
-  end associate
-
-end subroutine allocate_peak_patch_arrays
-!################################################################
-!################################################################
-!################################################################
-!################################################################
 subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
   use amr_commons
   use ramses_commons, only: ramses_t
@@ -470,6 +273,209 @@ subroutine get_global_peak_cpu(s,global_peak_id,peak_cpu)
   end associate
 
 end subroutine get_global_peak_cpu
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine allocate_peak_patch_arrays(s)
+  use amr_parameters, ONLY: ndim, dp, nbin
+  use clfind_commons
+  use ramses_commons, ONLY: ramses_t
+  implicit none
+  type(ramses_t)::s
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  !------------------------------------------
+  ! Compute the max size of peak-based arrays
+  !------------------------------------------
+  c%npeak_max=c%npeak+c%ncachemax
+
+  !-------------------------------
+  ! Allocate peak-patch properties
+  !-------------------------------
+  allocate(c%saddle_dens(1:c%npeak_max))
+  allocate(c%saddle_nbor(1:c%npeak_max))
+
+  allocate(c%lev_peak(1:c%npeak_max))
+  allocate(c%new_peak(c%npeak_max))
+  allocate(c%relevance(1:c%npeak_max))
+
+  allocate(c%peak_pos(1:c%npeak_max,1:ndim))
+  allocate(c%peak_vel(1:c%npeak_max,1:ndim))
+  allocate(c%peak_acc(1:c%npeak_max,1:ndim))
+
+  allocate(c%min_dens(1:c%npeak_max))
+  allocate(c%n_cells(1:c%npeak_max))
+  allocate(c%clump_mass(1:c%npeak_max))
+  allocate(c%clump_vol(1:c%npeak_max))
+
+  allocate(c%particle_mass(1:c%npeak_max))
+
+  !-------------------------------
+  ! Allocate halo-patch properties
+  !-------------------------------
+  allocate(c%halo_mass(1:c%npeak_max))
+  allocate(c%ind_halo(1:c%npeak_max))
+  allocate(c%n_cells_halo(1:c%npeak_max))
+
+  allocate(c%max_peak_mass(1:c%npeak_max))
+  allocate(c%ind_max_mass(1:c%npeak_max))
+  allocate(c%ind_halo_1(1:c%npeak_max))
+  allocate(c%ind_halo_2(1:c%npeak_max))
+  allocate(c%ind_halo_3(1:c%npeak_max))
+  allocate(c%ind_central(1:c%npeak_max))
+
+  allocate(c%mass_bin(1:c%npeak_max,1:nbin))
+
+  !-----------------------------------
+  ! Allocate sink particles properties
+  !-----------------------------------
+  if(r%sink)then
+     allocate(c%occupied_sink(1:c%npeak_max))
+     allocate(c%form_sink(1:c%npeak_max))
+  endif
+
+  !--------------------
+  ! Allocate hash table
+  !--------------------
+  call init_empty_hash_simple(c%peak_dict,c%ncachemax)
+
+  !----------------------
+  ! Allocate cache memory
+  !----------------------
+  allocate(c%dirty(1:c%ncachemax))
+  allocate(c%locked(1:c%ncachemax))
+  allocate(c%occupied(1:c%ncachemax))
+  allocate(c%parent_cpu(1:c%ncachemax))
+  allocate(c%gid(1:c%ncachemax))
+  c%dirty=.false.
+  c%locked=.false.
+  c%occupied=.false.
+  c%free_cache=1
+  c%ncache=0
+
+  !---------------------
+  ! Allocate cache comms
+  !---------------------
+  call init_cache_clump(s%mdl)
+
+  !------------------------------------------------
+  ! Initialize all peak based arrays for clump finder
+  !------------------------------------------------
+  c%lev_peak=0; c%new_peak=0; c%ind_halo=0; c%relevance=1
+
+  end associate
+
+end subroutine allocate_peak_patch_arrays
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_deallocate_clump(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_DEALLOC,pst%iUpper+1,input_size,0,ilevel)
+     call r_deallocate_clump(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call deallocate_peak_patch_arrays(pst%s)
+  endif
+
+end subroutine r_deallocate_clump
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine deallocate_peak_patch_arrays(s)
+  use clfind_commons
+  use ramses_commons, only: ramses_t
+  use hash, only: reset_entire_hash_simple
+  implicit none
+  type(ramses_t)::s
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Deallocate test particle arrays
+  if(c%ntest>0)then
+     deallocate(c%cell)
+     deallocate(c%grid)
+     deallocate(c%level)
+     deallocate(c%hash)
+  endif
+  if(c%ntest_tot==0)return
+
+  ! Deallocate cumulative peak count CPU array
+  deallocate(c%npeak_cum)
+  if(c%npeak_tot==0)return
+
+  ! Deallocate peak-patch arrays
+  deallocate(c%peak_cell)
+  deallocate(c%peak_grid)
+  deallocate(c%peak_level)
+  deallocate(c%max_dens)
+
+  deallocate(c%saddle_dens)
+  deallocate(c%saddle_nbor)
+
+  deallocate(c%lev_peak)
+  deallocate(c%new_peak)
+  deallocate(c%relevance)
+
+  deallocate(c%peak_pos)
+  deallocate(c%peak_vel)
+  deallocate(c%peak_acc)
+
+  deallocate(c%min_dens)
+  deallocate(c%n_cells)
+  deallocate(c%clump_mass)
+  deallocate(c%clump_vol)
+  deallocate(c%particle_mass)
+
+  ! Deallocate halo-patch arrays
+  deallocate(c%halo_mass)
+  deallocate(c%ind_halo)
+  deallocate(c%n_cells_halo)
+
+  deallocate(c%mass_bin)
+
+  deallocate(c%max_peak_mass)
+  deallocate(c%ind_max_mass)
+  deallocate(c%ind_halo_1)
+  deallocate(c%ind_halo_2)
+  deallocate(c%ind_halo_3)
+  deallocate(c%ind_central)
+
+  if(r%sink)then
+     deallocate(c%occupied_sink)
+     deallocate(c%form_sink)
+  endif
+
+  ! Deallocate hash table
+  call reset_entire_hash_simple(c%peak_dict)
+
+  ! Dellocate cache memory
+  deallocate(c%dirty)
+  deallocate(c%locked)
+  deallocate(c%occupied)
+  deallocate(c%parent_cpu)
+  deallocate(c%gid)
+
+  ! Deallocate cache comms
+  call kill_cache_clump(s%mdl)
+
+  end associate
+
+end subroutine deallocate_peak_patch_arrays
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -1647,11 +1653,11 @@ subroutine central_in_halos(s)
            c%ind_halo_2(ipeak)=0
         endif
         
-        if(mass2>0.or.mass3>0)then
-           write(*,*)c%ind_halo(ipeak),c%ind_halo_1(ipeak),c%ind_halo_2(ipeak),c%ind_halo_3(ipeak),&
-                & c%halo_mass(ipeak),mass1,mass2,mass3
-        endif
-
+!!$        if(mass2>0.or.mass3>0)then
+!!$           write(*,*)c%ind_halo(ipeak),c%ind_halo_1(ipeak),c%ind_halo_2(ipeak),c%ind_halo_3(ipeak),&
+!!$                & c%halo_mass(ipeak),mass1,mass2,mass3
+!!$        endif
+!!$
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -1978,6 +1984,397 @@ subroutine unpack_flush_part(c,local_peak_id,msg_size,msg_array)
   c%peak_vel(local_peak_id,1:ndim)=c%peak_vel(local_peak_id,1:ndim)+msg%vel(1:ndim)
 
 end subroutine unpack_flush_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine particle_split_centrals(s,p)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  !==================================================================
+  ! This routine computes various clump properties.
+  ! In particular, it computes for each particle its parent peak id.
+  ! This is used to compute mass profiles for each halo.
+  ! This is also stored in the peak_part and peak_star files.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !==================================================================
+  ! Local variables
+  type(msg_prop_clump)::dummy_prop_clump
+  type(msg_mbin_clump)::dummy_mbin_clump
+  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer(kind=8)::global_peak_id,global_halo_id
+  integer::ipeak,jpeak,no_halo
+  real(dp)::pi,grav,radius,velocity,distmin
+  real(dp)::dist,dist1,dist2,dist3
+  real(dp)::xdist1,xdist2,xdist3
+  real(dp)::vdist1,vdist2,vdist3
+  real(dp),dimension(1:ndim)::xpart,vpart
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Constants
+  pi=ACOS(-1.0D0)
+  grav=1d0
+  if(s%r%cosmo)grav=3d0/8d0/pi*s%g%omega_m*s%g%aexp
+
+  !---------------------------------
+  ! Reads halo id of input particles
+  !---------------------------------
+  call particle_halo_id(s,p,no_halo)
+
+  !--------------------------------------------
+  ! Sort particles according to global clump id
+  !--------------------------------------------
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
+
+  !-----------------------------------------------------------
+  ! Assign particle to central using clustering in phase space
+  !-----------------------------------------------------------
+  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_split,unpack=unpack_fetch_split)
+  do i=1+no_halo,p%npart
+     ! Get halo id
+     ipart=p%sortp(i)
+     global_halo_id=p%workp(i)
+     if (global_halo_id /=0 ) then
+        call get_peak(s,global_halo_id,ipeak,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+        ! Compute halo radius
+        radius=(c%halo_mass(ipeak)/4d0/pi*3d0/200d0)**(1d0/3d0)
+        ! Get first central peak id
+        global_peak_id=c%ind_halo_1(ipeak)
+        dist1=1e10
+        if(global_peak_id>0)then
+           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+           ! Compute Euclidian distance in configuration space
+           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
+           dist1=cmp_distance(p%xp(ipart,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
+                &             p%vp(ipart,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
+        endif
+        ! Get second central peak id
+        global_peak_id=c%ind_halo_2(ipeak)
+        dist2=1e10
+        if(global_peak_id>0)then
+           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+           ! Compute Euclidian distance in configuration space
+           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
+           dist2=cmp_distance(p%xp(ipart,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
+                &             p%vp(ipart,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
+        endif
+        ! Get third central peak id
+        global_peak_id=c%ind_halo_3(ipeak)
+        dist3=1e10
+        if(global_peak_id>0)then
+           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+           ! Compute Euclidian distance in configuration space
+           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
+           dist3=cmp_distance(p%xp(ipart,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
+                &             p%vp(ipart,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
+        endif
+        ! Assign particle to closest central in phase space
+        distmin=min(dist1,min(dist2,dist3))
+        if(dist3.EQ.distmin)p%workp(i)=c%ind_halo_3(ipeak)
+        if(dist2.EQ.distmin)p%workp(i)=c%ind_halo_2(ipeak)
+        if(dist1.EQ.distmin)p%workp(i)=c%ind_halo_1(ipeak)
+        ! Unlock halo
+        call unlock_cache_clump(s,ipeak)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  !-------------------------------------------------------
+  ! Assign peak to central using clustering in phase space
+  !-------------------------------------------------------
+  call open_cache_clump(s,storage_size(dummy_prop_clump)/32, &
+       pack=pack_fetch_split,unpack=unpack_fetch_split)
+  do i=1,c%npeak
+     if(c%clump_mass(i) > c%mass_threshold.AND. &
+          & c%relevance(i) > c%relevance_threshold)then
+     global_halo_id=c%ind_halo(i)
+     if(global_halo_id>0)then
+        call get_peak(s,global_halo_id,ipeak,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+        ! Compute halo radius
+        radius=(c%halo_mass(ipeak)/4d0/pi*3d0/200d0)**(1d0/3d0)
+        ! Get first central peak id
+        global_peak_id=c%ind_halo_1(ipeak)
+        dist1=1e10
+        if(global_peak_id>0)then
+           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+           ! Compute Euclidian distance in configuration space
+           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
+           dist1=cmp_distance(c%peak_pos(i,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
+                &             c%peak_vel(i,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
+        endif
+        ! Get second central peak id
+        global_peak_id=c%ind_halo_2(ipeak)
+        dist2=1e10
+        if(global_peak_id>0)then
+           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+           ! Compute Euclidian distance in configuration space
+           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
+           dist2=cmp_distance(c%peak_pos(i,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
+                &             c%peak_vel(i,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
+        endif
+        ! Get third central peak id
+        global_peak_id=c%ind_halo_3(ipeak)
+        dist3=1e10
+        if(global_peak_id>0)then
+           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+           ! Compute Euclidian distance in configuration space
+           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
+           dist3=cmp_distance(c%peak_pos(i,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
+                &             c%peak_vel(i,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
+        endif
+        ! Assign particle to closest central in phase space
+        distmin=min(dist1,min(dist2,dist3))
+        if(dist3.EQ.distmin)c%ind_central(i)=c%ind_halo_3(ipeak)
+        if(dist2.EQ.distmin)c%ind_central(i)=c%ind_halo_2(ipeak)
+        if(dist1.EQ.distmin)c%ind_central(i)=c%ind_halo_1(ipeak)
+        ! Unlock halo
+        call unlock_cache_clump(s,ipeak)
+     endif
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  !--------------------------------------------------------
+  ! Compute particle mass profile around their central peak
+  !--------------------------------------------------------
+  call open_cache_clump(s,storage_size(dummy_mbin_clump)/32,&
+       pack=pack_fetch_mbin,unpack=unpack_fetch_mbin,&
+       init=init_flush_mbin,flush=pack_flush_mbin,combine=unpack_flush_mbin)
+  c%mass_bin=0d0
+  do i=1+no_halo,p%npart
+     ! Get central global peak id
+     ipart=p%sortp(i)
+     global_peak_id=p%workp(i)
+     if (global_peak_id /=0 ) then
+        call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.true.)
+        ! Compute halo maximum radius
+        radius=2d0*(c%halo_mass(ipeak)/4d0/pi*3d0/200d0)**(1d0/3d0)
+        ! Compute particle radius
+        dist=0d0
+        xpart(1:ndim)=p%xp(ipart,1:ndim)-c%peak_pos(ipeak,1:ndim)
+        ! In case of periodic boundaries
+        do idim=1,ndim
+           if(xpart(idim)> r%boxlen*0.5)xpart(idim)=xpart(idim)-r%boxlen
+           if(xpart(idim)<-r%boxlen*0.5)xpart(idim)=xpart(idim)+r%boxlen
+           dist=dist+xpart(idim)**2
+        end do
+        dist=sqrt(dist)
+        do ibin=1,nbin
+           ! We use a simple linear binning as the mass is usually propto r
+           if(dist<=dble(ibin)/dble(nbin)*radius)then
+              c%mass_bin(ipeak,ibin)=c%mass_bin(ipeak,ibin)+p%mp(ipart)
+              exit
+           endif
+        end do
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  !------------------------
+  ! Compute cumulative mass
+  !------------------------
+  do ipeak=1,c%npeak
+     if(c%ind_central(ipeak).EQ.ipeak+c%npeak_cum(g%myid-1).AND. &
+          & c%halo_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold)then
+        do ibin=1,nbin-1
+           c%mass_bin(ipeak,ibin+1)=c%mass_bin(ipeak,ibin+1)+c%mass_bin(ipeak,ibin)
+        end do
+     endif
+  end do
+
+  end associate
+
+end subroutine particle_split_centrals
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+function cmp_distance(x1,x2,radius,v1,v2,velocity,boxlen)
+  use amr_parameters, only: ndim, dp
+  real(dp),dimension(1:ndim)::x1,x2,v1,v2
+  real(dp)::radius,velocity,boxlen
+  real(dp)::cmp_distance
+
+  integer::idim
+  real(dp)::xdist,vdist
+  real(dp),dimension(1:ndim)::xpart,vpart
+
+  xdist=0d0
+  xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
+  ! In case of periodic boundaries
+  do idim=1,ndim
+     if(xpart(idim)> boxlen*0.5)xpart(idim)=xpart(idim)-boxlen
+     if(xpart(idim)<-boxlen*0.5)xpart(idim)=xpart(idim)+boxlen
+     xdist=xdist+xpart(idim)**2
+  end do
+  ! Rescale distance in configuration space
+  xdist=xdist/radius**2
+  ! Compute Euclidian distance in velocity space
+  vdist=0d0
+  vpart(1:ndim)=v1(1:ndim)-v2(1:ndim)
+  do idim=1,ndim
+     vdist=vdist+vpart(idim)**2
+  end do
+  ! Rescale distance in velocity space
+  vdist=vdist/velocity**2
+  cmp_distance=xdist+vdist
+end function cmp_distance
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_split(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_prop_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_prop_clump)::msg
+
+  msg%mass=c%clump_mass(local_peak_id)
+  msg%dens=c%halo_mass(local_peak_id)
+  msg%vel=c%peak_vel(local_peak_id,1:ndim)
+  msg%pos=c%peak_pos(local_peak_id,1:ndim)
+  msg%ind(1)=c%ind_halo_1(local_peak_id)
+  msg%ind(2)=c%ind_halo_2(local_peak_id)
+  msg%ind(3)=c%ind_halo_3(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_split
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_split(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_prop_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_prop_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%clump_mass(local_peak_id)=msg%mass
+  c%halo_mass(local_peak_id)=msg%dens
+  c%peak_vel(local_peak_id,1:ndim)=msg%vel
+  c%peak_pos(local_peak_id,1:ndim)=msg%pos
+  c%ind_halo_1(local_peak_id)=msg%ind(1)
+  c%ind_halo_2(local_peak_id)=msg%ind(2)
+  c%ind_halo_3(local_peak_id)=msg%ind(3)
+
+end subroutine unpack_fetch_split
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_mbin_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_mbin_clump)::msg
+
+  msg%pos(1:ndim)=c%peak_pos(local_peak_id,1:ndim)
+  msg%mass=c%halo_mass(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_mbin
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_mbin_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_mbin_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%peak_pos(local_peak_id,1:ndim)=msg%pos(1:ndim)
+  c%halo_mass(local_peak_id)=msg%mass
+
+end subroutine unpack_fetch_mbin
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_mbin(c,local_peak_id)
+  use amr_commons, only: nbin
+  use clfind_commons, only: clump_t
+  type(clump_t)::c
+  integer::local_peak_id
+
+  c%mass_bin(local_peak_id,1:nbin)=0d0
+
+end subroutine init_flush_mbin
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_mbin(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: nbin
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_mbin_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_mbin_clump)::msg
+
+  msg%mbin(1:nbin)=c%mass_bin(local_peak_id,1:nbin)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_mbin
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_mbin(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: nbin
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_mbin_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_mbin_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%mass_bin(local_peak_id,1:nbin)=c%mass_bin(local_peak_id,1:nbin)+msg%mbin(1:nbin)
+
+end subroutine unpack_flush_mbin
 !##############################################################################
 !##############################################################################
 !##############################################################################

@@ -35,6 +35,18 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
         fileloc=TRIM(filename)//'peak.'
         call output_clump_field(pst%s,fileloc)
      endif
+     ! Computing and write halo id for dark matter particles'
+     ! The halo id has been computed before and stored in workp
+     if(pst%s%r%output_halo_part.and.pst%s%r%pic)then
+        fileloc=TRIM(filename)//'halo_part.'
+        call output_peak_part(pst%s,pst%s%p,fileloc)
+     endif
+     ! Computing and write halo id for star particles'
+     ! The halo id has been computed before and stored in workp
+     if(pst%s%r%output_halo_star.and.pst%s%r%star)then
+        fileloc=TRIM(filename)//'halo_star.'
+        call output_peak_part(pst%s,pst%s%star,fileloc)
+     endif
      ! Computing and write peak id for dark matter particles'
      if(pst%s%r%output_peak_part.and.pst%s%r%pic)then
         fileloc=TRIM(filename)//'peak_part.'
@@ -67,7 +79,7 @@ subroutine output_clump_properties(s,filename)
   integer::ilun,j
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(dp)::rad,r200b,rvir,concentration
+  real(dp)::rad,mass,r200b,rmax,concentration
   real(dp),dimension(1:nbin)::mbin
 
   associate(r=>s%r,g=>s%g,c=>s%c)
@@ -81,11 +93,12 @@ subroutine output_clump_properties(s,filename)
      if (c%relevance(j) > c%relevance_threshold.AND. &
           & c%clump_mass(j) > c%mass_threshold.AND. &
           & c%halo_mass(j) > c%mass_threshold)then
-        write(ilun,'(I10,X,I10,1X,I2,X,I10,X,I10,11(X,1PE18.9E2))')&
+!        write(ilun,'(I10,X,I10,1X,I2,X,I10,X,I10,11(X,1PE18.9E2))')&
+        write(ilun,'(I10,X,I10,1X,I10,11(X,1PE18.9E2))')&
              j+c%npeak_cum(g%myid-1)&
              ,c%ind_halo(j)&
-             ,c%lev_peak(j)&
-             ,c%new_peak(j)&
+!             ,c%lev_peak(j)&
+!             ,c%new_peak(j)&
              ,c%n_cells(j)&
              ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
              ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
@@ -107,24 +120,44 @@ subroutine output_clump_properties(s,filename)
      call open_file(s,fileloc,nskip,ilun)
 
      do j=1,c%npeak
-        if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.&
+        if(c%ind_central(j).EQ.j+c%npeak_cum(g%myid-1).AND.&
              & c%halo_mass(j) > c%mass_threshold.AND. &
              & c%relevance(j) > c%relevance_threshold)then
            mbin=c%mass_bin(j,1:nbin)
            rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
-           call halo_mass_def(s,mbin,rad,r200b,rvir,concentration)
-           write(ilun,'(I10,X,I10,11(X,1PE18.9E2))')&
+           mass=c%mass_bin(j,nbin)
+           call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
+           write(ilun,'(I10,X,11(X,1PE18.9E2))')&
                 j+c%npeak_cum(g%myid-1)&
-                ,c%n_cells_halo(j)&
                 ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
                 ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
                 ,c%max_dens(j)&
-                ,c%halo_mass(j)&
+                ,mass&
                 ,r200b&
-                ,rvir&
+                ,rmax&
                 ,concentration
         endif
      enddo
+
+!!$     do j=1,c%npeak
+!!$        if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.&
+!!$             & c%halo_mass(j) > c%mass_threshold.AND. &
+!!$             & c%relevance(j) > c%relevance_threshold)then
+!!$           mbin=c%mass_bin(j,1:nbin)
+!!$           rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
+!!$           call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
+!!$           write(ilun,'(I10,X,I10,11(X,1PE18.9E2))')&
+!!$                j+c%npeak_cum(g%myid-1)&
+!!$                ,c%n_cells_halo(j)&
+!!$                ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
+!!$                ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
+!!$                ,c%max_dens(j)&
+!!$                ,c%halo_mass(j)&
+!!$                ,r200b&
+!!$                ,rmax&
+!!$                ,concentration
+!!$        endif
+!!$     enddo
 
      call close_file(s,fileloc,nskip,ilun)
 
@@ -137,34 +170,46 @@ end subroutine output_clump_properties
 !###################################################
 !###################################################
 !###################################################
-subroutine halo_mass_def(s,mbin,rad,r200b,rvir,c)
+subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
   use amr_parameters, only: nbin, dp
   use ramses_commons, only: ramses_t
   type(ramses_t)::s
   real(dp),dimension(1:nbin)::mbin
-  real(dp)::rad,r200b,rvir,c
-  real(dp)::pi,G,x,delta,deltaold,deltavir,rbin,vcirc,volbin,alpha
-  real(dp)::vmax,vvir,c0,cl,cr,err,const
-  integer::i
+  real(dp)::rad,rmax,r200b,c,deltamax,cmin,cmax
+  real(dp)::pi,G,delta,deltaold,rbin,vcirc,volbin,alpha
+  real(dp)::vmax,v200b,c0,cl,cr,err,const
+  integer::i,imax
   ! Constants
   pi=ACOS(-1.0D0)
   G=1d0
   if(s%r%cosmo)G=3d0/8d0/pi*s%g%omega_m*s%g%aexp
-  x=s%g%omega_m/(s%g%omega_m+s%g%omega_l*s%g%aexp**3)-1
-  ! Bryan & Norman (1998)
-  deltavir=(18d0*pi**2+82d0*x-39d0*x*x)/s%g%omega_m
+  ! Find densest bin
+  deltamax=0
+  imax=1
+  ! Loop over radial bins
+  do i=1,nbin
+     if(mbin(i)==0)cycle
+     rbin=dble(i)/dble(nbin)*rad
+     volbin=4d0/3d0*pi*rbin**3
+     delta=mbin(i)/volbin
+     if(delta>deltamax)then
+        deltamax=delta
+        imax=i
+     endif
+  end do
   ! Initializations
   vmax=0
   r200b=0
-  rvir=0
+  rmax=0
   delta=0
   ! Loop over radial bins
-  do i=1,nbin
+  do i=imax,nbin
      if(mbin(i)==0)cycle
      rbin=dble(i)/dble(nbin)*rad
      vcirc=sqrt(G*mbin(i)/rbin)
      if(vcirc>vmax)then
         vmax=vcirc
+        rmax=rbin
      endif
      volbin=4d0/3d0*pi*rbin**3
      deltaold=delta
@@ -177,29 +222,20 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rvir,c)
            r200b=rbin
         endif
      endif
-     if(delta<=deltavir.and.rvir==0)then
-        if(deltaold>0)then
-           alpha=log(deltavir/delta)/log(deltaold/delta)
-           rvir=rbin*(dble(i-1)/dble(i))**alpha
-        else
-           rvir=rbin
-        endif
-     endif
   end do
+  ! Compute quantities at r200b
   if(delta>200d0.and.r200b==0)then
      alpha=log(200d0/delta)/log(deltaold/delta)
      r200b=rad*(dble(nbin-1)/dble(nbin))**alpha
   endif
-  if(delta>deltavir.and.rvir==0)then
-     alpha=log(deltavir/delta)/log(deltaold/delta)
-     rvir=rad*(dble(nbin-1)/dble(nbin))**alpha
-  endif
   c0=2.1626
-  vvir=sqrt(G*4d0*pi/3d0*deltavir*rvir**2)
-  vmax=max(vmax,vvir)
-  const=vmax**2/vvir**2*c0/(log(1d0+c0)-c0/(1d0+c0))
+  v200b=sqrt(G*4d0*pi/3d0*200d0*r200b**2)
+  ! Find concentration parameter
+  vmax=max(vmax,v200b)
+  const=MIN(vmax**2/v200b**2,4d0)*c0/(log(1d0+c0)-c0/(1d0+c0))
+  ! Find large root
   cl=c0
-  cr=200d0
+  cr=100d0
   err=1d0
   i=0
   do while(abs(err)>1d-3.and.i<100)
@@ -212,6 +248,38 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rvir,c)
      endif
      i=i+1
   end do
+  cmax=c
+  ! Find small root
+  cl=0.1
+  cr=c0
+  err=1d0
+  i=0
+  do while(abs(err)>1d-3.and.i<100)
+     c=0.5*(cl+cr)
+     err=c/(log(1d0+c)-c/(1d0+c))-const
+     if(err>0)then
+        cl=c
+     else
+        cr=c
+     endif
+     i=i+1
+  end do
+  cmin=c
+  ! Choose the right root
+  if(rmax>r200b)then
+     c=cmin
+  else
+     c=cmax
+  endif
+!!$  write(*,*)c,r200b,v200b,rmax,vmax
+!!$  do i=1,nbin
+!!$     if(mbin(i)==0)cycle
+!!$     rbin=dble(i)/dble(nbin)*rad
+!!$     vcirc=sqrt(G*mbin(i)/rbin)
+!!$     volbin=4d0/3d0*pi*rbin**3
+!!$     delta=mbin(i)/volbin
+!!$     write(*,*)rbin,mbin(i),vcirc,delta
+!!$  end do
 end subroutine halo_mass_def
 !###################################################
 !###################################################
@@ -228,7 +296,7 @@ subroutine output_clump_field(s,filename)
   !----------------------------------------------------------------  
   integer::ilevel,igrid,ilun
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(kind=4),dimension(1:twotondim)::flg
+  real(kind=4),dimension(1:twotondim)::flg1,flg2
   real(kind=4),dimension(1:twotondim)::rho
 
   associate(g=>s%g,r=>s%r,m=>s%m,mdl=>s%mdl)
@@ -241,8 +309,10 @@ subroutine output_clump_field(s,filename)
      write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
         rho=real(m%grid(igrid)%rho,kind=4)
-        flg=real(m%grid(igrid)%flag1,kind=4)
-        write(ilun)flg
+        flg1=real(m%grid(igrid)%flag1,kind=4)
+        flg2=real(m%grid(igrid)%flag2,kind=4)
+        write(ilun)flg1
+        write(ilun)flg2
         write(ilun)rho
      end do
   enddo
@@ -274,12 +344,15 @@ subroutine file_descriptor_clump(r,filename)
   fileloc=TRIM(filename)
   open(unit=ilun,file=fileloc,form='formatted')
 
-  write(ilun,'("nvar        =",I11)')2
+  write(ilun,'("nvar        =",I11)')3
 
   ivar=1
-  write(ilun,'("variable #",I2,": peak ID")')ivar
+  write(ilun,'("variable #",I2,": halo ID")')ivar
 
   ivar=2
+  write(ilun,'("variable #",I2,": peak ID")')ivar
+
+  ivar=3
   write(ilun,'("variable #",I2,": density")')ivar
   
   close(ilun)
@@ -361,6 +434,45 @@ subroutine output_peak_header(r,g,p,filename)
   close(ilun)
 
 end subroutine output_peak_header
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine output_halo_header(r,g,p,filename)
+  use amr_parameters, only: flen
+  use amr_commons, only: run_t,global_t
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  character(LEN=flen)::filename
+
+  ! Local variables
+  integer::ilun
+  character(LEN=flen)::fileloc
+
+  if(r%verbose)write(*,*)'Entering output_halo_header'
+
+  ilun=10!+g%myid
+
+  ! Open file
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')
+
+  ! Write header information
+  write(ilun,*)'Total number of particles'
+  write(ilun,*)p%npart_tot
+
+  write(ilun,*)'Total number of files'
+  write(ilun,*)r%nfile
+
+  ! Keep track of what particle fields are present
+  write(ilun,*)'Particle fields'
+  write(ilun,'(a)',advance='no')'halo_id'
+  close(ilun)
+
+end subroutine output_halo_header
 !#######################################################
 !#######################################################
 !#######################################################

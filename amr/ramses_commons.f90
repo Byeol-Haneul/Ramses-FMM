@@ -115,14 +115,14 @@ subroutine open_file(s,filename,nskip,ilun)
 
      if(index(filename,'clump').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(240A)')'     index       halo  lev   parent      ncell    pos_x              pos_y              pos_z      '//&
+        write(ilun,'(240A)')'     index       halo      ncell    pos_x              pos_y              pos_z      '//&
              '        vel_x              vel_y              vel_z              rho-               rho+               rho_av     '//&
-             '        mass_cl            relevance   '
+             '        mass               relevance   '
      elseif(index(filename,'halo').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(364A)')'     index      ncell    pos_x              pos_y              pos_z      '//&
+        write(ilun,'(364A)')'     index     pos_x              pos_y              pos_z      '//&
              '        vel_x              vel_y              vel_z              rho+               mass       '//&
-             '        r200b              rvir               cvir       '
+             '        r200               rmax               c200       '
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
         write(ilun)ndim
@@ -132,7 +132,7 @@ subroutine open_file(s,filename,nskip,ilun)
         if(index(filename,'hydro').NE.0)write(ilun)nvar
 #endif
         if(index(filename,'grav').NE.0)write(ilun)ndim+1
-        if(index(filename,'peak').NE.0)write(ilun)2
+        if(index(filename,'peak').NE.0)write(ilun)3
         write(ilun)r%levelmin
         write(ilun)r%nlevelmax
         do ilevel=r%levelmin,r%nlevelmax
