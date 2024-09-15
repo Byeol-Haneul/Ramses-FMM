@@ -130,7 +130,6 @@ subroutine output_clump_properties(s,filename)
                 ,c%npart(j)&
                 ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
                 ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
-                ,c%max_dens(j)&
                 ,c%halo_mass(j)&
                 ,mass&
                 ,r200b&

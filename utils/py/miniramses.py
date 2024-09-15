@@ -1191,13 +1191,13 @@ class HaloCat:
        """
        self.index = np.empty(shape=(0),dtype=int)
        self.patch = np.empty(shape=(0),dtype=int)
+       self.npart = np.empty(shape=(0),dtype=int)
        self.x = np.empty(shape=(0))
        self.y = np.empty(shape=(0))
        self.z = np.empty(shape=(0))
        self.u = np.empty(shape=(0))
        self.v = np.empty(shape=(0))
        self.w = np.empty(shape=(0))
-       self.dmax = np.empty(shape=(0))
        self.mpatch = np.empty(shape=(0))
        self.mass = np.empty(shape=(0))
        self.r200 = np.empty(shape=(0))
@@ -1230,13 +1230,13 @@ def rd_halo(nout,**kwargs):
        halo_cat = ascii.read(file_name)
        index = halo_cat['index']
        patch = halo_cat['patch']
+       npart = halo_cat['npart']
        x = halo_cat['pos_x']
        y = halo_cat['pos_y']
        z = halo_cat['pos_z']
        u = halo_cat['vel_x']
        v = halo_cat['vel_y']
        w = halo_cat['vel_z']
-       dmax = halo_cat['rho+']
        mpatch = halo_cat['mpatch']
        mass = halo_cat['mass']
        r200 = halo_cat['r200']
@@ -1244,13 +1244,13 @@ def rd_halo(nout,**kwargs):
        c200 = halo_cat['c200']
        cat.index = np.append(cat.index,index)
        cat.patch = np.append(cat.patch,patch)
+       cat.npart = np.append(cat.npart,npart)
        cat.x = np.append(cat.x,x)
        cat.y = np.append(cat.y,y)
        cat.z = np.append(cat.z,z)
        cat.u = np.append(cat.u,u)
        cat.v = np.append(cat.v,v)
        cat.w = np.append(cat.w,w)
-       cat.dmax = np.append(cat.dmax,dmax)
        cat.mpatch = np.append(cat.mpatch,mpatch)
        cat.mass = np.append(cat.mass,mass)
        cat.r200 = np.append(cat.r200,r200)

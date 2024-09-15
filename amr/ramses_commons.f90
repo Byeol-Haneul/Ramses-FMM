@@ -121,8 +121,8 @@ subroutine open_file(s,filename,nskip,ilun)
      elseif(index(filename,'halo').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
         write(ilun,'(364A)')'     index      patch      npart    pos_x              pos_y              pos_z      '//&
-             '        vel_x              vel_y              vel_z              rho+               mpatch             mass       '//&
-             '        r200               rmax               c200       '
+             '        vel_x              vel_y              vel_z              mpatch             mass               r200       '//&
+             '        rmax               c200       '
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
         write(ilun)ndim
