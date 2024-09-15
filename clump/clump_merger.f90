@@ -327,6 +327,7 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%ind_central(1:c%npeak_max))
 
   allocate(c%mass_bin(1:c%npeak_max,1:nbin))
+  allocate(c%npart(1:c%npeak_max))
 
   !-----------------------------------
   ! Allocate sink particles properties
@@ -447,6 +448,7 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%n_cells_halo)
 
   deallocate(c%mass_bin)
+  deallocate(c%npart)
 
   deallocate(c%max_peak_mass)
   deallocate(c%ind_max_mass)
@@ -2141,6 +2143,7 @@ subroutine particle_split_centrals(s,p,evaporate)
        pack=pack_fetch_mbin,unpack=unpack_fetch_mbin,&
        init=init_flush_mbin,flush=pack_flush_mbin,combine=unpack_flush_mbin)
   c%mass_bin=0d0
+  c%npart=0
   do i=1+no_halo,p%npart
      ! Get central global peak id
      ipart=p%sortp(i)
@@ -2163,6 +2166,7 @@ subroutine particle_split_centrals(s,p,evaporate)
            ! We use a simple linear binning as the mass is usually propto r
            if(dist<=dble(ibin)/dble(nbin)*radius)then
               c%mass_bin(ipeak,ibin)=c%mass_bin(ipeak,ibin)+p%mp(ipart)
+              c%npart=c%npart+1
               exit
            endif
         end do
@@ -2376,6 +2380,7 @@ subroutine init_flush_mbin(c,local_peak_id)
   integer::local_peak_id
 
   c%mass_bin(local_peak_id,1:nbin)=0d0
+  c%npart(local_peak_id)=0
 
 end subroutine init_flush_mbin
 !################################################################
@@ -2394,6 +2399,7 @@ subroutine pack_flush_mbin(c,local_peak_id,msg_size,msg_array)
   type(msg_mbin_clump)::msg
 
   msg%mbin(1:nbin)=c%mass_bin(local_peak_id,1:nbin)
+  msg%npart=c%npart(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -2416,6 +2422,7 @@ subroutine unpack_flush_mbin(c,local_peak_id,msg_size,msg_array)
   msg=transfer(msg_array,msg)
 
   c%mass_bin(local_peak_id,1:nbin)=c%mass_bin(local_peak_id,1:nbin)+msg%mbin(1:nbin)
+  c%npart(local_peak_id)=c%npart(local_peak_id)+msg%npart
 
 end subroutine unpack_flush_mbin
 !################################################################

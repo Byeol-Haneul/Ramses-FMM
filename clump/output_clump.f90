@@ -124,9 +124,10 @@ subroutine output_clump_properties(s,filename)
            rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
            mass=c%mass_bin(j,nbin)
            call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
-           write(ilun,'(I10,X,I10,1X,12(X,1PE18.9E2))')&
+           write(ilun,'(I10,X,I10,1X,I10,1X,12(X,1PE18.9E2))')&
                 j+c%npeak_cum(g%myid-1)&
                 ,c%ind_halo(j)&
+                ,c%npart(j)&
                 ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
                 ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
                 ,c%max_dens(j)&
