@@ -97,6 +97,7 @@ module cache_commons
      real(kind=dp)::mass
   end type msg_maxmass_clump
   type msg_mbin_clump
+     integer::npart
      real(kind=dp)::mass
      real(kind=dp),dimension(1:ndim)::pos
      real(kind=dp),dimension(1:nbin)::mbin
