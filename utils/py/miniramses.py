@@ -251,9 +251,9 @@ def rd_part(nout,**kwargs):
     for icpu in cpulist:
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"backup_"+car1+prefix+car2
+            filename = path+"/backup_"+car1+prefix+car2
         else:
-            filename = path+"output_"+car1+prefix+car2
+            filename = path+"/output_"+car1+prefix+car2
 
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         npart = npart + npart2
@@ -270,9 +270,9 @@ def rd_part(nout,**kwargs):
     for	icpu in	cpulist:
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"backup_"+car1+prefix+car2
+            filename = path+"/backup_"+car1+prefix+car2
         else:
-            filename = path+"output_"+car1+prefix+car2
+            filename = path+"/output_"+car1+prefix+car2
 
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         
@@ -335,7 +335,7 @@ def rd_part(nout,**kwargs):
         ipart = 0
         for icpu in cpulist:
             car2 = str(icpu).zfill(5)
-            filename = path+"output_"+car1+prefix+car2
+            filename = path+"/output_"+car1+prefix+car2
             npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
             offset = 8
             pid = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
@@ -407,9 +407,9 @@ def rd_amr(nout,**kwargs):
         car2 = str(icpu).zfill(5)
 
         if(backup):
-            filename = path+"backup_"+car1+"/amr."+car2
+            filename = path+"/backup_"+car1+"/amr."+car2
         else:
-            filename = path+"output_"+car1+"/amr."+car2
+            filename = path+"/output_"+car1+"/amr."+car2
 
         skip = 12
         for ilevel in range(levelmin-1,nlevelmax):
@@ -431,9 +431,9 @@ def rd_amr(nout,**kwargs):
         car1 = str(nout).zfill(5)
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"backup_"+car1+"/amr."+car2
+            filename = path+"/backup_"+car1+"/amr."+car2
         else:
-            filename = path+"output_"+car1+"/amr."+car2
+            filename = path+"/output_"+car1+"/amr."+car2
 
         offset = 12 + 4*(nlevelmax+1-levelmin)
         for ilevel in range(levelmin-1,nlevelmax):
@@ -490,9 +490,9 @@ def rd_hydro(nout,**kwargs):
     # Get number of hydro variables
     car1 = str(nout).zfill(5)
     if(backup):
-        filename = path+"backup_"+car1+"/"+prefix+".00001"
+        filename = path+"/backup_"+car1+"/"+prefix+".00001"
     else:
-        filename = path+"output_"+car1+"/"+prefix+".00001"
+        filename = path+"/output_"+car1+"/"+prefix+".00001"
 
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
     
@@ -512,9 +512,9 @@ def rd_hydro(nout,**kwargs):
 
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"backup_"+car1+"/"+prefix+"."+car2
+            filename = path+"/backup_"+car1+"/"+prefix+"."+car2
         else:
-            filename = path+"output_"+car1+"/"+prefix+"."+car2
+            filename = path+"/output_"+car1+"/"+prefix+"."+car2
 
         skip = 16
         for ilevel in range(levelmin-1,nlevelmax):
@@ -535,9 +535,9 @@ def rd_hydro(nout,**kwargs):
 
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"backup_"+car1+"/"+prefix+"."+car2
+            filename = path+"/backup_"+car1+"/"+prefix+"."+car2
         else:
-            filename = path+"output_"+car1+"/"+prefix+"."+car2
+            filename = path+"/output_"+car1+"/"+prefix+"."+car2
 
         offset = 16 + 4*(nlevelmax+1-levelmin)
         
@@ -774,9 +774,9 @@ def rd_info(nout,**kwargs):
 
     car1 = str(nout).zfill(5)
     if(backup):
-        filename = path+"backup_"+car1+"/info.txt"
+        filename = path+"/backup_"+car1+"/info.txt"
     else:
-        filename = path+"output_"+car1+"/info.txt"
+        filename = path+"/output_"+car1+"/info.txt"
 
     info=ascii.read(filename,delimiter="=",format='no_header')
 
@@ -1190,7 +1190,7 @@ class HaloCat:
        This function initialize the halo catalogue.
        """
        self.index = np.empty(shape=(0),dtype=int)
-       self.ncell = np.empty(shape=(0),dtype=int)
+       self.patch = np.empty(shape=(0),dtype=int)
        self.x = np.empty(shape=(0))
        self.y = np.empty(shape=(0))
        self.z = np.empty(shape=(0))
@@ -1198,10 +1198,11 @@ class HaloCat:
        self.v = np.empty(shape=(0))
        self.w = np.empty(shape=(0))
        self.dmax = np.empty(shape=(0))
+       self.mpatch = np.empty(shape=(0))
        self.mass = np.empty(shape=(0))
-       self.r200b = np.empty(shape=(0))
-       self.rvir = np.empty(shape=(0))
-       self.cvir = np.empty(shape=(0))
+       self.r200 = np.empty(shape=(0))
+       self.rmax = np.empty(shape=(0))
+       self.c200 = np.empty(shape=(0))
 
 def rd_halo(nout,**kwargs):
    """
@@ -1225,10 +1226,10 @@ def rd_halo(nout,**kwargs):
    cat = HaloCat()
    for i in range(0, ncpu):
        name = str(i+1).zfill(5)
-       file_name = path+"output_%s/halo.%s" % (output,name)
+       file_name = path+"/output_%s/halo.%s" % (output,name)
        halo_cat = ascii.read(file_name)
        index = halo_cat['index']
-       ncell = halo_cat['ncell']
+       patch = halo_cat['patch']
        x = halo_cat['pos_x']
        y = halo_cat['pos_y']
        z = halo_cat['pos_z']
@@ -1236,12 +1237,13 @@ def rd_halo(nout,**kwargs):
        v = halo_cat['vel_y']
        w = halo_cat['vel_z']
        dmax = halo_cat['rho+']
+       mpatch = halo_cat['mpatch']
        mass = halo_cat['mass']
-       r200b = halo_cat['r200b']
-       rvir = halo_cat['rvir']
-       cvir = halo_cat['cvir']
+       r200 = halo_cat['r200']
+       rmax = halo_cat['rmax']
+       c200 = halo_cat['c200']
        cat.index = np.append(cat.index,index)
-       cat.ncell = np.append(cat.ncell,ncell)
+       cat.patch = np.append(cat.patch,patch)
        cat.x = np.append(cat.x,x)
        cat.y = np.append(cat.y,y)
        cat.z = np.append(cat.z,z)
@@ -1249,10 +1251,11 @@ def rd_halo(nout,**kwargs):
        cat.v = np.append(cat.v,v)
        cat.w = np.append(cat.w,w)
        cat.dmax = np.append(cat.dmax,dmax)
+       cat.mpatch = np.append(cat.mpatch,mpatch)
        cat.mass = np.append(cat.mass,mass)
-       cat.r200b = np.append(cat.r200b,r200b)
-       cat.rvir = np.append(cat.rvir,rvir)
-       cat.cvir = np.append(cat.cvir,cvir)
+       cat.r200 = np.append(cat.r200,r200)
+       cat.rmax = np.append(cat.rmax,rmax)
+       cat.c200 = np.append(cat.c200,c200)
 
    return cat
 
@@ -1266,7 +1269,6 @@ class ClumpCat:
        """
        self.index = np.empty(shape=(0),dtype=int)
        self.halo = np.empty(shape=(0),dtype=int)
-       self.parent = np.empty(shape=(0),dtype=int)
        self.ncell = np.empty(shape=(0),dtype=int)
        self.x = np.empty(shape=(0))
        self.y = np.empty(shape=(0))
@@ -1301,11 +1303,10 @@ def rd_clump(nout,**kwargs):
    cat = ClumpCat()
    for i in range(0, ncpu):
        name = str(i+1).zfill(5)
-       file_name = path+"output_%s/clump.%s" % (output,name)
+       file_name = path+"/output_%s/clump.%s" % (output,name)
        halo_cat = ascii.read(file_name)
        index = halo_cat['index']
        halo = halo_cat['halo']
-       parent = halo_cat['parent']
        ncell = halo_cat['ncell']
        x = halo_cat['pos_x']
        y = halo_cat['pos_y']
@@ -1313,14 +1314,13 @@ def rd_clump(nout,**kwargs):
        u = halo_cat['vel_x']
        v = halo_cat['vel_y']
        w = halo_cat['vel_z']
-       mass = halo_cat['mass_cl']
+       mass = halo_cat['mass']
        dmax = halo_cat['rho+']
        dmin = halo_cat['rho-']
        dsad = halo_cat['relevance']
        dsad = dmax/dsad
        cat.index = np.append(cat.index,index)
        cat.halo = np.append(cat.halo,halo)
-       cat.parent = np.append(cat.parent,parent)
        cat.ncell = np.append(cat.ncell,ncell)
        cat.x = np.append(cat.x,x)
        cat.y = np.append(cat.y,y)

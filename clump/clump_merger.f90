@@ -1592,27 +1592,27 @@ subroutine central_in_halos(s)
           & c%halo_mass(ipeak) > c%mass_threshold.AND. &
           & c%relevance(ipeak) > c%relevance_threshold)then
 
-        ! Get 3 most massive peak patches and lock them in cache memory
+        ! Get 3 most massive peak patches
         mass1=0
         mass2=0
         mass3=0
         if(c%ind_halo_1(ipeak).NE.0)then
            global_peak_id=c%ind_halo_1(ipeak)
-           call get_peak(s,global_peak_id,jpeak1,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           call get_peak(s,global_peak_id,jpeak1,flush_cache=.false.,fetch_cache=.true.)
            if(c%clump_mass(jpeak1) > c%mass_threshold.AND. &
                 & c%relevance(jpeak1) > c%relevance_threshold)then
               mass1 = c%clump_mass(jpeak1)
            endif
            if(c%ind_halo_2(ipeak).NE.0)then
               global_peak_id=c%ind_halo_2(ipeak)
-              call get_peak(s,global_peak_id,jpeak2,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              call get_peak(s,global_peak_id,jpeak2,flush_cache=.false.,fetch_cache=.true.)
               if(c%clump_mass(jpeak2) > c%mass_threshold.AND. &
                    & c%relevance(jpeak2) > c%relevance_threshold)then
                  mass2 = c%clump_mass(jpeak2)
               endif
               if(c%ind_halo_3(ipeak).NE.0)then
                  global_peak_id=c%ind_halo_3(ipeak)
-                 call get_peak(s,global_peak_id,jpeak3,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+                 call get_peak(s,global_peak_id,jpeak3,flush_cache=.false.,fetch_cache=.true.)
                  if(c%clump_mass(jpeak3) > c%mass_threshold.AND. &
                       & c%relevance(jpeak3) > c%relevance_threshold)then
                     mass3 = c%clump_mass(jpeak3)
@@ -1632,17 +1632,6 @@ subroutine central_in_halos(s)
         endif
         if(mass2.LT.0.1*mass1)then
            mass2=0
-        endif
-
-        ! Unlock 3 most mossive peak patches
-        if(c%ind_halo_1(ipeak).NE.0)then
-           call unlock_cache_clump(s,jpeak1)
-           if(c%ind_halo_2(ipeak).NE.0)then
-              call unlock_cache_clump(s,jpeak2)
-              if(c%ind_halo_3(ipeak).NE.0)then
-                 call unlock_cache_clump(s,jpeak3)
-              endif
-           endif
         endif
 
         ! Set index of removed central to 0
@@ -1988,7 +1977,7 @@ end subroutine unpack_flush_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_split_centrals(s,p)
+subroutine particle_split_centrals(s,p,evaporate)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -1997,6 +1986,7 @@ subroutine particle_split_centrals(s,p)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
+  logical::evaporate
   !==================================================================
   ! This routine computes various clump properties.
   ! In particular, it computes for each particle its parent peak id.
@@ -2010,10 +2000,12 @@ subroutine particle_split_centrals(s,p)
   integer::i,ipart,icell,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id,global_halo_id
   integer::ipeak,jpeak,no_halo
+  integer::jpeak1,jpeak2,jpeak3
   real(dp)::pi,grav,radius,velocity,distmin
   real(dp)::dist,dist1,dist2,dist3
   real(dp)::xdist1,xdist2,xdist3
   real(dp)::vdist1,vdist2,vdist3
+  real(dp)::mass1,mass2,mass3
   real(dp),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -2190,6 +2182,57 @@ subroutine particle_split_centrals(s,p)
         end do
      endif
   end do
+
+  !------------------------------------------------
+  ! Remove centrals if cumulative mass is too small
+  !------------------------------------------------
+  if(evaporate)then
+     call open_cache_clump(s,pack_size=storage_size(dummy_prop_clump)/32,&
+          pack=pack_fetch_evaporate,unpack=unpack_fetch_evaporate)
+     do ipeak=1,c%npeak
+        global_peak_id=ipeak+c%npeak_cum(g%myid-1)
+        if(c%ind_halo(ipeak)==global_peak_id.AND.&
+             & c%halo_mass(ipeak) > c%mass_threshold.AND. &
+             & c%relevance(ipeak) > c%relevance_threshold)then
+           ! Get 3 most massive peak-patches
+           mass1=0
+           mass2=0
+           mass3=0
+           if(c%ind_halo_1(ipeak).NE.0)then
+              global_peak_id=c%ind_halo_1(ipeak)
+              call get_peak(s,global_peak_id,jpeak1,flush_cache=.false.,fetch_cache=.true.)
+              if(c%clump_mass(jpeak1) > c%mass_threshold.AND. &
+                   & c%relevance(jpeak1) > c%relevance_threshold)then
+                 mass1 = c%mass_bin(jpeak1,nbin)
+              endif
+              if(c%ind_halo_2(ipeak).NE.0)then
+                 global_peak_id=c%ind_halo_2(ipeak)
+                 call get_peak(s,global_peak_id,jpeak2,flush_cache=.false.,fetch_cache=.true.)
+                 if(c%clump_mass(jpeak2) > c%mass_threshold.AND. &
+                      & c%relevance(jpeak2) > c%relevance_threshold)then
+                    mass2 = c%mass_bin(jpeak2,nbin)
+                 endif
+                 if(c%ind_halo_3(ipeak).NE.0)then
+                    global_peak_id=c%ind_halo_3(ipeak)
+                    call get_peak(s,global_peak_id,jpeak3,flush_cache=.false.,fetch_cache=.true.)
+                    if(c%clump_mass(jpeak3) > c%mass_threshold.AND. &
+                         & c%relevance(jpeak3) > c%relevance_threshold)then
+                       mass3 = c%mass_bin(jpeak3,nbin)
+                    endif
+                 endif
+              endif
+           endif
+           ! Set index of removed central to 0
+           if(mass3.LT.c%mass_threshold.OR.mass3.LT.0.1*mass1)then
+              c%ind_halo_3(ipeak)=0
+           endif
+           if(mass2.LT.c%mass_threshold.OR.mass2.LT.0.1*mass1)then
+              c%ind_halo_2(ipeak)=0
+           endif
+        endif
+     end do
+     call close_cache(s,m%grid_dict)
+  endif
 
   end associate
 
@@ -2375,6 +2418,50 @@ subroutine unpack_flush_mbin(c,local_peak_id,msg_size,msg_array)
   c%mass_bin(local_peak_id,1:nbin)=c%mass_bin(local_peak_id,1:nbin)+msg%mbin(1:nbin)
 
 end subroutine unpack_flush_mbin
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_evaporate(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: nbin
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_prop_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_prop_clump)::msg
+
+  msg%mass=c%clump_mass(local_peak_id)
+  msg%dens=c%relevance(local_peak_id)
+  msg%vol=c%mass_bin(local_peak_id,nbin)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_evaporate
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_evaporate(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: nbin
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_prop_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_prop_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%clump_mass(local_peak_id)=msg%mass
+  c%relevance(local_peak_id)=msg%dens
+  c%mass_bin(local_peak_id,nbin)=msg%vol
+
+end subroutine unpack_fetch_evaporate
 !##############################################################################
 !##############################################################################
 !##############################################################################

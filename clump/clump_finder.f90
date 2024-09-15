@@ -191,6 +191,12 @@ subroutine clump_finder(s)
      call merge_clumps(s,'saddleden')
   endif
   !----------------------------------------------------------------------
+  ! Remove all peak-patches (resp. halo-patches) that are below
+  ! the relevance threshold or the mass threshold by setting their
+  ! flag2 (resp. flag1) field values to zero.
+  !----------------------------------------------------------------------
+  call trim_clumps(s)
+  !----------------------------------------------------------------------
   ! Find the 3 most massive central clumps in each halo (if any).
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
@@ -201,15 +207,10 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
      if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
-        call particle_split_centrals(s,s%p)
+        call particle_split_centrals(s,s%p,.true.)
+        call particle_split_centrals(s,s%p,.false.)
      endif
   endif
-  !----------------------------------------------------------------------
-  ! Remove all peak-patches (resp. halo-patches) that are below
-  ! the relevance threshold or the mass threshold by setting their
-  ! flag2 (resp. flag1) field values to zero.
-  !----------------------------------------------------------------------
-  call trim_clumps(s)
 #endif
 end subroutine clump_finder
 !################################################################

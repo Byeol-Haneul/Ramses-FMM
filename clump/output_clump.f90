@@ -93,12 +93,9 @@ subroutine output_clump_properties(s,filename)
      if (c%relevance(j) > c%relevance_threshold.AND. &
           & c%clump_mass(j) > c%mass_threshold.AND. &
           & c%halo_mass(j) > c%mass_threshold)then
-!        write(ilun,'(I10,X,I10,1X,I2,X,I10,X,I10,11(X,1PE18.9E2))')&
         write(ilun,'(I10,X,I10,1X,I10,11(X,1PE18.9E2))')&
              j+c%npeak_cum(g%myid-1)&
-             ,c%ind_halo(j)&
-!             ,c%lev_peak(j)&
-!             ,c%new_peak(j)&
+             ,c%ind_central(j)&
              ,c%n_cells(j)&
              ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
              ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
@@ -127,37 +124,19 @@ subroutine output_clump_properties(s,filename)
            rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
            mass=c%mass_bin(j,nbin)
            call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
-           write(ilun,'(I10,X,11(X,1PE18.9E2))')&
+           write(ilun,'(I10,X,I10,1X,12(X,1PE18.9E2))')&
                 j+c%npeak_cum(g%myid-1)&
+                ,c%ind_halo(j)&
                 ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
                 ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
                 ,c%max_dens(j)&
+                ,c%halo_mass(j)&
                 ,mass&
                 ,r200b&
                 ,rmax&
                 ,concentration
         endif
      enddo
-
-!!$     do j=1,c%npeak
-!!$        if(c%ind_halo(j).EQ.j+c%npeak_cum(g%myid-1).AND.&
-!!$             & c%halo_mass(j) > c%mass_threshold.AND. &
-!!$             & c%relevance(j) > c%relevance_threshold)then
-!!$           mbin=c%mass_bin(j,1:nbin)
-!!$           rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
-!!$           call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
-!!$           write(ilun,'(I10,X,I10,11(X,1PE18.9E2))')&
-!!$                j+c%npeak_cum(g%myid-1)&
-!!$                ,c%n_cells_halo(j)&
-!!$                ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
-!!$                ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
-!!$                ,c%max_dens(j)&
-!!$                ,c%halo_mass(j)&
-!!$                ,r200b&
-!!$                ,rmax&
-!!$                ,concentration
-!!$        endif
-!!$     enddo
 
      call close_file(s,fileloc,nskip,ilun)
 
