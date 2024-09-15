@@ -2166,7 +2166,7 @@ subroutine particle_split_centrals(s,p,evaporate)
            ! We use a simple linear binning as the mass is usually propto r
            if(dist<=dble(ibin)/dble(nbin)*radius)then
               c%mass_bin(ipeak,ibin)=c%mass_bin(ipeak,ibin)+p%mp(ipart)
-              c%npart=c%npart+1
+              c%npart(ipeak)=c%npart(ipeak)+1
               exit
            endif
         end do
