@@ -79,7 +79,7 @@ subroutine output_clump_properties(s,filename)
   integer::ilun,j
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(dp)::rad,mass,r200b,rmax,concentration
+  real(dp)::rad,mass,r200b,rmax,concentration,purity
   real(dp),dimension(1:nbin)::mbin
 
   associate(r=>s%r,g=>s%g,c=>s%c)
@@ -123,18 +123,23 @@ subroutine output_clump_properties(s,filename)
            mbin=c%mass_bin(j,1:nbin)
            rad=2d0*(c%halo_mass(j)/4d0/3.1415926*3d0/200d0)**(1d0/3d0)
            mass=c%mass_bin(j,nbin)
-           call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
-           write(ilun,'(I10,X,I10,1X,I10,12(X,1PE18.9E2))')&
-                j+c%npeak_cum(g%myid-1)&
-                ,c%ind_halo(j)&
-                ,c%npart(j)&
-                ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
-                ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
-                ,c%halo_mass(j)&
-                ,mass&
-                ,r200b&
-                ,rmax&
-                ,concentration
+           if(mass>0)then
+              purity=c%npart(j)*g%mp_min/mass
+              if(purity>0.98)then
+                 call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
+                 write(ilun,'(I10,X,I10,1X,I10,12(X,1PE18.9E2))')&
+                      j+c%npeak_cum(g%myid-1)&
+                      ,c%ind_halo(j)&
+                      ,c%npart(j)&
+                      ,c%peak_pos(j,1),c%peak_pos(j,2),c%peak_pos(j,3)&
+                      ,c%peak_vel(j,1),c%peak_vel(j,2),c%peak_vel(j,3)&
+                      ,c%halo_mass(j)&
+                      ,mass&
+                      ,r200b&
+                      ,rmax&
+                      ,concentration
+              endif
+           endif
         endif
      enddo
 
