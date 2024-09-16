@@ -1623,11 +1623,6 @@ subroutine central_in_halos(s)
            endif
         endif
 
-        ! Check that we have a most massive clump
-        if(mass1.EQ.0)then
-           write(*,*)'Problem: we need at least one central galaxy.'
-        endif
-        
         ! Remove centrals if not massive enough according to several criteria
         if(mass3.LT.0.1*mass1)then
            mass3=0
