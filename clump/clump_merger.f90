@@ -315,19 +315,19 @@ subroutine allocate_peak_patch_arrays(s)
   !-------------------------------
   ! Allocate halo-patch properties
   !-------------------------------
-  allocate(c%halo_mass(1:c%npeak_max))
-  allocate(c%ind_halo(1:c%npeak_max))
-  allocate(c%n_cells_halo(1:c%npeak_max))
-
-  allocate(c%max_peak_mass(1:c%npeak_max))
-  allocate(c%ind_max_mass(1:c%npeak_max))
-  allocate(c%ind_halo_1(1:c%npeak_max))
-  allocate(c%ind_halo_2(1:c%npeak_max))
-  allocate(c%ind_halo_3(1:c%npeak_max))
-  allocate(c%ind_central(1:c%npeak_max))
-
-  allocate(c%mass_bin(1:c%npeak_max,1:nbin))
-  allocate(c%npart(1:c%npeak_max))
+  if(c%saddle_threshold>0)then
+     allocate(c%halo_mass(1:c%npeak_max))
+     allocate(c%ind_halo(1:c%npeak_max))
+     allocate(c%n_cells_halo(1:c%npeak_max))
+     allocate(c%max_peak_mass(1:c%npeak_max))
+     allocate(c%ind_max_mass(1:c%npeak_max))
+     allocate(c%ind_halo_1(1:c%npeak_max))
+     allocate(c%ind_halo_2(1:c%npeak_max))
+     allocate(c%ind_halo_3(1:c%npeak_max))
+     allocate(c%ind_central(1:c%npeak_max))
+     allocate(c%mass_bin(1:c%npeak_max,1:nbin))
+     allocate(c%npart(1:c%npeak_max))
+  endif
 
   !-----------------------------------
   ! Allocate sink particles properties
@@ -360,11 +360,6 @@ subroutine allocate_peak_patch_arrays(s)
   ! Allocate cache comms
   !---------------------
   call init_cache_clump(s%mdl)
-
-  !------------------------------------------------
-  ! Initialize all peak based arrays for clump finder
-  !------------------------------------------------
-  c%lev_peak=0; c%new_peak=0; c%ind_halo=0; c%relevance=1
 
   end associate
 
@@ -443,20 +438,21 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%particle_mass)
 
   ! Deallocate halo-patch arrays
-  deallocate(c%halo_mass)
-  deallocate(c%ind_halo)
-  deallocate(c%n_cells_halo)
+  if(c%saddle_threshold>0)then
+     deallocate(c%halo_mass)
+     deallocate(c%ind_halo)
+     deallocate(c%n_cells_halo)
+     deallocate(c%mass_bin)
+     deallocate(c%npart)
+     deallocate(c%max_peak_mass)
+     deallocate(c%ind_max_mass)
+     deallocate(c%ind_halo_1)
+     deallocate(c%ind_halo_2)
+     deallocate(c%ind_halo_3)
+     deallocate(c%ind_central)
+  endif
 
-  deallocate(c%mass_bin)
-  deallocate(c%npart)
-
-  deallocate(c%max_peak_mass)
-  deallocate(c%ind_max_mass)
-  deallocate(c%ind_halo_1)
-  deallocate(c%ind_halo_2)
-  deallocate(c%ind_halo_3)
-  deallocate(c%ind_central)
-
+  ! Deallocate sink arrays
   if(r%sink)then
      deallocate(c%occupied_sink)
      deallocate(c%form_sink)
@@ -1026,7 +1022,7 @@ subroutine merge_clumps(s,action)
 
      do ilev=idepth-2,0,-1
         call open_cache_clump(s,pack_size=storage_size(dummy_merge_clump)/32,&
-             pack=pack_fetch_merge,unpack=unpack_fetch_merge)
+             pack=pack_fetch_ihalo,unpack=unpack_fetch_ihalo)
         do ipeak=1,c%npeak
            if(c%lev_peak(ipeak)==ilev)then
               merge_to=c%ind_halo(ipeak)
@@ -1080,7 +1076,6 @@ subroutine pack_fetch_merge(c,local_peak_id,msg_size,msg_array)
   type(msg_merge_clump)::msg
 
   msg%npeak=c%new_peak(local_peak_id)
-  msg%nhalo=c%ind_halo(local_peak_id)
   msg%mdens=c%max_dens(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
@@ -1104,9 +1099,46 @@ subroutine unpack_fetch_merge(c,local_peak_id,msg_size,msg_array)
 
   c%max_dens(local_peak_id)=msg%mdens
   c%new_peak(local_peak_id)=msg%npeak
-  c%ind_halo(local_peak_id)=msg%nhalo
 
 end subroutine unpack_fetch_merge
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_ihalo(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_merge_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_merge_clump)::msg
+
+  msg%npeak=c%ind_halo(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_ihalo
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_ihalo(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_merge_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_merge_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%ind_halo(local_peak_id)=msg%npeak
+
+end subroutine unpack_fetch_ihalo
 !################################################################
 !################################################################
 !################################################################
@@ -1277,7 +1309,7 @@ subroutine compute_clump_properties(s,rtype)
   ! Loop over all cells above the threshold and compute mass, volume...
   !--------------------------------------------------------------------------
   c%min_dens=huge(zero); c%n_cells=0
-  c%halo_mass=0d0; c%clump_mass=0d0; c%clump_vol=0d0
+  c%clump_mass=0d0; c%clump_vol=0d0
 
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        init=init_flush_prop,flush=pack_flush_prop,combine=unpack_flush_prop)
@@ -1318,7 +1350,9 @@ subroutine compute_clump_properties(s,rtype)
   call close_cache(s,m%grid_dict)
 
   ! Initialize halo mass to clump mass
-  c%halo_mass(1:c%npeak)=c%clump_mass(1:c%npeak)
+  if(c%saddle_threshold>0)then
+     c%halo_mass(1:c%npeak)=c%clump_mass(1:c%npeak)
+  endif
 
   ! Calculate total mass above threshold
   tot_mass=sum(c%clump_mass(1:c%npeak))
@@ -1470,7 +1504,9 @@ subroutine pack_fetch_prop(c,local_peak_id,msg_size,msg_array)
 
   msg%dens=c%relevance(local_peak_id)
   msg%mass=c%clump_mass(local_peak_id)
-  msg%vol=c%halo_mass(local_peak_id)
+  if(c%saddle_threshold>0)then
+     msg%vol=c%halo_mass(local_peak_id)
+  endif
 
   msg_array=transfer(msg,msg_array)
 
@@ -1493,7 +1529,9 @@ subroutine unpack_fetch_prop(c,local_peak_id,msg_size,msg_array)
 
   c%relevance(local_peak_id)=msg%dens
   c%clump_mass(local_peak_id)=msg%mass
-  c%halo_mass(local_peak_id)=msg%vol
+  if(c%saddle_threshold>0)then
+     c%halo_mass(local_peak_id)=msg%vol
+  endif
 
 end subroutine unpack_fetch_prop
 !################################################################

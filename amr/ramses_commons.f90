@@ -159,7 +159,7 @@ subroutine open_file(s,filename,nskip,ilun)
         if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*nvar)*noct(ilevel)
 #endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*noct(ilevel)
-        if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*2)*noct(ilevel)
+        if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*3)*noct(ilevel)
      end do
 
   elseif(g%myid.GT.istart(ifile))then
@@ -247,7 +247,7 @@ subroutine close_file(s,filename,nskip,ilun)
         if(index(filename,'hydro').NE.0)iskip=iskip+(4*twotondim*nvar)*m%noct(ilevel)
 #endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*m%noct(ilevel)
-        if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*2)*m%noct(ilevel)
+        if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*3)*m%noct(ilevel)
         nskip(ilevel)=iskip
      end do
 

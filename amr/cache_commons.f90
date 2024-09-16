@@ -74,7 +74,6 @@ module cache_commons
   end type msg_saddle_clump
   type msg_merge_clump
      integer(kind=8)::npeak
-     integer(kind=8)::nhalo
      real(kind=dp)::mdens
   end type msg_merge_clump
   type msg_halo_clump
