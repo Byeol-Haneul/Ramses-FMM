@@ -62,7 +62,7 @@ ifeq ($(COMPILER),GNU)
    F90 += -ffree-line-length-none -fimplicit-none
    FC += -ffree-line-length-none -fimplicit-none
    ifeq ($(DEBUG),1)
-      F90 += -O0 -fbounds-check
+      F90 += -O0 -fcheck=bounds
       FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
    else
       F90 += -O3
@@ -90,13 +90,34 @@ ifeq ($(COMPILER),INTEL)
    endif
 endif
 #############################################################################
+# NVHPC compiler
+ifeq ($(COMPILER),NVHPC)
+   FFLAGS = -cpp $(DEFINES)
+   ifeq ($(MPI),1)
+      F90 = $(MPIF90)
+      FC = nvfortran
+   else
+      F90 = nvfortran
+      FC = nvfortran
+      FFLAGS += -DWITHOUTMPI
+   endif
+   F90 += -Mfreeform
+   FC += -Mfreeform
+   ifeq ($(DEBUG),1)
+      F90 += -O0 -Mbounds -traceback
+      FFLAGS += -O0 -ffpe-trap=zero,overflow,invalid -Minit-real=snan
+   else
+      F90 += -O4
+   endif
+endif
+#############################################################################
 C = ifort
 CFLAGS = -g -O3
 #############################################################################
 MOD = mod
 #############################################################################
 # MPI librairies
-LIBMPI = 
+LIBMPI =
 #LIBMPI = -lfmpi -lmpi -lelan
 ifeq ($(HDF5),1)
    LIBHDF5 = -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
