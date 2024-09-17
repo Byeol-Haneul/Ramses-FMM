@@ -20,7 +20,10 @@ subroutine get_peak(s,global_peak_id,local_peak_id,flush_cache,fetch_cache,lock)
   logical::flush_cache
   logical::fetch_cache
   logical,optional::lock
-
+  !-----------------------------------------------------------
+  ! This routine implement the cache request for a peak patch
+  ! that is in distant MPI memory.
+  !-----------------------------------------------------------
   logical::failed_request
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::send_request_status_clump
@@ -218,10 +221,10 @@ subroutine lock_cache_clump(s,local_peak_id)
   implicit none
   type(ramses_t)::s
   integer::local_peak_id
-  !
+  !----------------------------------------------------
   ! This routine locks a cache line because
   ! it will be updated later.
-  !
+  !----------------------------------------------------
   integer::icache
   if(local_peak_id<=s%c%npeak)return
   icache=local_peak_id-s%c%npeak
@@ -236,10 +239,10 @@ subroutine unlock_cache_clump(s,local_peak_id)
   implicit none
   type(ramses_t)::s
   integer::local_peak_id
-  !
+  !----------------------------------------------------
   ! This routine unlocks a cache line because
   ! it has been updated and can be flushed.
-  !
+  !----------------------------------------------------
   integer::icache
   if(local_peak_id<=s%c%npeak)return
   icache=local_peak_id-s%c%npeak
@@ -257,21 +260,20 @@ subroutine get_global_peak_cpu(s,global_peak_id,peak_cpu)
   type(ramses_t)::s
   integer(kind=8)::global_peak_id
   integer::peak_cpu
-  ! get the mpi-domain a peak with input global id
+  !----------------------------------------------------
+  ! This routine returns the mpi domain of a peak with
+  ! input argument the peak global id
+  !----------------------------------------------------
   integer::icpu
-
   associate(g=>s%g,c=>s%c)
-
-    peak_cpu = g%ncpu
-    do icpu = 1,g%ncpu
-       if(    global_peak_id > c%npeak_cum(icpu-1) .and. &
-            & global_peak_id <= c%npeak_cum(icpu))then
-          peak_cpu = icpu
-       endif
-    end do
-
+  peak_cpu = g%ncpu
+  do icpu = 1,g%ncpu
+     if(    global_peak_id > c%npeak_cum(icpu-1) .and. &
+          & global_peak_id <= c%npeak_cum(icpu))then
+        peak_cpu = icpu
+     endif
+  end do
   end associate
-
 end subroutine get_global_peak_cpu
 !################################################################
 !################################################################
@@ -283,9 +285,11 @@ subroutine allocate_peak_patch_arrays(s)
   use ramses_commons, ONLY: ramses_t
   implicit none
   type(ramses_t)::s
-
+  !----------------------------------------------------
+  ! This routine allocate all arrays that are needed at 
+  ! different steps of the clump finder.
+  !----------------------------------------------------
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
-
   !------------------------------------------
   ! Compute the max size of peak-based arrays
   !------------------------------------------
@@ -398,7 +402,10 @@ subroutine deallocate_peak_patch_arrays(s)
   use hash, only: reset_entire_hash_simple
   implicit none
   type(ramses_t)::s
-
+  !----------------------------------------------------
+  ! This routine deallocates all arrays that habe been 
+  ! previously allocated by the clump finder.
+  !----------------------------------------------------
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
   ! Deallocate test particle arrays
@@ -487,11 +494,11 @@ subroutine collect_saddle(s)
   use nbors_utils
   implicit none
   type(ramses_t)::s
-  !===================================================================
+  !-------------------------------------------------------------------
   ! This is the clump finder routine for collecting the densest saddle
   ! points between each patch and its corresponding neighbor.
   ! Written by Ziyong Wu (mini-ramses version December 2023).
-  !==================================================================
+  !-------------------------------------------------------------------
   type(msg_int4_small_realdp)::dummy_int4_small_realdp
   type(msg_saddle_clump)::dummy_saddle_clump
   type(oct),pointer::gridn
@@ -1441,7 +1448,7 @@ subroutine trim_clumps(s)
   implicit none
   type(ramses_t)::s
   !----------------------------------------------------------------------------
-  ! This subroutine remove all clumps and halosthat are considered irrelevant.
+  ! This subroutine remove all clumps and halos that are considered irrelevant.
   ! They are removed because their relevance (or peakiness) is below the
   ! relevance threshold or because their mass is too small.
   ! The flag1 and flag2 arrays are modified accordingly.
@@ -1558,10 +1565,6 @@ subroutine central_in_halos(s)
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering central_halos'
-
-  !--------------------------------------
-  ! Find most massive peaks in each halo
-  !--------------------------------------
 
   ! Identify most massive peak within each halo
   c%ind_halo_1=0
@@ -1840,14 +1843,13 @@ subroutine particle_clump_properties(s,p)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  !==================================================================
-  ! This routine computes various clump properties.
+  !------------------------------------------------------------------
+  ! This routine computes various particle-based clump properties.
   ! In particular, it computes for each particle its parent peak id.
   ! This is used to compute mass profiles for each halo.
   ! This is also stored in the peak_part and peak_star files.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
-  !==================================================================
-  ! Local variables
+  !------------------------------------------------------------------
   type(msg_prop_clump)::dummy_prop_clump
   integer::i,ipeak,ipart,icell,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id,global_halo_id
@@ -2022,14 +2024,13 @@ subroutine particle_split_centrals(s,p,evaporate)
   type(ramses_t)::s
   type(part_t)::p
   logical::evaporate
-  !==================================================================
-  ! This routine computes various clump properties.
-  ! In particular, it computes for each particle its parent peak id.
-  ! This is used to compute mass profiles for each halo.
-  ! This is also stored in the peak_part and peak_star files.
+  !------------------------------------------------------------------
+  ! This routine splits all particle of a given halo-patch among 
+  ! the 1, 2 or 3 central peaks. It used a clustering method
+  ! in phase space to assign particles to a central peak.
+  ! The central peak id is stoted in the workp array.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
-  !==================================================================
-  ! Local variables
+  !------------------------------------------------------------------
   type(msg_prop_clump)::dummy_prop_clump
   type(msg_mbin_clump)::dummy_mbin_clump
   integer::i,ipart,icell,ind,idim,ibin,ilevel
@@ -2283,7 +2284,9 @@ function cmp_distance(x1,x2,radius,v1,v2,velocity,boxlen)
   real(dp),dimension(1:ndim)::x1,x2,v1,v2
   real(dp)::radius,velocity,boxlen
   real(dp)::cmp_distance
-
+  !-----------------------------------------------------------
+  ! This function computes the phase-space Euclidian distance
+  !-----------------------------------------------------------
   integer::idim
   real(dp)::xdist,vdist
   real(dp),dimension(1:ndim)::xpart,vpart
@@ -2521,12 +2524,11 @@ subroutine particle_peak_id(s,p,no_peak)
   type(ramses_t)::s
   type(part_t)::p
   integer::no_peak
-  !==================================================================
+  !-------------------------------------------------------------------
   ! This routine reads from the grid peak map (flag2) the peak id
   ! of the input particle object. It could be dark matter or stars.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
-  !==================================================================
-  ! Local variables
+  !-------------------------------------------------------------------
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::i,ipart,icell,ind,idim,ibin,ilevel
@@ -2625,12 +2627,11 @@ subroutine particle_halo_id(s,p,no_peak)
   type(ramses_t)::s
   type(part_t)::p
   integer::no_peak
-  !==================================================================
+  !------------------------------------------------------------------
   ! This routine reads from the grid peak map (flag1) the peak id
   ! of the input particle object. It could be dark matter or stars.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
-  !==================================================================
-  ! Local variables
+  !------------------------------------------------------------------
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::i,ipart,icell,ind,idim,ibin,ilevel

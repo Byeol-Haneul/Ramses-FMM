@@ -226,12 +226,12 @@ subroutine collect_test(s)
 #endif
   implicit none
   type(ramses_t)::s
-  !==================================================================
+  !------------------------------------------------------------------
   ! This is the clump finder routine for collecting test particles
   ! also known as all cells above the prescribed density threshold.
   ! Count number of test particles and share info across processors
   ! Written by Ziyong Wu (mini-ramses version December 2023).
-  !==================================================================
+  !------------------------------------------------------------------
 #ifndef WITHOUTMPI
   integer::info
   integer,dimension(1:s%g%ncpu)::ntest_cpu_all
@@ -373,14 +373,14 @@ subroutine collect_peak(s)
 #endif
   implicit none
   type(ramses_t)::s
-  !===================================================================
+  !------------------------------------------------------------------
   ! This is the clump finder routine for collecting densest
   ! neighbors. Only scan cells above the density threshold.
   ! Density peaks are cells without densest neighbors.
   ! Count number of density peaks and share info across processors.
   ! Store the hash key of the densest neighbor for later usage.
   ! Written by Ziyong Wu (mini-ramses version December 2023).
-  !==================================================================
+  !------------------------------------------------------------------
 #ifndef WITHOUTMPI
   integer::info
   integer,dimension(1:s%g%ncpu)::npeak_cpu_all
@@ -578,15 +578,16 @@ subroutine collect_patch(s)
 #endif
   implicit none
   type(ramses_t)::s
-  !==================================================================
+  !------------------------------------------------------------------
   ! This is the clump finder routine for segmenting the density
   ! field into peak patches around each density peak.
   ! - loop over cells in descending density order
   ! - propagate peak id from densest neighbor
   ! - nmove is the number of peak id's passed along
-  ! - done when nmove_tot=0 (for single core, only one sweep is necessary)
+  ! - done when nmove_tot=0
+  ! For single core, only one sweep is necessary.
   ! Written by Ziyong Wu (mini-ramses version December 2023).
-  !==================================================================
+  !------------------------------------------------------------------
 #ifndef WITHOUTMPI
   integer::info
   integer(kind=8)::nmove_all,nzero_all
