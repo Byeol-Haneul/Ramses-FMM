@@ -1332,6 +1332,23 @@ def rd_clump(nout,**kwargs):
        cat.dmin = np.append(cat.dmin,dmin)
        cat.dsad = np.append(cat.dsad,dsad)
 
+   if ( not (center is None)  and not (radius is None) ):
+       # Filtering clumps
+       r = np.sqrt((cat.x[0]-center[0])**2+(cat.x[1]-center[1])**2+(cat.x[2]-center[2])**2)
+       cat.index = cat.index[r < radius]
+       cat.halo = cat.halo[r < radius]
+       cat.ncell = cat.ncell[r < radius]
+       cat.x  = cat.x[r < radius]
+       cat.y  = cat.y[r < radius]
+       cat.z  = cat.z[r < radius]
+       cat.u  = cat.u[r < radius]
+       cat.v  = cat.v[r < radius]
+       cat.w  = cat.w[r < radius]
+       cat.mass = cat.mass[r < radius]
+       cat.dmax = cat.dmax[r < radius]
+       cat.dmin = cat.dmin[r < radius]
+       cat.dsad = cat.dsad[r < radius]
+        
    return cat
 
 class GraficFile:
