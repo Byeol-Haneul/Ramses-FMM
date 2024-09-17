@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib
 from matplotlib import pyplot as plt
 from scipy.io import FortranFile
-from tqdm import tqdm
 from astropy.io import ascii
 import os
 
