@@ -1,5 +1,5 @@
 module cache_commons
-  use amr_parameters, only: dp,ndim,twotondim
+  use amr_parameters, only: dp,ndim,twotondim,nbin
   use hydro_parameters, only: nvar
   use call_back
 
@@ -74,7 +74,6 @@ module cache_commons
   end type msg_saddle_clump
   type msg_merge_clump
      integer(kind=8)::npeak
-     integer(kind=8)::nhalo
      real(kind=dp)::mdens
   end type msg_merge_clump
   type msg_halo_clump
@@ -83,6 +82,7 @@ module cache_commons
   end type msg_halo_clump
   type msg_prop_clump
      integer::ncell
+     integer(kind=8),dimension(1:3)::ind
      real(kind=dp)::dens
      real(kind=dp)::mass
      real(kind=dp)::vol
@@ -95,6 +95,12 @@ module cache_commons
      integer(kind=8)::ind2
      real(kind=dp)::mass
   end type msg_maxmass_clump
+  type msg_mbin_clump
+     integer::npart
+     real(kind=dp)::mass
+     real(kind=dp),dimension(1:ndim)::pos
+     real(kind=dp),dimension(1:nbin)::mbin
+  end type msg_mbin_clump
 
   ! Cache call back functions
   type(cache_f)       ::pack_fetch

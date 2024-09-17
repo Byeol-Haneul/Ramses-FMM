@@ -398,7 +398,6 @@ subroutine godfine1(s,ind_grid,ilevel,h)
      end do
   end do
   ! End over octs
-  end do
 
   !-----------------------------------------------
   ! Compute flux using second-order Godunov method

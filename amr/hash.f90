@@ -166,7 +166,7 @@ contains
     integer :: i
 
     ! Compute sizes and allocate arrays
-    htable%total_size = int(htable%size/4,kind=4) + int(htable%size,kind=4)
+    htable%total_size = int(htable%size,kind=4) + int(htable%size,kind=4)
     htable%nfree = int(htable%size,kind=4)
     htable%nfree_chain = htable%total_size - int(htable%size,kind=4)
     htable%head_free = int(htable%size,kind=4) + 1

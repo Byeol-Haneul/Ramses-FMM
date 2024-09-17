@@ -260,6 +260,8 @@ module amr_commons
      integer::rho_type_clump=1
      logical::output_peak_part=.false.
      logical::output_peak_star=.false.
+     logical::output_halo_part=.false.
+     logical::output_halo_star=.false.
      real(dp)::relevance_threshold=2
      real(dp)::density_threshold=-1
      real(dp)::saddle_threshold=-1

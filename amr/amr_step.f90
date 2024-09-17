@@ -96,7 +96,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         endif
      endif
   endif
-  
+
   !-------------------------
   ! Sink formation in clumps
   !-------------------------
