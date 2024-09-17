@@ -1334,7 +1334,7 @@ def rd_clump(nout,**kwargs):
 
    if ( not (center is None)  and not (radius is None) ):
        # Filtering clumps
-       r = np.sqrt((cat.x[0]-center[0])**2+(cat.x[1]-center[1])**2+(cat.x[2]-center[2])**2)
+       r = np.sqrt((cat.x-center[0])**2+(cat.y-center[1])**2+(cat.z-center[2])**2)
        cat.index = cat.index[r < radius]
        cat.halo = cat.halo[r < radius]
        cat.ncell = cat.ncell[r < radius]
