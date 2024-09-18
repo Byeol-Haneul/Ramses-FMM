@@ -1,18 +1,20 @@
 subroutine write_gitinfo
-  use amr_parameters, ONLY:builddate,patchdir,gitrepo,gitbranch,githash
+  use amr_parameters, ONLY:builddate,buildcommand,patchdir,gitrepo,gitbranch,githash
 
   builddate = BUILDDATE
-  patchdir  = PATCH
-  gitrepo   = GITREPO
+  buildcommand = BUILDCOMMAND
+  patchdir = PATCH
+  gitrepo = GITREPO
   gitbranch = GITBRANCH
-  githash   = GITHASH
+  githash = GITHASH
 
   write(*,*)' '
   write(*,'(" compile date = ",A)')TRIM(builddate)
-!  write(*,'(" patch dir    = ",A)')TRIM(patchdir)
-  write(*,'(" remote repo  = ",A)')TRIM(gitrepo)
+  write(*,'(" compile command = ",A)')TRIM(buildcommand)
+  !  write(*,'(" patch dir    = ",A)')TRIM(patchdir)
+  write(*,'(" remote repo = ",A)')TRIM(gitrepo)
   write(*,'(" local branch = ",A)')TRIM(gitbranch)
-  write(*,'(" last commit  = ",A)')TRIM(githash)
+  write(*,'(" last commit = ",A)')TRIM(githash)
   write(*,*)' '
 
 end subroutine write_gitinfo

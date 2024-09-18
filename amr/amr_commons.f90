@@ -355,11 +355,11 @@ module amr_commons
      logical ::use_proper_time=.false.
      
      ! Executable identification
-     CHARACTER(LEN=80)::builddate,patchdir
-     CHARACTER(LEN=80)::gitrepo,gitbranch,githash
+     CHARACTER(LEN=300)::builddate,buildcommand,patchdir
+     CHARACTER(LEN=300)::gitrepo,gitbranch,githash
      
      ! Save namelist filename
-     CHARACTER(LEN=80)::namelist_file
+     CHARACTER(LEN=300)::namelist_file
      
      ! Friedman model variables
      real(dp),dimension(0:n_frw)::aexp_frw,hexp_frw,tau_frw,t_frw
