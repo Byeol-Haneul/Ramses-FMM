@@ -14,4 +14,4 @@ This namelist block, called `&OUTPUT_PARAMS`, is used to set up the output strat
 | `bkp_modulo=0`   | `integer` | Backup files are written using a numbering scheme that cycles modulo the prescribed number. Default value of 0 means never. A value of 1 corresponds to only 1 backup file at all time, with the risk of loosing it if something goes wrong during the write. Preferred values are 2 or 3. | 
 | `run_time_hrs=0` | `real` | Esimated wallclock time of the current job in hours. This is used to dump a last backup file just before the end of the simulation. Default value of 0 means this is not used.|
 | `bkp_last_min=10` | `real` | Dump the last backup file just before the end of the simulation using the prescribed time in minutes. |
-
+| `foutput=N` | `integer` | Frequency of outputs in units of main time steps. If N=0 then no output files are generated. |
