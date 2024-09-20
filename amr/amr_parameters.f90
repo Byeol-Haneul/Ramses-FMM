@@ -68,11 +68,11 @@ module amr_parameters
   real(kind=8),parameter ::Y_He    = 0.24 ! Helium mass fraction
 
   ! Executable identification
-  CHARACTER(LEN=80)::builddate,patchdir
-  CHARACTER(LEN=80)::gitrepo,gitbranch,githash
+  CHARACTER(LEN=300)::builddate,buildcommand,patchdir
+  CHARACTER(LEN=300)::gitrepo,gitbranch,githash
 
   ! Save namelist filename
-  CHARACTER(LEN=80)::namelist_file
+  CHARACTER(LEN=300)::namelist_file
 
 end module amr_parameters
 

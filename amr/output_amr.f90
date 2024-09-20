@@ -199,9 +199,10 @@ subroutine output_compil(filename)
   ! Copy compilation details to output directory
   OPEN(UNIT=11, FILE=filename, FORM='formatted')
   write(11,'(" compile date = ",A)')TRIM(builddate)
-  write(11,'(" remote repo  = ",A)')TRIM(gitrepo)
+  write(11,'(" compile command = ",A)')TRIM(buildcommand)
+  write(11,'(" remote repo = ",A)')TRIM(gitrepo)
   write(11,'(" local branch = ",A)')TRIM(gitbranch)
-  write(11,'(" last commit  = ",A)')TRIM(githash)
+  write(11,'(" last commit = ",A)')TRIM(githash)
   write(11,'(" PATCH = ",A)')TRIM(patchdir)
   write(mystring,*)nhilbert
   write(11,'(" NHILBERT = ",A)')adjustl(mystring)

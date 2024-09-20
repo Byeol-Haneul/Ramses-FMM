@@ -8,3 +8,6 @@ utils/f90/*
 # ignore python cache files
 utils/py/*
 !utils/py/*.py
+
+# ignore editor settings
+.vscode
