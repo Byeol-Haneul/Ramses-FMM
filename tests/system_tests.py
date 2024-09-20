@@ -13,7 +13,7 @@ def system_tester():
             self.repo_root = pathlib.Path(__file__).resolve().parents[1]
             self.bin_dir = self.repo_root / "bin"
             self.ranks = 22
-            self.system_test_allowed_error = 1.0E-15
+            self.system_test_allowed_error = 1.0e-15
 
         def build_run_and_test(self, build_options, test_name, output_num=2):
             # Build Ramses
@@ -28,7 +28,7 @@ def system_tester():
         def build_ramses(self, build_options: list[str]):
             # Define make commands and ramses executable name
             make_clean = ["make", "clean"]
-            build_command = ["make"] + build_options + ["COMPILER=NVHPC", 'MPI=1']
+            build_command = ["make"] + build_options + ["COMPILER=NVHPC", "MPI=1"]
 
             dims = next((s for s in build_command if "NDIM" in s))[
                 -1
@@ -79,8 +79,14 @@ def system_tester():
             self.test_dir.mkdir(exist_ok=True)
 
             # Run Ramses
-            namelist_file = self.repo_root / "namelist" / f"{test_name}.nml"
-            run_command = ['mpirun', '-n', f'{self.ranks}', self.ramses_path.as_posix(), namelist_file.as_posix()]
+            namelist_file = self.repo_root / "tests" / "namelist" / f"{test_name}.nml"
+            run_command = [
+                "mpirun",
+                "-n",
+                f"{self.ranks}",
+                self.ramses_path.as_posix(),
+                namelist_file.as_posix(),
+            ]
             with open(self.test_dir / "run.log", "w") as log_file:
                 subprocess.run(
                     run_command,
@@ -113,8 +119,9 @@ def test_system_sedov2d(system_tester):
 
     system_tester.build_run_and_test(build_options, test_name)
 
+
 def test_system_sedov3d(system_tester):
     build_options = ["NDIM=3", "HYDRO=1"]
-    test_name = "sedov3d_system_test"
+    test_name = "sedov3d"
 
     system_tester.build_run_and_test(build_options, test_name)
