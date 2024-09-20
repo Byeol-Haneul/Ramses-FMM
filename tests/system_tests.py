@@ -99,7 +99,7 @@ def system_tester():
         def check_results(self, test_name, output_num=2):
             # Load test & fiducial data
             fiducial_path = (
-                self.repo_root / "mini-ramses-test-data" / "system_tests" / test_name
+                self.repo_root / "tests" / "mini-ramses-test-data" / "system_tests" / test_name
             )
             fiducial_data = ram.rd_cell(output_num, path=fiducial_path.as_posix())
             test_data = ram.rd_cell(output_num, path=self.test_dir.as_posix())
