@@ -12,7 +12,7 @@ def system_tester():
             # define some useful paths
             self.repo_root = pathlib.Path(__file__).resolve().parents[1]
             self.bin_dir = self.repo_root / "bin"
-            self.ranks = 1
+            self.ranks = 22
             self.system_test_allowed_error = 1.0E-15
 
         def build_run_and_test(self, build_options, test_name, output_num=2):
@@ -113,14 +113,8 @@ def test_system_sedov2d(system_tester):
 
     system_tester.build_run_and_test(build_options, test_name)
 
-# def test_system_double_mach(system_tester):
-#     build_options = ["NDIM=2", "HYDRO=1", 'INIT=DOUBLEMACH']
-#     test_name = "doublemach"
+def test_system_sedov3d(system_tester):
+    build_options = ["NDIM=3", "HYDRO=1"]
+    test_name = "sedov3d_system_test"
 
-#     system_tester.build_run_and_test(build_options, test_name, output_num=5)
-
-# def test_system_loop(system_tester):
-#     build_options = ["NDIM=2", "HYDRO=1", 'INIT=LOOP', 'MHD=1']
-#     test_name = "loop"
-
-#     system_tester.build_run_and_test(build_options, test_name)
+    system_tester.build_run_and_test(build_options, test_name)
