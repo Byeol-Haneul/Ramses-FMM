@@ -690,7 +690,7 @@ subroutine cic_part(s,p,ilevel,rtype)
   real(kind=8)::dx_loc,vol_loc
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::star
+  logical::star,sink
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -698,9 +698,10 @@ subroutine cic_part(s,p,ilevel,rtype)
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
-  ! Are particles stars?
-  star = allocated(p%tp)
-  
+  ! Are particles stars or sinks?
+  star = p%type.eq.STAR_TYPE
+  sink = p%type.eq.SINK_TYPE
+
   ! Sort particle according to current level Hilbert key
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
      p%sortp(i)=i
@@ -740,7 +741,7 @@ subroutine cic_part(s,p,ilevel,rtype)
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
-     
+
      ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
      do idim=1,ndim
         dd(idim)=x(idim)+0.5D0
