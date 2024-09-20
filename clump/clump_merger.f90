@@ -1913,9 +1913,14 @@ subroutine particle_clump_properties(s,p)
         c%peak_com(ipeak,1:ndim)=c%peak_com(ipeak,1:ndim)/c%particle_mass(ipeak)
      end if
      c%peak_com(ipeak,1:ndim)=c%peak_com(ipeak,1:ndim)+c%peak_pos(ipeak,1:ndim)
+     ! Periodic boundary conditions
+     do idim=1,ndim
+        if(c%peak_com(ipeak,idim)<   0.0d0 )c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)+r%boxlen
+        if(c%peak_com(ipeak,idim)>=r%boxlen)c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)-r%boxlen
+     end do
   end do
 
-  end associate
+ end associate
 
 end subroutine particle_clump_properties
 !################################################################

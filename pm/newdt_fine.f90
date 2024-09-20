@@ -53,8 +53,10 @@ subroutine m_newdt_fine(pst,ilevel)
      fourpi=4.0d0*ACOS(-1.0d0)
      if(r%cosmo)fourpi=1.5d0*g%omega_m*g%aexp
      threepi2=3.0d0*ACOS(-1.0d0)**2
-     tff=sqrt(threepi2/8./fourpi/g%rho_max(ilevel))
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%courant_factor*tff)
+     if(g%rho_max(ilevel)>0)then
+        tff=sqrt(threepi2/8./fourpi/g%rho_max(ilevel))
+        g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%courant_factor*tff)
+     endif
   end if
 
   ! Cosmic-expansion-based Courant condition
