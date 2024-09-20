@@ -38,6 +38,7 @@ module clfind_commons
        real(dp),allocatable,dimension(:,:) :: peak_pos ! position of the peak
        real(dp),allocatable,dimension(:,:) :: peak_vel ! velocity of the peak
        real(dp),allocatable,dimension(:,:) :: peak_acc ! acceleration of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_com ! center of mass of the peak
 
        integer,allocatable,dimension(:) :: ind_halo ! Peak ID of the halo densest peak
        integer,allocatable,dimension(:) :: n_cells_halo ! Number of AMR cells per halo
