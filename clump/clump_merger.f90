@@ -1272,7 +1272,7 @@ subroutine compute_clump_properties(s,rtype)
   real(dp)::dx_loc,tot_mass
   real(dp)::zero=0
   ! variables needed temporarily store cell properties
-  real(dp)::d=0, vol=0
+  real(dp)::d=0, vol=0, nref=0
   ! variables related to the size of a cell on a given level
   integer::nx_loc
   logical::periodic
@@ -1337,6 +1337,7 @@ subroutine compute_clump_properties(s,rtype)
         ! Cell density
 #ifdef GRAV
         d=m%grid(igrid)%rho(ind)
+        nref=m%grid(igrid)%nref(ind)
 #endif
         ! Cell volume
         dx_loc=r%boxlen/2**ilevel
@@ -1349,7 +1350,7 @@ subroutine compute_clump_properties(s,rtype)
         c%min_dens(peak_nr)=min(c%min_dens(peak_nr),d)
         
         ! Clump mass
-        c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*d
+        c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*nref
         
         ! Clump volume
         c%clump_vol(peak_nr)=c%clump_vol(peak_nr)+vol

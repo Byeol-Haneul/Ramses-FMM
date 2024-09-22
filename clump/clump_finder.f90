@@ -276,6 +276,7 @@ subroutine collect_test(s)
         hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim) ! Get parent cell and grid index
         call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
         do ind=1,twotondim ! Loop over cells
+           m%grid(igrid)%nref(ind) = m%grid(igrid)%rho(ind) ! Save for true mass later
            m%grid(igrid)%rho(ind) = 0.5d0*m%grid(igrid)%rho(ind) + 0.5d0*gridp%rho(icell)
         end do
      end do
