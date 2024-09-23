@@ -1,0 +1,3 @@
+[submodule "mini-ramses-test-data"]
+	path = tests/mini-ramses-test-data
+	url = git@bitbucket.org:rcaddy/mini-ramses-test-data.git

@@ -315,6 +315,7 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%clump_vol(1:c%npeak_max))
 
   allocate(c%particle_mass(1:c%npeak_max))
+  allocate(c%peak_com(1:c%npeak_max,1:ndim))
 
   !-------------------------------
   ! Allocate halo-patch properties
@@ -443,6 +444,7 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%clump_mass)
   deallocate(c%clump_vol)
   deallocate(c%particle_mass)
+  deallocate(c%peak_com)
 
   ! Deallocate halo-patch arrays
   if(c%saddle_threshold>0)then
@@ -1270,7 +1272,7 @@ subroutine compute_clump_properties(s,rtype)
   real(dp)::dx_loc,tot_mass
   real(dp)::zero=0
   ! variables needed temporarily store cell properties
-  real(dp)::d=0, vol=0
+  real(dp)::d=0, vol=0, nref=0
   ! variables related to the size of a cell on a given level
   integer::nx_loc
   logical::periodic
@@ -1335,6 +1337,7 @@ subroutine compute_clump_properties(s,rtype)
         ! Cell density
 #ifdef GRAV
         d=m%grid(igrid)%rho(ind)
+        nref=m%grid(igrid)%nref(ind)
 #endif
         ! Cell volume
         dx_loc=r%boxlen/2**ilevel
@@ -1347,7 +1350,7 @@ subroutine compute_clump_properties(s,rtype)
         c%min_dens(peak_nr)=min(c%min_dens(peak_nr),d)
         
         ! Clump mass
-        c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*d
+        c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*nref
         
         ! Clump volume
         c%clump_vol(peak_nr)=c%clump_vol(peak_nr)+vol
@@ -1874,6 +1877,7 @@ subroutine particle_clump_properties(s,p)
   !-----------------------------------------
   c%particle_mass=0
   c%peak_vel=0
+  c%peak_com=0
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_part,unpack=unpack_fetch_part,&
        init=init_flush_part,flush=pack_flush_part,combine=unpack_flush_part)
@@ -1895,6 +1899,7 @@ subroutine particle_clump_properties(s,p)
         dx_loc=r%boxlen/2**ilevel
         ! Keep only particles within a 2-cell radius
         if(r2<=4d0*dx_loc**2)then
+           c%peak_com(peak_nr,1:ndim)=c%peak_com(peak_nr,1:ndim)+p%mp(ipart)*xpart(1:ndim)
            c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
            c%particle_mass(peak_nr)=c%particle_mass(peak_nr)+p%mp(ipart)
         endif
@@ -1906,10 +1911,17 @@ subroutine particle_clump_properties(s,p)
   do ipeak=1,c%npeak
      if (c%particle_mass(ipeak)>0)then
         c%peak_vel(ipeak,1:ndim)=c%peak_vel(ipeak,1:ndim)/c%particle_mass(ipeak)
+        c%peak_com(ipeak,1:ndim)=c%peak_com(ipeak,1:ndim)/c%particle_mass(ipeak)
      end if
+     c%peak_com(ipeak,1:ndim)=c%peak_com(ipeak,1:ndim)+c%peak_pos(ipeak,1:ndim)
+     ! Periodic boundary conditions
+     do idim=1,ndim
+        if(c%peak_com(ipeak,idim)<   0.0d0 )c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)+r%boxlen
+        if(c%peak_com(ipeak,idim)>=r%boxlen)c%peak_com(ipeak,idim)=c%peak_com(ipeak,idim)-r%boxlen
+     end do
   end do
 
-  end associate
+ end associate
 
 end subroutine particle_clump_properties
 !################################################################
@@ -1928,7 +1940,7 @@ subroutine pack_fetch_part(c,local_peak_id,msg_size,msg_array)
   type(msg_prop_clump)::msg
 
   msg%pos(1:ndim)=c%peak_pos(local_peak_id,1:ndim)
-  msg%vol=c%peak_level(local_peak_id)
+  msg%ind(1)=c%peak_level(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -1951,7 +1963,7 @@ subroutine unpack_fetch_part(c,local_peak_id,msg_size,msg_array)
   msg=transfer(msg_array,msg)
 
   c%peak_pos(local_peak_id,1:ndim)=msg%pos(1:ndim)
-  c%peak_level(local_peak_id)=msg%vol
+  c%peak_level(local_peak_id)=msg%ind(1)
 
 end subroutine unpack_fetch_part
 !################################################################
@@ -1966,6 +1978,7 @@ subroutine init_flush_part(c,local_peak_id)
 
   c%particle_mass(local_peak_id)=0
   c%peak_vel(local_peak_id,1:ndim)=0d0
+  c%peak_com(local_peak_id,1:ndim)=0d0
 
 end subroutine init_flush_part
 !################################################################
@@ -1985,6 +1998,7 @@ subroutine pack_flush_part(c,local_peak_id,msg_size,msg_array)
 
   msg%mass=c%particle_mass(local_peak_id)
   msg%vel(1:ndim)=c%peak_vel(local_peak_id,1:ndim)
+  msg%pos(1:ndim)=c%peak_com(local_peak_id,1:ndim)
 
   msg_array=transfer(msg,msg_array)
 
@@ -2008,6 +2022,7 @@ subroutine unpack_flush_part(c,local_peak_id,msg_size,msg_array)
 
   c%particle_mass(local_peak_id)=c%particle_mass(local_peak_id)+msg%mass
   c%peak_vel(local_peak_id,1:ndim)=c%peak_vel(local_peak_id,1:ndim)+msg%vel(1:ndim)
+  c%peak_com(local_peak_id,1:ndim)=c%peak_com(local_peak_id,1:ndim)+msg%pos(1:ndim)
 
 end subroutine unpack_flush_part
 !##############################################################################

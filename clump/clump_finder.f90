@@ -220,7 +220,12 @@ end subroutine clump_finder
 #if NDIM==3 && defined(GRAV)
 subroutine collect_test(s)
   use amr_parameters, only: twotondim,ndim,dp
+  use amr_commons, only: oct
   use ramses_commons, only: ramses_t
+  use multigrid_fine_coarse, only: pack_fetch_rho, unpack_fetch_rho
+  use nbors_utils
+  use cache_commons
+  use cache
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -242,19 +247,41 @@ subroutine collect_test(s)
   integer,dimension(1:s%g%ncpu)::ntest_cpu
   integer(kind=8),dimension(0:s%g%ncpu)::ntest_cum
   logical::verbose_all=.false.
-  integer::action
+  integer::action,icell
   logical::ok
   real(kind=8)::dx,vol
   real(kind=8)::d,dx_loc
   real(dp),allocatable,dimension(:)::dens
   integer,allocatable,dimension(:)::isort
   integer,allocatable,dimension(:)::iswap
+  integer(kind=8),dimension(0:ndim)::hash_key
+  type(oct),pointer::gridp
+  type(msg_small_realdp)::dummy_small_realdp
 
 #ifdef GRAV
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering collect_test'
+
+  !---------------------------------------------------------
+  ! Make density field smooth, positive and monotonous.
+  !---------------------------------------------------------
+  do ilevel=r%levelmin+1,r%nlevelmax ! Loop over levels
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+          hilbert=m%domain, pack_size=storage_size(dummy_small_realdp)/32,&
+          pack=pack_fetch_rho, unpack=unpack_fetch_rho)
+     hash_key(0)=ilevel
+     do igrid=m%head(ilevel),m%tail(ilevel) ! Loop over grids
+        hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim) ! Get parent cell and grid index
+        call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        do ind=1,twotondim ! Loop over cells
+           m%grid(igrid)%nref(ind) = m%grid(igrid)%rho(ind) ! Save for true mass later
+           m%grid(igrid)%rho(ind) = 0.5d0*m%grid(igrid)%rho(ind) + 0.5d0*gridp%rho(icell)
+        end do
+     end do
+     call close_cache(s,m%grid_dict)
+  end do
 
   !---------------------------------------------------------
   ! Count cells above threshold. We name them test particles
@@ -272,7 +299,7 @@ subroutine collect_test(s)
         end do
      end do
   end do
-  
+
   !-------------------------------------------------
   ! Compute number of test particles across all CPUs
   !-------------------------------------------------
