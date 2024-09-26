@@ -349,12 +349,9 @@ subroutine sink_clump(s)
   endif
   !---------------------------------------------
   ! Reset sink position to peak position
-  !---------------------------------------------
-  call sink_in_peak(s,.true.,.false.)
-  !---------------------------------------------
   ! Determine which halos are occupied by a sink
   !---------------------------------------------
-  call sink_in_halo(s,.false.,.true.)
+  call sink_in_peak(s,.true.,.true.)
 
 #endif
 end subroutine sink_clump
@@ -439,17 +436,17 @@ end subroutine sink_in_halo
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine sink_in_peak(s,reset_sink_pos,peak_is_occupied)
+subroutine sink_in_peak(s,reset_sink_pos,halo_is_occupied)
   use ramses_commons, only: ramses_t
   use clump_merger_module
   use cache_commons, only: msg_sink_clump,msg_saddle_clump
   use cache
   implicit none
   type(ramses_t)::s
-  logical::peak_is_occupied,reset_sink_pos
+  logical::halo_is_occupied,reset_sink_pos
 
-  integer::i,ipart,no_peak,peak_nr
-  integer(kind=8)::global_peak_id
+  integer::i,ipart,no_peak,peak_nr,halo_nr
+  integer(kind=8)::global_peak_id,global_halo_id
   type(msg_sink_clump)::dummy_sink_clump
   type(msg_saddle_clump)::dummy_saddle_clump
 
@@ -493,17 +490,22 @@ subroutine sink_in_peak(s,reset_sink_pos,peak_is_occupied)
   endif
 
   !------------------------------------
-  ! Flag occupied peaks with sink count
+  ! Flag occupied halos with sink count
   !------------------------------------
-  if(peak_is_occupied)then
+  if(halo_is_occupied)then
      c%occupied_sink=0
      call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
+          pack=pack_fetch_occupied,unpack=unpack_fetch_occupied,&
           init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
      do i=no_peak+1,p%npart
         global_peak_id=p%workp(i)
         if (global_peak_id /=0 ) then
-           call get_peak(s,global_peak_id,peak_nr,fetch_cache=.false.,flush_cache=.true.)
-           c%occupied_sink(peak_nr)=c%occupied_sink(peak_nr)+1
+           call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
+           global_halo_id=c%ind_halo(peak_nr)
+           if (global_halo_id /=0 ) then
+              call get_peak(s,global_halo_id,halo_nr,fetch_cache=.true.,flush_cache=.true.)
+              c%occupied_sink(halo_nr)=c%occupied_sink(halo_nr)+1
+           endif
         end if
      end do
      call close_cache(s,m%grid_dict)
@@ -558,6 +560,46 @@ subroutine unpack_fetch_sink(c,local_peak_id,msg_size,msg_array)
   c%peak_acc(local_peak_id,1:ndim)=msg%acc(1:ndim)
 
 end subroutine unpack_fetch_sink
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_occupied(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_saddle_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_saddle_clump)::msg
+
+  msg%nbor=c%ind_halo(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_occupied
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_occupied(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_saddle_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_saddle_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%ind_halo(local_peak_id)=msg%nbor
+
+end subroutine unpack_fetch_occupied
 !################################################################
 !################################################################
 !################################################################
