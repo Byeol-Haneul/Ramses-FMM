@@ -348,9 +348,13 @@ subroutine sink_clump(s)
      call merge_clumps(s,'saddleden')
   endif
   !---------------------------------------------
+  ! Reset sink position to peak position
+  !---------------------------------------------
+  call sink_in_peak(s,.true.,.false.)
+  !---------------------------------------------
   ! Determine which halos are occupied by a sink
   !---------------------------------------------
-  call occupied_halo(s)
+  call sink_in_halo(s,.false.,.true.)
 
 #endif
 end subroutine sink_clump
@@ -358,16 +362,17 @@ end subroutine sink_clump
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine occupied_halo(s)
+subroutine sink_in_halo(s,reset_sink_pos,halo_is_occupied)
   use ramses_commons, only: ramses_t
   use clump_merger_module
   use cache_commons, only: msg_sink_clump,msg_saddle_clump
   use cache
   implicit none
   type(ramses_t)::s
+  logical::halo_is_occupied,reset_sink_pos
+  
   integer::i,ipart,no_halo,halo_nr
   integer(kind=8)::global_halo_id
-
   type(msg_sink_clump)::dummy_sink_clump
   type(msg_saddle_clump)::dummy_saddle_clump
 
@@ -385,47 +390,128 @@ subroutine occupied_halo(s)
   !-------------------------------------
   ! Reset sink position to peak position
   !-------------------------------------
-  call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-       pack=pack_fetch_sink,unpack=unpack_fetch_sink)
-  do i=no_halo+1,p%npart
-     ipart=p%sortp(i)
-     global_halo_id=p%workp(i)
-     if (global_halo_id /=0 ) then
-        call get_peak(s,global_halo_id,halo_nr,fetch_cache=.true.,flush_cache=.false.)
-        ! Compute sink particle position from peak position
-        p%xp(ipart,1)=c%peak_com(halo_nr,1)
-        p%xp(ipart,2)=c%peak_com(halo_nr,2)
-        p%xp(ipart,3)=c%peak_com(halo_nr,3)
-        ! Compute sink particle velocity from peak velocity
-        p%vp(ipart,1)=c%peak_vel(halo_nr,1)-c%peak_acc(halo_nr,1)*0.5d0*g%dtnew(c%peak_level(halo_nr))
-        p%vp(ipart,2)=c%peak_vel(halo_nr,2)-c%peak_acc(halo_nr,2)*0.5d0*g%dtnew(c%peak_level(halo_nr))
-        p%vp(ipart,3)=c%peak_vel(halo_nr,3)-c%peak_acc(halo_nr,3)*0.5d0*g%dtnew(c%peak_level(halo_nr))
-        ! Compute sink particle old force from peak acceleration
-        p%fp(ipart,1)=c%peak_acc(halo_nr,1)
-        p%fp(ipart,2)=c%peak_acc(halo_nr,2)
-        p%fp(ipart,3)=c%peak_acc(halo_nr,3)
-     end if
-  end do
-  call close_cache(s,m%grid_dict)
-  
+  if(reset_sink_pos)then
+     call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
+          pack=pack_fetch_sink,unpack=unpack_fetch_sink)
+     do i=no_halo+1,p%npart
+        ipart=p%sortp(i)
+        global_halo_id=p%workp(i)
+        if (global_halo_id /=0 ) then
+           call get_peak(s,global_halo_id,halo_nr,fetch_cache=.true.,flush_cache=.false.)
+           ! Compute sink particle position from peak position
+           p%xp(ipart,1)=c%peak_com(halo_nr,1)
+           p%xp(ipart,2)=c%peak_com(halo_nr,2)
+           p%xp(ipart,3)=c%peak_com(halo_nr,3)
+           ! Compute sink particle velocity from peak velocity
+           p%vp(ipart,1)=c%peak_vel(halo_nr,1)-c%peak_acc(halo_nr,1)*0.5d0*g%dtnew(c%peak_level(halo_nr))
+           p%vp(ipart,2)=c%peak_vel(halo_nr,2)-c%peak_acc(halo_nr,2)*0.5d0*g%dtnew(c%peak_level(halo_nr))
+           p%vp(ipart,3)=c%peak_vel(halo_nr,3)-c%peak_acc(halo_nr,3)*0.5d0*g%dtnew(c%peak_level(halo_nr))
+           ! Compute sink particle old force from peak acceleration
+           p%fp(ipart,1)=c%peak_acc(halo_nr,1)
+           p%fp(ipart,2)=c%peak_acc(halo_nr,2)
+           p%fp(ipart,3)=c%peak_acc(halo_nr,3)
+        end if
+     end do
+     call close_cache(s,m%grid_dict)
+  endif
+
   !------------------------------------
   ! Flag occupied halos with sink count
   !------------------------------------
-  c%occupied_sink=0
-  call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
-       init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
-  do i=no_halo+1,p%npart
-     global_halo_id=p%workp(i)
-     if (global_halo_id /=0 ) then
-        call get_peak(s,global_halo_id,halo_nr,fetch_cache=.false.,flush_cache=.true.)
-        c%occupied_sink(halo_nr)=c%occupied_sink(halo_nr)+1
-     end if
-  end do
-  call close_cache(s,m%grid_dict)
-  
+  if(halo_is_occupied)then
+     c%occupied_sink=0
+     call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
+          init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
+     do i=no_halo+1,p%npart
+        global_halo_id=p%workp(i)
+        if (global_halo_id /=0 ) then
+           call get_peak(s,global_halo_id,halo_nr,fetch_cache=.false.,flush_cache=.true.)
+           c%occupied_sink(halo_nr)=c%occupied_sink(halo_nr)+1
+        end if
+     end do
+     call close_cache(s,m%grid_dict)
+  endif
+
   end associate
 
-end subroutine occupied_halo
+end subroutine sink_in_halo
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine sink_in_peak(s,reset_sink_pos,peak_is_occupied)
+  use ramses_commons, only: ramses_t
+  use clump_merger_module
+  use cache_commons, only: msg_sink_clump,msg_saddle_clump
+  use cache
+  implicit none
+  type(ramses_t)::s
+  logical::peak_is_occupied,reset_sink_pos
+
+  integer::i,ipart,no_peak,peak_nr
+  integer(kind=8)::global_peak_id
+  type(msg_sink_clump)::dummy_sink_clump
+  type(msg_saddle_clump)::dummy_saddle_clump
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
+
+  !--------------------------------
+  ! Reads peak id of sink particles
+  !--------------------------------
+  call particle_peak_id(s,p,no_peak)
+
+  if(no_peak>0)then
+     write(*,*)'SINK OUTSIDE PEAKS',no_peak
+  end if
+
+  !-------------------------------------
+  ! Reset sink position to peak position
+  !-------------------------------------
+  if(reset_sink_pos)then
+     call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
+          pack=pack_fetch_sink,unpack=unpack_fetch_sink)
+     do i=no_peak+1,p%npart
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        if (global_peak_id /=0 ) then
+           call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
+           ! Compute sink particle position from peak position
+           p%xp(ipart,1)=c%peak_com(peak_nr,1)
+           p%xp(ipart,2)=c%peak_com(peak_nr,2)
+           p%xp(ipart,3)=c%peak_com(peak_nr,3)
+           ! Compute sink particle velocity from peak velocity
+           p%vp(ipart,1)=c%peak_vel(peak_nr,1)-c%peak_acc(peak_nr,1)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+           p%vp(ipart,2)=c%peak_vel(peak_nr,2)-c%peak_acc(peak_nr,2)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+           p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+           ! Compute sink particle old force from peak acceleration
+           p%fp(ipart,1)=c%peak_acc(peak_nr,1)
+           p%fp(ipart,2)=c%peak_acc(peak_nr,2)
+           p%fp(ipart,3)=c%peak_acc(peak_nr,3)
+        end if
+     end do
+     call close_cache(s,m%grid_dict)
+  endif
+
+  !------------------------------------
+  ! Flag occupied peaks with sink count
+  !------------------------------------
+  if(peak_is_occupied)then
+     c%occupied_sink=0
+     call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
+          init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
+     do i=no_peak+1,p%npart
+        global_peak_id=p%workp(i)
+        if (global_peak_id /=0 ) then
+           call get_peak(s,global_peak_id,peak_nr,fetch_cache=.false.,flush_cache=.true.)
+           c%occupied_sink(peak_nr)=c%occupied_sink(peak_nr)+1
+        end if
+     end do
+     call close_cache(s,m%grid_dict)
+  endif
+
+  end associate
+
+end subroutine sink_in_peak
 !################################################################
 !################################################################
 !################################################################
