@@ -30,10 +30,13 @@ end subroutine r_godunov_fine
 !###########################################################
 subroutine godunov_fine(s,ilevel)
   use ramses_commons, only: ramses_t
+  use amr_commons
   use cache_commons
   use cache
   use marshal, only: pack_fetch_refine,unpack_fetch_refine
   use boundaries, only: init_bound_refine
+  use gpu_runner, only: gpu_integrator
+  use nvtx
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -45,15 +48,21 @@ subroutine godunov_fine(s,ilevel)
   ! On exit, unew has been updated. 
   !--------------------------------------------------------------------------
   integer::igrid
+  
+  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   if(s%r%verbose.and.s%g%myid==1)write(*,'("   Entering godunov_fine for level ",I2)')ilevel
 
-  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-
+  call nvtxStartRange("GPU integrator", color=6)!teal
+  call gpu_integrator(s, ilevel)
+  call nvtxEndRange()
+ 
   ! Loop over active grids by vector sweeps
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     call godfine1(s,igrid,ilevel,m%hydro_w%kernel_1)
-  end do
+!   call nvtxStartRange("CPU Integrator", color=9)!white
+!   do igrid=m%head(ilevel),m%tail(ilevel)
+!      call godfine1(s,igrid,ilevel,m%hydro_w%kernel_1)
+!   end do
+!   call nvtxEndRange()
 
   end associate
 end subroutine godunov_fine

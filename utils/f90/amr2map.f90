@@ -6,7 +6,7 @@ program amr2map
   !--------------------------------------------------------------------------
   implicit none
 
-  integer,parameter::flen=90
+  integer,parameter::flen=200
   
   integer::ndim,twotondim,nvar
   integer::n,i,j,k,type=0,dopeak=0,domax=0,dograv=0,backup=0
