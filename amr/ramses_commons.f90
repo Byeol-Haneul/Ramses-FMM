@@ -165,7 +165,9 @@ subroutine open_file(s,filename,nskip,ilun)
 #endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*noct(ilevel)
         if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*3)*noct(ilevel)
-        if(index(filename,'rt').NE.0)iskip=iskip+(4*twotondim*nvar)*noct(ilevel)
+#ifdef RT
+        if(index(filename,'rt').NE.0)iskip=iskip+(4*twotondim*nrtvar)*noct(ilevel)
+#endif
      end do
 
   elseif(g%myid.GT.istart(ifile))then
