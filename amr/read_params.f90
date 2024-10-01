@@ -670,6 +670,24 @@ subroutine m_read_params(pst)
 #endif
 
   !--------------------------------------------------
+  ! Check for metals
+  !--------------------------------------------------
+  if(metal.and.nvar<6)then
+     write(*,*)'Error: metal=.true. need nvar >= 6'
+     write(*,*)'Modify NVAR and recompile'
+     nml_ok=.false.
+  endif
+
+  !--------------------------------------------------
+  ! Check for entropy
+  !--------------------------------------------------
+  if(entropy.and.nvar<6)then
+     write(*,*)'Error: entropy=.true. need nvar >= 6'
+     write(*,*)'Modify NVAR and recompile'
+     nml_ok=.false.
+  endif
+
+  !--------------------------------------------------
   ! Compute indices for passive scalars
   ! and non-thermal energies
   !--------------------------------------------------
