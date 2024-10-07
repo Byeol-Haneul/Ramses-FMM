@@ -289,7 +289,9 @@ subroutine allocate_peak_patch_arrays(s)
   ! This routine allocate all arrays that are needed at 
   ! different steps of the clump finder.
   !----------------------------------------------------
+
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
   !------------------------------------------
   ! Compute the max size of peak-based arrays
   !------------------------------------------
@@ -365,6 +367,22 @@ subroutine allocate_peak_patch_arrays(s)
   ! Allocate cache comms
   !---------------------
   call init_cache_clump(s%mdl)
+
+  !-------------------------------------------------
+  ! Allocate various particle types peak and halo id
+  !-------------------------------------------------
+  if(r%pic)then
+     allocate(s%p%pid(1:s%p%npart))
+     allocate(s%p%hid(1:s%p%npart))
+  endif
+  if(r%star)then
+     allocate(s%star%pid(1:s%star%npart))
+     allocate(s%star%hid(1:s%star%npart))
+  endif
+  if(r%sink)then
+     allocate(s%sink%pid(1:s%sink%npart))
+     allocate(s%sink%hid(1:s%sink%npart))
+  endif
 
   end associate
 
@@ -479,6 +497,17 @@ subroutine deallocate_peak_patch_arrays(s)
 
   ! Deallocate cache comms
   call kill_cache_clump(s%mdl)
+
+  ! Deallocate particle pid and hid
+  if(r%pic)then
+     deallocate(s%p%pid,s%p%hid)
+  endif
+  if(r%star)then
+     deallocate(s%star%pid,s%star%hid)
+  endif
+  if(r%sink)then
+     deallocate(s%sink%pid,s%sink%hid)
+  endif
 
   end associate
 
@@ -1684,10 +1713,10 @@ subroutine central_in_halos(s)
         endif
         
 !!$        if(mass2>0.or.mass3>0)then
-!!$           write(*,*)c%ind_halo(ipeak),c%ind_halo_1(ipeak),c%ind_halo_2(ipeak),c%ind_halo_3(ipeak),&
+!!$           write(*,*)'centrals ',c%ind_halo(ipeak),c%ind_halo_1(ipeak),c%ind_halo_2(ipeak),c%ind_halo_3(ipeak),&
 !!$                & c%halo_mass(ipeak),mass1,mass2,mass3
 !!$        endif
-!!$
+
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -1855,21 +1884,20 @@ subroutine particle_clump_properties(s,p)
   !------------------------------------------------------------------
   type(msg_prop_clump)::dummy_prop_clump
   integer::i,ipeak,ipart,icell,ind,idim,ibin,ilevel
-  integer(kind=8)::global_peak_id,global_halo_id
-  integer::halo_nr,peak_nr,no_halo
-  real(dp)::dist,xx,rad,dx_loc,r2
+  integer(kind=8)::global_peak_id
+  integer::halo_nr,peak_nr
+  real(dp)::xx,rad,dx_loc,r2
   real(dp),dimension(1:ndim)::xpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
-  !---------------------------------
-  ! Reads peak id of input particles
-  !---------------------------------
-  call particle_peak_id(s,p,no_halo)
-
   !--------------------------------------------
   ! Sort particles according to global clump id
   !--------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%pid(ipart)
+  end do
   call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
   !-----------------------------------------
@@ -1881,7 +1909,7 @@ subroutine particle_clump_properties(s,p)
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_part,unpack=unpack_fetch_part,&
        init=init_flush_part,flush=pack_flush_part,combine=unpack_flush_part)
-  do i=1+no_halo,p%npart
+  do i=1+p%norphan_peak,p%npart
      ! Get peak id
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
@@ -2029,7 +2057,7 @@ end subroutine unpack_flush_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_split_centrals(s,p,evaporate)
+subroutine particle_split_centrals(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -2038,25 +2066,19 @@ subroutine particle_split_centrals(s,p,evaporate)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  logical::evaporate
   !------------------------------------------------------------------
-  ! This routine splits all particle of a given halo-patch among 
+  ! This routine splits all particle of a given halo-patch among
   ! the 1, 2 or 3 central peaks. It used a clustering method
   ! in phase space to assign particles to a central peak.
-  ! The central peak id is stoted in the workp array.
+  ! The central peak id is stored in the hid array.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
   !------------------------------------------------------------------
   type(msg_prop_clump)::dummy_prop_clump
-  type(msg_mbin_clump)::dummy_mbin_clump
   integer::i,ipart,icell,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id,global_halo_id
-  integer::ipeak,jpeak,no_halo
-  integer::jpeak1,jpeak2,jpeak3
+  integer::ipeak,jpeak
   real(dp)::pi,grav,radius,velocity,distmin
-  real(dp)::dist,dist1,dist2,dist3
-  real(dp)::xdist1,xdist2,xdist3
-  real(dp)::vdist1,vdist2,vdist3
-  real(dp)::mass1,mass2,mass3
+  real(dp)::dist1,dist2,dist3
   real(dp),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -2066,14 +2088,13 @@ subroutine particle_split_centrals(s,p,evaporate)
   grav=1d0
   if(s%r%cosmo)grav=3d0/8d0/pi*s%g%omega_m*s%g%aexp
 
-  !---------------------------------
-  ! Reads halo id of input particles
-  !---------------------------------
-  call particle_halo_id(s,p,no_halo)
-
-  !--------------------------------------------
-  ! Sort particles according to global clump id
-  !--------------------------------------------
+  !-------------------------------------------
+  ! Sort particles according to global halo id
+  !-------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%hid(ipart)
+  end do
   call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
   !-----------------------------------------------------------
@@ -2081,7 +2102,7 @@ subroutine particle_split_centrals(s,p,evaporate)
   !-----------------------------------------------------------
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_split,unpack=unpack_fetch_split)
-  do i=1+no_halo,p%npart
+  do i=1+p%norphan_halo,p%npart
      ! Get halo id
      ipart=p%sortp(i)
      global_halo_id=p%workp(i)
@@ -2121,14 +2142,52 @@ subroutine particle_split_centrals(s,p,evaporate)
         endif
         ! Assign particle to closest central in phase space
         distmin=min(dist1,min(dist2,dist3))
-        if(dist3.EQ.distmin)p%workp(i)=c%ind_halo_3(ipeak)
-        if(dist2.EQ.distmin)p%workp(i)=c%ind_halo_2(ipeak)
-        if(dist1.EQ.distmin)p%workp(i)=c%ind_halo_1(ipeak)
+        if(dist3.EQ.distmin)p%hid(ipart)=c%ind_halo_3(ipeak)
+        if(dist2.EQ.distmin)p%hid(ipart)=c%ind_halo_2(ipeak)
+        if(dist1.EQ.distmin)p%hid(ipart)=c%ind_halo_1(ipeak)
         ! Unlock halo
         call unlock_cache_clump(s,ipeak)
      endif
   end do
   call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine particle_split_centrals
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine peak_split_centrals(s)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  !------------------------------------------------------------------
+  ! This routine splits all peaks of a given halo-patch among 
+  ! the 1, 2 or 3 central peaks. It used a clustering method
+  ! in phase space to assign peaks to a central peak.
+  ! The central peak id is stored in the ind_central array.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !------------------------------------------------------------------
+  type(msg_prop_clump)::dummy_prop_clump
+  type(msg_mbin_clump)::dummy_mbin_clump
+  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer(kind=8)::global_peak_id,global_halo_id
+  integer::ipeak,jpeak
+  real(dp)::pi,grav,radius,velocity,distmin
+  real(dp)::dist1,dist2,dist3
+  real(dp),dimension(1:ndim)::xpart,vpart
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Constants
+  pi=ACOS(-1.0D0)
+  grav=1d0
+  if(s%r%cosmo)grav=3d0/8d0/pi*s%g%omega_m*s%g%aexp
 
   !-------------------------------------------------------
   ! Assign peak to central using clustering in phase space
@@ -2185,6 +2244,48 @@ subroutine particle_split_centrals(s,p,evaporate)
   end do
   call close_cache(s,m%grid_dict)
 
+  end associate
+
+end subroutine peak_split_centrals
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine mass_around_centrals(s,p)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  !------------------------------------------------------------------
+  ! This routine compute the cumulative mass profiles of input
+  ! particles p around the 1, 2 or 3 central peaks.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !------------------------------------------------------------------
+  type(msg_mbin_clump)::dummy_mbin_clump
+  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer(kind=8)::global_halo_id
+  integer::ipeak,jpeak
+  real(dp)::pi,grav,radius,velocity,dist
+  real(dp),dimension(1:ndim)::xpart,vpart
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Constants
+  pi=ACOS(-1.0D0)
+
+  !-------------------------------------------
+  ! Sort particles according to global halo id
+  !-------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%hid(ipart)
+  end do
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
+
   !--------------------------------------------------------
   ! Compute particle mass profile around their central peak
   !--------------------------------------------------------
@@ -2193,12 +2294,12 @@ subroutine particle_split_centrals(s,p,evaporate)
        init=init_flush_mbin,flush=pack_flush_mbin,combine=unpack_flush_mbin)
   c%mass_bin=0d0
   c%npart=0
-  do i=1+no_halo,p%npart
-     ! Get central global peak id
+  do i=1+p%norphan_halo,p%npart
+     ! Get global halo (central) id
      ipart=p%sortp(i)
-     global_peak_id=p%workp(i)
-     if (global_peak_id /=0 ) then
-        call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.true.)
+     global_halo_id=p%workp(i)
+     if (global_halo_id /=0 ) then
+        call get_peak(s,global_halo_id,ipeak,flush_cache=.true.,fetch_cache=.true.)
         ! Compute halo maximum radius
         radius=2d0*(c%halo_mass(ipeak)/4d0/pi*3d0/200d0)**(1d0/3d0)
         ! Compute particle radius
@@ -2236,60 +2337,88 @@ subroutine particle_split_centrals(s,p,evaporate)
      endif
   end do
 
+  end associate
+
+end subroutine mass_around_centrals
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine evaporate_centrals(s)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  !------------------------------------------------------------------
+  ! This routine removes central peaks that are not
+  ! massive enough.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !------------------------------------------------------------------
+  type(msg_prop_clump)::dummy_prop_clump
+  integer::i,ipart,icell,ind,idim,ibin,ilevel
+  integer(kind=8)::global_peak_id
+  integer::ipeak,jpeak
+  integer::jpeak1,jpeak2,jpeak3
+  real(dp)::pi,grav,radius,velocity
+  real(dp)::mass1,mass2,mass3
+  real(dp),dimension(1:ndim)::xpart,vpart
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
   !------------------------------------------------
   ! Remove centrals if cumulative mass is too small
   !------------------------------------------------
-  if(evaporate)then
-     call open_cache_clump(s,pack_size=storage_size(dummy_prop_clump)/32,&
-          pack=pack_fetch_evaporate,unpack=unpack_fetch_evaporate)
-     do ipeak=1,c%npeak
-        global_peak_id=ipeak+c%npeak_cum(g%myid-1)
-        if(c%ind_halo(ipeak)==global_peak_id.AND.&
-             & c%halo_mass(ipeak) > c%mass_threshold.AND. &
-             & c%relevance(ipeak) > c%relevance_threshold)then
-           ! Get 3 most massive peak-patches
-           mass1=0
-           mass2=0
-           mass3=0
-           if(c%ind_halo_1(ipeak).NE.0)then
-              global_peak_id=c%ind_halo_1(ipeak)
-              call get_peak(s,global_peak_id,jpeak1,flush_cache=.false.,fetch_cache=.true.)
-              if(c%clump_mass(jpeak1) > c%mass_threshold.AND. &
-                   & c%relevance(jpeak1) > c%relevance_threshold)then
-                 mass1 = c%mass_bin(jpeak1,nbin)
+  call open_cache_clump(s,pack_size=storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_evaporate,unpack=unpack_fetch_evaporate)
+  do ipeak=1,c%npeak
+     global_peak_id=ipeak+c%npeak_cum(g%myid-1)
+     if(c%ind_halo(ipeak)==global_peak_id.AND.&
+          & c%halo_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold)then
+        ! Get 3 most massive peak-patches
+        mass1=0
+        mass2=0
+        mass3=0
+        if(c%ind_halo_1(ipeak).NE.0)then
+           global_peak_id=c%ind_halo_1(ipeak)
+           call get_peak(s,global_peak_id,jpeak1,flush_cache=.false.,fetch_cache=.true.)
+           if(c%clump_mass(jpeak1) > c%mass_threshold.AND. &
+                & c%relevance(jpeak1) > c%relevance_threshold)then
+              mass1 = c%mass_bin(jpeak1,nbin)
+           endif
+           if(c%ind_halo_2(ipeak).NE.0)then
+              global_peak_id=c%ind_halo_2(ipeak)
+              call get_peak(s,global_peak_id,jpeak2,flush_cache=.false.,fetch_cache=.true.)
+              if(c%clump_mass(jpeak2) > c%mass_threshold.AND. &
+                   & c%relevance(jpeak2) > c%relevance_threshold)then
+                 mass2 = c%mass_bin(jpeak2,nbin)
               endif
-              if(c%ind_halo_2(ipeak).NE.0)then
-                 global_peak_id=c%ind_halo_2(ipeak)
-                 call get_peak(s,global_peak_id,jpeak2,flush_cache=.false.,fetch_cache=.true.)
-                 if(c%clump_mass(jpeak2) > c%mass_threshold.AND. &
-                      & c%relevance(jpeak2) > c%relevance_threshold)then
-                    mass2 = c%mass_bin(jpeak2,nbin)
-                 endif
-                 if(c%ind_halo_3(ipeak).NE.0)then
-                    global_peak_id=c%ind_halo_3(ipeak)
-                    call get_peak(s,global_peak_id,jpeak3,flush_cache=.false.,fetch_cache=.true.)
-                    if(c%clump_mass(jpeak3) > c%mass_threshold.AND. &
-                         & c%relevance(jpeak3) > c%relevance_threshold)then
-                       mass3 = c%mass_bin(jpeak3,nbin)
-                    endif
+              if(c%ind_halo_3(ipeak).NE.0)then
+                 global_peak_id=c%ind_halo_3(ipeak)
+                 call get_peak(s,global_peak_id,jpeak3,flush_cache=.false.,fetch_cache=.true.)
+                 if(c%clump_mass(jpeak3) > c%mass_threshold.AND. &
+                      & c%relevance(jpeak3) > c%relevance_threshold)then
+                    mass3 = c%mass_bin(jpeak3,nbin)
                  endif
               endif
-           endif
-           ! Set index of removed central to 0
-           if(mass3.LT.c%mass_threshold.OR.mass3.LT.0.1*mass1)then
-              c%ind_halo_3(ipeak)=0
-           endif
-           if(mass2.LT.c%mass_threshold.OR.mass2.LT.0.1*mass1)then
-              c%ind_halo_2(ipeak)=0
            endif
         endif
-     end do
-     call close_cache(s,m%grid_dict)
-  endif
+        ! Set index of removed central to 0
+        if(mass3.LT.c%mass_threshold.OR.mass3.LT.0.1*mass1)then
+           c%ind_halo_3(ipeak)=0
+        endif
+        if(mass2.LT.c%mass_threshold.OR.mass2.LT.0.1*mass1)then
+           c%ind_halo_2(ipeak)=0
+        endif
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
 
   end associate
 
-end subroutine particle_split_centrals
+end subroutine evaporate_centrals
 !################################################################
 !################################################################
 !################################################################
@@ -2524,7 +2653,7 @@ end subroutine unpack_fetch_evaporate
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_peak_id(s,p,no_peak)
+subroutine particle_peak_id(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -2532,13 +2661,11 @@ subroutine particle_peak_id(s,p,no_peak)
   use nbors_utils
   use cache_commons
   use cache
-  use boundaries, only: init_bound_flag2
   use marshal, only: pack_fetch_flag2, unpack_fetch_flag2
   use hilbert
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  integer::no_peak
   !-------------------------------------------------------------------
   ! This routine reads from the grid peak map (flag2) the peak id
   ! of the input particle object. It could be dark matter or stars.
@@ -2550,20 +2677,22 @@ subroutine particle_peak_id(s,p,no_peak)
   integer(kind=8)::global_peak_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
-  real(dp)::dx_loc,rmin,rmax,dist,xx
+  real(dp)::dx_loc,rmin,rmax,xx
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
+  integer::no_peak
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
   ! Open cache for array flag1 (fetch)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-       pack=pack_fetch_flag2,unpack=unpack_fetch_flag2,bound=init_bound_flag2)
+       pack=pack_fetch_flag2,unpack=unpack_fetch_flag2)
 
   ! Loop over particles
   no_peak=0
+  p%pid=0
   do ilevel=r%levelmin,r%nlevelmax
 
      ! Mesh spacing in that level
@@ -2583,25 +2712,25 @@ subroutine particle_peak_id(s,p,no_peak)
         hash_cell(1:ndim)=ckey(1:ndim)
         call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 
-        ! If cell does not exist at current level, then find cell at coarser level
+!!$        ! If cell does not exist at current level, then find cell at coarser level
+!!$        if(.not.associated(gridp))then
+!!$
+!!$           ! NGP at level ilevel-1
+!!$           do idim=1,ndim
+!!$              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+!!$           end do
+!!$
+!!$           ! Get parent cell at level ilevel-1 using cache
+!!$           hash_cell(0)=ilevel
+!!$           hash_cell(1:ndim)=ckey(1:ndim)
+!!$           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+!!$           if(.not.associated(gridp))ok_level=.false.
+!!$
+!!$        end if
+
         if(.not.associated(gridp))then
-
-           ! NGP at level ilevel-1
-           do idim=1,ndim
-              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
-           end do
-
-           ! Get parent cell at level ilevel-1 using cache
-           hash_cell(0)=ilevel
-           hash_cell(1:ndim)=ckey(1:ndim)
-           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-           if(.not.associated(gridp))ok_level=.false.
-
-        end if
-
-        if(.not. ok_level)then
            write(*,*)"Something went wrong in particle_peak_id"
-           write(*,*)"Current level grid and coarser grid both dont exist..."
+           write(*,*)"Current level grid does not exist..."
            stop
         endif
 
@@ -2609,9 +2738,8 @@ subroutine particle_peak_id(s,p,no_peak)
         global_peak_id=gridp%flag2(icell)
         if (global_peak_id==0)no_peak=no_peak+1
 
-        ! Store global peak id in workp array
-        p%sortp(ipart)=ipart
-        p%workp(ipart)=global_peak_id
+        ! Store global peak id in pid array
+        p%pid(ipart)=global_peak_id
 
      end do
      ! End loop over particles
@@ -2620,6 +2748,8 @@ subroutine particle_peak_id(s,p,no_peak)
 
   call close_cache(s,m%grid_dict)
 
+  p%norphan_peak=no_peak
+
   end associate
 
 end subroutine particle_peak_id
@@ -2627,7 +2757,7 @@ end subroutine particle_peak_id
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_halo_id(s,p,no_peak)
+subroutine particle_halo_id(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -2641,7 +2771,6 @@ subroutine particle_halo_id(s,p,no_peak)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  integer::no_peak
   !------------------------------------------------------------------
   ! This routine reads from the grid peak map (flag1) the peak id
   ! of the input particle object. It could be dark matter or stars.
@@ -2650,13 +2779,14 @@ subroutine particle_halo_id(s,p,no_peak)
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::i,ipart,icell,ind,idim,ibin,ilevel
-  integer(kind=8)::global_peak_id
+  integer(kind=8)::global_halo_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
-  real(dp)::dx_loc,rmin,rmax,dist,xx
+  real(dp)::dx_loc,rmin,rmax,xx
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
+  integer::no_halo
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -2666,7 +2796,8 @@ subroutine particle_halo_id(s,p,no_peak)
        pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
 
   ! Loop over particles
-  no_peak=0
+  no_halo=0
+  p%hid=0
   do ilevel=r%levelmin,r%nlevelmax
 
      ! Mesh spacing in that level
@@ -2686,35 +2817,34 @@ subroutine particle_halo_id(s,p,no_peak)
         hash_cell(1:ndim)=ckey(1:ndim)
         call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 
-        ! If cell does not exist at current level, then find cell at coarser level
+!!$        ! If cell does not exist at current level, then find cell at coarser level
+!!$        if(.not.associated(gridp))then
+!!$
+!!$           ! NGP at level ilevel-1
+!!$           do idim=1,ndim
+!!$              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+!!$           end do
+!!$
+!!$           ! Get parent cell at level ilevel-1 using cache
+!!$           hash_cell(0)=ilevel
+!!$           hash_cell(1:ndim)=ckey(1:ndim)
+!!$           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+!!$           if(.not.associated(gridp))ok_level=.false.
+!!$
+!!$        end if
+
         if(.not.associated(gridp))then
-
-           ! NGP at level ilevel-1
-           do idim=1,ndim
-              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
-           end do
-
-           ! Get parent cell at level ilevel-1 using cache
-           hash_cell(0)=ilevel
-           hash_cell(1:ndim)=ckey(1:ndim)
-           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-           if(.not.associated(gridp))ok_level=.false.
-
-        end if
-
-        if(.not. ok_level)then
            write(*,*)"Something went wrong in particle_halo_id"
-           write(*,*)"Current level grid and coarser grid both dont exist..."
+           write(*,*)"Current level grid does not exist..."
            stop
         endif
 
         ! Read flag1 value
-        global_peak_id=gridp%flag1(icell)
-        if (global_peak_id==0)no_peak=no_peak+1
+        global_halo_id=gridp%flag1(icell)
+        if (global_halo_id==0)no_halo=no_halo+1
 
-        ! Store global halo id in workp array
-        p%sortp(ipart)=ipart
-        p%workp(ipart)=global_peak_id
+        ! Store global halo id in hid array
+        p%hid(ipart)=global_halo_id
 
      end do
      ! End loop over particles
@@ -2722,6 +2852,8 @@ subroutine particle_halo_id(s,p,no_peak)
   ! End loop over levels
 
   call close_cache(s,m%grid_dict)
+
+  p%norphan_halo=no_halo
 
   end associate
 

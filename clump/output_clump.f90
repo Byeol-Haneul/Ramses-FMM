@@ -18,7 +18,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
   integer,dimension(1:output_size)::output_array
   
   character(LEN=flen)::filename,fileloc
-  integer::rID,no_halo
+  integer::rID
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_CLUMP,pst%iUpper+1,input_size,output_size,input_array)
@@ -30,34 +30,43 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
      if(pst%s%r%output_clump)then
         call output_clump_properties(pst%s,filename)
      endif
-     ! Write peak id of AMR cells
+     ! Write density, peak id and halo id for AMR cells
      if(pst%s%r%output_peak)then
         fileloc=TRIM(filename)//'peak.'
         call output_clump_field(pst%s,fileloc)
      endif
-     ! Computing and write halo id for dark matter particles'
-     ! The halo id has been computed before and stored in workp
+     ! Write halo id for dark matter particles
      if(pst%s%r%output_halo_part.and.pst%s%r%pic)then
         fileloc=TRIM(filename)//'halo_part.'
-        call output_peak_part(pst%s,pst%s%p,fileloc)
+        call output_halo_part(pst%s,pst%s%p,fileloc)
      endif
-     ! Computing and write halo id for star particles'
-     ! The halo id has been computed before and stored in workp
+     ! Write halo id for star particles
      if(pst%s%r%output_halo_star.and.pst%s%r%star)then
         fileloc=TRIM(filename)//'halo_star.'
-        call output_peak_part(pst%s,pst%s%star,fileloc)
+        call output_halo_part(pst%s,pst%s%star,fileloc)
      endif
-     ! Computing and write peak id for dark matter particles'
+     ! Write halo id for sink particles
+     if(pst%s%r%output_halo_sink.and.pst%s%r%sink)then
+        fileloc=TRIM(filename)//'halo_sink.'
+        call output_halo_part(pst%s,pst%s%sink,fileloc)
+     endif
+     ! Write peak id for dark matter particles
      if(pst%s%r%output_peak_part.and.pst%s%r%pic)then
         fileloc=TRIM(filename)//'peak_part.'
-        call particle_peak_id(pst%s,pst%s%p,no_halo)
         call output_peak_part(pst%s,pst%s%p,fileloc)
      endif
-     ! Computing and write peak id for star particles'
+     ! Write peak id for star particles
      if(pst%s%r%output_peak_star.and.pst%s%r%star)then
         fileloc=TRIM(filename)//'peak_star.'
-        call particle_peak_id(pst%s,pst%s%star,no_halo)
         call output_peak_part(pst%s,pst%s%star,fileloc)
+     endif
+     ! Write peak id for sink particles
+     if(pst%s%r%output_peak_sink.and.pst%s%r%sink)then
+        fileloc=TRIM(filename)//'peak_sink.'
+        if(pst%s%sink%norphan_peak>0)then
+           write(*,*)'OUTPUT: SINK OUTSIDE PEAKS',pst%s%sink%norphan_peak
+        endif
+        call output_peak_part(pst%s,pst%s%sink,fileloc)
      endif
   endif
 
@@ -331,10 +340,10 @@ subroutine file_descriptor_clump(r,filename)
   write(ilun,'("nvar        =",I11)')3
 
   ivar=1
-  write(ilun,'("variable #",I2,": halo ID")')ivar
+  write(ilun,'("variable #",I2,": halo patch ID")')ivar
 
   ivar=2
-  write(ilun,'("variable #",I2,": peak ID")')ivar
+  write(ilun,'("variable #",I2,": peak patch ID")')ivar
 
   ivar=3
   write(ilun,'("variable #",I2,": density")')ivar
@@ -342,6 +351,37 @@ subroutine file_descriptor_clump(r,filename)
   close(ilun)
 
 end subroutine file_descriptor_clump
+!#######################################################
+!#######################################################
+!#######################################################
+!#######################################################
+subroutine output_halo_part(s,p,filename)
+  use amr_parameters, only: ndim,i8b,flen
+  use ramses_commons, only: ramses_t,open_part_file,close_part_file
+  use pm_commons, only: part_t
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  character(LEN=flen)::filename
+  !------------------------------------
+  ! Output halo id of particles to file
+  !------------------------------------
+  integer::i,idim,ilun,ivar
+  integer(kind=8),dimension(1:p%nvaralloc+1)::nskip
+
+  associate(r=>s%r,g=>s%g)
+
+  call open_part_file(s,p,filename,nskip,ilun)
+
+  ! Write halo id
+  write(ilun,POS=nskip(1))
+  write(ilun)p%hid
+
+  call close_part_file(s,p,filename,nskip,ilun)
+
+  end associate
+
+end subroutine output_halo_part
 !#######################################################
 !#######################################################
 !#######################################################
@@ -354,31 +394,64 @@ subroutine output_peak_part(s,p,filename)
   type(ramses_t)::s
   type(part_t)::p
   character(LEN=flen)::filename
-  !--------------------------------------
+  !------------------------------------
   ! Output peak id of particles to file
-  !--------------------------------------
+  !------------------------------------
   integer::i,idim,ilun,ivar
   integer(kind=8),dimension(1:p%nvaralloc+1)::nskip
-  integer,allocatable,dimension(:)::ll
 
   associate(r=>s%r,g=>s%g)
 
   call open_part_file(s,p,filename,nskip,ilun)
 
-  ! Write halo id
-  allocate(ll(1:p%npart))
-  do i=1,p%npart
-     ll(i)=p%workp(i)
-  end do
+  ! Write peak id
   write(ilun,POS=nskip(1))
-  write(ilun)ll
-  deallocate(ll)
+  write(ilun)p%pid
 
   call close_part_file(s,p,filename,nskip,ilun)
 
   end associate
 
 end subroutine output_peak_part
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine output_halo_header(r,g,p,filename)
+  use amr_parameters, only: flen
+  use amr_commons, only: run_t,global_t
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  character(LEN=flen)::filename
+
+  ! Local variables
+  integer::ilun
+  character(LEN=flen)::fileloc
+
+  if(r%verbose)write(*,*)'Entering output_halo_header'
+
+  ilun=10!+g%myid
+
+  ! Open file
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')
+
+  ! Write header information
+  write(ilun,*)'Total number of particles'
+  write(ilun,*)p%npart_tot
+
+  write(ilun,*)'Total number of files'
+  write(ilun,*)r%nfile
+
+  ! Keep track of what particle fields are present
+  write(ilun,*)'Particle fields'
+  write(ilun,'(a)',advance='no')'halo_id'
+  close(ilun)
+
+end subroutine output_halo_header
 !#########################################################################
 !#########################################################################
 !#########################################################################
@@ -422,43 +495,4 @@ end subroutine output_peak_header
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine output_halo_header(r,g,p,filename)
-  use amr_parameters, only: flen
-  use amr_commons, only: run_t,global_t
-  use pm_commons, only: part_t
-  implicit none
-  type(run_t)::r
-  type(global_t)::g
-  type(part_t)::p
-  character(LEN=flen)::filename
-
-  ! Local variables
-  integer::ilun
-  character(LEN=flen)::fileloc
-
-  if(r%verbose)write(*,*)'Entering output_halo_header'
-
-  ilun=10!+g%myid
-
-  ! Open file
-  fileloc=TRIM(filename)
-  open(unit=ilun,file=fileloc,form='formatted')
-
-  ! Write header information
-  write(ilun,*)'Total number of particles'
-  write(ilun,*)p%npart_tot
-
-  write(ilun,*)'Total number of files'
-  write(ilun,*)r%nfile
-
-  ! Keep track of what particle fields are present
-  write(ilun,*)'Particle fields'
-  write(ilun,'(a)',advance='no')'halo_id'
-  close(ilun)
-
-end subroutine output_halo_header
-!#######################################################
-!#######################################################
-!#######################################################
-!#######################################################
 end module output_clump_module

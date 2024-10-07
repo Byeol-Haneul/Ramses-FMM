@@ -204,7 +204,7 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
   end do
   p%npart_tot=p%npart_tot+nsink_cum(g%ncpu)
 
-  if(g%myid==1)write(*,*)'New sinks =',nsink_cum(g%ncpu),'Number of sinks =',p%npart_tot
+  if(g%myid==1)write(*,*)'Found',int(nsink_cum(g%ncpu),kind=4),' new sinks for a total of',int(p%npart_tot,kind=4)
 
 #endif
 
@@ -333,9 +333,11 @@ subroutine sink_clump(s)
   ! Compute additional particle-based clump properties.
   !----------------------------------------------------------------------
   if(s%r%pic.and.s%r%rho_type_sink.eq.1)then
+     call particle_peak_id(s,s%p)
      call particle_clump_properties(s,s%p)
   endif
   if(s%r%star.and.s%r%rho_type_sink.eq.2)then
+     call particle_peak_id(s,s%star)
      call particle_clump_properties(s,s%star)
   endif
   !----------------------------------------------------------------------
@@ -351,6 +353,7 @@ subroutine sink_clump(s)
   ! Reset sink position to peak position
   ! Determine which halos are occupied by a sink
   !---------------------------------------------
+  call particle_peak_id(s,s%sink)
   call sink_in_peak(s,.true.,.true.)
 
 #endif
@@ -368,21 +371,25 @@ subroutine sink_in_halo(s,reset_sink_pos,halo_is_occupied)
   type(ramses_t)::s
   logical::halo_is_occupied,reset_sink_pos
   
-  integer::i,ipart,no_halo,halo_nr
+  integer::i,ipart,halo_nr
   integer(kind=8)::global_halo_id
   type(msg_sink_clump)::dummy_sink_clump
   type(msg_saddle_clump)::dummy_saddle_clump
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
 
-  !--------------------------------
-  ! Reads halo id of sink particles
-  !--------------------------------
-  call particle_halo_id(s,p,no_halo)
-
-  if(no_halo>0)then
-     write(*,*)'SINK OUTSIDE HALOS',no_halo
+  if(p%norphan_halo>0)then
+     write(*,*)'CREATE_SINK: SINK OUTSIDE HALOS',p%norphan_halo
   end if
+
+  !--------------------------------------------
+  ! Sort particles according to global halo id
+  !--------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%hid(ipart)
+  end do
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
   !-------------------------------------
   ! Reset sink position to peak position
@@ -390,7 +397,7 @@ subroutine sink_in_halo(s,reset_sink_pos,halo_is_occupied)
   if(reset_sink_pos)then
      call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
           pack=pack_fetch_sink,unpack=unpack_fetch_sink)
-     do i=no_halo+1,p%npart
+     do i=1+p%norphan_halo,p%npart
         ipart=p%sortp(i)
         global_halo_id=p%workp(i)
         if (global_halo_id /=0 ) then
@@ -419,7 +426,7 @@ subroutine sink_in_halo(s,reset_sink_pos,halo_is_occupied)
      c%occupied_sink=0
      call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
           init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
-     do i=no_halo+1,p%npart
+     do i=1+p%norphan_halo,p%npart
         global_halo_id=p%workp(i)
         if (global_halo_id /=0 ) then
            call get_peak(s,global_halo_id,halo_nr,fetch_cache=.false.,flush_cache=.true.)
@@ -445,21 +452,25 @@ subroutine sink_in_peak(s,reset_sink_pos,halo_is_occupied)
   type(ramses_t)::s
   logical::halo_is_occupied,reset_sink_pos
 
-  integer::i,ipart,no_peak,peak_nr,halo_nr
+  integer::i,ipart,peak_nr,halo_nr
   integer(kind=8)::global_peak_id,global_halo_id
   type(msg_sink_clump)::dummy_sink_clump
   type(msg_saddle_clump)::dummy_saddle_clump
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
 
-  !--------------------------------
-  ! Reads peak id of sink particles
-  !--------------------------------
-  call particle_peak_id(s,p,no_peak)
-
-  if(no_peak>0)then
-     write(*,*)'SINK OUTSIDE PEAKS',no_peak
+  if(p%norphan_peak>0)then
+     write(*,*)'CREATE_SINK: SINK OUTSIDE PEAKS',p%norphan_peak
   end if
+
+  !--------------------------------------------
+  ! Sort particles according to global clump id
+  !--------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%pid(ipart)
+  end do
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
   !-------------------------------------
   ! Reset sink position to peak position
@@ -467,7 +478,7 @@ subroutine sink_in_peak(s,reset_sink_pos,halo_is_occupied)
   if(reset_sink_pos)then
      call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
           pack=pack_fetch_sink,unpack=unpack_fetch_sink)
-     do i=no_peak+1,p%npart
+     do i=1+p%norphan_peak,p%npart
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
         if (global_peak_id /=0 ) then
@@ -497,7 +508,7 @@ subroutine sink_in_peak(s,reset_sink_pos,halo_is_occupied)
      call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
           pack=pack_fetch_occupied,unpack=unpack_fetch_occupied,&
           init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
-     do i=no_peak+1,p%npart
+     do i=1+p%norphan_peak,p%npart
         global_peak_id=p%workp(i)
         if (global_peak_id /=0 ) then
            call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)

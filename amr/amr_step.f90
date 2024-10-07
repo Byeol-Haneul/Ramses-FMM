@@ -65,14 +65,20 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_refine_fine(pst,ilevel)
   endif
   
+  !-------------------------
+  ! Sink formation in clumps
+  !-------------------------
+  if(r%sink.and.ilevel==r%levelmin)then
+                                    call m_timer(pst,'sink - formation','start')
+     call m_sink_formation(pst)
+  endif
+
   !------------------------
   ! Output results to files
   !------------------------
   if(ilevel==r%levelmin)then
      if(r%foutput>0)then
         if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
-                                    call m_timer(pst,'output','start')
-           call m_dump_all(pst,.false.)
            !----------------------------
            ! Call the clump finder
            !----------------------------
@@ -80,6 +86,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
                                     call m_timer(pst,'clump','start')
               call m_clump_finder(pst,.true.,.false.)
            endif
+                                    call m_timer(pst,'output','start')
+           call m_dump_all(pst,.false.)
         endif
      endif
      tcurr=wallclock()
@@ -95,14 +103,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            bkp_last_done=.true.
         endif
      endif
-  endif
-
-  !-------------------------
-  ! Sink formation in clumps
-  !-------------------------
-  if(r%sink.and.ilevel==r%levelmin)then
-                                    call m_timer(pst,'sink - formation','start')
-     call m_sink_formation(pst)
   endif
 
   !----------------------------

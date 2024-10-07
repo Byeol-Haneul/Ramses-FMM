@@ -292,8 +292,10 @@ subroutine m_read_params(pst)
   logical::output_peak=.false.
   logical::output_peak_part=.false.
   logical::output_peak_star=.false.
+  logical::output_peak_sink=.false.
   logical::output_halo_part=.false.
   logical::output_halo_star=.false.
+  logical::output_halo_sink=.false.
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
@@ -406,7 +408,8 @@ subroutine m_read_params(pst)
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
-       & ,output_clump,output_peak,output_peak_part,output_peak_star,output_halo_part,output_halo_star &
+       & ,output_clump,output_peak,output_peak_part,output_peak_star,output_peak_sink &
+       & ,output_halo_part,output_halo_star,output_halo_sink &
        & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold &
        & ,rho_type_clump
   ! Gadget initial conditions parameters
@@ -990,8 +993,10 @@ subroutine m_read_params(pst)
   s%r%output_peak=output_peak
   s%r%output_peak_part=output_peak_part
   s%r%output_peak_star=output_peak_star
+  s%r%output_peak_sink=output_peak_sink
   s%r%output_halo_part=output_halo_part
   s%r%output_halo_star=output_halo_star
+  s%r%output_halo_sink=output_halo_sink
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold

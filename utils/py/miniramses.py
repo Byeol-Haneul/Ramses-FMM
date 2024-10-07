@@ -174,7 +174,7 @@ def rd_histo(filename):
     return h
 
 class Part:
-    def __init__(self,nnp,nndim,star=False,peak=False):
+    def __init__(self,nnp,nndim,star=False,sink=False,peak=False):
         self.np = nnp
         self.ndim = nndim
         self.xp = np.zeros([nndim,nnp])
@@ -182,6 +182,9 @@ class Part:
         self.mp = np.zeros([nnp])
         if(star):
             self.zp = np.zeros([nnp])
+            self.tp = np.zeros([nnp])
+        if(sink):
+            self.fp = np.zeros([nndim,nnp])
             self.tp = np.zeros([nnp])
         if(peak):
             self.pid = np.zeros([nnp],dtype=np.int32)
@@ -261,7 +264,7 @@ def rd_part(nout,**kwargs):
     print(txt)
     print("Reading particle data...")
 
-    p = Part(npart,ndim,star,peak)
+    p = Part(npart,ndim,star,sink,peak)
     p.np = npart
     p.ndim = ndim
 
@@ -323,6 +326,26 @@ def rd_part(nout,**kwargs):
 
             p.tp[ipart:ipart+npart2] = xp
 
+        if(sink):
+            for idim in range(0,ndim):
+                if(backup):
+                    offset = 8+idim*npart2*8
+                    xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+                else:
+                    offset = 8+idim*npart2*4
+                    xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+
+                p.fp[idim,ipart:ipart+npart2] = xp
+
+            if(backup):
+                offset = 8+npart2*8*ndim*2+2*npart2*8
+                xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+            else:
+                offset = 8+npart2*4*ndim*2+2*npart2*4
+                xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+
+            p.tp[ipart:ipart+npart2] = xp
+
         ipart = ipart + npart2
 
     if(peak):
@@ -350,6 +373,8 @@ def rd_part(nout,**kwargs):
         p.vp = p.vp[:,r < radius]
         if(star):
             p.zp = p.zp[r < radius]
+            p.tp = p.tp[r < radius]
+        if(sink):
             p.tp = p.tp[r < radius]
         if(peak):
             p.pid = p.pid[r < radius]
@@ -1034,6 +1059,7 @@ def visu(x,y,dx,v,**kwargs):
     vmin = kwargs.get("vmin",None)
     vmax = kwargs.get("vmax",None)
     sort = kwargs.get("sort",None)
+    cmap = kwargs.get("cmap",'viridis')
 
     if( not (log is None)):
         if vmin==None:
@@ -1057,7 +1083,7 @@ def visu(x,y,dx,v,**kwargs):
     plt.scatter(x,y,s=0.0001)
     rescale=np.maximum(xmax-xmin,ymax-ymin)        
     ax.set_aspect("equal")
-    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,cmap="viridis",marker="s",vmin=vmin,vmax=vmax)
+    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,cmap=cmap)
     plt.colorbar(shrink=0.8)
 
 def mk_movie(**kwargs):

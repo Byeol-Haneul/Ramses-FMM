@@ -1006,7 +1006,7 @@ subroutine split_part(s,p,ilevel)
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp
+  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp
   integer,dimension(1:ndim)::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::i,ipart,jpart,idim,icell,ilev
@@ -1137,6 +1137,12 @@ subroutine split_part(s,p,ilevel)
            mp_tmp=p%zp(ipart)
            p%zp(ipart)=p%zp(jpart)
            p%zp(jpart)=mp_tmp
+        endif
+        ! Swap acceleration
+        if(allocated(p%fp))then
+           fp_tmp(1:ndim)=p%fp(ipart,1:ndim)
+           p%fp(ipart,1:ndim)=p%fp(jpart,1:ndim)
+           p%fp(jpart,1:ndim)=fp_tmp(1:ndim)
         endif
         ! Swap age
         if(allocated(p%tp))then
