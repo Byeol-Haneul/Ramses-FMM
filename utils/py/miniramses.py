@@ -174,7 +174,7 @@ def rd_histo(filename):
     return h
 
 class Part:
-    def __init__(self,nnp,nndim,star=False,sink=False,peak=False):
+    def __init__(self,nnp,nndim,star=False,sink=False,peak=False,halo=False):
         self.np = nnp
         self.ndim = nndim
         self.xp = np.zeros([nndim,nnp])
@@ -188,6 +188,8 @@ class Part:
             self.tp = np.zeros([nnp])
         if(peak):
             self.pid = np.zeros([nnp],dtype=np.int32)
+        if(halo):
+            self.hid = np.zeros([nnp],dtype=np.int32)
             
 def rd_part(nout,**kwargs):
     """This function reads a RAMSES particle file (unformatted Fortran binary) 
@@ -227,6 +229,7 @@ def rd_part(nout,**kwargs):
     star = kwargs.get("star",False)
     sink = kwargs.get("sink",False)
     peak = kwargs.get("peak",False)
+    halo = kwargs.get("halo",False)
 
     car1 = str(nout).zfill(5)
     i = rd_info(nout,path=path,backup=backup)
@@ -262,9 +265,8 @@ def rd_part(nout,**kwargs):
 
     txt = "Found "+str(npart)+" particles"
     print(txt)
-#    print("Reading particle data...")
 
-    p = Part(npart,ndim,star,sink,peak)
+    p = Part(npart,ndim,star,sink,peak,halo)
     p.np = npart
     p.ndim = ndim
 
@@ -364,6 +366,22 @@ def rd_part(nout,**kwargs):
             p.pid[ipart:ipart+npart2] = pid
             ipart = ipart + npart2
     
+    if(halo):
+        prefix="/halo_part."
+        if(star):
+            prefix="/halo_star."
+        if(sink):
+            prefix="/halo_sink."
+        ipart = 0
+        for icpu in cpulist:
+            car2 = str(icpu).zfill(5)
+            filename = path+"/output_"+car1+prefix+car2
+            npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
+            offset = 8
+            hid = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
+            p.hid[ipart:ipart+npart2] = hid
+            ipart = ipart + npart2
+
     if ( not (center is None)  and not (radius is None) ):
         # Filtering particles
         r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
@@ -378,6 +396,8 @@ def rd_part(nout,**kwargs):
             p.tp = p.tp[r < radius]
         if(peak):
             p.pid = p.pid[r < radius]
+        if(halo):
+            p.hid = p.hid[r < radius]
 
     return p
 
