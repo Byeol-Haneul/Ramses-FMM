@@ -262,7 +262,7 @@ def rd_part(nout,**kwargs):
 
     txt = "Found "+str(npart)+" particles"
     print(txt)
-    print("Reading particle data...")
+#    print("Reading particle data...")
 
     p = Part(npart,ndim,star,sink,peak)
     p.np = npart
@@ -1074,6 +1074,7 @@ def visu(x,y,dx,v,**kwargs):
     else:
         ind = np.arange(0,v.size)
 
+    olddpi = plt.rcParams['figure.dpi']
     plt.rcParams['figure.dpi'] = 58
     px = 1/plt.rcParams['figure.dpi'] 
     fig, ax = plt.subplots(figsize=(1000*px,1000*px))
@@ -1085,6 +1086,7 @@ def visu(x,y,dx,v,**kwargs):
     ax.set_aspect("equal")
     plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,cmap=cmap)
     plt.colorbar(shrink=0.8)
+    plt.rcParams['figure.dpi'] = olddpi
 
 def mk_movie(**kwargs):
     '''The function mk_movie() takes 2D data files containing maps and converts them into a sequence of images, 
@@ -1282,6 +1284,9 @@ def rd_halo(nout,**kwargs):
        cat.rmax = np.append(cat.rmax,rmax)
        cat.c200 = np.append(cat.c200,c200)
 
+   txt = "Found "+str(len(cat.index))+" halos"
+   print(txt)
+
    return cat
 
 class ClumpCat:
@@ -1375,6 +1380,9 @@ def rd_clump(nout,**kwargs):
        cat.dmin = cat.dmin[r < radius]
        cat.dsad = cat.dsad[r < radius]
         
+   txt = "Found "+str(len(cat.index))+" clumps"
+   print(txt)
+
    return cat
 
 class GraficFile:
