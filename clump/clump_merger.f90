@@ -1906,6 +1906,7 @@ subroutine particle_clump_properties(s,p)
   c%particle_mass=0
   c%peak_vel=0
   c%peak_com=0
+  c%npart=0
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_part,unpack=unpack_fetch_part,&
        init=init_flush_part,flush=pack_flush_part,combine=unpack_flush_part)
@@ -1930,6 +1931,7 @@ subroutine particle_clump_properties(s,p)
            c%peak_com(peak_nr,1:ndim)=c%peak_com(peak_nr,1:ndim)+p%mp(ipart)*xpart(1:ndim)
            c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
            c%particle_mass(peak_nr)=c%particle_mass(peak_nr)+p%mp(ipart)
+           c%npart(peak_nr)=c%npart(peak_nr)+1
         endif
      endif
   end do
@@ -2004,6 +2006,7 @@ subroutine init_flush_part(c,local_peak_id)
   type(clump_t)::c
   integer::local_peak_id
 
+  c%npart(local_peak_id)=0
   c%particle_mass(local_peak_id)=0
   c%peak_vel(local_peak_id,1:ndim)=0d0
   c%peak_com(local_peak_id,1:ndim)=0d0
@@ -2024,6 +2027,7 @@ subroutine pack_flush_part(c,local_peak_id,msg_size,msg_array)
 
   type(msg_prop_clump)::msg
 
+  msg%ncell=c%npart(local_peak_id)
   msg%mass=c%particle_mass(local_peak_id)
   msg%vel(1:ndim)=c%peak_vel(local_peak_id,1:ndim)
   msg%pos(1:ndim)=c%peak_com(local_peak_id,1:ndim)
@@ -2048,6 +2052,7 @@ subroutine unpack_flush_part(c,local_peak_id,msg_size,msg_array)
 
   msg=transfer(msg_array,msg)
 
+  c%npart(local_peak_id)=c%npart(local_peak_id)+msg%ncell
   c%particle_mass(local_peak_id)=c%particle_mass(local_peak_id)+msg%mass
   c%peak_vel(local_peak_id,1:ndim)=c%peak_vel(local_peak_id,1:ndim)+msg%vel(1:ndim)
   c%peak_com(local_peak_id,1:ndim)=c%peak_com(local_peak_id,1:ndim)+msg%pos(1:ndim)

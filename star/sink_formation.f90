@@ -106,8 +106,8 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
 #endif
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,nsink_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,nsink_cpu
-  integer::i,j,icpu,nsite,nsink,nsink_loc
-  integer::peak_nr
+  integer::i,j,icpu,nsite,nsink,nsink_loc,peak_nr
+  real(dp)::purity
   logical::ok
 
 #if NDIM>2
@@ -126,6 +126,8 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%halo_mass(j)<=c%mass_threshold)ok=.false.
      if(c%occupied_sink(j)>0)ok=.false.
+     purity=c%npart(j)*g%mp_min/c%particle_mass(j)
+     if(purity<=0.98)ok=.false.
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
