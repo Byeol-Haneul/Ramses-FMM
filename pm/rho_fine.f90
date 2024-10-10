@@ -690,7 +690,7 @@ subroutine cic_part(s,p,ilevel,rtype)
   real(kind=8)::dx_loc,vol_loc
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::star,sink
+  logical::dark,star,sink
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
