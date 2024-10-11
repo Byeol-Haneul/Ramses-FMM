@@ -812,11 +812,14 @@ subroutine cic_part(s,p,ilevel,rtype)
            ! Compute mass density field
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
            ! Compute refinement criterion
+#ifdef HYDRO
+           ! For stars or sinks use the baryonic mass
            if(star.or.sink)then
-              ! For stars or sinks use the baryonic mass
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
-           else
-              ! For dark matter particles, use particle count
+           endif
+#endif
+           ! For dark matter particles, use particle count
+           if(dark)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
