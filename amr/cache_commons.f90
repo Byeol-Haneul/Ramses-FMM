@@ -88,6 +88,7 @@ module cache_commons
   type msg_mbin_clump
      integer::npart
      integer::lev
+     integer(kind=8)::ind
      real(kind=dp)::dens
      real(kind=dp)::mass
      real(kind=dp),dimension(1:ndim)::pos

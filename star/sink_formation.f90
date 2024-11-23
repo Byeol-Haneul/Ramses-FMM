@@ -122,7 +122,7 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      !-------------------------------------
      ! Add here all sink formation criteria
      !-------------------------------------
-     if(c%new_peak(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
+     if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
      if(c%nsink(j)>0)ok=.false.
@@ -296,7 +296,7 @@ subroutine sink_clump(s)
   s%c%density_threshold = 80
   s%c%saddle_threshold = 200
   s%c%mass_threshold = 100*s%g%mp_min
-  s%c%fraction_threshold = s%r%fraction_threshold
+  s%c%fraction_threshold = 2d0
   s%c%purity_threshold = 0.98
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.

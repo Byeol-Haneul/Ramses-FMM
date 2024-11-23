@@ -2250,6 +2250,7 @@ subroutine pack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
   msg%mass=c%clump_mass(local_peak_id)
   msg%dens=c%tidal_dens(local_peak_id)
   msg%lev=c%lev_peak(local_peak_id)
+  msg%ind=c%new_peak(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -2275,6 +2276,7 @@ subroutine unpack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
   c%clump_mass(local_peak_id)=msg%mass
   c%tidal_dens(local_peak_id)=msg%dens
   c%lev_peak(local_peak_id)=msg%lev
+  c%new_peak(local_peak_id)=msg%ind
 
 end subroutine unpack_fetch_mbin
 !################################################################
