@@ -285,7 +285,6 @@ subroutine m_read_params(pst)
   logical::mechanical_feedback=.false.
 
   ! Clump finder parameters
-  integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks
   logical::clump_finder=.false.
   logical::clump_info=.false.
   logical::output_clump=.false.
@@ -293,13 +292,13 @@ subroutine m_read_params(pst)
   logical::output_peak_part=.false.
   logical::output_peak_star=.false.
   logical::output_peak_sink=.false.
-  logical::output_halo_part=.false.
-  logical::output_halo_star=.false.
-  logical::output_halo_sink=.false.
+  integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
   real(dp)::mass_threshold=0
+  real(dp)::purity_threshold=-1
+  real(dp)::fraction_threshold=0.1d0
 
   ! Sink parameters
   integer::rho_type_sink=1
@@ -409,8 +408,8 @@ subroutine m_read_params(pst)
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
        & ,output_clump,output_peak,output_peak_part,output_peak_star,output_peak_sink &
-       & ,output_halo_part,output_halo_star,output_halo_sink &
-       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold &
+       & ,relevance_threshold,density_threshold,saddle_threshold &
+       & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
@@ -994,13 +993,12 @@ subroutine m_read_params(pst)
   s%r%output_peak_part=output_peak_part
   s%r%output_peak_star=output_peak_star
   s%r%output_peak_sink=output_peak_sink
-  s%r%output_halo_part=output_halo_part
-  s%r%output_halo_star=output_halo_star
-  s%r%output_halo_sink=output_halo_sink
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold
   s%r%mass_threshold=mass_threshold
+  s%r%purity_threshold=purity_threshold
+  s%r%fraction_threshold=fraction_threshold
   s%r%rho_type_clump=rho_type_clump
 
   s%r%rho_type_sink=rho_type_sink

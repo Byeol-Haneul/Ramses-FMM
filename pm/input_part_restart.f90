@@ -286,8 +286,9 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
 
      iskip=9
 
-     ! Read positions
      allocate(xdp(istart:iend))
+
+     ! Read positions
      do idim=1,ndim
         ipos=iskip+8*(istart-1)
         read(10,POS=ipos)xdp
@@ -359,10 +360,37 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
         end do
         iskip=iskip+8*npart_file(icpu)
      endif
+
+     ! Read merging time
+     if(allocated(p%tm))then
+        ipos=iskip+8*(istart-1)
+        read(10,POS=ipos)xdp
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%tm(ipart)=xdp(i)
+        end do
+        iskip=iskip+8*npart_file(icpu)
+     endif
+
      deallocate(xdp)
 
-     ! Read identity
+     allocate(isp(istart:iend))
+
+     ! Read level
+     ipos=iskip+4*(istart-1)
+     read(10,POS=ipos)isp
+     ipart=ipart_old
+     do i=istart,iend
+        ipart=ipart+1
+        p%levelp(ipart)=isp(i)
+     end do
+
+     deallocate(isp)
+
      allocate(isp8(istart:iend))
+
+     ! Read identity
 #ifndef LONGINT
      ipos=iskip+4*(istart-1)
 #else
@@ -379,18 +407,28 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
 #else
      iskip=iskip+8*npart_file(icpu)
 #endif
-     deallocate(isp8)
 
-     ! Read level
-     allocate(isp(istart:iend))
-     ipos=iskip+4*(istart-1)
-     read(10,POS=ipos)isp
-     ipart=ipart_old
-     do i=istart,iend
-        ipart=ipart+1
-        p%levelp(ipart)=isp(i)
-     end do
-     deallocate(isp)
+     ! Read merging identity
+     if(allocated(p%idm))then
+#ifndef LONGINT
+        ipos=iskip+4*(istart-1)
+#else
+        ipos=iskip+8*(istart-1)
+#endif
+        read(10,POS=ipos)isp8
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%idm(ipart)=isp8(i)
+        end do
+#ifndef LONGINT
+        iskip=iskip+4*npart_file(icpu)
+#else
+        iskip=iskip+8*npart_file(icpu)
+#endif
+     endif
+
+     deallocate(isp8)
 
      ! Close the PART file
      close(10)

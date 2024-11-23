@@ -1158,14 +1158,26 @@ subroutine split_part(s,p,ilevel)
            p%tp(ipart)=p%tp(jpart)
            p%tp(jpart)=mp_tmp
         endif
-        ! Swap ids
-        idp_tmp=p%idp(ipart)
-        p%idp(ipart)=p%idp(jpart)
-        p%idp(jpart)=idp_tmp
+        ! Swap merging age
+        if(allocated(p%tm))then
+           mp_tmp=p%tm(ipart)
+           p%tm(ipart)=p%tm(jpart)
+           p%tm(jpart)=mp_tmp
+        endif
         ! Swap levels
         levelp_tmp=p%levelp(ipart)
         p%levelp(ipart)=p%levelp(jpart)
         p%levelp(jpart)=levelp_tmp
+        ! Swap ids
+        idp_tmp=p%idp(ipart)
+        p%idp(ipart)=p%idp(jpart)
+        p%idp(jpart)=idp_tmp
+        ! Swap merging ids
+        if(allocated(p%idm))then
+           idp_tmp=p%idm(ipart)
+           p%idm(ipart)=p%idm(jpart)
+           p%idm(jpart)=idp_tmp
+        endif
      end do
   end do
 

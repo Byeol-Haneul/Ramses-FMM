@@ -64,10 +64,6 @@ module cache_commons
      real(kind=dp),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
   end type msg_large_realdp
-  type msg_large_clump
-     integer(kind=4)::int4
-     real(kind=dp)::realdp
-  end type msg_large_clump
   type msg_saddle_clump
      integer(kind=8)::nbor
      real(kind=dp)::dens
@@ -76,32 +72,38 @@ module cache_commons
      integer(kind=8)::npeak
      real(kind=dp)::mdens
   end type msg_merge_clump
-  type msg_halo_clump
-     integer::ncell
-     real(kind=dp)::mhalo
-  end type msg_halo_clump
   type msg_prop_clump
      integer::ncell
-     integer(kind=8),dimension(1:3)::ind
+     integer(kind=8)::ind
      real(kind=dp)::dens
      real(kind=dp)::mass
      real(kind=dp)::vol
      real(kind=dp),dimension(1:ndim)::pos
      real(kind=dp),dimension(1:ndim)::vel
   end type msg_prop_clump
-  type msg_maxmass_clump
-     integer(kind=8)::ind
-     integer(kind=8)::ind1
-     integer(kind=8)::ind2
-     real(kind=dp)::mass
-  end type msg_maxmass_clump
+  type msg_halo_clump
+     integer::ihalo
+     real(kind=dp)::mhalo
+  end type msg_halo_clump
   type msg_mbin_clump
      integer::npart
+     integer::lev
+     real(kind=dp)::dens
      real(kind=dp)::mass
      real(kind=dp),dimension(1:ndim)::pos
      real(kind=dp),dimension(1:nbin)::mbin
   end type msg_mbin_clump
+  type msg_unbind_clump
+     integer::lev
+     integer(kind=8)::ind
+     real(kind=dp)::dens
+     real(kind=dp)::mass
+     real(kind=dp),dimension(1:ndim)::pos
+     real(kind=dp),dimension(1:ndim)::vel
+     real(kind=dp),dimension(1:nbin)::mbin
+  end type msg_unbind_clump
   type msg_sink_clump
+     integer::id
      integer::lev
      real(kind=dp),dimension(1:ndim)::pos
      real(kind=dp),dimension(1:ndim)::vel

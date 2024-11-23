@@ -49,9 +49,6 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      input_array=transfer(filedir,input_array)
      if(r%output_clump)then
         write(*,*)'Writing clump files'
-        if(pst%s%c%saddle_threshold>0)then
-           write(*,*)'Writing halo files'
-        endif
      endif
      if(r%output_peak)then
         write(*,*)'Writing peak grid files'
@@ -72,21 +69,6 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         write(*,*)'Writing peak sink files'
         filename=TRIM(filedir)//'peak_sink_header.txt'
         call output_peak_header(r,g,sink,filename)
-     endif
-     if(r%output_halo_part.and.r%pic)then
-        write(*,*)'Writing halo part files'
-        filename=TRIM(filedir)//'halo_part_header.txt'
-        call output_halo_header(r,g,p,filename)
-     endif
-     if(r%output_halo_star.and.r%star)then
-        write(*,*)'Writing halo star files'
-        filename=TRIM(filedir)//'halo_star_header.txt'
-        call output_halo_header(r,g,star,filename)
-     endif
-     if(r%output_halo_sink.and.r%sink)then
-        write(*,*)'Writing halo sink files'
-        filename=TRIM(filedir)//'halo_sink_header.txt'
-        call output_halo_header(r,g,sink,filename)
      endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
@@ -147,6 +129,8 @@ subroutine clump_finder(s)
   s%c%density_threshold = s%r%density_threshold
   s%c%saddle_threshold = s%r%saddle_threshold
   s%c%mass_threshold = s%r%mass_threshold
+  s%c%purity_threshold = s%r%purity_threshold
+  s%c%fraction_threshold = s%r%fraction_threshold
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
@@ -191,13 +175,20 @@ subroutine clump_finder(s)
   ! Compute particle-based peak-patch properties.
   ! Particle peak ids are also computed and stored in array pid.
   !----------------------------------------------------------------------
-  if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
+  if(s%r%pic)then
      call particle_peak_id(s,s%p)
-     call particle_clump_properties(s,s%p)
+     if(s%r%rho_type_clump.eq.1)then
+        call particle_clump_properties(s,s%p)
+     endif
   endif
-  if(s%r%star.and.s%r%rho_type_clump.eq.2)then
+  if(s%r%star)then
      call particle_peak_id(s,s%star)
-     call particle_clump_properties(s,s%star)
+     if(s%r%rho_type_clump.eq.2)then
+        call particle_clump_properties(s,s%star)
+     endif
+  endif
+  if(s%r%sink)then
+     call particle_peak_id(s,s%sink)
   endif
   !----------------------------------------------------------------------
   ! Merge all neighboring peak-patches above the prescribed density
@@ -209,44 +200,58 @@ subroutine clump_finder(s)
      call merge_clumps(s,'saddleden')
   endif
   !----------------------------------------------------------------------
+  ! Compute gravitational self-potential of all clumps hierarchically.
+  ! Particle peak ids need to be reset after that.
+  !----------------------------------------------------------------------
+  if(s%c%saddle_threshold>0)then
+     if(s%r%pic)then
+        call particle_potential(s,s%p)
+        call particle_peak_id(s,s%p)
+     endif
+  endif
+  !----------------------------------------------------------------------
+  ! Unbind clump and particle from clumps hierarchically.
+  ! The clump and particle peak ids are updated accordingly.
+  ! The halo patch is used as garbage collector.
+  !----------------------------------------------------------------------
+  if(s%c%saddle_threshold>0)then
+     call clump_unbind(s)
+     if(s%r%pic)then
+        call particle_unbind(s,s%p)
+     endif
+     if(s%r%star)then
+        call particle_unbind(s,s%star)
+     endif
+     if(s%r%sink)then
+        call particle_unbind(s,s%sink)
+     endif
+  endif
+  !----------------------------------------------------------------------
+  ! Compute final clump mass profiles hierarchically.
+  !----------------------------------------------------------------------
+  if(s%c%saddle_threshold>0)then
+     if(s%r%pic)then
+        call mass_profile(s,s%p)
+     endif
+  endif
+  !----------------------------------------------------------------------
   ! Remove all peak-patches (resp. halo-patches) that are below
   ! the relevance threshold or the mass threshold by setting their
   ! flag2 (resp. flag1) field values to zero.
   !----------------------------------------------------------------------
   call trim_clumps(s)
   !----------------------------------------------------------------------
-  ! Find 1, 2 or 3 most massive centrals in each halo patch.
+  ! Compute particle halo ids and store them in array hid.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     call central_in_halos(s)
-  endif
-  !----------------------------------------------------------------------
-  ! Split particles among centrals.
-  ! Particle central ids are stored in array hid.
-  ! Evaporate low mass centrals and compute cumulative mass profiles.
-  !----------------------------------------------------------------------
-  if(s%c%saddle_threshold>0)then
-     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
-        call particle_peak_id(s,s%p)
+     if(s%r%pic)then
         call particle_halo_id(s,s%p)
-        call particle_split_centrals(s,s%p)
-        call peak_split_centrals(s)
-        call mass_around_centrals(s,s%p)
-        call evaporate_centrals(s)
-        call particle_halo_id(s,s%p)
-        call particle_split_centrals(s,s%p)
-        call peak_split_centrals(s)
-        call mass_around_centrals(s,s%p)
-        if(s%r%star)then
-           call particle_peak_id(s,s%star)
-           call particle_halo_id(s,s%star)
-           call particle_split_centrals(s,s%star)
-        endif
-        if(s%r%sink)then
-           call particle_peak_id(s,s%sink)
-           call particle_halo_id(s,s%sink)
-           call particle_split_centrals(s,s%sink)
-        endif
+     endif
+     if(s%r%star)then
+        call particle_halo_id(s,s%star)
+     endif
+     if(s%r%sink)then
+        call particle_halo_id(s,s%sink)
      endif
   endif
 #endif

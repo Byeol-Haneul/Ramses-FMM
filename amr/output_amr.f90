@@ -634,7 +634,13 @@ subroutine output_header(r,g,p,filename)
   if(allocated(p%tp))then
      write(ilun,'(a)',advance='no')'age '
   endif
-  write(ilun,'(a)',advance='no')'iord level '
+  if(allocated(p%tm))then
+     write(ilun,'(a)',advance='no')'merging_age '
+  endif
+  write(ilun,'(a)',advance='no')'level id '
+  if(allocated(p%idm))then
+     write(ilun,'(a)',advance='no')'merging_id '
+  endif
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   write(ilun,'(a)',advance='no')'phi '
 #endif

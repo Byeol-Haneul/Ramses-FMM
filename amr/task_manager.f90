@@ -510,7 +510,7 @@ subroutine init_cache_clump(mdl)
   type(mdl_t)::mdl
 
   integer::ncpu,ibuf
-  type(msg_mbin_clump)::dummy_large_clump
+  type(msg_unbind_clump)::dummy_large_clump
 
   ncpu=mdl_threads(mdl)
 
@@ -639,7 +639,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   type(cache_key_ptr),dimension(1:ntilemax)::keys
   type(nbor),dimension(1:ntilemax)::grid
   type(msg_large_realdp)::dummy_large_realdp
-  type(msg_mbin_clump)::dummy_large_clump
+  type(msg_unbind_clump)::dummy_large_clump
 
 #ifndef WITHOUTMPI
 
@@ -1059,7 +1059,7 @@ subroutine destage_clump(s,local_peak_id,hash_dict)
   integer::send_flush_id_clump,iskip,nflush
   integer::buffer_size_flush_array_clump,buffer_size_msg_array_clump
   integer(kind=8)::global_peak_id
-  type(msg_mbin_clump)::dummy_large_clump
+  type(msg_unbind_clump)::dummy_large_clump
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 

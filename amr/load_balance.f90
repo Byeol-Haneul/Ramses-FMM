@@ -1082,14 +1082,26 @@ subroutine balance_part(s,p,ilevel)
            p%tp(ipart)=p%tp(jpart)
            p%tp(jpart)=tp_tmp
         endif
-        ! Swap ids
-        idp_tmp=p%idp(ipart)
-        p%idp(ipart)=p%idp(jpart)
-        p%idp(jpart)=idp_tmp
+        ! Swap merging time
+        if(allocated(p%tm))then
+           tp_tmp=p%tm(ipart)
+           p%tm(ipart)=p%tm(jpart)
+           p%tm(jpart)=tp_tmp
+        endif
         ! Swap levels
         levelp_tmp=p%levelp(ipart)
         p%levelp(ipart)=p%levelp(jpart)
         p%levelp(jpart)=levelp_tmp
+        ! Swap ids
+        idp_tmp=p%idp(ipart)
+        p%idp(ipart)=p%idp(jpart)
+        p%idp(jpart)=idp_tmp
+        ! Swap merging ids
+        if(allocated(p%idm))then
+           idp_tmp=p%idm(ipart)
+           p%idm(ipart)=p%idm(jpart)
+           p%idm(jpart)=idp_tmp
+        endif
      end do
   end do
 
@@ -1363,14 +1375,57 @@ subroutine balance_part(s,p,ilevel)
 
   endif
 
+  !-------------------------
+  ! Swap merging ages
+  !-------------------------
+  if(allocated(p%tm))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+           call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        x_send_buf(i)=p%tm(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+           call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%tm(ipart)=x_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
+
   deallocate(x_recv_buf,x_send_buf)
+
+  allocate(i_recv_buf(1:recv_cnt_tot))
+  allocate(i_send_buf(1:send_cnt_tot))
 
   !-------------------------
   ! Swap levels
   !-------------------------
-  allocate(i_recv_buf(1:recv_cnt_tot))
-  allocate(i_send_buf(1:send_cnt_tot))
-
   countrecv=0
   do icpu=1,g%ncpu
      nbuffer=recv_cnt(icpu)
@@ -1409,12 +1464,12 @@ subroutine balance_part(s,p,ilevel)
 
   deallocate(i_send_buf,i_recv_buf)
 
-  !-------------------------
-  ! Swap ids
-  !-------------------------
   allocate(l_recv_buf(1:recv_cnt_tot))
   allocate(l_send_buf(1:send_cnt_tot))
 
+  !-------------------------
+  ! Swap ids
+  !-------------------------
   countrecv=0
   do icpu=1,g%ncpu
      nbuffer=recv_cnt(icpu)
@@ -1458,6 +1513,57 @@ subroutine balance_part(s,p,ilevel)
 
   ! Wait for full completion of sends
   call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  !-------------------------
+  ! Swap merging ids
+  !-------------------------
+  if(allocated(p%idm))then
+
+     countrecv=0
+     do icpu=1,g%ncpu
+        nbuffer=recv_cnt(icpu)
+        if(nbuffer>0)then
+           countrecv=countrecv+1
+           istart=recv_oft(icpu)+1
+#ifndef LONGINT
+           call MPI_IRECV(l_recv_buf(istart),nbuffer,MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+#else
+           call MPI_IRECV(l_recv_buf(istart),nbuffer,MPI_INTEGER8,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+#endif
+        endif
+     end do
+
+     do i=1,send_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        l_send_buf(i)=p%idm(ipart)
+     end do
+
+     countsend=0
+     do icpu=1,g%ncpu
+        nbuffer=send_cnt(icpu)
+        if(nbuffer>0) then
+           countsend=countsend+1
+           istart=send_oft(icpu)+1
+#ifndef LONGINT
+           call MPI_ISEND(l_send_buf(istart),nbuffer,MPI_INTEGER,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+#else
+           call MPI_ISEND(l_send_buf(istart),nbuffer,MPI_INTEGER8,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+#endif
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+     do i=1,recv_cnt_tot
+        ipart=p%headp(ilevel)-1+count_loc+i
+        p%idm(ipart)=l_recv_buf(i)
+     end do
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+  endif
 
   deallocate(l_recv_buf,l_send_buf)
 

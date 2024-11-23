@@ -122,12 +122,12 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      !-------------------------------------
      ! Add here all sink formation criteria
      !-------------------------------------
-     if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
+     if(c%new_peak(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
-     if(c%halo_mass(j)<=c%mass_threshold)ok=.false.
-     if(c%occupied_sink(j)>0)ok=.false.
+     if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
+     if(c%nsink(j)>0)ok=.false.
      purity=c%npart(j)*g%mp_min/c%particle_mass(j)
-     if(purity<=0.98)ok=.false.
+     if(purity<=c%purity_threshold)ok=.false.
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
@@ -178,6 +178,10 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
         p%mp(p%npart)=0
         ! Compute sink particle birth time using proper time
         p%tp(p%npart)=g%texp
+        ! Set merging time to -1
+        p%tm(p%npart)=-1d0
+        ! Set merging id to 0
+        p%idm(p%npart)=0
         ! Compute level
         p%levelp(p%npart)=c%peak_level(j)
      endif
@@ -292,6 +296,8 @@ subroutine sink_clump(s)
   s%c%density_threshold = 80
   s%c%saddle_threshold = 200
   s%c%mass_threshold = 100*s%g%mp_min
+  s%c%fraction_threshold = s%r%fraction_threshold
+  s%c%purity_threshold = 0.98
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
@@ -334,13 +340,17 @@ subroutine sink_clump(s)
   !----------------------------------------------------------------------
   ! Compute additional particle-based clump properties.
   !----------------------------------------------------------------------
-  if(s%r%pic.and.s%r%rho_type_sink.eq.1)then
+  if(s%r%pic)then
      call particle_peak_id(s,s%p)
-     call particle_clump_properties(s,s%p)
+     if(s%r%rho_type_sink.eq.1)then
+        call particle_clump_properties(s,s%p)
+     endif
   endif
-  if(s%r%star.and.s%r%rho_type_sink.eq.2)then
+  if(s%r%star)then
      call particle_peak_id(s,s%star)
-     call particle_clump_properties(s,s%star)
+     if(s%r%rho_type_sink.eq.2)then
+        call particle_clump_properties(s,s%star)
+     endif
   endif
   !----------------------------------------------------------------------
   ! Merge all neighboring peak-patches above the prescribed density
@@ -353,7 +363,7 @@ subroutine sink_clump(s)
   endif
   !---------------------------------------------
   ! Reset sink position to peak position
-  ! Determine which halos are occupied by a sink
+  ! Count sinks in each clump hierarchically.
   !---------------------------------------------
   call particle_peak_id(s,s%sink)
   call sink_in_peak(s,.true.,.true.)
@@ -364,100 +374,18 @@ end subroutine sink_clump
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine sink_in_halo(s,reset_sink_pos,halo_is_occupied)
+subroutine sink_in_peak(s,reset_sink_pos,count_sink)
   use ramses_commons, only: ramses_t
   use clump_merger_module
   use cache_commons, only: msg_sink_clump,msg_saddle_clump
   use cache
   implicit none
   type(ramses_t)::s
-  logical::halo_is_occupied,reset_sink_pos
-  
-  integer::i,ipart,halo_nr
-  integer(kind=8)::global_halo_id
+  logical::count_sink,reset_sink_pos
+
+  integer::i,ipart,peak_nr,halo_nr,ilev,ipeak,jpeak
+  integer(kind=8)::global_peak_id,merge_to
   type(msg_sink_clump)::dummy_sink_clump
-  type(msg_saddle_clump)::dummy_saddle_clump
-
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
-
-  if(p%norphan_halo>0)then
-     write(*,*)'CREATE_SINK: SINK OUTSIDE HALOS',p%norphan_halo
-  end if
-
-  !--------------------------------------------
-  ! Sort particles according to global halo id
-  !--------------------------------------------
-  do ipart=1,p%npart
-     p%sortp(ipart)=ipart
-     p%workp(ipart)=p%hid(ipart)
-  end do
-  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
-
-  !-------------------------------------
-  ! Reset sink position to peak position
-  !-------------------------------------
-  if(reset_sink_pos)then
-     call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-          pack=pack_fetch_sink,unpack=unpack_fetch_sink)
-     do i=1+p%norphan_halo,p%npart
-        ipart=p%sortp(i)
-        global_halo_id=p%workp(i)
-        if (global_halo_id /=0 ) then
-           call get_peak(s,global_halo_id,halo_nr,fetch_cache=.true.,flush_cache=.false.)
-           ! Compute sink particle position from peak position
-           p%xp(ipart,1)=c%peak_com(halo_nr,1)
-           p%xp(ipart,2)=c%peak_com(halo_nr,2)
-           p%xp(ipart,3)=c%peak_com(halo_nr,3)
-           ! Compute sink particle velocity from peak velocity
-           p%vp(ipart,1)=c%peak_vel(halo_nr,1)-c%peak_acc(halo_nr,1)*0.5d0*g%dtnew(c%peak_level(halo_nr))
-           p%vp(ipart,2)=c%peak_vel(halo_nr,2)-c%peak_acc(halo_nr,2)*0.5d0*g%dtnew(c%peak_level(halo_nr))
-           p%vp(ipart,3)=c%peak_vel(halo_nr,3)-c%peak_acc(halo_nr,3)*0.5d0*g%dtnew(c%peak_level(halo_nr))
-           ! Compute sink particle old force from peak acceleration
-           p%fp(ipart,1)=c%peak_acc(halo_nr,1)
-           p%fp(ipart,2)=c%peak_acc(halo_nr,2)
-           p%fp(ipart,3)=c%peak_acc(halo_nr,3)
-        end if
-     end do
-     call close_cache(s,m%grid_dict)
-  endif
-
-  !------------------------------------
-  ! Flag occupied halos with sink count
-  !------------------------------------
-  if(halo_is_occupied)then
-     c%occupied_sink=0
-     call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
-          init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
-     do i=1+p%norphan_halo,p%npart
-        global_halo_id=p%workp(i)
-        if (global_halo_id /=0 ) then
-           call get_peak(s,global_halo_id,halo_nr,fetch_cache=.false.,flush_cache=.true.)
-           c%occupied_sink(halo_nr)=c%occupied_sink(halo_nr)+1
-        end if
-     end do
-     call close_cache(s,m%grid_dict)
-  endif
-
-  end associate
-
-end subroutine sink_in_halo
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine sink_in_peak(s,reset_sink_pos,halo_is_occupied)
-  use ramses_commons, only: ramses_t
-  use clump_merger_module
-  use cache_commons, only: msg_sink_clump,msg_saddle_clump
-  use cache
-  implicit none
-  type(ramses_t)::s
-  logical::halo_is_occupied,reset_sink_pos
-
-  integer::i,ipart,peak_nr,halo_nr
-  integer(kind=8)::global_peak_id,global_halo_id
-  type(msg_sink_clump)::dummy_sink_clump
-  type(msg_saddle_clump)::dummy_saddle_clump
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%sink)
 
@@ -478,50 +406,79 @@ subroutine sink_in_peak(s,reset_sink_pos,halo_is_occupied)
   ! Reset sink position to peak position
   !-------------------------------------
   if(reset_sink_pos)then
+     c%min_sink_id=huge(0)
      call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-          pack=pack_fetch_sink,unpack=unpack_fetch_sink)
+          pack=pack_fetch_sink,unpack=unpack_fetch_sink,&
+          init=init_flush_minid,flush=pack_flush_minid,combine=unpack_flush_minid)
      do i=1+p%norphan_peak,p%npart
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
-        if (global_peak_id /=0 ) then
-           call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
-           ! Compute sink particle position from peak position
-           p%xp(ipart,1)=c%peak_com(peak_nr,1)
-           p%xp(ipart,2)=c%peak_com(peak_nr,2)
-           p%xp(ipart,3)=c%peak_com(peak_nr,3)
-           ! Compute sink particle velocity from peak velocity
-           p%vp(ipart,1)=c%peak_vel(peak_nr,1)-c%peak_acc(peak_nr,1)*0.5d0*g%dtnew(c%peak_level(peak_nr))
-           p%vp(ipart,2)=c%peak_vel(peak_nr,2)-c%peak_acc(peak_nr,2)*0.5d0*g%dtnew(c%peak_level(peak_nr))
-           p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
-           ! Compute sink particle old force from peak acceleration
-           p%fp(ipart,1)=c%peak_acc(peak_nr,1)
-           p%fp(ipart,2)=c%peak_acc(peak_nr,2)
-           p%fp(ipart,3)=c%peak_acc(peak_nr,3)
-        end if
+        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
+        ! Compute sink particle position from peak position
+        p%xp(ipart,1)=c%peak_com(peak_nr,1)
+        p%xp(ipart,2)=c%peak_com(peak_nr,2)
+        p%xp(ipart,3)=c%peak_com(peak_nr,3)
+        ! Compute sink particle velocity from peak velocity
+        p%vp(ipart,1)=c%peak_vel(peak_nr,1)-c%peak_acc(peak_nr,1)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+        p%vp(ipart,2)=c%peak_vel(peak_nr,2)-c%peak_acc(peak_nr,2)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+        p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+        ! Compute sink particle old force from peak acceleration
+        p%fp(ipart,1)=c%peak_acc(peak_nr,1)
+        p%fp(ipart,2)=c%peak_acc(peak_nr,2)
+        p%fp(ipart,3)=c%peak_acc(peak_nr,3)
+        ! Update minimum sink id in each clump
+        c%min_sink_id(peak_nr)=min(c%min_sink_id(peak_nr),p%idp(ipart))
      end do
      call close_cache(s,m%grid_dict)
   endif
 
   !------------------------------------
-  ! Flag occupied halos with sink count
+  ! Merge sinks that sit in same clumps
   !------------------------------------
-  if(halo_is_occupied)then
-     c%occupied_sink=0
-     call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
-          pack=pack_fetch_occupied,unpack=unpack_fetch_occupied,&
-          init=init_flush_occupied,flush=pack_flush_occupied,combine=unpack_flush_occupied)
+  call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
+       pack=pack_fetch_minid,unpack=unpack_fetch_minid)
+  do i=1+p%norphan_peak,p%npart
+     ipart=p%sortp(i)
+     global_peak_id=p%workp(i)
+     call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
+     if(p%idm(ipart).EQ.0.AND.p%idp(ipart).NE.c%min_sink_id(peak_nr))then
+        p%idm(ipart)=c%min_sink_id(peak_nr)
+        p%tm(ipart)=g%texp
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  !------------------------------------
+  ! Count sinks in each halo
+  !------------------------------------
+  if(count_sink)then
+     ! Count sinks in each peak
+     c%nsink=0
+     call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
+          init=init_flush_sink,flush=pack_flush_sink,combine=unpack_flush_sink)
      do i=1+p%norphan_peak,p%npart
         global_peak_id=p%workp(i)
-        if (global_peak_id /=0 ) then
-           call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
-           global_halo_id=c%ind_halo(peak_nr)
-           if (global_halo_id /=0 ) then
-              call get_peak(s,global_halo_id,halo_nr,fetch_cache=.true.,flush_cache=.true.)
-              c%occupied_sink(halo_nr)=c%occupied_sink(halo_nr)+1
-           endif
-        end if
+        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.false.,flush_cache=.true.)
+        c%nsink(peak_nr)=c%nsink(peak_nr)+1
      end do
      call close_cache(s,m%grid_dict)
+     ! Count sinks hierarchically in each halo
+     if(c%saddle_threshold>0)then
+        do ilev=0,c%merge_levelmax
+           call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
+                init=init_flush_sink,flush=pack_flush_sink,combine=unpack_flush_sink)
+           do ipeak=1,c%npeak
+              if(c%lev_peak(ipeak)==ilev)then
+                 merge_to=c%new_peak(ipeak)
+                 if(merge_to.NE.ipeak+c%npeak_cum(g%myid-1))then
+                    call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.false.)
+                    c%nsink(jpeak)=c%nsink(jpeak)+c%nsink(ipeak)
+                 endif
+              endif
+           end do
+           call close_cache(s,m%grid_dict)
+        end do
+     endif
   endif
 
   end associate
@@ -577,92 +534,142 @@ end subroutine unpack_fetch_sink
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_occupied(c,local_peak_id,msg_size,msg_array)
-  use amr_parameters, only: ndim
+subroutine init_flush_sink(c,local_peak_id)
   use clfind_commons, only: clump_t
-  use cache_commons, only: msg_saddle_clump
+  type(clump_t)::c
+  integer::local_peak_id
+
+  c%nsink(local_peak_id)=0
+
+end subroutine init_flush_sink
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_sink(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_sink_clump
   type(clump_t)::c
   integer::local_peak_id
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  type(msg_saddle_clump)::msg
+  type(msg_sink_clump)::msg
 
-  msg%nbor=c%ind_halo(local_peak_id)
+  msg%lev=c%nsink(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
-end subroutine pack_fetch_occupied
+end subroutine pack_flush_sink
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_fetch_occupied(c,local_peak_id,msg_size,msg_array)
-  use amr_parameters, only: ndim
+subroutine unpack_flush_sink(c,local_peak_id,msg_size,msg_array)
   use clfind_commons, only: clump_t
-  use cache_commons, only: msg_saddle_clump
+  use cache_commons, only: msg_sink_clump
   type(clump_t)::c
   integer::local_peak_id
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  type(msg_saddle_clump)::msg
+  type(msg_sink_clump)::msg
 
   msg=transfer(msg_array,msg)
 
-  c%ind_halo(local_peak_id)=msg%nbor
+  c%nsink(local_peak_id)=c%nsink(local_peak_id)+msg%lev
 
-end subroutine unpack_fetch_occupied
+end subroutine unpack_flush_sink
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine init_flush_occupied(c,local_peak_id)
+subroutine pack_fetch_minid(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
   use clfind_commons, only: clump_t
-  type(clump_t)::c
-  integer::local_peak_id
-
-  c%occupied_sink(local_peak_id)=0
-
-end subroutine init_flush_occupied
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_flush_occupied(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_saddle_clump
+  use cache_commons, only: msg_sink_clump
   type(clump_t)::c
   integer::local_peak_id
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  type(msg_saddle_clump)::msg
+  type(msg_sink_clump)::msg
 
-  msg%nbor=c%occupied_sink(local_peak_id)
+  msg%id = c%min_sink_id(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
-end subroutine pack_flush_occupied
+end subroutine pack_fetch_minid
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine unpack_flush_occupied(c,local_peak_id,msg_size,msg_array)
+subroutine unpack_fetch_minid(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
   use clfind_commons, only: clump_t
-  use cache_commons, only: msg_saddle_clump
+  use cache_commons, only: msg_sink_clump
   type(clump_t)::c
   integer::local_peak_id
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  type(msg_saddle_clump)::msg
+  type(msg_sink_clump)::msg
 
   msg=transfer(msg_array,msg)
 
-  c%occupied_sink(local_peak_id)=c%occupied_sink(local_peak_id)+msg%nbor
+  c%min_sink_id(local_peak_id)=msg%id
 
-end subroutine unpack_flush_occupied
+end subroutine unpack_fetch_minid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_minid(c,local_peak_id)
+  use clfind_commons, only: clump_t
+  type(clump_t)::c
+  integer::local_peak_id
+
+  c%min_sink_id(local_peak_id)=huge(0)
+
+end subroutine init_flush_minid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_minid(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_sink_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_sink_clump)::msg
+
+  msg%id=c%min_sink_id(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_minid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_minid(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_sink_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_sink_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%min_sink_id(local_peak_id)=min(c%min_sink_id(local_peak_id),msg%id)
+
+end subroutine unpack_flush_minid
 !##############################################################################
 !##############################################################################
 !##############################################################################

@@ -19,10 +19,12 @@ module pm_commons
      real(dp),allocatable,dimension(:)     ::mp       ! Mass
      real(dp),allocatable,dimension(:)     ::zp       ! Metallicity
      real(dp),allocatable,dimension(:)     ::tp       ! Formation time
+     real(dp),allocatable,dimension(:)     ::tm       ! Merging time
      real(dp),allocatable,dimension(:)     ::up       ! Specific energy
      real(dp),allocatable,dimension(:)     ::phip     ! Potential
      integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
      integer(i8b),allocatable,dimension(:) ::idp      ! Particle unique identifier
+     integer(i8b),allocatable,dimension(:) ::idm      ! Merging particle id
      integer ,allocatable,dimension(:)     ::sortp    ! Sorted index
      integer ,allocatable,dimension(:)     ::workp    ! Work space
      integer ,allocatable,dimension(:)     ::pid      ! Peak ID

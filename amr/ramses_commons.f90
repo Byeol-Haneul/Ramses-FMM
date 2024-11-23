@@ -115,14 +115,11 @@ subroutine open_file(s,filename,nskip,ilun)
 
      if(index(filename,'clump').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(240A)')'     index       halo      ncell    pos_x              pos_y              pos_z      '//&
-             '        vel_x              vel_y              vel_z              rho-               rho+               rho_av     '//&
-             '        mass               relevance   '
-     elseif(index(filename,'halo').NE.0)then
-        open(unit=ilun,file=fileloc,form='formatted')
-        write(ilun,'(364A)')'     index      patch      npart    pos_x              pos_y              pos_z      '//&
-             '        vel_x              vel_y              vel_z              mpatch             mass               r200       '//&
-             '        rmax               c200       '
+        write(ilun,'(240A)')'     index       peak       halo      ncell      npart'//&
+             & '    rho_min            rho_max            rho_sad            rho_ave    '//&
+             & '        mpatch             mass               r200               rmax               c200   '//&
+             & '            pos_x              pos_y              pos_z      '//&
+             & '        vel_x              vel_y              vel_z'
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
         write(ilun)ndim
@@ -178,8 +175,6 @@ subroutine open_file(s,filename,nskip,ilun)
      end if
 
      if(index(filename,'clump').NE.0)then
-        open(unit=ilun,file=fileloc,form='formatted',access='append')
-     elseif(index(filename,'halo').NE.0)then
         open(unit=ilun,file=fileloc,form='formatted',access='append')
      else
         open(unit=ilun,file=fileloc,access="stream",action="write",form='unformatted')
@@ -380,12 +375,22 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar+1)=nskip(ivar)+4*npart
      endif
-     ! Identities
-     ivar=ivar+1
-     nskip(ivar+1)=nskip(ivar)+i8b*npart
+     ! Merging times
+     if(allocated(p%tm))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+4*npart
+     endif
      ! Levels
      ivar=ivar+1
      nskip(ivar+1)=nskip(ivar)+4*npart
+     ! Identities
+     ivar=ivar+1
+     nskip(ivar+1)=nskip(ivar)+i8b*npart
+     ! Merging identities
+     if(allocated(p%idm))then
+        ivar=ivar+1
+        nskip(ivar+1)=nskip(ivar)+i8b*npart
+     endif
 #ifdef OUTPUT_PARTICLE_POTENTIAL
      ! Potentials
      ivar=ivar+1
@@ -489,12 +494,22 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
         ivar=ivar+1
         nskip(ivar)=nskip(ivar)+4*p%npart
      endif
-     ! Identities
-     ivar=ivar+1
-     nskip(ivar)=nskip(ivar)+i8b*p%npart
+     ! Merging times
+     if(allocated(p%tm))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+4*p%npart
+     endif
      ! Levels
      ivar=ivar+1
      nskip(ivar)=nskip(ivar)+4*p%npart
+     ! Identities
+     ivar=ivar+1
+     nskip(ivar)=nskip(ivar)+i8b*p%npart
+     ! Merging identities
+     if(allocated(p%idm))then
+        ivar=ivar+1
+        nskip(ivar)=nskip(ivar)+i8b*p%npart
+     endif
 #ifdef OUTPUT_PARTICLE_POTENTIAL
      ! Potentials
      ivar=ivar+1
