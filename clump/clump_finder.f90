@@ -210,20 +210,16 @@ subroutine clump_finder(s)
      endif
   endif
   !----------------------------------------------------------------------
-  ! Unbind clump and particle from clumps hierarchically.
-  ! The clump and particle peak ids are updated accordingly.
+  ! Unbind particles from clumps hierarchically.
+  ! The particle peak ids are updated accordingly.
   ! The halo patch is used as garbage collector.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     call clump_unbind(s)
      if(s%r%pic)then
         call particle_unbind(s,s%p)
      endif
      if(s%r%star)then
         call particle_unbind(s,s%star)
-     endif
-     if(s%r%sink)then
-        call particle_unbind(s,s%sink)
      endif
   endif
   !----------------------------------------------------------------------

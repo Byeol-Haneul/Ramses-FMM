@@ -329,7 +329,6 @@ subroutine allocate_peak_patch_arrays(s)
      allocate(c%halo_mass(1:c%npeak_max))
      allocate(c%mass_bin(1:c%npeak_max,1:nbin))
      allocate(c%phi(1:c%npeak_max,1:nbin))
-     allocate(c%pid(1:c%npeak_max))
   endif
 
   !-----------------------------------
@@ -470,7 +469,6 @@ subroutine deallocate_peak_patch_arrays(s)
      deallocate(c%halo_mass)
      deallocate(c%mass_bin)
      deallocate(c%phi)
-     deallocate(c%pid)
   endif
 
   ! Deallocate sink arrays
@@ -1935,77 +1933,6 @@ subroutine particle_unbind(s,p)
   end associate
 
 end subroutine particle_unbind
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine clump_unbind(s)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
-  use ramses_commons, only: ramses_t
-  use cache_commons
-  use cache
-  implicit none
-  type(ramses_t)::s
-  !------------------------------------------------------------------
-  ! This routine unbinds clumps hierarchically between children
-  ! clumps and parent clumps in the saddle point merging hierarchy.
-  ! It updates the clump peak id accordingly.
-  ! The halo-patch is used as a garbage colector.
-  ! Written by Romain Teyssier (mini-ramses version in June 2024).
-  !------------------------------------------------------------------
-  type(msg_unbind_clump)::dummy_unbind_clump
-  integer::i,ipart,ind,idim,ibin,ilevel
-  integer(kind=8)::global_peak_id
-  integer::ipeak,jpeak
-  real(dp)::pi,rho,rad,bound
-
-  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
-
-  ! Constants
-  pi=ACOS(-1.0D0)
-
-  ! Initialize peak id to new_peak
-  c%pid=0
-  do ipeak=1,c%npeak
-     if (    c%relevance(ipeak) > c%relevance_threshold.AND. &
-          & c%clump_mass(ipeak) > c%mass_threshold)then
-        c%pid(ipeak)=c%new_peak(ipeak)
-     endif
-  end do
-
-  ! Loop over merging hierarchy levels
-  do ilevel=0,c%merge_levelmax
-     call open_cache_clump(s,storage_size(dummy_unbind_clump)/32,&
-          pack=pack_fetch_unbind,unpack=unpack_fetch_unbind)
-     do ipeak=1,c%npeak
-        if (    c%relevance(ipeak) > c%relevance_threshold.AND. &
-             & c%clump_mass(ipeak) > c%mass_threshold)then
-           ! Get peak id
-           global_peak_id=c%pid(ipeak)
-           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
-           if(c%lev_peak(jpeak)==ilevel)then
-              ! Get clump saddle point density
-              rho=c%tidal_dens(jpeak)
-              ! Compute clump tidal radius
-              rad=(c%clump_mass(jpeak)/4d0/pi/rho*3d0)**(1d0/3d0)
-              ! Compute total energy
-              bound=total_energy(c%peak_pos(ipeak,1:ndim),c%peak_pos(jpeak,1:ndim), &
-                   &             c%peak_vel(ipeak,1:ndim),c%peak_vel(jpeak,1:ndim), &
-                   &             c%phi(jpeak,1:nbin),rad,r%boxlen)
-              ! If unbound, assign to next peak in hierarchy
-              if(bound.GE.0d0)then
-                 c%pid(ipeak)=c%new_peak(jpeak)
-              endif
-           endif
-        end if
-     end do
-     call close_cache(s,m%grid_dict)
-  end do
-  ! End loop over levels
-
-  end associate
-
-end subroutine clump_unbind
 !################################################################
 !################################################################
 !################################################################

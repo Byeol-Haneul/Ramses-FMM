@@ -89,11 +89,6 @@ subroutine output_clump_properties(s,filename)
           & c%clump_mass(j) > c%mass_threshold.AND. &
           &      c%npart(j) > 0)then
 
-        ! Compute halo id
-        igrid=c%peak_grid(j)
-        ind=c%peak_cell(j)
-        hid=m%grid(igrid)%flag1(ind)
-
         ! Get cumulative mass profile
         mbin=c%mass_bin(j,1:nbin)
         ! Get clump tidal density
@@ -102,8 +97,7 @@ subroutine output_clump_properties(s,filename)
         rad=(c%clump_mass(j)/4d0/pi/rho*3d0)**(1d0/3d0)
         ! Compute clump particle mass
         mass=c%mass_bin(j,nbin)
-        ! Comnpute rmax and concentration
-        r200b=0; rmax=0; concentration=0
+        ! Comnpute r200, rmax and concentration
         call halo_mass_def(s,mbin,rad,r200b,rmax,concentration)
         ! Compute clump purity
         purity=c%npart(j)*g%mp_min/mass
@@ -119,8 +113,8 @@ subroutine output_clump_properties(s,filename)
         if(purity>c%purity_threshold)then
            write(ilun,'(I10,4(1X,I10),15(1X,1PE18.9E2))')&
                 j+c%npeak_cum(g%myid-1)&
-                ,c%pid(j)&
-                ,hid&
+                ,c%new_peak(j)&
+                ,c%ind_halo(j)&
                 ,c%n_cells(j)&
                 ,c%npart(j)&
                 ,c%min_dens(j)&

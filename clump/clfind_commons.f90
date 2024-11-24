@@ -32,29 +32,28 @@ module clfind_commons
        integer,allocatable,dimension(:) :: n_cells ! Number of AMR cells per peak patch
        integer,allocatable,dimension(:) :: lev_peak ! AMR level of the peak
        integer,allocatable,dimension(:) :: new_peak ! Peak ID in which current peak has merged
+       integer,allocatable,dimension(:) :: npart ! Number of particles per clump
        real(dp),allocatable,dimension(:) :: max_dens ! Density value at the peak
        real(dp),allocatable,dimension(:) :: clump_mass ! Mass inside peak patch
        real(dp),allocatable,dimension(:) :: relevance ! Relevance (prominence) of the peak
        real(dp),allocatable,dimension(:) :: tidal_dens ! Density at the tidal radius
-       real(dp),allocatable,dimension(:) :: min_dens ! min density of the clump
-       real(dp),allocatable,dimension(:) :: clump_vol ! volume of the clump
-       real(dp),allocatable,dimension(:) :: particle_mass ! clump mass using directly dark matter particles
-       real(dp),allocatable,dimension(:,:) :: peak_pos ! position of the peak
-       real(dp),allocatable,dimension(:,:) :: peak_vel ! velocity of the peak
-       real(dp),allocatable,dimension(:,:) :: peak_acc ! acceleration of the peak
-       real(dp),allocatable,dimension(:,:) :: peak_com ! center of mass of the peak
+       real(dp),allocatable,dimension(:) :: min_dens ! Min density of the clump
+       real(dp),allocatable,dimension(:) :: clump_vol ! Volume of the clump
+       real(dp),allocatable,dimension(:) :: particle_mass ! Clump mass using directly dark matter particles
+       real(dp),allocatable,dimension(:,:) :: peak_pos ! Position of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_vel ! Velocity of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_acc ! Acceleration of the peak
+       real(dp),allocatable,dimension(:,:) :: peak_com ! Center of mass of the peak
 
        integer,allocatable,dimension(:) :: ind_halo ! Peak index of halo patch
-       integer,allocatable,dimension(:) :: npart ! number of particles per clump
-       integer,allocatable,dimension(:) :: pid ! peak id of the parent (bound to) clump
        real(dp),allocatable,dimension(:) :: halo_mass ! Mass inside halo patch
        real(dp),allocatable,dimension(:) :: saddle_dens ! Density of the densest saddle point
-       real(dp),allocatable,dimension(:,:) :: mass_bin ! cumulative mass profile of halo
-       real(dp),allocatable,dimension(:,:) :: phi ! gravitational self-potential
+       real(dp),allocatable,dimension(:,:) :: mass_bin ! Cumulative mass profile of halo
+       real(dp),allocatable,dimension(:,:) :: phi ! Gravitational self-potential
 
-       integer,allocatable,dimension(:) :: nsink ! number of sinks per clump
-       integer,allocatable,dimension(:) :: form_sink ! does peak form a new sink particle?
-       integer,allocatable,dimension(:) :: min_sink_id ! minimum sink id in clump
+       integer,allocatable,dimension(:) :: nsink ! Number of sinks per clump
+       integer,allocatable,dimension(:) :: form_sink ! Does peak form a new sink particle?
+       integer,allocatable,dimension(:) :: min_sink_id ! Minimum sink id in clump
 
        ! Software cache array for peaks
        integer :: ncachemax=1000
