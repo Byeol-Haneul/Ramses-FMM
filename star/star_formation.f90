@@ -259,8 +259,8 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   !--------------------------------------
   ! Compute new star particle index
   !--------------------------------------
-  do i=s%npart-nstar_loc+1,s%npart
-     s%idp(i)=s%npart_tot+nstar_cum(g%myid-1)+i
+  do i=1,nstar_loc
+     s%idp(s%npart-nstar_loc+i)=s%npart_tot+nstar_cum(g%myid-1)+i
   end do
   s%npart_tot=s%npart_tot+nstar_cum(g%ncpu)
 

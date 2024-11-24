@@ -205,8 +205,8 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
   !--------------------------------------
   ! Compute new sink particle index
   !--------------------------------------
-  do i=p%npart-nsink_loc+1,p%npart
-     p%idp(i)=p%npart_tot+nsink_cum(g%myid-1)+i
+  do i=1,nsink_loc
+     p%idp(p%npart-nsink_loc+i)=p%npart_tot+nsink_cum(g%myid-1)+i
   end do
   p%npart_tot=p%npart_tot+nsink_cum(g%ncpu)
 
