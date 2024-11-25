@@ -238,6 +238,7 @@ def rd_part(nout,**kwargs):
     ndim = i.ndim
     levelmin = i.levelmin
     nlevelmax = i.nlevelmax
+    boxlen = i.boxlen
 
     #if ( not (center is None)  and not (radius is None) ):
     #    info = rd_info(nout)
@@ -416,6 +417,13 @@ def rd_part(nout,**kwargs):
 
     # Filtering particles within the input sphere
     if ( not (center is None)  and not (radius is None) ):
+
+        # Periodic boundaries
+        for idim in range(0,ndim):
+            xp = p.xp[idim]-center[idim]
+            xp[xp>boxlen/2]=xp[xp>boxlen/2]-boxlen
+            xp[xp<-boxlen/2]=xp[xp<-boxlen/2]+boxlen
+            p.xp[idim] = xp+center[idim]
         r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
         p.np = np.count_nonzero(r < radius)
         p.mp = p.mp[r < radius]
@@ -737,8 +745,15 @@ def rd_cell(nout,**kwargs):
                 dd = np.ones(nc)*dx
                 c.dx = np.append(c.dx,dd)
 
+    # Filtering cells
     if ( not (center is None)  and not (radius is None) ):
-        # Filtering cells
+
+        # Periodic boundaries
+        for idim in range(0,ndim):
+            xx = c.x[idim]-center[idim]
+            xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
+            xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
+            c.x[idim] = xx+center[idim]
         r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
         c.ncell = np.count_nonzero(r < radius)
         c.u  = c.u[:,r < radius]
@@ -1359,8 +1374,23 @@ def rd_clump(nout,**kwargs):
        cat.rmax = np.append(cat.rmax,rmax)
        cat.c200 = np.append(cat.c200,c200)
 
+   # Filtering clumps
    if ( not (center is None)  and not (radius is None) ):
-       # Filtering clumps
+
+       # Periodic boundaries
+       xx = cat.x-center[0]
+       xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
+       xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
+       cat.x = xx+center[0]
+       xx = cat.y-center[1]
+       xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
+       xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
+       cat.y = xx+center[1]
+       xx = cat.z-center[2]
+       xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
+       xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
+       cat.z = xx+center[2]
+
        r = np.sqrt((cat.x-center[0])**2+(cat.y-center[1])**2+(cat.z-center[2])**2)
        cat.index = cat.index[r < radius]
        cat.peak = cat.peak[r < radius]
