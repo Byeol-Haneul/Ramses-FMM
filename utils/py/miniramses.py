@@ -1326,6 +1326,7 @@ def rd_clump(nout,**kwargs):
    i = rd_info(nout,path=path,backup=backup)
    ncpu = i.ncpu
    ndim = i.ndim
+   boxlen = i.boxlen
 
    output = str(nout).zfill(5)
    cat = ClumpCat()
