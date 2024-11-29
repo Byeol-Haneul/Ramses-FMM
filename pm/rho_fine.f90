@@ -274,7 +274,7 @@ subroutine multipole_split_cells(s,ilevel)
   associate(r=>s%r,g=>s%g,m=>s%m)
   
   !-------------------------------------------------------
-  ! Perform octree restriction from level ilevel+1
+  ! Perform Multigrid restriction from level ilevel+1
   !-------------------------------------------------------
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&

@@ -23,7 +23,7 @@ module clfind_commons
        integer :: npeak_max ! Maximum number of peaks per processor including ghost peaks
        integer(kind=8) :: npeak_tot=0 ! Total number of density peaks across all processors
        integer(kind=8),allocatable,dimension(:) :: npeak_cum ! Cumulative number of peak per processor
-       integer :: merge_levelmax ! Max level of sub-halo merging tree
+       integer :: merge_levelmax ! Max level of sub-halo merging hierarchy
 
        integer,allocatable,dimension(:) :: peak_cell ! Cell index of peak
        integer,allocatable,dimension(:) :: peak_grid ! Grid index of peak

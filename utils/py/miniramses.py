@@ -1163,50 +1163,50 @@ def mk_movie(**kwargs):
     Args:
     
         start: starting index of the sequence of numpy array you wish to turn into image frames.
-    
+
         stop: number of arrays you wish to be turned into plots. 
             This will be the variable "snum" for the end product. 
             For now, if you wish to test out the function, 
             you can try out other smaller values to adjust the image for your preferences.
-            
+
         path: path leading to the directory where your files are stored, Default: "."
-    
+
         prefix: starting name of a typical file. Ex: if you have 50 files, called "fig01.npy", "fig02.npy" … "fig50.npy", write in "fig".
-    
+
         fill: This is for the zfill parameter. If your files are standardized into "fig001.npy", "fig002.npy"… "fig100.npy",
             write in 3, for example. If this is not how your files are formatted, write in the number 1.
-    
+
         suffix: suffix at the end of a file: Ex: ".npy", ".map", etc…
-    
+
         cmap: write in what color you wish your array to be displayed in (value for cmap). Options include "Reds", "Blues", and more.
-    
+
         cbar: write "YES" for this parameter if you want your figure to have a colorbar. Write anything else if not.
-    
+
         cbunit: units of the colormapping to be displayed next to the colorbar: Ex: "Concentration [code units]"
               If you do not plan on using a colorbar, write in any script.
-    
+
         tunit: units of time displayed by rd_img. Ex: "seconds", "minutes", "hours", "[code units]"
-    
+
         bunit: units of the box size displayed by rd_img. Ex: "cm", "kpc", "Mpc", "[code units]" …
-    
+
         fname: starting name of each of your images.
-    
+
         mvname: what you want your movie to be called.
-        
+
     Returns:
-    
+
         info: a string stating that the movie was done.
-    
+
     Exemple:
 
         import miniramses as ram
         info = ram.mk_movie(start=100,stop=2000,path="../movie1",prefix="dens_",fill=5,suffix=".map",cmap="Reds", 
                 cbar="YES", cbunit="log Density [H/cc]", tunit="Gyr",
                 fname="img", mvname="movie", vmin=-1, vmax=6)
-    
+
     By default, the movie's framerate is 30 frames per second, at a resolution of 420p
     You can edit this function and its parameters according to what fits your model best.
-    
+
     As it runs, the function will print the files it is currently converting.
 
     Authors: Thomas Decugis and Romain Teyssier (Princeton University, October 2022)
@@ -1418,6 +1418,31 @@ def rd_clump(nout,**kwargs):
    print(txt)
 
    return cat
+
+def plot_tree(nout,pid,**kwargs):
+
+    # read clump and sink files
+    c=rd_clump(nout,**kwargs)
+    s=rd_part(nout,sink=True,peak=True,**kwargs)
+
+    # collect sinks in chosen clump
+    ind=np.where(s.pid==pid)
+    idp=s.idp[ind]
+    idm=s.idm[ind]
+    tp=s.tp[ind]
+    tm=s.tm[ind]
+
+    # sort sinks according to id
+    isort=np.argsort(idp)
+    idp=idp[isort]
+    idm=idm[isort]
+    tp=tp[isort]
+    tm=tm[isort]
+
+    plt.plot([idp[0],idp[0]],[tp[0],0],'r')
+    for i in range(1,len(idp)):
+        plt.plot([idp[i],idp[i]],[tp[i],tm[i]],'b')
+        plt.plot([idp[i],idm[i]],[tm[i],tm[i]],'b')
 
 class GraficFile:
     """
