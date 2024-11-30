@@ -178,10 +178,6 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
         p%mp(p%npart)=0
         ! Compute sink particle birth time using proper time
         p%tp(p%npart)=g%texp
-        ! Set merging time to -1
-        p%tm(p%npart)=-1d0
-        ! Set merging id to 0
-        p%idm(p%npart)=0
         ! Compute level
         p%levelp(p%npart)=c%peak_level(j)
      endif
@@ -406,10 +402,8 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
   ! Reset sink position to peak position
   !-------------------------------------
   if(reset_sink_pos)then
-     c%min_sink_id=huge(0)
      call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-          pack=pack_fetch_sink,unpack=unpack_fetch_sink,&
-          init=init_flush_minid,flush=pack_flush_minid,combine=unpack_flush_minid)
+          pack=pack_fetch_sink,unpack=unpack_fetch_sink)
      do i=1+p%norphan_peak,p%npart
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
@@ -426,27 +420,9 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
         p%fp(ipart,1)=c%peak_acc(peak_nr,1)
         p%fp(ipart,2)=c%peak_acc(peak_nr,2)
         p%fp(ipart,3)=c%peak_acc(peak_nr,3)
-        ! Update minimum sink id in each clump
-        c%min_sink_id(peak_nr)=min(c%min_sink_id(peak_nr),p%idp(ipart))
      end do
      call close_cache(s,m%grid_dict)
   endif
-
-  !------------------------------------
-  ! Merge sinks that sit in same clumps
-  !------------------------------------
-  call open_cache_clump(s,pack_size=storage_size(dummy_sink_clump)/32,&
-       pack=pack_fetch_minid,unpack=unpack_fetch_minid)
-  do i=1+p%norphan_peak,p%npart
-     ipart=p%sortp(i)
-     global_peak_id=p%workp(i)
-     call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
-     if(p%idm(ipart).EQ.0.AND.p%idp(ipart).NE.c%min_sink_id(peak_nr))then
-        p%idm(ipart)=c%min_sink_id(peak_nr)
-        p%tm(ipart)=g%texp
-     endif
-  end do
-  call close_cache(s,m%grid_dict)
 
   !------------------------------------
   ! Count sinks in each halo
@@ -580,96 +556,6 @@ subroutine unpack_flush_sink(c,local_peak_id,msg_size,msg_array)
   c%nsink(local_peak_id)=c%nsink(local_peak_id)+msg%lev
 
 end subroutine unpack_flush_sink
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_fetch_minid(c,local_peak_id,msg_size,msg_array)
-  use amr_parameters, only: ndim
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_sink_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_sink_clump)::msg
-
-  msg%id = c%min_sink_id(local_peak_id)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_fetch_minid
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_fetch_minid(c,local_peak_id,msg_size,msg_array)
-  use amr_parameters, only: ndim
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_sink_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_sink_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  c%min_sink_id(local_peak_id)=msg%id
-
-end subroutine unpack_fetch_minid
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine init_flush_minid(c,local_peak_id)
-  use clfind_commons, only: clump_t
-  type(clump_t)::c
-  integer::local_peak_id
-
-  c%min_sink_id(local_peak_id)=huge(0)
-
-end subroutine init_flush_minid
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_flush_minid(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_sink_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_sink_clump)::msg
-
-  msg%id=c%min_sink_id(local_peak_id)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_flush_minid
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_flush_minid(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_sink_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_sink_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  c%min_sink_id(local_peak_id)=min(c%min_sink_id(local_peak_id),msg%id)
-
-end subroutine unpack_flush_minid
 !##############################################################################
 !##############################################################################
 !##############################################################################

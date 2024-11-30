@@ -346,7 +346,6 @@ subroutine allocate_peak_patch_arrays(s)
   if(r%sink)then
      allocate(c%nsink(1:c%npeak_max))
      allocate(c%form_sink(1:c%npeak_max))
-     allocate(c%min_sink_id(1:c%npeak_max))
   endif
 
   !--------------------
@@ -495,7 +494,6 @@ subroutine deallocate_peak_patch_arrays(s)
   if(r%sink)then
      deallocate(c%nsink)
      deallocate(c%form_sink)
-     deallocate(c%min_sink_id)
   endif
 
   ! Deallocate hash table

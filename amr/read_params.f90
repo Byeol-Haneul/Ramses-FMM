@@ -291,7 +291,7 @@ subroutine m_read_params(pst)
   logical::clump_finder=.false.
   logical::clump_info=.false.
   logical::output_clump=.false.
-  logical::output_peak=.false.
+  logical::output_peak_grid=.false.
   logical::output_peak_part=.false.
   logical::output_peak_star=.false.
   logical::output_peak_sink=.false.
@@ -411,7 +411,7 @@ subroutine m_read_params(pst)
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
-       & ,output_clump,output_peak,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
+       & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,merger_tree,ntreemax,ntreetot,rho_type_clump
@@ -1001,7 +1001,7 @@ subroutine m_read_params(pst)
   s%r%clump_finder=clump_finder
   s%r%clump_info=clump_info
   s%r%output_clump=output_clump
-  s%r%output_peak=output_peak
+  s%r%output_peak_grid=output_peak_grid
   s%r%output_peak_part=output_peak_part
   s%r%output_peak_star=output_peak_star
   s%r%output_peak_sink=output_peak_sink

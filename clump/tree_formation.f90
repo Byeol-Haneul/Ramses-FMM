@@ -157,10 +157,6 @@ subroutine tree_formation(r,g,m,p,c)
         p%vp(p%npart,1)=c%peak_vel(j,1)-c%peak_acc(j,1)*0.5d0*g%dtnew(c%peak_level(j))
         p%vp(p%npart,2)=c%peak_vel(j,2)-c%peak_acc(j,2)*0.5d0*g%dtnew(c%peak_level(j))
         p%vp(p%npart,3)=c%peak_vel(j,3)-c%peak_acc(j,3)*0.5d0*g%dtnew(c%peak_level(j))
-        ! Compute tree particle old force from peak acceleration
-        p%fp(p%npart,1)=c%peak_acc(j,1)
-        p%fp(p%npart,2)=c%peak_acc(j,2)
-        p%fp(p%npart,3)=c%peak_acc(j,3)
         ! Compute tree particle mass
         p%mp(p%npart)=0
         ! Compute tree particle birth time using proper time
@@ -403,10 +399,6 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         p%vp(ipart,1)=c%peak_vel(peak_nr,1)-c%peak_acc(peak_nr,1)*0.5d0*g%dtnew(c%peak_level(peak_nr))
         p%vp(ipart,2)=c%peak_vel(peak_nr,2)-c%peak_acc(peak_nr,2)*0.5d0*g%dtnew(c%peak_level(peak_nr))
         p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
-        ! Compute tree particle old force from peak acceleration
-        p%fp(ipart,1)=c%peak_acc(peak_nr,1)
-        p%fp(ipart,2)=c%peak_acc(peak_nr,2)
-        p%fp(ipart,3)=c%peak_acc(peak_nr,3)
         ! Update minimum tree id in each clump
         c%min_tree_id(peak_nr)=min(c%min_tree_id(peak_nr),p%idp(ipart))
      end do
@@ -483,7 +475,6 @@ subroutine pack_fetch_tree(c,local_peak_id,msg_size,msg_array)
   msg%lev = c%peak_level(local_peak_id)
   msg%pos(1:ndim) = c%peak_com(local_peak_id,1:ndim)
   msg%vel(1:ndim) = c%peak_vel(local_peak_id,1:ndim)
-  msg%acc(1:ndim) = c%peak_acc(local_peak_id,1:ndim)
 
   msg_array=transfer(msg,msg_array)
 
@@ -508,7 +499,6 @@ subroutine unpack_fetch_tree(c,local_peak_id,msg_size,msg_array)
   c%peak_level(local_peak_id)=msg%lev
   c%peak_com(local_peak_id,1:ndim)=msg%pos(1:ndim)
   c%peak_vel(local_peak_id,1:ndim)=msg%vel(1:ndim)
-  c%peak_acc(local_peak_id,1:ndim)=msg%acc(1:ndim)
 
 end subroutine unpack_fetch_tree
 !################################################################

@@ -258,7 +258,7 @@ module amr_commons
      logical::clump_finder=.false.
      logical::clump_info=.false.
      logical::output_clump=.false.
-     logical::output_peak=.false.
+     logical::output_peak_grid=.false.
      logical::output_peak_part=.false.
      logical::output_peak_star=.false.
      logical::output_peak_sink=.false.

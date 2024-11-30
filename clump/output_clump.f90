@@ -31,7 +31,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
         call output_clump_properties(pst%s,filename)
      endif
      ! Write density, peak id and halo id for AMR cells
-     if(pst%s%r%output_peak)then
+     if(pst%s%r%output_peak_grid)then
         fileloc=TRIM(filename)//'peak.'
         call output_clump_field(pst%s,fileloc)
      endif

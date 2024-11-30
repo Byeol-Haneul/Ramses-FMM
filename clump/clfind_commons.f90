@@ -57,7 +57,6 @@ module clfind_commons
 
        integer,allocatable,dimension(:) :: nsink ! Number of sinks per clump
        integer,allocatable,dimension(:) :: form_sink ! Does peak form a new sink particle?
-       integer,allocatable,dimension(:) :: min_sink_id ! Minimum sink id in clump
 
        ! Software cache array for peaks
        integer :: ncachemax=1000

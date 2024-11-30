@@ -132,11 +132,9 @@ subroutine init_sink(r,g,p)
   allocate(p%fp    (r%nsinkmax,ndim))
   allocate(p%mp    (r%nsinkmax))
   allocate(p%tp    (r%nsinkmax))
-  allocate(p%tm    (r%nsinkmax))
   allocate(p%levelp(r%nsinkmax))
   allocate(p%idp   (r%nsinkmax))
-  allocate(p%idm   (r%nsinkmax))
-  p%nvaralloc=3*ndim+6
+  p%nvaralloc=3*ndim+4
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(p%phip  (r%nsinkmax))
   p%nvaralloc=p%nvaralloc+1
@@ -170,14 +168,13 @@ subroutine init_tree(r,g,p)
   p%type=TREE_TYPE
   allocate(p%xp    (r%ntreemax,ndim))
   allocate(p%vp    (r%ntreemax,ndim))
-  allocate(p%fp    (r%ntreemax,ndim))
   allocate(p%mp    (r%ntreemax))
   allocate(p%tp    (r%ntreemax))
   allocate(p%tm    (r%ntreemax))
   allocate(p%levelp(r%ntreemax))
   allocate(p%idp   (r%ntreemax))
   allocate(p%idm   (r%ntreemax))
-  p%nvaralloc=3*ndim+6
+  p%nvaralloc=2*ndim+6
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(p%phip  (r%ntreemax))
   p%nvaralloc=p%nvaralloc+1
