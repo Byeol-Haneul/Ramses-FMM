@@ -14,7 +14,7 @@ subroutine m_input_part_restart(pst)
   use amr_parameters, only: ndim,dp
   use ramses_commons, only: pst_t
   use output_amr_module, only: input_header
-  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE
+  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
@@ -139,6 +139,42 @@ subroutine m_input_part_restart(pst)
 
   endif
 
+  if(pst%s%r%tree)then
+
+     ! Read star particle files header
+     call title(pst%s%r%nrestart,nchar)
+     file_head='backup_'//TRIM(nchar)//'/tree_header.txt'
+     call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
+     write(*,'(" Restart snapshot has ",I12," tree particles")')npart_tot_file
+
+     ! Allocate local array
+     allocate(npart_file(0:ncpu_file))
+
+     ! Read number of particles in each file
+     npart_tot_check=0
+     npart_file(0)=TREE_TYPE
+     do icpu=1,ncpu_file
+        call title(icpu,ncharcpu)
+        file_part='backup_'//TRIM(nchar)//'/tree.'//TRIM(ncharcpu)
+        ilun=10
+        open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
+        read(ilun,POS=5)npart_file(icpu)
+        npart_tot_check=npart_tot_check+npart_file(icpu)
+        close(ilun)
+     end do
+     if(npart_tot_check.NE.npart_tot_file)then
+        write(*,*)' Input file corrupted'
+        call mdl_abort(pst%s%mdl)
+     endif
+
+     ! Call recursive slave routine
+     call r_input_part_restart(pst,npart_file,ncpu_file+1,output,2)
+
+     ! Deallocate local array
+     deallocate(npart_file)
+
+  endif
+
 end subroutine m_input_part_restart
 !#########################################################################
 !#########################################################################
@@ -148,7 +184,7 @@ recursive subroutine r_input_part_restart(pst,input_array,input_size,output,outp
   use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
-  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE
+  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -181,6 +217,9 @@ recursive subroutine r_input_part_restart(pst,input_array,input_size,output,outp
      if(part_type==SINK_TYPE)then
         call input_part_restart(pst%s%r,pst%s%g,pst%s%sink,input_size-1,input_array(2:input_size),output%mass)
      endif
+     if(part_type==TREE_TYPE)then
+        call input_part_restart(pst%s%r,pst%s%g,pst%s%tree,input_size-1,input_array(2:input_size),output%mass)
+     endif
   endif
 
 end subroutine r_input_part_restart
@@ -191,7 +230,7 @@ end subroutine r_input_part_restart
 subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
   use amr_parameters, only: ndim,dp,i8b
   use amr_commons, only: run_t,global_t
-  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE
+  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
@@ -264,6 +303,7 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
   if(p%type==DM_TYPE)prefix='part'
   if(p%type==STAR_TYPE)prefix='star'
   if(p%type==SINK_TYPE)prefix='sink'
+  if(p%type==TREE_TYPE)prefix='tree'
   
   ! Loop over relevant files
   ipart=0

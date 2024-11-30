@@ -51,6 +51,10 @@ module clfind_commons
        real(dp),allocatable,dimension(:,:) :: mass_bin ! Cumulative mass profile of halo
        real(dp),allocatable,dimension(:,:) :: phi ! Gravitational self-potential
 
+       integer,allocatable,dimension(:) :: ntree ! Number of merger tree paeticles per clump
+       integer,allocatable,dimension(:) :: form_tree ! Does peak form a new tree particle?
+       integer,allocatable,dimension(:) :: min_tree_id ! Minimum tree id in clump
+
        integer,allocatable,dimension(:) :: nsink ! Number of sinks per clump
        integer,allocatable,dimension(:) :: form_sink ! Does peak form a new sink particle?
        integer,allocatable,dimension(:) :: min_sink_id ! Minimum sink id in clump

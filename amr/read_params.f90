@@ -21,6 +21,7 @@ subroutine m_read_params(pst)
   integer(kind=8)::nparttot=0
   integer(kind=8)::nstartot=0
   integer(kind=8)::nsinktot=0
+  integer(kind=8)::ntreetot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -36,6 +37,7 @@ subroutine m_read_params(pst)
   logical::hydro   =.false.   ! Hydro activated
   logical::star    =.false.   ! Stars and star formation activated
   logical::sink    =.false.   ! Sinks and sink formation activated
+  logical::tree    =.false.   ! Merger tree particles activated
   logical::verbose =.false.   ! Write everything
   logical::debug   =.false.   ! Debug mode activated
   logical::static  =.false.   ! Static mode activated
@@ -50,6 +52,7 @@ subroutine m_read_params(pst)
   integer::npartmax=0 
   integer::nstarmax=0
   integer::nsinkmax=0
+  integer::ntreemax=0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -292,6 +295,7 @@ subroutine m_read_params(pst)
   logical::output_peak_part=.false.
   logical::output_peak_star=.false.
   logical::output_peak_sink=.false.
+  logical::output_peak_tree=.false.
   integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
@@ -407,10 +411,10 @@ subroutine m_read_params(pst)
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
-       & ,output_clump,output_peak,output_peak_part,output_peak_star,output_peak_sink &
+       & ,output_clump,output_peak,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
-       & ,rho_type_clump
+       & ,tree,ntreemax,ntreetot,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
@@ -546,6 +550,12 @@ subroutine m_read_params(pst)
   endif
   if(nsinkmax==0)then
      nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
+  endif
+  if(ntreemax==0)then
+     ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntreemax==0)then
+        ntreemax=int(npartmax/100)
+     endif
   endif
 #ifdef HYDRO
   if(.not. hydro)then
@@ -734,6 +744,7 @@ subroutine m_read_params(pst)
   s%r%hydro=hydro
   s%r%star=star
   s%r%sink=sink
+  s%r%tree=tree
   s%r%verbose=verbose
   s%r%debug=debug
   s%r%nrestart=nrestart
@@ -765,6 +776,7 @@ subroutine m_read_params(pst)
   s%r%npartmax=npartmax
   s%r%nstarmax=nstarmax
   s%r%nsinkmax=nsinkmax
+  s%r%ntreemax=ntreemax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size
@@ -993,6 +1005,7 @@ subroutine m_read_params(pst)
   s%r%output_peak_part=output_peak_part
   s%r%output_peak_star=output_peak_star
   s%r%output_peak_sink=output_peak_sink
+  s%r%output_peak_tree=output_peak_tree
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold

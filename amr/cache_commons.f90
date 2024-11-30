@@ -110,6 +110,13 @@ module cache_commons
      real(kind=dp),dimension(1:ndim)::vel
      real(kind=dp),dimension(1:ndim)::acc
   end type msg_sink_clump
+  type msg_tree_clump
+     integer::id
+     integer::lev
+     real(kind=dp),dimension(1:ndim)::pos
+     real(kind=dp),dimension(1:ndim)::vel
+     real(kind=dp),dimension(1:ndim)::acc
+  end type msg_tree_clump
 
   ! Cache call back functions
   type(cache_f)       ::pack_fetch

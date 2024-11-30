@@ -50,6 +50,11 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
         fileloc=TRIM(filename)//'peak_sink.'
         call output_peak_part(pst%s,pst%s%sink,fileloc)
      endif
+     ! Write peak id and halo for tree particles
+     if(pst%s%r%output_peak_tree.and.pst%s%r%tree)then
+        fileloc=TRIM(filename)//'peak_tree.'
+        call output_peak_part(pst%s,pst%s%tree,fileloc)
+     endif
   endif
 
 end subroutine r_output_clump

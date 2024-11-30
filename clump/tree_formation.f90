@@ -1,0 +1,658 @@
+module tree_formation_module
+
+contains
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine m_tree_formation(pst)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_module, only: mdl_wtime
+  use clump_merger_module, only: r_deallocate_clump
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  double precision::ttend, ttstart
+
+  write(*,*)'Entering tree formation'
+  ttstart = mdl_wtime(pst%s%mdl)
+
+  !----------------------------
+  ! Find tree formation sites
+  !----------------------------
+  call m_formation_site(pst)
+
+  !----------------------------
+  ! Create tree particles
+  !----------------------------
+  if(pst%s%c%npeak_tot>0)then
+     call r_tree_formation(pst,pst%s%r%levelmin,1)
+  endif
+
+  !------------------------------
+  ! Deallocate all peak arrays
+  !------------------------------
+  call r_deallocate_clump(pst,pst%s%r%levelmin,1)
+
+  ttend = mdl_wtime(pst%s%mdl)
+  print '(A,F14.7)',' Time elapsed in creating trees:',ttend-ttstart
+
+end subroutine m_tree_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+recursive subroutine r_tree_formation(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_TREE_FORMATION,pst%iUpper+1,input_size,0,ilevel)
+     call r_tree_formation(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call tree_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%tree,pst%s%c)
+  endif
+
+end subroutine r_tree_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine tree_formation(r,g,m,p,c)
+  use rng
+  use constants
+  use hydro_parameters, only:nvar
+  use amr_parameters, only:dp,ndim,twotondim
+  use amr_commons, only:run_t,global_t,mesh_t
+  use pm_commons, only:part_t
+  use clfind_commons, only:clump_t
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  type(clump_t)::c
+  !-------------------------------------------------------------------
+  ! Spawn tree particles from clumps using various formation criteria.
+  ! We use the RAMSES clump finder PHEW for the clumps detection.
+  !-------------------------------------------------------------------
+#ifndef WITHOUTMPI
+  integer::info
+  integer,dimension(1:g%ncpu)::nsite_cpu_tot,ntree_cpu_tot
+#endif
+  integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntree_cum
+  integer,dimension(1:g%ncpu)::nsite_cpu,ntree_cpu
+  integer::i,j,icpu,nsite,ntree,ntree_loc,peak_nr
+  real(dp)::purity
+  logical::ok
+
+#if NDIM>2
+  !---------------------------
+  ! Count tree formation sites
+  !---------------------------
+  nsite=0
+  c%form_tree=0
+  ! Loop over peaks
+  do j=1,c%npeak
+     ok=.true.
+     !-------------------------------------
+     ! Add here all tree formation criteria
+     !-------------------------------------
+     if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
+     if(c%relevance(j)<=c%relevance_threshold)ok=.false.
+     if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
+     if(c%ntree(j)>0)ok=.false.
+     purity=c%npart(j)*g%mp_min/c%particle_mass(j)
+     if(purity<=c%purity_threshold)ok=.false.
+     ! Set tree formation flag
+     if(ok)c%form_tree(j)=1
+     if(ok)nsite=nsite+1
+  end do
+
+  !---------------------------------------------------------
+  ! Compute number of tree formation sites across all CPUs.
+  !---------------------------------------------------------
+  nsite_cpu=0
+  nsite_cpu(g%myid)=nsite
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nsite_cpu,nsite_cpu_tot,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  nsite_cpu=nsite_cpu_tot
+#endif
+  nsite_cum=0
+  do icpu=1,g%ncpu
+     nsite_cum(icpu)=nsite_cum(icpu-1)+int(nsite_cpu(icpu),kind=8)
+  end do
+
+  !--------------------------
+  ! Create new tree particles
+  !--------------------------
+  ntree_loc=0
+  ! Loop over peaks
+  do j=1,c%npeak
+     if(c%form_tree(j).eq.1)then
+        ntree_loc=ntree_loc+1
+        p%npart=p%npart+1
+        if(p%npart>r%ntreemax)then
+           write(*,*)'Not enough memory for tree particle'
+           write(*,*)'Increase ntreemax in the namelist'
+           stop
+        endif
+        ! Compute tree particle position from peak position
+        p%xp(p%npart,1)=c%peak_com(j,1)
+        p%xp(p%npart,2)=c%peak_com(j,2)
+        p%xp(p%npart,3)=c%peak_com(j,3)
+        ! Compute tree particle velocity from peak velocity
+        p%vp(p%npart,1)=c%peak_vel(j,1)-c%peak_acc(j,1)*0.5d0*g%dtnew(c%peak_level(j))
+        p%vp(p%npart,2)=c%peak_vel(j,2)-c%peak_acc(j,2)*0.5d0*g%dtnew(c%peak_level(j))
+        p%vp(p%npart,3)=c%peak_vel(j,3)-c%peak_acc(j,3)*0.5d0*g%dtnew(c%peak_level(j))
+        ! Compute tree particle old force from peak acceleration
+        p%fp(p%npart,1)=c%peak_acc(j,1)
+        p%fp(p%npart,2)=c%peak_acc(j,2)
+        p%fp(p%npart,3)=c%peak_acc(j,3)
+        ! Compute tree particle mass
+        p%mp(p%npart)=0
+        ! Compute tree particle birth time using proper time
+        p%tp(p%npart)=g%texp
+        ! Set merging time to -1
+        p%tm(p%npart)=-1d0
+        ! Set merging id to 0
+        p%idm(p%npart)=0
+        ! Compute level
+        p%levelp(p%npart)=c%peak_level(j)
+     endif
+  end do
+  p%tailp(r%nlevelmax)=p%tailp(r%nlevelmax)+ntree_loc
+
+  !---------------------------------------------------------
+  ! Compute number of new trees across all CPUs.
+  !---------------------------------------------------------
+  ntree_cpu=0
+  ntree_cpu(g%myid)=ntree_loc
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(ntree_cpu,ntree_cpu_tot,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  ntree_cpu=ntree_cpu_tot
+#endif
+  ntree_cum=0
+  do icpu=1,g%ncpu
+     ntree_cum(icpu)=ntree_cum(icpu-1)+int(ntree_cpu(icpu),kind=8)
+  end do
+
+  !--------------------------------------
+  ! Compute new tree particle index
+  !--------------------------------------
+  do i=1,ntree_loc
+     p%idp(p%npart-ntree_loc+i)=p%npart_tot+ntree_cum(g%myid-1)+i
+  end do
+  p%npart_tot=p%npart_tot+ntree_cum(g%ncpu)
+
+  if(g%myid==1)write(*,*)'Found',int(ntree_cum(g%ncpu),kind=4),' new trees for a total of',int(p%npart_tot,kind=4)
+
+#endif
+
+end subroutine tree_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine m_formation_site(pst)
+  use amr_parameters, only: flen
+  use mdl_module, only: mdl_wtime
+  use ramses_commons, only: pst_t
+  use clump_merger_module, only: r_deallocate_clump
+#ifdef GRAV
+  use rho_fine_module, only: m_rho_fine
+#endif
+  implicit none
+  type(pst_t)::pst
+  logical::keep_alive
+  !----------------------------------------------------------------------
+  ! This is the master routine for the RAMSES tree formation sites finder
+  !----------------------------------------------------------------------  
+
+#if NDIM==3 && defined(GRAV)
+
+  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star)
+
+  !--------------------------------------------------------------
+  ! Compute rho from gas density or dark matter or star particles
+  !--------------------------------------------------------------
+  call m_rho_fine(pst,r%levelmin,r%rho_type_clump)
+
+  !----------------------------------------------
+  ! Find relevant peak patches as formation sites
+  !----------------------------------------------
+  call r_tree_clump(pst,r%levelmin,1)
+
+  end associate
+#endif
+
+end subroutine m_formation_site
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_tree_clump(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_TREE_CLUMP,pst%iUpper+1,input_size,0,ilevel)
+     call r_tree_clump(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call tree_clump(pst%s)
+  endif
+  
+end subroutine r_tree_clump
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine tree_clump(s)
+  use ramses_commons, only: ramses_t
+  use clump_finder_module
+  use clump_merger_module
+  implicit none
+  type(ramses_t)::s
+  
+#if NDIM==3 && defined(GRAV)
+
+  !-----------------------------------------------
+  ! Load clump finder parameters in clump object.
+  !-----------------------------------------------
+  s%c%relevance_threshold = 3
+  s%c%density_threshold = 80
+  s%c%saddle_threshold = 200
+  s%c%mass_threshold = 100*s%g%mp_min
+  s%c%fraction_threshold = 2d0
+  s%c%purity_threshold = 0.98
+  !----------------------------------------------------------------------
+  ! Count and collect all cells above the prescribed density threshold.
+  ! We call these cell test particles for the watershed algorithm.
+  !----------------------------------------------------------------------
+  call collect_test(s)
+  if(s%c%ntest_tot==0)return
+  !----------------------------------------------------------------------
+  ! Count and collect all density peaks.
+  ! We also compute for each test particle the coordinates of its
+  ! densest neighbor.
+  !----------------------------------------------------------------------
+  call collect_peak(s)
+  if(s%c%npeak_tot==0)return
+  !----------------------------------------------------------------------
+  ! Perform a segmentation of the density field using the watershed
+  ! algorithm. We get well defined peak patches around each peak.
+  ! As a result, each pair of neighboring peak patches are separated
+  ! by their saddle surface.
+  !----------------------------------------------------------------------
+  call collect_patch(s)
+  !----------------------------------------------------------------------
+  ! Allocate all peak patch based arrays
+  !----------------------------------------------------------------------
+  call allocate_peak_patch_arrays(s)
+  !----------------------------------------------------------------------
+  ! We compute the densest saddle point and its corresponding
+  ! neighboring peak.
+  !----------------------------------------------------------------------
+  call collect_saddle(s)
+  !----------------------------------------------------------------------
+  ! Merge peaks based on a relevance criterion.
+  ! Peaks that are due to random noise fluctuations or peaks that
+  ! have similar peak density values are merged into relevant peaks
+  !----------------------------------------------------------------------
+  call merge_clumps(s,'relevance')
+  !----------------------------------------------------------------------
+  ! Compute relevant peak properties such as mass and number of cells
+  !----------------------------------------------------------------------
+  call compute_clump_properties(s,s%r%rho_type_clump)
+  !----------------------------------------------------------------------
+  ! Compute additional particle-based clump properties.
+  !----------------------------------------------------------------------
+  if(s%r%pic)then
+     call particle_peak_id(s,s%p)
+     if(s%r%rho_type_clump.eq.1)then
+        call particle_clump_properties(s,s%p)
+     endif
+  endif
+  !----------------------------------------------------------------------
+  ! Merge all neighboring peak-patches above the prescribed density
+  ! threshold into halo-patches, if their saddle point density is larger
+  ! that the prescribed saddle density threshold.
+  ! Global halo-patch ids are stored into flag1 for possible later use.
+  !----------------------------------------------------------------------
+  if(s%c%saddle_threshold>0)then
+     call merge_clumps(s,'saddleden')
+  endif
+  !---------------------------------------------
+  ! Reset tree position to peak position
+  ! Count trees in each clump hierarchically.
+  !---------------------------------------------
+  call particle_peak_id(s,s%tree)
+  call tree_in_peak(s,.true.,.true.)
+
+#endif
+end subroutine tree_clump
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine tree_in_peak(s,reset_tree_pos,count_tree)
+  use ramses_commons, only: ramses_t
+  use clump_merger_module
+  use cache_commons, only: msg_tree_clump,msg_saddle_clump
+  use cache
+  implicit none
+  type(ramses_t)::s
+  logical::count_tree,reset_tree_pos
+
+  integer::i,ipart,peak_nr,halo_nr,ilev,ipeak,jpeak
+  integer(kind=8)::global_peak_id,merge_to
+  type(msg_tree_clump)::dummy_tree_clump
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree)
+
+  if(p%norphan_peak>0)then
+     write(*,*)'CREATE_TREE: TREE PARTICLES OUTSIDE PEAKS',p%norphan_peak
+  end if
+
+  !--------------------------------------------
+  ! Sort particles according to global clump id
+  !--------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%pid(ipart)
+  end do
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
+
+  !-------------------------------------
+  ! Reset tree position to peak position
+  !-------------------------------------
+  if(reset_tree_pos)then
+     c%min_tree_id=huge(0)
+     call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
+          pack=pack_fetch_tree,unpack=unpack_fetch_tree,&
+          init=init_flush_minid,flush=pack_flush_minid,combine=unpack_flush_minid)
+     do i=1+p%norphan_peak,p%npart
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
+        ! Compute tree particle position from peak position
+        p%xp(ipart,1)=c%peak_com(peak_nr,1)
+        p%xp(ipart,2)=c%peak_com(peak_nr,2)
+        p%xp(ipart,3)=c%peak_com(peak_nr,3)
+        ! Compute tree particle velocity from peak velocity
+        p%vp(ipart,1)=c%peak_vel(peak_nr,1)-c%peak_acc(peak_nr,1)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+        p%vp(ipart,2)=c%peak_vel(peak_nr,2)-c%peak_acc(peak_nr,2)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+        p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+        ! Compute tree particle old force from peak acceleration
+        p%fp(ipart,1)=c%peak_acc(peak_nr,1)
+        p%fp(ipart,2)=c%peak_acc(peak_nr,2)
+        p%fp(ipart,3)=c%peak_acc(peak_nr,3)
+        ! Update minimum tree id in each clump
+        c%min_tree_id(peak_nr)=min(c%min_tree_id(peak_nr),p%idp(ipart))
+     end do
+     call close_cache(s,m%grid_dict)
+  endif
+
+  !------------------------------------
+  ! Merge trees that sit in same clumps
+  !------------------------------------
+  call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
+       pack=pack_fetch_minid,unpack=unpack_fetch_minid)
+  do i=1+p%norphan_peak,p%npart
+     ipart=p%sortp(i)
+     global_peak_id=p%workp(i)
+     call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
+     if(p%idm(ipart).EQ.0.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
+        p%idm(ipart)=c%min_tree_id(peak_nr)
+        p%tm(ipart)=g%texp
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  !------------------------------------
+  ! Count trees in each halo
+  !------------------------------------
+  if(count_tree)then
+     ! Count trees in each peak
+     c%ntree=0
+     call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
+          init=init_flush_tree,flush=pack_flush_tree,combine=unpack_flush_tree)
+     do i=1+p%norphan_peak,p%npart
+        global_peak_id=p%workp(i)
+        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.false.,flush_cache=.true.)
+        c%ntree(peak_nr)=c%ntree(peak_nr)+1
+     end do
+     call close_cache(s,m%grid_dict)
+     ! Count trees hierarchically in each halo
+     if(c%saddle_threshold>0)then
+        do ilev=0,c%merge_levelmax
+           call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
+                init=init_flush_tree,flush=pack_flush_tree,combine=unpack_flush_tree)
+           do ipeak=1,c%npeak
+              if(c%lev_peak(ipeak)==ilev)then
+                 merge_to=c%new_peak(ipeak)
+                 if(merge_to.NE.ipeak+c%npeak_cum(g%myid-1))then
+                    call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.false.)
+                    c%ntree(jpeak)=c%ntree(jpeak)+c%ntree(ipeak)
+                 endif
+              endif
+           end do
+           call close_cache(s,m%grid_dict)
+        end do
+     endif
+  endif
+
+  end associate
+
+end subroutine tree_in_peak
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_tree(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg%lev = c%peak_level(local_peak_id)
+  msg%pos(1:ndim) = c%peak_com(local_peak_id,1:ndim)
+  msg%vel(1:ndim) = c%peak_vel(local_peak_id,1:ndim)
+  msg%acc(1:ndim) = c%peak_acc(local_peak_id,1:ndim)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_tree
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_tree(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%peak_level(local_peak_id)=msg%lev
+  c%peak_com(local_peak_id,1:ndim)=msg%pos(1:ndim)
+  c%peak_vel(local_peak_id,1:ndim)=msg%vel(1:ndim)
+  c%peak_acc(local_peak_id,1:ndim)=msg%acc(1:ndim)
+
+end subroutine unpack_fetch_tree
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_tree(c,local_peak_id)
+  use clfind_commons, only: clump_t
+  type(clump_t)::c
+  integer::local_peak_id
+
+  c%ntree(local_peak_id)=0
+
+end subroutine init_flush_tree
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_tree(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg%lev=c%ntree(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_tree
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_tree(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%ntree(local_peak_id)=c%ntree(local_peak_id)+msg%lev
+
+end subroutine unpack_flush_tree
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_minid(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg%id = c%min_tree_id(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_minid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_minid(c,local_peak_id,msg_size,msg_array)
+  use amr_parameters, only: ndim
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%min_tree_id(local_peak_id)=msg%id
+
+end subroutine unpack_fetch_minid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_flush_minid(c,local_peak_id)
+  use clfind_commons, only: clump_t
+  type(clump_t)::c
+  integer::local_peak_id
+
+  c%min_tree_id(local_peak_id)=huge(0)
+
+end subroutine init_flush_minid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_flush_minid(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg%id=c%min_tree_id(local_peak_id)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_minid
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_flush_minid(c,local_peak_id,msg_size,msg_array)
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_tree_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_tree_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%min_tree_id(local_peak_id)=min(c%min_tree_id(local_peak_id),msg%id)
+
+end subroutine unpack_flush_minid
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+end module tree_formation_module

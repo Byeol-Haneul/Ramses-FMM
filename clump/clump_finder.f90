@@ -24,7 +24,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
 
 #if NDIM==3 && defined(GRAV)
 
-  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star,sink=>pst%s%sink)
+  associate(r=>pst%s%r,g=>pst%s%g,mdl=>pst%s%mdl,p=>pst%s%p,star=>pst%s%star,sink=>pst%s%sink,tree=>pst%s%tree)
 
   write(*,*)'Entering clump finder'
   ttstart = mdl_wtime(mdl)
@@ -69,6 +69,11 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         write(*,*)'Writing peak sink files'
         filename=TRIM(filedir)//'peak_sink_header.txt'
         call output_peak_header(r,g,sink,filename)
+     endif
+     if(r%output_peak_tree.and.r%tree)then
+        write(*,*)'Writing peak tree files'
+        filename=TRIM(filedir)//'peak_tree_header.txt'
+        call output_peak_header(r,g,tree,filename)
      endif
      call r_output_clump(pst,input_array,flen/4,dummy,0)
   endif
@@ -189,6 +194,12 @@ subroutine clump_finder(s)
   endif
   if(s%r%sink)then
      call particle_peak_id(s,s%sink)
+     if(s%r%rho_type_clump.eq.3)then
+        call particle_clump_properties(s,s%sink)
+     endif
+  endif
+  if(s%r%tree)then
+     call particle_peak_id(s,s%tree)
   endif
   !----------------------------------------------------------------------
   ! Merge all neighboring peak-patches above the prescribed density
@@ -248,6 +259,9 @@ subroutine clump_finder(s)
      endif
      if(s%r%sink)then
         call particle_halo_id(s,s%sink)
+     endif
+     if(s%r%tree)then
+        call particle_halo_id(s,s%tree)
      endif
   endif
 #endif

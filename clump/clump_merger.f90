@@ -331,6 +331,15 @@ subroutine allocate_peak_patch_arrays(s)
      allocate(c%phi(1:c%npeak_max,1:nbin))
   endif
 
+  !------------------------------------------
+  ! Allocate merger tree particles properties
+  !------------------------------------------
+  if(r%tree)then
+     allocate(c%ntree(1:c%npeak_max))
+     allocate(c%form_tree(1:c%npeak_max))
+     allocate(c%min_tree_id(1:c%npeak_max))
+  endif
+
   !-----------------------------------
   ! Allocate sink particles properties
   !-----------------------------------
@@ -378,6 +387,10 @@ subroutine allocate_peak_patch_arrays(s)
   if(r%sink)then
      allocate(s%sink%pid(1:s%sink%npart))
      allocate(s%sink%hid(1:s%sink%npart))
+  endif
+  if(r%tree)then
+     allocate(s%tree%pid(1:s%tree%npart))
+     allocate(s%tree%hid(1:s%tree%npart))
   endif
 
   end associate
@@ -471,6 +484,13 @@ subroutine deallocate_peak_patch_arrays(s)
      deallocate(c%phi)
   endif
 
+  ! Deallocate tree arrays
+  if(r%tree)then
+     deallocate(c%ntree)
+     deallocate(c%form_tree)
+     deallocate(c%min_tree_id)
+  endif
+
   ! Deallocate sink arrays
   if(r%sink)then
      deallocate(c%nsink)
@@ -503,6 +523,10 @@ subroutine deallocate_peak_patch_arrays(s)
   if(r%sink)then
      deallocate(s%sink%pid)
      deallocate(s%sink%hid)
+  endif
+  if(r%tree)then
+     deallocate(s%tree%pid)
+     deallocate(s%tree%hid)
   endif
 
   end associate

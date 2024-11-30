@@ -19,6 +19,7 @@ module amr_commons
      logical::hydro   =.false.   ! Hydro activated
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
+     logical::tree    =.false.   ! Merger tree particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
      integer::nrestart=0         ! New run or backup file number
@@ -52,6 +53,7 @@ module amr_commons
      integer::npartmax=0         ! Maximum number of DM particles
      integer::nstarmax=0         ! Maximum number of star particles
      integer::nsinkmax=0         ! Maximum number of sink particles
+     integer::ntreemax=0         ! Maximum number of tree particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(dp)::boxlen=1.0D0      ! Cell size at level 0 (total box size)
      real(dp)::box_size=0.0D0    ! Box length of active domain along x direction
@@ -260,6 +262,7 @@ module amr_commons
      logical::output_peak_part=.false.
      logical::output_peak_star=.false.
      logical::output_peak_sink=.false.
+     logical::output_peak_tree=.false.
      integer::rho_type_clump=1
      real(dp)::relevance_threshold=2
      real(dp)::density_threshold=-1

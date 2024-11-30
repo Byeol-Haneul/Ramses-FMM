@@ -13,6 +13,7 @@ module ramses_commons
      type(part_t)::p
      type(part_t)::star
      type(part_t)::sink
+     type(part_t)::tree
      type(part_t)::gas
      type(clump_t)::c
      type(cooling_t)::cool
