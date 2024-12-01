@@ -174,7 +174,7 @@ def rd_histo(filename):
     return h
 
 class Part:
-    def __init__(self,nnp,nndim,star=False,sink=False,peak=False):
+    def __init__(self,nnp,nndim,star=False,sink=False,tree=False,peak=False):
         self.np = nnp
         self.ndim = nndim
         self.xp = np.zeros([nndim,nnp])
@@ -185,11 +185,13 @@ class Part:
         if(star):
             self.zp = np.zeros([nnp])
             self.tp = np.zeros([nnp])
-        if(sink):
-            self.fp = np.zeros([nndim,nnp])
+        if(tree):
             self.tp = np.zeros([nnp])
             self.tm = np.zeros([nnp])
             self.idm = np.zeros([nnp])
+        if(sink):
+            self.fp = np.zeros([nndim,nnp])
+            self.tp = np.zeros([nnp])
         if(peak):
             self.hid = np.zeros([nnp],dtype=np.int32)
             self.pid = np.zeros([nnp],dtype=np.int32)
@@ -204,9 +206,14 @@ def rd_part(nout,**kwargs):
 
     Optional args:
 
+        path:   a string containing the relative path of the output folder.
+        prefix: a string describing the particle type. It corresponds to the filenames uswd in
+                the output folder. prefix='part' by default. It takes the followinf  possible values:
+                prefix='part', 'star', 'tree', 'sink'
         center: a numpy array containing the coordinates of the center of the sphere restricting
                 the region to read in data.
         radius: the radius of the sphere restricting the region to read in data.
+        peak:   a logical True or False to read also the peak information of the clump finder.
 
     Returns:
         A variable p (class Part) object defined as:
@@ -215,6 +222,7 @@ def rd_part(nout,**kwargs):
             p.xp: coordinates of the particles. p.xp[0] gives the x coordinate as a numpy array.
             p.vp: velocities of the particles. p.vp[0] gives the x-component as a numpy array.
             p.mp: array containing the particle masses
+        The number of fields depends on the particle type defined by prefix.
 
     Example:
         import miniramses as ram
@@ -224,12 +232,11 @@ def rd_part(nout,**kwargs):
     Authors: Romain Teyssier (Princeton University, October 2022)
     """
     
+    prefix = kwargs.get("prefix","part")
     backup = kwargs.get("backup",False)
     center = kwargs.get("center")
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
-    star = kwargs.get("star",False)
-    sink = kwargs.get("sink",False)
     peak = kwargs.get("peak",False)
 
     car1 = str(nout).zfill(5)
@@ -248,19 +255,23 @@ def rd_part(nout,**kwargs):
     #    cpulist = range(1,ncpu+1)
     cpulist = range(1,ncpu+1)
 
-    prefix="/part."        
-    if(star):
-        prefix="/star."
-    if(sink):
-        prefix="/sink."
-
+    star = False
+    sink = False
+    tree = False
+    if(prefix=="star"):
+        star=True
+    if(prefix=="sink"):
+        sink=True
+    if(prefix=="tree"):
+        tree=True
+    prefix2="/"+prefix+"."
     npart = 0
     for icpu in cpulist:
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"/backup_"+car1+prefix+car2
+            filename = path+"/backup_"+car1+prefix2+car2
         else:
-            filename = path+"/output_"+car1+prefix+car2
+            filename = path+"/output_"+car1+prefix2+car2
 
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         npart = npart + npart2
@@ -268,7 +279,7 @@ def rd_part(nout,**kwargs):
     txt = "Found "+str(npart)+" particles"
     print(txt)
 
-    p = Part(npart,ndim,star,sink,peak)
+    p = Part(npart,ndim,star,sink,tree,peak)
     p.np = npart
     p.ndim = ndim
 
@@ -276,9 +287,9 @@ def rd_part(nout,**kwargs):
     for	icpu in	cpulist:
         car2 = str(icpu).zfill(5)
         if(backup):
-            filename = path+"/backup_"+car1+prefix+car2
+            filename = path+"/backup_"+car1+prefix2+car2
         else:
-            filename = path+"/output_"+car1+prefix+car2
+            filename = path+"/output_"+car1+prefix2+car2
 
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
 
@@ -327,7 +338,7 @@ def rd_part(nout,**kwargs):
 
             p.zp[ipart:ipart+npart2] = xp
 
-            # read particle birth ages
+            # read particle birth times
             if(backup):
                 xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
                 offset = offset + npart2*8
@@ -349,6 +360,17 @@ def rd_part(nout,**kwargs):
 
                 p.fp[idim,ipart:ipart+npart2] = xp
 
+            # read particle birth times
+            if(backup):
+                xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+                offset = offset + npart2*8
+            else:
+                xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+                offset = offset + npart2*4
+
+            p.tp[ipart:ipart+npart2] = xp
+
+        if(tree):
             # read particle birth times
             if(backup):
                 xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
@@ -382,7 +404,7 @@ def rd_part(nout,**kwargs):
         p.idp[ipart:ipart+npart2] = xp
 
         # read particle merging id
-        if(sink):
+        if(tree):
             xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
             offset = offset + npart2*4
 
@@ -391,15 +413,17 @@ def rd_part(nout,**kwargs):
         ipart = ipart + npart2
 
     if(peak):
-        prefix="/peak_part."        
+        prefix2="/peak_part."        
         if(star):
-            prefix="/peak_star."
+            prefix2="/peak_star."
         if(sink):
-            prefix="/peak_sink."
+            prefix2="/peak_sink."
+        if(tree):
+            prefix2="/peak_tree."
         ipart = 0
         for icpu in cpulist:
             car2 = str(icpu).zfill(5)
-            filename = path+"/output_"+car1+prefix+car2
+            filename = path+"/output_"+car1+prefix2+car2
             npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
             offset = 8
 
@@ -436,6 +460,8 @@ def rd_part(nout,**kwargs):
             p.tp = p.tp[r < radius]
         if(sink):
             p.fp = p.fp[:,r < radius]
+            p.tp = p.tp[r < radius]
+        if(tree):
             p.tp = p.tp[r < radius]
             p.tm = p.tm[r < radius]
             p.idm = p.idm[r < radius]
