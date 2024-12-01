@@ -1449,7 +1449,7 @@ def plot_tree(nout,pid,**kwargs):
 
     # read clump and sink files
     c=rd_clump(nout,**kwargs)
-    s=rd_part(nout,sink=True,peak=True,**kwargs)
+    s=rd_part(nout,prefix='tree',peak=True,**kwargs)
 
     # collect sinks in chosen clump
     ind=np.where(s.pid==pid)
