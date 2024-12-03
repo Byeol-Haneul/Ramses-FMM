@@ -52,7 +52,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
      endif
      if(r%output_peak_grid)then
         write(*,*)'Writing peak grid files'
-        filename=TRIM(filedir)//'peak_header.txt'
+        filename=TRIM(filedir)//'peak_grid_header.txt'
         call file_descriptor_clump(r,filename)
      endif
      if(r%output_peak_part.and.r%pic)then

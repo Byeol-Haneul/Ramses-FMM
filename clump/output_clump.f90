@@ -32,7 +32,7 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
      endif
      ! Write density, peak id and halo id for AMR cells
      if(pst%s%r%output_peak_grid)then
-        fileloc=TRIM(filename)//'peak.'
+        fileloc=TRIM(filename)//'peak_grid.'
         call output_clump_field(pst%s,fileloc)
      endif
      ! Write peak id and halo id for dark matter particles
