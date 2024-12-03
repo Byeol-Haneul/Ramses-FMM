@@ -15,7 +15,7 @@ recursive subroutine m_tree_formation(pst)
   type(pst_t)::pst
   double precision::ttend, ttstart
 
-  write(*,*)'Entering tree formation'
+  write(*,*)'Entering merger tree particle formation'
   ttstart = mdl_wtime(pst%s%mdl)
 
   !----------------------------
