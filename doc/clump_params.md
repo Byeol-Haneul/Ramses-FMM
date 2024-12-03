@@ -6,7 +6,7 @@ The namelist block `&CLUMP_PARAMS` is used to specify parameters controlling the
 | `merger_tree`      | `logical`    | `.false.`           | Activate merger tree particles if set to .true.                                              |
 | `clump_info`       | `logical`    | `.false.`           | Turn clump finder diagnostics on or off.                                                     |
 | `output_clump`     | `logical`    | `.false.`           | Output clump information to disk as an ascii file.                                           |
-| `output_peak_grid` | `logical`    | `.false.`           | Output AMR grids density, peak id and halo id fields.                                        |
+| `output_peak_grid` | `logical`    | `.false.`           | Output AMR grid density, peak id and halo id fields.                                        |
 | `output_peak_part` | `logical`    | `.false.`           | Output dark matter particle peak id and halo id.                                             |
 | `output_peak_tree` | `logical`    | `.false.`           | Output merger tree particle peak id and halo id.                                             |
 | `output_peak_star` | `logical`    | `.false.`           | Output star particle peak id and halo id.                                                    |
