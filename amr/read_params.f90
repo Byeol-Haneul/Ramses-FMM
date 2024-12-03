@@ -296,7 +296,7 @@ subroutine m_read_params(pst)
   logical::output_peak_star=.false.
   logical::output_peak_sink=.false.
   logical::output_peak_tree=.false.
-  integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks
+  integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1

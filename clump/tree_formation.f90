@@ -112,7 +112,7 @@ subroutine tree_formation(r,g,m,p,c)
      !-------------------------------------
      if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
-     if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
+     if(c%halo_mass(j)<=c%mass_threshold)ok=.false.
      if(c%ntree(j)>0)ok=.false.
      purity=c%npart(j)*g%mp_min/c%particle_mass(j)
      if(purity<=c%purity_threshold)ok=.false.
@@ -157,8 +157,8 @@ subroutine tree_formation(r,g,m,p,c)
         p%vp(p%npart,1)=c%peak_vel(j,1)-c%peak_acc(j,1)*0.5d0*g%dtnew(c%peak_level(j))
         p%vp(p%npart,2)=c%peak_vel(j,2)-c%peak_acc(j,2)*0.5d0*g%dtnew(c%peak_level(j))
         p%vp(p%npart,3)=c%peak_vel(j,3)-c%peak_acc(j,3)*0.5d0*g%dtnew(c%peak_level(j))
-        ! Compute tree particle mass
-        p%mp(p%npart)=0
+        ! Set tree particle parent clump mass
+        p%mp(p%npart)=c%halo_mass(j)
         ! Compute tree particle birth time using proper time
         p%tp(p%npart)=g%texp
         ! Set merging time to -1
@@ -193,7 +193,7 @@ subroutine tree_formation(r,g,m,p,c)
   end do
   p%npart_tot=p%npart_tot+ntree_cum(g%ncpu)
 
-  if(g%myid==1)write(*,*)'Found',int(ntree_cum(g%ncpu),kind=4),' new trees for a total of',int(p%npart_tot,kind=4)
+  if(g%myid==1)write(*,*)'Found',int(ntree_cum(g%ncpu),kind=4),' new merger tree particles for a total of',int(p%npart_tot,kind=4)
 
 #endif
 
@@ -354,7 +354,7 @@ end subroutine tree_clump
 subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   use ramses_commons, only: ramses_t
   use clump_merger_module
-  use cache_commons, only: msg_tree_clump,msg_saddle_clump
+  use cache_commons, only: msg_tree_clump,msg_tree_minid
   use cache
   implicit none
   type(ramses_t)::s
@@ -363,6 +363,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   integer::i,ipart,peak_nr,halo_nr,ilev,ipeak,jpeak
   integer(kind=8)::global_peak_id,merge_to
   type(msg_tree_clump)::dummy_tree_clump
+  type(msg_tree_minid)::dummy_tree_minid
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree)
 
@@ -408,15 +409,20 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   !------------------------------------
   ! Merge trees that sit in same clumps
   !------------------------------------
-  call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
+  call open_cache_clump(s,pack_size=storage_size(dummy_tree_minid)/32,&
        pack=pack_fetch_minid,unpack=unpack_fetch_minid)
   do i=1+p%norphan_peak,p%npart
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
      call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
+     ! If tree particle merges, update merging age and merge-to-clump id
      if(p%idm(ipart).EQ.0.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
         p%idm(ipart)=c%min_tree_id(peak_nr)
         p%tm(ipart)=g%texp
+     endif
+     ! If live (not yet merged) tree particle sits in a halo-patch, update parent halo mass
+     if(p%idp(ipart).EQ.c%min_tree_id(peak_nr).AND.global_peak_id.EQ.c%ind_halo(peak_nr))then
+        p%mp(ipart)=max(p%mp(ipart),c%halo_mass(peak_nr))
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -558,15 +564,17 @@ end subroutine unpack_flush_tree
 subroutine pack_fetch_minid(c,local_peak_id,msg_size,msg_array)
   use amr_parameters, only: ndim
   use clfind_commons, only: clump_t
-  use cache_commons, only: msg_tree_clump
+  use cache_commons, only: msg_tree_minid
   type(clump_t)::c
   integer::local_peak_id
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  type(msg_tree_clump)::msg
+  type(msg_tree_minid)::msg
 
   msg%id = c%min_tree_id(local_peak_id)
+  msg%ind = c%ind_halo(local_peak_id)
+  msg%mass = c%halo_mass(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -578,17 +586,19 @@ end subroutine pack_fetch_minid
 subroutine unpack_fetch_minid(c,local_peak_id,msg_size,msg_array)
   use amr_parameters, only: ndim
   use clfind_commons, only: clump_t
-  use cache_commons, only: msg_tree_clump
+  use cache_commons, only: msg_tree_minid
   type(clump_t)::c
   integer::local_peak_id
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  type(msg_tree_clump)::msg
+  type(msg_tree_minid)::msg
 
   msg=transfer(msg_array,msg)
 
-  c%min_tree_id(local_peak_id)=msg%id
+  c%min_tree_id(local_peak_id) = msg%id
+  c%ind_halo(local_peak_id) = msg%ind
+  c%halo_mass(local_peak_id) = msg%mass
 
 end subroutine unpack_fetch_minid
 !################################################################

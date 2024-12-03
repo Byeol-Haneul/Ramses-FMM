@@ -149,6 +149,7 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
+  use pm_parameters, only: TREE_TYPE
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -164,14 +165,16 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
         vmax = MAX(vmax, ABS(p%vp(ipart, idim)))
      end do
   end do
-  
+
+  if(p%type==TREE_TYPE)return
+
   ! Compute kinetic energy
   do idim = 1, ndim
      do ipart = p%headp(ilevel), p%tailp(ilevel)
         ekin = ekin + 0.5D0 * p%mp(ipart) * p%vp(ipart, idim)**2
      end do
   end do
-    
+
 end subroutine newdt_part
 !#####################################################################
 !#####################################################################
