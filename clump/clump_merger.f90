@@ -441,6 +441,7 @@ subroutine deallocate_peak_patch_arrays(s)
      deallocate(c%grid)
      deallocate(c%level)
      deallocate(c%hash)
+     c%ntest=0
   endif
   if(c%ntest_tot==0)return
 
@@ -449,6 +450,7 @@ subroutine deallocate_peak_patch_arrays(s)
   if(c%npeak_tot==0)return
 
   ! Deallocate peak-patch arrays
+  c%npeak_tot=0
   deallocate(c%peak_cell)
   deallocate(c%peak_grid)
   deallocate(c%peak_level)

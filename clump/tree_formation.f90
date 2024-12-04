@@ -113,9 +113,12 @@ subroutine tree_formation(r,g,m,p,c)
      if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%halo_mass(j)<=c%mass_threshold)ok=.false.
+     if(c%npart(j)==0)ok=.false.
      if(c%ntree(j)>0)ok=.false.
-     purity=c%npart(j)*g%mp_min/c%particle_mass(j)
-     if(purity<=c%purity_threshold)ok=.false.
+     if(c%particle_mass(j)>0)then
+        purity=c%npart(j)*g%mp_min/c%particle_mass(j)
+        if(purity<=c%purity_threshold)ok=.false.
+     endif
      ! Set tree formation flag
      if(ok)c%form_tree(j)=1
      if(ok)nsite=nsite+1
@@ -275,12 +278,12 @@ subroutine tree_clump(s)
   !-----------------------------------------------
   ! Load clump finder parameters in clump object.
   !-----------------------------------------------
-  s%c%relevance_threshold = 3
-  s%c%density_threshold = 80
-  s%c%saddle_threshold = 200
-  s%c%mass_threshold = 100*s%g%mp_min
-  s%c%fraction_threshold = 2d0
+  s%c%relevance_threshold = s%r%relevance_threshold
+  s%c%density_threshold = s%r%density_threshold
+  s%c%saddle_threshold = s%r%saddle_threshold
+  s%c%mass_threshold = 10d0*s%r%mass_threshold
   s%c%purity_threshold = 0.98
+  s%c%fraction_threshold = 2d0
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
