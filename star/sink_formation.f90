@@ -288,12 +288,12 @@ subroutine sink_clump(s)
   !-----------------------------------------------
   ! Load clump finder parameters in clump object.
   !-----------------------------------------------
-  s%c%relevance_threshold = 3
-  s%c%density_threshold = 80
-  s%c%saddle_threshold = 200
-  s%c%mass_threshold = 100*s%g%mp_min
-  s%c%fraction_threshold = 2d0
-  s%c%purity_threshold = 0.98
+  s%c%relevance_threshold = s%r%sink_relevance_threshold
+  s%c%density_threshold = s%r%sink_density_threshold
+  s%c%saddle_threshold = s%r%sink_saddle_threshold
+  s%c%mass_threshold = s%r%sink_mass_threshold
+  s%c%fraction_threshold = s%r%sink_fraction_threshold
+  s%c%purity_threshold = s%r%sink_purity_threshold
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
