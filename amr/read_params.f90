@@ -303,7 +303,7 @@ subroutine m_read_params(pst)
   real(dp)::fudge_descent=0.5d0
   real(dp)::sink_relevance_threshold=3
   real(dp)::sink_density_threshold=80
-  real(dp)::sink_saddle_threshold=-1
+  real(dp)::sink_saddle_threshold=200
   real(dp)::sink_mass_threshold=100
   real(dp)::d_sink=500
 
