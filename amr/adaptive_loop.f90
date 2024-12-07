@@ -9,6 +9,7 @@ subroutine adaptive_loop(pst)
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
   use init_refine_restart_module, only: m_init_refine_restart
+  use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
   implicit none
@@ -44,8 +45,12 @@ subroutine adaptive_loop(pst)
 
   ! Build initial AMR grid
   if(r%nrestart==0)then
-     call m_init_refine_basegrid(pst) ! Build coarse grid
-     call m_init_refine_adaptive(pst) ! Build adaptive grid
+     if(r%filetype=='ramses')then
+        call m_init_refine_ramses(pst) ! Build AMR grid from output file
+     else
+        call m_init_refine_basegrid(pst) ! Build coarse grid
+        call m_init_refine_adaptive(pst) ! Build adaptive grid
+     endif
   else
      call m_init_refine_restart(pst) ! Build AMR grid from restart file
   endif

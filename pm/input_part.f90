@@ -11,6 +11,7 @@ subroutine m_input_part(pst)
   use input_part_grafic_module, only: m_input_part_grafic
   use input_part_ascii_module, only: m_input_part_ascii
   use input_part_restart_module, only: m_input_part_restart
+  use input_part_ramses_module, only: m_input_part_ramses
   use input_part_gadget_module, only: m_input_part_gadget
   implicit none
   type(pst_t)::pst
@@ -30,6 +31,8 @@ subroutine m_input_part(pst)
      call m_input_part_ascii(pst)
   case('gadget')
      call m_input_part_gadget(pst)
+  case('ramses')
+     call m_input_part_ramses(pst)
   case('restart')
      call m_input_part_restart(pst)
   case DEFAULT

@@ -114,12 +114,13 @@ function worker_init(mdl) result(pst)
   use input_part_zoom_module, only: r_input_part_zoom
   use input_part_ascii_module, only: r_input_part_ascii, r_input_star_ascii
   use input_part_restart_module, only: r_input_part_restart
+  use input_part_ramses_module, only: r_input_part_ramses
   use input_part_gadget_module, only: r_input_part_gadget
   use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
   use update_time_module, only: r_broadcast_aexp
-  use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,&
-                                        r_noct_used_max
+  use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,r_noct_used_max
   use init_refine_restart_module, only: r_init_refine_restart
+  use init_refine_ramses_module, only: r_init_refine_ramses
   use load_balance_module, only: r_load_balance,r_balance_part,r_broadcast_bound_key,r_collect_bound_key
   use refine_utils, only: r_refine_fine
   use smooth_module, only: r_smooth_fine
@@ -203,6 +204,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ASCII,       pst,C_FUNLOC(r_input_part_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_part_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_STAR_ASCII,       pst,C_FUNLOC(r_input_star_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_star_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RESTART,     pst,C_FUNLOC(r_input_part_restart),(MDL_MAX_CPU+1),0,"input_part_restart")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RAMSES,      pst,C_FUNLOC(r_input_part_ramses),(MDL_MAX_CPU+1),0,"input_part_ramses")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_GADGET,      pst,C_FUNLOC(r_input_part_gadget),MDL_MAX_CPU,6,"input_part_gadget")
   call mdl_add_service(pst%s%mdl,MDL_DEALLOCATE_GAS,         pst,C_FUNLOC(r_deallocate_gas),MDL_MAX_CPU,0,"input_part_gadget")
   call mdl_add_service(pst%s%mdl,MDL_NPART_MAX,              pst,C_FUNLOC(r_npart_max),0,1,"npart_max")
@@ -216,6 +218,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_NOCT_USED_MAX,          pst,C_FUNLOC(r_noct_used_max),1,1,"noct_used_max")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,   pst,C_FUNLOC(r_init_refine_basegrid),1,0,"init_refine_basegrid")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RESTART,    pst,C_FUNLOC(r_init_refine_restart),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_restart")
+  call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RAMSES,     pst,C_FUNLOC(r_init_refine_ramses),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_ramses")
   call mdl_add_service(pst%s%mdl,MDL_COLLECT_BOUND_KEY,      pst,C_FUNLOC(r_collect_bound_key),(MDL_MAX_CPU+1),nhilbert*(ncpu+1)*storage_size(dummy8)/32,"collect_bound_key")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_BOUND_KEY,    pst,C_FUNLOC(r_broadcast_bound_key),nhilbert*(ncpu+1)*storage_size(dummy8)/32 + 1,0,"broadcast_bound_key")
   call mdl_add_service(pst%s%mdl,MDL_LOAD_BALANCE,           pst,C_FUNLOC(r_load_balance),1,0,"load_balance")

@@ -15,7 +15,7 @@ module mdl_parameters
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_STAR_ASCII
      enumerator::MDL_INPUT_PART_RESTART
-     enumerator::MDL_INPUT_STAR_RESTART
+     enumerator::MDL_INPUT_PART_RAMSES
      enumerator::MDL_INPUT_PART_GADGET
      enumerator::MDL_DEALLOCATE_GAS
      enumerator::MDL_NPART_MAX
@@ -30,6 +30,7 @@ module mdl_parameters
      enumerator::MDL_GATHER_NOCT_MAX
      enumerator::MDL_INIT_REFINE_BASEGRID
      enumerator::MDL_INIT_REFINE_RESTART
+     enumerator::MDL_INIT_REFINE_RAMSES
      enumerator::MDL_COLLECT_BOUND_KEY
      enumerator::MDL_BROADCAST_BOUND_KEY
      enumerator::MDL_LOAD_BALANCE
