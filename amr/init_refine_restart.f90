@@ -48,10 +48,10 @@ subroutine m_init_refine_restart(pst)
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)  
-  
+
   ! Broadcast global variables to all CPUs.
   call m_broadcast_global(pst)  
-  
+
   if(r%verbose)write(*,*)'Broadcast completed'
 
   ! Compute the proper level interval
@@ -60,22 +60,22 @@ subroutine m_init_refine_restart(pst)
 
   ! Create base grids if necessary
   if(levelmin_max>r%levelmin)then
-     
+
      do ilevel=r%levelmin,levelmin_max-1
-        
+
         ! Set unigrid at coarser levels
         call r_init_refine_basegrid(pst,ilevel,1)
-        
+
         ! Get total, min and max grid count (only in master)
         call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),2)
         call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
         call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
-        
+
      end do
-     
+
      ! Get maximum used memory (only in master)
      call r_noct_used_max(pst,r%levelmin,1,m%noct_used_max,1)
-     
+
   endif
 
   ! Allocate local variables
@@ -101,7 +101,7 @@ subroutine m_init_refine_restart(pst)
         read(ilun,POS=ipos)noct_file(icpu)
         close(ilun)
      end do
-     
+
      ! Allocate input array
      input_size=2*ncpu_file+4
      allocate(input_array(1:input_size))
@@ -135,7 +135,7 @@ subroutine m_init_refine_restart(pst)
         endif
      end do
      bound_key(1:nhilbert,g%ncpu)=m%hkey_max(1:nhilbert,ilevel)
-     
+
      ! Scatter new domain decomposition to all processors
      input_size=2*nhilbert*(g%ncpu+1)+1
      allocate(input_array(1:input_size))
@@ -157,7 +157,7 @@ subroutine m_init_refine_restart(pst)
   ! Compute total mass density from gas and particles on the grid
   call m_rho_fine(pst,r%levelmin,0)
 #endif
-  
+
   end associate
 
 end subroutine m_init_refine_restart
