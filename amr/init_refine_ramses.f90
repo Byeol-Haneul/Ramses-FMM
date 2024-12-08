@@ -229,6 +229,7 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
   !--------------------------------------------------------------
   use mdl_module, only: mdl_abort
   use amr_parameters, only: dp,nhilbert,ndim,twotondim,nvector
+  use input_hydro_condinit_module, only: input_hydro_vecpot,input_cons_from_prim
   use hydro_parameters, only: nvar,nprim,nener,ie
   use ramses_commons, only: ramses_t
   use hash
@@ -261,8 +262,6 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
   integer,dimension(1:ndim)::ckey
   logical,dimension(1:twotondim)::refined
   real(kind=4),dimension(1:twotondim,1:nprim)::qout
-  real(dp),dimension(1:twotondim,1:6)::bold
-  real(dp)::ekin,eint,erad
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -377,36 +376,28 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
         m%noct(ilevel)=m%noct(ilevel)+1
         m%noct_used=m%noct_used+1
 
-        ! Fill values from files
+        ! Fill primitive variables from files
+        ! Ignore magnetic field if present
         m%grid(igrid)%lev=ilevel
         m%grid(igrid)%ckey=ckey
         m%grid(igrid)%refined=refined
         if(r%hydro)then
+#ifdef HYDRO
            do ind=1,twotondim
-              m%grid(igrid)%uold(ind,1)=qout(ind,1) ! Density
-              ekin=0d0
-              do idim=1,3
-                 m%grid(igrid)%uold(ind,idim+1)=qout(ind,1)*qout(ind,idim+1) ! Momentum
-                 ekin=ekin+0.5d0*qout(ind,1)*qout(ind,idim+1)**2 ! Kinetic energy
-              end do
-              eint=qout(ind,5)/(r%gamma-1d0) ! Internal energy
-              erad=0d0
+              m%grid(igrid)%uold(ind,1:5)=qout(ind,1:5) ! Density, velocity, pressure
 #if NENER>0
-              do irad=1,nener
-                 m%grid(igrid)%uold(ind,5+irad)=qout(ind,ie+irad)/(r%gamma_rad(irad)-1)
-                 erad=erad+m%grid(igrid)%uold(ind,5+irad) ! Non-thermal energies
+              do irad=1,nener ! Non-thermal pressures
+                 m%grid(igrid)%uold(ind,5+irad)=qout(ind,ie+irad)
               end do
 #endif
-              m%grid(igrid)%uold(ind,5)=eint+erad+ekin ! Total energy
 #if NVAR>5+NENER
-              do n=1,nvar-5-nener ! Passive scalars
-                 m%grid(igrid)%uold(ind,5+nener+n)=qout(ind,1)*qout(ind,ie+nener+n)
+              do n=1,nvar-5-nener ! Passive scalar mass fraction
+                 m%grid(igrid)%uold(ind,5+nener+n)=qout(ind,ie+nener+n)
               end do
 #endif
            end do
+#endif
         endif
-
-        ! Add here magnetic field (cannot be read from file)
 
         ! Set flag1 to preserve refinements
         do ind=1,twotondim
@@ -433,7 +424,14 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
         close(11)
      endif
   end do
-  
+
+  if(r%hydro)then
+     ! Compute initial magnetic field
+     call input_hydro_vecpot(r,g,m,ilevel)
+     ! Convert primitive to conservative
+     call input_cons_from_prim(r,g,m,ilevel)
+  endif
+
   !-----------
   ! Super-octs
   !-----------
