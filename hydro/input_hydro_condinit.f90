@@ -99,12 +99,10 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   end do
   ! End loop over grids
 #endif
-#ifdef MHD
-#if NDIM>1
+
   ! Compute initial magnetic field
   call input_hydro_vecpot(r,g,m,ilevel)
-#endif
-#endif
+
   ! Convert primitive to conservative
   call input_cons_from_prim(r,g,m,ilevel)
 
