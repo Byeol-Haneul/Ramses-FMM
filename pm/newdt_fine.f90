@@ -93,7 +93,7 @@ subroutine m_newdt_fine(pst,ilevel)
 #ifdef RT
   if(r%rt)then
      if(r%verbose)write(*,'("   Entering newdt_rt for level ",I2)')ilevel
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),0.8*dx/3d0/rt_c)
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%rt_courant_factor*dx/3d0/rt_c)
   endif
 #endif
   
