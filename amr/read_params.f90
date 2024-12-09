@@ -1136,6 +1136,7 @@ subroutine m_read_params(pst)
 #ifdef RT
   s%r%rt_advect=rt_advect
   s%r%rt_c_fraction=rt_c_fraction
+  s%r%rt_courant_factor=rt_courant_factor
   s%r%units_np=units_np
   s%r%smallnp=smallnp
   s%r%rt_nsubcycle=rt_nsubcycle
