@@ -95,7 +95,7 @@ recursive subroutine r_broadcast_mp_min(pst,mp_min,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      pst%s%g%mp_min=mp_min
-     if(pst%s%r%aexp_lock_refine)then
+     if(pst%s%r%aexp_lock_refine>0d0)then
         ilevel = 1
         do while(.true.)
            mm1 = 0.5d0**(3*ilevel)*(1.0d0-pst%s%g%omega_b/pst%s%g%omega_m)

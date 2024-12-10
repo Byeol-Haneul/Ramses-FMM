@@ -134,7 +134,7 @@ module amr_commons
      real(dp)::var_cut_refine=-1.0 ! Threshold for variable-based refinement
      real(dp)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
      integer::ivar_refine=-1 ! Variable index for refinement
-     logical::aexp_lock_refine=.false.
+     real(dp)::aexp_lock_refine=-1.0
      logical::pic_lock_refine=.false.
 
      ! Refinement parameters for hydro
