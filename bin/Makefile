@@ -130,7 +130,7 @@ endif
 	 output_hydro.o output_poisson.o output_part.o output_amr.o movie.o \
 	 sort.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o upload.o \
 	 init_hydro.o init_part.o init_amr.o smooth.o flag_utils.o init_time.o \
-	 read_params.o input_part_grafic.o input_part_zoom.o input_part_ascii.o \
+	 read_rt_params.o read_params.o input_part_grafic.o input_part_zoom.o input_part_ascii.o \
 	 input_part_restart.o input_part_gadget.o input_part.o interpol_hydro.o \
 	 update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o \
