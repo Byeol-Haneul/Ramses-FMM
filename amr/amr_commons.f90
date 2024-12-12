@@ -351,7 +351,6 @@ module amr_commons
     logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
     ! Grop props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev).
     ! Indexes nrtgroups, nIons stand for photon group vs species (e.g. 1=H, 2=He).
-    integer,dimension(nrtgroups)::iGroups=1                          ! Start indices of groups
     real(dp),dimension(nrtgroups,nIons)::group_csn=0, group_cse=0    !    Cross sections (cm2)
     real(dp),dimension(nrtgroups)::group_egy=0                       !  Avg photon energy (ev)
     !real(dp),dimension(nrtgroups)::group_egy_AGNfrac=0               !  Fraction of AGN energy

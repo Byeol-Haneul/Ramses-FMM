@@ -294,7 +294,7 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   integer,dimension(1:s%r%nfile+1)::istart
-  integer::i,idim,ivar,ifile,ncpufile,nremain,ilevel,ierr
+  integer::i,idim,ivar,ifile,ncpufile,nremain,ierr
   integer(kind=8)::npart
   logical::file_exist
 
@@ -456,7 +456,7 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
 #endif
   integer,dimension(1:s%r%nfile+1)::istart
   integer::ncpufile,nremain
-  integer::i,ivar,idim,ifile,ilevel
+  integer::i,ivar,idim,ifile
 
   associate(r=>s%r,g=>s%g)
 

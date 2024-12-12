@@ -2,12 +2,11 @@
 !##########################################################################
 !##########################################################################
 !##########################################################################
-subroutine interpol_rt(u1,u2,interpol_type,smallnp)
+subroutine interpol_rt(u1,u2,interpol_type)
   use amr_parameters, only: dp, ndim,twotondim,twondim
   use rt_parameters, only: nrtvar
   implicit none
   integer::interpol_type
-  real(dp)::smallnp
   real(dp),dimension(0:twondim  ,1:nrtvar)::u1
   real(dp),dimension(1:twotondim,1:nrtvar)::u2
   !----------------------------------------------------------

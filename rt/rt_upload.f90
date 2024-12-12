@@ -13,7 +13,6 @@ subroutine m_upload_rt_fine(pst,ilevel)
   ! This routine is the master procedure to upload HYDRO variables
   ! from level ilevel+1 to ilevel (averaging down or restriction).
   !--------------------------------------------------------------------
-  integer::dummy
 
   if(ilevel==pst%s%r%nlevelmax)return
   if(pst%s%m%noct_tot(ilevel)==0)return
@@ -72,10 +71,10 @@ subroutine upload_rt_fine(s,ilevel)
 #if NENER>0
   integer::irad
 #endif
-  integer::ioct,ind,ivar,icell,idim
+  integer::ioct,ind,ivar,icell
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:6,1:4)::hh
-  real(dp)::average,ekin,erad,emag
+  real(dp)::average
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 
