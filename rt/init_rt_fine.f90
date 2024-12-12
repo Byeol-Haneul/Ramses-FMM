@@ -3,12 +3,14 @@
 !#########################################################################
 !#########################################################################
 subroutine m_init_rt_fine(pst,ilevel)
+  use amr_commons, only: ndim
+  use amr_parameters, only: nvector, twotondim
   use ramses_commons, only: pst_t
   use input_rt_condinit_module, only: r_input_rt_condinit
   use rt_parameters, only: nrtgroups
   implicit none
   type(pst_t)::pst
-  integer::ilevel,igrp,idim
+  integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to input a given initial 
   ! condition for RT variables into the exisiting AMR structure from an
@@ -17,19 +19,18 @@ subroutine m_init_rt_fine(pst,ilevel)
   character(len=80)::filename
   logical::ok_file1,ok_file2,ok_file
 
-  associate(s=>pst%s)
-  
+  associate(s=>pst%s,r=>pst%s%r,m=>pst%s%m)
+
   if(s%m%noct_tot(ilevel)==0)return
   if(s%r%verbose)write(*,111)ilevel
 111 format(' Entering init_rt_fine for level ',I2)
-  ! First initialize everything to zero or small values
-  do igrp = 1, nrtgroups
-     !rtuold(:,1+(igrp-1)*(ndim+1)) = smallnp
-     !do idim = 1, ndim
-     !   rtuold(ind,1+idim+(igrp-1)*(ndim+1)) = 0.0
-     !end do
-  end do
-  
+
+  ! Use internal-defined or user-defined functions.
+  ! We always call the condinit routine, even in cosmological simulations, 
+  ! just to initialisethe RT variables (to small values)
+  if(s%r%verbose)write(*,*)'Initialising RT variables'
+  call r_input_rt_condinit(pst,ilevel,1)
+
   filename=TRIM(s%r%initfile(ilevel))//'/ic_d'
   INQUIRE(file=filename,exist=ok_file1)
   filename=TRIM(s%r%initfile(ilevel))//'/ic_deltab'
@@ -39,10 +40,6 @@ subroutine m_init_rt_fine(pst,ilevel)
      ! No initialization necessary for photons
   else if (s%r%filetype=='gadget')then
      ! No initialization necessary for photons
-  else
-     ! Use internal-defined or user-defined functions
-     if(s%r%verbose)write(*,*)'Computing RT initial conditions from analytical model'
-     call r_input_rt_condinit(pst,ilevel,1)
   endif
 
   end associate
@@ -69,7 +66,7 @@ subroutine m_update_rt_c(pst)
 ! This cannot be just a constant, since scale_v changes with time in
 ! cosmological simulations.
 !-------------------------------------------------------------------------
-  use rt_parameters,only: rt_c, rt_c2, rt_c_cgs
+  use rt_parameters,only: rt_c, rt_c_cgs
   use amr_parameters, only: clight
   use amr_commons, only: run_t, global_t, dp
   use ramses_commons, only: pst_t
@@ -79,7 +76,6 @@ subroutine m_update_rt_c(pst)
   !type(global_t)::g
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   type(in_broadcast_rt_c)::in_broadcast
-  integer::i
 !-------------------------------------------------------------------------
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
@@ -101,7 +97,7 @@ end subroutine m_update_rt_c
 recursive subroutine r_broadcast_rt_c(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
-  use rt_parameters,only: rt_c, rt_c2, rt_c_cgs
+  use rt_parameters,only: rt_c, rt_c2
   use mdl_parameters
   implicit none
   type(pst_t)::pst
