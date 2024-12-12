@@ -101,7 +101,7 @@ recursive subroutine r_set_rtunew(pst,ilevel,input_size)
      call r_set_rtunew(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call set_rtunew(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call set_rtunew(pst%s%m,ilevel)
   endif
 
 end subroutine r_set_rtunew
@@ -109,12 +109,10 @@ end subroutine r_set_rtunew
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine set_rtunew(r,g,m,ilevel)
+subroutine set_rtunew(m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
   integer::ilevel
   !--------------------------------------------------------------------------
@@ -148,7 +146,7 @@ recursive subroutine r_set_rtuold(pst,ilevel,input_size)
      call r_set_rtuold(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call set_rtuold(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call set_rtuold(pst%s%m,ilevel)
   endif
 
 end subroutine r_set_rtuold
@@ -156,19 +154,17 @@ end subroutine r_set_rtuold
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine set_rtuold(r,g,m,ilevel)
+subroutine set_rtuold(m,ilevel)
   use amr_parameters, only: dp,ndim,twotondim
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
-  type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
   integer::ilevel
   !---------------------------------------------------------
   ! This routine sets array rtuold to its new value rtunew 
   ! after the hydro step.
   !---------------------------------------------------------
-  integer::i,ind
+  integer::i
 
   ! Set rtuold to rtunew
   do i = m%head(ilevel),m%tail(ilevel)
@@ -204,8 +200,8 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   ! and stored in array rtunew(:), both at the current level and at the 
   ! coarser level if necessary.
   !-------------------------------------------------------------------
-  integer::ivar,idim,ind,ind_son,ind_oct
-  integer::igrid,icell,inbor,ipass
+  integer::ivar,idim,ind_son,ind_oct
+  integer::icell,inbor,ipass
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -213,14 +209,13 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   integer::i2min,i2max,j2min,j2max,k2min,k2max
   integer::i3min,i3max,j3min,j3max,k3min,k3max
   integer,dimension(1:ndim)::ckey_corner,ckey
-  integer(kind=8),dimension(0:ndim)::hash_nbor,hash_son_nbor
+  integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::ind_nbor
   type(nbor),dimension(0:twondim)::grid_nbor
   real(dp)::dx,oneontwotondim
   real(dp),dimension(0:twondim  ,1:nrtvar)::u1
   real(dp),dimension(1:twotondim,1:nrtvar)::u2
   logical::okx,oky,okz,oknbor
-  logical::ok1,ok2,ok3
   type(oct),pointer::gridp,childp
 
   i2min=0; i2max=0; j2min=0; j2max=0; k2min=0; k2max=0
@@ -423,7 +418,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                     end do
                  end do
                  ! Interpolate using rt variables
-                 call interpol_rt(u1,u2,r%interpol_var,r%interpol_type,r%smallnp)
+                 call interpol_rt(u1,u2,r%interpol_var,r%interpol_type)
               endif
 
               ! Store grid index

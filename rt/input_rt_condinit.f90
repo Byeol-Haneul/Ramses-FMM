@@ -91,7 +91,7 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
   real(dp)::dx
   real(dp),dimension(1:nvector,1:nrtvar)::q
   real(dp),dimension(1:nvector,1:ndim)::x
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
+  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::scale_np, scale_fp, dx_cgs
   !----------------------------------------------------
   ! This routine sets simple pre-defined initial
@@ -104,7 +104,7 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
   call rt_units(r,g,scale_np, scale_fp)
   dx_cgs=dx*scale_l
 
-  ! Set (tiny) default values in case n_region=0
+  ! Set (tiny) default values outside of regions or if n_region=0
   do igrp = 1, nrtgroups
      q(1:nn,1+(igrp-1)*(ndim+1)) = r%smallnp  ! photon densities
      do idim = 1, ndim
