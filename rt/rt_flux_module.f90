@@ -16,7 +16,7 @@ CONTAINS
 
 !************************************************************************
 subroutine cmp_flux_tensors(uin, iP0, F &
-                        ,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
+                        ,iu1,iu2,ju1,ju2,ku1,ku2,if2,jf2,kf2)
   
 ! Compute central fluxes for a photon group, for each cell in a vector 
 ! of grids. 
@@ -33,25 +33,25 @@ subroutine cmp_flux_tensors(uin, iP0, F &
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nrtvar)::  uin 
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nDim+1,1:ndim)::F 
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-  integer::if1,if2,jf1,jf2,kf1,kf2
+  integer::if2,jf2,kf2
   integer::iP0       !---------------------------------------------------
   real(dp),dimension(1:ndim)::pflux, u
   real(dp)::Np, Np_c_sq, pflux_sq, chi, iterm, oterm
-  integer::i, j, k, p, q, n, nedge, ilevel
+  integer::i, j, k, p, q, nedge
 !------------------------------------------------------------------------
-  ! Loop 4X4X4 cells in grid. All go from 0 to 3, out of 6X6X6 cells.
+  ! Loop (N+2)X(N+2)X(N+2) cells in grid, where N=2**(nsuperoct+1) = 2 by 
+  ! default. All dimension indices go from 0 to N+1.
   ! We only need to calculate tensors for those cells which have faces to
-  ! the 2X2X2 center cells, so by skipping the 'corners' we are reduced
-  ! to half of the 4X4X4 cells.
-
+  ! the NXNXN center cells, so by skipping the 'corners' we are reduced
+  ! to fewer cells to calculate (by half for the default N=2).
   do k = kfrt1, kf2
   do j = jfrt1, jf2
   do i = ifrt1, if2
 
      nedge=0                 ! Check if we're at a corner and if so, cycle
-     if(mod(i,3).eq.0) nedge=nedge+1
-     if(ndim.gt.1 .and. mod(j,3).eq.0) nedge=nedge+1
-     if(ndim.gt.2 .and. mod(k,3).eq.0) nedge=nedge+1
+     if(mod(i,if2).eq.0) nedge=nedge+1
+     if(ndim.gt.1 .and. mod(j,jf2).eq.0) nedge=nedge+1
+     if(ndim.gt.2 .and. mod(k,kf2).eq.0) nedge=nedge+1
      if(nedge.ge.2) cycle
 
 
@@ -103,8 +103,6 @@ FUNCTION cmp_face(fdn, fup, udn, uup)
 !              in the 3*4 flux function tensor
 !------------------------------------------------------------------------
   real(dp),dimension(nDim+1)::fdn, fup, udn, uup, cmp_face
-  real(dp)::div
-  integer::ilevel
 !------------------------------------------------------------------------
   cmp_face = ( fdn + fup - rt_c*( uup-udn )) / 2d0
   return
@@ -138,9 +136,6 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
 !  jf1,jf2     |edge centered, for active
 !  kf1,kf2     |cells only (3x3x3).
 !------------------------------------------------------------------------
-  !use amr_parameters
-  !use amr_commons
-  !use const             
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nrtvar)::       uin
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nrtvar,1:ndim)::flux
   real(dp)::dx, dy, dz, dt
@@ -150,19 +145,15 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2, ndim+1, ndim)::   cFlx
   ! Upwards and downwards fluxes and states of the group
   real(dp),dimension(nDim+1),save:: fdn, fup, udn, uup
-  real(dp):: lminus, lplus                        ! Intercell eigenvalues
   real(dp)::dtdx
-  integer ::i, j, k, n, iP0, iP1
+  integer ::i, j, k, iP0, iP1
 !------------------------------------------------------------------------
   iP0=1                                    ! For now just using one group
   iP1=iP0+nDim                             ! end index of photon group
 
   ! compute flux tensors for all the cells with correction
   call cmp_flux_tensors(uin, iP0, cFlx &
-                        ,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
-
-  !if(rt_use_hll) &
-  !     call cmp_eigenvals(uin, iP0, lmin, lmax)
+                        ,iu1,iu2,ju1,ju2,ku1,ku2,if2,jf2,kf2)
 
   ! Solve for 1D flux in X direction
   !----------------------------------------------------------------------
