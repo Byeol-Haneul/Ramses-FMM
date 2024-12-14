@@ -107,17 +107,10 @@ subroutine output_clump_properties(s,filename)
         ! Compute clump purity
         purity=c%npart(j)*g%mp_min/mass
 
-!!$        if(c%npart(j)<10)then
-!!$           write(*,*)'clump_mass=',c%clump_mass(j)
-!!$           write(*,*)'tidal_radius=',rad
-!!$           write(*,*)'circ_velocity=',grav*c%clump_mass(j)/rad
-!!$           write(*,*)'phi=',c%phi(j,1:nbin)
-!!$        endif
-
         ! Output clump properties to file
         if(purity>c%purity_threshold)then
            write(ilun,'(I10,4(1X,I10),15(1X,1PE18.9E2))')&
-                j+c%npeak_cum(g%myid-1)&
+                 c%ind_final(j)&
                 ,c%new_peak(j)&
                 ,c%ind_halo(j)&
                 ,c%n_cells(j)&

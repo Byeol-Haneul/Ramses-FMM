@@ -1310,7 +1310,7 @@ class ClumpCat:
        This function initialize the clump catalog.
        """
        self.index = np.empty(shape=(0),dtype=int)
-       self.peak = np.empty(shape=(0),dtype=int)
+       self.parent= np.empty(shape=(0),dtype=int)
        self.halo = np.empty(shape=(0),dtype=int)
        self.ncell = np.empty(shape=(0),dtype=int)
        self.npart = np.empty(shape=(0),dtype=int)
@@ -1361,7 +1361,7 @@ def rd_clump(nout,**kwargs):
        file_name = path+"/output_%s/clump.%s" % (output,name)
        read_cat = ascii.read(file_name)
        index = read_cat['index']
-       peak = read_cat['peak']
+       parent = read_cat['parent']
        halo = read_cat['halo']
        ncell = read_cat['ncell']
        npart = read_cat['npart']
@@ -1381,7 +1381,7 @@ def rd_clump(nout,**kwargs):
        rmax = read_cat['rmax']
        c200 = read_cat['c200']
        cat.index = np.append(cat.index,index)
-       cat.peak = np.append(cat.peak,peak)
+       cat.parent = np.append(cat.parent,parent)
        cat.halo = np.append(cat.halo,halo)
        cat.ncell = np.append(cat.ncell,ncell)
        cat.npart = np.append(cat.npart,npart)
@@ -1420,7 +1420,7 @@ def rd_clump(nout,**kwargs):
 
        r = np.sqrt((cat.x-center[0])**2+(cat.y-center[1])**2+(cat.z-center[2])**2)
        cat.index = cat.index[r < radius]
-       cat.peak = cat.peak[r < radius]
+       cat.parent = cat.parent[r < radius]
        cat.halo = cat.halo[r < radius]
        cat.ncell = cat.ncell[r < radius]
        cat.npart = cat.npart[r < radius]

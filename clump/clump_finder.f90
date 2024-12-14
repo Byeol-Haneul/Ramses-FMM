@@ -127,9 +127,9 @@ subroutine clump_finder(s)
 
 #if NDIM==3 && defined(GRAV)
 
-  !-----------------------------------------------
+  !-------------------------------------------------
   ! Store clump finder parameters in clump object.
-  !-----------------------------------------------
+  !-------------------------------------------------
   s%c%relevance_threshold = s%r%relevance_threshold
   s%c%density_threshold = s%r%density_threshold
   s%c%saddle_threshold = s%r%saddle_threshold
@@ -177,8 +177,8 @@ subroutine clump_finder(s)
   !----------------------------------------------------------------------
   call compute_clump_properties(s,s%r%rho_type_clump)
   !----------------------------------------------------------------------
+  ! Compute particle peak ids and store them in array pid.
   ! Compute particle-based peak-patch properties.
-  ! Particle peak ids are also computed and stored in array pid.
   !----------------------------------------------------------------------
   if(s%r%pic)then
      call particle_peak_id(s,s%p)
@@ -215,7 +215,7 @@ subroutine clump_finder(s)
   ! Particle peak ids need to be reset after that.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     if(s%r%pic)then
+     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
         call particle_potential(s,s%p)
         call particle_peak_id(s,s%p)
      endif
@@ -226,18 +226,15 @@ subroutine clump_finder(s)
   ! The halo patch is used as garbage collector.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     if(s%r%pic)then
+     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
         call particle_unbind(s,s%p)
-     endif
-     if(s%r%star)then
-        call particle_unbind(s,s%star)
      endif
   endif
   !----------------------------------------------------------------------
   ! Compute final clump mass profiles hierarchically.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     if(s%r%pic)then
+     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
         call mass_profile(s,s%p)
      endif
   endif

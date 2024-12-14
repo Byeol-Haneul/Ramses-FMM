@@ -321,6 +321,8 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%npart(1:c%npeak_max))
   allocate(c%particle_mass(1:c%npeak_max))
 
+  allocate(c%ind_final(1:c%npeak_max))
+
   !-------------------------------
   ! Allocate halo-patch properties
   !-------------------------------
@@ -476,6 +478,8 @@ subroutine deallocate_peak_patch_arrays(s)
 
   deallocate(c%npart)
   deallocate(c%particle_mass)
+
+  deallocate(c%ind_final)
 
   ! Deallocate halo-patch arrays
   if(c%saddle_threshold>0)then
@@ -1465,6 +1469,9 @@ end subroutine unpack_flush_prop
 !################################################################
 !################################################################
 subroutine trim_clumps(s)
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
@@ -1478,14 +1485,89 @@ subroutine trim_clumps(s)
   ! relevance threshold or because their mass is too small.
   ! The flag1 and flag2 arrays are modified accordingly.
   !----------------------------------------------------------------------------
+#ifndef WITHOUTMPI
+  integer::info
+  integer,dimension(1:s%g%ncpu)::nfinal_cpu_all
+#endif
   type(msg_prop_clump)::dummy_prop_clump
   integer(kind=8)::global_peak_id,global_halo_id
-  integer::ipeak,jpeak,igrid,ilevel,ind,itest
+  integer::nfinal,nfinal_tot
+  integer,dimension(1:s%g%ncpu)::nfinal_cpu
+  integer,dimension(0:s%g%ncpu)::nfinal_cum
+  integer::icpu,ipeak,jpeak,igrid,ilevel,ind,itest
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering trim_clumps'
 
+  ! Change peak indexing to keep only relevant ones
+  nfinal=0
+  do ipeak=1,c%npeak
+     if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold.AND. &
+          & c%npart(ipeak) > 0 ) then
+        nfinal=nfinal+1
+        c%ind_final(ipeak)=nfinal
+     endif
+  end do
+  nfinal_cpu=0
+  nfinal_cpu(g%myid)=nfinal
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nfinal_cpu,nfinal_cpu_all,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  nfinal_cpu=nfinal_cpu_all
+#endif
+  nfinal_cum=0
+  do icpu=1,g%ncpu
+     nfinal_cum(icpu)=nfinal_cum(icpu-1)+int(nfinal_cpu(icpu),kind=8)
+  end do
+#ifdef WITHOUTMPI
+  nfinal_tot=int(nfinal,kind=8)
+#else
+  nfinal_tot=nfinal_cum(g%ncpu)
+#endif
+!!$  if (g%myid==1)then
+!!$    write(*,*)'Found',int(nfinal_tot,kind=4),' clumps'
+!!$  endif
+  do ipeak=1,c%npeak
+     if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold.AND. &
+          & c%npart(ipeak) > 0 ) then
+        c%ind_final(ipeak)=c%ind_final(ipeak)+nfinal_cum(g%myid-1)
+     endif
+  end do
+
+  ! Change other important peak indices
+  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_prop,unpack=unpack_fetch_prop)
+  do ipeak=1,c%npeak
+     if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold.AND. &
+          & c%npart(ipeak) > 0 ) then
+        global_peak_id=c%new_peak(ipeak)
+        call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+        c%new_peak(ipeak)=c%ind_final(jpeak)
+        global_peak_id=c%ind_halo(ipeak)
+        call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+        c%ind_halo(ipeak)=c%ind_final(jpeak)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  ! Modify particle peak ids accordingly
+  if(s%r%pic)then
+     call trim_particles(s,s%p)
+  endif
+  if(s%r%star)then
+     call trim_particles(s,s%star)
+  endif
+  if(s%r%sink)then
+     call trim_particles(s,s%sink)
+  endif
+  if(s%r%tree)then
+     call trim_particles(s,s%tree)
+  endif
+
+  ! Modify flag1 and flag2 accordingly
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_prop,unpack=unpack_fetch_prop)
   do itest=1,c%ntest
@@ -1495,13 +1577,11 @@ subroutine trim_clumps(s)
      global_peak_id=m%grid(igrid)%flag2(ind)
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
-        if(c%relevance(ipeak).LE.c%relevance_threshold)then
-           m%grid(igrid)%flag2(ind)=0
-        endif
-        if(c%clump_mass(ipeak).LE.c%mass_threshold)then
-           m%grid(igrid)%flag2(ind)=0
-        endif
-        if(c%npart(ipeak).LE.0)then
+        if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+             & c%relevance(ipeak) > c%relevance_threshold.AND. &
+             & c%npart(ipeak) > 0 ) then
+           m%grid(igrid)%flag2(ind)=c%ind_final(ipeak)
+        else
            m%grid(igrid)%flag2(ind)=0
         endif
      endif
@@ -1509,13 +1589,11 @@ subroutine trim_clumps(s)
         global_halo_id=m%grid(igrid)%flag1(ind)
         if (global_halo_id /=0 ) then
            call get_peak(s,global_halo_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
-           if(c%relevance(ipeak).LE.c%relevance_threshold)then
-              m%grid(igrid)%flag1(ind)=0
-           endif
-           if(c%clump_mass(ipeak).LE.c%mass_threshold)then
-              m%grid(igrid)%flag1(ind)=0
-           endif
-           if(c%npart(ipeak).LE.0)then
+           if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+                & c%relevance(ipeak) > c%relevance_threshold.AND. &
+                & c%npart(ipeak) > 0 ) then
+              m%grid(igrid)%flag1(ind)=c%ind_final(ipeak)
+           else
               m%grid(igrid)%flag1(ind)=0
            endif
         endif
@@ -1530,6 +1608,50 @@ end subroutine trim_clumps
 !################################################################
 !################################################################
 !################################################################
+subroutine trim_particles(s,p)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  !------------------------------------------------------------------
+  ! This routine modifies the peak id of the input particles
+  ! to accound for the final clump index.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !------------------------------------------------------------------
+  type(msg_prop_clump)::dummy_prop_clump
+  integer::ipeak,ipart
+  integer(kind=8)::global_peak_id
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_prop,unpack=unpack_fetch_prop)
+  do ipart=1,p%npart
+     global_peak_id=p%pid(ipart)
+     if (global_peak_id /=0 ) then
+        call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
+        if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+             & c%relevance(ipeak) > c%relevance_threshold.AND. &
+             & c%npart(ipeak) > 0 ) then
+           p%pid(ipart)=c%ind_final(ipeak)
+        else
+           p%pid(ipart)=0
+        endif
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine trim_particles
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine pack_fetch_prop(c,local_peak_id,msg_size,msg_array)
   use clfind_commons, only: clump_t
   use cache_commons, only: msg_prop_clump
@@ -1540,6 +1662,7 @@ subroutine pack_fetch_prop(c,local_peak_id,msg_size,msg_array)
 
   type(msg_prop_clump)::msg
 
+  msg%ind=c%ind_final(local_peak_id)
   msg%ncell=c%npart(local_peak_id)
   msg%dens=c%relevance(local_peak_id)
   msg%mass=c%clump_mass(local_peak_id)
@@ -1563,6 +1686,7 @@ subroutine unpack_fetch_prop(c,local_peak_id,msg_size,msg_array)
 
   msg=transfer(msg_array,msg)
 
+  c%ind_final(local_peak_id)=msg%ind
   c%npart(local_peak_id)=msg%ncell
   c%relevance(local_peak_id)=msg%dens
   c%clump_mass(local_peak_id)=msg%mass
@@ -1777,8 +1901,9 @@ subroutine particle_potential(s,p)
   type(ramses_t)::s
   type(part_t)::p
   !------------------------------------------------------------------
-  ! This routine unbinds particle hierarchically between children
-  ! clumps and parent clumps in the saddle point merging hierarchy.
+  ! This routine computes the particle self-potential of each clump.
+  ! Particle are detached hierarchically from children clumps
+  ! to their parent clumps in the saddle point merging hierarchy.
   ! The halo-patch is used as a garbage colector.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
   !------------------------------------------------------------------

@@ -19,11 +19,11 @@ module clfind_commons
        integer,allocatable,dimension(:) :: level ! Level of test particle
        integer,allocatable,dimension(:,:) :: hash ! Hash key of densest neighbor
 
+       integer :: merge_levelmax ! Max level of sub-halo merging hierarchy
        integer :: npeak=0 ! Actual number of density peaks in current processor
        integer :: npeak_max ! Maximum number of peaks per processor including ghost peaks
        integer(kind=8) :: npeak_tot=0 ! Total number of density peaks across all processors
        integer(kind=8),allocatable,dimension(:) :: npeak_cum ! Cumulative number of peak per processor
-       integer :: merge_levelmax ! Max level of sub-halo merging hierarchy
 
        integer,allocatable,dimension(:) :: peak_cell ! Cell index of peak
        integer,allocatable,dimension(:) :: peak_grid ! Grid index of peak
@@ -46,6 +46,7 @@ module clfind_commons
        real(dp),allocatable,dimension(:,:) :: peak_com ! Center of mass of the peak
 
        integer,allocatable,dimension(:) :: ind_halo ! Peak index of halo patch
+       integer,allocatable,dimension(:) :: ind_final ! Final clump index
        real(dp),allocatable,dimension(:) :: halo_mass ! Mass inside halo patch
        real(dp),allocatable,dimension(:) :: saddle_dens ! Density of the densest saddle point
        real(dp),allocatable,dimension(:,:) :: mass_bin ! Cumulative mass profile of halo
