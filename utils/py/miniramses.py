@@ -1466,6 +1466,7 @@ def plot_tree(nout,pid,**kwargs):
     tm=tm[isort]
 
     plt.plot([idp[0],idp[0]],[tp[0],0],'r')
+    print("merger tree particle id=",idp[0])
     for i in range(1,len(idp)):
         plt.plot([idp[i],idp[i]],[tp[i],tm[i]],'b')
         plt.plot([idp[i],idm[i]],[tm[i],tm[i]],'g')
