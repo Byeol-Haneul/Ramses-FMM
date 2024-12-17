@@ -42,9 +42,8 @@ subroutine m_read_rt_params(pst)
   !logical::rt_use_hll=.false.          ! Use hll flux (or the default glf)               !
   !logical::rt_is_outflow_bound=.false. ! Make all boundaries=outflow for RT              !
   real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
-  !logical::rt_refine=.false.           ! Refine on RT-related conditions?                !
-  !real(dp)::rt_err_grad_n=-1.0         ! Photon number density gradient for refinement   !
-  !real(dp)::rt_floor_n=1d-10           ! Photon number density floor for refinement      !
+  real(dp)::rt_err_grad_n(nrtgroups)=-1. ! Photon number density gradient for refinement  !
+  real(dp)::rt_floor_n(nrtgroups)=1d-10 ! Photon number density floor for refinement      !
   !real(dp)::rt_err_grad_xHI=-1.0       ! Ionization state gradient for refinement        !
   !real(dp)::rt_err_grad_xHII=-1.0      ! Ionization state gradient for refinement        !
   !real(dp)::rt_refine_aexp=-1.0        ! Start a for RT gradient refinement              !
@@ -122,7 +121,8 @@ subroutine m_read_rt_params(pst)
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
-  namelist/rt_params/rt_c_fraction, rt_nsubcycle, rt_advect              &
+  namelist/rt_params/rt_advect, rt_c_fraction, rt_nsubcycle              &
+       & ,rt_err_grad_n, rt_floor_n                                      &
        ! RT regions (for initialization)                                 &
        & ,units_np, smallnp, rt_nregion, rt_region_type                  &
        & ,rt_reg_x_center, rt_reg_y_center, rt_reg_z_center              &
@@ -164,10 +164,12 @@ subroutine m_read_rt_params(pst)
 
   s%r%rt_advect=rt_advect
   s%r%rt_c_fraction=rt_c_fraction
+  s%r%rt_nsubcycle=rt_nsubcycle
+  s%r%rt_err_grad_n=rt_err_grad_n
+  s%r%rt_floor_n=rt_floor_n
   s%r%rt_courant_factor=rt_courant_factor
   s%r%units_np=units_np
   s%r%smallnp=smallnp
-  s%r%rt_nsubcycle=rt_nsubcycle
   s%r%rt_nregion=rt_nregion
   s%r%rt_region_type=rt_region_type
   s%r%rt_reg_x_center=rt_reg_x_center
