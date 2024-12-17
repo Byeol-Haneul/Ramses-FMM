@@ -649,7 +649,10 @@ contains
        file_hydro=TRIM(repository)//'/peak.00001'
     else if(do_rt)then
        file_hydro=TRIM(repository)//'/rt.00001'
+<<<<<<< HEAD
 >>>>>>> 3eb9595e (First step in miniramsesrt.)
+=======
+>>>>>>> 9f57b4f49803d32af7bb2247a778e33188d96dab
     else
        file_hydro=TRIM(repository)//'/hydro.00001'
     endif
