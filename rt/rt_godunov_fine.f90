@@ -1,3 +1,4 @@
+#ifdef RT
 module rt_godunov_fine_module
 contains
 !###########################################################
@@ -792,3 +793,4 @@ end subroutine unpack_flush_rt_godunov
 !###########################################################
 !###########################################################
 end module rt_godunov_fine_module
+#endif

@@ -1,3 +1,4 @@
+#ifdef RT
 MODULE rt_flux_module
 
   use rt_parameters,only:rt_c, nrtvar
@@ -211,3 +212,4 @@ end subroutine rt_unsplit
 
 
 END MODULE rt_flux_module
+#endif

@@ -1,3 +1,4 @@
+#ifdef RT
 subroutine rt_units(r,g,scale_Np,scale_Fp)
   use amr_parameters, only: dp,ndim,kB,mH,X_H,rhoc
   use amr_commons, only: run_t,global_t
@@ -28,3 +29,4 @@ subroutine rt_units(r,g,scale_Np,scale_Fp)
 #endif
 
 end subroutine rt_units
+#endif

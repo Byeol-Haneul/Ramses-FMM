@@ -1,3 +1,4 @@
+#ifdef RT
 module input_rt_condinit_module
 contains
 !###############################################
@@ -193,3 +194,4 @@ end subroutine rt_region_condinit
 !################################################################
 !################################################################
 end module input_rt_condinit_module
+#endif

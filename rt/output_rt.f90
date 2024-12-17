@@ -1,3 +1,4 @@
+#ifdef RT
 module output_rt_module
 contains
 !###################################################
@@ -165,3 +166,4 @@ subroutine file_descriptor_rt(r,filename,write_bkp_file)
 
 end subroutine file_descriptor_rt
 end module output_rt_module
+#endif
