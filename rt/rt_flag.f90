@@ -1,5 +1,124 @@
+#ifdef RT
 module rt_flag_module
 contains
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
+subroutine rt_flag(s,ilevel)
+  use amr_parameters, only: ndim,twotondim,twondim,dp
+  use amr_commons, only: oct,nbor
+  use ramses_commons, only: ramses_t
+  use rt_parameters, only: nrtvar, nrtgroups
+  use cache_commons
+  use cache
+  use nbors_utils
+  use boundaries, only: init_bound_refine
+  implicit none
+  type(ramses_t)::s
+  integer::ilevel
+  ! -------------------------------------------------------------------
+  ! This routine flag for refinement cells that satisfies
+  ! some user-defined physical criteria at the level ilevel. 
+  ! -------------------------------------------------------------------
+  integer,dimension(1:3,1:8),save::iii=reshape(&
+       & (/0,0,0,1,0,0,0,1,0,1,1,0,0,0,1,1,0,1,0,1,1,1,1,1/),(/3,8/))
+  integer,dimension(1:3,1:6),save::shift=reshape(&
+       & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+  integer::igrid,ind,idim,ivar,i_nbor
+  integer::icelld,icellg,icellp,igroup
+  integer,dimension(1:twondim)::icelln
+  integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
+  real(dp),dimension(1:nrtvar)::uug,uum,uud
+  logical::ok, do_rt_refine
+  type(nbor),dimension(1:twondim)::gridn
+  type(oct),pointer::gridp
+  type(msg_realdp)::dummy_realdp
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  do_rt_refine=.false.
+  do igroup=1, nrtgroups
+    if( r%rt_err_grad_n(igroup) .ne. -1.0 ) do_rt_refine=.true.
+  end do
+  if(.not. do_rt_refine) return ! No refinement done on radiation vars
+
+  hash_key(0)=ilevel+1
+
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
+                     pack=pack_fetch_rt,unpack=unpack_fetch_rt,&
+                     bound=init_bound_refine)
+
+  ! Loop over active grids
+  do igrid=m%head(ilevel),m%tail(ilevel)
+
+     ! Loop over cells
+     do ind=1,twotondim
+
+        ! Compute cell hash key
+        hash_key(1:ndim)=2*m%grid(igrid)%ckey(1:ndim)+iii(1:ndim,ind)
+
+        ! Initialize refinement to false
+        ok=.false.
+
+        ! If a neighbor cell does not exist,
+        ! replace it by its father cell
+        do i_nbor=1,twondim
+           hash_nbor(0)=hash_key(0)
+           ! Periodic boundary conditions
+           do idim=1,ndim
+              hash_nbor(idim)=hash_key(idim)+shift(idim,i_nbor)
+              if(r%periodic(idim))then
+                 if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_max(idim,ilevel+1)-1
+                 if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel+1))hash_nbor(idim)=m%box_ckey_min(idim,ilevel+1)
+              endif
+           enddo
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+           if(associated(gridp))then
+              gridn(i_nbor)%p=>gridp
+              icelln(i_nbor)=icellp
+           else
+              hash_nbor(0)=hash_nbor(0)-1
+              hash_nbor(1:ndim)=hash_nbor(1:ndim)/2
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
+              gridn(i_nbor)%p=>gridp
+              icelln(i_nbor)=icellp
+           endif
+        end do
+
+        ! Loop over dimensions
+        do idim=1,ndim
+           ! Gather rt variables
+           do ivar=1,nrtvar
+              icellg=icelln(2*idim-1)
+              icelld=icelln(2*idim  )
+              uug(ivar)=gridn(2*idim-1)%p%rtuold(icellg,ivar)
+              uum(ivar)=m%grid(igrid)%rtuold(ind,ivar)
+              uud(ivar)=gridn(2*idim)%p%rtuold(icelld,ivar)
+           end do
+           call rt_refine(r,uug,uum,uud,ok)
+        end do
+        
+        do i_nbor=1,twondim
+           call unlock_cache(s,gridn(i_nbor)%p)
+        end do
+
+        ! Count only newly flagged cells
+        if(m%grid(igrid)%flag1(ind)==0.and.ok)g%nflag=g%nflag+1
+        if(ok)m%grid(igrid)%flag1(ind)=1
+
+     end do
+     ! End loop over cells
+  end do
+  ! End loop over grids
+
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+
+end subroutine rt_flag
 !#####################################################################
 !#####################################################################
 !#####################################################################
@@ -74,3 +193,4 @@ end subroutine unpack_fetch_rt
 !#####################################################################
 !#####################################################################
 end module rt_flag_module
+#endif

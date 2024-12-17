@@ -72,6 +72,7 @@ ifeq ($(COMPILER),GNU)
    ifeq ($(DEBUG),1)
       F90 += -O0 -fcheck=bounds
       FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
+      F90 += -Wuninitialized -Wall
    else
       F90 += -O3
    endif
