@@ -32,15 +32,16 @@ subroutine adaptive_loop(pst)
   ! Read run parameters
   call m_read_params(pst)
 
-#ifdef RT
-  call m_update_rt_c(pst)
-#endif
-
   ! Initialize grid variables
   call r_init_amr(pst)
 
   ! Initialize time variables
   call r_init_time(pst)
+
+#ifdef RT
+  ! Initialize reduced speed of light
+  call m_update_rt_c(pst)
+#endif
 
   ! Initialize hydro kernel workspace
   if(r%hydro)call r_init_hydro(pst)
