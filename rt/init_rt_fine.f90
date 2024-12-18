@@ -50,23 +50,16 @@ end subroutine m_init_rt_fine
 !###############################################
 !###############################################
 !###############################################
-
 module update_rt_c_module
   type :: in_broadcast_rt_c
-    real(kind=8)::rt_c
+     real(kind=8)::rt_c
   end type in_broadcast_rt_c
 contains
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-!*************************************************************************
 subroutine m_update_rt_c(pst)
-
-! Update the speed of light for radiative transfer, in code units.
-! This cannot be just a constant, since scale_v changes with time in
-! cosmological simulations.
-!-------------------------------------------------------------------------
   use rt_parameters,only: rt_c, rt_c_cgs
   use amr_parameters, only: clight
   use amr_commons, only: run_t, global_t, dp
@@ -75,13 +68,19 @@ subroutine m_update_rt_c(pst)
   type(pst_t)::pst
   !type(run_t)::r
   !type(global_t)::g
+  !-------------------------------------------------------------------------
+  ! Update the speed of light for radiative transfer, in code units.
+  ! This cannot be just a constant, since scale_v changes with time in
+  ! cosmological simulations.
+  !-------------------------------------------------------------------------
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   type(in_broadcast_rt_c)::in_broadcast
-!-------------------------------------------------------------------------
+
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
+
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   rt_c_cgs = clight * r%rt_c_fraction
-  rt_c=rt_c_cgs/scale_v
+  rt_c = rt_c_cgs/scale_v
 
   ! Broadcast updated rt_c to all CPUs
   in_broadcast%rt_c=rt_c
@@ -90,7 +89,6 @@ subroutine m_update_rt_c(pst)
   end associate
 
 end subroutine m_update_rt_c
-
 !##############################################################
 !##############################################################
 !##############################################################
