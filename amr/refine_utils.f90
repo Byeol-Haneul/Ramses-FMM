@@ -423,6 +423,9 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
+#ifdef RT
+  use rt_parameters, only: nrtvar
+#endif
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -454,6 +457,14 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
   end do
 #endif
 
+#ifdef RT
+  do ivar=1,nrtvar
+     do ind=1,twotondim
+        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+     end do
+  end do
+#endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_refine
@@ -466,6 +477,9 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
+#ifdef RT
+  use rt_parameters, only: nrtvar
+#endif
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -501,6 +515,14 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
      end do
      grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
      grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+  end do
+#endif
+
+#ifdef RT
+  do ind=1,twotondim
+     do ivar=1,nrtvar
+        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+     end do
   end do
 #endif
 
@@ -591,6 +613,9 @@ subroutine make_new_oct(s,parent,icell,ilevel)
 #ifndef WITHOUTMPI
   use mpi
 #endif
+#ifdef RT
+  use rt_parameters, only: nrtvar
+#endif
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -617,6 +642,10 @@ subroutine make_new_oct(s,parent,icell,ilevel)
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim)::hash_nbor
   type(oct),pointer::gridn
+#endif
+#ifdef RT
+  real(dp),dimension(0:twondim  ,1:nrtvar)::rtu1
+  real(dp),dimension(1:twotondim,1:nrtvar)::rtu2
 #endif
   integer,dimension(0:twondim)::igrid_nbor,ind_nbor
   real(dp),dimension(0:twondim,1:nvar)::u1
@@ -726,6 +755,13 @@ subroutine make_new_oct(s,parent,icell,ilevel)
         u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
      end do
   end do
+#ifdef RT
+  do inbor=0,twondim
+     do ivar=1,nrtvar
+        rtu1(inbor,ivar)=grid_nbor(inbor)%p%rtuold(ind_nbor(inbor),ivar)
+     end do
+  end do
+#endif
 #ifdef MHD
   ! Store parent cell MHD variables
   do inbor=0,twondim
@@ -774,6 +810,16 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   do ivar=1,6
      do ind=1,twotondim
         child%bold(ind,ivar)=b2(ind,ivar)
+     enddo
+  end do
+#endif
+#ifdef RT
+  ! Interpolate using rt variables
+  call interpol_rt(rtu1,rtu2,r%interpol_var,r%interpol_type,r%smallnp)
+  ! Store children cell rt variables
+  do ivar=1,nrtvar
+     do ind=1,twotondim
+        child%rtuold(ind,ivar)=rtu2(ind,ivar)
      enddo
   end do
 #endif

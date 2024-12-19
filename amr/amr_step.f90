@@ -34,6 +34,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 #ifdef RT
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
   use update_rt_c_module, only: m_update_rt_c
+  use upload_rt_module, only: m_upload_rt_fine
 #endif
   
   implicit none
@@ -317,7 +318,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
      ! Restriction operator
                                     call m_timer(pst,'rt - upload','start')
-     !!call m_rt_upload_fine(pst,ilevel)  ! joki: later
+     call m_upload_rt_fine(pst,ilevel)
   endif
 #endif
 

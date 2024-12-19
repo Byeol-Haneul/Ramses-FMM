@@ -67,19 +67,14 @@ subroutine upload_rt_fine(s,ilevel)
   integer::ilevel
   !----------------------------------------------------------------------
   ! This routine performs a restriction operation (averaging down)
-  ! for the hydro variables.
+  ! for the RT variables.
   !----------------------------------------------------------------------
-#if NENER>0
-  integer::irad
-#endif
   integer::ioct,ind,ivar,icell
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:6,1:4)::hh
   real(dp)::average
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
-
-#ifdef HYDRO
 
   hh(1,1:4)=(/1,3,5,7/)
   hh(2,1:4)=(/2,4,6,8/)
@@ -130,8 +125,6 @@ subroutine upload_rt_fine(s,ilevel)
 
   end associate
 
-#endif
-
 end subroutine upload_rt_fine
 !##########################################################################
 !##########################################################################
@@ -173,7 +166,7 @@ subroutine pack_flush_upload_rt(grid,msg_size,msg_array)
 
   do ivar=1,nrtvar
      do ind=1,twotondim
-        msg%realdp(ind,ivar)=grid%rtuold(ind,ivar)
+        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
      end do
   end do
 
@@ -204,7 +197,7 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
   do ivar=1,nrtvar
      do ind=1,twotondim
         if(grid%refined(ind))then
-           grid%rtuold(ind,ivar)=grid%rtuold(ind,ivar)+msg%realdp(ind,ivar)
+           grid%rtuold(ind,ivar)=grid%rtuold(ind,ivar)+msg%realdp_rt(ind,ivar)
         endif
      end do
   end do
