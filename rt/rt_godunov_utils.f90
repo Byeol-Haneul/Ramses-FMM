@@ -31,7 +31,6 @@ subroutine rt_refine(r,ug,um,ud,ok)
     end if
   end do
 
-
 end subroutine rt_refine
 
 #endif

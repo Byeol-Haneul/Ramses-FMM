@@ -38,7 +38,7 @@ subroutine m_rt_step(pst,ilevel)
      if(rt_sink) call sink_RT_feedback(ilevel,g%dtnew(ilevel))
 
      ! Hyperbolic RT solver
-     if(rt_advect) call rt_godunov_fine(ilevel,g%dtnew(ilevel))
+     if(r%rt_advect) call r_rt_godunov_fine(pst,ilevel,1)
 
      ! Injection from radiation sources
      call add_rt_sources(ilevel,g%dtnew(ilevel))

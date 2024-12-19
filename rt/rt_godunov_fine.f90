@@ -52,10 +52,10 @@ subroutine rt_godunov_fine(s,ilevel)
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-                pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-                init=init_flush_rt_godunov, flush=pack_flush_rt_godunov,&
-                combine=unpack_flush_rt_godunov, bound=init_bound_refine)
+       hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
+       pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+       init=init_flush_rt_godunov, flush=pack_flush_rt_godunov,&
+       combine=unpack_flush_rt_godunov, bound=init_bound_refine)
 
   ! Loop over active grids by vector sweeps
   igrid=m%head(ilevel)
@@ -81,6 +81,7 @@ subroutine rt_godunov_fine(s,ilevel)
   call close_cache(s,m%grid_dict)
 
   end associate
+
 end subroutine rt_godunov_fine
 !###########################################################
 !###########################################################
@@ -483,7 +484,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   ! Compute flux using second-order Godunov method
   !-----------------------------------------------
   call rt_unsplit(h%rtuloc,h%rtflux,dx,dx,dx,&
-       &g%dtnew(ilevel),                     &
+       & g%dtnew(ilevel),                    &
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
 
