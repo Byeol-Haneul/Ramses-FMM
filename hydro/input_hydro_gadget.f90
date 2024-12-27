@@ -37,7 +37,7 @@ subroutine input_hydro_gadget(s,ilevel)
   use cache_commons
   use cache
   use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
-  use input_hydro_condinit_module, only: input_hydro_vecpot,input_cons_from_prim
+  use input_hydro_condinit_module, only: input_hydro_vecpot,cons_from_prim
   use marshal, only: pack_fetch_refine,unpack_fetch_refine
   use boundaries, only: init_bound_refine
   implicit none
@@ -230,7 +230,7 @@ subroutine input_hydro_gadget(s,ilevel)
   call input_hydro_vecpot(r,g,m,ilevel)
 
   ! Convert primitive to conservative
-  call input_cons_from_prim(r,g,m,ilevel)
+  call cons_from_prim(r,g,m,ilevel)
 #endif
 
   end associate

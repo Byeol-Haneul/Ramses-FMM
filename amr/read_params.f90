@@ -272,6 +272,7 @@ subroutine m_read_params(pst)
   real(dp)::T2max=1d50
 
   ! Star formation parameters
+  integer::sf_model=1
   real(dp)::T2_star=2e4
   real(dp)::n_star=0.1
   real(dp)::eps_star=0.01
@@ -410,7 +411,7 @@ subroutine m_read_params(pst)
        & ,eos_type,eos_nH,eos_index,eos_T2 &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
   ! Star particles and star formation recipe
-  namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
+  namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Star particles and star formation recipe
   namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
@@ -997,6 +998,7 @@ subroutine m_read_params(pst)
   s%r%eps_star=eps_star
   s%r%seed=seed
   s%r%m_star=m_star
+  s%r%sf_model=sf_model
 
   s%r%M_SNII=M_SNII
   s%r%E_SNII=E_SNII
