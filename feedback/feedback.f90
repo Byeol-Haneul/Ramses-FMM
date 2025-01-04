@@ -65,7 +65,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   integer::i,ipart,icellp,ind,idim
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::mejecta,mloss,mzloss,zloss,ekinetic,ethermal
+  real(dp)::mejecta,dloss,dzloss,zloss,ekinetic,ethermal
   real(dp)::birth_time,t_sn,e_sn,dteff,dold
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
@@ -158,27 +158,25 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
 
      ! Compute supernova properties
      mejecta=r%eta_SNII*p%mp(ipart)
-     mloss=mejecta/vol_cell
-     ethermal=mloss*e_SN
-     ekinetic=mloss*0.5d0*(p%vp(ipart,1)**2+p%vp(ipart,2)**2+p%vp(ipart,3)**2)
+     dloss=mejecta/vol_cell
+     ethermal=dloss*e_SN
+     ekinetic=dloss*0.5d0*(p%vp(ipart,1)**2+p%vp(ipart,2)**2+p%vp(ipart,3)**2)
      zloss=r%yield_SNII+(1d0-r%yield_SNII)*p%zp(ipart)
-     mzloss=mloss*zloss
+     dzloss=dloss*zloss
 
      ! Update unew
-     gridp%unew(icellp,1)=gridp%unew(icellp,1)+mloss
-     gridp%unew(icellp,2)=gridp%unew(icellp,2)+mloss*p%vp(ipart,1)
-     gridp%unew(icellp,3)=gridp%unew(icellp,3)+mloss*p%vp(ipart,2)
-     gridp%unew(icellp,4)=gridp%unew(icellp,4)+mloss*p%vp(ipart,3)
+     gridp%unew(icellp,1)=gridp%unew(icellp,1)+dloss
+     gridp%unew(icellp,2)=gridp%unew(icellp,2)+dloss*p%vp(ipart,1)
+     gridp%unew(icellp,3)=gridp%unew(icellp,3)+dloss*p%vp(ipart,2)
+     gridp%unew(icellp,4)=gridp%unew(icellp,4)+dloss*p%vp(ipart,3)
      gridp%unew(icellp,5)=gridp%unew(icellp,5)+ekinetic+ethermal
-     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+mzloss
+     if(r%metal)gridp%unew(icellp,r%imetal)=gridp%unew(icellp,r%imetal)+dzloss
 
      ! If dual energy scheme is activated, update entropy
      if(r%entropy.and.r%dual_energy.GE.0)then
         dold = gridp%uold(icellp,1)
         gridp%unew(icellp,r%ientropy)=gridp%unew(icellp,r%ientropy)+ethermal/dold**(r%gamma-1)*(r%gamma-1)
      endif
-
-!     write(*,'("feedback ",6(1PE13.6,1X))')g%texp,dteff,birth_time,(dold+mloss)*scale_nH,ethermal/(dold+mloss)*scale_v**2/1.38d-16*1.66d-24,gridp%uold(icellp,5)/dold*scale_v**2/1.38d-16*1.66d-24
 
      ! Update particle mass
      p%mp(ipart)=p%mp(ipart)-mejecta
@@ -292,7 +290,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   real(dp),parameter::expE_SN=+16d0/17d0
   real(dp),parameter::expZ_SN=-0.14
 
-  real(dp)::d,d_nei,dloss,ekloss,dzloss,dm_ejecta,dm_load,m_SN
+  real(dp)::d,d_nei,dloss,ekloss,dzloss,zloss,dm_ejecta,dm_load,m_SN
   real(dp)::e,ekk,eth,p_solid,ek_solid,f_esn2,f_w_cell,f_w_crit
   real(dp)::nH_nei,u,v,w,up,vp,wp,T2,x,y,z,rr,Z_nei,Zdepen
   real(dp)::vload,vload_rad,vol_nei
@@ -305,7 +303,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   integer,dimension(1:ndim)::ix
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::mejecta,mloss,mzloss,zloss,ekinetic,ethermal
+  real(dp)::mejecta,ekinetic,ethermal
   real(dp)::birth_time,t_sn,e_sn,dteff,dold,num_SN
   real(dp),dimension(1:3)::xcen,xnei
   real(dp),dimension(1:nvar)::q
@@ -656,7 +654,7 @@ subroutine mechanical_feedback_opt(s,p,ilevel,msn_loc)
   real(dp),parameter::expZ_SN=-0.14
   ! Local variables
   type(part_t)::sn
-  real(dp)::d,d_nei,dloss,ekloss,dzloss,dm_ejecta,dm_load,m_SN
+  real(dp)::d,d_nei,dloss,ekloss,dzloss,zloss,dm_ejecta,dm_load,m_SN
   real(dp)::e,ekk,eth,p_solid,ek_solid,f_esn2,f_w_cell,f_w_crit
   real(dp)::nH_nei,u,v,w,up,vp,wp,T2,x,y,z,rr,Z_nei,Zdepen
   real(dp)::vload,vload_rad,vol_nei
@@ -669,7 +667,7 @@ subroutine mechanical_feedback_opt(s,p,ilevel,msn_loc)
   integer,dimension(1:ndim)::ix
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc
-  real(dp)::mejecta,mloss,mzloss,zloss,ekinetic,ethermal
+  real(dp)::mejecta,ekinetic,ethermal
   real(dp)::birth_time,t_sn,e_sn,dteff,dold,num_SN
   real(dp),dimension(1:3)::xcen,xnei
   real(dp),dimension(1:nvar)::q
