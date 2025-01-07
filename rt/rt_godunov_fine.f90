@@ -479,12 +479,12 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   ! End over octs
   end do
 
-  !-----------------------------------------------
+  !-------------------------------------------------
   ! Compute flux using second-order Godunov method
-  !-----------------------------------------------
-  call rt_unsplit(h%rtuloc,h%rtflux,dx,dx,dx,&
-       & g%dtnew(ilevel),g%rt_c,             &
-       & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
+  !-------------------------------------------------
+  call rt_unsplit(h%rtuloc,h%rtflux,g%rt_c,        &
+       & dx,dx,dx,g%dtnew(ilevel),                 &
+       & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,      &
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
 
   !-------------------------------------------------
