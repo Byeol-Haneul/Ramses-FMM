@@ -1,4 +1,3 @@
-#ifdef RT
 module rt_godunov_fine_module
 contains
 !###########################################################
@@ -484,7 +483,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   ! Compute flux using second-order Godunov method
   !-----------------------------------------------
   call rt_unsplit(h%rtuloc,h%rtflux,dx,dx,dx,&
-       & g%dtnew(ilevel),                    &
+       & g%dtnew(ilevel),g%rt_c,             &
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
 
@@ -728,13 +727,13 @@ subroutine init_flush_rt_godunov(grid,hash_key)
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
         grid%rtunew(ind,ivar)=0.0d0
      enddo
   enddo
-
-
+#endif
 end subroutine init_flush_rt_godunov
 !###########################################################
 !###########################################################
@@ -751,13 +750,13 @@ subroutine pack_flush_rt_godunov(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
-
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
         msg%realdp_rt(ind,ivar)=grid%rtunew(ind,ivar)
      end do
   end do
-
+#endif
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_rt_godunov
@@ -781,17 +780,16 @@ subroutine unpack_flush_rt_godunov(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
         grid%rtunew(ind,ivar)=grid%rtunew(ind,ivar)+msg%realdp_rt(ind,ivar)
      end do
   end do
-
+#endif
 end subroutine unpack_flush_rt_godunov
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
 end module rt_godunov_fine_module
-#endif

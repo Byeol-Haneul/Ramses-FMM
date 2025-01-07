@@ -8,9 +8,7 @@ subroutine m_init_refine_adaptive(pst)
   use flag_utils, only: m_flag_fine
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
-#ifdef RT
   use upload_rt_module, only: m_upload_rt_fine
-#endif
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
@@ -43,14 +41,12 @@ subroutine m_init_refine_adaptive(pst)
         endif
      end do
 
-#ifdef RT
-     do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
-        if(pst%s%r%rt)then
+     if(pst%s%r%rt)then
+        do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
            call m_init_rt_fine(pst,ilevel)
            call m_upload_rt_fine(pst,ilevel)
-        endif
-     end do
-#endif
+        end do
+     endif
 
 #ifdef GRAV
      if(pst%s%r%filetype.NE.'grafic_zoom')then

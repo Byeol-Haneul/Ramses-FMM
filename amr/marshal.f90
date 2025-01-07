@@ -7,9 +7,7 @@ contains
 subroutine pack_fetch_refine(grid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
@@ -69,9 +67,7 @@ end subroutine pack_fetch_refine
 subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid

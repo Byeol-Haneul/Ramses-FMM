@@ -423,9 +423,7 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -477,9 +475,7 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -613,9 +609,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
 #ifndef WITHOUTMPI
   use mpi
 #endif
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   implicit none
   type(ramses_t)::s
   integer::ilevel

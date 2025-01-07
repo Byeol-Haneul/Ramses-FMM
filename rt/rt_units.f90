@@ -1,6 +1,6 @@
-#ifdef RT
 subroutine rt_units(r,g,scale_Np,scale_Fp)
-  use amr_parameters, only: dp,ndim,kB,mH,X_H,rhoc
+  use amr_parameters, only: dp,ndim
+  use constants, only: kB,mH,X_H,rhoc
   use amr_commons, only: run_t,global_t
   implicit none
   type(run_t)::r
@@ -16,12 +16,11 @@ subroutine rt_units(r,g,scale_Np,scale_Fp)
 #define COSMO 1
 
   call units(r, g, scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-#if UNITS==COSMO
 
+#if UNITS==COSMO
   ! Units for cosmological simulations are hard-coded
   scale_Np = 1./g%aexp**3
   scale_Fp = scale_Np * scale_v
-
 #else
   ! Default units from namelist
   scale_Np = r%units_Np          ! scale_Np converts photon density from user units into #/cc
@@ -29,4 +28,3 @@ subroutine rt_units(r,g,scale_Np,scale_Fp)
 #endif
 
 end subroutine rt_units
-#endif

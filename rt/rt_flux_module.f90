@@ -1,45 +1,45 @@
-#ifdef RT
 MODULE rt_flux_module
 
-  use rt_parameters,only:rt_c, nrtvar
-  use amr_parameters, only: ndim,dp
+  use rt_parameters, only: nrtvar
+  use amr_parameters, only: ndim, dp
   implicit none
 
   private   ! default
-  integer,parameter::ifrt1=0                                                           ! 0
+  integer,parameter::ifrt1=0                                                      ! 0
   integer,parameter::jfrt1=1-ndim/2                                               ! 0 or 1
   integer,parameter::kfrt1=1-ndim/3                                               ! 0 or 1
-
 
   public rt_unsplit
 
 CONTAINS
 
 !************************************************************************
-subroutine cmp_flux_tensors(uin, iP0, F &
-                        ,iu1,iu2,ju1,ju2,ku1,ku2,if2,jf2,kf2)
-  
-! Compute central fluxes for a photon group, for each cell in a vector 
-! of grids. 
-! The flux tensor is a three by four tensor (2*3 and 1*2 in 1D and 2D, 
-! respectively) where the first column is photon flux (x,y,z) and 
-! the other three columns compose the Eddington tensor (see Aubert & 
-! Teyssier '08), times c^2. 
-! input/output:
-! uin       => RT variables of all cells in a vector of grids
-!              (photon energy densities and photon fluxes).
-! iP0       => Starting index of photon group among the RT variables.
-! F        <=  Group flux tensors for all the cells.
-!------------------------------------------------------------------------
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nrtvar)::  uin 
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nDim+1,1:ndim)::F 
+subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
+     &                     ,iu1,iu2,ju1,ju2,ku1,ku2,if2,jf2,kf2)
+  !------------------------------------------------------------------------  
+  ! Compute central fluxes for a photon group, for each cell in a vector 
+  ! of grids. 
+  ! The flux tensor is a three by four tensor (2*3 and 1*2 in 1D and 2D, 
+  ! respectively) where the first column is photon flux (x,y,z) and 
+  ! the other three columns compose the Eddington tensor (see Aubert & 
+  ! Teyssier '08), times c^2. 
+  ! input/output:
+  ! uin       => RT variables of all cells in a vector of grids
+  !              (photon energy densities and photon fluxes).
+  ! iP0       => Starting index of photon group among the RT variables.
+  ! F        <=  Group flux tensors for all the cells.
+  !------------------------------------------------------------------------
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nrtvar)::uin
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nDim+1,1:ndim)::F
+  real(dp)::rt_c
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if2,jf2,kf2
-  integer::iP0       !---------------------------------------------------
+  integer::iP0
+  !---------------------------------------------------
   real(dp),dimension(1:ndim)::pflux, u
   real(dp)::Np, Np_c_sq, pflux_sq, chi, iterm, oterm
   integer::i, j, k, p, q, nedge
-!------------------------------------------------------------------------
+  !------------------------------------------------------------------------
   ! Loop (N+2)X(N+2)X(N+2) cells in grid, where N=2**(nsuperoct+1) = 2 by 
   ! default. All dimension indices go from 0 to N+1.
   ! We only need to calculate tensors for those cells which have faces to
@@ -54,7 +54,6 @@ subroutine cmp_flux_tensors(uin, iP0, F &
      if(ndim.gt.1 .and. mod(j,jf2).eq.0) nedge=nedge+1
      if(ndim.gt.2 .and. mod(k,kf2).eq.0) nedge=nedge+1
      if(nedge.ge.2) cycle
-
 
      Np =   uin(i, j, k, iP0)      !          Photon density in cell
      pflux= uin(i, j, k, iP0+1:iP0+ndim)  !       Photon flux vector
@@ -92,7 +91,7 @@ subroutine cmp_flux_tensors(uin, iP0, F &
 end subroutine cmp_flux_tensors
 
 !************************************************************************
-FUNCTION cmp_face(fdn, fup, udn, uup)
+FUNCTION cmp_face(fdn, fup, udn, uup, rt_c)
   
 ! Compute intercell fluxes for all (four) RT variables, using the
 ! Harten-Lax-van Leer method (see eq. 30 in Aubert&Teyssier(2008).
@@ -104,6 +103,7 @@ FUNCTION cmp_face(fdn, fup, udn, uup)
 !              in the 3*4 flux function tensor
 !------------------------------------------------------------------------
   real(dp),dimension(nDim+1)::fdn, fup, udn, uup, cmp_face
+  real(dp)::rt_c
 !------------------------------------------------------------------------
   cmp_face = ( fdn + fup - rt_c*( uup-udn )) / 2d0
   return
@@ -111,7 +111,7 @@ END FUNCTION cmp_face
 
 
 !************************************************************************
-SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
+SUBROUTINE rt_unsplit(uin,flux,rt_c,dx,dy,dz,dt &
                         ,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
 
 !  Compute intercell fluxes for one photon group in all dimensions,
@@ -139,7 +139,7 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
 !------------------------------------------------------------------------
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nrtvar)::       uin
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nrtvar,1:ndim)::flux
-  real(dp)::dx, dy, dz, dt
+  real(dp)::dx, dy, dz, dt, rt_c
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
   ! Central fluxes:
@@ -153,7 +153,7 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
   iP1=iP0+nDim                             ! end index of photon group
 
   ! compute flux tensors for all the cells with correction
-  call cmp_flux_tensors(uin, iP0, cFlx &
+  call cmp_flux_tensors(uin, iP0, cFlx, rt_c &
                         ,iu1,iu2,ju1,ju2,ku1,ku2,if2,jf2,kf2)
 
   ! Solve for 1D flux in X direction
@@ -167,7 +167,7 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
      udn = uin( i-1, j, k, iP0:iP1 )   !  conditions
      uup = uin( i,   j, k, iP0:iP1 )    !
      flux(i, j, k, iP0:iP1, 1)=&
-         cmp_face( fdn, fup, udn, uup)*dtdx
+          cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
   end do
   end do
   end do
@@ -184,7 +184,7 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
      udn = uin( i, j-1, k, iP0:iP1 )
      uup = uin( i, j,   k, iP0:iP1 )
      flux(i,j,k,iP0:iP1,2)=&
-          cmp_face( fdn, fup, udn, uup)*dtdx
+          cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
   end do
   end do
   end do
@@ -202,7 +202,7 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
      udn = uin( i, j, k-1, iP0:iP1 )
      uup = uin( i, j, k,   iP0:iP1 )
      flux(i,j,k,iP0:iP1,3)=&
-          cmp_face( fdn, fup, udn, uup)*dtdx
+          cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
   end do
   end do
   end do
@@ -210,6 +210,4 @@ SUBROUTINE rt_unsplit(uin,flux,dx,dy,dz,dt &
 
 end subroutine rt_unsplit
 
-
 END MODULE rt_flux_module
-#endif

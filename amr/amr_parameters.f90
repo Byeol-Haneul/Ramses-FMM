@@ -56,18 +56,6 @@ module amr_parameters
   ! Number of bins for halo mass profiles
   integer, parameter::nbin=10
 
-  ! Useful constants
-  real(kind=8),parameter ::twopi   = 6.2831853d0
-  real(kind=8),parameter ::hplanck = 6.6260702d-27
-  real(kind=8),parameter ::eV      = 1.6021766d-12
-  real(kind=8),parameter ::kB      = 1.3806490d-16
-  real(kind=8),parameter ::clight  = 2.9979246d+10
-  real(kind=8),parameter ::Gyr     = 3.1557600d+16
-  real(kind=8),parameter ::rhoc    = 1.8800000d-29
-  real(kind=8),parameter ::mH      = 1.6605390d-24
-  real(kind=8),parameter ::X_H     = 0.76 ! Hydrogen mass fraction
-  real(kind=8),parameter ::Y_He    = 0.24 ! Helium mass fraction
-
   ! Executable identification
   CHARACTER(LEN=300)::builddate,buildcommand,patchdir
   CHARACTER(LEN=300)::gitrepo,gitbranch,githash

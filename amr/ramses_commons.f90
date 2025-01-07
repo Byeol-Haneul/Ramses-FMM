@@ -38,9 +38,7 @@ contains
 !#########################################################################
 subroutine open_file(s,filename,nskip,ilun)
   use hydro_parameters, only: nvar
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   use amr_parameters, only: ndim,flen,twotondim
 #ifndef WITHOUTMPI
   use mpi
@@ -134,9 +132,7 @@ subroutine open_file(s,filename,nskip,ilun)
 #endif
         if(index(filename,'grav').NE.0)write(ilun)ndim+1
         if(index(filename,'peak').NE.0)write(ilun)3
-#ifdef RT
         if(index(filename,'rt').NE.0)write(ilun)nrtvar
-#endif
         write(ilun)r%levelmin
         write(ilun)r%nlevelmax
         do ilevel=r%levelmin,r%nlevelmax
@@ -165,9 +161,7 @@ subroutine open_file(s,filename,nskip,ilun)
 #endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*noct(ilevel)
         if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*3)*noct(ilevel)
-#ifdef RT
         if(index(filename,'rt').NE.0)iskip=iskip+(4*twotondim*nrtvar)*noct(ilevel)
-#endif
      end do
 
   elseif(g%myid.GT.istart(ifile))then
@@ -202,9 +196,7 @@ end subroutine open_file
 !#########################################################################
 subroutine close_file(s,filename,nskip,ilun)
   use hydro_parameters, only: nvar
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   use amr_parameters, only: ndim,flen,twotondim
 #ifndef WITHOUTMPI
   use mpi
@@ -257,9 +249,7 @@ subroutine close_file(s,filename,nskip,ilun)
 #endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*m%noct(ilevel)
         if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*3)*m%noct(ilevel)
-#ifdef RT
         if(index(filename,'rt').NE.0)iskip=iskip+(4*twotondim*nrtvar)*m%noct(ilevel)
-#endif
         nskip(ilevel)=iskip
      end do
 

@@ -58,9 +58,7 @@ contains
   subroutine init_hydro_kernel(h,nn)
     use amr_parameters, only: ndim
     use hydro_parameters, only: nvar
-#ifdef RT
     use rt_parameters, only: nrtvar
-#endif
 
     integer::nn
     class(hydro_kernel_t)::h
@@ -111,7 +109,7 @@ contains
     allocate(h%nborsonloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2,1:twondim))
 #endif
 #ifdef RT
-    allocate(h%rtuloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nrtvar))    ! Joki this needs to be eventually moved to a separate rt kernel
+    allocate(h%rtuloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nrtvar)) 
     allocate(h%rtflux(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:nrtvar,1:ndim))
 #endif
   end subroutine init_hydro_kernel
@@ -162,7 +160,7 @@ contains
 #endif
 #ifdef RT
     nint=nint+size(transfer(h%rtuloc,(/1/)))
-    nint=nint+size(transfer(h%rtflux ,(/1/)))
+    nint=nint+size(transfer(h%rtflux,(/1/)))
 #endif
     size_hydro_kernel = nint
 

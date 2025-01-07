@@ -1,7 +1,4 @@
-#ifdef RT
-
 module rt_params_module
-
 contains
 
 subroutine m_read_rt_params(pst)
@@ -10,9 +7,7 @@ subroutine m_read_rt_params(pst)
   use ramses_commons, only: pst_t
   use mdl_module
   use movie_module, only: set_movie_vars
-#ifdef RT
   use rt_parameters, only: nrtgroups, nrtvar
-#endif
   implicit none
   type(pst_t)::pst
 
@@ -26,7 +21,6 @@ subroutine m_read_rt_params(pst)
   ! RT namelist variables
   !--------------------------------------------------
 
-
   ! RT_PARAMS namelist
   logical::rt_advect=.false.           ! Advection of photons?                           !
   !logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
@@ -34,8 +28,8 @@ subroutine m_read_rt_params(pst)
   real(dp)::smallNp=1d-50              ! Floor value for photon number densities         !
   !real(dp)::rt_Tconst=-1               ! If pos. use this value for all T-depend. rates  !
   !logical::rt_isTconst=.false.         ! Const rates activated?                          !
-  !logical::rt_star=.false.             ! Activate radiation from star particles?         !
-  !logical::rt_AGN=.false.              ! Activate radiation from sink particles          !
+  !logical::rt_star=.false.             ! Activate radiation from star particles          !
+  !logical::rt_sink=.false.             ! Activate radiation from sink particles          !
   !real(dp)::rt_esc_frac=1d0            ! Escape fraction of light from stellar particles !
   !logical::rt_is_init_xion=.false.     ! Initialize ionization from T profile?           !
   !character(LEN=10)::rt_flux_scheme='glf'                                                !
@@ -96,10 +90,10 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(1:MAXREGION)   ::rt_reg_length_z=1.E10
   real(dp),dimension(1:MAXREGION)   ::rt_exp_region=2.0
   integer,dimension(1:MAXREGION)    ::rt_reg_group=1
-  real(dp),dimension(1:MAXREGION) ::rt_n_region=0.                    ! Photon density
-  real(dp),dimension(1:MAXREGION) ::rt_u_region=0.                    !    Photon flux
-  real(dp),dimension(1:MAXREGION) ::rt_v_region=0.                    !    Photon flux
-  real(dp),dimension(1:MAXREGION) ::rt_w_region=0.                    !    Photon flux
+  real(dp),dimension(1:MAXREGION)  ::rt_n_region=0.                    ! Photon density
+  real(dp),dimension(1:MAXREGION)  ::rt_u_region=0.                    !    Photon flux
+  real(dp),dimension(1:MAXREGION)  ::rt_v_region=0.                    !    Photon flux
+  real(dp),dimension(1:MAXREGION)  ::rt_w_region=0.                    !    Photon flux
 
   ! RT source regions parameters----------------------------------------------------------
   integer                           ::rt_nsource=0
@@ -153,12 +147,10 @@ subroutine m_read_rt_params(pst)
   end if
 
   open(1,file=infile)
-
   rewind(1)
   read(1,NML=rt_params,END=113)
 113 continue
   close(1)
-
 
   ! Fill in all run parameters in corresponding structure
 
@@ -206,5 +198,3 @@ end subroutine m_read_rt_params
 !#########################################################################
 !#########################################################################
 end module rt_params_module
-
-#endif

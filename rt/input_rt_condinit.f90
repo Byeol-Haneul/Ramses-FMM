@@ -1,4 +1,3 @@
-#ifdef RT
 module input_rt_condinit_module
 contains
 !###############################################
@@ -83,7 +82,7 @@ end subroutine input_rt_condinit
 !################################################################
 subroutine rt_region_condinit(r,g,x,q,dx,nn)
   use amr_parameters, only:dp, nvector, ndim
-  use rt_parameters, only: nrtvar, nrtgroups, rt_c  
+  use rt_parameters, only: nrtvar, nrtgroups
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
@@ -142,12 +141,12 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
            ! If cell lies within region,
            if(rad<1.0)then
               q(i,group_ind)=r%rt_n_region(k)
-              q(i,group_ind+1)=r%rt_u_region(k) * rt_c 
+              q(i,group_ind+1)=r%rt_u_region(k) * g%rt_c 
 #if NDIM>1 
-              q(i,group_ind+2)=r%rt_v_region(k) * rt_c
+              q(i,group_ind+2)=r%rt_v_region(k) * g%rt_c
 #endif
 #if NDIM>2
-              q(i,group_ind+3)=r%rt_w_region(k) * rt_c
+              q(i,group_ind+3)=r%rt_w_region(k) * g%rt_c
 #endif
            end if
         end do
@@ -173,14 +172,14 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
               ! Convert photon number to photon number density
               q(i,group_ind) = r%rt_n_region(k)/scale_np *weight/vol 
               q(i,group_ind+1) = r%rt_u_region(k)/scale_np*weight/vol &
-                               * rt_c
+                               * g%rt_c
 #if NDIM>1
               q(i,group_ind+2) = r%rt_v_region(k)/scale_np*weight/vol   &
-                               * rt_c
+                               * g%rt_c
 #endif
 #if NDIM>2
               q(i,group_ind+3) = r%rt_w_region(k)/scale_np *weight/vol  &
-                               * rt_c
+                               * g%rt_c
 #endif
            endif
         end do
@@ -194,4 +193,3 @@ end subroutine rt_region_condinit
 !################################################################
 !################################################################
 end module input_rt_condinit_module
-#endif

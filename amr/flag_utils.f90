@@ -257,9 +257,7 @@ end subroutine r_user_flag
 subroutine user_flag(s,ilevel,nflag)
   use ramses_commons, only: ramses_t
   use hydro_flag_module, only: hydro_flag
-#ifdef RT
   use rt_flag_module, only: rt_flag
-#endif  
   implicit none
   type(ramses_t)::s
   integer::ilevel,nflag
@@ -286,10 +284,8 @@ subroutine user_flag(s,ilevel,nflag)
   ! Refinement rules for the hydro solver
   if(s%r%hydro)call hydro_flag(s,ilevel)
 
-#ifdef RT
   ! Refinement rules for the radiative transfer solver
   if(s%r%rt)call rt_flag(s,ilevel)
-#endif
 
   nflag=s%g%nflag
 

@@ -12,9 +12,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   use output_part_module, only: r_output_part
   use mdl_module, only: mdl_mkdir, mdl_wtime
   use cooling_module, only: output_cool
-#ifdef RT
   use output_rt_module, only: r_output_rt
-#endif
   implicit none
   type(pst_t)::pst
   logical::write_bkp_file
@@ -157,7 +155,6 @@ subroutine m_dump_all(pst,write_bkp_file)
         call r_output_part(pst,input_array,flen/4,dummy,0)
      end if
 
-#ifdef RT
      ! Output RT data
      if(r%rt)then
         filename=TRIM(filedir)//'rt.'
@@ -165,7 +162,6 @@ subroutine m_dump_all(pst,write_bkp_file)
         if(r%verbose)write(*,*)'Writing RT files'
         call r_output_rt(pst,input_array,flen/4,dummy,0)
      end if
-#endif
 
      ttend = mdl_wtime(mdl)
      print '(A,F14.7)',' Time elapsed writing to disk:',ttend-ttstart

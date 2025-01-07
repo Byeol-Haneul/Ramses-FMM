@@ -1,4 +1,3 @@
-#ifdef RT
 module output_rt_module
 contains
 !###################################################
@@ -39,9 +38,9 @@ end subroutine r_output_rt
 !###################################################
 !###################################################
 subroutine output_rt(s,filename)
-  use amr_parameters, only: ndim,twotondim,flen,dp
-  use rt_parameters, only: nrtvar, nrtgroups, rt_c
-  use ramses_commons, only: ramses_t,open_file,close_file
+  use amr_parameters, only: ndim,twotondim, flen, dp
+  use rt_parameters, only: nrtvar, nrtgroups
+  use ramses_commons, only: ramses_t, open_file, close_file
   implicit none
   type(ramses_t)::s
   character(LEN=flen)::filename
@@ -51,21 +50,19 @@ subroutine output_rt(s,filename)
   integer::ilevel,igrid,ilun,igrp,idim,ind
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim,1:nrtvar)::qout
-  real(dp),    dimension(1:twotondim,1:nrtvar)::qold
-  real(dp),    dimension(1:twotondim,1:nrtvar)::rtuold
+  real(dp),dimension(1:twotondim,1:nrtvar)::qold
+  real(dp),dimension(1:twotondim,1:nrtvar)::rtuold
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+#ifdef RT
   call open_file(s,filename,nskip,ilun)
   do ilevel=r%levelmin,r%nlevelmax
-
      write(ilun,POS=nskip(ilevel))
-
      do igrid=m%head(ilevel),m%tail(ilevel)
-
         rtuold=m%grid(igrid)%rtuold
         do ind=1,twotondim
             do igrp = 1, nrtgroups
-              qold(ind,1+(igrp-1)*(ndim+1)) = rtuold(ind,1+(igrp-1)*(ndim+1)) * rt_c
+              qold(ind,1+(igrp-1)*(ndim+1)) = rtuold(ind,1+(igrp-1)*(ndim+1))*g%rt_c
               do idim = 1, ndim
                 qold(ind,1+idim+(igrp-1)*(ndim+1)) = rtuold(ind,1+idim+(igrp-1)*(ndim+1))
               end do
@@ -73,12 +70,10 @@ subroutine output_rt(s,filename)
         end do
         qout=real(qold,kind=4)
         write(ilun)qout
-
      end do
   end do
-
   call close_file(s,filename,nskip,ilun)
-
+#endif
   end associate
 
 end subroutine output_rt
@@ -102,8 +97,7 @@ subroutine backup_rt(r,g,m,mdl,filename)
   character(LEN=5)::nchar
   character(LEN=flen)::fileloc
   logical::file_exist
-
-
+#ifdef RT
   ilun=10+mdl_core(mdl)
   call title(g%myid,nchar)
   fileloc=TRIM(filename)//TRIM(nchar)
@@ -122,12 +116,11 @@ subroutine backup_rt(r,g,m,mdl,filename)
   enddo
   do ilevel=r%levelmin,r%nlevelmax
      do igrid=m%head(ilevel),m%tail(ilevel)
-        write(ilun)m%grid(igrid)%uold
+        write(ilun)m%grid(igrid)%rtuold
      end do
   enddo
   close(ilun)
-
-
+#endif
 end subroutine backup_rt
 !###################################################
 !###################################################
@@ -157,7 +150,7 @@ subroutine file_descriptor_rt(r,filename,write_bkp_file)
   ! Write variable names in backup file
   write(ilun,'("nvar        =",I11)')nrtgroups*(1+ndim)
   do igrp = 1, nrtgroups
-     write(ilun,'("variable #",I2,": photon_density_", i0.2)')1+(igrp-1)*(ndim+1), igrp
+     write(ilun,'("variable #",I2,": photon_flux_", i0.2)')1+(igrp-1)*(ndim+1), igrp
      do idim = 1, ndim
         write(ilun,'("variable #",I2,": photon_flux_", i0.2, "_", a)')1+idim+(igrp-1)*(ndim+1), igrp, dim_keys(idim)
      end do
@@ -166,4 +159,3 @@ subroutine file_descriptor_rt(r,filename,write_bkp_file)
 
 end subroutine file_descriptor_rt
 end module output_rt_module
-#endif

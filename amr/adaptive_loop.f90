@@ -12,9 +12,7 @@ subroutine adaptive_loop(pst)
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
-#ifdef RT
   use update_rt_c_module,only: m_update_rt_c
-#endif
 
   implicit none
   type(pst_t)::pst
@@ -38,10 +36,8 @@ subroutine adaptive_loop(pst)
   ! Initialize time variables
   call r_init_time(pst)
 
-#ifdef RT
   ! Initialize reduced speed of light
-  call m_update_rt_c(pst)
-#endif
+  if(r%rt)call m_update_rt_c(pst)
 
   ! Initialize hydro kernel workspace
   if(r%hydro)call r_init_hydro(pst)

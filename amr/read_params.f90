@@ -8,9 +8,7 @@ subroutine m_read_params(pst)
   use ramses_commons, only: pst_t
   use mdl_module
   use movie_module, only: set_movie_vars
-#ifdef RT
   use rt_params_module
-#endif
   implicit none
   type(pst_t)::pst
 
@@ -264,6 +262,7 @@ subroutine m_read_params(pst)
 #endif
 
   ! Cooling parameters
+  logical::neq_chem=.false.
   logical::cooling=.false.
   logical::cooling_ism=.false.
   logical::metal=.false.
@@ -411,7 +410,7 @@ subroutine m_read_params(pst)
 #endif
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
   ! Cooling / basic chemistry parameters
-  namelist/cooling_params/cooling,metal,isothermal,haardt_madau,J21 &
+  namelist/cooling_params/neq_chem,cooling,metal,isothermal,haardt_madau,J21 &
        & ,eos_type,eos_nH,eos_index,eos_T2 &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
   ! Star particles and star formation recipe
@@ -602,7 +601,7 @@ subroutine m_read_params(pst)
 #endif
 #ifdef RT
   if(.not. rt)then
-     write(*,*)'You are not using the RT solver but'
+     write(*,*)'You are not using the rt solver but'
      write(*,*)'the code was compiled with RT=1'
      write(*,*)'This is just a warning and RAMSES will continue'
   endif
@@ -654,9 +653,7 @@ subroutine m_read_params(pst)
 112 continue
   close(1)
 
-#ifdef RT
-  call m_read_rt_params(pst)
-#endif
+  if(rt)call m_read_rt_params(pst)
 
   !-----------------
   ! Max size checks
@@ -1001,6 +998,7 @@ subroutine m_read_params(pst)
   s%r%var_bound=var_bound
 #endif
 
+  s%r%neq_chem=neq_chem
   s%r%cooling=cooling
   s%r%cooling_ism=cooling_ism
   s%r%metal=metal

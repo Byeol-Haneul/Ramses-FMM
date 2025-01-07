@@ -31,11 +31,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use tree_formation_module, only: m_tree_formation
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
-#ifdef RT
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
   use update_rt_c_module, only: m_update_rt_c
   use upload_rt_module, only: m_upload_rt_fine
-#endif
+  use rt_step_module, only: m_rt_step
   
   implicit none
 
@@ -189,6 +188,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
   end if
 
+  ! Turn on RT in case of rt_stars and first stars just created:
+  ! Update photon packages according to star particles and sink particles
+  if(r%rt)then
+                                    call m_timer(pst,'rt - update SEDs','start')
+!     if(r%rt_star)call update_star_RT_feedback(ilevel)
+!     if(r%rt_sink)call update_sink_RT_feedback(ilevel)
+  endif
+
   !----------------------
   ! Compute new time step
   !----------------------
@@ -203,12 +210,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call r_set_unew(pst,ilevel,1)
   endif
 
-#ifdef RT
-  if(ilevel==r%levelmin) call m_update_rt_c(pst)
+  !---------------------------
   ! Set rtunew equal to rtuold
-                               call m_timer(pst,'rt - set rtunew','start')
-  if(r%rt)call r_set_rtunew(pst,ilevel,1)
-#endif
+  !---------------------------
+  if(r%rt)then
+                                    call m_timer(pst,'rt - set rtunew','start')
+     call r_set_rtunew(pst,ilevel,1)
+  endif
 
   !---------------------------
   ! Recursive call to amr_step
@@ -305,27 +313,38 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_upload_fine(pst,ilevel)
   endif
 
-#ifdef RT
+  !------------------------
+  ! Radiative transfer step
+  !------------------------
   if(r%rt)then
 
-     ! Hyperbolic solver
-                                    call m_timer(pst,'rt - godunov','start')
-     if(r%rt_advect)call r_rt_godunov_fine(pst,ilevel,1)
+     if(r%rt_advect)then
+        call m_timer(pst,'radiative transfer','start')
+        call m_rt_step(pst,ilevel)
+     else
+        if(r%hydro .and. (r%neq_chem.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
+     endif
 
-     ! Set rtuold equal to rtunew
-                                    call m_timer(pst,'rt - set rtuold','start')
-     call r_set_rtuold(pst,ilevel,1)
+     ! Regular updates and book-keeping:
+     if(ilevel==r%levelmin) then
+        call m_timer(pst,'radiative transfer','start')
+        if(r%cosmo)then
+           call m_update_rt_c(pst)
+!           if(r%haardt_madau) call m_update_UVrates(pst,dble(g%aexp))
+!           if(r%rt_isDiffuseUVsrc) call m_update_UVsrc(pst)
+           call m_timer(pst,'cooling','start')
+!           call m_update_coolrates_tables(pst,dble(g%aexp))
+        endif
+        call m_timer(pst,'radiative transfer','start')
+!        call output_rt_stats(pst)
+     endif
 
-     ! Restriction operator
-                                    call m_timer(pst,'rt - upload','start')
-     call m_upload_rt_fine(pst,ilevel)
   endif
-#endif
 
   !------------------------
   ! Compute cooling/heating
   !------------------------
-  if(r%cooling.or.r%isothermal)then
+  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%isothermal))then
                                     call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif

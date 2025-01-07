@@ -1,4 +1,3 @@
-#ifdef RT
 !================================================================
 !================================================================
 !================================================================
@@ -23,10 +22,8 @@ subroutine rt_condinit(r,g,x,q,dx,nn)
   !================================================================
   ! Call built-in initial condition generator
   call rt_region_condinit(r,g,x,q,dx,nn)
-  
+
   ! Add here, if you wish, some user-defined initial conditions
   ! ........
 
-
 end subroutine rt_condinit
-#endif

@@ -139,7 +139,7 @@ VPATH = $(PATCH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../p
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
-   hydro_commons.o amr_commons.o poisson_parameters.o rngstream.o \
+	 hydro_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
 	 mdl_commons.o mdl.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
@@ -159,7 +159,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
 	 sink_formation.o tree_formation.o \
-	 task_manager.o amr_step.o adaptive_loop.o \
+	 task_manager.o rt_step.o amr_step.o adaptive_loop.o \
 	 write_gitinfo.o
 #############################################################################
 ramses:	$(MODOBJ) ramses.o

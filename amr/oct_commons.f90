@@ -1,9 +1,7 @@
 module oct_commons
   use amr_parameters
   use hydro_parameters
-#ifdef RT
   use rt_parameters, only: nrtvar
-#endif
   
   ! New type for oct structure
   type oct

@@ -1,70 +1,152 @@
+module rt_step_module
+contains
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
 subroutine m_rt_step(pst,ilevel)
+  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
+  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
+  use update_rt_c_module, only: m_update_rt_c
+  use upload_rt_module, only: m_upload_rt_fine
+  type(pst_t)::pst
+  integer::ilevel
 
-  real(dp) :: dt_hydro, t_left, dt_rt, t_save
-  integer  :: i_substep, ivar
+  real(dp) :: dt_save, t_save
+  real(dp) :: dt_rad, t_rad
+  integer  :: i, i_substep
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
 
-  ! Store hydro timestep length
-  dt_hydro = g%dtnew(ilevel)
-
-  ! Time left until end of hydro time step
-  t_left = dt_hydro
+  ! Store hydro timestep length and hydro time
+  dt_save = g%dtnew(ilevel)
+  t_save = g%t
 
   ! We shift the time backwards one hydro-dt, to get evolution of stellar
   ! ages within the hydro timestep, in the case of rt subcycling:
-  t_save=g%t
-  g%t=g%t-t_left
+  t_rad = t_save - dt_save
+
+  ! Get RT courant time step at coarse level
+  call rt_courant_coarse(r,g,dt_rad)
+
+  ! Compute RT courant time step at fine level
+  dt_rad = MIN(dt_rad/2**(ilevel-r%levelmin),1.01*dt_save)
+
+  ! Compute number of subcycles
+  i_substep = int(dt_save/dt_rad)+1
+  dt_rad = dt_save/dble(i_substep)
 
   ! RT sub-cycle loop
-  i_substep = 0
-  do while (t_left > 0)
+  do i=1,i_substep
 
-     ! Get RT courant time step at coarse level
-     call rt_courant_coarse(dt_rt)
+     ! Shift the RT time forwards one dt_rad
+     t_rad = t_rad + dt_rad
 
-     ! Temporarily change timestep length to rt step
-     g%dtnew(ilevel) = MIN(t_left, dt_rt/2**(ilevel-r%levelmin))
-
-     ! Shift the time forwards one dt_rt
-     g%t = g%t + g%dtnew(ilevel)
+     ! Update time variables
+     call m_rt_update_time(pst,ilevel,t_rad,dt_rad)
 
      ! Set rtunew equal to rtuold
-     call rt_set_unew(ilevel)
-
-     ! Radiative feedback from stars and sinkss
-     if(rt_star) call star_RT_feedback(ilevel,g%dtnew(ilevel))
-     if(rt_sink) call sink_RT_feedback(ilevel,g%dtnew(ilevel))
+     if(i>1) call r_set_rtunew(pst,ilevel,1)
 
      ! Hyperbolic RT solver
      if(r%rt_advect) call r_rt_godunov_fine(pst,ilevel,1)
 
+     ! Radiative feedback from stars
+!     if(r%rt_star) call r_star_RT_feedback(pst,ilevel,1)
+
+     ! Radiative feedback from sinks
+!     if(r%rt_sink) call r_sink_RT_feedback(pst,ilevel,1)
+
      ! Injection from radiation sources
-     call add_rt_sources(ilevel,g%dtnew(ilevel))
+!     if(r%rt_nsource>0)call r_add_rt_sources(pst,ilevel,1)
 
      ! Set rtuold equal to rtunew
-     call rt_set_uold(ilevel)
+     if(.not.r%rt_smooth)call r_set_rtuold(pst,ilevel,1)
 
      ! Source terms for photo-chemistry
-     if(neq_chem.or.cooling.or.T2_star>0.0.or.barotropic_eos)call cooling_fine(ilevel)
-
-     ! Update time left until end of hydro step
-     t_left = t_left - g%dtnew(ilevel)
+!     if(r%neq_chem.or.r%cooling.or.r%isothermal)call r_cooling_fine(pst,ilevel,1)
 
   end do
   ! End RT subcycle loop
 
-  ! Restore hydro timestep length
-  g%dtnew(ilevel) = dt_hydro 
-  g%t = t_save ! Restore original time (otherwise tiny roundoff error)
+  ! Restore original hydro timestep and time
+  call m_rt_update_time(pst,ilevel,t_save,dt_save)
 
   ! Restriction operator to update coarser level split cells
-  call rt_upload_fine(ilevel)
+  call m_upload_rt_fine(pst,ilevel)
 
-  if (myid==1 .and. rt_nsubcycle .gt. 1) write(*,901) ilevel, i_substep
+  if (g%myid==1 .and. r%rt_nsubcycle .gt. 1) write(*,901) ilevel, i_substep
 901 format (' Performed level', I3, ' RT-step with ', I5, ' subcycles')
 
   end associate
 
 end subroutine m_rt_step
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
+subroutine m_rt_update_time(pst,ilevel,t,dt)
+  use amr_parameters, only: dp,n_frw
+  use ramses_commons, only: pst_t
+  use update_time_module, only: in_broadcast_aexp_t, r_broadcast_aexp
+  use newdt_fine_module, only: in_broadcast_dt_t, r_broadcast_dt
+  use mdl_module
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel
+  real(dp)::dt,t
+
+  type(in_broadcast_dt_t)::in_broadcast_dt
+  type(in_broadcast_aexp_t)::in_broadcast_aexp
+  integer::i
+
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
+
+  ! Store time step to global variable
+  g%dtnew(ilevel)=dt
+
+  ! Broadcast dtnew to all CPUs
+  in_broadcast_dt%ilevel=ilevel
+  in_broadcast_dt%dtnew=g%dtnew(ilevel)
+  in_broadcast_dt%dtold=g%dtold(ilevel)
+  call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
+
+  ! Store time to global variable
+  g%t=t
+
+  ! Compute expansion factor, hubble rate and proper time
+  if(r%cosmo)then
+     ! Find neighboring times
+     i=1
+     do while(g%tau_frw(i)>g%t.and.i<n_frw)
+        i=i+1
+     end do
+     ! Interpolate expansion factor
+     g%aexp = g%aexp_frw(i  )*(g%t-g%tau_frw(i-1))/(g%tau_frw(i  )-g%tau_frw(i-1))+ &
+            & g%aexp_frw(i-1)*(g%t-g%tau_frw(i  ))/(g%tau_frw(i-1)-g%tau_frw(i  ))
+     g%hexp = g%hexp_frw(i  )*(g%t-g%tau_frw(i-1))/(g%tau_frw(i  )-g%tau_frw(i-1))+ &
+            & g%hexp_frw(i-1)*(g%t-g%tau_frw(i  ))/(g%tau_frw(i-1)-g%tau_frw(i  ))
+     g%texp =    g%t_frw(i  )*(g%t-g%tau_frw(i-1))/(g%tau_frw(i  )-g%tau_frw(i-1))+ &
+            &    g%t_frw(i-1)*(g%t-g%tau_frw(i  ))/(g%tau_frw(i-1)-g%tau_frw(i  ))
+  else
+     g%aexp = 1.0
+     g%hexp = 0.0
+     g%texp = g%t
+  end if
+
+  ! Broadcast t, aexp, texp and hexp to all CPUs
+  in_broadcast_aexp%t=g%t
+  in_broadcast_aexp%texp=g%texp
+  in_broadcast_aexp%aexp=g%aexp
+  in_broadcast_aexp%hexp=g%hexp
+  call r_broadcast_aexp(pst,in_broadcast_aexp,storage_size(in_broadcast_aexp)/32)
+
+  end associate
+
+end subroutine m_rt_update_time
+!#####################################################################
+!#####################################################################
+!#####################################################################
+!#####################################################################
+end module rt_step_module

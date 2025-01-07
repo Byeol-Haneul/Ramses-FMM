@@ -1,13 +1,30 @@
-#ifdef RT
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine rt_courant_coarse(r,g,dt)
+  use amr_parameters
+  use rt_parameters
+  use amr_commons, only: run_t, global_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  real(dp):: dt
+  !-------------------------------------------------------------------------
+  ! Determine the coarse RT timestep length set by the Courant condition
+  !-------------------------------------------------------------------------
+  real(dp):: dx
+  ! Mesh spacing at coarse level
+  dx = 0.5D0**r%levelmin*r%boxlen
+  dt = r%rt_courant_factor*dx/3d0/g%rt_c
+end subroutine rt_courant_coarse
 !###########################################################
 !###########################################################
 !###########################################################
 !###########################################################
 subroutine rt_refine(r,ug,um,ud,ok)
+  use amr_parameters, only: ndim, dp
   use amr_commons, only: run_t
-  use amr_parameters, only: ndim
   use rt_parameters, only: nrtvar, nrtgroups
-  use const
   implicit none
   ! routine arguments
   type(run_t)::r
@@ -32,5 +49,3 @@ subroutine rt_refine(r,ug,um,ud,ok)
   end do
 
 end subroutine rt_refine
-
-#endif

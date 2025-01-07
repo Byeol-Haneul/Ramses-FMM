@@ -1,4 +1,3 @@
-#ifdef RT
 module upload_rt_module
 contains
 !#########################################################################
@@ -14,7 +13,6 @@ subroutine m_upload_rt_fine(pst,ilevel)
   ! This routine is the master procedure to upload HYDRO variables
   ! from level ilevel+1 to ilevel (averaging down or restriction).
   !--------------------------------------------------------------------
-
   if(ilevel==pst%s%r%nlevelmax)return
   if(pst%s%m%noct_tot(ilevel)==0)return
   if(pst%s%m%noct_tot(ilevel+1)==0)return
@@ -138,7 +136,7 @@ subroutine init_flush_upload_rt(grid,hash_key)
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-  
+#ifdef RT  
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   do ivar=1,nrtvar
@@ -146,7 +144,7 @@ subroutine init_flush_upload_rt(grid,hash_key)
         grid%rtuold(ind,ivar)=0.0d0
      end do
   end do
-  
+#endif
 end subroutine init_flush_upload_rt
 !##########################################################################
 !##########################################################################
@@ -163,13 +161,13 @@ subroutine pack_flush_upload_rt(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_realdp)::msg
-
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
         msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
      end do
   end do
-
+#endif
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_upload_rt
@@ -193,7 +191,7 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-  
+#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
         if(grid%refined(ind))then
@@ -201,11 +199,10 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
         endif
      end do
   end do
-
+#endif
 end subroutine unpack_flush_upload_rt
 !##########################################################################
 !##########################################################################
 !##########################################################################
 !##########################################################################
 end module upload_rt_module
-#endif
