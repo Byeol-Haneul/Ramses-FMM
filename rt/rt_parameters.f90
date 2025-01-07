@@ -1,5 +1,5 @@
 module rt_parameters
-  use amr_parameters, only: ndim
+  use amr_parameters, only: ndim, dp
 
 #ifdef NRTGROUPS
   integer,parameter::nrtgroups=NRTGROUPS       ! # of photon groups (set in Makefile)
