@@ -457,17 +457,17 @@ module amr_commons
      real(dp)::hexp=0.0D0     ! Current Hubble parameter
      real(dp)::texp=0.0D0     ! Current proper time
      logical ::use_proper_time=.false.
-     
+
      ! Executable identification
      CHARACTER(LEN=300)::builddate,buildcommand,patchdir
      CHARACTER(LEN=300)::gitrepo,gitbranch,githash
-     
+
      ! Save namelist filename
      CHARACTER(LEN=300)::namelist_file
-     
+
      ! Friedman model variables
      real(dp),dimension(0:n_frw)::aexp_frw,hexp_frw,tau_frw,t_frw
-     
+
      ! Initial conditions parameters from grafic
      integer::nlevelmax_part
      real(dp)::aexp_ini=10.
@@ -476,20 +476,21 @@ module amr_commons
      real(dp),dimension(1:MAXLEVEL)::vfact
      real(dp),dimension(1:MAXLEVEL)::xoff1,xoff2,xoff3,dxini
      integer ,dimension(1:MAXLEVEL)::n1,n2,n3
-          
+
      ! Minimum particle mass
      real(dp) :: mp_min=-1.0
 
      ! Minimum MG level
      integer :: levelmin_mg
-     
+
      ! Multigrid safety switch
      logical, dimension(1:MAXLEVEL)::safe_mode=.false.
-     
+
      ! Multipole coefficients
      !real(dp),dimension(1:ndim+1)::multipole
      type(multipole_t)::multipole
-     
+
+     ! RT global variables
      real(dp)::rt_c=1d0              ! Reduced lightspeed in code units
      real(dp)::rt_c2=1d0             ! Reduced lightspeed squared in code units
      real(dp)::rt_c_cgs              ! Reduced lightspeed in [cm s-1]

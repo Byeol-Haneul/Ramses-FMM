@@ -31,10 +31,10 @@ subroutine m_rt_step(pst,ilevel)
   call rt_courant_coarse(r,g,dt_rad)
 
   ! Compute RT courant time step at fine level
-  dt_rad = MIN(dt_rad/2**(ilevel-r%levelmin),1.01*dt_save)
+  dt_rad = MIN(dt_rad/2**(ilevel-r%levelmin),dt_save)
 
   ! Compute number of subcycles
-  i_substep = int(dt_save/dt_rad)+1
+  i_substep = ceiling(dt_save/dt_rad)
   dt_rad = dt_save/dble(i_substep)
 
   ! RT sub-cycle loop
