@@ -2,11 +2,11 @@
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_init_rt_fine(pst,ilevel)
+subroutine m_rt_init_flow_fine(pst,ilevel)
   use amr_commons, only: ndim
   use amr_parameters, only: nvector, twotondim
   use ramses_commons, only: pst_t
-  use input_rt_condinit_module, only: r_input_rt_condinit
+  use rt_input_condinit_module, only: r_rt_input_condinit
   use rt_parameters, only: nrtgroups
   implicit none
   type(pst_t)::pst
@@ -29,7 +29,7 @@ subroutine m_init_rt_fine(pst,ilevel)
   ! We always call the condinit routine, even in cosmological simulations, 
   ! just to initialisethe RT variables (to small values)
   if(s%r%verbose)write(*,*)'Initialising RT variables'
-  call r_input_rt_condinit(pst,ilevel,1)
+  call r_rt_input_condinit(pst,ilevel,1)
 
   filename=TRIM(s%r%initfile(ilevel))//'/ic_d'
   INQUIRE(file=filename,exist=ok_file1)
@@ -44,7 +44,7 @@ subroutine m_init_rt_fine(pst,ilevel)
 
   end associate
 
-end subroutine m_init_rt_fine
+end subroutine m_rt_init_flow_fine
 !###############################################
 !###############################################
 !###############################################

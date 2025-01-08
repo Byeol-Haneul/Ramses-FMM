@@ -40,10 +40,6 @@ module hydro_commons
      real(dp),dimension(:,:,:,:,:),allocatable::qLB
      type(nbor),dimension(:,:,:,:),allocatable::nborsonloc
 #endif
-#ifdef RT
-     real(dp),dimension(:,:,:,:),allocatable::rtuloc
-     real(dp),dimension(:,:,:,:,:),allocatable::rtflux
-#endif
    contains
      procedure :: init => init_hydro_kernel
      procedure :: size => size_hydro_kernel
@@ -108,10 +104,6 @@ contains
     allocate(h%qLB(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim,1:3))
     allocate(h%nborsonloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2,1:twondim))
 #endif
-#ifdef RT
-    allocate(h%rtuloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nrtvar)) 
-    allocate(h%rtflux(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:nrtvar,1:ndim))
-#endif
   end subroutine init_hydro_kernel
 
   function size_hydro_kernel(h)
@@ -157,10 +149,6 @@ contains
     nint=nint+size(transfer(h%qLT ,(/1/)))
     nint=nint+size(transfer(h%qLB ,(/1/)))
     nint=nint+size(transfer(h%nborsonloc,(/1/)))
-#endif
-#ifdef RT
-    nint=nint+size(transfer(h%rtuloc,(/1/)))
-    nint=nint+size(transfer(h%rtflux,(/1/)))
 #endif
     size_hydro_kernel = nint
 

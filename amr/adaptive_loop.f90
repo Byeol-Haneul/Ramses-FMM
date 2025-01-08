@@ -5,6 +5,7 @@ subroutine adaptive_loop(pst)
   use params_module, only: m_read_params
   use init_time_module, only: r_init_time
   use init_hydro_module, only: r_init_hydro
+  use init_rt_module, only: r_init_rt
   use init_part_module, only: r_init_part
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
@@ -41,6 +42,9 @@ subroutine adaptive_loop(pst)
 
   ! Initialize hydro kernel workspace
   if(r%hydro)call r_init_hydro(pst)
+
+  ! Initialize rt kernel workspace
+  if(r%rt)call r_init_rt(pst)
 
   ! Initialize particle variables
   if(r%pic)call r_init_part(pst)

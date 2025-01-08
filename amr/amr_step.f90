@@ -33,7 +33,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use clump_finder_module, only: m_clump_finder
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
   use update_rt_c_module, only: m_update_rt_c
-  use upload_rt_module, only: m_upload_rt_fine
   use rt_step_module, only: m_rt_step
   
   implicit none

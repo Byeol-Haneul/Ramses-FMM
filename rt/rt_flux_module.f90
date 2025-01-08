@@ -111,7 +111,7 @@ END FUNCTION cmp_face
 
 
 !************************************************************************
-SUBROUTINE rt_unsplit(uin,flux,rt_c,dx,dy,dz,dt &
+SUBROUTINE rt_unsplit(uin,flux,cFlx,rt_c,dx,dy,dz,dt &
                         ,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
 
 !  Compute intercell fluxes for one photon group in all dimensions,
@@ -139,11 +139,11 @@ SUBROUTINE rt_unsplit(uin,flux,rt_c,dx,dy,dz,dt &
 !------------------------------------------------------------------------
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nrtvar)::       uin
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nrtvar,1:ndim)::flux
+  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim+1,1:ndim)::cFlx
   real(dp)::dx, dy, dz, dt, rt_c
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
   ! Central fluxes:
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2, ndim+1, ndim)::   cFlx
   ! Upwards and downwards fluxes and states of the group
   real(dp),dimension(nDim+1),save:: fdn, fup, udn, uup
   real(dp)::dtdx

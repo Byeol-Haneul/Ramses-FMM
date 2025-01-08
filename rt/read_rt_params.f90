@@ -1,6 +1,9 @@
 module rt_params_module
 contains
-
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 subroutine m_read_rt_params(pst)
   use amr_parameters
   use hydro_parameters
@@ -59,27 +62,7 @@ subroutine m_read_rt_params(pst)
   !character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
   !character(LEN=128)::uv_file=''       ! File containing stellar energy distributions    !
 
-  ! RT_GROUPS namelist--------------------------------------------------------------------
-  !integer::sedprops_update=-1                      ! Update sedprops from star populations
-  ! negative: never update, 0:update on init, pos x: update every x coarse steps
-  !logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
-  ! Grop props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev).
-  ! Indexes nrtgroups, nIons stand for photon group vs species (e.g. 1=H, 2=He).
-  !real(dp),dimension(nrtgroups,nIons)::group_csn=0, group_cse=0    !    Cross sections (cm2)
-  !real(dp),dimension(nrtgroups)::group_egy=0                       !  Avg photon energy (ev)
-  !real(dp),dimension(nrtgroups)::group_egy_AGNfrac=0               !  Fraction of AGN energy
-  !real(dp),dimension(nrtgroups)::groupL0=13.60                     ! Wavelength lower limits
-  !real(dp),dimension(nrtgroups)::groupL1=0                         ! Wavelength upper limits
-  !integer,dimension(nIons)::spec2group=0                 !Ion -> group # in recombinations
-
-  ! Imposed boundary condition variables
-  !real(dp),dimension(1:MAXBOUND,1:nrtvar)::rt_boundary_var
-  !real(dp),dimension(1:MAXBOUND)::rt_n_bound=0.0d0
-  !real(dp),dimension(1:MAXBOUND)::rt_u_bound=0.0d0
-  !real(dp),dimension(1:MAXBOUND)::rt_v_bound=0.0d0
-  !real(dp),dimension(1:MAXBOUND)::rt_w_bound=0.0d0
-
-  ! Initial condition RT regions parameters----------------------------------------------
+  ! Initial condition RT regions parameters-----------------------------------------------
   integer                           ::rt_nregion=0
   character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
   real(dp),dimension(1:MAXREGION)   ::rt_reg_x_center=0.
@@ -90,10 +73,10 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(1:MAXREGION)   ::rt_reg_length_z=1.E10
   real(dp),dimension(1:MAXREGION)   ::rt_exp_region=2.0
   integer,dimension(1:MAXREGION)    ::rt_reg_group=1
-  real(dp),dimension(1:MAXREGION)  ::rt_n_region=0.                    ! Photon density
-  real(dp),dimension(1:MAXREGION)  ::rt_u_region=0.                    !    Photon flux
-  real(dp),dimension(1:MAXREGION)  ::rt_v_region=0.                    !    Photon flux
-  real(dp),dimension(1:MAXREGION)  ::rt_w_region=0.                    !    Photon flux
+  real(dp),dimension(1:MAXREGION)   ::rt_n_region=0.                    ! Photon density
+  real(dp),dimension(1:MAXREGION)   ::rt_u_region=0.                    !    Photon flux
+  real(dp),dimension(1:MAXREGION)   ::rt_v_region=0.                    !    Photon flux
+  real(dp),dimension(1:MAXREGION)   ::rt_w_region=0.                    !    Photon flux
 
   ! RT source regions parameters----------------------------------------------------------
   integer                           ::rt_nsource=0
@@ -112,6 +95,28 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                      !    Photon flux
   real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                      !    Photon flux
 
+  ! RT_GROUPS namelist---------------------------------------------------------------------
+  ! integer::sedprops_update=-1                     ! Update sedprops from star populations
+  ! negative: never update, 0:update on init, pos x: update every x coarse steps
+  ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
+
+  ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
+  ! Indexes nrtgroups, nions stand for photon group vs species (e.g. 1=H, 2=He).
+  real(dp),dimension(nrtgroups,nions)::group_csn=0, group_cse=0  !    Cross sections (cm2)
+  real(dp),dimension(nrtgroups)::group_egy=0                     !  Avg photon energy (ev)
+  real(dp),dimension(nrtgroups)::groupL0=13.60                   ! Wavelength lower limits
+  real(dp),dimension(nrtgroups)::groupL1=0                       ! Wavelength upper limits
+  integer,dimension(nions)::spec2group=0                ! Ion -> group # in recombinations
+  real(dp),dimension(nrtgroups)::kappaAbs=0                      ! Dust absorption opacity
+  real(dp),dimension(nrtgroups)::kappaSc=0                       ! Dust scattering opacity
+
+  ! NEQ_CHEM namelist---------------------------------------------------------------------
+  logical::is_init_xion=.false.                    ! Initialize ionization from T profile?
+  logical::isHe=.true.                             !      He ionization fractions tracked?
+  logical::isH2=.false.                            !                           H2 tracked?
+  real(dp)::X
+  real(dp)::Y
+
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
@@ -128,15 +133,17 @@ subroutine m_read_rt_params(pst)
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
        & ,rt_src_length_x, rt_src_length_y, rt_src_length_z              &
        & ,rt_exp_source, rt_src_group,   rt_src_trace_group              &
-       & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source             !&
-       ! RT boundary (for boundary conditions)                           &
-       !& ,rt_n_bound,rt_u_bound,rt_v_bound,rt_w_bound                    &
-       !& ,rt_AGN
+       & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source             
+  
+  namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
+       & ,groupL0, groupL1, kappaAbs, kappaSc
+
+  namelist/neq_chem/isHe, isH2, X, Y, is_init_xion
 
   associate(s=>pst%s)
 
   !-------------------------------------------------
-  ! Read the namelist
+  ! Read the namelist file
   !-------------------------------------------------
   CALL getarg(1,infile)
   namelist_file=TRIM(infile)
@@ -145,15 +152,21 @@ subroutine m_read_rt_params(pst)
      write(*,*)'File '//TRIM(infile)//' does not exist'
      call mdl_abort(s%mdl)
   end if
-
   open(1,file=infile)
   rewind(1)
   read(1,NML=rt_params,END=113)
 113 continue
+  rewind(1)
+  read(1,NML=rt_groups,END=114)
+114 continue
+  rewind(1)
+  read(1,NML=neq_chem,END=115)
+115 continue
   close(1)
 
   ! Fill in all run parameters in corresponding structure
 
+  ! rt_params
   s%r%rt_advect=rt_advect
   s%r%rt_c_fraction=rt_c_fraction
   s%r%rt_nsubcycle=rt_nsubcycle
@@ -189,6 +202,23 @@ subroutine m_read_rt_params(pst)
   s%r%rt_n_source=rt_n_source
   s%r%rt_v_source=rt_v_source
   s%r%rt_w_source=rt_w_source
+
+  ! rt_groups
+  s%r%group_csn=group_csn
+  s%r%group_cse=group_cse
+  s%r%group_egy=group_egy
+  s%r%spec2group=spec2group
+  s%r%groupL0=groupL0
+  s%r%groupL1=groupL1
+  s%r%kappaAbs=kappaAbs
+  s%r%kappaSc=kappaSc
+
+  ! neq_chem
+  s%r%is_init_xion=is_init_xion
+  s%r%isHe=isH2
+  s%r%isH2=isH2
+  s%r%X=X
+  s%r%Y=Y
 
   end associate
 
