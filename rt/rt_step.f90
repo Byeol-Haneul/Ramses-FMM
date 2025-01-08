@@ -10,6 +10,7 @@ subroutine m_rt_step(pst,ilevel)
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
   use update_rt_c_module, only: m_update_rt_c
   use upload_rt_module, only: m_upload_rt_fine
+  use input_rt_condinit_module, only: r_input_rt_source_regions
   type(pst_t)::pst
   integer::ilevel
 
@@ -59,7 +60,7 @@ subroutine m_rt_step(pst,ilevel)
 !     if(r%rt_sink) call r_sink_RT_feedback(pst,ilevel,1)
 
      ! Injection from radiation sources
-!     if(r%rt_nsource>0)call r_add_rt_sources(pst,ilevel,1)
+     if(r%rt_nsource>0)call r_input_rt_source_regions(pst,ilevel,1)
 
      ! Set rtuold equal to rtunew
      if(.not.r%rt_smooth)call r_set_rtuold(pst,ilevel,1)

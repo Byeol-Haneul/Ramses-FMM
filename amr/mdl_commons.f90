@@ -106,6 +106,7 @@ module mdl_parameters
      enumerator::MDL_CLUMP_FINDER
      enumerator::MDL_CLUMP_DEALLOC
      enumerator::MDL_INPUT_RT_CONDINIT
+     enumerator::MDL_INPUT_RT_SOURCE_REGIONS
      enumerator::MDL_UPLOAD_RT_FINE
      enumerator::MDL_OUTPUT_RT
      enumerator::MDL_RT_GODUNOV_FINE
