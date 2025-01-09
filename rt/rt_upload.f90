@@ -1,10 +1,10 @@
-module upload_rt_module
+module rt_upload_module
 contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_upload_rt_fine(pst,ilevel)
+subroutine m_rt_upload_fine(pst,ilevel)
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -19,14 +19,14 @@ subroutine m_upload_rt_fine(pst,ilevel)
   if(pst%s%r%verbose)write(*,111)ilevel
 111 format(' Entering upload_fine for level',i2)
 
-  call r_upload_rt_fine(pst,ilevel,1)
+  call r_rt_upload_fine(pst,ilevel,1)
 
-end subroutine m_upload_rt_fine
+end subroutine m_rt_upload_fine
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_upload_rt_fine(pst,ilevel,input_size)
+recursive subroutine r_rt_upload_fine(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -38,19 +38,19 @@ recursive subroutine r_upload_rt_fine(pst,ilevel,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_UPLOAD_RT_FINE,pst%iUpper+1,input_size,0,ilevel)
-     call r_upload_rt_fine(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RT_UPLOAD_FINE,pst%iUpper+1,input_size,0,ilevel)
+     call r_rt_upload_fine(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call upload_rt_fine(pst%s,ilevel)
+     call rt_upload_fine(pst%s,ilevel)
   endif
 
-end subroutine r_upload_rt_fine
+end subroutine r_rt_upload_fine
 !###########################################################
 !########################################################### 
 !###########################################################
 !###########################################################
-subroutine upload_rt_fine(s,ilevel)
+subroutine rt_upload_fine(s,ilevel)
   use mdl_module
   use rt_parameters, only: nrtvar
   use amr_parameters, only: dp,ndim,twotondim
@@ -123,7 +123,7 @@ subroutine upload_rt_fine(s,ilevel)
 
   end associate
 
-end subroutine upload_rt_fine
+end subroutine rt_upload_fine
 !##########################################################################
 !##########################################################################
 !##########################################################################
@@ -205,4 +205,4 @@ end subroutine unpack_flush_upload_rt
 !##########################################################################
 !##########################################################################
 !##########################################################################
-end module upload_rt_module
+end module rt_upload_module

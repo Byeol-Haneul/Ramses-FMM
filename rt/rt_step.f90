@@ -9,8 +9,8 @@ subroutine m_rt_step(pst,ilevel)
   use ramses_commons, only: pst_t
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
   use update_rt_c_module, only: m_update_rt_c
-  use upload_rt_module, only: m_upload_rt_fine
-  use input_rt_condinit_module, only: r_input_rt_source_regions
+  use rt_upload_module, only: m_rt_upload_fine
+  use rt_input_condinit_module, only: r_input_rt_source_regions  
   type(pst_t)::pst
   integer::ilevel
 
@@ -75,7 +75,7 @@ subroutine m_rt_step(pst,ilevel)
   call m_rt_update_time(pst,ilevel,t_save,dt_save)
 
   ! Restriction operator to update coarser level split cells
-  call m_upload_rt_fine(pst,ilevel)
+  call m_rt_upload_fine(pst,ilevel)
 
   if (g%myid==1 .and. r%rt_nsubcycle .gt. 1) write(*,901) ilevel, i_substep
 901 format (' Performed level', I3, ' RT-step with ', I5, ' subcycles')

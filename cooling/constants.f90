@@ -16,7 +16,7 @@ module constants
   ! * NIST - National Institute of Standards and Technology
   ! * IAU - Internatonal Astronomical Union resolution
   real(kind=8),parameter ::hplanck      = 6.6260702d-27 ! Planck const. [erg s]; SI
-  real(kind=8),parameter ::eV           = 1.6021766d-12 ! Electronvolt [erg]; SI
+  real(kind=8),parameter ::eV2erg       = 1.6021766d-12 ! Electronvolt [erg]; SI
   real(kind=8),parameter ::kB           = 1.3806490d-16 ! Boltzmann const. [erg K-1]; SI
   real(kind=8),parameter ::clight       = 2.9979246d+10 ! Speed of light [cm s-1]; SI
   real(kind=8),parameter ::a_r          = 7.5657233d-15 ! Radiation density const. [erg cm-3 K-4]; SI (derived)

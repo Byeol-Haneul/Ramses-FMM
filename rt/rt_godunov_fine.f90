@@ -62,17 +62,17 @@ subroutine rt_godunov_fine(s,ilevel)
      SELECT CASE (m%grid(igrid)%superoct)
      ! For now just re-using the hydro kernel for RT. Might change this later.
      CASE(1)
-        call rt_godfine1(s,igrid,ilevel,m%hydro_w%kernel_1)
+        call rt_godfine1(s,igrid,ilevel,m%rt_w%kernel_1)
      CASE(2**ndim)
-        call rt_godfine1(s,igrid,ilevel,m%hydro_w%kernel_2)
+        call rt_godfine1(s,igrid,ilevel,m%rt_w%kernel_2)
      CASE(4**ndim)
-        call rt_godfine1(s,igrid,ilevel,m%hydro_w%kernel_4)
+        call rt_godfine1(s,igrid,ilevel,m%rt_w%kernel_4)
      CASE(8**ndim)
-        call rt_godfine1(s,igrid,ilevel,m%hydro_w%kernel_8)
+        call rt_godfine1(s,igrid,ilevel,m%rt_w%kernel_8)
      CASE(16**ndim)
-        call rt_godfine1(s,igrid,ilevel,m%hydro_w%kernel_16)
+        call rt_godfine1(s,igrid,ilevel,m%rt_w%kernel_16)
      CASE(32**ndim)
-        call rt_godfine1(s,igrid,ilevel,m%hydro_w%kernel_32)
+        call rt_godfine1(s,igrid,ilevel,m%rt_w%kernel_32)
      END SELECT
      igrid=igrid+m%grid(igrid)%superoct
   end do
@@ -184,13 +184,13 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   use rt_parameters, only: nrtvar
   use ramses_commons, only: ramses_t
   use nbors_utils
-  use hydro_commons
+  use rt_commons
   use hash
   use rt_flux_module, only: rt_unsplit
   implicit none
   type(ramses_t)::s
   integer::ind_grid,ilevel
-  type(hydro_kernel_t)::h
+  type(rt_kernel_t)::h
   !-------------------------------------------------------------------
   ! This routine gathers first RT variables from neighboring grids
   ! to set initial conditions in a 6x6x6 grid. It interpolate from
@@ -243,9 +243,6 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #if NDIM>2
   k2max=1; k3min=h%ku1+2; k3max=h%ku2-2
 #endif
-
-  ! Reset gravitational acceleration
-  h%gloc=0.0d0
 
   !---------------------
   ! Gather hydro stencil
@@ -482,8 +479,8 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   !-------------------------------------------------
   ! Compute flux using second-order Godunov method
   !-------------------------------------------------
-  call rt_unsplit(h%rtuloc,h%rtflux,g%rt_c,        &
-       & dx,dx,dx,g%dtnew(ilevel),                 &
+  call rt_unsplit(h%rtuloc,h%rtflux,h%cFlx,        &
+       & g%rt_c,dx,dx,dx,g%dtnew(ilevel),          &
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,      &
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
 

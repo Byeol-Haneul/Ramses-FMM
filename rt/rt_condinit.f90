@@ -6,7 +6,7 @@ subroutine rt_condinit(r,g,x,q,dx,nn)
   use amr_parameters, only: dp, ndim, nvector
   use rt_parameters, only: nrtvar
   use amr_commons, only: run_t, global_t
-  use input_rt_condinit_module, only: rt_region_condinit
+  use rt_input_condinit_module, only: rt_region_condinit
   implicit none
   type(run_t)::r
   type(global_t)::g

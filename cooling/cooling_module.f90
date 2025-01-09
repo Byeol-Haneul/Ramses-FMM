@@ -1207,7 +1207,7 @@ function J_nu(c,e,J0)
   type(cooling_t)::c
   real(kind=8) :: e,J_nu,e_L,J0,Jloc
   Jloc = max(J0,c%J0min)
-  e_L  = 13.598d0*eV
+  e_L  = 13.598d0*eV2erg
   J_nu = Jloc*(e_L/e)
   return
 end function J_nu
@@ -1217,9 +1217,9 @@ function sigma_rad(e,ispec)
   implicit none
   integer::ispec
   real(kind=8)::sigma_rad,e,e_i,xxx,alph
-  if(ispec==HI  )e_i = 13.598D0*eV
-  if(ispec==HEI )e_i = 24.587D0*eV
-  if(ispec==HEII)e_i = 54.416D0*eV
+  if(ispec==HI  )e_i = 13.598D0*eV2erg
+  if(ispec==HEI )e_i = 24.587D0*eV2erg
+  if(ispec==HEII)e_i = 54.416D0*eV2erg
   xxx = e/e_i
   alph = sqrt(xxx-1.0d0)
   sigma_rad=0
@@ -1237,9 +1237,9 @@ function taux_rad(c,ispec,J0)
   type(cooling_t)::c
   integer::ispec
   real(kind=8) :: J0,taux_rad,e_i,e,de,error,integ
-  if(ispec==HI  )e_i = 13.598D0*eV
-  if(ispec==HEI )e_i = 24.587D0*eV
-  if(ispec==HEII)e_i = 54.416D0*eV
+  if(ispec==HI  )e_i = 13.598D0*eV2erg
+  if(ispec==HEI )e_i = 24.587D0*eV2erg
+  if(ispec==HEII)e_i = 54.416D0*eV2erg
   integ = 0.0d0
   e = e_i
   de = e/100d0
@@ -1316,9 +1316,9 @@ function heat_rad(c,ispec,J0)
   type(cooling_t)::c
   integer::ispec
   real(kind=8) :: J0,heat_rad,e_i,e,de,error,integ
-  if(ispec==HI  )e_i = 13.598D0*eV
-  if(ispec==HEI )e_i = 24.587D0*eV
-  if(ispec==HEII)e_i = 54.416D0*eV
+  if(ispec==HI  )e_i = 13.598D0*eV2erg
+  if(ispec==HEI )e_i = 24.587D0*eV2erg
+  if(ispec==HEII)e_i = 54.416D0*eV2erg
   integ = 0.0d0
   e = e_i
   de = e/100d0
