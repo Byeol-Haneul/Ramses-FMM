@@ -159,7 +159,7 @@ function worker_init(mdl) result(pst)
   use movie_module, only: r_output_frame
   use amr_parameters, only: nhilbert
   use init_rt_module, only: r_init_rt
-  use rt_input_condinit_module, only: r_rt_input_condinit, r_input_rt_source_regions
+  use rt_input_condinit_module, only: r_rt_input_condinit, r_rt_input_source_regions
   use rt_upload_module, only: r_rt_upload_fine
   use output_rt_module, only: r_output_rt
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
@@ -302,7 +302,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INIT_RT,                pst,C_FUNLOC(r_init_rt),0,0,"init_rt")
   call mdl_add_service(pst%s%mdl,MDL_RT_UPLOAD_FINE,         pst,C_FUNLOC(r_rt_upload_fine),1,0,"rt_upload_fine")
   call mdl_add_service(pst%s%mdl,MDL_RT_INPUT_CONDINIT,      pst,C_FUNLOC(r_rt_input_condinit),1,0,"rt_input_condinit")
-  call mdl_add_service(pst%s%mdl,MDL_INPUT_RT_SOURCE_REGIONS,pst,C_FUNLOC(r_input_rt_source_regions),1,0,"input_rt_source_regions")
+  call mdl_add_service(pst%s%mdl,MDL_RT_INPUT_SOURCE_REGIONS,pst,C_FUNLOC(r_rt_input_source_regions),1,0,"rt_input_source_regions")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_RT,              pst,C_FUNLOC(r_output_rt),flen,0,"output_rt")
   call mdl_add_service(pst%s%mdl,MDL_RT_GODUNOV_FINE,        pst,C_FUNLOC(r_rt_godunov_fine),1,0,"rt_godunov_fine")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUNEW,             pst,C_FUNLOC(r_set_rtunew),1,0,"set_rtunew")

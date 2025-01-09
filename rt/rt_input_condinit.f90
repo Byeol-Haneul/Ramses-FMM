@@ -194,7 +194,7 @@ end subroutine rt_region_condinit
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_input_rt_source_regions(pst,ilevel,input_size)
+recursive subroutine r_rt_input_source_regions(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -205,19 +205,19 @@ recursive subroutine r_input_rt_source_regions(pst,ilevel,input_size)
   integer::ilevel
   integer::rID
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INPUT_RT_SOURCE_REGIONS,pst%iUpper+1,input_size,0,ilevel)
-     call r_input_rt_source_regions(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RT_INPUT_SOURCE_REGIONS,pst%iUpper+1,input_size,0,ilevel)
+     call r_rt_input_source_regions(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call input_rt_source_regions(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call rt_input_source_regions(pst%s%r,pst%s%g,pst%s%m,ilevel)
   endif
   
-end subroutine r_input_rt_source_regions
+end subroutine r_rt_input_source_regions
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_rt_source_regions(r,g,m,ilevel)
+subroutine rt_input_source_regions(r,g,m,ilevel)
   use amr_parameters, only: ndim,twotondim,dp,nvector
   use rt_parameters,only: nrtvar
   use amr_commons, only: run_t,global_t,mesh_t
@@ -279,7 +279,7 @@ subroutine input_rt_source_regions(r,g,m,ilevel)
   end do
   ! End loop over grids
 
-end subroutine input_rt_source_regions
+end subroutine rt_input_source_regions
 !################################################################
 !################################################################
 !################################################################
