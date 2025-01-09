@@ -88,7 +88,9 @@ subroutine rt_upload_fine(s,ilevel)
      do ivar=1,nrtvar
         do ind=1,twotondim
            if(m%grid(ioct)%refined(ind))then
+#ifdef RT
               m%grid(ioct)%rtuold(ind,ivar)=0.0
+#endif
            endif
         end do
      end do
@@ -111,10 +113,14 @@ subroutine rt_upload_fine(s,ilevel)
      do ivar=1,nrtvar
         average=0.0d0
         do ind=1,twotondim
+#ifdef RT
            average=average+m%grid(ioct)%rtuold(ind,ivar)
+#endif
         end do
         ! Scatter result to parent cell
+#ifdef RT
         gridp%rtuold(icell,ivar)=average/dble(twotondim)
+#endif
      end do
 
   end do
@@ -136,15 +142,15 @@ subroutine init_flush_upload_rt(grid,hash_key)
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-#ifdef RT  
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   do ivar=1,nrtvar
      do ind=1,twotondim
+#ifdef RT  
         grid%rtuold(ind,ivar)=0.0d0
+#endif
      end do
   end do
-#endif
 end subroutine init_flush_upload_rt
 !##########################################################################
 !##########################################################################
@@ -161,13 +167,13 @@ subroutine pack_flush_upload_rt(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_realdp)::msg
-#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
+#ifdef RT
         msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+#endif
      end do
   end do
-#endif
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_upload_rt
@@ -191,15 +197,15 @@ subroutine unpack_flush_upload_rt(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
         if(grid%refined(ind))then
+#ifdef RT
            grid%rtuold(ind,ivar)=grid%rtuold(ind,ivar)+msg%realdp_rt(ind,ivar)
+#endif
         endif
      end do
   end do
-#endif
 end subroutine unpack_flush_upload_rt
 !##########################################################################
 !##########################################################################

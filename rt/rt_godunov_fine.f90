@@ -124,7 +124,9 @@ subroutine set_rtunew(m,ilevel)
 
   ! Set rtunew to rtuold for myid cells
   do i = m%head(ilevel),m%tail(ilevel)
+#ifdef RT
      m%grid(i)%rtunew = m%grid(i)%rtuold
+#endif
   end do
 
 end subroutine set_rtunew
@@ -169,7 +171,9 @@ subroutine set_rtuold(m,ilevel)
 
   ! Set rtuold to rtunew
   do i = m%head(ilevel),m%tail(ilevel)
+#ifdef RT
      m%grid(i)%rtuold = m%grid(i)%rtunew
+#endif
   end do
 
 end subroutine set_rtuold
@@ -222,8 +226,6 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   i2min=0; i2max=0; j2min=0; j2max=0; k2min=0; k2max=0
   i3min=1; i3max=1; j3min=1; j3max=1; k3min=1; k3max=1
   okx=.true.; oky=.true.; okz=.true.
-
-#ifdef RT
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
   
@@ -337,7 +339,9 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif             
                        ! Gather RT variables
                        do ivar=1,nrtvar
+#ifdef RT
                           h%rtuloc(i3,j3,k3,ivar)=m%grid(ind_oct)%rtuold(ind_son,ivar)
+#endif
                        end do
                        ! Gather refinement flag
                        h%okloc(i3,j3,k3)=m%grid(ind_oct)%refined(ind_son)
@@ -412,7 +416,9 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                  ! Gather RT variables
                  do inbor=0,twondim
                     do ivar=1,nrtvar
+#ifdef RT
                        u1(inbor,ivar)=grid_nbor(inbor)%p%rtuold(ind_nbor(inbor),ivar)
+#endif
                     end do
                  end do
                  ! Interpolate using rt variables
@@ -447,7 +453,9 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 
                           ! Gather RT variables
                           do ivar=1,nrtvar
+#ifdef RT
                              h%rtuloc(i3,j3,k3,ivar)=childp%rtuold(ind_son,ivar)
+#endif
                           end do
                           ! Gather refinement flag
                           h%okloc(i3,j3,k3)=childp%refined(ind_son)
@@ -459,7 +467,9 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 
                           ! Gather interpolated hydro variables
                           do ivar=1,nrtvar
+#ifdef RT
                              h%rtuloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
+#endif
                           end do
                           ! Gather refinement flag
                           h%okloc(i3,j3,k3)=.false.
@@ -479,10 +489,12 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   !-------------------------------------------------
   ! Compute flux using second-order Godunov method
   !-------------------------------------------------
+#ifdef RT
   call rt_unsplit(h%rtuloc,h%rtflux,h%cFlx,        &
        & g%rt_c,dx,dx,dx,g%dtnew(ilevel),          &
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,      &
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
+#endif
 
   !-------------------------------------------------
   ! Reset flux along direction at refined interfaces
@@ -497,7 +509,9 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
            do i3=i3min,i3max+i0
               if(h%okloc(i3-i0,j3-j0,k3-k0) .or. h%okloc(i3,j3,k3))then
                  do ivar=1,nrtvar
+#ifdef RT
                     h%rtflux(i3,j3,k3,ivar,idim)=0.0d0
+#endif
                  end do
               end if
            end do
@@ -542,9 +556,11 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
                        ! Update conservative variables new state vector
                        do ivar=1,nrtvar
+#ifdef RT
                           childp%rtunew(ind_son,ivar)=childp%rtunew(ind_son,ivar)+ &
                                & (h%rtflux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -h%rtflux(i3+i0,j3+j0,k3+k0,ivar,idim))
+#endif
                        end do
                     end do
                  end do
@@ -614,8 +630,10 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nrtvar
+#ifdef RT
                              gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
                                   & -h%rtflux(i3,j3,k3,ivar,idim)*oneontwotondim
+#endif
                           end do
                        end do
                     end do
@@ -661,8 +679,10 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nrtvar
+#ifdef RT
                              gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
                                   & +h%rtflux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
+#endif
                           end do
                        end do
                     end do
@@ -706,8 +726,6 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 
   end associate
 
-#endif
-
 end subroutine rt_godfine1
 !###########################################################
 !###########################################################
@@ -724,13 +742,13 @@ subroutine init_flush_rt_godunov(grid,hash_key)
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
-#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
+#ifdef RT
         grid%rtunew(ind,ivar)=0.0d0
+#endif
      enddo
   enddo
-#endif
 end subroutine init_flush_rt_godunov
 !###########################################################
 !###########################################################
@@ -747,13 +765,13 @@ subroutine pack_flush_rt_godunov(grid,msg_size,msg_array)
 
   integer::ind,ivar
   type(msg_large_realdp)::msg
-#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
+#ifdef RT
         msg%realdp_rt(ind,ivar)=grid%rtunew(ind,ivar)
+#endif
      end do
   end do
-#endif
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_rt_godunov
@@ -777,13 +795,13 @@ subroutine unpack_flush_rt_godunov(grid,msg_size,msg_array,hash_key)
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
-#ifdef RT
   do ivar=1,nrtvar
      do ind=1,twotondim
+#ifdef RT
         grid%rtunew(ind,ivar)=grid%rtunew(ind,ivar)+msg%realdp_rt(ind,ivar)
+#endif
      end do
   end do
-#endif
 end subroutine unpack_flush_rt_godunov
 !###########################################################
 !###########################################################
