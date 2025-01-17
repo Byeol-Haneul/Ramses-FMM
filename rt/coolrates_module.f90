@@ -94,7 +94,9 @@ SUBROUTINE init_coolrates_tables(r, tables)
 
   ! Initialise the cooling rates tables.
   !-------------------------------------------------------------------------
+#ifndef WITHOUTMPI
   use mpi
+#endif
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
@@ -181,7 +183,9 @@ END SUBROUTINE init_coolrates_tables
 SUBROUTINE update_coolrates_tables(r, tables, aexp)
   ! Update cooling rates lookup tables which depend on aexp
   !-------------------------------------------------------------------------
+#ifndef WITHOUTMPI
   use mpi
+#endif
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
