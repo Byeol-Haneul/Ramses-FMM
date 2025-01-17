@@ -1289,6 +1289,7 @@ SUBROUTINE updateRTGroups_CoolConstants(r,tables)
   !------------------------------------------------------------------------
   integer::iP, iI
   !------------------------------------------------------------------------
+#ifdef RT
   tables%signc = r%group_csn*tables%rt_c_cgs                    ! [cm3 s-1]
   tables%sigec = r%group_cse*tables%rt_c_cgs                    ! [cm3 s-1]
   do iP = 1,nrtgroups
@@ -1298,6 +1299,7 @@ SUBROUTINE updateRTGroups_CoolConstants(r,tables)
         tables%PHrate(iP,iI) = max(tables%PHrate(iP,iI),0d0)  ! Heating > 0
      end do
   end do
+#endif
 END SUBROUTINE updateRTGroups_CoolConstants
 
 !************************************************************************
