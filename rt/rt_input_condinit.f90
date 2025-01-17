@@ -286,7 +286,7 @@ end subroutine rt_input_source_regions
 !################################################################
 subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
   use amr_parameters, only:dp, nvector, ndim
-  use rt_parameters, only: nrtvar, nrtgroups
+  use rt_parameters, only: nrtvar, nrtgroups, smallnp
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
@@ -312,7 +312,7 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
   ! Loop over initial conditions regions
   do k=1,r%rt_nsource
      if(r%rt_src_group(k) .le. 0 .or. r%rt_src_group(k) .gt. nrtgroups) cycle
-     if(r%rt_n_source(k).le.r%smallnp) r%rt_n_source(k)=r%smallnp
+     if(r%rt_n_source(k).le.smallnp) r%rt_n_source(k)=smallnp
      group_ind = 1+(r%rt_src_group(k)-1)*(ndim+1)
      
      ! For "square" regions only:
