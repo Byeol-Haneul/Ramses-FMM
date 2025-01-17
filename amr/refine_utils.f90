@@ -609,7 +609,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
 #ifndef WITHOUTMPI
   use mpi
 #endif
-  use rt_parameters, only: nrtvar
+  use rt_parameters, only: nrtvar, smallnp
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -809,7 +809,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
 #endif
 #ifdef RT
   ! Interpolate using rt variables
-  call interpol_rt(rtu1,rtu2,r%interpol_var,r%interpol_type,r%smallnp)
+  call interpol_rt(rtu1,rtu2,r%interpol_var,r%interpol_type,smallnp)
   ! Store children cell rt variables
   do ivar=1,nrtvar
      do ind=1,twotondim

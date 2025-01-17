@@ -4,20 +4,23 @@ contains
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine m_read_rt_params(pst)
+subroutine m_read_rt_params(pst,neq_chem,ichem)
   use amr_parameters
   use hydro_parameters
+  use rt_parameters
   use ramses_commons, only: pst_t
   use mdl_module
   use movie_module, only: set_movie_vars
-  use rt_parameters, only: nrtgroups, nrtvar
   implicit none
   type(pst_t)::pst
+  logical::neq_chem
+  integer::ichem
 
   !--------------------------------------------------
   ! Local variables
   !--------------------------------------------------
   character(LEN=80)::infile
+  integer::icount
   logical::nml_ok
 
   !--------------------------------------------------
@@ -28,7 +31,6 @@ subroutine m_read_rt_params(pst)
   logical::rt_advect=.false.           ! Advection of photons?                           !
   !logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
   real(dp)::units_Np=1.0               ! [#/cm^3]
-  real(dp)::smallNp=1d-50              ! Floor value for photon number densities         !
   !real(dp)::rt_Tconst=-1               ! If pos. use this value for all T-depend. rates  !
   !logical::rt_isTconst=.false.         ! Const rates activated?                          !
   !logical::rt_star=.false.             ! Activate radiation from star particles          !
@@ -49,8 +51,8 @@ subroutine m_read_rt_params(pst)
   real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT        !
   !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
   integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
-                                        ! gravity/etc timestep                            !
-  !logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
+                                       ! gravity/etc timestep                            !
+  logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
   !logical::rt_isDiffuseUVsrc=.false.  ! UV emission from low-density cells              !
   !real(dp)::rt_UVsrc_nHmax=-1d0       ! Density threshold for UV emission               !
   !logical::upload_equilibrium_x=.true. ! Enforce equilibrium xion when uploading         !
@@ -114,16 +116,18 @@ subroutine m_read_rt_params(pst)
   logical::is_init_xion=.false.                    ! Initialize ionization from T profile?
   logical::isHe=.true.                             !      He ionization fractions tracked?
   logical::isH2=.false.                            !                           H2 tracked?
-  real(dp)::X
-  real(dp)::Y
+  real(dp)::X=0.76d0                               !                Hydrogen mass fraction
+  real(dp)::Y=0.24d0                               !                  Helium mass fraction
+  integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
+  real(dp),dimension(nIons)::ionEvs                !                   Ionization energies
 
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
-  namelist/rt_params/rt_advect, rt_c_fraction, rt_nsubcycle              &
+  namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
        & ,rt_err_grad_n, rt_floor_n                                      &
        ! RT regions (for initialization)                                 &
-       & ,units_np, smallnp, rt_nregion, rt_region_type                  &
+       & ,units_np, rt_nregion, rt_region_type                  &
        & ,rt_reg_x_center, rt_reg_y_center, rt_reg_z_center              &
        & ,rt_reg_length_x, rt_reg_length_y, rt_reg_length_z              &
        & ,rt_exp_region, rt_reg_group                                    &
@@ -138,7 +142,7 @@ subroutine m_read_rt_params(pst)
   namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
        & ,groupL0, groupL1, kappaAbs, kappaSc
 
-  namelist/neq_chem/isHe, isH2, X, Y, is_init_xion
+  namelist/neq_chem_params/isHe, isH2, X, Y, is_init_xion
 
   associate(s=>pst%s)
 
@@ -160,13 +164,62 @@ subroutine m_read_rt_params(pst)
   read(1,NML=rt_groups,END=114)
 114 continue
   rewind(1)
-  read(1,NML=neq_chem,END=115)
+  read(1,NML=neq_chem_params,END=115)
 115 continue
   close(1)
+
+  !----------------------------------------------------------------
+  ! Set number of used ionisation fractions, indexes of ionization
+  ! fractions, and ionization energies, and check if we have enough
+  ! ionization variables (NIONS)
+  !----------------------------------------------------------------
+  if(neq_chem) then
+     iCount=0
+     ! HI fraction and ionization energy
+     if(isH2) then
+        iCount=iCount+1
+        ixHI=iCount    ; ionEvs(ixHI)=ionEv_HI
+     endif
+     ! HII fraction and ionization energy
+     iCount=iCount+1    ; ixHII=iCount   ; ionEvs(ixHII)=ionEv_HII
+     ! HeII and HeIII fractions and ionization energies
+     if(isHe) then
+        iCount=iCount+1 ; ixHeII=iCount  ; ionEvs(ixHeII)=ionEv_HeII
+        iCount=iCount+1 ; ixHeIII=iCount ; ionEvs(ixHeIII)=ionEv_HeIII
+     endif
+     ! Check that we have enough chemical species
+     if(iCount .gt. NIONS) then
+        write(*,*) 'Not enough variables for ionization fractions'
+        write(*,*) 'Have NIONS=',NIONS
+        write(*,*) 'STOPPING!'
+        nml_ok=.false.
+     endif
+     if(iCount .lt. NIONS) then
+        write(*,*) 'Too many variables for ionization fractions'
+        write(*,*) 'Have NIONS=',NIONS
+        write(*,*) 'Need NIONS=',iCount
+        write(*,*) 'Probably no harm, so still continuing...'
+     endif
+     ! Starting index of ionized species
+     iIons = ichem
+     ! Check we have enough passive scalar
+     if(iIons+iCount-1 .gt. nvar) then
+        write(*,*) 'Something wrong with NVAR.'
+        write(*,*) 'Have NVAR=',nvar
+        write(*,*) 'Should have NVAR=',iIons+iCount-1
+        write(*,*) 'STOPPING!'
+        nml_ok=.false.
+     endif
+     ! Output indices for the user to check
+     write(*,*) 'Number of ionization fractions is:',iCount
+     write(*,*) 'Number of passive scalars is:',nvar-iIons+1
+     write(*,*) 'The indexes are iHI, iHII, iHeII, iHeIII =',ixHI, ixHII, ixHeII, ixHeIII
+  endif
 
   ! Fill in all run parameters in corresponding structure
 
   ! rt_params
+  s%r%rt_otsa=rt_otsa
   s%r%rt_advect=rt_advect
   s%r%rt_c_fraction=rt_c_fraction
   s%r%rt_nsubcycle=rt_nsubcycle
@@ -174,7 +227,6 @@ subroutine m_read_rt_params(pst)
   s%r%rt_floor_n=rt_floor_n
   s%r%rt_courant_factor=rt_courant_factor
   s%r%units_np=units_np
-  s%r%smallnp=smallnp
   s%r%rt_nregion=rt_nregion
   s%r%rt_region_type=rt_region_type
   s%r%rt_reg_x_center=rt_reg_x_center
@@ -219,6 +271,12 @@ subroutine m_read_rt_params(pst)
   s%r%isH2=isH2
   s%r%X=X
   s%r%Y=Y
+  s%r%iIons=iIons
+  s%r%ixHI=ixHI
+  s%r%ixHII=ixHII
+  s%r%ixHeII=ixHeII
+  s%r%ixHeIII=ixHeIII
+  s%r%ionEvs=ionEvs
 
   end associate
 

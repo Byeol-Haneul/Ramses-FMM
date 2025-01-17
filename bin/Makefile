@@ -141,6 +141,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
 	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
+	 coolrates_module.o rt_cooling_module.o init_neq_chem.o \
 	 mdl_commons.o mdl.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \

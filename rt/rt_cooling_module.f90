@@ -3,91 +3,53 @@
 ! For details, see Rosdahl et al. (2013), Rosdahl & Teyssier (2015),
 ! and Nickerson, Teyssier, & Rosdahl (2018).
 ! Joki Rosdahl, Sarah Nickerson, Andreas Bleuler, and Romain Teyssier.
+! NOTE: T2=T/mu, Np = photon density, Fp = photon flux,
 module rt_cooling_module
-  use cooling_module,only:X, Y
+  use amr_parameters, only: ndim, dp, nvector
+  use amr_commons, only: run_t
   use rt_parameters
   use coolrates_module
   use constants
   implicit none
 
   private   ! default
+  public rt_set_model, rt_solve_cooling, cmp_chem_eq, updateRTGroups_CoolConstants
 
-  public rt_set_model, rt_solve_cooling, update_UVrates, cmp_chem_eq     &
-         , getMu, is_mu_H2, X, Y, T2_min_fix                             &
-         , signc, sigec, PHrate, UVrates, rt_isIR, kappaAbs, kappaSc     &
-         , is_kIR_T, iIR, rt_isIRtrap, iIRtrapVar, rt_pressBoost         &
-         , rt_isoPress, rt_T_rad, rt_vc, iPEH_group
-
-  ! NOTE: T2=T/mu
-  ! Np = photon density, Fp = photon flux,
-
-  real(dp),parameter::T2_min_fix=1d-2           !     Min temperature [K]
+  real(dp),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 
   ! cosmic ray ionisation rates, primary and secondary
-  ! for HeI ionisation, use Glover 2010 cosray_HeI = 1.1 * cosray_HI
   ! see Nickerson, Teyssier, & Rosdahl (2018)
-  real(dp),parameter::cosray_H2 = 7.525d-16 !Indriolo 2012, Gong 2017[s-1]
-  real(dp),parameter::cosray_HI = 4.45d-16  !Indriolo 2015, Gong 2017[s-1]
+  real(dp),parameter::cosray_H2 = 7.525d-16 ! Indriolo 2012, Gong 2017[s-1]
+  real(dp),parameter::cosray_HI = 4.45d-16  ! Indriolo 2015, Gong 2017[s-1]
+  ! for HeI ionisation, use Glover 2010 cosray_HeI = 1.1 * cosray_HI
 
-  real(dp)::T_min, T_frac, x_min, x_fm, x_frac
-  real(dp)::Np_min, Np_frac, Fp_min, Fp_frac
+  real(dp),parameter::T_min=0.1, T_frac=0.1
+  real(dp),parameter::x_min=1d-20, x_fm=1d-6, x_frac=0.1
+  real(dp),parameter::Np_min=1d-13, Np_frac=0.2
+  real(dp),parameter::Fp_frac=0.5
 
-  integer,parameter::iIR=1             !                    IR group index
-  integer::iPEH_group=0                ! Photoelectric heating group index
-  integer::iIRtrapVar=1                !  Trapped IR energy variable index
-  ! Namelist parameters:
-  logical::is_mu_H2=.false.
-  logical::rt_isoPress=.false.         ! Use cE, not F, for rad. pressure
-  real(dp)::rt_pressBoost=1d0          ! Boost on RT pressure
-  logical::rt_isIR=.false.             ! Using IR scattering on dust?
-  logical::rt_isIRtrap=.false.         ! IR trapping in NENER variable?
-  logical::is_kIR_T=.false.            ! k_IR propto T^2?
-  logical::rt_T_rad=.false.            ! Use T_gas = T_rad
-  logical::rt_vc=.false.               ! (semi-) relativistic RT
-  real(dp)::Tmu_dissoc=1d3             ! Dissociation temperature [K]
-  ! Note to users: if photoelectric heating is activated with iPEH_group,
-  !                the value or expression used for kappaAbs should
-  !                not include PEH absorption, as this is done separately.
-
-  ! Cooling constants, updated on SED and c-change [cm3 s-1],[erg cm3 s-1]
-  real(dp),dimension(nrtgroups,nions)::signc,sigec,PHrate
-
-  real(dp),dimension(nIons, 2)::UVrates     !UV backgr. heating/ion. rates
+  ! IR group index
+  integer,parameter::iIR=1
 
 CONTAINS
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE rt_set_model(h,omegab, omega0, omegaL, astart_sim, T2_sim)
-! Initialize cooling. All these parameters are unused at the moment and
-! are only there for the original cooling-module.
-! h (dble)            => H0/100
-! omegab (dble)       => Omega baryons
-! omega0 (dble)       => Omega materal total
-! omegaL (dble)       => Omega Lambda
-! astart_sim (dble)   => Redshift at which we start the simulation
-! T2_sim (dble)      <=  Starting temperature in simulation?
-!-------------------------------------------------------------------------
-  use UV_module
-  use coolrates_module, only: init_coolrates_tables
-  real(kind=8) :: astart_sim, T2_sim, h, omegab, omega0, omegaL
+SUBROUTINE rt_set_model(r, tables, h, omegab, omega0, omegaL, astart_sim, T2_sim)
+  ! Initialize cooling. All these parameters are unused at the moment and
+  ! are only there for the original cooling-module.
+  ! h (dble)            => H0/100
+  ! omegab (dble)       => Omega Baryons
+  ! omega0 (dble)       => Omega Matter total
+  ! omegaL (dble)       => Omega Lambda
+  ! astart_sim (dble)   => Redshift at which we start the simulation
+  ! T2_sim (dble)      <=  Starting temperature in simulation?
+  !-------------------------------------------------------------------------
+!  use UV_module
+  type(run_t) :: r
+  type(neq_cooling_t) :: tables
+  real(kind=8) :: h, omegab, omega0, omegaL, astart_sim, T2_sim
   real(kind=8) :: astart=0.0001, aend, dasura, T2end=T2_min_fix, mu=1., ne
-!-------------------------------------------------------------------------
-
-  ! do initialization
-  isHe=.true. ; if(Y .le. 0.) isHe=.false.
-
-  T_MIN           = 0.1                  !                      Minimum T2
-  T_FRAC          = 0.1
-
-  x_FRAC          = 0.1
-  x_MIN           = 1d-20               !    Minimum ionization fractions
-  x_FM            = 1d-6                !  Min at which to consider frac.
-
-  Np_MIN = 1d-13                        !            Photon density floor
-  Np_FRAC = 0.2
-
-  Fp_MIN  = 1D-13*rt_c_cgs               !           Minimum photon fluxes
-  Fp_FRAC = 0.5
+  !-------------------------------------------------------------------------
 
   ! Calculate initial temperature
   if (astart_sim < astart) then
@@ -99,94 +61,102 @@ SUBROUTINE rt_set_model(h,omegab, omega0, omegaL, astart_sim, T2_sim)
   aend=astart_sim
   dasura=0.02d0
 
-  call update_rt_c
-  call init_UV_background
-  call update_UVrates(astart_sim)
-  call init_coolrates_tables(astart_sim)
+!  call init_UV_background
+  call init_coolrates_tables(r, tables)
 
-  if(nrestart==0)                                                        &
-       call rt_evol_single_cell(astart,aend,dasura,h,omegab,omega0       &
-                               ,omegaL,T2end,mu,ne,.false.)
+  if(r%nrestart==0)call rt_evol_single_cell(r, tables, astart, aend, dasura, &
+       &        h, omegab, omega0, omegaL, T2end, mu, ne, .false.)
   T2_sim=T2end
 
 END SUBROUTINE rt_set_model
 
+!!$!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+!!$SUBROUTINE update_UVrates(aexp)
+!!$! Set the UV ionization and heating rates according to the given a_exp.
+!!$!-------------------------------------------------------------------------
+!!$  use UV_module
+!!$  use amr_parameters,only:haardt_madau
+!!$  real(dp)::aexp
+!!$!------------------------------------------------------------------------
+!!$  UVrates=0.
+!!$  if(.not. haardt_madau) RETURN
+!!$
+!!$  call inp_UV_rates_table(1./aexp - 1., UVrates, .true.)
+!!$
+!!$END SUBROUTINE update_UVrates
+
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE update_UVrates(aexp)
-! Set the UV ionization and heating rates according to the given a_exp.
-!-------------------------------------------------------------------------
-  use UV_module
-  use amr_parameters,only:haardt_madau
-  real(dp)::aexp
-!------------------------------------------------------------------------
-  UVrates=0.
-  if(.not. haardt_madau) RETURN
-
-  call inp_UV_rates_table(1./aexp - 1., UVrates, .true.)
-
-END SUBROUTINE update_UVrates
-
-!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE rt_solve_cooling(T2, xion, Np, Fp, p_gas, dNpdt, dFpdt        &
-                           ,nH, c_switch, Zsolar, dt, a_exp, nCell)
-! Semi-implicitly solve for new temperature, ionization states,
-! photon density/flux, and gas velocity in a number of cells.
-! Parameters:
-! T2     <=> T/mu [K]
-! xion   <=> NION ionization fractions
-! Np     <=> NRTGROUPS photon number densities [cm-3]
-! Fp     <=> NRTGROUPS * ndim photon number fluxes [cm-2 s-1]
-! p_gas  <=> ndim gas momentum densities [cm s-1 g cm-3]
-! dNpdt   =>  Op split increment in photon densities during dt
-! dFpdt   =>  Op split increment in photon flux magnitudes during dt
-! nH      =>  Hydrogen number densities [cm-3]
-! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
-! Zsolar  =>  Cell metallicities [solar fraction]
-! dt      =>  Timestep size             [s]
-! a_exp   =>  Cosmic expansion
-! nCell   =>  Number of cells (length of all the above vectors)
-!
-! We use a slightly modified method of Anninos et al. (1997).
-!-------------------------------------------------------------------------
-  use amr_commons
+SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
+#ifdef RT
+     & Np, Fp, p_gas, dNpdt, dFpdt, &
+#endif
+     & nH, c_switch, Zsolar, dt, a_exp, nCell)
+  ! Semi-implicitly solve for new temperature, ionization states,
+  ! photon density/flux, and gas velocity in a number of cells.
+  ! Parameters:
+  ! tables  => object containing all non equilibrium chemistry tables
+  ! T2     <=> T/mu [K]
+  ! xion   <=> NION ionization fractions
+  ! Np     <=> NRTGROUPS photon number densities [cm-3]
+  ! Fp     <=> NRTGROUPS * ndim photon number fluxes [cm-2 s-1]
+  ! p_gas  <=> ndim gas momentum densities [cm s-1 g cm-3]
+  ! dNpdt   =>  Op split increment in photon densities during dt
+  ! dFpdt   =>  Op split increment in photon flux magnitudes during dt
+  ! nH      =>  Hydrogen number densities [cm-3]
+  ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
+  ! Zsolar  =>  Cell metallicities [solar fraction]
+  ! dt      =>  Timestep size             [s]
+  ! a_exp   =>  Cosmic expansion
+  ! nCell   =>  Number of cells (length of all the above vectors)
+  !
+  ! We use a slightly modified method of Anninos et al. (1997).
+  !-------------------------------------------------------------------------
   implicit none
+  type(run_t):: r
+  type(neq_cooling_t):: tables
   real(dp),dimension(1:nvector):: T2
   real(dp),dimension(1:nions, 1:nvector):: xion
+#ifdef RT
+  real(dp),dimension(1:ndim, 1:nvector):: p_gas
   real(dp),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
   real(dp),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
-  real(dp),dimension(1:ndim, 1:nvector):: p_gas
+#endif
   real(dp),dimension(1:nvector):: nH, Zsolar
   logical,dimension(1:nvector):: c_switch
   real(dp)::dt, a_exp
   integer::ncell
-!--------------------------------------------------------
+  !--------------------------------------------------------
   real(dp),dimension(1:nvector):: tLeft, ddt
   logical:: dt_ok
   real(dp):: dt_rec
   real(dp):: dT2
   real(dp),dimension(nions):: dXion
-  real(dp),dimension(nrtgroups):: dNp
-  real(dp),dimension(1:ndim, 1:nrtgroups):: dFp
-  real(dp),dimension(1:ndim):: dp_gas
   integer::i, ia, ig, nAct, nAct_next, loopcnt, code
   integer,dimension(1:nvector):: indAct              ! Active cell indexes
-  real(dp)::one_over_rt_c_cgs, one_over_egy_IR_erg, one_over_x_FRAC
-  real(dp)::one_over_Np_FRAC, one_over_Fp_FRAC, one_over_T_FRAC
-  real(dp),dimension(1:nrtgroups) :: group_egy_ratio, group_egy_erg
+  real(dp):: one_over_x_FRAC, one_over_T_FRAC
+#ifdef RT
+  real(dp):: one_over_rt_c_cgs, one_over_egy_IR_erg
+  real(dp):: one_over_Np_FRAC, one_over_Fp_FRAC
+  real(dp),dimension(1:ndim):: dp_gas
+  real(dp),dimension(nrtgroups):: dNp
+  real(dp),dimension(1:ndim, 1:nrtgroups):: dFp
+  real(dp),dimension(1:nrtgroups):: group_egy_ratio, group_egy_erg
+#endif
+  integer*8,dimension(20)::loopCodes=0
+
+  associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
   ! Store some temporary variables reduce computations
-  one_over_rt_c_cgs = 1d0 / rt_c_cgs
-  one_over_Np_FRAC = 1d0 / Np_FRAC
-  one_over_Fp_FRAC = 1d0 / Fp_FRAC
   one_over_T_FRAC = 1d0 / T_FRAC
   one_over_x_FRAC = 1d0 / x_FRAC
-#if NRTGROUPS>0
-  if(rt .and. nrtgroups .gt. 0) then
-     group_egy_erg(1:nrtgroups) = group_egy(1:nrtgroups) * eV2erg
-     if(rt_isIR) then
-        group_egy_ratio(1:nrtgroups) = group_egy(1:nrtgroups) / group_egy(iIR)
-        one_over_egy_IR_erg = 1d0 / group_egy_erg(iIR)
-     endif
+#ifdef RT
+  one_over_Np_FRAC = 1d0 / Np_FRAC
+  one_over_Fp_FRAC = 1d0 / Fp_FRAC
+  one_over_rt_c_cgs = 1d0 / tables%rt_c_cgs
+  group_egy_erg(1:nrtgroups) = r%group_egy(1:nrtgroups) * eV2erg
+  if(r%rt_isIR) then
+     group_egy_ratio(1:nrtgroups) = r%group_egy(1:nrtgroups) / r%group_egy(iIR)
+     one_over_egy_IR_erg = 1d0 / group_egy_erg(iIR)
   endif
 #endif
   !-----------------------------------------------------------------------
@@ -198,7 +168,7 @@ SUBROUTINE rt_solve_cooling(T2, xion, Np, Fp, p_gas, dNpdt, dFpdt        &
      ! Ensure all state vars are legal:
      T2(i) = MAX(T2(i), T2_min_fix)
      xion(1:nions,i) = MIN(MAX(xion(1:nions,i), x_MIN),1d0)
-     if(isH2) then
+     if(r%isH2) then
         ! Ensure the total hydrogen fraction is 1:
         if(xion(ixHI,i)+xion(ixHII,i) .gt. 1d0) then
            if(xion(ixHI,i) .gt. xion(ixHII,i)) then
@@ -208,7 +178,7 @@ SUBROUTINE rt_solve_cooling(T2, xion, Np, Fp, p_gas, dNpdt, dFpdt        &
            endif
         endif ! total hydrogen fraction
      endif ! isH2
-     if(isHe) then                                        ! Helium species
+     if(r%isHe) then                                        ! Helium species
         ! Ensure the total helium fraction is 1:
         if(xion(ixHeII,i)+xion(ixHeIII,i) .gt. 1d0) then
            if(xion(ixHeII,i) .gt. xion(ixHeIII,i)) then
@@ -218,29 +188,30 @@ SUBROUTINE rt_solve_cooling(T2, xion, Np, Fp, p_gas, dNpdt, dFpdt        &
            endif
         endif
      endif ! isHe
-     if(rt) then
-        do ig=1,nrtgroups
-           Np(ig,i) = MAX(smallNp, Np(ig,i))
-           call reduce_flux(Fp(:,ig,i),Np(ig,i)*rt_c_cgs)
-        end do
-     endif
+#ifdef RT
+     do ig=1,nrtgroups
+        Np(ig,i) = MAX(smallNp, Np(ig,i))
+        call reduce_flux(Fp(:,ig,i),Np(ig,i)*tables%rt_c_cgs)
+     end do
+#endif
   end do
 
   ! Loop until all cells have tleft=0
   ! **********************************************
   nAct=nCell                                      ! Currently active cells
-  loopcnt=0 ; n_cool_cells=n_cool_cells+nCell     !             Statistics
+  loopcnt=0 !; n_cool_cells=n_cool_cells+nCell     !             Statistics
   do while (nAct .gt. 0)      ! Iterate while there are still active cells
-     loopcnt=loopcnt+1   ;   tot_cool_loopcnt=tot_cool_loopcnt+nAct
+     loopcnt=loopcnt+1 !  ;   tot_cool_loopcnt=tot_cool_loopcnt+nAct
      nAct_next=0                     ! Active cells for the next iteration
      do ia=1,nAct                             ! Loop over the active cells
         i = indAct(ia)                        !                 Cell index
         call cool_step(i)
         if(loopcnt .gt. 100000) then
-           call display_coolinfo(.true., loopcnt, i, dt-tleft(i), dt     &
-                            ,ddt(i), nH(i), T2(i),  xion(:,i),  Np(:,i)  &
-                            ,Fp(:,:,i),  p_gas(:,i)                      &
-                            ,dT2, dXion, dNp, dFp, dp_gas, code)
+           call display_coolinfo(.true., loopcnt, i, dt-tleft(i), dt, ddt(i), nH(i), &
+#ifdef RT
+                &                Np(:,i), Fp(:,:,i), p_gas(:,i), dNp, dFp, dp_gas, &
+#endif
+                &                T2(i), xion(:,i), dT2, dXion, code)
         endif
         if(.not. dt_ok) then
            ddt(i)=ddt(i)/2.                    ! Try again with smaller dt
@@ -249,14 +220,13 @@ SUBROUTINE rt_solve_cooling(T2, xion, Np, Fp, p_gas, dNpdt, dFpdt        &
            cycle
         endif
         ! Update the cell state (advance the time by ddt):
-        T2(i)     = T2(i) + dT2
+        T2(i) = T2(i) + dT2
         xion(:,i) = xion(:,i) + dXion(:)
-        if(nrtgroups .gt. 0) then
-           Np(:,i)   = Np(:,i) + dNp(:)
-           Fp(:,:,i) = Fp(:,:,i) + dFp(:,:)
-        endif
-        p_gas(:,i)   = p_gas(:,i) + dp_gas(:)
-
+#ifdef RT
+        Np(:,i) = Np(:,i) + dNp(:)
+        Fp(:,:,i) = Fp(:,:,i) + dFp(:,:)
+        p_gas(:,i) = p_gas(:,i) + dp_gas(:)
+#endif
         tleft(i)=tleft(i)-ddt(i)
         if(tleft(i) .gt. 0.) then           ! Not finished with this cell
            nAct_next=nAct_next+1 ; indAct(nAct_next) = i
@@ -269,56 +239,67 @@ SUBROUTINE rt_solve_cooling(T2, xion, Np, Fp, p_gas, dNpdt, dFpdt        &
      nAct=nAct_next
   end do ! end iterative loop
   ! loop statistics
-  max_cool_loopcnt=max(max_cool_loopcnt,loopcnt)
+!  max_cool_loopcnt=max(max_cool_loopcnt,loopcnt)
+
+  end associate
+
 contains
 
   !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
   SUBROUTINE cool_step(icell)
-  ! Compute change in cell state in timestep ddt(icell), or set in dt_rec
-  ! a recommendation for new timestep if ddt(icell) proves too large.
-  ! T2      => T/mu [K]                                  -- dT2 is new value
-  ! xion    => NION ionization fractions                 --     dXion is new
-  ! Np      => NRTGROUPS photon number densities [cm-3]  -- dNp is new value
-  ! Fp      => NRTGROUPS * ndim photon fluxes [cm-2 s-1] -- dFp is new value
-  ! p_gas   => ndim gas momenta [cm s-1 g cm-3]          --    dp_gas is new
-  ! dNpdt   =>  Op split increment in photon densities during dt
-  ! dFpdt   =>  Op split increment in photon flux magnitudes during dt
-  ! nH      =>  Hydrogen number densities [cm-3]
-  ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
-  ! Zsolar  =>  Cell metallicities [solar fraction]
-  ! dt      =>  Timestep size [s]
-  ! a_exp   =>  Cosmic expansion
-  ! dt_ok   <=  .f. if timestep constraints were broken, .t. otherwise
-  ! dt_rec  <=  Recommended timesteps for next iteration
-  ! code    <= Error code in cool step, if dt_ok=.f.
-  !
-  ! The original values, T2, xion etc, must stay unchanged, while dT2,
-  ! dxion etc contain the new values (the difference at the end of the
-  ! routine).
-  !-----------------------------------------------------------------------
+    ! Compute change in cell state in timestep ddt(icell), or set in dt_rec
+    ! a recommendation for new timestep if ddt(icell) proves too large.
+    ! T2      => T/mu [K]                                  -- dT2 is new value
+    ! xion    => NION ionization fractions                 --     dXion is new
+    ! Np      => NRTGROUPS photon number densities [cm-3]  -- dNp is new value
+    ! Fp      => NRTGROUPS * ndim photon fluxes [cm-2 s-1] -- dFp is new value
+    ! p_gas   => ndim gas momenta [cm s-1 g cm-3]          --    dp_gas is new
+    ! dNpdt   =>  Op split increment in photon densities during dt
+    ! dFpdt   =>  Op split increment in photon flux magnitudes during dt
+    ! nH      =>  Hydrogen number densities [cm-3]
+    ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
+    ! Zsolar  =>  Cell metallicities [solar fraction]
+    ! dt      =>  Timestep size [s]
+    ! a_exp   =>  Cosmic expansion
+    ! dt_ok   <=  .f. if timestep constraints were broken, .t. otherwise
+    ! dt_rec  <=  Recommended timesteps for next iteration
+    ! code    <= Error code in cool step, if dt_ok=.f.
+    !
+    ! The original values, T2, xion etc, must stay unchanged, while dT2,
+    ! dxion etc contain the new values (the difference at the end of the
+    ! routine).
+    !-----------------------------------------------------------------------
     use amr_commons
     use const
     implicit none
-    integer, intent(in)::icell
-    real(dp),dimension(nDim),save:: dmom
-    real(dp),dimension(nions),save:: alpha, beta, nN, nI
-    real(dp),save:: dUU, fracMax, x_tot
-    real(dp),save:: mu, TK, nHe, ne, neInit, Hrate
+    integer, intent(in):: icell
+    !-----------------------------------------------------------------------
+    real(dp),dimension(nions):: alpha, beta, nN, nI
+    real(dp):: dUU, fracMax, x_tot
+    real(dp):: mu, TK, nHe, ne, neInit, Hrate
     real(dp):: xHI,dxHI, xH2=0d0,dXH2=0d0, xHeI,dxHeI
-    real(dp),save:: Crate, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
-    real(dp),save:: photoRate, metal_tot, metal_prime, ss_factor, f_dust
-    integer,save:: iion,igroup,idim
-    real(dp),dimension(nrtgroups),save:: recRad, phAbs, phSc, dustAbs
-    real(dp),dimension(nrtgroups),save:: dustSc, kAbs_loc,kSc_loc
-    real(dp),save:: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
-    real(dp),save:: G0, eff_peh, cdex, ncr
-    logical::newAtomicCons=.true.
-    !---------------------------------------------------------------------
+    real(dp):: Crate, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
+    real(dp):: photoRate, metal_tot, metal_prime, ss_factor, f_dust
+    integer:: iion,igroup,idim
+#ifdef RT
+    real(dp),dimension(ndim):: dmom
+    real(dp),dimension(nrtgroups):: recRad, phAbs, phSc, dustAbs
+    real(dp),dimension(nrtgroups):: dustSc, kAbs_loc, kSc_loc
+#endif
+    real(dp):: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
+    real(dp):: G0, eff_peh, cdex, ncr
+    logical:: newAtomicCons=.true.
+    !-----------------------------------------------------------------------
+    associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
+
     dt_ok=.false.
-    nHe=0.25*nH(icell)*Y/X  !         Helium number density
-    ! U contains the original values, dU the updated ones:
-    dT2=T2(icell) ; dXion(:)=xion(:,icell) ; dNp(:)=Np(:,icell)
-    dFp(:,:)=Fp(:,:,icell) ; dp_gas(:)=p_gas(:,icell)
+    nHe=0.25*nH(icell)*r%Y/r%X        ! Helium number density
+    ! U contains the original values, dU the updated ones
+    dT2 = T2(icell) ; dXion(:) = xion(:,icell)
+#ifdef RT
+    dNp(:) = Np(:,icell) ; dFp(:,:) = Fp(:,:,icell)
+    dp_gas(:) = p_gas(:,icell)
+#endif
     ! nN='neutral' species (pre-ionized), nI=their ionized counterparts
     ! nN(1) == nN(ixHI)    == nH2         ! nI(1) == nI(ixHI)    == nHI
     ! nN(2) == nN(ixHII)   == nHI         ! nI(2) == nI(ixHII)   == nHII
@@ -326,121 +307,118 @@ contains
     ! nN(4) == nN(ixHeIII) == nHeII       ! nI(4) == nI(ixHeIII) == nHeIII
     ! Hydrogen chemistry
     xHI = MAX(1d0-dxion(ixHII),x_min)       ! need in case of .not. isH2
-    if(isH2) xHI = MAX(dxion(ixHI),x_min)
-    if(isH2) xH2 = MAX((1.-dxion(ixHI)-dxion(ixHII))/2.,x_min)
+    if(r%isH2) xHI = MAX(dxion(ixHI),x_min)
+    if(r%isH2) xH2 = MAX((1.-dxion(ixHI)-dxion(ixHII))/2.,x_min)
     ! Helium chemistry
-    if(isHe) xHeI = MAX(1.-dxion(ixHeII)-dxion(ixHeIII),x_min)
+    if(r%isHe) xHeI = MAX(1.-dxion(ixHeII)-dxion(ixHeIII),x_min)
     ! nN='neutral' species (pre-ionized)
     nN=0d0
-    if(isH2) nN(ixHI) = nH(icell) * xH2                          !     nH2
+    if(r%isH2) nN(ixHI) = nH(icell) * xH2                        !     nH2
     nN(ixHII) = nH(icell) * xHI                                  !     nHI
-    if(isHe) nN(ixHeII)  = nHe*xHeI                              !    nHeI
-    if(isHe) nN(ixHeIII) = nHe*dxion(ixHeII)                     !   nHeII
+    if(r%isHe) nN(ixHeII)  = nHe*xHeI                            !    nHeI
+    if(r%isHe) nN(ixHeIII) = nHe*dxion(ixHeII)                   !   nHeII
     ! nI=ionized counterparts of the neutral species
     nI=0d0
-    if(isH2) nI(ixHI)  = nN(ixHII)                               !     nHI
+    if(r%isH2) nI(ixHI)  = nN(ixHII)                             !     nHI
     nI(ixHII) = nH(icell) * dxion(ixHII)                         !    nHII
-    if(isHe) nI(ixHeII)  = nN(ixHeIII)                           !   nHeII
-    if(isHe) nI(ixHeIII) = nHe*dxion(ixHeIII)                    !  nHeIII
+    if(r%isHe) nI(ixHeII)  = nN(ixHeIII)                         !   nHeII
+    if(r%isHe) nI(ixHeIII) = nHe*dxion(ixHeIII)                  !  nHeIII
     f_dust = (1.-dxion(ixHII))                    ! No dust in ionised gas
 
-    mu = getMu(dxion, dT2)
+    mu = getMu(r, dxion, dT2)
     TK = dT2 * mu                                           !  Temperature
-    if(rt_isTconst) TK=rt_Tconst                       !  Force constant T
-    ne= nH(icell)*dxion(ixHII)
-    if(isHe) ne=ne+nHe*(dxion(ixHeII)+2.*dxion(ixHeIII))! Electron density
-    neInit=ne
-    fracMax=0d0   ! Max fractional update, to check if dt can be increased
-    ss_factor=1d0                    ! UV background self_shielding factor
-    if(self_shielding) ss_factor = exp(-nH(icell)/1d-2)
-    rho = nH(icell) / X * mH
-#if NRTGROUPS>0
+    if(r%rt_isTconst) TK=r%rt_Tconst                   !  Force constant T
+    ne = nH(icell)*dxion(ixHII)
+    if(r%isHe) ne=ne+nHe*(dxion(ixHeII)+2.*dxion(ixHeIII)) ! Elec. density
+    neInit = ne
+    fracMax = 0d0 ! Max fractional update, to check if dt can be increased
+    ss_factor = 1d0                  ! UV background self_shielding factor
+    if(r%self_shielding) ss_factor = exp(-nH(icell)/1d-2)
+    rho = nH(icell) / r%X * mH
+#ifdef RT
     ! Set dust opacities--------------------------------------------------
-    if(rt .and. nrtgroups .gt. 0) then
-       kAbs_loc = kappaAbs
-       kSc_loc  = kappaSc
-       if(is_kIR_T) then                           ! k_IR depends on T_rad
+    kAbs_loc = r%kappaAbs
+    kSc_loc = r%kappaSc
+    if(r%is_kIR_T) then                            ! k_IR depends on T_rad
           ! For the radiation temperature,  weigh the energy in each group
-          ! by its opacity over IR opacity (derived from IR temperature)
-          E_rad = group_egy_erg(iIR) * dNp(iIR)
-          TR = max(0d0,(E_rad*rt_c_fraction/a_r)**0.25)   ! IR temperature
-          kAbs_loc(iIR) = kappaAbs(iIR) * (TR/10d0)**2
-          do iGroup=1,nrtgroups
-             if(iGroup .ne. iIR)                                         &
-                  E_rad = E_rad + kAbs_loc(iGroup) / kAbs_loc(iIR)       &
-                                * group_egy_erg(iGroup) * dNp(iGroup)
-          end do
-          TR = max(0d0,(E_rad*rt_c_fraction/a_r)**0.25) ! Rad. temperature
-          if(rt_T_rad) then ! Use radiation temperature for everything
-             dT2 = TR/mu ;   TK = TR
-          endif
-          ! Set the IR opacities according to the rad. temperature:
-          kAbs_loc(iIR) = kappaAbs(iIR) * (TR/10d0)**2 * exp(-TR/1d3)
-          kSc_loc(iIR)  = kappaSc(iIR)  * (TR/10d0)**2 * exp(-TR/1d3)
-       endif ! if(is_kIR_T)
-       ! Set dust absorption and scattering rates [s-1]:
-       dustAbs(:)  = kAbs_loc(:) *rho*Zsolar(icell)*f_dust*rt_c_cgs
-       dustSc(iIR) = kSc_loc(iIR)*rho*Zsolar(icell)*f_dust*rt_c_cgs
-
-    endif
+            ! by its opacity over IR opacity (derived from IR temperature)
+       E_rad = group_egy_erg(iIR) * dNp(iIR)
+       TR = max(0d0,(E_rad*r%rt_c_fraction/a_r)**0.25)    ! IR temperature
+       kAbs_loc(iIR) = r%kappaAbs(iIR) * (TR/10d0)**2
+       do iGroup=1,nrtgroups
+          if(iGroup .ne. iIR)                                            &
+               E_rad = E_rad + kAbs_loc(iGroup) / kAbs_loc(iIR)          &
+               * group_egy_erg(iGroup) * dNp(iGroup)
+       end do
+       TR = max(0d0,(E_rad*r%rt_c_fraction/a_r)**0.25)  ! Rad. temperature
+       if(r%rt_T_rad) then      ! Use radiation temperature for everything
+          dT2 = TR/mu ;   TK = TR
+       endif
+                 ! Set the IR opacities according to the rad. temperature:
+       kAbs_loc(iIR) = r%kappaAbs(iIR) * (TR/10d0)**2 * exp(-TR/1d3)
+       kSc_loc(iIR)  = r%kappaSc(iIR)  * (TR/10d0)**2 * exp(-TR/1d3)
+    endif ! if(is_kIR_T)
+                         ! Set dust absorption and scattering rates [s-1]:
+    dustAbs(:)  = kAbs_loc(:) *rho*Zsolar(icell)*f_dust*tables%rt_c_cgs
+    dustSc(iIR) = kSc_loc(iIR)*rho*Zsolar(icell)*f_dust*tables%rt_c_cgs
 
     ! UPDATE PHOTON DENSITY AND FLUX *************************************
-    if(rt .and. rt_advect) then
+    if(r%rt_advect) then
        recRad(1:nrtgroups)=0. ; phAbs(1:nrtgroups)=0.
-       ! Scattering rate; reduce the photon flux, but not photon density:
+        ! Scattering rate; reduce the photon flux, but not photon density:
        phSc(1:nrtgroups)=0.
 
        ! EMISSION FROM GAS
-       if(.not. rt_OTSA .and. rt_advect) then ! ----------- Rec. radiation
-          if(isH2) alpha(ixHI) = 0d0 ! H2 emits no rec. radiation
-          alpha(ixHII) = inp_coolrates_table(tbl_alphaA_HII, TK,.false.) &
-                       - inp_coolrates_table(tbl_alphaB_HII, TK,.false.)
-          if(isHe) then
-             ! alpha(2) A-B becomes negative around 1K, hence the max
+       if(.not. r%rt_otsa .and. r%rt_advect) then  ! ------ Rec. radiation
+          if(r%isH2) alpha(ixHI) = 0d0        ! H2 emits no rec. radiation
+          alpha(ixHII) = inp_coolrates_table(tables,tables%tbl_alphaA_HII, TK,.false.) &
+                       - inp_coolrates_table(tables,tables%tbl_alphaB_HII, TK,.false.)
+          if(r%isHe) then
+                  ! alpha(2) A-B becomes negative around 1K, hence the max
              alpha(ixHeII) = &
-                  MAX(0d0,inp_coolrates_table(tbl_alphaA_HeII,TK,.false.) &
-                          -inp_coolrates_table(tbl_alphaB_HeII, TK,.false.))
-             alpha(ixHeIII) = inp_coolrates_table(tbl_alphaA_HeIII, TK,.false.) &
-                            - inp_coolrates_table(tbl_alphaB_HeIII, TK,.false.)
+                  MAX(0d0,inp_coolrates_table(tables,tables%tbl_alphaA_HeII,TK,.false.) &
+                          -inp_coolrates_table(tables,tables%tbl_alphaB_HeII, TK,.false.))
+             alpha(ixHeIII) = inp_coolrates_table(tables,tables%tbl_alphaA_HeIII, TK,.false.) &
+                            - inp_coolrates_table(tables,tables%tbl_alphaB_HeIII, TK,.false.)
           endif
-          do iion=1,nionsUsed
-             if(spec2group(iion) .gt. 0) &  ! Contribution of ion -> group
-                  recRad(spec2group(iion)) = &
-                  recRad(spec2group(iion)) + alpha(iion) * nI(iion) * ne
+          do iion=1,nions
+             if(r%spec2group(iion) .gt. 0) &   ! Contribution ion -> group
+                  recRad(r%spec2group(iion)) = &
+                  recRad(r%spec2group(iion)) + alpha(iion) * nI(iion) * ne
           enddo
        endif
 
        ! ABSORPTION/SCATTERING OF PHOTONS BY GAS
-       do igroup=1,nrtgroups      ! -------------------Ionization absorbtion
-          phAbs(igroup) = SUM(nN(:)*signc(igroup,:)*ssh2(igroup)) ! s-1
+       do igroup=1,nrtgroups       ! ----------------Ionization absorbtion
+          phAbs(igroup) = SUM(nN(:)*tables%signc(igroup,:)*r%ssh2(igroup)) ! s-1
        end do
        ! IR, optical and UV depletion by dust absorption: ----------------
-       if(rt_isIR) & !IR scattering/abs on dust (abs after T update)
-            phSc(iIR)  = phSc(iIR) + dustSc(iIR)
-       do igroup=1,nrtgroups        ! Deplete photons, since they go into IR
-          if( .not. (rt_isIR .and. igroup.eq.iIR) ) &  ! IR done elsewhere
+       ! IR scattering/abs on dust (abs after T update)
+       if(r%rt_isIR) phSc(iIR)  = phSc(iIR) + dustSc(iIR)
+       do igroup=1,nrtgroups      ! Deplete photons, since they go into IR
+          if( .not. (r%rt_isIR .and. igroup.eq.iIR) ) & ! IR done elsewhere
                phAbs(igroup) = phAbs(igroup) + dustAbs(igroup)
        end do
 
-       if(iPEH_group .gt. 0) then
+       if(r%iPEH_group .gt. 0) then
           ! Photoelectric absorption: the effective PEH cross section
-          ! is photoelectric heating rate / habing flux
+          ! is photoelectric heating rate / Habing flux
           ! Note: as this absorption is done separately, kappaAbs
           !       should not include PEH absorption when PEH is included.
           ! from Bakes and Tielens 1994 and Wolfire 2003
-          G0  = group_egy_erg(iPEH_group)                                &
-              * dNp(iPEH_group) * rt_c_cgs / 1.6d-3
+          G0 = group_egy_erg(r%iPEH_group)                               &
+             * dNp(r%iPEH_group) * tables%rt_c_cgs / 1.6d-3
           eff_peh = 4.87d-2                                              &
-                  / (1d0 + 4d-3 * (G0*sqrt(TK)/ne*2.)**0.73)      &
-                  + 3.65d-2 * (TK/1d4)**0.7                       &
+                  / (1d0 + 4d-3 * (G0*sqrt(TK)/ne*2.)**0.73)             &
+                  + 3.65d-2 * (TK/1d4)**0.7                              &
                   / (1d0 + 2d-4 * (G0 * sqrt(TK) / ne*2. ))
-          phAbs(iPEH_group) = phAbs(iPEH_group)                          &
-                            + 8.125d-22 * eff_peh * rt_c_cgs * nH(icell) &
-                            * Zsolar(icell) * f_dust
+          phAbs(r%iPEH_group) = phAbs(r%iPEH_group)                      &
+                            + 8.125d-22 * eff_peh * tables%rt_c_cgs      &
+                            * nH(icell) * Zsolar(icell) * f_dust
        endif
 
-       dmom(1:nDim)=0d0
-       do igroup=1,nrtgroups  ! ------------------- Do the update of N and F
+       dmom(1:ndim)=0d0
+       do igroup=1,nrtgroups  ! ----------------- Do the update of N and F
           dNp(igroup)= MAX(smallNp,                                      &
                         (ddt(icell)*(recRad(igroup)+dNpdt(igroup,icell)) &
                                     +dNp(igroup))                        &
@@ -453,16 +431,17 @@ contains
           endif
           fracMax=MAX(fracMax,dUU)      ! To check if ddt can be increased
 
-          do idim=1,nDim
+          do idim=1,ndim
              dFp(idim,igroup) = &
                   (ddt(icell)*dFpdt(idim,igroup,icell)+dFp(idim,igroup)) &
                   /(1d0+ddt(icell)*(phAbs(igroup)+phSc(igroup)))
           end do
-          call reduce_flux(dFp(:,igroup),dNp(igroup)*rt_c_cgs)
+          call reduce_flux(dFp(:,igroup),dNp(igroup)*tables%rt_c_cgs)
 
-          do idim=1,nDim
+          do idim=1,ndim
              dUU = ABS(dFp(idim,igroup)-Fp(idim,igroup,icell))           &
-                  / (ABS(Fp(idim,igroup,icell))+Fp_MIN) * one_over_Fp_FRAC
+                  / (ABS(Fp(idim,igroup,icell))+Np_MIN*tables%rt_c_cgs)  &
+                  * one_over_Fp_FRAC
              if(dUU .gt. 1d0) then
                 code=2 ;   RETURN                     ! ddt(icell) too big
              endif
@@ -473,9 +452,9 @@ contains
 
        do igroup=1,nrtgroups ! -------Momentum transfer from photons to gas:
           mom_fact = ddt(icell) * (phAbs(igroup) + phSc(igroup)) &
-               * group_egy_erg(igroup) * one_over_c_cgs
+               * group_egy_erg(igroup) * one_over_clight
 
-          if(rt_isoPress .and. .not. (rt_isIR .and. igroup==iIR)) then
+          if(r%rt_isoPress .and. .not. (r%rt_isIR .and. igroup==iIR)) then
              ! rt_isoPress: assume f=1, where f is reduced flux.
              fluxMag=sqrt(sum((dFp(:,igroup))**2))
              if(fluxMag .gt. 0d0) then
@@ -487,14 +466,14 @@ contains
              mom_fact = mom_fact * one_over_rt_c_cgs
           end if
 
-          do idim = 1, nDim
+          do idim = 1, ndim
              dmom(idim) = dmom(idim) + dFp(idim,igroup) * mom_fact
           end do
        end do
-       dp_gas = dp_gas + dmom * rt_pressBoost        ! update gas momentum
+       dp_gas = dp_gas + dmom * r%rt_pressBoost      ! update gas momentum
 
        ! Add absorbed UV/optical energy to IR:----------------------------
-       if(rt_isIR) then
+       if(r%rt_isIR) then
           do igroup=iIR+1,nrtgroups
              dNp(iIR) = dNp(iIR) + dustAbs(igroup) * ddt(icell)          &
                   * dNp(igroup) * group_egy_ratio(igroup)
@@ -503,66 +482,73 @@ contains
        ! -----------------------------------------------------------------
     endif !if(rt)
 #endif
+
     ! UPDATE TEMPERATURE *************************************************
-    if(c_switch(icell) .and. cooling .and. .not. rt_T_rad) then
-       Hrate=0.                             !  Heating rate [erg cm-3 s-1]
-       if(rt .and. rt_advect) then
-          do igroup=1,nrtgroups                              !  Photoheating
-             Hrate = Hrate + dNp(igroup) * SUM(nN(:) * PHrate(igroup,:))
+    if(c_switch(icell) .and. r%cooling .and. .not. r%rt_T_rad) then
+       Hrate = 0.                           !  Heating rate [erg cm-3 s-1]
+       if(r%haardt_madau) Hrate = Hrate + SUM(nN(:)*tables%UVrates(:,2)) * ss_factor
+#ifdef RT
+       if(r%rt_advect) then
+          do igroup=1,nrtgroups                            !  Photoheating
+             Hrate = Hrate + dNp(igroup) * SUM(nN(:)                     &
+                   * tables%PHrate(igroup,:))
           end do
        endif
-       if(haardt_madau) Hrate= Hrate + SUM(nN(:)*UVrates(:,2)) * ss_factor
-       if(iPEH_group .gt. 0 .and. rt_advect) then
-          ! Photoelectric heating Bakes & Tielens 1994
-          ! and Wolfire 2003, [erg cm-3 s-1]
+       if(r%iPEH_group .gt. 0 .and. r%rt_advect) then
+                              ! Photoelectric heating Bakes & Tielens 1994
+                                        ! and Wolfire 2003, [erg cm-3 s-1]
           Hrate = Hrate + 1.3d-24 * eff_peh * G0 * nH(icell)             &
                 * Zsolar(icell) * f_dust
        endif
-       if(isH2) then
-          !UV pumping, Baczynski 2015
+#endif
+       if(r%isH2) then
+#ifdef RT
+                                              ! UV pumping, Baczynski 2015
           cdex  = 1d-12 * (1.4 * exp(-18100. / (TK + 1200.)) * xH2       &
                 + exp(-1000. / TK) * dxion(ixHI))                        &
-                * sqrt(TK) * nH(icell) ![s-1]
-          Hrate = Hrate + 6.94 * SUM(dNp(:) * signc(:,ixHI) * isLW(:))   &
-                * 2. * eV2erg * cdex / (cdex + 2d-7) * nH(icell) * xH2
-          !H2 formation heating, Omukai 2000
-          ! and Hollenbach and McKee 1976, [erg cm-3 s-1]
+                * sqrt(TK) * nH(icell)                             ! [s-1]
+          Hrate = Hrate + 6.94 * SUM(dNp(:) * tables%signc(:,ixHI)       &
+                * r%isLW(:)) * 2. * eV2erg * cdex / (cdex + 2d-7)        &
+                * nH(icell) * xH2
+#endif
+                                       ! H2 formation heating, Omukai 2000
+                           ! and Hollenbach and McKee 1976, [erg cm-3 s-1]
           ncr   = 1d6 * TK**(-0.5)                                       &
                 / (1.6 * dxion(ixHI) * exp(-(400. / TK)**2)              &
-                + 1.4 * xH2 * exp(-12000. / (TK + 1200.))) ![cm-3]
+                + 1.4 * xH2 * exp(-12000. / (TK + 1200.)))        ! [cm-3]
           Hrate = Hrate + eV2erg                                         &
                 * ((0.2 + 4.2 / (1. + ncr / nH(icell)))                  &
-                * inp_coolrates_table(tbl_AlphaZ_H2,TK,.false.)          &
+                * inp_coolrates_table(tables,tables%tbl_AlphaZ_H2,TK,.false.) &
                 * Zsolar(icell) * f_dust                                 &
                 * nH(icell)**2 * dxion(ixHI)                             &
                 + 3.53 / (1. + ncr/nH(icell))                            &
-                * inp_coolrates_table(tbl_AlphaGP_H2,TK,.false.)         &
+                * inp_coolrates_table(tables,tables%tbl_AlphaGP_H2,TK,.false.) &
                 * nH(icell) * dxion(ixHI) * ne                           &
                 + 4.48 / (1.+ncr / nH(icell))                            &
-                * inp_coolrates_table(tbl_Beta_H3B,TK,.false.)           &
+                * inp_coolrates_table(tables,tables%tbl_Beta_H3B,TK,.false.) &
                 * nH(icell)**3 * dxion(ixHI)**2 * (dxion(ixHI) + xH2/8.))
        endif
-       if (cosmic_rays) then !CR heating [erg cm-3 s-1]
-          !Glassgold 2012, ~10 ev/ionisation
+       if (r%cosmic_rays) then                 ! CR heating [erg cm-3 s-1]
+                                       ! Glassgold 2012, ~10 ev/ionisation
           Hrate = Hrate + 10. * eV2erg                                   &
                 * nH(icell) * xHI * cosray_HI
-          if (isH2) Hrate = Hrate + 10. * eV2erg                      &
+          if (r%isH2) Hrate = Hrate + 10. * eV2erg                       &
                           * nH(icell) * xH2 * cosray_H2
-          if (isHe) Hrate = Hrate + 10. * eV2erg                      &
+          if (r%isHe) Hrate = Hrate + 10. * eV2erg                       &
                           * nHe * xHeI * 1.1 * cosray_HI
        endif
-       Crate = compCoolrate(TK,ne,nN,nI,dCdT2)       ! Cooling
+       Crate = compCoolrate(r,tables,TK,ne,nN,nI,dCdT2)          ! Cooling
        dCdT2 = dCdT2 * mu                            ! dC/dT2 = mu * dC/dT
-       metal_tot=0d0 ; metal_prime=0d0             ! Metal cooling
+       metal_tot=0d0 ; metal_prime=0d0                     ! Metal cooling
        if(Zsolar(icell) .gt. 0d0) &
             call rt_cmp_metals(T2(icell),nH(icell),mu,metal_tot          &
                               ,metal_prime,a_exp)
-       X_nHkb= X/(1.5 * nH(icell) * kB)            ! Multiplication factor
+       X_nHkb = r%X/(1.5 * nH(icell) * kB)         ! Multiplication factor
        rate  = X_nHkb*(Hrate - Crate - Zsolar(icell)*metal_tot)
        dRate = -X_nHkb*(dCdT2 + Zsolar(icell)*metal_prime)     ! dRate/dT2
-       ! 1st order dt constr
+                                                     ! 1st order dt constr
        dUU   = ABS(MAX(T2_min_fix, T2(icell)+rate*ddt(icell))-T2(icell))
-       ! New T2 value
+                                                            ! New T2 value
        dT2   = MAX(T2_min_fix &
                   ,T2(icell)+rate*ddt(icell)/(1.-dRate*ddt(icell)))
        dUU   = MAX(dUU, ABS(dT2-T2(icell))) / (T2(icell)+T_MIN) &
@@ -574,17 +560,17 @@ contains
        TK=dT2*mu
     endif
 
-#if NRTGROUPS>0
-    if(rt_isIR) then
-       if(kAbs_loc(iIR) .gt. 0d0 .and. .not. rt_T_rad) then
+#ifdef RT
+    if(r%rt_isIR) then
+       if(kAbs_loc(iIR) .gt. 0d0 .and. .not. r%rt_T_rad) then
           ! Evolve IR-Dust equilibrium temperature------------------------
           ! Delta (Cv T)= ( c_red/lambda E - c/lambda a T^4)
           !           / ( 1/Delta t + 4 c/lambda/C_v a T^3 + c_red/lambda)
-          one_over_C_v = mh*mu*(gamma-1d0) / (rho*kb)
+          one_over_C_v = mH*mu*(r%gamma-1d0) / (rho*kB)
           E_rad = group_egy_erg(iIR) * dNp(iIR)
-          dE_T = (rt_c_cgs * E_rad - c_cgs*a_r*TK**4)                    &
+          dE_T = (tables%rt_c_cgs * E_rad - clight*a_r*TK**4)             &
                /(1d0/(kAbs_loc(iIR) * Zsolar(icell) * rho * ddt(icell))  &
-               +4d0*c_cgs * one_over_C_v *a_r*TK**3+rt_c_cgs)
+               +4d0*clight * one_over_C_v *a_r*TK**3+tables%rt_c_cgs)
           dT2 = dT2 + 1d0/mu * one_over_C_v * dE_T
           dNp(iIR) = dNp(iIR) - dE_T * one_over_egy_IR_erg
 
@@ -604,7 +590,7 @@ contains
           endif
           fracMax=MAX(fracMax,dUU)
           TK=dT2*mu
-          call reduce_flux(dFp(:,iIR),dNp(iIR)*rt_c_cgs)
+          call reduce_flux(dFp(:,iIR),dNp(iIR)*tables%rt_c_cgs)
        endif
     endif
 #endif
@@ -612,44 +598,48 @@ contains
     ! HYDROGEN UPDATE*****************************************************
     ! Update xH2**********************************************************
     dxH2=xH2
-    if(isH2) then
-       alpha(ixHI) = inp_coolrates_table(tbl_AlphaZ_H2, TK,.false.)      &
+    if(r%isH2) then
+       alpha(ixHI) = inp_coolrates_table(tables,tables%tbl_AlphaZ_H2, TK,.false.)      &
                    * Zsolar(icell) * f_dust * nH(icell)                  &
-                   + inp_coolrates_table(tbl_AlphaGP_H2,TK,.false.) * ne &
-                   + inp_coolrates_table(tbl_Beta_H3B,TK,.false.)        &
+                   + inp_coolrates_table(tables,tables%tbl_AlphaGP_H2,TK,.false.) * ne &
+                   + inp_coolrates_table(tables,tables%tbl_Beta_H3B,TK,.false.)        &
                    * nH(icell)**2 * dxion(ixHI) * (dxion(ixHI) + xH2/ 8.)
-       beta(ixHI)  = inp_coolrates_table(tbl_Beta_H2HI, TK,.false.)      &
+       beta(ixHI)  = inp_coolrates_table(tables,tables%tbl_Beta_H2HI, TK,.false.)      &
                    * dxion(ixHI)                                         &
-                   + inp_coolrates_table(tbl_Beta_H2H2, TK,.false.) * xH2
+                   + inp_coolrates_table(tables,tables%tbl_Beta_H2H2, TK,.false.) * xH2
        cr = alpha(ixHI) * dxion(ixHI)                        ! H2 Creation
        photoRate=0.
-       if(rt) photoRate = SUM(signc(:,ixHI)*dNp)
-       if(haardt_madau) photoRate = photoRate + UVrates(ixHI,1)*ss_factor
-       de = beta(ixHI) * nH(icell) + photoRate           ! H2 Destruction
-       if(cosmic_rays) de = de + cosray_H2
+#ifdef RT
+       photoRate = SUM(tables%signc(:,ixHI)*dNp)
+#endif
+       if(r%haardt_madau) photoRate = photoRate + tables%UVrates(ixHI,1)*ss_factor
+       de = beta(ixHI) * nH(icell) + photoRate            ! H2 Destruction
+       if(r%cosmic_rays) de = de + cosray_H2
        dxH2 = (cr*ddt(icell)+xH2)/(1.+de*ddt(icell))
        dxH2 = MIN(MAX(dxH2, x_min), 0.5)
     endif !if(isH2)
     ! Update xHI (also if .not. isH2, for stability)**********************
-    if(rt_OTSA .or. .not. rt_advect) then         !    Recombination rates
-       alpha(ixHII) = inp_coolrates_table(tbl_AlphaB_HII, TK,.false.)
+    if(r%rt_otsa .or. .not. r%rt_advect) then     !    Recombination rates
+       alpha(ixHII) = inp_coolrates_table(tables,tables%tbl_AlphaB_HII, TK,.false.)
     else
-       alpha(ixHII) = inp_coolrates_table(tbl_AlphaA_HII, TK,.false.)
+       alpha(ixHII) = inp_coolrates_table(tables,tables%tbl_AlphaA_HII, TK,.false.)
     endif
-    beta(ixHII) = inp_coolrates_table(tbl_Beta_HI, TK,.false.)! Coll.ion.rate
-    cr = alpha(ixHII) * ne * dxion(ixHII) + 2. * de * dxH2 !   HI creation
+    beta(ixHII) = inp_coolrates_table(tables,tables%tbl_Beta_HI, TK,.false.) ! Coll.ion.rate
+    cr = alpha(ixHII) * ne * dxion(ixHII) + 2. * de * dxH2    !HI creation
     photoRate=0.
-    if(rt) photoRate = SUM(signc(:,ixHII)*dNp)    !                  [s-1]
-    if(haardt_madau) photoRate = photoRate + UVrates(ixHII,1)*ss_factor
+#ifdef RT
+    photoRate = SUM(tables%signc(:,ixHII)*dNp)    !                  [s-1]
+#endif
+    if(r%haardt_madau) photoRate = photoRate + tables%UVrates(ixHII,1)*ss_factor
     de = beta(ixHII) * ne + photoRate             !         HI destruction
-    if(cosmic_rays) de = de + cosray_HI
-    if(isH2) de = de + 2. * alpha(ixHI)
+    if(r%cosmic_rays) de = de + cosray_HI
+    if(r%isH2) de = de + 2. * alpha(ixHI)
     dxHI = (cr*ddt(icell)+xHI)/(1.+de*ddt(icell))
     dxHI = MIN(MAX(dxHI, x_min),1.)
-    if(isH2) dxion(ixHI)=dxHI
+    if(r%isH2) dxion(ixHI)=dxHI
     ! Update xHII*********************************************************
     cr = (beta(ixHII)*ne+photoRate)*dxHI            !             Creation
-    if(cosmic_rays) cr = cr + cosray_HI * dxHI
+    if(r%cosmic_rays) cr = cr + cosray_HI * dxHI
     de = alpha(ixHII) * ne                          !          Destruction
     dxion(ixHII) = (cr*ddt(icell)+dxion(ixHII))/(1.+de*ddt(icell))
     dxion(ixHII) = MIN(MAX(dxion(ixHII), x_MIN),1d0)
@@ -658,10 +648,10 @@ contains
        x_tot = 2.*dxH2 + dxHI + dxion(ixHII)
        dxH2 = dxH2/x_tot
        dxHI = dxHI/x_tot
-       if(isH2) dxion(ixHI) = dxHI
+       if(r%isH2) dxion(ixHI) = dxHI
        dxion(ixHII)=dxion(ixHII)/x_tot
     else
-       if(isH2) then
+       if(r%isH2) then
           if(dxH2.ge.dxion(ixHII)) then      !   H2 or HI is most abundant
              if(dxH2.le.dxion(ixHI)) &       !    -> HI
                   dxion(ixHI)=1.-2.*dxH2-dxion(ixHII)
@@ -678,7 +668,7 @@ contains
     endif ! if(newAtomicCons)
     ! Timestep ok for hydrogen update? ***********************************
     dUU = 0d0
-    if(isH2) dUU = MAX(dUU,ABS((dxH2-xH2)/(xH2+x_FM)))
+    if(r%isH2) dUU = MAX(dUU,ABS((dxH2-xH2)/(xH2+x_FM)))
     dUU = MAX(dUU,ABS((dxHI-xHI)/(xHI+x_FM)))
     dUU = MAX(dUU &
          ,ABS(dXion(ixHII)-xion(ixHII,icell))/(xion(ixHII,icell)+x_FM))  &
@@ -689,38 +679,41 @@ contains
     fracMax=MAX(fracMax,dUU)
 
     ! HELIUM UPDATE*******************************************************
-    if(isHe) then
+    if(r%isHe) then
        ! Update ne because of changed hydrogen ionisation:
        ne= nH(icell)*dXion(ixHII)+nHE*(dXion(ixHeII)+2.*dXion(ixHeIII))
-       mu = getMu(dXion, dT2)
-       if(.not. rt_isTconst) TK=dT2*mu !  Update TK because of changed  mu
+       mu = getMu(r, dXion, dT2)
+       if(.not. r%rt_isTconst) TK=dT2*mu! Update TK because of changed  mu
        ! Update xHeI *****************************************************
-       if(rt_OTSA .or. .not. rt_advect) then
-          alpha(ixHeII)  = inp_coolrates_table(tbl_alphaB_HeII, TK,.false.)
-          alpha(ixHeIII) = inp_coolrates_table(tbl_alphaB_HeIII, TK,.false.)
+       if(r%rt_otsa .or. .not. r%rt_advect) then
+          alpha(ixHeII)  = inp_coolrates_table(tables,tables%tbl_alphaB_HeII, TK,.false.)
+          alpha(ixHeIII) = inp_coolrates_table(tables,tables%tbl_alphaB_HeIII, TK,.false.)
        else
-          alpha(ixHeII)  = inp_coolrates_table(tbl_alphaA_HeII, TK,.false.)
-          alpha(ixHeIII) = inp_coolrates_table(tbl_alphaA_HeIII, TK,.false.)
+          alpha(ixHeII)  = inp_coolrates_table(tables,tables%tbl_alphaA_HeII, TK,.false.)
+          alpha(ixHeIII) = inp_coolrates_table(tables,tables%tbl_alphaA_HeIII, TK,.false.)
        endif
-       beta(ixHeII)  =  inp_coolrates_table(tbl_beta_HeI, TK,.false.)
-       beta(ixHeIII) = inp_coolrates_table(tbl_beta_HeII, TK,.false.)
+       beta(ixHeII)  =  inp_coolrates_table(tables,tables%tbl_beta_HeI, TK,.false.)
+       beta(ixHeIII) = inp_coolrates_table(tables,tables%tbl_beta_HeII, TK,.false.)
        ! Creation = recombination of HeII and electrons
        cr = alpha(ixHeII) * ne * dXion(ixHeII)
        ! Destruction = collisional ionization+photoionization of HeI
        de = beta(ixHeII) * ne
-       if(cosmic_rays) de = de + 1.1 * cosray_HI
-       if(rt) de = de + SUM(signc(:,ixHeII)*dNp)
-       if(haardt_madau) de = de + UVrates(ixHeII,1) * ss_factor
+       if(r%cosmic_rays) de = de + 1.1 * cosray_HI
+#ifdef RT
+       de = de + SUM(tables%signc(:,ixHeII)*dNp)
+#endif
+       if(r%haardt_madau) de = de + tables%UVrates(ixHeII,1) * ss_factor
        dxHeI = (cr*ddt(icell)+xHeI)/(1.+de*ddt(icell))         ! The update
        dxHeI = MIN(MAX(dxHeI, x_min),1.)
        ! Update xHeII ****************************************************
        ! Creation = coll.- and photo-ionization of HI + rec. of HeIII
        cr = de * xHeI + alpha(ixHeIII) * ne * dXion(ixHeIII)
        ! Destruction = rec. of HeII + coll.- and photo-ionization of HeII
-       photoRate=0.
-       if(rt) photoRate = SUM(signc(:,ixHeIII)*dNp)
-       if(haardt_madau) &
-            photoRate = photoRate + UVrates(ixHeIII,1) * ss_factor
+       photoRate = 0.
+#ifdef RT
+       photoRate = SUM(tables%signc(:,ixHeIII)*dNp)
+#endif
+       if(r%haardt_madau) photoRate = photoRate + tables%UVrates(ixHeIII,1) * ss_factor
        de = (alpha(ixHeII) + beta(ixHeIII)) * ne + photoRate
        dXion(ixHeII) = (cr*ddt(icell)+dXion(ixHeII))/(1.+de*ddt(icell))
        dXion(ixHeII) = MIN(MAX(dXion(ixHeII), x_MIN),1.)
@@ -763,22 +756,24 @@ contains
 
     ! CHECK FRACTIONAL CHANGE IN ELECTRON ABUNDANCE **********************
     ne = nH(icell)*dxion(ixHII)
-    if(isHe) ne = ne + nHe*(dxion(ixHeII)+2.*dxion(ixHeIII))
+    if(r%isHe) ne = ne + nHe*(dxion(ixHeII)+2.*dxion(ixHeIII))
     dUU=ABS((ne-neInit)) / (neInit+x_FM) * one_over_x_FRAC
     if(dUU .gt. 1.) then
        code=8 ; RETURN
     endif
     fracMax=MAX(fracMax,dUU)
 
-    if(rt_isTconst)then
-       mu = getMu(dXion, dT2)
-       dT2=rt_Tconst/mu
+    if(r%rt_isTconst)then
+       mu = getMu(r, dXion, dT2)
+       dT2 = r%rt_Tconst/mu
     endif
 
     ! CLEAN UP AND RETURN ************************************************
     dT2 = dT2-T2(icell) ; dXion(:) = dXion(:)-xion(:,icell)
+#ifdef RT
     dNp(:) = dNp(:)-Np(:,icell) ; dFp(:,:) = dFp(:,:)-Fp(:,:,icell)
     dp_gas(:)= dp_gas(:)-p_gas(:,icell)
+#endif
     ! Now the dUs are really changes, not new values
     ! Check if we are safe to use a bigger timestep in next iteration:
     if(fracMax .lt. 0.5) then
@@ -789,70 +784,137 @@ contains
     dt_ok=.true.
     code=0
 
+    end associate
+
   END SUBROUTINE cool_step
 
-END SUBROUTINE rt_solve_cooling
-
-!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE display_coolinfo(stopRun, loopcnt, i, dtDone, dt, ddt, nH    &
-                            ,T2,  xion,  Np,  Fp,  p_gas                &
-                            ,dT2, dXion, dNp, dFp, dp_gas, code)
-! Print cooling information to standard output, and maybe stop execution.
-!------------------------------------------------------------------------
-  use amr_commons
-  use rt_parameters
-  real(dp),dimension(nions):: xion, dXion
-  real(dp),dimension(nrtgroups):: Np, dNp
-  real(dp),dimension(nDim, nrtgroups):: Fp, dFp
-  real(dp),dimension(nDim):: p_gas, dp_gas
-  real(dp)::T2, dT2, dtDone, dt, ddt, nH
-  logical::stopRun
-  integer::loopcnt,i, code
-!------------------------------------------------------------------------
-  if(stopRun) write(*, 111) loopcnt
-  if(.true.) then
-     write(*,900) loopcnt, code, i, dtDone, dt, ddt, rt_c_cgs, nH
-     write(*,901) T2,      xion,      Np,      Fp,      p_gas
-     write(*,902) dT2,     dXion,     dNp,     dFp,     dp_gas
-     write(*,903) dT2/ddt, dXion/ddt, dNp/ddt, dFp/ddt, dp_gas/ddt
-     write(*,904) abs(dT2)/(T2+T_MIN), abs(dxion)/(xion+x_FM),          &
-                  abs(dNp)/(Np+Np_MIN), abs(dFp)/(Fp+Fp_MIN)
-  endif
-  print*,loopcodes
-  print*,group_egy(:)
-  if(stopRun) then
-     print *,'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
-     STOP
-  endif
+  !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+  SUBROUTINE display_coolinfo(stopRun, loopcnt, i, dtDone, dt, ddt, nH,    &
+#ifdef RT
+       &                      Np,  Fp,  p_gas, dNp, dFp, dp_gas,           &
+#endif
+       &                      T2,  xion, dT2, dXion, code)
+    ! Print cooling information to standard output, and maybe stop execution.
+    !------------------------------------------------------------------------
+    real(dp),dimension(nions):: xion, dXion
+#ifdef RT
+    real(dp),dimension(nrtgroups):: Np, dNp
+    real(dp),dimension(nDim, nrtgroups):: Fp, dFp
+    real(dp),dimension(nDim):: p_gas, dp_gas
+#endif
+    real(dp)::T2, dT2, dtDone, dt, ddt, nH
+    logical::stopRun
+    integer::loopcnt,i, code
+    !------------------------------------------------------------------------
+    if(stopRun) write(*, 111) loopcnt
+    if(.true.) then
+#ifdef RT
+       write(*,900) loopcnt, code, i, dtDone, dt, ddt, tables%rt_c_cgs, nH
+       write(*,901) T2,      xion,      Np,      Fp,      p_gas
+       write(*,902) dT2,     dXion,     dNp,     dFp,     dp_gas
+       write(*,903) dT2/ddt, dXion/ddt, dNp/ddt, dFp/ddt, dp_gas/ddt
+       write(*,904) abs(dT2)/(T2+T_MIN), abs(dxion)/(xion+x_FM),          &
+            abs(dNp)/(Np+Np_MIN), abs(dFp)/(Fp+Np_MIN*tables%rt_c_cgs)
+#else
+       write(*,900) loopcnt, code, i, dtDone, dt, ddt, nH
+       write(*,901) T2,      xion
+       write(*,902) dT2,     dXion
+       write(*,903) dT2/ddt, dXion/ddt
+       write(*,904) abs(dT2)/(T2+T_MIN), abs(dxion)/(xion+x_FM)
+#endif
+    endif
+    print*,loopcodes
+    if(stopRun) then
+       print *,'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+       STOP
+    endif
 
 111 format(' Stopping because of large number of timestesps in', &
-           ' rt_solve_cooling (', I6, ')')
+         ' rt_solve_cooling (', I6, ')')
 900 format (I3, ' code=', I2, ' i=', I5, ' t=', 1pe12.3,xs&
-            '/', 1pe12.3, ' ddt=', 1pe12.3, ' c=', 1pe12.3, &
-            ' nH=', 1pe12.3)
+         '/', 1pe12.3, ' ddt=', 1pe12.3, ' c=', 1pe12.3, &
+         ' nH=', 1pe12.3)
 901 format ('  U      =', 20(1pe12.3))
 902 format ('  dU     =', 20(1pe12.3))
 903 format ('  dU/dt  =', 20(1pe12.3))
 904 format ('  dU/U % =', 20(1pe12.3))
-END SUBROUTINE display_coolinfo
+  END SUBROUTINE display_coolinfo
+
+END SUBROUTINE rt_solve_cooling
+
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+SUBROUTINE cmp_Equilibrium_Abundances(r, tables, &
+     & T2, nH, phI_rates, mu, nSpec, Zsolar)
+
+  ! Compute chemical equilibrium abundances of e,H2,HI,HII,HeI,HeII,HeIII.
+  ! tables     => Object containing all non-equilibrium cooling tables
+  ! T2         => T/mu in Kelvin
+  ! nH         => Hydrogen density in cm^-3
+  ! phI_rates  => Photoionization rates [s-1] for H2, HI, HeI, HeII
+  ! Zsolar     => Metallicity in Solar units
+  ! nSpec      <= Resulting species number densities
+  ! mu         <= Resulting average particle mass in units of proton mass
+  !-------------------------------------------------------------------------
+  implicit none
+  type(run_t)::r
+  type(neq_cooling_t)::tables
+  real(dp)::T2,nH
+  real(dp),dimension(nIons)::phI_rates
+  real(dp)::mu,Zsolar
+  real(dp),dimension(1:7)::nSpec
+  !-------------------------------------------------------------------------
+  real(dp)::mu_old, err_mu, mu_left, mu_right, T, nTot
+  integer::niter
+  !-------------------------------------------------------------------------
+  ! Iteration to find mu                     ! n_E     = n_spec(1) ! e
+                                             ! n_H2    = n_spec(2) ! H2
+  err_mu=1.                                  ! n_HI    = n_spec(3) ! H
+  mu_left=0.5                                ! n_HII   = n_spec(4) ! H+
+  mu_right=2.3                               ! n_HEI   = n_spec(5) ! He
+  niter=0                                    ! n_HEII  = n_spec(6) ! He+
+  do while (err_mu > 1d-4 .and. niter <= 50) ! n_HEIII = n_spec(7) ! He++
+     mu_old=0.5*(mu_left+mu_right)
+     T = T2*mu_old
+     call cmp_chem_eq(r, tables, T, nH, phI_rates, nSpec, nTot, mu, Zsolar)
+     err_mu = (mu-mu_old)/mu_old
+     if(err_mu>0.)then
+        mu_left =0.5*(mu_left+mu_right)
+        mu_right=mu_right
+     else
+        mu_left =mu_left
+        mu_right=0.5*(mu_left+mu_right)
+     end if
+     err_mu=ABS(err_mu)
+     niter=niter+1
+  end do
+  if (niter > 50) then
+     write(*,*) 'ERROR in cmp_Equilibrium_Abundances : too many iterations.'
+     STOP
+  endif
+
+END SUBROUTINE cmp_Equilibrium_Abundances
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE cmp_chem_eq(TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
+SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
 
-! Compute chemical equilibrium abundances of e,H2,HI,HII,HeI,HeII,HeIII.
-! TK         => Temperature in Kelvin
-! nH         => Hydrogen density in cm^-3
-! r_rad_spec => Photoionization rates [s-1] for H2, HI, HeI, HeII
-! nSpec      <= Resulting species number densities
-! nTot       <= Resulting total number density (=sum of nSpec)
-! mu         <= Resulting average particle mass in units of proton mass
-! Zsol       => Metallicity in Solar units
-!------------------------------------------------------------------------
+  ! Compute chemical equilibrium abundances of e,H2,HI,HII,HeI,HeII,HeIII.
+  ! tables     => Object containing all non-equilibrium cooling tables
+  ! TK         => Temperature in Kelvin
+  ! nH         => Hydrogen density in cm^-3
+  ! t_rad_spec => Photoionization rates [s-1] for H2, HI, HeI, HeII
+  ! Zsol       => Metallicity in Solar units
+  ! nSpec      <= Resulting species number densities
+  ! nTot       <= Resulting total number density (=sum of nSpec)
+  ! mu         <= Resulting average particle mass in units of proton mass
+  !------------------------------------------------------------------------
   implicit none
+  type(run_t)::r
+  type(neq_cooling_t)::tables
   real(dp),intent(in)::TK, nH, Zsol
   real(dp),intent(out)::nTot, mu
   real(dp),dimension(nions),intent(in)::t_rad_spec
-  real(dp),dimension(1:7),intent(out)::nSpec!------------------------
+  real(dp),dimension(1:7),intent(out)::nSpec
+  !------------------------------------------------------------------------
   real(dp)::nHe
   real(dp)::n_H2, n_HI, n_HII, n_HEI, n_HEII, n_HEIII, n_E, n_E_min
   real(dp)::g_H2=0,   g_HI=0,    g_HEI=0, g_HEII=0   ! Photoion/dissoc
@@ -861,75 +923,76 @@ SUBROUTINE cmp_chem_eq(TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   real(dp)::C_HII=0,  C_H2=0,    D_H2=0,  f_HII=0,   f_H2=0  ! Cre & destr
   real(dp)::D_HEI=0,  C_HEIII=0, f_HeI=0, f_HeIII=0, f_dust=0! Cre & destr
   real(dp)::err_nE, err_nH2, n_H2_old
-!-------------------------------------------------------------------------
+  !-------------------------------------------------------------------------
+  associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
   g_HI   = t_rad_spec(ixHII)                  !      Photoionization [s-1]
-  if(isH2) then
+  if(r%isH2) then
      g_H2   = t_rad_spec(ixHI)                !    Photodissociation [s-1]
-     aZ_H2  = inp_coolrates_table(tbl_AlphaZ_H2, TK,.false.) ! Dust form [cm3 s-1]
-     aGP_H2 = inp_coolrates_table(tbl_AlphaGP_H2, TK,.false.)! Gas phase [cm3 s-1]
-     b_H3B  = inp_coolrates_table(tbl_Beta_H3B,TK,.false.)   ! 3 body H2 [cm3 s-1]
-     b_H2HI = inp_coolrates_table(tbl_Beta_H2HI, TK,.false.) !     Cdiss [cm3 s-1]
-     b_H2H2 = inp_coolrates_table(tbl_Beta_H2H2, TK,.false.) !     Cdiss [cm3 s-1]
+     aZ_H2  = inp_coolrates_table(tables,tables%tbl_AlphaZ_H2, TK,.false.)  ! Dust form [cm3 s-1]
+     aGP_H2 = inp_coolrates_table(tables,tables%tbl_AlphaGP_H2, TK,.false.) ! Gas phase [cm3 s-1]
+     b_H3B  = inp_coolrates_table(tables,tables%tbl_Beta_H3B, TK,.false.)   ! 3 body H2 [cm3 s-1]
+     b_H2HI = inp_coolrates_table(tables,tables%tbl_Beta_H2HI, TK,.false.)  !     Cdiss [cm3 s-1]
+     b_H2H2 = inp_coolrates_table(tables,tables%tbl_Beta_H2H2, TK,.false.)  !     Cdiss [cm3 s-1]
   endif
-  if(rt_OTSA) then                             !   Recombination [cm3 s-1]
-     a_HI   = inp_coolrates_table(tbl_AlphaB_HII, TK,.false.)
-     a_HEI  = inp_coolrates_table(tbl_AlphaB_HeII, TK,.false.)
-     a_HEII = inp_coolrates_table(tbl_AlphaB_HeIII, TK,.false.)
+  if(r%rt_otsa) then                           !   Recombination [cm3 s-1]
+     a_HI   = inp_coolrates_table(tables,tables%tbl_AlphaB_HII, TK,.false.)
+     a_HEI  = inp_coolrates_table(tables,tables%tbl_AlphaB_HeII, TK,.false.)
+     a_HEII = inp_coolrates_table(tables,tables%tbl_AlphaB_HeIII, TK,.false.)
   else
-     a_HI   = inp_coolrates_table(tbl_AlphaA_HII, TK,.false.)
-     a_HEI  = inp_coolrates_table(tbl_AlphaA_HeII, TK,.false.)
-     a_HEII = inp_coolrates_table(tbl_AlphaA_HeIII, TK,.false.)
+     a_HI   = inp_coolrates_table(tables,tables%tbl_AlphaA_HII, TK,.false.)
+     a_HEI  = inp_coolrates_table(tables,tables%tbl_AlphaA_HeII, TK,.false.)
+     a_HEII = inp_coolrates_table(tables,tables%tbl_AlphaA_HeIII, TK,.false.)
   endif
-  b_HI   = inp_coolrates_table(tbl_Beta_HI, TK,.false.)  !  Cion [cm3 s-1]
-  if(isHe) then
-     nHe = Y/(1.-Y)/4.*nH
+  b_HI   = inp_coolrates_table(tables,tables%tbl_Beta_HI, TK,.false.)  !  Cion [cm3 s-1]
+  if(r%isHe) then
+     nHe = r%Y/(1.-r%Y)/4.*nH
      g_HEI  = t_rad_spec(ixHeII)
      g_HEII = t_rad_spec(ixHeIII)
-     b_HEI  = inp_coolrates_table(tbl_Beta_HeI, TK,.false.)
-     b_HEII = inp_coolrates_table(tbl_Beta_HeII, TK,.false.)
+     b_HEI  = inp_coolrates_table(tables,tables%tbl_Beta_HeI, TK,.false.)
+     b_HEII = inp_coolrates_table(tables,tables%tbl_Beta_HeII, TK,.false.)
   endif
 
   n_E = nH     ; n_H2 = 0d0    ; n_H2_old = nH/2d0
-  n_HeI=0d0    ; n_HeII=0d0    ; n_HeIII=0d0
+  n_HeI = 0d0  ; n_HeII=0d0    ; n_HeIII=0d0
   err_nE = 1d0 ; err_nH2=0d0   ! err_nH2 initialisation in case of no H2
   n_HI = 0.0d0 ; n_HII=nH
 
   do while(err_nE > 1d-8 .or. err_nH2 > 1d-8)
      n_E_min = MAX(n_E,1e-15*nH)
      C_HII = b_HI * n_E_min + g_HI                   !  HII creation (s-1)
-     if(cosmic_rays) C_HII = C_HII + cosray_HI
+     if(r%cosmic_rays) C_HII = C_HII + cosray_HI
      f_HII = max(C_HII / a_HI / n_E_min, 1d-20)     ! Cre/Destr [unitless]
      f_H2 = 0d0
-     if(isH2) then
+     if(r%isH2) then
         f_dust = 1d0-n_HII/nH
         C_H2   = aZ_H2 * nH * Zsol * f_dust                              &
                + aGP_H2 * n_E_min                                        &
                + b_H3B * n_HI * (n_HI + n_H2/ 8.)
-        D_H2   = b_H2HI * n_HI + b_H2H2 * n_H2 + g_H2 ! H2 destr. (s-1)
-        if(cosmic_rays) D_H2 = D_H2 + cosray_H2
-        f_H2   = C_H2 / max(D_H2,1d-50)         ! Cre/Destr [unitless]
+        D_H2   = b_H2HI * n_HI + b_H2H2 * n_H2 + g_H2    ! H2 destr. (s-1)
+        if(r%cosmic_rays) D_H2 = D_H2 + cosray_H2
+        f_H2   = C_H2 / max(D_H2,1d-50)             ! Cre/Destr [unitless]
         n_H2   = nH / (2d0 + 1d0/f_H2 + f_HII/f_H2)
      endif ! if(isH2)
      n_HI  = nH / (1d0 + f_HII + 2d0*f_H2)
      n_HII = nH / (1d0 + 1d0/f_HII + 2d0*f_H2/f_HII)
 
-     if(isHe) then
-        D_HeI   = b_HEI*n_E_min  + g_HEI           !  HeI destr. (s-1)
-        if(cosmic_rays) D_HeI = D_HeI + 1.1 * cosray_HI
-        C_HeIII = b_HEII*n_E_min + g_HEII          !  HeIII cre. (s-1)
+     if(r%isHe) then
+        D_HeI   = b_HEI*n_E_min  + g_HEI               !  HeI destr. (s-1)
+        if(r%cosmic_rays) D_HeI = D_HeI + 1.1 * cosray_HI
+        C_HeIII = max(b_HEII*n_E_min + g_HEII,1d-99)   !  HeIII cre. (s-1)
         f_HeI   = D_HeI / a_HeI / n_E_min          !  Destr/Cre [unitless]
         f_HeIII = a_HeII * n_E_min / C_HeIII       !  Destr/Cre [unitless]
 
-        n_HEI   = nHe / (1d0 + f_HeI + f_HeI/f_HeIII)
-        n_HEII  = nHe / (1d0 + 1d0/f_HeI + 1d0/f_HeIII)
-        n_HEIII = nHe / (1d0 + f_HeIII + f_HeIII/f_HeI)
+        n_HEI   = nHe / (1d0 + f_HeI + f_HeI/max(f_HeIII,1d-99))
+        n_HEII  = nHe / (1d0 + 1d0/f_HeI + 1d0/max(f_HeIII,1d-99))
+        n_HEIII = nHe / (1d0 + f_HeIII + f_HeIII/max(f_HeI,1d-99))
      endif ! if(isHe)
 
      err_nE = ABS((n_E - (n_HII + n_HEII + 2.*n_HEIII))/nH)
      n_E = 0.5*n_E+0.5*(n_HII + n_HEII + 2.*n_HEIII)
 
-     if(isH2) then
+     if(r%isH2) then
         err_nH2 = ABS((n_H2_old - n_H2)/nH)
         n_H2_old = n_H2
      endif
@@ -937,7 +1000,7 @@ SUBROUTINE cmp_chem_eq(TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   end do
 
   nTOT     = n_E+n_H2+n_HI+n_HII+n_HEI+n_HEII+n_HEIII
-  mu       = nH/(1.-Y)/nTOT
+  mu       = nH/(1.-r%Y)/nTOT
   nSpec(1) = n_E
   nSpec(2) = n_H2
   nSpec(3) = n_HI
@@ -946,63 +1009,78 @@ SUBROUTINE cmp_chem_eq(TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   nSpec(6) = n_HEII
   nSpec(7) = n_HEIII
 
+  end associate
+
 END SUBROUTINE cmp_chem_eq
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE rt_evol_single_cell(astart,aend,dasura,h,omegab,omega0,omegaL &
-                              ,T2end,mu,ne,if_write_result)
-!-------------------------------------------------------------------------
-! Used for initialization of thermal state in cosmological simulations.
-!
-! astart : valeur du facteur d'expansion au debut du calcul
-! aend   : valeur du facteur d'expansion a la fin du calcul
-! dasura : la valeur de da/a entre 2 pas de temps
-! h      : la valeur de H0/100
-! omegab : la valeur de Omega baryons
-! omega0 : la valeur de Omega matiere (total)
-! omegaL : la valeur de Omega Lambda
-! T2end  : Le T/mu en output
-! mu     : le poids moleculaire en output
-! ne     : le ne en output
-! if_write_result : .true. pour ecrire l'evolution de la temperature
-!          et de n_e sur l'ecran.
-!-------------------------------------------------------------------------
-  use UV_module
+SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
+     & h, omegab, omega0, omegaL, T2end, mu, ne, if_write_result)
+  !-------------------------------------------------------------------------
+  ! Used for initialization of thermal state in cosmological simulations.
+  !
+  ! tables : object containing all non-equilibrium cooling tables
+  ! astart : valeur du facteur d'expansion au debut du calcul
+  ! aend   : valeur du facteur d'expansion a la fin du calcul
+  ! dasura : la valeur de da/a entre 2 pas de temps
+  ! h      : la valeur de H0/100
+  ! omegab : la valeur de Omega baryons
+  ! omega0 : la valeur de Omega matiere (total)
+  ! omegaL : la valeur de Omega Lambda
+  ! T2end  : Le T/mu en output
+  ! mu     : le poids moleculaire en output
+  ! ne     : le ne en output
+  ! if_write_result : .true. pour ecrire l'evolution de la temperature
+  !          et de n_e sur l'ecran.
+  !-------------------------------------------------------------------------
+!  use UV_module
   implicit none
+  type(run_t)::r
+  type(neq_cooling_t)::tables
   real(kind=8)::astart,aend,T2end,h,omegab,omega0,omegaL,ne,dasura
-  logical :: if_write_result
-  real(dp):: aexp,daexp=0.,dt_cool,T2_com, nH_com
-  real(dp),dimension(nions)::pHI_rates=0.
-  real(kind=8) :: mu
-  real(dp) :: mu_dp
-  real(dp) :: n_spec(1:7)
+  logical::if_write_result
+  !-------------------------------------------------------------------------
+  real(dp)::aexp, daexp, dt_cool, T2_com, nH_com
+  real(dp),dimension(nions)::pHI_rates
+  real(kind=8)::mu
+  real(dp)::mu_dp
+  real(dp)::n_spec(1:7)
   real(dp),dimension(1:nvector):: T2
   real(dp),dimension(1:nions, 1:nvector):: xion
+#ifdef RT
   real(dp),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
   real(dp),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
   real(dp),dimension(1:ndim, 1:nvector):: p_gas
-  real(dp),dimension(1:nvector)::nH=0., Zsolar=0.
-  logical,dimension(1:nvector)::c_switch=.true.
-!-------------------------------------------------------------------------
+#endif
+  real(dp),dimension(1:nvector)::nH, Zsolar
+  logical,dimension(1:nvector)::c_switch
+  !-------------------------------------------------------------------------
+  associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
+
   aexp = astart
   T2_com = 2.726d0 / aexp * aexp**2 / mu_mol
-  nH_com = omegab*rhoc*h**2*X/mH
+  nH_com = omegab*rhoc*h**2*r%X/mH
+  pHI_rates = 0.                              ! Initially no UV background
 
   mu_dp = mu
-  call cmp_Equilibrium_Abundances(                                       &
-          T2_com/aexp**2, nH_com/aexp**3, pHI_rates, mu_dp, n_Spec, z_ave)
+  call cmp_Equilibrium_Abundances(r, tables, T2_com/aexp**2, nH_com/aexp**3, pHI_rates, mu_dp, n_Spec, 0d0)
+
   ! Initialize cell state
   T2(1)=T2_com                                          !      Temperature
-  if(isH2) xion(ixHI,1)=n_Spec(3)/(nH_com/aexp**3)      !   HI frac
+  if(r%isH2) xion(ixHI,1)=n_Spec(3)/(nH_com/aexp**3)    !   HI    fraction
   xion(ixHII,1)=n_Spec(4)/(nH_com/aexp**3)              !   HII   fraction
-  if(isHe) xion(ixHeII,1)=n_Spec(6)/(nH_com/aexp**3)    !   HeII  fraction
-  if(isHe) xion(ixHeIII,1)=n_Spec(7)/(nH_com/aexp**3)   !   HeIII fraction
-  p_gas(:,1)=0.
+  if(r%isHe) xion(ixHeII,1)=n_Spec(6)/(nH_com/aexp**3)  !   HeII  fraction
+  if(r%isHe) xion(ixHeIII,1)=n_Spec(7)/(nH_com/aexp**3) !   HeIII fraction
+#ifdef RT
   Np(:,1)=0. ; Fp(:,:,1)=0.                  ! Photon densities and fluxes
-  dNpdt(:,1)=0. ; dFpdt(:,:,1)=0.
+  dNpdt(:,1)=0. ; dFpdt(:,:,1)=0.              ! are set to zero initially
+  p_gas(:,1)=0.                                        ! Gas momemtum also
+#endif
+  Zsolar(1)=0.                                          ! Metallicity also
+  c_switch(1)=.true.
   do while (aexp < aend)
-     call update_UVrates(aexp)
-     call update_coolrates_tables(aexp)
+!     call update_UVrates(aexp)
+     call update_coolrates_tables(r,tables,aexp)  ! Update Compton heating
 
      daexp = dasura*aexp
      dt_cool = daexp                                                     &
@@ -1011,36 +1089,41 @@ SUBROUTINE rt_evol_single_cell(astart,aend,dasura,h,omegab,omega0,omegaL &
 
      nH(1) = nH_com/aexp**3
      T2(1) = T2(1)/aexp**2
-     call rt_solve_cooling(T2,xion,Np,Fp,p_gas,dNpdt,dFpdt,nH,c_switch   &
-                           ,Zsolar,dt_cool,aexp,1)
-     T2(1)=T2(1)*aexp**2
+     call rt_solve_cooling(r,tables,T2,xion, &
+#ifdef RT
+          &         Np,Fp,p_gas,dNpdt,dFpdt, &
+#endif
+          & nH,c_switch,Zsolar,dt_cool,aexp,1)
+     T2(1) = T2(1)*aexp**2
      aexp = aexp + daexp
-     if (if_write_result) write(*,'(4(1pe10.3))')                        &
-                              aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
+     if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
   end do
-  T2end=T2(1)/(aexp-daexp)**2
-  ne=(n_spec(3)+(n_spec(5)+2.*n_spec(6))*0.25*Y/X)
+  T2end = T2(1)/(aexp-daexp)**2
+  ne = (n_spec(3)+(n_spec(5)+2.*n_spec(6))*0.25*r%Y/r%X)
+
+  end associate
+
 end subroutine rt_evol_single_cell
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 FUNCTION HsurH0(z,omega0,omegaL,OmegaR)
-!-------------------------------------------------------------------------
+  !-------------------------------------------------------------------------
   implicit none
   real(kind=8) :: HsurH0,z,omega0,omegaL,omegaR
-!-------------------------------------------------------------------------
+  !-------------------------------------------------------------------------
   HsurH0=sqrt(Omega0*(1d0+z)**3+OmegaR*(1d0+z)**2+OmegaL)
 END FUNCTION HsurH0
 
 !=========================================================================
 subroutine rt_cmp_metals(T2,nH,mu,metal_tot,metal_prime,aexp)
-! Taken from the equilibrium cooling_module of RAMSES
-! Compute cooling enhancement due to metals
-! T2           => Temperature in Kelvin, divided by mu
-! nH           => Hydrogen number density (H/cc)
-! mu           => Average mass per particle in terms of mH
-! metal_tot   <=  Metal cooling contribution to de/dt [erg s-1 cm-3]
-! metal_prime <=  d(metal_tot)/dT2 [erg s-1 cm-3 K-1]
-!=========================================================================
+  ! Taken from the equilibrium cooling_module of RAMSES
+  ! Compute cooling enhancement due to metals
+  ! T2           => Temperature in Kelvin, divided by mu
+  ! nH           => Hydrogen number density (H/cc)
+  ! mu           => Average mass per particle in terms of mH
+  ! metal_tot   <=  Metal cooling contribution to de/dt [erg s-1 cm-3]
+  ! metal_prime <=  d(metal_tot)/dT2 [erg s-1 cm-3 K-1]
+  !=========================================================================
   implicit none
   real(dp) ::T2,nH,mu,metal_tot,metal_prime,aexp
   ! Cloudy at solar metalicity
@@ -1111,7 +1194,7 @@ subroutine rt_cmp_metals(T2,nH,mu,metal_tot,metal_prime,aexp)
   real(dp)::c1=0.4,c2=10.0,TT0=1d5,TTC=1d6,alpha1=0.15
   real(dp)::ux,g_courty,f_courty=1d0,g_courty_prime,f_courty_prime
   integer::iT,iZ
-!-------------------------------------------------------------------------
+  !-------------------------------------------------------------------------
   ZZ=1d0/aexp-1d0
   TT=T2*mu
   lTT=log10(TT)
@@ -1168,65 +1251,67 @@ subroutine rt_cmp_metals(T2,nH,mu,metal_tot,metal_prime,aexp)
 end subroutine rt_cmp_metals
 
 !*************************************************************************
-FUNCTION getMu(xion, Tmu)
-! Returns the mean particle mass, in units of the proton mass.
-! xion => Hydrogen and helium ionisation fractions
-! Tmu => T/mu in Kelvin
-!-------------------------------------------------------------------------
+FUNCTION getMu(r, xion, Tmu)
+  ! Returns the mean particle mass, in units of the proton mass.
+  ! xion => Hydrogen and helium ionisation fractions
+  ! Tmu => T/mu in Kelvin
+  !-------------------------------------------------------------------------
   implicit none
-  real(kind=8),intent(in) :: Tmu
-  real(kind=8),intent(in),dimension(nions) :: xion
-  real(kind=8),save :: xHI, xHII, xHeII, xHeIII
+  type(run_t),intent(in)::r
+  real(kind=8),intent(in)::Tmu
+  real(kind=8),intent(in),dimension(nions)::xion
   real(kind=8)::getMu
-!-------------------------------------------------------------------------
+  !-------------------------------------------------------------------------
+  real(kind=8)::xHI, xHII, xHeII, xHeIII
+  !-------------------------------------------------------------------------
   xHII=0d0 ; xHeII=0d0 ; xHeIII=0d0
-  if(isH2) then
-     xHI=xion(ixHI)
+  if(r%isH2) then
+     xHI=xion(r%ixHI)
   else
-     xHI=1.-xion(ixHII)
+     xHI=1.-xion(r%ixHII)
   endif
-  xHII=xion(ixHII)
-  if(isHe) xHeII=xion(ixHeII)
-  if(isHe) xHeIII=xion(ixHeIII)
-  getMu = 1./(X*(0.5+0.5*xHI+1.5*xHII) + 0.25*Y*(1.+xHeII+2.*xHeIII))
-  if(is_kIR_T .or. is_mu_H2) &
-       getMu = getMu + exp(-1d0*(Tmu/Tmu_dissoc)**2) * (2.33-getMu)
+  xHII=xion(r%ixHII)
+  if(r%isHe) xHeII=xion(r%ixHeII)
+  if(r%isHe) xHeIII=xion(r%ixHeIII)
+  getMu = 1./(r%X*(0.5+0.5*xHI+1.5*xHII) + 0.25*r%Y*(1.+xHeII+2.*xHeIII))
+  if(r%is_kIR_T .or. r%is_mu_H2) &
+       getMu = getMu + exp(-1d0*(Tmu/r%Tmu_dissoc)**2) * (2.33-getMu)
 END FUNCTION getMu
 
-
-END MODULE rt_cooling_module
-
 !************************************************************************
-SUBROUTINE updateRTGroups_CoolConstants()
-! Update photon group cooling and heating constants, to reflect an update
-! in rt_c_cgs and in the cross-sections and energies in the groups.
-!------------------------------------------------------------------------
-  use rt_cooling_module
-  use rt_parameters
+SUBROUTINE updateRTGroups_CoolConstants(r,tables)
+  ! Update photon group cooling and heating constants, to reflect an update
+  ! in rt_c_cgs and in the cross-sections and energies in the groups.
+  !------------------------------------------------------------------------
   implicit none
+  type(run_t)::r
+  type(neq_cooling_t)::tables
+  !------------------------------------------------------------------------
   integer::iP, iI
-!------------------------------------------------------------------------
-  signc=group_csn*rt_c_cgs                                    ! [cm3 s-1]
-  sigec=group_cse*rt_c_cgs                                    ! [cm3 s-1]
-  do iP=1,nrtgroups
-     do iI=1,nions               ! Photoheating rates for photons on ions
-        PHrate(iP,iI) =  eV2erg * &        ! See eq (19) in Aubert(08)
-             (sigec(iP,iI) * group_egy(iP) - signc(iP,iI)*ionEvs(iI))
-        PHrate(iP,iI) = max(PHrate(iP,iI),0d0) !      No negative heating
+  !------------------------------------------------------------------------
+  tables%signc = r%group_csn*tables%rt_c_cgs                    ! [cm3 s-1]
+  tables%sigec = r%group_cse*tables%rt_c_cgs                    ! [cm3 s-1]
+  do iP = 1,nrtgroups
+     do iI = 1,nions               ! Photoheating rates for photons on ions
+        tables%PHrate(iP,iI) =  eV2erg * &      ! See eq (19) in Aubert(08)
+             (tables%sigec(iP,iI) * r%group_egy(iP) - tables%signc(iP,iI)*r%ionEvs(iI))
+        tables%PHrate(iP,iI) = max(tables%PHrate(iP,iI),0d0)  ! Heating > 0
      end do
   end do
 END SUBROUTINE updateRTGroups_CoolConstants
 
 !************************************************************************
 SUBROUTINE reduce_flux(Fp, cNp)
-! Make sure the reduced photon flux is less than one
-!------------------------------------------------------------------------
-  use rt_parameters
+  ! Make sure the reduced photon flux is less than one
+  !------------------------------------------------------------------------
   implicit none
-  real(dp),dimension(ndim):: Fp
-  real(dp):: cNp, fred
-!------------------------------------------------------------------------
+  real(dp),dimension(ndim)::Fp
+  real(dp)::cNp
+  !------------------------------------------------------------------------
+  real(dp)::fred
   fred = sqrt(sum(Fp**2))/cNp
   if(fred .gt. 1d0) Fp = Fp/fred
 END SUBROUTINE reduce_flux
+
+END MODULE rt_cooling_module
 

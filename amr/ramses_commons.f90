@@ -4,6 +4,7 @@ module ramses_commons
   use mdl_module, only: mdl_t
   use clfind_commons, only: clump_t
   use cooling_module, only: cooling_t
+  use coolrates_module, only: neq_cooling_t
 
   type ramses_t
 
@@ -17,18 +18,19 @@ module ramses_commons
      type(part_t)::gas
      type(clump_t)::c
      type(cooling_t)::cool
+     type(neq_cooling_t)::tables
      type(mdl_t),pointer::mdl => null()
 
   end type ramses_t
 
   type pst_t
-     
+
      type(ramses_t),pointer::s => null()
      type(pst_t),pointer::pLower => null()
      integer::iUpper = -1
      integer::nLower = 0
      integer::nUpper = 0
-     
+
   end type pst_t
 
 contains

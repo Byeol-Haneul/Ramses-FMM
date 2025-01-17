@@ -1,6 +1,7 @@
 module amr_commons
   use amr_parameters
   use hydro_parameters
+  use rt_parameters
   use oct_commons
   use hydro_commons
   use rt_commons
@@ -305,38 +306,34 @@ module amr_commons
      real(dp)::IG_T2 = 1.0D7
      real(dp)::IG_metal = 0.01
 
-     ! RT_PARAMS namelist. Some parameters are not (yet) used
+     ! RT parameters. Some parameters are not (yet) used
      logical::rt_advect=.false.           ! Advection of photons?                           !
      logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
      real(dp)::units_Np=1.0               ! [#/cm^3]                                        !
-     real(dp)::smallNp=1d-50              ! Floor value for photon number densities         !
-     !real(dp)::rt_Tconst=-1              ! If pos. use this value for all T-depend. rates  !
-     !logical::rt_isTconst=.false.        ! Const rates activated?                          !
+     real(dp)::rt_Tconst=-1               ! If pos. use this value for all T-depend. rates  !
+     logical::rt_isTconst=.false.         ! Const rates activated?                          !
      logical::rt_star=.false.             ! Activate radiation from star particles          !
      logical::rt_sink=.false.             ! Activate radiation from sink particles          !
-     !real(dp)::rt_esc_frac=1d0           ! Escape fraction of light from stellar particles !
-     !character(LEN=10)::rt_flux_scheme='glf'                                                !
-     !logical::rt_use_hll=.false.          ! Use hll flux (or the default glf)               !
      logical::rt_is_outflow_bound=.false. ! Make all boundaries=outflow for RT              !
      real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
      real(dp)::rt_err_grad_n(nrtgroups)=-1.! Photon number density gradient for refinement  !
      real(dp)::rt_floor_n(nrtgroups)=1d-10 ! Photon number density floor for refinement     !
-     !real(dp)::rt_err_grad_xHI=-1.0      ! Ionization state gradient for refinement        !
-     !real(dp)::rts_err_grad_xHII=-1.0    ! Ionization state gradient for refinement        !
-     !real(dp)::rt_refine_aexp=-1.0       ! Start a for RT gradient refinement              !
      real(dp)::rt_floor_xHI=1d-10         ! Ionization state floor for refinement           !
      real(dp)::rt_floor_xHII=1d-10        ! Ionization state floor for refinement           !
      real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT                      !
-     !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
      integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
                                           ! gravity/etc timestep                            !
      logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
-     !logical::rt_isDiffuseUVsrc=.false.  ! UV emission from low-density cells              !
-     !real(dp)::rt_UVsrc_nHmax=-1d0       ! Density threshold for UV emission               !
+     logical::rt_isIR=.true.              ! Use IR photon groups                            !
+     logical::is_kIR_T=.true.             ! Kappa IT depends on T_rad                       !
+     logical::rt_T_rad=.true.             ! Use radiation temperature for everything        !
+     logical::rt_isoPress=.false.         ! Use cE, not F, for rad. pressure                !
+     real(dp)::rt_pressBoost=1d0          ! Boost on RT pressure                            !
+     logical::is_mu_H2=.false.
+     real(dp)::Tmu_dissoc=1d3             ! Dissociation temperature [K]                    !
      logical::upload_equilibrium_x=.true. ! Enforce equilibrium xion when uploading         !
-     !integer::heat_unresolved_HII=0      ! Subgrid model heating unresolved HII regions    !
-     !integer::iHIIheat=6                 ! Var index for HII heating                       !
-     !logical::cosmic_rays=.false.        ! Include cosmic ray ionisation                   !
+     integer::iPEH_group=-1               ! Radiation group used for photo-electric heating !
+     logical::cosmic_rays=.false.         ! Include cosmic ray ionisation                   !
      
      !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                           !
      !character(LEN=128)::sed_dir=''      ! Dir containing stellar energy distributions     !
@@ -382,26 +379,31 @@ module amr_commons
      real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                     ! Photon flux
      real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                     ! Photon flux
 
-     ! RT_GROUPS namelist--------------------------------------------------------------------
+     ! RT groups parameters------------------------------------------------------------------
      ! integer::sedprops_update=-1                    ! Update sedprops from star populations
      ! negative: never update, 0:update on init, pos x: update every x coarse steps
      ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
      ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
      ! Indexes nrtgroups, nIons stand for photon group vs species (e.g. 1=H, 2=He)
-     real(dp),dimension(nrtgroups,nIons)::group_csn=0, group_cse=0  !    Cross sections (cm2)
+     real(dp),dimension(nrtgroups,nIons)::group_csn=0, group_cse=0     ! Cross sections (cm2)
      real(dp),dimension(nrtgroups)::group_egy=0                     !  Avg photon energy (ev)
      real(dp),dimension(nrtgroups)::groupL0=13.60                   ! Wavelength lower limits
      real(dp),dimension(nrtgroups)::groupL1=0                       ! Wavelength upper limits
-     integer,dimension(nIons)::spec2group=0                ! Ion -> group # in recombinations
      real(dp),dimension(nrtgroups)::kappaAbs=0                      ! Dust absorption opacity
      real(dp),dimension(nrtgroups)::kappaSc=0                       ! Dust scattering opacity
+     real(dp),dimension(nrtgroups)::isLW=0d0                       ! Use to find the LW group 
+     real(dp),dimension(nrtgroups)::ssh2=0d0                          ! Self-shielding for H2
+     integer,dimension(nIons)::spec2group=0                ! Ion -> group # in recombinations
 
-     ! NEQ_CHEM namelist---------------------------------------------------------------------
+     ! Non-equilibrium chemistry parameters--------------------------------------------------
      logical::is_init_xion=.false.                    ! Initialize ionization from T profile?
      logical::isHe=.true.                             !      He ionization fractions tracked?
      logical::isH2=.false.                            !                           H2 tracked?
-     real(dp)::X
-     real(dp)::Y
+     ! X and Y here are variables, while X_H and Y_He are parameters in cooling/constants.f90
+     real(dp)::X=0.76d0                               !                Hydrogen mass fraction
+     real(dp)::Y=0.24d0                               !                  Helium mass fraction
+     integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
+     real(dp),dimension(nIons)::ionEvs                !                   Ionization energies
 
   end type run_t
 

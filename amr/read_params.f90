@@ -653,8 +653,6 @@ subroutine m_read_params(pst)
 112 continue
   close(1)
 
-  if(rt)call m_read_rt_params(pst)
-
   !-----------------
   ! Max size checks
   !-----------------
@@ -764,6 +762,10 @@ subroutine m_read_params(pst)
      write(*,*)'Aborting...'
      call mdl_abort(s%mdl)
   end if
+
+  ! Read RT parameters from namelist
+
+  if(rt)call m_read_rt_params(pst,neq_chem,ichem)
 
   ! Fill in all run parameters in corresponding structure
 

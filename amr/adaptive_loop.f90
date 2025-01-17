@@ -13,7 +13,7 @@ subroutine adaptive_loop(pst)
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
-  use update_rt_c_module,only: m_update_rt_c
+  use update_rt_c_module,only: r_update_rt_var
 
   implicit none
   type(pst_t)::pst
@@ -34,11 +34,11 @@ subroutine adaptive_loop(pst)
   ! Initialize grid variables
   call r_init_amr(pst)
 
-  ! Initialize time variables
+  ! Initialize time variables and cooling tables
   call r_init_time(pst)
 
-  ! Initialize reduced speed of light
-  if(r%rt)call m_update_rt_c(pst)
+  ! Initialize time dependent RT variables
+  if(r%rt)call r_update_rt_var(pst)
 
   ! Initialize hydro kernel workspace
   if(r%hydro)call r_init_hydro(pst)

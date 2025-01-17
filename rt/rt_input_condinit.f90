@@ -82,7 +82,7 @@ end subroutine rt_input_condinit
 !################################################################
 subroutine rt_region_condinit(r,g,x,q,dx,nn)
   use amr_parameters, only:dp, nvector, ndim
-  use rt_parameters, only: nrtvar, nrtgroups
+  use rt_parameters, only: nrtvar, nrtgroups, smallnp
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
@@ -106,7 +106,7 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
 
   ! Set (tiny) default values outside of regions or if n_region=0
   do igrp = 1, nrtgroups
-     q(1:nn,1+(igrp-1)*(ndim+1)) = r%smallnp  ! photon densities
+     q(1:nn,1+(igrp-1)*(ndim+1)) = smallnp  ! photon densities
      do idim = 1, ndim
         q(1:nn,1+idim+(igrp-1)*(ndim+1)) = 0.0d0 ! photon fluxes
      end do
@@ -115,7 +115,7 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
   ! Loop over initial conditions regions
   do k=1,r%rt_nregion
      if(r%rt_reg_group(k) .le. 0 .or. r%rt_reg_group(k) .gt. nrtgroups) cycle
-     if(r%rt_n_region(k).le.0.0) r%rt_n_region(k)=r%smallnp
+     if(r%rt_n_region(k).le.0.0) r%rt_n_region(k)=smallnp
      group_ind = 1+(r%rt_reg_group(k)-1)*(ndim+1)
      
      ! For "square" regions only:

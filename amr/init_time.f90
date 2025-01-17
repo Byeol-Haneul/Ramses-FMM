@@ -20,7 +20,7 @@ recursive subroutine r_init_time(pst)
      call r_init_time(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m,pst%s%cool)
+     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m,pst%s%cool,pst%s%tables)
   endif
 
 end subroutine r_init_time
@@ -28,18 +28,21 @@ end subroutine r_init_time
 !###########################################################
 !###########################################################
 !###########################################################
-  subroutine init_time(mdl,r,g,m,c)
+  subroutine init_time(mdl,r,g,m,c,tables)
   use mdl_module
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t,mesh_t
   use cooling_module, only: cooling_t,set_table
   use init_cooling_module, only: init_cooling
+  use coolrates_module, only: neq_cooling_t
+  use init_neq_chem_module, only: init_neq_chem
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(cooling_t)::c
+  type(neq_cooling_t)::tables
 
   ! Local variables
   integer::i
@@ -88,9 +91,13 @@ end subroutine r_init_time
   end if                                                                   
 
   ! Initialize cooling model
-  if(r%cooling.and..not.r%cooling_ism)then
+  if(r%cooling.and..not.r%cooling_ism.and..not.r%neq_chem)then
      call init_cooling(r,g,c)
      call set_table(c,dble(g%aexp))
+  endif
+  ! Initialize non-equilibrium chemistry model
+  if(r%neq_chem)then
+     call init_neq_chem(r,g,tables)
   endif
 
 end subroutine init_time

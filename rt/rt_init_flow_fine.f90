@@ -115,4 +115,32 @@ end subroutine r_broadcast_rt_c
 !##############################################################
 !##############################################################
 !##############################################################
+recursive subroutine r_update_rt_var(pst)
+  use mdl_module
+  use coolrates_module, only: update_rt_c, update_coolrates_tables
+  use rt_cooling_module, only: updateRTGroups_CoolConstants
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+
+  integer::rID
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_UPDATE_RT_VAR,pst%iUpper+1)
+     call r_update_rt_var(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     ! Update reduced speed of light
+     call update_rt_c(pst%s%r, pst%s%g, pst%s%tables)
+     ! Update Compton heating
+     call update_coolrates_tables(pst%s%r, pst%s%tables, dble(pst%s%g%aexp))
+     ! Update radiation heating and cooling constants
+     call updateRTGroups_CoolConstants(pst%s%r, pst%s%tables)
+  endif
+
+end subroutine r_update_rt_var
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
 end module update_rt_c_module
