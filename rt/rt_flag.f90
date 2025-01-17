@@ -92,13 +92,15 @@ subroutine rt_flag(s,ilevel)
            do ivar=1,nrtvar
               icellg=icelln(2*idim-1)
               icelld=icelln(2*idim  )
+#ifdef RT
               uug(ivar)=gridn(2*idim-1)%p%rtuold(icellg,ivar)
               uum(ivar)=m%grid(igrid)%rtuold(ind,ivar)
               uud(ivar)=gridn(2*idim)%p%rtuold(icelld,ivar)
+#endif 
            end do
            call rt_refine(r,uug,uum,uud,ok)
         end do
-        
+
         do i_nbor=1,twondim
            call unlock_cache(s,gridn(i_nbor)%p)
         end do
@@ -140,10 +142,12 @@ subroutine pack_fetch_rt(grid,msg_size,msg_array)
         msg%int4(ind)=0
      endif
   end do
-  
+
   do ivar=1,nrtvar
      do ind=1,twotondim
+#ifdef RT  
         msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+#endif
      end do
   end do
 
@@ -178,10 +182,12 @@ subroutine unpack_fetch_rt(grid,msg_size,msg_array,hash_key)
         grid%refined(ind)=.false.
      endif
   end do
-  
+
   do ivar=1,nrtvar
      do ind=1,twotondim
+#ifdef RT
         grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+#endif
      end do
   end do
 

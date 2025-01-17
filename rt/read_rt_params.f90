@@ -252,6 +252,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   s%r%rt_exp_source=rt_exp_source
   s%r%rt_src_group=rt_src_group
   s%r%rt_n_source=rt_n_source
+  s%r%rt_u_source=rt_u_source
   s%r%rt_v_source=rt_v_source
   s%r%rt_w_source=rt_w_source
 

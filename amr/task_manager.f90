@@ -22,7 +22,6 @@ subroutine mdl_init
 #endif
   type(mdl_t),pointer::mdl
   type(pst_t),allocatable::pst
-  integer,dimension(1)::ncpu
 
   allocate(mdl)
   call mdl_initialize(mdl)
@@ -159,7 +158,8 @@ function worker_init(mdl) result(pst)
   use output_clump_module, only: r_output_clump
   use movie_module, only: r_output_frame
   use amr_parameters, only: nhilbert
-  use rt_input_condinit_module, only: r_rt_input_condinit
+  use init_rt_module, only: r_init_rt
+  use rt_input_condinit_module, only: r_rt_input_condinit, r_rt_input_source_regions
   use rt_upload_module, only: r_rt_upload_fine
   use output_rt_module, only: r_output_rt
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
@@ -299,8 +299,10 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_SCAN_FLAG,          pst,C_FUNLOC(r_set_scan_flag),2,0,"set_scan_flag")
   call mdl_add_service(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,     pst,C_FUNLOC(r_cmp_residual_norm2),1,2,"cmp_residual_norm2")
 #endif
+  call mdl_add_service(pst%s%mdl,MDL_INIT_RT,                pst,C_FUNLOC(r_init_rt),0,0,"init_rt")
   call mdl_add_service(pst%s%mdl,MDL_RT_UPLOAD_FINE,         pst,C_FUNLOC(r_rt_upload_fine),1,0,"rt_upload_fine")
   call mdl_add_service(pst%s%mdl,MDL_RT_INPUT_CONDINIT,      pst,C_FUNLOC(r_rt_input_condinit),1,0,"rt_input_condinit")
+  call mdl_add_service(pst%s%mdl,MDL_RT_INPUT_SOURCE_REGIONS,pst,C_FUNLOC(r_rt_input_source_regions),1,0,"rt_input_source_regions")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_RT,              pst,C_FUNLOC(r_output_rt),flen,0,"output_rt")
   call mdl_add_service(pst%s%mdl,MDL_RT_GODUNOV_FINE,        pst,C_FUNLOC(r_rt_godunov_fine),1,0,"rt_godunov_fine")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUNEW,             pst,C_FUNLOC(r_set_rtunew),1,0,"set_rtunew")
@@ -639,7 +641,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   ! It can be a flush message, and the routine
   ! unpacks it and combine it in the local memory.
   !
-  integer::i,ind,ivar,idim,info,ipos,iskip,igrid,ichild
+  integer::i,info,iskip,ichild
   integer::grid_cpu,peak_cpu,ilevel,itile,ntile_reply,nflush,ibuf
   integer::buffer_size_fetch_array,buffer_size_msg_array
   integer::buffer_size_fetch_array_clump,buffer_size_msg_array_clump
@@ -970,7 +972,7 @@ subroutine destage(s,igrid,hash_dict)
   ! It assembles flush messages, and when the message
   ! buffer is full, it sends it to the target CPU.
   !
-  integer::ind,ivar,idim,info,icache,iflush,grid_cpu,ibuf
+  integer::info,icache,iflush,grid_cpu,ibuf
   integer::send_flush_id,iskip,nflush
   integer::buffer_size_flush_array,buffer_size_msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -1074,7 +1076,7 @@ subroutine destage_clump(s,local_peak_id,hash_dict)
   ! It assembles flush messages, and when the message
   ! buffer is full, it sends it to the target CPU.
   !
-  integer::ind,ivar,idim,info,icache,iflush,peak_cpu,ibuf
+  integer::info,icache,iflush,peak_cpu,ibuf
   integer::send_flush_id_clump,iskip,nflush
   integer::buffer_size_flush_array_clump,buffer_size_msg_array_clump
   integer(kind=8)::global_peak_id

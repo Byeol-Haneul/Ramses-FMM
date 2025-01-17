@@ -18,7 +18,6 @@ recursive subroutine r_output_rt(pst,input_array,input_size,output_array,output_
   
   character(LEN=flen)::filename
   integer::rID
-
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_RT,pst%iUpper+1,input_size,output_size,input_array)
      call r_output_rt(pst%pLower,input_array,input_size,output_array,output_size)
@@ -52,10 +51,12 @@ subroutine output_rt(s,filename)
   real(kind=4),dimension(1:twotondim,1:nrtvar)::qout
   real(dp),dimension(1:twotondim,1:nrtvar)::qold
   real(dp),dimension(1:twotondim,1:nrtvar)::rtuold
+  logical::overflow_reported=.false.
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 #ifdef RT
   call open_file(s,filename,nskip,ilun)
+  overflow_reported=.false.
   do ilevel=r%levelmin,r%nlevelmax
      write(ilun,POS=nskip(ilevel))
      do igrid=m%head(ilevel),m%tail(ilevel)
@@ -69,6 +70,10 @@ subroutine output_rt(s,filename)
             end do
         end do
         qout=real(qold,kind=4)
+        if(maxval(qout).gt.1d31 .and. s%g%myid==1 .and. .not. overflow_reported) then
+            print*,'The RT variables have very high values and are overflowing in the outputs'
+            overflow_reported=.true.
+        endif
         write(ilun)qout
      end do
   end do

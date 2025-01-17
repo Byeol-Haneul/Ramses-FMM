@@ -15,7 +15,7 @@ recursive subroutine r_init_rt(pst)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INIT_HYDRO,pst%iUpper+1)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_RT,pst%iUpper+1)
      call r_init_rt(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
