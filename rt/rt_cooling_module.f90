@@ -1073,13 +1073,13 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
 #ifdef RT
   Np(:,1)=0. ; Fp(:,:,1)=0.                  ! Photon densities and fluxes
   dNpdt(:,1)=0. ; dFpdt(:,:,1)=0.              ! are set to zero initially
-  p_gas(:,1)=0.                                        ! Gas momemtum also
+  p_gas(:,1)=0.                                 ! Gas momemtum set to zero
 #endif
-  Zsolar(1)=0.                                          ! Metallicity also
+  Zsolar(1)=0.                                   ! Metallicity set to zero
   c_switch(1)=.true.
   do while (aexp < aend)
 !     call update_UVrates(aexp)
-     call update_coolrates_tables(r,tables,aexp)  ! Update Compton heating
+     call update_coolrates_tables(r, tables, aexp)! Update Compton heating
 
      daexp = dasura*aexp
      dt_cool = daexp                                                     &
@@ -1088,11 +1088,11 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
 
      nH(1) = nH_com/aexp**3
      T2(1) = T2(1)/aexp**2
-     call rt_solve_cooling(r,tables,T2,xion, &
+     call rt_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
-          &         Np,Fp,p_gas,dNpdt,dFpdt, &
+          &         Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-          & nH,c_switch,Zsolar,dt_cool,1)
+          & nH, c_switch, Zsolar, dt_cool, 1)
      T2(1) = T2(1)*aexp**2
      aexp = aexp + daexp
      if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
