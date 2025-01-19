@@ -799,8 +799,8 @@ contains
     real(dp),dimension(nions):: xion, dXion
 #ifdef RT
     real(dp),dimension(nrtgroups):: Np, dNp
-    real(dp),dimension(nDim, nrtgroups):: Fp, dFp
-    real(dp),dimension(nDim):: p_gas, dp_gas
+    real(dp),dimension(ndim, nrtgroups):: Fp, dFp
+    real(dp),dimension(ndim):: p_gas, dp_gas
 #endif
     real(dp)::T2, dT2, dtDone, dt, ddt, nH
     logical::stopRun

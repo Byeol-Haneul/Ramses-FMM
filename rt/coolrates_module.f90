@@ -14,17 +14,18 @@ MODULE coolrates_module
   use amr_commons, only: run_t
   implicit none
 
-  private   ! default
-  public init_coolrates_tables, update_coolrates_tables, inp_coolrates_table, compCoolrate, neq_cooling_t, update_rt_c
+  private ! default
+  public init_coolrates_tables, update_coolrates_tables, inp_coolrates_table, &
+       & compCoolrate, neq_cooling_t, update_rt_c
 
   ! Default cooling rates table parameters
-  integer, parameter :: nbinT  = 1001
-  real(dp), parameter :: Tmin   = 1d-2
-  real(dp), parameter :: Tmax   = 1d+9
+  integer, parameter :: nbinT = 1001
+  real(dp), parameter :: Tmin = 1d-2
+  real(dp), parameter :: Tmax = 1d+9
 
   type coolrates_table
      ! Cooling and interaction rates (log):
-     real(dp),dimension(nbinT) :: rates  = 0d0
+     real(dp),dimension(nbinT) :: rates = 0d0
      ! Temperature derivatives of those rates (drate/dlog(T)):
      real(dp),dimension(nbinT) :: primes = 0d0
   end type coolrates_table
@@ -38,13 +39,13 @@ MODULE coolrates_module
      real(dp) :: phi
 
      ! UV background heating and ionization rates
-     real(dp),dimension(nions,2)::UVrates
+     real(dp),dimension(nions,2) :: UVrates
 #ifdef RT
      ! Contribution of each group to photo-ionization rates
-     real(dp),dimension(nrtgroups,nions)::signc
+     real(dp),dimension(nrtgroups,nions) :: signc
 
      ! Contribution of each group to photo-heating rates
-     real(dp),dimension(nrtgroups,nions)::sigec, PHrate
+     real(dp),dimension(nrtgroups,nions) :: sigec, PHrate
 #endif
      real(dp) :: dlogTinv ! Inverse of the bin space (in K)
      real(dp) :: hTable, h2Table, h3Table   ! Interpol constants
