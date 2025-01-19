@@ -91,7 +91,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
      & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-     & nH, c_switch, Zsolar, dt, nCell)
+     & nH, Zsolar, dt, nCell)
   ! Semi-implicitly solve for new temperature, ionization states,
   ! photon density/flux, and gas velocity in a number of cells.
   ! Parameters:
@@ -104,7 +104,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   ! dNpdt   =>  Op split increment in photon densities during dt
   ! dFpdt   =>  Op split increment in photon flux magnitudes during dt
   ! nH      =>  Hydrogen number densities [cm-3]
-  ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
+  ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat) (OFF)
   ! Zsolar  =>  Cell metallicities [solar fraction]
   ! dt      =>  Timestep size             [s]
   ! nCell   =>  Number of cells (length of all the above vectors)
@@ -122,7 +122,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   real(dp),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
 #endif
   real(dp),dimension(1:nvector):: nH, Zsolar
-  logical,dimension(1:nvector):: c_switch
+!  logical,dimension(1:nvector):: c_switch
   real(dp)::dt
   integer::ncell
   !--------------------------------------------------------
@@ -257,7 +257,7 @@ contains
     ! dNpdt   =>  Op split increment in photon densities during dt
     ! dFpdt   =>  Op split increment in photon flux magnitudes during dt
     ! nH      =>  Hydrogen number densities [cm-3]
-    ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
+    ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat) (OFF)
     ! Zsolar  =>  Cell metallicities [solar fraction]
     ! dt      =>  Timestep size [s]
     ! dt_ok   <=  .f. if timestep constraints were broken, .t. otherwise
@@ -483,7 +483,8 @@ contains
 #endif
 
     ! UPDATE TEMPERATURE *************************************************
-    if(c_switch(icell) .and. r%cooling .and. .not. r%rt_T_rad) then
+!    if(c_switch(icell) .and. r%cooling .and. .not. r%rt_T_rad) then
+    if(r%cooling .and. .not. r%rt_T_rad) then
        Hrate = 0.                           !  Heating rate [erg cm-3 s-1]
        if(r%haardt_madau) Hrate = Hrate + SUM(nN(:)*tables%UVrates(:,2)) * ss_factor
 #ifdef RT
@@ -1052,7 +1053,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
   real(dp),dimension(1:ndim, 1:nvector):: p_gas
 #endif
   real(dp),dimension(1:nvector)::nH, Zsolar
-  logical,dimension(1:nvector)::c_switch
+!  logical,dimension(1:nvector)::c_switch
   !-------------------------------------------------------------------------
   associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
@@ -1076,7 +1077,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
   p_gas(:,1)=0.                                 ! Gas momemtum set to zero
 #endif
   Zsolar(1)=0.                                   ! Metallicity set to zero
-  c_switch(1)=.true.
+!  c_switch(1)=.true.
   do while (aexp < aend)
 !     call update_UVrates(aexp)
      call update_coolrates_tables(r, tables, aexp)! Update Compton heating
@@ -1092,7 +1093,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
 #ifdef RT
           &         Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-          & nH, c_switch, Zsolar, dt_cool, 1)
+          & nH, Zsolar, dt_cool, 1)
      T2(1) = T2(1)*aexp**2
      aexp = aexp + daexp
      if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
@@ -1117,11 +1118,11 @@ END FUNCTION HsurH0
 subroutine update_metal_cooling(r, tables, aexp)
   ! Compute the UV background effect on metal cooling
   ! as calibrated on Cloudy
-  !=========================================================================
+  !-------------------------------------------------------------------------
   implicit none
-  real(dp)::aexp
   type(run_t)::r
   type(neq_cooling_t)::tables
+  real(dp)::aexp
   !-------------------------------------------------------------------------
   real(dp),dimension(1:50),parameter::z_courty=(/                         &
        & 0.00000,0.04912,0.10060,0.15470,0.21140,0.27090,0.33330,0.39880, &

@@ -53,7 +53,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   integer,dimension(1:nvector)::ind_leaf
   real(kind=8),dimension(1:nvector)::nH,T2,delta_T2,ekk,err,emag
   real(kind=8),dimension(1:nvector)::T2min,Zsolar,boost
-  logical,dimension(1:nvector)::cooling_on=.true.
+!  logical,dimension(1:nvector)::cooling_on=.true.
   real(dp),dimension(nions, 1:nvector):: xion
 #ifdef RT
   integer::ig,iNp
@@ -184,7 +184,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         if(r%neq_chem) then
            do ii=0,nIons-1
               do i=1,nleaf
-                 xion(1+ii,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+ii)/m%grid(ind_leaf(i))%uold(ind,1)
+                 xion(1+ii,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+ii) &
+                      &        /m%grid(ind_leaf(i))%uold(ind,1)
               end do
            end do
         endif
@@ -271,7 +272,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-                & nH, cooling_on, Zsolar, dtcool, nleaf)
+                & nH, Zsolar, dtcool, nleaf)
         endif
 
         ! Compute rho in code units
