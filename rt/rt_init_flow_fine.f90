@@ -118,7 +118,7 @@ end subroutine r_broadcast_rt_c
 recursive subroutine r_update_rt_var(pst)
   use mdl_module
   use coolrates_module, only: update_rt_c, update_coolrates_tables
-  use rt_cooling_module, only: updateRTGroups_CoolConstants
+  use rt_cooling_module, only: updateRTGroups_CoolConstants, update_metal_cooling
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -136,6 +136,8 @@ recursive subroutine r_update_rt_var(pst)
      call update_coolrates_tables(pst%s%r, pst%s%tables, dble(pst%s%g%aexp))
      ! Update radiation heating and cooling constants
      call updateRTGroups_CoolConstants(pst%s%r, pst%s%tables)
+     ! Update UV background constants for metal cooling
+     call update_metal_cooling(pst%s%r, pst%s%tables, dble(pst%s%g%aexp))
   endif
 
 end subroutine r_update_rt_var

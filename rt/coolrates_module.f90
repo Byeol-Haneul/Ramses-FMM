@@ -34,6 +34,9 @@ MODULE coolrates_module
      ! Reduced speed of light in cgs
      real(dp) :: rt_c_cgs
 
+     ! Contribution of UV background to metal cooling
+     real(dp) :: phi
+
      ! UV background heating and ionization rates
      real(dp),dimension(nions,2)::UVrates
 #ifdef RT

@@ -13,7 +13,8 @@ module rt_cooling_module
   implicit none
 
   private   ! default
-  public rt_set_model, rt_solve_cooling, cmp_chem_eq, updateRTGroups_CoolConstants
+  public rt_set_model, rt_solve_cooling, cmp_chem_eq, updateRTGroups_CoolConstants &
+       ,update_metal_cooling
 
   real(dp),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 
@@ -72,7 +73,7 @@ END SUBROUTINE rt_set_model
 
 !!$!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 !!$SUBROUTINE update_UVrates(aexp)
-!!$! Set the UV ionization and heating rates according to the given a_exp.
+!!$! Set the UV ionization and heating rates according to the given aexp.
 !!$!-------------------------------------------------------------------------
 !!$  use UV_module
 !!$  use amr_parameters,only:haardt_madau
@@ -90,7 +91,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
      & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-     & nH, c_switch, Zsolar, dt, a_exp, nCell)
+     & nH, c_switch, Zsolar, dt, nCell)
   ! Semi-implicitly solve for new temperature, ionization states,
   ! photon density/flux, and gas velocity in a number of cells.
   ! Parameters:
@@ -106,7 +107,6 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
   ! Zsolar  =>  Cell metallicities [solar fraction]
   ! dt      =>  Timestep size             [s]
-  ! a_exp   =>  Cosmic expansion
   ! nCell   =>  Number of cells (length of all the above vectors)
   !
   ! We use a slightly modified method of Anninos et al. (1997).
@@ -123,7 +123,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
 #endif
   real(dp),dimension(1:nvector):: nH, Zsolar
   logical,dimension(1:nvector):: c_switch
-  real(dp)::dt, a_exp
+  real(dp)::dt
   integer::ncell
   !--------------------------------------------------------
   real(dp),dimension(1:nvector):: tLeft, ddt
@@ -260,7 +260,6 @@ contains
     ! c_switch=>  Cooling switch (1 for cool/heat, 0 for no cool/heat)
     ! Zsolar  =>  Cell metallicities [solar fraction]
     ! dt      =>  Timestep size [s]
-    ! a_exp   =>  Cosmic expansion
     ! dt_ok   <=  .f. if timestep constraints were broken, .t. otherwise
     ! dt_rec  <=  Recommended timesteps for next iteration
     ! code    <= Error code in cool step, if dt_ok=.f.
@@ -541,8 +540,8 @@ contains
        dCdT2 = dCdT2 * mu                            ! dC/dT2 = mu * dC/dT
        metal_tot=0d0 ; metal_prime=0d0                     ! Metal cooling
        if(Zsolar(icell) .gt. 0d0) &
-            call rt_cmp_metals(T2(icell),nH(icell),mu,metal_tot          &
-                              ,metal_prime,a_exp)
+            call rt_cmp_metals(r, tables, T2(icell), nH(icell), mu,      &
+            &                  metal_tot, metal_prime)
        X_nHkb = r%X/(1.5 * nH(icell) * kB)         ! Multiplication factor
        rate  = X_nHkb*(Hrate - Crate - Zsolar(icell)*metal_tot)
        dRate = -X_nHkb*(dCdT2 + Zsolar(icell)*metal_prime)     ! dRate/dT2
@@ -1093,7 +1092,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
 #ifdef RT
           &         Np,Fp,p_gas,dNpdt,dFpdt, &
 #endif
-          & nH,c_switch,Zsolar,dt_cool,aexp,1)
+          & nH,c_switch,Zsolar,dt_cool,1)
      T2(1) = T2(1)*aexp**2
      aexp = aexp + daexp
      if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
@@ -1115,7 +1114,50 @@ FUNCTION HsurH0(z,omega0,omegaL,OmegaR)
 END FUNCTION HsurH0
 
 !=========================================================================
-subroutine rt_cmp_metals(T2,nH,mu,metal_tot,metal_prime,aexp)
+subroutine update_metal_cooling(r, tables, aexp)
+  ! Compute the UV background effect on metal cooling
+  ! as calibrated on Cloudy
+  !=========================================================================
+  implicit none
+  real(dp)::aexp
+  type(run_t)::r
+  type(neq_cooling_t)::tables
+  !-------------------------------------------------------------------------
+  real(dp),dimension(1:50),parameter::z_courty=(/                         &
+       & 0.00000,0.04912,0.10060,0.15470,0.21140,0.27090,0.33330,0.39880, &
+       & 0.46750,0.53960,0.61520,0.69450,0.77780,0.86510,0.95670,1.05300, &
+       & 1.15400,1.25900,1.37000,1.48700,1.60900,1.73700,1.87100,2.01300, &
+       & 2.16000,2.31600,2.47900,2.64900,2.82900,3.01700,3.21400,3.42100, &
+       & 3.63800,3.86600,4.10500,4.35600,4.61900,4.89500,5.18400,5.48800, &
+       & 5.80700,6.14100,6.49200,6.85900,7.24600,7.65000,8.07500,8.52100, &
+       & 8.98900,9.50000 /)
+  real(dp),dimension(1:50),parameter::phi_courty=(/                             &
+       & 0.0499886,0.0582622,0.0678333,0.0788739,0.0915889,0.1061913,0.1229119, &
+       & 0.1419961,0.1637082,0.1883230,0.2161014,0.2473183,0.2822266,0.3210551, &
+       & 0.3639784,0.4111301,0.4623273,0.5172858,0.5752659,0.6351540,0.6950232, &
+       & 0.7529284,0.8063160,0.8520859,0.8920522,0.9305764,0.9682031,1.0058810, &
+       & 1.0444020,1.0848160,1.1282190,1.1745120,1.2226670,1.2723200,1.3231350, &
+       & 1.3743020,1.4247480,1.4730590,1.5174060,1.5552610,1.5833640,1.5976390, &
+       & 1.5925270,1.5613110,1.4949610,1.3813710,1.2041510,0.9403100,0.5555344, &
+       & 0.0000000 /)
+  real(dp)::ZZ,deltaZ
+  integer::iZ
+  !-------------------------------------------------------------------------
+  ! This is a simple model to take into account the ionization background
+  ! on metal cooling (calibrated using CLOUDY).
+  ZZ=1d0/aexp-1d0
+  iZ=1+int(ZZ/z_courty(50)*49.)
+  iZ=min(iZ,49)
+  iZ=max(iZ,1)
+  deltaZ=z_courty(iZ+1)-z_courty(iZ)
+  ZZ=min(ZZ,z_courty(50))
+  tables%phi = (phi_courty(iZ+1)*(ZZ-z_courty(iZ))/deltaZ &
+       & + phi_courty(iZ)*(z_courty(iZ+1)-ZZ)/deltaZ )
+
+end subroutine update_metal_cooling
+
+!=========================================================================
+subroutine rt_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
   ! Taken from the equilibrium cooling_module of RAMSES
   ! Compute cooling enhancement due to metals
   ! T2           => Temperature in Kelvin, divided by mu
@@ -1125,7 +1167,9 @@ subroutine rt_cmp_metals(T2,nH,mu,metal_tot,metal_prime,aexp)
   ! metal_prime <=  d(metal_tot)/dT2 [erg s-1 cm-3 K-1]
   !=========================================================================
   implicit none
-  real(dp) ::T2,nH,mu,metal_tot,metal_prime,aexp
+  type(run_t)::r
+  type(neq_cooling_t)::tables
+  real(dp) ::T2, nH, mu, metal_tot, metal_prime
   ! Cloudy at solar metalicity
   real(dp),dimension(1:91),parameter :: temperature_cc07 = (/ &
        & 3.9684,4.0187,4.0690,4.1194,4.1697,4.2200,4.2703, &
@@ -1172,41 +1216,12 @@ subroutine rt_cmp_metals(T2,nH,mu,metal_tot,metal_prime,aexp)
        &  -1.0460, -0.7244, -0.3006, -0.1300,  0.1491,  0.0972,  0.2463, &
        &   0.0252,  0.1079, -0.1893, -0.1033, -0.3547, -0.2393, -0.4280, &
        &  -0.2735, -0.3670, -0.2033, -0.2261, -0.0821, -0.0754,  0.0634 /)
-  real(dp),dimension(1:50),parameter::z_courty=(/                         &
-       & 0.00000,0.04912,0.10060,0.15470,0.21140,0.27090,0.33330,0.39880, &
-       & 0.46750,0.53960,0.61520,0.69450,0.77780,0.86510,0.95670,1.05300, &
-       & 1.15400,1.25900,1.37000,1.48700,1.60900,1.73700,1.87100,2.01300, &
-       & 2.16000,2.31600,2.47900,2.64900,2.82900,3.01700,3.21400,3.42100, &
-       & 3.63800,3.86600,4.10500,4.35600,4.61900,4.89500,5.18400,5.48800, &
-       & 5.80700,6.14100,6.49200,6.85900,7.24600,7.65000,8.07500,8.52100, &
-       & 8.98900,9.50000 /)
-  real(dp),dimension(1:50),parameter::phi_courty=(/                             &
-       & 0.0499886,0.0582622,0.0678333,0.0788739,0.0915889,0.1061913,0.1229119, &
-       & 0.1419961,0.1637082,0.1883230,0.2161014,0.2473183,0.2822266,0.3210551, &
-       & 0.3639784,0.4111301,0.4623273,0.5172858,0.5752659,0.6351540,0.6950232, &
-       & 0.7529284,0.8063160,0.8520859,0.8920522,0.9305764,0.9682031,1.0058810, &
-       & 1.0444020,1.0848160,1.1282190,1.1745120,1.2226670,1.2723200,1.3231350, &
-       & 1.3743020,1.4247480,1.4730590,1.5174060,1.5552610,1.5833640,1.5976390, &
-       & 1.5925270,1.5613110,1.4949610,1.3813710,1.2041510,0.9403100,0.5555344, &
-       & 0.0000000 /)
   real(dp)::TT,lTT,deltaT,lcool1,lcool2,lcool1_prime,lcool2_prime
-  real(dp)::ZZ,deltaZ
   real(dp)::c1=0.4,c2=10.0,TT0=1d5,TTC=1d6,alpha1=0.15
   real(dp)::ux,g_courty,f_courty=1d0,g_courty_prime,f_courty_prime
-  integer::iT,iZ
+  integer::iT
   !-------------------------------------------------------------------------
-  ZZ=1d0/aexp-1d0
-  TT=T2*mu
-  lTT=log10(TT)
-  ! This is a simple model to take into account the ionization background
-  ! on metal cooling (calibrated using CLOUDY).
-  iZ=1+int(ZZ/z_courty(50)*49.)
-  iZ=min(iZ,49)
-  iZ=max(iZ,1)
-  deltaZ=z_courty(iZ+1)-z_courty(iZ)
-  ZZ=min(ZZ,z_courty(50))
-  ux=1d-4*(phi_courty(iZ+1)*(ZZ-z_courty(iZ))/deltaZ &
-       & + phi_courty(iZ)*(z_courty(iZ+1)-ZZ)/deltaZ )/nH
+  ux=1d-4*tables%phi/nH
   g_courty=c1*(TT/TT0)**alpha1+c2*exp(-TTC/TT)
   g_courty_prime=(c1*alpha1*(TT/TT0)**alpha1+c2*exp(-TTC/TT)*TTC/TT)/TT
   f_courty=1d0/(1d0+ux/g_courty)
@@ -1244,9 +1259,9 @@ subroutine rt_cmp_metals(T2,nH,mu,metal_tot,metal_prime,aexp)
      metal_prime=0d0
   endif
 
-  metal_tot=metal_tot*nH**2
-  metal_prime=           &   ! Convert from DlogLambda/DlogT to DLambda/DT
-       metal_prime * metal_tot/TT * mu
+  metal_tot = metal_tot * nH**2
+  ! Convert from DlogLambda/DlogT to DLambda/DT
+  metal_prime = metal_prime * metal_tot/TT * mu
 
 end subroutine rt_cmp_metals
 
