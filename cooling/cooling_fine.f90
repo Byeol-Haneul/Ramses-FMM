@@ -48,20 +48,20 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   ! Compute cooling for leaf cells at level ilevel
   !-------------------------------------------------------------------
   integer::i,ii,ind,igrid,idim,ngrid,nleaf
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dtcool,nH_eos,nCOM,damp_factor,cooling_switch,t_blast
   integer,dimension(1:nvector)::ind_leaf
   real(kind=8),dimension(1:nvector)::nH,T2,delta_T2,ekk,err,emag
   real(kind=8),dimension(1:nvector)::T2min,Zsolar,boost
 !  logical,dimension(1:nvector)::cooling_on=.true.
-  real(dp),dimension(nions, 1:nvector):: xion
+  real(kind=8),dimension(nions, 1:nvector):: xion
 #ifdef RT
   integer::ig,iNp
-  real(dp),dimension(1:ndim)::Fpnew
-  real(dp),dimension(nrtgroups, 1:nvector):: Np, dNpdt=0d0
-  real(dp),dimension(ndim, nrtgroups, 1:nvector):: Fp, dFpdt=0
-  real(dp),dimension(ndim, 1:nvector):: p_gas
-  real(dp)::scale_Np,scale_Fp,Npnew
+  real(kind=8),dimension(1:ndim)::Fpnew
+  real(kind=8),dimension(nrtgroups, 1:nvector):: Np, dNpdt=0d0
+  real(kind=8),dimension(ndim, nrtgroups, 1:nvector):: Fp, dFpdt=0
+  real(kind=8),dimension(ndim, 1:nvector):: p_gas
+  real(kind=8)::scale_Np,scale_Fp,Npnew
 #endif
 #if NENER>0
   integer::irad

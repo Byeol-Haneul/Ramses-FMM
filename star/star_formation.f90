@@ -64,7 +64,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,nstar_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,nstar_cpu
   integer::i,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nstar,nstar_loc
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,tstar,mcell,mgas,mask,PoissMean,Rand
 #if NENER>0
   integer::irad

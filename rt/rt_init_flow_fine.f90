@@ -71,7 +71,7 @@ subroutine m_update_rt_c(pst)
   ! This cannot be just a constant, since scale_v changes with time in
   ! cosmological simulations.
   !-------------------------------------------------------------------------
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   type(in_broadcast_rt_c)::in_broadcast
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)

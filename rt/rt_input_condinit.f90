@@ -93,8 +93,8 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
   real(dp)::dx
   real(dp),dimension(1:nvector,1:nrtvar)::q
   real(dp),dimension(1:nvector,1:ndim)::x
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::scale_np, scale_fp, dx_cgs
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_np, scale_fp, dx_cgs
   !----------------------------------------------------
   ! This routine sets simple pre-defined initial
   ! conditions, like points, squares, etc.
@@ -295,8 +295,8 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
   real(dp)::dx,dt
   real(dp),dimension(1:nvector,1:nrtvar)::q
   real(dp),dimension(1:nvector,1:ndim)::x
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::scale_np, scale_fp, dx_cgs, dt_cgs
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_np, scale_fp, dx_cgs, dt_cgs
   !----------------------------------------------------
   ! This routine sets simple pre-defined initial
   ! conditions, like points, squares, etc.

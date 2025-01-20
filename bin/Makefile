@@ -16,8 +16,8 @@ MPI = 0
 INIT =
 UNITS =
 NENER =
-NRTGROUPS =
-NIONS =
+NRTGROUPS = 1
+NIONS = 1
 PATCH =
 DEBUG = 0
 HDF5 = 0
@@ -44,8 +44,8 @@ ifneq ($(NENER),)
    DEFINES += -DNENER=$(NENER)
 endif
 ifeq ($(RT),1)
-   DEFINES += -DRT
-   #DEFINES += -DRT -DNIONS=$(NIONS) -DNGROUPS=$(NGROUPS)
+   #DEFINES += -DRT
+   DEFINES += -DRT -DNIONS=$(NIONS) -DNRTGROUPS=$(NRTGROUPS)
 endif
 #############################################################################
 # Set proper units and initial conditions

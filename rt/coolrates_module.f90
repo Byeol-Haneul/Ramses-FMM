@@ -20,45 +20,45 @@ MODULE coolrates_module
 
   ! Default cooling rates table parameters
   integer, parameter :: nbinT = 1001
-  real(dp), parameter :: Tmin = 1d-2
-  real(dp), parameter :: Tmax = 1d+9
+  real(kind=8), parameter :: Tmin = 1d-2
+  real(kind=8), parameter :: Tmax = 1d+9
 
   type coolrates_table
      ! Cooling and interaction rates (log):
-     real(dp),dimension(nbinT) :: rates = 0d0
+     real(kind=8),dimension(nbinT) :: rates = 0d0
      ! Temperature derivatives of those rates (drate/dlog(T)):
-     real(dp),dimension(nbinT) :: primes = 0d0
+     real(kind=8),dimension(nbinT) :: primes = 0d0
   end type coolrates_table
 
   type neq_cooling_t
 
      ! Reduced speed of light in cgs
-     real(dp) :: rt_c_cgs
+     real(kind=8) :: rt_c_cgs
 
      ! Contribution of UV background to metal cooling
-     real(dp) :: phi
+     real(kind=8) :: phi
 
      ! UV background heating and ionization rates
-     real(dp),dimension(nions,2) :: UVrates
+     real(kind=8),dimension(nions,2) :: UVrates
 #ifdef RT
      ! Contribution of each group to photo-ionization rates
-     real(dp),dimension(nrtgroups,nions) :: signc
+     real(kind=8),dimension(nrtgroups,nions) :: signc
 
      ! Contribution of each group to photo-heating rates
-     real(dp),dimension(nrtgroups,nions) :: sigec, PHrate
+     real(kind=8),dimension(nrtgroups,nions) :: sigec, PHrate
 #endif
-     real(dp) :: dlogTinv ! Inverse of the bin space (in K)
-     real(dp) :: hTable, h2Table, h3Table   ! Interpol constants
-     real(dp) :: one_over_lnTen, one_over_hTable, one_over_h2Table
-     real(dp) :: three_over_h2Table, two_over_h3Table
+     real(kind=8) :: dlogTinv ! Inverse of the bin space (in K)
+     real(kind=8) :: hTable, h2Table, h3Table   ! Interpol constants
+     real(kind=8) :: one_over_lnTen, one_over_hTable, one_over_h2Table
+     real(kind=8) :: three_over_h2Table, two_over_h3Table
 
      ! Lookup temperature in log K
-     real(dp),dimension(nbinT) :: T_lookup = 0d0
+     real(kind=8),dimension(nbinT) :: T_lookup = 0d0
 
      ! Interpolation factors saved for later use
      integer :: iT = 1
      logical :: extrap
-     real(dp) :: facT, yy, yy2, yy3, Tlast=-1
+     real(kind=8) :: facT, yy, yy2, yy3, Tlast=-1
 
      type(coolrates_table) :: tbl_alphaZ_H2  ! H2 dust grain formation
      type(coolrates_table) :: tbl_alphaGP_H2 ! H2 gas-phase formation
@@ -193,7 +193,7 @@ SUBROUTINE update_coolrates_tables(r, tables, aexp)
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
-  real(dp)::aexp
+  real(kind=8)::aexp
   !-------------------------------------------------------------------------
 #ifndef WITHOUTMPI
   integer::ierr
@@ -231,7 +231,7 @@ SUBROUTINE mpi_distribute_coolrates_table(table)
   use mpi
   implicit none
   type(coolrates_table) :: table
-  real(dp),dimension(:),allocatable :: table_mpi_sum
+  real(kind=8),dimension(:),allocatable :: table_mpi_sum
   integer::ierr
   !-------------------------------------------------------------------------
   allocate(table_mpi_sum(nbinT))
@@ -256,10 +256,10 @@ SUBROUTINE comp_table_rates(r, tables, iT)
   type(neq_cooling_t)::tables
   integer::iT
   !-------------------------------------------------------------------------
-  real(dp)::T, T2, Ta, T5, lambda, f, hf, laHII, laHeII, laHeIII
-  real(dp)::lowrleft,lowrright,lowr_hi,lowr_h2
-  real(dp)::lowvleft_hi,lowvright_hi,lowv_hi,lowv_h2
-  real(dp)::TT
+  real(kind=8)::T, T2, Ta, T5, lambda, f, hf, laHII, laHeII, laHeIII
+  real(kind=8)::lowrleft,lowrright,lowr_hi,lowr_h2
+  real(kind=8)::lowvleft_hi,lowvright_hi,lowv_hi,lowv_h2
+  real(kind=8)::TT
   !-------------------------------------------------------------------------
   ! Rates are stored in non-log, while temperature derivatives (primes)
   ! are stored in dRate/dlogT (= dRate/dT * T * ln(10)).
@@ -499,7 +499,7 @@ SUBROUTINE update_rt_c(r, g, tables)
   type(global_t) :: g
   type(neq_cooling_t) :: tables
   !-------------------------------------------------------------------------
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
 
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
@@ -518,9 +518,9 @@ SUBROUTINE update_table_rates(r, tables, iT, aexp)
   type(run_t)::r
   type(neq_cooling_t)::tables
   integer::iT
-  real(dp)::aexp
+  real(kind=8)::aexp
   !-------------------------------------------------------------------------
-  real(dp)::T, Ta
+  real(kind=8)::T, Ta
   !-------------------------------------------------------------------------
   ! Rates are stored in log, while temperature derivatives (primes) are
   ! stored in non-log
@@ -545,13 +545,13 @@ FUNCTION inp_coolrates_table(tables, interp, T, allow_negative, retPrime)
   implicit none
   type(neq_cooling_t) :: tables
   type(coolrates_table) :: interp
-  real(dp),intent(in) :: T
+  real(kind=8),intent(in) :: T
   logical,intent(in) :: allow_negative
-  real(dp),optional :: retPrime
-  real(dp) :: inp_coolrates_table
+  real(kind=8),optional :: retPrime
+  real(kind=8) :: inp_coolrates_table
   !-------------------------------------------------------------------------
-  real(dp) :: fa, fb, fprimea, fprimeb
-  real(dp) :: alpha, beta, gamma
+  real(kind=8) :: fa, fb, fprimea, fprimeb
+  real(kind=8) :: alpha, beta, gamma
   !-------------------------------------------------------------------------
   if (.not. (T .eq. tables%Tlast)) then    ! Reuse index if same T from last call
      ! Log of T, snapped to table at the lower boundary, but allowed
@@ -611,18 +611,18 @@ FUNCTION compCoolrate(r, tables, T, ne, nN, nI, dcooldT)
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
-  real(dp)::T, ne
-  real(dp),dimension(nIons)::nN, nI
-  real(dp)::compCoolrate, dcooldT
+  real(kind=8)::T, ne
+  real(kind=8),dimension(nIons)::nN, nI
+  real(kind=8)::compCoolrate, dcooldT
   !-------------------------------------------------------------------------
-  real(dp)::ci_HI, ci_HeI, ci_HeII
-  real(dp)::ci_HI_prime, ci_HeI_prime, ci_HeII_prime
-  real(dp)::cr_H2HI, cr_H2H2, cr_H2HI_prime, cr_H2H2_prime
-  real(dp)::ce_HI, ce_HeI, ce_HeII
-  real(dp)::ce_HI_prime, ce_HeI_prime, ce_HeII_prime
-  real(dp)::r_HII, r_HeII, r_HeIII
-  real(dp)::r_HII_prime, r_HeII_prime, r_HeIII_prime
-  real(dp)::bre, brefac, bre_prime, com, com_prime, die, die_prime
+  real(kind=8)::ci_HI, ci_HeI, ci_HeII
+  real(kind=8)::ci_HI_prime, ci_HeI_prime, ci_HeII_prime
+  real(kind=8)::cr_H2HI, cr_H2H2, cr_H2HI_prime, cr_H2H2_prime
+  real(kind=8)::ce_HI, ce_HeI, ce_HeII
+  real(kind=8)::ce_HI_prime, ce_HeI_prime, ce_HeII_prime
+  real(kind=8)::r_HII, r_HeII, r_HeIII
+  real(kind=8)::r_HII_prime, r_HeII_prime, r_HeIII_prime
+  real(kind=8)::bre, brefac, bre_prime, com, com_prime, die, die_prime
 !-------------------------------------------------------------------------
   associate(isHe=>r%isHe, isH2=>r%isH2, ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
@@ -704,9 +704,9 @@ END FUNCTION compCoolrate
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ELEMENTAL FUNCTION gamma_hi(T,J)
   implicit none
-  real(dp),intent(in)::T,J
+  real(kind=8),intent(in)::T,J
   !-------------------------------------------------------------------------
-  real(dp)::gamma_hi, T3, jconsts
+  real(kind=8)::gamma_hi, T3, jconsts
   !-------------------------------------------------------------------------
   T3 = T/1d3
   jconsts=0.33+0.9*exp(-1.0d0*((J-3.5d0)/0.9d0)**2)
@@ -717,9 +717,9 @@ END FUNCTION gamma_hi
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ELEMENTAL FUNCTION gamma_h2(T,J)
   implicit none
-  real(dp),intent(in)::T,J
+  real(kind=8),intent(in)::T,J
   !-------------------------------------------------------------------------
-  real(dp)::gamma_h2, T3, jconsts
+  real(kind=8)::gamma_h2, T3, jconsts
   !-------------------------------------------------------------------------
   T3 = T/1d3
   jconsts=(0.276*J**2)*exp(-1.0d0*(J/3.18d0)**1.7)

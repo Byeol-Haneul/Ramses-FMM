@@ -16,18 +16,18 @@ module rt_cooling_module
   public rt_set_model, rt_solve_cooling, cmp_chem_eq, updateRTGroups_CoolConstants &
        ,update_metal_cooling
 
-  real(dp),parameter::T2_min_fix=1d-2 ! Min temperature [K]
+  real(kind=8),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 
   ! cosmic ray ionisation rates, primary and secondary
   ! see Nickerson, Teyssier, & Rosdahl (2018)
-  real(dp),parameter::cosray_H2 = 7.525d-16 ! Indriolo 2012, Gong 2017[s-1]
-  real(dp),parameter::cosray_HI = 4.45d-16  ! Indriolo 2015, Gong 2017[s-1]
+  real(kind=8),parameter::cosray_H2 = 7.525d-16 ! Indriolo 2012, Gong 2017[s-1]
+  real(kind=8),parameter::cosray_HI = 4.45d-16  ! Indriolo 2015, Gong 2017[s-1]
   ! for HeI ionisation, use Glover 2010 cosray_HeI = 1.1 * cosray_HI
 
-  real(dp),parameter::T_min=0.1, T_frac=0.1
-  real(dp),parameter::x_min=1d-20, x_fm=1d-6, x_frac=0.1
-  real(dp),parameter::Np_min=1d-13, Np_frac=0.2
-  real(dp),parameter::Fp_frac=0.5
+  real(kind=8),parameter::T_min=0.1, T_frac=0.1
+  real(kind=8),parameter::x_min=1d-20, x_fm=1d-6, x_frac=0.1
+  real(kind=8),parameter::Np_min=1d-13, Np_frac=0.2
+  real(kind=8),parameter::Fp_frac=0.5
 
   ! IR group index
   integer,parameter::iIR=1
@@ -77,7 +77,7 @@ END SUBROUTINE rt_set_model
 !!$!-------------------------------------------------------------------------
 !!$  use UV_module
 !!$  use amr_parameters,only:haardt_madau
-!!$  real(dp)::aexp
+!!$  real(kind=8)::aexp
 !!$!------------------------------------------------------------------------
 !!$  UVrates=0.
 !!$  if(.not. haardt_madau) RETURN
@@ -114,33 +114,33 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   implicit none
   type(run_t):: r
   type(neq_cooling_t):: tables
-  real(dp),dimension(1:nvector):: T2
-  real(dp),dimension(1:nions, 1:nvector):: xion
+  real(kind=8),dimension(1:nvector):: T2
+  real(kind=8),dimension(1:nions, 1:nvector):: xion
 #ifdef RT
-  real(dp),dimension(1:ndim, 1:nvector):: p_gas
-  real(dp),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
-  real(dp),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
+  real(kind=8),dimension(1:ndim, 1:nvector):: p_gas
+  real(kind=8),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
+  real(kind=8),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
 #endif
-  real(dp),dimension(1:nvector):: nH, Zsolar
+  real(kind=8),dimension(1:nvector):: nH, Zsolar
 !  logical,dimension(1:nvector):: c_switch
-  real(dp)::dt
+  real(kind=8)::dt
   integer::ncell
   !--------------------------------------------------------
-  real(dp),dimension(1:nvector):: tLeft, ddt
+  real(kind=8),dimension(1:nvector):: tLeft, ddt
   logical:: dt_ok
-  real(dp):: dt_rec
-  real(dp):: dT2
-  real(dp),dimension(nions):: dXion
+  real(kind=8):: dt_rec
+  real(kind=8):: dT2
+  real(kind=8),dimension(nions):: dXion
   integer::i, ia, ig, nAct, nAct_next, loopcnt, code
   integer,dimension(1:nvector):: indAct              ! Active cell indexes
-  real(dp):: one_over_x_FRAC, one_over_T_FRAC
+  real(kind=8):: one_over_x_FRAC, one_over_T_FRAC
 #ifdef RT
-  real(dp):: one_over_rt_c_cgs, one_over_egy_IR_erg
-  real(dp):: one_over_Np_FRAC, one_over_Fp_FRAC
-  real(dp),dimension(1:ndim):: dp_gas
-  real(dp),dimension(nrtgroups):: dNp
-  real(dp),dimension(1:ndim, 1:nrtgroups):: dFp
-  real(dp),dimension(1:nrtgroups):: group_egy_ratio, group_egy_erg
+  real(kind=8):: one_over_rt_c_cgs, one_over_egy_IR_erg
+  real(kind=8):: one_over_Np_FRAC, one_over_Fp_FRAC
+  real(kind=8),dimension(1:ndim):: dp_gas
+  real(kind=8),dimension(nrtgroups):: dNp
+  real(kind=8),dimension(1:ndim, 1:nrtgroups):: dFp
+  real(kind=8),dimension(1:nrtgroups):: group_egy_ratio, group_egy_erg
 #endif
   integer*8,dimension(20)::loopCodes=0
 
@@ -273,20 +273,20 @@ contains
     implicit none
     integer, intent(in):: icell
     !-----------------------------------------------------------------------
-    real(dp),dimension(nions):: alpha, beta, nN, nI
-    real(dp):: dUU, fracMax, x_tot
-    real(dp):: mu, TK, nHe, ne, neInit, Hrate
-    real(dp):: xHI,dxHI, xH2=0d0,dXH2=0d0, xHeI,dxHeI
-    real(dp):: Crate, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
-    real(dp):: photoRate, metal_tot, metal_prime, ss_factor, f_dust
+    real(kind=8),dimension(nions):: alpha, beta, nN, nI
+    real(kind=8):: dUU, fracMax, x_tot
+    real(kind=8):: mu, TK, nHe, ne, neInit, Hrate
+    real(kind=8):: xHI,dxHI, xH2=0d0,dXH2=0d0, xHeI,dxHeI
+    real(kind=8):: Crate, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
+    real(kind=8):: photoRate, metal_tot, metal_prime, ss_factor, f_dust
     integer:: iion,igroup,idim
 #ifdef RT
-    real(dp),dimension(ndim):: dmom
-    real(dp),dimension(nrtgroups):: recRad, phAbs, phSc, dustAbs
-    real(dp),dimension(nrtgroups):: dustSc, kAbs_loc, kSc_loc
+    real(kind=8),dimension(ndim):: dmom
+    real(kind=8),dimension(nrtgroups):: recRad, phAbs, phSc, dustAbs
+    real(kind=8),dimension(nrtgroups):: dustSc, kAbs_loc, kSc_loc
 #endif
-    real(dp):: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
-    real(dp):: G0, eff_peh, cdex, ncr
+    real(kind=8):: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
+    real(kind=8):: G0, eff_peh, cdex, ncr
     logical:: newAtomicCons=.true.
     !-----------------------------------------------------------------------
     associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
@@ -796,13 +796,13 @@ contains
        &                      T2,  xion, dT2, dXion, code)
     ! Print cooling information to standard output, and maybe stop execution.
     !------------------------------------------------------------------------
-    real(dp),dimension(nions):: xion, dXion
+    real(kind=8),dimension(nions):: xion, dXion
 #ifdef RT
-    real(dp),dimension(nrtgroups):: Np, dNp
-    real(dp),dimension(ndim, nrtgroups):: Fp, dFp
-    real(dp),dimension(ndim):: p_gas, dp_gas
+    real(kind=8),dimension(nrtgroups):: Np, dNp
+    real(kind=8),dimension(ndim, nrtgroups):: Fp, dFp
+    real(kind=8),dimension(ndim):: p_gas, dp_gas
 #endif
-    real(dp)::T2, dT2, dtDone, dt, ddt, nH
+    real(kind=8)::T2, dT2, dtDone, dt, ddt, nH
     logical::stopRun
     integer::loopcnt,i, code
     !------------------------------------------------------------------------
@@ -858,12 +858,12 @@ SUBROUTINE cmp_Equilibrium_Abundances(r, tables, &
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
-  real(dp)::T2,nH
-  real(dp),dimension(nIons)::phI_rates
-  real(dp)::mu,Zsolar
-  real(dp),dimension(1:7)::nSpec
+  real(kind=8)::T2,nH
+  real(kind=8),dimension(nIons)::phI_rates
+  real(kind=8)::mu,Zsolar
+  real(kind=8),dimension(1:7)::nSpec
   !-------------------------------------------------------------------------
-  real(dp)::mu_old, err_mu, mu_left, mu_right, T, nTot
+  real(kind=8)::mu_old, err_mu, mu_left, mu_right, T, nTot
   integer::niter
   !-------------------------------------------------------------------------
   ! Iteration to find mu                     ! n_E     = n_spec(1) ! e
@@ -910,19 +910,19 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
-  real(dp),intent(in)::TK, nH, Zsol
-  real(dp),intent(out)::nTot, mu
-  real(dp),dimension(nions),intent(in)::t_rad_spec
-  real(dp),dimension(1:7),intent(out)::nSpec
+  real(kind=8),intent(in)::TK, nH, Zsol
+  real(kind=8),intent(out)::nTot, mu
+  real(kind=8),dimension(nions),intent(in)::t_rad_spec
+  real(kind=8),dimension(1:7),intent(out)::nSpec
   !------------------------------------------------------------------------
-  real(dp)::nHe
-  real(dp)::n_H2, n_HI, n_HII, n_HEI, n_HEII, n_HEIII, n_E, n_E_min
-  real(dp)::g_H2=0,   g_HI=0,    g_HEI=0, g_HEII=0   ! Photoion/dissoc
-  real(dp)::aZ_H2=0,  aGP_H2,    a_HI=0,  a_HEI=0,   a_HEII=0  ! Formation
-  real(dp)::b_H2HI=0, b_H2H2=0,  b_H3B,   b_HI=0,    b_HEI=0, b_HEII=0!Col
-  real(dp)::C_HII=0,  C_H2=0,    D_H2=0,  f_HII=0,   f_H2=0  ! Cre & destr
-  real(dp)::D_HEI=0,  C_HEIII=0, f_HeI=0, f_HeIII=0, f_dust=0! Cre & destr
-  real(dp)::err_nE, err_nH2, n_H2_old
+  real(kind=8)::nHe
+  real(kind=8)::n_H2, n_HI, n_HII, n_HEI, n_HEII, n_HEIII, n_E, n_E_min
+  real(kind=8)::g_H2=0,   g_HI=0,    g_HEI=0, g_HEII=0   ! Photoion/dissoc
+  real(kind=8)::aZ_H2=0,  aGP_H2,    a_HI=0,  a_HEI=0,   a_HEII=0  ! Formation
+  real(kind=8)::b_H2HI=0, b_H2H2=0,  b_H3B,   b_HI=0,    b_HEI=0, b_HEII=0!Col
+  real(kind=8)::C_HII=0,  C_H2=0,    D_H2=0,  f_HII=0,   f_H2=0  ! Cre & destr
+  real(kind=8)::D_HEI=0,  C_HEIII=0, f_HeI=0, f_HeIII=0, f_dust=0! Cre & destr
+  real(kind=8)::err_nE, err_nH2, n_H2_old
   !-------------------------------------------------------------------------
   associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
@@ -1040,19 +1040,19 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
   real(kind=8)::astart,aend,T2end,h,omegab,omega0,omegaL,ne,dasura
   logical::if_write_result
   !-------------------------------------------------------------------------
-  real(dp)::aexp, daexp, dt_cool, T2_com, nH_com
-  real(dp),dimension(nions)::pHI_rates
+  real(kind=8)::aexp, daexp, dt_cool, T2_com, nH_com
+  real(kind=8),dimension(nions)::pHI_rates
   real(kind=8)::mu
-  real(dp)::mu_dp
-  real(dp)::n_spec(1:7)
-  real(dp),dimension(1:nvector):: T2
-  real(dp),dimension(1:nions, 1:nvector):: xion
+  real(kind=8)::mu_dp
+  real(kind=8)::n_spec(1:7)
+  real(kind=8),dimension(1:nvector):: T2
+  real(kind=8),dimension(1:nions, 1:nvector):: xion
 #ifdef RT
-  real(dp),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
-  real(dp),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
-  real(dp),dimension(1:ndim, 1:nvector):: p_gas
+  real(kind=8),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
+  real(kind=8),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
+  real(kind=8),dimension(1:ndim, 1:nvector):: p_gas
 #endif
-  real(dp),dimension(1:nvector)::nH, Zsolar
+  real(kind=8),dimension(1:nvector)::nH, Zsolar
 !  logical,dimension(1:nvector)::c_switch
   !-------------------------------------------------------------------------
   associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
@@ -1122,9 +1122,9 @@ subroutine update_metal_cooling(r, tables, aexp)
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
-  real(dp)::aexp
+  real(kind=8)::aexp
   !-------------------------------------------------------------------------
-  real(dp),dimension(1:50),parameter::z_courty=(/                         &
+  real(kind=8),dimension(1:50),parameter::z_courty=(/                         &
        & 0.00000,0.04912,0.10060,0.15470,0.21140,0.27090,0.33330,0.39880, &
        & 0.46750,0.53960,0.61520,0.69450,0.77780,0.86510,0.95670,1.05300, &
        & 1.15400,1.25900,1.37000,1.48700,1.60900,1.73700,1.87100,2.01300, &
@@ -1132,7 +1132,7 @@ subroutine update_metal_cooling(r, tables, aexp)
        & 3.63800,3.86600,4.10500,4.35600,4.61900,4.89500,5.18400,5.48800, &
        & 5.80700,6.14100,6.49200,6.85900,7.24600,7.65000,8.07500,8.52100, &
        & 8.98900,9.50000 /)
-  real(dp),dimension(1:50),parameter::phi_courty=(/                             &
+  real(kind=8),dimension(1:50),parameter::phi_courty=(/                             &
        & 0.0499886,0.0582622,0.0678333,0.0788739,0.0915889,0.1061913,0.1229119, &
        & 0.1419961,0.1637082,0.1883230,0.2161014,0.2473183,0.2822266,0.3210551, &
        & 0.3639784,0.4111301,0.4623273,0.5172858,0.5752659,0.6351540,0.6950232, &
@@ -1141,7 +1141,7 @@ subroutine update_metal_cooling(r, tables, aexp)
        & 1.3743020,1.4247480,1.4730590,1.5174060,1.5552610,1.5833640,1.5976390, &
        & 1.5925270,1.5613110,1.4949610,1.3813710,1.2041510,0.9403100,0.5555344, &
        & 0.0000000 /)
-  real(dp)::ZZ,deltaZ
+  real(kind=8)::ZZ,deltaZ
   integer::iZ
   !-------------------------------------------------------------------------
   ! This is a simple model to take into account the ionization background
@@ -1170,9 +1170,9 @@ subroutine rt_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
-  real(dp) ::T2, nH, mu, metal_tot, metal_prime
+  real(kind=8) ::T2, nH, mu, metal_tot, metal_prime
   ! Cloudy at solar metalicity
-  real(dp),dimension(1:91),parameter :: temperature_cc07 = (/ &
+  real(kind=8),dimension(1:91),parameter :: temperature_cc07 = (/ &
        & 3.9684,4.0187,4.0690,4.1194,4.1697,4.2200,4.2703, &
        & 4.3206,4.3709,4.4212,4.4716,4.5219,4.5722,4.6225, &
        & 4.6728,4.7231,4.7734,4.8238,4.8741,4.9244,4.9747, &
@@ -1203,7 +1203,7 @@ subroutine rt_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
        &  -23.0547, -23.0886, -23.1101, -23.1139, -23.1147, -23.1048, -23.1017, &
        &  -23.0928, -23.0969, -23.0968, -23.1105, -23.1191, -23.1388, -23.1517, &
        &  -23.1717, -23.1837, -23.1986, -23.2058, -23.2134, -23.2139, -23.2107 /)
-  real(dp),dimension(1:91),parameter :: excess_prime_cc07 = (/           &
+  real(kind=8),dimension(1:91),parameter :: excess_prime_cc07 = (/           &
        &   2.0037,  4.7267, 12.2283, 13.5820,  9.8755,  4.8379,  1.8046, &
        &   1.4574,  1.8086,  2.0685,  2.2012,  2.2250,  2.2060,  2.1605, &
        &   2.1121,  2.0335,  1.9254,  1.7861,  1.5357,  1.1784,  0.7628, &
@@ -1217,9 +1217,9 @@ subroutine rt_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
        &  -1.0460, -0.7244, -0.3006, -0.1300,  0.1491,  0.0972,  0.2463, &
        &   0.0252,  0.1079, -0.1893, -0.1033, -0.3547, -0.2393, -0.4280, &
        &  -0.2735, -0.3670, -0.2033, -0.2261, -0.0821, -0.0754,  0.0634 /)
-  real(dp)::TT,lTT,deltaT,lcool1,lcool2,lcool1_prime,lcool2_prime
-  real(dp)::c1=0.4,c2=10.0,TT0=1d5,TTC=1d6,alpha1=0.15
-  real(dp)::ux,g_courty,f_courty=1d0,g_courty_prime,f_courty_prime
+  real(kind=8)::TT,lTT,deltaT,lcool1,lcool2,lcool1_prime,lcool2_prime
+  real(kind=8)::c1=0.4,c2=10.0,TT0=1d5,TTC=1d6,alpha1=0.15
+  real(kind=8)::ux,g_courty,f_courty=1d0,g_courty_prime,f_courty_prime
   integer::iT
   !-------------------------------------------------------------------------
   ux=1d-4*tables%phi/nH
@@ -1323,10 +1323,10 @@ SUBROUTINE reduce_flux(Fp, cNp)
   ! Make sure the reduced photon flux is less than one
   !------------------------------------------------------------------------
   implicit none
-  real(dp),dimension(ndim)::Fp
-  real(dp)::cNp
+  real(kind=8),dimension(ndim)::Fp
+  real(kind=8)::cNp
   !------------------------------------------------------------------------
-  real(dp)::fred
+  real(kind=8)::fred
   fred = sqrt(sum(Fp**2))/cNp
   if(fred .gt. 1d0) Fp = Fp/fred
 END SUBROUTINE reduce_flux

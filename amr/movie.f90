@@ -224,7 +224,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   integer::nlevelmax_frame,nstride
   integer::ilun,ind,ind_map
   integer::imin,imax,jmin,jmax,ii,jj
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::xcen,ycen,zcen
   real(dp)::xleft_frame,xright_frame,yleft_frame,yright_frame,zleft_frame,zright_frame
   real(dp)::xleft,xright,yleft,yright,zleft,zright

@@ -40,7 +40,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #if INIT==COEUR
   real(dp)::r2,rx,ry,rz,d,p,vx,vy,vz,r_trunc,r2_trunc,c2
   real(dp)::omega_code,AU,Msol,pi,M,sigma,r_min,r2_min,omega_const,r_vortex,invr2_vortex
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 #elif INIT==INSTA
   integer::id,iu,iv,iw,ip,ix,iy
   real(dp)::x0,lambday,ky,lambdaz,kz,rho1,rho2,p0,v0,v1,v2

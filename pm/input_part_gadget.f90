@@ -497,7 +497,7 @@ subroutine rescale_gadget(r,g,p)
   ! This routine convert particle variables from Gadget code units
   ! to Ramses code units
   integer::i
-  real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,scale_m
+  real(kind=8)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,scale_m
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m = scale_d*scale_l**3

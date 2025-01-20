@@ -63,7 +63,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::i,ipart,icell,ind,idim
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc,vol_cell
   real(dp)::mejecta,mloss,mzloss,zloss,ekinetic,ethermal
   real(dp)::birth_time,t_sn,e_sn,dteff,dold
@@ -312,7 +312,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   integer::i,j,k,ipart,icellp,icelln,ind,idim,ivar,ipart_ref
   integer,dimension(1:ndim)::ix
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc
   real(dp)::mejecta,mloss,mzloss,zloss,ekinetic,ethermal
   real(dp)::birth_time,t_sn,e_sn,dteff,dold,num_SN
@@ -660,7 +660,7 @@ subroutine collect_sn(s,p,sn,ilevel,msn_loc)
   !==================================================================
   integer::n_loc,n_tot,ipart,i,icpu,idim,info
   real(dp)::dteff,birth_time,dx_loc,t_SN
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   integer(kind=8),dimension(1:ndim)::ix
   integer(kind=8),dimension(1:nhilbert)::hk
   real(dp),dimension(:,:),allocatable::x_loc,v_loc

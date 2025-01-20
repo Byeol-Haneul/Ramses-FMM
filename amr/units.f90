@@ -5,7 +5,7 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   implicit none
   type(run_t)::r
   type(global_t)::g
-  real(dp)::scale_nH,scale_T2,scale_t,scale_v,scale_d,scale_l
+  real(kind=8)::scale_nH,scale_T2,scale_t,scale_v,scale_d,scale_l
   !-----------------------------------------------------------------------
   ! Conversion factors from user units into cgs units
   ! For gravity runs, make sure that G=1 in user units.

@@ -52,7 +52,7 @@ subroutine input_hydro_gadget(s,ilevel)
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::igrid,ipart,icell,ind,idim,ivar
-  real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,scale_m
+  real(kind=8)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,scale_m
   real(kind=8)::dx_loc,vol_loc,ekin
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp

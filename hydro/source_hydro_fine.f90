@@ -72,7 +72,7 @@ subroutine source_hydro_fine(s,ilevel)
   real(dp)::dx,phi_diss,div,divu
   real(dp)::d,u,v,w,bx,by,bz,d_old,sigma
   real(dp)::e_kin,e_mag,e_cons,e_prim,e_turb,e_trunc,T2_cons,T2_fix
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
 
 #ifdef HYDRO
 

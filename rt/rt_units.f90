@@ -5,8 +5,8 @@ subroutine rt_units(r,g,scale_Np,scale_Fp)
   implicit none
   type(run_t)::r
   type(global_t)::g
-  real(dp)::scale_Np, scale_Fp
-  real(dp)::scale_nH,scale_T2,scale_t,scale_v,scale_d,scale_l
+  real(kind=8)::scale_Np, scale_Fp
+  real(kind=8)::scale_nH,scale_T2,scale_t,scale_v,scale_d,scale_l
   !-----------------------------------------------------------------------
   ! Conversion factors from user units into cgs units for RT variables.
   ! scale_Np   <=  photon number density scale [# cm-3]

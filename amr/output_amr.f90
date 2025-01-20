@@ -555,7 +555,7 @@ subroutine output_info(r,g,filename)
   character(LEN=flen)::filename
 
   integer::ilun
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering output_info'
