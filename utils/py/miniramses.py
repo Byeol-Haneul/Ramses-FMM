@@ -915,6 +915,11 @@ def rd_info(nout,**kwargs):
     i.time=info[8][1]
     i.texp=info[9][1]
     i.aexp=info[10][1]
+    i.H0=int(info[11][1])
+    i.omega_m=int(info[12][1])
+    i.omega_l=int(info[13][1])
+    i.omega_k=int(info[14][1])
+    i.omega_b=int(info[15][1])
     i.gamma=info[16][1]
     i.unit_l=info[17][1]
     i.unit_d=info[18][1]
