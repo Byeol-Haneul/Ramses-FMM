@@ -1,12 +1,11 @@
-This namelist contains various input parameters for the sedov2d test.
+This namelist contains various input parameters for a 2d Stromgren sphere test.
 Compile using:
-make RT=1 RTNGROUPS=1 NDIM=2
+make NDIM=2 RT=1 NRTGRP=1 NION=1
 
 &RUN_PARAMS 
 hydro=.true.
 rt=.true.
 ncontrol=1
-!nsubcycle=10*2,
 verbose=.false.
 nremap=10
 nsuperoct=0
@@ -17,19 +16,6 @@ levelmin=6
 levelmax=6
 ngridmax=800000
 box_size=1.0
-box_xmin=0 !1
-box_ymin=0 !1
-box_xmax=0 !-1
-box_ymax=0 !-1
-/
-
-&BOUNDARY_PARAMS		! Box boundaries
-nbound=4                        ! 4 sides of 2d box
-bound_xmin=-1,+1,-1,-1          ! Lower x-sides of boundaries
-bound_xmax=-1,+1,+1,+1          ! Upper x-sides
-bound_ymin= 0, 0,+1,-1          ! Lower y-sides
-bound_ymax= 0, 0,+1,-1          ! Upper y-sides
-bound_type= 2, 2, 2, 2          ! Boundary type (2=flowthrough, 1=mirror)
 /
 
 &INIT_PARAMS                    ! Initial conditions of the gas
@@ -48,7 +34,6 @@ foutput=10                      ! Number of timesteps between snapshot outputs
 noutput=1
 tout=15                         ! End-time for the simulation (in unit_time=Myr)
 /
-
 
 &HYDRO_PARAMS
 gamma=1.4
@@ -76,10 +61,9 @@ err_grad_p=0.1
 &RT_PARAMS
 rt_advect=.true.
 rt_c_fraction=0.001
-
 rt_nsource=1                    !--Idealized radiation sources------------
-rt_source_type=1*'point'        ! Source geometry (point or square)
-rt_src_x_center=0.5              ! Source position (0 to 1)
+rt_source_type='point'          ! Source geometry (point or square)
+rt_src_x_center=0.5             ! Source position (0 to 1)
 rt_src_y_center=0.5
 rt_src_length_x=0.              ! Source size (0 to 1)
 rt_src_length_y=0
@@ -89,14 +73,8 @@ rt_u_source=0.                  ! Reduced x-direction flux
 rt_v_source=0.                  ! Reduced y-direction flux
 /
 
-!&NEQ_CHEM_PARAMS
-!isH2=.true.
-!/
-
 &RT_GROUPS                      ! Photon group properties
 group_csn(1,:)= 1.6d-18 ! group 1 cross sec. -> HI, HeI, HeII [cm^2]
 group_cse(1,:)= 1.1d-18 ! group 1 e-weighted cs -> HI, HeI, HeII [cm^2]
 group_egy     = 29.6            ! group 1 photon energy [eV]
-!group_L0     = 11.3             ! group 1 photon energy [eV]
-!group_L1     = 11.8             ! group 1 photon energy [eV]
 /
