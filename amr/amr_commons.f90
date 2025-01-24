@@ -307,37 +307,37 @@ module amr_commons
      real(dp)::IG_metal = 0.01
 
      ! RT parameters. Some parameters are not (yet) used
-     logical::rt_advect=.false.           ! Advection of photons?                           !
-     logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
-     real(dp)::units_Np=1.0               ! [#/cm^3]                                        !
-     real(dp)::rt_Tconst=-1               ! If pos. use this value for all T-depend. rates  !
-     logical::rt_isTconst=.false.         ! Const rates activated?                          !
-     logical::rt_star=.false.             ! Activate radiation from star particles          !
-     logical::rt_sink=.false.             ! Activate radiation from sink particles          !
-     logical::rt_is_outflow_bound=.false. ! Make all boundaries=outflow for RT              !
-     real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
+     logical::rt_advect=.false.            ! Advection of photons?                           !
+     logical::rt_smooth=.false.            ! Smooth the discrete RT update of op. splitting  !
+     real(dp)::units_Np=1.0                ! [#/cm^3]                                        !
+     real(dp)::rt_Tconst=-1                ! If pos. use this value for all T-depend. rates  !
+     logical::rt_isTconst=.false.          ! Const rates activated?                          !
+     logical::rt_star=.false.              ! Activate radiation from star particles          !
+     logical::rt_sink=.false.              ! Activate radiation from sink particles          !
+     logical::rt_is_outflow_bound=.false.  ! Make all boundaries=outflow for RT              !
+     real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
      real(dp)::rt_err_grad_n(nrtgroups)=-1.! Photon number density gradient for refinement  !
      real(dp)::rt_floor_n(nrtgroups)=1d-10 ! Photon number density floor for refinement     !
-     real(dp)::rt_floor_xHI=1d-10         ! Ionization state floor for refinement           !
-     real(dp)::rt_floor_xHII=1d-10        ! Ionization state floor for refinement           !
-     real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT                      !
-     integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
-                                          ! gravity/etc timestep                            !
-     logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
-     logical::rt_isIR=.true.              ! Use IR photon groups                            !
-     logical::is_kIR_T=.true.             ! Kappa IT depends on T_rad                       !
-     logical::rt_T_rad=.true.             ! Use radiation temperature for everything        !
-     logical::rt_isoPress=.false.         ! Use cE, not F, for rad. pressure                !
-     real(dp)::rt_pressBoost=1d0          ! Boost on RT pressure                            !
+     real(dp)::rt_floor_xHI=1d-10          ! Ionization state floor for refinement           !
+     real(dp)::rt_floor_xHII=1d-10         ! Ionization state floor for refinement           !
+     real(dp)::rt_c_fraction=1d0           ! Lightspeed fraction for RT                      !
+     integer::rt_nsubcycle=1               ! Maximum number of RT-steps during one hydro/    !
+                                           ! gravity/etc timestep                            !
+     logical::rt_otsa=.true.               ! Use on-the-spot approximation                   !
+     logical::rt_isIR=.true.               ! Use IR photon groups                            !
+     logical::is_kIR_T=.true.              ! Kappa IT depends on T_rad                       !
+     logical::rt_T_rad=.true.              ! Use radiation temperature for everything        !
+     logical::rt_isoPress=.false.          ! Use cE, not F, for rad. pressure                !
+     real(dp)::rt_pressBoost=1d0           ! Boost on RT pressure                            !
      logical::is_mu_H2=.false.
-     real(dp)::Tmu_dissoc=1d3             ! Dissociation temperature [K]                    !
-     logical::upload_equilibrium_x=.true. ! Enforce equilibrium xion when uploading         !
-     integer::iPEH_group=-1               ! Radiation group used for photo-electric heating !
-     logical::cosmic_rays=.false.         ! Include cosmic ray ionisation                   !
+     real(dp)::Tmu_dissoc=1d3              ! Dissociation temperature [K]                    !
+     logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
+     integer::iPEH_group=-1                ! Radiation group used for photo-electric heating !
+     logical::cosmic_rays=.false.          ! Include cosmic ray ionisation                   !
      
      !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                           !
-     !character(LEN=128)::sed_dir=''      ! Dir containing stellar energy distributions     !
-     !character(LEN=128)::uv_file=''      ! File containing stellar energy distributions    !
+     !character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
+     !character(LEN=128)::uv_file=''       ! File containing stellar energy distributions    !
      
      ! Imposed boundary condition variables
      !real(dp),dimension(1:MAXBOUND,1:nrtvar)::rt_boundary_var

@@ -114,7 +114,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
 
   ! NEQ_CHEM namelist---------------------------------------------------------------------
   logical::is_init_xion=.false.                    ! Initialize ionization from T profile?
-  logical::isHe=.true.                             !      He ionization fractions tracked?
+  logical::isHe=.false.                            !      He ionization fractions tracked?
   logical::isH2=.false.                            !                           H2 tracked?
   real(dp)::X=0.76d0                               !                Hydrogen mass fraction
   real(dp)::Y=0.24d0                               !                  Helium mass fraction
