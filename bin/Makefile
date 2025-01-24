@@ -51,7 +51,7 @@ ifneq ($(NENER),)
    DEFINES += -DNENER=$(NENER)
 endif
 ifeq ($(RT),1)
-   DEFINES += -DRT -DNRTGROUPS=$(NRTGRP)
+   DEFINES += -DRT -DNRTGRP=$(NRTGRP)
 endif
 #############################################################################
 # Set proper units and initial conditions
