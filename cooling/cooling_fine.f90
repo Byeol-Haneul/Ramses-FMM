@@ -73,7 +73,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 #ifdef RT
-  call rt_units(scale_Np,scale_Fp)
+  call rt_units(r,g,scale_Np,scale_Fp)
 #endif
   ! Density for isothermal/polytropic EOS in H/cc
   nH_eos = r%eos_nH

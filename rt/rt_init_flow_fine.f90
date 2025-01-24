@@ -54,63 +54,6 @@ module update_rt_c_module
      real(kind=8)::rt_c
   end type in_broadcast_rt_c
 contains
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine m_update_rt_c(pst)
-  use constants, only: clight
-  use amr_commons, only: run_t, global_t, dp
-  use ramses_commons, only: pst_t
-  implicit none
-  type(pst_t)::pst
-  !type(run_t)::r
-  !type(global_t)::g
-  !-------------------------------------------------------------------------
-  ! Update the speed of light for radiative transfer, in code units.
-  ! This cannot be just a constant, since scale_v changes with time in
-  ! cosmological simulations.
-  !-------------------------------------------------------------------------
-  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  type(in_broadcast_rt_c)::in_broadcast
-
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
-
-  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-  g%rt_c_cgs = clight * r%rt_c_fraction
-  g%rt_c = g%rt_c_cgs/scale_v
-
-  ! Broadcast updated rt_c to all CPUs
-  in_broadcast%rt_c=g%rt_c
-  call r_broadcast_rt_c(pst,in_broadcast,storage_size(in_broadcast)/32)
-
-  end associate
-
-end subroutine m_update_rt_c
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
-recursive subroutine r_broadcast_rt_c(pst,input,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  type(in_broadcast_rt_c)::input
-
-  integer::rID
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_BROADCAST_RT_C,pst%iUpper+1,input_size,0,input)
-     call r_broadcast_rt_c(pst%pLower,input,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     pst%s%g%rt_c  = input%rt_c
-     pst%s%g%rt_c2 = input%rt_c**2
-  endif
-
-end subroutine r_broadcast_rt_c
 !##############################################################
 !##############################################################
 !##############################################################
@@ -138,6 +81,8 @@ recursive subroutine r_update_rt_var(pst)
      call updateRTGroups_CoolConstants(pst%s%r, pst%s%tables)
      ! Update UV background constants for metal cooling
      call update_metal_cooling(pst%s%r, pst%s%tables, dble(pst%s%g%aexp))
+     if(pst%s%g%myid==1) write(*,*)'RT-related quantities updated'
+
   endif
 
 end subroutine r_update_rt_var

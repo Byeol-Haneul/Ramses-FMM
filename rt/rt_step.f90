@@ -7,6 +7,7 @@ contains
 subroutine m_rt_step(pst,ilevel)
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
+  use cooling_fine_module, only: r_cooling_fine
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
   use rt_upload_module, only: m_rt_upload_fine
   use rt_input_condinit_module, only: r_rt_input_source_regions  
@@ -65,7 +66,7 @@ subroutine m_rt_step(pst,ilevel)
      if(.not.r%rt_smooth)call r_set_rtuold(pst,ilevel,1)
 
      ! Source terms for photo-chemistry
-!     if(r%neq_chem.or.r%cooling.or.r%isothermal)call r_cooling_fine(pst,ilevel,1)
+     if(r%neq_chem)call r_cooling_fine(pst,ilevel,1)
 
   end do
   ! End RT subcycle loop
