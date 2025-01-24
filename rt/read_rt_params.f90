@@ -40,9 +40,9 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   !character(LEN=10)::rt_flux_scheme='glf'                                                !
   !logical::rt_use_hll=.false.          ! Use hll flux (or the default glf)               !
   !logical::rt_is_outflow_bound=.false. ! Make all boundaries=outflow for RT              !
-  real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
-  real(dp)::rt_err_grad_n(nrtgroups)=-1. ! Photon number density gradient for refinement  !
-  real(dp)::rt_floor_n(nrtgroups)=1d-10 ! Photon number density floor for refinement      !
+  real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
+  real(dp)::rt_err_grad_n(nrtgrp)=-1.   ! Photon number density gradient for refinement  !
+  real(dp)::rt_floor_n(nrtgrp)=1d-10    ! Photon number density floor for refinement      !
   !real(dp)::rt_err_grad_xHI=-1.0       ! Ionization state gradient for refinement        !
   !real(dp)::rt_err_grad_xHII=-1.0      ! Ionization state gradient for refinement        !
   !real(dp)::rt_refine_aexp=-1.0        ! Start a for RT gradient refinement              !
@@ -103,14 +103,14 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
 
   ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
-  ! Indices nrtgroups, nions stand for photon group vs species (e.g. 1=H, 2=He).
-  real(dp),dimension(nrtgroups,nions)::group_csn=0, group_cse=0  !    Cross sections (cm2)
-  real(dp),dimension(nrtgroups)::group_egy=0                     !  Avg photon energy (ev)
-  real(dp),dimension(nrtgroups)::group_L0=13.60                  ! Wavelength lower limits
-  real(dp),dimension(nrtgroups)::group_L1=0                      ! Wavelength upper limits
-  integer,dimension(nions)::spec2group=0                ! Ion -> group # in recombinations
-  real(dp),dimension(nrtgroups)::kappaAbs=0                      ! Dust absorption opacity
-  real(dp),dimension(nrtgroups)::kappaSc=0                       ! Dust scattering opacity
+  ! Indices nrtgrp, nion stand for photon group vs species (e.g. 1=H, 2=He).
+  real(dp),dimension(nrtgrp,nion)::group_csn=0, group_cse=0      !    Cross sections (cm2)
+  real(dp),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
+  real(dp),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
+  real(dp),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
+  integer,dimension(nion)::spec2group=0                 ! Ion -> group # in recombinations
+  real(dp),dimension(nrtgrp)::kappaAbs=0                         ! Dust absorption opacity
+  real(dp),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
 
   ! NEQ_CHEM namelist---------------------------------------------------------------------
   logical::is_init_xion=.false.                    ! Initialize ionization from T profile?
@@ -119,7 +119,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   real(dp)::X=0.76d0                               !                Hydrogen mass fraction
   real(dp)::Y=0.24d0                               !                  Helium mass fraction
   integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !       Indices of ionization fractions
-  real(dp),dimension(nIons)::ionEvs                !                   Ionization energies
+  real(dp),dimension(nion)::ionEvs                 !                   Ionization energies
 
   !--------------------------------------------------
   ! Namelist definitions
@@ -171,7 +171,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   !----------------------------------------------------------------
   ! Set number of used ionisation fractions, indices of ionization
   ! fractions, and ionization energies, and check if we have enough
-  ! ionization variables (NIONS)
+  ! ionization variables (NION)
   !----------------------------------------------------------------
   if(neq_chem) then
      iCount=0
@@ -188,16 +188,16 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
         iCount=iCount+1 ; ixHeIII=iCount ; ionEvs(ixHeIII)=ionEv_HeIII
      endif
      ! Check that we have enough chemical species
-     if(iCount .gt. NIONS) then
+     if(iCount .gt. NION) then
         write(*,*) 'Not enough variables for ionization fractions'
-        write(*,*) 'Have NIONS=',NIONS
+        write(*,*) 'Have NION=',NION
         write(*,*) 'STOPPING!'
         call mdl_abort(s%mdl)
      endif
-     if(iCount .lt. NIONS) then
+     if(iCount .lt. NION) then
         write(*,*) 'Too many variables for ionization fractions'
-        write(*,*) 'Have NIONS=',NIONS
-        write(*,*) 'Need NIONS=',iCount
+        write(*,*) 'Have NION=',NION
+        write(*,*) 'Need NION=',iCount
         write(*,*) 'Probably no harm, so still continuing...'
      endif
      ! Starting index of ionized species
@@ -286,7 +286,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   s%r%ionEvs=ionEvs
 
   if(s%r%isH2) then
-     do i=1,nrtgroups
+     do i=1,nrtgrp
         if((s%r%group_L0(i) .ge. 11.2) .and. (s%r%group_L1(i) .le. 13.6)          &
           .and. (s%r%group_L0(i) .le. 13.6) .and. (s%r%group_L1(i) .ge. 11.2))then
             s%r%ssh2(i) = 4d2 ! H2 self-shielding factor

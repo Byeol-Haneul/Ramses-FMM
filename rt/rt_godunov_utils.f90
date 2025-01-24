@@ -24,7 +24,7 @@ end subroutine rt_courant_coarse
 subroutine rt_refine(r,ug,um,ud,ok)
   use amr_parameters, only: ndim, dp
   use amr_commons, only: run_t
-  use rt_parameters, only: nrtvar, nrtgroups
+  use rt_parameters, only: nrtvar, nrtgrp
   implicit none
   ! routine arguments
   type(run_t)::r
@@ -37,7 +37,7 @@ subroutine rt_refine(r,ug,um,ud,ok)
   real(dp)::ng,nm,nd,error
 
   ! Compute errors
-  do igroup=1, nrtgroups
+  do igroup=1, nrtgrp
     if(r%rt_err_grad_n(igroup) >= 0.)then
       ivar = 1+(igroup-1)*(ndim+1)
       ng=ug(ivar); nm=um(ivar); nd=ud(ivar)

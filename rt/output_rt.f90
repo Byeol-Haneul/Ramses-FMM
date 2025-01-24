@@ -38,7 +38,7 @@ end subroutine r_output_rt
 !###################################################
 subroutine output_rt(s,filename)
   use amr_parameters, only: ndim,twotondim, flen, dp
-  use rt_parameters, only: nrtvar, nrtgroups
+  use rt_parameters, only: nrtvar, nrtgrp
   use ramses_commons, only: ramses_t, open_file, close_file
   implicit none
   type(ramses_t)::s
@@ -62,7 +62,7 @@ subroutine output_rt(s,filename)
      do igrid=m%head(ilevel),m%tail(ilevel)
         rtuold=m%grid(igrid)%rtuold
         do ind=1,twotondim
-            do igrp = 1, nrtgroups
+            do igrp = 1, nrtgrp
               qold(ind,1+(igrp-1)*(ndim+1)) = rtuold(ind,1+(igrp-1)*(ndim+1))*g%rt_c
               do idim = 1, ndim
                 qold(ind,1+idim+(igrp-1)*(ndim+1)) = rtuold(ind,1+idim+(igrp-1)*(ndim+1))
@@ -133,7 +133,7 @@ end subroutine backup_rt
 !###################################################
 subroutine file_descriptor_rt(r,filename,write_bkp_file)
   use amr_parameters, only: ndim,flen
-  use rt_parameters, only: nrtgroups
+  use rt_parameters, only: nrtgrp
   use amr_commons, only: run_t
   implicit none
   type(run_t)::r
@@ -153,8 +153,8 @@ subroutine file_descriptor_rt(r,filename,write_bkp_file)
   open(unit=ilun,file=fileloc,form='formatted')
 
   ! Write variable names in backup file
-  write(ilun,'("nvar        =",I11)')nrtgroups*(1+ndim)
-  do igrp = 1, nrtgroups
+  write(ilun,'("nvar        =",I11)')nrtgrp*(1+ndim)
+  do igrp = 1, nrtgrp
      write(ilun,'("variable #",I2,": photon_flux_", i0.2)')1+(igrp-1)*(ndim+1), igrp
      do idim = 1, ndim
         write(ilun,'("variable #",I2,": photon_flux_", i0.2, "_", a)')1+idim+(igrp-1)*(ndim+1), igrp, dim_keys(idim)

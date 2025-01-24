@@ -97,9 +97,9 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   ! Parameters:
   ! tables  => object containing all non equilibrium chemistry tables
   ! T2     <=> T/mu [K]
-  ! xion   <=> NION ionization fractions
-  ! Np     <=> NRTGROUPS photon number densities [cm-3]
-  ! Fp     <=> NRTGROUPS * ndim photon number fluxes [cm-2 s-1]
+  ! xion   <=> nion ionization fractions
+  ! Np     <=> nrtgrp photon number densities [cm-3]
+  ! Fp     <=> nrtgrp * ndim photon number fluxes [cm-2 s-1]
   ! p_gas  <=> ndim gas momentum densities [cm s-1 g cm-3]
   ! dNpdt   =>  Op split increment in photon densities during dt
   ! dFpdt   =>  Op split increment in photon flux magnitudes during dt
@@ -115,11 +115,11 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   type(run_t):: r
   type(neq_cooling_t):: tables
   real(kind=8),dimension(1:nvector):: T2
-  real(kind=8),dimension(1:nions, 1:nvector):: xion
+  real(kind=8),dimension(1:nion, 1:nvector):: xion
 #ifdef RT
   real(kind=8),dimension(1:ndim, 1:nvector):: p_gas
-  real(kind=8),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
-  real(kind=8),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
+  real(kind=8),dimension(1:nrtgrp, 1:nvector):: Np, dNpdt
+  real(kind=8),dimension(1:ndim, 1:nrtgrp, 1:nvector):: Fp, dFpdt
 #endif
   real(kind=8),dimension(1:nvector):: nH, Zsolar
 !  logical,dimension(1:nvector):: c_switch
@@ -130,7 +130,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   logical:: dt_ok
   real(kind=8):: dt_rec
   real(kind=8):: dT2
-  real(kind=8),dimension(nions):: dXion
+  real(kind=8),dimension(nion):: dXion
   integer::i, ia, ig, nAct, nAct_next, loopcnt, code
   integer,dimension(1:nvector):: indAct              ! Active cell indexes
   real(kind=8):: one_over_x_FRAC, one_over_T_FRAC
@@ -138,9 +138,9 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   real(kind=8):: one_over_rt_c_cgs, one_over_egy_IR_erg
   real(kind=8):: one_over_Np_FRAC, one_over_Fp_FRAC
   real(kind=8),dimension(1:ndim):: dp_gas
-  real(kind=8),dimension(nrtgroups):: dNp
-  real(kind=8),dimension(1:ndim, 1:nrtgroups):: dFp
-  real(kind=8),dimension(1:nrtgroups):: group_egy_ratio, group_egy_erg
+  real(kind=8),dimension(nrtgrp):: dNp
+  real(kind=8),dimension(1:ndim, 1:nrtgrp):: dFp
+  real(kind=8),dimension(1:nrtgrp):: group_egy_ratio, group_egy_erg
 #endif
   integer*8,dimension(20)::loopCodes=0
 
@@ -153,9 +153,9 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
   one_over_Np_FRAC = 1d0 / Np_FRAC
   one_over_Fp_FRAC = 1d0 / Fp_FRAC
   one_over_rt_c_cgs = 1d0 / tables%rt_c_cgs
-  group_egy_erg(1:nrtgroups) = r%group_egy(1:nrtgroups) * eV2erg
+  group_egy_erg(1:nrtgrp) = r%group_egy(1:nrtgrp) * eV2erg
   if(r%rt_isIR) then
-     group_egy_ratio(1:nrtgroups) = r%group_egy(1:nrtgroups) / r%group_egy(iIR)
+     group_egy_ratio(1:nrtgrp) = r%group_egy(1:nrtgrp) / r%group_egy(iIR)
      one_over_egy_IR_erg = 1d0 / group_egy_erg(iIR)
   endif
 #endif
@@ -167,7 +167,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
      indact(i) = i                   !      Set up indexes of active cells
      ! Ensure all state vars are legal:
      T2(i) = MAX(T2(i), T2_min_fix)
-     xion(1:nions,i) = MIN(MAX(xion(1:nions,i), x_MIN),1d0)
+     xion(1:nion,i) = MIN(MAX(xion(1:nion,i), x_MIN),1d0)
      if(r%isH2) then
         ! Ensure the total hydrogen fraction is 1:
         if(xion(ixHI,i)+xion(ixHII,i) .gt. 1d0) then
@@ -189,7 +189,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
         endif
      endif ! isHe
 #ifdef RT
-     do ig=1,nrtgroups
+     do ig=1,nrtgrp
         Np(ig,i) = MAX(smallNp, Np(ig,i))
         call reduce_flux(Fp(:,ig,i),Np(ig,i)*tables%rt_c_cgs)
      end do
@@ -249,11 +249,11 @@ contains
   SUBROUTINE cool_step(icell)
     ! Compute change in cell state in timestep ddt(icell), or set in dt_rec
     ! a recommendation for new timestep if ddt(icell) proves too large.
-    ! T2      => T/mu [K]                                  -- dT2 is new value
-    ! xion    => NION ionization fractions                 --     dXion is new
-    ! Np      => NRTGROUPS photon number densities [cm-3]  -- dNp is new value
-    ! Fp      => NRTGROUPS * ndim photon fluxes [cm-2 s-1] -- dFp is new value
-    ! p_gas   => ndim gas momenta [cm s-1 g cm-3]          --    dp_gas is new
+    ! T2      => T/mu [K]                               -- dT2 is new value
+    ! xion    => nion ionization fractions              --     dXion is new
+    ! Np      => nrtgrp photon number densities [cm-3]  -- dNp is new value
+    ! Fp      => nrtgrp * ndim photon fluxes [cm-2 s-1] -- dFp is new value
+    ! p_gas   => ndim gas momenta [cm s-1 g cm-3]       --    dp_gas is new
     ! dNpdt   =>  Op split increment in photon densities during dt
     ! dFpdt   =>  Op split increment in photon flux magnitudes during dt
     ! nH      =>  Hydrogen number densities [cm-3]
@@ -273,7 +273,7 @@ contains
     implicit none
     integer, intent(in):: icell
     !-----------------------------------------------------------------------
-    real(kind=8),dimension(nions):: alpha, beta, nN, nI
+    real(kind=8),dimension(nion):: alpha, beta, nN, nI
     real(kind=8):: dUU, fracMax, x_tot
     real(kind=8):: mu, TK, nHe, ne, neInit, Hrate
     real(kind=8):: xHI,dxHI, xH2=0d0,dXH2=0d0, xHeI,dxHeI
@@ -282,8 +282,8 @@ contains
     integer:: iion,igroup,idim
 #ifdef RT
     real(kind=8),dimension(ndim):: dmom
-    real(kind=8),dimension(nrtgroups):: recRad, phAbs, phSc, dustAbs
-    real(kind=8),dimension(nrtgroups):: dustSc, kAbs_loc, kSc_loc
+    real(kind=8),dimension(nrtgrp):: recRad, phAbs, phSc, dustAbs
+    real(kind=8),dimension(nrtgrp):: dustSc, kAbs_loc, kSc_loc
 #endif
     real(kind=8):: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
     real(kind=8):: G0, eff_peh, cdex, ncr
@@ -344,7 +344,7 @@ contains
        E_rad = group_egy_erg(iIR) * dNp(iIR)
        TR = max(0d0,(E_rad*r%rt_c_fraction/a_r)**0.25)    ! IR temperature
        kAbs_loc(iIR) = r%kappaAbs(iIR) * (TR/10d0)**2
-       do iGroup=1,nrtgroups
+       do iGroup=1,nrtgrp
           if(iGroup .ne. iIR)                                            &
                E_rad = E_rad + kAbs_loc(iGroup) / kAbs_loc(iIR)          &
                * group_egy_erg(iGroup) * dNp(iGroup)
@@ -363,9 +363,9 @@ contains
 
     ! UPDATE PHOTON DENSITY AND FLUX *************************************
     if(r%rt_advect) then
-       recRad(1:nrtgroups)=0. ; phAbs(1:nrtgroups)=0.
+       recRad(1:nrtgrp)=0. ; phAbs(1:nrtgrp)=0.
         ! Scattering rate; reduce the photon flux, but not photon density:
-       phSc(1:nrtgroups)=0.
+       phSc(1:nrtgrp)=0.
 
        ! EMISSION FROM GAS
        if(.not. r%rt_otsa .and. r%rt_advect) then  ! ------ Rec. radiation
@@ -380,7 +380,7 @@ contains
              alpha(ixHeIII) = inp_coolrates_table(tables,tables%tbl_alphaA_HeIII, TK,.false.) &
                             - inp_coolrates_table(tables,tables%tbl_alphaB_HeIII, TK,.false.)
           endif
-          do iion=1,nions
+          do iion=1,nion
              if(r%spec2group(iion) .gt. 0) &   ! Contribution ion -> group
                   recRad(r%spec2group(iion)) = &
                   recRad(r%spec2group(iion)) + alpha(iion) * nI(iion) * ne
@@ -388,13 +388,13 @@ contains
        endif
 
        ! ABSORPTION/SCATTERING OF PHOTONS BY GAS
-       do igroup=1,nrtgroups       ! ----------------Ionization absorbtion
+       do igroup=1,nrtgrp       ! ----------------Ionization absorbtion
           phAbs(igroup) = SUM(nN(:)*tables%signc(igroup,:)*r%ssh2(igroup)) ! s-1
        end do
        ! IR, optical and UV depletion by dust absorption: ----------------
        ! IR scattering/abs on dust (abs after T update)
        if(r%rt_isIR) phSc(iIR)  = phSc(iIR) + dustSc(iIR)
-       do igroup=1,nrtgroups      ! Deplete photons, since they go into IR
+       do igroup=1,nrtgrp      ! Deplete photons, since they go into IR
           if( .not. (r%rt_isIR .and. igroup.eq.iIR) ) & ! IR done elsewhere
                phAbs(igroup) = phAbs(igroup) + dustAbs(igroup)
        end do
@@ -417,7 +417,7 @@ contains
        endif
 
        dmom(1:ndim)=0d0
-       do igroup=1,nrtgroups  ! ----------------- Do the update of N and F
+       do igroup=1,nrtgrp  ! ----------------- Do the update of N and F
           dNp(igroup)= MAX(smallNp,                                      &
                         (ddt(icell)*(recRad(igroup)+dNpdt(igroup,icell)) &
                                     +dNp(igroup))                        &
@@ -449,7 +449,7 @@ contains
 
        end do
 
-       do igroup=1,nrtgroups ! -------Momentum transfer from photons to gas:
+       do igroup=1,nrtgrp ! -------Momentum transfer from photons to gas:
           mom_fact = ddt(icell) * (phAbs(igroup) + phSc(igroup)) &
                * group_egy_erg(igroup) * one_over_clight
 
@@ -473,7 +473,7 @@ contains
 
        ! Add absorbed UV/optical energy to IR:----------------------------
        if(r%rt_isIR) then
-          do igroup=iIR+1,nrtgroups
+          do igroup=iIR+1,nrtgrp
              dNp(iIR) = dNp(iIR) + dustAbs(igroup) * ddt(icell)          &
                   * dNp(igroup) * group_egy_ratio(igroup)
           end do
@@ -489,7 +489,7 @@ contains
        if(r%haardt_madau) Hrate = Hrate + SUM(nN(:)*tables%UVrates(:,2)) * ss_factor
 #ifdef RT
        if(r%rt_advect) then
-          do igroup=1,nrtgroups                            !  Photoheating
+          do igroup=1,nrtgrp                            !  Photoheating
              Hrate = Hrate + dNp(igroup) * SUM(nN(:)                     &
                    * tables%PHrate(igroup,:))
           end do
@@ -796,10 +796,10 @@ contains
        &                      T2,  xion, dT2, dXion, code)
     ! Print cooling information to standard output, and maybe stop execution.
     !------------------------------------------------------------------------
-    real(kind=8),dimension(nions):: xion, dXion
+    real(kind=8),dimension(nion):: xion, dXion
 #ifdef RT
-    real(kind=8),dimension(nrtgroups):: Np, dNp
-    real(kind=8),dimension(ndim, nrtgroups):: Fp, dFp
+    real(kind=8),dimension(nrtgrp):: Np, dNp
+    real(kind=8),dimension(ndim, nrtgrp):: Fp, dFp
     real(kind=8),dimension(ndim):: p_gas, dp_gas
 #endif
     real(kind=8)::T2, dT2, dtDone, dt, ddt, nH
@@ -859,7 +859,7 @@ SUBROUTINE cmp_Equilibrium_Abundances(r, tables, &
   type(run_t)::r
   type(neq_cooling_t)::tables
   real(kind=8)::T2,nH
-  real(kind=8),dimension(nIons)::phI_rates
+  real(kind=8),dimension(nion)::phI_rates
   real(kind=8)::mu,Zsolar
   real(kind=8),dimension(1:7)::nSpec
   !-------------------------------------------------------------------------
@@ -912,7 +912,7 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   type(neq_cooling_t)::tables
   real(kind=8),intent(in)::TK, nH, Zsol
   real(kind=8),intent(out)::nTot, mu
-  real(kind=8),dimension(nions),intent(in)::t_rad_spec
+  real(kind=8),dimension(nion),intent(in)::t_rad_spec
   real(kind=8),dimension(1:7),intent(out)::nSpec
   !------------------------------------------------------------------------
   real(kind=8)::nHe
@@ -1041,15 +1041,15 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
   logical::if_write_result
   !-------------------------------------------------------------------------
   real(kind=8)::aexp, daexp, dt_cool, T2_com, nH_com
-  real(kind=8),dimension(nions)::pHI_rates
+  real(kind=8),dimension(nion)::pHI_rates
   real(kind=8)::mu
   real(kind=8)::mu_dp
   real(kind=8)::n_spec(1:7)
   real(kind=8),dimension(1:nvector):: T2
-  real(kind=8),dimension(1:nions, 1:nvector):: xion
+  real(kind=8),dimension(1:nion, 1:nvector):: xion
 #ifdef RT
-  real(kind=8),dimension(1:nrtgroups, 1:nvector):: Np, dNpdt
-  real(kind=8),dimension(1:ndim, 1:nrtgroups, 1:nvector):: Fp, dFpdt
+  real(kind=8),dimension(1:nrtgrp, 1:nvector):: Np, dNpdt
+  real(kind=8),dimension(1:ndim, 1:nrtgrp, 1:nvector):: Fp, dFpdt
   real(kind=8),dimension(1:ndim, 1:nvector):: p_gas
 #endif
   real(kind=8),dimension(1:nvector)::nH, Zsolar
@@ -1275,7 +1275,7 @@ FUNCTION getMu(r, xion, Tmu)
   implicit none
   type(run_t),intent(in)::r
   real(kind=8),intent(in)::Tmu
-  real(kind=8),intent(in),dimension(nions)::xion
+  real(kind=8),intent(in),dimension(nion)::xion
   real(kind=8)::getMu
   !-------------------------------------------------------------------------
   real(kind=8)::xHI, xHII, xHeII, xHeIII
@@ -1308,8 +1308,8 @@ SUBROUTINE updateRTGroups_CoolConstants(r,tables)
 #ifdef RT
   tables%signc = r%group_csn*tables%rt_c_cgs                    ! [cm3 s-1]
   tables%sigec = r%group_cse*tables%rt_c_cgs                    ! [cm3 s-1]
-  do iP = 1,nrtgroups
-     do iI = 1,nions               ! Photoheating rates for photons on ions
+  do iP = 1,nrtgrp
+     do iI = 1,nion                ! Photoheating rates for photons on ions
         tables%PHrate(iP,iI) =  eV2erg * &      ! See eq (19) in Aubert(08)
              (tables%sigec(iP,iI) * r%group_egy(iP) - tables%signc(iP,iI)*r%ionEvs(iI))
         tables%PHrate(iP,iI) = max(tables%PHrate(iP,iI),0d0)  ! Heating > 0

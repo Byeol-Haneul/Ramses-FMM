@@ -84,7 +84,7 @@ end subroutine rt_input_condinit
 !################################################################
 subroutine rt_region_condinit(r,g,x,q,dx,nn)
   use amr_parameters, only:dp, nvector, ndim
-  use rt_parameters, only: nrtvar, nrtgroups, smallnp
+  use rt_parameters, only: nrtvar, nrtgrp, smallnp
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
@@ -107,7 +107,7 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
   dx_cgs=dx*scale_l
 
   ! Set (tiny) default values outside of regions or if n_region=0
-  do igrp = 1, nrtgroups
+  do igrp = 1, nrtgrp
      q(1:nn,1+(igrp-1)*(ndim+1)) = smallnp  ! photon densities
      do idim = 1, ndim
         q(1:nn,1+idim+(igrp-1)*(ndim+1)) = 0.0d0 ! photon fluxes
@@ -116,7 +116,7 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
 
   ! Loop over initial conditions regions
   do k=1,r%rt_nregion
-     if(r%rt_reg_group(k) .le. 0 .or. r%rt_reg_group(k) .gt. nrtgroups) cycle
+     if(r%rt_reg_group(k) .le. 0 .or. r%rt_reg_group(k) .gt. nrtgrp) cycle
      if(r%rt_n_region(k).le.0.0) r%rt_n_region(k)=smallnp
      group_ind = 1+(r%rt_reg_group(k)-1)*(ndim+1)
      
@@ -286,7 +286,7 @@ end subroutine rt_input_source_regions
 !################################################################
 subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
   use amr_parameters, only:dp, nvector, ndim
-  use rt_parameters, only: nrtvar, nrtgroups, smallnp
+  use rt_parameters, only: nrtvar, nrtgrp, smallnp
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
@@ -311,7 +311,7 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
 
   ! Loop over initial conditions regions
   do k=1,r%rt_nsource
-     if(r%rt_src_group(k) .le. 0 .or. r%rt_src_group(k) .gt. nrtgroups) cycle
+     if(r%rt_src_group(k) .le. 0 .or. r%rt_src_group(k) .gt. nrtgrp) cycle
      if(r%rt_n_source(k).le.smallnp) r%rt_n_source(k)=smallnp
      group_ind = 1+(r%rt_src_group(k)-1)*(ndim+1)
      

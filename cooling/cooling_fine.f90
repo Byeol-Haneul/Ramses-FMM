@@ -32,7 +32,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use constants
   use amr_parameters, only:dp,ndim,nvector,twotondim
   use hydro_parameters, only: nener
-  use rt_parameters, only: nions,nrtgroups,smallnp
+  use rt_parameters, only: nion,nrtgrp,smallnp
   use amr_commons, only:run_t,global_t,mesh_t
   use cooling_module, only:cooling_t,solve_cooling,T2_min_fix,set_table
   use coolrates_module, only: neq_cooling_t
@@ -54,12 +54,12 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   real(kind=8),dimension(1:nvector)::nH,T2,delta_T2,ekk,err,emag
   real(kind=8),dimension(1:nvector)::T2min,Zsolar,boost
 !  logical,dimension(1:nvector)::cooling_on=.true.
-  real(kind=8),dimension(nions, 1:nvector):: xion
+  real(kind=8),dimension(nion, 1:nvector):: xion
 #ifdef RT
   integer::ig,iNp
   real(kind=8),dimension(1:ndim)::Fpnew
-  real(kind=8),dimension(nrtgroups, 1:nvector):: Np, dNpdt=0d0
-  real(kind=8),dimension(ndim, nrtgroups, 1:nvector):: Fp, dFpdt=0
+  real(kind=8),dimension(nrtgrp, 1:nvector):: Np, dNpdt=0d0
+  real(kind=8),dimension(ndim, nrtgrp, 1:nvector):: Fp, dFpdt=0
   real(kind=8),dimension(ndim, 1:nvector):: p_gas
   real(kind=8)::scale_Np,scale_Fp,Npnew
 #endif
@@ -182,7 +182,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Compute ionization fraction
         if(r%neq_chem) then
-           do ii=0,nIons-1
+           do ii=0,nIon-1
               do i=1,nleaf
                  xion(1+ii,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+ii) &
                       &        /m%grid(ind_leaf(i))%uold(ind,1)
@@ -192,7 +192,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Get photon densities and flux magnitudes
 #ifdef RT
-        do ig=1,nrtgroups
+        do ig=1,nrtgrp
            iNp=1+(ig-1)*(ndim+1)
            do i=1,nleaf
               Np(ig,i)          = scale_Np * m%grid(ind_leaf(i))%rtuold(ind,iNp)
@@ -247,7 +247,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Smooth RT update
 #ifdef RT
         if(r%rt_smooth) then
-           do ig=1,nrtgroups
+           do ig=1,nrtgrp
               iNp=1+(ig-1)*(ndim+1)
               do i=1,nleaf ! Calc addition per sec to Np, Fp for current dt
                  Npnew = scale_Np * m%grid(ind_leaf(i))%rtunew(ind,iNp)
@@ -323,7 +323,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Update ionization fraction
         if(r%neq_chem) then
-           do ii=0,nions-1
+           do ii=0,nion-1
               do i=1,nleaf
                  m%grid(ind_leaf(i))%uold(ind,r%iIons+ii) = xion(1+ii,i)*nH(i)
               end do
@@ -356,7 +356,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Update photon densities and flux magnitudes
 #ifdef RT
-        do ig=1,nrtgroups
+        do ig=1,nrtgrp
            iNp=1+(ig-1)*(ndim+1)
            do i=1,nleaf
               m%grid(ind_leaf(i))%rtuold(ind,iNp) = max(Np(ig,i)/scale_Np,smallNp)

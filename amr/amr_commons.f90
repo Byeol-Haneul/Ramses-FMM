@@ -7,7 +7,7 @@ module amr_commons
   use rt_commons
   use hash
   use domain_m
-  use rt_parameters,only: nrtgroups
+  use rt_parameters,only: nrtgrp
   
   type multipole_t
     real(dp),dimension(1:ndim+1)::q
@@ -316,21 +316,19 @@ module amr_commons
      logical::rt_sink=.false.              ! Activate radiation from sink particles          !
      logical::rt_is_outflow_bound=.false.  ! Make all boundaries=outflow for RT              !
      real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
-     real(dp)::rt_err_grad_n(nrtgroups)=-1.! Photon number density gradient for refinement  !
-     real(dp)::rt_floor_n(nrtgroups)=1d-10 ! Photon number density floor for refinement     !
+     real(dp)::rt_err_grad_n(nrtgrp)=-1.   ! Photon number density gradient for refinement   !
+     real(dp)::rt_floor_n(nrtgrp)=1d-10    ! Photon number density floor for refinement      !
      real(dp)::rt_floor_xHI=1d-10          ! Ionization state floor for refinement           !
      real(dp)::rt_floor_xHII=1d-10         ! Ionization state floor for refinement           !
-     real(dp)::rt_floor_xHI=1d-10         ! Ionization state floor for refinement           !
-     real(dp)::rt_floor_xHII=1d-10        ! Ionization state floor for refinement           !
-     real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT                      !
-     integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
-                                          ! gravity/etc timestep                            !
-     logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
-     logical::rt_isIR=.false.             ! Use IR photon groups                            !
-     logical::is_kIR_T=.false.            ! Kappa IT depends on T_rad                       !
-     logical::rt_T_rad=.false.            ! Use radiation temperature for everything        !
-     logical::rt_isoPress=.false.         ! Use cE, not F, for rad. pressure                !
-     real(dp)::rt_pressBoost=1d0          ! Boost on RT pressure                            !
+     real(dp)::rt_c_fraction=1d0           ! Lightspeed fraction for RT                      !
+     integer::rt_nsubcycle=1               ! Maximum number of RT-steps during one hydro/    !
+                                           ! gravity/etc timestep                            !
+     logical::rt_otsa=.true.               ! Use on-the-spot approximation                   !
+     logical::rt_isIR=.false.              ! Use IR photon groups                            !
+     logical::is_kIR_T=.false.             ! Kappa IT depends on T_rad                       !
+     logical::rt_T_rad=.false.             ! Use radiation temperature for everything        !
+     logical::rt_isoPress=.false.          ! Use cE, not F, for rad. pressure                !
+     real(dp)::rt_pressBoost=1d0           ! Boost on RT pressure                            !
      logical::is_mu_H2=.false.
      real(dp)::Tmu_dissoc=1d3              ! Dissociation temperature [K]                    !
      logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
@@ -385,16 +383,16 @@ module amr_commons
      ! negative: never update, 0:update on init, pos x: update every x coarse steps
      ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
      ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
-     ! Indexes nrtgroups, nIons stand for photon group vs species (e.g. 1=H, 2=He)
-     real(dp),dimension(nrtgroups,nIons)::group_csn=0, group_cse=0     ! Cross sections (cm2)
-     real(dp),dimension(nrtgroups)::group_egy=0                     !  Avg photon energy (ev)
-     real(dp),dimension(nrtgroups)::group_L0=13.60                  ! Wavelength lower limits
-     real(dp),dimension(nrtgroups)::group_L1=0                      ! Wavelength upper limits
-     real(dp),dimension(nrtgroups)::kappaAbs=0                      ! Dust absorption opacity
-     real(dp),dimension(nrtgroups)::kappaSc=0                       ! Dust scattering opacity
-     real(dp),dimension(nrtgroups)::isLW=0d0                       ! Use to find the LW group 
-     real(dp),dimension(nrtgroups)::ssh2=1d0                   ! Self-shielding factor for H2
-     integer,dimension(nIons)::spec2group=0                ! Ion -> group # in recombinations
+     ! Indexes nrtgrp, nIon stand for photon group vs species (e.g. 1=H, 2=He)
+     real(dp),dimension(nrtgrp,nIon)::group_csn=0, group_cse=0         ! Cross sections (cm2)
+     real(dp),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
+     real(dp),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
+     real(dp),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
+     real(dp),dimension(nrtgrp)::kappaAbs=0                         ! Dust absorption opacity
+     real(dp),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
+     real(dp),dimension(nrtgrp)::isLW=0d0                          ! Use to find the LW group 
+     real(dp),dimension(nrtgrp)::ssh2=1d0                      ! Self-shielding factor for H2
+     integer,dimension(nIon)::spec2group=0                 ! Ion -> group # in recombinations
 
      ! Non-equilibrium chemistry parameters--------------------------------------------------
      logical::is_init_xion=.false.                    ! Initialize ionization from T profile?
@@ -404,7 +402,7 @@ module amr_commons
      real(dp)::X=0.76d0                               !                Hydrogen mass fraction
      real(dp)::Y=0.24d0                               !                  Helium mass fraction
      integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
-     real(dp),dimension(nIons)::ionEvs                !                   Ionization energies
+     real(dp),dimension(nIon)::ionEvs                 !                   Ionization energies
 
   end type run_t
 

@@ -10,7 +10,7 @@ MODULE coolrates_module
 
   use constants
   use amr_parameters, only: dp
-  use rt_parameters, only: nions, nrtgroups
+  use rt_parameters, only: nion, nrtgrp
   use amr_commons, only: run_t
   implicit none
 
@@ -39,13 +39,13 @@ MODULE coolrates_module
      real(kind=8) :: phi
 
      ! UV background heating and ionization rates
-     real(kind=8),dimension(nions,2) :: UVrates
+     real(kind=8),dimension(nion,2) :: UVrates
 #ifdef RT
      ! Contribution of each group to photo-ionization rates
-     real(kind=8),dimension(nrtgroups,nions) :: signc
+     real(kind=8),dimension(nrtgrp,nion) :: signc
 
      ! Contribution of each group to photo-heating rates
-     real(kind=8),dimension(nrtgroups,nions) :: sigec, PHrate
+     real(kind=8),dimension(nrtgrp,nion) :: sigec, PHrate
 #endif
      real(kind=8) :: dlogTinv ! Inverse of the bin space (in K)
      real(kind=8) :: hTable, h2Table, h3Table   ! Interpol constants
@@ -611,7 +611,7 @@ FUNCTION compCoolrate(r, tables, T, ne, nN, nI, dcooldT)
   type(run_t)::r
   type(neq_cooling_t)::tables
   real(kind=8)::T, ne
-  real(kind=8),dimension(nIons)::nN, nI
+  real(kind=8),dimension(nion)::nN, nI
   real(kind=8)::compCoolrate, dcooldT
   !-------------------------------------------------------------------------
   real(kind=8)::ci_HI, ci_HeI, ci_HeII

@@ -7,7 +7,7 @@ subroutine m_rt_init_flow_fine(pst,ilevel)
   use amr_parameters, only: nvector, twotondim
   use ramses_commons, only: pst_t
   use rt_input_condinit_module, only: r_rt_input_condinit
-  use rt_parameters, only: nrtgroups
+  use rt_parameters, only: nrtgrp
   implicit none
   type(pst_t)::pst
   integer::ilevel

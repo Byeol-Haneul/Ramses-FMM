@@ -1,17 +1,17 @@
 module rt_parameters
   use amr_parameters, only: ndim, dp
 
-#ifdef NRTGROUPS
-  integer,parameter::nrtgroups=NRTGROUPS       ! # of photon groups (set in Makefile)
+#ifdef NRTGRP
+  integer,parameter::nrtgrp=NRTGRP             ! # of photon groups (set in Makefile)
 #else
-  integer,parameter::nrtgroups=1
+  integer,parameter::nrtgrp=1
 #endif
-  integer,parameter::nrtvar=nrtgroups*(1+ndim) ! # of RT variables (photon density and flux)
+  integer,parameter::nrtvar=nrtgrp*(1+ndim) ! # of RT variables (photon density and flux)
 
-#ifdef NIONS
-  integer,parameter::nIons=NIONS               !   # of ion species (set in Makefile)
+#ifdef NION
+  integer,parameter::nion=NION                 !   # of ion species (set in Makefile)
 #else
-  integer,parameter::nIons=3                   !   HII and optionally HI, HeII, HeIII
+  integer,parameter::nion=3                    !   HII and optionally HI, HeII, HeIII
 #endif
 
 #ifndef NPRE

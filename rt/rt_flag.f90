@@ -8,7 +8,7 @@ subroutine rt_flag(s,ilevel)
   use amr_parameters, only: ndim,twotondim,twondim,dp
   use amr_commons, only: oct,nbor
   use ramses_commons, only: ramses_t
-  use rt_parameters, only: nrtvar, nrtgroups
+  use rt_parameters, only: nrtvar, nrtgrp
   use cache_commons
   use cache
   use nbors_utils
@@ -37,7 +37,7 @@ subroutine rt_flag(s,ilevel)
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   do_rt_refine=.false.
-  do igroup=1, nrtgroups
+  do igroup=1, nrtgrp
     if( r%rt_err_grad_n(igroup) .ne. -1.0 ) do_rt_refine=.true.
   end do
   if(.not. do_rt_refine) return ! No refinement done on radiation vars

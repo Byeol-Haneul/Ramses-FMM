@@ -13,12 +13,12 @@ RT = 0
 GRAV = 0
 MPI = 0
 INIT =
-UNITS =
+UNIT =
 NENER = 0
-NMETALS = 0
+NMETAL = 0
+NION = 0
 NPSCAL = 0
-NRTGROUPS = 0
-NIONS = 0
+NRTGRP = 0
 PATCH =
 DEBUG = 0
 HDF5 = 0
@@ -28,7 +28,7 @@ EXEC = ramses
 
 # Compute NVAR
 NHYDRO = 5
-NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETALS)+$(NIONS)
+NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
 
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
@@ -37,7 +37,7 @@ GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNHILBERT=$(NHILBERT) \
-	-DNVAR=$(NVAR)
+	-DNVAR=$(NVAR) -DNION=$(NION)
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
@@ -51,16 +51,15 @@ ifneq ($(NENER),)
    DEFINES += -DNENER=$(NENER)
 endif
 ifeq ($(RT),1)
-   #DEFINES += -DRT
-   DEFINES += -DRT -DNIONS=$(NIONS) -DNRTGROUPS=$(NRTGROUPS)
+   DEFINES += -DRT -DNRTGROUPS=$(NRTGRP)
 endif
 #############################################################################
 # Set proper units and initial conditions
 ifneq ($(INIT),)
    DEFINES += -DINIT=$(INIT)
 endif
-ifneq ($(UNITS),)
-   DEFINES += -DUNITS=$(UNITS)
+ifneq ($(UNIT),)
+   DEFINES += -DUNITS=$(UNIT)
 endif
 #############################################################################
 # GNU compiler (gfortran)
