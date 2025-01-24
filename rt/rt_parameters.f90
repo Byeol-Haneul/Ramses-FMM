@@ -8,12 +8,6 @@ module rt_parameters
 #endif
   integer,parameter::nrtvar=nrtgrp*(1+ndim) ! # of RT variables (photon density and flux)
 
-#ifdef NION
-  integer,parameter::nion=NION                 !   # of ion species (set in Makefile)
-#else
-  integer,parameter::nion=3                    !   HII and optionally HI, HeII, HeIII
-#endif
-
 #ifndef NPRE
   real(dp),parameter::smallNp=1d-30            !               Minimum photon density
 #else
@@ -24,9 +18,4 @@ module rt_parameters
 #endif
 #endif
 
-  real(dp),parameter::ionEv_HI    = 11.20d0
-  real(dp),parameter::ionEv_HII   = 13.60d0
-  real(dp),parameter::ionEv_HeII  = 24.59d0
-  real(dp),parameter::ionEv_HeIII = 54.42d0
-  
 end module rt_parameters

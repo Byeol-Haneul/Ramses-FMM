@@ -45,4 +45,10 @@ module constants
   real(kind=8),parameter ::Gyr2sec      = 3.15576000d+16 ! Gyr [s]
   real(kind=8),parameter ::sec2Gyr      = 3.16880878d-17 ! sec [Gyr]
 
+  ! Non-equilibrium cooling constants
+  real(kind=8),parameter::ionEv_HI    = 11.20d0
+  real(kind=8),parameter::ionEv_HII   = 13.60d0
+  real(kind=8),parameter::ionEv_HeII  = 24.59d0
+  real(kind=8),parameter::ionEv_HeIII = 54.42d0
+  
 end module constants

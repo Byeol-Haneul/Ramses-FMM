@@ -10,7 +10,8 @@ MODULE coolrates_module
 
   use constants
   use amr_parameters, only: dp
-  use rt_parameters, only: nion, nrtgrp
+  use hydro_parameters, only: nion
+  use rt_parameters, only: nrtgrp
   use amr_commons, only: run_t
   implicit none
 

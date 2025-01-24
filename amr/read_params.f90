@@ -9,6 +9,7 @@ subroutine m_read_params(pst)
   use mdl_module
   use movie_module, only: set_movie_vars
   use rt_params_module
+  use constants
   implicit none
   type(pst_t)::pst
 
@@ -262,7 +263,6 @@ subroutine m_read_params(pst)
 #endif
 
   ! Cooling parameters
-  logical::neq_chem=.false.
   logical::cooling=.false.
   logical::cooling_ism=.false.
   logical::metal=.false.
@@ -273,6 +273,16 @@ subroutine m_read_params(pst)
   integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
   real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
   real(dp)::T2max=1d50
+  logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
+  logical::is_init_xion=.false.   ! Initialize ionization from T profile?
+  logical::isHe=.false.           !      He ionization fractions tracked?
+  logical::isH2=.false.           !                 H2 tracked (via xHI)?
+  real(dp)::X=0.76d0              !                Hydrogen mass fraction
+  real(dp)::Y=0.24d0              !                  Helium mass fraction
+  integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !   Ionization indices
+  real(dp),dimension(nion)::ionEvs                 !  Ionization energies
+  integer::icount
+
 
   ! Star formation parameters
   real(dp)::T2_star=2e4
@@ -412,7 +422,8 @@ subroutine m_read_params(pst)
   ! Cooling / basic chemistry parameters
   namelist/cooling_params/neq_chem,cooling,metal,isothermal,haardt_madau,J21 &
        & ,eos_type,eos_nH,eos_index,eos_T2 &
-       & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
+       & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism &
+       & ,isHe, isH2, is_init_xion
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
@@ -757,15 +768,68 @@ subroutine m_read_params(pst)
      write(*,'(A50)')"__________________________________________________"
   endif
 
+  !----------------------------------------------------------------
+  ! Set number of used ionisation fractions, indices of ionization
+  ! fractions, and ionization energies, and check if we have enough
+  ! ionization variables (NION)
+  !----------------------------------------------------------------
+  if(neq_chem) then
+     iCount=0
+     ! HI fraction and ionization energy
+     if(isH2) then
+        iCount=iCount+1
+        ixHI=iCount    ; ionEvs(ixHI)=ionEv_HI
+     endif
+     ! HII fraction and ionization energy
+     iCount=iCount+1    ; ixHII=iCount   ; ionEvs(ixHII)=ionEv_HII
+     ! HeII and HeIII fractions and ionization energies
+     if(isHe) then
+        iCount=iCount+1 ; ixHeII=iCount  ; ionEvs(ixHeII)=ionEv_HeII
+        iCount=iCount+1 ; ixHeIII=iCount ; ionEvs(ixHeIII)=ionEv_HeIII
+     endif
+     ! Check that we have enough chemical species
+     if(iCount .gt. NION) then
+        write(*,*) 'Not enough variables for ionization fractions'
+        write(*,*) 'Have NION=',NION
+        write(*,*) 'STOPPING!'
+        call mdl_abort(s%mdl)
+     endif
+     if(iCount .lt. NION) then
+        write(*,*) 'Too many variables for ionization fractions'
+        write(*,*) 'Have NION=',NION
+        write(*,*) 'Need NION=',iCount
+        write(*,*) 'Probably no harm, so still continuing...'
+     endif
+     ! Starting index of ionized species
+     iIons = ichem
+     ichem = ichem + icount
+     ! Check we have enough passive scalar
+     if(iIons+iCount-1 .gt. nvar) then
+        write(*,*) 'Something wrong with NVAR.'
+        write(*,*) 'Have NVAR=',nvar
+        write(*,*) 'Should have NVAR=',iIons+iCount-1
+        write(*,*) 'STOPPING!'
+        call mdl_abort(s%mdl)
+     endif
+     ! Output indices for the user to check
+     write(*,'(A39, I2)') 'The number of ionization fractions is:',iCount
+     write(*,*) 'Their indices in U are:'
+     if(isH2) write(*,'(A10, I2)') '  iHI =    ', iIons-1+ixHI
+     write(*,'(A10, I2)')          '  iHII =   ', iIons-1+ixHII
+     if(isHe) write(*,'(A10, I2)') '  iHeII =  ', iIons-1+ixHeII
+     if(isHe) write(*,'(A10, I2)') '  iHeIII = ', iIons-1+ixHeIII
+     !if(isHe) print '(I3, A9)', iIons-1+ixHeIII, 'iHeIII'
+  endif
+
+  ! Read RT parameters from namelist
+
+  if(rt)call m_read_rt_params(pst)
+
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'
      write(*,*)'Aborting...'
      call mdl_abort(s%mdl)
   end if
-
-  ! Read RT parameters from namelist
-
-  if(rt)call m_read_rt_params(pst,neq_chem,ichem)
 
   ! Fill in all run parameters in corresponding structure
 
@@ -1000,7 +1064,6 @@ subroutine m_read_params(pst)
   s%r%var_bound=var_bound
 #endif
 
-  s%r%neq_chem=neq_chem
   s%r%cooling=cooling
   s%r%cooling_ism=cooling_ism
   s%r%metal=metal
@@ -1016,6 +1079,17 @@ subroutine m_read_params(pst)
   s%r%eos_index=eos_index
   s%r%eos_T2=eos_T2
   s%r%T2max=T2max
+  ! neq_chem
+  s%r%neq_chem=neq_chem
+  s%r%is_init_xion=is_init_xion
+  s%r%isHe=isH2
+  s%r%isH2=isH2
+  s%r%iIons=iIons
+  s%r%ixHI=ixHI
+  s%r%ixHII=ixHII
+  s%r%ixHeII=ixHeII
+  s%r%ixHeIII=ixHeIII
+  s%r%ionEvs=ionEvs
 
   s%r%T2_star=T2_star
   s%r%n_star=n_star
