@@ -7,11 +7,11 @@ NHILBERT = 1
 NVECTOR = 32
 NPRE = 8
 NDIM = 3
+MPI = 0
 HYDRO = 1
+GRAV = 0
 MHD = 0
 RT = 0
-GRAV = 0
-MPI = 0
 INIT =
 UNIT =
 NENER = 0
@@ -51,7 +51,7 @@ ifneq ($(NENER),)
    DEFINES += -DNENER=$(NENER)
 endif
 ifeq ($(RT),1)
-   DEFINES += -DRT -DNRTGROUPS=$(NRTGRP)
+   DEFINES += -DRT -DNRTGRP=$(NRTGRP)
 endif
 #############################################################################
 # Set proper units and initial conditions
