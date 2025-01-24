@@ -320,24 +320,25 @@ module amr_commons
      real(dp)::rt_floor_n(nrtgroups)=1d-10 ! Photon number density floor for refinement     !
      real(dp)::rt_floor_xHI=1d-10          ! Ionization state floor for refinement           !
      real(dp)::rt_floor_xHII=1d-10         ! Ionization state floor for refinement           !
-     real(dp)::rt_c_fraction=1d0           ! Lightspeed fraction for RT                      !
-     integer::rt_nsubcycle=1               ! Maximum number of RT-steps during one hydro/    !
-                                           ! gravity/etc timestep                            !
-     logical::rt_otsa=.true.               ! Use on-the-spot approximation                   !
-     logical::rt_isIR=.true.               ! Use IR photon groups                            !
-     logical::is_kIR_T=.true.              ! Kappa IT depends on T_rad                       !
-     logical::rt_T_rad=.true.              ! Use radiation temperature for everything        !
-     logical::rt_isoPress=.false.          ! Use cE, not F, for rad. pressure                !
-     real(dp)::rt_pressBoost=1d0           ! Boost on RT pressure                            !
+     real(dp)::rt_floor_xHI=1d-10         ! Ionization state floor for refinement           !
+     real(dp)::rt_floor_xHII=1d-10        ! Ionization state floor for refinement           !
+     real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT                      !
+     integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
+                                          ! gravity/etc timestep                            !
+     logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
+     logical::rt_isIR=.false.             ! Use IR photon groups                            !
+     logical::is_kIR_T=.false.            ! Kappa IT depends on T_rad                       !
+     logical::rt_T_rad=.false.            ! Use radiation temperature for everything        !
+     logical::rt_isoPress=.false.         ! Use cE, not F, for rad. pressure                !
+     real(dp)::rt_pressBoost=1d0          ! Boost on RT pressure                            !
      logical::is_mu_H2=.false.
      real(dp)::Tmu_dissoc=1d3              ! Dissociation temperature [K]                    !
      logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
      integer::iPEH_group=-1                ! Radiation group used for photo-electric heating !
      logical::cosmic_rays=.false.          ! Include cosmic ray ionisation                   !
      
-     !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                           !
-     !character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
-     !character(LEN=128)::uv_file=''       ! File containing stellar energy distributions    !
+     !character(LEN=128)::sed_dir=''      ! Dir containing stellar energy distributions     !
+     !character(LEN=128)::uv_file=''      ! File containing stellar energy distributions    !
      
      ! Imposed boundary condition variables
      !real(dp),dimension(1:MAXBOUND,1:nrtvar)::rt_boundary_var
@@ -387,12 +388,12 @@ module amr_commons
      ! Indexes nrtgroups, nIons stand for photon group vs species (e.g. 1=H, 2=He)
      real(dp),dimension(nrtgroups,nIons)::group_csn=0, group_cse=0     ! Cross sections (cm2)
      real(dp),dimension(nrtgroups)::group_egy=0                     !  Avg photon energy (ev)
-     real(dp),dimension(nrtgroups)::groupL0=13.60                   ! Wavelength lower limits
-     real(dp),dimension(nrtgroups)::groupL1=0                       ! Wavelength upper limits
+     real(dp),dimension(nrtgroups)::group_L0=13.60                  ! Wavelength lower limits
+     real(dp),dimension(nrtgroups)::group_L1=0                      ! Wavelength upper limits
      real(dp),dimension(nrtgroups)::kappaAbs=0                      ! Dust absorption opacity
      real(dp),dimension(nrtgroups)::kappaSc=0                       ! Dust scattering opacity
      real(dp),dimension(nrtgroups)::isLW=0d0                       ! Use to find the LW group 
-     real(dp),dimension(nrtgroups)::ssh2=0d0                          ! Self-shielding for H2
+     real(dp),dimension(nrtgroups)::ssh2=1d0                   ! Self-shielding factor for H2
      integer,dimension(nIons)::spec2group=0                ! Ion -> group # in recombinations
 
      ! Non-equilibrium chemistry parameters--------------------------------------------------

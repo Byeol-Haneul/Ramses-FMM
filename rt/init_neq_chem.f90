@@ -7,7 +7,7 @@ contains
 subroutine init_neq_chem(r,g,tables)
   use amr_commons, only: run_t, global_t
   use rt_cooling_module, only: rt_set_model
-  use coolrates_module, only: neq_cooling_t
+  use coolrates_module, only: neq_cooling_t, update_rt_c
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -16,6 +16,8 @@ subroutine init_neq_chem(r,g,tables)
   real(kind=8)::T2_sim
 
   if(g%myid==1)write(*,*)'Computing non-equilibrium chemistry model'
+
+  call update_rt_c(r, g, tables)
 
   if(r%cosmo)then
      call rt_set_model(r,tables,dble(g%h0/100.),dble(g%omega_b),dble(g%omega_m),dble(g%omega_l),dble(g%aexp_ini),T2_sim)

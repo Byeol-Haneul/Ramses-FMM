@@ -14,7 +14,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   implicit none
   type(pst_t)::pst
   logical::neq_chem
-  integer::ichem
+  integer::i, ichem
 
   !--------------------------------------------------
   ! Local variables
@@ -103,11 +103,11 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
 
   ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
-  ! Indexes nrtgroups, nions stand for photon group vs species (e.g. 1=H, 2=He).
+  ! Indices nrtgroups, nions stand for photon group vs species (e.g. 1=H, 2=He).
   real(dp),dimension(nrtgroups,nions)::group_csn=0, group_cse=0  !    Cross sections (cm2)
   real(dp),dimension(nrtgroups)::group_egy=0                     !  Avg photon energy (ev)
-  real(dp),dimension(nrtgroups)::groupL0=13.60                   ! Wavelength lower limits
-  real(dp),dimension(nrtgroups)::groupL1=0                       ! Wavelength upper limits
+  real(dp),dimension(nrtgroups)::group_L0=13.60                  ! Wavelength lower limits
+  real(dp),dimension(nrtgroups)::group_L1=0                      ! Wavelength upper limits
   integer,dimension(nions)::spec2group=0                ! Ion -> group # in recombinations
   real(dp),dimension(nrtgroups)::kappaAbs=0                      ! Dust absorption opacity
   real(dp),dimension(nrtgroups)::kappaSc=0                       ! Dust scattering opacity
@@ -118,7 +118,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   logical::isH2=.false.                            !                           H2 tracked?
   real(dp)::X=0.76d0                               !                Hydrogen mass fraction
   real(dp)::Y=0.24d0                               !                  Helium mass fraction
-  integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
+  integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !       Indices of ionization fractions
   real(dp),dimension(nIons)::ionEvs                !                   Ionization energies
 
   !--------------------------------------------------
@@ -140,7 +140,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
        & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source             
   
   namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
-       & ,groupL0, groupL1, kappaAbs, kappaSc
+       & ,group_L0, group_L1, kappaAbs, kappaSc
 
   namelist/neq_chem_params/isHe, isH2, X, Y, is_init_xion
 
@@ -169,7 +169,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   close(1)
 
   !----------------------------------------------------------------
-  ! Set number of used ionisation fractions, indexes of ionization
+  ! Set number of used ionisation fractions, indices of ionization
   ! fractions, and ionization energies, and check if we have enough
   ! ionization variables (NIONS)
   !----------------------------------------------------------------
@@ -192,7 +192,7 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
         write(*,*) 'Not enough variables for ionization fractions'
         write(*,*) 'Have NIONS=',NIONS
         write(*,*) 'STOPPING!'
-        nml_ok=.false.
+        call mdl_abort(s%mdl)
      endif
      if(iCount .lt. NIONS) then
         write(*,*) 'Too many variables for ionization fractions'
@@ -202,19 +202,25 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
      endif
      ! Starting index of ionized species
      iIons = ichem
+     ichem = ichem + icount
      ! Check we have enough passive scalar
      if(iIons+iCount-1 .gt. nvar) then
         write(*,*) 'Something wrong with NVAR.'
         write(*,*) 'Have NVAR=',nvar
         write(*,*) 'Should have NVAR=',iIons+iCount-1
         write(*,*) 'STOPPING!'
-        nml_ok=.false.
+        call mdl_abort(s%mdl)
      endif
      ! Output indices for the user to check
-     write(*,*) 'Number of ionization fractions is:',iCount
-     write(*,*) 'Number of passive scalars is:',nvar-iIons+1
-     write(*,*) 'The indexes are iHI, iHII, iHeII, iHeIII =',ixHI, ixHII, ixHeII, ixHeIII
+     write(*,'(A39, I2)') 'The number of ionization fractions is:',iCount
+     write(*,*) 'Their indices in U are:'
+     if(isH2) write(*,'(A10, I2)') '  iHI =    ', iIons-1+ixHI
+     write(*,'(A10, I2)')          '  iHII =   ', iIons-1+ixHII
+     if(isHe) write(*,'(A10, I2)') '  iHeII =  ', iIons-1+ixHeII
+     if(isHe) write(*,'(A10, I2)') '  iHeIII = ', iIons-1+ixHeIII
+     !if(isHe) print '(I3, A9)', iIons-1+ixHeIII, 'iHeIII'
   endif
+
 
   ! Fill in all run parameters in corresponding structure
 
@@ -261,8 +267,8 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   s%r%group_cse=group_cse
   s%r%group_egy=group_egy
   s%r%spec2group=spec2group
-  s%r%groupL0=groupL0
-  s%r%groupL1=groupL1
+  s%r%group_L0=group_L0
+  s%r%group_L1=group_L1
   s%r%kappaAbs=kappaAbs
   s%r%kappaSc=kappaSc
 
@@ -278,6 +284,16 @@ subroutine m_read_rt_params(pst,neq_chem,ichem)
   s%r%ixHeII=ixHeII
   s%r%ixHeIII=ixHeIII
   s%r%ionEvs=ionEvs
+
+  if(s%r%isH2) then
+     do i=1,nrtgroups
+        if((s%r%group_L0(i) .ge. 11.2) .and. (s%r%group_L1(i) .le. 13.6)          &
+          .and. (s%r%group_L0(i) .le. 13.6) .and. (s%r%group_L1(i) .ge. 11.2))then
+            s%r%ssh2(i) = 4d2 ! H2 self-shielding factor
+            s%r%isLW(i) = 1d0 ! Index for LW groups
+        endif
+     enddo
+  endif
 
   end associate
 

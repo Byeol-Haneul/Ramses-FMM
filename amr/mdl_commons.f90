@@ -113,7 +113,6 @@ module mdl_parameters
      enumerator::MDL_RT_GODUNOV_FINE
      enumerator::MDL_SET_RTUNEW
      enumerator::MDL_SET_RTUOLD
-     enumerator::MDL_BROADCAST_RT_C
      enumerator::MDL_UPDATE_RT_VAR
   end enum
   

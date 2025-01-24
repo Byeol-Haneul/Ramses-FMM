@@ -7,7 +7,6 @@ NHILBERT = 1
 NVECTOR = 32
 NPRE = 8
 NDIM = 3
-NVAR = 5
 HYDRO = 1
 MHD = 0
 RT = 0
@@ -15,22 +14,30 @@ GRAV = 0
 MPI = 0
 INIT =
 UNITS =
-NENER =
-NRTGROUPS = 1
-NIONS = 1
+NENER = 0
+NMETALS = 0
+NPSCAL = 0
+NRTGROUPS = 0
+NIONS = 0
 PATCH =
 DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
 SOLVER = hydro
 EXEC = ramses
+
+# Compute NVAR
+NHYDRO = 5
+NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETALS)+$(NIONS)
+
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
-DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNVAR=$(NVAR) -DNHILBERT=$(NHILBERT)
+DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNHILBERT=$(NHILBERT) \
+	-DNVAR=$(NVAR)
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
