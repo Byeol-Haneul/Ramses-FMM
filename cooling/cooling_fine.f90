@@ -36,7 +36,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use amr_commons, only:run_t,global_t,mesh_t
   use cooling_module, only:cooling_t,solve_cooling,T2_min_fix,set_table
   use coolrates_module, only: neq_cooling_t
-  use rt_cooling_module, only: rt_solve_cooling
+  use neq_cooling_module, only: neq_solve_cooling
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -268,7 +268,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            ! Use cooling from cooling_module_frig described in Audit & Hennebelle 2005
            call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,1.4d0,nleaf)
         else if(r%neq_chem)then
-           call rt_solve_cooling(r, tables, T2, xion, &
+           call neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif

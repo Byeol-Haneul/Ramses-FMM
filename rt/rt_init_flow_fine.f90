@@ -61,7 +61,7 @@ contains
 recursive subroutine r_update_rt_var(pst)
   use mdl_module
   use coolrates_module, only: update_rt_c, update_coolrates_tables
-  use rt_cooling_module, only: updateRTGroups_CoolConstants, update_metal_cooling
+  use neq_cooling_module, only: updateRTGroups_CoolConstants, update_metal_cooling
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none

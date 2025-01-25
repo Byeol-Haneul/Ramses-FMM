@@ -4,7 +4,7 @@
 ! and Nickerson, Teyssier, & Rosdahl (2018).
 ! Joki Rosdahl, Sarah Nickerson, Andreas Bleuler, and Romain Teyssier.
 ! NOTE: T2=T/mu, Np = photon density, Fp = photon flux,
-module rt_cooling_module
+module neq_cooling_module
   use amr_parameters, only: ndim, dp, nvector
   use amr_commons, only: run_t
   use hydro_parameters, only: nion
@@ -14,7 +14,7 @@ module rt_cooling_module
   implicit none
 
   private   ! default
-  public rt_set_model, rt_solve_cooling, cmp_chem_eq, updateRTGroups_CoolConstants &
+  public neq_set_model, neq_solve_cooling, cmp_chem_eq, updateRTGroups_CoolConstants &
        ,update_metal_cooling
 
   real(kind=8),parameter::T2_min_fix=1d-2 ! Min temperature [K]
@@ -36,7 +36,7 @@ module rt_cooling_module
 CONTAINS
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE rt_set_model(r, tables, h, omegab, omega0, omegaL, astart_sim, T2_sim)
+SUBROUTINE neq_set_model(r, tables, h, omegab, omega0, omegaL, astart_sim, T2_sim)
   ! Initialize cooling. All these parameters are unused at the moment and
   ! are only there for the original cooling-module.
   ! h (dble)            => H0/100
@@ -66,11 +66,11 @@ SUBROUTINE rt_set_model(r, tables, h, omegab, omega0, omegaL, astart_sim, T2_sim
 !  call init_UV_background
   call init_coolrates_tables(r, tables)
 
-  if(r%nrestart==0)call rt_evol_single_cell(r, tables, astart, aend, dasura, &
+  if(r%nrestart==0)call neq_evol_single_cell(r, tables, astart, aend, dasura, &
        &        h, omegab, omega0, omegaL, T2end, mu, ne, .false.)
   T2_sim=T2end
 
-END SUBROUTINE rt_set_model
+END SUBROUTINE neq_set_model
 
 !!$!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 !!$SUBROUTINE update_UVrates(aexp)
@@ -88,7 +88,7 @@ END SUBROUTINE rt_set_model
 !!$END SUBROUTINE update_UVrates
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
+SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
      & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
@@ -232,7 +232,7 @@ SUBROUTINE rt_solve_cooling(r, tables, T2, xion, &
         if(tleft(i) .gt. 0.) then           ! Not finished with this cell
            nAct_next=nAct_next+1 ; indAct(nAct_next) = i
         else if(tleft(i) .lt. 0.) then        ! Overshot by abs(tleft(i))
-           print*,'In rt_solve_cooling: tleft < 0  !!'
+           print*,'In neq_solve_cooling: tleft < 0  !!'
            stop
         endif
         ddt(i)=min(dt_rec,tleft(i))    ! Use recommended dt from cool_step
@@ -542,7 +542,7 @@ contains
        dCdT2 = dCdT2 * mu                            ! dC/dT2 = mu * dC/dT
        metal_tot=0d0 ; metal_prime=0d0                     ! Metal cooling
        if(Zsolar(icell) .gt. 0d0) &
-            call rt_cmp_metals(r, tables, T2(icell), nH(icell), mu,      &
+            call neq_cmp_metals(r, tables, T2(icell), nH(icell), mu,      &
             &                  metal_tot, metal_prime)
        X_nHkb = r%neq_X_H/(1.5 * nH(icell) * kB)         ! Multiplication factor
        rate  = X_nHkb*(Hrate - Crate - Zsolar(icell)*metal_tot)
@@ -831,7 +831,7 @@ contains
     endif
 
 111 format(' Stopping because of large number of timestesps in', &
-         ' rt_solve_cooling (', I6, ')')
+         ' neq_solve_cooling (', I6, ')')
 900 format (I3, ' code=', I2, ' i=', I5, ' t=', 1pe12.3,xs&
          '/', 1pe12.3, ' ddt=', 1pe12.3, ' c=', 1pe12.3, &
          ' nH=', 1pe12.3)
@@ -841,7 +841,7 @@ contains
 904 format ('  dU/U % =', 20(1pe12.3))
   END SUBROUTINE display_coolinfo
 
-END SUBROUTINE rt_solve_cooling
+END SUBROUTINE neq_solve_cooling
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 SUBROUTINE cmp_Equilibrium_Abundances(r, tables, &
@@ -1015,7 +1015,7 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
 END SUBROUTINE cmp_chem_eq
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
+SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
      & h, omegab, omega0, omegaL, T2end, mu, ne, if_write_result)
   !-------------------------------------------------------------------------
   ! Used for initialization of thermal state in cosmological simulations.
@@ -1064,7 +1064,8 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
   pHI_rates = 0.                              ! Initially no UV background
 
   mu_dp = mu
-  call cmp_Equilibrium_Abundances(r, tables, T2_com/aexp**2, nH_com/aexp**3, pHI_rates, mu_dp, n_Spec, 0d0)
+  call cmp_Equilibrium_Abundances(r,tables,T2_com/aexp**2,nH_com/aexp**3 &
+        ,pHI_rates, mu_dp, n_Spec, 0d0)
 
   ! Initialize cell state
   T2(1)=T2_com                                          !      Temperature
@@ -1090,7 +1091,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
 
      nH(1) = nH_com/aexp**3
      T2(1) = T2(1)/aexp**2
-     call rt_solve_cooling(r, tables, T2, xion, &
+     call neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
           &         Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
@@ -1104,7 +1105,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
 
   end associate
 
-end subroutine rt_evol_single_cell
+end subroutine neq_evol_single_cell
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 FUNCTION HsurH0(z,omega0,omegaL,OmegaR)
@@ -1159,7 +1160,7 @@ subroutine update_metal_cooling(r, tables, aexp)
 end subroutine update_metal_cooling
 
 !=========================================================================
-subroutine rt_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
+subroutine neq_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
   ! Taken from the equilibrium cooling_module of RAMSES
   ! Compute cooling enhancement due to metals
   ! T2           => Temperature in Kelvin, divided by mu
@@ -1265,7 +1266,7 @@ subroutine rt_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
   ! Convert from DlogLambda/DlogT to DLambda/DT
   metal_prime = metal_prime * metal_tot/TT * mu
 
-end subroutine rt_cmp_metals
+end subroutine neq_cmp_metals
 
 !*************************************************************************
 FUNCTION getMu(r, xion, Tmu)
@@ -1332,5 +1333,5 @@ SUBROUTINE reduce_flux(Fp, cNp)
   if(fred .gt. 1d0) Fp = Fp/fred
 END SUBROUTINE reduce_flux
 
-END MODULE rt_cooling_module
+END MODULE neq_cooling_module
 
