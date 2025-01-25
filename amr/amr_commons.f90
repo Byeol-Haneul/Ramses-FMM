@@ -400,6 +400,9 @@ module amr_commons
      logical::isH2=.false.                            !                           H2 tracked?
      integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
      real(dp),dimension(nIon)::ionEvs                 !                   Ionization energies
+     ! X and Y here are variables, while X_H and Y_He are parameters in cooling/constants.f90
+     real(dp)::neq_X_H                                !                Hydrogen mass fraction
+     real(dp)::neq_Y_He                               !                  Helium mass fraction
 
   end type run_t
 

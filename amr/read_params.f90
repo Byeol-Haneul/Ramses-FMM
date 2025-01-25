@@ -277,8 +277,8 @@ subroutine m_read_params(pst)
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
   logical::isHe=.false.           !      He ionization fractions tracked?
   logical::isH2=.false.           !                 H2 tracked (via xHI)?
-  real(dp)::X=0.76d0              !                Hydrogen mass fraction
-  real(dp)::Y=0.24d0              !                  Helium mass fraction
+  real(dp)::neq_X_H=0.76d0        !                Hydrogen mass fraction
+  real(dp)::neq_Y_He=0.24d0       !                  Helium mass fraction
   integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !   Ionization indices
   real(dp),dimension(nion)::ionEvs                 !  Ionization energies
   integer::icount
@@ -423,7 +423,7 @@ subroutine m_read_params(pst)
   namelist/cooling_params/neq_chem,cooling,metal,isothermal,haardt_madau,J21 &
        & ,eos_type,eos_nH,eos_index,eos_T2 &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism &
-       & ,isHe, isH2, is_init_xion
+       & ,isHe, isH2, is_init_xion, neq_X_H, neq_Y_He
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
@@ -1082,8 +1082,10 @@ subroutine m_read_params(pst)
   ! neq_chem
   s%r%neq_chem=neq_chem
   s%r%is_init_xion=is_init_xion
-  s%r%isHe=isH2
+  s%r%isHe=isHe
   s%r%isH2=isH2
+  s%r%neq_X_H=neq_X_H
+  s%r%neq_Y_He=neq_Y_He
   s%r%iIons=iIons
   s%r%ixHI=ixHI
   s%r%ixHII=ixHII

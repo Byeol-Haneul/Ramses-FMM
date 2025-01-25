@@ -293,7 +293,7 @@ contains
     associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
     dt_ok=.false.
-    nHe=0.25*nH(icell)*Y_He/X_H        ! Helium number density
+    nHe=0.25*nH(icell)*r%neq_Y_He/r%neq_X_H        ! Helium number density
     ! U contains the original values, dU the updated ones
     dT2 = T2(icell) ; dXion(:) = xion(:,icell)
 #ifdef RT
@@ -334,7 +334,7 @@ contains
     fracMax = 0d0 ! Max fractional update, to check if dt can be increased
     ss_factor = 1d0                  ! UV background self_shielding factor
     if(r%self_shielding) ss_factor = exp(-nH(icell)/1d-2)
-    rho = nH(icell) / X_H * mH
+    rho = nH(icell) / r%neq_X_H * mH
 #ifdef RT
     ! Set dust opacities--------------------------------------------------
     kAbs_loc = r%kappaAbs
@@ -544,7 +544,7 @@ contains
        if(Zsolar(icell) .gt. 0d0) &
             call rt_cmp_metals(r, tables, T2(icell), nH(icell), mu,      &
             &                  metal_tot, metal_prime)
-       X_nHkb = X_H/(1.5 * nH(icell) * kB)         ! Multiplication factor
+       X_nHkb = r%neq_X_H/(1.5 * nH(icell) * kB)         ! Multiplication factor
        rate  = X_nHkb*(Hrate - Crate - Zsolar(icell)*metal_tot)
        dRate = -X_nHkb*(dCdT2 + Zsolar(icell)*metal_prime)     ! dRate/dT2
                                                      ! 1st order dt constr
@@ -947,7 +947,7 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   endif
   b_HI   = inp_coolrates_table(tables,tables%tbl_Beta_HI, TK,.false.)  !  Cion [cm3 s-1]
   if(r%isHe) then
-     nHe = Y_He/(1.-Y_He)/4.*nH
+     nHe = r%neq_Y_He/(1.-r%neq_Y_He)/4.*nH
      g_HEI  = t_rad_spec(ixHeII)
      g_HEII = t_rad_spec(ixHeIII)
      b_HEI  = inp_coolrates_table(tables,tables%tbl_Beta_HeI, TK,.false.)
@@ -1001,7 +1001,7 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   end do
 
   nTOT     = n_E+n_H2+n_HI+n_HII+n_HEI+n_HEII+n_HEIII
-  mu       = nH/(1.-Y_He)/nTOT
+  mu       = nH/(1.-r%neq_Y_He)/nTOT
   nSpec(1) = n_E
   nSpec(2) = n_H2
   nSpec(3) = n_HI
@@ -1060,7 +1060,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
 
   aexp = astart
   T2_com = 2.726d0 / aexp * aexp**2 / mu_mol
-  nH_com = omegab*rhoc*h**2*X_H/mH
+  nH_com = omegab*rhoc*h**2*r%neq_X_H/mH
   pHI_rates = 0.                              ! Initially no UV background
 
   mu_dp = mu
@@ -1100,7 +1100,7 @@ SUBROUTINE rt_evol_single_cell(r, tables, astart, aend, dasura, &
      if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
   end do
   T2end = T2(1)/(aexp-daexp)**2
-  ne = (n_spec(3)+(n_spec(5)+2.*n_spec(6))*0.25*Y_He/X_H)
+  ne = (n_spec(3)+(n_spec(5)+2.*n_spec(6))*0.25*r%neq_Y_He/r%neq_X_H)
 
   end associate
 
@@ -1290,7 +1290,7 @@ FUNCTION getMu(r, xion, Tmu)
   xHII=xion(r%ixHII)
   if(r%isHe) xHeII=xion(r%ixHeII)
   if(r%isHe) xHeIII=xion(r%ixHeIII)
-  getMu = 1./(X_H*(0.5+0.5*xHI+1.5*xHII) + 0.25*Y_He*(1.+xHeII+2.*xHeIII))
+  getMu = 1./(r%neq_X_H*(0.5+0.5*xHI+1.5*xHII) + 0.25*r%neq_Y_He*(1.+xHeII+2.*xHeIII))
   if(r%is_kIR_T .or. r%is_mu_H2) &
        getMu = getMu + exp(-1d0*(Tmu/r%Tmu_dissoc)**2) * (2.33-getMu)
 END FUNCTION getMu
