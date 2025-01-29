@@ -570,8 +570,7 @@ subroutine m_read_params(pst)
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
      write(*,*)'the code was compiled with HYDRO=1'
-     write(*,*)'Please recompile with HYDRO=0'
-     call mdl_abort(s%mdl)
+     write(*,*)'This might not be optimal but I am still running.'
   endif
 #else
   if(hydro)then
@@ -585,8 +584,7 @@ subroutine m_read_params(pst)
   if(.not. poisson)then
      write(*,*)'You are not using the poisson solver but'
      write(*,*)'the code was compiled with GRAV=1'
-     write(*,*)'Please recompile with GRAV=0'
-     call mdl_abort(s%mdl)
+     write(*,*)'This might not be optimal but I am still running.'
   endif
 #else
   if(poisson)then
