@@ -44,6 +44,7 @@ FUNCTION integrateSpectrum(run, X, Y, N, e0, e1, species, func)
   integer :: N, species
   interface
      real(kind=8) function func(run, wavelength, intensity, species)
+       use amr_commons, only: run_t
        type(run_t) :: run
        real(kind=8) :: wavelength,intensity
        integer :: species
@@ -98,7 +99,7 @@ FUNCTION f1(run, lambda, f, species)
   f1 = f
 END FUNCTION f1
 
-FUNCTION fLambda(lambda, f, species)
+FUNCTION fLambda(run, lambda, f, species)
   type(run_t) :: run
   real(kind=8):: fLambda, lambda, f
   integer :: species
@@ -215,17 +216,19 @@ END MODULE spectrum_integrator_module
 MODULE SED_module
   !_________________________________________________________________________
   use amr_commons, only: run_t, global_t
-  use constants, only: L_sun, clight, eV2erg, hplanck
+  use constants, only: L_sun, clight, eV2erg, hplanck, Gyr2sec
   use hydro_parameters, only: nion
   use rt_parameters, only: nrtgrp
   implicit none
 
-  PUBLIC sed_table_t, init_SED_table, inp_SED_table, update_SED_group_props, r_star_RT_feedback
+  PUBLIC sed_table_t, init_SED_table, inp_SED_table, update_SED_group_props
 
   PRIVATE   ! default
 
   type sed_table_t
 
+     !-------------------------------------------------------------------------
+     logical :: is_SED_single_Z
      !-------------------------------------------------------------------------
      ! Light properties for different spectral energy distributions------------
      integer :: nA, nZ=8              ! Number of age bins and Z bins
@@ -238,8 +241,8 @@ MODULE SED_module
      !-------------------------------------------------------------------------
      ! SED_table: iAges, imetallicities, igroups, properties
      !                                         (Lum, Lum-acc, egy, csn, cse)
-     ! Lum is photons per sec per solar mass (eV per sec per solar mass in
-     ! the case of SED_isEgy=true). Lum-acc is accumulated lum.
+     ! Lum is photons per sec per solar mass (eV per sec per solar mass).
+     ! Lum-acc is accumulated lum.
      real(kind=8), allocatable, dimension(:,:,:,:) :: table
      !-------------------------------------------------------------------------
      ! ia, iz: lower indexes: 0<ia<sed_nA etc.
@@ -254,7 +257,7 @@ MODULE SED_module
 CONTAINS
 
 !*************************************************************************
-SUBROUTINE init_SED_table(r, g, sed)
+SUBROUTINE init_SED_table(r, g, SED)
 
   ! Initiate SED properties table, which gives photon luminosities,
   ! integrated luminosities, average photon cross sections and energies of
@@ -268,7 +271,7 @@ SUBROUTINE init_SED_table(r, g, sed)
   implicit none
   type(run_t) :: r
   type(global_t) :: g
-  type(sed_table_t) :: sed
+  type(sed_table_t) :: SED
 #ifndef WITHOUTMPI
   real(kind=8),allocatable::tbl2(:,:,:)
   integer::dummy_io,info2,ierr
@@ -321,7 +324,7 @@ SUBROUTINE init_SED_table(r, g, sed)
      read(10,'(e14.6)') zs(i)
   end do
   close(10)
-  if(nzs.eq.1)is_SED_single_Z=.true.
+  if(nzs.eq.1)SED%is_SED_single_Z=.true.
 
   ! READ AGE BINS---------------------------------------------------------
   open(unit=10,file=fAges,status='old',form='formatted')
@@ -332,7 +335,7 @@ SUBROUTINE init_SED_table(r, g, sed)
   end do
   close(10)
   if(nAges.lt.2)then
-      if(myid==1) print*,'WARNING! Only one age bin found - check if interpolated values make sense'
+      if(g%myid==1) print*,'WARNING! Only one age bin found - check if interpolated values make sense'
   endif
   ages = ages*1.e-9 ! Convert from yr to Gyr
   if(ages(1) .ne. 0.) ages(1) = 0.
@@ -353,7 +356,6 @@ SUBROUTINE init_SED_table(r, g, sed)
   ! Do not interpolate and update SEDs if single metallicity and age
   if(nZs.eq.1 .and. nAges<3)then
      SED%nZ=1
-     r%sedprops_update=-1
   end if
 
   ! If MPI then share the SED integration between the cpus:
@@ -370,14 +372,14 @@ SUBROUTINE init_SED_table(r, g, sed)
   allocate(tbl(nAges,nZs,nv))
   do ip = 1, nrtgrp                                ! Loop photon groups
      tbl = 0.
-     pL0 = groupL0(ip) ; pL1 = groupL1(ip)! eV interval of photon group ip
+     pL0 = r%group_L0(ip) ; pL1 = r%group_L1(ip)! eV interval of photon group ip
      do iz = 1, nzs                                     ! Loop metallicity
      do ia = locid+1,nAges,ncpu2                                ! Loop age
-        tbl(ia,iz,1) = getSEDLuminosity(Ls,SEDs(:,ia,iz),nLs,pL0,pL1)
-        tbl(ia,iz,3) = getSEDEgy(Ls,SEDs(:,ia,iz),nLs,pL0,pL1)
+        tbl(ia,iz,1) = getSEDLuminosity(r,Ls,SEDs(:,ia,iz),nLs,pL0,pL1)
+        tbl(ia,iz,3) = getSEDEgy(r,Ls,SEDs(:,ia,iz),nLs,pL0,pL1)
         do ii = 1, nion                                     ! Loop species
-           tbl(ia,iz,2+ii*2) = getSEDcsn(Ls,SEDs(:,ia,iz),nLs,pL0,pL1,ii)
-           tbl(ia,iz,3+ii*2) = getSEDcse(Ls,SEDs(:,ia,iz),nLs,pL0,pL1,ii)
+           tbl(ia,iz,2+ii*2) = getSEDcsn(r,Ls,SEDs(:,ia,iz),nLs,pL0,pL1,ii)
+           tbl(ia,iz,3+ii*2) = getSEDcse(r,Ls,SEDs(:,ia,iz),nLs,pL0,pL1,ii)
         end do ! End species loop
      end do ! End age loop
      end do ! End Z loop
@@ -423,7 +425,7 @@ SUBROUTINE init_SED_table(r, g, sed)
   deallocate(zs)
   deallocate(Ls)
 
-  if (g%myid==1) call write_SEDtable
+  if (g%myid==1) call write_SED_table(SED)
 
 END SUBROUTINE init_SED_table
 
@@ -458,7 +460,7 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
   real(kind=8), dimension(1:nrtgrp,1:nion) :: csn_star, cse_star
   real(kind=8), dimension(1:nrtgrp,1:nion) :: sum_csn_cpu, sum_csn_all
   real(kind=8), dimension(1:nrtgrp,1:nion) :: sum_cse_cpu, sum_cse_all
-  real(kind=8) :: mass, age, Z, t_sne_Gyr
+  real(kind=8) :: mass, age, Z, t_SN
   real(kind=8) :: scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
   !-------------------------------------------------------------------------
 
@@ -484,7 +486,7 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
      if(r%metal) then
         Z = max(p%zp(i), 1d-5)                               ! [m_metals/m_tot]
      else
-        Z = max(z_ave*0.02, 1d-5)                            ! [m_metals/m_tot]
+        Z = max(r%z_ave*0.02, 1d-5)                          ! [m_metals/m_tot]
      endif
      call inp_SED_table(SED, age, Z, 1, .false., L_star)     !  [# s-1 M_sun-1]
      call inp_SED_table(SED, age, Z, 3, .true., egy_star)    !             [eV]
@@ -523,8 +525,8 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
   ! ...and take averages weighted by luminosities
   do ip = 1, nrtgrp
      ! No update for non-SED groups (L0>L1):
-     if(r%groupL0(ip).ne. 0d0 .and. r%groupL1(ip) .ne. 0d0 .and. &
-          &  (r%groupL0(ip) .ge. r%groupL1(ip)) ) cycle
+     if(r%group_L0(ip).ne. 0d0 .and. r%group_L1(ip) .ne. 0d0 .and. &
+          &  (r%group_L0(ip) .ge. r%group_L1(ip)) ) cycle
      ! We have star particles already
      if(sum_L_all(ip) .gt. 0.) then
         r%group_egy(ip) = sum_egy_all(ip) / sum_L_all(ip)
@@ -539,7 +541,7 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
      endif
   end do
 
-  if(myid==1) write(*,*)'SED Photon groups updated through stellar polling'
+  if(g%myid==1) write(*,*)'SED Photon groups updated through stellar polling'
 
 END SUBROUTINE update_SED_group_props
 
@@ -550,8 +552,7 @@ FUNCTION getSEDLuminosity(run, X, Y, N, e0, e1)
   ! in SED Y(X). Assumes X is in Angstroms and Y in Lo/Angstroms/Msun.
   ! (Lo=[Lo_sun], Lo_sun=[erg s-1]. total solar luminosity is
   ! Lo_sun=10^33.58 erg/s)
-  ! returns: Photon luminosity in, [# s-1 Msun-1],
-  !                             or [eV s-1 Msun-1] if SED_isEgy=true
+  ! returns: Photon luminosity in, [# s-1 Msun-1]
   !-------------------------------------------------------------------------
   use spectrum_integrator_module
   type(run_t) :: run
@@ -563,14 +564,8 @@ FUNCTION getSEDLuminosity(run, X, Y, N, e0, e1)
   ! const is a div by ph energy => ph count.  1e-8 is a conversion into
   ! cgs, since wly=[angstrom] h=[erg s-1], c=[cm s-1]
   !-------------------------------------------------------------------------
-  if(.not. run%SED_isEgy) then           !  Photon number per sec per Msun
-     getSEDLuminosity = const * integrateSpectrum(run, X, Y, N, e0, e1, species, fLambda)
-     getSEDLuminosity = getSEDLuminosity * L_sun  ! Scale by solar luminosity
-  else                             ! SED_isEgy=true -> eV per sec per Msun
-     getSEDLuminosity = integrateSpectrum(run, X, Y, N, e0, e1, species, f1)
-     ! Scale by solar lum and convert to eV (bc group energies are in eV)
-     getSEDLuminosity = getSEDLuminosity / eV2erg * L_sun
-  endif
+  getSEDLuminosity = const * integrateSpectrum(run, X, Y, N, e0, e1, species, fLambda)
+  getSEDLuminosity = getSEDLuminosity * L_sun  ! Scale by solar luminosity
 
 END FUNCTION getSEDLuminosity
 
@@ -584,7 +579,7 @@ FUNCTION getSEDEgy(run, X, Y, N, e0, e1)
   use spectrum_integrator_module
   type(run_t) :: run
   integer :: N
-  real(kind=8) :: getSEDEgy, X(N), Y(N), e0, e1, norm
+  real(kind=8) :: getSEDEgy, X(N), Y(N), e0, e1
   !-------------------------------------------------------------------------
   integer :: species = 1
   real(kind=8) :: norm
@@ -739,7 +734,7 @@ SUBROUTINE rebin_log(xint_log, yint_log,                         &
                                          abs(dy0+dy1-1.0d0) > 1.0d-6) then
            write(*,*) 'Screwed up the rebin interpolation ... '
            write(*,*) dx0+dx1,dy0+dy1
-           call clean_stop
+           stop
         end if
 
         new_data(i,j,:) =                                                &
@@ -819,7 +814,7 @@ SUBROUTINE inp_SED_table(SED, age, Z, nProp, same, ret)
   logical :: same
   real(kind=8), dimension(1:nrtgrp) :: ret
   !-------------------------------------------------------------------------
-  real(kind=8) :: lgAge, lgZ
+  real(kind=8) :: lgAge, lgZ, da, dz
   !-------------------------------------------------------------------------
   if(.not. same) then
      if(age.le.0d0) then
@@ -828,9 +823,9 @@ SUBROUTINE inp_SED_table(SED, age, Z, nProp, same, ret)
         lgAge = log10(age)
      endif
      SED%ia = min(max(floor((lgAge-SED%lgA0)/SED%dlgA ) + 2, 1  ),  SED%nA-1 )
-     da = SED_ages(SED%ia+1)-SED%ages(SED%ia)
-     SED%da0 = min( max(   (age-SED_ages(SED%ia)) /da,       0. ), 1.          )
-     SED%da1 = min( max(  (SED_ages(SED%ia+1)-age)/da,       0. ), 1.          )
+     da = SED%ages(SED%ia+1)-SED%ages(SED%ia)
+     SED%da0 = min( max(   (age-SED%ages(SED%ia)) /da,       0. ), 1.          )
+     SED%da1 = min( max(  (SED%ages(SED%ia+1)-age)/da,       0. ), 1.          )
 
      if(SED%is_SED_single_Z)then
         SED%iz = 1
@@ -881,241 +876,8 @@ SUBROUTINE getNPhotonsEmitted(run, SED, age1_Gyr, dt_Gyr, Z, ret)
   ! Lc1 = cumulative emitted photons at the end of the timestep
   call inp_SED_table(SED, age1_Gyr, Z, 2, .false., Lc1)
   ret = max(Lc1-Lc0,0.)
-  if(run%SED_isEgy) then ! Integrate correct energy rather than # of photons
-     ! Divide emitted energy by group energy -> Photon count
-     ret = ret / run%group_egy(1:nrtgrp)
-  endif
+
 END SUBROUTINE getNPhotonsEmitted
-
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-recursive subroutine r_star_RT_feedback(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_STAR_RT_FEEDBACK,pst%iUpper+1,input_size,0,ilevel)
-     call r_star_RT_feedback(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call star_RT_feedback(pst%s, pst%s%star, ilevel)
-  endif
-
-end subroutine r_star_RT_feedback
-!##############################################################################
-!##############################################################################
-!##############################################################################
-!##############################################################################
-subroutine star_RT_feedback(s, p, ilevel)
-  use amr_parameters, only: ndim, twotondim, dp
-  use amr_commons, only: oct
-  use ramses_commons, only: ramses_t
-  use pm_commons, only: part_t
-  use nbors_utils
-  use cache_commons
-  use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
-  use boundaries, only: init_bound_refine
-  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
-  use hilbert
-  implicit none
-  type(ramses_t) :: s
-  type(part_t) :: p
-  integer :: ilevel
-  !==================================================================
-  ! This is the RAMSES routine for stellar radiation feedback.
-  ! The emissivity grid variable is updated using each star particle
-  ! luminosity. Energy will be deposited later during RT subcycles.
-  !==================================================================
-  ! Local variables
-  integer,dimension(1:ndim)::ckey
-  integer(kind=8),dimension(0:ndim)::hash_cell
-  integer::i,ipart,icell,ind,idim
-  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(kind=8)::scale_Np,scale_Fp,scale_inp
-  real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::z,mass,age,code2Gr,dt_Gyr,t_SN_Gyr
-  type(oct),pointer::gridp
-  type(msg_rt_emissivity_realdp)::dummy_rt_emissivity_realdp
-  logical::ok_level,ok_leaf
-
-#ifdef RT
-#if NDIM==3
-  associate(r=>s%r, g=>s%g, m=>s%m)
-
-  ! Mesh spacing in that level
-  dx_loc = r%boxlen / 2**ilevel 
-  vol_loc = dx_loc**ndim
-
-  ! Conversion factor from user units to cgs units
-  call units(r, g, scale_l, scale_t, scale_d, scale_v, scale_nH, scale_T2)
-  call rt_units(r, g, scale_Np, scale_Fp)
-  scale_inp = r%rt_esc_frac * scale_d / scale_Np / vol_loc / M_sun
-
-  ! Proper time (codeunits) to Gyr
-  code2Gyr = scale_t * sec2Gyr / g%aexp**2
-
-  ! Time step from code units to Gyr
-  dt_Gyr = g%dtnew(ilevel) * scale_t * sec2Gyr
-
-  ! Supernovae progenitors life time from Myr to Gyr
-  t_SN_Gyr = r%t_SNII * 1d-3
-
-  ! Open cache for array emissivity (flush)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_rt_emissivity_realdp)/32,&
-                init=init_flush_emissivity, flush=pack_flush_emissivity,&
-                combine=unpack_flush_emissivity)
-
-  ! Loop over particles in Hilbert order
-  do ipart=p%headp(ilevel),p%tailp(ilevel)
-
-     ok_level=.true.
-
-     ! Find parent cell at level ilevel
-     do idim=1,ndim
-        ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
-     end do
-
-     ! Cell volume at level ilevel
-     vol_cell=vol_loc
-     scale_inp_cell=scale_inp
-
-     ! Get parent cell at level ilevel using cache
-     hash_cell(0)=ilevel+1
-     hash_cell(1:ndim)=ckey(1:ndim)
-     call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
-
-     ! If cell does not exist at current level, then find cell at coarser level
-     if(.not.associated(gridp))then
-
-        ! NGP at level ilevel-1
-        do idim=1,ndim
-           ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
-        end do
-
-        ! Cell volume at level ilevel-1
-        vol_cell=vol_loc*2**ndim
-        scale_inp_cell=scale_inp/2**ndim
-        
-        ! Get parent cell at level ilevel-1 using cache
-        hash_cell(0)=ilevel
-        hash_cell(1:ndim)=ckey(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
-        if(.not.associated(gridp))ok_level=.false.
-
-     end if
-
-     if(.not. ok_level)then
-        write(*,*)"Something went wrong in star_RT_feedback"
-        write(*,*)"Current level grid and coarser grid both dont exist..."
-        stop
-     endif
-
-     ! Compute star particle properties
-     if(metal)z = max(p%zp(ipart), 1e-5)
-     age = (g%texp - p%tp(ipart)) * code2Gyr
-
-     ! Possibilities: Born i) before dt, ii) within dt, iii) after dt:
-     dt_loc_Gyr = max(min(dt_Gyr, age), 0.)
-     call getNPhotonsEmitted(r, s%SED, age, dt_loc_Gyr, z, part_NpInp(1:nrtgrp))
-
-     mass = p%mp(ipart)
-     if(age.gt.t_SN_Gyr) then
-        mass = mass / (1d0 - r%eta_SNII)
-     endif
-
-     part_NpInp(1:nrtgrp) = part_NpInp(1:nrtgrp) * mass * scale_inp_cell ! #photons
-     lum(1:nrtgrp) = 0.
-     if(dt_loc_Gyr > 0.)then
-        lum(1:nrtgrp) = part_NpInp(1:nrtgrp) / dt_loc_Gyr / sec2Gyr ! #photons s-1
-     endif
-     lum(1:nrtgrp) = lum(1:nrtgrp) / scale_t ! back to code units
-
-     ! Update parent cell emissivity
-     gridp%emissivity(icell,1:nrtgrp) = gridp%emissivity(icell,1:nrtgrp) + lum(1:nrtgrp)
-
-  end do
-  ! End loop over particles
-
-  call close_cache(s,m%grid_dict)
-
-end associate
-#endif
-#endif
-end subroutine star_RT_feedback
-
-!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-subroutine init_flush_emissivity(grid,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use rt_parameters, only: nrtvar
-  use amr_commons, only: oct
-  type(oct)::grid
-  integer(kind=8),dimension(0:ndim)::hash_key
-
-  integer::ind,ig
-
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
-#ifdef RT
-  grid%emissivity=0.0d0
-#endif
-
-end subroutine init_flush_emissivity
-
-!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-subroutine pack_flush_emissivity(grid,msg_size,msg_array)
-  use amr_parameters, only: twotondim
-  use rt_parameters, only: nrtgrp
-  use amr_commons, only: oct
-  use cache_commons, only: msg_rt_emissivity_realdp
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  integer::ind,ig
-  type(msg_rt_emissivity_realdp)::msg
-#ifdef RT
-  msg%realdp=grid%emissivity
-#endif
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_flush_emissivity
-
-!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-subroutine unpack_flush_emissivity(grid,msg_size,msg_array,hash_key)
-  use amr_parameters, only: ndim,twotondim
-  use rt_parameters, only: nrtgrp
-  use amr_commons, only: oct
-  use cache_commons, only: msg_rt_emissivity_realdp
-  type(oct)::grid
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-  integer(kind=8),dimension(0:ndim)::hash_key
-
-  integer::ind,ig
-  type(msg_rt_emissivity_realdp)::msg
-
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
-  msg=transfer(msg_array,msg)
-#ifdef RT
-  grid%emissivity=grid%emissivity+msg%realdp
-#endif
-
-end subroutine unpack_flush_emissivity
 
 END MODULE SED_module
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
@@ -1170,13 +932,13 @@ SUBROUTINE inp_1d(xax,nx,x,ix0,ix1,dx0,dx1)
      dx1 = min(xax(ix1) - x           , x_step) / x_step
   else
      ix1 = ix0
-     dx0 = 0.0d0 ;  dx1   1.0d0
+     dx0 = 0.0d0 ;  dx1 = 1.0d0
   end if
 
   if (abs(dx0+dx1-1.0d0) .gt. 1.0d-5) then
      write(*,*) 'Screwed up the 1d interpolation ... '
      write(*,*) dx0+dx1
-     call clean_stop
+     stop
   end if
 
 END SUBROUTINE inp_1d

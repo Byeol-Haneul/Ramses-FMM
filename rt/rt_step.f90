@@ -12,6 +12,7 @@ subroutine m_rt_step(pst,ilevel)
   use rt_upload_module, only: m_rt_upload_fine
   use rt_input_condinit_module, only: r_rt_input_source_regions  
   use cooling_fine_module, only: r_cooling_fine
+  use rt_star_feedback, only: r_star_RT_feedback
   type(pst_t)::pst
   integer::ilevel
 

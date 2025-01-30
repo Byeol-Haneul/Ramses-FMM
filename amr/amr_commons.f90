@@ -335,7 +335,7 @@ module amr_commons
      integer::iPEH_group=-1                ! Radiation group used for photo-electric heating !
      logical::cosmic_rays=.false.          ! Include cosmic ray ionisation                   !
      
-     !character(LEN=128)::sed_dir=''      ! Dir containing stellar energy distributions     !
+     character(LEN=128)::sed_dir=''        ! Dir containing stellar energy distributions     !
      !character(LEN=128)::uv_file=''      ! File containing stellar energy distributions    !
      
      ! Imposed boundary condition variables

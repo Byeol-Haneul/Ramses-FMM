@@ -164,7 +164,7 @@ function worker_init(mdl) result(pst)
   use output_rt_module, only: r_output_rt
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use update_rt_c_module, only: r_update_rt_var
-  use SED_module, only: r_star_RT_feedback
+  use rt_star_feedback, only: r_star_RT_feedback
 
   implicit none
 

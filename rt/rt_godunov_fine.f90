@@ -206,7 +206,7 @@ subroutine set_rtuold(r, g, m, ilevel)
      do ig = 1, nrtgrp
         iN = 1 + (ig-1)*ndim
         do i = m%head(ilevel), m%tail(ilevel)
-           m%grid(i)%rtnew(1:twotondim,iN) = m%grid(i)%rtunew(1:twotondim,iN) + &
+           m%grid(i)%rtunew(1:twotondim,iN) = m%grid(i)%rtunew(1:twotondim,iN) + &
                 & m%grid(i)%emissivity(1:twotondim,ig)*g%dtnew(ilevel)
         end do
      end do

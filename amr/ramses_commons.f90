@@ -5,6 +5,7 @@ module ramses_commons
   use clfind_commons, only: clump_t
   use cooling_module, only: cooling_t
   use coolrates_module, only: neq_cooling_t
+  use SED_module, only: sed_table_t
 
   type ramses_t
 
@@ -19,6 +20,7 @@ module ramses_commons
      type(clump_t)::c
      type(cooling_t)::cool
      type(neq_cooling_t)::tables
+     type(sed_table_t)::SED
      type(mdl_t),pointer::mdl => null()
 
   end type ramses_t

@@ -148,7 +148,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
 	 coolrates_module.o neq_cooling_module.o init_neq_chem.o \
-	 mdl_commons.o mdl.o clfind_commons.o ramses_commons.o \
+	 mdl_commons.o mdl.o rt_spectra.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o \
@@ -165,7 +165,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 condinit.o vecpotentialinit.o init_refine_adaptive.o init_refine_restart.o \
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
-	 sink_formation.o tree_formation.o \
+	 rt_star_feedback.o sink_formation.o tree_formation.o \
 	 task_manager.o rt_step.o amr_step.o adaptive_loop.o \
 	 write_gitinfo.o
 #############################################################################

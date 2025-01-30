@@ -20,7 +20,7 @@ recursive subroutine r_init_time(pst)
      call r_init_time(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m,pst%s%cool,pst%s%tables)
+     call init_time(pst%s%mdl,pst%s%r,pst%s%g,pst%s%m,pst%s%cool,pst%s%tables,pst%s%SED)
   endif
 
 end subroutine r_init_time
@@ -28,7 +28,7 @@ end subroutine r_init_time
 !###########################################################
 !###########################################################
 !###########################################################
-  subroutine init_time(mdl,r,g,m,c,tables)
+  subroutine init_time(mdl,r,g,m,c,tables,sed)
   use mdl_module
   use amr_parameters, only: n_frw
   use amr_commons, only: run_t,global_t,mesh_t
@@ -36,12 +36,14 @@ end subroutine r_init_time
   use init_cooling_module, only: init_cooling
   use coolrates_module, only: neq_cooling_t
   use init_neq_chem_module, only: init_neq_chem
+  use SED_module, only: sed_table_t, init_SED_table
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
-  type(global_t)::g
   type(mesh_t)::m
+  type(global_t)::g
   type(cooling_t)::c
+  type(sed_table_t)::sed
   type(neq_cooling_t)::tables
 
   ! Local variables

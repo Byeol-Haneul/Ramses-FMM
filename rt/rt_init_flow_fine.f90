@@ -63,6 +63,7 @@ recursive subroutine r_update_rt_var(pst)
   use coolrates_module, only: update_rt_c, update_coolrates_tables
   use neq_cooling_module, only: updateRTGroups_CoolConstants, update_metal_cooling
   use ramses_commons, only: pst_t
+  use SED_module, only: update_SED_group_props
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -75,21 +76,24 @@ recursive subroutine r_update_rt_var(pst)
   else
      ! Update reduced speed of light
      if(pst%s%r%cosmo)call update_rt_c(pst%s%r, pst%s%g, pst%s%tables)
+
      ! Update Compton heating
      if(pst%s%r%cosmo)call update_coolrates_tables(pst%s%r, pst%s%tables, dble(pst%s%g%aexp))
-     endif
+
      ! Update cross sections based on evolving star properties
      if(pst%s%r%star.and.pst%s%r%rt)then
         call update_SED_group_props(pst%s%r, pst%s%g, pst%s%SED, pst%s%star)
      endif
+
      ! Update radiation heating and cooling constants
      if(pst%s%r%cosmo.or.(pst%s%r%star.and.pst%s%r%rt))then
         call updateRTGroups_CoolConstants(pst%s%r, pst%s%tables)
      endif
+
      ! Update UV background constants for metal cooling
      if(pst%s%r%cosmo)call update_metal_cooling(pst%s%r, pst%s%tables, dble(pst%s%g%aexp))
-     if(pst%s%g%myid==1) write(*,*)'Time dependent RT quantities updated'
 
+     if(pst%s%g%myid==1) write(*,*)'Time dependent RT quantities updated'
   endif
 
 end subroutine r_update_rt_var
