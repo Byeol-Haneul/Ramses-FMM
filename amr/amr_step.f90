@@ -215,6 +215,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%rt)then
                                     call m_timer(pst,'rt - set rtunew','start')
      call r_set_rtunew(pst,ilevel,1)
+     call r_set_emissivity(pst,ilevel,1)
   endif
 
   !---------------------------
@@ -324,13 +325,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         if(r%hydro .and. (r%neq_chem.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
      endif
 
-     ! Updates time-dependent RT variables (cosmo only)
+     ! Updates time-dependent RT variables
      if(ilevel==r%levelmin) then
-        if(r%cosmo)then
-           call m_timer(pst,'radiative transfer','start')
-           call r_update_rt_var(pst)
-        endif
-!        call m_timer(pst,'radiative transfer','start')
+        call m_timer(pst,'radiative transfer','start')
+        call r_update_rt_var(pst)
 !        call output_rt_stats(pst)
      endif
 

@@ -162,8 +162,9 @@ function worker_init(mdl) result(pst)
   use rt_input_condinit_module, only: r_rt_input_condinit, r_rt_input_source_regions
   use rt_upload_module, only: r_rt_upload_fine
   use output_rt_module, only: r_output_rt
-  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
+  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use update_rt_c_module, only: r_update_rt_var
+  use SED_module, only: r_star_RT_feedback
 
   implicit none
 
@@ -305,6 +306,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_RT_INPUT_SOURCE_REGIONS,pst,C_FUNLOC(r_rt_input_source_regions),1,0,"rt_input_source_regions")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_RT,              pst,C_FUNLOC(r_output_rt),flen,0,"output_rt")
   call mdl_add_service(pst%s%mdl,MDL_RT_GODUNOV_FINE,        pst,C_FUNLOC(r_rt_godunov_fine),1,0,"rt_godunov_fine")
+  call mdl_add_service(pst%s%mdl,MDL_SET_EMISSIVITY,         pst,C_FUNLOC(r_set_emissivity),1,0,"set_emissivity")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUNEW,             pst,C_FUNLOC(r_set_rtunew),1,0,"set_rtunew")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUOLD,             pst,C_FUNLOC(r_set_rtuold),1,0,"set_rtuold")
   call mdl_add_service(pst%s%mdl,MDL_UPDATE_RT_VAR,          pst,C_FUNLOC(r_update_rt_var),1,0,"update_rt_var")

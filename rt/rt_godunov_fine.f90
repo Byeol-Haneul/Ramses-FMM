@@ -86,6 +86,34 @@ end subroutine rt_godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
+recursive subroutine r_set_emissivity(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID, i
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_SET_EMISSIVITY,pst%iUpper+1,input_size,0,ilevel)
+     call r_set_emissivity(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+#ifdef RT
+     do i = pst%s%m%head(ilevel),pst%s%m%tail(ilevel)
+        pst%s%m%grid(i)%emissivity = 0
+     end do
+#endif
+  endif
+
+end subroutine r_set_emissivity
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 recursive subroutine r_set_rtunew(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
@@ -123,11 +151,11 @@ subroutine set_rtunew(m,ilevel)
   integer::i
 
   ! Set rtunew to rtuold for myid cells
-  do i = m%head(ilevel),m%tail(ilevel)
 #ifdef RT
+  do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%rtunew = m%grid(i)%rtuold
-#endif
   end do
+#endif
 
 end subroutine set_rtunew
 !###########################################################
@@ -149,7 +177,7 @@ recursive subroutine r_set_rtuold(pst,ilevel,input_size)
      call r_set_rtuold(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call set_rtuold(pst%s%m,ilevel)
+     call set_rtuold(pst%s%r, pst%s%g, pst%s%m, ilevel)
   endif
 
 end subroutine r_set_rtuold
@@ -157,24 +185,42 @@ end subroutine r_set_rtuold
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine set_rtuold(m,ilevel)
-  use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+subroutine set_rtuold(r, g, m, ilevel)
+  use rt_parameters, only: nrtgrp
+  use amr_parameters, only: dp, ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
-  type(mesh_t)::m
-  integer::ilevel
+  type(run_t) :: r
+  type(global_t) :: g
+  type(mesh_t) :: m
+  integer :: ilevel
   !---------------------------------------------------------
   ! This routine sets array rtuold to its new value rtunew 
   ! after the hydro step.
   !---------------------------------------------------------
-  integer::i
+  integer :: i, ig, iN
 
-  ! Set rtuold to rtunew
-  do i = m%head(ilevel),m%tail(ilevel)
+  ! Add emissivity source term
 #ifdef RT
-     m%grid(i)%rtuold = m%grid(i)%rtunew
+  if(.not.r%neq_chem)then
+     do ig = 1, nrtgrp
+        iN = 1 + (ig-1)*ndim
+        do i = m%head(ilevel), m%tail(ilevel)
+           m%grid(i)%rtnew(1:twotondim,iN) = m%grid(i)%rtunew(1:twotondim,iN) + &
+                & m%grid(i)%emissivity(1:twotondim,ig)*g%dtnew(ilevel)
+        end do
+     end do
+  endif
 #endif
+
+  if(r%neq_chem.and.r%rt_smooth)return
+
+ ! Set rtuold to rtunew
+#ifdef RT
+  do i = m%head(ilevel), m%tail(ilevel)
+     m%grid(i)%rtuold = m%grid(i)%rtunew
   end do
+#endif
 
 end subroutine set_rtuold
 !###########################################################

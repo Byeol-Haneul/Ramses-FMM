@@ -1,0 +1,1182 @@
+! These are modules for reading, integrating and interpolating RT-relevant
+! values from spectral tables, specifically SED (spectral energy
+! distrbution) tables for stellar particle sources, as functions of age
+! and metallicity, and UV-spectrum tables, as functions of redshift.
+! The modules are:
+! spectrum_integrator_module
+!    For dealing with the integration of spectra in general
+! SED_module
+!    For dealing with the SED data
+! UV_module
+!    For dealing with the UV data
+!_________________________________________________________________________
+
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+! Module for integrating a wavelength-dependent spectrum
+!_________________________________________________________________________
+!
+MODULE spectrum_integrator_module
+!_________________________________________________________________________
+  use amr_commons, only: run_t
+  use constants, only: clight, eV2erg, hplanck
+  implicit none
+
+  PUBLIC integrateSpectrum, f1, fLambda, fdivLambda, fSig, fSigLambda,   &
+         fSigdivLambda, trapz1
+
+  PRIVATE   ! default
+
+CONTAINS
+
+!*************************************************************************
+FUNCTION integrateSpectrum(run, X, Y, N, e0, e1, species, func)
+
+  ! Integrate spectral weighted function in energy interval [e0,e1]
+  ! X      => Wavelengths [angstrom]
+  ! Y      => Spectral luminosity per angstrom at wavelenghts [XX A-1]
+  ! N      => Length of X and Y
+  ! e0,e1  => Integrated interval [eV]
+  ! species=> ion species, used as an argument in fx
+  ! func   => Function which is integrated (of X, Y, species)
+  !-------------------------------------------------------------------------
+  type(run_t) :: run
+  real(kind=8) :: integrateSpectrum, X(N), Y(N), e0, e1
+  integer :: N, species
+  interface
+     real(kind=8) function func(run, wavelength, intensity, species)
+       type(run_t) :: run
+       real(kind=8) :: wavelength,intensity
+       integer :: species
+     end function func
+  end interface
+  !-------------------------------------------------------------------------
+  real(kind=8),dimension(:),allocatable:: xx, yy, f
+  real(kind=8):: la0, la1
+  integer :: i
+  !-------------------------------------------------------------------------
+  integrateSpectrum=0.
+  if(N .le. 2) RETURN
+  ! Convert energy interval to wavelength interval
+  la0 = X(1) ; la1 = X(N)
+  if(e1.gt.0) la0 = max(la0, 1d8 * hplanck * clight / e1 / eV2erg)
+  if(e0.gt.0) la1 = min(la1, 1d8 * hplanck * clight / e0 / eV2erg)
+  if(la0 .ge. la1) then
+     print*,'The energy limits do not overlap with SED range, so stopping'
+     stop
+  endif
+  ! If we get here, the [la0, la1] inverval is completely within X
+  allocate(xx(N)) ; allocate(yy(N)) ; allocate(f(N))
+  xx = la0; yy = 0.; f = 0.
+  i = 2
+  do while ( i.lt.N .and. X(i).le.la0 )
+     i = i+1                      !              Below wavelength interval
+  enddo                           !   X(i) is now the first entry .gt. la0
+  ! Interpolate to value at la0
+  yy(i-1) = Y(i-1) + (xx(i-1)-X(i-1))*(Y(i)-Y(i-1))/(X(i)-X(i-1))
+  f(i-1) = func(run, xx(i-1), yy(i-1), species)
+  do while ( i.lt.N .and. X(i).le.la1 )              ! Now within interval
+     xx(i) = X(i) ; yy(i) = Y(i) ; f(i) = func(run, xx(i), yy(i), species)
+     i = i+1
+  enddo                          ! i=N or X(i) is the first entry .gt. la1
+  xx(i:) = la1                   !             Interpolate to value at la1
+  yy(i) = Y(i-1) + (xx(i)-X(i-1))*(Y(i)-Y(i-1))/(X(i)-X(i-1))
+  f(i) = func(run, xx(i), yy(i), species)
+  integrateSpectrum = trapz1(xx,f,i)
+  deallocate(xx) ; deallocate(yy) ; deallocate(f)
+END FUNCTION integrateSpectrum
+
+!*************************************************************************
+! FUNCTIONS FOR USE WITH integrateSpectrum:
+! lambda  => wavelengths in Angstrom
+! f       => function of wavelength (a spectrum in some units)
+! species => 1=HI, 2=HeI or 3=HeII
+!_________________________________________________________________________
+FUNCTION f1(run, lambda, f, species)
+  type(run_t) :: run
+  real(kind=8) :: f1, lambda, f
+  integer :: species
+  f1 = f
+END FUNCTION f1
+
+FUNCTION fLambda(lambda, f, species)
+  type(run_t) :: run
+  real(kind=8):: fLambda, lambda, f
+  integer :: species
+  fLambda = f * lambda
+END FUNCTION fLambda
+
+FUNCTION fdivLambda(run, lambda, f, species)
+  type(run_t) :: run
+  real(kind=8):: fdivlambda, lambda, f
+  integer :: species
+  fdivLambda = f / lambda
+END FUNCTION fdivLambda
+
+FUNCTION fSig(run, lambda, f, species)
+  type(run_t) :: run
+  real(kind=8):: fSig, lambda, f
+  integer :: species
+  fSig = f * getCrosssection(run, lambda, species)
+END FUNCTION fSig
+
+FUNCTION fSigLambda(run, lambda, f, species)
+  type(run_t) :: run
+  real(kind=8):: fSigLambda, lambda, f
+  integer :: species
+  fSigLambda = f * lambda * getCrosssection(run, lambda, species)
+END FUNCTION fSigLambda
+
+FUNCTION fSigdivLambda(run, lambda, f, species)
+  type(run_t) :: run
+  real(kind=8):: fSigdivLambda, lambda, f
+  integer :: species
+  fSigdivLambda = f / lambda * getCrosssection(run, lambda, species)
+END FUNCTION fSigdivLambda
+!_________________________________________________________________________
+
+!*************************************************************************
+FUNCTION trapz1(X, Y, N, cum)
+
+  ! Integrates function Y(X) along the whole interval 1..N, using a very
+  ! simple staircase method and returns the result.
+  ! Optionally, the cumulative integral is returned in the cum argument.
+  !-------------------------------------------------------------------------
+  integer :: N,i
+  real(kind=8) :: trapz1
+  real(kind=8) :: X(N),Y(N)
+  real(kind=8), optional :: cum(N)
+  real(kind=8), allocatable :: cumInt(:)
+  !-------------------------------------------------------------------------
+  trapz1=0.
+  if (N.le.1) RETURN
+  allocate(cumInt(N))
+  cumInt(:)=0d0
+  do i=2,N
+     cumInt(i)= cumInt(i-1) + abs(X(i)-X(i-1)) * (Y(i)+Y(i-1)) / 2d0
+  end do
+  trapz1 = cumInt(N)
+  if(present(cum)) cum=cumInt
+  deallocate(cumInt)
+END FUNCTION trapz1
+
+!*************************************************************************
+FUNCTION getCrosssection(run, lambda, species)
+
+  ! Gives an atom-photon cross-section of given species at given wavelength,
+  ! as given by Hui and Gnedin (1997) for HI and He, and Abel97 for H2.
+  ! lambda  => Wavelength in angstrom
+  ! species => ixHI (H2), ixHII (HI), ixHeII (HeI) or ixHeIII (HeII)
+  ! returns :  photoionization or photodissociation cross-section in cm^2
+  !------------------------------------------------------------------------
+  type(run_t)  :: run
+  real(kind=8) :: lambda, getCrosssection
+  integer      :: species
+  real(kind=8) :: E0=1., cs0=0., P=1., ya=1., yw=0., y0=0., y1=1.
+  real(kind=8) :: E, x, y
+  !------------------------------------------------------------------------
+  E = hplanck * clight/(lambda*1d-8) / eV2erg         ! photon energy in eV
+  if ( E .lt. run%ionEvs(species) ) then            ! below ionization energy
+     getCrosssection=0.
+     RETURN
+  endif
+  if(species .eq. run%ixHI) then ! H2 ionization cs, Abel1997 eqn A24
+    getCrosssection = 0.
+    if(E .ge. 11.2  .and. E .lt. 13.6) getCrosssection=2.1d-19 ! Sternberg2014
+    if(E .ge. 15.42 .and. E .lt. 16.5) getCrosssection=6.2e-18*E-9.4e-17
+    if(E .ge. 16.5  .and. E .lt. 17.7) getCrosssection=1.4e-18*E-1.48e-17
+    if(E .ge. 17.7) getCrosssection=2.5e-14*E**(-2.71)
+    RETURN
+  endif
+  if(species .eq. run%ixHII) then ! HI
+     E0 = 4.298d-1 ; cs0 = 5.475d-14  ; P  = 2.963
+     ya = 32.88    ; yw  = 0          ; y0 = 0         ; y1 = 0
+  endif
+  if(species .eq. run%ixHeII) then ! HeI
+     E0 = 1.361d1  ; cs0 = 9.492d-16  ; P  = 3.188
+     ya = 1.469    ; yw  = 2.039      ; y0 = 0.4434    ; y1 = 2.136
+  endif
+  if(species .eq. run%ixHeIII) then ! HeII
+     E0 = 1.720    ; cs0 = 1.369d-14  ; P  = 2.963
+     ya = 32.88    ; yw  = 0          ; y0 = 0         ; y1 = 0
+  endif
+  x = E/E0 - y0
+  y = sqrt(x**2+y1**2)
+
+  getCrosssection = cs0 * ((x-1.)**2 + yw**2) * y**(0.5*P-5.5)/(1.+sqrt(y/ya))**P
+
+END FUNCTION getCrosssection
+
+END MODULE spectrum_integrator_module
+
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+! Module for Stellar Energy Distribution table.
+!_________________________________________________________________________
+!
+MODULE SED_module
+  !_________________________________________________________________________
+  use amr_commons, only: run_t, global_t
+  use constants, only: L_sun, clight, eV2erg, hplanck
+  use hydro_parameters, only: nion
+  use rt_parameters, only: nrtgrp
+  implicit none
+
+  PUBLIC sed_table_t, init_SED_table, inp_SED_table, update_SED_group_props, r_star_RT_feedback
+
+  PRIVATE   ! default
+
+  type sed_table_t
+
+     !-------------------------------------------------------------------------
+     ! Light properties for different spectral energy distributions------------
+     integer :: nA, nZ=8              ! Number of age bins and Z bins
+     !-------------------------------------------------------------------------
+     ! Age and z logarithmic intervals and lowest values:
+     real(kind=8) :: dlgA=0.02d0
+     real(kind=8) :: dlgZ
+     real(kind=8) :: lgA0, lgZ0
+     real(kind=8), allocatable, dimension(:) :: ages, zeds ! [Gyr], [m_met/m_gas]
+     !-------------------------------------------------------------------------
+     ! SED_table: iAges, imetallicities, igroups, properties
+     !                                         (Lum, Lum-acc, egy, csn, cse)
+     ! Lum is photons per sec per solar mass (eV per sec per solar mass in
+     ! the case of SED_isEgy=true). Lum-acc is accumulated lum.
+     real(kind=8), allocatable, dimension(:,:,:,:) :: table
+     !-------------------------------------------------------------------------
+     ! ia, iz: lower indexes: 0<ia<sed_nA etc.
+     ! da0, da1, dz0, dz1: proportional distances from edges:
+     ! 0<=da0<=1, 0<=da1<=1 etc.
+     integer :: ia, iz
+     real(kind=8) :: da, da0, da1, dz, dz0, dz1
+     !-------------------------------------------------------------------------
+
+  end type sed_table_t
+
+CONTAINS
+
+!*************************************************************************
+SUBROUTINE init_SED_table(r, g, sed)
+
+  ! Initiate SED properties table, which gives photon luminosities,
+  ! integrated luminosities, average photon cross sections and energies of
+  ! each photon group as a function of stellar population age and
+  ! metallicity.  The SED is read from a directory specified by sed_dir.
+  !-------------------------------------------------------------------------
+  use spectrum_integrator_module
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  implicit none
+  type(run_t) :: r
+  type(global_t) :: g
+  type(sed_table_t) :: sed
+#ifndef WITHOUTMPI
+  real(kind=8),allocatable::tbl2(:,:,:)
+  integer::dummy_io,info2,ierr
+#endif
+  ! Temporary SSP/SED parameters (read from SED files):
+  integer:: nAges, nzs, nLs              ! # of bins of age, z, wavelength
+  real(kind=8),allocatable::ages(:), Zs(:), Ls(:), rebAges(:)
+  real(kind=8),allocatable::SEDs(:,:,:)           ! SEDs f(lambda,age,met)
+  real(kind=8),allocatable::tbl(:,:,:), reb_tbl(:,:,:)
+  integer::i,ia,iz,ip,ii,dum
+  character(len=128)::fZs, fAges, fSEDs                        ! Filenames
+  logical::ok,okAge,okZ
+  real(kind=8)::dlgA, pL0, pL1, tmp
+  integer::locid,ncpu2
+  integer::nv=3+2*nion  ! # vars in SED table: L,Lacc,egy,nions*(csn,egy)
+  integer,parameter::tag=1132
+  !-------------------------------------------------------------------------
+  if(g%myid==1)write(*,*) 'Stars are photon emitting, so initializing SED table'
+  if(r%sed_dir.eq.'')call get_environment_variable('RAMSES_SED_DIR',r%sed_dir)
+  inquire(FILE=TRIM(r%sed_dir)//'/all_seds.dat', exist=ok)
+  if(.not. ok)then
+     if(g%myid.eq.1) then
+        write(*,*)'Cannot access SED directory ',TRIM(r%sed_dir)
+        write(*,*)'Directory '//TRIM(r%sed_dir)//' not found'
+        write(*,*)'You need to set the RAMSES_SED_DIR envvar' // &
+                  ' to the correct path, or use the namelist.'
+     endif
+     stop
+  end if
+  write(fZs,'(a,a)')   trim(r%sed_dir),"/metallicity_bins.dat"
+  write(fAges,'(a,a)') trim(r%sed_dir),"/age_bins.dat"
+  write(fSEDs,'(a,a)') trim(r%sed_dir),"/all_seds.dat"
+  inquire(file=fZs, exist=okZ)
+  inquire(file=fAges, exist=okAge)
+  inquire(file=fSEDs, exist=ok)
+  if(.not. ok .or. .not. okAge .or. .not. okZ) then
+     if(g%myid.eq.1) then
+        write(*,*) 'Cannot read SED files...'
+        write(*,*) 'Check if SED-directory contains the files ',  &
+                   'metallicity_bins.dat, age_bins.dat, all_seds.dat'
+     endif
+     stop
+  end if
+
+  ! READ METALLICITY BINS-------------------------------------------------
+  open(unit=10,file=fZs,status='old',form='formatted')
+  read(10,'(i8)') nzs
+  allocate(zs(nzs))
+  do i = 1, nzs
+     read(10,'(e14.6)') zs(i)
+  end do
+  close(10)
+  if(nzs.eq.1)is_SED_single_Z=.true.
+
+  ! READ AGE BINS---------------------------------------------------------
+  open(unit=10,file=fAges,status='old',form='formatted')
+  read(10,'(i8)') nAges
+  allocate(ages(nAges))
+  do i = 1, nAges
+     read(10,'(e14.6)') ages(i)
+  end do
+  close(10)
+  if(nAges.lt.2)then
+      if(myid==1) print*,'WARNING! Only one age bin found - check if interpolated values make sense'
+  endif
+  ages = ages*1.e-9 ! Convert from yr to Gyr
+  if(ages(1) .ne. 0.) ages(1) = 0.
+
+  ! READ SEDS-------------------------------------------------------------
+  open(unit=10,file=fSEDs,status='old',form='unformatted')
+  read(10) nLs, dum
+  allocate(Ls(nLs))
+  read(10) Ls(:)
+  allocate(SEDs(nLs,nAges,nzs))
+  do iz = 1, nzs
+     do ia = 1, nAges
+        read(10) SEDs(:,ia,iz)
+     end do
+  end do
+  close(10)
+
+  ! Do not interpolate and update SEDs if single metallicity and age
+  if(nZs.eq.1 .and. nAges<3)then
+     SED%nZ=1
+     r%sedprops_update=-1
+  end if
+
+  ! If MPI then share the SED integration between the cpus:
+#ifndef WITHOUTMPI
+  call MPI_COMM_RANK(MPI_COMM_WORLD,locid,ierr)
+  call MPI_COMM_SIZE(MPI_COMM_WORLD,ncpu2,ierr)
+#endif
+#ifdef WITHOUTMPI
+  locid=0
+  ncpu2=1
+#endif
+
+  ! Perform SED integration of luminosity, csn and egy per (age,Z) bin----
+  allocate(tbl(nAges,nZs,nv))
+  do ip = 1, nrtgrp                                ! Loop photon groups
+     tbl = 0.
+     pL0 = groupL0(ip) ; pL1 = groupL1(ip)! eV interval of photon group ip
+     do iz = 1, nzs                                     ! Loop metallicity
+     do ia = locid+1,nAges,ncpu2                                ! Loop age
+        tbl(ia,iz,1) = getSEDLuminosity(Ls,SEDs(:,ia,iz),nLs,pL0,pL1)
+        tbl(ia,iz,3) = getSEDEgy(Ls,SEDs(:,ia,iz),nLs,pL0,pL1)
+        do ii = 1, nion                                     ! Loop species
+           tbl(ia,iz,2+ii*2) = getSEDcsn(Ls,SEDs(:,ia,iz),nLs,pL0,pL1,ii)
+           tbl(ia,iz,3+ii*2) = getSEDcse(Ls,SEDs(:,ia,iz),nLs,pL0,pL1,ii)
+        end do ! End species loop
+     end do ! End age loop
+     end do ! End Z loop
+
+#ifndef WITHOUTMPI
+     allocate(tbl2(nAges,nzs,nv))
+     call MPI_ALLREDUCE(tbl,tbl2,nAges*nzs*nv,MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,ierr)
+     tbl = tbl2
+     deallocate(tbl2)
+#endif
+
+     ! Now the SED properties are in tbl...just need to rebin it, to get !
+     ! even log-intervals between bins for fast interpolation.           !
+     dlgA = SED%dlgA ; SED%dlgZ = -SED%nz
+     call rebin_log(dlgA, SED%dlgZ                                       &
+          , tbl(2:nAges,:,:), nAges-1, nZs, ages(2:nAges), zs, nv        &
+          , reb_tbl, SED%nA, SED%nZ, rebAges, SED%Zeds)
+     SED%nA = SED%nA + 1                              ! Make room for zero age
+     if(ip .eq. 1) allocate(SED%table(SED%nA, SED%nZ, nrtgrp, nv))
+     SED%table(1, :,ip,:) = reb_tbl(1,:,:)            ! Zero age properties
+     SED%table(1, :,ip,2) = 0.                        !  Lacc=0 at zero age
+     SED%table(2:,:,ip,:) = reb_tbl
+     deallocate(reb_tbl)
+
+     if(ip .eq. 1) then
+        SED%lgZ0 = log10(SED%Zeds(1))                  ! Interpolation intervals
+        SED%lgA0 = log10(rebAges(1))
+        allocate(SED%ages(SED%nA))
+        SED%ages(1)=0d0 ; SED%ages(2:)=rebAges ;    ! Must have zero initial age
+     end if
+
+     ! Integrate the cumulative luminosities:
+     SED%table(:,:,ip,2)=0d0
+     do iz = 1, SED%nZ ! Loop metallicity
+        tmp = trapz1( SED%ages, SED%table(:,iz,ip,1), SED%nA, SED%table(:,iz,ip,2) )
+        SED%table(:,iz,ip,2) = SED%table(:,iz,ip,2) * Gyr2sec
+     end do
+
+  end do ! End photon group loop
+
+  deallocate(SEDs) ; deallocate(tbl)
+  deallocate(ages) ; deallocate(rebAges)
+  deallocate(zs)
+  deallocate(Ls)
+
+  if (g%myid==1) call write_SEDtable
+
+END SUBROUTINE init_SED_table
+
+!*************************************************************************
+SUBROUTINE update_SED_group_props(r, g, SED, p)
+
+  ! Compute and assign to all SED photon groups an average of the
+  ! quantities group_csn and group_egy from all the star particles in the
+  ! simulation, weighted by the luminosity of the particles.
+  ! If there are no stars, we assign the SED properties of zero-age,
+  ! zero-metallicity stellar populations.
+  !-------------------------------------------------------------------------
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  use pm_commons, only: part_t
+  use amr_commons, only: global_t
+  use hydro_parameters, only: nion
+  type(run_t) :: r
+  type(part_t) :: p
+  type(global_t) :: g
+  type(sed_table_t) :: SED
+  !-------------------------------------------------------------------------
+  integer :: i, ip, ii
+#ifndef WITHOUTMPI
+  integer::info
+#endif
+  real(kind=8), dimension(1:nrtgrp) :: L_star
+  real(kind=8), dimension(1:nrtgrp) :: egy_star
+  real(kind=8), dimension(1:nrtgrp) :: sum_L_cpu, sum_L_all
+  real(kind=8), dimension(1:nrtgrp) :: sum_egy_cpu, sum_egy_all
+  real(kind=8), dimension(1:nrtgrp,1:nion) :: csn_star, cse_star
+  real(kind=8), dimension(1:nrtgrp,1:nion) :: sum_csn_cpu, sum_csn_all
+  real(kind=8), dimension(1:nrtgrp,1:nion) :: sum_cse_cpu, sum_cse_all
+  real(kind=8) :: mass, age, Z, t_sne_Gyr
+  real(kind=8) :: scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
+  !-------------------------------------------------------------------------
+
+  ! Conversion factor from user units to cgs units
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+
+  ! Supernovae progenitors life time from Myr to proper time in code units
+  t_SN = r%t_SNII*1d6*(365.*24.*3600.)/(scale_t/g%aexp**2)
+  
+  sum_L_cpu   = 0d0 ! Accumulated luminosity, avg cross sections and
+  sum_egy_cpu = 0d0 ! photon energies for all stars belonging to
+  sum_csn_cpu = 0d0 ! 'this' cpu
+  sum_cse_cpu = 0d0
+
+  ! Loop over all star particles
+  do i = 1, p%npart
+     mass = p%mp(i)
+     age = g%texp-p%tp(i)
+     ! Account for stellar mass loss - SED uses initial population mass
+     if(age.gt.t_SN)then
+        mass = mass / (1d0-r%eta_SNII)
+     endif
+     if(r%metal) then
+        Z = max(p%zp(i), 1d-5)                               ! [m_metals/m_tot]
+     else
+        Z = max(z_ave*0.02, 1d-5)                            ! [m_metals/m_tot]
+     endif
+     call inp_SED_table(SED, age, Z, 1, .false., L_star)     !  [# s-1 M_sun-1]
+     call inp_SED_table(SED, age, Z, 3, .true., egy_star)    !             [eV]
+     do ii = 1, nion
+        call inp_SED_table(SED, age, Z, 2+2*ii, .true., csn_star(1:nrtgrp,ii))! [cm^2]
+        call inp_SED_table(SED, age, Z, 3+2*ii, .true., cse_star(1:nrtgrp,ii))! [cm^2]
+     end do
+
+     do ip = 1, nrtgrp
+        L_star(ip) = L_star(ip) * mass                  !       [# photons s-1]
+        sum_L_cpu(ip) = sum_L_cpu(ip) + L_star(ip)
+        sum_egy_cpu(ip) = sum_egy_cpu(ip) + L_star(ip) * egy_star(ip)
+        sum_csn_cpu(ip,1:nion) = sum_csn_cpu(ip,1:nion) + L_star(ip) * csn_star(ip,1:nion)
+        sum_cse_cpu(ip,1:nion) = sum_cse_cpu(ip,1:nion) + L_star(ip) * cse_star(ip,1:nion)
+     end do
+
+  end do
+
+  ! Sum up for all cpus
+#ifdef WITHOUTMPI
+  sum_L_all = sum_L_cpu
+  sum_egy_all = sum_egy_cpu
+  sum_csn_all = sum_csn_cpu
+  sum_cse_all = sum_cse_cpu
+#else
+  call MPI_ALLREDUCE(sum_L_cpu,   sum_L_all,   nrtgrp,               &
+                     MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, info)
+  call MPI_ALLREDUCE(sum_egy_cpu, sum_egy_all, nrtgrp,               &
+                     MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, info)
+  call MPI_ALLREDUCE(sum_csn_cpu, sum_csn_all, nrtgrp*nion,         &
+                     MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, info)
+  call MPI_ALLREDUCE(sum_cse_cpu, sum_cse_all, nrtgrp*nion,         &
+                     MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, info)
+#endif
+
+  ! ...and take averages weighted by luminosities
+  do ip = 1, nrtgrp
+     ! No update for non-SED groups (L0>L1):
+     if(r%groupL0(ip).ne. 0d0 .and. r%groupL1(ip) .ne. 0d0 .and. &
+          &  (r%groupL0(ip) .ge. r%groupL1(ip)) ) cycle
+     ! We have star particles already
+     if(sum_L_all(ip) .gt. 0.) then
+        r%group_egy(ip) = sum_egy_all(ip) / sum_L_all(ip)
+        r%group_csn(ip,1:nion) = sum_csn_all(ip,1:nion) / sum_L_all(ip)
+        r%group_cse(ip,1:nion) = sum_cse_all(ip,1:nion) / sum_L_all(ip)
+     else ! no stars -> assign zero-age zero-metallicity props
+        r%group_egy(ip) = SED%table(1,1,ip,3)
+        do ii = 1, nion
+           r%group_csn(ip,ii) = SED%table(1,1,ip,2+2*ii)
+           r%group_cse(ip,ii) = SED%table(1,1,ip,3+2*ii)
+        enddo
+     endif
+  end do
+
+  if(myid==1) write(*,*)'SED Photon groups updated through stellar polling'
+
+END SUBROUTINE update_SED_group_props
+
+!*************************************************************************
+FUNCTION getSEDLuminosity(run, X, Y, N, e0, e1)
+
+  ! Compute and return luminosity in energy interval (e0,e1) [eV]
+  ! in SED Y(X). Assumes X is in Angstroms and Y in Lo/Angstroms/Msun.
+  ! (Lo=[Lo_sun], Lo_sun=[erg s-1]. total solar luminosity is
+  ! Lo_sun=10^33.58 erg/s)
+  ! returns: Photon luminosity in, [# s-1 Msun-1],
+  !                             or [eV s-1 Msun-1] if SED_isEgy=true
+  !-------------------------------------------------------------------------
+  use spectrum_integrator_module
+  type(run_t) :: run
+  integer :: N
+  real(kind=8) :: getSEDLuminosity, X(N), Y(N), e0, e1
+  !-------------------------------------------------------------------------
+  integer :: species = 1                 ! irrelevant but must be included
+  real(kind=8), parameter :: const=1.0e-8/hplanck/clight
+  ! const is a div by ph energy => ph count.  1e-8 is a conversion into
+  ! cgs, since wly=[angstrom] h=[erg s-1], c=[cm s-1]
+  !-------------------------------------------------------------------------
+  if(.not. run%SED_isEgy) then           !  Photon number per sec per Msun
+     getSEDLuminosity = const * integrateSpectrum(run, X, Y, N, e0, e1, species, fLambda)
+     getSEDLuminosity = getSEDLuminosity * L_sun  ! Scale by solar luminosity
+  else                             ! SED_isEgy=true -> eV per sec per Msun
+     getSEDLuminosity = integrateSpectrum(run, X, Y, N, e0, e1, species, f1)
+     ! Scale by solar lum and convert to eV (bc group energies are in eV)
+     getSEDLuminosity = getSEDLuminosity / eV2erg * L_sun
+  endif
+
+END FUNCTION getSEDLuminosity
+
+!*************************************************************************
+FUNCTION getSEDEgy(run, X, Y, N, e0, e1)
+
+  ! Compute average energy, in eV, in energy interval (e0,e1) [eV] in SED
+  ! Y(X). Assumes X is in Angstroms and Y is energy weight per angstrom
+  ! (not photon count).
+  !-------------------------------------------------------------------------
+  use spectrum_integrator_module
+  type(run_t) :: run
+  integer :: N
+  real(kind=8) :: getSEDEgy, X(N), Y(N), e0, e1, norm
+  !-------------------------------------------------------------------------
+  integer :: species = 1
+  real(kind=8) :: norm
+  real(kind=8), parameter :: const=1d8*hplanck*clight/eV2erg ! energy conversion
+  !-------------------------------------------------------------------------
+  norm = integrateSpectrum(run, X, Y, N, e0, e1, species, fLambda)
+  getSEDEgy = const * integrateSpectrum(run, X, Y, N, e0, e1, species, f1) / norm
+
+END FUNCTION getSEDEgy
+
+!*************************************************************************
+FUNCTION getSEDcsn(run, X, Y, N, e0, e1, species)
+
+  ! Compute and return average photoionization
+  ! cross-section, in cm^2, for a given energy interval (e0,e1) [eV] in
+  ! SED Y(X). Assumes X is in Angstroms and that Y is energy weight per
+  ! angstrom (not photon #).
+  ! Species is a code for the ion in question: 1=HI, 2=HeI, 3=HeIII
+  !-------------------------------------------------------------------------
+  use spectrum_integrator_module
+  type(run_t) :: run
+  integer :: N, species
+  real(kind=8) :: getSEDcsn, X(N), Y(N), e0, e1
+  !-------------------------------------------------------------------------
+  real(kind=8) :: norm
+  !-------------------------------------------------------------------------
+  if(e1 .gt. 0. .and. e1 .le. run%ionEvs(species)) then
+     getSEDcsn=0. ; RETURN    ! [e0,e1] below ionization energy of species
+  endif
+  norm = integrateSpectrum(run, X, Y, N, e0, e1, species, fLambda)
+  getSEDcsn = integrateSpectrum(run, X, Y, N, e0, e1, species, fSigLambda) / norm
+
+END FUNCTION getSEDcsn
+
+!************************************************************************
+FUNCTION getSEDcse(run, X, Y, N, e0, e1, species)
+
+  ! Compute and return average energy weighted photoionization
+  ! cross-section, in cm^2, for a given energy interval (e0,e1) [eV] in
+  ! SED Y(X). Assumes X is in Angstroms and that Y is energy weight per
+  ! angstrom (not photon #).
+  ! Species is a code for the ion in question: 1=HI, 2=HeI, 3=HeIII
+  !-------------------------------------------------------------------------
+  use spectrum_integrator_module
+  type(run_t) :: run
+  integer :: N, species
+  real(kind=8) :: getSEDcse, X(N), Y(N), e0, e1
+  !-------------------------------------------------------------------------
+  real(kind=8) :: norm
+  !-------------------------------------------------------------------------
+  if(e1 .gt. 0. .and. e1 .le. run%ionEvs(species)) then
+     getSEDcse = 0. ; RETURN    ! [e0,e1] below ionization energy of species
+  endif
+  norm = integrateSpectrum(run, X, Y, N, e0, e1, species, f1)
+  getSEDcse = integrateSpectrum(run, X, Y, N, e0, e1, species, fSig) / norm
+
+END FUNCTION getSEDcse
+
+!*************************************************************************
+SUBROUTINE rebin_log(xint_log, yint_log,                         &
+     &               data, nx, ny, x, y, nz,                     &
+     &               new_data, new_nx, new_ny, new_x, new_y      )
+
+  ! Rebin the given 2d data into constant logarithmic intervals, using
+  ! linear interpolation.
+  ! xint_log,  => x and y intervals in the rebinned data. If negative,
+  ! yint_log      these values represent the new number of bins.
+  ! data       => The 2d data to be rebinned
+  ! nx,ny      => Number of points in x and y in the original data
+  ! nz         => Number of values in the data
+  ! x,y        => x and y values for the data
+  ! new_data  <=  The rebinned 2d data
+  ! new_nx,ny <=  Number of points in x and y in the rebinned data
+  ! new_x,y   <=  x and y point values for the rebinned data
+  !-------------------------------------------------------------------------
+  integer, intent(in) :: nx, ny, nz
+  integer :: new_nx, new_ny
+  real(kind=8) :: xint_log, yint_log
+  real(kind=8), intent(in) :: x(nx),y(ny)
+  real(kind=8), intent(in) :: data(nx,ny,nz)
+  real(kind=8), dimension(:), allocatable :: new_x, new_y
+  real(kind=8), dimension(:,:,:), allocatable :: new_data
+  !-------------------------------------------------------------------------
+  real(kind=8), dimension(:), allocatable :: new_lgx, new_lgy
+  real(kind=8) :: dx0, dx1, dy0, dy1, x_step, y_step
+  real(kind=8) :: x0lg, x1lg, y0lg, y1lg
+  integer :: i, j, ix, iy, ix1, iy1
+  !-------------------------------------------------------------------------
+  if(allocated(new_x)) deallocate(new_x)
+  if(allocated(new_y)) deallocate(new_y)
+  if(allocated(new_data)) deallocate(new_data)
+
+  ! Find dimensions of the new_data and initialize it
+  x0lg = log10(x(1));   x1lg = log10(x(nx))
+  y0lg = log10(y(1));   y1lg = log10(y(ny))
+
+  if(xint_log .lt. 0 .and. nx .gt. 1) then
+     new_nx=int(-xint_log)                        ! xint represents wanted
+     xint_log = (x1lg-x0lg)/(new_nx-1)            !     number of new bins
+  else
+     new_nx =int((x1lg-x0lg)/xint_log) + 1
+  endif
+  allocate(new_x(new_nx)) ; allocate(new_lgx(new_nx))
+  do i = 0, new_nx-1                              !  initialize the x-axis
+     new_lgx(i+1) = x0lg + i*xint_log
+  end do
+  new_x=10d0**new_lgx
+
+  if(yint_log .lt. 0 .and. ny .gt. 1) then        ! yint represents wanted
+     new_ny=int(-yint_log)                        !     number of new bins
+     yint_log = (y1lg-y0lg)/(new_ny-1)
+  else
+     new_ny = int((y1lg-y0lg)/yint_log) + 1
+  endif
+  allocate(new_y(new_ny)) ; allocate(new_lgy(new_ny))
+  do j = 0, new_ny-1                              !      ...and the y-axis
+     new_lgy(j+1) = y0lg + j*yint_log
+  end do
+  new_y=10d0**new_lgy
+
+  ! Initialize new_data and find values for each point in it
+  allocate(new_data(new_nx, new_ny, nz))
+  do j = 1, new_ny
+     call locate(y, ny, new_y(j), iy)
+     ! y(iy) <= new_y(j) <= y(iy+1)
+     ! iy is lower bound, so it can be zero but not larger than ny
+     if(iy < 1) iy=1
+     if (iy < ny) then
+        iy1  = iy + 1
+        y_step = y(iy1) - y(iy)
+        dy0  = max(new_y(j) - y(iy),    0.0d0)  / y_step
+        dy1  = min(y(iy1)   - new_y(j), y_step) / y_step
+     else
+        iy1  = iy
+        dy0  = 0.0d0 ;  dy1  = 1.0d0
+     end if
+
+     do i = 1, new_nx
+        call locate(x, nx, new_x(i), ix)
+        if(ix < 1) ix=1
+        if (ix < nx) then
+           ix1  = ix+1
+           x_step = x(ix1)-x(ix)
+           dx0  = max(new_x(i) - x(ix),    0.0d0)  / x_step
+           dx1  = min(x(ix1)   - new_x(i), x_step) / x_step
+        else
+           ix1  = ix
+           dx0  = 0.0d0 ;  dx1  = 1.0d0
+        end if
+
+        if (abs(dx0+dx1-1.0d0) .gt. 1.0d-6 .or.                          &
+                                         abs(dy0+dy1-1.0d0) > 1.0d-6) then
+           write(*,*) 'Screwed up the rebin interpolation ... '
+           write(*,*) dx0+dx1,dy0+dy1
+           call clean_stop
+        end if
+
+        new_data(i,j,:) =                                                &
+             dx0 * dy0 * data(ix1,iy1,:) + dx1 * dy0 * data(ix, iy1,:) + &
+             dx0 * dy1 * data(ix1,iy, :) + dx1 * dy1 * data(ix, iy, :)
+     end do
+  end do
+
+  deallocate(new_lgx)
+  deallocate(new_lgy)
+
+END SUBROUTINE rebin_log
+
+!*************************************************************************
+SUBROUTINE write_SED_table(SED)
+
+  ! Write the SED properties to a file (this is just in debugging, to check
+  ! if the SEDs are being read correctly).
+  ! Photon group properties: age [Gyr], metal mass fraction,
+  ! luminosity [photons s-1 Msun-1], cumulative luminosity [photons Msun-1],
+  ! group energy [ergs], csn_HX [cm2], cse_HX [cm2], where HX=H2, HI, HeI,
+  ! and HeII; H2 and He are optional
+  !-------------------------------------------------------------------------
+  use hydro_parameters, only: nion
+  type(sed_table_t) :: SED
+  !-------------------------------------------------------------------------
+  character(len=128) :: filename
+  integer :: ip, i, j, k
+  !-------------------------------------------------------------------------
+  do ip = 1, nrtgrp
+     write(filename,'(A, I1, A)') 'SEDtable', ip, '.list'
+     open(10, file=filename, status='unknown')
+     write(10,*) SED%nA, SED%nZ
+
+     do j = 1,SED%nz
+        do i = 1,SED%nA
+           write(10,900,advance='no')                                    &
+                SED%ages(i)        ,    SED%zeds(j)        ,            &
+                SED%table(i,j,ip,1),    SED%table(i,j,ip,2),            &
+                SED%table(i,j,ip,3)
+           if(nion .gt. 1) then
+              do k = 1,nion-1
+                 write(10,901,advance='no')                              &
+                      SED%table(i,j,ip,2+2*k), SED%table(i,j,ip,3+2*k)
+              enddo
+           endif
+           write(10,901)                                                 &
+                SED%table(i,j,ip,2+2*nion), SED%table(i,j,ip,3+2*nion)
+        end do
+     end do
+     close(10)
+  end do
+900 format (ES15.4, ES15.4, ES15.4, ES15.4, f15.4)
+901 format (ES15.4, ES15.4)
+
+END SUBROUTINE write_SED_table
+
+!*************************************************************************
+SUBROUTINE inp_SED_table(SED, age, Z, nProp, same, ret)
+
+  ! Compute SED property by interpolation from table.
+  ! input/output:
+  ! age   => Star population age [Gyrs]
+  ! Z     => Star population metallicity [m_metals/m_tot]
+  ! nprop => Number of property to fetch
+  !          1=log(photon # intensity [# Msun-1 s-1]),
+  !          2=log(cumulative photon # intensity [# Msun-1]),
+  !          3=avg_egy, 2+2*iIon=avg_csn, 3+2*iIon=avg_cse
+  ! same  => If true then assume same age and Z as used in last call.
+  !          In this case the interpolation indexes can be recycled.
+  ! ret   => The interpolated values of the sed property for every photon
+  !          group
+  !-------------------------------------------------------------------------
+  type(sed_table_t) :: SED
+  real(kind=8), intent(in) :: age, Z
+  integer :: nProp
+  logical :: same
+  real(kind=8), dimension(1:nrtgrp) :: ret
+  !-------------------------------------------------------------------------
+  real(kind=8) :: lgAge, lgZ
+  !-------------------------------------------------------------------------
+  if(.not. same) then
+     if(age.le.0d0) then
+        lgAge = -4d0
+     else
+        lgAge = log10(age)
+     endif
+     SED%ia = min(max(floor((lgAge-SED%lgA0)/SED%dlgA ) + 2, 1  ),  SED%nA-1 )
+     da = SED_ages(SED%ia+1)-SED%ages(SED%ia)
+     SED%da0 = min( max(   (age-SED_ages(SED%ia)) /da,       0. ), 1.          )
+     SED%da1 = min( max(  (SED_ages(SED%ia+1)-age)/da,       0. ), 1.          )
+
+     if(SED%is_SED_single_Z)then
+        SED%iz = 1
+        SED%dz0 = 0.0d0
+        SED%dz1 = 1.0d0
+     else
+        lgZ = log10(Z)
+        SED%iz = min(max(floor((lgZ-SED%lgZ0)/SED%dlgZ ) + 1,   1  ),  SED%nZ-1 )
+        dz = SED%Zeds(SED%iz+1)-SED%Zeds(SED%iz)
+        SED%dz0 = min( max(   (Z-SED%Zeds(SED%iz)) /dz,         0. ),  1.         )
+        SED%dz1 = min( max(  (SED%Zeds(SED%iz+1)-Z)/dz,         0. ),  1.         )
+     endif
+
+     if (abs(SED%da0+SED%da1-1.0d0) > 1.0d-5 .or. abs(SED%dz0+SED%dz1-1.0d0) > 1.0d-5) then
+        write(*,*) 'Screwed up the sed interpolation ... '
+        write(*,*) SED%da0+SED%da1,SED%dz0+SED%dz1
+        stop
+     end if
+  endif
+
+  ret = SED%da0 * SED%dz0 * SED%table(SED%ia+1, SED%iz+1, :, nProp) + &
+        SED%da1 * SED%dz0 * SED%table(SED%ia,   SED%iz+1, :, nProp) + &
+        SED%da0 * SED%dz1 * SED%table(SED%ia+1, SED%iz,   :, nProp) + &
+        SED%da1 * SED%dz1 * SED%table(SED%ia,   SED%iz,   :, nProp)
+
+END SUBROUTINE inp_SED_table
+
+!*************************************************************************
+SUBROUTINE getNPhotonsEmitted(run, SED, age1_Gyr, dt_Gyr, Z, ret)
+
+  ! Compute number of photons emitted by a stellar particle per solar mass
+  ! over a timestep.
+  ! input/output:
+  ! age1_Gyr => Star population age [Gyrs] at timestep end
+  ! dt_gyr   => Timestep length in Gyr
+  ! Z        => Star population metallicity [m_metals/m_tot]
+  ! ret      => # of photons emitted per solar mass over timestep
+  !-------------------------------------------------------------------------
+  type(run_t) :: run
+  type(sed_table_t) :: SED
+  real(kind=8),intent(in) :: age1_Gyr, dt_Gyr, Z
+  real(kind=8),dimension(nrtgrp) :: ret
+  !-------------------------------------------------------------------------
+  real(kind=8),dimension(nrtgrp) :: Lc0, Lc1
+  !-------------------------------------------------------------------------
+  ! Lc0 = cumulative emitted photons at the start of the timestep
+  call inp_SED_table(SED, age1_Gyr-dt_Gyr, Z, 2, .false., Lc0)
+  ! Lc1 = cumulative emitted photons at the end of the timestep
+  call inp_SED_table(SED, age1_Gyr, Z, 2, .false., Lc1)
+  ret = max(Lc1-Lc0,0.)
+  if(run%SED_isEgy) then ! Integrate correct energy rather than # of photons
+     ! Divide emitted energy by group energy -> Photon count
+     ret = ret / run%group_egy(1:nrtgrp)
+  endif
+END SUBROUTINE getNPhotonsEmitted
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+recursive subroutine r_star_RT_feedback(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_STAR_RT_FEEDBACK,pst%iUpper+1,input_size,0,ilevel)
+     call r_star_RT_feedback(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call star_RT_feedback(pst%s, pst%s%star, ilevel)
+  endif
+
+end subroutine r_star_RT_feedback
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine star_RT_feedback(s, p, ilevel)
+  use amr_parameters, only: ndim, twotondim, dp
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use boundaries, only: init_bound_refine
+  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
+  use hilbert
+  implicit none
+  type(ramses_t) :: s
+  type(part_t) :: p
+  integer :: ilevel
+  !==================================================================
+  ! This is the RAMSES routine for stellar radiation feedback.
+  ! The emissivity grid variable is updated using each star particle
+  ! luminosity. Energy will be deposited later during RT subcycles.
+  !==================================================================
+  ! Local variables
+  integer,dimension(1:ndim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_cell
+  integer::i,ipart,icell,ind,idim
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_Np,scale_Fp,scale_inp
+  real(dp)::dx_loc,vol_loc,vol_cell
+  real(dp)::z,mass,age,code2Gr,dt_Gyr,t_SN_Gyr
+  type(oct),pointer::gridp
+  type(msg_rt_emissivity_realdp)::dummy_rt_emissivity_realdp
+  logical::ok_level,ok_leaf
+
+#ifdef RT
+#if NDIM==3
+  associate(r=>s%r, g=>s%g, m=>s%m)
+
+  ! Mesh spacing in that level
+  dx_loc = r%boxlen / 2**ilevel 
+  vol_loc = dx_loc**ndim
+
+  ! Conversion factor from user units to cgs units
+  call units(r, g, scale_l, scale_t, scale_d, scale_v, scale_nH, scale_T2)
+  call rt_units(r, g, scale_Np, scale_Fp)
+  scale_inp = r%rt_esc_frac * scale_d / scale_Np / vol_loc / M_sun
+
+  ! Proper time (codeunits) to Gyr
+  code2Gyr = scale_t * sec2Gyr / g%aexp**2
+
+  ! Time step from code units to Gyr
+  dt_Gyr = g%dtnew(ilevel) * scale_t * sec2Gyr
+
+  ! Supernovae progenitors life time from Myr to Gyr
+  t_SN_Gyr = r%t_SNII * 1d-3
+
+  ! Open cache for array emissivity (flush)
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                hilbert=m%domain,pack_size=storage_size(dummy_rt_emissivity_realdp)/32,&
+                init=init_flush_emissivity, flush=pack_flush_emissivity,&
+                combine=unpack_flush_emissivity)
+
+  ! Loop over particles in Hilbert order
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+     ok_level=.true.
+
+     ! Find parent cell at level ilevel
+     do idim=1,ndim
+        ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
+     end do
+
+     ! Cell volume at level ilevel
+     vol_cell=vol_loc
+     scale_inp_cell=scale_inp
+
+     ! Get parent cell at level ilevel using cache
+     hash_cell(0)=ilevel+1
+     hash_cell(1:ndim)=ckey(1:ndim)
+     call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+
+     ! If cell does not exist at current level, then find cell at coarser level
+     if(.not.associated(gridp))then
+
+        ! NGP at level ilevel-1
+        do idim=1,ndim
+           ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+        end do
+
+        ! Cell volume at level ilevel-1
+        vol_cell=vol_loc*2**ndim
+        scale_inp_cell=scale_inp/2**ndim
+        
+        ! Get parent cell at level ilevel-1 using cache
+        hash_cell(0)=ilevel
+        hash_cell(1:ndim)=ckey(1:ndim)
+        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+        if(.not.associated(gridp))ok_level=.false.
+
+     end if
+
+     if(.not. ok_level)then
+        write(*,*)"Something went wrong in star_RT_feedback"
+        write(*,*)"Current level grid and coarser grid both dont exist..."
+        stop
+     endif
+
+     ! Compute star particle properties
+     if(metal)z = max(p%zp(ipart), 1e-5)
+     age = (g%texp - p%tp(ipart)) * code2Gyr
+
+     ! Possibilities: Born i) before dt, ii) within dt, iii) after dt:
+     dt_loc_Gyr = max(min(dt_Gyr, age), 0.)
+     call getNPhotonsEmitted(r, s%SED, age, dt_loc_Gyr, z, part_NpInp(1:nrtgrp))
+
+     mass = p%mp(ipart)
+     if(age.gt.t_SN_Gyr) then
+        mass = mass / (1d0 - r%eta_SNII)
+     endif
+
+     part_NpInp(1:nrtgrp) = part_NpInp(1:nrtgrp) * mass * scale_inp_cell ! #photons
+     lum(1:nrtgrp) = 0.
+     if(dt_loc_Gyr > 0.)then
+        lum(1:nrtgrp) = part_NpInp(1:nrtgrp) / dt_loc_Gyr / sec2Gyr ! #photons s-1
+     endif
+     lum(1:nrtgrp) = lum(1:nrtgrp) / scale_t ! back to code units
+
+     ! Update parent cell emissivity
+     gridp%emissivity(icell,1:nrtgrp) = gridp%emissivity(icell,1:nrtgrp) + lum(1:nrtgrp)
+
+  end do
+  ! End loop over particles
+
+  call close_cache(s,m%grid_dict)
+
+end associate
+#endif
+#endif
+end subroutine star_RT_feedback
+
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+subroutine init_flush_emissivity(grid,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use rt_parameters, only: nrtvar
+  use amr_commons, only: oct
+  type(oct)::grid
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind,ig
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+#ifdef RT
+  grid%emissivity=0.0d0
+#endif
+
+end subroutine init_flush_emissivity
+
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+subroutine pack_flush_emissivity(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use rt_parameters, only: nrtgrp
+  use amr_commons, only: oct
+  use cache_commons, only: msg_rt_emissivity_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind,ig
+  type(msg_rt_emissivity_realdp)::msg
+#ifdef RT
+  msg%realdp=grid%emissivity
+#endif
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_flush_emissivity
+
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+subroutine unpack_flush_emissivity(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use rt_parameters, only: nrtgrp
+  use amr_commons, only: oct
+  use cache_commons, only: msg_rt_emissivity_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind,ig
+  type(msg_rt_emissivity_realdp)::msg
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+#ifdef RT
+  grid%emissivity=grid%emissivity+msg%realdp
+#endif
+
+end subroutine unpack_flush_emissivity
+
+END MODULE SED_module
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+!*************************************************************************
+SUBROUTINE locate(xx,n,x,j)
+  ! Locates position j of a value x in an ordered array xx of n elements
+  ! After: xx(j) <= x <= xx(j+1) (assuming increasing order)
+  ! j is lower bound, so it can be zero but not larger than n
+  !-------------------------------------------------------------------------
+  integer ::  n,j
+  real(kind=8) :: xx(n),x
+  !-------------------------------------------------------------------------
+  integer :: jl,ju,jm
+  !-------------------------------------------------------------------------
+  jl = 0
+  ju = n+1
+  do while (ju-jl > 1)
+     jm = (ju+jl)/2
+     if ((xx(n) > xx(1)) .eqv. (x > xx(jm))) then
+        jl = jm
+     else
+        ju = jm
+     endif
+  enddo
+  j = jl
+END SUBROUTINE locate
+
+!*************************************************************************
+SUBROUTINE inp_1d(xax,nx,x,ix0,ix1,dx0,dx1)
+  ! Compute variables by interpolation from table with non-equal intervals.
+  ! xax      => Axis of x-values in table
+  ! nx       => Length of x-axis
+  ! x        => x-value to interpolate to
+  ! ix0,ix1 <=  Lower and upper boundaries of x in xax
+  ! dx0,dx1 <=  Weights of ix0 and ix1 indexes
+  !-------------------------------------------------------------------------
+  integer:: nx, ix0, ix1
+  real(kind=8), intent(in)::xax(nx), x
+  real(kind=8):: dx0, dx1
+  !-------------------------------------------------------------------------
+  real(kind=8):: x_step
+  !-------------------------------------------------------------------------
+  call locate(xax, nx, x, ix0)
+  if(ix0 < 1) ix0=1
+  if (ix0 < nx) then
+     ix1 = ix0+1
+     x_step = xax(ix1) - xax(ix0)
+     dx0 = max(           x - xax(ix0), 0.0d0 ) / x_step
+     dx1 = min(xax(ix1) - x           , x_step) / x_step
+  else
+     ix1 = ix0
+     dx0 = 0.0d0 ;  dx1   1.0d0
+  end if
+
+  if (abs(dx0+dx1-1.0d0) .gt. 1.0d-5) then
+     write(*,*) 'Screwed up the 1d interpolation ... '
+     write(*,*) dx0+dx1
+     call clean_stop
+  end if
+
+END SUBROUTINE inp_1d

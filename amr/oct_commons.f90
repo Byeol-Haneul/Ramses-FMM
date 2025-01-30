@@ -16,6 +16,7 @@ module oct_commons
 #ifdef RT
      real(kind=dp),dimension(1:twotondim,1:nrtvar)::rtuold
      real(kind=dp),dimension(1:twotondim,1:nrtvar)::rtunew
+     real(kind=dp),dimension(1:twotondim,1:nrtgrp)::emissivity
 #endif
 #ifdef GRAV
      real(kind=dp),dimension(1:twotondim,1:3)::f

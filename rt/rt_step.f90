@@ -39,8 +39,14 @@ subroutine m_rt_step(pst,ilevel)
   i_substep = ceiling(dt_save/dt_rad)
   dt_rad = dt_save/dble(i_substep)
 
+  ! Compute isotropic emissivity from stars
+  if(r%star)call r_star_RT_feedback(pst,ilevel,1)
+
+  ! Compute isotropic emissivity from sinks
+  ! if(r%rt_sink) call r_sink_RT_feedback(pst,ilevel,1)
+
   ! RT sub-cycle loop
-  do i=1,i_substep
+  do i = 1, i_substep
 
      ! Shift the RT time forwards one dt_rad
      t_rad = t_rad + dt_rad
@@ -49,22 +55,17 @@ subroutine m_rt_step(pst,ilevel)
      call m_rt_update_time(pst,ilevel,t_rad,dt_rad)
 
      ! Set rtunew equal to rtuold
-     if(i>1) call r_set_rtunew(pst,ilevel,1)
+     if(i>1)call r_set_rtunew(pst,ilevel,1)
 
      ! Hyperbolic RT solver
-     if(r%rt_advect) call r_rt_godunov_fine(pst,ilevel,1)
+     if(r%rt_advect)call r_rt_godunov_fine(pst,ilevel,1)
 
-     ! Radiative feedback from stars
-!     if(r%rt_star) call r_star_RT_feedback(pst,ilevel,1)
-
-     ! Radiative feedback from sinks
-!     if(r%rt_sink) call r_sink_RT_feedback(pst,ilevel,1)
-
-     ! Injection from radiation sources
+     ! Add anisotropic radiation from other sources
      if(r%rt_nsource>0)call r_rt_input_source_regions(pst,ilevel,1)
 
-     ! Set rtuold equal to rtunew
-     if(.not.r%rt_smooth)call r_set_rtuold(pst,ilevel,1)
+     ! Set rtuold equal to rtunew if not rt_smooth
+     ! Add isotropic sources if not neq_chem
+     call r_set_rtuold(pst,ilevel,1)
 
      ! Source terms for photo-chemistry
      if(r%neq_chem)call r_cooling_fine(pst,ilevel,1)

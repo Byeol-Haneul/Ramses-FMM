@@ -111,9 +111,11 @@ module mdl_parameters
      enumerator::MDL_RT_UPLOAD_FINE
      enumerator::MDL_OUTPUT_RT
      enumerator::MDL_RT_GODUNOV_FINE
+     enumerator::MDL_SET_EMISSIVITY
      enumerator::MDL_SET_RTUNEW
      enumerator::MDL_SET_RTUOLD
      enumerator::MDL_UPDATE_RT_VAR
+     enumerator::MDL_STAR_RT_FEEDBACK
   end enum
   
   ! Maximum number of cpus

@@ -244,16 +244,24 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Compute cooling time step in second
         dtcool = g%dtnew(ilevel)*scale_t
 
-        ! Smooth RT update
 #ifdef RT
+        ! Isotropic emission (star and sink particles) in cgs units
+        do ig=1,nrtgrp
+           do i=1,nleaf
+              dNpdt(ig,i) = scale_Np * m%grid(ind_leaf(i))%emissivity(ind,ig) / scale_t
+              dFpdt(:,ig,i) = 0
+           end do
+        end do
+
+        ! Smooth RT update
         if(r%rt_smooth) then
            do ig=1,nrtgrp
               iNp=1+(ig-1)*(ndim+1)
               do i=1,nleaf ! Calc addition per sec to Np, Fp for current dt
                  Npnew = scale_Np * m%grid(ind_leaf(i))%rtunew(ind,iNp)
                  Fpnew = scale_Fp * m%grid(ind_leaf(i))%rtunew(ind,iNp+1:iNp+ndim)
-                 dNpdt(ig,i)   = (Npnew - Np(ig,i)) / dtcool
-                 dFpdt(:,ig,i) = (Fpnew - Fp(:,ig,i)) / dtcool
+                 dNpdt(ig,i) = dNpdt(ig,i) + (Npnew - Np(ig,i)) / dtcool
+                 dFpdt(:,ig,i) = dFpdt(:,ig,i) + (Fpnew - Fp(:,ig,i)) / dtcool
               end do
            end do
         end if

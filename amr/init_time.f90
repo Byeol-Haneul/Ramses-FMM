@@ -95,9 +95,15 @@ end subroutine r_init_time
      call init_cooling(r,g,c)
      call set_table(c,dble(g%aexp))
   endif
+
   ! Initialize non-equilibrium chemistry model
   if(r%neq_chem)then
      call init_neq_chem(r,g,tables)
+  endif
+
+  ! Initialize stellar spectral energy distribution table
+  if(r%star.and.r%rt)then
+     call init_SED_table(r,g,sed)
   endif
 
 end subroutine init_time
