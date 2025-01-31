@@ -11,7 +11,6 @@ MODULE rt_star_feedback
   implicit none
 
 CONTAINS
-
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -178,9 +177,7 @@ end associate
 #endif
 #endif
 end subroutine star_RT_feedback
-
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
 subroutine init_flush_emissivity(grid,hash_key)
   use amr_parameters, only: ndim,twotondim
   use rt_parameters, only: nrtvar
@@ -197,9 +194,7 @@ subroutine init_flush_emissivity(grid,hash_key)
 #endif
 
 end subroutine init_flush_emissivity
-
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
 subroutine pack_flush_emissivity(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use rt_parameters, only: nrtgrp
@@ -217,9 +212,7 @@ subroutine pack_flush_emissivity(grid,msg_size,msg_array)
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_emissivity
-
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-
 subroutine unpack_flush_emissivity(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use rt_parameters, only: nrtgrp
@@ -241,7 +234,7 @@ subroutine unpack_flush_emissivity(grid,msg_size,msg_array,hash_key)
 #endif
 
 end subroutine unpack_flush_emissivity
-
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 END MODULE rt_star_feedback
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
