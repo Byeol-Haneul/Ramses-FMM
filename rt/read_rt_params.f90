@@ -92,6 +92,12 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                      !    Photon flux
   real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                      !    Photon flux
 
+  ! RT boundary condition parameters-------------------------------------------------------
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
+
   ! RT_GROUPS namelist---------------------------------------------------------------------
   ! integer::sedprops_update=-1                     ! Update sedprops from star populations
   ! negative: never update, 0:update on init, pos x: update every x coarse steps
@@ -115,7 +121,7 @@ subroutine m_read_rt_params(pst)
   namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
        & ,rt_err_grad_n, rt_floor_n                                      &
        ! RT regions (for initialization)                                 &
-       & ,units_np, rt_nregion, rt_region_type                  &
+       & ,units_np, rt_nregion, rt_region_type                           &
        & ,rt_reg_x_center, rt_reg_y_center, rt_reg_z_center              &
        & ,rt_reg_length_x, rt_reg_length_y, rt_reg_length_z              &
        & ,rt_exp_region, rt_reg_group                                    &
@@ -125,8 +131,10 @@ subroutine m_read_rt_params(pst)
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
        & ,rt_src_length_x, rt_src_length_y, rt_src_length_z              &
        & ,rt_exp_source, rt_src_group,   rt_src_trace_group              &
-       & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source             
-  
+       & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source             &
+       ! RT boundaries                                                    &
+       & ,rt_n_bound,rt_u_bound,rt_v_bound,rt_w_bound
+
   namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
        & ,group_L0, group_L1, kappaAbs, kappaSc
 
@@ -190,6 +198,10 @@ subroutine m_read_rt_params(pst)
   s%r%rt_u_source=rt_u_source
   s%r%rt_v_source=rt_v_source
   s%r%rt_w_source=rt_w_source
+  s%r%rt_n_bound=rt_n_bound
+  s%r%rt_u_bound=rt_u_bound
+  s%r%rt_v_bound=rt_v_bound
+  s%r%rt_w_bound=rt_w_bound
 
   ! rt_groups
   s%r%group_csn=group_csn

@@ -70,12 +70,15 @@ end subroutine get_bound
 subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
   use amr_parameters, only: ndim, twotondim, dp, nvector
   use hydro_parameters, only: nvar, nener
+  use rt_parameters, only: nrtvar, nrtgrp
   use amr_commons, only: run_t, global_t, mesh_t, oct
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
   type(oct)::grid, grid_ref
   integer::ibound
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_np, scale_fp, dx_cgs, dt_cgs
 
   integer,dimension(1:8,1:3)::ref_right=reshape(&
        & (/ 0,1,0,3,0,5,0,7,&
@@ -165,6 +168,15 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
         end do
 #endif
 #endif
+#ifdef RT
+        do ivar=1,nrtvar
+           reverse=1
+           if(mod(ivar-1, ndim+1) == dir) reverse=-1
+           do ind=1,twotondim
+              grid%rtuold(ind,ivar)=grid_ref%rtuold(ind1_right(ind,dir),ivar)*reverse
+           end do
+        end do
+#endif
      endif
 
      if(shift==-1)then
@@ -192,6 +204,15 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
            grid%bold(ind,6)=grid_ref%bold(ind1_left(ind,dir),6)
         end do
 #endif
+#endif
+#ifdef RT
+        do ivar=1,nrtvar
+           reverse=1
+           if(mod(ivar-1, ndim+1) == dir) reverse=-1
+           do ind=1,twotondim
+              grid%rtuold(ind,ivar)=grid_ref%rtuold(ind1_left(ind,dir),ivar)*reverse
+           end do
+        end do
 #endif
      endif
 
@@ -224,6 +245,13 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
         end do
 #endif
 #endif
+#ifdef RT
+        do ivar=1,nrtvar
+           do ind=1,twotondim
+              grid%rtuold(ind,ivar)=grid_ref%rtuold(ind2_right(ind,dir),ivar)
+           end do
+        end do
+#endif
      endif
 
      if(shift==-1)then
@@ -249,6 +277,13 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
            grid%bold(ind,6)=grid_ref%bold(ind2_left(ind,dir),6)
         end do
 #endif
+#endif
+#ifdef RT
+        do ivar=1,nrtvar
+           do ind=1,twotondim
+              grid%rtuold(ind,ivar)=grid_ref%rtuold(ind2_left(ind,dir),ivar)
+           end do
+        end do
 #endif
      endif
 
@@ -293,6 +328,22 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
 #endif
 #endif
      end do
+#ifdef RT
+     call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+     call rt_units(r,g,scale_np,scale_fp)
+     do ind=1,twotondim
+        do ivar=1,nrtgrp
+            grid%rtuold(ind,1+(ivar-1)*(ndim+1))= &
+              r%rt_n_bound(ibound,ivar)/g%rt_c/scale_fp
+            grid%rtuold(ind,2+(ivar-1)*(ndim+1))= &
+              r%rt_n_bound(ibound,ivar)*r%rt_u_bound(ibound,ivar)/scale_fp
+            if(ndim>1) grid%rtuold(ind,3+(ivar-1)*(ndim+1))= &
+                r%rt_n_bound(ibound,ivar)*r%rt_v_bound(ibound,ivar)/scale_fp
+            if(ndim>2) grid%rtuold(ind,4+(ivar-1)*(ndim+1))= &
+                r%rt_n_bound(ibound,ivar)*r%rt_w_bound(ibound,ivar)/scale_fp
+        end do
+     end do
+#endif
 
   endif
 

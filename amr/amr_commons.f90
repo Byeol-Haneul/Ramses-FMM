@@ -334,14 +334,7 @@ module amr_commons
      logical::cosmic_rays=.false.          ! Include cosmic ray ionisation                   !
      
      character(LEN=128)::sed_dir=''        ! Dir containing stellar energy distributions     !
-     !character(LEN=128)::uv_file=''      ! File containing stellar energy distributions    !
-     
-     ! Imposed boundary condition variables
-     !real(dp),dimension(1:MAXBOUND,1:nrtvar)::rt_boundary_var
-     !real(dp),dimension(1:MAXBOUND)::rt_n_bound=0.0d0
-     !real(dp),dimension(1:MAXBOUND)::rt_u_bound=0.0d0
-     !real(dp),dimension(1:MAXBOUND)::rt_v_bound=0.0d0
-     !real(dp),dimension(1:MAXBOUND)::rt_w_bound=0.0d0
+     !character(LEN=128)::uv_file=''       ! File containing UV background                   !
      
      ! Initial condition RT regions parameters----------------------------------------------
      integer                           ::rt_nregion=0
@@ -376,6 +369,12 @@ module amr_commons
      real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                     ! Photon flux
      real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                     ! Photon flux
 
+     ! RT boundary condition parameters-------------------------------------------------------
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
+     
      ! RT groups parameters------------------------------------------------------------------
      ! integer::sedprops_update=-1                    ! Update sedprops from star populations
      ! negative: never update, 0:update on init, pos x: update every x coarse steps
