@@ -328,7 +328,7 @@ contains
 
     mu = getMu(r, dxion, dT2)
     TK = dT2 * mu                                           !  Temperature
-    if(r%rt_isTconst) TK=r%rt_Tconst                   !  Force constant T
+    if(r%neq_isTconst) TK=r%neq_Tconst                   !  Force constant T
     ne = nH(icell)*dxion(ixHII)
     if(r%isHe) ne=ne+nHe*(dxion(ixHeII)+2.*dxion(ixHeIII)) ! Elec. density
     neInit = ne
@@ -685,7 +685,7 @@ contains
        ! Update ne because of changed hydrogen ionisation:
        ne= nH(icell)*dXion(ixHII)+nHE*(dXion(ixHeII)+2.*dXion(ixHeIII))
        mu = getMu(r, dXion, dT2)
-       if(.not. r%rt_isTconst) TK=dT2*mu! Update TK because of changed  mu
+       if(.not. r%neq_isTconst) TK=dT2*mu! Update TK because of changed  mu
        ! Update xHeI *****************************************************
        if(r%rt_otsa .or. .not. r%rt_advect) then
           alpha(ixHeII)  = inp_coolrates_table(tables,tables%tbl_alphaB_HeII, TK,.false.)
@@ -765,9 +765,9 @@ contains
     endif
     fracMax=MAX(fracMax,dUU)
 
-    if(r%rt_isTconst)then
+    if(r%neq_isTconst)then
        mu = getMu(r, dXion, dT2)
-       dT2 = r%rt_Tconst/mu
+       dT2 = r%neq_Tconst/mu
     endif
 
     ! CLEAN UP AND RETURN ************************************************

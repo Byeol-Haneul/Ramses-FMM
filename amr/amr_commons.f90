@@ -310,8 +310,6 @@ module amr_commons
      logical::rt_advect=.false.            ! Advection of photons?                           !
      logical::rt_smooth=.false.            ! Smooth the discrete RT update of op. splitting  !
      real(dp)::units_Np=1.0                ! [#/cm^3]                                        !
-     real(dp)::rt_Tconst=-1                ! If pos. use this value for all T-depend. rates  !
-     logical::rt_isTconst=.false.          ! Const rates activated?                          !
      logical::rt_star=.false.              ! Activate radiation from star particles          !
      logical::rt_sink=.false.              ! Activate radiation from sink particles          !
      logical::rt_is_outflow_bound=.false.  ! Make all boundaries=outflow for RT              !
@@ -400,6 +398,8 @@ module amr_commons
      logical::isH2=.false.                            !                           H2 tracked?
      integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
      real(dp),dimension(nIon)::ionEvs                 !                   Ionization energies
+     real(dp)::neq_Tconst=-1              ! If pos. use this value for all T-depend. rates  !
+     logical::neq_isTconst=.false.        ! Const rates activated?                          !
      ! X and Y here are variables, while X_H and Y_He are parameters in cooling/constants.f90
      real(dp)::neq_X_H                                !                Hydrogen mass fraction
      real(dp)::neq_Y_He                               !                  Helium mass fraction
