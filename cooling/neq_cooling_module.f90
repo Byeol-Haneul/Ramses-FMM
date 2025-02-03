@@ -65,6 +65,7 @@ SUBROUTINE neq_set_model(r, tables, h, omegab, omega0, omegaL, astart_sim, T2_si
 
 !  call init_UV_background
   call init_coolrates_tables(r, tables)
+  call updateRTGroups_CoolConstants(r, tables)
 
   if(r%nrestart==0)call neq_evol_single_cell(r, tables, astart, aend, dasura, &
        &        h, omegab, omega0, omegaL, T2end, mu, ne, .false.)
