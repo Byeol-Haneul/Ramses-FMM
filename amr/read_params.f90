@@ -275,7 +275,7 @@ subroutine m_read_params(pst)
   real(dp)::T2max=1d50
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
-  logical::isHe=.false.           !      He ionization fractions tracked?
+  logical::isHe=.true.            !      He ionization fractions tracked?
   logical::isH2=.false.           !                 H2 tracked (via xHI)?
   real(dp)::neq_X_H=0.76d0        !                Hydrogen mass fraction
   real(dp)::neq_Y_He=0.24d0       !                  Helium mass fraction
