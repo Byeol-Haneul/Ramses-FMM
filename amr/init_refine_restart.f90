@@ -372,7 +372,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      if(r%rt)then
         file_rt='backup_'//TRIM(nchar)//'/rt.'//TRIM(ncharcpu)
         open(unit=13,file=file_rt,access="stream",action="read",form='unformatted')
-        iskip_rt=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvar)*nskip_file(icpu)
+        iskip_rt=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nrtvar)*nskip_file(icpu)
      endif
 
      ! Loop over useful octs in file
