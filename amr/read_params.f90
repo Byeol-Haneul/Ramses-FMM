@@ -1080,7 +1080,7 @@ subroutine m_read_params(pst)
   s%r%eos_index=eos_index
   s%r%eos_T2=eos_T2
   s%r%T2max=T2max
-  ! neq_chem
+
   s%r%neq_chem=neq_chem
   s%r%is_init_xion=is_init_xion
   s%r%isHe=isHe

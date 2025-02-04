@@ -495,7 +495,6 @@ module amr_commons
      logical, dimension(1:MAXLEVEL)::safe_mode=.false.
 
      ! Multipole coefficients
-     !real(dp),dimension(1:ndim+1)::multipole
      type(multipole_t)::multipole
 
      ! RT global variables
