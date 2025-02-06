@@ -302,8 +302,8 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   integer::i,j,k,ipart,icellp,icelln,ind,idim,ivar,ipart_ref
   integer,dimension(1:ndim)::ix
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::dx_loc,vol_loc
-  real(dp)::mejecta,mloss,mzloss,zloss,ekinetic,ethermal
+  real(dp)::dx_loc,vol_loc,vol_cell
+  real(dp)::mejecta,ekinetic,ethermal
   real(dp)::birth_time,t_sn,e_sn,dteff,dold,num_SN
   real(dp),dimension(1:3)::xcen,xnei
   real(dp),dimension(1:nvar)::q
@@ -312,6 +312,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   type(oct),pointer::gridp,gridn
   type(msg_large_realdp)::dummy_large_realdp
   logical::ok_level,ok_leaf,ok
+
 
 #ifdef HYDRO
 #if NDIM==3
