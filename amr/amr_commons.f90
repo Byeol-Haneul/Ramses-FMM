@@ -242,6 +242,16 @@ module amr_commons
      integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
      real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
      real(dp)::T2max
+     real(kind=8) ::mu_mol       = 1.2195d0           ! Mean molecular weight (std ISM value)
+     real(kind=8) ::X_H          = 0.7600d0           !                Hydrogen mass fraction
+     real(kind=8) ::Y_He         = 0.2400d0           !                  Helium mass fraction
+     logical::is_init_xion=.false.          ! Initialize ionization from T profile (neq only)
+     logical::isHe=.true.                             !      He ionization fractions tracked?
+     logical::isH2=.false.                            !                           H2 tracked?
+     integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
+     real(kind=8),dimension(nIon)::ionEvs             !                   Ionization energies
+     real(dp)::neq_Tconst=-1           ! If positive use this value for all T-dependent rates
+     logical::neq_isTconst=.false.                    !             Constant rates activated?
 
      ! Star formation parameters
      real(dp)::T2_star=2e4
@@ -390,18 +400,6 @@ module amr_commons
      real(dp),dimension(nrtgrp)::isLW=0d0                          ! Use to find the LW group 
      real(dp),dimension(nrtgrp)::ssh2=1d0                      ! Self-shielding factor for H2
      integer,dimension(nIon)::spec2group=0                 ! Ion -> group # in recombinations
-
-     ! Non-equilibrium chemistry parameters--------------------------------------------------
-     logical::is_init_xion=.false.                    ! Initialize ionization from T profile?
-     logical::isHe=.true.                             !      He ionization fractions tracked?
-     logical::isH2=.false.                            !                           H2 tracked?
-     integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
-     real(dp),dimension(nIon)::ionEvs                 !                   Ionization energies
-     real(dp)::neq_Tconst=-1              ! If pos. use this value for all T-depend. rates  !
-     logical::neq_isTconst=.false.        ! Const rates activated?                          !
-     ! X and Y here are variables, while X_H and Y_He are parameters in cooling/constants.f90
-     real(dp)::neq_X_H                                !                Hydrogen mass fraction
-     real(dp)::neq_Y_He                               !                  Helium mass fraction
 
   end type run_t
 

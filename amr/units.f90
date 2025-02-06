@@ -1,6 +1,6 @@
 subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   use amr_parameters, only: dp,ndim
-  use constants, only: kB,mH,X_H,rhoc
+  use constants, only: kB,mH,rhoc
   use amr_commons, only: run_t,global_t
   implicit none
   type(run_t)::r
@@ -23,7 +23,7 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_l = g%aexp * g%boxlen_ini * 3.0856776d24 / (g%h0/100)
   scale_v = scale_l / scale_t    ! scale_v converts velocity in user units into cm/s
   scale_T2 = mH/kB * scale_v**2  ! scale_T2 converts (P/rho) in user unit into (T/mu) in Kelvin
-  scale_nH = X_H/mH * scale_d    ! scale_nH converts rho in user units into nH in H/cc
+  scale_nH = r%X_H/mH * scale_d  ! scale_nH converts rho in user units into nH in H/cc
 
 #elif UNITS==COEUR
 
@@ -43,7 +43,7 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_t = 1.0/sqrt(6.67d-8*scale_d)
   scale_v = scale_l / scale_t
   scale_T2 = mH/kB * scale_v**2
-  scale_nH = X_H/mH * scale_d
+  scale_nH = r%X_H/mH * scale_d
 
 #else
 
@@ -53,7 +53,7 @@ subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_l = r%units_length       ! scale_l converts distance from user units into cm
   scale_v = scale_l / scale_t    ! scale_v converts velocity in user units into cm/s
   scale_T2 = mH/kB * scale_v**2  ! scale_T2 converts (P/rho) in user unit into (T/mu) in Kelvin
-  scale_nH = X_H/mH * scale_d    ! scale_nH converts rho in user units into nH in H/cc
+  scale_nH = r%X_H/mH * scale_d  ! scale_nH converts rho in user units into nH in H/cc
 
 #endif
 

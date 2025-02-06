@@ -278,12 +278,12 @@ subroutine m_read_params(pst)
   logical::isHe=.true.            !      He ionization fractions tracked?
   logical::isH2=.false.           !                 H2 tracked (via xHI)?
   real(dp)::neq_Tconst=-1         !             Const T in neq chemistry?
-  real(dp)::neq_X_H=0.76d0        !                Hydrogen mass fraction
-  real(dp)::neq_Y_He=0.24d0       !                  Helium mass fraction
+  real(kind=8) ::mu_mol=1.2195d0  ! Mean molecular weight (std ISM value)
+  real(kind=8) ::X_H=0.7600d0     !                Hydrogen mass fraction
+  real(kind=8) ::Y_He=0.2400d0    !                  Helium mass fraction
   integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !   Ionization indices
-  real(dp),dimension(nion)::ionEvs                 !  Ionization energies
+  real(kind=8),dimension(nion)::ionEvs             !  Ionization energies
   integer::icount
-
 
   ! Star formation parameters
   real(dp)::T2_star=2e4
@@ -422,9 +422,9 @@ subroutine m_read_params(pst)
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
   ! Cooling / basic chemistry parameters
   namelist/cooling_params/neq_chem,cooling,metal,isothermal,haardt_madau,J21 &
-       & ,eos_type,eos_nH,eos_index,eos_T2 &
+       & ,eos_type,eos_nH,eos_index,eos_T2, mu_mol, X_H, Y_He &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism &
-       & ,isHe, isH2, is_init_xion, neq_X_H, neq_Y_He, neq_Tconst
+       & ,isHe, isH2, is_init_xion, neq_Tconst
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
   ! Star particles and star formation recipe
@@ -1080,7 +1080,9 @@ subroutine m_read_params(pst)
   s%r%eos_index=eos_index
   s%r%eos_T2=eos_T2
   s%r%T2max=T2max
-  ! neq_chem
+  s%r%mu_mol=mu_mol
+  s%r%X_H=X_H
+  s%r%Y_He=Y_He
   s%r%neq_chem=neq_chem
   s%r%is_init_xion=is_init_xion
   s%r%isHe=isHe
@@ -1088,8 +1090,6 @@ subroutine m_read_params(pst)
   s%r%neq_Tconst=neq_Tconst
   if(neq_Tconst .ge. 0d0) s%r%neq_isTconst=.true.
 
-  s%r%neq_X_H=neq_X_H
-  s%r%neq_Y_He=neq_Y_He
   s%r%iIons=iIons
   s%r%ixHI=ixHI
   s%r%ixHII=ixHII

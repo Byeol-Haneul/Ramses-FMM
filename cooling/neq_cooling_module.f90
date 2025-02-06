@@ -294,7 +294,7 @@ contains
     associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
     dt_ok=.false.
-    nHe=0.25*nH(icell)*r%neq_Y_He/r%neq_X_H        ! Helium number density
+    nHe=0.25*nH(icell)*r%Y_He/r%X_H       ! Helium number density
     ! U contains the original values, dU the updated ones
     dT2 = T2(icell) ; dXion(:) = xion(:,icell)
 #ifdef RT
@@ -302,10 +302,10 @@ contains
     dp_gas(:) = p_gas(:,icell)
 #endif
     ! nN='neutral' species (pre-ionized), nI=their ionized counterparts
-    ! nN(1) == nN(ixHI)    == nH2         ! nI(1) == nI(ixHI)    == nHI
-    ! nN(2) == nN(ixHII)   == nHI         ! nI(2) == nI(ixHII)   == nHII
-    ! nN(3) == nN(ixHeII)  == nHeI        ! nI(3) == nI(ixHeII)  == nHeII
-    ! nN(4) == nN(ixHeIII) == nHeII       ! nI(4) == nI(ixHeIII) == nHeIII
+    ! nN(1) == nN(ixHI)    == nH2         !      nI(1) == nI(ixHI)    == nHI
+    ! nN(2) == nN(ixHII)   == nHI         !     nI(2) == nI(ixHII)   == nHII
+    ! nN(3) == nN(ixHeII)  == nHeI        !    nI(3) == nI(ixHeII)  == nHeII
+    ! nN(4) == nN(ixHeIII) == nHeII       !   nI(4) == nI(ixHeIII) == nHeIII
     ! Hydrogen chemistry
     xHI = MAX(1d0-dxion(ixHII),x_min)       ! need in case of .not. isH2
     if(r%isH2) xHI = MAX(dxion(ixHI),x_min)
@@ -314,28 +314,28 @@ contains
     if(r%isHe) xHeI = MAX(1.-dxion(ixHeII)-dxion(ixHeIII),x_min)
     ! nN='neutral' species (pre-ionized)
     nN=0d0
-    if(r%isH2) nN(ixHI) = nH(icell) * xH2                        !     nH2
-    nN(ixHII) = nH(icell) * xHI                                  !     nHI
-    if(r%isHe) nN(ixHeII)  = nHe*xHeI                            !    nHeI
-    if(r%isHe) nN(ixHeIII) = nHe*dxion(ixHeII)                   !   nHeII
+    if(r%isH2) nN(ixHI) = nH(icell) * xH2                        !      nH2
+    nN(ixHII) = nH(icell) * xHI                                  !      nHI
+    if(r%isHe) nN(ixHeII)  = nHe*xHeI                            !     nHeI
+    if(r%isHe) nN(ixHeIII) = nHe*dxion(ixHeII)                   !    nHeII
     ! nI=ionized counterparts of the neutral species
     nI=0d0
-    if(r%isH2) nI(ixHI)  = nN(ixHII)                             !     nHI
-    nI(ixHII) = nH(icell) * dxion(ixHII)                         !    nHII
-    if(r%isHe) nI(ixHeII)  = nN(ixHeIII)                         !   nHeII
-    if(r%isHe) nI(ixHeIII) = nHe*dxion(ixHeIII)                  !  nHeIII
-    f_dust = (1.-dxion(ixHII))                    ! No dust in ionised gas
+    if(r%isH2) nI(ixHI)  = nN(ixHII)                             !      nHI
+    nI(ixHII) = nH(icell) * dxion(ixHII)                         !     nHII
+    if(r%isHe) nI(ixHeII)  = nN(ixHeIII)                         !    nHeII
+    if(r%isHe) nI(ixHeIII) = nHe*dxion(ixHeIII)                  !   nHeIII
+    f_dust = (1.-dxion(ixHII))                     ! No dust in ionised gas
 
     mu = getMu(r, dxion, dT2)
-    TK = dT2 * mu                                           !  Temperature
-    if(r%neq_isTconst) TK=r%neq_Tconst                   !  Force constant T
+    TK = dT2 * mu                                        !      Temperature
+    if(r%neq_isTconst) TK=r%neq_Tconst                   ! Force constant T
     ne = nH(icell)*dxion(ixHII)
-    if(r%isHe) ne=ne+nHe*(dxion(ixHeII)+2.*dxion(ixHeIII)) ! Elec. density
+    if(r%isHe) ne=ne+nHe*(dxion(ixHeII)+2.*dxion(ixHeIII)) !  Elec. density
     neInit = ne
     fracMax = 0d0 ! Max fractional update, to check if dt can be increased
     ss_factor = 1d0                  ! UV background self_shielding factor
     if(r%self_shielding) ss_factor = exp(-nH(icell)/1d-2)
-    rho = nH(icell) / r%neq_X_H * mH
+    rho = nH(icell) / r%X_H * mH
 #ifdef RT
     ! Set dust opacities--------------------------------------------------
     kAbs_loc = r%kappaAbs
@@ -545,7 +545,7 @@ contains
        if(Zsolar(icell) .gt. 0d0) &
             call neq_cmp_metals(r, tables, T2(icell), nH(icell), mu,      &
             &                  metal_tot, metal_prime)
-       X_nHkb = r%neq_X_H/(1.5 * nH(icell) * kB)         ! Multiplication factor
+       X_nHkb = r%X_H/(1.5 * nH(icell) * kB)        ! Multiplication factor
        rate  = X_nHkb*(Hrate - Crate - Zsolar(icell)*metal_tot)
        dRate = -X_nHkb*(dCdT2 + Zsolar(icell)*metal_prime)     ! dRate/dT2
                                                      ! 1st order dt constr
@@ -948,7 +948,7 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   endif
   b_HI   = inp_coolrates_table(tables,tables%tbl_Beta_HI, TK,.false.)  !  Cion [cm3 s-1]
   if(r%isHe) then
-     nHe = r%neq_Y_He/(1.-r%neq_Y_He)/4.*nH
+     nHe = r%Y_He/(1.-r%Y_He)/4.*nH
      g_HEI  = t_rad_spec(ixHeII)
      g_HEII = t_rad_spec(ixHeIII)
      b_HEI  = inp_coolrates_table(tables,tables%tbl_Beta_HeI, TK,.false.)
@@ -1002,7 +1002,7 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
   end do
 
   nTOT     = n_E+n_H2+n_HI+n_HII+n_HEI+n_HEII+n_HEIII
-  mu       = nH/(1.-r%neq_Y_He)/nTOT
+  mu       = nH/(1.-r%Y_He)/nTOT
   nSpec(1) = n_E
   nSpec(2) = n_H2
   nSpec(3) = n_HI
@@ -1060,8 +1060,8 @@ SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
   associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
 
   aexp = astart
-  T2_com = 2.726d0 / aexp * aexp**2 / mu_mol
-  nH_com = omegab*rhoc*h**2*r%neq_X_H/mH
+  T2_com = 2.726d0 / aexp * aexp**2 / r%mu_mol
+  nH_com = omegab*rhoc*h**2*r%X_H/mH
   pHI_rates = 0.                              ! Initially no UV background
 
   mu_dp = mu
@@ -1102,7 +1102,7 @@ SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
      if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
   end do
   T2end = T2(1)/(aexp-daexp)**2
-  ne = (n_spec(3)+(n_spec(5)+2.*n_spec(6))*0.25*r%neq_Y_He/r%neq_X_H)
+  ne = (n_spec(3)+(n_spec(5)+2.*n_spec(6))*0.25*r%Y_He/r%X_H)
 
   end associate
 
@@ -1292,7 +1292,7 @@ FUNCTION getMu(r, xion, Tmu)
   xHII=xion(r%ixHII)
   if(r%isHe) xHeII=xion(r%ixHeII)
   if(r%isHe) xHeIII=xion(r%ixHeIII)
-  getMu = 1./(r%neq_X_H*(0.5+0.5*xHI+1.5*xHII) + 0.25*r%neq_Y_He*(1.+xHeII+2.*xHeIII))
+  getMu = 1./(r%X_H*(0.5+0.5*xHI+1.5*xHII) + 0.25*r%Y_He*(1.+xHeII+2.*xHeIII))
   if(r%is_kIR_T .or. r%is_mu_H2) &
        getMu = getMu + exp(-1d0*(Tmu/r%Tmu_dissoc)**2) * (2.33-getMu)
 END FUNCTION getMu

@@ -4,11 +4,6 @@ module constants
   real(kind=8),parameter ::twopi        = 6.2831853d0
   real(kind=8),parameter ::pi           = twopi/2d0
 
-  ! Mean molecular weight
-  real(kind=8),parameter ::mu_mol       = 1.2195d0      ! Standard ISM value
-  real(kind=8),parameter ::X_H          = 0.7600d0      ! Hydrogen mass fraction
-  real(kind=8),parameter ::Y_He         = 0.2400d0      ! Helium mass fraction
-
   ! Physical constants
   ! Source:
   ! * SI - SI Brochure (2018)
