@@ -43,6 +43,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   use amr_parameters, only:dp,ndim,twotondim
   use amr_commons, only:run_t,global_t,mesh_t
   use pm_commons, only:part_t
+  use input_hydro_condinit_module, only: cons_from_prim, prim_from_cons
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -64,8 +65,9 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,nstar_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,nstar_cpu
   integer::i,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nstar,nstar_loc
-  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,tstar,mcell,mgas,mask,PoissMean,Rand
+  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,erfc
+  real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,t_ff,mcell,mgas,mask,PoissMean,Rand
+  real(kind=8)::sfr_ff,t_dyn,p,cs2,sigma2,alpha_vir,sigs,scrit,Mach2,b_turb
 #if NENER>0
   integer::irad
 #endif
@@ -97,6 +99,11 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   dstar = mstar/vol
 
   !---------------------------------------------------------
+  ! Convert conservative variables to primitive variables
+  !---------------------------------------------------------
+  call prim_from_cons(r,g,m,ilevel)
+
+  !---------------------------------------------------------
   ! Count potential star formation sites.
   ! This is important for the pseudo-random number generator
   !---------------------------------------------------------
@@ -112,7 +119,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         ok = ok .and. d > d0
         ! Select cells in zoom region
         if(r%ivar_refine>0)then
-           mask = m%grid(igrid)%uold(ind,r%ivar_refine)/d
+           mask = m%grid(igrid)%uold(ind,r%ivar_refine)
            ok = ok .and. mask > r%var_cut_refine
         endif
         ! Count number of random numbers
@@ -149,6 +156,9 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
      endif
   endif
 
+  !------------------------------------------------
+  ! Create new stars based on local SF efficiency
+  !------------------------------------------------
   nstar_loc=0
   mstar_loc=0.0d0
   ! Loop over octs
@@ -162,14 +172,48 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         ok = ok .and. d > d0
         ! Select cells in zoom region
         if(r%ivar_refine>0)then
-           mask = m%grid(igrid)%uold(ind,r%ivar_refine)/d
+           mask = m%grid(igrid)%uold(ind,r%ivar_refine)
            ok = ok .and. mask > r%var_cut_refine
         endif
+        ! Compute sound speed squared
+        p = m%grid(igrid)%uold(ind,5)
+        cs2 = max(r%gamma*p/d,r%smallc**2)
+        ! Turbulence 1D velocity dispersion
+        sigma2 = 0d0
+        if(r%turb)then
+           sigma2 = m%grid(igrid)%uold(ind,r%iturb)*2d0/3d0
+        endif
+
         ! Draw Poisson process based on local SF rate
         if(ok)then
+
+           ! Compute local SF efficiency
+           select case (r%sf_model)
+
+           case(1)
+              ! Constant efficiency
+              sfr_ff = r%eps_star
+
+           case(2)
+              ! Padoan, Haugbolle & Nordlund 2012
+              t_dyn = dx/(2d0*sqrt(3d0*(sigma2+cs2)))
+              t_ff = 0.5427d0/sqrt(factG*d)
+              sfr_ff = r%eps_star*exp(-1.6d0*t_ff/t_dyn)
+
+           case(3)
+              ! Multi-freefall model a la Krumholz & McKee
+              alpha_vir = (15d0*(sigma2+cs2))/(pi*factG*d*dx**2)
+              Mach2 = max(sigma2/cs2,r%smallr)
+              b_turb = 1.0 ! Turbulent forcing parameter (Federrath 2008 & 2010)
+              sigs = log(1d0+b_turb**2*Mach2)
+              scrit = log(alpha_vir*(1d0+(2d0*Mach2**2/(1d0+Mach2))))
+              sfr_ff = (r%eps_star/2d0)*exp(3d0/8d0*sigs)*(2d0-erfc((sigs-scrit)/sqrt(2d0*sigs)))
+
+           end select
+           ! Compute stellar mass formed
            mcell=d*vol
-           tstar=0.5427d0/sqrt(factG*d)
-           mgas=g%dtnew(ilevel)*(r%eps_star/tstar)*mcell
+           t_ff=0.5427d0/sqrt(factG*d)
+           mgas=g%dtnew(ilevel)*(sfr_ff/t_ff)*mcell
            ! Poisson mean
            PoissMean=mgas/mstar
            call poissdev(RngStream_RandUni(gg),PoissMean,nstar)
@@ -217,18 +261,22 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
               endif
               ! Compute level
               s%levelp(s%npart)=ilevel
-              ! Remove corresponding mass from all conservative variables
-              ! Careful: this will not work for MHD or non-thermal energies
-              ! Best is to remove the corresponding energies before and add them back after
-              m%grid(igrid)%uold(ind,1:nvar)=m%grid(igrid)%uold(ind,1:nvar)*(d-dstar)/d
-
-!              write(*,'("star=",10(1PE14.7,1X))')d*scale_nH,g%texp,s%mp(s%npart),s%tp(s%npart),Rand,g%dtnew(ilevel)*g%aexp**2
-
+              ! Remove corresponding mass from gas mass density
+              m%grid(igrid)%uold(ind,1)=d-dstar
+              ! Star formation is isobaric, adjust entropy
+              if(r%entropy.and.r%dual_energy.GE.0)then
+                 m%grid(igrid)%uold(ind,r%ientropy)=p/(d-dstar)**r%gamma
+              endif
            endif
         endif
      end do
   end do
   s%tailp(r%nlevelmax)=s%tailp(r%nlevelmax)+nstar_loc
+
+  !---------------------------------------------------------
+  ! Convert primitive variables to conservative variables
+  !---------------------------------------------------------
+  call cons_from_prim(r,g,m,ilevel)
 
   !----------------------------------------------
   ! Get the new global seed to the final state
@@ -268,4 +316,37 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
 #endif
 
 end subroutine star_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+function erfc(x)
+  ! complementary error function
+  use amr_parameters, ONLY: dp
+  implicit none
+  real(dp) :: erfc
+  real(dp) :: x, y
+  real(kind=8) :: pv, ph
+  real(kind=8) :: q0, q1, q2, q3, q4, q5, q6, q7
+  real(kind=8) :: p0, p1, p2, p3, p4, p5, p6, p7
+  parameter(pv= 1.26974899965115684d+01, ph= 6.10399733098688199d+00)
+  parameter(p0= 2.96316885199227378d-01, p1= 1.81581125134637070d-01)
+  parameter(p2= 6.81866451424939493d-02, p3= 1.56907543161966709d-02)
+  parameter(p4= 2.21290116681517573d-03, p5= 1.91395813098742864d-04)
+  parameter(p6= 9.71013284010551623d-06, p7= 1.66642447174307753d-07)
+  parameter(q0= 6.12158644495538758d-02, q1= 5.50942780056002085d-01)
+  parameter(q2= 1.53039662058770397d+00, q3= 2.99957952311300634d+00)
+  parameter(q4= 4.95867777128246701d+00, q5= 7.41471251099335407d+00)
+  parameter(q6= 1.04765104356545238d+01, q7= 1.48455557345597957d+01)
+  y = x*x
+  y = exp(-y)*x*(p7/(y+q7)+p6/(y+q6) + p5/(y+q5)+p4/(y+q4)+p3/(y+q3) &
+       &       + p2/(y+q2)+p1/(y+q1)+p0/(y+q0))
+  if (x < ph) y = y+2d0/(exp(pv*x)+1.0)
+  erfc = y
+  return
+end function erfc
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
 end module star_formation_module

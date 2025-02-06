@@ -254,6 +254,7 @@ module amr_commons
      logical::neq_isTconst=.false.                    !             Constant rates activated?
 
      ! Star formation parameters
+     integer::sf_model=1
      real(dp)::T2_star=2e4
      real(dp)::n_star=0.1
      real(dp)::eps_star=0.01

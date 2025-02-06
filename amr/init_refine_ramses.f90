@@ -229,7 +229,7 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
   !--------------------------------------------------------------
   use mdl_module, only: mdl_abort
   use amr_parameters, only: dp,nhilbert,ndim,twotondim,nvector
-  use input_hydro_condinit_module, only: input_hydro_vecpot,input_cons_from_prim
+  use input_hydro_condinit_module, only: input_hydro_vecpot,cons_from_prim
   use hydro_parameters, only: nvar,nprim,nener,ie
   use ramses_commons, only: ramses_t
   use hash
@@ -429,7 +429,7 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
      ! Compute initial magnetic field
      call input_hydro_vecpot(r,g,m,ilevel)
      ! Convert primitive to conservative
-     call input_cons_from_prim(r,g,m,ilevel)
+     call cons_from_prim(r,g,m,ilevel)
   endif
 
   !-----------

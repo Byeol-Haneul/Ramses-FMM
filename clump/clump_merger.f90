@@ -1491,9 +1491,10 @@ subroutine trim_clumps(s)
 #endif
   type(msg_prop_clump)::dummy_prop_clump
   integer(kind=8)::global_peak_id,global_halo_id
-  integer::nfinal,nfinal_tot
+  integer::nfinal
+  integer(kind=8)::nfinal_tot
   integer,dimension(1:s%g%ncpu)::nfinal_cpu
-  integer,dimension(0:s%g%ncpu)::nfinal_cum
+  integer(kind=8),dimension(0:s%g%ncpu)::nfinal_cum
   integer::icpu,ipeak,jpeak,igrid,ilevel,ind,itest
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
@@ -1502,6 +1503,7 @@ subroutine trim_clumps(s)
 
   ! Change peak indexing to keep only relevant ones
   nfinal=0
+  c%ind_final=0
   do ipeak=1,c%npeak
      if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
           & c%relevance(ipeak) > c%relevance_threshold.AND. &
