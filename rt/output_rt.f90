@@ -69,7 +69,7 @@ subroutine output_rt(s,filename)
               end do
             end do
         end do
-        qout=real(qold,kind=4)
+        qout=real(max(qold,tiny(0.E0)),kind=4)
         if(maxval(qout).gt.1d31 .and. s%g%myid==1 .and. .not. overflow_reported) then
             print*,'The RT variables have very high values and are overflowing in the outputs'
             overflow_reported=.true.
