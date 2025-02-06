@@ -63,7 +63,7 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::i,ipart,icellp,ind,idim
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc,vol_cell
   real(dp)::mejecta,dloss,dzloss,zloss,ekinetic,ethermal
   real(dp)::birth_time,t_sn,e_sn,dteff,dold
@@ -301,15 +301,9 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   integer::i,j,k,ipart,icellp,icelln,ind,idim,ivar,ipart_ref
   integer,dimension(1:ndim)::ix
-<<<<<<< HEAD
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(dp)::dx_loc,vol_loc
   real(dp)::mejecta,mloss,mzloss,zloss,ekinetic,ethermal
-=======
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::mejecta,ekinetic,ethermal
->>>>>>> 94e211ca6d206ecb42bc9165baf2b1d2e877972a
   real(dp)::birth_time,t_sn,e_sn,dteff,dold,num_SN
   real(dp),dimension(1:3)::xcen,xnei
   real(dp),dimension(1:nvar)::q
