@@ -399,7 +399,7 @@ program amr2map
      write(*,*)'as unformatted binary file'
      open(unit=20,file=nomfich,form='unformatted')
      if(nx_sample==0)then
-        write(20)p%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
+        write(20)p%t, (xxmax-xxmin)*p%boxlen, (yymax-yymin)*p%boxlen, (zzmax-zzmin)*p%boxlen
         write(20)imax-imin+1,jmax-jmin+1
         allocate(filemap(imax-imin+1,jmax-jmin+1))
         if(do_max)then
@@ -643,16 +643,9 @@ contains
     if(do_grav)then
        file_hydro=TRIM(repository)//'/grav.00001'
     else if(do_peak)then
-<<<<<<< HEAD
        file_hydro=TRIM(repository)//'/peak_grid.00001'
-=======
-       file_hydro=TRIM(repository)//'/peak.00001'
     else if(do_rt)then
        file_hydro=TRIM(repository)//'/rt.00001'
-<<<<<<< HEAD
->>>>>>> 3eb9595e (First step in miniramsesrt.)
-=======
->>>>>>> 9f57b4f49803d32af7bb2247a778e33188d96dab
     else
        file_hydro=TRIM(repository)//'/hydro.00001'
     endif
