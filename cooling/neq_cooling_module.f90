@@ -14,8 +14,8 @@ module neq_cooling_module
   implicit none
 
   private   ! default
-  public neq_set_model, neq_solve_cooling, cmp_chem_eq, updateRTGroups_CoolConstants &
-       ,update_metal_cooling
+  public neq_set_model, neq_solve_cooling, updateRTGroups_CoolConstants &
+       ,update_metal_cooling, cmp_equilibrium_abundances
 
   real(kind=8),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 
@@ -485,8 +485,8 @@ contains
 #endif
 
     ! UPDATE TEMPERATURE *************************************************
-!    if(c_switch(icell) .and. r%cooling .and. .not. r%rt_T_rad) then
-    if(r%cooling .and. .not. r%rt_T_rad) then
+    !if(c_switch(icell) .and. .not. rt_isTconst .and. .not. r%rt_T_rad) then
+    if(.not. r%neq_isTconst .and. .not. r%rt_T_rad) then
        Hrate = 0.                           !  Heating rate [erg cm-3 s-1]
        if(r%haardt_madau) Hrate = Hrate + SUM(nN(:)*tables%UVrates(:,2)) * ss_factor
 #ifdef RT
@@ -845,8 +845,8 @@ contains
 END SUBROUTINE neq_solve_cooling
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE cmp_Equilibrium_Abundances(r, tables, &
-     & T2, nH, phI_rates, mu, nSpec, Zsolar)
+SUBROUTINE cmp_equilibrium_abundances(r, tables, &
+                                   & T2, nH, phI_rates, mu, nSpec, Zsolar)
 
   ! Compute chemical equilibrium abundances of e,H2,HI,HII,HeI,HeII,HeIII.
   ! tables     => Object containing all non-equilibrium cooling tables
@@ -890,11 +890,11 @@ SUBROUTINE cmp_Equilibrium_Abundances(r, tables, &
      niter=niter+1
   end do
   if (niter > 50) then
-     write(*,*) 'ERROR in cmp_Equilibrium_Abundances : too many iterations.'
+     write(*,*) 'ERROR in cmp_equilibrium_abundances : too many iterations.'
      STOP
   endif
 
-END SUBROUTINE cmp_Equilibrium_Abundances
+END SUBROUTINE cmp_equilibrium_abundances
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
@@ -1065,7 +1065,7 @@ SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
   pHI_rates = 0.                              ! Initially no UV background
 
   mu_dp = mu
-  call cmp_Equilibrium_Abundances(r,tables,T2_com/aexp**2,nH_com/aexp**3 &
+  call cmp_equilibrium_abundances(r,tables,T2_com/aexp**2,nH_com/aexp**3 &
         ,pHI_rates, mu_dp, n_Spec, 0d0)
 
   ! Initialize cell state
