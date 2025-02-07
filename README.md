@@ -1,6 +1,58 @@
 [1]: https://bitbucket.org/rteyssie/ramses/
 [2]: https://bitbucket.org/rteyssie/mini-ramses/
 
+# mini-ramses-AGN
+A repository for developing sink particle / black hole / AGN models for mini-ramses.
+The original mini-ramses trunk is available on bitbucket at: https://bitbucket.org/rteyssie/mini-ramses/src/develop/
+
+## Here is the to-do list for sink particle development:
+### Sink Refine
+- [ ] Add sink-refine
+- [ ] Add ability to modify the size of the sink particle region based on the mass of the sink particle
+
+### Dyanmics
+- [ ]  Under construction
+
+### Accretion
+- [ ] Add simple bondi accretion
+- [ ] Add a weighting scheme (mass, volume, gaussian kernel)
+- [ ] Add flux accretion method (Bleuler+2014)
+- [ ] Design a new angular momentum-based weighting scheme, (e.g. Hopkins,Quataert 2011, Angles-Alcazar+2013)
+- [ ] Investigate the need for a sector based approach, (see Talbot+21, Fiacconi+18)
+
+### Feedback
+- [ ] Implement a simple version of two-mode AGN feedback (Teyssier+2011, Dubois+2012)
+- [ ] Implement a different weighting scheme for feedback and accretion
+- [ ] Play around with having a different (larger) feedback region than accretion region
+
+### Internal Black Hole evolution
+- [ ] Finalise the accretion disk (AD) and black hole (BH) internal model, (Talbot+21)
+- [ ] Design an efficient workflow for all of these processes
+- [ ] Implement a first version
+- [ ] Include a switch between the 'simple' BH model and this one
+- [ ] Leave room for other physics (e.g. disk alpha, R/H, phi_BH to be dynamically updated, see Chris Bambic's paper suggestions)
+
+### Couple the Internal Black hole model to a Blandford-Znajek Jet
+- [ ] Understand exactly what's happening in the Talbot+21 model
+- [ ] Implement into the code, adding a switch between this feedback mode and the original two-mode model
+- [ ] find an optimum injection geometry
+
+### Couple the Black Hole to RT
+- [ ] Settle on a full model to be used (e.g. Trebitsch+19,21,23)
+- [ ] Implement this model
+- [ ] Couple to the rest of feedback, ensure energy is conserved
+
+
+## Intended tests
+- [ ] Sink refine: Orbiting sink particle with refining mesh
+- [ ] Accretion: Typical Bondi-Hoyle-Lyttleton tests
+- [ ] Accretion: Idealised disk accretion
+- [ ] Feedback: Compare jet/quasar mode properties to RAMSES OG
+- [ ] Advanced Feedback: Same as above, redo some of the experiments from Talbot+21
+- [ ] RT Feedback: Idealised RT feedback with no jet, test if this produces a good Narrow Line Region (requires RTZ)
+- [ ] RT Feedback: Same jet tests as Talbot+21, compare the loading factors with the non-RT version above
+
+# Original README:
 ## mini-ramses ##
 
 The mini-ramses repository is a fork of the [main RAMSES repository][1]. It was created as a stripped-down version of the main code base created in order to facilitate the development of major updates of RAMSES' core routines. This stripped-down version is still available in the `master` branch.
