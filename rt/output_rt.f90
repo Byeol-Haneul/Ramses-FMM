@@ -127,10 +127,10 @@ subroutine backup_rt(r,g,m,mdl,filename)
   close(ilun)
 #endif
 end subroutine backup_rt
-!###################################################
-!###################################################
-!###################################################
-!###################################################
+!########################################################################
+!########################################################################
+!########################################################################
+!########################################################################
 subroutine file_descriptor_rt(r,filename,write_bkp_file)
   use amr_parameters, only: ndim,flen
   use rt_parameters, only: nrtgrp
@@ -163,4 +163,110 @@ subroutine file_descriptor_rt(r,filename,write_bkp_file)
   close(ilun)
 
 end subroutine file_descriptor_rt
+
+!########################################################################
+!########################################################################
+!########################################################################
+!########################################################################
+subroutine output_rtinfo(r, g, filename)
+
+! Output rt information into info_rt_XXXXX.txt
+!------------------------------------------------------------------------
+  use amr_parameters, only: flen
+  use amr_commons, only: run_t, global_t
+  use hydro_parameters, only: nion
+  use rt_parameters, only: nrtvar, nrtgrp
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  character(LEN=flen)::filename, fileloc
+  integer :: ilun
+  real(kind=8)::scale_np,scale_fp
+!------------------------------------------------------------------------
+  if (r%verbose) write(*,*)'Entering output_rtinfo'
+
+  ilun=11
+
+#ifdef RT
+  ! Conversion factor from user units to cgs units
+  call rt_units(r,g,scale_np,scale_fp)
+#endif
+
+  ! Open file
+  fileloc=TRIM(filename)
+  open(unit=ilun,file=fileloc,form='formatted')
+
+  ! Write run parameters
+  write(ilun,'("nrtvar       = ", I11)') nrtvar
+  !write(ilun,'("nion         = ", I11)') nion
+  write(ilun,'("nrtgrp       = ", I11)') nrtgrp
+  !write(ilun,'("iion         = ", I11)') r%iions
+  write(ilun,*)
+
+  ! Write cooling parameters
+  write(ilun,'("x_h          = ", E23.15)') r%x_h
+  write(ilun,'("y_he         = ", E23.15)') r%y_he
+  write(ilun,*)
+
+  ! Write physical parameters
+  write(ilun,'("unit_np      = ", E23.15)') scale_np
+  write(ilun,'("unit_fp      = ", E23.15)') scale_fp
+  write(ilun,'("rt_c_fraction= ", E23.15)') r%rt_c_fraction
+  write(ilun,*)
+
+  ! Write polytropic parameters
+  write(ilun,'("n_star       = ", E23.15)') r%eos_nH
+  write(ilun,'("T2_star      = ", E23.15)') r%eos_T2
+  write(ilun,'("g_star       = ", E23.15)') r%eos_index
+  write(ilun,*)
+  call write_group_props(r, .false., ilun)
+
+  close(ilun)
+
+end subroutine output_rtInfo
+
+!########################################################################
+!########################################################################
+!########################################################################
+!########################################################################
+subroutine write_group_props(r, update, lun)
+
+! Write photon group properties to file or std output.
+! lun => File identifier (use 6 for std. output)
+!------------------------------------------------------------------------
+  use amr_commons, only: run_t
+  use rt_parameters, only: nrtgrp
+  implicit none
+  type(run_t)::r
+  logical :: update
+  integer :: ip, lun
+!------------------------------------------------------------------------
+  if (.not. update) then
+     write(lun,*) 'Photon group properties------------------------------ '
+  else
+     write(lun,*) 'Photon properties have been changed to--------------- '
+  end if
+  write(lun, 901) r%group_L0(:)
+  write(lun, 902) r%group_L1(:)
+  write(lun, 903) r%spec2group(:)
+  do ip = 1, nrtgrp
+     write(lun, 907) ip
+     write(lun, 904) r%group_egy(ip)
+     write(lun, 905) r%group_csn(ip,:)
+     write(lun, 906) r%group_cse(ip,:)
+  end do
+  write (lun,*) '-------------------------------------------------------'
+
+901 format ('  groupL0  [eV]  = ', 20f12.3)
+902 format ('  groupL1  [eV]  = ', 20f12.3)
+903 format ('  spec2group     = ', 20I12)
+904 format ('  egy      [eV]  = ', 1pe12.3)
+905 format ('  csn    [cm^2]  = ', 20(1pe12.3))
+906 format ('  cse    [cm^2]  = ', 20(1pe12.3))
+907 format ('  ---Group', I2)
+
+end subroutine write_group_props
+
+
+
 end module output_rt_module

@@ -12,7 +12,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   use output_part_module, only: r_output_part
   use mdl_module, only: mdl_mkdir, mdl_wtime
   use cooling_module, only: output_cool
-  use output_rt_module, only: r_output_rt,file_descriptor_rt
+  use output_rt_module, only: r_output_rt,file_descriptor_rt,output_rtinfo
   implicit none
   type(pst_t)::pst
   logical::write_bkp_file
@@ -106,6 +106,8 @@ subroutine m_dump_all(pst,write_bkp_file)
      if(r%rt)then
         filename=TRIM(filedir)//'rt_header.txt'
         call file_descriptor_rt(r,filename,write_bkp_file)
+        filename=TRIM(filedir)//'rt_info.txt'
+        call output_rtinfo(r,g,filename)
      end if
      if(r%poisson)then
         filename=TRIM(filedir)//'grav_header.txt'
