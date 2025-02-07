@@ -274,7 +274,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            call solve_cooling(c,nH,T2,Zsolar,boost,dtcool,delta_T2,nleaf)
         else if(r%cooling_ism)then
            ! Use cooling from cooling_module_frig described in Audit & Hennebelle 2005
-           call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,1.4d0,nleaf)
+           call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,r%mu_mol,nleaf)
         else if(r%neq_chem)then
            call neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
