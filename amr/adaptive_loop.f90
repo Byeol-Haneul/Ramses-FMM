@@ -7,6 +7,7 @@ subroutine adaptive_loop(pst)
   use init_hydro_module, only: r_init_hydro
   use init_rt_module, only: r_init_rt
   use init_part_module, only: r_init_part
+  use init_xion_module, only: m_init_xion
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
   use init_refine_restart_module, only: m_init_refine_restart
@@ -63,6 +64,9 @@ subroutine adaptive_loop(pst)
   else
      call m_init_refine_restart(pst) ! Build AMR grid from restart file
   endif
+
+  ! Initialization of ionization fractions
+  if(r%is_init_xion) call m_init_xion(pst)
 
   ! Timing since startup
   tt2 = mdl_wtime(mdl)

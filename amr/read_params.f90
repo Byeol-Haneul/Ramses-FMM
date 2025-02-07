@@ -541,6 +541,17 @@ subroutine m_read_params(pst)
   nfile=max(nfile,1)
   nfile=min(nfile,s%g%ncpu)
 
+  !-------------------------------------------------
+  ! Set default initialisation of ionisation states:
+  ! -Off if restarting, but can set to true (for postprocessing)
+  ! -On otherwise, but can set to false
+  !-------------------------------------------------
+  if(nrestart .gt. 0) then
+     is_init_xion=.false.
+  else
+     is_init_xion=.true.
+  endif
+
   !--------------------------------------------------
   ! Check for errors in the namelist so far
   !--------------------------------------------------
