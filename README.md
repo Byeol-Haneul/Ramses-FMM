@@ -17,6 +17,7 @@ The original mini-ramses trunk is available on bitbucket at: https://bitbucket.o
 - [ ] Add simple bondi accretion
 - [ ] Add a weighting scheme (mass, volume, gaussian kernel)
 - [ ] Add flux accretion method (Bleuler+2014)
+- [ ] Add a time-step mechanism, such that the accretion is limited
 - [ ] Design a new angular momentum-based weighting scheme, (e.g. Hopkins,Quataert 2011, Angles-Alcazar+2013)
 - [ ] Investigate the need for a sector based approach, (see Talbot+21, Fiacconi+18)
 
