@@ -202,7 +202,7 @@ end subroutine backup_hydro
 !###################################################
 subroutine file_descriptor_hydro(r,filename,write_bkp_file)
   use amr_parameters, only: ndim,flen
-  use hydro_parameters, only: nvar,nener,nprim,ie
+  use hydro_parameters, only: nvar,nener,nprim,ie,nion
   use amr_commons, only: run_t
   implicit none
   type(run_t)::r
@@ -288,8 +288,35 @@ subroutine file_descriptor_hydro(r,filename,write_bkp_file)
 #endif
 #if NVAR>5+NENER
      ! Passive scalars
-     do ivar=ie+1+nener,nprim
-        write(ilun,'("variable #",I2,": scalar_",I1)')ivar,ivar-ie-nener
+     ivar=ie+1+nener
+     print*,'writing ',ie+1+nener, nprim
+     do while(ivar.le.nprim)
+        if(ivar.ge.r%iions.and.ivar.lt.r%iions+nion) then
+          ! Special cases for ionisation fractions
+          if(r%ixHI.gt.0) then
+            write(ilun,'("variable #",I2,": xHI")')ivar
+            ivar=ivar+1
+          endif
+          if(r%ixHiI.gt.0) then
+            write(ilun,'("variable #",I2,": xHII")')ivar
+            ivar=ivar+1
+          endif
+          if(r%ixHeII.gt.0) then
+            write(ilun,'("variable #",I2,": xHeII")')ivar
+            ivar=ivar+1
+          endif
+          if(r%ixHeIII.gt.0) then
+            write(ilun,'("variable #",I2,": xHeIII")')ivar
+            ivar=ivar+1
+          endif
+          do while(ivar.lt.r%iions+nion)
+            write(ilun,'("variable #",I2,": x_unused")')ivar
+            ivar=ivar+1
+          end do
+        else
+          write(ilun,'("variable #",I2,": scalar_",I1)')ivar,ivar-ie-nener
+          ivar=ivar+1
+        endif
      end do
 #endif
   endif
