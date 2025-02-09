@@ -392,6 +392,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      ! Find parent cell at level ilevel
      do idim=1,ndim
         ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
+        xcen(idim)=ckey(idim)+0.5
      end do
 
      ! Cell volume at level ilevel
@@ -408,6 +409,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ! NGP at level ilevel-1
         do idim=1,ndim
            ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
+           xcen(idim)=ckey(idim)+0.5
         end do
 
         ! Cell volume at level ilevel-1
