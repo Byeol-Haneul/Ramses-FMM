@@ -14,6 +14,7 @@ module mdl_parameters
      enumerator::MDL_INPUT_PART_ZOOM
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_STAR_ASCII
+     enumerator::MDL_INPUT_SINK_ASCII
      enumerator::MDL_INPUT_PART_RESTART
      enumerator::MDL_INPUT_PART_RAMSES
      enumerator::MDL_INPUT_PART_GADGET
