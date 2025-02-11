@@ -112,7 +112,7 @@ function worker_init(mdl) result(pst)
   use init_part_module, only: r_init_part, r_deallocate_gas
   use input_part_grafic_module, only: r_input_part_grafic
   use input_part_zoom_module, only: r_input_part_zoom
-  use input_part_ascii_module, only: r_input_part_ascii, r_input_star_ascii
+  use input_part_ascii_module, only: r_input_part_ascii, r_input_star_ascii, r_input_sink_ascii
   use input_part_restart_module, only: r_input_part_restart
   use input_part_ramses_module, only: r_input_part_ramses
   use input_part_gadget_module, only: r_input_part_gadget
@@ -204,6 +204,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ZOOM,        pst,C_FUNLOC(r_input_part_zoom),1,3,"input_part_zoom")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ASCII,       pst,C_FUNLOC(r_input_part_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_part_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_STAR_ASCII,       pst,C_FUNLOC(r_input_star_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_star_ascii")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_SINK_ASCII,       pst,C_FUNLOC(r_input_sink_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_sink_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RESTART,     pst,C_FUNLOC(r_input_part_restart),(MDL_MAX_CPU+1),0,"input_part_restart")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_RAMSES,      pst,C_FUNLOC(r_input_part_ramses),(MDL_MAX_CPU+1),0,"input_part_ramses")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_GADGET,      pst,C_FUNLOC(r_input_part_gadget),MDL_MAX_CPU,6,"input_part_gadget")
