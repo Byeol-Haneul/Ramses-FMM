@@ -143,6 +143,7 @@ function worker_init(mdl) result(pst)
   use sink_formation_module, only: r_sink_formation,r_sink_clump
   use tree_formation_module, only: r_tree_formation,r_tree_clump
   use feedback_module, only: r_thermal_feedback, r_mechanical_feedback
+  use sink_accretion_module, only: r_sink_accretion
   use newdt_fine_module, only: r_newdt_part,r_broadcast_dt
 #ifdef GRAV
   use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
@@ -252,6 +253,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_TREE_CLUMP,             pst,C_FUNLOC(r_tree_clump),1,2,"tree_clump")
   call mdl_add_service(pst%s%mdl,MDL_THERMAL_FEEDBACK,       pst,C_FUNLOC(r_thermal_feedback),1,2,"thermal_feedback")
   call mdl_add_service(pst%s%mdl,MDL_MECHANICAL_FEEDBACK,    pst,C_FUNLOC(r_mechanical_feedback),1,2,"mechanical_feedback")
+  call mdl_add_service(pst%s%mdl,MDL_SINK_ACCRETION,         pst,C_FUNLOC(r_sink_accretion),1,2,"sink_accretion")
   call mdl_add_service(pst%s%mdl,MDL_NEWDT_PART,             pst,C_FUNLOC(r_newdt_part),0,0,"newdt_part")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_DT,           pst,C_FUNLOC(r_broadcast_dt),24,0,"broadcast_dt")
   call mdl_add_service(pst%s%mdl,MDL_SYNCHRO_HYDRO_FINE,     pst,C_FUNLOC(r_synchro_hydro_fine),3,0,"synchro_hydro_fine")
