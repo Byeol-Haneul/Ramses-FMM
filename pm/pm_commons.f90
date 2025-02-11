@@ -16,6 +16,7 @@ module pm_commons
      real(dp),allocatable,dimension(:,:)   ::xp       ! Position
      real(dp),allocatable,dimension(:,:)   ::vp       ! Velocity
      real(dp),allocatable,dimension(:,:)   ::fp       ! Acceleration
+     real(dp),allocatable,dimension(:,:)   ::jp       ! Angular momentum
      real(dp),allocatable,dimension(:)     ::mp       ! Mass
      real(dp),allocatable,dimension(:)     ::zp       ! Metallicity
      real(dp),allocatable,dimension(:)     ::tp       ! Formation time
@@ -36,4 +37,14 @@ module pm_commons
      
   end type part_t
 
+contains
+  function cross(a,b)
+     use amr_parameters, only:dp
+     real(dp),dimension(1:3)::a,b
+     real(dp),dimension(1:3)::cross
+     !computes the cross product c= a x b
+     cross(1)=a(2)*b(3)-a(3)*b(2)
+     cross(2)=a(3)*b(1)-a(1)*b(3)
+     cross(3)=a(1)*b(2)-a(2)*b(1)
+  end function cross
 end module pm_commons
