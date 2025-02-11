@@ -36,13 +36,6 @@ subroutine m_read_rt_params(pst)
   !logical::rt_use_hll=.false.          ! Use hll flux (or the default glf)               !
   !logical::rt_is_outflow_bound=.false. ! Make all boundaries=outflow for RT              !
   real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
-  real(dp)::rt_err_grad_n(nrtgrp)=-1.   ! Photon number density gradient for refinement  !
-  real(dp)::rt_floor_n(nrtgrp)=1d-10    ! Photon number density floor for refinement      !
-  !real(dp)::rt_err_grad_xHI=-1.0       ! Ionization state gradient for refinement        !
-  !real(dp)::rt_err_grad_xHII=-1.0      ! Ionization state gradient for refinement        !
-  !real(dp)::rt_refine_aexp=-1.0        ! Start a for RT gradient refinement              !
-  !real(dp)::rt_floor_xHI=1d-10         ! Ionization state floor for refinement           !
-  !real(dp)::rt_floor_xHII=1d-10        ! Ionization state floor for refinement           !
   real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT        !
   !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
   integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
@@ -58,22 +51,6 @@ subroutine m_read_rt_params(pst)
   !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                            !
   !character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
   !character(LEN=128)::uv_file=''       ! File containing stellar energy distributions    !
-
-  ! Initial condition RT regions parameters-----------------------------------------------
-  integer                           ::rt_nregion=0
-  character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
-  real(dp),dimension(1:MAXREGION)   ::rt_reg_x_center=0.
-  real(dp),dimension(1:MAXREGION)   ::rt_reg_y_center=0.
-  real(dp),dimension(1:MAXREGION)   ::rt_reg_z_center=0.
-  real(dp),dimension(1:MAXREGION)   ::rt_reg_length_x=1.E10
-  real(dp),dimension(1:MAXREGION)   ::rt_reg_length_y=1.E10
-  real(dp),dimension(1:MAXREGION)   ::rt_reg_length_z=1.E10
-  real(dp),dimension(1:MAXREGION)   ::rt_exp_region=2.0
-  integer,dimension(1:MAXREGION)    ::rt_reg_group=1
-  real(dp),dimension(1:MAXREGION)   ::rt_n_region=0.                    ! Photon density
-  real(dp),dimension(1:MAXREGION)   ::rt_u_region=0.                    !    Photon flux
-  real(dp),dimension(1:MAXREGION)   ::rt_v_region=0.                    !    Photon flux
-  real(dp),dimension(1:MAXREGION)   ::rt_w_region=0.                    !    Photon flux
 
   ! RT source regions parameters----------------------------------------------------------
   integer                           ::rt_nsource=0
@@ -91,12 +68,6 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(1:MAXREGION)   ::rt_u_source=0.                      !    Photon flux
   real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                      !    Photon flux
   real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                      !    Photon flux
-
-  ! RT boundary condition parameters-------------------------------------------------------
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
 
   ! RT_GROUPS namelist---------------------------------------------------------------------
   ! integer::sedprops_update=-1                     ! Update sedprops from star populations
@@ -119,22 +90,12 @@ subroutine m_read_rt_params(pst)
   ! Namelist definitions
   !--------------------------------------------------
   namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
-       & ,rt_err_grad_n, rt_floor_n                                      &
-       ! RT regions (for initialization)                                 &
-       & ,units_np, rt_nregion, rt_region_type                           &
-       & ,rt_reg_x_center, rt_reg_y_center, rt_reg_z_center              &
-       & ,rt_reg_length_x, rt_reg_length_y, rt_reg_length_z              &
-       & ,rt_exp_region, rt_reg_group                                    &
-       & ,rt_n_region, rt_u_region, rt_v_region, rt_w_region             &
-       ! RT source regions (for every timestep)                          &
-       & ,rt_nsource, rt_source_type                                     &
+       & ,units_np
+  namelist/rt_sources/rt_nsource, rt_source_type                         &
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
        & ,rt_src_length_x, rt_src_length_y, rt_src_length_z              &
-       & ,rt_exp_source, rt_src_group,   rt_src_trace_group              &
-       & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source             &
-       ! RT boundaries                                                    &
-       & ,rt_n_bound,rt_u_bound,rt_v_bound,rt_w_bound
-
+       & ,rt_exp_source, rt_src_group, rt_src_trace_group                &
+       & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source
   namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
        & ,group_L0, group_L1, kappaAbs, kappaSc
 
@@ -157,33 +118,19 @@ subroutine m_read_rt_params(pst)
   rewind(1)
   read(1,NML=rt_groups,END=114)
 114 continue
+  rewind(1)
+  read(1,NML=rt_sources,END=115)
+115 continue
   close(1)
 
   ! Fill in all run parameters in corresponding structure
-
-  ! rt_params
   s%r%rt_otsa=rt_otsa
   s%r%rt_advect=rt_advect
   s%r%rt_c_fraction=rt_c_fraction
   s%r%rt_nsubcycle=rt_nsubcycle
-  s%r%rt_err_grad_n=rt_err_grad_n
-  s%r%rt_floor_n=rt_floor_n
   s%r%rt_courant_factor=rt_courant_factor
   s%r%units_np=units_np
-  s%r%rt_nregion=rt_nregion
-  s%r%rt_region_type=rt_region_type
-  s%r%rt_reg_x_center=rt_reg_x_center
-  s%r%rt_reg_y_center=rt_reg_y_center
-  s%r%rt_reg_z_center=rt_reg_z_center
-  s%r%rt_reg_length_x=rt_reg_length_x
-  s%r%rt_reg_length_y=rt_reg_length_y
-  s%r%rt_reg_length_z=rt_reg_length_z
-  s%r%rt_exp_region=rt_exp_region
-  s%r%rt_reg_group=rt_reg_group
-  s%r%rt_n_region=rt_n_region
-  s%r%rt_u_region=rt_u_region
-  s%r%rt_v_region=rt_v_region
-  s%r%rt_w_region=rt_w_region
+
   s%r%rt_nsource=rt_nsource
   s%r%rt_source_type=rt_source_type
   s%r%rt_src_x_center=rt_src_x_center
@@ -198,12 +145,7 @@ subroutine m_read_rt_params(pst)
   s%r%rt_u_source=rt_u_source
   s%r%rt_v_source=rt_v_source
   s%r%rt_w_source=rt_w_source
-  s%r%rt_n_bound=rt_n_bound
-  s%r%rt_u_bound=rt_u_bound
-  s%r%rt_v_bound=rt_v_bound
-  s%r%rt_w_bound=rt_w_bound
 
-  ! rt_groups
   s%r%group_csn=group_csn
   s%r%group_cse=group_cse
   s%r%group_egy=group_egy

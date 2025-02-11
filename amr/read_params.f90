@@ -5,6 +5,7 @@ contains
 subroutine m_read_params(pst)
   use amr_parameters
   use hydro_parameters
+  use rt_parameters, only: nrtgrp
   use ramses_commons, only: pst_t
   use mdl_module
   use movie_module, only: set_movie_vars
@@ -156,6 +157,42 @@ subroutine m_read_params(pst)
   character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
   real(dp)::ic_scale_m=1.0d0
 
+  ! Initial conditions hydro variables
+  real(dp),dimension(1:MAXREGION)::d_region=0.
+  real(dp),dimension(1:MAXREGION)::u_region=0.
+  real(dp),dimension(1:MAXREGION)::v_region=0.
+  real(dp),dimension(1:MAXREGION)::w_region=0.
+  real(dp),dimension(1:MAXREGION)::p_region=0.
+#if NENER>0
+  real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
+#endif
+#if NVAR>5+NENER
+  real(dp),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
+#endif
+#ifdef MHD
+  real(dp),dimension(1:MAXREGION)::B_region=0.
+  real(dp),dimension(1:MAXREGION)::C_region=0.
+  real(dp)::A_ave=0.,B_ave=0.,C_ave=0.
+#endif
+
+  ! Initial condition rt variables
+#ifdef RT
+  integer::rt_nregion=0
+  character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
+  real(dp),dimension(1:MAXREGION)::rt_reg_x_center=0.
+  real(dp),dimension(1:MAXREGION)::rt_reg_y_center=0.
+  real(dp),dimension(1:MAXREGION)::rt_reg_z_center=0.
+  real(dp),dimension(1:MAXREGION)::rt_reg_length_x=1.E10
+  real(dp),dimension(1:MAXREGION)::rt_reg_length_y=1.E10
+  real(dp),dimension(1:MAXREGION)::rt_reg_length_z=1.E10
+  real(dp),dimension(1:MAXREGION)::rt_exp_region=2.0
+  integer ,dimension(1:MAXREGION)::rt_reg_group=1
+  real(dp),dimension(1:MAXREGION)::rt_n_region=0.0 ! Photon density
+  real(dp),dimension(1:MAXREGION)::rt_u_region=0.0 !    Photon flux
+  real(dp),dimension(1:MAXREGION)::rt_v_region=0.0 !    Photon flux
+  real(dp),dimension(1:MAXREGION)::rt_w_region=0.0 !    Photon flux
+#endif
+
   ! Refinement parameters for hydro
   real(dp)::err_grad_d=-1.0  ! Density gradient
   real(dp)::err_grad_u=-1.0  ! Velocity gradient
@@ -182,23 +219,17 @@ subroutine m_read_params(pst)
 #endif
   real(dp),dimension(1:MAXLEVEL)::jeans_refine=-1.0
 
-  ! Initial conditions hydro variables
-  real(dp),dimension(1:MAXREGION)::d_region=0.
-  real(dp),dimension(1:MAXREGION)::u_region=0.
-  real(dp),dimension(1:MAXREGION)::v_region=0.
-  real(dp),dimension(1:MAXREGION)::w_region=0.
-  real(dp),dimension(1:MAXREGION)::p_region=0.
-#if NENER>0
-  real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
+  ! Refinement parameters for rt
+#ifdef RT
+  real(dp)::rt_err_grad_n(nrtgrp)=-1 ! Photon number density gradient for refinement
+  real(dp)::rt_floor_n(nrtgrp)=1d-10 ! Photon number density floor for refinement
+  real(dp)::rt_err_grad_xHI=-1.0     ! Ionization state gradient for refinement
+  real(dp)::rt_err_grad_xHII=-1.0    ! Ionization state gradient for refinement
+  real(dp)::rt_floor_xHI=1d-10       ! Ionization state floor for refinement
+  real(dp)::rt_floor_xHII=1d-10      ! Ionization state floor for refinement
+  real(dp)::rt_refine_aexp=-1.0      ! Start expansion factor for RT refinements
 #endif
-#if NVAR>5+NENER
-  real(dp),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
-#endif
-#ifdef MHD
-  real(dp),dimension(1:MAXREGION)::B_region=0.
-  real(dp),dimension(1:MAXREGION)::C_region=0.
-  real(dp)::A_ave=0.,B_ave=0.,C_ave=0.
-#endif
+
   ! Hydro solver parameters
   integer ::niter_riemann=10
   integer ::slope_type=1
@@ -260,6 +291,12 @@ subroutine m_read_params(pst)
 #endif
 #if NVAR>5+NENER
   real(dp),dimension(1:MAXBOUND,1:NVAR-5-NENER)::var_bound=0
+#endif
+#ifdef RT
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
 #endif
 
   ! Cooling parameters
@@ -387,6 +424,13 @@ subroutine m_read_params(pst)
 #ifdef MHD
        & ,B_region,C_region,A_ave,B_ave,C_ave &
 #endif
+#ifdef RT
+       & ,rt_nregion, rt_region_type                           &
+       & ,rt_reg_x_center, rt_reg_y_center, rt_reg_z_center    &
+       & ,rt_reg_length_x, rt_reg_length_y, rt_reg_length_z    &
+       & ,rt_exp_region, rt_reg_group                          &
+       & ,rt_n_region, rt_u_region, rt_v_region, rt_w_region
+#endif
        & ,d_region,u_region,v_region,w_region,p_region
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
@@ -405,6 +449,10 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
        & ,err_grad_var &
 #endif
+#ifdef RT
+       & ,rt_err_grad_n, rt_floor_n, rt_err_grad_xHI, rt_err_grad_xHII &
+       & ,rt_refine_aexp, rt_floor_xHI, rt_floor_xHII &
+#endif
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type &
@@ -419,6 +467,9 @@ subroutine m_read_params(pst)
 #endif
 #if NVAR>5+NENER
        & ,var_bound &
+#endif
+#ifdef RT
+       & ,rt_n_bound,rt_u_bound,rt_v_bound,rt_w_bound &
 #endif
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
   ! Cooling / basic chemistry parameters
@@ -1014,6 +1065,15 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
   s%r%err_grad_var=err_grad_var
 #endif
+#ifdef RT
+  s%r%rt_err_grad_n=rt_err_grad_n
+  s%r%rt_floor_n=rt_floor_n
+  s%r%rt_err_grad_xHI=rt_err_grad_xHI
+  s%r%rt_err_grad_xHII=rt_err_grad_xHII
+  s%r%rt_floor_xHI=rt_floor_xHI
+  s%r%rt_floor_xHII=rt_floor_xHII
+  s%r%rt_refine_aexp=rt_refine_aexp
+#endif
 
   if(nrestart>0)filetype='restart'
   s%r%filetype=filetype
@@ -1050,6 +1110,22 @@ subroutine m_read_params(pst)
   s%r%B_ave=B_ave
   s%r%C_ave=C_ave
 #endif
+#ifdef RT
+  s%r%rt_nregion=rt_nregion
+  s%r%rt_region_type=rt_region_type
+  s%r%rt_reg_x_center=rt_reg_x_center
+  s%r%rt_reg_y_center=rt_reg_y_center
+  s%r%rt_reg_z_center=rt_reg_z_center
+  s%r%rt_reg_length_x=rt_reg_length_x
+  s%r%rt_reg_length_y=rt_reg_length_y
+  s%r%rt_reg_length_z=rt_reg_length_z
+  s%r%rt_exp_region=rt_exp_region
+  s%r%rt_reg_group=rt_reg_group
+  s%r%rt_n_region=rt_n_region
+  s%r%rt_u_region=rt_u_region
+  s%r%rt_v_region=rt_v_region
+  s%r%rt_w_region=rt_w_region
+#endif
 
   s%r%periodic=periodic
   s%r%nbound=nbound
@@ -1073,6 +1149,12 @@ subroutine m_read_params(pst)
 #endif
 #if NVAR>5+NENER
   s%r%var_bound=var_bound
+#endif
+#ifdef RT
+  s%r%rt_n_bound=rt_n_bound
+  s%r%rt_u_bound=rt_u_bound
+  s%r%rt_v_bound=rt_v_bound
+  s%r%rt_w_bound=rt_w_bound
 #endif
 
   s%r%cooling=cooling
