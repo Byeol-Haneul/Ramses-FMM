@@ -77,7 +77,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   ! [0,1], [1,7], [2,33], [3,123], [4,257], [5,509], [6,697]
   integer,parameter::nBHnei=257
   real(dp),dimension(1:ndim,1:nBHnei)::xBHnei
-  real(dp),dimension(1:ndim,1:nBHnei)::vBHnei
+  !real(dp),dimension(1:ndim,1:nBHnei)::vBHnei
   real(dp)::dx_loc,vol_loc,vol_cell
   real(dp),dimension(1:ndim)::xcen,xnei
   integer,dimension(1:ndim)::ckey,ckey_nbor
@@ -102,17 +102,6 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   ! Gravitational constant
   factG=1
   if(r%cosmo)factG=3d0/4d0/twopi*g%omega_m*g%aexp
-  ! 1.  get basic information
-  ! 2.  set up grid region information (e.g. vectors, weights)
-  ! 3.  loop over all sinks
-  ! 4.  set up cache
-  ! 5.  select the sink region (get all of the grid IDs)
-  ! 6.  loop over them to get the local information (e.g. density, sound speed etc)
-  ! 7.  compute the accretion rate
-  ! 8.  accrete from the cells
-  ! 9.  accrete onto the sink particle
-  ! 10. update any extra information that's needed
-  ! 11. close cache
 
   ! Arrays to define neighbours (center=[0,0,0])
   ! normalized to dx = 1 = size of the central leaf cell in which a SN particle sits
@@ -131,9 +120,9 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               xBHnei(1,ind) = x/2d0
               xBHnei(2,ind) = y/2d0
               xBHnei(3,ind) = z/2d0
-              vBHnei(1,ind) = x/rr
-              vBHnei(2,ind) = y/rr
-              vBHnei(3,ind) = z/rr
+              !vBHnei(1,ind) = x/rr
+              !vBHnei(2,ind) = y/rr
+              !vBHnei(3,ind) = z/rr
               ! TODO: Compute weights here
            endif
         enddo
@@ -160,12 +149,12 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
      ! Find parent cell
      do idim=1,ndim
-        ckey(idim)=int(xcen(idim)/dx_loc)
+        ckey(idim) = int(xcen(idim)/dx_loc)
      end do
    
      ! Get parent cell at level ilevel using cache
-     hash_cell(0)=ilevel+1
-     hash_cell(1:ndim)=ckey(1:ndim)
+     hash_cell(0)      = ilevel+1
+     hash_cell(1:ndim) = ckey(1:ndim)
      call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icelln,flush_cache=.true.,fetch_cache=.true.)
 
      ! Initialise sink information at zero
@@ -174,7 +163,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      ! Loop over all cells in the accretion region, collecting physical properties and hash IDs
      do j=1,nBHnei
         ! Compute neighbouring cell coordinates
-        xnei(1:ndim)=xcen(1:ndim)+xBHnei(1:ndim,j)
+        xnei(1:ndim) = xcen(1:ndim) + xBHnei(1:ndim,j)
 
         ! Periodic boundary conditions
         do idim=1,ndim
@@ -183,9 +172,9 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         end do
 
         ! Get neighboring cell at current level
-        ckey_nbor(1:ndim)=int(xnei(1:ndim))
-        hash_nbor(0)=hash_cell(0)
-        hash_nbor(1:ndim)=ckey_nbor(1:ndim)
+        ckey_nbor(1:ndim)  = int(xnei(1:ndim))
+        hash_nbor(0)       = hash_cell(0)
+        hash_nbor(1:ndim)  = ckey_nbor(1:ndim)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
         
         ! Lock grid in cache
@@ -193,32 +182,32 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
         ! Save grid info for later
         grid_nbor(j)%p => gridn
-        icell_nbor(j) = icelln
-        level_nbor(j) = hash_nbor(0)-1
+        icell_nbor(j)  = icelln
+        level_nbor(j)  = hash_nbor(0)-1
 
         ! Get physical information
-        d = max(gridp%unew(icelln,1),r%smallr)
-        vv(1:ndim) = gridp%unew(icelln,2:ndim+1)/d
-        e = gridp%unew(icelln,5)
-        ethermal = (e - 0.5d0*d*sum(vv(:)**2)) / d
-        cs = max((r%gamma-1.0d0)*ethermal,r%smallc**2)!*boost**(-2d0/3d0)
+        d                = max(gridp%uold(icelln,1),r%smallr)
+        vv(1:ndim)       = gridp%uold(icelln,2:ndim+1)/d
+        e                = gridp%uold(icelln,5)
+        ethermal         = (e - 0.5d0*d*sum(vv(:)**2)) / d
+        cs               = max((r%gamma-1.0d0)*ethermal,r%smallc**2)!*boost**(-2d0/3d0)
         ! TODO: Add boost above
 
         ! Add to average (weighted) information
-        weight = 1 / nBHnei
-        rho_sink = rho_sink + d * weight
+        weight           = 1 / nBHnei
+        rho_sink         = rho_sink + d * weight
         vel_sink(1:ndim) = vel_sink(1:ndim) + vv(1:ndim) * weight
-        cs_sink = cs_sink + cs * weight
+        cs_sink          = cs_sink + cs * weight
      end do
 
      !!! Compute BHL accretion rate
      ! Bondi velocity
      v_rel(1:ndim) = vel_sink(1:ndim) - p%vp(ipart,1:ndim)
      if(r%bondi_use_vrel)then
-        velocity = sqrt(sum(v_rel(:)**2))
-        v_bondi = sqrt(vel**2 + cs**2)
+        velocity   = sqrt(sum(v_rel(:)**2))
+        v_bondi    = sqrt(vel**2 + cs**2)
      else
-        v_bondi = sqrt(cs**2)
+        v_bondi    = sqrt(cs**2)
      end if
      
      ! Sink radius
@@ -240,14 +229,14 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      ! Loop over all cells in the accretion region, proceeding with accretion
      do j=1,nBHnei
         ! Identify the correct grid and cell
-        gridn => grid_nbor(j)%p
+        gridn  => grid_nbor(j)%p
         icelln = icell_nbor(j)
 
         ! Get physical information
-        d = max(gridp%unew(icelln,1),r%smallr)
+        d          = max(gridp%unew(icelln,1),r%smallr)
         vv(1:ndim) = gridp%unew(icelln,2:ndim+1)/d
-        e = gridp%unew(icelln,5)
-        ethermal = (e - 0.5d0*d*sum(vv(:)**2))/d
+        e          = gridp%unew(icelln,5)
+        ethermal   = (e - 0.5d0*d*sum(vv(:)**2))/d
 
         ! Get accreted mass for this cell
         m_acc = dMBH_overdt * g%dtnew(p%levelp(ipart))
@@ -260,11 +249,13 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         ! TODO: Add other limiters here
 
         ! Accrete from the cell
-        gridp%unew(icelln,1) = gridp%unew(icelln,1) - m_acc / vol_loc
+        gridp%unew(icelln,1)       = gridp%unew(icelln,1) - m_acc / vol_loc
         do idim=1,ndim
          gridp%unew(icelln,idim+1) = gridp%unew(icelln,idim+1) - m_acc * vv(idim) / vol_loc
         end do
-        gridp%unew(icelln,5) = gridp%unew(icelln,5) - m_acc * ethermal / vol_loc
+        gridp%unew(icelln,5)       = gridp%unew(icelln,5) - m_acc * ethermal / vol_loc
+
+        ! TODO: Add passive scalar accretion here
 
         !!! Accrete onto the black hole
         ! Accreted relative center of mass
@@ -275,7 +266,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         l_acc(1:ndim) = m_acc * cross(xBHnei(1:ndim,j), v_rel(1:ndim))
 
         ! Add accreted properties to sink variables
-        p%mp(ipart) = p%mp(ipart) + m_acc
+        p%mp(ipart)        = p%mp(ipart) + m_acc
         p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + x_acc(1:ndim) / p%mp(ipart)
         p%vp(ipart,1:ndim) = p%vp(ipart,1:ndim) + p_acc(1:ndim) / p%mp(ipart)
         p%jp(ipart,1:ndim) = p%jp(ipart,1:ndim) + l_acc / p%mp(ipart)
