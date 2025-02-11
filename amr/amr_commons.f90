@@ -325,10 +325,13 @@ module amr_commons
      logical::rt_sink=.false.              ! Activate radiation from sink particles          !
      logical::rt_is_outflow_bound=.false.  ! Make all boundaries=outflow for RT              !
      real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
-     real(dp)::rt_err_grad_n(nrtgrp)=-1.   ! Photon number density gradient for refinement   !
+     real(dp)::rt_err_grad_n(nrtgrp)=-1    ! Photon number density gradient for refinement   !
      real(dp)::rt_floor_n(nrtgrp)=1d-10    ! Photon number density floor for refinement      !
      real(dp)::rt_floor_xHI=1d-10          ! Ionization state floor for refinement           !
      real(dp)::rt_floor_xHII=1d-10         ! Ionization state floor for refinement           !
+     real(dp)::rt_err_grad_xHI=-1          ! Ionization state gradient for refinement        !
+     real(dp)::rt_err_grad_xHII=-1         ! Ionization state gradient for refinement        !
+     real(dp)::rt_refine_aexp=-1           ! Expansion factor for rt refinements             !
      real(dp)::rt_c_fraction=1d0           ! Lightspeed fraction for RT                      !
      integer::rt_nsubcycle=1               ! Maximum number of RT-steps during one hydro/    !
                                            ! gravity/etc timestep                            !

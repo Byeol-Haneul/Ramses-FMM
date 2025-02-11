@@ -429,7 +429,7 @@ subroutine m_read_params(pst)
        & ,rt_reg_x_center, rt_reg_y_center, rt_reg_z_center    &
        & ,rt_reg_length_x, rt_reg_length_y, rt_reg_length_z    &
        & ,rt_exp_region, rt_reg_group                          &
-       & ,rt_n_region, rt_u_region, rt_v_region, rt_w_region
+       & ,rt_n_region, rt_u_region, rt_v_region, rt_w_region   &
 #endif
        & ,d_region,u_region,v_region,w_region,p_region
   ! Hydro solver parameters
