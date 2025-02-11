@@ -255,7 +255,7 @@ module amr_commons
      real(dp)::yield_SNII=0.1
      logical::thermal_feedback=.false.
      logical::mechanical_feedback=.false.
-     
+
      ! Clump finder parameters
      logical::clump_finder=.false.
      logical::clump_info=.false.
@@ -283,6 +283,7 @@ module amr_commons
      real(dp)::sink_mass_threshold=0
      real(dp)::sink_purity_threshold=-1
      real(dp)::sink_fraction_threshold=2d0
+     real(dp)::sink_radius
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format
