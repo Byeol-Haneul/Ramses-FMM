@@ -11,6 +11,7 @@ subroutine m_input_part(pst)
   use input_part_grafic_module, only: m_input_part_grafic
   use input_part_ascii_module, only: m_input_part_ascii
   use input_part_restart_module, only: m_input_part_restart
+  use input_part_ramses_module, only: m_input_part_ramses
   use input_part_gadget_module, only: m_input_part_gadget
   implicit none
   type(pst_t)::pst
@@ -30,6 +31,8 @@ subroutine m_input_part(pst)
      call m_input_part_ascii(pst)
   case('gadget')
      call m_input_part_gadget(pst)
+  case('ramses')
+     call m_input_part_ramses(pst)
   case('restart')
      call m_input_part_restart(pst)
   case DEFAULT
@@ -92,7 +95,7 @@ recursive subroutine r_broadcast_mp_min(pst,mp_min,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      pst%s%g%mp_min=mp_min
-     if(pst%s%r%aexp_lock_refine)then
+     if(pst%s%r%aexp_lock_refine>0d0)then
         ilevel = 1
         do while(.true.)
            mm1 = 0.5d0**(3*ilevel)*(1.0d0-pst%s%g%omega_b/pst%s%g%omega_m)

@@ -1,10 +1,10 @@
-module init_refine_restart_module
+module init_refine_ramses_module
 contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_init_refine_restart(pst)
+subroutine m_init_refine_ramses(pst)
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
   use hilbert
@@ -34,17 +34,16 @@ subroutine m_init_refine_restart(pst)
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
-  if(r%verbose)write(*,*)'Building adaptive grid from restart file',r%nrestart
+  if(r%verbose)write(*,*)'Building adaptive grid from output file '//TRIM(r%initfile(r%levelmin))
 
   ! Set local constants
   zero_key=0
 
-  ! Read parameters from restart file
-  call title(r%nrestart,nchar)
-  file_params='backup_'//TRIM(nchar)//'/params.bin'
+  ! Read parameters from output file
+  file_params=TRIM(r%initfile(r%levelmin))//'/params.bin'
   call input_params(mdl,r,g,file_params,ncpu_file,levelmin_file,nlevelmax_file)
-  write(*,'(" Restart snapshot has levelmin=",I4)')levelmin_file
-  write(*,'(" Restart snapshot has levelmax=",I4)')nlevelmax_file
+  write(*,'(" Output folder has levelmin=",I4)')levelmin_file
+  write(*,'(" Output folder has levelmax=",I4)')nlevelmax_file
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)  
@@ -88,7 +87,7 @@ subroutine m_init_refine_restart(pst)
      ! Count number of octs in each CPU file
      do icpu=1,ncpu_file
         call title(icpu,ncharcpu)
-        file_amr='backup_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
+        file_amr=TRIM(r%initfile(r%levelmin))//'/amr.'//TRIM(ncharcpu)
         ilun=10
         noct_skip(icpu)=0
         open(unit=ilun,file=file_amr,access="stream",action="read",form='unformatted')
@@ -117,7 +116,7 @@ subroutine m_init_refine_restart(pst)
      allocate(output_array(1:output_size))
 
      ! Call recursive slave routine
-     call r_init_refine_restart(pst,input_array,input_size,output_array,output_size)
+     call r_init_refine_ramses(pst,input_array,input_size,output_array,output_size)
 
      bound_key=reshape(transfer(output_array,zero_key),[nhilbert,g%ncpu+1])
      deallocate(input_array,output_array)
@@ -160,12 +159,12 @@ subroutine m_init_refine_restart(pst)
 
   end associate
 
-end subroutine m_init_refine_restart
+end subroutine m_init_refine_ramses
 !###############################################
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_array,output_size)
+recursive subroutine r_init_refine_ramses(pst,input_array,input_size,output_array,output_size)
   use mdl_module
   use amr_parameters, only: nhilbert
   use ramses_commons, only: pst_t
@@ -188,8 +187,8 @@ recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_arr
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RESTART,pst%iUpper+1,input_size,output_size,input_array)
-     call r_init_refine_restart(pst%pLower,input_array,input_size,output_array,output_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_REFINE_RAMSES,pst%iUpper+1,input_size,output_size,input_array)
+     call r_init_refine_ramses(pst%pLower,input_array,input_size,output_array,output_size)
      allocate(next_output_array(1:output_size))
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output_array)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
@@ -212,25 +211,26 @@ recursive subroutine r_init_refine_restart(pst,input_array,input_size,output_arr
      nskip_file=input_array(ncpu_file+5:2*ncpu_file+4)
      allocate(bound_key(1:nhilbert,0:pst%s%g%ncpu))
      bound_key=0
-     call init_refine_restart(pst%s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key)
+     call init_refine_ramses(pst%s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key)
      output_array=transfer(reshape(bound_key,[nhilbert*(pst%s%g%ncpu+1)]),output_array)
      deallocate(bound_key)
      deallocate(noct_file,nskip_file)
   endif
 
-end subroutine r_init_refine_restart
+end subroutine r_init_refine_ramses
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key_target)
+subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,noct_file,nskip_file,bound_key_target)
   !--------------------------------------------------------------
-  ! This routine builds from a RAMSES restart file
+  ! This routine builds from a RAMSES output file
   ! the initial AMR grid.
   !--------------------------------------------------------------
   use mdl_module, only: mdl_abort
   use amr_parameters, only: dp,nhilbert,ndim,twotondim,nvector
-  use hydro_parameters, only: nvar
+  use input_hydro_condinit_module, only: input_hydro_vecpot,cons_from_prim
+  use hydro_parameters, only: nvar,nprim,nener,ie
   use ramses_commons, only: ramses_t
   use hash
   use hilbert
@@ -243,7 +243,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
   ! Local variables
   integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,ilun
-  integer::i,ind,istart,iend,noct_tmp,ilev,ioct
+  integer::i,n,ind,istart,iend,noct_tmp,ilev,ioct,idim
   integer::igrid,igrid_start,nleft,nright,ileft,iright
   character(LEN=80)::file_params,file_amr,file_hydro,file_grav
   character(LEN=5)::nchar,ncharcpu
@@ -261,10 +261,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
   integer,dimension(1:ndim)::ckey
   logical,dimension(1:twotondim)::refined
-  real(dp),dimension(1:twotondim,1:nvar)::uold
-  real(dp),dimension(1:twotondim,1:6)::bold
-  real(dp),dimension(1:twotondim,1:3)::f
-  real(dp),dimension(1:twotondim)::phi,rho
+  real(kind=4),dimension(1:twotondim,1:nprim)::qout
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -289,7 +286,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   do icpu=2,ncpu_file
      noct_cum(icpu)=noct_cum(icpu-1)+noct_file(icpu)
   end do
-     
+
   !------------------------------------------
   ! New cumulative numbers of octs per cpu
   !------------------------------------------
@@ -329,9 +326,6 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   !----------------------------
   ! Read octs data in files
   !----------------------------
-  ! Restart filename
-  call title(r%nrestart,nchar)
-
   ! Loop over relevant files (if any)
   do icpu=ileft,iright
      if(icpu>1)then
@@ -342,28 +336,17 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
         iend=MIN(nright,noct_file(icpu))
      endif
      call title(icpu,ncharcpu)
-     
+
      ! Prepare reading the AMR file
-     file_amr='backup_'//TRIM(nchar)//'/amr.'//TRIM(ncharcpu)
+     file_amr=TRIM(r%initfile(r%levelmin))//'/amr.'//TRIM(ncharcpu)
      open(unit=10,file=file_amr,access="stream",action="read",form='unformatted')
      iskip_amr=13+4*(nlevelmax_file-levelmin_file+1)+(4*ndim+4*twotondim)*nskip_file(icpu)
 
      ! Prepare reading the HYDRO file
      if(r%hydro)then
-        file_hydro='backup_'//TRIM(nchar)//'/hydro.'//TRIM(ncharcpu)
+        file_hydro=TRIM(r%initfile(r%levelmin))//'/hydro.'//TRIM(ncharcpu)
         open(unit=11,file=file_hydro,access="stream",action="read",form='unformatted')
-#ifdef MHD
-        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*(nvar+6))*nskip_file(icpu)
-#else
-        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nvar)*nskip_file(icpu)
-#endif
-     endif
-
-     ! Prepare reading the GRAV file
-     if(r%poisson)then
-        file_grav='backup_'//TRIM(nchar)//'/grav.'//TRIM(ncharcpu)
-        open(unit=12,file=file_grav,access="stream",action="read",form='unformatted')
-        iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*(ndim+1))*nskip_file(icpu)
+        iskip_hydro=17+4*(nlevelmax_file-levelmin_file+1)+(4*twotondim*nprim)*nskip_file(icpu)
      endif
 
      ! Loop over useful octs in file
@@ -377,24 +360,8 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
         ! Read values from HYDRO files
         if(r%hydro)then
-#ifdef MHD
-           ipos=iskip_hydro+(8*twotondim*(nvar+6))*(i-1)
-#else
-           ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
-#endif
-           read(11,POS=ipos)uold
-#ifdef MHD
-           ipos=ipos+8*twotondim*nvar
-           read(11,POS=ipos)bold
-#endif
-        endif
-
-        ! Read values from GRAV files
-        if(r%poisson)then
-           ipos=iskip_grav+(8*twotondim*(ndim+1))*(i-1)
-           read(12,POS=ipos)phi
-           ipos=ipos+8*twotondim
-           read(12,POS=ipos)f
+           ipos=iskip_hydro+(4*twotondim*nprim)*(i-1)
+           read(11,POS=ipos)qout
         endif
 
         ! Create new oct in memory
@@ -408,25 +375,30 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
         m%tail(ilevel)=igrid
         m%noct(ilevel)=m%noct(ilevel)+1
         m%noct_used=m%noct_used+1
-        
-        ! Fill values from files
+
+        ! Fill primitive variables from files
+        ! Ignore magnetic field if present
         m%grid(igrid)%lev=ilevel
         m%grid(igrid)%ckey=ckey
         m%grid(igrid)%refined=refined
         if(r%hydro)then
 #ifdef HYDRO
-           m%grid(igrid)%uold=uold
+           do ind=1,twotondim
+              m%grid(igrid)%uold(ind,1:5)=qout(ind,1:5) ! Density, velocity, pressure
+#if NENER>0
+              do irad=1,nener ! Non-thermal pressures
+                 m%grid(igrid)%uold(ind,5+irad)=qout(ind,ie+irad)
+              end do
 #endif
-#ifdef MHD
-           m%grid(igrid)%bold=bold
+#if NVAR>5+NENER
+              do n=1,nvar-5-nener ! Passive scalar mass fraction
+                 m%grid(igrid)%uold(ind,5+nener+n)=qout(ind,ie+nener+n)
+              end do
+#endif
+           end do
 #endif
         endif
-#ifdef GRAV
-        if(r%poisson)then
-           m%grid(igrid)%phi=phi
-           m%grid(igrid)%f=f
-        endif
-#endif
+
         ! Set flag1 to preserve refinements
         do ind=1,twotondim
            if(m%grid(igrid)%refined(ind))then
@@ -451,11 +423,15 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      if(r%hydro)then
         close(11)
      endif
-     if(r%poisson)then
-        close(12)
-     endif
   end do
-  
+
+  if(r%hydro)then
+     ! Compute initial magnetic field
+     call input_hydro_vecpot(r,g,m,ilevel)
+     ! Convert primitive to conservative
+     call cons_from_prim(r,g,m,ilevel)
+  endif
+
   !-----------
   ! Super-octs
   !-----------
@@ -485,9 +461,9 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
   end associate
 
-end subroutine init_refine_restart
+end subroutine init_refine_ramses
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-end module init_refine_restart_module
+end module init_refine_ramses_module

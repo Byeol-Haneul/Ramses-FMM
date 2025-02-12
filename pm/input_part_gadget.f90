@@ -476,9 +476,9 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   if(r%hydro)mgas=sum(gas%mp(1:gas%npart))
   
   ! Put all particles inside levelmin 
-  if(r%pic)call init_tree(r,p)
-  if(r%hydro)call init_tree(r,gas)
-  if(r%star)call init_tree(r,star)
+  if(r%pic)call init_levelmin(r,p)
+  if(r%hydro)call init_levelmin(r,gas)
+  if(r%star)call init_levelmin(r,star)
 
   end associate
 
@@ -600,7 +600,7 @@ end subroutine trim_box
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine init_tree(r,p)
+subroutine init_levelmin(r,p)
   use amr_commons, only: run_t
   use pm_commons, only: part_t
   type(run_t)::r
@@ -610,7 +610,7 @@ subroutine init_tree(r,p)
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart  
-end subroutine init_tree
+end subroutine init_levelmin
 !#########################################################################
 !#########################################################################
 !#########################################################################

@@ -274,7 +274,7 @@ subroutine multipole_split_cells(s,ilevel)
   associate(r=>s%r,g=>s%g,m=>s%m)
   
   !-------------------------------------------------------
-  ! Perform octree restriction from level ilevel+1
+  ! Perform Multigrid restriction from level ilevel+1
   !-------------------------------------------------------
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
@@ -657,6 +657,7 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
      call cic_part(pst%s,pst%s%p,ilevel,rtype)
      if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
      if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
+     if(pst%s%r%tree)call cic_part(pst%s,pst%s%tree,ilevel,rtype)
   endif
 
 end subroutine r_cic_part
@@ -690,7 +691,7 @@ subroutine cic_part(s,p,ilevel,rtype)
   real(kind=8)::dx_loc,vol_loc
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::star,sink
+  logical::dark,star,sink,tree
   
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -698,7 +699,9 @@ subroutine cic_part(s,p,ilevel,rtype)
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
-  ! Are particles stars or sinks?
+  ! Are particles dark  matter, tree, stars or sinks?
+  dark = p%type.eq.  DM_TYPE
+  tree = p%type.eq.TREE_TYPE
   star = p%type.eq.STAR_TYPE
   sink = p%type.eq.SINK_TYPE
 
@@ -709,10 +712,11 @@ subroutine cic_part(s,p,ilevel,rtype)
   ix=0
   call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
 
-  ! Don't deposit mass depending on rho action type
-  if(p%type.eq.  DM_TYPE.and.rtype.NE.0.and.rtype.NE.1)return
-  if(p%type.eq.STAR_TYPE.and.rtype.NE.0.and.rtype.NE.2)return
-  if(p%type.eq.SINK_TYPE.and.rtype.NE.0.and.rtype.NE.3)return
+  ! Don't deposit mass depending on rho action type and paticle type
+  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(star.and.rtype.NE.0.and.rtype.NE.2)return
+  if(sink.and.rtype.NE.0.and.rtype.NE.3)return
+  if(tree)return
 
   ! Compute contribution to multipole
   if(ilevel==r%levelmin)then
@@ -808,10 +812,17 @@ subroutine cic_part(s,p,ilevel,rtype)
         ! Get parent cell using write-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
+           ! Compute mass density field
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           if(star)then
+           ! Compute refinement criterion
+#ifdef HYDRO
+           ! For stars or sinks use the baryonic mass
+           if(star.or.sink)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
-           else
+           endif
+#endif
+           ! For dark matter particles, use particle count
+           if(dark)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
@@ -930,6 +941,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      call split_part(pst%s,pst%s%p,ilevel)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
+     if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
   endif
 
 end subroutine r_split_part
@@ -1006,7 +1018,7 @@ subroutine split_part(s,p,ilevel)
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp
+  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp
   integer,dimension(1:ndim)::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::i,ipart,jpart,idim,icell,ilev
@@ -1138,20 +1150,38 @@ subroutine split_part(s,p,ilevel)
            p%zp(ipart)=p%zp(jpart)
            p%zp(jpart)=mp_tmp
         endif
+        ! Swap acceleration
+        if(allocated(p%fp))then
+           fp_tmp(1:ndim)=p%fp(ipart,1:ndim)
+           p%fp(ipart,1:ndim)=p%fp(jpart,1:ndim)
+           p%fp(jpart,1:ndim)=fp_tmp(1:ndim)
+        endif
         ! Swap age
         if(allocated(p%tp))then
            mp_tmp=p%tp(ipart)
            p%tp(ipart)=p%tp(jpart)
            p%tp(jpart)=mp_tmp
         endif
-        ! Swap ids
-        idp_tmp=p%idp(ipart)
-        p%idp(ipart)=p%idp(jpart)
-        p%idp(jpart)=idp_tmp
+        ! Swap merging age
+        if(allocated(p%tm))then
+           mp_tmp=p%tm(ipart)
+           p%tm(ipart)=p%tm(jpart)
+           p%tm(jpart)=mp_tmp
+        endif
         ! Swap levels
         levelp_tmp=p%levelp(ipart)
         p%levelp(ipart)=p%levelp(jpart)
         p%levelp(jpart)=levelp_tmp
+        ! Swap ids
+        idp_tmp=p%idp(ipart)
+        p%idp(ipart)=p%idp(jpart)
+        p%idp(jpart)=idp_tmp
+        ! Swap merging ids
+        if(allocated(p%idm))then
+           idp_tmp=p%idm(ipart)
+           p%idm(ipart)=p%idm(jpart)
+           p%idm(jpart)=idp_tmp
+        endif
      end do
   end do
 

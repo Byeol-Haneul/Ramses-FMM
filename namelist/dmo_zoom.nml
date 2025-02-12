@@ -48,3 +48,17 @@ ivar_refine=0
 mass_cut_refine=2e-9
 /
 
+&CLUMP_PARAMS
+clump_finder=.true.
+merger_tree=.true.
+rho_type_clump=1
+density_threshold=80
+relevance_threshold=3
+purity_threshold=0.98
+saddle_threshold=200
+mass_threshold=9.3e-9
+output_clump=.true.
+output_peak_grid=.true.
+output_peak_part=.true.
+output_peak_tree=.true.
+/

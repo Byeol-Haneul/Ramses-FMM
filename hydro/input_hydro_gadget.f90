@@ -37,6 +37,7 @@ subroutine input_hydro_gadget(s,ilevel)
   use cache_commons
   use cache
   use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
+  use input_hydro_condinit_module, only: input_hydro_vecpot,cons_from_prim
   use marshal, only: pack_fetch_refine,unpack_fetch_refine
   use boundaries, only: init_bound_refine
   implicit none
@@ -72,7 +73,7 @@ subroutine input_hydro_gadget(s,ilevel)
   ! Deposit gas particle variables to the grid
   ! using cloud-in-cell. We deposit only mass,
   ! momentum, internal energy and metallicity.
-  !-----------------------------------------------
+  !----------------------------------------------
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel
@@ -151,9 +152,7 @@ subroutine input_hydro_gadget(s,ilevel)
      ckey(1:3,7)=(/ig(1),id(2),id(3)/)
      ckey(1:3,8)=(/id(1),id(2),id(3)/)
 #endif
-
-#ifdef HYDRO
-     ! Update mass, momentum, internal energy and metallicity
+     ! Update mass, momentum, specific internal energy and metallicity
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell using write-only cache
@@ -169,16 +168,15 @@ subroutine input_hydro_gadget(s,ilevel)
            endif
         endif
      end do
-#endif
-
+     ! End loop over cloud
   end do
   ! End loop over particles
 
   call close_cache(s,m%grid_dict)
 
-  !----------------------------------------------
+  !--------------------
   ! Set uold to unew
-  !-----------------------------------------------
+  !--------------------
   do igrid=m%head(ilevel),m%tail(ilevel)
      m%grid(igrid)%uold=m%grid(igrid)%unew
   end do
@@ -187,7 +185,7 @@ subroutine input_hydro_gadget(s,ilevel)
   ! Set empty cells to minumum values from
   ! the namelist IG medium variables.
   ! Convert primitive to conservative variables.
-  !-----------------------------------------------
+  !----------------------------------------------
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
   ! Deal with empty cells
@@ -206,22 +204,35 @@ subroutine input_hydro_gadget(s,ilevel)
      end do
   end do
 
-  ! Add here magnetic field and non-thermal energies
-
-  ! Compute total energy
+  !----------------------------------------------
+  ! Compute proper primitive variables.
+  !----------------------------------------------
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
-        if(r%entropy) then
-           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)*(r%gamma-1)/m%grid(igrid)%uold(ind,1)**(r%gamma-1)
-        endif
-        ekin=0d0
+        ! From momentum to velocity
         do idim=1,3
-           ekin=ekin+0.5*m%grid(igrid)%uold(ind,idim+1)**2/m%grid(igrid)%uold(ind,1)
+           m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)/m%grid(igrid)%uold(ind,1)
         end do
-        m%grid(igrid)%uold(ind,5)=m%grid(igrid)%uold(ind,5)+ekin
+        ! From internal energy density to pressure
+        m%grid(igrid)%uold(ind,5)=(r%gamma-1)*m%grid(igrid)%uold(ind,5)
+        ! From metal mass density to metal mass fraction
+        if(r%metal) then
+           m%grid(igrid)%uold(ind,r%imetal)=m%grid(igrid)%uold(ind,r%imetal)/m%grid(igrid)%uold(ind,1)
+        endif
+        ! Compute entropy from pressure
+        if(r%entropy) then
+           m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)/m%grid(igrid)%uold(ind,1)**r%gamma
+        endif
      end do
   end do
+
+  ! Compute initial magnetic field
+  call input_hydro_vecpot(r,g,m,ilevel)
+
+  ! Convert primitive to conservative
+  call cons_from_prim(r,g,m,ilevel)
 #endif
+
   end associate
 
 end subroutine input_hydro_gadget

@@ -36,6 +36,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            filename2=TRIM(filename)//'sink.'
            call backup_part(pst%s%r,pst%s%g,pst%s%sink,filename2)
         endif
+        if(pst%s%r%tree)then
+           filename2=TRIM(filename)//'tree.'
+           call backup_part(pst%s%r,pst%s%g,pst%s%tree,filename2)
+        endif
      else
         filename2=TRIM(filename)//'part.'
         call output_part(pst%s,pst%s%p,filename2)
@@ -46,6 +50,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
         if(pst%s%r%sink)then
            filename2=TRIM(filename)//'sink.'
            call output_part(pst%s,pst%s%sink,filename2)
+        endif
+        if(pst%s%r%tree)then
+           filename2=TRIM(filename)//'tree.'
+           call output_part(pst%s,pst%s%tree,filename2)
         endif
      endif
   endif
@@ -76,8 +84,9 @@ subroutine output_part(s,p,filename)
 
   call open_part_file(s,p,filename,nskip,ilun)
 
-  ! Write position
   allocate(xsp(1:p%npart))
+
+  ! Write position
   do idim=1,ndim
      do i=1,p%npart
         xsp(i)=p%xp(i,idim)
@@ -135,27 +144,52 @@ subroutine output_part(s,p,filename)
      write(ilun,POS=nskip(ivar))
      write(ilun)xsp
   endif
+
+  ! Write merging time
+  if(allocated(p%tm))then
+     do i=1,p%npart
+        xsp(i)=p%tm(i)
+     end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
+     write(ilun)xsp
+  endif
+
   deallocate(xsp)
 
-  ! Write identity
-  allocate(ii8(1:p%npart))
-  do i=1,p%npart
-     ii8(i)=p%idp(i)
-  end do
-  ivar=ivar+1
-  write(ilun,POS=nskip(ivar))
-  write(ilun)ii8
-  deallocate(ii8)
+  allocate(ll(1:p%npart))
 
   ! Write level
-  allocate(ll(1:p%npart))
   do i=1,p%npart
      ll(i)=p%levelp(i)
   end do
   ivar=ivar+1
   write(ilun,POS=nskip(ivar))
   write(ilun)ll
+
   deallocate(ll)
+
+  allocate(ii8(1:p%npart))
+
+  ! Write identity
+  do i=1,p%npart
+     ii8(i)=p%idp(i)
+  end do
+  ivar=ivar+1
+  write(ilun,POS=nskip(ivar))
+  write(ilun)ii8
+
+  ! Write merging identity
+  if(allocated(p%idm))then
+     do i=1,p%npart
+        ii8(i)=p%idm(i)
+     end do
+     ivar=ivar+1
+     write(ilun,POS=nskip(ivar))
+     write(ilun)ii8
+  endif
+
+  deallocate(ii8)
 
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   ! Write potential (optional)
@@ -212,8 +246,9 @@ subroutine backup_part(r,g,p,filename)
   write(ilun)ndim
   write(ilun)p%npart
 
-  ! Write position
   allocate(xdp(1:p%npart))
+
+  ! Write position
   do idim=1,ndim
      do i=1,p%npart
         xdp(i)=p%xp(i,idim)
@@ -260,23 +295,44 @@ subroutine backup_part(r,g,p,filename)
      end do
      write(ilun)xdp
   endif
+
+  ! Write merging time
+  if(allocated(p%tm))then
+     do i=1,p%npart
+        xdp(i)=p%tm(i)
+     end do
+     write(ilun)xdp
+  endif
+
   deallocate(xdp)
 
-  ! Write identity
-  allocate(ii8(1:p%npart))
-  do i=1,p%npart
-     ii8(i)=p%idp(i)
-  end do
-  write(ilun)ii8
-  deallocate(ii8)
+  allocate(ll(1:p%npart))
 
   ! Write level
-  allocate(ll(1:p%npart))
   do i=1,p%npart
      ll(i)=p%levelp(i)
   end do
   write(ilun)ll
+
   deallocate(ll)
+
+  allocate(ii8(1:p%npart))
+
+  ! Write identity
+  do i=1,p%npart
+     ii8(i)=p%idp(i)
+  end do
+  write(ilun)ii8
+
+  ! Write merging identity
+  if(allocated(p%idm))then
+     do i=1,p%npart
+        ii8(i)=p%idm(i)
+     end do
+     write(ilun)ii8
+  endif
+
+  deallocate(ii8)
 
   close(ilun)
 

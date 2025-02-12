@@ -27,5 +27,5 @@ The block named `&REFINE_PARAMS` contains the parameters related to grid refinem
 | `mass_cut_refine`   | `real` | -1.0   | Quasi-Lagrangian strategy: mass threshold in code units for particle-based refinement. Particles more massive than this value are ignored. |
 | `ivar_refine`       | `int`  | -1    | Refinement map strategy: variable index (usually a passive scalar) used to define the refinement map. |
 | `var_cut_refine`    | `real` | -1.0  | Refinement map strategy: threshold used on the refinement map to allow refinements. |
-| `aexp_lock_refine`  | `logical` | .false.  | Activate progressive unlocking of levels when expansion factor doubles. This is used in cosmological simulations to enforce a quasi-constant resolution in physical units although length scales are in comoving units. The maximum level set by `levelmax` is activated at `aexp=0.8`. |
+| `aexp_lock_refine`  | `real` | -1.0  | Activate progressive unlocking of levels when expansion factor doubles. This is used in cosmological simulations to enforce a quasi-constant resolution in physical units although length scales are in comoving units. The maximum level set by `levelmax` is activated after `aexp=aexp_lock_refine`. |
 

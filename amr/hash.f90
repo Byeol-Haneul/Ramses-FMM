@@ -309,8 +309,8 @@ contains
        do while (htable%data(ibucket)%next_ibucket .ne. 0)
           ! Check if key already exists - abort if so
           if (htable%data(ibucket)%key == key)then
-             write(*,*) "trying to insert already existing key: ",key
-             write(*,*) "existing key: ", htable%data(ibucket)%key
+             write(*,*) "trying to insert already existing simple key: ",key,val
+             write(*,*) "existing simple key: ", htable%data(ibucket)%key
              stop
           end if
           ibucket = htable%data(ibucket)%next_ibucket
@@ -318,8 +318,8 @@ contains
 
        ! Check again (at the end of linked list)
        if (htable%data(ibucket)%key == key)then
-          write(*,*) "trying to insert already existing key: ",key
-          CALL ABORT
+          write(*,*) "trying to insert already existing simple key (end): ",key,val
+          write(*,*) "existing simple key (end): ", htable%data(ibucket)%key
           stop
        end if
 

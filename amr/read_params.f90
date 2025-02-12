@@ -21,6 +21,7 @@ subroutine m_read_params(pst)
   integer(kind=8)::nparttot=0
   integer(kind=8)::nstartot=0
   integer(kind=8)::nsinktot=0
+  integer(kind=8)::ntreetot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -36,6 +37,7 @@ subroutine m_read_params(pst)
   logical::hydro   =.false.   ! Hydro activated
   logical::star    =.false.   ! Stars and star formation activated
   logical::sink    =.false.   ! Sinks and sink formation activated
+  logical::merger_tree=.false. ! Merger tree particles activated
   logical::verbose =.false.   ! Write everything
   logical::debug   =.false.   ! Debug mode activated
   logical::static  =.false.   ! Static mode activated
@@ -50,6 +52,7 @@ subroutine m_read_params(pst)
   integer::npartmax=0 
   integer::nstarmax=0
   integer::nsinkmax=0
+  integer::ntreemax=0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -121,7 +124,7 @@ subroutine m_read_params(pst)
   real(dp)::var_cut_refine=-1.0 ! Threshold for variable-based refinement
   real(dp)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
   integer::ivar_refine=-1 ! Variable index for refinement
-  logical::aexp_lock_refine=.false.
+  real(dp)::aexp_lock_refine=-1.0
   logical::pic_lock_refine=.false.
 
   ! Default units
@@ -269,6 +272,7 @@ subroutine m_read_params(pst)
   real(dp)::T2max=1d50
 
   ! Star formation parameters
+  integer::sf_model=1
   real(dp)::T2_star=2e4
   real(dp)::n_star=0.1
   real(dp)::eps_star=0.01
@@ -285,24 +289,32 @@ subroutine m_read_params(pst)
   logical::mechanical_feedback=.false.
 
   ! Clump finder parameters
-  integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks
   logical::clump_finder=.false.
   logical::clump_info=.false.
   logical::output_clump=.false.
-  logical::output_peak=.false.
+  logical::output_peak_grid=.false.
   logical::output_peak_part=.false.
   logical::output_peak_star=.false.
-  logical::output_halo_part=.false.
-  logical::output_halo_star=.false.
+  logical::output_peak_sink=.false.
+  logical::output_peak_tree=.false.
+  integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
   real(dp)::relevance_threshold=2
   real(dp)::density_threshold=-1
   real(dp)::saddle_threshold=-1
   real(dp)::mass_threshold=0
+  real(dp)::purity_threshold=-1
+  real(dp)::fraction_threshold=0.1d0
 
   ! Sink parameters
   integer::rho_type_sink=1
   logical::sink_descent=.false.
   real(dp)::fudge_descent=0.5d0
+  real(dp)::sink_relevance_threshold=2
+  real(dp)::sink_density_threshold=-1
+  real(dp)::sink_saddle_threshold=-1
+  real(dp)::sink_mass_threshold=0
+  real(dp)::sink_purity_threshold=-1
+  real(dp)::sink_fraction_threshold=2d0
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -399,16 +411,19 @@ subroutine m_read_params(pst)
        & ,eos_type,eos_nH,eos_index,eos_T2 &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
   ! Star particles and star formation recipe
-  namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star
+  namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Star particles and star formation recipe
-  namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent
+  namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
+       & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
+       & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
-       & ,output_clump,output_peak,output_peak_part,output_peak_star,output_halo_part,output_halo_star &
-       & ,relevance_threshold,density_threshold,saddle_threshold,mass_threshold &
-       & ,rho_type_clump
+       & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
+       & ,relevance_threshold,density_threshold,saddle_threshold &
+       & ,mass_threshold,purity_threshold,fraction_threshold &
+       & ,merger_tree,ntreemax,ntreetot,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
@@ -545,12 +560,17 @@ subroutine m_read_params(pst)
   if(nsinkmax==0)then
      nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
   endif
+  if(ntreemax==0)then
+     ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntreemax==0)then
+        ntreemax=int(npartmax/100)
+     endif
+  endif
 #ifdef HYDRO
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
      write(*,*)'the code was compiled with HYDRO=1'
-     write(*,*)'Please recompile with HYDRO=0'
-     call mdl_abort(s%mdl)
+     write(*,*)'This might not be optimal but I am still running.'
   endif
 #else
   if(hydro)then
@@ -564,8 +584,7 @@ subroutine m_read_params(pst)
   if(.not. poisson)then
      write(*,*)'You are not using the poisson solver but'
      write(*,*)'the code was compiled with GRAV=1'
-     write(*,*)'Please recompile with GRAV=0'
-     call mdl_abort(s%mdl)
+     write(*,*)'This might not be optimal but I am still running.'
   endif
 #else
   if(poisson)then
@@ -670,6 +689,24 @@ subroutine m_read_params(pst)
 #endif
 
   !--------------------------------------------------
+  ! Check for metals
+  !--------------------------------------------------
+  if(metal.and.nvar<6)then
+     write(*,*)'Error: metal=.true. need nvar >= 6'
+     write(*,*)'Modify NVAR and recompile'
+     nml_ok=.false.
+  endif
+
+  !--------------------------------------------------
+  ! Check for entropy
+  !--------------------------------------------------
+  if(entropy.and.nvar<6)then
+     write(*,*)'Error: entropy=.true. need nvar >= 6'
+     write(*,*)'Modify NVAR and recompile'
+     nml_ok=.false.
+  endif
+
+  !--------------------------------------------------
   ! Compute indices for passive scalars
   ! and non-thermal energies
   !--------------------------------------------------
@@ -714,6 +751,7 @@ subroutine m_read_params(pst)
   s%r%hydro=hydro
   s%r%star=star
   s%r%sink=sink
+  s%r%tree=merger_tree
   s%r%verbose=verbose
   s%r%debug=debug
   s%r%nrestart=nrestart
@@ -745,6 +783,7 @@ subroutine m_read_params(pst)
   s%r%npartmax=npartmax
   s%r%nstarmax=nstarmax
   s%r%nsinkmax=nsinkmax
+  s%r%ntreemax=ntreemax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size
@@ -957,6 +996,7 @@ subroutine m_read_params(pst)
   s%r%eps_star=eps_star
   s%r%seed=seed
   s%r%m_star=m_star
+  s%r%sf_model=sf_model
 
   s%r%M_SNII=M_SNII
   s%r%E_SNII=E_SNII
@@ -969,20 +1009,28 @@ subroutine m_read_params(pst)
   s%r%clump_finder=clump_finder
   s%r%clump_info=clump_info
   s%r%output_clump=output_clump
-  s%r%output_peak=output_peak
+  s%r%output_peak_grid=output_peak_grid
   s%r%output_peak_part=output_peak_part
   s%r%output_peak_star=output_peak_star
-  s%r%output_halo_part=output_halo_part
-  s%r%output_halo_star=output_halo_star
+  s%r%output_peak_sink=output_peak_sink
+  s%r%output_peak_tree=output_peak_tree
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold
   s%r%mass_threshold=mass_threshold
+  s%r%purity_threshold=purity_threshold
+  s%r%fraction_threshold=fraction_threshold
   s%r%rho_type_clump=rho_type_clump
 
   s%r%rho_type_sink=rho_type_sink
   s%r%sink_descent=sink_descent
   s%r%fudge_descent=fudge_descent
+  s%r%sink_relevance_threshold=sink_relevance_threshold
+  s%r%sink_density_threshold=sink_density_threshold
+  s%r%sink_saddle_threshold=sink_saddle_threshold
+  s%r%sink_mass_threshold=sink_mass_threshold
+  s%r%sink_purity_threshold=sink_purity_threshold
+  s%r%sink_fraction_threshold=sink_fraction_threshold
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format

@@ -27,7 +27,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   integer,dimension(1:flen/4)::input_array
   type(in_output_poisson_t)::in_output_poisson
 
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star,sink=>pst%s%sink,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star,sink=>pst%s%sink,tree=>pst%s%tree,mdl=>pst%s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -93,6 +93,10 @@ subroutine m_dump_all(pst,write_bkp_file)
            filename=TRIM(filedir)//'sink_header.txt'
            call output_header(r,g,sink,filename)
         endif
+        if(r%tree)then
+           filename=TRIM(filedir)//'tree_header.txt'
+           call output_header(r,g,tree,filename)
+        endif
      endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_header.txt'
@@ -142,7 +146,7 @@ subroutine m_dump_all(pst,write_bkp_file)
         call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
      end if
 
-     ! Output PART and STAR data
+     ! Output PART data
      if(r%pic)then
         filename=TRIM(filedir) ! Note that suffix will be added later
         input_array=transfer(filename,input_array)
@@ -634,7 +638,13 @@ subroutine output_header(r,g,p,filename)
   if(allocated(p%tp))then
      write(ilun,'(a)',advance='no')'age '
   endif
-  write(ilun,'(a)',advance='no')'iord level '
+  if(allocated(p%tm))then
+     write(ilun,'(a)',advance='no')'merging_age '
+  endif
+  write(ilun,'(a)',advance='no')'level id '
+  if(allocated(p%idm))then
+     write(ilun,'(a)',advance='no')'merging_id '
+  endif
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   write(ilun,'(a)',advance='no')'phi '
 #endif

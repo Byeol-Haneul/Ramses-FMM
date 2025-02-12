@@ -28,6 +28,9 @@ recursive subroutine r_init_part(pst)
      if(pst%s%r%sink)then
         call init_sink(pst%s%r,pst%s%g,pst%s%sink)
      end if
+     if(pst%s%r%tree)then
+        call init_tree(pst%s%r,pst%s%g,pst%s%tree)
+     end if
   endif
 
 end subroutine r_init_part
@@ -146,6 +149,46 @@ subroutine init_sink(r,g,p)
   p%headp=1
   p%tailp=0
 end subroutine init_sink
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine init_tree(r,g,p)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t
+  use pm_parameters, only: TREE_TYPE
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  !-----------------------------------
+  ! Allocate tree particle variables
+  !------------------------------------
+  p%type=TREE_TYPE
+  allocate(p%xp    (r%ntreemax,ndim))
+  allocate(p%vp    (r%ntreemax,ndim))
+  allocate(p%mp    (r%ntreemax))
+  allocate(p%tp    (r%ntreemax))
+  allocate(p%tm    (r%ntreemax))
+  allocate(p%levelp(r%ntreemax))
+  allocate(p%idp   (r%ntreemax))
+  allocate(p%idm   (r%ntreemax))
+  p%nvaralloc=2*ndim+6
+#ifdef OUTPUT_PARTICLE_POTENTIAL
+  allocate(p%phip  (r%ntreemax))
+  p%nvaralloc=p%nvaralloc+1
+#endif
+  ! Allocate workspace variables
+  allocate(p%sortp (r%ntreemax))
+  allocate(p%workp (r%ntreemax))
+  ! Allocate pointers to particle levels
+  allocate(p%headp(r%levelmin:r%nlevelmax))
+  allocate(p%tailp(r%levelmin:r%nlevelmax))
+  ! No particle just yet
+  p%headp=1
+  p%tailp=0
+end subroutine init_tree
 !#########################################################################
 !#########################################################################
 !#########################################################################

@@ -19,6 +19,7 @@ module amr_commons
      logical::hydro   =.false.   ! Hydro activated
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
+     logical::tree    =.false.   ! Merger tree particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
      integer::nrestart=0         ! New run or backup file number
@@ -52,6 +53,7 @@ module amr_commons
      integer::npartmax=0         ! Maximum number of DM particles
      integer::nstarmax=0         ! Maximum number of star particles
      integer::nsinkmax=0         ! Maximum number of sink particles
+     integer::ntreemax=0         ! Maximum number of tree particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(dp)::boxlen=1.0D0      ! Cell size at level 0 (total box size)
      real(dp)::box_size=0.0D0    ! Box length of active domain along x direction
@@ -132,7 +134,7 @@ module amr_commons
      real(dp)::var_cut_refine=-1.0 ! Threshold for variable-based refinement
      real(dp)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
      integer::ivar_refine=-1 ! Variable index for refinement
-     logical::aexp_lock_refine=.false.
+     real(dp)::aexp_lock_refine=-1.0
      logical::pic_lock_refine=.false.
 
      ! Refinement parameters for hydro
@@ -237,6 +239,7 @@ module amr_commons
      real(dp)::T2max
 
      ! Star formation parameters
+     integer::sf_model=1
      real(dp)::T2_star=2e4
      real(dp)::n_star=0.1
      real(dp)::eps_star=0.01
@@ -256,21 +259,29 @@ module amr_commons
      logical::clump_finder=.false.
      logical::clump_info=.false.
      logical::output_clump=.false.
-     logical::output_peak=.false.
-     integer::rho_type_clump=1
+     logical::output_peak_grid=.false.
      logical::output_peak_part=.false.
      logical::output_peak_star=.false.
-     logical::output_halo_part=.false.
-     logical::output_halo_star=.false.
+     logical::output_peak_sink=.false.
+     logical::output_peak_tree=.false.
+     integer::rho_type_clump=1
      real(dp)::relevance_threshold=2
      real(dp)::density_threshold=-1
      real(dp)::saddle_threshold=-1
      real(dp)::mass_threshold=0
+     real(dp)::purity_threshold=-1
+     real(dp)::fraction_threshold=0.1d0
 
      ! Sink parameters
      integer::rho_type_sink=1
      logical::sink_descent=.false.
      real(dp)::fudge_descent=0.5d0
+     real(dp)::sink_relevance_threshold=2
+     real(dp)::sink_density_threshold=-1
+     real(dp)::sink_saddle_threshold=-1
+     real(dp)::sink_mass_threshold=0
+     real(dp)::sink_purity_threshold=-1
+     real(dp)::sink_fraction_threshold=2d0
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format

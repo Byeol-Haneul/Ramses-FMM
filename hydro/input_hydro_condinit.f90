@@ -37,31 +37,22 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   type(global_t)::g
   type(mesh_t)::m
   integer::ilevel
-  
-  ! Local variables
+  !------------------------------------------------------------
+  ! Compute hydro primitive variables from subroutine condinit.
+  ! Input magnetic field if MHD is activated.
+  ! Finally convert primitive to conservative variables.
+  !------------------------------------------------------------
   integer::igrid,ngrid,ind,idim,nstride,i,ivar,irad
-  integer::l,nfine,ii,jj,kk
   real(dp),dimension(1:nvector,1:ndim)::xx
 #ifdef MHD
   real(dp),dimension(1:nvector,1:nvar+3-ndim)::qq
-  real(dp),dimension(1:nvector,1:ndim)::xll,xrl,xlr,xrr
-  real(dp),dimension(1:nvector)::ax,ay,az
-  real(dp),dimension(1:nvector)::axll,axrl,axlr,axrr
-  real(dp),dimension(1:nvector)::ayll,ayrl,aylr,ayrr
-  real(dp),dimension(1:nvector)::azll,azrl,azlr,azrr
 #else
   real(dp),dimension(1:nvector,1:nvar)::qq
 #endif
-  real(dp)::dx,dxmin
-  real(dp)::rr,vx,vy,vz,pp
-  real(dp)::bx,by,bz
-  real(dp)::eint,ekin,emag,erad
+  real(dp)::dx
 
   if(m%noct(ilevel)==0)return
 
-  !-----------------------------------------------------------
-  ! Compute hydro primitive variables from subroutine condinit
-  !-----------------------------------------------------------
 #ifdef HYDRO
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
@@ -109,9 +100,39 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   ! End loop over grids
 #endif
 
+  ! Compute initial magnetic field
+  call input_hydro_vecpot(r,g,m,ilevel)
+
+  ! Convert primitive to conservative
+  call cons_from_prim(r,g,m,ilevel)
+
+end subroutine input_hydro_condinit
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine input_hydro_vecpot(r,g,m,ilevel)
+  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
   !------------------------------------------------------------------------------
   ! Compute magnetic field from vector potential from subroutine vecpotentialinit
   !------------------------------------------------------------------------------
+  integer::igrid,ngrid,ind,i
+  integer::l,nfine,ii,jj,kk
+  real(dp),dimension(1:nvector,1:ndim)::xll,xrl,xlr,xrr
+  real(dp),dimension(1:nvector)::ax,ay,az
+  real(dp),dimension(1:nvector)::axll,axrl,axlr,axrr
+  real(dp),dimension(1:nvector)::ayll,ayrl,aylr,ayrr
+  real(dp),dimension(1:nvector)::azll,azrl,azlr,azrr
+  real(dp)::dx,dxmin
+
+  if(m%noct(ilevel)==0)return
+
 #ifdef MHD
 #if NDIM>1
   ! Mesh size at level ilevel in code units
@@ -264,11 +285,31 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   ! End loop over grids
 #endif
 #endif
+end subroutine input_hydro_vecpot
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine cons_from_prim(r,g,m,ilevel)
+  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use hydro_parameters, only: nvar, nener
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
   !--------------------------------------------
   ! Convert primitive to conservative variables
   !--------------------------------------------
+  integer::igrid,ind,idim,i,ivar,irad
+  real(dp)::rr,vx,vy,vz,pp
+  real(dp)::bx,by,bz
+  real(dp)::eint,ekin,emag,erad
+
+  if(m%noct(ilevel)==0)return
+
 #ifdef HYDRO
-  dx=r%boxlen/2**ilevel
   ! Loop over grids
   do igrid=m%head(ilevel),m%tail(ilevel)
      ! Loop over cells
@@ -316,7 +357,79 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   ! End loop over grids
 #endif
 
-end subroutine input_hydro_condinit
+end subroutine cons_from_prim
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine prim_from_cons(r,g,m,ilevel)
+  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use hydro_parameters, only: nvar, nener
+  use amr_commons, only: run_t,global_t,mesh_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  integer::ilevel
+  !--------------------------------------------
+  ! Convert primitive to conservative variables
+  !--------------------------------------------
+  integer::igrid,ind,idim,i,ivar,irad
+  real(dp)::rr,vx,vy,vz,pp
+  real(dp)::bx,by,bz
+  real(dp)::eint,ekin,emag,erad,etot
+
+  if(m%noct(ilevel)==0)return
+
+#ifdef HYDRO
+  ! Loop over grids
+  do igrid=m%head(ilevel),m%tail(ilevel)
+     ! Loop over cells
+     do ind=1,twotondim
+        ! Compute velocities and kinetic energy density
+        rr=m%grid(igrid)%uold(ind,1)
+        vx=m%grid(igrid)%uold(ind,2)/rr
+        vy=m%grid(igrid)%uold(ind,3)/rr
+        vz=m%grid(igrid)%uold(ind,4)/rr
+        ekin=0.5d0*rr*(vx**2+vy**2+vz**2)
+        m%grid(igrid)%uold(ind,2)=vx
+        m%grid(igrid)%uold(ind,3)=vy
+        m%grid(igrid)%uold(ind,4)=vz
+        emag=0.0d0
+#ifdef MHD
+        ! Compute magnetic energy for all cells
+        bx=0.5d0*(m%grid(igrid)%bold(ind,1)+m%grid(igrid)%bold(ind,4))
+        by=0.5d0*(m%grid(igrid)%bold(ind,2)+m%grid(igrid)%bold(ind,5))
+        bz=0.5d0*(m%grid(igrid)%bold(ind,3)+m%grid(igrid)%bold(ind,6))
+        emag=0.5d0*(bx**2+by**2+bz**2)
+#endif
+        erad=0.0d0
+#if NENER>0
+        ! Compute non-thermal pressures
+        do irad=1,nener
+           erad=erad+m%grid(igrid)%uold(ind,5+irad)
+           m%grid(igrid)%uold(ind,5+irad)=m%grid(igrid)%uold(ind,5+irad)*(r%gamma_rad(irad)-1.0d0)
+        end do
+#endif
+        ! Compute internal energy
+        etot=m%grid(igrid)%uold(ind,5)
+        eint=etot-ekin-emag-erad
+        ! Compute thermal pressure
+        pp=(r%gamma-1.0)*eint
+        m%grid(igrid)%uold(ind,5)=pp
+#if NVAR>5+NENER
+        ! Compute passive scalar mass fraction
+        do ivar=6+nener,nvar
+           m%grid(igrid)%uold(ind,ivar)=m%grid(igrid)%uold(ind,ivar)/rr
+        enddo
+#endif
+     end do
+     ! End loop over cells
+  end do
+  ! End loop over grids
+#endif
+
+end subroutine prim_from_cons
 !################################################################
 !################################################################
 !################################################################

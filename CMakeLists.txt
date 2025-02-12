@@ -169,13 +169,14 @@ set(fortran_files
   cooling/cooling_module_ism.f90
   cooling/init_cooling.f90
 
+  clump/clfind_commons.f90
   clump/clump_finder.f90
   clump/clump_merger.f90
-  clump/clfind_commons.f90
-  clump/sparse_mat.f90
   clump/output_clump.f90
+  clump/tree_formation.f90
 
   star/star_formation.f90
+  star/sink_formation.f90
   feedback/feedback.f90
 
   ${CMAKE_BINARY_DIR}/write_gitinfo.f90

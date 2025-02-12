@@ -201,7 +201,7 @@ program amr2map
         if(do_grav)then
            file_hydro=TRIM(repository)//'/grav.'//TRIM(ncharcpu)
         else if(do_peak)then
-           file_hydro=TRIM(repository)//'/peak.'//TRIM(ncharcpu)
+           file_hydro=TRIM(repository)//'/peak_grid.'//TRIM(ncharcpu)
         else
            file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
         endif
@@ -638,7 +638,7 @@ contains
     if(do_grav)then
        file_hydro=TRIM(repository)//'/grav.00001'
     else if(do_peak)then
-       file_hydro=TRIM(repository)//'/peak.00001'
+       file_hydro=TRIM(repository)//'/peak_grid.00001'
     else
        file_hydro=TRIM(repository)//'/hydro.00001'
     endif

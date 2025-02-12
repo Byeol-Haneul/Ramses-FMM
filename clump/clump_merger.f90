@@ -289,7 +289,9 @@ subroutine allocate_peak_patch_arrays(s)
   ! This routine allocate all arrays that are needed at 
   ! different steps of the clump finder.
   !----------------------------------------------------
+
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
   !------------------------------------------
   ! Compute the max size of peak-based arrays
   !------------------------------------------
@@ -304,41 +306,47 @@ subroutine allocate_peak_patch_arrays(s)
   allocate(c%lev_peak(1:c%npeak_max))
   allocate(c%new_peak(c%npeak_max))
   allocate(c%relevance(1:c%npeak_max))
+  allocate(c%tidal_dens(1:c%npeak_max))
 
   allocate(c%peak_pos(1:c%npeak_max,1:ndim))
   allocate(c%peak_vel(1:c%npeak_max,1:ndim))
   allocate(c%peak_acc(1:c%npeak_max,1:ndim))
+  allocate(c%peak_com(1:c%npeak_max,1:ndim))
 
   allocate(c%min_dens(1:c%npeak_max))
   allocate(c%n_cells(1:c%npeak_max))
   allocate(c%clump_mass(1:c%npeak_max))
   allocate(c%clump_vol(1:c%npeak_max))
 
+  allocate(c%npart(1:c%npeak_max))
   allocate(c%particle_mass(1:c%npeak_max))
-  allocate(c%peak_com(1:c%npeak_max,1:ndim))
+
+  allocate(c%ind_final(1:c%npeak_max))
 
   !-------------------------------
   ! Allocate halo-patch properties
   !-------------------------------
   if(c%saddle_threshold>0)then
-     allocate(c%halo_mass(1:c%npeak_max))
      allocate(c%ind_halo(1:c%npeak_max))
-     allocate(c%n_cells_halo(1:c%npeak_max))
-     allocate(c%max_peak_mass(1:c%npeak_max))
-     allocate(c%ind_max_mass(1:c%npeak_max))
-     allocate(c%ind_halo_1(1:c%npeak_max))
-     allocate(c%ind_halo_2(1:c%npeak_max))
-     allocate(c%ind_halo_3(1:c%npeak_max))
-     allocate(c%ind_central(1:c%npeak_max))
+     allocate(c%halo_mass(1:c%npeak_max))
      allocate(c%mass_bin(1:c%npeak_max,1:nbin))
-     allocate(c%npart(1:c%npeak_max))
+     allocate(c%phi(1:c%npeak_max,1:nbin))
+  endif
+
+  !------------------------------------------
+  ! Allocate merger tree particles properties
+  !------------------------------------------
+  if(r%tree)then
+     allocate(c%ntree(1:c%npeak_max))
+     allocate(c%form_tree(1:c%npeak_max))
+     allocate(c%min_tree_id(1:c%npeak_max))
   endif
 
   !-----------------------------------
   ! Allocate sink particles properties
   !-----------------------------------
   if(r%sink)then
-     allocate(c%occupied_sink(1:c%npeak_max))
+     allocate(c%nsink(1:c%npeak_max))
      allocate(c%form_sink(1:c%npeak_max))
   endif
 
@@ -365,6 +373,26 @@ subroutine allocate_peak_patch_arrays(s)
   ! Allocate cache comms
   !---------------------
   call init_cache_clump(s%mdl)
+
+  !-------------------------------------------------
+  ! Allocate various particle types peak and halo id
+  !-------------------------------------------------
+  if(r%pic)then
+     allocate(s%p%pid(1:s%p%npart))
+     allocate(s%p%hid(1:s%p%npart))
+  endif
+  if(r%star)then
+     allocate(s%star%pid(1:s%star%npart))
+     allocate(s%star%hid(1:s%star%npart))
+  endif
+  if(r%sink)then
+     allocate(s%sink%pid(1:s%sink%npart))
+     allocate(s%sink%hid(1:s%sink%npart))
+  endif
+  if(r%tree)then
+     allocate(s%tree%pid(1:s%tree%npart))
+     allocate(s%tree%hid(1:s%tree%npart))
+  endif
 
   end associate
 
@@ -415,6 +443,7 @@ subroutine deallocate_peak_patch_arrays(s)
      deallocate(c%grid)
      deallocate(c%level)
      deallocate(c%hash)
+     c%ntest=0
   endif
   if(c%ntest_tot==0)return
 
@@ -423,6 +452,7 @@ subroutine deallocate_peak_patch_arrays(s)
   if(c%npeak_tot==0)return
 
   ! Deallocate peak-patch arrays
+  c%npeak_tot=0
   deallocate(c%peak_cell)
   deallocate(c%peak_grid)
   deallocate(c%peak_level)
@@ -434,36 +464,41 @@ subroutine deallocate_peak_patch_arrays(s)
   deallocate(c%lev_peak)
   deallocate(c%new_peak)
   deallocate(c%relevance)
+  deallocate(c%tidal_dens)
 
   deallocate(c%peak_pos)
   deallocate(c%peak_vel)
   deallocate(c%peak_acc)
+  deallocate(c%peak_com)
 
   deallocate(c%min_dens)
   deallocate(c%n_cells)
   deallocate(c%clump_mass)
   deallocate(c%clump_vol)
+
+  deallocate(c%npart)
   deallocate(c%particle_mass)
-  deallocate(c%peak_com)
+
+  deallocate(c%ind_final)
 
   ! Deallocate halo-patch arrays
   if(c%saddle_threshold>0)then
-     deallocate(c%halo_mass)
      deallocate(c%ind_halo)
-     deallocate(c%n_cells_halo)
+     deallocate(c%halo_mass)
      deallocate(c%mass_bin)
-     deallocate(c%npart)
-     deallocate(c%max_peak_mass)
-     deallocate(c%ind_max_mass)
-     deallocate(c%ind_halo_1)
-     deallocate(c%ind_halo_2)
-     deallocate(c%ind_halo_3)
-     deallocate(c%ind_central)
+     deallocate(c%phi)
+  endif
+
+  ! Deallocate tree arrays
+  if(r%tree)then
+     deallocate(c%ntree)
+     deallocate(c%form_tree)
+     deallocate(c%min_tree_id)
   endif
 
   ! Deallocate sink arrays
   if(r%sink)then
-     deallocate(c%occupied_sink)
+     deallocate(c%nsink)
      deallocate(c%form_sink)
   endif
 
@@ -480,6 +515,24 @@ subroutine deallocate_peak_patch_arrays(s)
   ! Deallocate cache comms
   call kill_cache_clump(s%mdl)
 
+  ! Deallocate particle pid and hid
+  if(r%pic)then
+     deallocate(s%p%pid)
+     deallocate(s%p%hid)
+  endif
+  if(r%star)then
+     deallocate(s%star%pid)
+     deallocate(s%star%hid)
+  endif
+  if(r%sink)then
+     deallocate(s%sink%pid)
+     deallocate(s%sink%hid)
+  endif
+  if(r%tree)then
+     deallocate(s%tree%pid)
+     deallocate(s%tree%hid)
+  endif
+
   end associate
 
 end subroutine deallocate_peak_patch_arrays
@@ -489,7 +542,7 @@ end subroutine deallocate_peak_patch_arrays
 !#########################################################################
 subroutine collect_saddle(s)
   use amr_parameters, only: twotondim,ndim
-  use amr_commons, only:oct,nbor
+  use amr_commons, only: oct,nbor
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
@@ -504,7 +557,7 @@ subroutine collect_saddle(s)
   type(msg_int4_small_realdp)::dummy_int4_small_realdp
   type(msg_saddle_clump)::dummy_saddle_clump
   type(oct),pointer::gridn
-  integer:: ilevel
+  integer::ilevel
   integer::icpu,next_level,now_level,icelln,idim,j,jpeak,k
   integer::ipart,jpart,ip,i,icellp,icellpm,ipeak,itest,igrid,ind,peak_cen,peak_nbor
   integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
@@ -512,7 +565,7 @@ subroutine collect_saddle(s)
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   real(dp)::dens_cen,dens_ave,dens_nbor,x,y,z
   real(dp),dimension(1:ndim)::xcen,xnei
-  integer, parameter::nSnei=56
+  integer,parameter::nSnei=56
   real(dp),dimension(1:ndim,1:nSnei)::xSnei
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor
@@ -559,7 +612,7 @@ subroutine collect_saddle(s)
   call open_cache_clump(s,pack_size=storage_size(dummy_saddle_clump)/32,&
        init=init_flush_saddle,flush=pack_flush_saddle,combine=unpack_flush_saddle)
 
-  c%saddle_dens = 0
+  c%saddle_dens = c%density_threshold
   c%saddle_nbor = 0
 
   do itest=1,c%ntest
@@ -742,7 +795,7 @@ subroutine init_flush_saddle(c,local_peak_id)
   type(clump_t)::c
   integer::local_peak_id
 
-  c%saddle_dens(local_peak_id)=0d0
+  c%saddle_dens(local_peak_id)=c%density_threshold
   c%saddle_nbor(local_peak_id)=0
 
 end subroutine init_flush_saddle
@@ -795,7 +848,7 @@ end subroutine unpack_flush_saddle
 subroutine merge_clumps(s,action)
   use amr_commons, only: dp, ndim
   use ramses_commons, only: ramses_t
-  use cache_commons, only: msg_merge_clump, msg_halo_clump
+  use cache_commons, only: msg_merge_clump, msg_prop_clump, msg_halo_clump
   use cache
 #ifndef WITHOUTMPI
   use mpi
@@ -814,7 +867,7 @@ subroutine merge_clumps(s,action)
   integer::j,i,ipart,igrid,ind,itest
   integer::current,nmove,ipeak,jpeak,iter
   integer::nsurvive,nzero,idepth
-  integer::ilev,ilevel,mergelevel_max
+  integer::ilev,ilevel
   integer(kind=8)::global_peak_id,merge_to
   real(dp)::value_iij,zero=0,relevance_peak
   real(dp)::d,dx_loc,vol
@@ -822,9 +875,9 @@ subroutine merge_clumps(s,action)
   real(dp),dimension(1:s%c%npeak_max)::peakd
   logical::do_merge=.false.
   type(msg_merge_clump)::dummy_merge_clump
+  type(msg_prop_clump)::dummy_prop_clump
   type(msg_halo_clump)::dummy_halo_clump
 #ifndef WITHOUTMPI
-  integer::mergelevel_max_global
   integer::nmove_all,nsurvive_all,nzero_all
 #endif
 
@@ -842,7 +895,8 @@ subroutine merge_clumps(s,action)
   ! Initialize new_peak array to global peak id
   ! All peaks are alive at the start
   do i=1,c%npeak
-     c%new_peak(i)=c%npeak_cum(g%myid-1)+i
+     c%new_peak(i)=i+c%npeak_cum(g%myid-1)
+     c%tidal_dens(i)=c%saddle_threshold
      if(action.EQ.'relevance')then
         alive(i)=1
      endif
@@ -852,6 +906,7 @@ subroutine merge_clumps(s,action)
         else
            alive(i)=0
         endif
+        c%lev_peak(i)=-1
      endif
   end do
 
@@ -881,11 +936,7 @@ subroutine merge_clumps(s,action)
            merge_to=c%new_peak(ipeak)
            if(alive(ipeak)>0)then
               if(action.EQ.'relevance')then
-                 if(c%saddle_dens(ipeak)>0)then
-                    relevance_peak=c%max_dens(ipeak)/c%saddle_dens(ipeak)
-                 else
-                    relevance_peak=c%max_dens(ipeak)/c%density_threshold
-                 end if
+                 relevance_peak=c%max_dens(ipeak)/c%saddle_dens(ipeak)
                  do_merge=relevance_peak<c%relevance_threshold
               endif
               if(action.EQ.'saddleden')then
@@ -906,6 +957,7 @@ subroutine merge_clumps(s,action)
            if(c%new_peak(ipeak).NE.merge_to)then
               nmove=nmove+1
               c%new_peak(ipeak)=merge_to
+              c%tidal_dens(ipeak)=c%saddle_dens(ipeak)
            endif
         end do
 
@@ -942,7 +994,7 @@ subroutine merge_clumps(s,action)
      do ipeak=1,c%npeak
         if(alive(ipeak)>0)then
            merge_to=c%new_peak(ipeak)
-           if(merge_to.NE.(c%npeak_cum(g%myid-1)+ipeak))then
+           if(merge_to.NE.ipeak+c%npeak_cum(g%myid-1))then
               alive(ipeak)=0
               c%lev_peak(ipeak)=idepth
               nzero=nzero+1
@@ -964,11 +1016,8 @@ subroutine merge_clumps(s,action)
   end do
   ! End loop over peak levels
 
-  mergelevel_max=idepth-2 ! last level has no more clumps, also idepth=idepth+1 still happens on last level.
-#ifndef WITHOUTMPI
-  call MPI_ALLREDUCE(mergelevel_max,mergelevel_max_global,1,MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,info)
-  mergelevel_max=mergelevel_max_global
-#endif
+  ! Last level has no more clumps, also idepth=idepth+1 still happens on last level.
+  c%merge_levelmax=idepth-2
 
   ! Count surviving peaks
   nsurvive=0
@@ -995,12 +1044,7 @@ subroutine merge_clumps(s,action)
      ! Compute relevance
      do ipeak=1,c%npeak
         if(alive(ipeak)>0)then
-           if (c%saddle_dens(ipeak)>0)then
-              relevance_peak=c%max_dens(ipeak)/c%saddle_dens(ipeak)
-           else
-              relevance_peak=c%max_dens(ipeak)/c%density_threshold
-           end if
-           c%relevance(ipeak)=relevance_peak
+           c%relevance(ipeak)=c%max_dens(ipeak)/c%saddle_dens(ipeak)
         else
            c%relevance(ipeak)=0
         endif
@@ -1024,14 +1068,13 @@ subroutine merge_clumps(s,action)
 
   if(action.EQ.'saddleden')then
 
-     ! Compute peak index for the halo
+     ! Compute halo index
      do ipeak=1,c%npeak
         c%ind_halo(ipeak)=c%new_peak(ipeak)
      end do
-
      do ilev=idepth-2,0,-1
-        call open_cache_clump(s,pack_size=storage_size(dummy_merge_clump)/32,&
-             pack=pack_fetch_ihalo,unpack=unpack_fetch_ihalo)
+        call open_cache_clump(s,pack_size=storage_size(dummy_halo_clump)/32,&
+             pack=pack_fetch_halo,unpack=unpack_fetch_halo)
         do ipeak=1,c%npeak
            if(c%lev_peak(ipeak)==ilev)then
               merge_to=c%ind_halo(ipeak)
@@ -1042,20 +1085,25 @@ subroutine merge_clumps(s,action)
         call close_cache(s,m%grid_dict)
      end do
 
-     ! Compute halo masses
+     ! Set merging level of halos to idepth-1
+     do ipeak=1,c%npeak
+        if(c%ind_halo(ipeak)==ipeak+c%npeak_cum(g%myid-1))then
+           c%lev_peak(ipeak)=idepth-1
+        endif
+     end do
+
+     ! Compute halo mass
      c%halo_mass=0
-     c%n_cells_halo=0
      call open_cache_clump(s,pack_size=storage_size(dummy_halo_clump)/32,&
           init=init_flush_halo,flush=pack_flush_halo,combine=unpack_flush_halo)
      do ipeak=1,c%npeak
         merge_to=c%ind_halo(ipeak)
         call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.false.)
         c%halo_mass(jpeak)=c%halo_mass(jpeak)+c%clump_mass(ipeak)
-        c%n_cells_halo(jpeak)=c%n_cells_halo(jpeak)+c%n_cells(ipeak)
      end do
      call close_cache(s,m%grid_dict)
 
-     ! Assign back halo mass to peak halo mass
+     ! Assign back halo mass to peak
      call open_cache_clump(s,pack_size=storage_size(dummy_halo_clump)/32,&
           pack=pack_fetch_halo,unpack=unpack_fetch_halo)
      do ipeak=1,c%npeak
@@ -1064,6 +1112,30 @@ subroutine merge_clumps(s,action)
         c%halo_mass(ipeak)=c%halo_mass(jpeak)
      end do
      call close_cache(s,m%grid_dict)
+
+     ! Compute hierarchical clump properties
+     do ilev=0,idepth-2
+        call open_cache_clump(s,pack_size=storage_size(dummy_prop_clump)/32,&
+             init=init_flush_prop,flush=pack_flush_prop,combine=unpack_flush_prop)
+        do ipeak=1,c%npeak
+           if(c%lev_peak(ipeak)==ilev)then
+              ! If clump is too massive, then it does not merge
+              if(c%clump_mass(ipeak).GT.c%fraction_threshold*c%halo_mass(ipeak))then
+                 c%new_peak(ipeak)=ipeak+c%npeak_cum(g%myid-1)
+                 c%lev_peak(ipeak)=idepth-1
+              endif
+              merge_to=c%new_peak(ipeak)
+              if(merge_to.NE.ipeak+c%npeak_cum(g%myid-1))then
+                 call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.false.)
+                 c%clump_mass(jpeak)=c%clump_mass(jpeak)+c%clump_mass(ipeak)
+                 c%clump_vol(jpeak)=c%clump_vol(jpeak)+c%clump_vol(ipeak)
+                 c%n_cells(jpeak)=c%n_cells(jpeak)+c%n_cells(ipeak)
+                 c%min_dens(jpeak)=min(c%min_dens(jpeak),c%min_dens(ipeak))
+              endif
+           endif
+        end do
+        call close_cache(s,m%grid_dict)
+     end do
 
   endif
 
@@ -1114,44 +1186,6 @@ end subroutine unpack_fetch_merge
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_ihalo(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_merge_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_merge_clump)::msg
-
-  msg%npeak=c%ind_halo(local_peak_id)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_fetch_ihalo
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_fetch_ihalo(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_merge_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_merge_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  c%ind_halo(local_peak_id)=msg%npeak
-
-end subroutine unpack_fetch_ihalo
-!################################################################
-!################################################################
-!################################################################
-!################################################################
 subroutine pack_fetch_halo(c,local_peak_id,msg_size,msg_array)
   use clfind_commons, only: clump_t
   use cache_commons, only: msg_halo_clump
@@ -1162,7 +1196,7 @@ subroutine pack_fetch_halo(c,local_peak_id,msg_size,msg_array)
 
   type(msg_halo_clump)::msg
 
-  msg%ncell=c%n_cells_halo(local_peak_id)
+  msg%ihalo=c%ind_halo(local_peak_id)
   msg%mhalo=c%halo_mass(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
@@ -1184,7 +1218,7 @@ subroutine unpack_fetch_halo(c,local_peak_id,msg_size,msg_array)
 
   msg=transfer(msg_array,msg)
 
-  c%n_cells_halo(local_peak_id)=msg%ncell
+  c%ind_halo(local_peak_id)=msg%ihalo
   c%halo_mass(local_peak_id)=msg%mhalo
 
 end subroutine unpack_fetch_halo
@@ -1197,7 +1231,6 @@ subroutine init_flush_halo(c,local_peak_id)
   type(clump_t)::c
   integer::local_peak_id
 
-  c%n_cells_halo(local_peak_id)=0
   c%halo_mass(local_peak_id)=0d0
 
 end subroutine init_flush_halo
@@ -1215,7 +1248,6 @@ subroutine pack_flush_halo(c,local_peak_id,msg_size,msg_array)
 
   type(msg_halo_clump)::msg
 
-  msg%ncell=c%n_cells_halo(local_peak_id)
   msg%mhalo=c%halo_mass(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
@@ -1238,7 +1270,6 @@ subroutine unpack_flush_halo(c,local_peak_id,msg_size,msg_array)
   msg=transfer(msg_array,msg)
 
   c%halo_mass(local_peak_id)=c%halo_mass(local_peak_id)+msg%mhalo
-  c%n_cells_halo(local_peak_id)=c%n_cells_halo(local_peak_id)+msg%ncell
 
 end subroutine unpack_flush_halo
 !################################################################
@@ -1267,7 +1298,7 @@ subroutine compute_clump_properties(s,rtype)
   !----------------------------------------------------------------------------
   type(msg_prop_clump)::dummy_prop_clump
   integer(kind=8)::global_peak_id
-  integer::ipart,grid,peak_nr,ilevel,ipeak,plevel,igrid,itest,icelln,idim,ind
+  integer::ipart,grid,peak_nr,ilevel,ipeak,plevel,igrid,itest,idim,ind
   real(dp),dimension(1:ndim)::xcell,accel
   real(dp)::dx_loc,tot_mass
   real(dp)::zero=0
@@ -1333,7 +1364,7 @@ subroutine compute_clump_properties(s,rtype)
 
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,peak_nr,flush_cache=.true.,fetch_cache=.false.)
-        
+
         ! Cell density
 #ifdef GRAV
         d=m%grid(igrid)%rho(ind)
@@ -1342,27 +1373,22 @@ subroutine compute_clump_properties(s,rtype)
         ! Cell volume
         dx_loc=r%boxlen/2**ilevel
         vol=dx_loc**ndim
-        
+
         ! Number of leaf cells per clump
         c%n_cells(peak_nr)=c%n_cells(peak_nr)+1
-        
+
         ! Clump min density
         c%min_dens(peak_nr)=min(c%min_dens(peak_nr),d)
-        
+
         ! Clump mass
         c%clump_mass(peak_nr)=c%clump_mass(peak_nr)+vol*nref
-        
+
         ! Clump volume
         c%clump_vol(peak_nr)=c%clump_vol(peak_nr)+vol
-        
+
      end if
   end do
   call close_cache(s,m%grid_dict)
-
-  ! Initialize halo mass to clump mass
-  if(c%saddle_threshold>0)then
-     c%halo_mass(1:c%npeak)=c%clump_mass(1:c%npeak)
-  endif
 
   ! Calculate total mass above threshold
   tot_mass=sum(c%clump_mass(1:c%npeak))
@@ -1443,6 +1469,9 @@ end subroutine unpack_flush_prop
 !################################################################
 !################################################################
 subroutine trim_clumps(s)
+#ifndef WITHOUTMPI
+  use mpi
+#endif
   use amr_commons, only: dp,ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
@@ -1456,14 +1485,91 @@ subroutine trim_clumps(s)
   ! relevance threshold or because their mass is too small.
   ! The flag1 and flag2 arrays are modified accordingly.
   !----------------------------------------------------------------------------
+#ifndef WITHOUTMPI
+  integer::info
+  integer,dimension(1:s%g%ncpu)::nfinal_cpu_all
+#endif
   type(msg_prop_clump)::dummy_prop_clump
   integer(kind=8)::global_peak_id,global_halo_id
-  integer::ipeak,jpeak,igrid,ilevel,ind,itest
+  integer::nfinal
+  integer(kind=8)::nfinal_tot
+  integer,dimension(1:s%g%ncpu)::nfinal_cpu
+  integer(kind=8),dimension(0:s%g%ncpu)::nfinal_cum
+  integer::icpu,ipeak,jpeak,igrid,ilevel,ind,itest
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
 
   if(g%myid==1.and.r%verbose)write(*,*)'Entering trim_clumps'
 
+  ! Change peak indexing to keep only relevant ones
+  nfinal=0
+  c%ind_final=0
+  do ipeak=1,c%npeak
+     if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold.AND. &
+          & c%npart(ipeak) > 0 ) then
+        nfinal=nfinal+1
+        c%ind_final(ipeak)=nfinal
+     endif
+  end do
+  nfinal_cpu=0
+  nfinal_cpu(g%myid)=nfinal
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(nfinal_cpu,nfinal_cpu_all,g%ncpu,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,info)
+  nfinal_cpu=nfinal_cpu_all
+#endif
+  nfinal_cum=0
+  do icpu=1,g%ncpu
+     nfinal_cum(icpu)=nfinal_cum(icpu-1)+int(nfinal_cpu(icpu),kind=8)
+  end do
+#ifdef WITHOUTMPI
+  nfinal_tot=int(nfinal,kind=8)
+#else
+  nfinal_tot=nfinal_cum(g%ncpu)
+#endif
+!!$  if (g%myid==1)then
+!!$    write(*,*)'Found',int(nfinal_tot,kind=4),' clumps'
+!!$  endif
+  do ipeak=1,c%npeak
+     if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold.AND. &
+          & c%npart(ipeak) > 0 ) then
+        c%ind_final(ipeak)=c%ind_final(ipeak)+nfinal_cum(g%myid-1)
+     endif
+  end do
+
+  ! Change other important peak indices
+  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_prop,unpack=unpack_fetch_prop)
+  do ipeak=1,c%npeak
+     if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold.AND. &
+          & c%npart(ipeak) > 0 ) then
+        global_peak_id=c%new_peak(ipeak)
+        call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+        c%new_peak(ipeak)=c%ind_final(jpeak)
+        global_peak_id=c%ind_halo(ipeak)
+        call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
+        c%ind_halo(ipeak)=c%ind_final(jpeak)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  ! Modify particle peak ids accordingly
+  if(s%r%pic)then
+     call trim_particles(s,s%p)
+  endif
+  if(s%r%star)then
+     call trim_particles(s,s%star)
+  endif
+  if(s%r%sink)then
+     call trim_particles(s,s%sink)
+  endif
+  if(s%r%tree)then
+     call trim_particles(s,s%tree)
+  endif
+
+  ! Modify flag1 and flag2 accordingly
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_prop,unpack=unpack_fetch_prop)
   do itest=1,c%ntest
@@ -1473,10 +1579,11 @@ subroutine trim_clumps(s)
      global_peak_id=m%grid(igrid)%flag2(ind)
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
-        if(c%relevance(ipeak).LE.c%relevance_threshold)then
-           m%grid(igrid)%flag2(ind)=0
-        endif
-        if(c%clump_mass(ipeak).LE.c%mass_threshold)then
+        if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+             & c%relevance(ipeak) > c%relevance_threshold.AND. &
+             & c%npart(ipeak) > 0 ) then
+           m%grid(igrid)%flag2(ind)=c%ind_final(ipeak)
+        else
            m%grid(igrid)%flag2(ind)=0
         endif
      endif
@@ -1484,10 +1591,11 @@ subroutine trim_clumps(s)
         global_halo_id=m%grid(igrid)%flag1(ind)
         if (global_halo_id /=0 ) then
            call get_peak(s,global_halo_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
-           if(c%relevance(ipeak).LE.c%relevance_threshold)then
-              m%grid(igrid)%flag1(ind)=0
-           endif
-           if(c%halo_mass(ipeak).LE.c%mass_threshold)then
+           if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+                & c%relevance(ipeak) > c%relevance_threshold.AND. &
+                & c%npart(ipeak) > 0 ) then
+              m%grid(igrid)%flag1(ind)=c%ind_final(ipeak)
+           else
               m%grid(igrid)%flag1(ind)=0
            endif
         endif
@@ -1502,6 +1610,50 @@ end subroutine trim_clumps
 !################################################################
 !################################################################
 !################################################################
+subroutine trim_particles(s,p)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  !------------------------------------------------------------------
+  ! This routine modifies the peak id of the input particles
+  ! to accound for the final clump index.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !------------------------------------------------------------------
+  type(msg_prop_clump)::dummy_prop_clump
+  integer::ipeak,ipart
+  integer(kind=8)::global_peak_id
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
+       pack=pack_fetch_prop,unpack=unpack_fetch_prop)
+  do ipart=1,p%npart
+     global_peak_id=p%pid(ipart)
+     if (global_peak_id /=0 ) then
+        call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
+        if( c%clump_mass(ipeak) > c%mass_threshold.AND. &
+             & c%relevance(ipeak) > c%relevance_threshold.AND. &
+             & c%npart(ipeak) > 0 ) then
+           p%pid(ipart)=c%ind_final(ipeak)
+        else
+           p%pid(ipart)=0
+        endif
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine trim_particles
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine pack_fetch_prop(c,local_peak_id,msg_size,msg_array)
   use clfind_commons, only: clump_t
   use cache_commons, only: msg_prop_clump
@@ -1512,11 +1664,10 @@ subroutine pack_fetch_prop(c,local_peak_id,msg_size,msg_array)
 
   type(msg_prop_clump)::msg
 
+  msg%ind=c%ind_final(local_peak_id)
+  msg%ncell=c%npart(local_peak_id)
   msg%dens=c%relevance(local_peak_id)
   msg%mass=c%clump_mass(local_peak_id)
-  if(c%saddle_threshold>0)then
-     msg%vol=c%halo_mass(local_peak_id)
-  endif
 
   msg_array=transfer(msg,msg_array)
 
@@ -1537,302 +1688,12 @@ subroutine unpack_fetch_prop(c,local_peak_id,msg_size,msg_array)
 
   msg=transfer(msg_array,msg)
 
+  c%ind_final(local_peak_id)=msg%ind
+  c%npart(local_peak_id)=msg%ncell
   c%relevance(local_peak_id)=msg%dens
   c%clump_mass(local_peak_id)=msg%mass
-  if(c%saddle_threshold>0)then
-     c%halo_mass(local_peak_id)=msg%vol
-  endif
 
 end subroutine unpack_fetch_prop
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine central_in_halos(s)
-  use amr_commons, only: dp,ndim
-  use clfind_commons
-  use ramses_commons, only: ramses_t
-  use cache_commons, only: msg_maxmass_clump, msg_prop_clump
-  use cache
-  implicit none
-  type(ramses_t)::s
-  !----------------------------------------------------------------------------
-  ! This subroutine find the 3 most massive clumps in each halo if any.
-  !----------------------------------------------------------------------------
-  type(msg_maxmass_clump)::dummy_maxmass_clump
-  type(msg_prop_clump)::dummy_prop_clump
-  integer(kind=8)::global_peak_id,merge_to
-  integer::ipeak,jpeak,jpeak1,jpeak2,jpeak3
-  real(dp)::mass1,mass2,mass3
-
-  associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
-
-  if(g%myid==1.and.r%verbose)write(*,*)'Entering central_halos'
-
-  ! Identify most massive peak within each halo
-  c%ind_halo_1=0
-  c%ind_max_mass=0
-  c%max_peak_mass=0
-  call open_cache_clump(s,pack_size=storage_size(dummy_maxmass_clump)/32,&
-       init=init_flush_maxmass,flush=pack_flush_maxmass,combine=unpack_flush_maxmass)
-  do ipeak=1,c%npeak
-     global_peak_id=ipeak+c%npeak_cum(g%myid-1)
-     merge_to=c%ind_halo(ipeak)
-     call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.false.)
-     if(c%clump_mass(ipeak).gt.c%max_peak_mass(jpeak))then
-        c%max_peak_mass(jpeak)=c%clump_mass(ipeak)
-        c%ind_max_mass(jpeak)=global_peak_id
-     endif
-  end do
-  call close_cache(s,m%grid_dict)
-  c%ind_halo_1=c%ind_max_mass
-
-  ! Identify second massive peak within each halo
-  c%ind_halo_2=0
-  c%ind_max_mass=0
-  c%max_peak_mass=0
-  call open_cache_clump(s,pack_size=storage_size(dummy_maxmass_clump)/32,&
-       pack=pack_fetch_maxmass,unpack=unpack_fetch_maxmass,&
-       init=init_flush_maxmass,flush=pack_flush_maxmass,combine=unpack_flush_maxmass)
-  do ipeak=1,c%npeak
-     global_peak_id=ipeak+c%npeak_cum(g%myid-1)
-     merge_to=c%ind_halo(ipeak)
-     call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.true.)
-     if(c%ind_halo_1(jpeak).NE.global_peak_id)then
-        if(c%clump_mass(ipeak).gt.c%max_peak_mass(jpeak))then
-           c%max_peak_mass(jpeak)=c%clump_mass(ipeak)
-           c%ind_max_mass(jpeak)=global_peak_id
-        endif
-     endif
-  end do
-  call close_cache(s,m%grid_dict)
-  c%ind_halo_2=c%ind_max_mass
-
-  ! Identify third massive peak within each halo
-  c%ind_halo_3=0
-  c%ind_max_mass=0
-  c%max_peak_mass=0
-  call open_cache_clump(s,pack_size=storage_size(dummy_maxmass_clump)/32,&
-       pack=pack_fetch_maxmass,unpack=unpack_fetch_maxmass,&
-       init=init_flush_maxmass,flush=pack_flush_maxmass,combine=unpack_flush_maxmass)
-  do ipeak=1,c%npeak
-     global_peak_id=ipeak+c%npeak_cum(g%myid-1)
-     merge_to=c%ind_halo(ipeak)
-     call get_peak(s,merge_to,jpeak,flush_cache=.true.,fetch_cache=.true.)
-     if(c%ind_halo_1(jpeak).NE.global_peak_id.and.c%ind_halo_2(jpeak).NE.global_peak_id)then
-        if(c%clump_mass(ipeak).gt.c%max_peak_mass(jpeak))then
-           c%max_peak_mass(jpeak)=c%clump_mass(ipeak)
-           c%ind_max_mass(jpeak)=global_peak_id
-        endif
-     endif
-  end do
-  call close_cache(s,m%grid_dict)
-  c%ind_halo_3=c%ind_max_mass
-
-  ! Write masses of relevant centrals if any
-  call open_cache_clump(s,pack_size=storage_size(dummy_prop_clump)/32,&
-       pack=pack_fetch_central,unpack=unpack_fetch_central)
-  do ipeak=1,c%npeak
-     global_peak_id=ipeak+c%npeak_cum(g%myid-1)
-     if(c%ind_halo(ipeak)==global_peak_id.AND.&
-          & c%halo_mass(ipeak) > c%mass_threshold.AND. &
-          & c%relevance(ipeak) > c%relevance_threshold)then
-
-        ! Get 3 most massive peak patches
-        mass1=0
-        mass2=0
-        mass3=0
-        if(c%ind_halo_1(ipeak).NE.0)then
-           global_peak_id=c%ind_halo_1(ipeak)
-           call get_peak(s,global_peak_id,jpeak1,flush_cache=.false.,fetch_cache=.true.)
-           if(c%clump_mass(jpeak1) > c%mass_threshold.AND. &
-                & c%relevance(jpeak1) > c%relevance_threshold)then
-              mass1 = c%clump_mass(jpeak1)
-           endif
-           if(c%ind_halo_2(ipeak).NE.0)then
-              global_peak_id=c%ind_halo_2(ipeak)
-              call get_peak(s,global_peak_id,jpeak2,flush_cache=.false.,fetch_cache=.true.)
-              if(c%clump_mass(jpeak2) > c%mass_threshold.AND. &
-                   & c%relevance(jpeak2) > c%relevance_threshold)then
-                 mass2 = c%clump_mass(jpeak2)
-              endif
-              if(c%ind_halo_3(ipeak).NE.0)then
-                 global_peak_id=c%ind_halo_3(ipeak)
-                 call get_peak(s,global_peak_id,jpeak3,flush_cache=.false.,fetch_cache=.true.)
-                 if(c%clump_mass(jpeak3) > c%mass_threshold.AND. &
-                      & c%relevance(jpeak3) > c%relevance_threshold)then
-                    mass3 = c%clump_mass(jpeak3)
-                 endif
-              endif
-           endif
-        endif
-
-        ! Remove centrals if not massive enough according to several criteria
-        if(mass3.LT.0.1*mass1)then
-           mass3=0
-        endif
-        if(mass2.LT.0.1*mass1)then
-           mass2=0
-        endif
-
-        ! Set index of removed central to 0
-        if(mass3==0)then
-           c%ind_halo_3(ipeak)=0
-        endif
-        if(mass2==0)then
-           c%ind_halo_2(ipeak)=0
-        endif
-        
-!!$        if(mass2>0.or.mass3>0)then
-!!$           write(*,*)c%ind_halo(ipeak),c%ind_halo_1(ipeak),c%ind_halo_2(ipeak),c%ind_halo_3(ipeak),&
-!!$                & c%halo_mass(ipeak),mass1,mass2,mass3
-!!$        endif
-!!$
-     endif
-  end do
-  call close_cache(s,m%grid_dict)
-
-  end associate
-
-end subroutine central_in_halos
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_fetch_maxmass(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_maxmass_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_maxmass_clump)::msg
-
-  msg%ind1=c%ind_halo_1(local_peak_id)
-  msg%ind2=c%ind_halo_2(local_peak_id)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_fetch_maxmass
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_fetch_maxmass(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_maxmass_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_maxmass_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  c%ind_halo_1(local_peak_id)=msg%ind1
-  c%ind_halo_2(local_peak_id)=msg%ind2
-
-end subroutine unpack_fetch_maxmass
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine init_flush_maxmass(c,local_peak_id)
-  use amr_commons, only: ndim
-  use clfind_commons, only: clump_t
-  type(clump_t)::c
-  integer::local_peak_id
-
-  c%max_peak_mass(local_peak_id)=0d0
-  c%ind_max_mass(local_peak_id)=0
-
-end subroutine init_flush_maxmass
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_flush_maxmass(c,local_peak_id,msg_size,msg_array)
-  use amr_commons, only: ndim
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_maxmass_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_maxmass_clump)::msg
-
-  msg%mass=c%max_peak_mass(local_peak_id)
-  msg%ind=c%ind_max_mass(local_peak_id)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_flush_maxmass
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_flush_maxmass(c,local_peak_id,msg_size,msg_array)
-  use amr_commons, only: ndim
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_maxmass_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_maxmass_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  if(msg%mass.GT.c%max_peak_mass(local_peak_id))then
-     c%max_peak_mass(local_peak_id)=msg%mass
-     c%ind_max_mass(local_peak_id)=msg%ind
-  endif
-
-end subroutine unpack_flush_maxmass
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_fetch_central(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_prop_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_prop_clump)::msg
-
-  msg%mass=c%clump_mass(local_peak_id)
-  msg%dens=c%relevance(local_peak_id)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_fetch_central
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_fetch_central(c,local_peak_id,msg_size,msg_array)
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_prop_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_prop_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  c%clump_mass(local_peak_id)=msg%mass
-  c%relevance(local_peak_id)=msg%dens
-
-end subroutine unpack_fetch_central
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -1848,28 +1709,26 @@ subroutine particle_clump_properties(s,p)
   type(part_t)::p
   !------------------------------------------------------------------
   ! This routine computes various particle-based clump properties.
-  ! In particular, it computes for each particle its parent peak id.
-  ! This is used to compute mass profiles for each halo.
-  ! This is also stored in the peak_part and peak_star files.
+  ! The particle peak id must be available in p%pid.
+  ! Note that this routine must be called prior to unbinding.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
   !------------------------------------------------------------------
   type(msg_prop_clump)::dummy_prop_clump
-  integer::i,ipeak,ipart,icell,ind,idim,ibin,ilevel
-  integer(kind=8)::global_peak_id,global_halo_id
-  integer::halo_nr,peak_nr,no_halo
-  real(dp)::dist,xx,rad,dx_loc,r2
+  integer::i,ipeak,ipart,ind,idim,ibin,ilevel
+  integer(kind=8)::global_peak_id
+  integer::halo_nr,peak_nr
+  real(dp)::xx,rad,dx_loc,r2
   real(dp),dimension(1:ndim)::xpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
-  !---------------------------------
-  ! Reads peak id of input particles
-  !---------------------------------
-  call particle_peak_id(s,p,no_halo)
-
   !--------------------------------------------
   ! Sort particles according to global clump id
   !--------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%pid(ipart)
+  end do
   call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
   !-----------------------------------------
@@ -1878,10 +1737,11 @@ subroutine particle_clump_properties(s,p)
   c%particle_mass=0
   c%peak_vel=0
   c%peak_com=0
+  c%npart=0
   call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
        pack=pack_fetch_part,unpack=unpack_fetch_part,&
        init=init_flush_part,flush=pack_flush_part,combine=unpack_flush_part)
-  do i=1+no_halo,p%npart
+  do i=1+p%norphan_peak,p%npart
      ! Get peak id
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
@@ -1902,6 +1762,7 @@ subroutine particle_clump_properties(s,p)
            c%peak_com(peak_nr,1:ndim)=c%peak_com(peak_nr,1:ndim)+p%mp(ipart)*xpart(1:ndim)
            c%peak_vel(peak_nr,1:ndim)=c%peak_vel(peak_nr,1:ndim)+p%mp(ipart)*p%vp(ipart,1:ndim)
            c%particle_mass(peak_nr)=c%particle_mass(peak_nr)+p%mp(ipart)
+           c%npart(peak_nr)=c%npart(peak_nr)+1
         endif
      endif
   end do
@@ -1940,7 +1801,7 @@ subroutine pack_fetch_part(c,local_peak_id,msg_size,msg_array)
   type(msg_prop_clump)::msg
 
   msg%pos(1:ndim)=c%peak_pos(local_peak_id,1:ndim)
-  msg%ind(1)=c%peak_level(local_peak_id)
+  msg%ind=c%peak_level(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -1963,7 +1824,7 @@ subroutine unpack_fetch_part(c,local_peak_id,msg_size,msg_array)
   msg=transfer(msg_array,msg)
 
   c%peak_pos(local_peak_id,1:ndim)=msg%pos(1:ndim)
-  c%peak_level(local_peak_id)=msg%ind(1)
+  c%peak_level(local_peak_id)=msg%ind
 
 end subroutine unpack_fetch_part
 !################################################################
@@ -1976,6 +1837,7 @@ subroutine init_flush_part(c,local_peak_id)
   type(clump_t)::c
   integer::local_peak_id
 
+  c%npart(local_peak_id)=0
   c%particle_mass(local_peak_id)=0
   c%peak_vel(local_peak_id,1:ndim)=0d0
   c%peak_com(local_peak_id,1:ndim)=0d0
@@ -1996,6 +1858,7 @@ subroutine pack_flush_part(c,local_peak_id,msg_size,msg_array)
 
   type(msg_prop_clump)::msg
 
+  msg%ncell=c%npart(local_peak_id)
   msg%mass=c%particle_mass(local_peak_id)
   msg%vel(1:ndim)=c%peak_vel(local_peak_id,1:ndim)
   msg%pos(1:ndim)=c%peak_com(local_peak_id,1:ndim)
@@ -2020,6 +1883,7 @@ subroutine unpack_flush_part(c,local_peak_id,msg_size,msg_array)
 
   msg=transfer(msg_array,msg)
 
+  c%npart(local_peak_id)=c%npart(local_peak_id)+msg%ncell
   c%particle_mass(local_peak_id)=c%particle_mass(local_peak_id)+msg%mass
   c%peak_vel(local_peak_id,1:ndim)=c%peak_vel(local_peak_id,1:ndim)+msg%vel(1:ndim)
   c%peak_com(local_peak_id,1:ndim)=c%peak_com(local_peak_id,1:ndim)+msg%pos(1:ndim)
@@ -2029,7 +1893,7 @@ end subroutine unpack_flush_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_split_centrals(s,p,evaporate)
+subroutine particle_potential(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -2038,25 +1902,18 @@ subroutine particle_split_centrals(s,p,evaporate)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  logical::evaporate
   !------------------------------------------------------------------
-  ! This routine splits all particle of a given halo-patch among 
-  ! the 1, 2 or 3 central peaks. It used a clustering method
-  ! in phase space to assign particles to a central peak.
-  ! The central peak id is stoted in the workp array.
+  ! This routine computes the particle self-potential of each clump.
+  ! Particle are detached hierarchically from children clumps
+  ! to their parent clumps in the saddle point merging hierarchy.
+  ! The halo-patch is used as a garbage colector.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
   !------------------------------------------------------------------
-  type(msg_prop_clump)::dummy_prop_clump
   type(msg_mbin_clump)::dummy_mbin_clump
-  integer::i,ipart,icell,ind,idim,ibin,ilevel
-  integer(kind=8)::global_peak_id,global_halo_id
-  integer::ipeak,jpeak,no_halo
-  integer::jpeak1,jpeak2,jpeak3
-  real(dp)::pi,grav,radius,velocity,distmin
-  real(dp)::dist,dist1,dist2,dist3
-  real(dp)::xdist1,xdist2,xdist3
-  real(dp)::vdist1,vdist2,vdist3
-  real(dp)::mass1,mass2,mass3
+  integer::i,ipart,ind,idim,ibin,ilevel
+  integer(kind=8)::global_peak_id
+  integer::ipeak
+  real(dp)::pi,grav,rho,rad,dist,dr
   real(dp),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
@@ -2066,124 +1923,258 @@ subroutine particle_split_centrals(s,p,evaporate)
   grav=1d0
   if(s%r%cosmo)grav=3d0/8d0/pi*s%g%omega_m*s%g%aexp
 
-  !---------------------------------
-  ! Reads halo id of input particles
-  !---------------------------------
-  call particle_halo_id(s,p,no_halo)
-
-  !--------------------------------------------
-  ! Sort particles according to global clump id
-  !--------------------------------------------
+  ! Sort particles according to global peak id
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%pid(ipart)
+  end do
   call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
-  !-----------------------------------------------------------
-  ! Assign particle to central using clustering in phase space
-  !-----------------------------------------------------------
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32,&
-       pack=pack_fetch_split,unpack=unpack_fetch_split)
-  do i=1+no_halo,p%npart
-     ! Get halo id
-     ipart=p%sortp(i)
-     global_halo_id=p%workp(i)
-     if (global_halo_id /=0 ) then
-        call get_peak(s,global_halo_id,ipeak,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-        ! Compute halo radius
-        radius=(c%halo_mass(ipeak)/4d0/pi*3d0/200d0)**(1d0/3d0)
-        ! Get first central peak id
-        global_peak_id=c%ind_halo_1(ipeak)
-        dist1=1e10
-        if(global_peak_id>0)then
-           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
-           ! Compute Euclidian distance in configuration space
-           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
-           dist1=cmp_distance(p%xp(ipart,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
-                &             p%vp(ipart,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
+  ! Loop over merging hierarchy levels
+  c%mass_bin=0d0
+  c%npart=0
+  do ilevel=0,c%merge_levelmax+1
+     ! Open cache
+     call open_cache_clump(s,storage_size(dummy_mbin_clump)/32,&
+          pack=pack_fetch_mbin,unpack=unpack_fetch_mbin,&
+          init=init_flush_mbin,flush=pack_flush_mbin,combine=unpack_flush_mbin)
+     do i=1+p%norphan_peak,p%npart
+        ! Get peak id
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.true.)
+        if(c%lev_peak(ipeak)==ilevel)then
+           ! Get clump saddle point density
+           rho=c%tidal_dens(ipeak)
+           ! Compute clump tidal radius
+           rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
+           ! Compute particle radius
+           xpart(1:ndim)=p%xp(ipart,1:ndim)-c%peak_pos(ipeak,1:ndim)
+           dist=0d0
+           do idim=1,ndim
+              ! In case of periodic boundaries
+              if(xpart(idim)> r%boxlen*0.5)xpart(idim)=xpart(idim)-r%boxlen
+              if(xpart(idim)<-r%boxlen*0.5)xpart(idim)=xpart(idim)+r%boxlen
+              dist=dist+xpart(idim)**2
+           end do
+           dist=sqrt(dist)
+           dr=2d0*rad/dble(nbin)
+           do ibin=1,nbin
+              ! We use a simple linear binning as the mass is usually propto r
+              if(dist<=dble(ibin)*dr)then
+                 c%mass_bin(ipeak,ibin)=c%mass_bin(ipeak,ibin)+p%mp(ipart)
+                 c%npart(ipeak)=c%npart(ipeak)+1
+                 exit
+              endif
+           end do
+           ! Assign particle to next peak in hierarchy
+           p%workp(i)=c%new_peak(ipeak)
+           p%pid(ipart)=c%new_peak(ipeak)
         endif
-        ! Get second central peak id
-        global_peak_id=c%ind_halo_2(ipeak)
-        dist2=1e10
-        if(global_peak_id>0)then
-           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
-           ! Compute Euclidian distance in configuration space
-           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
-           dist2=cmp_distance(p%xp(ipart,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
-                &             p%vp(ipart,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
-        endif
-        ! Get third central peak id
-        global_peak_id=c%ind_halo_3(ipeak)
-        dist3=1e10
-        if(global_peak_id>0)then
-           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
-           ! Compute Euclidian distance in configuration space
-           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
-           dist3=cmp_distance(p%xp(ipart,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
-                &             p%vp(ipart,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
-        endif
-        ! Assign particle to closest central in phase space
-        distmin=min(dist1,min(dist2,dist3))
-        if(dist3.EQ.distmin)p%workp(i)=c%ind_halo_3(ipeak)
-        if(dist2.EQ.distmin)p%workp(i)=c%ind_halo_2(ipeak)
-        if(dist1.EQ.distmin)p%workp(i)=c%ind_halo_1(ipeak)
-        ! Unlock halo
-        call unlock_cache_clump(s,ipeak)
-     endif
+     end do
+     call close_cache(s,m%grid_dict)
   end do
-  call close_cache(s,m%grid_dict)
+  ! End loop over levels
 
-  !-------------------------------------------------------
-  ! Assign peak to central using clustering in phase space
-  !-------------------------------------------------------
-  call open_cache_clump(s,storage_size(dummy_prop_clump)/32, &
-       pack=pack_fetch_split,unpack=unpack_fetch_split)
-  do i=1,c%npeak
-     if(c%clump_mass(i) > c%mass_threshold.AND. &
-          & c%relevance(i) > c%relevance_threshold)then
-     global_halo_id=c%ind_halo(i)
-     if(global_halo_id>0)then
-        call get_peak(s,global_halo_id,ipeak,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-        ! Compute halo radius
-        radius=(c%halo_mass(ipeak)/4d0/pi*3d0/200d0)**(1d0/3d0)
-        ! Get first central peak id
-        global_peak_id=c%ind_halo_1(ipeak)
-        dist1=1e10
-        if(global_peak_id>0)then
-           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
-           ! Compute Euclidian distance in configuration space
-           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
-           dist1=cmp_distance(c%peak_pos(i,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
-                &             c%peak_vel(i,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
-        endif
-        ! Get second central peak id
-        global_peak_id=c%ind_halo_2(ipeak)
-        dist2=1e10
-        if(global_peak_id>0)then
-           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
-           ! Compute Euclidian distance in configuration space
-           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
-           dist2=cmp_distance(c%peak_pos(i,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
-                &             c%peak_vel(i,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
-        endif
-        ! Get third central peak id
-        global_peak_id=c%ind_halo_3(ipeak)
-        dist3=1e10
-        if(global_peak_id>0)then
-           call get_peak(s,global_peak_id,jpeak,flush_cache=.false.,fetch_cache=.true.)
-           ! Compute Euclidian distance in configuration space
-           velocity=sqrt(grav*c%clump_mass(jpeak)/radius)
-           dist3=cmp_distance(c%peak_pos(i,1:ndim),c%peak_pos(jpeak,1:ndim),radius, &
-                &             c%peak_vel(i,1:ndim),c%peak_vel(jpeak,1:ndim),velocity,r%boxlen)
-        endif
-        ! Assign particle to closest central in phase space
-        distmin=min(dist1,min(dist2,dist3))
-        if(dist3.EQ.distmin)c%ind_central(i)=c%ind_halo_3(ipeak)
-        if(dist2.EQ.distmin)c%ind_central(i)=c%ind_halo_2(ipeak)
-        if(dist1.EQ.distmin)c%ind_central(i)=c%ind_halo_1(ipeak)
-        ! Unlock halo
-        call unlock_cache_clump(s,ipeak)
-     endif
+  !------------------------
+  ! Compute cumulative mass
+  !------------------------
+  do ipeak=1,c%npeak
+     if(   c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold)then
+        do ibin=1,nbin-1
+           c%mass_bin(ipeak,ibin+1)=c%mass_bin(ipeak,ibin+1)+c%mass_bin(ipeak,ibin)
+        end do
      endif
   end do
-  call close_cache(s,m%grid_dict)
+
+  !-----------------------
+  ! Compute self-potential
+  !-----------------------
+  c%phi=0d0
+  do ipeak=1,c%npeak
+     if(   c%clump_mass(ipeak) > c%mass_threshold.AND. &
+          & c%relevance(ipeak) > c%relevance_threshold)then
+        ! Get clump saddle point density
+        rho=c%tidal_dens(ipeak)
+        ! Compute clump tidal radius
+        rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
+        ! Convert mass profile into potential energy
+        dr=2d0*rad/dble(nbin)
+        dist=(dble(nbin-1)+0.5d0)*dr
+        c%phi(ipeak,nbin)=grav*c%mass_bin(ipeak,nbin)/dist**2*dr
+        do ibin=nbin-1,1,-1
+           dist=(dble(ibin-1)+0.5d0)*dr
+           c%phi(ipeak,ibin)=c%phi(ipeak,ibin+1)+grav*c%mass_bin(ipeak,ibin)/dist**2*dr
+        end do
+     endif
+  end do
+
+  end associate
+
+end subroutine particle_potential
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine particle_unbind(s,p)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  !------------------------------------------------------------------
+  ! This routine unbinds particle hierarchically between children
+  ! clumps and parent clumps in the saddle point merging hierarchy.
+  ! The halo-patch is used as a garbage colector.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !------------------------------------------------------------------
+  type(msg_unbind_clump)::dummy_unbind_clump
+  integer::i,ipart,ind,idim,ibin,ilevel
+  integer(kind=8)::global_peak_id
+  integer::ipeak
+  real(dp)::pi,rho,rad,vel,bound
+  real(dp),dimension(1:ndim)::xpart,vpart
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Constants
+  pi=ACOS(-1.0D0)
+
+  ! Sort particles according to global peak id
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%pid(ipart)
+  end do
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
+
+  ! Loop over merging hierarchy levels
+  do ilevel=0,c%merge_levelmax
+     ! Demote particles to parent clump if unbound
+     call open_cache_clump(s,storage_size(dummy_unbind_clump)/32,&
+          pack=pack_fetch_unbind,unpack=unpack_fetch_unbind)
+     do i=1+p%norphan_peak,p%npart
+        ! Get peak id
+        ipart=p%sortp(i)
+        global_peak_id=p%workp(i)
+        call get_peak(s,global_peak_id,ipeak,flush_cache=.false.,fetch_cache=.true.)
+        if(c%lev_peak(ipeak)==ilevel)then
+           ! Get clump saddle point density
+           rho=c%tidal_dens(ipeak)
+           ! Compute clump tidal radius
+           rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
+           ! Compute total energy
+           bound=total_energy(p%xp(ipart,1:ndim),c%peak_pos(ipeak,1:ndim), &
+                &             p%vp(ipart,1:ndim),c%peak_vel(ipeak,1:ndim), &
+                &             c%phi(ipeak,1:nbin),rad,r%boxlen)
+           ! If unbound, assign to next peak in hierarchy
+           if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
+              p%workp(i)=c%new_peak(ipeak)
+              p%pid(ipart)=c%new_peak(ipeak)
+           endif
+        endif
+     end do
+     call close_cache(s,m%grid_dict)
+  end do
+  ! End loop over levels
+
+  end associate
+
+end subroutine particle_unbind
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine pack_fetch_unbind(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: ndim,nbin
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_unbind_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_unbind_clump)::msg
+
+  msg%lev=c%lev_peak(local_peak_id)
+  msg%ind=c%new_peak(local_peak_id)
+  msg%dens=c%tidal_dens(local_peak_id)
+  msg%mass=c%clump_mass(local_peak_id)
+  msg%vel=c%peak_vel(local_peak_id,1:ndim)
+  msg%pos=c%peak_pos(local_peak_id,1:ndim)
+  msg%mbin=c%phi(local_peak_id,1:nbin)
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_unbind
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine unpack_fetch_unbind(c,local_peak_id,msg_size,msg_array)
+  use amr_commons, only: ndim, nbin
+  use clfind_commons, only: clump_t
+  use cache_commons, only: msg_unbind_clump
+  type(clump_t)::c
+  integer::local_peak_id
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  type(msg_unbind_clump)::msg
+
+  msg=transfer(msg_array,msg)
+
+  c%lev_peak(local_peak_id)=msg%lev
+  c%new_peak(local_peak_id)=msg%ind
+  c%tidal_dens(local_peak_id)=msg%dens
+  c%clump_mass(local_peak_id)=msg%mass
+  c%peak_vel(local_peak_id,1:ndim)=msg%vel
+  c%peak_pos(local_peak_id,1:ndim)=msg%pos
+  c%phi(local_peak_id,1:nbin)=msg%mbin
+
+end subroutine unpack_fetch_unbind
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine mass_profile(s,p)
+  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use ramses_commons, only: ramses_t
+  use pm_commons, only: part_t
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  !------------------------------------------------------------------
+  ! This routine compute the cumulative mass profiles of input
+  ! particles p around each subhalo. The particle peak id must
+  ! have been computed before by the unbinding routine.
+  ! Written by Romain Teyssier (mini-ramses version in June 2024).
+  !------------------------------------------------------------------
+  type(msg_mbin_clump)::dummy_mbin_clump
+  integer::i,ipart,ind,idim,ibin,ilevel
+  integer(kind=8)::global_peak_id
+  integer::ipeak,jpeak
+  real(dp)::pi,rad,rho,dist,dr
+  real(dp),dimension(1:ndim)::xpart,vpart
+
+  associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
+
+  ! Constants
+  pi=ACOS(-1.0D0)
+
+  !-------------------------------------------
+  ! Sort particles according to global peak id
+  !-------------------------------------------
+  do ipart=1,p%npart
+     p%sortp(ipart)=ipart
+     p%workp(ipart)=p%pid(ipart)
+  end do
+  call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
   !--------------------------------------------------------
   ! Compute particle mass profile around their central peak
@@ -2193,27 +2184,30 @@ subroutine particle_split_centrals(s,p,evaporate)
        init=init_flush_mbin,flush=pack_flush_mbin,combine=unpack_flush_mbin)
   c%mass_bin=0d0
   c%npart=0
-  do i=1+no_halo,p%npart
-     ! Get central global peak id
+  do i=1+p%norphan_peak,p%npart
+     ! Get global peak id
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
      if (global_peak_id /=0 ) then
         call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.true.)
-        ! Compute halo maximum radius
-        radius=2d0*(c%halo_mass(ipeak)/4d0/pi*3d0/200d0)**(1d0/3d0)
+        ! Compute subhalo saddle point density
+        rho=c%tidal_dens(ipeak)
+        ! Compute clump tidal radius
+        rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
         ! Compute particle radius
-        dist=0d0
         xpart(1:ndim)=p%xp(ipart,1:ndim)-c%peak_pos(ipeak,1:ndim)
-        ! In case of periodic boundaries
+        dist=0d0
         do idim=1,ndim
+           ! In case of periodic boundaries
            if(xpart(idim)> r%boxlen*0.5)xpart(idim)=xpart(idim)-r%boxlen
            if(xpart(idim)<-r%boxlen*0.5)xpart(idim)=xpart(idim)+r%boxlen
            dist=dist+xpart(idim)**2
         end do
         dist=sqrt(dist)
+        dr=2d0*rad/dble(nbin)
         do ibin=1,nbin
            ! We use a simple linear binning as the mass is usually propto r
-           if(dist<=dble(ibin)/dble(nbin)*radius)then
+           if(dist<=dble(ibin)*dr)then
               c%mass_bin(ipeak,ibin)=c%mass_bin(ipeak,ibin)+p%mp(ipart)
               c%npart(ipeak)=c%npart(ipeak)+1
               exit
@@ -2227,8 +2221,7 @@ subroutine particle_split_centrals(s,p,evaporate)
   ! Compute cumulative mass
   !------------------------
   do ipeak=1,c%npeak
-     if(c%ind_central(ipeak).EQ.ipeak+c%npeak_cum(g%myid-1).AND. &
-          & c%halo_mass(ipeak) > c%mass_threshold.AND. &
+     if(   c%clump_mass(ipeak) > c%mass_threshold.AND. &
           & c%relevance(ipeak) > c%relevance_threshold)then
         do ibin=1,nbin-1
            c%mass_bin(ipeak,ibin+1)=c%mass_bin(ipeak,ibin+1)+c%mass_bin(ipeak,ibin)
@@ -2236,65 +2229,14 @@ subroutine particle_split_centrals(s,p,evaporate)
      endif
   end do
 
-  !------------------------------------------------
-  ! Remove centrals if cumulative mass is too small
-  !------------------------------------------------
-  if(evaporate)then
-     call open_cache_clump(s,pack_size=storage_size(dummy_prop_clump)/32,&
-          pack=pack_fetch_evaporate,unpack=unpack_fetch_evaporate)
-     do ipeak=1,c%npeak
-        global_peak_id=ipeak+c%npeak_cum(g%myid-1)
-        if(c%ind_halo(ipeak)==global_peak_id.AND.&
-             & c%halo_mass(ipeak) > c%mass_threshold.AND. &
-             & c%relevance(ipeak) > c%relevance_threshold)then
-           ! Get 3 most massive peak-patches
-           mass1=0
-           mass2=0
-           mass3=0
-           if(c%ind_halo_1(ipeak).NE.0)then
-              global_peak_id=c%ind_halo_1(ipeak)
-              call get_peak(s,global_peak_id,jpeak1,flush_cache=.false.,fetch_cache=.true.)
-              if(c%clump_mass(jpeak1) > c%mass_threshold.AND. &
-                   & c%relevance(jpeak1) > c%relevance_threshold)then
-                 mass1 = c%mass_bin(jpeak1,nbin)
-              endif
-              if(c%ind_halo_2(ipeak).NE.0)then
-                 global_peak_id=c%ind_halo_2(ipeak)
-                 call get_peak(s,global_peak_id,jpeak2,flush_cache=.false.,fetch_cache=.true.)
-                 if(c%clump_mass(jpeak2) > c%mass_threshold.AND. &
-                      & c%relevance(jpeak2) > c%relevance_threshold)then
-                    mass2 = c%mass_bin(jpeak2,nbin)
-                 endif
-                 if(c%ind_halo_3(ipeak).NE.0)then
-                    global_peak_id=c%ind_halo_3(ipeak)
-                    call get_peak(s,global_peak_id,jpeak3,flush_cache=.false.,fetch_cache=.true.)
-                    if(c%clump_mass(jpeak3) > c%mass_threshold.AND. &
-                         & c%relevance(jpeak3) > c%relevance_threshold)then
-                       mass3 = c%mass_bin(jpeak3,nbin)
-                    endif
-                 endif
-              endif
-           endif
-           ! Set index of removed central to 0
-           if(mass3.LT.c%mass_threshold.OR.mass3.LT.0.1*mass1)then
-              c%ind_halo_3(ipeak)=0
-           endif
-           if(mass2.LT.c%mass_threshold.OR.mass2.LT.0.1*mass1)then
-              c%ind_halo_2(ipeak)=0
-           endif
-        endif
-     end do
-     call close_cache(s,m%grid_dict)
-  endif
-
   end associate
 
-end subroutine particle_split_centrals
+end subroutine mass_profile
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-function cmp_distance(x1,x2,radius,v1,v2,velocity,boxlen)
+function cmp_distance(x1,x2,v1,v2,radius,velocity,boxlen)
   use amr_parameters, only: ndim, dp
   real(dp),dimension(1:ndim)::x1,x2,v1,v2
   real(dp)::radius,velocity,boxlen
@@ -2305,7 +2247,6 @@ function cmp_distance(x1,x2,radius,v1,v2,velocity,boxlen)
   integer::idim
   real(dp)::xdist,vdist
   real(dp),dimension(1:ndim)::xpart,vpart
-
   xdist=0d0
   xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
   ! In case of periodic boundaries
@@ -2330,54 +2271,44 @@ end function cmp_distance
 !################################################################
 !################################################################
 !################################################################
-subroutine pack_fetch_split(c,local_peak_id,msg_size,msg_array)
-  use amr_commons, only: ndim
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_prop_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_prop_clump)::msg
-
-  msg%mass=c%clump_mass(local_peak_id)
-  msg%dens=c%halo_mass(local_peak_id)
-  msg%vel=c%peak_vel(local_peak_id,1:ndim)
-  msg%pos=c%peak_pos(local_peak_id,1:ndim)
-  msg%ind(1)=c%ind_halo_1(local_peak_id)
-  msg%ind(2)=c%ind_halo_2(local_peak_id)
-  msg%ind(3)=c%ind_halo_3(local_peak_id)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_fetch_split
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_fetch_split(c,local_peak_id,msg_size,msg_array)
-  use amr_commons, only: ndim
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_prop_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_prop_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  c%clump_mass(local_peak_id)=msg%mass
-  c%halo_mass(local_peak_id)=msg%dens
-  c%peak_vel(local_peak_id,1:ndim)=msg%vel
-  c%peak_pos(local_peak_id,1:ndim)=msg%pos
-  c%ind_halo_1(local_peak_id)=msg%ind(1)
-  c%ind_halo_2(local_peak_id)=msg%ind(2)
-  c%ind_halo_3(local_peak_id)=msg%ind(3)
-
-end subroutine unpack_fetch_split
+function total_energy(x1,x2,v1,v2,phi,radius,boxlen)
+  use amr_parameters, only: ndim, dp, nbin
+  real(dp),dimension(1:ndim)::x1,x2,v1,v2
+  real(dp),dimension(1:nbin)::phi
+  real(dp)::radius,boxlen
+  real(dp)::total_energy
+  !-----------------------------------------------------------
+  ! This function computes the phase-space Euclidian distance
+  !-----------------------------------------------------------
+  integer::idim,ibin,ileft,iright
+  real(dp)::epot,ekin,xbin,dr,r,r2
+  real(dp),dimension(1:ndim)::xpart,vpart
+  r2=0d0
+  xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
+  do idim=1,ndim  ! In case of periodic boundaries
+     if(xpart(idim)> boxlen*0.5)xpart(idim)=xpart(idim)-boxlen
+     if(xpart(idim)<-boxlen*0.5)xpart(idim)=xpart(idim)+boxlen
+     r2=r2+xpart(idim)**2
+  end do
+  r=sqrt(r2)
+  dr=2d0*radius/dble(nbin)
+  xbin=min(r/dr,dble(nbin))
+  ibin=int(xbin)
+  ileft=ibin+1
+  iright=ileft+1
+  epot=0d0
+  if(ileft<nbin)then
+     epot=phi(ileft)*(ileft-xbin)+phi(iright)*(xbin-ibin)
+  elseif(ileft==nbin)then
+     epot=phi(ileft)*(ileft-xbin)
+  endif
+  ekin=0d0
+  vpart(1:ndim)=v1(1:ndim)-v2(1:ndim)
+  do idim=1,ndim
+     ekin=ekin+0.5d0*vpart(idim)**2
+  end do
+  total_energy=ekin-epot
+end function total_energy
 !################################################################
 !################################################################
 !################################################################
@@ -2394,7 +2325,10 @@ subroutine pack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
   type(msg_mbin_clump)::msg
 
   msg%pos(1:ndim)=c%peak_pos(local_peak_id,1:ndim)
-  msg%mass=c%halo_mass(local_peak_id)
+  msg%mass=c%clump_mass(local_peak_id)
+  msg%dens=c%tidal_dens(local_peak_id)
+  msg%lev=c%lev_peak(local_peak_id)
+  msg%ind=c%new_peak(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -2417,7 +2351,10 @@ subroutine unpack_fetch_mbin(c,local_peak_id,msg_size,msg_array)
   msg=transfer(msg_array,msg)
 
   c%peak_pos(local_peak_id,1:ndim)=msg%pos(1:ndim)
-  c%halo_mass(local_peak_id)=msg%mass
+  c%clump_mass(local_peak_id)=msg%mass
+  c%tidal_dens(local_peak_id)=msg%dens
+  c%lev_peak(local_peak_id)=msg%lev
+  c%new_peak(local_peak_id)=msg%ind
 
 end subroutine unpack_fetch_mbin
 !################################################################
@@ -2476,55 +2413,11 @@ subroutine unpack_flush_mbin(c,local_peak_id,msg_size,msg_array)
   c%npart(local_peak_id)=c%npart(local_peak_id)+msg%npart
 
 end subroutine unpack_flush_mbin
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine pack_fetch_evaporate(c,local_peak_id,msg_size,msg_array)
-  use amr_parameters, only: nbin
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_prop_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_prop_clump)::msg
-
-  msg%mass=c%clump_mass(local_peak_id)
-  msg%dens=c%relevance(local_peak_id)
-  msg%vol=c%mass_bin(local_peak_id,nbin)
-
-  msg_array=transfer(msg,msg_array)
-
-end subroutine pack_fetch_evaporate
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-subroutine unpack_fetch_evaporate(c,local_peak_id,msg_size,msg_array)
-  use amr_parameters, only: nbin
-  use clfind_commons, only: clump_t
-  use cache_commons, only: msg_prop_clump
-  type(clump_t)::c
-  integer::local_peak_id
-  integer::msg_size
-  integer,dimension(1:msg_size),optional::msg_array
-
-  type(msg_prop_clump)::msg
-
-  msg=transfer(msg_array,msg)
-
-  c%clump_mass(local_peak_id)=msg%mass
-  c%relevance(local_peak_id)=msg%dens
-  c%mass_bin(local_peak_id,nbin)=msg%vol
-
-end subroutine unpack_fetch_evaporate
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_peak_id(s,p,no_peak)
+subroutine particle_peak_id(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -2532,16 +2425,14 @@ subroutine particle_peak_id(s,p,no_peak)
   use nbors_utils
   use cache_commons
   use cache
-  use boundaries, only: init_bound_flag2
   use marshal, only: pack_fetch_flag2, unpack_fetch_flag2
   use hilbert
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  integer::no_peak
   !-------------------------------------------------------------------
   ! This routine reads from the grid peak map (flag2) the peak id
-  ! of the input particle object. It could be dark matter or stars.
+  ! of the input particle object.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
   !-------------------------------------------------------------------
   integer,dimension(1:ndim)::ckey
@@ -2550,20 +2441,22 @@ subroutine particle_peak_id(s,p,no_peak)
   integer(kind=8)::global_peak_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
-  real(dp)::dx_loc,rmin,rmax,dist,xx
+  real(dp)::dx_loc,rmin,rmax,xx
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
+  integer::no_peak
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
   ! Open cache for array flag1 (fetch)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
-       pack=pack_fetch_flag2,unpack=unpack_fetch_flag2,bound=init_bound_flag2)
+       pack=pack_fetch_flag2,unpack=unpack_fetch_flag2)
 
   ! Loop over particles
   no_peak=0
+  p%pid=0
   do ilevel=r%levelmin,r%nlevelmax
 
      ! Mesh spacing in that level
@@ -2583,25 +2476,9 @@ subroutine particle_peak_id(s,p,no_peak)
         hash_cell(1:ndim)=ckey(1:ndim)
         call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 
-        ! If cell does not exist at current level, then find cell at coarser level
         if(.not.associated(gridp))then
-
-           ! NGP at level ilevel-1
-           do idim=1,ndim
-              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
-           end do
-
-           ! Get parent cell at level ilevel-1 using cache
-           hash_cell(0)=ilevel
-           hash_cell(1:ndim)=ckey(1:ndim)
-           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-           if(.not.associated(gridp))ok_level=.false.
-
-        end if
-
-        if(.not. ok_level)then
            write(*,*)"Something went wrong in particle_peak_id"
-           write(*,*)"Current level grid and coarser grid both dont exist..."
+           write(*,*)"Current level grid does not exist..."
            stop
         endif
 
@@ -2609,9 +2486,8 @@ subroutine particle_peak_id(s,p,no_peak)
         global_peak_id=gridp%flag2(icell)
         if (global_peak_id==0)no_peak=no_peak+1
 
-        ! Store global peak id in workp array
-        p%sortp(ipart)=ipart
-        p%workp(ipart)=global_peak_id
+        ! Store global peak id in pid array
+        p%pid(ipart)=global_peak_id
 
      end do
      ! End loop over particles
@@ -2620,6 +2496,8 @@ subroutine particle_peak_id(s,p,no_peak)
 
   call close_cache(s,m%grid_dict)
 
+  p%norphan_peak=no_peak
+
   end associate
 
 end subroutine particle_peak_id
@@ -2627,7 +2505,7 @@ end subroutine particle_peak_id
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine particle_halo_id(s,p,no_peak)
+subroutine particle_halo_id(s,p)
   use amr_parameters, only: ndim,nbin,twotondim,dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -2641,22 +2519,22 @@ subroutine particle_halo_id(s,p,no_peak)
   implicit none
   type(ramses_t)::s
   type(part_t)::p
-  integer::no_peak
   !------------------------------------------------------------------
   ! This routine reads from the grid peak map (flag1) the peak id
-  ! of the input particle object. It could be dark matter or stars.
+  ! of the input particle object.
   ! Written by Romain Teyssier (mini-ramses version in June 2024).
   !------------------------------------------------------------------
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::i,ipart,icell,ind,idim,ibin,ilevel
-  integer(kind=8)::global_peak_id
+  integer(kind=8)::global_halo_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
-  real(dp)::dx_loc,rmin,rmax,dist,xx
+  real(dp)::dx_loc,rmin,rmax,xx
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
+  integer::no_halo
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -2666,7 +2544,8 @@ subroutine particle_halo_id(s,p,no_peak)
        pack=pack_fetch_flag,unpack=unpack_fetch_flag,bound=init_bound_flag)
 
   ! Loop over particles
-  no_peak=0
+  no_halo=0
+  p%hid=0
   do ilevel=r%levelmin,r%nlevelmax
 
      ! Mesh spacing in that level
@@ -2686,35 +2565,18 @@ subroutine particle_halo_id(s,p,no_peak)
         hash_cell(1:ndim)=ckey(1:ndim)
         call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
 
-        ! If cell does not exist at current level, then find cell at coarser level
         if(.not.associated(gridp))then
-
-           ! NGP at level ilevel-1
-           do idim=1,ndim
-              ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
-           end do
-
-           ! Get parent cell at level ilevel-1 using cache
-           hash_cell(0)=ilevel
-           hash_cell(1:ndim)=ckey(1:ndim)
-           call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-           if(.not.associated(gridp))ok_level=.false.
-
-        end if
-
-        if(.not. ok_level)then
            write(*,*)"Something went wrong in particle_halo_id"
-           write(*,*)"Current level grid and coarser grid both dont exist..."
+           write(*,*)"Current level grid does not exist..."
            stop
         endif
 
         ! Read flag1 value
-        global_peak_id=gridp%flag1(icell)
-        if (global_peak_id==0)no_peak=no_peak+1
+        global_halo_id=gridp%flag1(icell)
+        if (global_halo_id==0)no_halo=no_halo+1
 
-        ! Store global halo id in workp array
-        p%sortp(ipart)=ipart
-        p%workp(ipart)=global_peak_id
+        ! Store global halo id in hid array
+        p%hid(ipart)=global_halo_id
 
      end do
      ! End loop over particles
@@ -2722,6 +2584,8 @@ subroutine particle_halo_id(s,p,no_peak)
   ! End loop over levels
 
   call close_cache(s,m%grid_dict)
+
+  p%norphan_halo=no_halo
 
   end associate
 
