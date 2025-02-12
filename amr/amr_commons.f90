@@ -284,6 +284,7 @@ module amr_commons
      real(dp)::sink_purity_threshold=-1
      real(dp)::sink_fraction_threshold=2d0
      real(dp)::sink_radius
+     logical::form_sinks
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
