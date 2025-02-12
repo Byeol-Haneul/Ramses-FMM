@@ -1,6 +1,6 @@
 MODULE rt_flux_module
 
-  use rt_parameters, only: nrtvar
+  use rt_parameters, only: nrtvar, nrtgrp
   use amr_parameters, only: ndim, dp
   implicit none
 
@@ -109,10 +109,9 @@ FUNCTION cmp_face(fdn, fup, udn, uup, rt_c)
   return
 END FUNCTION cmp_face
 
-
 !************************************************************************
 SUBROUTINE rt_unsplit(uin,flux,cFlx,rt_c,dx,dy,dz,dt &
-                        ,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
+     ,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2)
 
 !  Compute intercell fluxes for one photon group in all dimensions,
 !  using the Eddington tensor with the M1 closure relation.
@@ -147,27 +146,29 @@ SUBROUTINE rt_unsplit(uin,flux,cFlx,rt_c,dx,dy,dz,dt &
   ! Upwards and downwards fluxes and states of the group
   real(dp),dimension(nDim+1),save:: fdn, fup, udn, uup
   real(dp)::dtdx
-  integer ::i, j, k, iP0, iP1
+  integer ::i, j, k, iP0, iP1, igrp
 !------------------------------------------------------------------------
-  iP0=1                                    ! For now just using one group
-  iP1=iP0+nDim                             ! end index of photon group
+  do igrp = 1, nrtgrp
 
-  ! compute flux tensors for all the cells with correction
-  call cmp_flux_tensors(uin, iP0, cFlx, rt_c &
-                        ,iu1,iu2,ju1,ju2,ku1,ku2,if2,jf2,kf2)
+  ! Select group
+  iP0 = 1 + (igrp-1)*(ndim+1)
+  iP1 = iP0+nDim
+
+  ! Compute flux tensors for all the cells with correction
+  call cmp_flux_tensors(uin, iP0, cFlx, rt_c, &
+       & iu1, iu2, ju1, ju2, ku1, ku2, if2, jf2, kf2)
 
   ! Solve for 1D flux in X direction
   !----------------------------------------------------------------------
-  dtdx=dt/dx
-  do i=if1,if2                                 !
-  do j=jf1,jf2                                 !        each cell in grid
-  do k=kf1,kf2                                 !
+  dtdx = dt/dx
+  do i = if1, if2                                 !
+  do j = jf1, jf2                                 !        each cell in grid
+  do k = kf1, kf2                                 !
      fdn = cFlx(i-1, j, k, :, 1    )    !
      fup = cFlx(i,   j, k, :, 1    )   !  upwards and downwards
      udn = uin( i-1, j, k, iP0:iP1 )   !  conditions
      uup = uin( i,   j, k, iP0:iP1 )    !
-     flux(i, j, k, iP0:iP1, 1)=&
-          cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
+     flux(i, j, k, iP0:iP1, 1) = cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
   end do
   end do
   end do
@@ -175,16 +176,15 @@ SUBROUTINE rt_unsplit(uin,flux,cFlx,rt_c,dx,dy,dz,dt &
   ! Solve for 1D flux in Y direction
   !----------------------------------------------------------------------
 #if NDIM>1
-  dtdx=dt/dy
-  do i=if1,if2
-  do j=jf1,jf2
-  do k=kf1,kf2
+  dtdx = dt/dy
+  do i = if1, if2
+  do j = jf1, jf2
+  do k = kf1, kf2
      fdn = cFlx(i, j-1, k, :, 2    )
      fup = cFlx(i, j,   k, :, 2    )
      udn = uin( i, j-1, k, iP0:iP1 )
      uup = uin( i, j,   k, iP0:iP1 )
-     flux(i,j,k,iP0:iP1,2)=&
-          cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
+     flux(i,j,k,iP0:iP1,2) = cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
   end do
   end do
   end do
@@ -193,20 +193,21 @@ SUBROUTINE rt_unsplit(uin,flux,cFlx,rt_c,dx,dy,dz,dt &
   ! Solve for 1D flux in Z direction
   !----------------------------------------------------------------------
 #if NDIM>2
-  dtdx=dt/dz
-  do i=if1,if2
-  do j=jf1,jf2
-  do k=kf1,kf2
+  dtdx = dt/dz
+  do i = if1, if2
+  do j = jf1, jf2
+  do k = kf1, kf2
      fdn = cFlx(i, j, k-1, :, 3    )
      fup = cFlx(i, j, k,   :, 3    )
      udn = uin( i, j, k-1, iP0:iP1 )
      uup = uin( i, j, k,   iP0:iP1 )
-     flux(i,j,k,iP0:iP1,3)=&
-          cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
+     flux(i,j,k,iP0:iP1,3) = cmp_face( fdn, fup, udn, uup, rt_c )*dtdx
   end do
   end do
   end do
 #endif
+
+  end do
 
 end subroutine rt_unsplit
 
