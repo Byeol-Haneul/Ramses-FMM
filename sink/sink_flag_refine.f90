@@ -42,8 +42,8 @@ subroutine sink_flag(s,p,ilevel)
   vol_loc = dx_loc**ndim
 
   ! Compute number of cells within sink sphere
-  rrad = r%sink_radius/dx_loc
-  nrad = ceiling(rrad/dx_loc)
+  rrad = r%sink_accretion_radius/dx_loc
+  nrad = ceiling(rrad)
   n_nei = 0
   do k = -nrad, nrad
      z = dble(k) / dble(nrad) * rrad
@@ -67,9 +67,9 @@ subroutine sink_flag(s,p,ilevel)
            rr = sqrt(dble(x*x+y*y+z*z))
            if(rr .le. rrad)then
               i_nei = i_nei + 1
-              x_nei(1, i_nei) = x / dx_loc
-              x_nei(2, i_nei) = y / dx_loc
-              x_nei(3, i_nei) = z / dx_loc
+              x_nei(1, i_nei) = x
+              x_nei(2, i_nei) = y
+              x_nei(3, i_nei) = z
            endif
         enddo
      enddo
@@ -82,12 +82,11 @@ subroutine sink_flag(s,p,ilevel)
                 init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
 
   ! Loop over sink particles at current level
+  hash_nbor(0) = ilevel+1
   do ipart = p%headp(ilevel), p%tailp(ilevel)
 
      ! Sink sphere center in units of current level Cartesian coordinates
-     do idim = 1, ndim
-        xcen(idim) = p%xp(ipart,idim) / dx_loc
-     end do
+     xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
 
      ! Collect sink sphere sampling points
      do i_nei = 1, n_nei
@@ -99,15 +98,10 @@ subroutine sink_flag(s,p,ilevel)
            if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
            if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
         end do
-
         ! Get neighboring cell at current level
-        ckey_nbor(1:ndim) = int(xnei(1:ndim))
-        hash_nbor(0) = ilevel+1
-        hash_nbor(1:ndim) = ckey_nbor(1:ndim)
+        hash_nbor(1:ndim) = int(xnei(1:ndim))
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.false.)
-
-        ! If missing, then cycle
-        ! This should never happens if sink_refine=.true.
+        ! If missing, then cycle. This should never happens if sink_refine=.true.
         if(.not.associated(gridn))cycle
 
         ! Set refinement map flag1 to 1

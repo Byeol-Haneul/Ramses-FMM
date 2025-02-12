@@ -283,13 +283,13 @@ module amr_commons
      real(dp)::sink_mass_threshold=0
      real(dp)::sink_purity_threshold=-1
      real(dp)::sink_fraction_threshold=2d0
-     real(dp)::sink_radius
-     logical::form_sinks
+     real(dp)::sink_radius=-1
+     logical::form_sinks=.false.
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
      character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
-     integer::sink_accretion_radius = 0 ! Radius for the accretion region
+     real(dp)::sink_accretion_radius = -1 ! Radius for the accretion region
      real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
      logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
      logical::eddington_cap = .true. ! Whether to limit accretion at Eddington rate
