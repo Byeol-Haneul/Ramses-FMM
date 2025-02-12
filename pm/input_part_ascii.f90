@@ -89,7 +89,7 @@ subroutine m_input_part_ascii(pst)
 
   if(s%r%sink)then
 
-   ! Compute total number of stars in file
+   ! Compute total number of sinks in file
    if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
       filename=TRIM(s%r%initfile(s%r%levelmin))//'/ic_sink'
       write(*,*)'Opening file '//TRIM(filename)
