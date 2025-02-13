@@ -5,7 +5,7 @@
 MODULE rt_star_feedback
   !_________________________________________________________________________
   use amr_commons, only: run_t, global_t
-  use constants, only: L_sun, clight, eV2erg, hplanck
+  use constants, only: L_sun, m_sun, clight, eV2erg, hplanck, sec2Gyr
   use hydro_parameters, only: nion
   use rt_parameters, only: nrtgrp
   implicit none
@@ -44,6 +44,8 @@ subroutine star_RT_feedback(s, p, ilevel)
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
+  use rt_parameters, only: nrtgrp
+  use SED_module, only: getNPhotonsEmitted
   use nbors_utils
   use cache_commons
   use cache
@@ -63,14 +65,16 @@ subroutine star_RT_feedback(s, p, ilevel)
   ! Local variables
   integer,dimension(1:ndim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_cell
-  integer::i,ipart,icell,ind,idim
+  integer::ipart,icell,idim
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(kind=8)::scale_Np,scale_Fp,scale_inp
+  real(kind=8)::scale_Np,scale_Fp,scale_inp,scale_inp_cell
   real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::z,mass,age,code2Gr,dt_Gyr,t_SN_Gyr
+  real(dp)::z,mass,age,code2Gyr,dt_Gyr,dt_loc_Gyr,t_SN_Gyr
   type(oct),pointer::gridp
   type(msg_rt_emissivity_realdp)::dummy_rt_emissivity_realdp
-  logical::ok_level,ok_leaf
+  logical::ok_level
+  real(dp),dimension(nrtgrp)::part_NpInp, lum
+
 
 #ifdef RT
 #if NDIM==3
@@ -97,6 +101,7 @@ subroutine star_RT_feedback(s, p, ilevel)
   ! Open cache for array emissivity (flush)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_rt_emissivity_realdp)/32,&
+                pack=pack_fetch_emissivity, unpack=unpack_fetch_emissivity, &
                 init=init_flush_emissivity, flush=pack_flush_emissivity,&
                 combine=unpack_flush_emissivity)
 
@@ -134,7 +139,8 @@ subroutine star_RT_feedback(s, p, ilevel)
         ! Get parent cell at level ilevel-1 using cache
         hash_cell(0)=ilevel
         hash_cell(1:ndim)=ckey(1:ndim)
-        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+        call get_parent_cell(s,hash_cell,m%grid_dict,gridp,icell &
+                                ,flush_cache=.true.,fetch_cache=.false.)
         if(.not.associated(gridp))ok_level=.false.
 
      end if
@@ -144,9 +150,12 @@ subroutine star_RT_feedback(s, p, ilevel)
         write(*,*)"Current level grid and coarser grid both dont exist..."
         stop
      endif
-
      ! Compute star particle properties
-     if(metal)z = max(p%zp(ipart), 1e-5)
+     if(r%metal) then
+        z = max(p%zp(ipart), 1e-5)                     ! [m_metals/m_tot]
+     else
+        z = max(r%z_ave*0.02, 10d-5)
+     endif
      age = (g%texp - p%tp(ipart)) * code2Gyr
 
      ! Possibilities: Born i) before dt, ii) within dt, iii) after dt:
@@ -178,14 +187,119 @@ end associate
 #endif
 end subroutine star_RT_feedback
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+!*************************************************************************
+recursive SUBROUTINE r_check_to_initiate_star_RT_feedback(pst)
+
+! Turn on RT advection if needed.
+! If turning on, update photon group properties from stellar populations.
+!-------------------------------------------------------------------------
+  use amr_parameters, only: ndim, twotondim, dp
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t, pst_t
+  use pm_commons, only: part_t
+  use rt_parameters, only: nrtgrp
+  use SED_module, only: getNPhotonsEmitted
+  use mdl_module
+  use nbors_utils
+  use cache_commons
+  use cache
+  use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use boundaries, only: init_bound_refine
+  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
+  use SED_module, only: update_SED_group_props
+  use hilbert
+  implicit none
+  type(pst_t)::pst
+  !type(ramses_t) :: s
+  !type(part_t) :: p
+  ! Local variables
+  logical,save::groupProps_init=.false.
+  integer::rID
+!-------------------------------------------------------------------------
+  if(groupProps_init) return
+  if(.not. (pst%s%r%rt_star.and. pst%s%star%npart_tot .gt. 0)) return
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_UPDATE_RT_VAR,pst%iUpper+1)
+     call r_check_to_initiate_star_RT_feedback(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+
+    if(.not.pst%s%r%rt_advect) then ! Turn on RT advection due to newborn stars:
+      if(pst%s%g%myid==1) then
+        write(*,*) '*****************************************'
+        write(*,*) 'Stellar RT turned on at a=',pst%s%g%aexp
+        write(*,*) '*****************************************'
+      endif
+      pst%s%r%rt_advect=.true.
+    endif
+    ! Set group props from stellar populations:
+    if(pst%s%r%sedprops_update .gt. 0 .and. .not. groupProps_init) then
+      call update_SED_group_props(pst%s%r, pst%s%g, pst%s%SED, pst%s%star)
+    endif
+    groupProps_init=.true.
+
+  endif
+END SUBROUTINE r_check_to_initiate_star_RT_feedback
+
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+subroutine pack_fetch_emissivity(grid,msg_size,msg_array)
+  use amr_parameters, only: ndim,twotondim
+  use rt_parameters, only: nrtgrp
+  use amr_commons, only: oct
+  use cache_commons, only: msg_rt_emissivity_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind,igrp
+  type(msg_rt_emissivity_realdp)::msg
+
+  do igrp=1,nrtgrp
+     do ind=1,twotondim
+#ifdef RT  
+        msg%realdp(ind,igrp)=grid%emissivity(ind,igrp)
+#endif
+     end do
+  end do
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_emissivity
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+subroutine unpack_fetch_emissivity(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use rt_parameters, only: nrtgrp
+  use amr_commons, only: oct
+  use cache_commons, only: msg_rt_emissivity_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind,igrp
+  type(msg_rt_emissivity_realdp)::msg
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+
+  do igrp=1,nrtgrp
+     do ind=1,twotondim
+#ifdef RT
+        grid%emissivity(ind,igrp)=msg%realdp(ind,igrp)
+#endif
+     end do
+  end do
+
+end subroutine unpack_fetch_emissivity
+!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 subroutine init_flush_emissivity(grid,hash_key)
   use amr_parameters, only: ndim,twotondim
   use rt_parameters, only: nrtvar
   use amr_commons, only: oct
   type(oct)::grid
   integer(kind=8),dimension(0:ndim)::hash_key
-
-  integer::ind,ig
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
@@ -203,9 +317,8 @@ subroutine pack_flush_emissivity(grid,msg_size,msg_array)
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
-
-  integer::ind,ig
   type(msg_rt_emissivity_realdp)::msg
+
 #ifdef RT
   msg%realdp=grid%emissivity
 #endif
@@ -223,7 +336,6 @@ subroutine unpack_flush_emissivity(grid,msg_size,msg_array,hash_key)
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  integer::ind,ig
   type(msg_rt_emissivity_realdp)::msg
 
   grid%lev=hash_key(0)

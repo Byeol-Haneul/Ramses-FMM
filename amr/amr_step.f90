@@ -32,6 +32,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
+  use rt_star_feedback
   use rt_step_module, only: m_rt_step
   use update_rt_c_module, only: r_update_rt_var
 
@@ -187,11 +188,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
   end if
 
-  ! Turn on RT in case of rt_stars and first stars just created:
+  ! Turn on RT in case of rt_star and first stars just created:
   ! Update photon packages according to star particles and sink particles
   if(r%rt)then
                                     call m_timer(pst,'rt - update SEDs','start')
-!     if(r%rt_star)call update_star_RT_feedback(ilevel)
+      if(r%rt_star)call r_check_to_initiate_star_RT_feedback(pst)
 !     if(r%rt_sink)call update_sink_RT_feedback(ilevel)
   endif
 
