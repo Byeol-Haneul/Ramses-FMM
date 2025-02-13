@@ -221,7 +221,8 @@ MODULE SED_module
   use rt_parameters, only: nrtgrp
   implicit none
 
-  PUBLIC sed_table_t, init_SED_table, inp_SED_table, update_SED_group_props
+  PUBLIC sed_table_t, init_SED_table, inp_SED_table &
+        ,update_SED_group_props, getNPhotonsEmitted
 
   PRIVATE   ! default
 
@@ -444,6 +445,7 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
   use pm_commons, only: part_t
   use amr_commons, only: global_t
   use hydro_parameters, only: nion
+  use constants, only: Gyr2sec
   type(run_t) :: r
   type(part_t) :: p
   type(global_t) :: g
@@ -460,15 +462,18 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
   real(kind=8), dimension(1:nrtgrp,1:nion) :: csn_star, cse_star
   real(kind=8), dimension(1:nrtgrp,1:nion) :: sum_csn_cpu, sum_csn_all
   real(kind=8), dimension(1:nrtgrp,1:nion) :: sum_cse_cpu, sum_cse_all
-  real(kind=8) :: mass, age, Z, t_SN
+  real(kind=8) :: mass, age, Z, t_SN_gyr, scale_t_Gyr
   real(kind=8) :: scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
   !-------------------------------------------------------------------------
 
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
+  scale_t_Gyr = (scale_t/g%aexp**2)/Gyr2sec
+
   ! Supernovae progenitors life time from Myr to proper time in code units
-  t_SN = r%t_SNII*1d6*(365.*24.*3600.)/(scale_t/g%aexp**2)
+  !t_SN = r%t_SNII*1d6*(365.*24.*3600.)/(scale_t/g%aexp**2)
+  t_SN_gyr = r%t_SNII/1d3
   
   sum_L_cpu   = 0d0 ! Accumulated luminosity, avg cross sections and
   sum_egy_cpu = 0d0 ! photon energies for all stars belonging to
@@ -478,9 +483,9 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
   ! Loop over all star particles
   do i = 1, p%npart
      mass = p%mp(i)
-     age = g%texp-p%tp(i)
+     age = (g%texp-p%tp(i)) * scale_t_Gyr ! stellar age in Gyrs
      ! Account for stellar mass loss - SED uses initial population mass
-     if(age.gt.t_SN)then
+     if(age.gt.t_SN_gyr)then
         mass = mass / (1d0-r%eta_SNII)
      endif
      if(r%metal) then
@@ -838,7 +843,6 @@ SUBROUTINE inp_SED_table(SED, age, Z, nProp, same, ret)
         SED%dz0 = min( max(   (Z-SED%Zeds(SED%iz)) /dz,         0. ),  1.         )
         SED%dz1 = min( max(  (SED%Zeds(SED%iz+1)-Z)/dz,         0. ),  1.         )
      endif
-
      if (abs(SED%da0+SED%da1-1.0d0) > 1.0d-5 .or. abs(SED%dz0+SED%dz1-1.0d0) > 1.0d-5) then
         write(*,*) 'Screwed up the sed interpolation ... '
         write(*,*) SED%da0+SED%da1,SED%dz0+SED%dz1
