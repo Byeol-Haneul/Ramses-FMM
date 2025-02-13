@@ -66,7 +66,7 @@ subroutine adaptive_loop(pst)
   endif
 
   ! Initialization of ionization fractions
-  if(r%is_init_xion) call m_init_xion(pst)
+  if(r%neq_chem .and. r%is_init_xion) call m_init_xion(pst)
 
   ! Timing since startup
   tt2 = mdl_wtime(mdl)
