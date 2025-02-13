@@ -345,6 +345,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   if(r%pic.and.nhalo>0.and..not.skip(2))then
      if(g%myid==1)write(*,'(A)') " Reading halo particles..."
      p%npart=nhalo/g%ncpu
+     p%npart_tot=nhalo
      ihalo=(g%myid-1)*p%npart
      nrest=nhalo-p%npart*g%ncpu
      if(g%myid.LE.nrest)then
@@ -382,6 +383,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   if(r%star.and.nstar>0.and..not.skip(3))then
      if(g%myid==1)write(*,'(A)') " Reading star particles..."
      star%npart=nstar/g%ncpu
+     star%npart_tot=nstar
      istar=(g%myid-1)*star%npart
      nrest=nstar-star%npart*g%ncpu
      if(g%myid.LE.nrest)then
