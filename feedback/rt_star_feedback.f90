@@ -15,7 +15,7 @@ CONTAINS
 !##############################################################################
 !##############################################################################
 !##############################################################################
-recursive subroutine r_star_RT_feedback(pst,ilevel,input_size)
+recursive subroutine r_star_rt_feedback(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -28,18 +28,18 @@ recursive subroutine r_star_RT_feedback(pst,ilevel,input_size)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_STAR_RT_FEEDBACK,pst%iUpper+1,input_size,0,ilevel)
-     call r_star_RT_feedback(pst%pLower,ilevel,input_size)
+     call r_star_rt_feedback(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call star_RT_feedback(pst%s, pst%s%star, ilevel)
+     call star_rt_feedback(pst%s, pst%s%star, ilevel)
   endif
 
-end subroutine r_star_RT_feedback
+end subroutine r_star_rt_feedback
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine star_RT_feedback(s, p, ilevel)
+subroutine star_rt_feedback(s, p, ilevel)
   use amr_parameters, only: ndim, twotondim, dp
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
@@ -49,9 +49,6 @@ subroutine star_RT_feedback(s, p, ilevel)
   use nbors_utils
   use cache_commons
   use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
-  use boundaries, only: init_bound_refine
-  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
   use hilbert
   implicit none
   type(ramses_t) :: s
@@ -99,10 +96,10 @@ subroutine star_RT_feedback(s, p, ilevel)
   t_SN_Gyr = r%t_SNII * 1d-3
 
   ! Open cache for array emissivity (flush)
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_rt_emissivity_realdp)/32,&
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32, &
+                hilbert=m%domain,pack_size=storage_size(dummy_rt_emissivity_realdp)/32, &
                 pack=pack_fetch_emissivity, unpack=unpack_fetch_emissivity, &
-                init=init_flush_emissivity, flush=pack_flush_emissivity,&
+                init=init_flush_emissivity, flush=pack_flush_emissivity, &
                 combine=unpack_flush_emissivity)
 
   ! Loop over particles in Hilbert order
@@ -146,15 +143,16 @@ subroutine star_RT_feedback(s, p, ilevel)
      end if
 
      if(.not. ok_level)then
-        write(*,*)"Something went wrong in star_RT_feedback"
+        write(*,*)"Something went wrong in star_rt_feedback"
         write(*,*)"Current level grid and coarser grid both dont exist..."
         stop
      endif
+
      ! Compute star particle properties
      if(r%metal) then
-        z = max(p%zp(ipart), 1e-5)                     ! [m_metals/m_tot]
+        z = max(p%zp(ipart), 1d-5)                     ! [m_metals/m_tot]
      else
-        z = max(r%z_ave*0.02, 10d-5)
+        z = max(r%z_ave*0.02, 1d-5)
      endif
      age = (g%texp - p%tp(ipart)) * code2Gyr
 
@@ -185,10 +183,10 @@ subroutine star_RT_feedback(s, p, ilevel)
 end associate
 #endif
 #endif
-end subroutine star_RT_feedback
+end subroutine star_rt_feedback
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 !*************************************************************************
-recursive SUBROUTINE r_check_to_initiate_star_RT_feedback(pst)
+recursive SUBROUTINE r_check_to_initiate_star_rt_feedback(pst)
 
 ! Turn on RT advection if needed.
 ! If turning on, update photon group properties from stellar populations.
@@ -221,7 +219,7 @@ recursive SUBROUTINE r_check_to_initiate_star_RT_feedback(pst)
 
   if(pst%nLower>0)then
      rID = mdl_send_request(pst%s%mdl,MDL_UPDATE_RT_VAR,pst%iUpper+1)
-     call r_check_to_initiate_star_RT_feedback(pst%pLower)
+     call r_check_to_initiate_star_rt_feedback(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
 
@@ -240,7 +238,7 @@ recursive SUBROUTINE r_check_to_initiate_star_RT_feedback(pst)
     groupProps_init=.true.
 
   endif
-END SUBROUTINE r_check_to_initiate_star_RT_feedback
+END SUBROUTINE r_check_to_initiate_star_rt_feedback
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 subroutine pack_fetch_emissivity(grid,msg_size,msg_array)
@@ -255,13 +253,9 @@ subroutine pack_fetch_emissivity(grid,msg_size,msg_array)
   integer::ind,igrp
   type(msg_rt_emissivity_realdp)::msg
 
-  do igrp=1,nrtgrp
-     do ind=1,twotondim
 #ifdef RT  
-        msg%realdp(ind,igrp)=grid%emissivity(ind,igrp)
+  msg%realdp=grid%emissivity
 #endif
-     end do
-  end do
 
   msg_array=transfer(msg,msg_array)
 
@@ -284,13 +278,9 @@ subroutine unpack_fetch_emissivity(grid,msg_size,msg_array,hash_key)
   grid%ckey(1:ndim)=hash_key(1:ndim)
   msg=transfer(msg_array,msg)
 
-  do igrp=1,nrtgrp
-     do ind=1,twotondim
 #ifdef RT
-        grid%emissivity(ind,igrp)=msg%realdp(ind,igrp)
+  grid%emissivity=msg%realdp
 #endif
-     end do
-  end do
 
 end subroutine unpack_fetch_emissivity
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
