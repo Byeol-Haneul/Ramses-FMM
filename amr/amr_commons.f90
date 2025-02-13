@@ -31,7 +31,8 @@ module amr_commons
      integer::nstepmax=1000000   ! Maximum number of time steps
      integer,dimension(1:MAXLEVEL)::nsubcycle=2 ! Subcycling at each level
      integer::nremap=10          ! Load balancing frequency (0: never)
-     logical::static  =.false.   ! Static mode activated     
+     logical::static_mesh=.false.! Static mesh refinement mode activated
+     logical::static_gas=.false. ! Turn off gas dynamics
      integer::geom    =1         ! 1: cartesian, 2: cylindrical, 3: spherical
      integer::overload=1         ! MPI domain overloading
      integer::nsuperoct=0        ! Number of superoct levels

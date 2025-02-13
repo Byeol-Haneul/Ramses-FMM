@@ -9,7 +9,7 @@ ncontrol=1
 verbose=.false.
 nremap=10
 nsuperoct=0
-static=.true.
+static_gas=.true.
 nrestart=0
 /
 

@@ -66,7 +66,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
                                     call m_timer(pst,'refine','start')
-     call m_refine_fine(pst,ilevel)
+     if(.not.r%static_mesh)call m_refine_fine(pst,ilevel)
   endif
   
   !-------------------------
@@ -285,11 +285,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-----------
   ! Hydro step
   !-----------
-  if(r%hydro)then
+  if(r%hydro.and..not.r%static_gas)then
 
      ! Hyperbolic solver
                                     call m_timer(pst,'hydro - godunov','start')
-     if(.not.r%static)call r_godunov_fine(pst,ilevel,1)
+     call r_godunov_fine(pst,ilevel,1)
 
      ! Add gravity source terms to unew with half time step
                                     call m_timer(pst,'hydro - gravity','start')
@@ -365,7 +365,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Compute refinement map
   !-----------------------
                                     call m_timer(pst,'flag','start')
-  if(.not.r%static)call m_flag_fine(pst,ilevel,icount)
+  if(.not.r%static_mesh)call m_flag_fine(pst,ilevel,icount)
 
   !-------------------------------
   ! Update coarser level time-step

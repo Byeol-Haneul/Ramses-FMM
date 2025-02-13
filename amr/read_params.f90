@@ -34,17 +34,18 @@ subroutine m_read_params(pst)
   !--------------------------------------------------
 
   ! Run control
-  logical::cosmo   =.false.   ! Cosmology activated
-  logical::pic     =.false.   ! Particle In Cell activated
-  logical::poisson =.false.   ! Poisson solver activated
-  logical::hydro   =.false.   ! Hydro activated
+  logical::cosmo   =.false.    ! Cosmology activated
+  logical::pic     =.false.    ! Particle In Cell activated
+  logical::poisson =.false.    ! Poisson solver activated
+  logical::hydro   =.false.    ! Hydro activated
   logical::rt      =.false.    ! RT activated
-  logical::star    =.false.   ! Stars and star formation activated
-  logical::sink    =.false.   ! Sinks and sink formation activated
+  logical::star    =.false.    ! Stars and star formation activated
+  logical::sink    =.false.    ! Sinks and sink formation activated
   logical::merger_tree=.false. ! Merger tree particles activated
-  logical::verbose =.false.   ! Write everything
-  logical::debug   =.false.   ! Debug mode activated
-  logical::static  =.false.   ! Static mode activated
+  logical::verbose =.false.    ! Write everything
+  logical::debug   =.false.    ! Debug mode activated
+  logical::static_mesh=.false. ! Static mesh refinement activated
+  logical::static_gas=.false.  ! Hydro is turned off
 
   ! Step parameters
   integer::nrestart=0         ! New run or backup file number
@@ -393,7 +394,7 @@ subroutine m_read_params(pst)
   ! Global run parameter
   namelist/run_params/cosmo,pic,poisson,hydro,rt,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
-       & ,static,geom,overload,nsuperoct
+       & ,static_mesh,static_gas,geom,overload,nsuperoct
   ! Output parameters
   namelist/output_params/noutput,foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
@@ -910,7 +911,8 @@ subroutine m_read_params(pst)
   s%r%nstepmax=nstepmax
   s%r%nsubcycle=nsubcycle
   s%r%nremap=nremap
-  s%r%static=static
+  s%r%static_mesh=static_mesh
+  s%r%static_gas=static_gas
   s%r%geom=geom
   s%r%overload=overload
   s%r%nsuperoct=nsuperoct
