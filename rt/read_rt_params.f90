@@ -26,31 +26,30 @@ subroutine m_read_rt_params(pst)
 
   ! RT_PARAMS namelist
   logical::rt_advect=.false.           ! Advection of photons?                           !
-  !logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
-  real(dp)::units_Np=1.0               ! [#/cm^3]
-  !logical::rt_star=.false.             ! Activate radiation from star particles          !
-  !logical::rt_sink=.false.             ! Activate radiation from sink particles          !
-  !real(dp)::rt_esc_frac=1d0            ! Escape fraction of light from stellar particles !
-  !logical::rt_is_init_xion=.false.     ! Initialize ionization from T profile?           !
-  !character(LEN=10)::rt_flux_scheme='glf'                                                !
-  !logical::rt_use_hll=.false.          ! Use hll flux (or the default glf)               !
-  !logical::rt_is_outflow_bound=.false. ! Make all boundaries=outflow for RT              !
-  real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
-  real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT        !
+  !logical::rt_smooth=.false.          ! Smooth the discrete RT update of op. splitting  !
+  real(dp)::units_Np=1.0               ! [#/cm^3]                                        !
+  logical::rt_star=.false.             ! Activate radiation from star particles          !
+  !logical::rt_sink=.false.            ! Activate radiation from sink particles          !
+  real(dp)::rt_esc_frac=1d0            ! Photon escape fraction from stellar particles   !
+  !character(LEN=10)::rt_flux_scheme='glf'                                               !
+  !logical::rt_use_hll=.false.         ! Use hll flux (or the default glf)               !
+  !logical::rt_is_outflow_bound=.false.! Make all boundaries=outflow for RT              !
+  real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
+  real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT                      !
   !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
   integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
                                        ! gravity/etc timestep                            !
   logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
   !logical::rt_isDiffuseUVsrc=.false.  ! UV emission from low-density cells              !
   !real(dp)::rt_UVsrc_nHmax=-1d0       ! Density threshold for UV emission               !
-  !logical::upload_equilibrium_x=.true. ! Enforce equilibrium xion when uploading         !
+  !logical::upload_equilibrium_x=.true.! Enforce equilibrium xion when uploading         !
   !integer::heat_unresolved_HII=0      ! Subgrid model heating unresolved HII regions    !
   !integer::iHIIheat=6                 ! Var index for HII heating                       !
-  !logical::cosmic_rays=.false.         ! Include cosmic ray ionisation                   !
+  !logical::cosmic_rays=.false.        ! Include cosmic ray ionisation                   !
 
-  !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                            !
-  !character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
-  !character(LEN=128)::uv_file=''       ! File containing stellar energy distributions    !
+  !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                           !
+  character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
+  !character(LEN=128)::uv_file=''      ! File containing stellar energy distributions    !
 
   ! RT source regions parameters----------------------------------------------------------
   integer                           ::rt_nsource=0
@@ -70,7 +69,7 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                      !    Photon flux
 
   ! RT_GROUPS namelist---------------------------------------------------------------------
-  ! integer::sedprops_update=-1                     ! Update sedprops from star populations
+  integer::sedprops_update=-1           ! Update sedprops from stellar populations        !
   ! negative: never update, 0:update on init, pos x: update every x coarse steps
   ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
 
@@ -91,13 +90,14 @@ subroutine m_read_rt_params(pst)
   !--------------------------------------------------
   namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
        & ,units_np
-  namelist/rt_sources/rt_nsource, rt_source_type                         &
+  namelist/rt_sources/rt_star, rt_esc_frac                               &
+       & ,rt_nsource, rt_source_type                                     &
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
        & ,rt_src_length_x, rt_src_length_y, rt_src_length_z              &
        & ,rt_exp_source, rt_src_group, rt_src_trace_group                &
        & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source
   namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
-       & ,group_L0, group_L1, kappaAbs, kappaSc
+       & ,group_L0, group_L1, kappaAbs, kappaSc, sed_dir, sedprops_update
 
   associate(s=>pst%s)
 
@@ -131,6 +131,9 @@ subroutine m_read_rt_params(pst)
   s%r%rt_courant_factor=rt_courant_factor
   s%r%units_np=units_np
 
+  s%r%rt_star=rt_star
+  s%r%rt_esc_frac=rt_esc_frac
+  s%r%sed_dir=sed_dir
   s%r%rt_nsource=rt_nsource
   s%r%rt_source_type=rt_source_type
   s%r%rt_src_x_center=rt_src_x_center
@@ -146,6 +149,8 @@ subroutine m_read_rt_params(pst)
   s%r%rt_v_source=rt_v_source
   s%r%rt_w_source=rt_w_source
 
+  s%r%sed_dir=sed_dir
+  s%r%sedprops_update=sedprops_update
   s%r%group_csn=group_csn
   s%r%group_cse=group_cse
   s%r%group_egy=group_egy

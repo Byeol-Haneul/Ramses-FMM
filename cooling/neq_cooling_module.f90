@@ -67,7 +67,8 @@ SUBROUTINE neq_set_model(r, tables, h, omegab, omega0, omegaL, astart_sim, T2_si
   call init_coolrates_tables(r, tables)
   call updateRTGroups_CoolConstants(r, tables)
 
-  if(r%nrestart==0)call neq_evol_single_cell(r, tables, astart, aend, dasura, &
+  if(r%nrestart==0 .and. r%cosmo)                                        &
+      call neq_evol_single_cell(r, tables, astart, aend, dasura,         &
        &        h, omegab, omega0, omegaL, T2end, mu, ne, .false.)
   T2_sim=T2end
 
@@ -1225,6 +1226,8 @@ subroutine neq_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
   real(kind=8)::ux,g_courty,f_courty=1d0,g_courty_prime,f_courty_prime
   integer::iT
   !-------------------------------------------------------------------------
+  TT=T2*mu
+  lTT=log10(TT)
   ux=1d-4*tables%phi/nH
   g_courty=c1*(TT/TT0)**alpha1+c2*exp(-TTC/TT)
   g_courty_prime=(c1*alpha1*(TT/TT0)**alpha1+c2*exp(-TTC/TT)*TTC/TT)/TT

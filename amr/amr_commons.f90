@@ -324,6 +324,7 @@ module amr_commons
      real(dp)::units_Np=1.0                ! [#/cm^3]                                        !
      logical::rt_star=.false.              ! Activate radiation from star particles          !
      logical::rt_sink=.false.              ! Activate radiation from sink particles          !
+     real(dp)::rt_esc_frac=1d0             ! Photon escape fraction from stellar particles   !
      logical::rt_is_outflow_bound=.false.  ! Make all boundaries=outflow for RT              !
      real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
      real(dp)::rt_err_grad_n(nrtgrp)=-1    ! Photon number density gradient for refinement   !
@@ -390,8 +391,8 @@ module amr_commons
      real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
      real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
      
-     ! RT groups parameters------------------------------------------------------------------
-     ! integer::sedprops_update=-1                    ! Update sedprops from star populations
+     ! RT groups parameters-------------------------------------------------------------------
+     integer::sedprops_update=-1           ! Update sedprops from stellar populations        
      ! negative: never update, 0:update on init, pos x: update every x coarse steps
      ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
      ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
