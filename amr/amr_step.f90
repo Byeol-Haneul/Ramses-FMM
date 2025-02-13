@@ -142,7 +142,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 #endif
 
   ! Remove gravity source term with half time step and old force
-  if(r%hydro)then
+  if(r%hydro.and..not.r%static_gas)then
                                     call m_timer(pst,'hydro - gravity','start')
      call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
   endif
@@ -183,7 +183,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   endif
 
   ! Add gravity source term with half time step and new force
-  if(r%hydro)then
+  if(r%hydro.and..not.r%static_gas)then
                                     call m_timer(pst,'hydro - gravity','start')
      call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
   end if
@@ -205,7 +205,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
-  if(r%hydro)then
+  if(r%hydro.and..not.r%static_gas)then
                                     call m_timer(pst,'hydro - set unew','start')
      call r_set_unew(pst,ilevel,1)
   endif

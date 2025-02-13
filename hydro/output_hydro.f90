@@ -289,7 +289,6 @@ subroutine file_descriptor_hydro(r,filename,write_bkp_file)
 #if NVAR>5+NENER
      ! Passive scalars
      ivar=ie+1+nener
-     print*,'writing ',ie+1+nener, nprim
      do while(ivar.le.nprim)
         if(ivar.ge.r%iions.and.ivar.lt.r%iions+nion) then
           ! Special cases for ionisation fractions
