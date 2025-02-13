@@ -80,6 +80,8 @@ if prefix=="peak":
     isort=1
 if prefix=="grav":
     isort=0
+if prefix=="rt":
+    isort=0
 
 nout = args.nout
 print("Reading output number ",nout)
