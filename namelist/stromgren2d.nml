@@ -1,6 +1,6 @@
 This namelist contains various input parameters for a 2d Stromgren sphere test.
 Compile using:
-make NDIM=2 RT=1 NRTGRP=1 NION=1
+make NDIM=2 RT=1 NRTGRP=1 NION=1 MPI=1
 
 &RUN_PARAMS 
 hydro=.true.
@@ -9,13 +9,31 @@ ncontrol=1
 verbose=.false.
 nremap=10
 nsuperoct=0
+static=.true.
+nrestart=0
 /
 
 &AMR_PARAMS
-levelmin=6
-levelmax=6
+levelmin=7
+levelmax=7
 ngridmax=800000
 box_size=1.0
+box_xmin=1
+box_ymin=1
+box_xmax=-1
+box_ymax=-1
+/
+
+&BOUNDARY_PARAMS
+nbound=4
+periodic=.false.,.false.
+bound_dir=1,1,2,2
+bound_type=1,1,1,1
+bound_shift=1,-1,1,-1
+bound_xmin= 0,-1, 0, 0
+bound_ymin= 1, 1, 0,-1
+bound_xmax= 1, 0, 0, 0
+bound_ymax=-1,-1, 1, 0
 /
 
 &INIT_PARAMS                    ! Initial conditions of the gas
@@ -30,6 +48,7 @@ p_region=8.69869d-6		! Initial pressure (corresponds to 10^4 K)
 /
 
 &OUTPUT_PARAMS
+foutput=100                      ! Number of timesteps between snapshot outputs
 noutput=1
 tout=15                         ! End-time for the simulation (in unit_time=Myr)
 /
@@ -49,31 +68,43 @@ units_time=3.1556926d13         ! 1 Myr in seconds
 
 &COOLING_PARAMS                 ! Cooling / basic chemistry
 neq_chem=.true.
+isHe=.false.
+isH2=.false.
+X_H=1.0
+Y_He=0.0
+neq_TConst=1d4                  ! Force constant gas temperature of 10^4 K
+is_init_xion=.true.
 /
 
 &REFINE_PARAMS 
 interpol_var=0
 interpol_type=0
 err_grad_p=0.1
+rt_err_grad_n=0.4
+rt_floor_n=0.1
 /
 
 &RT_PARAMS
 rt_advect=.true.
 rt_c_fraction=0.001
+rt_nsubcycle=1
+/
+
+&RT_SOURCES
 rt_nsource=1                    !--Idealized radiation sources------------
-rt_source_type='point'          ! Source geometry (point or square)
-rt_src_x_center=0.5             ! Source position (0 to 1)
-rt_src_y_center=0.5
+rt_source_type=1*'point'        ! Source geometry (point or square)
+rt_src_x_center=0.0             ! Source position (0 to 1)
+rt_src_y_center=0.0
 rt_src_length_x=0.              ! Source size (0 to 1)
 rt_src_length_y=0
 rt_src_group=1                  ! Photon group emitted into
-rt_n_source=3d27                ! Source luminosity (photons per sec)
+rt_n_source=2d28                ! Source luminosity (photons per sec)
 rt_u_source=0.                  ! Reduced x-direction flux
 rt_v_source=0.                  ! Reduced y-direction flux
 /
 
-&RT_GROUPS                      ! Photon group properties
-group_csn(1,:)= 1.6d-18 ! group 1 cross sec. -> HI, HeI, HeII [cm^2]
-group_cse(1,:)= 1.1d-18 ! group 1 e-weighted cs -> HI, HeI, HeII [cm^2]
-group_egy     = 29.6            ! group 1 photon energy [eV]
+&RT_GROUPS                       ! Photon group properties
+group_csn(1,:)= 1.6d-18          ! group 1 cross sec. -> HI, HeI, HeII [cm^2]
+group_cse(1,:)= 1.1d-18          ! group 1 e-weighted cs -> HI, HeI, HeII [cm^2]
+group_egy     = 29.6             ! group 1 photon energy [eV]
 /
