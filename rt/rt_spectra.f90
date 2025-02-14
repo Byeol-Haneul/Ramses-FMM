@@ -275,7 +275,7 @@ SUBROUTINE init_SED_table(r, g, SED)
   type(sed_table_t) :: SED
 #ifndef WITHOUTMPI
   real(kind=8),allocatable::tbl2(:,:,:)
-  integer::dummy_io,info2,ierr
+  integer::ierr
 #endif
   ! Temporary SSP/SED parameters (read from SED files):
   integer:: nAges, nzs, nLs              ! # of bins of age, z, wavelength

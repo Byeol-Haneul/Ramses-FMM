@@ -185,62 +185,6 @@ end associate
 #endif
 end subroutine star_rt_feedback
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-!*************************************************************************
-recursive SUBROUTINE r_check_to_initiate_star_rt_feedback(pst)
-
-! Turn on RT advection if needed.
-! If turning on, update photon group properties from stellar populations.
-!-------------------------------------------------------------------------
-  use amr_parameters, only: ndim, twotondim, dp
-  use amr_commons, only: oct
-  use ramses_commons, only: ramses_t, pst_t
-  use pm_commons, only: part_t
-  use rt_parameters, only: nrtgrp
-  use SED_module, only: getNPhotonsEmitted
-  use mdl_module
-  use nbors_utils
-  use cache_commons
-  use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
-  use boundaries, only: init_bound_refine
-  use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
-  use SED_module, only: update_SED_group_props
-  use hilbert
-  implicit none
-  type(pst_t)::pst
-  !type(ramses_t) :: s
-  !type(part_t) :: p
-  ! Local variables
-  logical,save::groupProps_init=.false.
-  integer::rID
-!-------------------------------------------------------------------------
-  if(groupProps_init) return
-  if(.not. (pst%s%r%rt_star.and. pst%s%star%npart_tot .gt. 0)) return
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_UPDATE_RT_VAR,pst%iUpper+1)
-     call r_check_to_initiate_star_rt_feedback(pst%pLower)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-
-    if(.not.pst%s%r%rt_advect) then ! Turn on RT advection due to newborn stars:
-      if(pst%s%g%myid==1) then
-        write(*,*) '*****************************************'
-        write(*,*) 'Stellar RT turned on at a=',pst%s%g%aexp
-        write(*,*) '*****************************************'
-      endif
-      pst%s%r%rt_advect=.true.
-    endif
-    ! Set group props from stellar populations:
-    if(pst%s%r%sedprops_update .gt. 0 .and. .not. groupProps_init) then
-      call update_SED_group_props(pst%s%r, pst%s%g, pst%s%SED, pst%s%star)
-    endif
-    groupProps_init=.true.
-
-  endif
-END SUBROUTINE r_check_to_initiate_star_rt_feedback
-
-!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 subroutine pack_fetch_emissivity(grid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim
   use rt_parameters, only: nrtgrp
@@ -249,8 +193,6 @@ subroutine pack_fetch_emissivity(grid,msg_size,msg_array)
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
-
-  integer::ind,igrp
   type(msg_rt_emissivity_realdp)::msg
 
 #ifdef RT  
@@ -270,8 +212,6 @@ subroutine unpack_fetch_emissivity(grid,msg_size,msg_array,hash_key)
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
-
-  integer::ind,igrp
   type(msg_rt_emissivity_realdp)::msg
 
   grid%lev=hash_key(0)
