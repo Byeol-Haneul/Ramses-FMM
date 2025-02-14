@@ -1,0 +1,728 @@
+module hydro_integrator
+   use amr_parameters, only: dp
+   use gpu_utils, only: subgrid_8x8x8cell_conserved, subgrid_8x8x8cell_primitive
+   use cudafor
+   implicit none
+
+   !> @brief
+   !> Contains a 5x5x5 subgrid of primitive variables. Intended to act as a subgrid
+   !> for interface states and fluxes. Note that it is zero indexed to make 1D to 3D
+   !> indexing easier
+   type, public :: subgrid_5x4x4cell_primitive
+      real(kind=dp), dimension(0:4, 0:3, 0:3) :: density, velocity_x, velocity_y, velocity_z, pressure
+   end type subgrid_5x4x4cell_primitive
+   type, public :: subgrid_4x5x4cell_primitive
+      real(kind=dp), dimension(0:3, 0:4, 0:3) :: density, velocity_x, velocity_y, velocity_z, pressure
+   end type subgrid_4x5x4cell_primitive
+   type, public :: subgrid_4x4x5cell_primitive
+      real(kind=dp), dimension(0:3, 0:3, 0:4) :: density, velocity_x, velocity_y, velocity_z, pressure
+   end type subgrid_4x4x5cell_primitive
+
+   !> @brief
+   !> A simple type for holding the conserved variables of a cell
+   type, public :: conserved_t
+      real(kind=dp) :: density
+      real(kind=dp) :: momentum_x
+      real(kind=dp) :: momentum_y
+      real(kind=dp) :: momentum_z
+      real(kind=dp) :: energy
+   end type conserved_t
+
+   !> @brief
+   !> A simple type for holding the primitive variables of a cell
+   type, public :: primitive_t
+      real(kind=dp) :: density
+      real(kind=dp) :: velocity_x
+      real(kind=dp) :: velocity_y
+      real(kind=dp) :: velocity_z
+      real(kind=dp) :: pressure
+   end type primitive_t
+
+
+contains
+   ! ==========================================================================
+   !> @brief
+   !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
+   !> Parentheses are used to guarantee associativity of transverse terms.
+   !>
+   !> @param[in] x : The x component of the vector
+   !> @param[in] y : The y component of the vector
+   !> @param[in] z : The z component of the vector
+   attributes(device) function magnitude_squared(x, y, z)
+      real(kind=dp), value :: x, y, z
+      real(kind=dp) :: magnitude_squared
+      magnitude_squared = x**2 + (y**2 + z**2)
+      return
+   end function magnitude_squared
+   ! ==========================================================================
+
+   ! ==========================================================================
+   !> @brief
+   !> Compute the pressure from conserved variables
+   !>
+   !> @param[in] conserved : The conserved variables
+   !> @param[in] gamma : The adiabatic index
+   !>
+   !> @return
+   !> The pressure
+   attributes(device) function compute_pressure(conserved, gamma) result(pressure)
+      type(conserved_t), intent(in) :: conserved
+      real(kind=dp), value :: gamma
+      real(kind=dp) :: pressure, momentum_squared
+
+      momentum_squared = magnitude_squared(conserved%momentum_x, conserved%momentum_y, conserved%momentum_z)
+      pressure = (gamma - 1.d0)*(conserved%energy - 0.5d0*momentum_squared/conserved%density)
+      return
+   end function compute_pressure
+   ! ==========================================================================
+
+   ! ==========================================================================
+   !> @brief
+   !> Compute the energy in a cell from primitive variables
+   !>
+   !> @param[in] primitive : The primitive variables in the cell
+   !>  @param[in] gamma : The adiabatic index
+   !>
+   !> @return
+   !> The energy in the cell
+   attributes(device) function compute_energy(primitive, gamma) result(energy)
+      type(primitive_t), intent(in) :: primitive
+      real(kind=dp), value :: gamma
+      real(kind=dp) :: energy, velocity_squared
+
+      velocity_squared = magnitude_squared(primitive%velocity_x, primitive%velocity_y, primitive%velocity_z)
+      energy = (primitive%pressure/(gamma - 1.d0)) + 0.5*primitive%density*velocity_squared
+      return
+   end function compute_energy
+   ! ==========================================================================
+
+   ! ==========================================================================
+   !> @brief
+   !> Compute the sound speed in a cell from the primitive variables
+   !>
+   !> @param[in] primitive : The primitive variables in a cell
+   !> @param[in] gamma : The adiabatic index
+   !>
+   !> @return
+   !> The sound speed in a cell
+   attributes(device) function sound_speed(primitive, gamma)
+      type(primitive_t), intent(in) :: primitive
+      real(kind=dp), value :: gamma
+      real(kind=dp) :: sound_speed
+
+      sound_speed = sqrt(gamma*primitive%pressure/primitive%density)
+      return
+   end function sound_speed
+   ! ==========================================================================
+
+   ! ==========================================================================
+   !> @brief
+   !> Computes the minmod slope
+   !>
+   !> @param[in] left : The value to the "left" side of the cell
+   !> @param[in] middle : The value in the cell
+   !> @param[in] right : The value to the "left" side of the cell
+   !> @return
+   !> The minmod slope in the cell
+   attributes(device) function slope_minmod(left, middle, right)
+      real(kind=dp), value :: left, middle, right
+      real(kind=dp) :: slope_left, slope_right
+      real(kind=dp) :: slope_minmod
+
+      slope_left = middle - left
+      slope_right = right - middle
+
+      if (slope_left*slope_right <= 0.0) then
+         slope_minmod = 0.0
+      else if (slope_left > 0) then
+         slope_minmod = min(slope_left, slope_right)
+      else
+         slope_minmod = max(slope_left, slope_right)
+      end if
+   end function slope_minmod
+   ! ==========================================================================
+
+   ! ==========================================================================
+   !> @brief
+   !> Convert from conserved to primitive variables
+   !>
+   !>
+   !> @param[in] conserved : The conserved variables
+   !> @param[in] gamma : The adiabatic index
+   !> @return
+   !> A primitive_t object with the primitive variables in a cell
+   attributes(device) function conserved_2_primitive(conserved, gamma) result(primitive)
+      type(conserved_t), intent(in) :: conserved
+      real(kind=dp), value :: gamma
+      type(primitive_t) :: primitive
+
+      primitive%density = conserved%density
+      primitive%velocity_x = conserved%momentum_x/conserved%density
+      primitive%velocity_y = conserved%momentum_y/conserved%density
+      primitive%velocity_z = conserved%momentum_z/conserved%density
+      primitive%pressure = compute_pressure(conserved, gamma)
+      return
+   end function conserved_2_primitive
+   ! ==========================================================================
+
+   ! ==========================================================================
+   !> @brief
+   !> Convert from primitive to conserved variables
+   !>
+   !>
+   !> @param[in] primitive : The primitive variables
+   !> @param[in] gamma : The adiabatic index
+   !> @return
+   !> A conserved_t object with the conserved variables in a cell
+   attributes(device) function primitive_2_conserved(primitive, gamma) result(conserved)
+      type(primitive_t), intent(in) :: primitive
+      real(kind=dp), value :: gamma
+      type(conserved_t) :: conserved
+
+      conserved%density = primitive%density
+      conserved%momentum_x = primitive%velocity_x*primitive%density
+      conserved%momentum_y = primitive%velocity_y*primitive%density
+      conserved%momentum_z = primitive%velocity_z*primitive%density
+      conserved%energy = compute_energy(primitive, gamma)
+      return
+   end function primitive_2_conserved
+   ! ==========================================================================
+   ! ==========================================================================
+   !> @brief
+   !> Convert a zero based 1D index into zero based 3D indices
+   !>
+   !> @param[in] index : The 1D index to convert
+   !> @param[in] nx : The size of the grid in the X direction
+   !> @param[in] ny : The size of the grid in the Y direction
+   !> @param[out] xid : The x component of the 3D index
+   !> @param[out] yid : The y component of the 3D index
+   !> @param[out] zid : The z component of the 3D index
+   attributes(device) subroutine index_1Dto3D(index, nx, ny, xid, yid, zid)
+      integer, value :: index, nx, ny
+      integer, intent(out) :: xid, yid, zid
+      zid = index/(nx*ny)
+      yid = (index - zid*nx*ny)/nx
+      xid = index - zid*nx*ny - yid*nx
+   end subroutine index_1Dto3D
+   ! ==========================================================================
+
+   ! =========================================================================
+   !> @brief
+   !> Convert a subgrid of conserved variables to primitive variables in shared memory
+   !>
+   !> @param[in] conserved_subgrids : The array of conserved subgrids in global memory
+   !> @param[in] block_idx : The CUDA block index of the calling thread
+   !> @param[in] thread_idx : The index of calling thread within its block
+   !> @param[in] subgrid_size : The size of the subgrid in each dimension
+   !> @param[in] gamma : The adiabatic index
+   !> @param[out] local_subgrid : The local subgrid in shared memory to write the primitive variables to
+   !>
+   attributes(device) subroutine subgrid_conserved_2_primitive(conserved_subgrids, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+      type(subgrid_8x8x8cell_conserved), device, dimension(*) :: conserved_subgrids
+      integer, value :: block_idx, thread_idx
+      integer, value :: subgrid_size
+      real(kind=dp), value :: gamma
+      type(subgrid_8x8x8cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
+      type(conserved_t) :: conserved ! object to hold the conserved variables
+      type(primitive_t) :: primitive ! object to hold the primitive variables
+      integer :: work_idx   ! Loop index for unit of work
+      integer :: i, j, k    ! Cell indices
+
+      do work_idx = thread_idx, subgrid_size**3 - 1, blockDim%x
+         ! Compute the 3D indices
+         call index_1Dto3D(work_idx, subgrid_size, subgrid_size, i, j, k)
+
+         ! Load cells
+         conserved%density = conserved_subgrids(block_idx)%density(i, j, k)
+         conserved%momentum_x = conserved_subgrids(block_idx)%momentum_x(i, j, k)
+         conserved%momentum_y = conserved_subgrids(block_idx)%momentum_y(i, j, k)
+         conserved%momentum_z = conserved_subgrids(block_idx)%momentum_z(i, j, k)
+         conserved%energy = conserved_subgrids(block_idx)%energy(i, j, k)
+
+         ! Convert to primitive variables
+         primitive = conserved_2_primitive(conserved, gamma)
+
+         ! Write primitives cells to shared memory
+         local_subgrid%density(i, j, k) = primitive%density
+         local_subgrid%velocity_x(i, j, k) = primitive%velocity_x
+         local_subgrid%velocity_y(i, j, k) = primitive%velocity_y
+         local_subgrid%velocity_z(i, j, k) = primitive%velocity_z
+         local_subgrid%pressure(i, j, k) = primitive%pressure
+      end do
+
+      call syncthreads()
+
+   end subroutine subgrid_conserved_2_primitive
+   ! =========================================================================
+
+   ! =========================================================================
+   !> @brief
+   !> Compute the interface states with tracing
+   !>
+   !> @param[in] local_subgrid : The subgrid of primitive variables to solve
+   !> @param[in] thread_idx : The index of the current thread
+   !> @param[in] subgrid_size : The size of the subgrid on each subgrid_size
+   !> @param[in] gamma : The adiabatic index
+   !> @param[in] dtdx : dt / dx
+   !> @param[in] left_interfaces_x : The left side interfaces normal to x
+   !> @param[in] left_interfaces_y : The left side interfaces normal to y
+   !> @param[in] left_interfaces_z : The left side interfaces normal to z
+   !> @param[in] right_interfaces_x : The right side interfaces normal to x
+   !> @param[in] right_interfaces_y : The right side interfaces normal to y
+   !> @param[in] right_interfaces_z : The right side interfaces normal to z
+   !>
+   attributes(device) subroutine trace_3d(local_subgrid, thread_idx, subgrid_size, gamma, dtdx,left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z)
+      type(subgrid_8x8x8cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
+      integer, value :: thread_idx
+      integer, value :: subgrid_size
+      real(kind=dp), value :: gamma, dtdx
+      type(subgrid_5x4x4cell_primitive) :: left_interfaces_x, right_interfaces_x
+      type(subgrid_4x5x4cell_primitive) :: left_interfaces_y, right_interfaces_y
+      type(subgrid_4x4x5cell_primitive) :: left_interfaces_z, right_interfaces_z
+      type(primitive_t) :: cell ! The cell centered primitive variables and (eventually) predicted states
+      type(primitive_t) :: slopes_x, slopes_y, slopes_z ! The limited slopes in the x, y, and z directions
+      type(primitive_t) :: source_term ! The sources terms
+
+      integer :: work_idx   ! Loop index for unit of work
+      integer :: i, j, k    ! Cell indices
+      integer :: work_size
+
+      ! Compute the size of the section of the subgrid to operate on
+      work_size = subgrid_size - 2
+
+      ! Note that we're now excluding the outermost shell of cells since this
+      ! stencil operation requires 1 ghost cell. This also requires the
+      ! transformation from the basic 3D indexing as shown below to shift the indices from going from 0-5 to 1-6
+      do work_idx = thread_idx, work_size**3 - 1, blockDim%x
+         ! Compute the 3D indices, note the tranformation so that we're indexing 1-6 and not 0-5
+         call index_1Dto3D(work_idx, work_size, work_size, i, j, k)
+         i = i + 1
+         j = j + 1
+         k = k + 1
+
+         ! Cell centered values
+         cell%density = local_subgrid%density(i, j, k)
+         cell%velocity_x = local_subgrid%velocity_x(i, j, k)
+         cell%velocity_y = local_subgrid%velocity_y(i, j, k)
+         cell%velocity_z = local_subgrid%velocity_z(i, j, k)
+         cell%pressure = local_subgrid%pressure(i, j, k)
+
+         ! Compute the TVD Slopes
+         slopes_x%density    = 0.5 * slope_minmod(local_subgrid%density   (i - 1, j, k), cell%density,    local_subgrid%density   (i + 1, j, k))
+         slopes_x%velocity_x = 0.5 * slope_minmod(local_subgrid%velocity_x(i - 1, j, k), cell%velocity_x, local_subgrid%velocity_x(i + 1, j, k))
+         slopes_x%velocity_y = 0.5 * slope_minmod(local_subgrid%velocity_y(i - 1, j, k), cell%velocity_y, local_subgrid%velocity_y(i + 1, j, k))
+         slopes_x%velocity_z = 0.5 * slope_minmod(local_subgrid%velocity_z(i - 1, j, k), cell%velocity_z, local_subgrid%velocity_z(i + 1, j, k))
+         slopes_x%pressure   = 0.5 * slope_minmod(local_subgrid%pressure  (i - 1, j, k), cell%pressure,   local_subgrid%pressure  (i + 1, j, k))
+
+         slopes_y%density    = 0.5 * slope_minmod(local_subgrid%density   (i, j - 1, k), cell%density,    local_subgrid%density(   i, j + 1, k))
+         slopes_y%velocity_x = 0.5 * slope_minmod(local_subgrid%velocity_x(i, j - 1, k), cell%velocity_x, local_subgrid%velocity_x(i, j + 1, k))
+         slopes_y%velocity_y = 0.5 * slope_minmod(local_subgrid%velocity_y(i, j - 1, k), cell%velocity_y, local_subgrid%velocity_y(i, j + 1, k))
+         slopes_y%velocity_z = 0.5 * slope_minmod(local_subgrid%velocity_z(i, j - 1, k), cell%velocity_z, local_subgrid%velocity_z(i, j + 1, k))
+         slopes_y%pressure   = 0.5 * slope_minmod(local_subgrid%pressure  (i, j - 1, k), cell%pressure,   local_subgrid%pressure(  i, j + 1, k))
+
+         slopes_z%density    = 0.5 * slope_minmod(local_subgrid%density   (i, j, k - 1), cell%density,    local_subgrid%density   (i, j, k + 1))
+         slopes_z%velocity_x = 0.5 * slope_minmod(local_subgrid%velocity_x(i, j, k - 1), cell%velocity_x, local_subgrid%velocity_x(i, j, k + 1))
+         slopes_z%velocity_y = 0.5 * slope_minmod(local_subgrid%velocity_y(i, j, k - 1), cell%velocity_y, local_subgrid%velocity_y(i, j, k + 1))
+         slopes_z%velocity_z = 0.5 * slope_minmod(local_subgrid%velocity_z(i, j, k - 1), cell%velocity_z, local_subgrid%velocity_z(i, j, k + 1))
+         slopes_z%pressure   = 0.5 * slope_minmod(local_subgrid%pressure  (i, j, k - 1), cell%pressure,   local_subgrid%pressure  (i, j, k + 1))
+
+         ! Source terms
+         source_term%density    = -cell%velocity_x * slopes_x%density    &
+                                  -cell%velocity_y * slopes_y%density    &
+                                  -cell%velocity_z * slopes_z%density    &
+                                  - (slopes_x%velocity_x + slopes_y%velocity_y + slopes_z%velocity_z) * cell%density
+         source_term%velocity_x = -cell%velocity_x * slopes_x%velocity_x &
+                                  -cell%velocity_y * slopes_y%velocity_x &
+                                  -cell%velocity_z * slopes_x%velocity_x &
+                                  - (slopes_x%pressure) / cell%density
+         source_term%velocity_y = -cell%velocity_x * slopes_x%velocity_y &
+                                  -cell%velocity_y * slopes_y%velocity_y &
+                                  -cell%velocity_z * slopes_x%velocity_y &
+                                  - (slopes_y%pressure) / cell%density
+         source_term%velocity_z = -cell%velocity_x * slopes_x%velocity_z &
+                                  -cell%velocity_y * slopes_y%velocity_z &
+                                  -cell%velocity_z * slopes_x%velocity_z &
+                                  - (slopes_z%pressure) / cell%density
+         source_term%pressure   = -cell%velocity_x * slopes_x%pressure   &
+                                  -cell%velocity_y * slopes_y%pressure   &
+                                  -cell%velocity_z * slopes_z%pressure   &
+                                  - (slopes_x%velocity_x + slopes_y%velocity_y + slopes_z%velocity_z) * gamma * cell%pressure
+
+         ! Cell-centered predicted states
+         cell%density    = cell%density    + dtdx * source_term%density
+         cell%velocity_x = cell%velocity_x + dtdx * source_term%velocity_x
+         cell%velocity_y = cell%velocity_y + dtdx * source_term%velocity_y
+         cell%velocity_z = cell%velocity_z + dtdx * source_term%velocity_z
+         cell%pressure   = cell%pressure   + dtdx * source_term%pressure
+
+         ! Compute and write out the interface states
+
+         ! The right state at i-1/2
+         if (i > 1 .and. (j > 1 .and. j < 6) .and. (k > 1 .and. k < 6)) then
+            right_interfaces_x%   density(i-2, j-2, k-2) = cell%density    - slopes_x%density
+            right_interfaces_x%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_x%velocity_x
+            right_interfaces_x%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_x%velocity_y
+            right_interfaces_x%velocity_z(i-2, j-2, k-2) = cell%velocity_z - slopes_x%velocity_z
+            right_interfaces_x%  pressure(i-2, j-2, k-2) = cell%pressure   - slopes_x%pressure
+         end if
+
+         ! The left state at i+1/2
+         if (i < 6 .and. (j > 1 .and. j < 6) .and. (k > 1 .and. k < 6)) then
+            left_interfaces_x%   density(i-1, j-2, k-2) = cell%density    + slopes_x%density
+            left_interfaces_x%velocity_x(i-1, j-2, k-2) = cell%velocity_x + slopes_x%velocity_x
+            left_interfaces_x%velocity_y(i-1, j-2, k-2) = cell%velocity_y + slopes_x%velocity_y
+            left_interfaces_x%velocity_z(i-1, j-2, k-2) = cell%velocity_z + slopes_x%velocity_z
+            left_interfaces_x%  pressure(i-1, j-2, k-2) = cell%pressure   + slopes_x%pressure
+         end if
+
+         ! The right state at j-1/2
+         if ((i > 1 .and. i < 6) .and. j > 1 .and. (k > 1 .and. k < 6)) then
+            right_interfaces_y%   density(i-2, j-2, k-2) = cell%density    - slopes_y%density
+            right_interfaces_y%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_y%velocity_x
+            right_interfaces_y%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_y%velocity_y
+            right_interfaces_y%velocity_z(i-2, j-2, k-2) = cell%velocity_z - slopes_y%velocity_z
+            right_interfaces_y%  pressure(i-2, j-2, k-2) = cell%pressure   - slopes_y%pressure
+         end if
+
+         ! The left state at j+1/2
+         if ((i > 1 .and. i < 6) .and. j < 6 .and. (k > 1 .and. k < 6)) then
+            left_interfaces_y%   density(i-2, j-1, k-2) = cell%density    + slopes_y%density
+            left_interfaces_y%velocity_x(i-2, j-1, k-2) = cell%velocity_x + slopes_y%velocity_x
+            left_interfaces_y%velocity_y(i-2, j-1, k-2) = cell%velocity_y + slopes_y%velocity_y
+            left_interfaces_y%velocity_z(i-2, j-1, k-2) = cell%velocity_z + slopes_y%velocity_z
+            left_interfaces_y%  pressure(i-2, j-1, k-2) = cell%pressure   + slopes_y%pressure
+         end if
+
+         ! The right state at k-1/2
+         if ((i > 1 .and. i < 6) .and. (j > 1 .and. j < 6) .and. k > 1) then
+            right_interfaces_z%   density(i-2, j-2, k-2) = cell%density    - slopes_z%density
+            right_interfaces_z%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_z%velocity_x
+            right_interfaces_z%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_z%velocity_y
+            right_interfaces_z%velocity_z(i-2, j-2, k-2) = cell%velocity_z - slopes_z%velocity_z
+            right_interfaces_z%  pressure(i-2, j-2, k-2) = cell%pressure   - slopes_z%pressure
+         end if
+
+         ! The left state at k+1/2
+         if ((i > 1 .and. i < 6) .and. (j > 1 .and. j < 6) .and. k < 6) then
+            left_interfaces_z%   density(i-2, j-2, k-1) = cell%density    + slopes_z%density
+            left_interfaces_z%velocity_x(i-2, j-2, k-1) = cell%velocity_x + slopes_z%velocity_x
+            left_interfaces_z%velocity_y(i-2, j-2, k-1) = cell%velocity_y + slopes_z%velocity_y
+            left_interfaces_z%velocity_z(i-2, j-2, k-1) = cell%velocity_z + slopes_z%velocity_z
+            left_interfaces_z%  pressure(i-2, j-2, k-1) = cell%pressure   + slopes_z%pressure
+         end if
+      end do
+
+      call syncthreads()
+
+   end subroutine trace_3d
+   ! =========================================================================
+
+   ! =========================================================================
+   !> @brief
+   !> Compute the HLL flux for a specific field. Note that this only computes 
+   !> the HLL flux itself from intermediate values. The full HLL Riemann Solver 
+   !> is in the `hll_fluxes` function which calls this function.
+   !>
+   !> @param[in] speed_l : The sound speed from the left interface
+   !> @param[in] speed_r : The sound speed from the right interface
+   !> @param[in] left_flux : The left HLL flux
+   !> @param[in] right_flux : The right HLL flux
+   !> @param[in] left_c : The left conserved variables
+   !> @param[in] right_c : The right conserved variable
+   !>
+   !> @return
+   !> flux : The HLL flux for this field
+   attributes(device) function hll_flux(speed_l, speed_r, left_flux, right_flux, left_c, right_c) result(flux)
+      real(kind=dp), value :: speed_l, speed_r,  left_flux, right_flux, left_c, right_c
+      real(kind=dp) :: flux
+
+      flux = (speed_r * left_flux - speed_l*right_flux + speed_r * speed_l * (right_c-left_c)) / (speed_r-speed_l)
+   end function hll_flux
+   ! =========================================================================
+
+   ! =========================================================================
+   !> @brief
+   !> GPU implementation of the HLL Riemann Solver.
+   !>
+   !> @param[in] left_state_p : The state on the left side of the interface in primitive variables
+   !> @param[in] right_state_p : The state on the right side of the interface in primitive variables
+   !> @param[in] gamma : The adiabatic index
+   !>
+   !> @return
+   !> flux : The conserved_t of the HLL fluxes 
+   attributes(device) function hll_fluxes(left_state_p, right_state_p, gamma) result(flux)
+      type(primitive_t), intent(inout) :: left_state_p, right_state_p
+      real(kind=dp), value :: gamma
+      type(conserved_t) :: flux
+      ! Both `smallr` and `smallc`/`smallp` are usually defined in amr_commons. I'm redefining them here so that they will be evaluated at compile time
+      real(kind=dp), parameter :: smallr = 1.d-10 
+      real(kind=dp), parameter :: smallc_squared = (1.d-10)**2
+      type(conserved_t) :: left_state_c, right_state_c, left_fluxes, right_fluxes
+      real(kind=dp) :: smallp
+      real(kind=dp) :: sound_speed_l, sound_speed_r, speed_l, speed_r
+
+      ! Verify that the density and pressure are reasonable and positive
+      smallp = smallc_squared / gamma ! The minimum pressure
+      left_state_p%density   = max(left_state_p%density,   smallr)
+      right_state_p%density  = max(right_state_p%density,  smallr)
+      left_state_p%pressure  = max(left_state_p%pressure,  smallp * left_state_p%density)
+      right_state_p%pressure = max(right_state_p%pressure, smallp * right_state_p%density)
+
+      ! Compute the wave speeds
+      sound_speed_l = sound_speed(left_state_p, gamma)
+      sound_speed_r = sound_speed(right_state_p, gamma)
+      speed_l = min(min(left_state_p%velocity_x, right_state_p%velocity_x) - max(sound_speed_l, sound_speed_r), 0.0_dp)
+      speed_r = max(max(left_state_p%velocity_x, right_state_p%velocity_x) + max(sound_speed_l, sound_speed_r), 0.0_dp)
+
+      ! Convert to conserved variables
+      left_state_c = primitive_2_conserved(left_state_p, gamma)
+      right_state_c = primitive_2_conserved(right_state_p, gamma)
+
+      ! Compute the left and right fluxes
+      left_fluxes%density    = left_state_c%momentum_x
+      left_fluxes%momentum_x = left_state_p%pressure + left_state_p%velocity_x * left_state_c%momentum_x
+      left_fluxes%momentum_y = left_state_p%velocity_x * left_state_c%momentum_y
+      left_fluxes%momentum_z = left_state_p%velocity_x * left_state_c%momentum_z
+      left_fluxes%energy     = left_state_p%velocity_x * (left_state_p%pressure + left_state_c%energy)
+
+      right_fluxes%density    = right_state_c%momentum_x
+      right_fluxes%momentum_x = right_state_p%pressure + right_state_p%velocity_x * right_state_c%momentum_x
+      right_fluxes%momentum_y = right_state_p%velocity_x * right_state_c%momentum_y
+      right_fluxes%momentum_z = right_state_p%velocity_x * right_state_c%momentum_z
+      right_fluxes%energy     = right_state_p%velocity_x * (right_state_p%pressure + right_state_c%energy)
+
+      ! Compute the HLL fluxes
+      flux%density    = hll_flux(speed_l, speed_r, left_fluxes%density,    right_fluxes%density,    left_state_c%density,    right_state_c%density)
+      flux%momentum_x = hll_flux(speed_l, speed_r, left_fluxes%momentum_x, right_fluxes%momentum_x, left_state_c%momentum_x, right_state_c%momentum_x)
+      flux%momentum_y = hll_flux(speed_l, speed_r, left_fluxes%momentum_y, right_fluxes%momentum_y, left_state_c%momentum_y, right_state_c%momentum_y)
+      flux%momentum_z = hll_flux(speed_l, speed_r, left_fluxes%momentum_z, right_fluxes%momentum_z, left_state_c%momentum_z, right_state_c%momentum_z)
+      flux%energy     = hll_flux(speed_l, speed_r, left_fluxes%energy,     right_fluxes%energy,     left_state_c%energy,     right_state_c%energy)
+
+   end function hll_fluxes
+   ! =========================================================================
+
+   ! =========================================================================
+   !> @brief
+   !> Driver for the Riemann solvers. This subroutine handles arranging the interface states and reading/writing data from shared memory
+   !>
+   !> @param[in,out] left_interfaces_x : The left interfaces at the i+1/2 interfaces. The fluxes along the X interfaces are returned in this array
+   !> @param[in] right_interfaces_x : The right interfaces at the i-1/2 interfaces.
+   !> @param[in,out] left_interfaces_y : The left interfaces at the j+1/2 interfaces. The fluxes along the Y interfaces are returned in this array
+   !> @param[in] right_interfaces_y : The right interfaces at the j-1/2 interfaces.
+   !> @param[in,out] left_interfaces_z : The left interfaces at the k+1/2 interfaces. The fluxes along the Z interfaces are returned in this array
+   !> @param[in] right_interfaces_z : The right interfaces at the k-1/2 interfaces.
+   !> @param[in] gamma : The adiabatic index
+   !> @param[in] subgrid_size : The size of the subgrid in cells on each edge
+   !> @param[in] thread_idx : The index of this thread
+   !>
+   attributes(device) subroutine riemann_driver(left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z, gamma, subgrid_size, thread_idx)
+   type(subgrid_5x4x4cell_primitive), intent(inout) :: left_interfaces_x, right_interfaces_x
+   type(subgrid_4x5x4cell_primitive), intent(inout) :: left_interfaces_y, right_interfaces_y
+   type(subgrid_4x4x5cell_primitive), intent(inout) :: left_interfaces_z, right_interfaces_z
+   real(kind=dp), value :: gamma
+   integer, value :: subgrid_size, thread_idx
+   integer :: work_idx, interface_array_size, i, j, k
+   type(primitive_t) :: left_interface, right_interface
+   type(conserved_t) :: flux
+
+   interface_array_size = (subgrid_size-3) * (subgrid_size-4)**2
+
+   do work_idx = thread_idx, interface_array_size * 3 - 1, blockDim%x
+      if (work_idx < interface_array_size) then ! Compute fluxes across the x interfaces
+         ! Compute the indices in the interface state arrays
+         call index_1Dto3D(work_idx, subgrid_size-3, subgrid_size-4, i, j, k)
+
+         ! Gather the interface states
+         left_interface%density    = left_interfaces_x%density(i,j,k)
+         left_interface%velocity_x = left_interfaces_x%velocity_x(i,j,k)
+         left_interface%velocity_y = left_interfaces_x%velocity_y(i,j,k)
+         left_interface%velocity_z = left_interfaces_x%velocity_z(i,j,k)
+         left_interface%pressure   = left_interfaces_x%pressure(i,j,k)
+
+         right_interface%density    = right_interfaces_x%density(i,j,k)
+         right_interface%velocity_x = right_interfaces_x%velocity_x(i,j,k)
+         right_interface%velocity_y = right_interfaces_x%velocity_y(i,j,k)
+         right_interface%velocity_z = right_interfaces_x%velocity_z(i,j,k)
+         right_interface%pressure   = right_interfaces_x%pressure(i,j,k)
+
+         ! Call the Riemann Solver
+         flux = hll_fluxes(left_interface, right_interface, gamma)
+
+         ! Unpack the fluxes into the interface state arrays
+         left_interfaces_x%density(i,j,k)    = flux%density
+         left_interfaces_x%velocity_x(i,j,k) = flux%momentum_x
+         left_interfaces_x%velocity_y(i,j,k) = flux%momentum_y
+         left_interfaces_x%velocity_z(i,j,k) = flux%momentum_z
+         left_interfaces_x%pressure(i,j,k)   = flux%energy
+         
+      else if (work_idx < 2 * interface_array_size) then ! Compute fluxes across the y interfaces
+         ! Compute the indices in the interface state arrays
+         call index_1Dto3D(work_idx-interface_array_size, subgrid_size-4, subgrid_size-3, i, j, k)
+         
+         ! Gather the interface states
+         left_interface%density    = left_interfaces_y%density(i,j,k)
+         left_interface%velocity_x = left_interfaces_y%velocity_y(i,j,k)
+         left_interface%velocity_y = left_interfaces_y%velocity_z(i,j,k)
+         left_interface%velocity_z = left_interfaces_y%velocity_x(i,j,k)
+         left_interface%pressure   = left_interfaces_y%pressure(i,j,k)
+
+         right_interface%density    = right_interfaces_y%density(i,j,k)
+         right_interface%velocity_x = right_interfaces_y%velocity_y(i,j,k)
+         right_interface%velocity_y = right_interfaces_y%velocity_z(i,j,k)
+         right_interface%velocity_z = right_interfaces_y%velocity_x(i,j,k)
+         right_interface%pressure   = right_interfaces_y%pressure(i,j,k)
+
+         ! Call the Riemann Solver
+         flux = hll_fluxes(left_interface, right_interface, gamma)
+
+         ! Unpack the fluxes into the interface state arrays
+         left_interfaces_y%density(i,j,k)    = flux%density
+         left_interfaces_y%velocity_x(i,j,k) = flux%momentum_z
+         left_interfaces_y%velocity_y(i,j,k) = flux%momentum_x
+         left_interfaces_y%velocity_z(i,j,k) = flux%momentum_y
+         left_interfaces_y%pressure(i,j,k)   = flux%energy
+      else ! Compute fluxes across the z interfaces
+         ! Compute the indices in the interface state arrays
+         call index_1Dto3D(work_idx - 2*interface_array_size, subgrid_size-4, subgrid_size-4, i, j, k)
+
+         ! Gather the interface states
+         left_interface%density    = left_interfaces_z%density(i,j,k)
+         left_interface%velocity_x = left_interfaces_z%velocity_z(i,j,k)
+         left_interface%velocity_y = left_interfaces_z%velocity_x(i,j,k)
+         left_interface%velocity_z = left_interfaces_z%velocity_y(i,j,k)
+         left_interface%pressure   = left_interfaces_z%pressure(i,j,k)
+
+         right_interface%density    = right_interfaces_z%density(i,j,k)
+         right_interface%velocity_x = right_interfaces_z%velocity_z(i,j,k)
+         right_interface%velocity_y = right_interfaces_z%velocity_x(i,j,k)
+         right_interface%velocity_z = right_interfaces_z%velocity_y(i,j,k)
+         right_interface%pressure   = right_interfaces_z%pressure(i,j,k)
+
+         ! Call the Riemann Solver
+         flux = hll_fluxes(left_interface, right_interface, gamma)
+
+         ! Unpack the fluxes into the interface state arrays
+         left_interfaces_z%density(i,j,k)    = flux%density
+         left_interfaces_z%velocity_x(i,j,k) = flux%momentum_y
+         left_interfaces_z%velocity_y(i,j,k) = flux%momentum_z
+         left_interfaces_z%velocity_z(i,j,k) = flux%momentum_x
+         left_interfaces_z%pressure(i,j,k)   = flux%energy
+      end if
+   end do
+   
+   call syncthreads()
+   
+   end subroutine riemann_driver
+   ! =========================================================================
+
+   ! =========================================================================
+   attributes(device) subroutine  conservative_update(conserved_subgrids, fluxes_x, fluxes_y, fluxes_z, block_idx, thread_idx, subgrid_size, dtdx)
+   type(subgrid_8x8x8cell_conserved), device, dimension(*) :: conserved_subgrids
+   type(subgrid_5x4x4cell_primitive), intent(in) :: fluxes_x
+   type(subgrid_4x5x4cell_primitive), intent(in) :: fluxes_y
+   type(subgrid_4x4x5cell_primitive), intent(in) :: fluxes_z
+   integer, value :: block_idx, thread_idx, subgrid_size
+   real(kind=dp), value :: dtdx
+
+   integer :: work_idx   ! Loop index for unit of work
+   integer :: i, j, k    ! Cell indices
+   integer :: work_size
+   type(conserved_t) :: update_term
+
+   ! Compute the size of the section of the subgrid to operate on
+   work_size = subgrid_size - 4
+
+   ! Note that we're now excluding the ghost cells since this operation doesn't need them.
+   do work_idx = thread_idx, work_size**3 - 1, blockDim%x
+      call index_1Dto3D(work_idx, work_size, work_size, i, j, k)
+
+      ! TODO: Do I need to add a shift here? Or is that entirely taken care of below? Is the Riemann solver writing to the correct locations?
+      
+      ! Gather the fluxes, computing the update term as we go. Note that the flux 
+      ! variables names are the primitive names but the actual variables are the 
+      ! conserved variables, this is because we're reuseing the interface state 
+      ! array to store this fluxes. 
+      ! TODO: replace the member variables with enum based indexing
+      ! X component
+
+      update_term%density    = fluxes_x%density   (i, j, k)  - fluxes_x%density   (i+1, j, k)
+      update_term%momentum_x = (fluxes_x%velocity_x(i, j, k) - fluxes_x%velocity_x(i+1, j, k))
+      update_term%momentum_y = (fluxes_x%velocity_y(i, j, k) - fluxes_x%velocity_y(i+1, j, k))
+      update_term%momentum_z = (fluxes_x%velocity_z(i, j, k) - fluxes_x%velocity_z(i+1, j, k))
+      update_term%energy     = (fluxes_x%pressure  (i, j, k) - fluxes_x%pressure  (i+1, j, k))
+
+      ! Y component
+      update_term%density    = (fluxes_y%density   (i, j, k) - fluxes_y%density   (i, j+1, k)) + update_term%density
+      update_term%momentum_x = (fluxes_y%velocity_x(i, j, k) - fluxes_y%velocity_x(i, j+1, k)) + update_term%momentum_x
+      update_term%momentum_y = (fluxes_y%velocity_y(i, j, k) - fluxes_y%velocity_y(i, j+1, k)) + update_term%momentum_y
+      update_term%momentum_z = (fluxes_y%velocity_z(i, j, k) - fluxes_y%velocity_z(i, j+1, k)) + update_term%momentum_z
+      update_term%energy     = (fluxes_y%pressure  (i, j, k) - fluxes_y%pressure  (i, j+1, k)) + update_term%energy
+
+      ! Z component
+      update_term%density    = (fluxes_z%density   (i, j, k) - fluxes_z%density   (i, j, k+1)) + update_term%density
+      update_term%momentum_x = (fluxes_z%velocity_x(i, j, k) - fluxes_z%velocity_x(i, j, k+1)) + update_term%momentum_x
+      update_term%momentum_y = (fluxes_z%velocity_y(i, j, k) - fluxes_z%velocity_y(i, j, k+1)) + update_term%momentum_y
+      update_term%momentum_z = (fluxes_z%velocity_z(i, j, k) - fluxes_z%velocity_z(i, j, k+1)) + update_term%momentum_z
+      update_term%energy     = (fluxes_z%pressure  (i, j, k) - fluxes_z%pressure  (i, j, k+1)) + update_term%energy
+
+      ! Conservative update. Note that in this code dt/dx = dt/dy = dt/dz in call cases
+      conserved_subgrids(block_idx)%density   (i+2, j+2, k+2) = conserved_subgrids(block_idx)%density   (i+2, j+2, k+2) + dtdx * update_term%density
+      conserved_subgrids(block_idx)%momentum_x(i+2, j+2, k+2) = conserved_subgrids(block_idx)%momentum_x(i+2, j+2, k+2) + dtdx * update_term%momentum_x
+      conserved_subgrids(block_idx)%momentum_y(i+2, j+2, k+2) = conserved_subgrids(block_idx)%momentum_y(i+2, j+2, k+2) + dtdx * update_term%momentum_y
+      conserved_subgrids(block_idx)%momentum_z(i+2, j+2, k+2) = conserved_subgrids(block_idx)%momentum_z(i+2, j+2, k+2) + dtdx * update_term%momentum_z
+      conserved_subgrids(block_idx)%energy    (i+2, j+2, k+2) = conserved_subgrids(block_idx)%energy    (i+2, j+2, k+2) + dtdx * update_term%energy
+
+   end do
+
+   end subroutine conservative_update
+   ! =========================================================================
+
+   ! =========================================================================
+   attributes(global) subroutine hydro_integrator_kernel(conserved_subgrids, num_subgrids, subgrid_size, gamma, dtdx)
+      type(subgrid_8x8x8cell_conserved), device, dimension(*) :: conserved_subgrids
+      integer(kind=8), intent(in), value :: num_subgrids
+      integer, intent(in), value :: subgrid_size
+      real(kind=dp), intent(in), value:: gamma
+      real(kind=dp), intent(in), value :: dtdx
+      type(subgrid_5x4x4cell_primitive), shared :: left_interfaces_x, right_interfaces_x
+      type(subgrid_4x5x4cell_primitive), shared :: left_interfaces_y, right_interfaces_y
+      type(subgrid_4x4x5cell_primitive), shared :: left_interfaces_z, right_interfaces_z
+      type(subgrid_8x8x8cell_primitive), shared :: local_subgrid ! The subgrid that this block is working on in shared memory
+      integer :: block_idx  ! The index of this block, corresponds to the subgrid to load
+      integer :: thread_idx ! The index of this thread within the block
+
+      ! compute the various indices. Note the conversion to zero based indexing
+      block_idx = blockIdx%x
+      thread_idx = threadIdx%x - 1
+
+      ! thread guard, probably not needed since num_blocks should always be equal to num_subgrids
+      if (block_idx > num_subgrids) return
+
+      ! =======================================================================
+      ! Convert from conserved to primitive variables
+      ! =======================================================================
+      call subgrid_conserved_2_primitive(conserved_subgrids, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+
+      ! =======================================================================
+      ! Perform tracing step and compute the interface states
+      ! =======================================================================
+      ! This will compute the interface states and write them to shared memory
+      call trace_3d(local_subgrid, thread_idx, subgrid_size, gamma, dtdx, left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z)
+
+      ! =======================================================================
+      ! Compute the fluxes.
+      ! =======================================================================
+      ! This will compute the fluxes and write them to shared memory. Note that
+      ! it writes the fluxes to the `left_interfaces_?` arrays and that those
+      ! fluxes are in the conserved variables despite what the member variables
+      ! names say
+      call riemann_driver(left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z, gamma, subgrid_size, thread_idx)
+
+      ! =======================================================================
+      ! Update the conserved variables
+      ! =======================================================================
+      call conservative_update(conserved_subgrids, left_interfaces_x, left_interfaces_y, left_interfaces_z, block_idx, thread_idx, subgrid_size, dtdx)
+
+   end subroutine hydro_integrator_kernel
+   ! =========================================================================
+end module hydro_integrator
