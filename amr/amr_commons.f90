@@ -92,8 +92,8 @@ module amr_commons
      real(kind=8)::tendmov=0.
      real(kind=8)::aendmov=0.
      character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
-     integer,dimension(0:NVAR+2)::movie_vars=0
-     character(len=5),dimension(0:NVAR+2)::movie_vars_txt=''
+     integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
+     character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
      
      ! Hydro solver parameters
      real(dp)::gamma=1.4d0

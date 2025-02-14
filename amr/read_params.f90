@@ -112,8 +112,8 @@ subroutine m_read_params(pst)
   real(kind=8),dimension(1:10)::deltay_frame=0d0
   real(kind=8),dimension(1:10)::deltaz_frame=0d0
   character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
-  integer,dimension(0:NVAR+2)::movie_vars=0
-  character(len=5),dimension(0:NVAR+2)::movie_vars_txt=''
+  integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
+  character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
 
   ! Refinement parameters for each level
   integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion

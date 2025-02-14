@@ -7,6 +7,7 @@ contains
 subroutine m_output_frame(pst)
   use amr_parameters, only: dp,ndim,nvector,twotondim,flen
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtgrp
   use ramses_commons, only: pst_t
   use output_amr_module, only: output_info
   use mdl_module, only: mdl_mkdir
@@ -17,17 +18,15 @@ subroutine m_output_frame(pst)
   character(len=1)::temp_string
   character(len=5)::istep_str
   character(len=flen)::moviedir,moviecmd,infofile
-  character(len=flen),dimension(0:nvar+2)::moviefiles
+  character(len=flen),dimension(0:nvar+2+nrtgrp)::moviefiles
   integer::ilun,info,kk,ind_proj,input_size,output_size
   integer,dimension(:),allocatable::input_array,output_array
   real(dp)::delx,dely,delz
   real(kind=8),dimension(:),allocatable::data_frame
   real(kind=8),dimension(:),allocatable::dens
   real(kind=4),dimension(:),allocatable::data_single
-#if NVAR>5
   integer::ll
   character(LEN=5)::dummy
-#endif
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
@@ -68,8 +67,12 @@ subroutine m_output_frame(pst)
         moviefiles(ll) = trim(moviedir)//'var'//trim(adjustl(dummy))//'_'//trim(istep_str)//'.map'
      end do
 #endif
-     moviefiles(NVAR+1) = trim(moviedir)//'dm_'//trim(istep_str)//'.map'
-     moviefiles(NVAR+2) = trim(moviedir)//'stars_'//trim(istep_str)//'.map'
+     do ll=nvar+1,nvar+nrtgrp
+        write(dummy,'(I3.1)') ll-nvar
+        moviefiles(ll) = trim(moviedir)//'Fp'//trim(adjustl(dummy))//'_'//trim(istep_str)//'.map'
+     end do
+     moviefiles(NVAR+nrtgrp+1) = trim(moviedir)//'dm_'//trim(istep_str)//'.map'
+     moviefiles(NVAR+nrtgrp+2) = trim(moviedir)//'stars_'//trim(istep_str)//'.map'
           
      ! Allocate image
      allocate(data_single(1:r%nw_frame*r%nh_frame))
@@ -103,7 +106,7 @@ subroutine m_output_frame(pst)
         call r_output_frame(pst,input_array,input_size,output_array,output_size)
         dens=transfer(output_array,dens)
         
-        do kk=1,NVAR
+        do kk=1,NVAR+nrtgrp
            if(r%movie_vars(kk).eq.1)then
               ! Compute mass-weighted projected quantities
               input_array(2)=kk
@@ -212,6 +215,7 @@ end subroutine r_output_frame
 subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   use amr_parameters, only: dp,ndim,nvector,twotondim
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtgrp
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
   type(run_t)::r
@@ -247,7 +251,6 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-  
   ! Compute frame centre
   if(r%proj_axis(ind_proj:ind_proj).eq.'x')then
      xcen=r%ycentre_frame(ind_proj*4-3)+r%ycentre_frame(ind_proj*4-2)*g%aexp+r%ycentre_frame(ind_proj*4-1)*g%aexp**2+r%ycentre_frame(ind_proj*4)*g%aexp**3
@@ -409,6 +412,12 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                        ! Temperature in K
                        temp=max(temp/max(m%grid(igrid)%uold(ind,1),r%smallr),r%smallc**2)*scale_T2
                        map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)*temp
+#ifdef RT
+                    else if(ind_var.ge.nvar+1 .and. ind_var.lt.nvar+1+nrtgrp)then
+                       ! Photon flux
+                       map(ind_map) = map(ind_map) &
+                                    + dvol * m%grid(igrid)%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1)) * g%rt_c
+#endif
                     else
                        ! Other variables
                        map(ind_map)=map(ind_map)+dvol*m%grid(igrid)%uold(ind,ind_var)
@@ -434,13 +443,13 @@ end subroutine output_frame
 subroutine set_movie_vars(r)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t
+  use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtgrp
   ! This routine sets the movie vars from textual form
   type(run_t)::r
-  
-#if NVAR>5
-  integer::ll
+  integer::tmp
   character(LEN=5)::dummy
-#endif
+  integer::ll
 
   if(ANY(r%movie_vars_txt=='dens '))r%movie_vars(1)=1
   if(ANY(r%movie_vars_txt=='vx   '))r%movie_vars(2)=1
@@ -448,13 +457,18 @@ subroutine set_movie_vars(r)
   if(ANY(r%movie_vars_txt=='vz   '))r%movie_vars(4)=1
   if(ANY(r%movie_vars_txt=='temp '))r%movie_vars(5)=1
 #if NVAR>5
-  do ll=6,NVAR
+  do ll=6,nvar
      write(dummy,'(I3.1)') ll
      if(ANY(r%movie_vars_txt=='var'//trim(adjustl(dummy))//' '))r%movie_vars(ll)=1
   end do
 #endif
-  if(ANY(r%movie_vars_txt=='dm   '))r%movie_vars(NVAR+1)=1
-  if(ANY(r%movie_vars_txt=='stars'))r%movie_vars(NVAR+2)=1
+  do ll=nvar+1,nvar+nrtgrp
+     tmp=ll-nvar
+     write(dummy,'(I3.1)') tmp
+     if(ANY(r%movie_vars_txt=='Fp'//trim(adjustl(dummy))//' '))r%movie_vars(ll)=1
+  end do
+  if(ANY(r%movie_vars_txt=='dm   '))r%movie_vars(NVAR+nrtgrp+1)=1
+  if(ANY(r%movie_vars_txt=='stars'))r%movie_vars(NVAR+nrtgrp+2)=1
   
 end subroutine set_movie_vars
 !=======================================================================
