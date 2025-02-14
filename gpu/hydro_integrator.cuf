@@ -333,15 +333,15 @@ contains
                                   - (slopes_x%velocity_x + slopes_y%velocity_y + slopes_z%velocity_z) * cell%density
          source_term%velocity_x = -cell%velocity_x * slopes_x%velocity_x &
                                   -cell%velocity_y * slopes_y%velocity_x &
-                                  -cell%velocity_z * slopes_x%velocity_x &
+                                  -cell%velocity_z * slopes_z%velocity_x &
                                   - (slopes_x%pressure) / cell%density
          source_term%velocity_y = -cell%velocity_x * slopes_x%velocity_y &
                                   -cell%velocity_y * slopes_y%velocity_y &
-                                  -cell%velocity_z * slopes_x%velocity_y &
+                                  -cell%velocity_z * slopes_z%velocity_y &
                                   - (slopes_y%pressure) / cell%density
          source_term%velocity_z = -cell%velocity_x * slopes_x%velocity_z &
                                   -cell%velocity_y * slopes_y%velocity_z &
-                                  -cell%velocity_z * slopes_x%velocity_z &
+                                  -cell%velocity_z * slopes_z%velocity_z &
                                   - (slopes_z%pressure) / cell%density
          source_term%pressure   = -cell%velocity_x * slopes_x%pressure   &
                                   -cell%velocity_y * slopes_y%pressure   &
