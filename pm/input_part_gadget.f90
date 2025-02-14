@@ -471,9 +471,9 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
 
   ! Compute total mass in star, gas and dark matter
   mstar=0.; mhalo=0.; mgas=0.
-  if(r%star)mstar=sum(star%mp(1:star%npart))
   if(r%pic)mhalo=sum(p%mp(1:p%npart))
   if(r%hydro)mgas=sum(gas%mp(1:gas%npart))
+  if(r%star)mstar=sum(star%mp(1:star%npart))
   
   ! Put all particles inside levelmin 
   if(r%pic)call init_levelmin(r,p)
