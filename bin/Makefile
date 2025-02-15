@@ -107,7 +107,9 @@ endif
 #############################################################################
 # NVHPC compiler
 ifeq ($(COMPILER),NVHPC)
-   FFLAGS = -cpp $(DEFINES)
+   FFLAGS = -cpp -gpu=sm_80,sm_90,nordc -cuda $(DEFINES)
+   LIBS = -gpu=sm_80,sm_90,nordc -cuda -cudalib=nvtx
+   GPU_PATH = ../gpu
    ifeq ($(MPI),1)
       F90 = $(MPIF90)
       FC = nvfortran
@@ -119,8 +121,8 @@ ifeq ($(COMPILER),NVHPC)
    F90 += -Mfreeform
    FC += -Mfreeform
    ifeq ($(DEBUG),1)
-      F90 += -O0 -Mbounds -traceback
-      FFLAGS += -O0 -ffpe-trap=zero,overflow,invalid -Minit-real=snan
+      F90 += -O0 -traceback -g -gpu=debug,lineinfo -Mprof=dwarf
+      FFLAGS += -O0 -ffpe-trap=zero,overflow,invalid -Minit-real=snan -g -gpu=debug,lineinfo -Mprof=dwarf
    else
       F90 += -O4
    endif
@@ -137,10 +139,10 @@ LIBMPI =
 ifeq ($(HDF5),1)
    LIBHDF5 = -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
 endif
-LIBS = $(LIBMPI) $(LIBHDF5)
+LIBS += $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
+VPATH = $(PATCH):$(GPU_PATH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
 #############################################################################
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
@@ -159,8 +161,13 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 input_part_restart.o input_part_ramses.o input_part_gadget.o input_part.o \
 	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
-	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o godunov_fine.o \
-	 umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
+	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
+
+ifeq ($(COMPILER),NVHPC)
+   MODOBJ += gpu_utils.o hydro_integrator.o gpu_runner.o
+endif
+
+MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 input_hydro_condinit.o input_hydro_grafic.o input_hydro_gadget.o init_flow_fine.o \
 	 condinit.o vecpotentialinit.o init_refine_adaptive.o init_refine_restart.o \
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
@@ -170,13 +177,15 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 write_gitinfo.o
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
-	$(F90) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
+	$(F90) $(FFLAGS) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
 #############################################################################
 write_gitinfo.o: FORCE
 	$(FC) -O0 -cpp -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \
                 -DGITREPO=\'"$(GITREPO)"\' -DBUILDDATE=\'"$(BUILDDATE)"\' -DBUILDCOMMAND=\'"$(BUILDCOMMAND)"\' -c ../amr/write_gitinfo.f90 -o $@
+%.o:%.cuf
+	$(F90) $(FFLAGS) -c $^ -o $@ $(LIBS)
 %.o:%.f90
-	$(F90) $(FFLAGS) -c $^ -o $@
+	$(F90) $(FFLAGS) -c $^ -o $@ $(LIBS)
 %.o:%.c
 	$(C) $(CFLAGS) -c $^ -o $@
 FORCE:

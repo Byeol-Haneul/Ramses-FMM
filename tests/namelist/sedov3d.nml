@@ -48,7 +48,7 @@ gamma=1.4
 courant_factor=0.8
 scheme='muscl'
 slope_type=1
-riemann='llf'
+riemann='hll'
 /
 
 &REFINE_PARAMS

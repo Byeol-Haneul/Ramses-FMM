@@ -6,7 +6,7 @@ program amr2map
   !--------------------------------------------------------------------------
   implicit none
 
-  integer,parameter::flen=200
+  integer,parameter::flen=90
   
   integer::ndim,twotondim,nvar
   integer::n,i,j,k,type=0,dopeak=0,domax=0,dograv=0,dort=0,backup=0
@@ -201,7 +201,7 @@ program amr2map
         if(do_grav)then
            file_hydro=TRIM(repository)//'/grav.'//TRIM(ncharcpu)
         else if(do_peak)then
-           file_hydro=TRIM(repository)//'/peak_grid.'//TRIM(ncharcpu)
+           file_hydro=TRIM(repository)//'/peak.'//TRIM(ncharcpu)
         else if(do_rt)then
            file_hydro=TRIM(repository)//'/rt.'//TRIM(ncharcpu)
         else
@@ -225,7 +225,7 @@ program amr2map
               ipos=iskip_hydro+(8*twotondim*nvar)*(i-1)
               read(11,POS=ipos)uold
            else
-              ipos=iskip_hydro+(4*twotondim*nvar)*int((i-1),kind=8)
+              ipos=iskip_hydro+(4*twotondim*nvar)*(i-1)
               read(11,POS=ipos)qold
            endif
            ! Loop over 2**ndim cells
@@ -289,13 +289,6 @@ program amr2map
                        map = pres
                     else
                        map = rho*pres
-                    endif
-                 case (66) ! H2 fraction 
-                    metmax = max(metmax,qold(ind,type))
-                    if(do_max)then
-                       map = qold(ind,type)
-                    else
-                       map = rho*(1.-qold(ind,6)-qold(ind,7))
                     endif
                  case default ! Passive scalar
                     metmax = max(metmax,qold(ind,type))
@@ -406,7 +399,7 @@ program amr2map
      write(*,*)'as unformatted binary file'
      open(unit=20,file=nomfich,form='unformatted')
      if(nx_sample==0)then
-        write(20)p%t, (xxmax-xxmin)*p%boxlen, (yymax-yymin)*p%boxlen, (zzmax-zzmin)*p%boxlen
+        write(20)p%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
         write(20)imax-imin+1,jmax-jmin+1
         allocate(filemap(imax-imin+1,jmax-jmin+1))
         if(do_max)then
@@ -650,7 +643,7 @@ contains
     if(do_grav)then
        file_hydro=TRIM(repository)//'/grav.00001'
     else if(do_peak)then
-       file_hydro=TRIM(repository)//'/peak_grid.00001'
+       file_hydro=TRIM(repository)//'/peak.00001'
     else if(do_rt)then
        file_hydro=TRIM(repository)//'/rt.00001'
     else

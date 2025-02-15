@@ -1454,7 +1454,7 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
            qleft (7) = qm(i,j,k,bt1,xdim) ! Tangential magnetic field 1
            qleft (8) = qm(i,j,k,bt2,xdim) ! Tangential magnetic field 2
 #endif
-           ! Left state
+           ! Right state
            qright(1) = qp(i,j,k,1  ,xdim) ! Mass density
            qright(2) = qp(i,j,k,ln ,xdim) ! Normal velocity
            qright(3) = qp(i,j,k,lt1,xdim) ! Tangential velocity 1
