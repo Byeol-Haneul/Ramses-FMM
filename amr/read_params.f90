@@ -435,8 +435,9 @@ subroutine m_read_params(pst)
        & ,d_region,u_region,v_region,w_region,p_region
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
-       & ,niter_riemann,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
-       & ,dual_energy,T2_fix,induction,entropy,turb,scheme,riemann,riemann2d,constant_gravity
+       & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
+       & ,dual_energy,T2_fix,induction,entropy,turb,riemann,riemann2d,constant_gravity &
+       & ,niter_riemann,scheme
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
