@@ -165,10 +165,10 @@ subroutine star_rt_feedback(s, p, ilevel)
         mass = mass / (1d0 - r%eta_SNII)
      endif
 
-     part_NpInp(1:nrtgrp) = part_NpInp(1:nrtgrp) * mass * scale_inp_cell ! #photons
+     part_NpInp(1:nrtgrp) = part_NpInp(1:nrtgrp) * mass * scale_inp_cell ! #photons cm-3
      lum(1:nrtgrp) = 0.
      if(dt_loc_Gyr > 0.)then
-        lum(1:nrtgrp) = part_NpInp(1:nrtgrp) / dt_loc_Gyr * sec2Gyr ! #photons s-1
+        lum(1:nrtgrp) = part_NpInp(1:nrtgrp) / dt_loc_Gyr * sec2Gyr ! #photons cm-3 s-1
      endif
      lum(1:nrtgrp) = lum(1:nrtgrp) * scale_t ! back to code units
 
