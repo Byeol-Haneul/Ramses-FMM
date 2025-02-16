@@ -136,6 +136,7 @@ subroutine m_read_params(pst)
   real(dp)::units_density=1.0 ! [g/cm^3]
   real(dp)::units_time=1.0    ! [seconds]
   real(dp)::units_length=1.0  ! [cm]
+  real(dp)::units_np=1.0      ! [#photon/cm^3]
 
   ! Initial conditions parameters from grafic
   real(dp)::aexp_ini=10.
@@ -460,7 +461,7 @@ subroutine m_read_params(pst)
        & ,interpol_var,interpol_type &
        & ,aexp_lock_refine,pic_lock_refine
   ! Units parameters
-  namelist/units_params/units_density,units_time,units_length
+  namelist/units_params/units_density,units_time,units_length,units_np
   ! Boundary conditions parameters
   namelist/boundary_params/periodic,nbound,bound_type,bound_dir,bound_shift &
        & ,bound_xmin,bound_xmax,bound_ymin,bound_ymax,bound_zmin,bound_zmax &
@@ -1034,6 +1035,7 @@ subroutine m_read_params(pst)
   s%r%units_density=units_density
   s%r%units_time=units_time
   s%r%units_length=units_length
+  s%r%units_np=units_np
 
   s%r%m_refine=m_refine
   s%r%r_refine=r_refine

@@ -27,7 +27,6 @@ subroutine m_read_rt_params(pst)
   ! RT_PARAMS namelist
   logical::rt_advect=.false.           ! Advection of photons?                           !
   !logical::rt_smooth=.false.          ! Smooth the discrete RT update of op. splitting  !
-  real(dp)::units_Np=1.0               ! [#/cm^3]                                        !
   logical::rt_star=.false.             ! Activate radiation from star particles          !
   !logical::rt_sink=.false.            ! Activate radiation from sink particles          !
   real(dp)::rt_esc_frac=1d0            ! Photon escape fraction from stellar particles   !
@@ -88,8 +87,7 @@ subroutine m_read_rt_params(pst)
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
-  namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
-       & ,units_np
+  namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle
   namelist/rt_sources/rt_star, rt_esc_frac                               &
        & ,rt_nsource, rt_source_type                                     &
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
@@ -129,7 +127,6 @@ subroutine m_read_rt_params(pst)
   s%r%rt_c_fraction=rt_c_fraction
   s%r%rt_nsubcycle=rt_nsubcycle
   s%r%rt_courant_factor=rt_courant_factor
-  s%r%units_np=units_np
 
   s%r%rt_star=rt_star
   s%r%rt_esc_frac=rt_esc_frac

@@ -121,6 +121,7 @@ module amr_commons
      real(dp)::units_density=1.0 ! [g/cm^3]
      real(dp)::units_time=1.0    ! [seconds]
      real(dp)::units_length=1.0  ! [cm]
+     real(dp)::units_np=1.0      ! [#photon/cm^3]
 
      ! Cosmological parameters (others are read from file)
      real(dp)::omega_b=0.0D0  ! Omega Baryon
@@ -321,7 +322,6 @@ module amr_commons
      ! RT parameters. Some parameters are not (yet) used
      logical::rt_advect=.false.            ! Advection of photons?                           !
      logical::rt_smooth=.false.            ! Smooth the discrete RT update of op. splitting  !
-     real(dp)::units_Np=1.0                ! [#/cm^3]                                        !
      logical::rt_star=.false.              ! Activate radiation from star particles          !
      logical::rt_sink=.false.              ! Activate radiation from sink particles          !
      real(dp)::rt_esc_frac=1d0             ! Photon escape fraction from stellar particles   !
