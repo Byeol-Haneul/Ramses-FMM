@@ -36,8 +36,7 @@ subroutine m_read_rt_params(pst)
   real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
   real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT                      !
   !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
-  integer::rt_nsubcycle=1              ! Maximum number of RT-steps during one hydro/    !
-                                       ! gravity/etc timestep                            !
+  integer::rt_nsubcycle=1              ! Maximum number of RT subcycles per hydro step   !
   logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
   !logical::rt_isDiffuseUVsrc=.false.  ! UV emission from low-density cells              !
   !real(dp)::rt_UVsrc_nHmax=-1d0       ! Density threshold for UV emission               !
@@ -166,8 +165,6 @@ subroutine m_read_rt_params(pst)
       endif
     enddo
   endif
-
-
 
   end associate
 
