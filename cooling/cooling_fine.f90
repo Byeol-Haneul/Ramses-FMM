@@ -248,7 +248,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Isotropic emission (star and sink particles) in cgs units
         do ig=1,nrtgrp
            do i=1,nleaf
-              dNpdt(ig,i) = scale_Np * m%grid(ind_leaf(i))%emissivity(ind,ig) / scale_t
+              dNpdt(ig,i) = m%grid(ind_leaf(i))%emissivity(ind,ig) * scale_Np / scale_t
               dFpdt(:,ig,i) = 0
            end do
         end do
