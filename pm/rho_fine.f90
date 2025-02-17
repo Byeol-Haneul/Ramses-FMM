@@ -438,7 +438,7 @@ subroutine reset_rho(r,g,m,ilevel)
         m%grid(igrid)%nref(ind)=0.0D0
      end do
   end do
-#endif  
+#endif
 
 end subroutine reset_rho
 !################################################################
@@ -705,7 +705,7 @@ subroutine tsc_multipole(s,ilevel)
            x(idim)=x(idim)/dx_loc
         end do
 
-        ! TSC at level ilevel; a particle contributes to 3 cells in each dimension
+        ! TSC at level ilevel; a particle contributes to 3 cells in each direction
         do idim=1,ndim
            cl(idim)=int(x(idim))-1 ! cell index
            cc(idim)=int(x(idim))
@@ -872,7 +872,7 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-     call cic_part(pst%s,pst%s%p,ilevel,rtype)
+                     call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
      if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
      if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
      if(pst%s%r%tree)call cic_part(pst%s,pst%s%tree,ilevel,rtype)
@@ -1096,7 +1096,6 @@ subroutine tsc_part(s,p,ilevel,rtype)
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
-  !write(*,*)"Entering tsc_part..."
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
@@ -1148,7 +1147,7 @@ subroutine tsc_part(s,p,ilevel,rtype)
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
 
-     ! TSC at level ilevel; a particle contributes to 3 cells in each dimension
+     ! TSC at level ilevel; a particle contributes to 3 cells in each direction
      do idim=1,ndim
         cl(idim)=int(x(idim))-1 ! cell index
         cc(idim)=int(x(idim))
@@ -1164,6 +1163,8 @@ subroutine tsc_part(s,p,ilevel,rtype)
      ! Periodic boundary conditions
      do idim=1,ndim
         if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
+        if(cc(idim)<0)cc(idim)=m%ckey_max(ilevel+1)-1
+        if(cc(idim)==m%ckey_max(ilevel+1))cc(idim)=0
         if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
      enddo
 
