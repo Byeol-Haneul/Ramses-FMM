@@ -26,9 +26,9 @@ subroutine m_read_rt_params(pst)
 
   ! RT_PARAMS namelist
   logical::rt_advect=.false.           ! Advection of photons?                           !
-  !logical::rt_smooth=.false.          ! Smooth the discrete RT update of op. splitting  !
+  logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
   logical::rt_star=.false.             ! Activate radiation from star particles          !
-  !logical::rt_sink=.false.            ! Activate radiation from sink particles          !
+  logical::rt_sink=.false.             ! Activate radiation from sink particles          !
   real(dp)::rt_esc_frac=1d0            ! Photon escape fraction from stellar particles   !
   !character(LEN=10)::rt_flux_scheme='glf'                                               !
   !logical::rt_use_hll=.false.         ! Use hll flux (or the default glf)               !
@@ -73,21 +73,23 @@ subroutine m_read_rt_params(pst)
 
   ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
   ! Indices nrtgrp, nion stand for photon group vs species (e.g. 1=H, 2=He).
-  real(dp),dimension(nrtgrp,nion)::group_csn=0, group_cse=0      !    Cross sections (cm2)
+  real(dp),dimension(nrtgrp,nion)::group_csn=0                   !    Cross sections (cm2)
+  real(dp),dimension(nrtgrp,nion)::group_cse=0                   !    Cross sections (cm2)
   real(dp),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
   real(dp),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
   real(dp),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
-  integer,dimension(nion)::spec2group=0                 ! Ion -> group # in recombinations
   real(dp),dimension(nrtgrp)::kappaAbs=0                         ! Dust absorption opacity
   real(dp),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
+  integer,dimension(nion)::spec2group=0                 ! Ion -> group # in recombinations
 
   integer:: i
 
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
-  namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle
-  namelist/rt_sources/rt_star, rt_esc_frac                               &
+  namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
+       & ,rt_smooth
+  namelist/rt_sources/rt_star, rt_sink, rt_esc_frac                      &
        & ,rt_nsource, rt_source_type                                     &
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
        & ,rt_src_length_x, rt_src_length_y, rt_src_length_z              &
@@ -123,11 +125,13 @@ subroutine m_read_rt_params(pst)
   ! Fill in all run parameters in corresponding structure
   s%r%rt_otsa=rt_otsa
   s%r%rt_advect=rt_advect
+  s%r%rt_smooth=rt_smooth
   s%r%rt_c_fraction=rt_c_fraction
   s%r%rt_nsubcycle=rt_nsubcycle
   s%r%rt_courant_factor=rt_courant_factor
 
   s%r%rt_star=rt_star
+  s%r%rt_sink=rt_sink
   s%r%rt_esc_frac=rt_esc_frac
   s%r%sed_dir=sed_dir
   s%r%rt_nsource=rt_nsource
@@ -157,13 +161,13 @@ subroutine m_read_rt_params(pst)
   s%r%kappaSc=kappaSc
 
   if(s%r%isH2) then
-    do i=1,nrtgrp
-      if((s%r%group_L0(i) .ge. 11.2) .and. (s%r%group_L1(i) .le. 13.6)          &
-        .and. (s%r%group_L0(i) .le. 13.6) .and. (s%r%group_L1(i) .ge. 11.2))then
-          s%r%ssh2(i) = 4d2 ! H2 self-shielding factor
-          s%r%isLW(i) = 1d0 ! Index for LW groups
-      endif
-    enddo
+     do i=1,nrtgrp
+        if(    (s%r%group_L0(i) .ge. 11.2) .and. (s%r%group_L1(i) .le. 13.6) .and. &
+             & (s%r%group_L0(i) .le. 13.6) .and. (s%r%group_L1(i) .ge. 11.2) )then
+           s%r%ssh2(i) = 4d2 ! H2 self-shielding factor
+           s%r%isLW(i) = 1d0 ! Index for LW groups
+        endif
+     enddo
   endif
 
   end associate
