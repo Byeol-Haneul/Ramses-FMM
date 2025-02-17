@@ -840,9 +840,245 @@ subroutine cic_part(s,p,ilevel,rtype)
 
   call close_cache(s,m%grid_dict)
 
-end associate
-  
+  end associate
+
 end subroutine cic_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine tsc_part(s,p,ilevel,rtype)
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_parameters
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel,rtype
+  !
+  ! Local variables
+  real(dp),dimension(1:ndim)::x,dd,dg
+  integer,dimension(1:ndim)::ig,id,ix,cl,cr,cc
+  real(dp),dimension(1:ndim)::wl,wr,wc
+  real(dp),dimension(1:threetondim)::vol
+  integer,dimension(1:ndim,1:threetondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::i,ipart,icell,ind,idim
+  real(kind=8)::dx_loc,vol_loc,xl,xc,xr,dl,dc,dr
+  type(oct),pointer::gridp
+  type(msg_twin_realdp)::dummy_twin_realdp
+  logical::star
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  !write(*,*)"Entering tsc_part..."
+  ! Mesh spacing in that level
+  dx_loc=r%boxlen/2**ilevel
+  vol_loc=dx_loc**ndim
+
+  ! Are particles dark  matter, tree, stars or sinks?
+  dark = p%type.eq.  DM_TYPE
+  tree = p%type.eq.TREE_TYPE
+  star = p%type.eq.STAR_TYPE
+  sink = p%type.eq.SINK_TYPE
+
+  ! Sort particle according to current level Hilbert key
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     p%sortp(i)=i
+  end do
+  ix=0
+  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+
+  ! Don't deposit mass depending on rho action type and paticle type
+  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(star.and.rtype.NE.0.and.rtype.NE.2)return
+  if(sink.and.rtype.NE.0.and.rtype.NE.3)return
+  if(tree)return
+
+  ! Compute contribution to multipole
+  if(ilevel==r%levelmin)then
+     do i=1,p%npart
+        g%multipole%q(1)=g%multipole%q(1)+p%mp(i)
+     end do
+     do idim=1,ndim
+        do i=1,p%npart
+           g%multipole%q(idim+1)=g%multipole%q(idim+1)+p%mp(i)*p%xp(i,idim)
+        end do
+     end do
+  endif
+
+  ! Open write-only cache for array rho
+  hash_nbor(0)=ilevel+1
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
+       pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+       init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
+
+  ! Loop over particles in Hilbert order
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     ipart=p%sortp(i)
+
+     ! Rescale particle position at level ilevel
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+
+     ! TSC at level ilevel; a particle contributes to 3 cells in each dimension
+     ! cl: index of left cell
+     ! cc: index of central cell
+     ! cr: index of right cell
+     ! wl: weighting function for left cell
+     ! wc: weighting function for central cell
+     ! wr: weighting function for right cell
+
+     do idim=1,ndim
+        cl(idim)=int(x(idim))-1 ! cell index
+        cc(idim)=int(x(idim))
+        cr(idim)=int(x(idim))+1
+        xl=dble(cl(idim))+0.5D0 ! cell coordinate
+        xc=dble(cc(idim))+0.5D0
+        xr=dble(cr(idim))+0.5D0
+        wl(idim)=0.5D0*(1.5D0-abs(x(idim)-xl))**2
+        wc(idim)=0.75D0-         (x(idim)-xc) **2
+        wr(idim)=0.5D0*(1.5D0-abs(x(idim)-xr))**2
+     end do
+
+     ! Periodic boundary conditions
+     do idim=1,ndim
+        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
+        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+     enddo
+
+     ! Compute cloud volumes
+#if NDIM==1
+     vol(1)=wl(1)
+     vol(2)=wc(1)
+     vol(3)=wr(1)
+#endif
+#if NDIM==2
+     vol(1)=wl(1)*wl(2)
+     vol(2)=wc(1)*wl(2)
+     vol(3)=wr(1)*wl(2)
+     vol(4)=wl(1)*wc(2)
+     vol(5)=wc(1)*wc(2)
+     vol(6)=wr(1)*wc(2)
+     vol(7)=wl(1)*wr(2)
+     vol(8)=wc(1)*wr(2)
+     vol(9)=wr(1)*wr(2)
+#endif
+#if NDIM==3
+     vol(1) =wl(1)*wl(2)*wl(3)
+     vol(2) =wc(1)*wl(2)*wl(3)
+     vol(3) =wr(1)*wl(2)*wl(3)
+     vol(4) =wl(1)*wc(2)*wl(3)
+     vol(5) =wc(1)*wc(2)*wl(3)
+     vol(6) =wr(1)*wc(2)*wl(3)
+     vol(7) =wl(1)*wr(2)*wl(3)
+     vol(8) =wc(1)*wr(2)*wl(3)
+     vol(9) =wr(1)*wr(2)*wl(3)
+     vol(10)=wl(1)*wl(2)*wc(3)
+     vol(11)=wc(1)*wl(2)*wc(3)
+     vol(12)=wr(1)*wl(2)*wc(3)
+     vol(13)=wl(1)*wc(2)*wc(3)
+     vol(14)=wc(1)*wc(2)*wc(3)
+     vol(15)=wr(1)*wc(2)*wc(3)
+     vol(16)=wl(1)*wr(2)*wc(3)
+     vol(17)=wc(1)*wr(2)*wc(3)
+     vol(18)=wr(1)*wr(2)*wc(3)
+     vol(19)=wl(1)*wl(2)*wr(3)
+     vol(20)=wc(1)*wl(2)*wr(3)
+     vol(21)=wr(1)*wl(2)*wr(3)
+     vol(22)=wl(1)*wc(2)*wr(3)
+     vol(23)=wc(1)*wc(2)*wr(3)
+     vol(24)=wr(1)*wc(2)*wr(3)
+     vol(25)=wl(1)*wr(2)*wr(3)
+     vol(26)=wc(1)*wr(2)*wr(3)
+     vol(27)=wr(1)*wr(2)*wr(3)
+#endif
+     ! Compute cells Cartesian key
+#ifdef NDIM==1
+     ckey(1,1)=cl(1))
+     ckey(1,2)=cc(1)
+     ckey(1,3)=cr(1)
+#endif
+#ifdef NDIM==2
+     ckey(1:2,1)=(/cl(1),cl(2)/)
+     ckey(1:2,2)=(/cc(1),cl(2)/)
+     ckey(1:2,3)=(/cr(1),cl(2)/)
+     ckey(1:2,4)=(/cl(1),cc(2)/)
+     ckey(1:2,5)=(/cc(1),cc(2)/)
+     ckey(1:2,6)=(/cr(1),cc(2)/)
+     ckey(1:2,7)=(/cl(1),cr(2)/)
+     ckey(1:2,8)=(/cc(1),cr(2)/)
+     ckey(1:2,9)=(/cr(1),cr(2)/)
+#endif
+#if NDIM==3
+     ckey(1:3,1) =(/cl(1),cl(2),cl(3)/)
+     ckey(1:3,2) =(/cc(1),cl(2),cl(3)/)
+     ckey(1:3,3) =(/cr(1),cl(2),cl(3)/)
+     ckey(1:3,4) =(/cl(1),cc(2),cl(3)/)
+     ckey(1:3,5) =(/cc(1),cc(2),cl(3)/)
+     ckey(1:3,6) =(/cr(1),cc(2),cl(3)/)
+     ckey(1:3,7) =(/cl(1),cr(2),cl(3)/)
+     ckey(1:3,8) =(/cc(1),cr(2),cl(3)/)
+     ckey(1:3,9) =(/cr(1),cr(2),cl(3)/)
+     ckey(1:3,10)=(/cl(1),cl(2),cc(3)/)
+     ckey(1:3,11)=(/cc(1),cl(2),cc(3)/)
+     ckey(1:3,12)=(/cr(1),cl(2),cc(3)/)
+     ckey(1:3,13)=(/cl(1),cc(2),cc(3)/)
+     ckey(1:3,14)=(/cc(1),cc(2),cc(3)/)
+     ckey(1:3,15)=(/cr(1),cc(2),cc(3)/)
+     ckey(1:3,16)=(/cl(1),cr(2),cc(3)/)
+     ckey(1:3,17)=(/cc(1),cr(2),cc(3)/)
+     ckey(1:3,18)=(/cr(1),cr(2),cc(3)/)
+     ckey(1:3,19)=(/cl(1),cl(2),cr(3)/)
+     ckey(1:3,20)=(/cc(1),cl(2),cr(3)/)
+     ckey(1:3,21)=(/cr(1),cl(2),cr(3)/)
+     ckey(1:3,22)=(/cl(1),cc(2),cr(3)/)
+     ckey(1:3,23)=(/cc(1),cc(2),cr(3)/)
+     ckey(1:3,24)=(/cr(1),cc(2),cr(3)/)
+     ckey(1:3,25)=(/cl(1),cr(2),cr(3)/)
+     ckey(1:3,26)=(/cc(1),cr(2),cr(3)/)
+     ckey(1:3,27)=(/cr(1),cr(2),cr(3)/)
+#endif
+
+#ifdef GRAV
+     ! Update mass density
+     do ind=1,threetondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        ! Get parent cell using write-only cache
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+        if(associated(gridp))then
+           gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           if(star.or.sink)then
+              gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
+           else
+              if(r%mass_cut_refine>0)then
+                 if(p%mp(ipart)<r%mass_cut_refine)then
+                    gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+                 endif
+              else
+                 gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+              endif
+           endif
+        endif
+     end do
+#endif
+
+  end do
+  ! End loop over particles
+
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine tsc_part
 !################################################################
 !################################################################
 !################################################################
