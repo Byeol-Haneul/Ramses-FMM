@@ -488,8 +488,7 @@ subroutine cic_multipole(s,ilevel)
   real(dp),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::inbor,igrid,ind,idim
-  integer::icell
+  integer::inbor,igrid,ind,idim,icell
   real(kind=8)::dx_loc,vol_loc,mmm,mask
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
@@ -654,8 +653,7 @@ subroutine tsc_multipole(s,ilevel)
   real(dp),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::inbor,igrid,ind,idim
-  integer::icell
+  integer::inbor,igrid,ind,idim,icell
   real(kind=8)::dx_loc,vol_loc,mmm,mask
   real(kind=8)::xl,xc,xr
   type(oct),pointer::gridp
@@ -1084,14 +1082,14 @@ subroutine tsc_part(s,p,ilevel,rtype)
   integer::ilevel,rtype
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,dd,dg
-  integer,dimension(1:ndim)::ig,id,ix,cl,cc,cr
-  real(dp),dimension(1:ndim)::wl,wr,wc
+  integer,dimension(1:ndim)::ix,cl,cc,cr
+  real(dp),dimension(1:ndim)::x,wl,wr,wc
   real(dp),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
-  real(kind=8)::dx_loc,vol_loc,xl,xc,xr,dl,dc,dr
+  real(kind=8)::dx_loc,vol_loc
+  real(kind=8)::xl,xc,xr
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
   logical::dark,tree,star,sink
