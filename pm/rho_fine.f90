@@ -1163,8 +1163,6 @@ subroutine tsc_part(s,p,ilevel,rtype)
      ! Periodic boundary conditions
      do idim=1,ndim
         if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
-        if(cc(idim)<0)cc(idim)=m%ckey_max(ilevel+1)-1
-        if(cc(idim)==m%ckey_max(ilevel+1))cc(idim)=0
         if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
      enddo
 

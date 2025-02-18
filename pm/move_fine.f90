@@ -52,15 +52,10 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-     call kick_drift_part(pst%s,pst%s%p,ilevel,action_part)
-     if(pst%s%r%star)then
-        call kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
-     endif
-     if(pst%s%r%sink)then
-        call kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
-     endif
-     if(pst%s%r%tree)then
-        call kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+                     call kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
+     if(pst%s%r%star)call kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+     if(pst%s%r%sink)call kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+     if(pst%s%r%tree)call kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
      endif
   endif
 
@@ -164,7 +159,6 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
         if(.not.associated(gridp(ind)%p))then
            ok_level=.false.
-!           exit
         end if
      end do
      do ind=1,twotondim
@@ -225,7 +219,6 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
            if(.not.associated(gridp(ind)%p))then
               ok_level=.false.
-!              exit
            end if
         end do
         do ind=1,twotondim
