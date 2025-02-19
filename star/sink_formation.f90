@@ -160,19 +160,9 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
-<<<<<<< HEAD
      if(c%nsink(j)>0)ok=.false.
      purity=c%npart(j)*g%mp_min/c%particle_mass(j)
      if(purity<=c%purity_threshold)ok=.false.
-=======
-     ! Peak has to be dense enough
-     if(c%max_dens(j)<=r%d_sink)ok=.false.
-     ! Clump has to contain at least one cell
-     if(c%n_cells(j)<=0)ok=.false.
-     ! Clump has to be virialized
-     if(c%Icl_dd(j)>=0.)ok=.false.
-     if(c%occupied_sink(j)>0)ok=.false.
->>>>>>> 5a4de9559a61c83bd4107588e360bdb869196400
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
@@ -335,17 +325,9 @@ subroutine sink_clump(s)
   s%c%relevance_threshold = s%r%sink_relevance_threshold
   s%c%density_threshold = s%r%sink_density_threshold
   s%c%saddle_threshold = s%r%sink_saddle_threshold
-<<<<<<< HEAD
   s%c%mass_threshold = s%r%sink_mass_threshold
   s%c%fraction_threshold = s%r%sink_fraction_threshold
-  s%c%purity_threshold = s%r%sink_purity_threshold
-=======
-  s%c%mass_threshold = 10*s%g%mp_min
-  !s%c%relevance_threshold = 3
-  !s%c%density_threshold = 80
-  !s%c%saddle_threshold = -1
-  !s%c%mass_threshold = 10*s%g%mp_min
->>>>>>> 5a4de9559a61c83bd4107588e360bdb869196400
+  s%c%purity_threshold = s%r%sink_purity_threshold0
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
