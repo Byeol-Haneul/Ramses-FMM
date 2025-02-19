@@ -772,7 +772,7 @@ subroutine tsc_multipole(s,ilevel)
 #endif
         ! Compute cells Cartesian key
 #if NDIM==1
-        ckey(1,1)=cl(1))
+        ckey(1,1)=cl(1)
         ckey(1,2)=cc(1)
         ckey(1,3)=cr(1)
 #endif
@@ -1214,7 +1214,7 @@ subroutine tsc_part(s,p,ilevel,rtype)
 #endif
      ! Compute cells Cartesian key
 #if NDIM==1
-     ckey(1,1)=cl(1))
+     ckey(1,1)=cl(1)
      ckey(1,2)=cc(1)
      ckey(1,3)=cr(1)
 #endif
@@ -1493,7 +1493,7 @@ subroutine pcs_part(s,p,ilevel,rtype)
 #endif
      ! Compute cells Cartesian key
 #if NDIM==1
-     ckey(1,1)=cll(1))
+     ckey(1,1)=cll(1)
      ckey(1,2)=cl (1)
      ckey(1,3)=cr (1)
      ckey(1,4)=crr(1)
