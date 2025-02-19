@@ -37,7 +37,8 @@ recursive subroutine m_sink_formation(pst)
         pst%s%g%mass_sink_tot=pst%s%g%mass_sink_tot+output_sink%mass
      endif
   endif
-
+  call dump_sink_particles(pst)
+  
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
@@ -47,6 +48,40 @@ recursive subroutine m_sink_formation(pst)
   print '(A,F14.7)',' Time elapsed in creating sinks:',ttend-ttstart
 
 end subroutine m_sink_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine dump_sink_particles(pst)
+    use amr_parameters, only: ndim,flen
+    use ramses_commons, only: pst_t
+    use output_part_module, only: r_output_sink
+    use output_clump_module, only: r_output_clump
+    use mdl_module, only: mdl_mkdir
+    implicit none
+    type(pst_t)::pst
+    ! Local variables
+    integer::i,dummy(1)
+    character(LEN=flen)::filename,filedir,filecmd
+    integer,dimension(1:flen/4)::input_array
+    character(len=20) :: str
+  
+    filedir='output/'
+    call mdl_mkdir(pst%s%mdl,filedir)
+    write(str, '(I0)') pst%s%g%nstep_coarse
+    filedir='output/'//TRIM(str)//'_'
+  
+    filename=TRIM(filedir) ! Note that suffix will be added later
+    input_array=transfer(filename,input_array)
+    if(pst%s%r%verbose)write(*,*)'Writing particle files'
+    if(pst%s%c%npeak_tot>0)then
+      call r_output_clump(pst,input_array,flen/4,dummy,0)
+    endif
+    call r_output_sink(pst,input_array,flen/4,dummy,0)
+  
+  
+  
+end subroutine dump_sink_particles
 !###########################################################
 !###########################################################
 !###########################################################
@@ -125,9 +160,19 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
+<<<<<<< HEAD
      if(c%nsink(j)>0)ok=.false.
      purity=c%npart(j)*g%mp_min/c%particle_mass(j)
      if(purity<=c%purity_threshold)ok=.false.
+=======
+     ! Peak has to be dense enough
+     if(c%max_dens(j)<=r%d_sink)ok=.false.
+     ! Clump has to contain at least one cell
+     if(c%n_cells(j)<=0)ok=.false.
+     ! Clump has to be virialized
+     if(c%Icl_dd(j)>=0.)ok=.false.
+     if(c%occupied_sink(j)>0)ok=.false.
+>>>>>>> 5a4de9559a61c83bd4107588e360bdb869196400
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
@@ -219,7 +264,6 @@ subroutine m_formation_site(pst)
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
   use ramses_commons, only: pst_t
-  use clump_merger_module, only: r_deallocate_clump
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
@@ -291,9 +335,17 @@ subroutine sink_clump(s)
   s%c%relevance_threshold = s%r%sink_relevance_threshold
   s%c%density_threshold = s%r%sink_density_threshold
   s%c%saddle_threshold = s%r%sink_saddle_threshold
+<<<<<<< HEAD
   s%c%mass_threshold = s%r%sink_mass_threshold
   s%c%fraction_threshold = s%r%sink_fraction_threshold
   s%c%purity_threshold = s%r%sink_purity_threshold
+=======
+  s%c%mass_threshold = 10*s%g%mp_min
+  !s%c%relevance_threshold = 3
+  !s%c%density_threshold = 80
+  !s%c%saddle_threshold = -1
+  !s%c%mass_threshold = 10*s%g%mp_min
+>>>>>>> 5a4de9559a61c83bd4107588e360bdb869196400
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.

@@ -132,7 +132,7 @@ function worker_init(mdl) result(pst)
   use output_amr_module, only: r_output_amr
   use output_hydro_module, only: r_output_hydro
   use output_poisson_module, only: r_output_poisson
-  use output_part_module, only: r_output_part
+  use output_part_module, only: r_output_part,r_output_sink
   use synchro_hydro_fine_module, only: r_synchro_hydro_fine, r_gravity_hydro_fine
   use source_hydro_fine_module, only: r_source_hydro_fine
   use nbors_utils, only: r_save_phi_old
@@ -239,6 +239,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_FRAME,           pst,C_FUNLOC(r_output_frame),2,2*pst%s%r%nw_frame*pst%s%r%nh_frame,"output_frame")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_POISSON,         pst,C_FUNLOC(r_output_poisson),flen/4,0,"output_poisson")
   call mdl_add_service(pst%s%mdl,MDL_OUTPUT_PART,            pst,C_FUNLOC(r_output_part),flen/4,0,"output_part")
+  call mdl_add_service(pst%s%mdl,MDL_OUTPUT_SINK,            pst,C_FUNLOC(r_output_sink),flen/4,0,"output_sink")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_AEXP,         pst,C_FUNLOC(r_broadcast_aexp),4,0,"broadcast_aexp")
   call mdl_add_service(pst%s%mdl,MDL_COURANT_FINE,           pst,C_FUNLOC(r_courant_fine),1,8,"courant_fine")
   call mdl_add_service(pst%s%mdl,MDL_GODUNOV_FINE,           pst,C_FUNLOC(r_godunov_fine),1,0,"godunov_fine")
