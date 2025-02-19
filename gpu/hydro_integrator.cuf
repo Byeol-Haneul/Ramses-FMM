@@ -636,13 +636,11 @@ contains
    do work_idx = thread_idx, work_size**3 - 1, blockDim%x
       call index_1Dto3D(work_idx, work_size, work_size, i, j, k)
 
-      ! TODO: Do I need to add a shift here? Or is that entirely taken care of below? Is the Riemann solver writing to the correct locations?
-      
       ! Gather the fluxes, computing the update term as we go. Note that the flux 
       ! variables names are the primitive names but the actual variables are the 
       ! conserved variables, this is because we're reuseing the interface state 
       ! array to store this fluxes. 
-      ! TODO: replace the member variables with enum based indexing
+
       ! X component
 
       update_term%density    = fluxes_x%density   (i, j, k)  - fluxes_x%density   (i+1, j, k)
