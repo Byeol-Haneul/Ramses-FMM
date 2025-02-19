@@ -327,7 +327,7 @@ subroutine sink_clump(s)
   s%c%saddle_threshold = s%r%sink_saddle_threshold
   s%c%mass_threshold = s%r%sink_mass_threshold
   s%c%fraction_threshold = s%r%sink_fraction_threshold
-  s%c%purity_threshold = s%r%sink_purity_threshold0
+  s%c%purity_threshold = s%r%sink_purity_threshold
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
