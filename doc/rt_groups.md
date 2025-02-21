@@ -1,7 +1,7 @@
 The namelist block `&RT_GROUPS` is used to specify parameters controlling the radiative transfer multigroups' properrties.
 
 | Variable name | Fortran type | Default value  | Description      |
-|:------------------- |:-------|:--------------------|:------------------------- |
+|:------------------- |:-------|:-----------------------------|:------------------------- |
 | `group_L0`    | `real array`   | `(\13.60,24.59,54.42\)`  | Lower energy boundaries, in eV, of each photon group. Used for example when calculating SED model emission from stellar particles. |
 | `group_L1`    | `real array`   | `(\24.59,54.42,0.0\)`    | Upper energy boundaries, in eV, of each photon group. A value of 0.0 is used to represent infinity. |
 | `spec2group`  | `integer array` | `(\1,2,3\)`  | Determines, for each recombining species (HII, HeII, HeIII) which photon group the recombination photons are injected into. Note that recombination emission must be activated with `rt_otsa=.false.` in namelist block `&RT_PARAMS`. |
