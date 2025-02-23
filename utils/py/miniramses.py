@@ -683,13 +683,16 @@ def rd_hydro(nout,**kwargs):
     return hydro
 
 class Cell:
-    def __init__(self,nndim,nnvar):
+    def __init__(self,nndim,nnvar,nrtvar=0):
         self.ncell = 0
         self.ndim = nndim
         self.nvar = nnvar
         self.x = np.empty(shape=(nndim,0))
         self.u = np.empty(shape=(nnvar,0))
         self.dx = np.empty(shape=(0))
+        self.nrtvar=nrtvar
+        if nrtvar>0:
+                self.rtu = np.empty(shape=(nrtvar,0))
 
 def rd_cell(nout,**kwargs):
     """This function reads RAMSES AMR and hydro files (unformatted Fortran binary) 
@@ -725,9 +728,15 @@ def rd_cell(nout,**kwargs):
     path = kwargs.get("path","./")
     center = kwargs.get("center")
     radius = kwargs.get("radius")
+    rd_rt = kwargs.get("rt",False)
 
     a = rd_amr(nout,**kwargs)
     h = rd_hydro(nout,**kwargs)
+
+    nrtvar=0
+    if rd_rt:
+        rt = rd_hydro(nout, **kwargs, prefix='rt')
+        nrtvar = rt[0].nvar
 
     nlevelmax = len(a)
     ndim = a[0].ndim
@@ -752,7 +761,7 @@ def rd_cell(nout,**kwargs):
     print("Found",ncell,"leaf cells")
     print("Extracting leaf cells...")
 
-    c = Cell(ndim,nvar)
+    c = Cell(ndim,nvar,nrtvar=nrtvar)
     c.ncell = ncell
     
     for ilev in range(0,nlevelmax):
@@ -768,6 +777,11 @@ def rd_cell(nout,**kwargs):
                 for ivar in range(0,nvar):
                     uc[ivar,:]= h[ilev].u[ivar,ind,np.where(a[ilev].refined[ind] == False)]
                 c.u = np.append(c.u,uc,axis=1)
+                if rd_rt:
+                    rtuc = np.zeros([nrtvar,nc])
+                    for ivar in range(0,nrtvar):
+                        rtuc[ivar,:]= rt[ilev].u[ivar,ind,np.where(a[ilev].refined[ind] == False)]
+                    c.rtu = np.append(c.rtu,rtuc,axis=1)
                 dd = np.ones(nc)*dx
                 c.dx = np.append(c.dx,dd)
 
