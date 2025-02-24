@@ -58,33 +58,6 @@ contains
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine update_rt_var(pst, ilevel)
-  use ramses_commons, only: pst_t
-  implicit none
-  type(pst_t)::pst
-  integer::ilevel
-  logical:: cont
-
-  ! Continue if ilevel=levelmin, for regular coarse level updates
-  ! Also continue if rt_star=.true. and rt_advect=.false. and nstar_tot>0, 
-  ! and if so, activate RT on all cpus, and do stellar p
-  cont=.false.
-  if(ilevel .eq. pst%s%r%levelmin) cont=.true.
-
-  if(.not. pst%s%r%rt_advect            &
-     .and. pst%s%r%rt_star              &
-     .and. pst%s%star%npart_tot .gt. 0) then
-        ! Need to activate rt_advect on all cpus
-        cont=.true.
-  endif
-
-  if(cont) call r_update_rt_var(pst, pst%s%g%nstep_coarse, 1)
-
-end subroutine update_rt_var
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
 recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
   use mdl_module
   use coolrates_module, only: update_rt_c, update_coolrates_tables
@@ -111,21 +84,7 @@ recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
      ! Update Compton heating
      if(r%cosmo)call update_coolrates_tables(r, pst%s%tables, dble(g%aexp))
 
-     ! Check if radiadion advection should be turned on
-     if(.not. pst%s%r%rt_advect            &
-        .and. pst%s%r%rt_star              &
-        .and. pst%s%star%npart_tot .gt. 0) then
-        if(pst%s%g%myid==1) then
-          write(*,*) '*****************************************'
-          write(*,*) 'Stellar RT turned on at a=',pst%s%g%aexp
-          write(*,*) '*****************************************'
-        endif
-        pst%s%r%rt_advect=.true.
-        ! Update cross sections based on star properties
-        if(pst%s%r%sedprops_update .gt. 0) then
-           call update_SED_group_props(r, g, s%SED, s%star)
-        endif
-     else if(r%star.and.r%rt_advect .and. r%rt_star .and. r%sedprops_update .gt. 0  &
+     if(r%star.and.r%rt_advect.and.r%rt_star.and.r%sedprops_update.gt.0  &
         .and. mod(nstep_coarse,r%sedprops_update)==0)  then
            ! Update cross sections based on evolving star properties
            call update_SED_group_props(r, g, s%SED, s%star)

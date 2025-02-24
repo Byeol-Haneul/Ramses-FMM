@@ -47,6 +47,9 @@ subroutine m_input_part(pst)
   call r_mass_min_part(pst,pst%s%r%levelmin,1,mp_min,2)
   call r_broadcast_mp_min(pst,mp_min,2)
 
+  ! Check if we should turn on radiation advection and update rt groups
+  call r_check_part_emission(pst)
+
 end subroutine m_input_part
 !#####################################################################
 !#####################################################################
@@ -141,4 +144,40 @@ end subroutine r_npart_max
 !#########################################################################
 !#########################################################################
 !#########################################################################
+recursive subroutine r_check_part_emission(pst)
+
+! Check if we should turn on radiation advection from stellar particles
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use SED_module, only: update_SED_group_props
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer::rID
+
+  associate(s=>pst%s,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CHECK_PART_EMISSION,pst%iUpper+1)
+     call r_check_part_emission(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     ! Check if radiadion advection should be turned on
+     if(r%rt .and. r%star .and. .not. r%rt_advect            &
+        .and. pst%s%star%npart_tot .gt. 0) then
+        if(g%myid==1) then
+          write(*,*) 'Stellar radiation is emitted and advected'
+        endif
+        r%rt_advect=.true.
+        ! Update cross sections based on star properties
+        if(r%sedprops_update .gt. 0) then
+           call update_SED_group_props(r, g, pst%s%sed, pst%s%star)
+        endif
+     endif
+  endif
+
+  end associate
+
+end subroutine r_check_part_emission
+
 end module input_part_module

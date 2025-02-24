@@ -115,7 +115,7 @@ function worker_init(mdl) result(pst)
   use input_part_restart_module, only: r_input_part_restart
   use input_part_ramses_module, only: r_input_part_ramses
   use input_part_gadget_module, only: r_input_part_gadget
-  use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
+  use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min, r_check_part_emission
   use update_time_module, only: r_broadcast_aexp
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,r_noct_used_max
   use init_refine_restart_module, only: r_init_refine_restart
@@ -313,6 +313,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUNEW,             pst,C_FUNLOC(r_set_rtunew),1,0,"set_rtunew")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUOLD,             pst,C_FUNLOC(r_set_rtuold),1,0,"set_rtuold")
   call mdl_add_service(pst%s%mdl,MDL_UPDATE_RT_VAR,          pst,C_FUNLOC(r_update_rt_var),1,0,"update_rt_var")
+  call mdl_add_service(pst%s%mdl,MDL_CHECK_PART_EMISSION,    pst,C_FUNLOC(r_check_part_emission),0,0,"check_part_emission")
 end function worker_init
 !##############################################################
 !##############################################################

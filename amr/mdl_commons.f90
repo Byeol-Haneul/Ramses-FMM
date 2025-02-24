@@ -116,6 +116,7 @@ module mdl_parameters
      enumerator::MDL_SET_RTUNEW
      enumerator::MDL_SET_RTUOLD
      enumerator::MDL_UPDATE_RT_VAR
+     enumerator::MDL_CHECK_PART_EMISSION
      enumerator::MDL_STAR_RT_FEEDBACK
   end enum
   
