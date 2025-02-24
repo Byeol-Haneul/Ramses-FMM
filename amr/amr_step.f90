@@ -188,15 +188,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
   end if
 
-  ! Turn on RT in case of rt_star and first stars just created, plus
-  ! updates of rt variables evolving with redshift
-  if(r%rt)then
-                                    call m_timer(pst,'rt - updates','start')
-     ! Updates time-dependent RT variables
-     call update_rt_var(pst,ilevel)
-!     if(r%rt_sink)call update_sink_RT_feedback(ilevel)
-  endif
-
   !----------------------
   ! Compute new time step
   !----------------------
@@ -326,7 +317,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      else
         if(r%hydro .and. (r%neq_chem.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
      endif
-
+     call m_timer(pst,'rt - updates','start')
+     ! Updates time-dependent RT variables
+     call update_rt_var(pst,ilevel)
   endif
 
   !------------------------

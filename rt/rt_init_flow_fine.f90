@@ -90,6 +90,7 @@ recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
   use coolrates_module, only: update_rt_c, update_coolrates_tables
   use neq_cooling_module, only: updateRTGroups_CoolConstants, update_metal_cooling
   use ramses_commons, only: pst_t
+  use output_rt_module, only: output_photon_emission_stats
   use SED_module, only: update_SED_group_props
   use mdl_parameters
   implicit none
@@ -137,6 +138,9 @@ recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
 
      ! Update UV background constants for metal cooling
      if(r%cosmo)call update_metal_cooling(r, s%tables, dble(g%aexp))
+
+     if(r%rt_advect .and. r%rt_emission_stats .and. r%rt_star) &
+        call output_photon_emission_stats(r,g)
 
      if(g%myid==1) write(*,*)'Time dependent RT quantities updated'
   endif

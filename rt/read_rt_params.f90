@@ -29,6 +29,7 @@ subroutine m_read_rt_params(pst)
   logical::rt_smooth=.false.           ! Smooth the discrete RT update of op. splitting  !
   logical::rt_star=.false.             ! Activate radiation from star particles          !
   logical::rt_sink=.false.             ! Activate radiation from sink particles          !
+  logical::rt_emission_stats=.false.   ! Print stellar emission info                     !
   real(dp)::rt_esc_frac=1d0            ! Photon escape fraction from stellar particles   !
   !character(LEN=10)::rt_flux_scheme='glf'                                               !
   !logical::rt_use_hll=.false.         ! Use hll flux (or the default glf)               !
@@ -90,10 +91,10 @@ subroutine m_read_rt_params(pst)
   namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
        & ,rt_smooth
   namelist/rt_sources/rt_star, rt_sink, rt_esc_frac                      &
-       & ,rt_nsource, rt_source_type                                     &
+       & ,rt_emission_stats ,rt_nsource, rt_source_type                  &
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
        & ,rt_src_length_x, rt_src_length_y, rt_src_length_z              &
-       & ,rt_exp_source, rt_src_group, rt_src_trace_group                &
+       & ,rt_exp_source, rt_src_group                                    &
        & ,rt_n_source, rt_u_source, rt_v_source, rt_w_source
   namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
        & ,group_L0, group_L1, kappaAbs, kappaSc, sed_dir, sedprops_update
@@ -134,6 +135,7 @@ subroutine m_read_rt_params(pst)
   s%r%rt_sink=rt_sink
   s%r%rt_esc_frac=rt_esc_frac
   s%r%sed_dir=sed_dir
+  s%r%rt_emission_stats=rt_emission_stats
   s%r%rt_nsource=rt_nsource
   s%r%rt_source_type=rt_source_type
   s%r%rt_src_x_center=rt_src_x_center

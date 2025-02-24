@@ -64,7 +64,7 @@ subroutine star_rt_feedback(s, p, ilevel)
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::ipart,icell,idim
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(kind=8)::scale_Np,scale_Fp,scale_inp,scale_inp_cell
+  real(kind=8)::scale_Np,scale_Fp,scale_inp,scale_inp_cell,scale_msun
   real(dp)::dx_loc,vol_loc,vol_cell
   real(dp)::z,mass,age,code2Gyr,dt_Gyr,dt_loc_Gyr,t_SN_Gyr
   type(oct),pointer::gridp
@@ -85,6 +85,7 @@ subroutine star_rt_feedback(s, p, ilevel)
   call units(r, g, scale_l, scale_t, scale_d, scale_v, scale_nH, scale_T2)
   call rt_units(r, g, scale_Np, scale_Fp)
   scale_inp = r%rt_esc_frac * scale_d / scale_Np / vol_loc / M_sun
+  scale_msun = scale_d * scale_l**ndim / M_sun
 
   ! Proper time (codeunits) to Gyr
   code2Gyr = scale_t * sec2Gyr / g%aexp**2
@@ -166,6 +167,14 @@ subroutine star_rt_feedback(s, p, ilevel)
      endif
 
      part_NpInp(1:nrtgrp) = part_NpInp(1:nrtgrp) * mass * scale_inp_cell ! #photons cm-3
+
+     if(r%rt_emission_stats) then
+        g%step_nPhot = g%step_nPhot + part_NpInp(1) / scale_inp_cell * scale_msun
+        g%step_nStar = g%step_nStar + dt_loc_Gyr/sec2Gyr/scale_t
+        g%step_mStar = g%step_mStar + p%mp(ipart) * scale_msun &
+                                    * dt_loc_Gyr /sec2Gyr / scale_t
+     endif
+
      lum(1:nrtgrp) = 0.
      if(dt_loc_Gyr > 0.)then
         lum(1:nrtgrp) = part_NpInp(1:nrtgrp) / dt_Gyr * sec2Gyr ! #photons cm-3 s-1

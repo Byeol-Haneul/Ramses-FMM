@@ -351,6 +351,8 @@ module amr_commons
      
      character(LEN=128)::sed_dir=''        ! Dir containing stellar energy distributions     !
      !character(LEN=128)::uv_file=''       ! File containing UV background                   !
+     ! SED statistics: Radiation emitted, total, last coarse step [#photons/10^50]-----------
+     logical::rt_emission_stats=.false.    ! Print info about stellar emission in log        !
      
      ! Initial condition RT regions parameters----------------------------------------------
      integer                           ::rt_nregion=0
@@ -439,6 +441,9 @@ module amr_commons
      real(dp)::mass_tot_0=0.0D0                    ! Initial total gas mass
      real(dp)::mass_star_tot=0.0D0                 ! Total mass in new stars
      real(dp)::mass_sink_tot=0.0D0                 ! Total mass in new sinks
+     real(dp)::tot_nPhot=0.0D0, step_nPhot=0.0D0   ! RT bookkeeping
+     real(dp)::step_nStar=0.0D0, step_mStar=0.0D0  ! RT bookkeeping
+
      
      ! Level related arrays
      real(dp),dimension(1:MAXLEVEL)::dtold,dtnew ! Time step at each level

@@ -267,6 +267,52 @@ subroutine write_group_props(r, update, lun)
 
 end subroutine write_group_props
 
+!########################################################################
+!########################################################################
+!########################################################################
+!########################################################################
+subroutine output_photon_emission_stats(r,g)
 
+! Output and reset  statistics on stellar emission of radiation.
+! star rt feedback statistics
+!------------------------------------------------------------------------
+  use amr_commons, only: run_t, global_t
+  use constants, only: yr2sec
+#ifndef WITHOUTMPI
+  use mpi
+#endif
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  real(kind=8) :: step_nPhot_all, step_nStar_all, step_mStar_all
+  real(kind=8) :: scale_l, scale_t, scale_d, scale_v, scale_nh, scale_T2
+#ifndef WITHOUTMPI
+  integer :: ierr
+#endif
+!------------------------------------------------------------------------
+  call units(r, g, scale_l, scale_t, scale_d, scale_v, scale_nH, scale_T2)
+
+  step_nPhot_all = 0d0 ; step_nStar_all = 0d0 ; step_mStar_all = 0d0
+#ifndef WITHOUTMPI
+  call MPI_ALLREDUCE(g%step_nPhot,           step_nPhot_all,  1,      &
+       MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_ALLREDUCE(g%step_nStar,           step_nStar_all,  1,      &
+          MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+  call MPI_ALLREDUCE(g%step_mStar,           step_mStar_all,  1,      &
+          MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+  g%step_nPhot  = step_nPhot_all
+  g%step_nStar  = step_nStar_all
+  g%step_mStar  = step_mStar_all
+#endif
+  g%tot_nPhot = g%tot_nPhot + g%step_nPhot
+  if (g%myid .eq. 1)                                                 &
+      write(*, 113) g%step_nPhot, g%tot_nPhot                        &
+                  , g%step_nStar/g%dtnew(r%levelmin)                 &
+                  , g%step_mStar/g%dtnew(r%levelmin)                 &
+                  , g%dtnew(r%levelmin)*scale_t/yr2sec
+  g%step_nPhot = 0d0 ; g%step_nStar = 0d0 ; g%step_mStar = 0d0
+113 format(' Stellar radiation(phot/step, phot/tot, *, */Msun , dt[yr])= '  &
+                                                             , 10(1pe9.2))
+end subroutine output_photon_emission_stats
 
 end module output_rt_module
