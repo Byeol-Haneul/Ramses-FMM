@@ -555,48 +555,10 @@ subroutine cic_multipole(s,ilevel)
         enddo
 
         ! Compute cloud volumes
-#if NDIM==1
-        vol(1)=dg(1)
-        vol(2)=dd(1)
-#endif
-#if NDIM==2
-        vol(1)=dg(1)*dg(2)
-        vol(2)=dd(1)*dg(2)
-        vol(3)=dg(1)*dd(2)
-        vol(4)=dd(1)*dd(2)
-#endif
-#if NDIM==3
-        vol(1)=dg(1)*dg(2)*dg(3)
-        vol(2)=dd(1)*dg(2)*dg(3)
-        vol(3)=dg(1)*dd(2)*dg(3)
-        vol(4)=dd(1)*dd(2)*dg(3)
-        vol(5)=dg(1)*dg(2)*dd(3)
-        vol(6)=dd(1)*dg(2)*dd(3)
-        vol(7)=dg(1)*dd(2)*dd(3)
-        vol(8)=dd(1)*dd(2)*dd(3)
-#endif
+        vol = cic_weight(dg,dd)
 
         ! Compute cells Cartesian key
-#if NDIM==1
-        ckey(1,1)=ig(1)
-        ckey(1,2)=id(1)
-#endif
-#if NDIM==2
-        ckey(1:2,1)=(/ig(1),ig(2)/)
-        ckey(1:2,2)=(/id(1),ig(2)/)
-        ckey(1:2,3)=(/ig(1),id(2)/)
-        ckey(1:2,4)=(/id(1),id(2)/)
-#endif
-#if NDIM==3
-        ckey(1:3,1)=(/ig(1),ig(2),ig(3)/)
-        ckey(1:3,2)=(/id(1),ig(2),ig(3)/)
-        ckey(1:3,3)=(/ig(1),id(2),ig(3)/)
-        ckey(1:3,4)=(/id(1),id(2),ig(3)/)
-        ckey(1:3,5)=(/ig(1),ig(2),id(3)/)
-        ckey(1:3,6)=(/id(1),ig(2),id(3)/)
-        ckey(1:3,7)=(/ig(1),id(2),id(3)/)
-        ckey(1:3,8)=(/id(1),id(2),id(3)/)
-#endif     
+        ckey = cic_index(ig,id)
 
 #ifdef GRAV
         ! Update mass density
@@ -761,48 +723,10 @@ subroutine cic_part(s,p,ilevel,rtype)
      enddo
 
      ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=dl(1)
-     vol(2)=dr(1)
-#endif
-#if NDIM==2
-     vol(1)=dl(1)*dl(2)
-     vol(2)=dr(1)*dl(2)
-     vol(3)=dl(1)*dr(2)
-     vol(4)=dr(1)*dr(2)
-#endif
-#if NDIM==3
-     vol(1)=dl(1)*dl(2)*dl(3)
-     vol(2)=dr(1)*dl(2)*dl(3)
-     vol(3)=dl(1)*dr(2)*dl(3)
-     vol(4)=dr(1)*dr(2)*dl(3)
-     vol(5)=dl(1)*dl(2)*dr(3)
-     vol(6)=dr(1)*dl(2)*dr(3)
-     vol(7)=dl(1)*dr(2)*dr(3)
-     vol(8)=dr(1)*dr(2)*dr(3)
-#endif
+     vol = cic_weight(dl,dr)
 
      ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=il(1)
-     ckey(1,2)=ir(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1)=(/il(1),il(2)/)
-     ckey(1:2,2)=(/ir(1),il(2)/)
-     ckey(1:2,3)=(/il(1),ir(2)/)
-     ckey(1:2,4)=(/ir(1),ir(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1)=(/il(1),il(2),il(3)/)
-     ckey(1:3,2)=(/ir(1),il(2),il(3)/)
-     ckey(1:3,3)=(/il(1),ir(2),il(3)/)
-     ckey(1:3,4)=(/ir(1),ir(2),il(3)/)
-     ckey(1:3,5)=(/il(1),il(2),ir(3)/)
-     ckey(1:3,6)=(/ir(1),il(2),ir(3)/)
-     ckey(1:3,7)=(/il(1),ir(2),ir(3)/)
-     ckey(1:3,8)=(/ir(1),ir(2),ir(3)/)
-#endif
+     ckey = cic_index(il,ir)
 
 #ifdef GRAV
      ! Update mass density
@@ -842,6 +766,64 @@ subroutine cic_part(s,p,ilevel,rtype)
   end associate
 
 end subroutine cic_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function cic_weight(dl,dr)
+  use amr_parameters, only: dp, ndim, twotondim
+  real(dp),dimension(1:twotondim)::cic_weight
+  real(dp),dimension(1:ndim)::dl,dr
+#if NDIM==1
+  cic_weight(1)=dl(1)
+  cic_weight(2)=dr(1)
+#endif
+#if NDIM==2
+  cic_weight(1)=dl(1)*dl(2)
+  cic_weight(2)=dr(1)*dl(2)
+  cic_weight(3)=dl(1)*dr(2)
+  cic_weight(4)=dr(1)*dr(2)
+#endif
+#if NDIM==3
+  cic_weight(1)=dl(1)*dl(2)*dl(3)
+  cic_weight(2)=dr(1)*dl(2)*dl(3)
+  cic_weight(3)=dl(1)*dr(2)*dl(3)
+  cic_weight(4)=dr(1)*dr(2)*dl(3)
+  cic_weight(5)=dl(1)*dl(2)*dr(3)
+  cic_weight(6)=dr(1)*dl(2)*dr(3)
+  cic_weight(7)=dl(1)*dr(2)*dr(3)
+  cic_weight(8)=dr(1)*dr(2)*dr(3)
+#endif
+end function cic_weight
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function cic_index(il,ir)
+  use amr_parameters, only: ndim, twotondim
+  integer,dimension(1:ndim,1:twotondim)::cic_index
+  integer,dimension(1:ndim)::il,ir
+#if NDIM==1
+  cic_index(1,1)=il(1)
+  cic_index(1,2)=ir(1)
+#endif
+#if NDIM==2
+  cic_index(1:2,1)=(/il(1),il(2)/)
+  cic_index(1:2,2)=(/ir(1),il(2)/)
+  cic_index(1:2,3)=(/il(1),ir(2)/)
+  cic_index(1:2,4)=(/ir(1),ir(2)/)
+#endif
+#if NDIM==3
+  cic_index(1:3,1)=(/il(1),il(2),il(3)/)
+  cic_index(1:3,2)=(/ir(1),il(2),il(3)/)
+  cic_index(1:3,3)=(/il(1),ir(2),il(3)/)
+  cic_index(1:3,4)=(/ir(1),ir(2),il(3)/)
+  cic_index(1:3,5)=(/il(1),il(2),ir(3)/)
+  cic_index(1:3,6)=(/ir(1),il(2),ir(3)/)
+  cic_index(1:3,7)=(/il(1),ir(2),ir(3)/)
+  cic_index(1:3,8)=(/ir(1),ir(2),ir(3)/)
+#endif
+end function cic_index
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -948,97 +930,10 @@ subroutine tsc_part(s,p,ilevel,rtype)
      enddo
 
      ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=wl(1)
-     vol(2)=wc(1)
-     vol(3)=wr(1)
-#endif
-#if NDIM==2
-     vol(1)=wl(1)*wl(2)
-     vol(2)=wc(1)*wl(2)
-     vol(3)=wr(1)*wl(2)
-     vol(4)=wl(1)*wc(2)
-     vol(5)=wc(1)*wc(2)
-     vol(6)=wr(1)*wc(2)
-     vol(7)=wl(1)*wr(2)
-     vol(8)=wc(1)*wr(2)
-     vol(9)=wr(1)*wr(2)
-#endif
-#if NDIM==3
-     vol(1) =wl(1)*wl(2)*wl(3)
-     vol(2) =wc(1)*wl(2)*wl(3)
-     vol(3) =wr(1)*wl(2)*wl(3)
-     vol(4) =wl(1)*wc(2)*wl(3)
-     vol(5) =wc(1)*wc(2)*wl(3)
-     vol(6) =wr(1)*wc(2)*wl(3)
-     vol(7) =wl(1)*wr(2)*wl(3)
-     vol(8) =wc(1)*wr(2)*wl(3)
-     vol(9) =wr(1)*wr(2)*wl(3)
-     vol(10)=wl(1)*wl(2)*wc(3)
-     vol(11)=wc(1)*wl(2)*wc(3)
-     vol(12)=wr(1)*wl(2)*wc(3)
-     vol(13)=wl(1)*wc(2)*wc(3)
-     vol(14)=wc(1)*wc(2)*wc(3)
-     vol(15)=wr(1)*wc(2)*wc(3)
-     vol(16)=wl(1)*wr(2)*wc(3)
-     vol(17)=wc(1)*wr(2)*wc(3)
-     vol(18)=wr(1)*wr(2)*wc(3)
-     vol(19)=wl(1)*wl(2)*wr(3)
-     vol(20)=wc(1)*wl(2)*wr(3)
-     vol(21)=wr(1)*wl(2)*wr(3)
-     vol(22)=wl(1)*wc(2)*wr(3)
-     vol(23)=wc(1)*wc(2)*wr(3)
-     vol(24)=wr(1)*wc(2)*wr(3)
-     vol(25)=wl(1)*wr(2)*wr(3)
-     vol(26)=wc(1)*wr(2)*wr(3)
-     vol(27)=wr(1)*wr(2)*wr(3)
-#endif
+     vol = tsc_weight(wl,wc,wr)
+
      ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=cl(1)
-     ckey(1,2)=cc(1)
-     ckey(1,3)=cr(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1)=(/cl(1),cl(2)/)
-     ckey(1:2,2)=(/cc(1),cl(2)/)
-     ckey(1:2,3)=(/cr(1),cl(2)/)
-     ckey(1:2,4)=(/cl(1),cc(2)/)
-     ckey(1:2,5)=(/cc(1),cc(2)/)
-     ckey(1:2,6)=(/cr(1),cc(2)/)
-     ckey(1:2,7)=(/cl(1),cr(2)/)
-     ckey(1:2,8)=(/cc(1),cr(2)/)
-     ckey(1:2,9)=(/cr(1),cr(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1) =(/cl(1),cl(2),cl(3)/)
-     ckey(1:3,2) =(/cc(1),cl(2),cl(3)/)
-     ckey(1:3,3) =(/cr(1),cl(2),cl(3)/)
-     ckey(1:3,4) =(/cl(1),cc(2),cl(3)/)
-     ckey(1:3,5) =(/cc(1),cc(2),cl(3)/)
-     ckey(1:3,6) =(/cr(1),cc(2),cl(3)/)
-     ckey(1:3,7) =(/cl(1),cr(2),cl(3)/)
-     ckey(1:3,8) =(/cc(1),cr(2),cl(3)/)
-     ckey(1:3,9) =(/cr(1),cr(2),cl(3)/)
-     ckey(1:3,10)=(/cl(1),cl(2),cc(3)/)
-     ckey(1:3,11)=(/cc(1),cl(2),cc(3)/)
-     ckey(1:3,12)=(/cr(1),cl(2),cc(3)/)
-     ckey(1:3,13)=(/cl(1),cc(2),cc(3)/)
-     ckey(1:3,14)=(/cc(1),cc(2),cc(3)/)
-     ckey(1:3,15)=(/cr(1),cc(2),cc(3)/)
-     ckey(1:3,16)=(/cl(1),cr(2),cc(3)/)
-     ckey(1:3,17)=(/cc(1),cr(2),cc(3)/)
-     ckey(1:3,18)=(/cr(1),cr(2),cc(3)/)
-     ckey(1:3,19)=(/cl(1),cl(2),cr(3)/)
-     ckey(1:3,20)=(/cc(1),cl(2),cr(3)/)
-     ckey(1:3,21)=(/cr(1),cl(2),cr(3)/)
-     ckey(1:3,22)=(/cl(1),cc(2),cr(3)/)
-     ckey(1:3,23)=(/cc(1),cc(2),cr(3)/)
-     ckey(1:3,24)=(/cr(1),cc(2),cr(3)/)
-     ckey(1:3,25)=(/cl(1),cr(2),cr(3)/)
-     ckey(1:3,26)=(/cc(1),cr(2),cr(3)/)
-     ckey(1:3,27)=(/cr(1),cr(2),cr(3)/)
-#endif
+     ckey = tsc_index(cl,cc,cr)
 
 #ifdef GRAV
      ! Update mass density
@@ -1071,6 +966,114 @@ subroutine tsc_part(s,p,ilevel,rtype)
   end associate
 
 end subroutine tsc_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function tsc_weight(wl,wc,wr)
+  use amr_parameters, only: dp, ndim, threetondim
+  real(dp),dimension(1:threetondim)::tsc_weight
+  real(dp),dimension(1:ndim)::wl,wc,wr
+#if NDIM==1
+  tsc_weight(1)=wl(1)
+  tsc_weight(2)=wc(1)
+  tsc_weight(3)=wr(1)
+#endif
+#if NDIM==2
+  tsc_weight(1)=wl(1)*wl(2)
+  tsc_weight(2)=wc(1)*wl(2)
+  tsc_weight(3)=wr(1)*wl(2)
+  tsc_weight(4)=wl(1)*wc(2)
+  tsc_weight(5)=wc(1)*wc(2)
+  tsc_weight(6)=wr(1)*wc(2)
+  tsc_weight(7)=wl(1)*wr(2)
+  tsc_weight(8)=wc(1)*wr(2)
+  tsc_weight(9)=wr(1)*wr(2)
+#endif
+#if NDIM==3
+  tsc_weight(1) =wl(1)*wl(2)*wl(3)
+  tsc_weight(2) =wc(1)*wl(2)*wl(3)
+  tsc_weight(3) =wr(1)*wl(2)*wl(3)
+  tsc_weight(4) =wl(1)*wc(2)*wl(3)
+  tsc_weight(5) =wc(1)*wc(2)*wl(3)
+  tsc_weight(6) =wr(1)*wc(2)*wl(3)
+  tsc_weight(7) =wl(1)*wr(2)*wl(3)
+  tsc_weight(8) =wc(1)*wr(2)*wl(3)
+  tsc_weight(9) =wr(1)*wr(2)*wl(3)
+  tsc_weight(10)=wl(1)*wl(2)*wc(3)
+  tsc_weight(11)=wc(1)*wl(2)*wc(3)
+  tsc_weight(12)=wr(1)*wl(2)*wc(3)
+  tsc_weight(13)=wl(1)*wc(2)*wc(3)
+  tsc_weight(14)=wc(1)*wc(2)*wc(3)
+  tsc_weight(15)=wr(1)*wc(2)*wc(3)
+  tsc_weight(16)=wl(1)*wr(2)*wc(3)
+  tsc_weight(17)=wc(1)*wr(2)*wc(3)
+  tsc_weight(18)=wr(1)*wr(2)*wc(3)
+  tsc_weight(19)=wl(1)*wl(2)*wr(3)
+  tsc_weight(20)=wc(1)*wl(2)*wr(3)
+  tsc_weight(21)=wr(1)*wl(2)*wr(3)
+  tsc_weight(22)=wl(1)*wc(2)*wr(3)
+  tsc_weight(23)=wc(1)*wc(2)*wr(3)
+  tsc_weight(24)=wr(1)*wc(2)*wr(3)
+  tsc_weight(25)=wl(1)*wr(2)*wr(3)
+  tsc_weight(26)=wc(1)*wr(2)*wr(3)
+  tsc_weight(27)=wr(1)*wr(2)*wr(3)
+#endif
+end function tsc_weight
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function tsc_index(cl,cc,cr)
+  use amr_parameters, only: ndim, threetondim
+  integer,dimension(1:ndim,1:threetondim)::tsc_index
+  integer,dimension(1:ndim)::cl,cc,cr
+#if NDIM==1
+  tsc_index(1,1)=cl(1)
+  tsc_index(1,2)=cc(1)
+  tsc_index(1,3)=cr(1)
+#endif
+#if NDIM==2
+  tsc_index(1:2,1)=(/cl(1),cl(2)/)
+  tsc_index(1:2,2)=(/cc(1),cl(2)/)
+  tsc_index(1:2,3)=(/cr(1),cl(2)/)
+  tsc_index(1:2,4)=(/cl(1),cc(2)/)
+  tsc_index(1:2,5)=(/cc(1),cc(2)/)
+  tsc_index(1:2,6)=(/cr(1),cc(2)/)
+  tsc_index(1:2,7)=(/cl(1),cr(2)/)
+  tsc_index(1:2,8)=(/cc(1),cr(2)/)
+  tsc_index(1:2,9)=(/cr(1),cr(2)/)
+#endif
+#if NDIM==3
+  tsc_index(1:3,1) =(/cl(1),cl(2),cl(3)/)
+  tsc_index(1:3,2) =(/cc(1),cl(2),cl(3)/)
+  tsc_index(1:3,3) =(/cr(1),cl(2),cl(3)/)
+  tsc_index(1:3,4) =(/cl(1),cc(2),cl(3)/)
+  tsc_index(1:3,5) =(/cc(1),cc(2),cl(3)/)
+  tsc_index(1:3,6) =(/cr(1),cc(2),cl(3)/)
+  tsc_index(1:3,7) =(/cl(1),cr(2),cl(3)/)
+  tsc_index(1:3,8) =(/cc(1),cr(2),cl(3)/)
+  tsc_index(1:3,9) =(/cr(1),cr(2),cl(3)/)
+  tsc_index(1:3,10)=(/cl(1),cl(2),cc(3)/)
+  tsc_index(1:3,11)=(/cc(1),cl(2),cc(3)/)
+  tsc_index(1:3,12)=(/cr(1),cl(2),cc(3)/)
+  tsc_index(1:3,13)=(/cl(1),cc(2),cc(3)/)
+  tsc_index(1:3,14)=(/cc(1),cc(2),cc(3)/)
+  tsc_index(1:3,15)=(/cr(1),cc(2),cc(3)/)
+  tsc_index(1:3,16)=(/cl(1),cr(2),cc(3)/)
+  tsc_index(1:3,17)=(/cc(1),cr(2),cc(3)/)
+  tsc_index(1:3,18)=(/cr(1),cr(2),cc(3)/)
+  tsc_index(1:3,19)=(/cl(1),cl(2),cr(3)/)
+  tsc_index(1:3,20)=(/cc(1),cl(2),cr(3)/)
+  tsc_index(1:3,21)=(/cr(1),cl(2),cr(3)/)
+  tsc_index(1:3,22)=(/cl(1),cc(2),cr(3)/)
+  tsc_index(1:3,23)=(/cc(1),cc(2),cr(3)/)
+  tsc_index(1:3,24)=(/cr(1),cc(2),cr(3)/)
+  tsc_index(1:3,25)=(/cl(1),cr(2),cr(3)/)
+  tsc_index(1:3,26)=(/cc(1),cr(2),cr(3)/)
+  tsc_index(1:3,27)=(/cr(1),cr(2),cr(3)/)
+#endif
+end function tsc_index
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -1182,187 +1185,10 @@ subroutine pcs_part(s,p,ilevel,rtype)
      enddo
 
      ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=wll(1)
-     vol(2)=wl (1)
-     vol(3)=wr (1)
-     vol(4)=wrr(1)
-#endif
-#if NDIM==2
-     vol(1) =wll(1)*wll(2)
-     vol(2) =wl (1)*wll(2)
-     vol(3) =wr (1)*wll(2)
-     vol(4) =wrr(1)*wll(2)
-     vol(5) =wll(1)*wl (2)
-     vol(6) =wl (1)*wl (2)
-     vol(7) =wr (1)*wl (2)
-     vol(8) =wrr(1)*wl (2)
-     vol(9) =wll(1)*wr (2)
-     vol(10)=wl (1)*wr (2)
-     vol(11)=wr (1)*wr (2)
-     vol(12)=wrr(1)*wr (2)
-     vol(13)=wll(1)*wrr(2)
-     vol(14)=wl (1)*wrr(2)
-     vol(15)=wr (1)*wrr(2)
-     vol(16)=wrr(1)*wrr(2)
-#endif
-#if NDIM==3
-     vol(1) =wll(1)*wll(2)*wll(3)
-     vol(2) =wl (1)*wll(2)*wll(3)
-     vol(3) =wr (1)*wll(2)*wll(3)
-     vol(4) =wrr(1)*wll(2)*wll(3)
-     vol(5) =wll(1)*wl (2)*wll(3)
-     vol(6) =wl (1)*wl (2)*wll(3)
-     vol(7) =wr (1)*wl (2)*wll(3)
-     vol(8) =wrr(1)*wl (2)*wll(3)
-     vol(9) =wll(1)*wr (2)*wll(3)
-     vol(10)=wl (1)*wr (2)*wll(3)
-     vol(11)=wr (1)*wr (2)*wll(3)
-     vol(12)=wrr(1)*wr (2)*wll(3)
-     vol(13)=wll(1)*wrr(2)*wll(3)
-     vol(14)=wl (1)*wrr(2)*wll(3)
-     vol(15)=wr (1)*wrr(2)*wll(3)
-     vol(16)=wrr(1)*wrr(2)*wll(3)
-     vol(17)=wll(1)*wll(2)*wl (3)
-     vol(18)=wl (1)*wll(2)*wl (3)
-     vol(19)=wr (1)*wll(2)*wl (3)
-     vol(20)=wrr(1)*wll(2)*wl (3)
-     vol(21)=wll(1)*wl (2)*wl (3)
-     vol(22)=wl (1)*wl (2)*wl (3)
-     vol(23)=wr (1)*wl (2)*wl (3)
-     vol(24)=wrr(1)*wl (2)*wl (3)
-     vol(25)=wll(1)*wr (2)*wl (3)
-     vol(26)=wl (1)*wr (2)*wl (3)
-     vol(27)=wr (1)*wr (2)*wl (3)
-     vol(28)=wrr(1)*wr (2)*wl (3)
-     vol(29)=wll(1)*wrr(2)*wl (3)
-     vol(30)=wl (1)*wrr(2)*wl (3)
-     vol(31)=wr (1)*wrr(2)*wl (3)
-     vol(32)=wrr(1)*wrr(2)*wl (3)
-     vol(33)=wll(1)*wll(2)*wr (3)
-     vol(34)=wl (1)*wll(2)*wr (3)
-     vol(35)=wr (1)*wll(2)*wr (3)
-     vol(36)=wrr(1)*wll(2)*wr (3)
-     vol(37)=wll(1)*wl (2)*wr (3)
-     vol(38)=wl (1)*wl (2)*wr (3)
-     vol(39)=wr (1)*wl (2)*wr (3)
-     vol(40)=wrr(1)*wl (2)*wr (3)
-     vol(41)=wll(1)*wr (2)*wr (3)
-     vol(42)=wl (1)*wr (2)*wr (3)
-     vol(43)=wr (1)*wr (2)*wr (3)
-     vol(44)=wrr(1)*wr (2)*wr (3)
-     vol(45)=wll(1)*wrr(2)*wr (3)
-     vol(46)=wl (1)*wrr(2)*wr (3)
-     vol(47)=wr (1)*wrr(2)*wr (3)
-     vol(48)=wrr(1)*wrr(2)*wr (3)
-     vol(49)=wll(1)*wll(2)*wrr(3)
-     vol(50)=wl (1)*wll(2)*wrr(3)
-     vol(51)=wr (1)*wll(2)*wrr(3)
-     vol(52)=wrr(1)*wll(2)*wrr(3)
-     vol(53)=wll(1)*wl (2)*wrr(3)
-     vol(54)=wl (1)*wl (2)*wrr(3)
-     vol(55)=wr (1)*wl (2)*wrr(3)
-     vol(56)=wrr(1)*wl (2)*wrr(3)
-     vol(57)=wll(1)*wr (2)*wrr(3)
-     vol(58)=wl (1)*wr (2)*wrr(3)
-     vol(59)=wr (1)*wr (2)*wrr(3)
-     vol(60)=wrr(1)*wr (2)*wrr(3)
-     vol(61)=wll(1)*wrr(2)*wrr(3)
-     vol(62)=wl (1)*wrr(2)*wrr(3)
-     vol(63)=wr (1)*wrr(2)*wrr(3)
-     vol(64)=wrr(1)*wrr(2)*wrr(3)
-#endif
+     vol = pcs_weight(wll,wl,wr,wrr)
+
      ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=cll(1)
-     ckey(1,2)=cl (1)
-     ckey(1,3)=cr (1)
-     ckey(1,4)=crr(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1) =(/cll(1),cll(2)/)
-     ckey(1:2,2) =(/cl (1),cll(2)/)
-     ckey(1:2,3) =(/cr (1),cll(2)/)
-     ckey(1:2,4) =(/crr(1),cll(2)/)
-     ckey(1:2,5) =(/cll(1),cl (2)/)
-     ckey(1:2,6) =(/cl (1),cl (2)/)
-     ckey(1:2,7) =(/cr (1),cl (2)/)
-     ckey(1:2,8) =(/crr(1),cl (2)/)
-     ckey(1:2,9) =(/cll(1),cr (2)/)
-     ckey(1:2,10)=(/cl (1),cr (2)/)
-     ckey(1:2,11)=(/cr (1),cr (2)/)
-     ckey(1:2,12)=(/crr(1),cr (2)/)
-     ckey(1:2,13)=(/cll(1),crr(2)/)
-     ckey(1:2,14)=(/cl (1),crr(2)/)
-     ckey(1:2,15)=(/cr (1),crr(2)/)
-     ckey(1:2,16)=(/crr(1),crr(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1) =(/cll(1),cll(2),cll(3)/)
-     ckey(1:3,2) =(/cl (1),cll(2),cll(3)/)
-     ckey(1:3,3) =(/cr (1),cll(2),cll(3)/)
-     ckey(1:3,4) =(/crr(1),cll(2),cll(3)/)
-     ckey(1:3,5) =(/cll(1),cl (2),cll(3)/)
-     ckey(1:3,6) =(/cl (1),cl (2),cll(3)/)
-     ckey(1:3,7) =(/cr (1),cl (2),cll(3)/)
-     ckey(1:3,8) =(/crr(1),cl (2),cll(3)/)
-     ckey(1:3,9) =(/cll(1),cr (2),cll(3)/)
-     ckey(1:3,10)=(/cl (1),cr (2),cll(3)/)
-     ckey(1:3,11)=(/cr (1),cr (2),cll(3)/)
-     ckey(1:3,12)=(/crr(1),cr (2),cll(3)/)
-     ckey(1:3,13)=(/cll(1),crr(2),cll(3)/)
-     ckey(1:3,14)=(/cl (1),crr(2),cll(3)/)
-     ckey(1:3,15)=(/cr (1),crr(2),cll(3)/)
-     ckey(1:3,16)=(/crr(1),crr(2),cll(3)/)
-     ckey(1:3,17)=(/cll(1),cll(2),cl (3)/)
-     ckey(1:3,18)=(/cl (1),cll(2),cl (3)/)
-     ckey(1:3,19)=(/cr (1),cll(2),cl (3)/)
-     ckey(1:3,20)=(/crr(1),cll(2),cl (3)/)
-     ckey(1:3,21)=(/cll(1),cl (2),cl (3)/)
-     ckey(1:3,22)=(/cl (1),cl (2),cl (3)/)
-     ckey(1:3,23)=(/cr (1),cl (2),cl (3)/)
-     ckey(1:3,24)=(/crr(1),cl (2),cl (3)/)
-     ckey(1:3,25)=(/cll(1),cr (2),cl (3)/)
-     ckey(1:3,26)=(/cl (1),cr (2),cl (3)/)
-     ckey(1:3,27)=(/cr (1),cr (2),cl (3)/)
-     ckey(1:3,28)=(/crr(1),cr (2),cl (3)/)
-     ckey(1:3,29)=(/cll(1),crr(2),cl (3)/)
-     ckey(1:3,30)=(/cl (1),crr(2),cl (3)/)
-     ckey(1:3,31)=(/cr (1),crr(2),cl (3)/)
-     ckey(1:3,32)=(/crr(1),crr(2),cl (3)/)
-     ckey(1:3,33)=(/cll(1),cll(2),cr (3)/)
-     ckey(1:3,34)=(/cl (1),cll(2),cr (3)/)
-     ckey(1:3,35)=(/cr (1),cll(2),cr (3)/)
-     ckey(1:3,36)=(/crr(1),cll(2),cr (3)/)
-     ckey(1:3,37)=(/cll(1),cl (2),cr (3)/)
-     ckey(1:3,38)=(/cl (1),cl (2),cr (3)/)
-     ckey(1:3,39)=(/cr (1),cl (2),cr (3)/)
-     ckey(1:3,40)=(/crr(1),cl (2),cr (3)/)
-     ckey(1:3,41)=(/cll(1),cr (2),cr (3)/)
-     ckey(1:3,42)=(/cl (1),cr (2),cr (3)/)
-     ckey(1:3,43)=(/cr (1),cr (2),cr (3)/)
-     ckey(1:3,44)=(/crr(1),cr (2),cr (3)/)
-     ckey(1:3,45)=(/cll(1),crr(2),cr (3)/)
-     ckey(1:3,46)=(/cl (1),crr(2),cr (3)/)
-     ckey(1:3,47)=(/cr (1),crr(2),cr (3)/)
-     ckey(1:3,48)=(/crr(1),crr(2),cr (3)/)
-     ckey(1:3,49)=(/cll(1),cll(2),crr(3)/)
-     ckey(1:3,50)=(/cl (1),cll(2),crr(3)/)
-     ckey(1:3,51)=(/cr (1),cll(2),crr(3)/)
-     ckey(1:3,52)=(/crr(1),cll(2),crr(3)/)
-     ckey(1:3,53)=(/cll(1),cl (2),crr(3)/)
-     ckey(1:3,54)=(/cl (1),cl (2),crr(3)/)
-     ckey(1:3,55)=(/cr (1),cl (2),crr(3)/)
-     ckey(1:3,56)=(/crr(1),cl (2),crr(3)/)
-     ckey(1:3,57)=(/cll(1),cr (2),crr(3)/)
-     ckey(1:3,58)=(/cl (1),cr (2),crr(3)/)
-     ckey(1:3,59)=(/cr (1),cr (2),crr(3)/)
-     ckey(1:3,60)=(/crr(1),cr (2),crr(3)/)
-     ckey(1:3,61)=(/cll(1),crr(2),crr(3)/)
-     ckey(1:3,62)=(/cl (1),crr(2),crr(3)/)
-     ckey(1:3,63)=(/cr (1),crr(2),crr(3)/)
-     ckey(1:3,64)=(/crr(1),crr(2),crr(3)/)
-#endif
+     ckey = pcs_index(cll,cl,cr,crr)
 
 #ifdef GRAV
      ! Update mass density
@@ -1395,6 +1221,204 @@ subroutine pcs_part(s,p,ilevel,rtype)
   end associate
 
 end subroutine pcs_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function pcs_weight(wll,wl,wr,wrr)
+  use amr_parameters, only: dp, ndim, fourtondim
+  real(dp),dimension(1:fourtondim)::pcs_weight
+  real(dp),dimension(1:ndim)::wll,wl,wr,wrr
+#if NDIM==1
+  pcs_weight(1)=wll(1)
+  pcs_weight(2)=wl (1)
+  pcs_weight(3)=wr (1)
+  pcs_weight(4)=wrr(1)
+#endif
+#if NDIM==2
+  pcs_weight(1) =wll(1)*wll(2)
+  pcs_weight(2) =wl (1)*wll(2)
+  pcs_weight(3) =wr (1)*wll(2)
+  pcs_weight(4) =wrr(1)*wll(2)
+  pcs_weight(5) =wll(1)*wl (2)
+  pcs_weight(6) =wl (1)*wl (2)
+  pcs_weight(7) =wr (1)*wl (2)
+  pcs_weight(8) =wrr(1)*wl (2)
+  pcs_weight(9) =wll(1)*wr (2)
+  pcs_weight(10)=wl (1)*wr (2)
+  pcs_weight(11)=wr (1)*wr (2)
+  pcs_weight(12)=wrr(1)*wr (2)
+  pcs_weight(13)=wll(1)*wrr(2)
+  pcs_weight(14)=wl (1)*wrr(2)
+  pcs_weight(15)=wr (1)*wrr(2)
+  pcs_weight(16)=wrr(1)*wrr(2)
+#endif
+#if NDIM==3
+  pcs_weight(1) =wll(1)*wll(2)*wll(3)
+  pcs_weight(2) =wl (1)*wll(2)*wll(3)
+  pcs_weight(3) =wr (1)*wll(2)*wll(3)
+  pcs_weight(4) =wrr(1)*wll(2)*wll(3)
+  pcs_weight(5) =wll(1)*wl (2)*wll(3)
+  pcs_weight(6) =wl (1)*wl (2)*wll(3)
+  pcs_weight(7) =wr (1)*wl (2)*wll(3)
+  pcs_weight(8) =wrr(1)*wl (2)*wll(3)
+  pcs_weight(9) =wll(1)*wr (2)*wll(3)
+  pcs_weight(10)=wl (1)*wr (2)*wll(3)
+  pcs_weight(11)=wr (1)*wr (2)*wll(3)
+  pcs_weight(12)=wrr(1)*wr (2)*wll(3)
+  pcs_weight(13)=wll(1)*wrr(2)*wll(3)
+  pcs_weight(14)=wl (1)*wrr(2)*wll(3)
+  pcs_weight(15)=wr (1)*wrr(2)*wll(3)
+  pcs_weight(16)=wrr(1)*wrr(2)*wll(3)
+  pcs_weight(17)=wll(1)*wll(2)*wl (3)
+  pcs_weight(18)=wl (1)*wll(2)*wl (3)
+  pcs_weight(19)=wr (1)*wll(2)*wl (3)
+  pcs_weight(20)=wrr(1)*wll(2)*wl (3)
+  pcs_weight(21)=wll(1)*wl (2)*wl (3)
+  pcs_weight(22)=wl (1)*wl (2)*wl (3)
+  pcs_weight(23)=wr (1)*wl (2)*wl (3)
+  pcs_weight(24)=wrr(1)*wl (2)*wl (3)
+  pcs_weight(25)=wll(1)*wr (2)*wl (3)
+  pcs_weight(26)=wl (1)*wr (2)*wl (3)
+  pcs_weight(27)=wr (1)*wr (2)*wl (3)
+  pcs_weight(28)=wrr(1)*wr (2)*wl (3)
+  pcs_weight(29)=wll(1)*wrr(2)*wl (3)
+  pcs_weight(30)=wl (1)*wrr(2)*wl (3)
+  pcs_weight(31)=wr (1)*wrr(2)*wl (3)
+  pcs_weight(32)=wrr(1)*wrr(2)*wl (3)
+  pcs_weight(33)=wll(1)*wll(2)*wr (3)
+  pcs_weight(34)=wl (1)*wll(2)*wr (3)
+  pcs_weight(35)=wr (1)*wll(2)*wr (3)
+  pcs_weight(36)=wrr(1)*wll(2)*wr (3)
+  pcs_weight(37)=wll(1)*wl (2)*wr (3)
+  pcs_weight(38)=wl (1)*wl (2)*wr (3)
+  pcs_weight(39)=wr (1)*wl (2)*wr (3)
+  pcs_weight(40)=wrr(1)*wl (2)*wr (3)
+  pcs_weight(41)=wll(1)*wr (2)*wr (3)
+  pcs_weight(42)=wl (1)*wr (2)*wr (3)
+  pcs_weight(43)=wr (1)*wr (2)*wr (3)
+  pcs_weight(44)=wrr(1)*wr (2)*wr (3)
+  pcs_weight(45)=wll(1)*wrr(2)*wr (3)
+  pcs_weight(46)=wl (1)*wrr(2)*wr (3)
+  pcs_weight(47)=wr (1)*wrr(2)*wr (3)
+  pcs_weight(48)=wrr(1)*wrr(2)*wr (3)
+  pcs_weight(49)=wll(1)*wll(2)*wrr(3)
+  pcs_weight(50)=wl (1)*wll(2)*wrr(3)
+  pcs_weight(51)=wr (1)*wll(2)*wrr(3)
+  pcs_weight(52)=wrr(1)*wll(2)*wrr(3)
+  pcs_weight(53)=wll(1)*wl (2)*wrr(3)
+  pcs_weight(54)=wl (1)*wl (2)*wrr(3)
+  pcs_weight(55)=wr (1)*wl (2)*wrr(3)
+  pcs_weight(56)=wrr(1)*wl (2)*wrr(3)
+  pcs_weight(57)=wll(1)*wr (2)*wrr(3)
+  pcs_weight(58)=wl (1)*wr (2)*wrr(3)
+  pcs_weight(59)=wr (1)*wr (2)*wrr(3)
+  pcs_weight(60)=wrr(1)*wr (2)*wrr(3)
+  pcs_weight(61)=wll(1)*wrr(2)*wrr(3)
+  pcs_weight(62)=wl (1)*wrr(2)*wrr(3)
+  pcs_weight(63)=wr (1)*wrr(2)*wrr(3)
+  pcs_weight(64)=wrr(1)*wrr(2)*wrr(3)
+#endif
+end function pcs_weight
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function pcs_index(cll,cl,cr,crr)
+  use amr_parameters, only: ndim, fourtondim
+  integer,dimension(1:ndim,1:fourtondim)::pcs_index
+  integer,dimension(1:ndim)::cll,cl,cr,crr
+#if NDIM==1
+  pcs_index(1,1)=cll(1)
+  pcs_index(1,2)=cl (1)
+  pcs_index(1,3)=cr (1)
+  pcs_index(1,4)=crr(1)
+#endif
+#if NDIM==2
+  pcs_index(1:2,1) =(/cll(1),cll(2)/)
+  pcs_index(1:2,2) =(/cl (1),cll(2)/)
+  pcs_index(1:2,3) =(/cr (1),cll(2)/)
+  pcs_index(1:2,4) =(/crr(1),cll(2)/)
+  pcs_index(1:2,5) =(/cll(1),cl (2)/)
+  pcs_index(1:2,6) =(/cl (1),cl (2)/)
+  pcs_index(1:2,7) =(/cr (1),cl (2)/)
+  pcs_index(1:2,8) =(/crr(1),cl (2)/)
+  pcs_index(1:2,9) =(/cll(1),cr (2)/)
+  pcs_index(1:2,10)=(/cl (1),cr (2)/)
+  pcs_index(1:2,11)=(/cr (1),cr (2)/)
+  pcs_index(1:2,12)=(/crr(1),cr (2)/)
+  pcs_index(1:2,13)=(/cll(1),crr(2)/)
+  pcs_index(1:2,14)=(/cl (1),crr(2)/)
+  pcs_index(1:2,15)=(/cr (1),crr(2)/)
+  pcs_index(1:2,16)=(/crr(1),crr(2)/)
+#endif
+#if NDIM==3
+  pcs_index(1:3,1) =(/cll(1),cll(2),cll(3)/)
+  pcs_index(1:3,2) =(/cl (1),cll(2),cll(3)/)
+  pcs_index(1:3,3) =(/cr (1),cll(2),cll(3)/)
+  pcs_index(1:3,4) =(/crr(1),cll(2),cll(3)/)
+  pcs_index(1:3,5) =(/cll(1),cl (2),cll(3)/)
+  pcs_index(1:3,6) =(/cl (1),cl (2),cll(3)/)
+  pcs_index(1:3,7) =(/cr (1),cl (2),cll(3)/)
+  pcs_index(1:3,8) =(/crr(1),cl (2),cll(3)/)
+  pcs_index(1:3,9) =(/cll(1),cr (2),cll(3)/)
+  pcs_index(1:3,10)=(/cl (1),cr (2),cll(3)/)
+  pcs_index(1:3,11)=(/cr (1),cr (2),cll(3)/)
+  pcs_index(1:3,12)=(/crr(1),cr (2),cll(3)/)
+  pcs_index(1:3,13)=(/cll(1),crr(2),cll(3)/)
+  pcs_index(1:3,14)=(/cl (1),crr(2),cll(3)/)
+  pcs_index(1:3,15)=(/cr (1),crr(2),cll(3)/)
+  pcs_index(1:3,16)=(/crr(1),crr(2),cll(3)/)
+  pcs_index(1:3,17)=(/cll(1),cll(2),cl (3)/)
+  pcs_index(1:3,18)=(/cl (1),cll(2),cl (3)/)
+  pcs_index(1:3,19)=(/cr (1),cll(2),cl (3)/)
+  pcs_index(1:3,20)=(/crr(1),cll(2),cl (3)/)
+  pcs_index(1:3,21)=(/cll(1),cl (2),cl (3)/)
+  pcs_index(1:3,22)=(/cl (1),cl (2),cl (3)/)
+  pcs_index(1:3,23)=(/cr (1),cl (2),cl (3)/)
+  pcs_index(1:3,24)=(/crr(1),cl (2),cl (3)/)
+  pcs_index(1:3,25)=(/cll(1),cr (2),cl (3)/)
+  pcs_index(1:3,26)=(/cl (1),cr (2),cl (3)/)
+  pcs_index(1:3,27)=(/cr (1),cr (2),cl (3)/)
+  pcs_index(1:3,28)=(/crr(1),cr (2),cl (3)/)
+  pcs_index(1:3,29)=(/cll(1),crr(2),cl (3)/)
+  pcs_index(1:3,30)=(/cl (1),crr(2),cl (3)/)
+  pcs_index(1:3,31)=(/cr (1),crr(2),cl (3)/)
+  pcs_index(1:3,32)=(/crr(1),crr(2),cl (3)/)
+  pcs_index(1:3,33)=(/cll(1),cll(2),cr (3)/)
+  pcs_index(1:3,34)=(/cl (1),cll(2),cr (3)/)
+  pcs_index(1:3,35)=(/cr (1),cll(2),cr (3)/)
+  pcs_index(1:3,36)=(/crr(1),cll(2),cr (3)/)
+  pcs_index(1:3,37)=(/cll(1),cl (2),cr (3)/)
+  pcs_index(1:3,38)=(/cl (1),cl (2),cr (3)/)
+  pcs_index(1:3,39)=(/cr (1),cl (2),cr (3)/)
+  pcs_index(1:3,40)=(/crr(1),cl (2),cr (3)/)
+  pcs_index(1:3,41)=(/cll(1),cr (2),cr (3)/)
+  pcs_index(1:3,42)=(/cl (1),cr (2),cr (3)/)
+  pcs_index(1:3,43)=(/cr (1),cr (2),cr (3)/)
+  pcs_index(1:3,44)=(/crr(1),cr (2),cr (3)/)
+  pcs_index(1:3,45)=(/cll(1),crr(2),cr (3)/)
+  pcs_index(1:3,46)=(/cl (1),crr(2),cr (3)/)
+  pcs_index(1:3,47)=(/cr (1),crr(2),cr (3)/)
+  pcs_index(1:3,48)=(/crr(1),crr(2),cr (3)/)
+  pcs_index(1:3,49)=(/cll(1),cll(2),crr(3)/)
+  pcs_index(1:3,50)=(/cl (1),cll(2),crr(3)/)
+  pcs_index(1:3,51)=(/cr (1),cll(2),crr(3)/)
+  pcs_index(1:3,52)=(/crr(1),cll(2),crr(3)/)
+  pcs_index(1:3,53)=(/cll(1),cl (2),crr(3)/)
+  pcs_index(1:3,54)=(/cl (1),cl (2),crr(3)/)
+  pcs_index(1:3,55)=(/cr (1),cl (2),crr(3)/)
+  pcs_index(1:3,56)=(/crr(1),cl (2),crr(3)/)
+  pcs_index(1:3,57)=(/cll(1),cr (2),crr(3)/)
+  pcs_index(1:3,58)=(/cl (1),cr (2),crr(3)/)
+  pcs_index(1:3,59)=(/cr (1),cr (2),crr(3)/)
+  pcs_index(1:3,60)=(/crr(1),cr (2),crr(3)/)
+  pcs_index(1:3,61)=(/cll(1),crr(2),crr(3)/)
+  pcs_index(1:3,62)=(/cl (1),crr(2),crr(3)/)
+  pcs_index(1:3,63)=(/cr (1),crr(2),crr(3)/)
+  pcs_index(1:3,64)=(/crr(1),crr(2),crr(3)/)
+#endif
+end function pcs_index
 !################################################################
 !################################################################
 !################################################################
