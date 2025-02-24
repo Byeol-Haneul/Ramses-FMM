@@ -1130,6 +1130,7 @@ subroutine unpack_flush_rho(grid,msg_size,msg_array,hash_key)
 #endif
 
 end subroutine unpack_flush_rho
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -1150,7 +1151,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      call r_split_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call split_part(pst%s,pst%s%p,ilevel)
+                     call split_part(pst%s,pst%s%p   ,ilevel)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
@@ -1457,7 +1458,6 @@ recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
   endif
 
 end subroutine r_broadcast_multipole
-#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################

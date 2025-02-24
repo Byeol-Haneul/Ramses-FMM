@@ -112,8 +112,10 @@ module cache_commons
   type msg_tree_clump
      integer::id
      integer::lev
+     real(kind=dp)::mass
      real(kind=dp),dimension(1:ndim)::pos
      real(kind=dp),dimension(1:ndim)::vel
+     real(kind=dp),dimension(1:ndim)::acc
   end type msg_tree_clump
   type msg_tree_minid
      integer::id
