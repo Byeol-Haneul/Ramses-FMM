@@ -58,7 +58,7 @@ contains
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine update_rt_var(pst, ilevel)
+subroutine m_update_rt_var(pst, ilevel)
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -80,7 +80,7 @@ subroutine update_rt_var(pst, ilevel)
 
   if(cont) call r_update_rt_var(pst, pst%s%g%nstep_coarse, 1)
 
-end subroutine update_rt_var
+end subroutine m_update_rt_var
 !##############################################################
 !##############################################################
 !##############################################################

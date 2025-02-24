@@ -34,7 +34,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use rt_star_feedback
   use rt_step_module, only: m_rt_step
-  use update_rt_c_module, only: update_rt_var
+  use update_rt_c_module, only: m_update_rt_var
 
   implicit none
 
@@ -319,7 +319,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
      call m_timer(pst,'rt - updates','start')
      ! Updates time-dependent RT variables
-     call update_rt_var(pst,ilevel)
+     call m_update_rt_var(pst,ilevel)
   endif
 
   !------------------------
