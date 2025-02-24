@@ -9,7 +9,7 @@ parser.add_argument("nout", help="enter output number")
 parser.add_argument("--path", help="specify a path")
 parser.add_argument("--log", help="plot log variable",action="store_true")
 parser.add_argument("--out", help="output a png image")
-parser.add_argument("--pref", help="specify a file prefix")
+parser.add_argument("--prefix", help="specify a file prefix")
 parser.add_argument("--min", help="specify a minimum variable value")
 parser.add_argument("--max", help="specify a maximum variable value")
 parser.add_argument("--var", help="specify a variable number")
@@ -23,7 +23,7 @@ parser.add_argument("--dir", help="specify the projection axis")
 args = parser.parse_args()
 # path the the file
 path = args.path
-prefix = args.pref
+prefix = args.prefix
 ivar = args.var
 vmin = args.min
 vmax = args.max
