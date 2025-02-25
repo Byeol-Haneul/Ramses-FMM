@@ -79,9 +79,8 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   real(dp),dimension(1:ndim)::vv,v_rel,x_acc,p_acc,l_acc,vel_gas
   type(oct),pointer::gridn
   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,d_acc,m_gas,bondi_mass
-  real(dp)::rho_inf!,dMdt_freefall,t_ff
+  real(dp)::rho_inf,weighted_bondi!,dMdt_freefall,t_ff
   type(msg_large_realdp)::dummy_large_realdp
-  real(dp)::total_weight
 
 #ifdef HYDRO
 #if NDIM==3
@@ -151,13 +150,9 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         write(*,*)'This is an unknown B-spline order'
         ckeynei = -1 ! To cause a seg-fault
      end if
-     total_weight=0d0
-     do j = 1,nBHnei
-        total_weight = total_weight + vol(j)
-     end do
 
      ! Initialise sink information at zero
-     rho_gas=0d0; vel_gas=0d0; cs_gas=0d0; m_gas=0d0
+     rho_gas=0d0; vel_gas=0d0; cs_gas=0d0; m_gas=0d0; weighted_bondi=0d0
 
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      ! Collect local gas information
@@ -183,7 +178,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         if(.not.associated(gridn))cycle
 
         ! Get the B-spline weights for this cell (they should already be normalised)
-        weight = vol(j) / total_weight
+        weight = vol(j)
 
         ! Get physical information
         d                = max(gridn%uold(icelln,1),r%smallr)
@@ -199,46 +194,72 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         vel_gas(1:ndim)  = vel_gas(1:ndim) + vv(1:ndim) * weight
         cs_gas           = cs_gas          + cs         * weight
         m_gas            = m_gas           + d          * weight * vol_loc
+
+        ! Compute local bondi rate
+        !!! Compute Bondi boosts here (e.g. c_s boost due to unresolved fluctuations)
+        ! Perhaps we should model these unresolved fluctuations with a log-normal distribution, with uncertainty given by sigma_v (as in star-formation routines)
+        if(r%use_local_bondi_rate)then
+           v_rel(1:ndim) = vv(1:ndim) - p%vp(ipart,1:ndim)
+           if(r%bondi_use_vrel)then
+              v_bondi    = sqrt(sum(v_rel(:)**2) + cs**2)
+           else
+              v_bondi    = cs
+           end if
+           if(r%bondi_use_gas_mass)then
+              bondi_mass = p%mp(ipart) + d*vol_loc ! can add a check for m_gas > M_sink
+           else
+              bondi_mass = p%mp(ipart)
+           end if
+           r2_sink     = (factG * bondi_mass / v_bondi**2)**2
+           xrel(1:ndim) = xnei(1:ndim) - xcen(1:ndim) 
+           rho_inf = d / (bondi_alpha(sqrt(sum(xrel(:)**2))/(r2_sink+tiny(0.0_dp))**0.5d0))
+           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi
+           weighted_bondi = weighted_bondi + dMBH_overdt*weight
+        end if
      end do
 
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      ! Compute overall accretion rate
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
-     !!! Compute Bondi boosts here (e.g. c_s boost due to unresolved fluctuations)
+     
 
      !!! Compute BHL accretion rate
-     ! Bondi velocity
-     v_rel(1:ndim) = vel_gas(1:ndim) - p%vp(ipart,1:ndim)
-     if(r%bondi_use_vrel)then
-        velocity   = sqrt(sum(v_rel(:)**2))
-        v_bondi    = sqrt(velocity**2 + cs**2)
+     if(r%use_local_bondi_rate)then
+        dMBH_overdt = weighted_bondi
      else
-        v_bondi    = sqrt(cs**2)
+        ! Bondi velocity
+        v_rel(1:ndim) = vel_gas(1:ndim) - p%vp(ipart,1:ndim)
+        if(r%bondi_use_vrel)then
+           velocity   = sum(v_rel(:)**2)
+           v_bondi    = sqrt(velocity + cs**2)
+        else
+           v_bondi    = cs
+        end if
+
+        ! Bondi mass
+        if(r%bondi_use_gas_mass)then
+           bondi_mass = p%mp(ipart) + m_gas ! can add a check for m_gas > M_sink
+        else
+           bondi_mass = p%mp(ipart)
+        end if
+
+        ! Bondi radius
+        r2_sink     = (factG * bondi_mass / v_bondi**2)**2
+
+        ! Density at infinity (using extrapolation)
+        rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+
+        ! Bondi-Hoyle-Lyttleton accretion rate
+        dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi
      end if
-
-     ! Bondi mass
-     if(r%bondi_use_gas_mass)then
-        bondi_mass = p%mp(ipart) + m_gas ! can add a check for m_gas > M_sink
-     else
-        bondi_mass = p%mp(ipart)
-     end if
-
-     ! Bondi radius
-     r2_sink     = (factG * bondi_mass / v_bondi**2)**2
-
-     ! Density at infinity (using extrapolation)
-     rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
-
-     ! Bondi-Hoyle-Lyttleton accretion rate
-     dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi
 
      ! Eddington accretion rate, which introduces an optional cap
      dMEd_overdt = 4.0d0 * pi * factG_in_cgs * p%mp(ipart) * mH / (0.1d0 * sigma_T * c_cgs) * scale_t
      if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
 
      if(r%verbose_sink)then
-        write(*,*)'Sink properties:',rho_gas,cs_gas,v_bondi,r2_sink,total_weight
+        write(*,*)'Sink properties:',rho_gas,cs_gas,v_bondi,r2_sink
      end if
 
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -271,7 +292,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         ! We need to remove all non-thermal energies as they are not accreted
 
         ! Get the weight for this cell based on the B-spline interpolation
-        weight = vol(j) / total_weight
+        weight = vol(j)
 
         ! Get accreted mass for this cell
         d_acc = dMBH_overdt * g%dtnew(p%levelp(ipart)) * weight / vol_loc

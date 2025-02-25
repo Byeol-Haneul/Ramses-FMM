@@ -328,6 +328,7 @@ subroutine m_read_params(pst)
   integer::sink_b_spline_order = 4 ! Order of B-spline interpolation used for sink accretion and dynamics
   logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
   logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
+  logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -430,7 +431,8 @@ subroutine m_read_params(pst)
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
        & ,accretion_type,sink_accretion_radius,acc_sink_boost,bondi_use_vrel,accretion_method &
-       & ,eddington_cap,form_sinks,sink_b_spline_order,verbose_sink,bondi_use_gas_mass
+       & ,eddington_cap,form_sinks,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
+       & ,use_local_bondi_rate
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -1058,6 +1060,7 @@ subroutine m_read_params(pst)
   s%r%sink_b_spline_order = sink_b_spline_order
   s%r%verbose_sink = verbose_sink
   s%r%bondi_use_gas_mass = bondi_use_gas_mass
+  s%r%use_local_bondi_rate = use_local_bondi_rate
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format
