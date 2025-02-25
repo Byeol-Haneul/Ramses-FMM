@@ -227,7 +227,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         ok   = gridp%flag1(icell)==0 .and. &
              & gridp%refined(icell)
         if(ok)then
-#ifdef RT
            if(r%neq_chem .and. r%upload_equilibrium_x .and. g%nstep_coarse.ne.0) then
               ! Enforce equilibrium on ionization states when merging, to
               ! prevent unnatural values (e.g when merging hot and cold cells).
@@ -235,7 +234,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
               call calc_equilibrium_xion(s, gridp, icell, xion)
               gridp%uold(icell,r%iIons:r%iIons+nion-1)=xion*gridp%uold(icell,1)
             endif
-#endif
            ! Set grid level to zero
            m%grid(ioct)%lev=0
            ! Set parent cell to "unrefined" status
