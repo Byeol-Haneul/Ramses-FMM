@@ -192,7 +192,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         vv(3)            =     gridn%uold(icelln,4)/d
         e                =     gridn%uold(icelln,5)
         ethermal         = (e - 0.5d0*d*sum(vv(:)**2)) / d
-        cs               = max((r%gamma-1.0d0)*ethermal,r%smallc**2)!*boost**(-2d0/3d0)
+        cs               = max((r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0)
 
         ! Add to average (weighted) information
         rho_gas          = rho_gas         + d          * weight
