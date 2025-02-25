@@ -96,7 +96,7 @@ recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
      endif
 
      ! Update UV background constants for metal cooling
-     if(r%cosmo)call update_metal_cooling(r, s%tables, dble(g%aexp))
+     if(r%cosmo)call update_metal_cooling(s%tables, dble(g%aexp))
 
      if(r%rt_advect .and. r%rt_emission_stats .and. r%rt_star) &
         call output_photon_emission_stats(r,g)

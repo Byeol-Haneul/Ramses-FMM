@@ -544,7 +544,7 @@ contains
        dCdT2 = dCdT2 * mu                            ! dC/dT2 = mu * dC/dT
        metal_tot=0d0 ; metal_prime=0d0                     ! Metal cooling
        if(Zsolar(icell) .gt. 0d0) &
-            call neq_cmp_metals(r, tables, T2(icell), nH(icell), mu,      &
+            call neq_cmp_metals(tables, T2(icell), nH(icell), mu,        &
             &                  metal_tot, metal_prime)
        X_nHkb = r%X_H/(1.5 * nH(icell) * kB)        ! Multiplication factor
        rate  = X_nHkb*(Hrate - Crate - Zsolar(icell)*metal_tot)
@@ -979,7 +979,6 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
      endif ! if(isH2)
      n_HI  = nH / (1d0 + f_HII + 2d0*f_H2)
      n_HII = nH / (1d0 + 1d0/f_HII + 2d0*f_H2/f_HII)
-
      if(r%isHe) then
         D_HeI   = b_HEI*n_E_min  + g_HEI               !  HeI destr. (s-1)
         if(r%cosmic_rays) D_HeI = D_HeI + 1.1 * cosray_HI
@@ -988,7 +987,7 @@ SUBROUTINE cmp_chem_eq(r, tables, TK, nH, t_rad_spec, nSpec, nTot, mu, Zsol)
         f_HeIII = a_HeII * n_E_min / C_HeIII       !  Destr/Cre [unitless]
 
         n_HEI   = nHe / (1d0 + f_HeI + f_HeI/max(f_HeIII,1d-99))
-        n_HEII  = nHe / (1d0 + 1d0/f_HeI + 1d0/max(f_HeIII,1d-99))
+        n_HEII  = nHe / (1d0 + 1d0/max(f_HeI,1d-99) + 1d0/max(f_HeIII,1d-99))
         n_HEIII = nHe / (1d0 + f_HeIII + f_HeIII/max(f_HeI,1d-99))
      endif ! if(isHe)
 
@@ -1119,12 +1118,11 @@ FUNCTION HsurH0(z,omega0,omegaL,OmegaR)
 END FUNCTION HsurH0
 
 !=========================================================================
-subroutine update_metal_cooling(r, tables, aexp)
+subroutine update_metal_cooling(tables, aexp)
   ! Compute the UV background effect on metal cooling
   ! as calibrated on Cloudy
   !-------------------------------------------------------------------------
   implicit none
-  type(run_t)::r
   type(neq_cooling_t)::tables
   real(kind=8)::aexp
   !-------------------------------------------------------------------------
@@ -1162,7 +1160,7 @@ subroutine update_metal_cooling(r, tables, aexp)
 end subroutine update_metal_cooling
 
 !=========================================================================
-subroutine neq_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
+subroutine neq_cmp_metals(tables, T2, nH, mu, metal_tot, metal_prime)
   ! Taken from the equilibrium cooling_module of RAMSES
   ! Compute cooling enhancement due to metals
   ! T2           => Temperature in Kelvin, divided by mu
@@ -1172,7 +1170,6 @@ subroutine neq_cmp_metals(r, tables, T2, nH, mu, metal_tot, metal_prime)
   ! metal_prime <=  d(metal_tot)/dT2 [erg s-1 cm-3 K-1]
   !=========================================================================
   implicit none
-  type(run_t)::r
   type(neq_cooling_t)::tables
   real(kind=8) ::T2, nH, mu, metal_tot, metal_prime
   ! Cloudy at solar metalicity
