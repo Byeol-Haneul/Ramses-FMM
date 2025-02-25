@@ -296,6 +296,7 @@ module amr_commons
      integer::sink_b_spline_order = 4 ! Order of B-spline interpolation used for sink accretion and dynamics
      logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
      logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
+     logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format
