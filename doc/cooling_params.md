@@ -23,6 +23,7 @@ The namelist block `&COOLING_PARAMS` is used to specify parameters controlling g
 | `T2max`             | `real`     | 1d50    | Maximum temperature (T/mu in units of [K]) allowed in the cooling routine. If for some reason `T2>T2max`, then the code resets `T2=T2max` in the corresponding cell. |
 | `neq_Tconst`        | `real`     | -1      | If positive, set the value of the constant gas temperature for non-equilibrium chemistry. |
 | `is_init_xion`      | `logical`  |`.false.`| Turn on or off equilibrium abundances for non-equilibrium chemistry initial conditions. |
+| `upload_equilibrium_x` | `logical`  |`.true.`| Set photoionisation equilibrium ionisation fractions in the parent cell when de-refining. This is to avoid unnatural emission rates which can occur when the children ionization fractions are averaged (relevant mostly for mock observations) |
 | `isHe`              | `logical`  |`.false.`| Turn on or off non-equilibrium chemistry for Helium. |
 | `isH2`              | `logical`  |`.false.`| Turn on or off non-equilibrium chemistry for H2 molecule. |
 
