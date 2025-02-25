@@ -1,6 +1,7 @@
 module hydro_integrator
    use amr_parameters, only: dp
    use gpu_utils, only: subgrid_8x8x8cell_conserved, subgrid_8x8x8cell_primitive
+   use oct_commons, only: oct
    use cudafor
    implicit none
 
@@ -217,8 +218,9 @@ contains
    !> @param[in] gamma : The adiabatic index
    !> @param[out] local_subgrid : The local subgrid in shared memory to write the primitive variables to
    !>
-   attributes(device) subroutine subgrid_conserved_2_primitive(conserved_subgrids, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
-      type(subgrid_8x8x8cell_conserved), device, dimension(*) :: conserved_subgrids
+   attributes(device) subroutine subgrid_conserved_2_primitive(oct_grid, subgrid_indices, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+      type(oct), device, dimension(*) :: oct_grid
+      integer, device, dimension(4,4,4,*) :: subgrid_indices
       integer, value :: block_idx, thread_idx
       integer, value :: subgrid_size
       real(kind=dp), value :: gamma
@@ -226,28 +228,38 @@ contains
       type(conserved_t) :: conserved ! object to hold the conserved variables
       type(primitive_t) :: primitive ! object to hold the primitive variables
       integer :: work_idx   ! Loop index for unit of work
-      integer :: i, j, k    ! Cell indices
+      integer :: i, j, k, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx, cell_idx, source_idx    ! Cell indices
 
       do work_idx = thread_idx, subgrid_size**3 - 1, blockDim%x
-         ! Compute the 3D indices
-         call index_1Dto3D(work_idx, subgrid_size, subgrid_size, i, j, k)
+         ! Compute the subgrid_indices index, i.e. determine the oct to load
+         call index_1Dto3D(work_idx/8, subgrid_size/2, subgrid_size/2, i_subgrid_idx, j_subgrid_idx, k_subgrid_idx)
+         source_idx = subgrid_indices(i_subgrid_idx+1, j_subgrid_idx+1, k_subgrid_idx+1, block_idx)
 
-         ! Load cells
-         conserved%density = conserved_subgrids(block_idx)%density(i, j, k)
-         conserved%momentum_x = conserved_subgrids(block_idx)%momentum_x(i, j, k)
-         conserved%momentum_y = conserved_subgrids(block_idx)%momentum_y(i, j, k)
-         conserved%momentum_z = conserved_subgrids(block_idx)%momentum_z(i, j, k)
-         conserved%energy = conserved_subgrids(block_idx)%energy(i, j, k)
+         ! Now that we have the index to the oct we need to figure out which cell within it to load 
+         cell_idx = mod(work_idx, 8) + 1
+         
+         ! Lastly, we need to figure out where in the subgrid the cell we will load goes
+         call index_1Dto3D(cell_idx-1, 2, 2, i, j, k)
+         i = i + 2*i_subgrid_idx
+         j = j + 2*j_subgrid_idx
+         k = k + 2*k_subgrid_idx
+         
+         ! Load the cell
+         conserved%density    = oct_grid(source_idx)%uold(cell_idx, 1)
+         conserved%momentum_x = oct_grid(source_idx)%uold(cell_idx, 2)
+         conserved%momentum_y = oct_grid(source_idx)%uold(cell_idx, 3)
+         conserved%momentum_z = oct_grid(source_idx)%uold(cell_idx, 4)
+         conserved%energy     = oct_grid(source_idx)%uold(cell_idx, 5)
 
          ! Convert to primitive variables
          primitive = conserved_2_primitive(conserved, gamma)
 
          ! Write primitives cells to shared memory
-         local_subgrid%density(i, j, k) = primitive%density
+         local_subgrid%density   (i, j, k) = primitive%density
          local_subgrid%velocity_x(i, j, k) = primitive%velocity_x
          local_subgrid%velocity_y(i, j, k) = primitive%velocity_y
          local_subgrid%velocity_z(i, j, k) = primitive%velocity_z
-         local_subgrid%pressure(i, j, k) = primitive%pressure
+         local_subgrid%pressure  (i, j, k) = primitive%pressure
       end do
 
       call syncthreads()
@@ -616,8 +628,9 @@ contains
    ! =========================================================================
 
    ! =========================================================================
-   attributes(device) subroutine  conservative_update(conserved_subgrids, fluxes_x, fluxes_y, fluxes_z, block_idx, thread_idx, subgrid_size, dtdx)
-   type(subgrid_8x8x8cell_conserved), device, dimension(*) :: conserved_subgrids
+   attributes(device) subroutine  conservative_update(oct_grid, subgrid_indices, fluxes_x, fluxes_y, fluxes_z, block_idx, thread_idx, subgrid_size, dtdx)
+   type(oct), device, dimension(*) :: oct_grid
+   integer, device, dimension(4,4,4,*) :: subgrid_indices
    type(subgrid_5x4x4cell_primitive), intent(in) :: fluxes_x
    type(subgrid_4x5x4cell_primitive), intent(in) :: fluxes_y
    type(subgrid_4x4x5cell_primitive), intent(in) :: fluxes_z
@@ -625,8 +638,8 @@ contains
    real(kind=dp), value :: dtdx
 
    integer :: work_idx   ! Loop index for unit of work
-   integer :: i, j, k    ! Cell indices
-   integer :: work_size
+   integer :: i, j, k, i_subgrid, j_subgrid, k_subgrid    ! Cell indices
+   integer :: work_size, oct_grid_index, cell_idx
    type(conserved_t) :: update_term
 
    ! Compute the size of the section of the subgrid to operate on
@@ -636,14 +649,29 @@ contains
    do work_idx = thread_idx, work_size**3 - 1, blockDim%x
       call index_1Dto3D(work_idx, work_size, work_size, i, j, k)
 
+      ! Compute the index within the indices array to load
+      call index_1Dto3D(work_idx/8, subgrid_size/4, subgrid_size/4, i_subgrid, j_subgrid, k_subgrid)
+      i_subgrid = i_subgrid + 2
+      j_subgrid = j_subgrid + 2
+      k_subgrid = k_subgrid + 2
+      oct_grid_index = subgrid_indices(i_subgrid,j_subgrid,k_subgrid,block_idx)
+      
+      ! Compute the cell_idx
+      cell_idx = mod(work_idx, 8) + 1
+
+      ! Compute the flux indices
+      call index_1Dto3D(cell_idx-1, 2, 2,i,j,k)
+      i = i + 2*i_subgrid - 4
+      j = j + 2*j_subgrid - 4
+      k = k + 2*k_subgrid - 4
+
       ! Gather the fluxes, computing the update term as we go. Note that the flux 
       ! variables names are the primitive names but the actual variables are the 
       ! conserved variables, this is because we're reuseing the interface state 
       ! array to store this fluxes. 
 
       ! X component
-
-      update_term%density    = fluxes_x%density   (i, j, k)  - fluxes_x%density   (i+1, j, k)
+      update_term%density    = (fluxes_x%density   (i, j, k) - fluxes_x%density   (i+1, j, k))
       update_term%momentum_x = (fluxes_x%velocity_x(i, j, k) - fluxes_x%velocity_x(i+1, j, k))
       update_term%momentum_y = (fluxes_x%velocity_y(i, j, k) - fluxes_x%velocity_y(i+1, j, k))
       update_term%momentum_z = (fluxes_x%velocity_z(i, j, k) - fluxes_x%velocity_z(i+1, j, k))
@@ -663,12 +691,12 @@ contains
       update_term%momentum_z = (fluxes_z%velocity_z(i, j, k) - fluxes_z%velocity_z(i, j, k+1)) + update_term%momentum_z
       update_term%energy     = (fluxes_z%pressure  (i, j, k) - fluxes_z%pressure  (i, j, k+1)) + update_term%energy
 
-      ! Conservative update. Note that in this code dt/dx = dt/dy = dt/dz in call cases
-      conserved_subgrids(block_idx)%density   (i+2, j+2, k+2) = conserved_subgrids(block_idx)%density   (i+2, j+2, k+2) + dtdx * update_term%density
-      conserved_subgrids(block_idx)%momentum_x(i+2, j+2, k+2) = conserved_subgrids(block_idx)%momentum_x(i+2, j+2, k+2) + dtdx * update_term%momentum_x
-      conserved_subgrids(block_idx)%momentum_y(i+2, j+2, k+2) = conserved_subgrids(block_idx)%momentum_y(i+2, j+2, k+2) + dtdx * update_term%momentum_y
-      conserved_subgrids(block_idx)%momentum_z(i+2, j+2, k+2) = conserved_subgrids(block_idx)%momentum_z(i+2, j+2, k+2) + dtdx * update_term%momentum_z
-      conserved_subgrids(block_idx)%energy    (i+2, j+2, k+2) = conserved_subgrids(block_idx)%energy    (i+2, j+2, k+2) + dtdx * update_term%energy
+      ! Conservative update. Note that in this code dt/dx = dt/dy = dt/dz in all cases
+      oct_grid(oct_grid_index)%unew(cell_idx, 1) = oct_grid(oct_grid_index)%uold(cell_idx, 1) + dtdx * update_term%density
+      oct_grid(oct_grid_index)%unew(cell_idx, 2) = oct_grid(oct_grid_index)%uold(cell_idx, 2) + dtdx * update_term%momentum_x
+      oct_grid(oct_grid_index)%unew(cell_idx, 3) = oct_grid(oct_grid_index)%uold(cell_idx, 3) + dtdx * update_term%momentum_y
+      oct_grid(oct_grid_index)%unew(cell_idx, 4) = oct_grid(oct_grid_index)%uold(cell_idx, 4) + dtdx * update_term%momentum_z
+      oct_grid(oct_grid_index)%unew(cell_idx, 5) = oct_grid(oct_grid_index)%uold(cell_idx, 5) + dtdx * update_term%energy
 
    end do
 
@@ -676,8 +704,9 @@ contains
    ! =========================================================================
 
    ! =========================================================================
-   attributes(global) subroutine hydro_integrator_kernel(conserved_subgrids, num_subgrids, subgrid_size, gamma, dtdx)
-      type(subgrid_8x8x8cell_conserved), device, dimension(*) :: conserved_subgrids
+   attributes(global) subroutine hydro_integrator_kernel(oct_grid, subgrid_indices, num_subgrids, subgrid_size, gamma, dtdx)
+      type(oct), device, dimension(*) :: oct_grid
+      integer, device, dimension(4,4,4,*) :: subgrid_indices
       integer(kind=8), intent(in), value :: num_subgrids
       integer, intent(in), value :: subgrid_size
       real(kind=dp), intent(in), value:: gamma
@@ -699,7 +728,7 @@ contains
       ! =======================================================================
       ! Convert from conserved to primitive variables
       ! =======================================================================
-      call subgrid_conserved_2_primitive(conserved_subgrids, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
+      call subgrid_conserved_2_primitive(oct_grid, subgrid_indices, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
 
       ! =======================================================================
       ! Perform tracing step and compute the interface states
@@ -719,7 +748,7 @@ contains
       ! =======================================================================
       ! Update the conserved variables
       ! =======================================================================
-      call conservative_update(conserved_subgrids, left_interfaces_x, left_interfaces_y, left_interfaces_z, block_idx, thread_idx, subgrid_size, dtdx)
+      call conservative_update(oct_grid, subgrid_indices, left_interfaces_x, left_interfaces_y, left_interfaces_z, block_idx, thread_idx, subgrid_size, dtdx)
 
    end subroutine hydro_integrator_kernel
    ! =========================================================================
