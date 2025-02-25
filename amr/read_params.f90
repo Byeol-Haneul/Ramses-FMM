@@ -322,7 +322,7 @@ subroutine m_read_params(pst)
   real(kind=8) ::X_H=0.7600d0     !                Hydrogen mass fraction
   real(kind=8) ::Y_He=0.2400d0    !                  Helium mass fraction
   integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !   Ionization indices
-  real(kind=8),dimension(nion)::ionEvs             !  Ionization energies
+  real(kind=8),dimension(nion)::ionEvs=0.          !  Ionization energies
   integer::icount
 
   ! Star formation parameters
@@ -846,7 +846,7 @@ subroutine m_read_params(pst)
   ! fractions, and ionization energies, and check if we have enough
   ! ionization variables (NION)
   !----------------------------------------------------------------
-  if(neq_chem) then
+  if(nion.gt.0) then
      iCount=0
      ! HI fraction and ionization energy
      if(isH2) then
