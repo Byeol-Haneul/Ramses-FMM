@@ -254,6 +254,7 @@ module amr_commons
      real(kind=8),dimension(nIon)::ionEvs             !                   Ionization energies
      real(dp)::neq_Tconst=-1           ! If positive use this value for all T-dependent rates
      logical::neq_isTconst=.false.                    !             Constant rates activated?
+     logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
 
      ! Star formation parameters
      integer::sf_model=1
@@ -345,7 +346,6 @@ module amr_commons
      real(dp)::rt_pressBoost=1d0           ! Boost on RT pressure                            !
      logical::is_mu_H2=.false.
      real(dp)::Tmu_dissoc=1d3              ! Dissociation temperature [K]                    !
-     logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
      integer::iPEH_group=-1                ! Radiation group used for photo-electric heating !
      logical::cosmic_rays=.false.          ! Include cosmic ray ionisation                   !
      

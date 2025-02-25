@@ -314,6 +314,7 @@ subroutine m_read_params(pst)
   real(dp)::T2max=1d50
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
+  logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
   logical::isHe=.true.            !      He ionization fractions tracked?
   logical::isH2=.false.           !                 H2 tracked (via xHI)?
   real(dp)::neq_Tconst=-1         !             Const T in neq chemistry?
@@ -479,7 +480,7 @@ subroutine m_read_params(pst)
   namelist/cooling_params/neq_chem,cooling,metal,isothermal,haardt_madau,J21 &
        & ,eos_type,eos_nH,eos_index,eos_T2, mu_mol, X_H, Y_He &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism &
-       & ,isHe, isH2, is_init_xion, neq_Tconst
+       & ,isHe, isH2, is_init_xion, neq_Tconst, upload_equilibrium_x
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Star particles and star formation recipe
@@ -1193,6 +1194,7 @@ subroutine m_read_params(pst)
   s%r%isH2=isH2
   s%r%neq_Tconst=neq_Tconst
   if(neq_Tconst .ge. 0d0) s%r%neq_isTconst=.true.
+  s%r%upload_equilibrium_x = upload_equilibrium_x
 
   s%r%iIons=iIons
   s%r%ixHI=ixHI

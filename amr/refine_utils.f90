@@ -22,8 +22,6 @@ subroutine m_refine_fine(pst,ilevel)
   integer::ilev,dummy
   double precision::ttend,ttstart
   type(out_refine_fine_t)::out_refine_fine
-  integer,dimension(1:2)::noct
-  integer,dimension(1)::alevel
 
   associate(s=>pst%s)
 
@@ -95,7 +93,6 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
   type(out_refine_fine_t)::output
 
   type(out_refine_fine_t)::next_output
-  integer::ncreate,nkill
   integer::rID
   
   if(pst%nLower>0)then
@@ -125,6 +122,8 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use hilbert
   use call_back, only: cache_f
   use nbors_utils
+  use hydro_parameters, only: nion
+  use init_xion_module, only: calc_equilibrium_xion
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -138,7 +137,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   ! automatically satisfied. For adaptive time-stepping,
   ! numerical rules are checked before refining any cell.
   !---------------------------------------------------------
-  integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
+  integer::icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
   integer::ind_cell,ind_parent
@@ -154,6 +153,10 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_int4)::dummy_int4
+#ifdef RT
+  real(dp),dimension(nion)::xion
+#endif
+
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -224,6 +227,15 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         ok   = gridp%flag1(icell)==0 .and. &
              & gridp%refined(icell)
         if(ok)then
+#ifdef RT
+           if(r%neq_chem .and. r%upload_equilibrium_x .and. g%nstep_coarse.ne.0) then
+              ! Enforce equilibrium on ionization states when merging, to
+              ! prevent unnatural values (e.g when merging hot and cold cells).
+              ! Skip this during grid initialization (i.e. nstep_coarse=0)
+              call calc_equilibrium_xion(s, gridp, icell, xion)
+              gridp%uold(icell,r%iIons:r%iIons+nion-1)=xion*gridp%uold(icell,1)
+            endif
+#endif
            ! Set grid level to zero
            m%grid(ioct)%lev=0
            ! Set parent cell to "unrefined" status
@@ -641,10 +653,9 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   real(dp),dimension(0:twondim  ,1:nrtvar)::rtu1
   real(dp),dimension(1:twotondim,1:nrtvar)::rtu2
 #endif
-  integer,dimension(0:twondim)::igrid_nbor,ind_nbor
+  integer,dimension(0:twondim)::ind_nbor
   real(dp),dimension(0:twondim,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
-  real(dp)::bx_central,by_central,bz_central
   type(nbor),dimension(0:twondim)::grid_nbor
   type(oct),pointer::child
   logical::ok

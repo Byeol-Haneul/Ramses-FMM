@@ -59,7 +59,7 @@ end subroutine r_init_xion
 !#########################################################################
 subroutine init_xion(r,g,m,tables,ilevel)
   use constants
-  use amr_parameters, only:dp,ndim,nvector,twotondim
+  use amr_parameters, only:ndim,nvector,twotondim
   use hydro_parameters, only: nener, nion
   use amr_commons, only:run_t,global_t,mesh_t
   use cooling_module, only:cooling_t
@@ -76,8 +76,8 @@ subroutine init_xion(r,g,m,tables,ilevel)
   real(kind=8)::mu,x
   integer,dimension(1:nvector)::ind_leaf
   real(kind=8),dimension(1:nvector)::nH,T2,ekk,err,emag,Zsolar
-  real(dp),dimension(nion)::phI_rates       ! Photoionization rates [s-1]
-  real(dp),dimension(1:nvector, 7)::nSpec    !          Species abundances
+  real(kind=8),dimension(nion)::phI_rates       ! Photoionization rates [s-1]
+  real(kind=8),dimension(1:nvector, 7)::nSpec    !          Species abundances
 #if NENER>0
   integer::irad
 #endif
@@ -214,4 +214,101 @@ subroutine init_xion(r,g,m,tables,ilevel)
   end associate
 
 end subroutine init_xion
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine calc_equilibrium_xion(s, gridp, icell, xion)
+
+! Calculate and return photoionization equilibrium abundance states for
+! a cell
+! gridp     => Pointer to (type oct) grid containing the cell in question
+! icell     => Index for cell in grid
+! xion      <= Returned equilibrium ionization fractions of cell
+!-------------------------------------------------------------------------
+  use amr_commons, only: oct
+  use amr_parameters, only:ndim
+  use hydro_parameters, only: nener, nion
+  use neq_cooling_module, only: cmp_equilibrium_abundances
+  use ramses_commons, only: ramses_t
+  use rt_parameters, only: nrtgrp
+  implicit none
+  type(ramses_t)::s
+  type(oct),pointer::gridp
+  integer::icell
+  real(kind=8),dimension(nion)::xion
+  integer::ip, iI, idim, iNp
+  real(kind=8)::scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
+  real(kind=8)::scale_Np,scale_Fp,nH,T2,ekk,err,emag,mu,Zsolar,ss_factor
+  real(kind=8),dimension(nion)::phI_rates    ! Photoionization rates [s-1]
+  real(kind=8),dimension(7)::ns              !          Species abundances
+#if NENER>0
+  integer::irad
+#endif
+!-------------------------------------------------------------------------
+  ! Conversion factor from user units to cgs units
+  call units(s%r,s%g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+#ifdef RT
+  call rt_units(s%r,s%g,scale_Np,scale_Fp)
+#endif
+  ! Calculate photoionization rates:
+  phI_rates(:)=0.0
+  do ip=1, nrtgrp
+     iNp=1+(ip-1)*(ndim+1)
+     do iI=1,nion
+#ifdef RT
+        phI_rates(iI) = phI_rates(iI) &
+                      + gridp%rtuold(icell, iNp) &
+                      * scale_Np*s%tables%signc(ip,iI)
+     end do
+#endif
+  end do
+
+  nH = MAX(gridp%uold(icell,1),s%r%smallr)      !   Nb density of gas [UU]
+
+  Zsolar = s%r%z_ave
+  if(s%r%metal) Zsolar=gridp%uold(icell,s%r%imetal)/nH/0.02  ! Z (Solar U)
+
+  ! Compute temperature from energy density
+  T2 = gridp%uold(icell, 5)               ! Energy density (kin+heat) [UU]
+  ekk = 0.0d0                             !            Kinetic energy [UU]
+  do idim=1,3
+     ekk=ekk+0.5d0*gridp%uold(icell,1+idim)**2/nH
+  end do
+  err = 0.0d0
+#if NENER>0
+  do irad=1,nener
+     err=err+gridp%uold(icell,5+irad)
+  end do
+#endif
+  emag=0.0d0
+#ifdef MHD
+  do idim=1,3
+     emag(i)=emag(i) &
+            +0.125d0*(gridp%bold(icell,idim)+gridp%uold(icell,idim+3))**2
+  end do
+#endif
+  ! Gas thermal pressure
+  T2=(s%r%gamma-1.0d0)*(T2-ekk-err-emag)
+  T2 = T2/nH*scale_T2                       !                T/mu [Kelvin]
+  nH = nH*scale_nH                          !        Number density [H/cc]
+
+  ! UV background photoionization
+  ss_factor = 1d0
+  if(s%r%self_shielding) ss_factor = exp(-nH/1d-2)
+  if(s%r%haardt_madau) &
+     phI_rates = phI_rates + s%tables%UVrates(:,1) * ss_factor
+
+  call cmp_Equilibrium_Abundances(s%r, s%tables, T2, nH, pHI_rates, mu   &
+                                 ,ns, Zsolar)
+
+  if(s%r%isH2) xion(s%r%ixHI)=ns(3)/(2.*ns(2)+ns(3)+ns(4)) !   HI fraction
+  xion(s%r%ixHII)=ns(4)/(2.*ns(2)+ns(3)+ns(4))             !  HII fraction
+  if(s%r%Y_He .gt. 0d0 .and. s%r%isHe) then
+     xion(s%r%ixHeII) = ns(6)/(ns(5)+ns(6)+ns(7))          ! HeII fraction
+     xion(s%r%ixHeIII) = ns(7)/(ns(5)+ns(6)+ns(7))         !HeIII fraction
+  endif
+
+end subroutine calc_equilibrium_xion
+
 end module init_xion_module

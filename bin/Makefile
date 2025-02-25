@@ -153,7 +153,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 mdl_commons.o mdl.o rt_spectra.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
-	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o \
+	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o init_xion.o \
 	 rt_flux_module.o rt_godunov_fine.o rt_input_condinit.o rt_init_flow_fine.o rt_units.o  \
 	 rt_condinit.o rt_flag.o rt_upload.o interpol_rt.o rt_godunov_utils.o read_rt_params.o \
 	 init_hydro.o init_part.o init_amr.o smooth.o flag_utils.o init_time.o read_params.o \
@@ -172,7 +172,7 @@ MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooli
 	 condinit.o vecpotentialinit.o init_refine_adaptive.o init_refine_restart.o \
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
-	 rt_star_feedback.o init_xion.o sink_formation.o tree_formation.o \
+	 rt_star_feedback.o sink_formation.o tree_formation.o \
 	 task_manager.o rt_step.o amr_step.o adaptive_loop.o \
 	 write_gitinfo.o
 #############################################################################
