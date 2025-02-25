@@ -153,9 +153,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_int4)::dummy_int4
-#ifdef RT
   real(dp),dimension(nion)::xion
-#endif
 
 
   associate(r=>s%r,g=>s%g,m=>s%m)
