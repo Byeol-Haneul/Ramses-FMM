@@ -292,7 +292,10 @@ module amr_commons
      real(dp)::sink_accretion_radius = -1 ! Radius for the accretion region
      real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
      logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
-     logical::eddington_cap = .true. ! Whether to limit accretion at Eddington rate
+     real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
+     integer::sink_b_spline_order = 4 ! Order of B-spline interpolation used for sink accretion and dynamics
+     logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
+     logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format
