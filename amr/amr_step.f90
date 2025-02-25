@@ -32,9 +32,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
-  use rt_star_feedback
   use rt_step_module, only: m_rt_step
-  use update_rt_c_module, only: r_update_rt_var
 
   implicit none
 
@@ -310,17 +308,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Radiative transfer step
   !------------------------
   if(r%rt)then
-
      if(r%rt_advect)then
         call m_timer(pst,'radiative transfer','start')
         call m_rt_step(pst,ilevel)
      else
         if(r%hydro .and. (r%neq_chem.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
-     endif
-     if(ilevel==r%levelmin) then
-        call m_timer(pst,'rt - updates','start')
-        ! Update time-dependent RT variables
-        call r_update_rt_var(pst, pst%s%g%nstep_coarse, 1)
      endif
   endif
 

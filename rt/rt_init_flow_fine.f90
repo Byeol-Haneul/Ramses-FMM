@@ -58,7 +58,7 @@ contains
 !##############################################################
 !##############################################################
 !##############################################################
-recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
+recursive subroutine r_rt_neq_updates(pst, nstep_coarse, input_size)
   use mdl_module
   use coolrates_module, only: update_rt_c, update_coolrates_tables
   use neq_cooling_module, only: updateRTGroups_CoolConstants, update_metal_cooling
@@ -74,17 +74,19 @@ recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
   associate(s=>pst%s,r=>pst%s%r,m=>pst%s%m,g=>pst%s%g)
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_UPDATE_RT_VAR,pst%iUpper+1,input_size,0,nstep_coarse)
-     call r_update_rt_var(pst%pLower, nstep_coarse,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_RT_NEQ_UPDATES,pst%iUpper+1,input_size,0,nstep_coarse)
+     call r_rt_neq_updates(pst%pLower, nstep_coarse, input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      ! Update reduced speed of light
-     if(r%cosmo)call update_rt_c(r, g, pst%s%tables)
+     if(r%rt .and. r%cosmo) call update_rt_c(r, g, pst%s%tables)
 
      ! Update Compton heating
-     if(r%cosmo)call update_coolrates_tables(r, pst%s%tables, dble(g%aexp))
+     if(r%neq_chem .and. r%cosmo) &
+        call update_coolrates_tables(r, pst%s%tables, dble(g%aexp))
 
-     if(r%star.and.r%rt_advect.and.r%rt_star.and.r%sedprops_update.gt.0  &
+     if(r%rt .and. r%star .and. r%rt_advect .and. r%rt_star &
+        .and. r%sedprops_update.gt.0                        &
         .and. mod(nstep_coarse,r%sedprops_update)==0)  then
            ! Update cross sections based on evolving star properties
            call update_SED_group_props(r, g, s%SED, s%star)
@@ -96,17 +98,17 @@ recursive subroutine r_update_rt_var(pst, nstep_coarse, input_size)
      endif
 
      ! Update UV background constants for metal cooling
-     if(r%cosmo)call update_metal_cooling(s%tables, dble(g%aexp))
+     if(r%neq_chem .and. r%cosmo) &
+        call update_metal_cooling(s%tables, dble(g%aexp))
 
      if(r%rt_advect .and. r%rt_emission_stats .and. r%rt_star) &
         call output_photon_emission_stats(r,g)
 
-     if(g%myid==1) write(*,*)'Time dependent RT quantities updated'
   endif
 
   end associate
 
-end subroutine r_update_rt_var
+end subroutine r_rt_neq_updates
 !##############################################################
 !##############################################################
 !##############################################################

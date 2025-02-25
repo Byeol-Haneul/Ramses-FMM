@@ -164,7 +164,7 @@ function worker_init(mdl) result(pst)
   use rt_upload_module, only: r_rt_upload_fine
   use output_rt_module, only: r_output_rt
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
-  use update_rt_c_module, only: r_update_rt_var
+  use update_rt_c_module, only: r_rt_neq_updates
   use rt_star_feedback, only: r_star_rt_feedback
 
   implicit none
@@ -312,7 +312,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_STAR_RT_FEEDBACK,       pst,C_FUNLOC(r_star_rt_feedback),1,0,"star_rt_feedback")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUNEW,             pst,C_FUNLOC(r_set_rtunew),1,0,"set_rtunew")
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUOLD,             pst,C_FUNLOC(r_set_rtuold),1,0,"set_rtuold")
-  call mdl_add_service(pst%s%mdl,MDL_UPDATE_RT_VAR,          pst,C_FUNLOC(r_update_rt_var),1,0,"update_rt_var")
+  call mdl_add_service(pst%s%mdl,MDL_RT_NEQ_UPDATES,         pst,C_FUNLOC(r_rt_neq_updates),1,0,"rt_neq_updates")
   call mdl_add_service(pst%s%mdl,MDL_CHECK_PART_EMISSION,    pst,C_FUNLOC(r_check_part_emission),0,0,"check_part_emission")
 end function worker_init
 !##############################################################
