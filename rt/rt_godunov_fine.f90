@@ -186,7 +186,7 @@ end subroutine r_set_rtuold
 !###########################################################
 !###########################################################
 subroutine set_rtuold(r, g, m, ilevel)
-  use rt_parameters, only: nrtgrp
+  use rt_parameters, only: nrtgrp, smallNp
   use amr_parameters, only: dp, ndim, twotondim
   use amr_commons, only: run_t, global_t, mesh_t
   implicit none
@@ -194,11 +194,12 @@ subroutine set_rtuold(r, g, m, ilevel)
   type(global_t) :: g
   type(mesh_t) :: m
   integer :: ilevel
+  real(dp)::Npc,fred
   !---------------------------------------------------------
   ! This routine sets array rtuold to its new value rtunew 
   ! after the hydro step.
   !---------------------------------------------------------
-  integer :: i, ig, iN
+  integer :: i, j, ig, iN
 
   ! Add emissivity source term
 #ifdef RT
@@ -220,6 +221,29 @@ subroutine set_rtuold(r, g, m, ilevel)
   do i = m%head(ilevel), m%tail(ilevel)
      m%grid(i)%rtuold = m%grid(i)%rtunew
   end do
+
+  ! Make a photon conservation fix (prevent light explosions)
+  do ig=1,nrtgrp
+      iN = 1 + (ig-1)*ndim
+      do i = m%head(ilevel), m%tail(ilevel)
+        do j=1, twotondim
+          ! No negative photon densities:
+          m%grid(i)%rtuold(j,iN) = max(m%grid(i)%rtuold(j,iN),smallNp)
+          Npc=m%grid(i)%rtuold(j,iN)*g%rt_c
+          ! Reduced flux, should always be .le. 1
+          !fred = sqrt(sum((rtuold(icell,iGroups(ig)+1:iGroups(ig)+ndim))**2))/Npc
+          fred = sqrt(sum((m%grid(i)%rtuold(j,iN+1:iN+ndim))**2))/Npc
+          if(fred .gt. 1d0) then ! Too big so normalize flux to one
+            !rtuold(icell,iGroups(ig)+1:iGroups(ig)+ndim) &
+            !      = rtuold(icell,iGroups(ig)+1:iGroups(ig)+ndim)/fred
+            m%grid(i)%rtuold(j,iN+1:iN+ndim) &
+                = m%grid(i)%rtuold(j,iN+1:iN+ndim)/fred
+          endif
+        end do
+      end do
+  end do
+  ! End photon conservation fix
+
 #endif
 
 end subroutine set_rtuold
@@ -545,6 +569,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   !-------------------------------------------------
   ! Reset flux along direction at refined interfaces
   !-------------------------------------------------
+  if(r%rt_nsubcycle.eq.1) then
   do idim=1,ndim
      i0=0; j0=0; k0=0
      if(idim==1)i0=1
@@ -564,6 +589,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
         end do
      end do
   end do
+  endif
   !--------------------------------------
   ! Conservative update at level ilevel
   !--------------------------------------
@@ -622,6 +648,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   !--------------------------------------
   ! Conservative update at level ilevel-1
   !--------------------------------------
+  if(r%rt_nsubcycle.eq.1) then
   ! Loop over dimensions
   do idim=1,ndim
      i0=0; j0=0; k0=0
@@ -741,7 +768,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
      ! End loop over boundary octs
   end do
   ! End loop over dimensions
-
+  endif ! if(r%rt_nsubcycle.eq.1)
 
   endif
 
