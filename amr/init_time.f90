@@ -34,7 +34,7 @@ end subroutine r_init_time
   use amr_commons, only: run_t,global_t,mesh_t
   use cooling_module, only: cooling_t,set_table
   use init_cooling_module, only: init_cooling
-  use coolrates_module, only: neq_cooling_t
+  use coolrates_module, only: neq_cooling_t, update_rt_c
   use init_neq_chem_module, only: init_neq_chem
   use SED_module, only: sed_table_t, init_SED_table
   implicit none
@@ -101,6 +101,8 @@ end subroutine r_init_time
   ! Initialize non-equilibrium chemistry model
   if(r%neq_chem)then
      call init_neq_chem(r,g,tables)
+  else if(r%rt) then
+     call update_rt_c(r, g, tables)
   endif
 
   ! Initialize stellar spectral energy distribution table
