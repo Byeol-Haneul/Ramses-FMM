@@ -223,19 +223,16 @@ subroutine set_rtuold(r, g, m, ilevel)
   end do
 
   ! Make a photon conservation fix (prevent light explosions)
-  do ig=1,nrtgrp
+  do ig = 1, nrtgrp
       iN = 1 + (ig-1)*ndim
       do i = m%head(ilevel), m%tail(ilevel)
-        do j=1, twotondim
+        do j = 1, twotondim
           ! No negative photon densities:
           m%grid(i)%rtuold(j,iN) = max(m%grid(i)%rtuold(j,iN),smallNp)
           Npc=m%grid(i)%rtuold(j,iN)*g%rt_c
           ! Reduced flux, should always be .le. 1
-          !fred = sqrt(sum((rtuold(icell,iGroups(ig)+1:iGroups(ig)+ndim))**2))/Npc
           fred = sqrt(sum((m%grid(i)%rtuold(j,iN+1:iN+ndim))**2))/Npc
           if(fred .gt. 1d0) then ! Too big so normalize flux to one
-            !rtuold(icell,iGroups(ig)+1:iGroups(ig)+ndim) &
-            !      = rtuold(icell,iGroups(ig)+1:iGroups(ig)+ndim)/fred
             m%grid(i)%rtuold(j,iN+1:iN+ndim) &
                 = m%grid(i)%rtuold(j,iN+1:iN+ndim)/fred
           endif
