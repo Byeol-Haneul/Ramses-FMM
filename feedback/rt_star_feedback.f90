@@ -65,8 +65,8 @@ subroutine star_rt_feedback(s, p, ilevel)
   integer::ipart,icell,idim
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::scale_Np,scale_Fp,scale_inp,scale_inp_cell,scale_msun
-  real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::z,mass,age,code2Gyr,dt_Gyr,dt_loc_Gyr,t_SN_Gyr
+  real(dp)::dx_loc,vol_loc
+  real(dp)::z,mass,age,code2Gyr,dt_Gyr,dt_Gyr_parent,dt_loc_Gyr,t_SN_Gyr
   type(oct),pointer::gridp
   type(msg_rt_emissivity_realdp)::dummy_rt_emissivity_realdp
   logical::ok_level
@@ -92,6 +92,7 @@ subroutine star_rt_feedback(s, p, ilevel)
 
   ! Time step from code units to Gyr
   dt_Gyr = g%dtnew(ilevel) * scale_t * sec2Gyr
+  if(ilevel.gt.r%levelmin) dt_Gyr_parent = g%dtnew(ilevel-1) * scale_t * sec2Gyr
 
   ! Supernovae progenitors life time from Myr to Gyr
   t_SN_Gyr = r%t_SNII * 1d-3
@@ -113,9 +114,7 @@ subroutine star_rt_feedback(s, p, ilevel)
         ckey(idim)=int(p%xp(ipart,idim)/dx_loc)
      end do
 
-     ! Cell volume at level ilevel
-     vol_cell=vol_loc
-     scale_inp_cell=scale_inp
+     scale_inp_cell=scale_inp/dt_Gyr
 
      ! Get parent cell at level ilevel using cache
      hash_cell(0)=ilevel+1
@@ -130,9 +129,8 @@ subroutine star_rt_feedback(s, p, ilevel)
            ckey(idim)=int(p%xp(ipart,idim)/dx_loc/2)
         end do
 
-        ! Cell volume at level ilevel-1
-        vol_cell=vol_loc*2**ndim
-        scale_inp_cell=scale_inp/2**ndim
+        ! Account for larger volume in coarser cell
+        scale_inp_cell=scale_inp/2**ndim/dt_Gyr_parent
         
         ! Get parent cell at level ilevel-1 using cache
         hash_cell(0)=ilevel
@@ -166,19 +164,14 @@ subroutine star_rt_feedback(s, p, ilevel)
         mass = mass / (1d0 - r%eta_SNII)
      endif
 
-     part_NpInp(1:nrtgrp) = part_NpInp(1:nrtgrp) * mass * scale_inp_cell ! #photons cm-3
-
      if(r%rt_emission_stats) then
-        g%step_nPhot = g%step_nPhot + part_NpInp(1) / scale_inp_cell * scale_msun
+        g%step_nPhot = g%step_nPhot + part_NpInp(1) * mass * scale_msun
         g%step_nStar = g%step_nStar + dt_loc_Gyr/sec2Gyr/scale_t
         g%step_mStar = g%step_mStar + p%mp(ipart) * scale_msun &
                                     * dt_loc_Gyr /sec2Gyr / scale_t
      endif
 
-     lum(1:nrtgrp) = 0.
-     if(dt_loc_Gyr > 0.)then
-        lum(1:nrtgrp) = part_NpInp(1:nrtgrp) / dt_Gyr * sec2Gyr ! #photons cm-3 s-1
-     endif
+     lum(1:nrtgrp) = part_NpInp(1:nrtgrp) * mass * scale_inp_cell * sec2Gyr ! #photons cm-3 s-1
      lum(1:nrtgrp) = lum(1:nrtgrp) * scale_t ! back to code units
 
      ! Update parent cell emissivity
