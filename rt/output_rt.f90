@@ -309,9 +309,9 @@ subroutine output_photon_emission_stats(r,g)
       write(*, 113) g%step_nPhot, g%tot_nPhot                        &
                   , g%step_nStar/g%dtnew(r%levelmin)                 &
                   , g%step_mStar/g%dtnew(r%levelmin)                 &
-                  , g%dtnew(r%levelmin)*scale_t/yr2sec
+                  , g%t*scale_t/yr2sec
   g%step_nPhot = 0d0 ; g%step_nStar = 0d0 ; g%step_mStar = 0d0
-113 format(' Stellar radiation(phot/step, phot/tot, *, */Msun , dt[yr])= '  &
+113 format(' Stellar radiation(phot/step, phot/tot, *, */Msun, t[yr])= '  &
                                                              , 10(1pe9.2))
 end subroutine output_photon_emission_stats
 
