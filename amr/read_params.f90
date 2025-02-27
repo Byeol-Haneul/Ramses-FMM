@@ -317,6 +317,7 @@ subroutine m_read_params(pst)
   real(dp)::sink_purity_threshold=-1
   real(dp)::sink_fraction_threshold=2d0
   logical::form_sinks=.false.
+  logical::sink_refine=.true.
 
   ! Black hole parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi
@@ -407,7 +408,7 @@ subroutine m_read_params(pst)
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type &
-       & ,aexp_lock_refine,pic_lock_refine
+       & ,aexp_lock_refine,pic_lock_refine,sink_refine
   ! Units parameters
   namelist/units_params/units_density,units_time,units_length
   ! Boundary conditions parameters
@@ -1057,6 +1058,7 @@ subroutine m_read_params(pst)
   s%r%bondi_use_vrel = bondi_use_vrel
   s%r%eddington_cap = eddington_cap
   s%r%form_sinks = form_sinks
+  s%r%sink_refine = sink_refine
   s%r%sink_b_spline_order = sink_b_spline_order
   s%r%verbose_sink = verbose_sink
   s%r%bondi_use_gas_mass = bondi_use_gas_mass
