@@ -42,8 +42,8 @@ subroutine sink_flag(s,p,ilevel)
   vol_loc = dx_loc**ndim
 
   ! Compute number of cells within sink sphere
-  rrad = r%sink_accretion_radius/dx_loc
-  nrad = ceiling(rrad)
+  nrad = r%sink_b_spline_order
+  rrad = dble(nrad)
   n_nei = 0
   do k = -nrad, nrad
      z = dble(k) / dble(nrad) * rrad
