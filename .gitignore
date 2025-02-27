@@ -1,6 +1,6 @@
 # ignore everything in bin except "official" Makefiles
 bin/*
-!trunk/ramses/bin/Makefile
+!bin/Makefile
 
 # ignore utils executables
 utils/f90/*
