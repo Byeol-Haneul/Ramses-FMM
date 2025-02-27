@@ -162,13 +162,8 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      do j = 1,nBHnei
 
         ! Get neighbouring cell coordinates
+        ! Note, periodic BCs for xnei are already enforced in sink_B_spline_weights_PCS etc.
         xnei(1:ndim) = xBHnei(1:ndim,j)
-
-        ! Periodic boundary conditions
-        do idim=1,ndim
-           if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim)+m%ckey_max(ilevel+1)
-           if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim)-m%ckey_max(ilevel+1)
-        end do
 
         ! Get neighboring cell at current level
         hash_nbor(1:ndim)  = ckeynei(1:ndim,j)
@@ -212,7 +207,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
            end if
            r2_sink     = (factG * bondi_mass / v_bondi**2)**2
            xrel(1:ndim) = xnei(1:ndim) - xcen(1:ndim) 
-           rho_inf = d / (bondi_alpha(sqrt(sum(xrel(:)**2))/(r2_sink+tiny(0.0_dp))**0.5d0))
+           rho_inf = d / (bondi_alpha(0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
            dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi
            weighted_bondi = weighted_bondi + dMBH_overdt*weight
         end if
@@ -221,8 +216,6 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      ! Compute overall accretion rate
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
-     
 
      !!! Compute BHL accretion rate
      if(r%use_local_bondi_rate)then
@@ -276,8 +269,9 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(xnei(idim)<                0.0d0)xnei(idim)=xnei(idim) + m%ckey_max(ilevel+1)
-           if(xnei(idim)>=m%ckey_max(ilevel+1))xnei(idim)=xnei(idim) - m%ckey_max(ilevel+1)
+           ! Note, periodic BCs for xnei are already enforced in sink_B_spline_weights_PCS etc.
+           if(xrel(idim)<-r%boxlen/2d0)xrel(idim)=xrel(idim)+r%boxlen
+           if(xrel(idim)> r%boxlen/2d0)xrel(idim)=xrel(idim)-r%boxlen
         end do
         ! Get neighboring cell at current level
         hash_nbor(1:ndim)  = ckeynei(1:ndim,j)
@@ -302,23 +296,23 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         d_acc = max(d_acc, 0.0_dp)
 
         ! Accrete from the cell
-        gridn%unew(icelln,1)         = gridn%unew(icelln,1)      - d_acc
-        do idim=1,ndim
-           gridn%unew(icelln,idim+1) = gridn%unew(icelln,idim+1) - d_acc * vel_gas(idim)
-        end do
-        gridn%unew(icelln,5)         = gridn%unew(icelln,5)      - d_acc * e
+        gridn%unew(icelln,1)          = gridn%unew(icelln,1)          - d_acc
+        !do idim=1,ndim
+        !   gridn%unew(icelln,idim+1) = gridn%unew(icelln,idim+1) - d_acc * vv(idim)
+        !end do
+        gridn%unew(icelln,2:(ndim+1)) = gridn%unew(icelln,2:(ndim+1)) - d_acc * vv(1:ndim)
+        gridn%unew(icelln,5)          = gridn%unew(icelln,5)          - d_acc * e
         ! TODO: Add passive scalar accretion here
 
         !!! Accretion onto the black hole
         ! Accreted mass
         m_acc = m_acc + d_acc * vol_loc
         ! Accreted relative center of mass
-        ! This should be zero, as it equals dM * sum_i (x_i - x_p)*w_i which is zero by construction
         x_acc(1:ndim) = x_acc(1:ndim) + d_acc * xrel(1:ndim) * vol_loc * dx_loc
         ! Accreted relative momentum
-        p_acc(1:ndim) = p_acc(1:ndim) + d_acc * vel_gas(1:ndim)  * vol_loc
+        p_acc(1:ndim) = p_acc(1:ndim) + d_acc * vv(1:ndim)  * vol_loc
         ! Accreted relative angular momentum
-        l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(xrel(1:ndim), vel_gas(1:ndim)) * vol_loc * dx_loc
+        l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(xrel(1:ndim), vv(1:ndim) - p%vp(ipart,1:ndim)) * vol_loc * dx_loc
      end do ! End loop over j
 
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -326,6 +320,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
      ! Add accreted properties to sink variables
+     ! This should be zero, as it equals dM * sum_i (x_i - x_p)*w_i which is zero by construction
      p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) + x_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
      p%vp(ipart,1:ndim) = ( p%mp(ipart) * p%vp(ipart,1:ndim) + p_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
      p%jp(ipart,1:ndim) = ( p%mp(ipart) * p%jp(ipart,1:ndim) + l_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
