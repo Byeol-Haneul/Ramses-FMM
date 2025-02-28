@@ -69,17 +69,17 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   real(dp),dimension(:,:),allocatable::xBHnei
   integer,dimension(:,:),allocatable::ckeynei
   real(dp),dimension(:),allocatable::vol
-  real(dp)::dx_loc,vol_loc,vol_cell
+  real(dp)::dx_loc,vol_loc
   real(dp),dimension(1:ndim)::xcen,xnei,xrel
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::i,j,k,ipart,icelln,ind,idim,nrad
+  integer::i,j,k,ipart,icelln,ind,idim
   real(dp)::d,e,ethermal,r2_sink,v_bondi,cs_gas,cs,rho_gas,velocity
   real(dp)::weight
   real(dp),dimension(1:ndim)::vv,v_rel,x_acc,p_acc,l_acc,vel_gas
   type(oct),pointer::gridn
   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,d_acc,m_gas,bondi_mass
-  real(dp)::rho_inf,weighted_bondi!,dMdt_freefall,t_ff
+  real(dp)::rho_inf,weighted_bondi,lambda!,dMdt_freefall,t_ff
   type(msg_large_realdp)::dummy_large_realdp
 
 #ifdef HYDRO
@@ -206,9 +206,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               bondi_mass = p%mp(ipart)
            end if
            r2_sink     = (factG * bondi_mass / v_bondi**2)**2
-           xrel(1:ndim) = xnei(1:ndim) - xcen(1:ndim) 
            rho_inf = d / (bondi_alpha(0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
-           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi
+           if(abs(r%gamma - 1).le.0.01)then
+              lambda = 0.25d0*exp(1.5d0)
+           else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
+              lambda = 0.25d0
+           else
+              lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+           end if
+           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
            weighted_bondi = weighted_bondi + dMBH_overdt*weight
         end if
      end do
@@ -243,8 +249,16 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         ! Density at infinity (using extrapolation)
         rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
 
+        if(abs(r%gamma - 1).le.0.01)then
+           lambda = 0.25d0*exp(1.5d0)
+        else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
+           lambda = 0.25d0
+        else
+           lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+        end if
+
         ! Bondi-Hoyle-Lyttleton accretion rate
-        dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi
+        dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
      end if
 
      ! Eddington accretion rate, which introduces an optional cap
@@ -252,6 +266,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
 
      if(r%verbose_sink)then
+        write(*,*)'Run Properties: ',ilevel,dx_loc,vol_loc,p%levelp(ipart),ilevel
         write(*,*)'Sink properties:',rho_gas,cs_gas,v_bondi,r2_sink
      end if
 

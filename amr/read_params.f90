@@ -322,7 +322,6 @@ subroutine m_read_params(pst)
   ! Black hole parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi
   character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
-  real(dp)::sink_accretion_radius = -1 ! Radius for the accretion region
   real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
   logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
   real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
@@ -431,7 +430,7 @@ subroutine m_read_params(pst)
   namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
-       & ,accretion_type,sink_accretion_radius,acc_sink_boost,bondi_use_vrel,accretion_method &
+       & ,accretion_type,acc_sink_boost,bondi_use_vrel,accretion_method &
        & ,eddington_cap,form_sinks,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
        & ,use_local_bondi_rate
   ! Supernovae feedback parameters
@@ -1053,7 +1052,6 @@ subroutine m_read_params(pst)
 
   s%r%accretion_type = accretion_type
   s%r%accretion_method = accretion_method
-  s%r%sink_accretion_radius = sink_accretion_radius
   s%r%acc_sink_boost = acc_sink_boost
   s%r%bondi_use_vrel = bondi_use_vrel
   s%r%eddington_cap = eddington_cap
