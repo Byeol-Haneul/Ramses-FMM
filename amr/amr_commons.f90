@@ -290,7 +290,6 @@ module amr_commons
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
      character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
-     real(dp)::sink_accretion_radius = -1 ! Radius for the accretion region
      real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
      logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
      real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
