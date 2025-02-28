@@ -255,8 +255,8 @@ subroutine calc_equilibrium_xion(s, gridp, icell, xion)
   phI_rates(:)=0.0
   do ip=1, nrtgrp
      iNp=1+(ip-1)*(ndim+1)
-     do iI=1,nion
 #ifdef RT
+     do iI=1,nion
         phI_rates(iI) = phI_rates(iI) &
                       + gridp%rtuold(icell, iNp) &
                       * scale_Np*s%tables%signc(ip,iI)
