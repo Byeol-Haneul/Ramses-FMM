@@ -20,6 +20,7 @@ parser.add_argument("--rad", help="specify the image radius")
 parser.add_argument("--clump", help="specify if clumps are overplotted")
 parser.add_argument("--sink", help="specify if sinks are overplotted")
 parser.add_argument("--dir", help="specify the projection axis")
+parser.add_argument("--grid", help="overlay the AMR grid",action="store_true")
 args = parser.parse_args()
 # path the the file
 path = args.path
@@ -35,7 +36,11 @@ clump = args.clump
 sink = args.sink
 axis = args.dir
 log = args.log
+grid = args.grid
 
+grid0 = None
+if grid:
+    grid0=1
 if clump==None:
     clump=False
 if sink==None:
@@ -95,7 +100,7 @@ if axis=="z":
     ii=1; jj=2
 
 c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
-ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax)
+ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax,grid=grid0)
 
 if clump:
     h=ram.rd_clump(nout)
