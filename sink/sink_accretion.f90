@@ -100,6 +100,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   factG=1
   if(r%cosmo)factG=3d0/4d0/twopi*g%omega_m*g%aexp
 
+  ! Bondi sonic constant
+  if(abs(r%gamma - 1).le.0.01)then
+     lambda = 0.25d0*exp(1.5d0)
+  else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
+     lambda = 0.25d0
+  else
+     lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+  end if
+
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
@@ -207,13 +216,6 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
            end if
            r2_sink     = (factG * bondi_mass / v_bondi**2)**2
            rho_inf = d / (bondi_alpha(0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
-           if(abs(r%gamma - 1).le.0.01)then
-              lambda = 0.25d0*exp(1.5d0)
-           else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
-              lambda = 0.25d0
-           else
-              lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
-           end if
            dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
            weighted_bondi = weighted_bondi + dMBH_overdt*weight
         end if
@@ -248,14 +250,6 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
         ! Density at infinity (using extrapolation)
         rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
-
-        if(abs(r%gamma - 1).le.0.01)then
-           lambda = 0.25d0*exp(1.5d0)
-        else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
-           lambda = 0.25d0
-        else
-           lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
-        end if
 
         ! Bondi-Hoyle-Lyttleton accretion rate
         dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
