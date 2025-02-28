@@ -320,8 +320,8 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   ckey_corner(1:ndim)=(m%grid(ind_grid)%ckey(1:ndim)/(i1max-1))*(i1max-1)
   ind_oct=ind_grid
 
-  ! Loop over 3x3x3 neighboring father cells using 27 passes
-  do ipass = 1, threetondim
+  ! Loop over 3x3x3 neighboring father cells using 7 passes
+  do ipass = 1, 1+2*ndim
 
   if(ipass == 1)then
      ii1min = i1min+1; ii1max = i1max-1
@@ -334,28 +334,24 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
      kk1min = kk1min+1; kk1max = kk1max-1
 #endif
   endif
-  if(MOD(ipass,3) == 2)then ! ipass = 2, 5, 8, 11, 14, 17, 20, 23, 26
+  if(ipass == 2)then
      ii1min = i1min; ii1max = i1min
   endif
-  if(MOD(ipass,3) == 0)then ! ipass = 3, 6, 9, 12, 15, 18, 21, 24, 27
+  if(ipass == 3)then
      ii1min = i1max; ii1max = i1max
   endif
-  if(MOD(ipass,9) == 4)then ! ipass = 4, 13, 22
+  if(ipass == 4)then
      ii1min = i1min+1; ii1max = i1max-1
      jj1min = j1min; jj1max = j1min
   endif
-  if(MOD(ipass,9) == 7)then ! ipass = 7, 16, 25
-     ii1min = i1min+1; ii1max = i1max-1
+  if(ipass == 5)then
      jj1min = j1max; jj1max = j1max
   endif
-  if(ipass == 10)then
-     ii1min = i1min+1; ii1max = i1max-1
+  if(ipass == 6)then
      jj1min = j1min+1; jj1max = j1max-1
      kk1min = k1min; kk1max = k1min
   endif
-  if(ipass == 19)then
-     ii1min = i1min+1; ii1max = i1max-1
-     jj1min = j1min+1; jj1max = j1max-1
+  if(ipass == 6)then
      kk1min = k1max; kk1max = k1max
   endif
 
