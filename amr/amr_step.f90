@@ -189,7 +189,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------
   ! Compute new time step
   !----------------------
-                                    call m_timer(pst,'courant','start')
+                                    call m_timer(pst,'time step','start')
   call m_newdt_fine(pst,ilevel)
 
   !-----------------------
