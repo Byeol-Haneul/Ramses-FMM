@@ -482,10 +482,12 @@ subroutine pack_fetch_tree(c,local_peak_id,msg_size,msg_array)
   type(msg_tree_clump)::msg
 
   msg%lev = c%peak_level(local_peak_id)
+  msg%mass = c%particle_mass(local_peak_id)
   msg%pos(1:ndim) = c%peak_com(local_peak_id,1:ndim)
   msg%vel(1:ndim) = c%peak_vel(local_peak_id,1:ndim)
+  msg%acc(1:ndim) = c%peak_acc(local_peak_id,1:ndim)
 
-  msg_array=transfer(msg,msg_array)
+  msg_array = transfer(msg,msg_array)
 
 end subroutine pack_fetch_tree
 !################################################################
@@ -503,11 +505,13 @@ subroutine unpack_fetch_tree(c,local_peak_id,msg_size,msg_array)
 
   type(msg_tree_clump)::msg
 
-  msg=transfer(msg_array,msg)
+  msg = transfer(msg_array,msg)
 
-  c%peak_level(local_peak_id)=msg%lev
-  c%peak_com(local_peak_id,1:ndim)=msg%pos(1:ndim)
-  c%peak_vel(local_peak_id,1:ndim)=msg%vel(1:ndim)
+  c%peak_level(local_peak_id) = msg%lev
+  c%particle_mass(local_peak_id) = msg%mass
+  c%peak_com(local_peak_id,1:ndim) = msg%pos(1:ndim)
+  c%peak_vel(local_peak_id,1:ndim) = msg%vel(1:ndim)
+  c%peak_acc(local_peak_id,1:ndim) = msg%acc(1:ndim)
 
 end subroutine unpack_fetch_tree
 !################################################################

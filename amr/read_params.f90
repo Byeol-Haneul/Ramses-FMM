@@ -38,6 +38,7 @@ subroutine m_read_params(pst)
   logical::star    =.false.   ! Stars and star formation activated
   logical::sink    =.false.   ! Sinks and sink formation activated
   logical::merger_tree=.false. ! Merger tree particles activated
+  logical::orphan  =.false.   ! Orphan particles activated
   logical::verbose =.false.   ! Write everything
   logical::debug   =.false.   ! Debug mode activated
   logical::static  =.false.   ! Static mode activated
@@ -423,7 +424,7 @@ subroutine m_read_params(pst)
        & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
-       & ,merger_tree,ntreemax,ntreetot,rho_type_clump
+       & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
@@ -752,6 +753,7 @@ subroutine m_read_params(pst)
   s%r%star=star
   s%r%sink=sink
   s%r%tree=merger_tree
+  s%r%orphan=orphan
   s%r%verbose=verbose
   s%r%debug=debug
   s%r%nrestart=nrestart

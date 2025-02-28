@@ -1,4 +1,5 @@
 module move_fine_module
+  use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
 contains
 !################################################################
 !################################################################
@@ -52,10 +53,10 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-                     call kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
-     if(pst%s%r%star)call kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
-     if(pst%s%r%sink)call kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
-     if(pst%s%r%tree)call kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+                     call cic_kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
+     if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+     if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+     if(pst%s%r%tree)call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
   endif
 
 end subroutine r_kick_drift_part
@@ -63,7 +64,7 @@ end subroutine r_kick_drift_part
 !################################################################
 !################################################################
 !################################################################
-subroutine kick_drift_part(s,p,ilevel,action_part)
+subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   use amr_parameters, only: dp,ndim,twotondim
   use pm_parameters
   use pm_commons, only: part_t
@@ -92,7 +93,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
-  
+
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Mesh spacing in that level
@@ -106,12 +107,12 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
-     
+
      ! Rescale particle position at level ilevel
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
-     
+
      ! CIC at level ilevel (dr: right cloud boundary; dl: left cloud boundary)
      do idim=1,ndim
         dr(idim)=x(idim)+0.5D0
@@ -120,35 +121,16 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
         dl(idim)=1.0D0-dr(idim)
         il(idim)=ir(idim)-1
      end do
-     
+
      ! Periodic boundary conditions
      do idim=1,ndim
         if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
         if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
      enddo
-     
+
      ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=il(1)
-     ckey(1,2)=ir(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1)=(/il(1),il(2)/)
-     ckey(1:2,2)=(/ir(1),il(2)/)
-     ckey(1:2,3)=(/il(1),ir(2)/)
-     ckey(1:2,4)=(/ir(1),ir(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1)=(/il(1),il(2),il(3)/)
-     ckey(1:3,2)=(/ir(1),il(2),il(3)/)
-     ckey(1:3,3)=(/il(1),ir(2),il(3)/)
-     ckey(1:3,4)=(/ir(1),ir(2),il(3)/)
-     ckey(1:3,5)=(/il(1),il(2),ir(3)/)
-     ckey(1:3,6)=(/ir(1),il(2),ir(3)/)
-     ckey(1:3,7)=(/il(1),ir(2),ir(3)/)
-     ckey(1:3,8)=(/ir(1),ir(2),ir(3)/)
-#endif
-     
+     ckey = cic_index(il,ir)
+
      ! Get parent cell at level ilevel using read-only cache
      ok_level=.true.
      hash_nbor(0)=ilevel+1
@@ -171,7 +153,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
         do idim=1,ndim
            x(idim)=x(idim)/2.0d0
         end do
-        
+
         ! CIC at level ilevel-1 (dr: right cloud boundary; dl: left cloud boundary)
         do idim=1,ndim
            dr(idim)=x(idim)+0.5D0
@@ -180,35 +162,16 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
            dl(idim)=1.0D0-dr(idim)
            il(idim)=ir(idim)-1
         end do
-        
+
         ! Periodic boundary conditions
         do idim=1,ndim
            if(il(idim)<0)il(idim)=m%ckey_max(ilevel)-1
            if(ir(idim)==m%ckey_max(ilevel))ir(idim)=0
         enddo
-        
+
         ! Compute cells Cartesian key
-#if NDIM==1
-        ckey(1,1)=il(1)
-        ckey(1,2)=ir(1)
-#endif
-#if NDIM==2
-        ckey(1:2,1)=(/il(1),il(2)/)
-        ckey(1:2,2)=(/ir(1),il(2)/)
-        ckey(1:2,3)=(/il(1),ir(2)/)
-        ckey(1:2,4)=(/ir(1),ir(2)/)
-#endif
-#if NDIM==3
-        ckey(1:3,1)=(/il(1),il(2),il(3)/)
-        ckey(1:3,2)=(/ir(1),il(2),il(3)/)
-        ckey(1:3,3)=(/il(1),ir(2),il(3)/)
-        ckey(1:3,4)=(/ir(1),ir(2),il(3)/)
-        ckey(1:3,5)=(/il(1),il(2),ir(3)/)
-        ckey(1:3,6)=(/ir(1),il(2),ir(3)/)
-        ckey(1:3,7)=(/il(1),ir(2),ir(3)/)
-        ckey(1:3,8)=(/ir(1),ir(2),ir(3)/)
-#endif
-        
+        ckey = cic_index(il,ir)
+
         ! Get parent cell at level ilevel-1 using read-only cache
         ok_level=.true.
         hash_nbor(0)=ilevel
@@ -224,29 +187,10 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
            call unlock_cache(s,gridp(ind)%p)
         end do
      end if
-        
+
      ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=dl(1)
-     vol(2)=dr(1)
-#endif
-#if NDIM==2
-     vol(1)=dl(1)*dl(2)
-     vol(2)=dr(1)*dl(2)
-     vol(3)=dl(1)*dr(2)
-     vol(4)=dr(1)*dr(2)
-#endif
-#if NDIM==3
-     vol(1)=dl(1)*dl(2)*dl(3)
-     vol(2)=dr(1)*dl(2)*dl(3)
-     vol(3)=dl(1)*dr(2)*dl(3)
-     vol(4)=dr(1)*dr(2)*dl(3)
-     vol(5)=dl(1)*dl(2)*dr(3)
-     vol(6)=dr(1)*dl(2)*dr(3)
-     vol(7)=dl(1)*dr(2)*dr(3)
-     vol(8)=dr(1)*dr(2)*dr(3)
-#endif
-     
+     vol = cic_weight(dl,dr)
+
      ! Gather 3-force
      ff(1:ndim)=0.0
      if(ok_level)then
@@ -262,7 +206,7 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 
         ! Update velocity
         p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
-        
+
         ! Update position
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
 
@@ -313,12 +257,12 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
 
         ! Update velocity
         p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
-        
+
      endif
 
   end do
   ! End loop over particles
-  
+
   call close_cache(s,m%grid_dict)
 
   ! Periodic boundary conditions
@@ -332,8 +276,8 @@ subroutine kick_drift_part(s,p,ilevel,action_part)
   end if
 
   end associate
-  
-end subroutine kick_drift_part
+
+end subroutine cic_kick_drift_part
 !################################################################
 !################################################################
 !################################################################
@@ -407,98 +351,10 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
      enddo
 
      ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=cl(1)
-     ckey(1,2)=cc(1)
-     ckey(1,3)=cr(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1)=(/cl(1),cl(2)/)
-     ckey(1:2,2)=(/cc(1),cl(2)/)
-     ckey(1:2,3)=(/cr(1),cl(2)/)
-     ckey(1:2,4)=(/cl(1),cc(2)/)
-     ckey(1:2,5)=(/cc(1),cc(2)/)
-     ckey(1:2,6)=(/cr(1),cc(2)/)
-     ckey(1:2,7)=(/cl(1),cr(2)/)
-     ckey(1:2,8)=(/cc(1),cr(2)/)
-     ckey(1:2,9)=(/cr(1),cr(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1) =(/cl(1),cl(2),cl(3)/)
-     ckey(1:3,2) =(/cc(1),cl(2),cl(3)/)
-     ckey(1:3,3) =(/cr(1),cl(2),cl(3)/)
-     ckey(1:3,4) =(/cl(1),cc(2),cl(3)/)
-     ckey(1:3,5) =(/cc(1),cc(2),cl(3)/)
-     ckey(1:3,6) =(/cr(1),cc(2),cl(3)/)
-     ckey(1:3,7) =(/cl(1),cr(2),cl(3)/)
-     ckey(1:3,8) =(/cc(1),cr(2),cl(3)/)
-     ckey(1:3,9) =(/cr(1),cr(2),cl(3)/)
-     ckey(1:3,10)=(/cl(1),cl(2),cc(3)/)
-     ckey(1:3,11)=(/cc(1),cl(2),cc(3)/)
-     ckey(1:3,12)=(/cr(1),cl(2),cc(3)/)
-     ckey(1:3,13)=(/cl(1),cc(2),cc(3)/)
-     ckey(1:3,14)=(/cc(1),cc(2),cc(3)/)
-     ckey(1:3,15)=(/cr(1),cc(2),cc(3)/)
-     ckey(1:3,16)=(/cl(1),cr(2),cc(3)/)
-     ckey(1:3,17)=(/cc(1),cr(2),cc(3)/)
-     ckey(1:3,18)=(/cr(1),cr(2),cc(3)/)
-     ckey(1:3,19)=(/cl(1),cl(2),cr(3)/)
-     ckey(1:3,20)=(/cc(1),cl(2),cr(3)/)
-     ckey(1:3,21)=(/cr(1),cl(2),cr(3)/)
-     ckey(1:3,22)=(/cl(1),cc(2),cr(3)/)
-     ckey(1:3,23)=(/cc(1),cc(2),cr(3)/)
-     ckey(1:3,24)=(/cr(1),cc(2),cr(3)/)
-     ckey(1:3,25)=(/cl(1),cr(2),cr(3)/)
-     ckey(1:3,26)=(/cc(1),cr(2),cr(3)/)
-     ckey(1:3,27)=(/cr(1),cr(2),cr(3)/)
-#endif
+     ckey = tsc_index(cl,cc,cr)
 
      ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=wl(1)
-     vol(2)=wc(1)
-     vol(3)=wr(1)
-#endif
-#if NDIM==2
-     vol(1)=wl(1)*wl(2)
-     vol(2)=wc(1)*wl(2)
-     vol(3)=wr(1)*wl(2)
-     vol(4)=wl(1)*wc(2)
-     vol(5)=wc(1)*wc(2)
-     vol(6)=wr(1)*wc(2)
-     vol(7)=wl(1)*wr(2)
-     vol(8)=wc(1)*wr(2)
-     vol(9)=wr(1)*wr(2)
-#endif
-#if NDIM==3
-     vol(1) =wl(1)*wl(2)*wl(3)
-     vol(2) =wc(1)*wl(2)*wl(3)
-     vol(3) =wr(1)*wl(2)*wl(3)
-     vol(4) =wl(1)*wc(2)*wl(3)
-     vol(5) =wc(1)*wc(2)*wl(3)
-     vol(6) =wr(1)*wc(2)*wl(3)
-     vol(7) =wl(1)*wr(2)*wl(3)
-     vol(8) =wc(1)*wr(2)*wl(3)
-     vol(9) =wr(1)*wr(2)*wl(3)
-     vol(10)=wl(1)*wl(2)*wc(3)
-     vol(11)=wc(1)*wl(2)*wc(3)
-     vol(12)=wr(1)*wl(2)*wc(3)
-     vol(13)=wl(1)*wc(2)*wc(3)
-     vol(14)=wc(1)*wc(2)*wc(3)
-     vol(15)=wr(1)*wc(2)*wc(3)
-     vol(16)=wl(1)*wr(2)*wc(3)
-     vol(17)=wc(1)*wr(2)*wc(3)
-     vol(18)=wr(1)*wr(2)*wc(3)
-     vol(19)=wl(1)*wl(2)*wr(3)
-     vol(20)=wc(1)*wl(2)*wr(3)
-     vol(21)=wr(1)*wl(2)*wr(3)
-     vol(22)=wl(1)*wc(2)*wr(3)
-     vol(23)=wc(1)*wc(2)*wr(3)
-     vol(24)=wr(1)*wc(2)*wr(3)
-     vol(25)=wl(1)*wr(2)*wr(3)
-     vol(26)=wc(1)*wr(2)*wr(3)
-     vol(27)=wr(1)*wr(2)*wr(3)
-#endif
+     vol = tsc_weight(wl,wc,wr)
 
      ! Gather 3-force
      hash_nbor(0)=ilevel+1
@@ -654,10 +510,10 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
         xl =dble(cl (idim))+0.5D0
         xr =dble(cr (idim))+0.5D0
 	xrr=dble(crr(idim))+0.5D0
-        wll(idim)=(2D0                        -abs(x(idim)-xll)**3)/6D0 ! weight
+        wll(idim)=(2D0                        -abs(x(idim)-xll))**3/6D0 ! weight
         wl (idim)=(4D0-6D0*(x(idim)-xl)**2+3d0*abs(x(idim)-xl )**3)/6D0
         wr (idim)=(4D0-6D0*(x(idim)-xr)**2+3d0*abs(x(idim)-xr )**3)/6D0
-        wrr(idim)=(2D0                        -abs(x(idim)-xrr)**3)/6D0
+        wrr(idim)=(2D0                        -abs(x(idim)-xrr))**3/6D0
      end do
 
      ! Periodic boundary conditions
@@ -669,188 +525,10 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
      enddo
 
      ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=cll(1)
-     ckey(1,2)=cl (1)
-     ckey(1,3)=cr (1)
-     ckey(1,4)=crr(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1) =(/cll(1),cll(2)/)
-     ckey(1:2,2) =(/cl (1),cll(2)/)
-     ckey(1:2,3) =(/cr (1),cll(2)/)
-     ckey(1:2,4) =(/crr(1),cll(2)/)
-     ckey(1:2,5) =(/cll(1),cl (2)/)
-     ckey(1:2,6) =(/cl (1),cl (2)/)
-     ckey(1:2,7) =(/cr (1),cl (2)/)
-     ckey(1:2,8) =(/crr(1),cl (2)/)
-     ckey(1:2,9) =(/cll(1),cr (2)/)
-     ckey(1:2,10)=(/cl (1),cr (2)/)
-     ckey(1:2,11)=(/cr (1),cr (2)/)
-     ckey(1:2,12)=(/crr(1),cr (2)/)
-     ckey(1:2,13)=(/cll(1),crr(2)/)
-     ckey(1:2,14)=(/cl (1),crr(2)/)
-     ckey(1:2,15)=(/cr (1),crr(2)/)
-     ckey(1:2,16)=(/crr(1),crr(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1) =(/cll(1),cll(2),cll(3)/)
-     ckey(1:3,2) =(/cl (1),cll(2),cll(3)/)
-     ckey(1:3,3) =(/cr (1),cll(2),cll(3)/)
-     ckey(1:3,4) =(/crr(1),cll(2),cll(3)/)
-     ckey(1:3,5) =(/cll(1),cl (2),cll(3)/)
-     ckey(1:3,6) =(/cl (1),cl (2),cll(3)/)
-     ckey(1:3,7) =(/cr (1),cl (2),cll(3)/)
-     ckey(1:3,8) =(/crr(1),cl (2),cll(3)/)
-     ckey(1:3,9) =(/cll(1),cr (2),cll(3)/)
-     ckey(1:3,10)=(/cl (1),cr (2),cll(3)/)
-     ckey(1:3,11)=(/cr (1),cr (2),cll(3)/)
-     ckey(1:3,12)=(/crr(1),cr (2),cll(3)/)
-     ckey(1:3,13)=(/cll(1),crr(2),cll(3)/)
-     ckey(1:3,14)=(/cl (1),crr(2),cll(3)/)
-     ckey(1:3,15)=(/cr (1),crr(2),cll(3)/)
-     ckey(1:3,16)=(/crr(1),crr(2),cll(3)/)
-     ckey(1:3,17)=(/cll(1),cll(2),cl (3)/)
-     ckey(1:3,18)=(/cl (1),cll(2),cl (3)/)
-     ckey(1:3,19)=(/cr (1),cll(2),cl (3)/)
-     ckey(1:3,20)=(/crr(1),cll(2),cl (3)/)
-     ckey(1:3,21)=(/cll(1),cl (2),cl (3)/)
-     ckey(1:3,22)=(/cl (1),cl (2),cl (3)/)
-     ckey(1:3,23)=(/cr (1),cl (2),cl (3)/)
-     ckey(1:3,24)=(/crr(1),cl (2),cl (3)/)
-     ckey(1:3,25)=(/cll(1),cr (2),cl (3)/)
-     ckey(1:3,26)=(/cl (1),cr (2),cl (3)/)
-     ckey(1:3,27)=(/cr (1),cr (2),cl (3)/)
-     ckey(1:3,28)=(/crr(1),cr (2),cl (3)/)
-     ckey(1:3,29)=(/cll(1),crr(2),cl (3)/)
-     ckey(1:3,30)=(/cl (1),crr(2),cl (3)/)
-     ckey(1:3,31)=(/cr (1),crr(2),cl (3)/)
-     ckey(1:3,32)=(/crr(1),crr(2),cl (3)/)
-     ckey(1:3,33)=(/cll(1),cll(2),cr (3)/)
-     ckey(1:3,34)=(/cl (1),cll(2),cr (3)/)
-     ckey(1:3,35)=(/cr (1),cll(2),cr (3)/)
-     ckey(1:3,36)=(/crr(1),cll(2),cr (3)/)
-     ckey(1:3,37)=(/cll(1),cl (2),cr (3)/)
-     ckey(1:3,38)=(/cl (1),cl (2),cr (3)/)
-     ckey(1:3,39)=(/cr (1),cl (2),cr (3)/)
-     ckey(1:3,40)=(/crr(1),cl (2),cr (3)/)
-     ckey(1:3,41)=(/cll(1),cr (2),cr (3)/)
-     ckey(1:3,42)=(/cl (1),cr (2),cr (3)/)
-     ckey(1:3,43)=(/cr (1),cr (2),cr (3)/)
-     ckey(1:3,44)=(/crr(1),cr (2),cr (3)/)
-     ckey(1:3,45)=(/cll(1),crr(2),cr (3)/)
-     ckey(1:3,46)=(/cl (1),crr(2),cr (3)/)
-     ckey(1:3,47)=(/cr (1),crr(2),cr (3)/)
-     ckey(1:3,48)=(/crr(1),crr(2),cr (3)/)
-     ckey(1:3,49)=(/cll(1),cll(2),crr(3)/)
-     ckey(1:3,50)=(/cl (1),cll(2),crr(3)/)
-     ckey(1:3,51)=(/cr (1),cll(2),crr(3)/)
-     ckey(1:3,52)=(/crr(1),cll(2),crr(3)/)
-     ckey(1:3,53)=(/cll(1),cl (2),crr(3)/)
-     ckey(1:3,54)=(/cl (1),cl (2),crr(3)/)
-     ckey(1:3,55)=(/cr (1),cl (2),crr(3)/)
-     ckey(1:3,56)=(/crr(1),cl (2),crr(3)/)
-     ckey(1:3,57)=(/cll(1),cr (2),crr(3)/)
-     ckey(1:3,58)=(/cl (1),cr (2),crr(3)/)
-     ckey(1:3,59)=(/cr (1),cr (2),crr(3)/)
-     ckey(1:3,60)=(/crr(1),cr (2),crr(3)/)
-     ckey(1:3,61)=(/cll(1),crr(2),crr(3)/)
-     ckey(1:3,62)=(/cl (1),crr(2),crr(3)/)
-     ckey(1:3,63)=(/cr (1),crr(2),crr(3)/)
-     ckey(1:3,64)=(/crr(1),crr(2),crr(3)/)
-#endif
+     ckey = pcs_index(cll,cl,cr,crr)
 
      ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=wll(1)
-     vol(2)=wl (1)
-     vol(3)=wr (1)
-     vol(4)=wrr(1)
-#endif
-#if NDIM==2
-     vol(1) =wll(1)*wll(2)
-     vol(2) =wl (1)*wll(2)
-     vol(3) =wr (1)*wll(2)
-     vol(4) =wrr(1)*wll(2)
-     vol(5) =wll(1)*wl (2)
-     vol(6) =wl (1)*wl (2)
-     vol(7) =wr (1)*wl (2)
-     vol(8) =wrr(1)*wl (2)
-     vol(9) =wll(1)*wr (2)
-     vol(10)=wl (1)*wr (2)
-     vol(11)=wr (1)*wr (2)
-     vol(12)=wrr(1)*wr (2)
-     vol(13)=wll(1)*wrr(2)
-     vol(14)=wl (1)*wrr(2)
-     vol(15)=wr (1)*wrr(2)
-     vol(16)=wrr(1)*wrr(2)
-#endif
-#if NDIM==3
-     vol(1) =wll(1)*wll(2)*wll(3)
-     vol(2) =wl (1)*wll(2)*wll(3)
-     vol(3) =wr (1)*wll(2)*wll(3)
-     vol(4) =wrr(1)*wll(2)*wll(3)
-     vol(5) =wll(1)*wl (2)*wll(3)
-     vol(6) =wl (1)*wl (2)*wll(3)
-     vol(7) =wr (1)*wl (2)*wll(3)
-     vol(8) =wrr(1)*wl (2)*wll(3)
-     vol(9) =wll(1)*wr (2)*wll(3)
-     vol(10)=wl (1)*wr (2)*wll(3)
-     vol(11)=wr (1)*wr (2)*wll(3)
-     vol(12)=wrr(1)*wr (2)*wll(3)
-     vol(13)=wll(1)*wrr(2)*wll(3)
-     vol(14)=wl (1)*wrr(2)*wll(3)
-     vol(15)=wr (1)*wrr(2)*wll(3)
-     vol(16)=wrr(1)*wrr(2)*wll(3)
-     vol(17)=wll(1)*wll(2)*wl (3)
-     vol(18)=wl (1)*wll(2)*wl (3)
-     vol(19)=wr (1)*wll(2)*wl (3)
-     vol(20)=wrr(1)*wll(2)*wl (3)
-     vol(21)=wll(1)*wl (2)*wl (3)
-     vol(22)=wl (1)*wl (2)*wl (3)
-     vol(23)=wr (1)*wl (2)*wl (3)
-     vol(24)=wrr(1)*wl (2)*wl (3)
-     vol(25)=wll(1)*wr (2)*wl (3)
-     vol(26)=wl (1)*wr (2)*wl (3)
-     vol(27)=wr (1)*wr (2)*wl (3)
-     vol(28)=wrr(1)*wr (2)*wl (3)
-     vol(29)=wll(1)*wrr(2)*wl (3)
-     vol(30)=wl (1)*wrr(2)*wl (3)
-     vol(31)=wr (1)*wrr(2)*wl (3)
-     vol(32)=wrr(1)*wrr(2)*wl (3)
-     vol(33)=wll(1)*wll(2)*wr (3)
-     vol(34)=wl (1)*wll(2)*wr (3)
-     vol(35)=wr (1)*wll(2)*wr (3)
-     vol(36)=wrr(1)*wll(2)*wr (3)
-     vol(37)=wll(1)*wl (2)*wr (3)
-     vol(38)=wl (1)*wl (2)*wr (3)
-     vol(39)=wr (1)*wl (2)*wr (3)
-     vol(40)=wrr(1)*wl (2)*wr (3)
-     vol(41)=wll(1)*wr (2)*wr (3)
-     vol(42)=wl (1)*wr (2)*wr (3)
-     vol(43)=wr (1)*wr (2)*wr (3)
-     vol(44)=wrr(1)*wr (2)*wr (3)
-     vol(45)=wll(1)*wrr(2)*wr (3)
-     vol(46)=wl (1)*wrr(2)*wr (3)
-     vol(47)=wr (1)*wrr(2)*wr (3)
-     vol(48)=wrr(1)*wrr(2)*wr (3)
-     vol(49)=wll(1)*wll(2)*wrr(3)
-     vol(50)=wl (1)*wll(2)*wrr(3)
-     vol(51)=wr (1)*wll(2)*wrr(3)
-     vol(52)=wrr(1)*wll(2)*wrr(3)
-     vol(53)=wll(1)*wl (2)*wrr(3)
-     vol(54)=wl (1)*wl (2)*wrr(3)
-     vol(55)=wr (1)*wl (2)*wrr(3)
-     vol(56)=wrr(1)*wl (2)*wrr(3)
-     vol(57)=wll(1)*wr (2)*wrr(3)
-     vol(58)=wl (1)*wr (2)*wrr(3)
-     vol(59)=wr (1)*wr (2)*wrr(3)
-     vol(60)=wrr(1)*wr (2)*wrr(3)
-     vol(61)=wll(1)*wrr(2)*wrr(3)
-     vol(62)=wl (1)*wrr(2)*wrr(3)
-     vol(63)=wr (1)*wrr(2)*wrr(3)
-     vol(64)=wrr(1)*wrr(2)*wrr(3)
-#endif
+     vol = pcs_weight(wll,wl,wr,wrr)
 
      ! Gather 3-force
      hash_nbor(0)=ilevel+1
