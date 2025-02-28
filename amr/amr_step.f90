@@ -204,7 +204,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Set rtunew equal to rtuold
   !---------------------------
   if(r%rt)then
-                                    call m_timer(pst,'rt - set rtunew','start')
+                                    call m_timer(pst,'radiative transfer','start')
      call r_set_rtunew(pst,ilevel,1)
      call r_set_emissivity(pst,ilevel,1)
   endif
