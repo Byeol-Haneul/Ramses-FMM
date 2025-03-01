@@ -82,7 +82,6 @@ contains
       ! =============================
       num_blocks = num_subgrids
 
-
       ! Perform integration
       dt = sim%g%dtnew(ilevel)
       dx = sim%r%boxlen/2**ilevel

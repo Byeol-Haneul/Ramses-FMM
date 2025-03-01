@@ -39,7 +39,6 @@ module hydro_integrator
       real(kind=dp) :: pressure
    end type primitive_t
 
-
 contains
    ! ==========================================================================
    !> @brief
