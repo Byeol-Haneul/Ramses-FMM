@@ -6,6 +6,7 @@ module rt_commons
      integer::iu1,iu2,ju1,ju2,ku1,ku2
      integer::if1,if2,jf1,jf2,kf1,kf2
      integer::io1,io2,jo1,jo2,ko1,ko2
+     logical ,dimension(:,:,:),allocatable::inkernel
      logical ,dimension(:,:,:),allocatable::okloc
      integer ,dimension(:,:,:),allocatable::cellloc
      type(nbor),dimension(:,:,:),allocatable::childloc
@@ -46,6 +47,7 @@ contains
     
     allocate(h%okloc(h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2))
 
+    allocate(h%inkernel(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
     allocate(h%childloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
     allocate(h%gridloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
     allocate(h%cellloc (h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
@@ -67,6 +69,7 @@ contains
     nint=0
     nint=nint+size(transfer(h%okloc,(/1/)))
 
+    nint=nint+size(transfer(h%inkernel,(/1/)))
     nint=nint+size(transfer(h%childloc,(/1/)))
     nint=nint+size(transfer(h%gridloc ,(/1/)))
     nint=nint+size(transfer(h%cellloc ,(/1/)))

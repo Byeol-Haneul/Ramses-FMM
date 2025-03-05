@@ -319,6 +319,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   hash_nbor(0)=m%grid(ind_grid)%lev
   ckey_corner(1:ndim)=(m%grid(ind_grid)%ckey(1:ndim)/(i1max-1))*(i1max-1)
   ind_oct=ind_grid
+  h%inkernel=.false.
 
   ! Loop over 3x3x3 neighboring father cells using 7 passes
   do ipass = 1, 1+2*ndim
@@ -384,6 +385,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
               kk1=ckey(3)+1
 #endif
               h%childloc(ii1,jj1,kk1)%p=>m%grid(ind_oct)
+              h%inkernel(ii1,jj1,kk1)=.true.
               nullify(h%gridloc(ii1,jj1,kk1)%p)
               h%cellloc(ii1,jj1,kk1)=0
 
@@ -490,6 +492,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 
               ! Store grid index
               h%childloc(i1,j1,k1)%p=>childp
+              h%inkernel(i1,j1,k1)=.true.
               h%gridloc (i1,j1,k1)%p=>gridp
               h%cellloc (i1,j1,k1)=icell
               do inbor=1,twondim
@@ -771,6 +774,8 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   do k1=k1min,k1max
      do j1=j1min,j1max
         do i1=i1min,i1max     
+           ! Check if in kernel
+           if(.not.h%inkernel(i1,j1,k1))cycle
            ! Get oct index
            childp=>h%childloc(i1,j1,k1)%p
            ! Check that parent cell is not refined
