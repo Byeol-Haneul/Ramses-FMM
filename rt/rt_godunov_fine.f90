@@ -352,7 +352,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
      jj1min = j1min+1; jj1max = j1max-1
      kk1min = k1min; kk1max = k1min
   endif
-  if(ipass == 6)then
+  if(ipass == 7)then
      kk1min = k1max; kk1max = k1max
   endif
 
