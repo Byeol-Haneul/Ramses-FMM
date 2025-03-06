@@ -284,7 +284,7 @@ subroutine user_flag(s,ilevel,nflag)
   if(s%r%hydro)call hydro_flag(s,ilevel)
 
   ! Refinement rules around sink particles
-  if(s%r%sink_refine)call sink_flag(s,s%sink,ilevel)
+  if(s%r%sink.and.s%r%sink_refine)call sink_flag(s,s%sink,ilevel)
 
   nflag=s%g%nflag
 
