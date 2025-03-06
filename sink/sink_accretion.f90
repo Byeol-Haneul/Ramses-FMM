@@ -1,8 +1,8 @@
 module sink_accretion_module
-
-   type :: out_accretion_t
-      real(kind=8)::mass
-   end type out_accretion_t
+  use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
+  type :: out_accretion_t
+     real(kind=8)::mass
+  end type out_accretion_t
 
 contains
 !##############################################################################
@@ -452,140 +452,11 @@ subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol)
       if(crr(idim)==m%ckey_max(r%nlevelmax+1))crr(idim)=0
    enddo
 
-   !!! Compute volumes, positions and cartesian keys
-   ! NOTE: Sinks always exist at ndim = 3
-
    ! Compute cloud volumes
-   vol(1) =wll(1)*wll(2)*wll(3)
-   vol(2) =wl (1)*wll(2)*wll(3)
-   vol(3) =wr (1)*wll(2)*wll(3)
-   vol(4) =wrr(1)*wll(2)*wll(3)
-   vol(5) =wll(1)*wl (2)*wll(3)
-   vol(6) =wl (1)*wl (2)*wll(3)
-   vol(7) =wr (1)*wl (2)*wll(3)
-   vol(8) =wrr(1)*wl (2)*wll(3)
-   vol(9) =wll(1)*wr (2)*wll(3)
-   vol(10)=wl (1)*wr (2)*wll(3)
-   vol(11)=wr (1)*wr (2)*wll(3)
-   vol(12)=wrr(1)*wr (2)*wll(3)
-   vol(13)=wll(1)*wrr(2)*wll(3)
-   vol(14)=wl (1)*wrr(2)*wll(3)
-   vol(15)=wr (1)*wrr(2)*wll(3)
-   vol(16)=wrr(1)*wrr(2)*wll(3)
-   vol(17)=wll(1)*wll(2)*wl (3)
-   vol(18)=wl (1)*wll(2)*wl (3)
-   vol(19)=wr (1)*wll(2)*wl (3)
-   vol(20)=wrr(1)*wll(2)*wl (3)
-   vol(21)=wll(1)*wl (2)*wl (3)
-   vol(22)=wl (1)*wl (2)*wl (3)
-   vol(23)=wr (1)*wl (2)*wl (3)
-   vol(24)=wrr(1)*wl (2)*wl (3)
-   vol(25)=wll(1)*wr (2)*wl (3)
-   vol(26)=wl (1)*wr (2)*wl (3)
-   vol(27)=wr (1)*wr (2)*wl (3)
-   vol(28)=wrr(1)*wr (2)*wl (3)
-   vol(29)=wll(1)*wrr(2)*wl (3)
-   vol(30)=wl (1)*wrr(2)*wl (3)
-   vol(31)=wr (1)*wrr(2)*wl (3)
-   vol(32)=wrr(1)*wrr(2)*wl (3)
-   vol(33)=wll(1)*wll(2)*wr (3)
-   vol(34)=wl (1)*wll(2)*wr (3)
-   vol(35)=wr (1)*wll(2)*wr (3)
-   vol(36)=wrr(1)*wll(2)*wr (3)
-   vol(37)=wll(1)*wl (2)*wr (3)
-   vol(38)=wl (1)*wl (2)*wr (3)
-   vol(39)=wr (1)*wl (2)*wr (3)
-   vol(40)=wrr(1)*wl (2)*wr (3)
-   vol(41)=wll(1)*wr (2)*wr (3)
-   vol(42)=wl (1)*wr (2)*wr (3)
-   vol(43)=wr (1)*wr (2)*wr (3)
-   vol(44)=wrr(1)*wr (2)*wr (3)
-   vol(45)=wll(1)*wrr(2)*wr (3)
-   vol(46)=wl (1)*wrr(2)*wr (3)
-   vol(47)=wr (1)*wrr(2)*wr (3)
-   vol(48)=wrr(1)*wrr(2)*wr (3)
-   vol(49)=wll(1)*wll(2)*wrr(3)
-   vol(50)=wl (1)*wll(2)*wrr(3)
-   vol(51)=wr (1)*wll(2)*wrr(3)
-   vol(52)=wrr(1)*wll(2)*wrr(3)
-   vol(53)=wll(1)*wl (2)*wrr(3)
-   vol(54)=wl (1)*wl (2)*wrr(3)
-   vol(55)=wr (1)*wl (2)*wrr(3)
-   vol(56)=wrr(1)*wl (2)*wrr(3)
-   vol(57)=wll(1)*wr (2)*wrr(3)
-   vol(58)=wl (1)*wr (2)*wrr(3)
-   vol(59)=wr (1)*wr (2)*wrr(3)
-   vol(60)=wrr(1)*wr (2)*wrr(3)
-   vol(61)=wll(1)*wrr(2)*wrr(3)
-   vol(62)=wl (1)*wrr(2)*wrr(3)
-   vol(63)=wr (1)*wrr(2)*wrr(3)
-   vol(64)=wrr(1)*wrr(2)*wrr(3)
+   vol = pcs_weight(wll,wl,wr,wrr)
 
    ! Compute cartesian keys
-   ckey(1:3,1) =(/cll(1),cll(2),cll(3)/)
-   ckey(1:3,2) =(/cl (1),cll(2),cll(3)/)
-   ckey(1:3,3) =(/cr (1),cll(2),cll(3)/)
-   ckey(1:3,4) =(/crr(1),cll(2),cll(3)/)
-   ckey(1:3,5) =(/cll(1),cl (2),cll(3)/)
-   ckey(1:3,6) =(/cl (1),cl (2),cll(3)/)
-   ckey(1:3,7) =(/cr (1),cl (2),cll(3)/)
-   ckey(1:3,8) =(/crr(1),cl (2),cll(3)/)
-   ckey(1:3,9) =(/cll(1),cr (2),cll(3)/)
-   ckey(1:3,10)=(/cl (1),cr (2),cll(3)/)
-   ckey(1:3,11)=(/cr (1),cr (2),cll(3)/)
-   ckey(1:3,12)=(/crr(1),cr (2),cll(3)/)
-   ckey(1:3,13)=(/cll(1),crr(2),cll(3)/)
-   ckey(1:3,14)=(/cl (1),crr(2),cll(3)/)
-   ckey(1:3,15)=(/cr (1),crr(2),cll(3)/)
-   ckey(1:3,16)=(/crr(1),crr(2),cll(3)/)
-   ckey(1:3,17)=(/cll(1),cll(2),cl (3)/)
-   ckey(1:3,18)=(/cl (1),cll(2),cl (3)/)
-   ckey(1:3,19)=(/cr (1),cll(2),cl (3)/)
-   ckey(1:3,20)=(/crr(1),cll(2),cl (3)/)
-   ckey(1:3,21)=(/cll(1),cl (2),cl (3)/)
-   ckey(1:3,22)=(/cl (1),cl (2),cl (3)/)
-   ckey(1:3,23)=(/cr (1),cl (2),cl (3)/)
-   ckey(1:3,24)=(/crr(1),cl (2),cl (3)/)
-   ckey(1:3,25)=(/cll(1),cr (2),cl (3)/)
-   ckey(1:3,26)=(/cl (1),cr (2),cl (3)/)
-   ckey(1:3,27)=(/cr (1),cr (2),cl (3)/)
-   ckey(1:3,28)=(/crr(1),cr (2),cl (3)/)
-   ckey(1:3,29)=(/cll(1),crr(2),cl (3)/)
-   ckey(1:3,30)=(/cl (1),crr(2),cl (3)/)
-   ckey(1:3,31)=(/cr (1),crr(2),cl (3)/)
-   ckey(1:3,32)=(/crr(1),crr(2),cl (3)/)
-   ckey(1:3,33)=(/cll(1),cll(2),cr (3)/)
-   ckey(1:3,34)=(/cl (1),cll(2),cr (3)/)
-   ckey(1:3,35)=(/cr (1),cll(2),cr (3)/)
-   ckey(1:3,36)=(/crr(1),cll(2),cr (3)/)
-   ckey(1:3,37)=(/cll(1),cl (2),cr (3)/)
-   ckey(1:3,38)=(/cl (1),cl (2),cr (3)/)
-   ckey(1:3,39)=(/cr (1),cl (2),cr (3)/)
-   ckey(1:3,40)=(/crr(1),cl (2),cr (3)/)
-   ckey(1:3,41)=(/cll(1),cr (2),cr (3)/)
-   ckey(1:3,42)=(/cl (1),cr (2),cr (3)/)
-   ckey(1:3,43)=(/cr (1),cr (2),cr (3)/)
-   ckey(1:3,44)=(/crr(1),cr (2),cr (3)/)
-   ckey(1:3,45)=(/cll(1),crr(2),cr (3)/)
-   ckey(1:3,46)=(/cl (1),crr(2),cr (3)/)
-   ckey(1:3,47)=(/cr (1),crr(2),cr (3)/)
-   ckey(1:3,48)=(/crr(1),crr(2),cr (3)/)
-   ckey(1:3,49)=(/cll(1),cll(2),crr(3)/)
-   ckey(1:3,50)=(/cl (1),cll(2),crr(3)/)
-   ckey(1:3,51)=(/cr (1),cll(2),crr(3)/)
-   ckey(1:3,52)=(/crr(1),cll(2),crr(3)/)
-   ckey(1:3,53)=(/cll(1),cl (2),crr(3)/)
-   ckey(1:3,54)=(/cl (1),cl (2),crr(3)/)
-   ckey(1:3,55)=(/cr (1),cl (2),crr(3)/)
-   ckey(1:3,56)=(/crr(1),cl (2),crr(3)/)
-   ckey(1:3,57)=(/cll(1),cr (2),crr(3)/)
-   ckey(1:3,58)=(/cl (1),cr (2),crr(3)/)
-   ckey(1:3,59)=(/cr (1),cr (2),crr(3)/)
-   ckey(1:3,60)=(/crr(1),cr (2),crr(3)/)
-   ckey(1:3,61)=(/cll(1),crr(2),crr(3)/)
-   ckey(1:3,62)=(/cl (1),crr(2),crr(3)/)
-   ckey(1:3,63)=(/cr (1),crr(2),crr(3)/)
-   ckey(1:3,64)=(/crr(1),crr(2),crr(3)/)
+   ckey = pcs_index(cll,cl,cr,crr)
 
    ! Compute neighbour positions
    do j = 1,fourtondim
@@ -642,66 +513,11 @@ subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol)
       if(cr(idim)==m%ckey_max(r%nlevelmax+1))cr(idim)=0
    enddo
 
-   !!! Compute volumes, positions and cartesian keys
-   ! NOTE: Sinks always exist at ndim = 3
-
    ! Compute cloud volumes
-   vol(1) =wl(1)*wl(2)*wl(3)
-   vol(2) =wc(1)*wl(2)*wl(3)
-   vol(3) =wr(1)*wl(2)*wl(3)
-   vol(4) =wl(1)*wc(2)*wl(3)
-   vol(5) =wc(1)*wc(2)*wl(3)
-   vol(6) =wr(1)*wc(2)*wl(3)
-   vol(7) =wl(1)*wr(2)*wl(3)
-   vol(8) =wc(1)*wr(2)*wl(3)
-   vol(9) =wr(1)*wr(2)*wl(3)
-   vol(10)=wl(1)*wl(2)*wc(3)
-   vol(11)=wc(1)*wl(2)*wc(3)
-   vol(12)=wr(1)*wl(2)*wc(3)
-   vol(13)=wl(1)*wc(2)*wc(3)
-   vol(14)=wc(1)*wc(2)*wc(3)
-   vol(15)=wr(1)*wc(2)*wc(3)
-   vol(16)=wl(1)*wr(2)*wc(3)
-   vol(17)=wc(1)*wr(2)*wc(3)
-   vol(18)=wr(1)*wr(2)*wc(3)
-   vol(19)=wl(1)*wl(2)*wr(3)
-   vol(20)=wc(1)*wl(2)*wr(3)
-   vol(21)=wr(1)*wl(2)*wr(3)
-   vol(22)=wl(1)*wc(2)*wr(3)
-   vol(23)=wc(1)*wc(2)*wr(3)
-   vol(24)=wr(1)*wc(2)*wr(3)
-   vol(25)=wl(1)*wr(2)*wr(3)
-   vol(26)=wc(1)*wr(2)*wr(3)
-   vol(27)=wr(1)*wr(2)*wr(3)
+   vol = tsc_weight(wl,wc,wr)
 
    ! Compute cartesian keys
-   ckey(1:3,1) =(/cl(1),cl(2),cl(3)/)
-   ckey(1:3,2) =(/cc(1),cl(2),cl(3)/)
-   ckey(1:3,3) =(/cr(1),cl(2),cl(3)/)
-   ckey(1:3,4) =(/cl(1),cc(2),cl(3)/)
-   ckey(1:3,5) =(/cc(1),cc(2),cl(3)/)
-   ckey(1:3,6) =(/cr(1),cc(2),cl(3)/)
-   ckey(1:3,7) =(/cl(1),cr(2),cl(3)/)
-   ckey(1:3,8) =(/cc(1),cr(2),cl(3)/)
-   ckey(1:3,9) =(/cr(1),cr(2),cl(3)/)
-   ckey(1:3,10)=(/cl(1),cl(2),cc(3)/)
-   ckey(1:3,11)=(/cc(1),cl(2),cc(3)/)
-   ckey(1:3,12)=(/cr(1),cl(2),cc(3)/)
-   ckey(1:3,13)=(/cl(1),cc(2),cc(3)/)
-   ckey(1:3,14)=(/cc(1),cc(2),cc(3)/)
-   ckey(1:3,15)=(/cr(1),cc(2),cc(3)/)
-   ckey(1:3,16)=(/cl(1),cr(2),cc(3)/)
-   ckey(1:3,17)=(/cc(1),cr(2),cc(3)/)
-   ckey(1:3,18)=(/cr(1),cr(2),cc(3)/)
-   ckey(1:3,19)=(/cl(1),cl(2),cr(3)/)
-   ckey(1:3,20)=(/cc(1),cl(2),cr(3)/)
-   ckey(1:3,21)=(/cr(1),cl(2),cr(3)/)
-   ckey(1:3,22)=(/cl(1),cc(2),cr(3)/)
-   ckey(1:3,23)=(/cc(1),cc(2),cr(3)/)
-   ckey(1:3,24)=(/cr(1),cc(2),cr(3)/)
-   ckey(1:3,25)=(/cl(1),cr(2),cr(3)/)
-   ckey(1:3,26)=(/cc(1),cr(2),cr(3)/)
-   ckey(1:3,27)=(/cr(1),cr(2),cr(3)/)
+   ckey = tsc_index(cl,cc,cr)
 
    ! Compute neighbour positions
    do j = 1,threetondim
@@ -746,35 +562,18 @@ subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol)
       dl(idim)=1.0D0-dr(idim)
       il(idim)=ir(idim)-1
    end do
-   
+
    ! Periodic boundary conditions
    do idim=1,ndim
       if(il(idim)<0)il(idim)=m%ckey_max(r%nlevelmax+1)-1
       if(ir(idim)==m%ckey_max(r%nlevelmax+1))ir(idim)=0
    enddo
 
-   !!! Compute volumes, positions and cartesian keys
-   ! NOTE: Sinks always exist at ndim = 3
-
    ! Compute cloud volumes
-   vol(1)=dl(1)*dl(2)*dl(3)
-   vol(2)=dr(1)*dl(2)*dl(3)
-   vol(3)=dl(1)*dr(2)*dl(3)
-   vol(4)=dr(1)*dr(2)*dl(3)
-   vol(5)=dl(1)*dl(2)*dr(3)
-   vol(6)=dr(1)*dl(2)*dr(3)
-   vol(7)=dl(1)*dr(2)*dr(3)
-   vol(8)=dr(1)*dr(2)*dr(3)
+   vol = cic_weight(dl,dr)
 
    ! Compute cartesian keys
-   ckey(1:3,1)=(/il(1),il(2),il(3)/)
-   ckey(1:3,2)=(/ir(1),il(2),il(3)/)
-   ckey(1:3,3)=(/il(1),ir(2),il(3)/)
-   ckey(1:3,4)=(/ir(1),ir(2),il(3)/)
-   ckey(1:3,5)=(/il(1),il(2),ir(3)/)
-   ckey(1:3,6)=(/ir(1),il(2),ir(3)/)
-   ckey(1:3,7)=(/il(1),ir(2),ir(3)/)
-   ckey(1:3,8)=(/ir(1),ir(2),ir(3)/)
+   ckey = cic_index(il,ir)
 
    ! Compute neighbour positions
    do j = 1,twotondim
