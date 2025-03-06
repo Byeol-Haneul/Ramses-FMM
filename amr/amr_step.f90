@@ -268,18 +268,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Sink Accretion
   !--------------------
   if(r%sink.and.(r%accretion_type>0))then
-     ok_acc=.false.
-     if(ilevel==r%nlevelmax)then
-        ok_acc=.true.
-     end if
-     if(ok_acc)then
                                     call m_timer(pst,'sink - accretion','start')
-        call r_sink_accretion(pst,ilevel,1,output_acc,2)
-        !TODO: g%mass_sink_tot needs to be added
+     call r_sink_accretion(pst,ilevel,1,output_acc,2)
+     !TODO: g%mass_sink_tot needs to be added
         !if(output_sink%mass>0)then
-           !g%mass_sink_tot=g%mass_sink_tot + output_sink%mass
-        !end if
-     end if
+        !g%mass_sink_tot=g%mass_sink_tot + output_sink%mass
+     !end if
   end if
 
   !-----------
