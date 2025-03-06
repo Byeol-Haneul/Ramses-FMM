@@ -416,7 +416,8 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                     else if(ind_var.ge.nvar+1 .and. ind_var.lt.nvar+1+nrtgrp)then
                        ! Photon flux
                        map(ind_map) = map(ind_map) &
-                                    + dvol * m%grid(igrid)%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1)) * g%rt_c
+                                    + dvol * max(m%grid(igrid)%uold(ind,1),r%smallr) &
+                                    * m%grid(igrid)%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1)) * g%rt_c
 #endif
                     else
                        ! Other variables
