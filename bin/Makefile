@@ -142,7 +142,7 @@ endif
 LIBS += $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):$(GPU_PATH):../$(SOLVER):../feedback:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
+VPATH = $(PATCH):$(GPU_PATH):../$(SOLVER):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
 #############################################################################
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
@@ -161,19 +161,17 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 input_part_restart.o input_part_ramses.o input_part_gadget.o input_part.o \
 	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
-	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
-
+	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o
 ifeq ($(COMPILER),NVHPC)
-   MODOBJ += gpu_utils.o hydro_integrator.o gpu_runner.o
+MODOBJ += gpu_utils.o hydro_integrator.o gpu_runner.o
 endif
-
 MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 input_hydro_condinit.o input_hydro_grafic.o input_hydro_gadget.o init_flow_fine.o \
 	 condinit.o vecpotentialinit.o init_refine_adaptive.o init_refine_restart.o \
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
 	 rt_star_feedback.o sink_formation.o tree_formation.o \
-	 task_manager.o rt_step.o amr_step.o adaptive_loop.o \
+	 sink_accretion.o task_manager.o rt_step.o amr_step.o adaptive_loop.o \
 	 write_gitinfo.o
 #############################################################################
 ramses:	$(MODOBJ) ramses.o

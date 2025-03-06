@@ -42,6 +42,7 @@ subroutine m_read_params(pst)
   logical::star    =.false.    ! Stars and star formation activated
   logical::sink    =.false.    ! Sinks and sink formation activated
   logical::merger_tree=.false. ! Merger tree particles activated
+  logical::orphan  =.false.   ! Orphan particles activated
   logical::verbose =.false.    ! Write everything
   logical::debug   =.false.    ! Debug mode activated
   logical::static_mesh=.false. ! Static mesh refinement activated
@@ -369,6 +370,19 @@ subroutine m_read_params(pst)
   real(dp)::sink_mass_threshold=0
   real(dp)::sink_purity_threshold=-1
   real(dp)::sink_fraction_threshold=2d0
+  logical::form_sinks=.false.
+  logical::sink_refine=.true.
+
+  ! Black hole parameters
+  integer::accretion_type = 0 ! 0: None, 1: Bondi
+  character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
+  real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
+  logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
+  real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
+  integer::sink_b_spline_order = 4 ! Order of B-spline interpolation used for sink accretion and dynamics
+  logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
+  logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
+  logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -460,7 +474,7 @@ subroutine m_read_params(pst)
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type &
-       & ,aexp_lock_refine,pic_lock_refine
+       & ,aexp_lock_refine,pic_lock_refine,sink_refine
   ! Units parameters
   namelist/units_params/units_density,units_time,units_length,units_np
   ! Boundary conditions parameters
@@ -483,10 +497,13 @@ subroutine m_read_params(pst)
        & ,isHe, isH2, is_init_xion, neq_Tconst, upload_equilibrium_x
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
-  ! Star particles and star formation recipe
+  ! Sink particles and black hole parameters
   namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
-       & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold
+       & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
+       & ,accretion_type,acc_sink_boost,bondi_use_vrel,accretion_method &
+       & ,eddington_cap,form_sinks,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
+       & ,use_local_bondi_rate
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -494,7 +511,7 @@ subroutine m_read_params(pst)
        & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
-       & ,merger_tree,ntreemax,ntreetot,rho_type_clump
+       & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
@@ -914,6 +931,7 @@ subroutine m_read_params(pst)
   s%r%star=star
   s%r%sink=sink
   s%r%tree=merger_tree
+  s%r%orphan=orphan
   s%r%verbose=verbose
   s%r%debug=debug
   s%r%nrestart=nrestart
@@ -1243,6 +1261,18 @@ subroutine m_read_params(pst)
   s%r%sink_mass_threshold=sink_mass_threshold
   s%r%sink_purity_threshold=sink_purity_threshold
   s%r%sink_fraction_threshold=sink_fraction_threshold
+
+  s%r%accretion_type = accretion_type
+  s%r%accretion_method = accretion_method
+  s%r%acc_sink_boost = acc_sink_boost
+  s%r%bondi_use_vrel = bondi_use_vrel
+  s%r%eddington_cap = eddington_cap
+  s%r%form_sinks = form_sinks
+  s%r%sink_refine = sink_refine
+  s%r%sink_b_spline_order = sink_b_spline_order
+  s%r%verbose_sink = verbose_sink
+  s%r%bondi_use_gas_mass = bondi_use_gas_mass
+  s%r%use_local_bondi_rate = use_local_bondi_rate
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format

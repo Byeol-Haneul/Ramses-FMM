@@ -4,6 +4,9 @@ module input_part_gadget_module
      real(kind=8)::mass_star
      real(kind=8)::mass_gas
      real(kind=8)::mass_halo
+     integer(kind=8)::nstar
+     integer(kind=8)::ngas
+     integer(kind=8)::nhalo
   end type out_input_gadget_t
 
 contains
@@ -24,15 +27,23 @@ subroutine m_input_part_gadget(pst)
   !--------------------------------------------------------------------
   integer::dummy
   type(out_input_gadget_t)::output
-  
+
   if(pst%s%r%verbose)write(*,*)'Entering input_part_gadget'
 
   ! Call recursive slave routine
-  call r_input_part_gadget(pst,dummy,1,output,6)
+  call r_input_part_gadget(pst,dummy,1,output,12)
 
   write(*,*)'Total mass in gas=',output%mass_gas
   write(*,*)'Total mass in dark matter=',output%mass_halo
   write(*,*)'Total mass in stars=',output%mass_star
+
+  write(*,*)'Total number of particles in gas=',output%ngas
+  write(*,*)'Total number of particles in dark matter=',output%nhalo
+  write(*,*)'Total number of particles in stars=',output%nstar
+
+  if(pst%s%r%pic)pst%s%p%npart_tot=output%nhalo
+  if(pst%s%r%hydro)pst%s%gas%npart_tot=output%ngas
+  if(pst%s%r%star)pst%s%star%npart_tot=output%nstar
 
   pst%s%g%mass_star_tot=output%mass_star
 
@@ -64,8 +75,11 @@ recursive subroutine r_input_part_gadget(pst,dummy,input_size,output,output_size
      output%mass_star=output%mass_star+next_output%mass_star
      output%mass_gas=output%mass_gas+next_output%mass_gas
      output%mass_halo=output%mass_halo+next_output%mass_halo
+     output%nstar=output%nstar+next_output%nstar
+     output%ngas=output%ngas+next_output%ngas
+     output%nhalo=output%nhalo+next_output%nhalo
   else
-     call input_part_gadget(pst%s,output%mass_star,output%mass_gas,output%mass_halo)
+     call input_part_gadget(pst%s,output%mass_star,output%mass_gas,output%mass_halo,output%nstar,output%ngas,output%nhalo)
   endif
 
 end subroutine r_input_part_gadget
@@ -73,7 +87,7 @@ end subroutine r_input_part_gadget
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine input_part_gadget(s,mstar,mgas,mhalo)
+subroutine input_part_gadget(s,mstar,mgas,mhalo,npart_star,npart_gas,npart_halo)
   use amr_parameters, only: ndim,flen
   use ramses_commons, only: ramses_t
   use gadgetreadfilemod, only: gadgetheadertype
@@ -81,6 +95,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   implicit none
   type(ramses_t)::s
   real(kind=8)::mstar,mgas,mhalo
+  integer(kind=8)::npart_star,npart_gas,npart_halo
   !------------------------------------------------------------
   ! Read particles positions and velocities from a Ramses 
   ! restart file and allocate particle-based arrays.
@@ -476,7 +491,13 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo)
   if(r%pic)mhalo=sum(p%mp(1:p%npart))
   if(r%hydro)mgas=sum(gas%mp(1:gas%npart))
   if(r%star)mstar=sum(star%mp(1:star%npart))
-  
+
+  ! Compute number of particles in star, gas and dark matter
+  npart_star=0; npart_halo=0; npart_gas=0
+  if(r%pic)npart_halo=p%npart
+  if(r%hydro)npart_gas=gas%npart
+  if(r%star)npart_star=star%npart
+
   ! Put all particles inside levelmin 
   if(r%pic)call init_levelmin(r,p)
   if(r%hydro)call init_levelmin(r,gas)

@@ -33,12 +33,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use clump_finder_module, only: m_clump_finder
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use rt_step_module, only: m_rt_step
-
+  use sink_accretion_module, only: r_sink_accretion, out_accretion_t
+  
   implicit none
 
   type(pst_t)::pst
   integer::ilevel,icount
-  logical::done,ok_fbk
+  logical::done,ok_fbk,ok_acc
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
@@ -47,6 +48,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   type(in_broadcast_dt_t)::in_broadcast_dt
   type(out_star_formation_t)::output_star
   type(out_feedback_t)::output_fbk
+  type(out_accretion_t)::output_acc
   real(kind=8) :: mass_fbk
   real(kind=8) :: tcurr=0
   real(kind=8), save :: tprev=0.
@@ -71,7 +73,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-------------------------
   ! Sink formation in clumps
   !-------------------------
-  if(r%sink.and.ilevel==r%levelmin)then
+  if(r%sink.and.ilevel==r%levelmin.and.r%form_sinks)then
                                     call m_timer(pst,'sink - formation','start')
      call m_sink_formation(pst)
   endif
@@ -272,6 +274,18 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         endif
      endif
   endif
+
+  !--------------------
+  ! Sink Accretion
+  !--------------------
+  if(r%sink.and.(r%accretion_type>0))then
+                                    call m_timer(pst,'sink - accretion','start')
+     call r_sink_accretion(pst,ilevel,1,output_acc,2)
+     !TODO: g%mass_sink_tot needs to be added
+        !if(output_sink%mass>0)then
+        !g%mass_sink_tot=g%mass_sink_tot + output_sink%mass
+     !end if
+  end if
 
   !-----------
   ! Hydro step

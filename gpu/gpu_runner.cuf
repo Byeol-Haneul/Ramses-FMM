@@ -1,16 +1,20 @@
 module gpu_runner
    use gpu_utils
    use cudafor
+   use oct_commons
    implicit none
 
-   !> The Fortran pointer to the array of subgrids on the host
-   type(subgrid_8x8x8cell_conserved), pointer, dimension(:) :: subgrids_host
-   !> The Fortran pointer to the array of subgrids on the device
-   type(subgrid_8x8x8cell_conserved), device, pointer, dimension(:) :: subgrids_device
-   !> The C pointer to the array of subgrids on the host
-   type(C_PTR)    :: subgrids_host_cptr
-   !> The C pointer to the array of subgrids on the device
-   type(C_DEVPTR) :: subgrids_device_cptr
+   !> Fortran array to hold the grid on the device and the C_DEVPTR to it
+   type(oct), device, pointer, dimension(:) :: grid_device
+   type(C_DEVPTR) :: grid_device_cptr
+
+   !> The Fortran array of subgrid indices on the host and the C_PTR to it
+   integer, pointer, dimension(:,:,:,:) :: subgrid_indices_host
+   type(C_PTR) :: subgrid_indices_host_cptr
+
+   !> The Fortran array of subgrid indices on the device and the C_DEVPTR to it
+   integer, device, pointer, dimension(:,:,:,:) :: subgrid_indices_device
+   type(C_DEVPTR) :: subgrid_indices_device_cptr
 
 contains
    !> @brief
@@ -33,91 +37,67 @@ contains
       use ramses_commons, only: ramses_t
       type(ramses_t), intent(inout)::sim
       integer, intent(in)::ilevel
-      integer(kind=8) :: i, j, k, subgrid_idx
-      integer(kind=8) :: num_subgrids, grid_size_bytes
+      integer(kind=8) :: num_subgrids
       integer :: err_code, threads_per_block, num_blocks
       integer, parameter :: subgrid_size = 8
       real(kind=dp) :: dt, dx
 
       ! get the number of octs in each direction and compute the number of subgrids
       num_subgrids = sim%m%tail(ilevel)/8
-      grid_size_bytes = num_subgrids*sizeof(subgrid_8x8x8cell_conserved)
 
       ! Allocate arrays if they're not allocated
-      if (.not. (allocated(subgrids_host) .or. allocated(subgrids_device))) then
-         err_code = cudaMallocHost(subgrids_host_cptr, grid_size_bytes)
-         err_code = cudaMalloc(subgrids_device_cptr, grid_size_bytes)
+      if (.not. (allocated(subgrid_indices_host))) then
+         ! Allocate the device arrays
+         err_code = cudaMalloc(grid_device_cptr,     sizeof(sim%m%grid))
+         ! Note dt is used here just to get the sizeof a float
+         err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(dt))
+         err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(dt)) 
+
+         ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
+         call c_f_pointer(grid_device_cptr, grid_device, [sim%m%tail(ilevel)])
+         call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
+         call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
+
+         ! Setup the subgrid mapping
+         call nvtxStartRange("Setup Index Mapping", color=1)!blue
+         call setup_subgrid_mapping(sim, ilevel)
+         call nvtxEndRange()
+
+         ! Copy subgrid map to device. This has to be done outside of the 
+         ! setup_subgrid_mapping subroutine due to a compiler bug with nested NVTX statements
+         call nvtxStartRange("Copy subgrid mapping to device", color=5)!red
+         subgrid_indices_device = subgrid_indices_host
+         call GPU_Error_Check(__FILE__, __LINE__)
+         call nvtxEndRange()
       end if
 
-      ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
-      call c_f_pointer(subgrids_host_cptr, subgrids_host, [num_subgrids])
-      call c_f_pointer(subgrids_device_cptr, subgrids_device, [num_subgrids])
-
-      ! loop through all octs and copy to their respective subgrids.
-      ! The i,j,k index is the oct coordinated of the "lower left" real oct in the subgrid
-      call nvtxStartRange("Pack subgrids", color=1)!blue
-      subgrid_idx = 1
-      do i = 0, sim%m%nx - 1, 2
-         do j = 0, sim%m%ny - 1, 2
-            do k = 0, sim%m%nz - 1, 2
-               ! pack this particular subgrid
-               call pack_subgrid(sim, ilevel, subgrid_idx, i, j, k)
-
-               ! increment subgrid index
-               subgrid_idx = subgrid_idx + 1
-            end do
-         end do
-      end do
-      call nvtxEndRange()
-
-      ! Copy subgrids from host to device
-      call nvtxStartRange("Copy subgrids to device", color=5)!red
-      err_code = cudaMemcpy(subgrids_device_cptr, subgrids_host_cptr, grid_size_bytes, cudaMemcpyHostToDevice)
+      ! Copy grid from host to device
+      call nvtxStartRange("Copy sim%m%grid to device", color=5)!red
+      grid_device = sim%m%grid
       call GPU_Error_Check(__FILE__, __LINE__)
       call nvtxEndRange()
-
-      ! =============================
-      ! End of packing the subgrids
-      ! =============================
 
       ! =============================
       ! GPU Integration
       ! =============================
-      call nvtxStartRange("GPU Integration", color=0)!green
+      num_blocks = num_subgrids
 
+      ! Perform integration
       dt = sim%g%dtnew(ilevel)
       dx = sim%r%boxlen/2**ilevel
-
       threads_per_block = 128
-      num_blocks = num_subgrids
-      call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(subgrids_device, num_subgrids, subgrid_size, sim%r%gamma, dt/dx)
+
+      call nvtxStartRange("GPU Integration", color=0)!green
+      call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid_device, subgrid_indices_device, num_subgrids, subgrid_size, sim%r%gamma, dt/dx)
       call GPU_Error_Check(__FILE__, __LINE__)
       call nvtxEndRange()
 
-      ! =============================
-      ! Unpack subgrids
-      ! =============================
-      ! Copy subgrids from host to device
-      call nvtxStartRange("Copy subgrids to host", color=5)!red
-      err_code = cudaMemcpy(subgrids_host_cptr, subgrids_device_cptr, grid_size_bytes, cudaMemcpyDeviceToHost)
+      ! ====================================
+      ! Copy updated values back to the host
+      ! ====================================
+      call nvtxStartRange("Copy sim%m%grid to host", color=5)!red
+      sim%m%grid = grid_device
       call GPU_Error_Check(__FILE__, __LINE__)
-      call nvtxEndRange()
-
-      ! loop through all octs and update the `unew` values
-      ! The i,j,k index is the oct coordinated of the "lower left" real oct in the subgrid
-      call nvtxStartRange("Unpack subgrids", color=1)!blue
-      subgrid_idx = 1
-      do i = 0, sim%m%nx - 1, 2
-         do j = 0, sim%m%ny - 1, 2
-            do k = 0, sim%m%nz - 1, 2
-               ! unpack this particular subgrid
-               call unpack_subgrid(sim, ilevel, subgrid_idx, i, j, k)
-
-               ! increment subgrid index
-               subgrid_idx = subgrid_idx + 1
-            end do
-         end do
-      end do
       call nvtxEndRange()
 
    end subroutine gpu_integrator
@@ -144,10 +124,36 @@ contains
    end function check_boundaries
 
    !> @brief
-   !> Pack a single subgrid in the host array of subgrids
+   !> Setup the mapping of the subgrids. This creates a host array with dimensions 
+   !> 4x4x4xnum_subgrids where each element in the 4x4x4 subgrid is an index into 
+   !> sim%m%grid that points at the oct that should go in that part of the subgrid
    !>
-   !> @note
-   !> We might be able to run this on the GPU side by building an array of C_PTR and using that to pack on the GPU side
+   !> @param[in] sim : The simulation object
+   !> @param[in] ilevel : The ilevel to integrate
+   subroutine setup_subgrid_mapping(sim, ilevel)
+      use ramses_commons, only: ramses_t
+      type(ramses_t), intent(in)::sim
+      integer, intent(in)::ilevel
+      integer(kind=8) :: num_subgrids, subgrid_idx, i, j, k
+
+      ! Loop through subgrids
+      subgrid_idx = 1
+      do i = 0, sim%m%nx - 1, 2
+         do j = 0, sim%m%ny - 1, 2
+            do k = 0, sim%m%nz - 1, 2
+               ! pack this particular subgrid
+               call setup_subgrid(sim, ilevel, subgrid_idx, i, j, k)
+
+               ! increment subgrid index
+               subgrid_idx = subgrid_idx + 1
+            end do
+         end do
+      end do
+
+   end subroutine setup_subgrid_mapping
+
+   !> @brief
+   !> Sets up a single subgrid with indices to each oct in the proper places
    !>
    !> @param[in] sim : The simulation object
    !> @param[in] ilevel : The current refinement level
@@ -156,7 +162,7 @@ contains
    !> @param[in] j_subgrid_loc : The ijindex of the "lower left" real oct in the subgrid to pack
    !> @param[in] k_subgrid_loc : The ikindex of the "lower left" real oct in the subgrid to pack
    !>
-   subroutine pack_subgrid(sim, ilevel, subgrid_idx, i_subgrid_loc, j_subgrid_loc, k_subgrid_loc)
+   subroutine setup_subgrid(sim, ilevel, subgrid_idx, i_subgrid_loc, j_subgrid_loc, k_subgrid_loc)
       use nbors_utils, only: unlock_cache, get_grid
       use ramses_commons, only: ramses_t
       use oct_commons, only: oct
@@ -167,11 +173,10 @@ contains
       integer(kind=8), intent(in):: i_subgrid_loc, j_subgrid_loc, k_subgrid_loc ! the i, j, k indices of the "lower left" real oct in the subgrid to pack
       integer :: i_grid, j_grid, k_grid ! the loop indices of the location of the oct
       integer :: i_oct, j_oct, k_oct ! loop indices within the oct
-      integer :: cell_idx ! index for the active cell in the oct
-      integer :: i_sub_cell, j_sub_cell, k_sub_cell ! indices for the active cell in the subgrid
-      integer :: i, j, k ! loop indices
+      integer :: subgrid_i, subgrid_j, subgrid_k
       integer(kind=8), dimension(0:ndim)::hash_key
       type(oct), pointer:: oct_to_load
+      integer :: idx_to_oct
 
       ! Loop over octs in the subgrid. The loop indices are the coordinates
       ! relative to i_subgrid_loc, j_subgrid_loc, k_subgrid_loc. This all assumes 1 MPI rank
@@ -179,7 +184,7 @@ contains
          do j_grid = j_subgrid_loc - 1, j_subgrid_loc + 2
             do i_grid = i_subgrid_loc - 1, i_subgrid_loc + 2
 
-               ! Use periodic boundaries for boundary cells.
+               ! Use periodic boundaries for boundary octs.
                i_oct = check_boundaries(i_grid, sim%m%nx)
                j_oct = check_boundaries(j_grid, sim%m%ny)
                k_oct = check_boundaries(k_grid, sim%m%nz)
@@ -197,119 +202,18 @@ contains
                              oct_to_load, &! The pointer to the oct
                              flush_cache=.false., &
                              fetch_cache=.true., &
-                             lock=.true.)
+                             lock=.false.)
+               
+               idx_to_oct = (loc(oct_to_load)-loc(sim%m%grid(1)))/(loc(sim%m%grid(2))-loc(sim%m%grid(1)))+1
 
-               ! now to loop over an oct and convert from 3D indices to 1D
-               do k = 0, 1
-                  do j = 0, 1
-                     do i = 0, 1
-                        ! oct cell index
-                        cell_idx = oct2cell_idx(i, j, k)
+               subgrid_i = (i_grid - (i_subgrid_loc - 1)) + 1
+               subgrid_j = (j_grid - (j_subgrid_loc - 1)) + 1
+               subgrid_k = (k_grid - (k_subgrid_loc - 1)) + 1
 
-                        ! subgrid cell indices
-                        !             (compute the cell in the oct) + (add a shift to the prober oct)
-                        i_sub_cell = i + 2*(i_grid - (i_subgrid_loc - 1))
-                        j_sub_cell = j + 2*(j_grid - (j_subgrid_loc - 1))
-                        k_sub_cell = k + 2*(k_grid - (k_subgrid_loc - 1))
-
-                        ! Copy
-                        subgrids_host(subgrid_idx)%density(i_sub_cell, j_sub_cell, k_sub_cell) = oct_to_load%uold(cell_idx, 1)
-                        subgrids_host(subgrid_idx)%momentum_x(i_sub_cell, j_sub_cell, k_sub_cell) = oct_to_load%uold(cell_idx, 2)
-                        subgrids_host(subgrid_idx)%momentum_y(i_sub_cell, j_sub_cell, k_sub_cell) = oct_to_load%uold(cell_idx, 3)
-                        subgrids_host(subgrid_idx)%momentum_z(i_sub_cell, j_sub_cell, k_sub_cell) = oct_to_load%uold(cell_idx, 4)
-                        subgrids_host(subgrid_idx)%energy(i_sub_cell, j_sub_cell, k_sub_cell) = oct_to_load%uold(cell_idx, 5)
-                     end do
-                  end do
-               end do
-
-               ! unlock the oct that is in use
-               call unlock_cache(sim, &! sim
-                                 oct_to_load) ! the pointer to the oct we're working on
+               subgrid_indices_host(subgrid_i, subgrid_j, subgrid_k, subgrid_idx) = idx_to_oct
             end do
          end do
       end do
-   end subroutine pack_subgrid
-
-   !> @brief
-   !> Unpack a single subgrid in the host array of subgrids
-   !>
-   !> @note
-   !> We might be able to run this on the GPU side since we know that all the octs it's writing to are local
-   !>
-   !> @param[in] sim : The simulation object
-   !> @param[in] ilevel : The current refinement level
-   !> @param[in] subgrid_idx : The index of the subgrid to unpack
-   !> @param[in] i_subgrid_loc : The i index of the "lower left" real oct in the subgrid to unpack
-   !> @param[in] j_subgrid_loc : The ijindex of the "lower left" real oct in the subgrid to unpack
-   !> @param[in] k_subgrid_loc : The ikindex of the "lower left" real oct in the subgrid to unpack
-   !>
-   subroutine unpack_subgrid(sim, ilevel, subgrid_idx, i_subgrid_loc, j_subgrid_loc, k_subgrid_loc)
-      use nbors_utils, only: unlock_cache, get_grid
-      use ramses_commons, only: ramses_t
-      use oct_commons, only: oct
-      use amr_parameters, only: ndim
-      type(ramses_t), intent(in)::sim
-      integer, intent(in)::ilevel
-      integer(kind=8), intent(in):: subgrid_idx ! the index of the subgrid to unpack
-      integer(kind=8), intent(in):: i_subgrid_loc, j_subgrid_loc, k_subgrid_loc ! the i, j, k indices of the "lower left" real oct in the subgrid to unpack
-      integer :: i_grid, j_grid, k_grid ! the loop indices of the location of the oct
-      integer :: i_oct, j_oct, k_oct ! loop indices within the oct
-      integer :: cell_idx ! index for the active cell in the oct
-      integer :: i_sub_cell, j_sub_cell, k_sub_cell ! indices for the active cell in the subgrid
-      integer :: i, j, k ! loop indices
-      integer(kind=8), dimension(0:ndim)::hash_key
-      type(oct), pointer:: oct_to_update
-
-      ! Loop over octs in the subgrid. The loop indices are the coordinates
-      ! relative to i_subgrid_loc, j_subgrid_loc, k_subgrid_loc. This all assumes 1 MPI rank
-      do k_grid = k_subgrid_loc, k_subgrid_loc + 1
-         do j_grid = j_subgrid_loc, j_subgrid_loc + 1
-            do i_grid = i_subgrid_loc, i_subgrid_loc + 1
-
-               ! Assign values to the oct hash
-               hash_key(0) = ilevel ! the refinement level
-               hash_key(1) = i_grid  ! the X index of the oct to load
-               hash_key(2) = j_grid  ! the Y index of the oct to load
-               hash_key(3) = k_grid  ! the Z index of the oct to load
-
-               ! Get a pointer to the oct to load
-               call get_grid(sim, &! sim object
-                             hash_key, &! the hash key (level, x, y, z)
-                             sim%m%grid_dict, &! ???
-                             oct_to_update, &! The pointer to the oct
-                             flush_cache=.false., &
-                             fetch_cache=.true., &
-                             lock=.true.)
-
-               ! now to loop over an oct and convert from 3D indices to 1D
-               do k = 0, 1
-                  do j = 0, 1
-                     do i = 0, 1
-                        ! oct cell index
-                        cell_idx = oct2cell_idx(i, j, k)
-
-                        ! subgrid cell indices
-                        ! (compute the cell in the oct) + (add a shift to the proper oct)
-                        i_sub_cell = i + 2*(i_grid - (i_subgrid_loc - 1))
-                        j_sub_cell = j + 2*(j_grid - (j_subgrid_loc - 1))
-                        k_sub_cell = k + 2*(k_grid - (k_subgrid_loc - 1))
-
-                        ! Copy
-                        oct_to_update%unew(cell_idx, 1) = subgrids_host(subgrid_idx)%density(i_sub_cell, j_sub_cell, k_sub_cell)
-                        oct_to_update%unew(cell_idx, 2) = subgrids_host(subgrid_idx)%momentum_x(i_sub_cell, j_sub_cell, k_sub_cell)
-                        oct_to_update%unew(cell_idx, 3) = subgrids_host(subgrid_idx)%momentum_y(i_sub_cell, j_sub_cell, k_sub_cell)
-                        oct_to_update%unew(cell_idx, 4) = subgrids_host(subgrid_idx)%momentum_z(i_sub_cell, j_sub_cell, k_sub_cell)
-                        oct_to_update%unew(cell_idx, 5) = subgrids_host(subgrid_idx)%energy(i_sub_cell, j_sub_cell, k_sub_cell)
-                     end do
-                  end do
-               end do
-
-               ! unlock the oct that is in use
-               call unlock_cache(sim, &! sim
-                                 oct_to_update) ! the pointer to the oct we're working on
-            end do
-         end do
-      end do
-   end subroutine unpack_subgrid
+   end subroutine setup_subgrid
 
 end module gpu_runner

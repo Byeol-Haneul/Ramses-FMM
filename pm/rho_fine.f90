@@ -438,7 +438,7 @@ subroutine reset_rho(r,g,m,ilevel)
         m%grid(igrid)%nref(ind)=0.0D0
      end do
   end do
-#endif  
+#endif
 
 end subroutine reset_rho
 !################################################################
@@ -488,8 +488,7 @@ subroutine cic_multipole(s,ilevel)
   real(dp),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::inbor,igrid,ind,idim
-  integer::icell
+  integer::inbor,igrid,ind,idim,icell
   real(kind=8)::dx_loc,vol_loc,mmm,mask
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
@@ -556,48 +555,10 @@ subroutine cic_multipole(s,ilevel)
         enddo
 
         ! Compute cloud volumes
-#if NDIM==1
-        vol(1)=dg(1)
-        vol(2)=dd(1)
-#endif
-#if NDIM==2
-        vol(1)=dg(1)*dg(2)
-        vol(2)=dd(1)*dg(2)
-        vol(3)=dg(1)*dd(2)
-        vol(4)=dd(1)*dd(2)
-#endif
-#if NDIM==3
-        vol(1)=dg(1)*dg(2)*dg(3)
-        vol(2)=dd(1)*dg(2)*dg(3)
-        vol(3)=dg(1)*dd(2)*dg(3)
-        vol(4)=dd(1)*dd(2)*dg(3)
-        vol(5)=dg(1)*dg(2)*dd(3)
-        vol(6)=dd(1)*dg(2)*dd(3)
-        vol(7)=dg(1)*dd(2)*dd(3)
-        vol(8)=dd(1)*dd(2)*dd(3)
-#endif
+        vol = cic_weight(dg,dd)
 
         ! Compute cells Cartesian key
-#if NDIM==1
-        ckey(1,1)=ig(1)
-        ckey(1,2)=id(1)
-#endif
-#if NDIM==2
-        ckey(1:2,1)=(/ig(1),ig(2)/)
-        ckey(1:2,2)=(/id(1),ig(2)/)
-        ckey(1:2,3)=(/ig(1),id(2)/)
-        ckey(1:2,4)=(/id(1),id(2)/)
-#endif
-#if NDIM==3
-        ckey(1:3,1)=(/ig(1),ig(2),ig(3)/)
-        ckey(1:3,2)=(/id(1),ig(2),ig(3)/)
-        ckey(1:3,3)=(/ig(1),id(2),ig(3)/)
-        ckey(1:3,4)=(/id(1),id(2),ig(3)/)
-        ckey(1:3,5)=(/ig(1),ig(2),id(3)/)
-        ckey(1:3,6)=(/id(1),ig(2),id(3)/)
-        ckey(1:3,7)=(/ig(1),id(2),id(3)/)
-        ckey(1:3,8)=(/id(1),id(2),id(3)/)
-#endif     
+        ckey = cic_index(ig,id)
 
 #ifdef GRAV
         ! Update mass density
@@ -654,7 +615,7 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-     call cic_part(pst%s,pst%s%p,ilevel,rtype)
+                     call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
      if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
      if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
      if(pst%s%r%tree)call cic_part(pst%s,pst%s%tree,ilevel,rtype)
@@ -682,8 +643,8 @@ subroutine cic_part(s,p,ilevel,rtype)
   integer::ilevel,rtype
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,dd,dg
-  integer,dimension(1:ndim)::ig,id,ix
+  real(dp),dimension(1:ndim)::x,dr,dl
+  integer,dimension(1:ndim)::ir,il,ix
   real(dp),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
@@ -746,64 +707,26 @@ subroutine cic_part(s,p,ilevel,rtype)
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
 
-     ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
+     ! CIC at level ilevel (dr: right cloud boundary; dl: left cloud boundary)
      do idim=1,ndim
-        dd(idim)=x(idim)+0.5D0
-        id(idim)=int(dd(idim))
-        dd(idim)=dd(idim)-id(idim)
-        dg(idim)=1.0D0-dd(idim)
-        ig(idim)=id(idim)-1
+        dr(idim)=x(idim)+0.5D0
+        ir(idim)=int(dr(idim))
+        dr(idim)=dr(idim)-ir(idim)
+        dl(idim)=1.0D0-dr(idim)
+        il(idim)=ir(idim)-1
      end do
      
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(ig(idim)<0)ig(idim)=m%ckey_max(ilevel+1)-1
-        if(id(idim)==m%ckey_max(ilevel+1))id(idim)=0
+        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
+        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
      enddo
 
      ! Compute cloud volumes
-#if NDIM==1
-     vol(1)=dg(1)
-     vol(2)=dd(1)
-#endif
-#if NDIM==2
-     vol(1)=dg(1)*dg(2)
-     vol(2)=dd(1)*dg(2)
-     vol(3)=dg(1)*dd(2)
-     vol(4)=dd(1)*dd(2)
-#endif
-#if NDIM==3
-     vol(1)=dg(1)*dg(2)*dg(3)
-     vol(2)=dd(1)*dg(2)*dg(3)
-     vol(3)=dg(1)*dd(2)*dg(3)
-     vol(4)=dd(1)*dd(2)*dg(3)
-     vol(5)=dg(1)*dg(2)*dd(3)
-     vol(6)=dd(1)*dg(2)*dd(3)
-     vol(7)=dg(1)*dd(2)*dd(3)
-     vol(8)=dd(1)*dd(2)*dd(3)
-#endif
+     vol = cic_weight(dl,dr)
 
      ! Compute cells Cartesian key
-#if NDIM==1
-     ckey(1,1)=ig(1)
-     ckey(1,2)=id(1)
-#endif
-#if NDIM==2
-     ckey(1:2,1)=(/ig(1),ig(2)/)
-     ckey(1:2,2)=(/id(1),ig(2)/)
-     ckey(1:2,3)=(/ig(1),id(2)/)
-     ckey(1:2,4)=(/id(1),id(2)/)
-#endif
-#if NDIM==3
-     ckey(1:3,1)=(/ig(1),ig(2),ig(3)/)
-     ckey(1:3,2)=(/id(1),ig(2),ig(3)/)
-     ckey(1:3,3)=(/ig(1),id(2),ig(3)/)
-     ckey(1:3,4)=(/id(1),id(2),ig(3)/)
-     ckey(1:3,5)=(/ig(1),ig(2),id(3)/)
-     ckey(1:3,6)=(/id(1),ig(2),id(3)/)
-     ckey(1:3,7)=(/ig(1),id(2),id(3)/)
-     ckey(1:3,8)=(/id(1),id(2),id(3)/)
-#endif
+     ckey = cic_index(il,ir)
 
 #ifdef GRAV
      ! Update mass density
@@ -840,9 +763,298 @@ subroutine cic_part(s,p,ilevel,rtype)
 
   call close_cache(s,m%grid_dict)
 
-end associate
-  
+  end associate
+
 end subroutine cic_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine tsc_part(s,p,ilevel,rtype)
+  use amr_parameters, only: ndim, twotondim, threetondim
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_parameters
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel,rtype
+  !
+  ! Local variables
+  integer,dimension(1:ndim)::ix,cl,cc,cr
+  real(dp),dimension(1:ndim)::x,wl,wr,wc
+  real(dp),dimension(1:threetondim)::vol
+  integer,dimension(1:ndim,1:threetondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::i,ipart,icell,ind,idim
+  real(kind=8)::dx_loc,vol_loc
+  real(kind=8)::xl,xc,xr
+  type(oct),pointer::gridp
+  type(msg_twin_realdp)::dummy_twin_realdp
+  logical::dark,tree,star,sink
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  ! Mesh spacing in that level
+  dx_loc=r%boxlen/2**ilevel
+  vol_loc=dx_loc**ndim
+
+  ! Are particles dark  matter, tree, stars or sinks?
+  dark = p%type.eq.  DM_TYPE
+  tree = p%type.eq.TREE_TYPE
+  star = p%type.eq.STAR_TYPE
+  sink = p%type.eq.SINK_TYPE
+
+  ! Sort particle according to current level Hilbert key
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     p%sortp(i)=i
+  end do
+  ix=0
+  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+
+  ! Don't deposit mass depending on rho action type and paticle type
+  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(star.and.rtype.NE.0.and.rtype.NE.2)return
+  if(sink.and.rtype.NE.0.and.rtype.NE.3)return
+  if(tree)return
+
+  ! Compute contribution to multipole
+  if(ilevel==r%levelmin)then
+     do i=1,p%npart
+        g%multipole%q(1)=g%multipole%q(1)+p%mp(i)
+     end do
+     do idim=1,ndim
+        do i=1,p%npart
+           g%multipole%q(idim+1)=g%multipole%q(idim+1)+p%mp(i)*p%xp(i,idim)
+        end do
+     end do
+  endif
+
+  ! Open write-only cache for array rho
+  hash_nbor(0)=ilevel+1
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
+       pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+       init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
+
+  ! Loop over particles in Hilbert order
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     ipart=p%sortp(i)
+
+     ! Rescale particle position at level ilevel
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+
+     ! TSC at level ilevel; a particle contributes to 3 cells in each direction
+     do idim=1,ndim
+        cl(idim)=int(x(idim))-1 ! cell index
+        cc(idim)=int(x(idim))
+        cr(idim)=int(x(idim))+1
+        xl=dble(cl(idim))+0.5D0 ! cell coordinate
+        xc=dble(cc(idim))+0.5D0
+        xr=dble(cr(idim))+0.5D0
+        wl(idim)=0.5D0*(1.5D0-abs(x(idim)-xl))**2 ! weight
+        wc(idim)=0.75D0-         (x(idim)-xc) **2
+        wr(idim)=0.5D0*(1.5D0-abs(x(idim)-xr))**2
+     end do
+
+     ! Periodic boundary conditions
+     do idim=1,ndim
+        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
+        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+     enddo
+
+     ! Compute cloud volumes
+     vol = tsc_weight(wl,wc,wr)
+
+     ! Compute cells Cartesian key
+     ckey = tsc_index(cl,cc,cr)
+
+#ifdef GRAV
+     ! Update mass density
+     do ind=1,threetondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        ! Get parent cell using write-only cache
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+        if(associated(gridp))then
+           gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           if(star.or.sink)then
+              gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
+           else
+              if(r%mass_cut_refine>0)then
+                 if(p%mp(ipart)<r%mass_cut_refine)then
+                    gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+                 endif
+              else
+                 gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+              endif
+           endif
+        endif
+     end do
+#endif
+
+  end do
+  ! End loop over particles
+
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine tsc_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine pcs_part(s,p,ilevel,rtype)
+  use amr_parameters, only: ndim, twotondim, fourtondim
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_parameters
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel,rtype
+  !
+  ! Local variables
+  integer,dimension(1:ndim)::ix,cll,cl,cr,crr
+  real(dp),dimension(1:ndim)::x,wll,wl,wr,wrr
+  real(dp),dimension(1:fourtondim)::vol
+  integer,dimension(1:ndim,1:fourtondim)::ckey
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::i,ipart,icell,ind,idim
+  real(kind=8)::dx_loc,vol_loc
+  real(kind=8)::xll,xl,xr,xrr
+  type(oct),pointer::gridp
+  type(msg_twin_realdp)::dummy_twin_realdp
+  logical::dark,tree,star,sink
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  ! Mesh spacing in that level
+  dx_loc=r%boxlen/2**ilevel
+  vol_loc=dx_loc**ndim
+
+  ! Are particles dark  matter, tree, stars or sinks?
+  dark = p%type.eq.  DM_TYPE
+  tree = p%type.eq.TREE_TYPE
+  star = p%type.eq.STAR_TYPE
+  sink = p%type.eq.SINK_TYPE
+
+  ! Sort particle according to current level Hilbert key
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     p%sortp(i)=i
+  end do
+  ix=0
+  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+
+  ! Don't deposit mass depending on rho action type and paticle type
+  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(star.and.rtype.NE.0.and.rtype.NE.2)return
+  if(sink.and.rtype.NE.0.and.rtype.NE.3)return
+  if(tree)return
+
+  ! Compute contribution to multipole
+  if(ilevel==r%levelmin)then
+     do i=1,p%npart
+        g%multipole%q(1)=g%multipole%q(1)+p%mp(i)
+     end do
+     do idim=1,ndim
+        do i=1,p%npart
+           g%multipole%q(idim+1)=g%multipole%q(idim+1)+p%mp(i)*p%xp(i,idim)
+        end do
+     end do
+  endif
+
+  ! Open write-only cache for array rho
+  hash_nbor(0)=ilevel+1
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
+       pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+       init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
+
+  ! Loop over particles in Hilbert order
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     ipart=p%sortp(i)
+
+     ! Rescale particle position at level ilevel
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+
+     ! PCS at level ilevel; a particle contributes to 4 cells in each direction
+     do idim=1,ndim
+        crr(idim)=int(x(idim)+1.5D0) ! rightermost cell index
+        cr (idim)=crr(idim)-1
+        cl (idim)=crr(idim)-2
+        cll(idim)=crr(idim)-3
+        xll=dble(cll(idim))+0.5D0 ! cell coordinate
+        xl =dble(cl (idim))+0.5D0
+        xr =dble(cr (idim))+0.5D0
+        xrr=dble(crr(idim))+0.5D0
+        wll(idim)=(2D0                        -abs(x(idim)-xll))**3/6D0 ! weight
+        wl (idim)=(4D0-6D0*(x(idim)-xl)**2+3d0*abs(x(idim)-xl )**3)/6D0
+        wr (idim)=(4D0-6D0*(x(idim)-xr)**2+3d0*abs(x(idim)-xr )**3)/6D0
+        wrr(idim)=(2D0                        -abs(x(idim)-xrr))**3/6D0
+     end do
+
+     ! Periodic boundary conditions
+     do idim=1,ndim
+        if(cll(idim)<0)cll(idim)=m%ckey_max(ilevel+1)-1
+        if(cl (idim)<0)cl (idim)=m%ckey_max(ilevel+1)-1
+        if(cr (idim)==m%ckey_max(ilevel+1))cr (idim)=0
+        if(crr(idim)==m%ckey_max(ilevel+1))crr(idim)=0
+     enddo
+
+     ! Compute cloud volumes
+     vol = pcs_weight(wll,wl,wr,wrr)
+
+     ! Compute cells Cartesian key
+     ckey = pcs_index(cll,cl,cr,crr)
+
+#ifdef GRAV
+     ! Update mass density
+     do ind=1,fourtondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        ! Get parent cell using write-only cache
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
+        if(associated(gridp))then
+           gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
+           if(star.or.sink)then
+              gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
+           else
+              if(r%mass_cut_refine>0)then
+                 if(p%mp(ipart)<r%mass_cut_refine)then
+                    gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+                 endif
+              else
+                 gridp%nref(icell)=gridp%nref(icell)+vol(ind)
+              endif
+           endif
+        endif
+     end do
+#endif
+
+  end do
+  ! End loop over particles
+
+  call close_cache(s,m%grid_dict)
+
+  end associate
+
+end subroutine pcs_part
 !################################################################
 !################################################################
 !################################################################
@@ -854,7 +1066,7 @@ subroutine init_flush_rho(grid,hash_key)
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind
-  
+
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef GRAV
@@ -863,7 +1075,7 @@ subroutine init_flush_rho(grid,hash_key)
      grid%nref(ind)=0.0
   end do
 #endif
-  
+
 end subroutine init_flush_rho
 !################################################################
 !################################################################
@@ -918,6 +1130,7 @@ subroutine unpack_flush_rho(grid,msg_size,msg_array,hash_key)
 #endif
 
 end subroutine unpack_flush_rho
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -938,7 +1151,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      call r_split_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call split_part(pst%s,pst%s%p,ilevel)
+                     call split_part(pst%s,pst%s%p   ,ilevel)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
@@ -1018,7 +1231,7 @@ subroutine split_part(s,p,ilevel)
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp
+  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp,jp_tmp
   integer,dimension(1:ndim)::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::i,ipart,jpart,idim,icell,ilev
@@ -1156,6 +1369,12 @@ subroutine split_part(s,p,ilevel)
            p%fp(ipart,1:ndim)=p%fp(jpart,1:ndim)
            p%fp(jpart,1:ndim)=fp_tmp(1:ndim)
         endif
+        ! Swap angular momentum
+        if(allocated(p%jp))then
+           jp_tmp(1:ndim)=p%jp(ipart,1:ndim)
+           p%jp(ipart,1:ndim)=p%jp(jpart,1:ndim)
+           p%jp(jpart,1:ndim)=jp_tmp(1:ndim)
+        endif
         ! Swap age
         if(allocated(p%tp))then
            mp_tmp=p%tp(ipart)
@@ -1245,7 +1464,370 @@ recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
   endif
 
 end subroutine r_broadcast_multipole
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function cic_weight(dl,dr)
+  use amr_parameters, only: dp, ndim, twotondim
+  real(dp),dimension(1:twotondim)::cic_weight
+  real(dp),dimension(1:ndim)::dl,dr
+#if NDIM==1
+  cic_weight(1)=dl(1)
+  cic_weight(2)=dr(1)
 #endif
+#if NDIM==2
+  cic_weight(1)=dl(1)*dl(2)
+  cic_weight(2)=dr(1)*dl(2)
+  cic_weight(3)=dl(1)*dr(2)
+  cic_weight(4)=dr(1)*dr(2)
+#endif
+#if NDIM==3
+  cic_weight(1)=dl(1)*dl(2)*dl(3)
+  cic_weight(2)=dr(1)*dl(2)*dl(3)
+  cic_weight(3)=dl(1)*dr(2)*dl(3)
+  cic_weight(4)=dr(1)*dr(2)*dl(3)
+  cic_weight(5)=dl(1)*dl(2)*dr(3)
+  cic_weight(6)=dr(1)*dl(2)*dr(3)
+  cic_weight(7)=dl(1)*dr(2)*dr(3)
+  cic_weight(8)=dr(1)*dr(2)*dr(3)
+#endif
+end function cic_weight
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function cic_index(il,ir)
+  use amr_parameters, only: ndim, twotondim
+  integer,dimension(1:ndim,1:twotondim)::cic_index
+  integer,dimension(1:ndim)::il,ir
+#if NDIM==1
+  cic_index(1,1)=il(1)
+  cic_index(1,2)=ir(1)
+#endif
+#if NDIM==2
+  cic_index(1:2,1)=(/il(1),il(2)/)
+  cic_index(1:2,2)=(/ir(1),il(2)/)
+  cic_index(1:2,3)=(/il(1),ir(2)/)
+  cic_index(1:2,4)=(/ir(1),ir(2)/)
+#endif
+#if NDIM==3
+  cic_index(1:3,1)=(/il(1),il(2),il(3)/)
+  cic_index(1:3,2)=(/ir(1),il(2),il(3)/)
+  cic_index(1:3,3)=(/il(1),ir(2),il(3)/)
+  cic_index(1:3,4)=(/ir(1),ir(2),il(3)/)
+  cic_index(1:3,5)=(/il(1),il(2),ir(3)/)
+  cic_index(1:3,6)=(/ir(1),il(2),ir(3)/)
+  cic_index(1:3,7)=(/il(1),ir(2),ir(3)/)
+  cic_index(1:3,8)=(/ir(1),ir(2),ir(3)/)
+#endif
+end function cic_index
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function tsc_weight(wl,wc,wr)
+  use amr_parameters, only: dp, ndim, threetondim
+  real(dp),dimension(1:threetondim)::tsc_weight
+  real(dp),dimension(1:ndim)::wl,wc,wr
+#if NDIM==1
+  tsc_weight(1)=wl(1)
+  tsc_weight(2)=wc(1)
+  tsc_weight(3)=wr(1)
+#endif
+#if NDIM==2
+  tsc_weight(1)=wl(1)*wl(2)
+  tsc_weight(2)=wc(1)*wl(2)
+  tsc_weight(3)=wr(1)*wl(2)
+  tsc_weight(4)=wl(1)*wc(2)
+  tsc_weight(5)=wc(1)*wc(2)
+  tsc_weight(6)=wr(1)*wc(2)
+  tsc_weight(7)=wl(1)*wr(2)
+  tsc_weight(8)=wc(1)*wr(2)
+  tsc_weight(9)=wr(1)*wr(2)
+#endif
+#if NDIM==3
+  tsc_weight(1) =wl(1)*wl(2)*wl(3)
+  tsc_weight(2) =wc(1)*wl(2)*wl(3)
+  tsc_weight(3) =wr(1)*wl(2)*wl(3)
+  tsc_weight(4) =wl(1)*wc(2)*wl(3)
+  tsc_weight(5) =wc(1)*wc(2)*wl(3)
+  tsc_weight(6) =wr(1)*wc(2)*wl(3)
+  tsc_weight(7) =wl(1)*wr(2)*wl(3)
+  tsc_weight(8) =wc(1)*wr(2)*wl(3)
+  tsc_weight(9) =wr(1)*wr(2)*wl(3)
+  tsc_weight(10)=wl(1)*wl(2)*wc(3)
+  tsc_weight(11)=wc(1)*wl(2)*wc(3)
+  tsc_weight(12)=wr(1)*wl(2)*wc(3)
+  tsc_weight(13)=wl(1)*wc(2)*wc(3)
+  tsc_weight(14)=wc(1)*wc(2)*wc(3)
+  tsc_weight(15)=wr(1)*wc(2)*wc(3)
+  tsc_weight(16)=wl(1)*wr(2)*wc(3)
+  tsc_weight(17)=wc(1)*wr(2)*wc(3)
+  tsc_weight(18)=wr(1)*wr(2)*wc(3)
+  tsc_weight(19)=wl(1)*wl(2)*wr(3)
+  tsc_weight(20)=wc(1)*wl(2)*wr(3)
+  tsc_weight(21)=wr(1)*wl(2)*wr(3)
+  tsc_weight(22)=wl(1)*wc(2)*wr(3)
+  tsc_weight(23)=wc(1)*wc(2)*wr(3)
+  tsc_weight(24)=wr(1)*wc(2)*wr(3)
+  tsc_weight(25)=wl(1)*wr(2)*wr(3)
+  tsc_weight(26)=wc(1)*wr(2)*wr(3)
+  tsc_weight(27)=wr(1)*wr(2)*wr(3)
+#endif
+end function tsc_weight
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function tsc_index(cl,cc,cr)
+  use amr_parameters, only: ndim, threetondim
+  integer,dimension(1:ndim,1:threetondim)::tsc_index
+  integer,dimension(1:ndim)::cl,cc,cr
+#if NDIM==1
+  tsc_index(1,1)=cl(1)
+  tsc_index(1,2)=cc(1)
+  tsc_index(1,3)=cr(1)
+#endif
+#if NDIM==2
+  tsc_index(1:2,1)=(/cl(1),cl(2)/)
+  tsc_index(1:2,2)=(/cc(1),cl(2)/)
+  tsc_index(1:2,3)=(/cr(1),cl(2)/)
+  tsc_index(1:2,4)=(/cl(1),cc(2)/)
+  tsc_index(1:2,5)=(/cc(1),cc(2)/)
+  tsc_index(1:2,6)=(/cr(1),cc(2)/)
+  tsc_index(1:2,7)=(/cl(1),cr(2)/)
+  tsc_index(1:2,8)=(/cc(1),cr(2)/)
+  tsc_index(1:2,9)=(/cr(1),cr(2)/)
+#endif
+#if NDIM==3
+  tsc_index(1:3,1) =(/cl(1),cl(2),cl(3)/)
+  tsc_index(1:3,2) =(/cc(1),cl(2),cl(3)/)
+  tsc_index(1:3,3) =(/cr(1),cl(2),cl(3)/)
+  tsc_index(1:3,4) =(/cl(1),cc(2),cl(3)/)
+  tsc_index(1:3,5) =(/cc(1),cc(2),cl(3)/)
+  tsc_index(1:3,6) =(/cr(1),cc(2),cl(3)/)
+  tsc_index(1:3,7) =(/cl(1),cr(2),cl(3)/)
+  tsc_index(1:3,8) =(/cc(1),cr(2),cl(3)/)
+  tsc_index(1:3,9) =(/cr(1),cr(2),cl(3)/)
+  tsc_index(1:3,10)=(/cl(1),cl(2),cc(3)/)
+  tsc_index(1:3,11)=(/cc(1),cl(2),cc(3)/)
+  tsc_index(1:3,12)=(/cr(1),cl(2),cc(3)/)
+  tsc_index(1:3,13)=(/cl(1),cc(2),cc(3)/)
+  tsc_index(1:3,14)=(/cc(1),cc(2),cc(3)/)
+  tsc_index(1:3,15)=(/cr(1),cc(2),cc(3)/)
+  tsc_index(1:3,16)=(/cl(1),cr(2),cc(3)/)
+  tsc_index(1:3,17)=(/cc(1),cr(2),cc(3)/)
+  tsc_index(1:3,18)=(/cr(1),cr(2),cc(3)/)
+  tsc_index(1:3,19)=(/cl(1),cl(2),cr(3)/)
+  tsc_index(1:3,20)=(/cc(1),cl(2),cr(3)/)
+  tsc_index(1:3,21)=(/cr(1),cl(2),cr(3)/)
+  tsc_index(1:3,22)=(/cl(1),cc(2),cr(3)/)
+  tsc_index(1:3,23)=(/cc(1),cc(2),cr(3)/)
+  tsc_index(1:3,24)=(/cr(1),cc(2),cr(3)/)
+  tsc_index(1:3,25)=(/cl(1),cr(2),cr(3)/)
+  tsc_index(1:3,26)=(/cc(1),cr(2),cr(3)/)
+  tsc_index(1:3,27)=(/cr(1),cr(2),cr(3)/)
+#endif
+end function tsc_index
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function pcs_weight(wll,wl,wr,wrr)
+  use amr_parameters, only: dp, ndim, fourtondim
+  real(dp),dimension(1:fourtondim)::pcs_weight
+  real(dp),dimension(1:ndim)::wll,wl,wr,wrr
+#if NDIM==1
+  pcs_weight(1)=wll(1)
+  pcs_weight(2)=wl (1)
+  pcs_weight(3)=wr (1)
+  pcs_weight(4)=wrr(1)
+#endif
+#if NDIM==2
+  pcs_weight(1) =wll(1)*wll(2)
+  pcs_weight(2) =wl (1)*wll(2)
+  pcs_weight(3) =wr (1)*wll(2)
+  pcs_weight(4) =wrr(1)*wll(2)
+  pcs_weight(5) =wll(1)*wl (2)
+  pcs_weight(6) =wl (1)*wl (2)
+  pcs_weight(7) =wr (1)*wl (2)
+  pcs_weight(8) =wrr(1)*wl (2)
+  pcs_weight(9) =wll(1)*wr (2)
+  pcs_weight(10)=wl (1)*wr (2)
+  pcs_weight(11)=wr (1)*wr (2)
+  pcs_weight(12)=wrr(1)*wr (2)
+  pcs_weight(13)=wll(1)*wrr(2)
+  pcs_weight(14)=wl (1)*wrr(2)
+  pcs_weight(15)=wr (1)*wrr(2)
+  pcs_weight(16)=wrr(1)*wrr(2)
+#endif
+#if NDIM==3
+  pcs_weight(1) =wll(1)*wll(2)*wll(3)
+  pcs_weight(2) =wl (1)*wll(2)*wll(3)
+  pcs_weight(3) =wr (1)*wll(2)*wll(3)
+  pcs_weight(4) =wrr(1)*wll(2)*wll(3)
+  pcs_weight(5) =wll(1)*wl (2)*wll(3)
+  pcs_weight(6) =wl (1)*wl (2)*wll(3)
+  pcs_weight(7) =wr (1)*wl (2)*wll(3)
+  pcs_weight(8) =wrr(1)*wl (2)*wll(3)
+  pcs_weight(9) =wll(1)*wr (2)*wll(3)
+  pcs_weight(10)=wl (1)*wr (2)*wll(3)
+  pcs_weight(11)=wr (1)*wr (2)*wll(3)
+  pcs_weight(12)=wrr(1)*wr (2)*wll(3)
+  pcs_weight(13)=wll(1)*wrr(2)*wll(3)
+  pcs_weight(14)=wl (1)*wrr(2)*wll(3)
+  pcs_weight(15)=wr (1)*wrr(2)*wll(3)
+  pcs_weight(16)=wrr(1)*wrr(2)*wll(3)
+  pcs_weight(17)=wll(1)*wll(2)*wl (3)
+  pcs_weight(18)=wl (1)*wll(2)*wl (3)
+  pcs_weight(19)=wr (1)*wll(2)*wl (3)
+  pcs_weight(20)=wrr(1)*wll(2)*wl (3)
+  pcs_weight(21)=wll(1)*wl (2)*wl (3)
+  pcs_weight(22)=wl (1)*wl (2)*wl (3)
+  pcs_weight(23)=wr (1)*wl (2)*wl (3)
+  pcs_weight(24)=wrr(1)*wl (2)*wl (3)
+  pcs_weight(25)=wll(1)*wr (2)*wl (3)
+  pcs_weight(26)=wl (1)*wr (2)*wl (3)
+  pcs_weight(27)=wr (1)*wr (2)*wl (3)
+  pcs_weight(28)=wrr(1)*wr (2)*wl (3)
+  pcs_weight(29)=wll(1)*wrr(2)*wl (3)
+  pcs_weight(30)=wl (1)*wrr(2)*wl (3)
+  pcs_weight(31)=wr (1)*wrr(2)*wl (3)
+  pcs_weight(32)=wrr(1)*wrr(2)*wl (3)
+  pcs_weight(33)=wll(1)*wll(2)*wr (3)
+  pcs_weight(34)=wl (1)*wll(2)*wr (3)
+  pcs_weight(35)=wr (1)*wll(2)*wr (3)
+  pcs_weight(36)=wrr(1)*wll(2)*wr (3)
+  pcs_weight(37)=wll(1)*wl (2)*wr (3)
+  pcs_weight(38)=wl (1)*wl (2)*wr (3)
+  pcs_weight(39)=wr (1)*wl (2)*wr (3)
+  pcs_weight(40)=wrr(1)*wl (2)*wr (3)
+  pcs_weight(41)=wll(1)*wr (2)*wr (3)
+  pcs_weight(42)=wl (1)*wr (2)*wr (3)
+  pcs_weight(43)=wr (1)*wr (2)*wr (3)
+  pcs_weight(44)=wrr(1)*wr (2)*wr (3)
+  pcs_weight(45)=wll(1)*wrr(2)*wr (3)
+  pcs_weight(46)=wl (1)*wrr(2)*wr (3)
+  pcs_weight(47)=wr (1)*wrr(2)*wr (3)
+  pcs_weight(48)=wrr(1)*wrr(2)*wr (3)
+  pcs_weight(49)=wll(1)*wll(2)*wrr(3)
+  pcs_weight(50)=wl (1)*wll(2)*wrr(3)
+  pcs_weight(51)=wr (1)*wll(2)*wrr(3)
+  pcs_weight(52)=wrr(1)*wll(2)*wrr(3)
+  pcs_weight(53)=wll(1)*wl (2)*wrr(3)
+  pcs_weight(54)=wl (1)*wl (2)*wrr(3)
+  pcs_weight(55)=wr (1)*wl (2)*wrr(3)
+  pcs_weight(56)=wrr(1)*wl (2)*wrr(3)
+  pcs_weight(57)=wll(1)*wr (2)*wrr(3)
+  pcs_weight(58)=wl (1)*wr (2)*wrr(3)
+  pcs_weight(59)=wr (1)*wr (2)*wrr(3)
+  pcs_weight(60)=wrr(1)*wr (2)*wrr(3)
+  pcs_weight(61)=wll(1)*wrr(2)*wrr(3)
+  pcs_weight(62)=wl (1)*wrr(2)*wrr(3)
+  pcs_weight(63)=wr (1)*wrr(2)*wrr(3)
+  pcs_weight(64)=wrr(1)*wrr(2)*wrr(3)
+#endif
+end function pcs_weight
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+function pcs_index(cll,cl,cr,crr)
+  use amr_parameters, only: ndim, fourtondim
+  integer,dimension(1:ndim,1:fourtondim)::pcs_index
+  integer,dimension(1:ndim)::cll,cl,cr,crr
+#if NDIM==1
+  pcs_index(1,1)=cll(1)
+  pcs_index(1,2)=cl (1)
+  pcs_index(1,3)=cr (1)
+  pcs_index(1,4)=crr(1)
+#endif
+#if NDIM==2
+  pcs_index(1:2,1) =(/cll(1),cll(2)/)
+  pcs_index(1:2,2) =(/cl (1),cll(2)/)
+  pcs_index(1:2,3) =(/cr (1),cll(2)/)
+  pcs_index(1:2,4) =(/crr(1),cll(2)/)
+  pcs_index(1:2,5) =(/cll(1),cl (2)/)
+  pcs_index(1:2,6) =(/cl (1),cl (2)/)
+  pcs_index(1:2,7) =(/cr (1),cl (2)/)
+  pcs_index(1:2,8) =(/crr(1),cl (2)/)
+  pcs_index(1:2,9) =(/cll(1),cr (2)/)
+  pcs_index(1:2,10)=(/cl (1),cr (2)/)
+  pcs_index(1:2,11)=(/cr (1),cr (2)/)
+  pcs_index(1:2,12)=(/crr(1),cr (2)/)
+  pcs_index(1:2,13)=(/cll(1),crr(2)/)
+  pcs_index(1:2,14)=(/cl (1),crr(2)/)
+  pcs_index(1:2,15)=(/cr (1),crr(2)/)
+  pcs_index(1:2,16)=(/crr(1),crr(2)/)
+#endif
+#if NDIM==3
+  pcs_index(1:3,1) =(/cll(1),cll(2),cll(3)/)
+  pcs_index(1:3,2) =(/cl (1),cll(2),cll(3)/)
+  pcs_index(1:3,3) =(/cr (1),cll(2),cll(3)/)
+  pcs_index(1:3,4) =(/crr(1),cll(2),cll(3)/)
+  pcs_index(1:3,5) =(/cll(1),cl (2),cll(3)/)
+  pcs_index(1:3,6) =(/cl (1),cl (2),cll(3)/)
+  pcs_index(1:3,7) =(/cr (1),cl (2),cll(3)/)
+  pcs_index(1:3,8) =(/crr(1),cl (2),cll(3)/)
+  pcs_index(1:3,9) =(/cll(1),cr (2),cll(3)/)
+  pcs_index(1:3,10)=(/cl (1),cr (2),cll(3)/)
+  pcs_index(1:3,11)=(/cr (1),cr (2),cll(3)/)
+  pcs_index(1:3,12)=(/crr(1),cr (2),cll(3)/)
+  pcs_index(1:3,13)=(/cll(1),crr(2),cll(3)/)
+  pcs_index(1:3,14)=(/cl (1),crr(2),cll(3)/)
+  pcs_index(1:3,15)=(/cr (1),crr(2),cll(3)/)
+  pcs_index(1:3,16)=(/crr(1),crr(2),cll(3)/)
+  pcs_index(1:3,17)=(/cll(1),cll(2),cl (3)/)
+  pcs_index(1:3,18)=(/cl (1),cll(2),cl (3)/)
+  pcs_index(1:3,19)=(/cr (1),cll(2),cl (3)/)
+  pcs_index(1:3,20)=(/crr(1),cll(2),cl (3)/)
+  pcs_index(1:3,21)=(/cll(1),cl (2),cl (3)/)
+  pcs_index(1:3,22)=(/cl (1),cl (2),cl (3)/)
+  pcs_index(1:3,23)=(/cr (1),cl (2),cl (3)/)
+  pcs_index(1:3,24)=(/crr(1),cl (2),cl (3)/)
+  pcs_index(1:3,25)=(/cll(1),cr (2),cl (3)/)
+  pcs_index(1:3,26)=(/cl (1),cr (2),cl (3)/)
+  pcs_index(1:3,27)=(/cr (1),cr (2),cl (3)/)
+  pcs_index(1:3,28)=(/crr(1),cr (2),cl (3)/)
+  pcs_index(1:3,29)=(/cll(1),crr(2),cl (3)/)
+  pcs_index(1:3,30)=(/cl (1),crr(2),cl (3)/)
+  pcs_index(1:3,31)=(/cr (1),crr(2),cl (3)/)
+  pcs_index(1:3,32)=(/crr(1),crr(2),cl (3)/)
+  pcs_index(1:3,33)=(/cll(1),cll(2),cr (3)/)
+  pcs_index(1:3,34)=(/cl (1),cll(2),cr (3)/)
+  pcs_index(1:3,35)=(/cr (1),cll(2),cr (3)/)
+  pcs_index(1:3,36)=(/crr(1),cll(2),cr (3)/)
+  pcs_index(1:3,37)=(/cll(1),cl (2),cr (3)/)
+  pcs_index(1:3,38)=(/cl (1),cl (2),cr (3)/)
+  pcs_index(1:3,39)=(/cr (1),cl (2),cr (3)/)
+  pcs_index(1:3,40)=(/crr(1),cl (2),cr (3)/)
+  pcs_index(1:3,41)=(/cll(1),cr (2),cr (3)/)
+  pcs_index(1:3,42)=(/cl (1),cr (2),cr (3)/)
+  pcs_index(1:3,43)=(/cr (1),cr (2),cr (3)/)
+  pcs_index(1:3,44)=(/crr(1),cr (2),cr (3)/)
+  pcs_index(1:3,45)=(/cll(1),crr(2),cr (3)/)
+  pcs_index(1:3,46)=(/cl (1),crr(2),cr (3)/)
+  pcs_index(1:3,47)=(/cr (1),crr(2),cr (3)/)
+  pcs_index(1:3,48)=(/crr(1),crr(2),cr (3)/)
+  pcs_index(1:3,49)=(/cll(1),cll(2),crr(3)/)
+  pcs_index(1:3,50)=(/cl (1),cll(2),crr(3)/)
+  pcs_index(1:3,51)=(/cr (1),cll(2),crr(3)/)
+  pcs_index(1:3,52)=(/crr(1),cll(2),crr(3)/)
+  pcs_index(1:3,53)=(/cll(1),cl (2),crr(3)/)
+  pcs_index(1:3,54)=(/cl (1),cl (2),crr(3)/)
+  pcs_index(1:3,55)=(/cr (1),cl (2),crr(3)/)
+  pcs_index(1:3,56)=(/crr(1),cl (2),crr(3)/)
+  pcs_index(1:3,57)=(/cll(1),cr (2),crr(3)/)
+  pcs_index(1:3,58)=(/cl (1),cr (2),crr(3)/)
+  pcs_index(1:3,59)=(/cr (1),cr (2),crr(3)/)
+  pcs_index(1:3,60)=(/crr(1),cr (2),crr(3)/)
+  pcs_index(1:3,61)=(/cll(1),crr(2),crr(3)/)
+  pcs_index(1:3,62)=(/cl (1),crr(2),crr(3)/)
+  pcs_index(1:3,63)=(/cr (1),crr(2),crr(3)/)
+  pcs_index(1:3,64)=(/crr(1),crr(2),crr(3)/)
+#endif
+end function pcs_index
 !##############################################################################
 !##############################################################################
 !##############################################################################

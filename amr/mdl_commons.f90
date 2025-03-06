@@ -14,6 +14,7 @@ module mdl_parameters
      enumerator::MDL_INPUT_PART_ZOOM
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_STAR_ASCII
+     enumerator::MDL_INPUT_SINK_ASCII
      enumerator::MDL_INPUT_PART_RESTART
      enumerator::MDL_INPUT_PART_RAMSES
      enumerator::MDL_INPUT_PART_GADGET
@@ -80,6 +81,7 @@ module mdl_parameters
      enumerator::MDL_TREE_CLUMP
      enumerator::MDL_THERMAL_FEEDBACK
      enumerator::MDL_MECHANICAL_FEEDBACK
+     enumerator::MDL_SINK_ACCRETION
      enumerator::MDL_NEWDT_PART
      enumerator::MDL_BROADCAST_DT
      enumerator::MDL_MAKE_INITIAL_PHI

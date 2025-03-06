@@ -389,6 +389,20 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
         end do
      endif
 
+     ! Read Angular Momenta
+     if(allocated(p%jp))then
+        do idim=1,ndim
+           ipos=iskip+8*(istart-1)
+           read(10,POS=ipos)xdp
+           ipart=ipart_old
+           do i=istart,iend
+              ipart=ipart+1
+              p%jp(ipart,idim)=xdp(i)
+           end do
+           iskip=iskip+8*npart_file(icpu)
+        end do
+     endif
+
      ! Read birth time
      if(allocated(p%tp))then
         ipos=iskip+8*(istart-1)
