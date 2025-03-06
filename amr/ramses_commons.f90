@@ -371,6 +371,13 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
            nskip(ivar+1)=nskip(ivar)+4*npart
         end do
      endif
+     ! Angular momentum
+     if(allocated(p%jp))then
+        do idim=1,ndim
+           ivar=ivar+1
+           nskip(ivar+1)=nskip(ivar)+4*npart
+        end do
+     endif
      ! Birth times
      if(allocated(p%tp))then
         ivar=ivar+1
@@ -485,6 +492,13 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
      endif
      ! Accelerations
      if(allocated(p%fp))then
+        do idim=1,ndim
+           ivar=ivar+1
+           nskip(ivar)=nskip(ivar)+4*p%npart
+        end do
+     endif
+     ! Angular momenta
+     if(allocated(p%jp))then
         do idim=1,ndim
            ivar=ivar+1
            nskip(ivar)=nskip(ivar)+4*p%npart

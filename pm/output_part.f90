@@ -135,6 +135,18 @@ subroutine output_part(s,p,filename)
      end do
   endif
 
+  ! Write Angular momentum
+  if(allocated(p%jp))then
+     do idim=1,ndim
+        do i=1,p%npart
+           xsp(i)=p%jp(i,idim)
+        end do
+        ivar=ivar+1
+        write(ilun,POS=nskip(ivar))
+        write(ilun)xsp
+     end do
+  endif
+
   ! Write birth time
   if(allocated(p%tp))then
      do i=1,p%npart
@@ -283,6 +295,16 @@ subroutine backup_part(r,g,p,filename)
      do idim=1,ndim
         do i=1,p%npart
            xdp(i)=p%fp(i,idim)
+        end do
+        write(ilun)xdp
+     end do
+  endif
+
+  ! Write angular momentum
+  if(allocated(p%jp))then
+     do idim=1,ndim
+        do i=1,p%npart
+           xdp(i)=p%jp(i,idim)
         end do
         write(ilun)xdp
      end do

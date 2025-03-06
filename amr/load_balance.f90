@@ -776,7 +776,7 @@ subroutine balance_part(s,p,ilevel)
   integer,dimension(1:s%g%ncpu)::npart_cpu,npart_cpu_tot
   real(dp)::xpart_target,xcum_target
 
-  real(dp),dimension(1:ndim)::xp_tmp,vp_tmp,fp_tmp
+  real(dp),dimension(1:ndim)::xp_tmp,vp_tmp,fp_tmp,jp_tmp
   real(dp)::mp_tmp,zp_tmp,tp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
@@ -1079,6 +1079,12 @@ subroutine balance_part(s,p,ilevel)
            p%fp(ipart,1:ndim)=p%fp(jpart,1:ndim)
            p%fp(jpart,1:ndim)=fp_tmp(1:ndim)
         endif
+        ! Swap angular momentum (spin)
+        if(allocated(p%jp))then
+           jp_tmp(1:ndim)=p%jp(ipart,1:ndim)
+           p%jp(ipart,1:ndim)=p%jp(jpart,1:ndim)
+           p%jp(jpart,1:ndim)=jp_tmp(1:ndim)
+        end if
         ! Swap birth time
         if(allocated(p%tp))then
            tp_tmp=p%tp(ipart)
@@ -1336,6 +1342,51 @@ subroutine balance_part(s,p,ilevel)
   endif
 
   !-------------------------
+  ! Swap Angular momenta (spins)
+  !-------------------------
+  if(allocated(p%jp))then
+     do idim=1,ndim
+
+        countrecv=0
+        do icpu=1,g%ncpu
+           nbuffer=recv_cnt(icpu)
+           if(nbuffer>0)then
+              countrecv=countrecv+1
+              istart=recv_oft(icpu)+1
+              call MPI_IRECV(x_recv_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqrecv(countrecv),info)
+           endif
+        end do
+
+        do i=1,send_cnt_tot
+           ipart=p%headp(ilevel)-1+count_loc+i
+           x_send_buf(i)=p%jp(ipart,idim)
+        end do
+
+        countsend=0
+        do icpu=1,g%ncpu
+           nbuffer=send_cnt(icpu)
+           if(nbuffer>0) then
+              countsend=countsend+1
+              istart=send_oft(icpu)+1
+              call MPI_ISEND(x_send_buf(istart),nbuffer,MPI_DOUBLE_PRECISION,icpu-1,tag,MPI_COMM_WORLD,reqsend(countsend),info)
+           end if
+        end do
+
+        ! Wait for full completion of receives
+        call MPI_WAITALL(countrecv,reqrecv,statuses,info)
+
+        do i=1,recv_cnt_tot
+           ipart=p%headp(ilevel)-1+count_loc+i
+           p%jp(ipart,idim)=x_recv_buf(i)
+        end do
+
+        ! Wait for full completion of sends
+        call MPI_WAITALL(countsend,reqsend,statuses,info)
+
+     end do
+  end if
+
+  !-------------------------
   ! Swap birth ages
   !-------------------------
   if(allocated(p%tp))then
@@ -1420,7 +1471,7 @@ subroutine balance_part(s,p,ilevel)
      call MPI_WAITALL(countsend,reqsend,statuses,info)
 
   endif
-
+  
   deallocate(x_recv_buf,x_send_buf)
 
   allocate(i_recv_buf(1:recv_cnt_tot))
