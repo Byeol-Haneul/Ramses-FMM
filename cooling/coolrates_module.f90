@@ -503,7 +503,7 @@ SUBROUTINE update_rt_c(r, g, tables)
 
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 
-  g%rt_c_cgs = clight * r%rt_c_fraction
+  g%rt_c_cgs = c_cgs * r%rt_c_fraction
   g%rt_c = g%rt_c_cgs / scale_v
   tables%rt_c_cgs = g%rt_c_cgs
 

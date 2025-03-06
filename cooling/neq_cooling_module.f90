@@ -571,9 +571,9 @@ contains
           !           / ( 1/Delta t + 4 c/lambda/C_v a T^3 + c_red/lambda)
           one_over_C_v = mH*mu*(r%gamma-1d0) / (rho*kB)
           E_rad = group_egy_erg(iIR) * dNp(iIR)
-          dE_T = (tables%rt_c_cgs * E_rad - clight*a_r*TK**4)             &
+          dE_T = (tables%rt_c_cgs * E_rad - c_cgs*a_r*TK**4)             &
                /(1d0/(kAbs_loc(iIR) * Zsolar(icell) * rho * ddt(icell))  &
-               +4d0*clight * one_over_C_v *a_r*TK**3+tables%rt_c_cgs)
+               +4d0*c_cgs * one_over_C_v *a_r*TK**3+tables%rt_c_cgs)
           dT2 = dT2 + 1d0/mu * one_over_C_v * dE_T
           dNp(iIR) = dNp(iIR) - dE_T * one_over_egy_IR_erg
 

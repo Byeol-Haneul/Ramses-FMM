@@ -18,7 +18,7 @@
 MODULE spectrum_integrator_module
 !_________________________________________________________________________
   use amr_commons, only: run_t
-  use constants, only: clight, eV2erg, hplanck
+  use constants, only: c_cgs, eV2erg, hplanck
   implicit none
 
   PUBLIC integrateSpectrum, f1, fLambda, fdivLambda, fSig, fSigLambda,   &
@@ -59,8 +59,8 @@ FUNCTION integrateSpectrum(run, X, Y, N, e0, e1, species, func)
   if(N .le. 2) RETURN
   ! Convert energy interval to wavelength interval
   la0 = X(1) ; la1 = X(N)
-  if(e1.gt.0) la0 = max(la0, 1d8 * hplanck * clight / e1 / eV2erg)
-  if(e0.gt.0) la1 = min(la1, 1d8 * hplanck * clight / e0 / eV2erg)
+  if(e1.gt.0) la0 = max(la0, 1d8 * hplanck * c_cgs / e1 / eV2erg)
+  if(e0.gt.0) la1 = min(la1, 1d8 * hplanck * c_cgs / e0 / eV2erg)
   if(la0 .ge. la1) then
      print*,'The energy limits do not overlap with SED range, so stopping'
      stop
@@ -175,7 +175,7 @@ FUNCTION getCrosssection(run, lambda, species)
   real(kind=8) :: E0=1., cs0=0., P=1., ya=1., yw=0., y0=0., y1=1.
   real(kind=8) :: E, x, y
   !------------------------------------------------------------------------
-  E = hplanck * clight/(lambda*1d-8) / eV2erg         ! photon energy in eV
+  E = hplanck * c_cgs/(lambda*1d-8) / eV2erg         ! photon energy in eV
   if ( E .lt. run%ionEvs(species) ) then            ! below ionization energy
      getCrosssection=0.
      RETURN
@@ -216,7 +216,7 @@ END MODULE spectrum_integrator_module
 MODULE SED_module
   !_________________________________________________________________________
   use amr_commons, only: run_t, global_t
-  use constants, only: L_sun, clight, eV2erg, hplanck, Gyr2sec
+  use constants, only: L_sun, c_cgs, eV2erg, hplanck, Gyr2sec
   use hydro_parameters, only: nion
   use rt_parameters, only: nrtgrp
   implicit none
@@ -565,7 +565,7 @@ FUNCTION getSEDLuminosity(run, X, Y, N, e0, e1)
   real(kind=8) :: getSEDLuminosity, X(N), Y(N), e0, e1
   !-------------------------------------------------------------------------
   integer :: species = 1                 ! irrelevant but must be included
-  real(kind=8), parameter :: const=1.0e-8/hplanck/clight
+  real(kind=8), parameter :: const=1.0e-8/hplanck/c_cgs
   ! const is a div by ph energy => ph count.  1e-8 is a conversion into
   ! cgs, since wly=[angstrom] h=[erg s-1], c=[cm s-1]
   !-------------------------------------------------------------------------
@@ -588,7 +588,7 @@ FUNCTION getSEDEgy(run, X, Y, N, e0, e1)
   !-------------------------------------------------------------------------
   integer :: species = 1
   real(kind=8) :: norm
-  real(kind=8), parameter :: const=1d8*hplanck*clight/eV2erg ! energy conversion
+  real(kind=8), parameter :: const=1d8*hplanck*c_cgs/eV2erg ! energy conversion
   !-------------------------------------------------------------------------
   norm = integrateSpectrum(run, X, Y, N, e0, e1, species, fLambda)
   getSEDEgy = const * integrateSpectrum(run, X, Y, N, e0, e1, species, f1) / norm

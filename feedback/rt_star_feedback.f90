@@ -5,7 +5,7 @@
 MODULE rt_star_feedback
   !_________________________________________________________________________
   use amr_commons, only: run_t, global_t
-  use constants, only: L_sun, m_sun, clight, eV2erg, hplanck, sec2Gyr
+  use constants, only: L_sun, m_sun, eV2erg, hplanck, sec2Gyr
   use hydro_parameters, only: nion
   use rt_parameters, only: nrtgrp
   implicit none
