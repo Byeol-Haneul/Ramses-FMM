@@ -1231,7 +1231,7 @@ subroutine split_part(s,p,ilevel)
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp
+  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp,jp_tmp
   integer,dimension(1:ndim)::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::i,ipart,jpart,idim,icell,ilev
@@ -1368,6 +1368,12 @@ subroutine split_part(s,p,ilevel)
            fp_tmp(1:ndim)=p%fp(ipart,1:ndim)
            p%fp(ipart,1:ndim)=p%fp(jpart,1:ndim)
            p%fp(jpart,1:ndim)=fp_tmp(1:ndim)
+        endif
+        ! Swap angular momentum
+        if(allocated(p%jp))then
+           jp_tmp(1:ndim)=p%jp(ipart,1:ndim)
+           p%jp(ipart,1:ndim)=p%jp(jpart,1:ndim)
+           p%jp(jpart,1:ndim)=jp_tmp(1:ndim)
         endif
         ! Swap age
         if(allocated(p%tp))then

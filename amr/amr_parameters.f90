@@ -34,6 +34,7 @@ module amr_parameters
   integer,parameter::twotondim=2**ndim
   integer,parameter::threetondim=3**ndim
   integer,parameter::fourtondim=4**ndim
+  integer,parameter::fivetondim=5**ndim
   integer,parameter::twondim=2*ndim
 
   ! Number of 64-bit integers needed to store one Hilbert key

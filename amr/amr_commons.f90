@@ -255,7 +255,7 @@ module amr_commons
      real(dp)::yield_SNII=0.1
      logical::thermal_feedback=.false.
      logical::mechanical_feedback=.false.
-     
+
      ! Clump finder parameters
      logical::clump_finder=.false.
      logical::clump_info=.false.
@@ -283,6 +283,20 @@ module amr_commons
      real(dp)::sink_mass_threshold=0
      real(dp)::sink_purity_threshold=-1
      real(dp)::sink_fraction_threshold=2d0
+     real(dp)::sink_radius=-1
+     logical::form_sinks=.false.
+     logical::sink_refine=.true.
+
+     ! Black hole parameters
+     integer::accretion_type = 0 ! 0: None, 1: Bondi
+     character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
+     real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
+     logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
+     real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
+     integer::sink_b_spline_order = 4 ! Order of B-spline interpolation used for sink accretion and dynamics
+     logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
+     logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
+     logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format

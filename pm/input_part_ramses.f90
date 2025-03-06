@@ -341,6 +341,20 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
         end do
      endif
 
+     ! Read Angular momenta
+     if(allocated(p%jp))then
+        do idim=1,ndim
+           ipos=iskip+4*(istart-1)
+           read(10,POS=ipos)xsp
+           ipart=ipart_old
+           do i=istart,iend
+              ipart=ipart+1
+              p%jp(ipart,idim)=xsp(i)
+           end do
+           iskip=iskip+4*npart_file(icpu)
+        end do
+     endif
+
      ! Read birth time
      if(allocated(p%tp))then
         ipos=iskip+4*(istart-1)
