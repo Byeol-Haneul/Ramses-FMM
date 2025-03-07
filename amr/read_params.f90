@@ -911,10 +911,6 @@ subroutine m_read_params(pst)
      !if(isHe) print '(I3, A9)', iIons-1+ixHeIII, 'iHeIII'
   endif
 
-  ! Read RT parameters from namelist
-
-  if(rt)call m_read_rt_params(pst)
-
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'
      write(*,*)'Aborting...'
@@ -1292,6 +1288,10 @@ subroutine m_read_params(pst)
   s%r%gadget_scale_m=gadget_scale_m
   s%r%gadget_scale_t=gadget_scale_t
   s%r%ic_skip_type=ic_skip_type
+
+
+  ! Read RT parameters from namelist
+  if(rt)call m_read_rt_params(pst)
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)

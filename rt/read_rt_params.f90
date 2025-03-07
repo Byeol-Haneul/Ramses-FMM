@@ -83,7 +83,7 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
   integer,dimension(nion)::spec2group=0                 ! Ion -> group # in recombinations
 
-  integer:: i
+  integer::i, igroup_HI=0, igroup_HII=0, igroup_HeII=0, igroup_HeIII=0
 
   !--------------------------------------------------
   ! Namelist definitions
@@ -99,7 +99,95 @@ subroutine m_read_rt_params(pst)
   namelist/rt_groups/group_csn, group_cse, group_egy, spec2group         &
        & ,group_L0, group_L1, kappaAbs, kappaSc, sed_dir, sedprops_update
 
-  associate(s=>pst%s)
+  associate(s=>pst%s, ionEvs=>pst%s%r%ionEvs, isH2=>pst%s%r%isH2         &
+    ,isHe=>pst%s%r%isHe, ixHI=>pst%s%r%ixHI, ixHII=>pst%s%r%ixHII        &
+    ,ixHeII=>pst%s%r%ixHeII, ixHeIII=>pst%s%r%ixHeIII)
+
+  write(*,'(" Working with ",I2," photon groups ")') nrtgrp
+
+  if(nrtgrp .le. 0) then
+     s%r%rt = .false.
+     write(*,'(" Turning off RT, since no RT groups ")')
+     return
+  endif
+
+  !--------------------------------------------------
+  ! Set defaults for radiation groups
+  !--------------------------------------------------
+  
+#if NRTGRP>0
+  !  Use H2, HI, HeI, HeII ionization energies  as default group intervals
+  group_L0(1:min(nrtgrp,nion))=ionEvs(1:min(nrtgrp,nion))   ! Lower bounds
+  group_L1(1:min(nrtgrp,nion-1))=ionEvs(2:min(nrtgrp+1,nion)) ! Upper bnds
+  group_L1(min(nrtgrp,nion))=0.                     ! Upper bound=infinity
+
+  i=0
+  if(isH2) then ! Set index for H2 dissociating group
+     i=i+1 ; igroup_HI=i
+  endif
+  if(i .lt. nrtgrp) then ! Set index for HI ionizing group
+     i=i+1 ; igroup_HII=i
+  endif
+  if(i .lt. nrtgrp .and. isHe) then ! Set index for HeI ionizing group
+     i=i+1 ; igroup_HeII=i
+  endif
+  if(i .lt. nrtgrp .and. isHe) then ! Set index for HeII ionizing group
+     i=i+1 ; igroup_HeIII=i
+  endif
+
+  ! Default groups are all blackbodies at 10^5 Kelvin:
+  group_csn=0d0 ; group_cse=0d0 ; group_egy=0d0         ! Default all zero
+  if(igroup_HI .gt. 0) then
+     if(ixHI .gt. 0) then                                ! H2 dissociation
+        group_csn(igroup_HI,ixHI)=2.1d-19
+        group_cse(igroup_HI,ixHI)=2.1d-19
+     endif
+     group_egy(igroup_HI)=12.44
+  endif
+  if(igroup_HII .gt. 0) then
+     if(ixHI .gt. 0) then                   ! H2 ionization by HI photons
+        group_csn(igroup_HII,ixHI)=5.0d-18
+        group_cse(igroup_HII,ixHI)=5.3d-18
+     endif
+     group_csn(igroup_HII,ixHII)=3.007d-18                ! HI ionization
+     group_cse(igroup_HII,ixHII)=2.781d-18
+     group_egy(igroup_HII)=18.85
+  endif
+  if(igroup_HeII .gt. 0) then
+     if(ixHI .gt. 0) then                  ! H2 ionization by HeI photons
+        group_csn(igroup_HeII,ixHI)=2.9d-18
+        group_cse(igroup_HeII,ixHI)=2.8d-18
+     endif
+     group_csn(igroup_HeII,ixHII)=5.687d-19! HI ionization by HeI photons
+     group_cse(igroup_HeII,ixHII)=5.042d-19
+     if(ixHeII .gt. 0) then                              ! HeI ionization
+        group_csn(igroup_HeII,ixHeII)=4.478d-18
+        group_cse(igroup_HeII,ixHeII)=4.130d-18
+     endif
+     group_egy(igroup_HeII)=35.079
+  endif
+  if(igroup_HeIII .gt. 0) then
+     if(ixHI .gt. 0) then                 ! H2 ionization by HeII photons
+        group_csn(igroup_HeIII,ixHI)=4.1d-19
+        group_cse(igroup_HeIII,ixHI)=4.1d-19
+     endif
+     group_csn(igroup_HeIII,ixHII)=7.889d-20  ! HI ioniz. by HeII photons
+     group_cse(igroup_HeIII,ixHII)=7.456d-20
+     if(ixHeII .gt. 0) then                  ! HeI ioniz. by HeII photons
+        group_csn(igroup_HeIII,ixHeII)=1.197d-18
+        group_cse(igroup_HeIII,ixHeII)=1.142d-18
+     endif
+     if(ixHeIII .gt. 0) then                            ! HeII ionization
+        group_csn(igroup_HeIII,ixHeIII)=1.055d-18
+        group_cse(igroup_HeIII,ixHeIII)=1.001d-18
+     endif
+     group_egy(igroup_HeIII)=65.666
+  endif
+#endif
+
+  do i=1,min(nion,nrtgrp)
+     spec2group(i)=i                   ! Species contributions to groups
+  end do
 
   !-------------------------------------------------
   ! Read the namelist file
@@ -161,6 +249,13 @@ subroutine m_read_rt_params(pst)
   s%r%group_L1=group_L1
   s%r%kappaAbs=kappaAbs
   s%r%kappaSc=kappaSc
+
+  if(minval(s%r%group_egy) .le. 0d0) then
+     write(*,*) '========================================================='
+     write(*,*) 'WARNING! Some photon groups have zero or negative energy!'
+     write(*,*) 'This could have unwanted effects, so be careful!!!'
+     write(*,*) '========================================================='
+  endif
 
   if(s%r%isH2) then
      do i=1,nrtgrp
