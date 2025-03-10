@@ -150,11 +150,11 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      ! TODO: In principle these weights can be computed once for every sink
      if      (r%sink_b_spline_order==2)then
-        call sink_B_spline_weights_CIC(s,xcen(1:ndim),xBHnei,ckeynei,vol)
+        call sink_B_spline_weights_CIC(s,xcen(1:ndim),xBHnei,ckeynei,vol,ilevel)
      else if (r%sink_b_spline_order==3)then
-        call sink_B_spline_weights_TSC(s,xcen(1:ndim),xBHnei,ckeynei,vol)
+        call sink_B_spline_weights_TSC(s,xcen(1:ndim),xBHnei,ckeynei,vol,ilevel)
      else if (r%sink_b_spline_order==4)then
-        call sink_B_spline_weights_PCS(s,xcen(1:ndim),xBHnei,ckeynei,vol)
+        call sink_B_spline_weights_PCS(s,xcen(1:ndim),xBHnei,ckeynei,vol,ilevel)
      else
         write(*,*)'This is an unknown B-spline order'
         ckeynei = -1 ! To cause a seg-fault
@@ -408,7 +408,7 @@ end subroutine sink_accretion
 !##############################################################################
 !##############################################################################
 
-subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol)
+subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol,ilevel)
    use amr_parameters, only: ndim,dp,fourtondim
    use ramses_commons, only: ramses_t
    implicit none
@@ -417,6 +417,7 @@ subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol)
    real(dp),dimension(1:ndim,1:fourtondim)::xnei
    integer,dimension(1:ndim,1:fourtondim)::ckey
    real(dp),dimension(1:fourtondim)::vol
+   integer::ilevel
    !==================================================================
    ! Simple routine to compute B-spline cells and weights for a given sink
    ! Nicholas Choustikov
@@ -428,7 +429,7 @@ subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol)
 
    associate(r=>s%r,m=>s%m)
 
-   ! PCS at level nlevelmax; a particle contributes to 4 cells in each direction
+   ! PCS at level ilevel; a particle contributes to 4 cells in each direction
    do idim=1,ndim
       crr(idim)=int(x(idim)+1.5D0) ! rightermost cell index
       cr (idim)=crr(idim)-1
@@ -474,7 +475,7 @@ end subroutine sink_B_spline_weights_PCS
 !##############################################################################
 !##############################################################################
 
-subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol)
+subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol,ilevel)
    use amr_parameters, only: ndim,dp,threetondim
    use ramses_commons, only: ramses_t
    implicit none
@@ -483,6 +484,7 @@ subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol)
    real(dp),dimension(1:ndim,1:threetondim)::xnei
    integer,dimension(1:ndim,1:threetondim)::ckey
    real(dp),dimension(1:threetondim)::vol
+   integer::ilevel
    !==================================================================
    ! Simple routine to compute B-spline cells and weights for a given sink
    ! Nicholas Choustikov
@@ -509,8 +511,8 @@ subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol)
 
    ! Periodic boundary conditions
    do idim=1,ndim
-      if(cl(idim)<0)cl(idim)=m%ckey_max(r%nlevelmax+1)-1
-      if(cr(idim)==m%ckey_max(r%nlevelmax+1))cr(idim)=0
+      if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
+      if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
    enddo
 
    ! Compute cloud volumes
@@ -535,7 +537,7 @@ end subroutine sink_B_spline_weights_TSC
 !##############################################################################
 !##############################################################################
 
-subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol)
+subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol,ilevel)
    use amr_parameters, only: ndim,dp,twotondim
    use ramses_commons, only: ramses_t
    implicit none
@@ -544,6 +546,7 @@ subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol)
    real(dp),dimension(1:ndim,1:twotondim)::xnei
    integer,dimension(1:ndim,1:twotondim)::ckey
    real(dp),dimension(1:twotondim)::vol
+   integer::ilevel
    !==================================================================
    ! Simple routine to compute B-spline cells and weights for a given sink
    ! Nicholas Choustikov
@@ -565,8 +568,8 @@ subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol)
 
    ! Periodic boundary conditions
    do idim=1,ndim
-      if(il(idim)<0)il(idim)=m%ckey_max(r%nlevelmax+1)-1
-      if(ir(idim)==m%ckey_max(r%nlevelmax+1))ir(idim)=0
+      if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
+      if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
    enddo
 
    ! Compute cloud volumes
