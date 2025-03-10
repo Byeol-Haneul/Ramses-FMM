@@ -518,10 +518,10 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(cll(idim)<0)cll(idim)=m%ckey_max(ilevel+1)-1
-        if(cl (idim)<0)cl (idim)=m%ckey_max(ilevel+1)-1
-        if(cr (idim)==m%ckey_max(ilevel+1))cr (idim)=0
-        if(crr(idim)==m%ckey_max(ilevel+1))crr(idim)=0
+        if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
+        if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
+        if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
+        if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
      enddo
 
      ! Compute cells Cartesian key
