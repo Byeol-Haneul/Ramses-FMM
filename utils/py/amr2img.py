@@ -9,7 +9,7 @@ parser.add_argument("nout", help="enter output number")
 parser.add_argument("--path", help="specify a path")
 parser.add_argument("--log", help="plot log variable",action="store_true")
 parser.add_argument("--out", help="output a png image")
-parser.add_argument("--pref", help="specify a file prefix")
+parser.add_argument("--prefix", help="specify a file prefix")
 parser.add_argument("--min", help="specify a minimum variable value")
 parser.add_argument("--max", help="specify a maximum variable value")
 parser.add_argument("--var", help="specify a variable number")
@@ -20,10 +20,11 @@ parser.add_argument("--rad", help="specify the image radius")
 parser.add_argument("--clump", help="specify if clumps are overplotted")
 parser.add_argument("--sink", help="specify if sinks are overplotted")
 parser.add_argument("--dir", help="specify the projection axis")
+parser.add_argument("--grid", help="overlay the AMR grid",action="store_true")
 args = parser.parse_args()
 # path the the file
 path = args.path
-prefix = args.pref
+prefix = args.prefix
 ivar = args.var
 vmin = args.min
 vmax = args.max
@@ -35,7 +36,11 @@ clump = args.clump
 sink = args.sink
 axis = args.dir
 log = args.log
+grid = args.grid
 
+grid0 = None
+if grid:
+    grid0=1
 if clump==None:
     clump=False
 if sink==None:
@@ -80,6 +85,8 @@ if prefix=="peak":
     isort=1
 if prefix=="grav":
     isort=0
+if prefix=="rt":
+    isort=0
 
 nout = args.nout
 print("Reading output number ",nout)
@@ -93,7 +100,7 @@ if axis=="z":
     ii=1; jj=2
 
 c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
-ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax)
+ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax,grid=grid0)
 
 if clump:
     h=ram.rd_clump(nout)

@@ -1158,7 +1158,8 @@ def visu(x,y,dx,v,**kwargs):
     vmax = kwargs.get("vmax",None)
     sort = kwargs.get("sort",None)
     cmap = kwargs.get("cmap",'viridis')
-
+    grid = kwargs.get("grid",None)
+    
     if( not (log is None)):
         if vmin==None:
             v = np.log10(abs(v))
@@ -1186,7 +1187,13 @@ def visu(x,y,dx,v,**kwargs):
     plt.scatter(x,y,s=0.0001)
     rescale=np.maximum(xmax-xmin,ymax-ymin)        
     ax.set_aspect("equal")
-    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,cmap=cmap)
+    edgec = None
+    linew = None
+    if( not (grid is None)):
+        edgec='black'
+        linew=0.5
+    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
+                cmap=cmap,edgecolor=edgec,linewidth=linew)
     plt.colorbar(shrink=0.8)
     plt.rcParams['figure.dpi'] = olddpi
 
