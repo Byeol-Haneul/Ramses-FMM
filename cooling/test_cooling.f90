@@ -111,7 +111,6 @@ program test_cool
            do l = 1, nnh
               mu = getMu(r,xion(:,l), TK(l))
               TK(l) = cells(l,k,j,i-1,1)
-              write(*,*)l, nH(l), TK(l)
               Tmu(l) = TK(l)/mu ! T/mu
               if(r%neq_isTconst) r%neq_Tconst = TK(l)
            end do
