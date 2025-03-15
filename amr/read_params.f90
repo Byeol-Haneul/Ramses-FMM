@@ -357,7 +357,7 @@ subroutine m_read_params(pst)
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
        & ,static,geom,overload,nsuperoct
   ! Output parameters
-  namelist/output_params/noutput,foutput,aout,tout,output_mode &
+  namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
        & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
   ! AMR grid basic parameters
@@ -534,6 +534,7 @@ subroutine m_read_params(pst)
         aout(i)=dble(i)*delta_aout
      end do
   endif
+  noutput=max(count(aout>0.and.aout<=1),count(tout>0))
   noutput=MIN(noutput,MAXOUT)
   if(imovout>0) then
      if(tendmov==0.and.aendmov==0)movie=.false.
