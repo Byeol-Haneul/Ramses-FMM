@@ -37,7 +37,7 @@ recursive subroutine m_sink_formation(pst)
         pst%s%g%mass_sink_tot=pst%s%g%mass_sink_tot+output_sink%mass
      endif
   endif
-  
+
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------

@@ -59,7 +59,6 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
   endif
 
 end subroutine r_output_part
-
 !#######################################################
 !#######################################################
 !#######################################################

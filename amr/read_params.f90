@@ -234,6 +234,15 @@ subroutine m_read_params(pst)
   ! level < cg_levelmin uses fine multigrid
   ! level >=cg_levelmin uses conjugate gradient
   logical :: fast_solver = .false.   ! Fast solver with MPI pre-fetch (memory intensive)
+  integer:: part_mass_deposition_scheme=1 ! Part mass deposition schemes (CIC 1, TSC 2, PCS 3)
+  integer::part_force_interpolation_scheme=1 ! Part force interpolation schemes (CIC 1, TSC 2, PCS 3)
+  integer::star_mass_deposition_scheme=1 ! star mass deposition schemes
+  integer::star_force_interpolation_scheme=1 ! star force interpolation schemes
+  integer::sink_mass_deposition_scheme=1 ! sink mass deposition schemes
+  integer::sink_force_interpolation_scheme=1 ! sink force interpolation schemes
+  integer::tree_mass_deposition_scheme=1 ! tree mass deposition schemes
+  integer::tree_force_interpolation_scheme=1 ! tree force interpolation schemes
+
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -366,7 +375,11 @@ subroutine m_read_params(pst)
        & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax,fast_solver
+       & ,cg_levelmin,cic_levelmax,fast_solver,part_mass_deposition_scheme &
+       & ,part_force_interpolation_scheme,star_mass_deposition_scheme &
+       & ,star_force_interpolation_scheme,sink_mass_deposition_scheme &
+       & ,sink_force_interpolation_scheme,tree_mass_deposition_scheme &
+       & ,tree_force_interpolation_scheme 
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
@@ -818,6 +831,14 @@ subroutine m_read_params(pst)
   s%r%cic_levelmax=cic_levelmax
   s%r%cg_levelmin=cg_levelmin
   s%r%fast_solver=fast_solver
+  s%r%part_mass_deposition_scheme=part_mass_deposition_scheme
+  s%r%part_force_interpolation_scheme=part_force_interpolation_scheme
+  s%r%star_mass_deposition_scheme=star_mass_deposition_scheme
+  s%r%star_force_interpolation_scheme=star_force_interpolation_scheme
+  s%r%sink_mass_deposition_scheme=sink_mass_deposition_scheme
+  s%r%sink_force_interpolation_scheme=sink_force_interpolation_scheme
+  s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
+  s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
 
   s%r%nw_frame=nw_frame
   s%r%nh_frame=nh_frame
