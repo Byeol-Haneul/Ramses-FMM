@@ -227,22 +227,21 @@ subroutine m_read_params(pst)
 
   ! Poisson solver parameters
   real(dp)::epsilon=1.0D-4 ! Convergence criterion
-  integer ::gravity_type=0 ! Type of gravity calculations (see user guide)
   real(dp),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
+  integer :: gravity_type=0 ! Type of gravity calculations (see user guide)
   integer :: cic_levelmax=0 ! Maximum level for CIC dark matter interpolation
   integer :: cg_levelmin=999   ! Min level for CG solver
   ! level < cg_levelmin uses fine multigrid
   ! level >=cg_levelmin uses conjugate gradient
   logical :: fast_solver = .false.   ! Fast solver with MPI pre-fetch (memory intensive)
-  integer:: part_mass_deposition_scheme=1 ! Part mass deposition schemes (CIC 1, TSC 2, PCS 3)
-  integer::part_force_interpolation_scheme=1 ! Part force interpolation schemes (CIC 1, TSC 2, PCS 3)
-  integer::star_mass_deposition_scheme=1 ! star mass deposition schemes
-  integer::star_force_interpolation_scheme=1 ! star force interpolation schemes
-  integer::sink_mass_deposition_scheme=1 ! sink mass deposition schemes
-  integer::sink_force_interpolation_scheme=1 ! sink force interpolation schemes
-  integer::tree_mass_deposition_scheme=1 ! tree mass deposition schemes
-  integer::tree_force_interpolation_scheme=1 ! tree force interpolation schemes
-
+  integer :: part_mass_deposition_scheme=1     ! part mass deposition schemes (CIC 1, TSC 2, PCS 3)
+  integer :: part_force_interpolation_scheme=1 ! part force interpolation schemes (CIC 1, TSC 2, PCS 3)
+  integer :: star_mass_deposition_scheme=1     ! star mass deposition schemes
+  integer :: star_force_interpolation_scheme=1 ! star force interpolation schemes
+  integer :: sink_mass_deposition_scheme=1     ! sink mass deposition schemes
+  integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
+  integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
+  integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
