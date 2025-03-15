@@ -4,6 +4,45 @@ contains
 !#######################################################
 !#######################################################
 !#######################################################
+recursive subroutine r_output_sink(pst,input_array,input_size,output_array,output_size)
+  use mdl_module
+  use amr_parameters, only: flen
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::output_size
+  integer,dimension(1:input_size)::input_array
+  integer,dimension(1:output_size)::output_array
+  
+  character(LEN=flen)::filename,filename2
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_OUTPUT_SINK,pst%iUpper+1,input_size,output_size,input_array)
+     call r_output_sink(pst%pLower,input_array,input_size,output_array,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size)
+  else
+     filename=transfer(input_array,filename)
+     if(index(filename,'output')==0)then
+        if(pst%s%r%sink)then
+           filename2=TRIM(filename)//'sink.'
+           call backup_part(pst%s%r,pst%s%g,pst%s%sink,filename2)
+        endif
+     else
+        if(pst%s%r%sink)then
+           filename2=TRIM(filename)//'sink.'
+           call output_part(pst%s,pst%s%sink,filename2)
+        endif
+     endif
+  endif
+
+end subroutine r_output_sink
+!#######################################################
+!#######################################################
+!#######################################################
+!#######################################################
 recursive subroutine r_output_part(pst,input_array,input_size,output_array,output_size)
   use mdl_module
   use amr_parameters, only: flen
@@ -59,6 +98,7 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
   endif
 
 end subroutine r_output_part
+
 !#######################################################
 !#######################################################
 !#######################################################
