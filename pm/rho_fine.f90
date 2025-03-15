@@ -615,10 +615,42 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-                     call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
-     if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
-     if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
-     if(pst%s%r%tree)call cic_part(pst%s,pst%s%tree,ilevel,rtype)
+     ! the mass deposition for various components (particle, star, sink, tree) 
+     ! based on their respective deposition schemes (CIC 1, TSC 2, or PCS 3) 
+     if(pst%s%r%part_mass_deposition_scheme==1)then
+        call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
+     else if(pst%s%r%part_mass_deposition_scheme==2)then
+        call tsc_part(pst%s,pst%s%p   ,ilevel,rtype)
+     else if(pst%s%r%part_mass_deposition_scheme==3)then
+        call pcs_part(pst%s,pst%s%p   ,ilevel,rtype)
+     endif
+     if(pst%s%r%star)then 
+        if(pst%s%r%star_mass_deposition_scheme==1)then
+           call cic_part(pst%s,pst%s%star,ilevel,rtype)
+        elseif(pst%s%r%star_mass_deposition_scheme==2)then
+           call tsc_part(pst%s,pst%s%star,ilevel,rtype)
+        elseif(pst%s%r%star_mass_deposition_scheme==3)then
+            call pcs_part(pst%s,pst%s%star,ilevel,rtype)
+        endif
+     endif
+     if(pst%s%r%sink)then
+        if(pst%s%r%sink_mass_deposition_scheme==1)then
+           call cic_part(pst%s,pst%s%sink,ilevel,rtype)
+        elseif(pst%s%r%sink_mass_deposition_scheme==2)then
+            call tsc_part(pst%s,pst%s%sink,ilevel,rtype)
+        elseif(pst%s%r%sink_mass_deposition_scheme==3)then
+            call pcs_part(pst%s,pst%s%sink,ilevel,rtype)
+        endif
+     endif
+     if(pst%s%r%tree)then
+        if(pst%s%r%tree_mass_deposition_scheme==1)then
+           call cic_part(pst%s,pst%s%tree,ilevel,rtype)
+        elseif(pst%s%r%tree_mass_deposition_scheme==2)then
+            call tsc_part(pst%s,pst%s%tree,ilevel,rtype)
+        elseif(pst%s%r%tree_mass_deposition_scheme==3)then
+            call pcs_part(pst%s,pst%s%tree,ilevel,rtype)
+        endif
+     endif
   endif
 
 end subroutine r_cic_part

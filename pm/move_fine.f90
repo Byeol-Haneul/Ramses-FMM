@@ -53,10 +53,42 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
   else
      ilevel=input_array(1)
      action_part=input_array(2)
-                     call cic_kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
-     if(pst%s%r%star)call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
-     if(pst%s%r%sink)call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
-     if(pst%s%r%tree)call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+     ! the force interpolation for various components (particle, star, sink, tree) 
+     ! based on their respective deposition schemes (CIC 1, TSC 2, or PCS 3)
+     if(pst%s%r%part_force_interpolation_scheme==1)then
+        call cic_kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
+     elseif(pst%s%r%part_force_interpolation_scheme==2)then
+        call tsc_kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
+     elseif(pst%s%r%part_force_interpolation_scheme==3)then
+        call pcs_kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
+     endif
+     if(pst%s%r%star)then
+        if(pst%s%r%star_force_interpolation_scheme==1)then
+           call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+        elseif(pst%s%r%star_force_interpolation_scheme==2)then
+           call tsc_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+        elseif(pst%s%r%star_force_interpolation_scheme==3)then
+           call pcs_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
+        endif
+     endif
+     if(pst%s%r%sink)then
+        if(pst%s%r%sink_force_interpolation_scheme==1)then
+           call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+        elseif(pst%s%r%sink_force_interpolation_scheme==2)then
+           call tsc_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+        elseif(pst%s%r%sink_force_interpolation_scheme==3)then
+           call pcs_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
+        endif
+     endif
+     if(pst%s%r%tree)then
+        if(pst%s%r%tree_force_interpolation_scheme==1)then
+           call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+        elseif(pst%s%r%tree_force_interpolation_scheme==2)then
+           call tsc_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+        elseif(pst%s%r%tree_force_interpolation_scheme==3)then
+           call pcs_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+        endif
+     endif
   endif
 
 end subroutine r_kick_drift_part
