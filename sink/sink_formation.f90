@@ -38,6 +38,8 @@ recursive subroutine m_sink_formation(pst)
      endif
   endif
 
+  dump_sink_particles(pst)
+
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
@@ -47,6 +49,50 @@ recursive subroutine m_sink_formation(pst)
   print '(A,F14.7)',' Time elapsed in creating sinks:',ttend-ttstart
 
 end subroutine m_sink_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine dump_sink_particles(pst)
+    use amr_parameters, only: ndim,flen
+    use ramses_commons, only: pst_t
+    use output_part_module, only: r_output_part
+    use output_clump_module, only: r_output_clump
+    use mdl_module, only: mdl_mkdir
+    use output_amr_module, only: r_output_amr,output_info
+    use output_poisson_module, only: r_output_poisson,in_output_poisson_t
+    implicit none
+    type(pst_t)::pst
+    type(in_output_poisson_t)::in_output_poisson
+    ! Local variables
+    integer::i,dummy(1)
+    character(LEN=flen)::filename,filedir,filecmd
+    integer,dimension(1:flen/4)::input_array
+    character(len=20) :: str
+  
+    filedir='output/'
+    call mdl_mkdir(pst%s%mdl,filedir)
+    write(str, '(I0)') pst%s%g%nstep_coarse
+    filedir='output/'//TRIM(str)//'_'
+  
+    filename=TRIM(filedir) ! Note that suffix will be added later
+    input_array=transfer(filename,input_array)
+    !in_output_poisson%filename=TRIM(filedir)//'grav.'
+    if(pst%s%r%verbose)write(*,*)'Writing particle files'
+    if(pst%s%c%npeak_tot>0)then
+      call r_output_clump(pst,input_array,flen/4,dummy,0)
+    endif
+    
+    !call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
+    !call r_output_part(pst,input_array,flen/4,dummy,0)
+    !filename=TRIM(filedir)//'amr.'
+    !input_array=transfer(filename,input_array)
+    !call r_output_amr(pst,input_array,flen/4,dummy,0)
+    !filename=TRIM(filedir)//'info.txt'
+    !call output_info(pst%s%r,pst%s%g,filename)
+  
+  
+end subroutine dump_sink_particles
 !###########################################################
 !###########################################################
 !###########################################################
