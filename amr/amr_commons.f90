@@ -294,6 +294,7 @@ module amr_commons
      real(dp)::sink_radius=-1
      logical::form_sinks=.false.
      logical::sink_refine=.true.
+     logical::sink_dump=.false.
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
