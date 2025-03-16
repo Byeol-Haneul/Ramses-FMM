@@ -420,7 +420,7 @@ subroutine m_read_params(pst)
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type &
-       & ,aexp_lock_refine,pic_lock_refine,sink_refine,sink_dump
+       & ,aexp_lock_refine,pic_lock_refine,sink_refine
   ! Units parameters
   namelist/units_params/units_density,units_time,units_length
   ! Boundary conditions parameters
@@ -445,7 +445,7 @@ subroutine m_read_params(pst)
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
        & ,accretion_type,acc_sink_boost,bondi_use_vrel,accretion_method &
        & ,eddington_cap,form_sinks,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
-       & ,use_local_bondi_rate
+       & ,use_local_bondi_rate,sink_dump
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
