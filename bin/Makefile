@@ -37,7 +37,10 @@ GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
 DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNHILBERT=$(NHILBERT) \
-	-DNVAR=$(NVAR) -DNION=$(NION)
+	-DNVAR=$(NVAR)
+ifneq ($(NION),0)
+   DEFINES += -DNION=$(NION)
+endif
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
@@ -47,7 +50,7 @@ endif
 ifeq ($(GRAV),1)
    DEFINES += -DGRAV
 endif
-ifneq ($(NENER),)
+ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
 endif
 ifeq ($(RT),1)
@@ -176,6 +179,9 @@ MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooli
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
 	$(F90) $(FFLAGS) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
+#############################################################################
+test_cooling:	$(MODOBJ) test_cooling.o
+	$(F90) $(FFLAGS) $(MODOBJ) test_cooling.o -o test_cooling $(LIBS)
 #############################################################################
 write_gitinfo.o: FORCE
 	$(FC) -O0 -cpp -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \

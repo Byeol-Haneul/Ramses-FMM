@@ -15,7 +15,7 @@ module neq_cooling_module
 
   private   ! default
   public neq_set_model, neq_solve_cooling, updateRTGroups_CoolConstants &
-       ,update_metal_cooling, cmp_equilibrium_abundances
+       ,update_metal_cooling, cmp_equilibrium_abundances, getmu
 
   real(kind=8),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 
