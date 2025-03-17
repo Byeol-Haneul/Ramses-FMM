@@ -224,8 +224,8 @@ subroutine m_read_params(pst)
 
   ! Refinement parameters for rt
 #ifdef RT
-  real(dp)::rt_err_grad_n(nrtgrp)=-1 ! Photon number density gradient for refinement
-  real(dp)::rt_floor_n(nrtgrp)=1d-10 ! Photon number density floor for refinement
+  real(dp)::rt_err_grad_cn(nrtgrp)=-1 ! Photon flux gradient for refinement
+  real(dp)::rt_floor_cn(nrtgrp)=1d-10 ! Photon flux floor for refinement
   real(dp)::rt_err_grad_xHI=-1.0     ! Ionization state gradient for refinement
   real(dp)::rt_err_grad_xHII=-1.0    ! Ionization state gradient for refinement
   real(dp)::rt_floor_xHI=1d-10       ! Ionization state floor for refinement
@@ -468,7 +468,7 @@ subroutine m_read_params(pst)
        & ,err_grad_var &
 #endif
 #ifdef RT
-       & ,rt_err_grad_n, rt_floor_n, rt_err_grad_xHI, rt_err_grad_xHII &
+       & ,rt_err_grad_cn, rt_floor_cn, rt_err_grad_xHI, rt_err_grad_xHII &
        & ,rt_refine_aexp, rt_floor_xHI, rt_floor_xHII &
 #endif
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
@@ -1093,8 +1093,8 @@ subroutine m_read_params(pst)
   s%r%err_grad_var=err_grad_var
 #endif
 #ifdef RT
-  s%r%rt_err_grad_n=rt_err_grad_n
-  s%r%rt_floor_n=rt_floor_n
+  s%r%rt_err_grad_cn=rt_err_grad_cn
+  s%r%rt_floor_cn=rt_floor_cn
   s%r%rt_err_grad_xHI=rt_err_grad_xHI
   s%r%rt_err_grad_xHII=rt_err_grad_xHII
   s%r%rt_floor_xHI=rt_floor_xHI

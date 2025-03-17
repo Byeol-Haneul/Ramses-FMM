@@ -343,14 +343,14 @@ module amr_commons
      real(dp)::rt_esc_frac=1d0             ! Photon escape fraction from stellar particles   !
      logical::rt_is_outflow_bound=.false.  ! Make all boundaries=outflow for RT              !
      real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
-     real(dp)::rt_err_grad_n(nrtgrp)=-1    ! Photon number density gradient for refinement   !
-     real(dp)::rt_floor_n(nrtgrp)=1d-10    ! Photon number density floor for refinement      !
+     real(dp)::rt_err_grad_cn(nrtgrp)=-1   ! Photon flux gradient for refinement             !
+     real(dp)::rt_floor_cn(nrtgrp)=1d-10   ! Photon flux floor for refinement                !
      real(dp)::rt_floor_xHI=1d-10          ! Ionization state floor for refinement           !
      real(dp)::rt_floor_xHII=1d-10         ! Ionization state floor for refinement           !
      real(dp)::rt_err_grad_xHI=-1          ! Ionization state gradient for refinement        !
      real(dp)::rt_err_grad_xHII=-1         ! Ionization state gradient for refinement        !
      real(dp)::rt_refine_aexp=-1           ! Expansion factor for rt refinements             !
-     real(dp)::rt_c_fraction=1d0           ! Lightspeed fraction for RT                      !
+     real(dp),dimension(1:MAXLEVEL)::rt_c_fraction=1d0 ! Reduced light speed on each level   !
      integer::rt_nsubcycle=1               ! Maximum number of RT-steps during one hydro/    !
                                            ! gravity/etc timestep                            !
      logical::rt_otsa=.true.               ! Use on-the-spot approximation                   !
@@ -522,9 +522,8 @@ module amr_commons
      type(multipole_t)::multipole
 
      ! RT global variables
-     real(dp)::rt_c=1d0              ! Reduced lightspeed in code units
-     real(dp)::rt_c2=1d0             ! Reduced lightspeed squared in code units
-     real(dp)::rt_c_cgs              ! Reduced lightspeed in [cm s-1]
+     real(dp),dimension(1:MAXLEVEL)::rt_c=1d0            ! Reduced lightspeed in code units
+     real(dp),dimension(1:MAXLEVEL)::rt_c_cgs            ! Reduced lightspeed in [cm s-1]
 
   end type global_t
 

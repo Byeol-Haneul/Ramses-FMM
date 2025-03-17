@@ -6,6 +6,7 @@ contains
 !###########################################################
 subroutine m_read_rt_params(pst)
   use amr_parameters
+  use constants,only:c_cgs
   use hydro_parameters
   use rt_parameters
   use ramses_commons, only: pst_t
@@ -18,7 +19,7 @@ subroutine m_read_rt_params(pst)
   ! Local variables
   !--------------------------------------------------
   character(LEN=80)::infile
-  logical::nml_ok
+  logical::nml_ok, rt_vsla=.false.
 
   !--------------------------------------------------
   ! RT namelist variables
@@ -35,7 +36,7 @@ subroutine m_read_rt_params(pst)
   !logical::rt_use_hll=.false.         ! Use hll flux (or the default glf)               !
   !logical::rt_is_outflow_bound=.false.! Make all boundaries=outflow for RT              !
   real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
-  real(dp)::rt_c_fraction=1d0          ! Lightspeed fraction for RT                      !
+  real(dp),dimension(1:MAXLEVEL)::rt_c_fraction=1d0 ! Lightspeed fraction for RT         !
   !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
   integer::rt_nsubcycle=1              ! Maximum number of RT subcycles per hydro step   !
   logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
@@ -61,7 +62,7 @@ subroutine m_read_rt_params(pst)
   real(dp),dimension(1:MAXREGION)   ::rt_src_length_z=1.E10
   real(dp),dimension(1:MAXREGION)   ::rt_exp_source=2.0
   integer, dimension(1:MAXREGION)   ::rt_src_group=1  
-  integer, dimension(1:MAXREGION)   ::rt_src_trace_group=1
+  !integer, dimension(1:MAXREGION)   ::rt_src_trace_group=1
   real(dp),dimension(1:MAXREGION)   ::rt_n_source=0.                      ! Photon density
   real(dp),dimension(1:MAXREGION)   ::rt_u_source=0.                      !    Photon flux
   real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                      !    Photon flux
@@ -211,6 +212,37 @@ subroutine m_read_rt_params(pst)
 115 continue
   close(1)
 
+  !--------------------------------------------------  
+  ! Reduced light speed. First check if only one light speed fraction set
+  ! and if so, set that same light speed fraction at all levels. If more 
+  ! than one fraction is set, we are using a variable speed of light.
+  !--------------------------------------------------
+  if(rt_c_fraction(1).ne.rt_c_fraction(2) .and. rt_c_fraction(2).eq.1.0  &
+                                .and. all((rt_c_fraction(2:)).eq.1.0)) then
+      rt_c_fraction(2:) = rt_c_fraction(1)
+  endif
+
+  ! Shift lightspeed fractions from levels [1:] to [levelmin:]
+  do i=s%r%nlevelmax,s%r%levelmin,-1
+     rt_c_fraction(i)=rt_c_fraction(i-s%r%levelmin+1)
+  end do
+  do i=1,s%r%levelmin-1     ! Just a dummy lightspeed for non-leaf levels
+     rt_c_fraction(i)=1.0
+  end do
+  !do i=s%r%nlevelmax,s%r%levelmin,-1 !Set the light speed(s) according to f_c
+  !   s%g%rt_c_cgs(i) = c_cgs * rt_c_fraction(i)
+  !end do
+
+  ! Print a message if using level-variable speed of light
+  do i=s%r%levelmin,s%r%nlevelmax-1
+     if(rt_c_fraction(i) .ne. rt_c_fraction(s%r%nlevelmax)) then
+        write(*,212) rt_c_fraction(s%r%levelmin:s%r%nlevelmax)
+        rt_vsla=.true.
+        exit
+     endif
+  end do
+  if(.not. rt_vsla) write(*,213) rt_c_fraction(s%r%levelmin)
+
   ! Fill in all run parameters in corresponding structure
   s%r%rt_otsa=rt_otsa
   s%r%rt_advect=rt_advect
@@ -269,6 +301,8 @@ subroutine m_read_rt_params(pst)
 
   end associate
 
+212 format (' Using a level-variable speed of light, with f_c= '20(1pe12.3))
+213 format (' Using a uniform reduced speed of light fraction of f_c='1pe10.3)
 end subroutine m_read_rt_params
 !#########################################################################
 !#########################################################################

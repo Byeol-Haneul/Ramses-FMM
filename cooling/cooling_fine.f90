@@ -280,7 +280,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-                & nH, Zsolar, dtcool, nleaf)
+                & nH, Zsolar, dtcool, nleaf, ilevel)
         endif
 
         ! Compute rho in code units

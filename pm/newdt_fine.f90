@@ -89,7 +89,7 @@ subroutine m_newdt_fine(pst,ilevel)
 
   if(r%rt.and.r%rt_advect)then
      if(r%verbose)write(*,'("   Entering newdt_rt for level ",I2)')ilevel
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%rt_nsubcycle*r%rt_courant_factor*dx/3d0/g%rt_c)
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%rt_nsubcycle*r%rt_courant_factor*dx/3d0/g%rt_c(ilevel))
   endif
 
   ! Adaptive time step condition

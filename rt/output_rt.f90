@@ -63,7 +63,7 @@ subroutine output_rt(s,filename)
         rtuold=m%grid(igrid)%rtuold
         do ind=1,twotondim
             do igrp = 1, nrtgrp
-              qold(ind,1+(igrp-1)*(ndim+1)) = rtuold(ind,1+(igrp-1)*(ndim+1))*g%rt_c
+              qold(ind,1+(igrp-1)*(ndim+1)) = rtuold(ind,1+(igrp-1)*(ndim+1))*g%rt_c(ilevel)
               do idim = 1, ndim
                 qold(ind,1+idim+(igrp-1)*(ndim+1)) = rtuold(ind,1+idim+(igrp-1)*(ndim+1))
               end do

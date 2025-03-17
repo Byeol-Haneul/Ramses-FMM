@@ -31,6 +31,7 @@ subroutine rt_flag(s,ilevel)
   real(dp),dimension(1:nrtvar)::uug,uum,uud
   logical::ok, do_rt_refine
   type(nbor),dimension(1:twondim)::gridn
+  integer,dimension(1:twondim)::c_factor
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 
@@ -38,9 +39,11 @@ subroutine rt_flag(s,ilevel)
 
   do_rt_refine=.false.
   do igroup=1, nrtgrp
-    if( r%rt_err_grad_n(igroup) .ne. -1.0 ) do_rt_refine=.true.
+    if( r%rt_err_grad_cn(igroup) .ne. -1.0 ) do_rt_refine=.true.
   end do
   if(.not. do_rt_refine) return ! No refinement done on radiation vars
+
+  c_factor(:)=g%rt_c(ilevel)
 
   hash_key(0)=ilevel+1
 
@@ -83,6 +86,7 @@ subroutine rt_flag(s,ilevel)
               call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icellp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
+              c_factor(i_nbor) = g%rt_c(ilevel-1)
            endif
         end do
 
@@ -93,9 +97,9 @@ subroutine rt_flag(s,ilevel)
               icellg=icelln(2*idim-1)
               icelld=icelln(2*idim  )
 #ifdef RT
-              uug(ivar)=gridn(2*idim-1)%p%rtuold(icellg,ivar)
-              uum(ivar)=m%grid(igrid)%rtuold(ind,ivar)
-              uud(ivar)=gridn(2*idim)%p%rtuold(icelld,ivar)
+              uug(ivar)=gridn(2*idim-1)%p%rtuold(icellg,ivar)*c_factor(2*idim-1)
+              uum(ivar)=m%grid(igrid)%rtuold(ind,ivar)*g%rt_c(ilevel)
+              uud(ivar)=gridn(2*idim)%p%rtuold(icelld,ivar)*c_factor(2*idim)
 #endif 
            end do
            call rt_refine(r,uug,uum,uud,ok)

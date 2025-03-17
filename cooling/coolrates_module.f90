@@ -9,7 +9,7 @@ MODULE coolrates_module
   ! Nickerson, Teyssier, and Rosdahl, March 2018.
 
   use constants
-  use amr_parameters, only: dp
+  use amr_parameters, only: dp, MAXLEVEL
   use hydro_parameters, only: nion
   use rt_parameters, only: nrtgrp
   use amr_commons, only: run_t
@@ -34,7 +34,7 @@ MODULE coolrates_module
   type neq_cooling_t
 
      ! Reduced speed of light in cgs
-     real(kind=8) :: rt_c_cgs
+     real(kind=8),dimension(1:MAXLEVEL)::rt_c_cgs
 
      ! Contribution of UV background to metal cooling
      real(kind=8) :: phi
@@ -43,10 +43,10 @@ MODULE coolrates_module
      real(kind=8),dimension(nion,2) :: UVrates
 #ifdef RT
      ! Contribution of each group to photo-ionization rates
-     real(kind=8),dimension(nrtgrp,nion) :: signc
+     real(kind=8),dimension(nrtgrp,nion,MAXLEVEL) :: signc
 
      ! Contribution of each group to photo-heating rates
-     real(kind=8),dimension(nrtgrp,nion) :: sigec, PHrate
+     real(kind=8),dimension(nrtgrp,nion,MAXLEVEL) :: sigec, PHrate
 #endif
      real(kind=8) :: dlogTinv ! Inverse of the bin space (in K)
      real(kind=8) :: hTable, h2Table, h3Table   ! Interpol constants
@@ -256,7 +256,7 @@ SUBROUTINE comp_table_rates(r, tables, iT)
   type(neq_cooling_t)::tables
   integer::iT
   !-------------------------------------------------------------------------
-  real(kind=8)::T, T2, Ta, T5, lambda, f, hf, laHII, laHeII, laHeIII
+  real(kind=8)::T, T2, T5, lambda, f, hf, laHII, laHeII, laHeIII
   real(kind=8)::lowrleft,lowrright,lowr_hi,lowr_h2
   real(kind=8)::lowvleft_hi,lowvright_hi,lowv_hi,lowv_h2
   real(kind=8)::TT
@@ -498,14 +498,15 @@ SUBROUTINE update_rt_c(r, g, tables)
   type(run_t) :: r
   type(global_t) :: g
   type(neq_cooling_t) :: tables
-  !-------------------------------------------------------------------------
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-
+  integer::i
+  !-------------------------------------------------------------------------
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-
-  g%rt_c_cgs = c_cgs * r%rt_c_fraction
-  g%rt_c = g%rt_c_cgs / scale_v
-  tables%rt_c_cgs = g%rt_c_cgs
+  do i=r%nlevelmax,r%levelmin,-1
+    g%rt_c_cgs(i) = c_cgs * r%rt_c_fraction(i)
+    g%rt_c(i) = g%rt_c_cgs(i) / scale_v
+    tables%rt_c_cgs(i) = g%rt_c_cgs(i)
+  enddo
 
 END SUBROUTINE update_rt_c
 

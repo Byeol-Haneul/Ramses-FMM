@@ -334,7 +334,7 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
      do ind=1,twotondim
         do ivar=1,nrtgrp
             grid%rtuold(ind,1+(ivar-1)*(ndim+1))= &
-              r%rt_n_bound(ibound,ivar)/g%rt_c/scale_fp
+              r%rt_n_bound(ibound,ivar)/g%rt_c(grid%lev)/scale_fp
             grid%rtuold(ind,2+(ivar-1)*(ndim+1))= &
               r%rt_n_bound(ibound,ivar)*r%rt_u_bound(ibound,ivar)/scale_fp
             if(ndim>1) grid%rtuold(ind,3+(ivar-1)*(ndim+1))= &

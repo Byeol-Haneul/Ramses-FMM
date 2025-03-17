@@ -94,7 +94,7 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
      & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-     & nH, Zsolar, dt, nCell)
+     & nH, Zsolar, dt, nCell, ilevel)
   ! Semi-implicitly solve for new temperature, ionization states,
   ! photon density/flux, and gas velocity in a number of cells.
   ! Parameters:
@@ -111,6 +111,7 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
   ! Zsolar  =>  Cell metallicities [solar fraction]
   ! dt      =>  Timestep size             [s]
   ! nCell   =>  Number of cells (length of all the above vectors)
+  ! ilevel  =>  Refinement levels
   !
   ! We use a slightly modified method of Anninos et al. (1997).
   !-------------------------------------------------------------------------
@@ -127,7 +128,7 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
   real(kind=8),dimension(1:nvector):: nH, Zsolar
 !  logical,dimension(1:nvector):: c_switch
   real(kind=8)::dt
-  integer::ncell
+  integer::ncell, ilevel
   !--------------------------------------------------------
   real(kind=8),dimension(1:nvector):: tLeft, ddt
   logical:: dt_ok
@@ -155,7 +156,7 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
   one_over_Np_FRAC = 1d0 / Np_FRAC
   one_over_Fp_FRAC = 1d0 / Fp_FRAC
-  one_over_rt_c_cgs = 1d0 / tables%rt_c_cgs
+  one_over_rt_c_cgs = 1d0 / tables%rt_c_cgs(ilevel)
   group_egy_erg(1:nrtgrp) = r%group_egy(1:nrtgrp) * eV2erg
   if(r%rt_isIR) then
      group_egy_ratio(1:nrtgrp) = r%group_egy(1:nrtgrp) / r%group_egy(iIR)
@@ -194,7 +195,7 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
      do ig=1,nrtgrp
         Np(ig,i) = MAX(smallNp, Np(ig,i))
-        call reduce_flux(Fp(:,ig,i),Np(ig,i)*tables%rt_c_cgs)
+        call reduce_flux(Fp(:,ig,i),Np(ig,i)*tables%rt_c_cgs(ilevel))
      end do
 #endif
   end do
@@ -214,7 +215,7 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
 #ifdef RT
                 &                Np(:,i), Fp(:,:,i), p_gas(:,i), dNp, dFp, dp_gas, &
 #endif
-                &                T2(i), xion(:,i), dT2, dXion, code)
+                &                T2(i), xion(:,i), dT2, dXion, code, ilevel)
         endif
         if(.not. dt_ok) then
            ddt(i)=ddt(i)/2.                    ! Try again with smaller dt
@@ -292,7 +293,13 @@ contains
     real(kind=8):: G0, eff_peh, cdex, ncr
     logical:: newAtomicCons=.true.
     !-----------------------------------------------------------------------
-    associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII, ixHeIII=>r%ixHeIII)
+    associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII               &
+      ,ixHeIII=>r%ixHeIII, rt_c_cgs=>tables%rt_c_cgs(ilevel)               &
+      ,rt_c_fraction=>r%rt_c_fraction(ilevel)                              &
+#ifdef RT
+      , signc=>tables%signc(:,:,ilevel)                                    &
+#endif
+    )
 
     dt_ok=.false.
     nHe=0.25*nH(icell)*r%Y_He/r%X_H       ! Helium number density
@@ -345,14 +352,14 @@ contains
           ! For the radiation temperature,  weigh the energy in each group
             ! by its opacity over IR opacity (derived from IR temperature)
        E_rad = group_egy_erg(iIR) * dNp(iIR)
-       TR = max(0d0,(E_rad*r%rt_c_fraction/a_r)**0.25)    ! IR temperature
+       TR = max(0d0,(E_rad*rt_c_fraction/a_r)**0.25)      ! IR temperature
        kAbs_loc(iIR) = r%kappaAbs(iIR) * (TR/10d0)**2
        do iGroup=1,nrtgrp
           if(iGroup .ne. iIR)                                            &
                E_rad = E_rad + kAbs_loc(iGroup) / kAbs_loc(iIR)          &
                * group_egy_erg(iGroup) * dNp(iGroup)
        end do
-       TR = max(0d0,(E_rad*r%rt_c_fraction/a_r)**0.25)  ! Rad. temperature
+       TR = max(0d0,(E_rad*rt_c_fraction/a_r)**0.25)  ! Rad. temperature
        if(r%rt_T_rad) then      ! Use radiation temperature for everything
           dT2 = TR/mu ;   TK = TR
        endif
@@ -361,8 +368,8 @@ contains
        kSc_loc(iIR)  = r%kappaSc(iIR)  * (TR/10d0)**2 * exp(-TR/1d3)
     endif ! if(is_kIR_T)
                          ! Set dust absorption and scattering rates [s-1]:
-    dustAbs(:)  = kAbs_loc(:) *rho*Zsolar(icell)*f_dust*tables%rt_c_cgs
-    dustSc(iIR) = kSc_loc(iIR)*rho*Zsolar(icell)*f_dust*tables%rt_c_cgs
+    dustAbs(:) =kAbs_loc(:) *rho*Zsolar(icell)*f_dust*rt_c_cgs
+    dustSc(iIR)=kSc_loc(iIR)*rho*Zsolar(icell)*f_dust*rt_c_cgs
 
     ! UPDATE PHOTON DENSITY AND FLUX *************************************
     if(r%rt_advect) then
@@ -392,7 +399,7 @@ contains
 
        ! ABSORPTION/SCATTERING OF PHOTONS BY GAS
        do igroup=1,nrtgrp       ! ----------------Ionization absorbtion
-          phAbs(igroup) = SUM(nN(:)*tables%signc(igroup,:)*r%ssh2(igroup)) ! s-1
+          phAbs(igroup) = SUM(nN(:)*signc(igroup,:)*r%ssh2(igroup)) ! s-1
        end do
        ! IR, optical and UV depletion by dust absorption: ----------------
        ! IR scattering/abs on dust (abs after T update)
@@ -409,14 +416,14 @@ contains
           !       should not include PEH absorption when PEH is included.
           ! from Bakes and Tielens 1994 and Wolfire 2003
           G0 = group_egy_erg(r%iPEH_group)                               &
-             * dNp(r%iPEH_group) * tables%rt_c_cgs / 1.6d-3
+             * dNp(r%iPEH_group) * rt_c_cgs / 1.6d-3
           eff_peh = 4.87d-2                                              &
                   / (1d0 + 4d-3 * (G0*sqrt(TK)/ne*2.)**0.73)             &
                   + 3.65d-2 * (TK/1d4)**0.7                              &
                   / (1d0 + 2d-4 * (G0 * sqrt(TK) / ne*2. ))
           phAbs(r%iPEH_group) = phAbs(r%iPEH_group)                      &
-                            + 8.125d-22 * eff_peh * tables%rt_c_cgs      &
-                            * nH(icell) * Zsolar(icell) * f_dust
+                            + 8.125d-22 * eff_peh * rt_c_cgs *nH(icell)  &
+                            * Zsolar(icell) * f_dust
        endif
 
        dmom(1:ndim)=0d0
@@ -438,11 +445,11 @@ contains
                   (ddt(icell)*dFpdt(idim,igroup,icell)+dFp(idim,igroup)) &
                   /(1d0+ddt(icell)*(phAbs(igroup)+phSc(igroup)))
           end do
-          call reduce_flux(dFp(:,igroup),dNp(igroup)*tables%rt_c_cgs)
+          call reduce_flux(dFp(:,igroup),dNp(igroup)*rt_c_cgs)
 
           do idim=1,ndim
              dUU = ABS(dFp(idim,igroup)-Fp(idim,igroup,icell))           &
-                  / (ABS(Fp(idim,igroup,icell))+Np_MIN*tables%rt_c_cgs)  &
+                  / (ABS(Fp(idim,igroup,icell))+Np_MIN*rt_c_cgs)         &
                   * one_over_Fp_FRAC
              if(dUU .gt. 1d0) then
                 code=2 ;   RETURN                     ! ddt(icell) too big
@@ -494,7 +501,7 @@ contains
        if(r%rt_advect) then
           do igroup=1,nrtgrp                            !  Photoheating
              Hrate = Hrate + dNp(igroup) * SUM(nN(:)                     &
-                   * tables%PHrate(igroup,:))
+                   * tables%PHrate(igroup,:,ilevel))
           end do
        endif
        if(r%iPEH_group .gt. 0 .and. r%rt_advect) then
@@ -510,7 +517,7 @@ contains
           cdex  = 1d-12 * (1.4 * exp(-18100. / (TK + 1200.)) * xH2       &
                 + exp(-1000. / TK) * dxion(ixHI))                        &
                 * sqrt(TK) * nH(icell)                             ! [s-1]
-          Hrate = Hrate + 6.94 * SUM(dNp(:) * tables%signc(:,ixHI)       &
+          Hrate = Hrate + 6.94 * SUM(dNp(:) * signc(:,ixHI)       &
                 * r%isLW(:)) * 2. * eV2erg * cdex / (cdex + 2d-7)        &
                 * nH(icell) * xH2
 #endif
@@ -571,9 +578,9 @@ contains
           !           / ( 1/Delta t + 4 c/lambda/C_v a T^3 + c_red/lambda)
           one_over_C_v = mH*mu*(r%gamma-1d0) / (rho*kB)
           E_rad = group_egy_erg(iIR) * dNp(iIR)
-          dE_T = (tables%rt_c_cgs * E_rad - c_cgs*a_r*TK**4)             &
+          dE_T = (rt_c_cgs * E_rad - c_cgs*a_r*TK**4)                    &
                /(1d0/(kAbs_loc(iIR) * Zsolar(icell) * rho * ddt(icell))  &
-               +4d0*c_cgs * one_over_C_v *a_r*TK**3+tables%rt_c_cgs)
+               +4d0*c_cgs * one_over_C_v *a_r*TK**3+rt_c_cgs)
           dT2 = dT2 + 1d0/mu * one_over_C_v * dE_T
           dNp(iIR) = dNp(iIR) - dE_T * one_over_egy_IR_erg
 
@@ -593,7 +600,7 @@ contains
           endif
           fracMax=MAX(fracMax,dUU)
           TK=dT2*mu
-          call reduce_flux(dFp(:,iIR),dNp(iIR)*tables%rt_c_cgs)
+          call reduce_flux(dFp(:,iIR),dNp(iIR)*rt_c_cgs)
        endif
     endif
 #endif
@@ -613,7 +620,7 @@ contains
        cr = alpha(ixHI) * dxion(ixHI)                        ! H2 Creation
        photoRate=0.
 #ifdef RT
-       photoRate = SUM(tables%signc(:,ixHI)*dNp)
+       photoRate = SUM(signc(:,ixHI)*dNp)
 #endif
        if(r%haardt_madau) photoRate = photoRate + tables%UVrates(ixHI,1)*ss_factor
        de = beta(ixHI) * nH(icell) + photoRate            ! H2 Destruction
@@ -631,7 +638,7 @@ contains
     cr = alpha(ixHII) * ne * dxion(ixHII) + 2. * de * dxH2    !HI creation
     photoRate=0.
 #ifdef RT
-    photoRate = SUM(tables%signc(:,ixHII)*dNp)    !                  [s-1]
+    photoRate = SUM(signc(:,ixHII)*dNp)           !                  [s-1]
 #endif
     if(r%haardt_madau) photoRate = photoRate + tables%UVrates(ixHII,1)*ss_factor
     de = beta(ixHII) * ne + photoRate             !         HI destruction
@@ -703,7 +710,7 @@ contains
        de = beta(ixHeII) * ne
        if(r%cosmic_rays) de = de + 1.1 * cosray_HI
 #ifdef RT
-       de = de + SUM(tables%signc(:,ixHeII)*dNp)
+       de = de + SUM(signc(:,ixHeII)*dNp)
 #endif
        if(r%haardt_madau) de = de + tables%UVrates(ixHeII,1) * ss_factor
        dxHeI = (cr*ddt(icell)+xHeI)/(1.+de*ddt(icell))         ! The update
@@ -714,7 +721,7 @@ contains
        ! Destruction = rec. of HeII + coll.- and photo-ionization of HeII
        photoRate = 0.
 #ifdef RT
-       photoRate = SUM(tables%signc(:,ixHeIII)*dNp)
+       photoRate = SUM(signc(:,ixHeIII)*dNp)
 #endif
        if(r%haardt_madau) photoRate = photoRate + tables%UVrates(ixHeIII,1) * ss_factor
        de = (alpha(ixHeII) + beta(ixHeIII)) * ne + photoRate
@@ -796,7 +803,7 @@ contains
 #ifdef RT
        &                      Np,  Fp,  p_gas, dNp, dFp, dp_gas,           &
 #endif
-       &                      T2,  xion, dT2, dXion, code)
+       &                      T2,  xion, dT2, dXion, code, ilevel)
     ! Print cooling information to standard output, and maybe stop execution.
     !------------------------------------------------------------------------
     real(kind=8),dimension(nion):: xion, dXion
@@ -807,17 +814,17 @@ contains
 #endif
     real(kind=8)::T2, dT2, dtDone, dt, ddt, nH
     logical::stopRun
-    integer::loopcnt,i, code
+    integer::loopcnt,i, code, ilevel
     !------------------------------------------------------------------------
     if(stopRun) write(*, 111) loopcnt
     if(.true.) then
 #ifdef RT
-       write(*,900) loopcnt, code, i, dtDone, dt, ddt, tables%rt_c_cgs, nH
+       write(*,900) loopcnt, code, i, dtDone, dt, ddt, tables%rt_c_cgs(ilevel), nH
        write(*,901) T2,      xion,      Np,      Fp,      p_gas
        write(*,902) dT2,     dXion,     dNp,     dFp,     dp_gas
        write(*,903) dT2/ddt, dXion/ddt, dNp/ddt, dFp/ddt, dp_gas/ddt
        write(*,904) abs(dT2)/(T2+T_MIN), abs(dxion)/(xion+x_FM),          &
-            abs(dNp)/(Np+Np_MIN), abs(dFp)/(Fp+Np_MIN*tables%rt_c_cgs)
+            abs(dNp)/(Np+Np_MIN), abs(dFp)/(Fp+Np_MIN*tables%rt_c_cgs(ilevel))
 #else
        write(*,900) loopcnt, code, i, dtDone, dt, ddt, nH
        write(*,901) T2,      xion
@@ -1096,7 +1103,7 @@ SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
 #ifdef RT
           &         Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-          & nH, Zsolar, dt_cool, 1)
+          & nH, Zsolar, dt_cool, 1, r%levelmin)
      T2(1) = T2(1)*aexp**2
      aexp = aexp + daexp
      if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
@@ -1306,17 +1313,20 @@ SUBROUTINE updateRTGroups_CoolConstants(r,tables)
   type(run_t)::r
   type(neq_cooling_t)::tables
   !------------------------------------------------------------------------
-  integer::iP, iI
+  integer::iP, iI, i
   !------------------------------------------------------------------------
 #ifdef RT
-  tables%signc = r%group_csn*tables%rt_c_cgs                    ! [cm3 s-1]
-  tables%sigec = r%group_cse*tables%rt_c_cgs                    ! [cm3 s-1]
-  do iP = 1,nrtgrp
-     do iI = 1,nion                ! Photoheating rates for photons on ions
-        tables%PHrate(iP,iI) =  eV2erg * &      ! See eq (19) in Aubert(08)
-             (tables%sigec(iP,iI) * r%group_egy(iP) - tables%signc(iP,iI)*r%ionEvs(iI))
-        tables%PHrate(iP,iI) = max(tables%PHrate(iP,iI),0d0)  ! Heating > 0
-     end do
+  do i=r%nlevelmax,r%levelmin,-1
+    tables%signc(:,:,i) = r%group_csn*tables%rt_c_cgs(i)        ! [cm3 s-1]
+    tables%sigec(:,:,i) = r%group_cse*tables%rt_c_cgs(i)        ! [cm3 s-1]
+    do iP = 1,nrtgrp
+      do iI = 1,nion               ! Photoheating rates for photons on ions
+        tables%PHrate(iP,iI,i) =  eV2erg * &    ! See eq (19) in Aubert(08)
+             (tables%sigec(iP,iI,i) * r%group_egy(iP)  &
+             -tables%signc(iP,iI,i)*r%ionEvs(iI))
+        tables%PHrate(iP,iI,i) = max(tables%PHrate(iP,iI,i),0d0)!Heating>0
+      end do
+    end do
   end do
 #endif
 END SUBROUTINE updateRTGroups_CoolConstants

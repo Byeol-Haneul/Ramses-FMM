@@ -218,12 +218,13 @@ end subroutine init_xion
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine calc_equilibrium_xion(s, gridp, icell, xion)
+subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
 
 ! Calculate and return photoionization equilibrium abundance states for
 ! a cell
 ! gridp     => Pointer to (type oct) grid containing the cell in question
 ! icell     => Index for cell in grid
+! ilevel    => Cell refinement level
 ! xion      <= Returned equilibrium ionization fractions of cell
 !-------------------------------------------------------------------------
   use amr_commons, only: oct
@@ -235,7 +236,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, xion)
   implicit none
   type(ramses_t)::s
   type(oct),pointer::gridp
-  integer::icell
+  integer::icell, ilevel
   real(kind=8),dimension(nion)::xion
   integer::ip, iI, idim, iNp
   real(kind=8)::scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
@@ -259,7 +260,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, xion)
      do iI=1,nion
         phI_rates(iI) = phI_rates(iI) &
                       + gridp%rtuold(icell, iNp) &
-                      * scale_Np*s%tables%signc(ip,iI)
+                      * scale_Np*s%tables%signc(ip,iI,ilevel)
      end do
 #endif
   end do
