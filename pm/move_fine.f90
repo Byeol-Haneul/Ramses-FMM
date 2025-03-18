@@ -73,7 +73,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call pcs_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
         endif
      endif
-     if(pst%s%r%sink)then
+     if(pst%s%r%sink.and..not.pst%s%r%static_sink)then
         if(pst%s%r%sink_force_interpolation_scheme==1)then
            call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
         elseif(pst%s%r%sink_force_interpolation_scheme==2)then
