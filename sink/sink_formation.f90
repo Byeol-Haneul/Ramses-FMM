@@ -171,8 +171,6 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
      if(c%nsink(j)>0)ok=.false.
-     purity=c%npart(j)*g%mp_min/c%particle_mass(j)
-     if(purity<=c%purity_threshold)ok=.false.
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
@@ -337,7 +335,6 @@ subroutine sink_clump(s)
   s%c%saddle_threshold = s%r%sink_saddle_threshold
   s%c%mass_threshold = s%r%sink_mass_threshold
   s%c%fraction_threshold = s%r%sink_fraction_threshold
-  s%c%purity_threshold = s%r%sink_purity_threshold
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
@@ -451,7 +448,7 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
      do i=1+p%norphan_peak,p%npart
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
-        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
+        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
         ! Compute sink particle position from peak position
         p%xp(ipart,1)=c%peak_com(peak_nr,1)
         p%xp(ipart,2)=c%peak_com(peak_nr,2)
