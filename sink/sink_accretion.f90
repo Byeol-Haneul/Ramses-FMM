@@ -101,6 +101,8 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   if(r%cosmo)factG=3d0/4d0/twopi*g%omega_m*g%aexp
 
   ! Bondi sonic constant
+  ! NOTE: This is also computed in bondi_alpha...
+  ! TODO: Check if this is a conflict
   if(abs(r%gamma - 1).le.0.01)then
      lambda = 0.25d0*exp(1.5d0)
   else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
