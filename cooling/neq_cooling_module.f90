@@ -288,18 +288,19 @@ contains
     real(kind=8),dimension(ndim):: dmom
     real(kind=8),dimension(nrtgrp):: recRad, phAbs, phSc, dustAbs
     real(kind=8),dimension(nrtgrp):: dustSc, kAbs_loc, kSc_loc
+    real(kind=8),dimension(nrtgrp,nion)::signc
 #endif
     real(kind=8):: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
-    real(kind=8):: G0, eff_peh, cdex, ncr
+    real(kind=8):: G0, eff_peh, cdex, ncr, rt_c_fraction, rt_c_cgs
     logical:: newAtomicCons=.true.
     !-----------------------------------------------------------------------
-    associate(ixHI=>r%ixHi, ixHII=>r%ixHII, ixHeII=>r%ixHeII               &
-      ,ixHeIII=>r%ixHeIII, rt_c_cgs=>tables%rt_c_cgs(ilevel)               &
-      ,rt_c_fraction=>r%rt_c_fraction(ilevel)                              &
+    associate(ixHI=>r%ixHi,ixHII=>r%ixHII,ixHeII=>r%ixHeII,ixHeIII=>r%ixHeIII)
+
 #ifdef RT
-      , signc=>tables%signc(:,:,ilevel)                                    &
+    signc=tables%signc(:,:,ilevel)
 #endif
-    )
+    rt_c_fraction = r%rt_c_fraction(ilevel)
+    rt_c_cgs = tables%rt_c_cgs(ilevel)
 
     dt_ok=.false.
     nHe=0.25*nH(icell)*r%Y_He/r%X_H       ! Helium number density
