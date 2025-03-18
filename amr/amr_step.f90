@@ -71,7 +71,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-------------------------
   ! Sink formation in clumps
   !-------------------------
-  if(r%sink.and.ilevel==r%levelmin.and.r%form_sinks)then
+  if(r%sink.and.ilevel==r%levelmin.and.r%sink_form)then
                                     call m_timer(pst,'sink - formation','start')
      call m_sink_formation(pst)
   endif

@@ -292,8 +292,8 @@ module amr_commons
      real(dp)::sink_purity_threshold=-1
      real(dp)::sink_fraction_threshold=2d0
      real(dp)::sink_radius=-1
-     logical::form_sinks=.false.
-     logical::sink_refine=.true.
+     logical::sink_form=.false.
+     logical::sink_refine=.false.
      logical::sink_dump=.false.
 
      ! Black hole parameters
