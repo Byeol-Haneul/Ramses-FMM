@@ -41,16 +41,10 @@ subroutine m_update_time(pst,ilevel,done)
      ! Check mass conservation
      !--------------------------
      if(g%mass_tot_0==0.0D0)then
-        g%mass_tot_0=g%mass_tot
-        if(r%star)then
-           g%mass_tot_0=g%mass_tot+g%mass_star_tot
-        endif
+        g%mass_tot_0=g%mass_tot+g%mass_star_tot+g%mass_sink_tot
         mcons=0.0D0
      else
-        mcons=(g%mass_tot-g%mass_tot_0)/g%mass_tot_0
-        if(r%star)then
-           mcons=(g%mass_tot+g%mass_star_tot-g%mass_tot_0)/g%mass_tot_0
-        endif
+        mcons=(g%mass_tot+g%mass_star_tot+g%mass_sink_tot-g%mass_tot_0)/g%mass_tot_0
      end if
 
      !----------------------------

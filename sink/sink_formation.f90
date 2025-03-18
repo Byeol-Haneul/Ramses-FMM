@@ -17,6 +17,7 @@ recursive subroutine m_sink_formation(pst)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
+
   type(out_sink_formation_t)::output_sink
   double precision::ttend, ttstart
 

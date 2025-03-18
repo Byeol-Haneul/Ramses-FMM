@@ -343,7 +343,7 @@ module amr_commons
      integer::nstep_coarse=0                       ! Coarse step
      integer::nstep_coarse_old=0                   ! Old coarse step
      integer::nflag,ncreate,nkill                  ! Refinements
-     
+
      real(dp)::ekin_tot=0.0D0                      ! Total kinetic energy
      real(dp)::eint_tot=0.0D0                      ! Total internal energy
      real(dp)::emag_tot=0.0D0                      ! Total magnetic energy
@@ -354,15 +354,15 @@ module amr_commons
      real(dp)::aexp_old=1.0D0                      ! Old expansion factor
      real(dp)::rho_tot=0.0D0                       ! Mean density in the box
      real(dp)::t=0.0D0                             ! Time variable
-     real(dp)::mass_tot=0.0D0                      ! Total gass mass
-     real(dp)::mass_tot_0=0.0D0                    ! Initial total gas mass
+     real(dp)::mass_tot=0.0D0                      ! Total mass in gas
      real(dp)::mass_star_tot=0.0D0                 ! Total mass in new stars
      real(dp)::mass_sink_tot=0.0D0                 ! Total mass in new sinks
-     
+     real(dp)::mass_tot_0=0.0D0                    ! Initial total mass (gas+star+sink)
+
      ! Level related arrays
-     real(dp),dimension(1:MAXLEVEL)::dtold,dtnew ! Time step at each level
-     real(dp),dimension(1:MAXLEVEL)::rho_max     ! Maximum density at each level
-     integer,dimension(1:MAXLEVEL)::isubcycle    ! Current subcycling step at each level
+     real(dp),dimension(1:MAXLEVEL)::dtold,dtnew   ! Time step at each level
+     real(dp),dimension(1:MAXLEVEL)::rho_max       ! Maximum density at each level
+     integer,dimension(1:MAXLEVEL)::isubcycle      ! Current subcycling step at each level
 
      ! Only one process can write at a time in an I/O group
      integer::IOGROUPSIZE=0           ! Main snapshot
@@ -371,12 +371,12 @@ module amr_commons
      logical::withoutmkdir=.false.    ! If true mkdir should be done before the run
      logical::print_when_io=.false.   ! If true print when IO
      logical::synchro_when_io=.false. ! If true synchronize when IO
-     
+
      ! Lightcone parameters
      real(dp)::thetay_cone=12.5
      real(dp)::thetaz_cone=12.5
      real(dp)::zmax_cone=2.0
-     
+
      ! Cosmology parameters
      real(dp)::boxlen_ini     ! Box size in h-1 Mpc
      real(dp)::omega_b=0.0D0  ! Omega Baryon
@@ -388,17 +388,17 @@ module amr_commons
      real(dp)::hexp=0.0D0     ! Current Hubble parameter
      real(dp)::texp=0.0D0     ! Current proper time
      logical ::use_proper_time=.false.
-     
+
      ! Executable identification
      CHARACTER(LEN=300)::builddate,buildcommand,patchdir
      CHARACTER(LEN=300)::gitrepo,gitbranch,githash
-     
+
      ! Save namelist filename
      CHARACTER(LEN=300)::namelist_file
-     
+
      ! Friedman model variables
      real(dp),dimension(0:n_frw)::aexp_frw,hexp_frw,tau_frw,t_frw
-     
+
      ! Initial conditions parameters from grafic
      integer::nlevelmax_part
      real(dp)::aexp_ini=10.
@@ -407,20 +407,20 @@ module amr_commons
      real(dp),dimension(1:MAXLEVEL)::vfact
      real(dp),dimension(1:MAXLEVEL)::xoff1,xoff2,xoff3,dxini
      integer ,dimension(1:MAXLEVEL)::n1,n2,n3
-          
+
      ! Minimum particle mass
      real(dp) :: mp_min=-1.0
 
      ! Minimum MG level
      integer :: levelmin_mg
-     
+
      ! Multigrid safety switch
      logical, dimension(1:MAXLEVEL)::safe_mode=.false.
-     
+
      ! Multipole coefficients
      !real(dp),dimension(1:ndim+1)::multipole
      type(multipole_t)::multipole
-     
+
   end type global_t
 
   type mesh_t

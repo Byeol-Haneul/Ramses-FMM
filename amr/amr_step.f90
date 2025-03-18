@@ -35,25 +35,25 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   
   implicit none
 
-  type(pst_t)::pst
-  integer::ilevel,icount
-  logical::done,ok_fbk,ok_acc
+  type(pst_t) :: pst
+  integer :: ilevel,icount
+  logical :: done,ok_fbk,ok_acc
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
   ! unless you check all consequences first                           !
   !-------------------------------------------------------------------!
-  type(in_broadcast_dt_t)::in_broadcast_dt
-  type(out_star_formation_t)::output_star
-  type(out_feedback_t)::output_fbk
-  type(out_accretion_t)::output_acc
+  type(in_broadcast_dt_t) :: in_broadcast_dt
+  type(out_star_formation_t) :: output_star
+  type(out_feedback_t) :: output_fbk
+  type(out_accretion_t) :: output_acc
   real(kind=8) :: mass_fbk
   real(kind=8) :: tcurr=0
   real(kind=8), save :: tprev=0.
   real(kind=8), external :: wallclock
   logical, save :: bkp_last_done=.false.
 
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r, g=>pst%s%g, m=>pst%s%m, mdl=>pst%s%mdl)
 
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering amr_step",i1," for level",i2)')icount,ilevel
@@ -270,10 +270,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%sink.and.(r%accretion_type>0))then
                                     call m_timer(pst,'sink - accretion','start')
      call r_sink_accretion(pst,ilevel,1,output_acc,2)
-     !TODO: g%mass_sink_tot needs to be added
-        !if(output_sink%mass>0)then
-        !g%mass_sink_tot=g%mass_sink_tot + output_sink%mass
-     !end if
+     if(output_acc%mass>0)then
+        g%mass_sink_tot=g%mass_sink_tot+output_acc%mass
+     end if
   end if
 
   !-----------
