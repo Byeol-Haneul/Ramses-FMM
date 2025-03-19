@@ -200,9 +200,13 @@ subroutine m_read_params(pst)
   real(dp)::err_grad_d=-1.0  ! Density gradient
   real(dp)::err_grad_u=-1.0  ! Velocity gradient
   real(dp)::err_grad_p=-1.0  ! Pressure gradient
+  real(dp)::err_grad_xHI=-1.0! xHI gradient
+  real(dp)::err_grad_xHII=-1.0 ! xHII gradient
   real(dp)::floor_d=1.d-10   ! Density floor
   real(dp)::floor_u=1.d-10   ! Velocity floor
   real(dp)::floor_p=1.d-10   ! Pressure floor
+  real(dp)::floor_xHI=1d-10  ! xHI floor
+  real(dp)::floor_xHII=1d-10 ! xHII floor
   real(dp)::mass_sph=0.0D0   ! mass_sph
 #ifdef MHD
   real(dp)::err_grad_b2=-1.0
@@ -226,10 +230,6 @@ subroutine m_read_params(pst)
 #ifdef RT
   real(dp)::rt_err_grad_cn(nrtgrp)=-1 ! Photon flux gradient for refinement
   real(dp)::rt_floor_cn(nrtgrp)=1d-10 ! Photon flux floor for refinement
-  real(dp)::rt_err_grad_xHI=-1.0     ! Ionization state gradient for refinement
-  real(dp)::rt_err_grad_xHII=-1.0    ! Ionization state gradient for refinement
-  real(dp)::rt_floor_xHI=1d-10       ! Ionization state floor for refinement
-  real(dp)::rt_floor_xHII=1d-10      ! Ionization state floor for refinement
   real(dp)::rt_refine_aexp=-1.0      ! Start expansion factor for RT refinements
 #endif
 
@@ -468,9 +468,9 @@ subroutine m_read_params(pst)
        & ,err_grad_var &
 #endif
 #ifdef RT
-       & ,rt_err_grad_cn, rt_floor_cn, rt_err_grad_xHI, rt_err_grad_xHII &
-       & ,rt_refine_aexp, rt_floor_xHI, rt_floor_xHII &
+       & ,rt_err_grad_cn, rt_floor_cn, rt_refine_aexp &
 #endif
+       & ,err_grad_xHI, err_grad_xHII, floor_xHI, floor_xHII &
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type &
@@ -1092,13 +1092,13 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
   s%r%err_grad_var=err_grad_var
 #endif
+  s%r%err_grad_xHI=err_grad_xHI
+  s%r%err_grad_xHII=err_grad_xHII
+  s%r%floor_xHI=floor_xHI
+  s%r%floor_xHII=floor_xHII
 #ifdef RT
   s%r%rt_err_grad_cn=rt_err_grad_cn
   s%r%rt_floor_cn=rt_floor_cn
-  s%r%rt_err_grad_xHI=rt_err_grad_xHI
-  s%r%rt_err_grad_xHII=rt_err_grad_xHII
-  s%r%rt_floor_xHI=rt_floor_xHI
-  s%r%rt_floor_xHII=rt_floor_xHII
   s%r%rt_refine_aexp=rt_refine_aexp
 #endif
 

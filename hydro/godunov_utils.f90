@@ -24,7 +24,7 @@ subroutine hydro_refine(r,ug,um,ud,ok)
 #endif
   logical ::ok
   ! local variables
-  integer::idim
+  integer::idim,ii
 #if NENER>0
   integer::irad
 #endif
@@ -135,6 +135,22 @@ subroutine hydro_refine(r,ug,um,ud,ok)
            ok = ok .or. error > r%err_grad_u
         end do
      end if
+  end if
+
+  if(r%neq_chem .and. r%err_grad_xHII >= 0.)then
+     ii=r%iIons
+     error=2.0d0*MAX( &
+          & ABS((ud(ii)-um(ii))/(ud(ii)+um(ii)+r%floor_xHII)), &
+          & ABS((um(ii)-ug(ii))/(um(ii)+ug(ii)+r%floor_xHII)) )
+     ok = ok .or. error > r%err_grad_xHII
+  end if
+
+  if(r%neq_chem .and. r%err_grad_xHI >= 0.)then
+     ii=r%iIons
+     error=2.0d0*MAX( &
+          & ABS((um(ii)-ud(ii))/(2.-ud(ii)-um(ii)+r%floor_xHI)), &
+          & ABS((ug(ii)-um(ii))/(2.-um(ii)-ug(ii)+r%floor_xHI)) )
+     ok = ok .or. error > r%err_grad_xHI
   end if
 
 #ifdef MHD

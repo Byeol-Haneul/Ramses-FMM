@@ -150,9 +150,13 @@ module amr_commons
      real(dp)::err_grad_d=-1.0  ! Density gradient
      real(dp)::err_grad_u=-1.0  ! Velocity gradient
      real(dp)::err_grad_p=-1.0  ! Pressure gradient
+     real(dp)::err_grad_xHI=-1  ! xHI gradient
+     real(dp)::err_grad_xHII=-1 ! xHII gradient
      real(dp)::floor_d=1.d-10   ! Density floor
      real(dp)::floor_u=1.d-10   ! Velocity floor
      real(dp)::floor_p=1.d-10   ! Pressure floor
+     real(dp)::floor_xHI=1d-10  ! xHI floor
+     real(dp)::floor_xHII=1d-10 ! xHII floor
      real(dp)::mass_sph=0.0D0   ! mass_sph
 #ifdef MHD
      real(dp)::err_grad_b2=-1.0
@@ -345,10 +349,6 @@ module amr_commons
      real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
      real(dp)::rt_err_grad_cn(nrtgrp)=-1   ! Photon flux gradient for refinement             !
      real(dp)::rt_floor_cn(nrtgrp)=1d-10   ! Photon flux floor for refinement                !
-     real(dp)::rt_floor_xHI=1d-10          ! Ionization state floor for refinement           !
-     real(dp)::rt_floor_xHII=1d-10         ! Ionization state floor for refinement           !
-     real(dp)::rt_err_grad_xHI=-1          ! Ionization state gradient for refinement        !
-     real(dp)::rt_err_grad_xHII=-1         ! Ionization state gradient for refinement        !
      real(dp)::rt_refine_aexp=-1           ! Expansion factor for rt refinements             !
      real(dp),dimension(1:MAXLEVEL)::rt_c_fraction=1d0 ! Reduced light speed on each level   !
      integer::rt_nsubcycle=1               ! Maximum number of RT-steps during one hydro/    !
