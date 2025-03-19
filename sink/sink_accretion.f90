@@ -345,8 +345,6 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
   end do ! End loop over ipart
 
-  if(r%verbose_sink)write(*,*)'Total accreted mass:',macc_loc
-
   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
   ! Close cache
   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
