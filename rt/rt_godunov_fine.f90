@@ -523,12 +523,6 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                           do ivar=1,nrtvar
 #ifdef RT
                              h%rtuloc(i3,j3,k3,ivar)=childp%rtuold(ind_son,ivar)
-                             if(h%okloc(i3,j3,k3) .and. mod(ivar,ndim+1)==1) then
-                                ! VSLA: finer level and different light speed
-                                h%rtuloc(i3,j3,k3,ivar)           &
-                                  = h%rtuloc(i3,j3,k3,ivar)       &
-                                  * g%rt_c(ilevel+1)/g%rt_c(ilevel)
-                             endif
 #endif
                           end do
 
@@ -544,7 +538,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #ifdef RT
                              h%rtuloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
                              if(mod(ivar,ndim+1)==1) then
-                                ! VSLA: finer level and different light speed
+                                ! Variable light speed correction for coarser level
                                 h%rtuloc(i3,j3,k3,ivar)           &
                                   = h%rtuloc(i3,j3,k3,ivar)       &
                                   * g%rt_c(ilevel-1)/g%rt_c(ilevel)

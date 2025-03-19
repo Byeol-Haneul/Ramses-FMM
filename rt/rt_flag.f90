@@ -31,7 +31,7 @@ subroutine rt_flag(s,ilevel)
   real(dp),dimension(1:nrtvar)::uug,uum,uud
   logical::ok, do_rt_refine
   type(nbor),dimension(1:twondim)::gridn
-  integer,dimension(1:twondim)::c_factor
+  real(dp),dimension(1:twondim)::c_factor
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 
@@ -80,6 +80,7 @@ subroutine rt_flag(s,ilevel)
            if(associated(gridp))then
               gridn(i_nbor)%p=>gridp
               icelln(i_nbor)=icellp
+              c_factor(i_nbor) = g%rt_c(ilevel)
            else
               hash_nbor(0)=hash_nbor(0)-1
               hash_nbor(1:ndim)=hash_nbor(1:ndim)/2

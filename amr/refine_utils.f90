@@ -137,7 +137,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   ! automatically satisfied. For adaptive time-stepping,
   ! numerical rules are checked before refining any cell.
   !---------------------------------------------------------
-  integer::icell,i,j,ibit,ibucket,ilev,ind,inew,ioct,ivar
+  integer::icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
   integer::ind_cell,ind_parent
@@ -200,6 +200,29 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   end do
   ncreate=g%ncreate
 
+  if(r%neq_chem .and. r%upload_equilibrium_x .and. g%nstep_coarse.ne.0) then
+        ! Enforce equilibrium on ionization states when merging, to
+        ! prevent unnatural values (e.g when merging hot and cold cells).
+        ! Skip this during grid initialization (i.e. nstep_coarse=0)
+  do ilev=ilevel,r%nlevelmax-1
+
+     do ioct=m%head(ilev),m%tail(ilev)
+        do ind=1,twotondim
+           ok   = m%grid(ioct)%flag1(ind)==0 .and. &
+                & m%grid(ioct)%refined(ind)
+           if(ok)then
+              ind_parent=ioct
+              ind_cell=ind
+              gridp=>m%grid(ioct)
+              call calc_equilibrium_xion(s, gridp, ind_cell, ilev, xion)
+              m%grid(ioct)%uold(ind,r%iIons:r%iIons+nion-1)=xion*m%grid(ioct)%uold(ind,1)
+           endif
+        end do
+     end do
+
+  end do
+  endif
+
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
   ! but it is refined, then destroy the child grid.
@@ -224,25 +247,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         ok   = gridp%flag1(icell)==0 .and. &
              & gridp%refined(icell)
         if(ok)then
-           if(r%neq_chem .and. r%upload_equilibrium_x .and. g%nstep_coarse.ne.0) then
-              ! Enforce equilibrium on ionization states when merging, to
-              ! prevent unnatural values (e.g when merging hot and cold cells).
-              ! Skip this during grid initialization (i.e. nstep_coarse=0)
-              call calc_equilibrium_xion(s, gridp, icell, ilev, xion)
-              gridp%uold(icell,r%iIons:r%iIons+nion-1)=xion*gridp%uold(icell,1)
-           endif
-#ifdef RT
-           do ivar=1,nrtvar
-              ! Rescale according to speed of light difference
-              if(r%rt_nsubcycle.eq.1) then
-                if (mod(ivar,ndim+1).ne.1) &
-                  gridp%rtuold(icell,ivar) = gridp%rtuold(icell,ivar) * g%rt_c(ilevel)/g%rt_c(ilevel+1)
-              else
-                if (mod(ivar,ndim+1).eq.1) &
-                  gridp%rtuold(icell,ivar) = gridp%rtuold(icell,ivar) * g%rt_c(ilevel+1)/g%rt_c(ilevel)
-              endif
-           end do
-#endif
            ! Set grid level to zero
            m%grid(ioct)%lev=0
            ! Set parent cell to "unrefined" status
@@ -833,13 +837,8 @@ subroutine make_new_oct(s,parent,icell,ilevel)
      do ind=1,twotondim
         child%rtuold(ind,ivar)=rtu2(ind,ivar)
         ! Rescale according to speed of light difference
-        if(r%rt_nsubcycle.eq.1) then
-           if (mod(ivar,ndim+1).ne.1) &
-             child%rtuold(ind,ivar) = child%rtuold(ind,ivar) * g%rt_c(ilevel-1)/g%rt_c(ilevel)
-        else
-           if (mod(ivar,ndim+1).eq.1) &
-             child%rtuold(ind,ivar) = child%rtuold(ind,ivar) * g%rt_c(ilevel)/g%rt_c(ilevel-1)
-        endif
+        if (mod(ivar,ndim+1).eq.1) &
+          child%rtuold(ind,ivar) = child%rtuold(ind,ivar) * g%rt_c(ilevel-1)/g%rt_c(ilevel)
      enddo
   end do
 #endif
