@@ -1312,12 +1312,12 @@ subroutine split_part(s,p,ilevel)
         do idim=1,ndim
            x(idim)=p%xp(ipart,idim)/dx_loc
         end do
-        
+
         ! Shift particle position to to 2x2x2 grid corner
         do idim=1,ndim
            ii(idim)=int(x(idim)-2*ix_ref(idim))
         end do
-        
+
         ! Compute parent cell index
 #if NDIM==1
         icell=1+ii(1)
