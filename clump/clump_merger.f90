@@ -377,7 +377,7 @@ subroutine allocate_peak_patch_arrays(s)
   !-------------------------------------------------
   ! Allocate various particle types peak and halo id
   !-------------------------------------------------
-  if(r%pic)then
+  if(r%part)then
      allocate(s%p%pid(1:s%p%npart))
      allocate(s%p%hid(1:s%p%npart))
   endif
@@ -516,7 +516,7 @@ subroutine deallocate_peak_patch_arrays(s)
   call kill_cache_clump(s%mdl)
 
   ! Deallocate particle pid and hid
-  if(r%pic)then
+  if(r%part)then
      deallocate(s%p%pid)
      deallocate(s%p%hid)
   endif
@@ -1556,7 +1556,7 @@ subroutine trim_clumps(s)
   call close_cache(s,m%grid_dict)
 
   ! Modify particle peak ids accordingly
-  if(s%r%pic)then
+  if(s%r%part)then
      call trim_particles(s,s%p)
   endif
   if(s%r%star)then

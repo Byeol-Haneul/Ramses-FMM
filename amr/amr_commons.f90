@@ -17,6 +17,7 @@ module amr_commons
      logical::pic     =.false.   ! Particle In Cell activated
      logical::poisson =.false.   ! Poisson solver activated
      logical::hydro   =.false.   ! Hydro activated
+     logical::part    =.false.   ! Dark matter particles activated
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
@@ -445,7 +446,7 @@ module amr_commons
 !     type(oct),dimension(:),allocatable::grid
      type(oct),dimension(:),pointer::grid
      type(hash_table)::grid_dict   ! Oct hash table
-     
+
      ! Arrays for the MG solver
      type(hash_table)::mg_dict     ! MG hash table
      integer(kind=4),allocatable,dimension(:)::head_mg ! Starting index for each level
@@ -459,20 +460,20 @@ module amr_commons
      logical,allocatable,dimension(:)::locked
      integer,allocatable,dimension(:)::parent_cpu
      integer::free_cache,ncache,ifree
-     
+
      ! Software cache array for failed requests
      logical,allocatable,dimension(:)::occupied_null
      integer,allocatable,dimension(:)::lev_null
      integer,allocatable,dimension(:,:)::ckey_null
      integer::free_null,nnull
-     
+
      ! Peano-Hilbert key boundaries for cpu domains
      type(domain_t),pointer,dimension(:)::domain,domain_mg
      type(domain_t),pointer,dimension(:)::domain_hilbert
 
      ! Hydro kernel workspace
      type(hydro_workspace_t)::hydro_w
-     
+
   end type mesh_t
 
   ! Peano-Hilbert key boundaries for cpu domains

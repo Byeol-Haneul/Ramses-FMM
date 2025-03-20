@@ -36,9 +36,9 @@ recursive subroutine r_output_clump(pst,input_array,input_size,output_array,outp
         call output_clump_field(pst%s,fileloc)
      endif
      ! Write peak id and halo id for dark matter particles
-     if(pst%s%r%output_peak_part.and.pst%s%r%pic)then
+     if(pst%s%r%output_peak_part.and.pst%s%r%part)then
         fileloc=TRIM(filename)//'peak_part.'
-        call output_peak_part(pst%s,pst%s%p,fileloc)
+        call output_peak_part(pst%s,pst%s%p   ,fileloc)
      endif
      ! Write peak id and halo for star particles
      if(pst%s%r%output_peak_star.and.pst%s%r%star)then

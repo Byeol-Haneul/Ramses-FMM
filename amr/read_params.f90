@@ -35,6 +35,7 @@ subroutine m_read_params(pst)
   logical::pic     =.false.   ! Particle In Cell activated
   logical::poisson =.false.   ! Poisson solver activated
   logical::hydro   =.false.   ! Hydro activated
+  logical::part    =.false.   ! Dark matter particles activated
   logical::star    =.false.   ! Stars and star formation activated
   logical::sink    =.false.   ! Sinks and sink formation activated
   logical::merger_tree=.false. ! Merger tree particles activated
@@ -585,17 +586,21 @@ subroutine m_read_params(pst)
   if(npartmax==0)then
      npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
   endif
+  if(pic.and.npartmax>0)part=.true.
   if(nstarmax==0)then
      nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
+     if(nstarmax==0)star=.false.
   endif
   if(nsinkmax==0)then
      nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
+     if(nsinkmax==0)sink=.false.
   endif
   if(ntreemax==0)then
      ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
      if(ntreemax==0)then
         ntreemax=int(npartmax/100)
      endif
+     if(ntreemax==0)merger_tree=.false.
   endif
 #ifdef HYDRO
   if(.not. hydro)then
@@ -780,6 +785,7 @@ subroutine m_read_params(pst)
   s%r%pic=pic
   s%r%poisson=poisson
   s%r%hydro=hydro
+  s%r%part=part
   s%r%star=star
   s%r%sink=sink
   s%r%tree=merger_tree

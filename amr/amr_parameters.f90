@@ -3,7 +3,7 @@ module amr_parameters
   ! Define real types
   integer,parameter::sp=kind(1.0E0)
 #ifndef NPRE
-  integer,parameter::dp=kind(1.0E0) ! default
+  integer,parameter::dp=kind(1.0D0) ! default
 #else
 #if NPRE==4
   integer,parameter::dp=kind(1.0E0) ! real*4

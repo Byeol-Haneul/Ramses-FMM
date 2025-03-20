@@ -30,36 +30,40 @@ subroutine m_input_part_ramses(pst)
   
   if(pst%s%r%verbose)write(*,*)'Entering input_part_ramses'
 
-  ! Read particle files header
-  file_head=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part_header.txt'
-  call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
-  write(*,'(" Output folder has ",I12," DM particles")')npart_tot_file
+  if(pst%s%r%part)then
 
-  ! Allocate local array
-  allocate(npart_file(0:ncpu_file))
+     ! Read particle files header
+     file_head=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part_header.txt'
+     call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
+     write(*,'(" Output folder has ",I12," DM particles")')npart_tot_file
 
-  ! Read number of particles in each file
-  npart_tot_check=0
-  npart_file(0)=DM_TYPE
-  do icpu=1,ncpu_file
-     file_part=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part.'//TRIM(ncharcpu)
-     ilun=10
-     open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
-     read(ilun,POS=5)npart_file(icpu)
-     npart_tot_check=npart_tot_check+npart_file(icpu)
-     close(ilun)
-  end do
-  if(npart_tot_check.NE.npart_tot_file)then
-     write(*,*)' Input file corrupted'
-     call mdl_abort(pst%s%mdl)
+     ! Allocate local array
+     allocate(npart_file(0:ncpu_file))
+
+     ! Read number of particles in each file
+     npart_tot_check=0
+     npart_file(0)=DM_TYPE
+     do icpu=1,ncpu_file
+        file_part=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part.'//TRIM(ncharcpu)
+        ilun=10
+        open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
+        read(ilun,POS=5)npart_file(icpu)
+        npart_tot_check=npart_tot_check+npart_file(icpu)
+        close(ilun)
+     end do
+     if(npart_tot_check.NE.npart_tot_file)then
+        write(*,*)' Input file corrupted'
+        call mdl_abort(pst%s%mdl)
+     endif
+
+     ! Call recursive slave routine
+     call r_input_part_ramses(pst,npart_file,ncpu_file+1,output,2)
+     write(*,*)'Total mass in dark matter=',output%mass
+
+     ! Deallocate local array
+     deallocate(npart_file)
+
   endif
-
-  ! Call recursive slave routine
-  call r_input_part_ramses(pst,npart_file,ncpu_file+1,output,2)
-  write(*,*)'Total mass in dark matter=',output%mass
-
-  ! Deallocate local array
-  deallocate(npart_file)
 
   if(pst%s%r%star)then
 

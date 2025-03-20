@@ -378,7 +378,7 @@ subroutine sink_clump(s)
   !----------------------------------------------------------------------
   ! Compute additional particle-based clump properties.
   !----------------------------------------------------------------------
-  if(s%r%pic)then
+  if(s%r%part)then
      call particle_peak_id(s,s%p)
      if(s%r%rho_type_sink.eq.1)then
         call particle_clump_properties(s,s%p)

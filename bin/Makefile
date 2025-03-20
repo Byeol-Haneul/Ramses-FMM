@@ -3,9 +3,6 @@
 #############################################################################
 # Compilation time parameters
 COMPILER = GNU
-NHILBERT = 1
-NVECTOR = 32
-NPRE = 8
 NDIM = 3
 NVAR = 5
 HYDRO = 1
@@ -14,7 +11,10 @@ GRAV = 0
 MPI = 0
 INIT =
 UNITS =
-NENER =
+NENER = 0
+NHILBERT = 1
+NVECTOR = 32
+NPRE = 8
 PATCH =
 DEBUG = 0
 HDF5 = 0
@@ -27,7 +27,7 @@ GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
-DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNVAR=$(NVAR) -DNHILBERT=$(NHILBERT)
+DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR)
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
@@ -37,8 +37,17 @@ endif
 ifeq ($(GRAV),1)
    DEFINES += -DGRAV
 endif
-ifneq ($(NENER),)
+ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
+endif
+ifneq ($(NVECTOR),32)
+   DEFINES += -DNVECTOR=$(NVECTOR)
+endif
+ifneq ($(NPRE),8)
+   DEFINES += -DNPRE=$(NPRE)
+endif
+ifneq ($(NHILBERT),1)
+   DEFINES += -DNHILBERT=$(NHILBERT)
 endif
 #############################################################################
 # Set proper units and initial conditions

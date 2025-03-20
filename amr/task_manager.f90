@@ -145,10 +145,11 @@ function worker_init(mdl) result(pst)
   use feedback_module, only: r_thermal_feedback, r_mechanical_feedback
   use sink_accretion_module, only: r_sink_accretion
   use newdt_fine_module, only: r_newdt_part,r_broadcast_dt
+  use rho_fine_module, only: r_split_part,r_sort_part
 #ifdef GRAV
   use force_fine_module, only: r_force_analytic,r_compute_epot,r_compute_rhomax,r_gradient_phi
   use rho_fine_module, only: r_multipole_leaf_cells,r_multipole_split_cells,r_broadcast_multipole,r_collect_multipole,&
-                            r_cic_multipole,r_cic_part,r_split_part,r_reset_rho
+                            r_cic_multipole,r_cic_part,r_reset_rho
   use phi_fine_cg_module, only: r_cmp_pAp_cg,r_cmp_r2_cg,r_cmp_residual_cg,r_cmp_rhs_norm,&
                                 r_make_initial_phi,r_recurrence_on_p,r_recurrence_x_and_r
   use multigrid_fine_commons, only: r_init_mg,r_build_mg,r_cleanup_mg,r_make_mask,r_make_bc_rhs
@@ -262,6 +263,8 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SOURCE_HYDRO_FINE,      pst,C_FUNLOC(r_source_hydro_fine),1,0,"source_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_CLUMP_FINDER,           pst,C_FUNLOC(r_clump_finder),1,0,"clump_finder")
   call mdl_add_service(pst%s%mdl,MDL_CLUMP_DEALLOC,          pst,C_FUNLOC(r_deallocate_clump),1,0,"deallocate_clump")
+  call mdl_add_service(pst%s%mdl,MDL_SPLIT_PART,             pst,C_FUNLOC(r_split_part),0,0,"split_part")
+  call mdl_add_service(pst%s%mdl,MDL_SORT_PART,              pst,C_FUNLOC(r_sort_part),0,0,"sort_part")
 #ifdef GRAV
   call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,   pst,C_FUNLOC(r_multipole_leaf_cells),1,0,"multipole_leaf_cells")
   call mdl_add_service(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,  pst,C_FUNLOC(r_multipole_split_cells),1,0,"multipole_split_cells")
@@ -270,7 +273,6 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_CIC_PART,               pst,C_FUNLOC(r_cic_part),0,0,"cic_part")
   call mdl_add_service(pst%s%mdl,MDL_COLLECT_MULTIPOLE,      pst,C_FUNLOC(r_collect_multipole),1,storage_size(pst%s%g%multipole)/32,"collect_multipole")
   call mdl_add_service(pst%s%mdl,MDL_COMPUTE_RHOMAX,         pst,C_FUNLOC(r_compute_rhomax),1,2,"compute_rhomax")
-  call mdl_add_service(pst%s%mdl,MDL_SPLIT_PART,             pst,C_FUNLOC(r_split_part),0,0,"split_part")
   call mdl_add_service(pst%s%mdl,MDL_BROADCAST_MULTIPOLE,    pst,C_FUNLOC(r_broadcast_multipole),storage_size(pst%s%g%multipole)/32,0,"broadcast_multipole")
   call mdl_add_service(pst%s%mdl,MDL_SAVE_PHI_OLD,           pst,C_FUNLOC(r_save_phi_old),1,0,"save_phi_old")
   call mdl_add_service(pst%s%mdl,MDL_FORCE_ANALYTIC,         pst,C_FUNLOC(r_force_analytic),1,0,"force_analytic")

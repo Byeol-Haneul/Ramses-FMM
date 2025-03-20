@@ -92,6 +92,7 @@ subroutine m_update_time(pst,ilevel,done)
            write(*,777)g%nstep_coarse,mcons,econs,g%epot_tot,g%ekin_tot
         end if
         if(r%star)write(*,'(" Total mass in stars=",1PE14.7)')g%mass_star_tot
+        if(r%sink)write(*,'(" Total mass in sinks=",1PE14.7)')g%mass_sink_tot
 777     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2)
 778     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2)
 779     format(' Main step=',i6,' mcons=',1pe9.2,' econs=',1pe9.2,' epot=',1pe9.2,' ekin=',1pe9.2,' eint=',1pe9.2,' emag=',1pe9.2)
@@ -99,7 +100,7 @@ subroutine m_update_time(pst,ilevel,done)
         !----------------------------------------------
         ! Output fine step information and used memory
         !----------------------------------------------
-        if(r%pic)then
+        if(r%part)then
            write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax)),&
                 & real(100.0D0*dble(p%npart_max)/dble(r%npartmax+1))
         else
@@ -129,7 +130,7 @@ subroutine m_update_time(pst,ilevel,done)
   !----------------------------
   if(mod(g%nstep,r%ncontrol)==0)then
      if(itest==0)then
-        if(r%pic)then
+        if(r%part)then
            write(*,888)g%nstep,g%t,dt,g%aexp,real(100.0D0*dble(m%noct_used_max)/dble(r%ngridmax)),&
                 & real(100.0D0*dble(p%npart_max)/dble(r%npartmax+1))
         else

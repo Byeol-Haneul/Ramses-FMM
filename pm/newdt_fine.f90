@@ -128,7 +128,9 @@ recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
   else
      output%vmax=0.0d0
      output%ekin=0.0d0
-     call newdt_part(pst%s%r,pst%s%g,pst%s%p,ilevel,output%ekin,output%vmax)
+     if(pst%s%r%part)then
+        call newdt_part(pst%s%r,pst%s%g,pst%s%p   ,ilevel,output%ekin,output%vmax)
+     endif
      if(pst%s%r%star)then
         call newdt_part(pst%s%r,pst%s%g,pst%s%star,ilevel,output%ekin,output%vmax)
      endif

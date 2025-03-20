@@ -21,7 +21,9 @@ recursive subroutine r_init_part(pst)
      call r_init_part(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_part(pst%s%r,pst%s%g,pst%s%p)
+     if(pst%s%r%part)then
+        call init_part(pst%s%r,pst%s%g,pst%s%p   )
+     endif
      if(pst%s%r%star)then
         call init_star(pst%s%r,pst%s%g,pst%s%star)
      end if
