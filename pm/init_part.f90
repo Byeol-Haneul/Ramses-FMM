@@ -43,16 +43,16 @@ end subroutine r_init_part
 subroutine init_part(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
-  use pm_parameters, only: DM_TYPE
+  use pm_parameters, only: PART_TYPE
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
   !---------------------------------
-  ! Allocate DM particle variables
+  ! Allocate PART particle variables
   !---------------------------------
-  p%type=DM_TYPE
+  p%type=PART_TYPE
   allocate(p%xp    (r%npartmax,ndim))
   allocate(p%vp    (r%npartmax,ndim))
   allocate(p%mp    (r%npartmax))

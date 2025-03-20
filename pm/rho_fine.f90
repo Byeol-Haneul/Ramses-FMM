@@ -689,7 +689,7 @@ subroutine cic_part(s,p,ilevel,rtype)
   integer::i,ipart,icell,ind,idim
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::dark,star,sink
+  logical::part,star,sink
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -698,12 +698,12 @@ subroutine cic_part(s,p,ilevel,rtype)
   vol_loc=dx_loc**ndim
 
   ! Are particles dark matter, stars or sinks?
-  dark = p%type.eq.  DM_TYPE
+  part = p%type.eq.PART_TYPE
   star = p%type.eq.STAR_TYPE
   sink = p%type.eq.SINK_TYPE
 
   ! Don't deposit mass depending on rho action type and paticle type
-  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(part.and.rtype.NE.0.and.rtype.NE.1)return
   if(star.and.rtype.NE.0.and.rtype.NE.2)return
   if(sink.and.rtype.NE.0.and.rtype.NE.3)return
 
@@ -767,7 +767,7 @@ subroutine cic_part(s,p,ilevel,rtype)
            if(star.or.sink)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
            endif
-           if(dark)then
+           if(part)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
@@ -818,7 +818,7 @@ subroutine tsc_part(s,p,ilevel,rtype)
   integer::i,ipart,icell,ind,idim
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::dark,star,sink
+  logical::part,star,sink
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -827,12 +827,12 @@ subroutine tsc_part(s,p,ilevel,rtype)
   vol_loc=dx_loc**ndim
 
   ! Are particles dark matter, stars or sinks?
-  dark = p%type.eq.  DM_TYPE
+  part = p%type.eq.PART_TYPE
   star = p%type.eq.STAR_TYPE
   sink = p%type.eq.SINK_TYPE
 
   ! Don't deposit mass depending on rho action type and paticle type
-  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(part.and.rtype.NE.0.and.rtype.NE.1)return
   if(star.and.rtype.NE.0.and.rtype.NE.2)return
   if(sink.and.rtype.NE.0.and.rtype.NE.3)return
 
@@ -900,7 +900,7 @@ subroutine tsc_part(s,p,ilevel,rtype)
            if(star.or.sink)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
            endif
-           if(dark)then
+           if(part)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
@@ -951,7 +951,7 @@ subroutine pcs_part(s,p,ilevel,rtype)
   integer::i,ipart,icell,ind,idim
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::dark,star,sink
+  logical::part,star,sink
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -960,12 +960,12 @@ subroutine pcs_part(s,p,ilevel,rtype)
   vol_loc=dx_loc**ndim
 
   ! Are particles dark matter, stars or sinks?
-  dark = p%type.eq.  DM_TYPE
+  part = p%type.eq.PART_TYPE
   star = p%type.eq.STAR_TYPE
   sink = p%type.eq.SINK_TYPE
 
   ! Don't deposit mass depending on rho action type and paticle type
-  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(part.and.rtype.NE.0.and.rtype.NE.1)return
   if(star.and.rtype.NE.0.and.rtype.NE.2)return
   if(sink.and.rtype.NE.0.and.rtype.NE.3)return
 
@@ -1038,7 +1038,7 @@ subroutine pcs_part(s,p,ilevel,rtype)
            if(star.or.sink)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
            endif
-           if(dark)then
+           if(part)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
