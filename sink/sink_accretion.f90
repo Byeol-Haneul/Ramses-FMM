@@ -270,8 +270,10 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      end if
      dMBH_overdt = min(dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
 
-     ! TOOD: Another option is to limit the accretion rate by
+     ! TODO: Another option is to limit the accretion rate by
      !dMBH_overdt = min(dMBH_overdt, dMBH_overdt * rho_min / rho_gas) 
+
+     ! TODO: Add another option based on the free-fall timescale for rho_gas: i.e. m_gas / t_ff
 
      if(r%verbose_sink)then
         write(*,*)'Run Properties: ',ilevel,dx_loc,vol_loc,p%levelp(ipart),ilevel
@@ -344,7 +346,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
      ! Add accreted properties to sink variables
      ! This should be zero, as it equals dM * sum_i (x_i - x_p)*w_i which is zero by construction
-     if(.not.r%static_sink)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) + x_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
+     if(.not.p%static)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) + x_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
      p%vp(ipart,1:ndim) = ( p%mp(ipart) * p%vp(ipart,1:ndim) + p_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
      p%jp(ipart,1:ndim) = ( p%mp(ipart) * p%jp(ipart,1:ndim) + l_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
      p%mp(ipart)        =   p%mp(ipart) + m_acc
