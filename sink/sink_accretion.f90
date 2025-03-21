@@ -261,6 +261,18 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      dMEd_overdt = 4.0d0 * pi * factG_in_cgs * p%mp(ipart) * mH / (0.1d0 * sigma_T * c_cgs) * scale_t
      if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
 
+     !!! Add accretion limiters across the entire accretion region
+     ! (this preserves the scheme we are using, as compared to cell-specific limiters)
+
+     ! limiting total accreted mass to 25% of the weighted mass of the accretion region
+     if(r%verbose_sink)then
+        write(*,*)'Correction: ',dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
+     end if
+     dMBH_overdt = min(dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
+
+     ! TOOD: Another option is to limit the accretion rate by
+     !dMBH_overdt = min(dMBH_overdt, dMBH_overdt * rho_min / rho_gas) 
+
      if(r%verbose_sink)then
         write(*,*)'Run Properties: ',ilevel,dx_loc,vol_loc,p%levelp(ipart),ilevel
         write(*,*)'Sink properties:',rho_gas,cs_gas,v_bondi,r2_sink
@@ -300,7 +312,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         weight = vol(j)
 
         ! Get accreted mass for this cell
-        d_acc = dMBH_overdt * g%dtnew(p%levelp(ipart)) * weight / vol_loc
+        d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
 
         ! Ensure that the accreted amount is positive
         !d_acc = min(d_acc, 0.25d0 * d)
@@ -342,7 +354,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
      if(r%verbose_sink)then
         write(*,*)'Accretion:',ipart,dMBH_overdt,dMEd_overdt,p%mp(ipart)
-        write(*,*)'Accreted properties:',ipart,m_acc/g%dtnew(p%levelp(ipart)),sqrt(sum(x_acc(:)**2)),sqrt(sum(p_acc(:)**2)),sqrt(sum(l_acc(:)**2))
+        write(*,*)'Accreted properties:',ipart,m_acc/g%dtnew(ilevel),sqrt(sum(x_acc(:)**2)),sqrt(sum(p_acc(:)**2)),sqrt(sum(l_acc(:)**2))
      end if
 
   end do ! End loop over ipart
