@@ -193,7 +193,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         vv(3)            =     gridn%uold(icelln,4)/d
         e                =     gridn%uold(icelln,5)
         ethermal         = (e - 0.5d0*d*sum(vv(:)**2)) / d
-        cs               = max((r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0)
+        cs               = sqrt(max((r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0))
 
         ! Add to average (weighted) information
         rho_gas          = rho_gas         + d          * weight
@@ -235,9 +235,9 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         v_rel(1:ndim) = vel_gas(1:ndim) - p%vp(ipart,1:ndim)
         if(r%bondi_use_vrel)then
            velocity   = sum(v_rel(:)**2)
-           v_bondi    = sqrt(velocity + cs**2)
+           v_bondi    = sqrt(velocity + cs_gas**2)
         else
-           v_bondi    = cs
+           v_bondi    = cs_gas
         end if
 
         ! Bondi mass
@@ -276,8 +276,8 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      ! TODO: Add another option based on the free-fall timescale for rho_gas: i.e. m_gas / t_ff
 
      if(r%verbose_sink)then
-        write(*,*)'Run Properties: ',ilevel,dx_loc,vol_loc,p%levelp(ipart),ilevel
-        write(*,*)'Sink properties:',rho_gas,cs_gas,v_bondi,r2_sink
+        write(*,*)'Run Properties: ',ilevel,p%levelp(ipart),dx_loc,vol_loc
+        write(*,*)'Sink properties:',rho_gas,rho_inf,cs_gas,v_bondi,r2_sink
      end if
 
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
