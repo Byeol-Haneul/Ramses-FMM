@@ -1,0 +1,42 @@
+This namelist contains various input parameters for the current sheet MHD test (Gardiner & Stone 2005).
+Compile using:
+make NDIM=2 MPI=1 HYDRO=1 MHD=1 INIT=CURRENTSHEET
+
+&RUN_PARAMS 
+hydro=.true.
+ncontrol=1
+nsubcycle=1,2
+verbose=.false.
+nsuperoct=0
+/
+
+&AMR_PARAMS
+levelmin=5
+levelmax=9
+ngridmax=80000
+nexpand=1
+boxlen=2.0
+/
+
+&INIT_PARAMS
+/
+
+&OUTPUT_PARAMS
+tout=0.5,1.0
+/
+
+&HYDRO_PARAMS
+gamma=1.6666667
+courant_factor=0.8
+slope_type=1
+scheme='muscl'
+riemann='llf'
+riemann2d='llf'
+/
+
+&REFINE_PARAMS 
+err_grad_p=0.1
+err_grad_B=0.1
+interpol_var=0
+interpol_type=0
+/

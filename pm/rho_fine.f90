@@ -69,10 +69,14 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         call r_reset_rho(pst,i,1)
      endif
 
-     ! Gas mass deposition using pseudo-particles
-     if(r%hydro.AND.m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
-        if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
-        call r_cic_multipole(pst,i,1)
+     ! Mass deposition into array rho using gas pseudo-particles
+     if(r%hydro)then
+
+        if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
+           if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
+           call r_cic_multipole(pst,i,1)
+        endif
+
      endif
 
   end do
@@ -91,7 +95,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
            call r_sort_part(pst,i,1)
         endif
 
-        ! Mass deposition into array rho
+        ! Mass deposition into array rho using all massive particle types
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
            input_array(1)=i
