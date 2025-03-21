@@ -182,7 +182,7 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,3)=+sin(2.0*pi*xc)
      q(i,4)=0.0
      q(i,5)=5.0/(12.0*pi)
-     q(i,6)=0.0 ! Bz
+     q(i,nvar+1)=0.0 ! Bz
   end do
 #endif
 
@@ -232,7 +232,7 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,3) = 0.0
      q(i,4) = 0.0
      q(i,5) = 0.5*beta
-     q(i,6) = 0.0 ! Bz
+     q(i,nvar+1) = 0.0 ! Bz
   end do
 #endif
 
