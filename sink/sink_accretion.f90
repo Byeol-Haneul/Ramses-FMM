@@ -359,6 +359,11 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         write(*,*)'Accreted properties:',ipart,m_acc/g%dtnew(ilevel),sqrt(sum(x_acc(:)**2)),sqrt(sum(p_acc(:)**2)),sqrt(sum(l_acc(:)**2))
      end if
 
+     !!! Save data
+     if(r%output_sink_fine)then
+        call dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+     end if
+
   end do ! End loop over ipart
 
   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -608,4 +613,82 @@ end subroutine sink_B_spline_weights_CIC
 !##############################################################################
 !##############################################################################
 
+subroutine dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+   use amr_parameters, only: dp,ndim
+   use ramses_commons, only: ramses_t
+   use pm_commons, only: part_t
+   use mdl_module, only: mdl_mkdir
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ilevel,ipart
+   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
+   real(dp)::scale_l,scale_t,scale_d
+   !==================================================================
+   ! Simple routine to dump sink data to a CSV on every fine time step
+   ! Nicholas Choustikov
+   !==================================================================
+   character(LEN=80)::filename
+   integer::id_sink_loc,unit
+   character(LEN=5)::nchar
+   logical::file_exist
+   real(dp)::scale_m,scale_v
+   real(dp)::unit_amu,unit_pc,unit_msun,unit_dotM,unit_yr
+
+   associate(r=>s%r, g=>s%g, mdl=>s%mdl)
+
+   if(r%verbose_sink)write(*,*)'Entering output_sink_csv'
+
+   ! Computing extra units and constants
+   scale_m = scale_d * scale_l**ndim
+   scale_v = scale_l / scale_t
+   unit_amu=1.660538921e-24
+   unit_pc=3.08567758096d18
+   unit_msun=1.98841586d33
+   unit_dotM=(scale_m/scale_t)/unit_msun*3600*24*365.25
+   unit_yr = 3600*24*365.25
+   
+   ! Check if the SINK file exists
+   filename=TRIM('SINK')
+   inquire(file=filename, exist=file_exist)
+   if(.not.file_exist)call mdl_mkdir(mdl,filename)
+
+   ! Get the filename for this sink
+   call title(p%idp(ipart),nchar)
+   filename=TRIM('SINK/sink_'//TRIM(nchar)//'.csv')
+
+   ! If this is a new sink, then we need to make the file associated with that sink
+   inquire(file=filename, exist=file_exist)
+   unit = 10 !+g%myid
+   if(.not.file_exist)then
+      if(r%verbose_sink)write(*,*)'Creating file: ',filename
+      open(unit=unit,file=filename,form='formatted')
+      write(unit,*)'nstep,time,dt,mass,dMBH,dMEd,m_acc,rho_inf,cs_gas,x,y,z,vx,vy,vz,jx,jy,jz'
+      close(unit)
+   end if
+   
+   ! Open the sink file
+   open(unit=unit,file=filename,form='formatted',status='unknown',position='append')
+
+   ! TODO: Units should be passed to this function so they don't have to be recomputed...
+   ! These should then be use to save all of the data in human units
+
+   ! Write data to the sink file
+   write(unit,'(I10,21(A1,ES21.10),A1,I10)')g%nstep,',',g%t*scale_t/unit_yr,',',g%dtnew(ilevel)*scale_t/unit_yr,',',p%mp(ipart)*scale_m/unit_msun,&
+   & ',',dMBH_overdt*unit_dotM,',',dMEd_overdt*unit_dotM,',',m_acc*scale_m/unit_msun,',',rho_inf*scale_d,',',cs_gas*scale_v,&
+   & ',',p%xp(ipart,1),',',p%xp(ipart,2),',',p%xp(ipart,3),&
+   & ',',p%vp(ipart,1),',',p%vp(ipart,2),',',p%vp(ipart,3),&
+   & ',',p%jp(ipart,1),',',p%jp(ipart,2),',',p%jp(ipart,3)
+   ! Close the sink file
+   close(unit)
+
+   !42 format((8,1x,f23.15,1x),42(e23.15,1x))
+   end associate
+end subroutine dump_sink_data_fine
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
 end module sink_accretion_module
+
+

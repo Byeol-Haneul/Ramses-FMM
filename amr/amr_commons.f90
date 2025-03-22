@@ -321,10 +321,10 @@ module amr_commons
      logical::sink_refine=.false.
      logical::sink_dump=.false.
      logical::static_sink=.false.
+     logical::output_sink_fine=.false. ! In future, this should be an integer to allow the user to control how often this dump is done
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
-     character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
      real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
      logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
      real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
