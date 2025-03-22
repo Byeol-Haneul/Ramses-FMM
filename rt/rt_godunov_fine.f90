@@ -705,12 +705,12 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nrtvar
-                            ! For VSLA, when updating coarser level, rescale radiation flux
-                            ! to the expression which would be seen from there.
-                            rt_c_diff = g%rt_c(ilevel-1)/g%rt_c(ilevel)
-                            if (mod(ivar,ndim+1)==1) then
-                              rt_c_diff=1.d0
-                            end if
+                             ! For VSLA, when updating coarser level, rescale radiation flux
+                             ! to the expression which would be seen from there.
+                             rt_c_diff = g%rt_c(ilevel-1)/g%rt_c(ilevel)
+                             if (mod(ivar,ndim+1)==1) then
+                                rt_c_diff=1.d0
+                             end if
 #ifdef RT
                              gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
                                   & -h%rtflux(i3,j3,k3,ivar,idim)              &
@@ -761,11 +761,11 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nrtvar
-                            ! Rescale for VSLA, as above
-                            rt_c_diff = g%rt_c(ilevel-1)/g%rt_c(ilevel)
-                            if (mod(ivar,ndim+1)==1) then
-                               rt_c_diff=1.d0
-                            end if
+                             ! Rescale for VSLA, as above
+                             rt_c_diff = g%rt_c(ilevel-1)/g%rt_c(ilevel)
+                             if (mod(ivar,ndim+1)==1) then
+                                rt_c_diff=1.d0
+                             end if
 #ifdef RT
                              gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
                                   & +h%rtflux(i3+i0,j3+j0,k3+k0,ivar,idim)     &

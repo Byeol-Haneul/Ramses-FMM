@@ -201,26 +201,24 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   ncreate=g%ncreate
 
   if(r%neq_chem .and. r%upload_equilibrium_x .and. g%nstep_coarse.ne.0) then
-        ! Enforce equilibrium on ionization states when merging, to
-        ! prevent unnatural values (e.g when merging hot and cold cells).
-        ! Skip this during grid initialization (i.e. nstep_coarse=0)
-  do ilev=ilevel,r%nlevelmax-1
-
-     do ioct=m%head(ilev),m%tail(ilev)
-        do ind=1,twotondim
-           ok   = m%grid(ioct)%flag1(ind)==0 .and. &
-                & m%grid(ioct)%refined(ind)
-           if(ok)then
-              ind_parent=ioct
-              ind_cell=ind
-              gridp=>m%grid(ioct)
-              call calc_equilibrium_xion(s, gridp, ind_cell, ilev, xion)
-              m%grid(ioct)%uold(ind,r%iIons:r%iIons+nion-1)=xion*m%grid(ioct)%uold(ind,1)
-           endif
+     ! Enforce equilibrium on ionization states when derefining, to
+     ! prevent unnatural values (e.g when merging hot and cold cells).
+     ! Skip this during grid initialization (i.e. nstep_coarse=0)
+     do ilev=ilevel,r%nlevelmax-1
+        do ioct=m%head(ilev),m%tail(ilev)
+           do ind=1,twotondim
+              ok   = m%grid(ioct)%flag1(ind)==0 .and. &
+                   & m%grid(ioct)%refined(ind)
+              if(ok)then
+                 ind_parent=ioct
+                 ind_cell=ind
+                 gridp=>m%grid(ioct)
+                 call calc_equilibrium_xion(s, gridp, ind_cell, ilev, xion)
+                 m%grid(ioct)%uold(ind,r%iIons:r%iIons+nion-1)=xion*m%grid(ioct)%uold(ind,1)
+              endif
+           end do
         end do
      end do
-
-  end do
   endif
 
   !----------------------------------------------------------
