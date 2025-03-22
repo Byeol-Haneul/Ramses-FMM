@@ -71,7 +71,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   real(dp),dimension(:),allocatable::vol
   real(dp)::dx_loc,vol_loc
   real(dp),dimension(1:ndim)::xcen,xnei,xrel
-  integer,dimension(1:ndim)::ckey,ckey_nbor
+  integer,dimension(1:ndim)::ckey,ckey_nbor,ckey_div
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,j,k,ipart,icelln,ind,idim
   real(dp)::d,e,ethermal,r2_sink,v_bondi,cs_gas,cs,rho_gas,velocity
@@ -81,6 +81,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,d_acc,m_gas,bondi_mass
   real(dp)::rho_inf,weighted_bondi,lambda!,dMdt_freefall,t_ff
   type(msg_large_realdp)::dummy_large_realdp
+  real(dp)::div_cell,total_divergence,div_right,div_left
 
 #ifdef HYDRO
 #if NDIM==3
@@ -163,7 +164,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      end if
 
      ! Initialise sink information at zero
-     rho_gas=0d0; vel_gas=0d0; cs_gas=0d0; m_gas=0d0; weighted_bondi=0d0
+     rho_gas=0d0; vel_gas=0d0; cs_gas=0d0; m_gas=0d0; weighted_bondi=0d0; total_divergence=0d0
 
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      ! Collect local gas information
@@ -200,6 +201,42 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         vel_gas(1:ndim)  = vel_gas(1:ndim) + vv(1:ndim) * weight
         cs_gas           = cs_gas          + cs         * weight
         m_gas            = m_gas           + d          * weight * vol_loc
+
+        ! Compute local mass divergence for Bleuler+14 flux accretion
+        if(r%accretion_type==2)then
+           div_cell = 0
+           do idim =1,ndim
+              ! 'Right' value
+              ckey_div(1:ndim) = ckeynei(1:ndim,j)
+              ckey_div(idim) = ckey_div(idim) + 1
+
+              ! Get the cell information
+              hash_nbor(1:ndim)  = ckey_div(1:ndim)
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+              ! If missing then cycle
+              if(.not.associated(gridn))cycle
+
+              ! Compute the 'Right' contribution
+              div_right = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/(2.0d0*dx_loc)
+
+              ! 'Left' value
+              ckey_div(1:ndim) = ckeynei(1:ndim,j)
+              ckey_div(idim) = ckey_div(idim) - 1
+
+              ! Get the cell information
+              hash_nbor(1:ndim)  = ckey_div(1:ndim)
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+              ! If missing then cycle
+              if(.not.associated(gridn))cycle
+
+              ! Compute the 'Left' contribution
+              div_left = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/(2.0d0*dx_loc)
+
+              ! Compute the 'Total' contribution
+              div_cell = div_right - div_left
+           end do
+           total_divergence = total_divergence + div_cell*weight
+        end if
 
         ! Compute local bondi rate
         !!! Compute Bondi boosts here (e.g. c_s boost due to unresolved fluctuations)
@@ -255,6 +292,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
         ! Bondi-Hoyle-Lyttleton accretion rate
         dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
+     end if
+
+     if(r%accretion_type==2)then
+        write(*,*)'Divergence: ',total_divergence, dMBH_overdt
+        ! Use Divergence of the flow as your accretion rate
+        dMBH_overdt = -1.0*total_divergence*vol_loc
+
+        ! TODO: Add some checks based on the resolution
+        ! When sonic radius is not resolved, use the Bondi rate...
      end if
 
      ! Eddington accretion rate, which introduces an optional cap
