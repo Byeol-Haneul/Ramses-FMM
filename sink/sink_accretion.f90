@@ -79,7 +79,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   real(dp),dimension(1:ndim)::vv,v_rel,x_acc,p_acc,l_acc,vel_gas
   type(oct),pointer::gridn
   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,d_acc,m_gas,bondi_mass
-  real(dp)::rho_inf,weighted_bondi,lambda!,dMdt_freefall,t_ff
+  real(dp)::rho_inf,weighted_bondi,lambda,dMdt_freefall,t_ff
   type(msg_large_realdp)::dummy_large_realdp
   real(dp)::div_cell,total_divergence,div_right,div_left
 
@@ -254,7 +254,11 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               bondi_mass = p%mp(ipart)
            end if
            r2_sink     = (factG * bondi_mass / v_bondi**2)**2
-           rho_inf = d / (bondi_alpha(0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+           if(r%use_rho_inf)then
+              rho_inf = d / (bondi_alpha(0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+           else
+              rho_inf = d
+           end if
            dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
            weighted_bondi = weighted_bondi + dMBH_overdt*weight
         end if
@@ -288,7 +292,11 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         r2_sink     = (factG * bondi_mass / v_bondi**2)**2
 
         ! Density at infinity (using extrapolation)
-        rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+        if(r%use_rho_inf)then
+           rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+        else
+           rho_inf = rho_gas
+        end if
 
         ! Bondi-Hoyle-Lyttleton accretion rate
         dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
@@ -319,7 +327,13 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      ! TODO: Another option is to limit the accretion rate by
      !dMBH_overdt = min(dMBH_overdt, dMBH_overdt * rho_min / rho_gas) 
 
-     ! TODO: Add another option based on the free-fall timescale for rho_gas: i.e. m_gas / t_ff
+     ! Limit the accretion rate based on the free-fall timescale
+     t_ff = sqrt((3.0d0*pi)/(32.0d0*factG*rho_gas))
+     dMdt_freefall = (rho_gas * vol_loc * dble(nBHnei)) / t_ff
+     if(r%verbose_sink)then
+        write(*,*)'Freefall: ',dMBH_overdt, dMdt_freefall
+     end if
+     dMBH_overdt = min(dMBH_overdt, dMdt_freefall)
 
      if(r%verbose_sink)then
         write(*,*)'Run Properties: ',ilevel,p%levelp(ipart),dx_loc,vol_loc
