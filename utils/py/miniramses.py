@@ -1167,8 +1167,8 @@ def visu(x,y,dx,v,**kwargs):
             v = np.log10(abs(v+float(vmin)))            
             vmin = np.log10(float(vmin))
 
-    if( not (vmax==None)):
-        vmax = np.log10(float(vmax))
+        if( not (vmax==None)):
+            vmax = np.log10(float(vmax))
 
     print("min=",np.min(v)," max=",np.max(v))
 
