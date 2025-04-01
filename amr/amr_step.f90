@@ -290,8 +290,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-----------
   ! Hydro step
   !-----------
-  if(r%hydro.and..not.r%static_gas)then
-
+  if(r%hydro)then
+     if(.not.r%static_gas)then
      ! Hyperbolic solver
                                     call m_timer(pst,'hydro - godunov','start')
      call r_godunov_fine(pst,ilevel,1)
@@ -312,7 +312,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      ! to complete the time step with old force (will be removed later)
                                     call m_timer(pst,'hydro - gravity','start')
      call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
-
+     endif
      ! Restriction operator
                                     call m_timer(pst,'hydro - upload','start')
      call m_upload_fine(pst,ilevel)

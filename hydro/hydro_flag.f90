@@ -50,8 +50,8 @@ subroutine hydro_flag(s,ilevel)
 #endif       
        & r%err_grad_p==-1.0.and.&
        & r%err_grad_u==-1.0.and.&
-       & r%err_grad_xHII==-1.0.and.&
-       & r%err_grad_xHI==-1)return
+       & r%err_grad_xHI==-1.0.and.&
+       & r%err_grad_xHII==-1.0)return
 
   hash_key(0)=ilevel+1
 
