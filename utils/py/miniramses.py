@@ -669,7 +669,7 @@ def rd_hydro(nout,**kwargs):
 
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
     
-    txt = "ncpu="+str(ncpu)+" ndim="+str(ndim)+" nlevelmax="+str(nlevelmax)+" nvar="+str(nvar)
+    txt = "Found  nvar="+str(nvar)
     print(txt)
     print("Reading "+prefix+" data...")
 
