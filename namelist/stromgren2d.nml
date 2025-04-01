@@ -78,9 +78,7 @@ is_init_xion=.true.
 &REFINE_PARAMS 
 interpol_var=0
 interpol_type=0
-err_grad_p=0.1
-rt_err_grad_cn=0.4
-rt_floor_cn=0.1
+err_grad_xHII=0.1
 /
 
 &RT_PARAMS
