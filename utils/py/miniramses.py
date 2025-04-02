@@ -448,7 +448,12 @@ def rd_part(nout,**kwargs):
             xp[xp>boxlen/2]=xp[xp>boxlen/2]-boxlen
             xp[xp<-boxlen/2]=xp[xp<-boxlen/2]+boxlen
             p.xp[idim] = xp+center[idim]
-        r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
+        if ndim==1:
+            r = np.sqrt((p.xp[0]-center[0])**2)
+        if ndim==2:
+            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2)
+        if ndim==3:
+            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)            
         p.np = np.count_nonzero(r < radius)
         p.mp = p.mp[r < radius]
         p.xp = p.xp[:,r < radius]
@@ -780,7 +785,12 @@ def rd_cell(nout,**kwargs):
             xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
             xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
             c.x[idim] = xx+center[idim]
-        r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
+        if ndim==1:
+            r = np.sqrt((c.x[0]-center[0])**2) - dx
+        if ndim==2:
+            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2) - dx
+        if ndim==3:
+            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
         c.ncell = np.count_nonzero(r < radius)
         c.u  = c.u[:,r < radius]
         c.x  = c.x[:,r < radius]
