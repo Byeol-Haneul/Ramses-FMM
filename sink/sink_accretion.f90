@@ -194,7 +194,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         vv(3)            =     gridn%uold(icelln,4)/d
         e                =     gridn%uold(icelln,5)
         ethermal         = (e - 0.5d0*d*sum(vv(:)**2)) / d
-        cs               = sqrt(max((r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0))
+        cs               = sqrt(max(r%gamma*(r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0))
 
         ! Add to average (weighted) information
         rho_gas          = rho_gas         + d          * weight
@@ -259,7 +259,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
            else
               rho_inf = d
            end if
-           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
+           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi! * lambda
            weighted_bondi = weighted_bondi + dMBH_overdt*weight
         end if
      end do
@@ -283,7 +283,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
         ! Bondi mass
         if(r%bondi_use_gas_mass)then
-           bondi_mass = p%mp(ipart) + m_gas ! can add a check for m_gas > M_sink
+           bondi_mass = p%mp(ipart)! + m_gas ! can add a check for m_gas > M_sink
         else
            bondi_mass = p%mp(ipart)
         end if
@@ -299,11 +299,12 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         end if
 
         ! Bondi-Hoyle-Lyttleton accretion rate
-        dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
+        dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi! * lambda
      end if
+     if(r%accretion_type==1.and.r%verbose_sink)write(*,*)'Bondi',dMBH_overdt
 
      if(r%accretion_type==2)then
-        write(*,*)'Divergence: ',total_divergence, dMBH_overdt
+        write(*,*)'Divergence: ',total_divergence, -1.0*total_divergence*vol_loc, dMBH_overdt
         ! Use Divergence of the flow as your accretion rate
         dMBH_overdt = -1.0*total_divergence*vol_loc
 
@@ -313,27 +314,31 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
      ! Eddington accretion rate, which introduces an optional cap
      dMEd_overdt = 4.0d0 * pi * factG_in_cgs * p%mp(ipart) * mH / (0.1d0 * sigma_T * c_cgs) * scale_t
-     if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
+     !if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
 
      !!! Add accretion limiters across the entire accretion region
      ! (this preserves the scheme we are using, as compared to cell-specific limiters)
 
      ! limiting total accreted mass to 25% of the weighted mass of the accretion region
-     if(r%verbose_sink)then
-        write(*,*)'Correction: ',dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
-     end if
-     dMBH_overdt = min(dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
+     !if(r%verbose_sink)then
+     !   write(*,*)'Correction: ',dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
+     !end if
+     !dMBH_overdt = min(dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
 
      ! TODO: Another option is to limit the accretion rate by
      !dMBH_overdt = min(dMBH_overdt, dMBH_overdt * rho_min / rho_gas) 
 
      ! Limit the accretion rate based on the free-fall timescale
      t_ff = sqrt((3.0d0*pi)/(32.0d0*factG*rho_gas))
+     !if(dx_loc <= sqrt(r2_sink))then ! I think there should be a prefactor here...
      dMdt_freefall = (rho_gas * vol_loc * dble(nBHnei)) / t_ff
+     !else
+     !dMdt_freefall = (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3/2)) / t_ff
+     !end if
      if(r%verbose_sink)then
-        write(*,*)'Freefall: ',dMBH_overdt, dMdt_freefall
+        write(*,*)'Freefall: ',dMBH_overdt, dMdt_freefall, dx_loc / sqrt(r2_sink), (rho_gas * vol_loc * dble(nBHnei)) / t_ff, (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3/2)) / t_ff
      end if
-     dMBH_overdt = min(dMBH_overdt, dMdt_freefall)
+     if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMdt_freefall)
 
      if(r%verbose_sink)then
         write(*,*)'Run Properties: ',ilevel,p%levelp(ipart),dx_loc,vol_loc
@@ -409,7 +414,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      if(.not.p%static)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) + x_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
      p%vp(ipart,1:ndim) = ( p%mp(ipart) * p%vp(ipart,1:ndim) + p_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
      p%jp(ipart,1:ndim) = ( p%mp(ipart) * p%jp(ipart,1:ndim) + l_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
-     p%mp(ipart)        =   p%mp(ipart) + m_acc
+     if(.not.r%fix_sink_mass)p%mp(ipart)        =   p%mp(ipart) + m_acc
 
      ! Save accreted mass to total
      macc_loc = macc_loc + m_acc

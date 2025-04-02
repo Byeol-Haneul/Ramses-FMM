@@ -322,6 +322,7 @@ module amr_commons
      logical::sink_dump=.false.
      logical::static_sink=.false.
      logical::output_sink_fine=.false. ! In future, this should be an integer to allow the user to control how often this dump is done
+     logical::fix_sink_mass = .false. 
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi

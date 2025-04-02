@@ -386,6 +386,7 @@ subroutine m_read_params(pst)
   logical::sink_dump=.false.
   logical::static_sink=.false.
   logical::output_sink_fine=.false. ! In future, this should be an integer to allow the user to control how often this dump is done
+  logical::fix_sink_mass = .false. 
 
   ! Black hole parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi
@@ -521,7 +522,7 @@ subroutine m_read_params(pst)
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
        & ,accretion_type,acc_sink_boost,bondi_use_vrel,use_rho_inf &
        & ,eddington_cap,sink_form,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
-       & ,use_local_bondi_rate,sink_dump,static_sink,output_sink_fine
+       & ,use_local_bondi_rate,sink_dump,static_sink,output_sink_fine,fix_sink_mass
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -1302,6 +1303,7 @@ subroutine m_read_params(pst)
   s%r%sink_fraction_threshold=sink_fraction_threshold
   s%r%static_sink=static_sink
   s%r%output_sink_fine=output_sink_fine
+  s%r%fix_sink_mass=fix_sink_mass
 
   s%r%accretion_type = accretion_type
   s%r%acc_sink_boost = acc_sink_boost
