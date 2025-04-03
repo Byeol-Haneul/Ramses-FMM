@@ -315,7 +315,7 @@ subroutine m_read_params(pst)
   real(dp)::T2max=1d50
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
-  logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
+  logical::upload_equilibrium_x=.false.! Enforce equ. xion when uploading
   logical::isHe=.true.            !      He ionization fractions tracked?
   logical::isH2=.false.           !                 H2 tracked (via xHI)?
   real(dp)::neq_Tconst=-1         !             Const T in neq chemistry?

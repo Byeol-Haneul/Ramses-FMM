@@ -259,7 +259,7 @@ module amr_commons
      real(kind=8),dimension(nIon)::ionEvs             !                   Ionization energies
      real(dp)::neq_Tconst=-1           ! If positive use this value for all T-dependent rates
      logical::neq_isTconst=.false.                    !             Constant rates activated?
-     logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
+     logical::upload_equilibrium_x=.false.          ! Enforce equilibrium xion when uploading
 
      ! Star formation parameters
      integer::sf_model=1

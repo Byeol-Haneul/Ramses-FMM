@@ -200,7 +200,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   end do
   ncreate=g%ncreate
 
-  if(r%neq_chem .and. r%upload_equilibrium_x .and. g%nstep_coarse.ne.0) then
+  if(r%neq_chem .and. r%upload_equilibrium_x) then
      ! Enforce equilibrium on ionization states when derefining, to
      ! prevent unnatural values (e.g when merging hot and cold cells).
      ! Skip this during grid initialization (i.e. nstep_coarse=0)
@@ -210,7 +210,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
               ok   = m%grid(ioct)%flag1(ind)==0 .and. &
                    & m%grid(ioct)%refined(ind)
               if(ok)then
-                 ind_parent=ioct
                  ind_cell=ind
                  gridp=>m%grid(ioct)
                  call calc_equilibrium_xion(s, gridp, ind_cell, ilev, xion)

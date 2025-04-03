@@ -7,7 +7,6 @@ hydro=.true.
 rt=.true.
 ncontrol=1
 verbose=.false.
-nremap=10
 nsuperoct=0
 static_gas=.true.
 nrestart=0
