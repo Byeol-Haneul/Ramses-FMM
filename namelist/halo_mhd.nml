@@ -47,6 +47,7 @@ epsilon=1.d-4
 gamma=1.6666667
 courant_factor=0.5
 slope_type=1
+slope_mag_type=2
 T2_fix=1d4
 dual_energy=0.2
 entropy=.true.
