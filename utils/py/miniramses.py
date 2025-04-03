@@ -453,7 +453,7 @@ def rd_part(nout,**kwargs):
         if ndim==2:
             r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2)
         if ndim==3:
-            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)            
+            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
         p.np = np.count_nonzero(r < radius)
         p.mp = p.mp[r < radius]
         p.xp = p.xp[:,r < radius]
@@ -617,7 +617,7 @@ def rd_hydro(nout,**kwargs):
 
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
     
-    txt = "ncpu="+str(ncpu)+" ndim="+str(ndim)+" nlevelmax="+str(nlevelmax)+" nvar="+str(nvar)
+    txt = "Found nvar="+str(nvar)
     print(txt)
     print("Reading "+prefix+" data...")
 
