@@ -1,4 +1,5 @@
-This namelist contains various input parameters for a 2d shadow test aka Iliev test 7.
+This namelist contains various input parameters for a 2d shadow test
+from Iliev et al. test 7.
 Compile using:
 make NDIM=2 RT=1 NRTGRP=1 NION=1 MPI=1
 
@@ -83,7 +84,6 @@ X_H=1.0
 Y_He=0.0
 neq_TConst=1d4                  ! Force constant gas temperature of 10^4 K
 is_init_xion=.true.
-upload_equilibrium_x=.true.
 /
 
 &REFINE_PARAMS
