@@ -29,6 +29,8 @@ if args.sym:
     plt.plot(data["x"],data["d"],"o")
 else:
     plt.plot(data["x"],data["d"])
+if args.log:
+    plt.yscale("log")
 
 if args.out:
     plt.savefig(args.out)
