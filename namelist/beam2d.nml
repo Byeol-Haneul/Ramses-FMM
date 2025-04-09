@@ -1,0 +1,93 @@
+This namelist contains various input parameters for a 2d Stromgren sphere test.
+Compile using:
+make NDIM=2 RT=1 NRTGRP=1 NION=1 MPI=1
+
+&RUN_PARAMS 
+hydro=.true.
+rt=.true.
+ncontrol=1
+verbose=.false.
+nremap=10
+nsuperoct=0
+static_gas=.true.
+nrestart=0
+/
+
+&AMR_PARAMS
+levelmin=5
+levelmax=8
+ngridmax=800000
+box_size=1.0
+box_xmin=1
+box_ymin=1
+box_xmax=-1
+box_ymax=-1
+/
+
+&INIT_PARAMS                    ! Initial conditions of the gas
+nregion=1                       ! Number of geometrical regions
+region_type(1)='square'         ! Region gemoetry
+x_center=0.5                    ! Region center, should be [0,boxlen]
+y_center=0.5                    ! 
+length_x=100.0                  ! Region width, in units of boxlen 
+length_y=100.0                  ! (this region covers the whole box)
+d_region=1d-1                   ! Initial density of the gas in H/cc
+p_region=8.69869d-6		! Initial pressure (corresponds to 10^4 K)
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.1                  ! Time interval between snapshots (in unit_time=Myr)
+tend=1                          ! End-time for the simulation (in unit_time=Myr)
+/
+
+&HYDRO_PARAMS
+gamma=1.4
+courant_factor=0.8
+slope_type=1
+scheme='muscl'
+/
+
+&UNITS_PARAMS                   ! Unit conversion to cgs. We work in kpc-mp-Myr.
+units_length=3.09d21            ! 1 kpc in cm
+units_density=1.66000d-24       ! 1 proton mass
+units_time=3.1556926d13         ! 1 Myr in seconds
+/
+
+&COOLING_PARAMS                 ! Cooling / basic chemistry
+neq_chem=.false.
+isHe=.false.
+isH2=.false.
+/
+
+&REFINE_PARAMS 
+interpol_var=0
+interpol_type=0
+err_grad_p=0.1
+rt_err_grad_n=0.4
+rt_floor_n=0.1
+/
+
+&RT_PARAMS
+rt_advect=.true.
+rt_c_fraction=0.001
+rt_nsubcycle=1
+/
+
+&RT_SOURCES
+rt_nsource=1                    !--Idealized radiation sources------------
+rt_source_type=1*'point'        ! Source geometry (point or square)
+rt_src_x_center=0.05            ! Source position (0 to 1)
+rt_src_y_center=0.05
+rt_src_length_x=0.              ! Source size (0 to 1)
+rt_src_length_y=0
+rt_src_group=1                  ! Photon group emitted into
+rt_n_source=2d28                ! Source luminosity (photons per sec)
+rt_u_source=0.707               ! Reduced x-direction flux
+rt_v_source=0.707               ! Reduced y-direction flux
+/
+
+&RT_GROUPS                       ! Photon group properties
+group_csn(1,:)= 0.               ! group 1 cross sec. -> HI, HeI, HeII [cm^2]
+group_cse(1,:)= 0.               ! group 1 e-weighted cs -> HI, HeI, HeII [cm^2]
+group_egy     = 29.6             ! group 1 photon energy [eV]
+/

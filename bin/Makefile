@@ -4,14 +4,18 @@
 # Compilation time parameters
 COMPILER = GNU
 NDIM = 3
-NVAR = 5
-HYDRO = 1
-MHD = 0
-GRAV = 0
 MPI = 0
+HYDRO = 1
+GRAV = 0
+MHD = 0
+RT = 0
 INIT =
 UNITS =
 NENER = 0
+NMETAL = 0
+NION = 0
+NPSCAL = 0
+NRTGRP = 0
 NHILBERT = 1
 NVECTOR = 32
 NPRE = 8
@@ -22,12 +26,19 @@ MPIF90 = mpif90
 SOLVER = hydro
 EXEC = ramses
 #############################################################################
+# Compute NVAR
+NHYDRO = 5
+NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
+#############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
 DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR)
+ifneq ($(NION),0)
+   DEFINES += -DNION=$(NION)
+endif
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
@@ -39,6 +50,9 @@ ifeq ($(GRAV),1)
 endif
 ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
+endif
+ifeq ($(RT),1)
+   DEFINES += -DRT -DNRTGRP=$(NRTGRP)
 endif
 ifneq ($(NVECTOR),32)
    DEFINES += -DNVECTOR=$(NVECTOR)
@@ -54,8 +68,8 @@ endif
 ifneq ($(INIT),)
    DEFINES += -DINIT=$(INIT)
 endif
-ifneq ($(UNITS),)
-   DEFINES += -DUNITS=$(UNITS)
+ifneq ($(UNIT),)
+   DEFINES += -DUNITS=$(UNIT)
 endif
 #############################################################################
 # GNU compiler (gfortran)
@@ -74,6 +88,7 @@ ifeq ($(COMPILER),GNU)
    ifeq ($(DEBUG),1)
       F90 += -O0 -fcheck=bounds
       FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
+      F90 += -Wuninitialized -Wall
    else
       F90 += -O3
    endif
@@ -137,18 +152,22 @@ endif
 LIBS += $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):$(GPU_PATH):../$(SOLVER):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1
+VPATH = $(PATCH):$(GPU_PATH):../$(SOLVER):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
 #############################################################################
 # Modules
-MODOBJ = amr_parameters.o hydro_parameters.o oct_commons.o hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
-         hydro_commons.o amr_commons.o poisson_parameters.o rngstream.o \
+MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
+	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
+	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
-	 mdl_commons.o mdl.o clfind_commons.o ramses_commons.o \
+	 coolrates_module.o neq_cooling_module.o init_neq_chem.o \
+	 mdl_commons.o mdl.o rt_spectra.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
-	 boundaries.o output_hydro.o output_poisson.o output_part.o output_amr.o movie.o \
-	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o \
+	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
+	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o init_xion.o \
+	 rt_flux_module.o rt_godunov_fine.o rt_input_condinit.o rt_init_flow_fine.o rt_units.o  \
+	 rt_condinit.o rt_flag.o rt_upload.o interpol_rt.o rt_godunov_utils.o read_rt_params.o \
 	 init_hydro.o init_part.o init_amr.o smooth.o flag_utils.o init_time.o read_params.o \
-	 input_part_grafic.o input_part_zoom.o input_part_ascii.o \
+	 init_rt.o input_part_grafic.o input_part_zoom.o input_part_ascii.o \
 	 input_part_restart.o input_part_ramses.o input_part_gadget.o input_part.o \
 	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
@@ -161,12 +180,15 @@ MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooli
 	 condinit.o vecpotentialinit.o init_refine_adaptive.o init_refine_restart.o \
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
-	 sink_formation.o tree_formation.o sink_accretion.o \
-	 task_manager.o amr_step.o adaptive_loop.o \
+	 rt_star_feedback.o sink_formation.o tree_formation.o \
+	 sink_accretion.o task_manager.o rt_step.o amr_step.o adaptive_loop.o \
 	 write_gitinfo.o
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
 	$(F90) $(FFLAGS) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
+#############################################################################
+test_cooling:	$(MODOBJ) test_cooling.o
+	$(F90) $(FFLAGS) $(MODOBJ) test_cooling.o -o test_cooling $(LIBS)
 #############################################################################
 write_gitinfo.o: FORCE
 	$(FC) -O0 -cpp -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \

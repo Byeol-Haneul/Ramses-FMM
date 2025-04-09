@@ -71,6 +71,7 @@ module cooling_module
      
      real(kind=8) :: X = 0.76d0
      real(kind=8) :: Y = 0.24d0
+     real(kind=8) :: mu_mol = 1.2195d0
      real(kind=8) :: dumfac_ion=dumfac_ion_theuns
      real(kind=8) :: dumfac_rec=dumfac_rec_theuns
      
@@ -133,9 +134,9 @@ module cooling_module
   
 contains
 !=======================================================================
-subroutine set_model(c,Nmodel,J0in_in,J0min_in,alpha_in,normfacJ0_in,zreioniz_in, &
- &                   correct_cooling,realistic_ne, &
- &                   h,omegab,omega0,omegaL,astart_sim,T2_sim)
+subroutine set_model(c,Nmodel,J0in_in,J0min_in,alpha_in,normfacJ0_in,  &
+ &                   zreioniz_in, correct_cooling,realistic_ne,h,      &
+ &                   omegab,omega0,omegaL,astart_sim,T2_sim,mu_mol)
 !=======================================================================
 ! Nmodel(integer) =1 : Teyssier : ancien choix de l'evolution et de la forme du J(nu,z)
 !                  2 : Theuns   : pareil mais avec les fonctions interpolees de Theuns (+ rapide)
@@ -180,6 +181,7 @@ subroutine set_model(c,Nmodel,J0in_in,J0min_in,alpha_in,normfacJ0_in,zreioniz_in
 ! astart_sim (dble) : redshift auquel on veut commencer la simulation
 ! T2_sim     (dble) : ce sera en output, le T/mu en K a ce redshift pour des regions de contraste
 !                     de densite nul.
+! mu_mol (dble)     : mean molecular weight
 !
 ! NOTE :
 ! Dans les cas madau, le J0 a grand redshift est calcule comme
@@ -191,7 +193,7 @@ subroutine set_model(c,Nmodel,J0in_in,J0min_in,alpha_in,normfacJ0_in,zreioniz_in
   implicit none
   type(cooling_t)::c
   real(kind=8) :: J0in_in,zreioniz_in,J0min_in,alpha_in,normfacJ0_in,astart_sim,T2_sim
-  real(kind=8) :: J0min_ref_calc,h,omegab,omega0,omegaL
+  real(kind=8) :: J0min_ref_calc,h,omegab,omega0,omegaL,mu_mol
   integer :: Nmodel,correct_cooling,realistic_ne
   real(kind=8) :: astart,aend,dasura,T2end,mu,ne,minus1
   if (Nmodel /= -1) then
@@ -252,6 +254,7 @@ subroutine set_model(c,Nmodel,J0in_in,J0min_in,alpha_in,normfacJ0_in,zreioniz_in
      write(*,*) 'astart_sim =',astart_sim
      STOP
   endif
+  c%mu_mol = mu_mol
   ! Calcul de la temperature initiale
   aend=astart_sim
   dasura=0.02d0
@@ -345,7 +348,7 @@ subroutine evol_single_cell(c,astart,aend,dasura,h,omegab,omega0,omegaL, &
      endif
   endif
   aexp = astart
-  T2_com = 2.726d0 / aexp * aexp**2 / mu_mol
+  T2_com = 2.726d0 / aexp * aexp**2 / c%mu_mol
   nH_com = omegab*rhoc*h**2*c%X/mH
   do while (aexp < aend)
      daexp = dasura*aexp

@@ -22,8 +22,6 @@ subroutine m_refine_fine(pst,ilevel)
   integer::ilev,dummy
   double precision::ttend,ttstart
   type(out_refine_fine_t)::out_refine_fine
-  integer,dimension(1:2)::noct
-  integer,dimension(1)::alevel
 
   associate(s=>pst%s)
 
@@ -95,7 +93,6 @@ recursive subroutine r_refine_fine(pst,ilevel,input_size,output,output_size)
   type(out_refine_fine_t)::output
 
   type(out_refine_fine_t)::next_output
-  integer::ncreate,nkill
   integer::rID
   
   if(pst%nLower>0)then
@@ -125,6 +122,8 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use hilbert
   use call_back, only: cache_f
   use nbors_utils
+  use hydro_parameters, only: nion
+  use init_xion_module, only: calc_equilibrium_xion
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -138,7 +137,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   ! automatically satisfied. For adaptive time-stepping,
   ! numerical rules are checked before refining any cell.
   !---------------------------------------------------------
-  integer::igrid,icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
+  integer::icell,i,j,ibit,ibucket,ilev,ind,inew,ioct
   integer::noct_zero,head_zero,indx_zero
   integer::skip_bit,ikey,true_level
   integer::ind_cell,ind_parent
@@ -154,6 +153,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_int4)::dummy_int4
+  real(dp),dimension(nion)::xion
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -200,6 +200,26 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   end do
   ncreate=g%ncreate
 
+  if(r%neq_chem .and. r%upload_equilibrium_x) then
+     ! Enforce equilibrium on ionization states when derefining, to
+     ! prevent unnatural values (e.g when merging hot and cold cells).
+     ! Skip this during grid initialization (i.e. nstep_coarse=0)
+     do ilev=ilevel,r%nlevelmax-1
+        do ioct=m%head(ilev),m%tail(ilev)
+           do ind=1,twotondim
+              ok   = m%grid(ioct)%flag1(ind)==0 .and. &
+                   & m%grid(ioct)%refined(ind)
+              if(ok)then
+                 ind_cell=ind
+                 gridp=>m%grid(ioct)
+                 call calc_equilibrium_xion(s, gridp, ind_cell, ilev, xion)
+                 m%grid(ioct)%uold(ind,r%iIons:r%iIons+nion-1)=xion*m%grid(ioct)%uold(ind,1)
+              endif
+           end do
+        end do
+     end do
+  endif
+
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
   ! but it is refined, then destroy the child grid.
@@ -210,7 +230,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
                 pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-                init=init_flush_derefine,flush=pack_flush_derefine, combine=unpack_flush_derefine)
+                init=init_flush_derefine,flush=pack_flush_derefine,combine=unpack_flush_derefine)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
@@ -423,6 +443,7 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
+  use rt_parameters, only: nrtvar
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -454,6 +475,14 @@ subroutine pack_flush_refine(grid,msg_size,msg_array)
   end do
 #endif
 
+#ifdef RT
+  do ivar=1,nrtvar
+     do ind=1,twotondim
+        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+     end do
+  end do
+#endif
+
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_flush_refine
@@ -466,6 +495,7 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
+  use rt_parameters, only: nrtvar
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -501,6 +531,14 @@ subroutine unpack_flush_refine(grid,msg_size,msg_array,hash_key)
      end do
      grid%phi(ind)=msg%realdp_poisson(ind,ndim+1)
      grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
+  end do
+#endif
+
+#ifdef RT
+  do ind=1,twotondim
+     do ivar=1,nrtvar
+        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+     end do
   end do
 #endif
 
@@ -591,6 +629,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
 #ifndef WITHOUTMPI
   use mpi
 #endif
+  use rt_parameters, only: nrtvar, smallnp
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -618,10 +657,13 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   type(oct),pointer::gridn
 #endif
-  integer,dimension(0:twondim)::igrid_nbor,ind_nbor
+#ifdef RT
+  real(dp),dimension(0:twondim  ,1:nrtvar)::rtu1
+  real(dp),dimension(1:twotondim,1:nrtvar)::rtu2
+#endif
+  integer,dimension(0:twondim)::ind_nbor
   real(dp),dimension(0:twondim,1:nvar)::u1
   real(dp),dimension(1:twotondim,1:nvar)::u2
-  real(dp)::bx_central,by_central,bz_central
   type(nbor),dimension(0:twondim)::grid_nbor
   type(oct),pointer::child
   logical::ok
@@ -726,6 +768,13 @@ subroutine make_new_oct(s,parent,icell,ilevel)
         u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
      end do
   end do
+#ifdef RT
+  do inbor=0,twondim
+     do ivar=1,nrtvar
+        rtu1(inbor,ivar)=grid_nbor(inbor)%p%rtuold(ind_nbor(inbor),ivar)
+     end do
+  end do
+#endif
 #ifdef MHD
   ! Store parent cell MHD variables
   do inbor=0,twondim
@@ -774,6 +823,19 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   do ivar=1,6
      do ind=1,twotondim
         child%bold(ind,ivar)=b2(ind,ivar)
+     enddo
+  end do
+#endif
+#ifdef RT
+  ! Interpolate using rt variables
+  call interpol_rt(rtu1,rtu2,r%interpol_var,r%interpol_type,smallnp)
+  ! Store children cell rt variables
+  do ivar=1,nrtvar
+     do ind=1,twotondim
+        child%rtuold(ind,ivar)=rtu2(ind,ivar)
+        ! Rescale according to speed of light difference
+        if (mod(ivar,ndim+1).eq.1) &
+          child%rtuold(ind,ivar) = child%rtuold(ind,ivar) * g%rt_c(ilevel-1)/g%rt_c(ilevel)
      enddo
   end do
 #endif

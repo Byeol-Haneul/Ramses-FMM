@@ -17,10 +17,16 @@ The block named `&REFINE_PARAMS` contains the parameters related to grid refinem
 | `err_grad_b2`       | `real` | -1.0  | Discontinuity-based strategy: magnetic energy gradient relative variations above which a cell is refined |
 | `err_grad_prad`     | `real array` | -1.0  | Discontinuity-based strategy: non-thermal energy gradient relative variations above which a cell is refined |
 | `err_grad_var `     | `real array` | -1.0  | Discontinuity-based strategy: passive scalar gradient relative variations above which a cell is refined |
+| `rt_err_grad_cn`     | `real array` | -1.0  | Discontinuity-based strategy: photon flux gradient relative variations above which a cell is refined |
+| `err_grad_xHI`   | `real` | -1.0  | Discontinuity-based strategy: HI fraction gradient relative variations above which a cell is refined |
+| `err_grad_xHII`  | `real` | -1.0  | Discontinuity-based strategy: HII fraction gradient relative variations above which a cell is refined |
 | `floor_d`           | `real` | 1e-10 | Discontinuity-based strategy: density floor below which gradients are ignored |
 | `floor_u`           | `real` | 1e-10 | Discontinuity-based strategy: velocity floor below which gradients are ignored |
 | `floor_p`           | `real` | 1e-10 | Discontinuity-based strategy: pressure floor below which gradients are ignored |
 | `floor_b2`          | `real` | 1e-10 | Discontinuity-based strategy: magnetic energy floor below which gradients are ignored |
+| `rt_floor_cn`        | `real array` | -1.0  | Discontinuity-based strategy: photon group flux floor below which gradients are ignored |
+| `floor_xHI`      | `real` | 1e-10 | Discontinuity-based strategy: HI fraction floor below which gradients are ignored |
+| `floor_xHII`     | `real` | 1e-10 | Discontinuity-based strategy: HII fraction floor below which gradients are ignored |
 | `jeans_refine`      | `real array` | -1.0   | Jeans refinement strategy: each level is refined if the cell size exceeds the local Jeans length divided by jeans_refine(ilevel). |
 | `m_refine`          | `real array` | -1.0   | Quasi-Lagrangian strategy: each level is refined if the baryons mass in a cell exceeds `m_refine(ilevel)*mass_sph`, or if the number of dark matter particles exceeds `m_refine(ilevel)`, whatever the mass is. |
 | `mass_sph`          | `real` | 0.0   | Quasi-Lagrangian strategy: `mass_sph` is used to set a typical baryonic mass scale. For cosmo runs, its value is set automatically to the initial mass resolution. |

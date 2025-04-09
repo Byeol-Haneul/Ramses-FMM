@@ -90,7 +90,6 @@ if prefix=="rt":
 
 nout = args.nout
 print("Reading output number ",nout)
-print(path)
 
 if axis=="x":
     ii=2; jj=3

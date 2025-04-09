@@ -21,6 +21,12 @@ module hydro_parameters
   integer,parameter::ie=5
 #endif
 
+#ifdef NION
+  integer,parameter::nion=NION  ! # of ionization fractions species
+#else
+  integer,parameter::nion=0
+#endif
+
   integer,parameter::solver_llf=1
   integer,parameter::solver_hll=2
   integer,parameter::solver_hllc=3

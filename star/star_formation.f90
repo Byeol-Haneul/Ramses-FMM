@@ -13,6 +13,7 @@ recursive subroutine r_star_formation(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use SED_module,only: update_SED_group_props
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
@@ -29,6 +30,25 @@ recursive subroutine r_star_formation(pst,ilevel,input_size,output,output_size)
      output%mass=output%mass+next_output%mass
   else
      call star_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%star,ilevel,output%mass)
+
+     ! Check if radiadion advection should be turned on
+     if(pst%s%r%rt .and. .not. pst%s%r%rt_advect .and. pst%s%star%npart_tot .gt. 0) then
+        if(pst%s%g%myid==1) then
+          write(*,*) '*****************************************'
+          if(pst%s%r%cosmo) then
+            write(*,*) 'Stellar RT turned on at a=',pst%s%g%aexp
+          else
+            write(*,*) 'Stellar RT turned on at t=',pst%s%g%t
+          endif
+          write(*,*) '*****************************************'
+        endif
+        pst%s%r%rt_advect=.true.
+        ! Update cross sections based on star properties
+        if(pst%s%r%sedprops_update .gt. 0) then
+          call update_SED_group_props(pst%s%r, pst%s%g, pst%s%sed, pst%s%star)
+        endif
+     endif
+
   endif
 
 end subroutine r_star_formation
@@ -65,7 +85,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,nstar_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,nstar_cpu
   integer::i,ind,igrid,idim,icpu,ngrid,nleaf,nsite,nstar,nstar_loc
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,erfc
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,erfc
   real(kind=8)::dx,vol,factG,n_star,nCOM,d,d0,mstar,dstar,t_ff,mcell,mgas,mask,PoissMean,Rand
   real(kind=8)::sfr_ff,t_dyn,p,cs2,sigma2,alpha_vir,sigs,scrit,Mach2,b_turb
 #if NENER>0

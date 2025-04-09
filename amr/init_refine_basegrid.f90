@@ -30,7 +30,9 @@ subroutine m_init_refine_basegrid(pst)
 
   ! Initialize hydro variables on the base grid
   if(r%hydro)call m_init_flow_fine(pst,r%levelmin)
-
+#ifdef RT
+  if(r%rt)call m_rt_init_flow_fine(pst,r%levelmin)
+#endif
 #ifdef GRAV
   ! Compute total mass density from gas and particles on the base grid
   call m_rho_fine(pst,r%levelmin,0)

@@ -360,6 +360,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo,npart_star,npart_gas,npart_halo)
   if(r%part.and.nhalo>0.and..not.skip(2))then
      if(g%myid==1)write(*,'(A)') " Reading halo particles..."
      p%npart=nhalo/g%ncpu
+     p%npart_tot=nhalo
      ihalo=(g%myid-1)*p%npart
      nrest=nhalo-p%npart*g%ncpu
      if(g%myid.LE.nrest)then
@@ -397,6 +398,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo,npart_star,npart_gas,npart_halo)
   if(r%star.and.nstar>0.and..not.skip(3))then
      if(g%myid==1)write(*,'(A)') " Reading star particles..."
      star%npart=nstar/g%ncpu
+     star%npart_tot=nstar
      istar=(g%myid-1)*star%npart
      nrest=nstar-star%npart*g%ncpu
      if(g%myid.LE.nrest)then
@@ -518,7 +520,7 @@ subroutine rescale_gadget(r,g,p)
   ! This routine convert particle variables from Gadget code units
   ! to Ramses code units
   integer::i
-  real(dp)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,scale_m
+  real(kind=8)::scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2,scale_m
   ! Conversion factor from user units to cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   scale_m = scale_d*scale_l**3

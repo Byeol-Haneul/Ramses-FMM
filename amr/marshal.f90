@@ -7,6 +7,7 @@ contains
 subroutine pack_fetch_refine(grid,msg_size,msg_array)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
@@ -48,6 +49,14 @@ subroutine pack_fetch_refine(grid,msg_size,msg_array)
   end do
 #endif
 
+#ifdef RT
+  do ivar=1,nrtvar
+     do ind=1,twotondim
+        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+     end do
+  end do
+#endif
+  
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_fetch_refine
@@ -58,6 +67,7 @@ end subroutine pack_fetch_refine
 subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
   type(oct)::grid
@@ -103,6 +113,15 @@ subroutine unpack_fetch_refine(grid,msg_size,msg_array,hash_key)
      grid%phi_old(ind)=msg%realdp_poisson(ind,ndim+2)
   end do
 #endif
+
+#ifdef RT
+  do ivar=1,nrtvar
+     do ind=1,twotondim
+        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+     end do
+  end do
+#endif
+
 
 end subroutine unpack_fetch_refine
 !################################################################

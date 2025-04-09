@@ -22,7 +22,6 @@ subroutine mdl_init
 #endif
   type(mdl_t),pointer::mdl
   type(pst_t),allocatable::pst
-  integer,dimension(1)::ncpu
 
   allocate(mdl)
   call mdl_initialize(mdl)
@@ -116,7 +115,7 @@ function worker_init(mdl) result(pst)
   use input_part_restart_module, only: r_input_part_restart
   use input_part_ramses_module, only: r_input_part_ramses
   use input_part_gadget_module, only: r_input_part_gadget
-  use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min
+  use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min, r_check_part_emission
   use update_time_module, only: r_broadcast_aexp
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,r_noct_used_max
   use init_refine_restart_module, only: r_init_refine_restart
@@ -139,6 +138,7 @@ function worker_init(mdl) result(pst)
   use courant_fine_module, only: r_courant_fine
   use godunov_fine_module, only: r_godunov_fine,r_set_unew,r_set_uold
   use cooling_fine_module, only: r_cooling_fine
+  use init_xion_module, only: r_init_xion
   use star_formation_module, only: r_star_formation
   use sink_formation_module, only: r_sink_formation,r_sink_clump
   use tree_formation_module, only: r_tree_formation,r_tree_clump
@@ -161,6 +161,13 @@ function worker_init(mdl) result(pst)
   use output_clump_module, only: r_output_clump
   use movie_module, only: r_output_frame
   use amr_parameters, only: nhilbert
+  use init_rt_module, only: r_init_rt
+  use rt_input_condinit_module, only: r_rt_input_condinit, r_rt_input_source_regions
+  use rt_upload_module, only: r_rt_upload_fine
+  use output_rt_module, only: r_output_rt
+  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
+  use update_rt_c_module, only: r_rt_neq_updates
+  use rt_star_feedback, only: r_star_rt_feedback
 
   implicit none
 
@@ -248,6 +255,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_UNEW,               pst,C_FUNLOC(r_set_unew),1,0,"set_unew")
   call mdl_add_service(pst%s%mdl,MDL_SET_UOLD,               pst,C_FUNLOC(r_set_uold),1,0,"set_uold")
   call mdl_add_service(pst%s%mdl,MDL_COOLING_FINE,           pst,C_FUNLOC(r_cooling_fine),1,0,"cooling_fine")
+  call mdl_add_service(pst%s%mdl,MDL_INIT_XION,              pst,C_FUNLOC(r_init_xion),1,0,"init_xion")
   call mdl_add_service(pst%s%mdl,MDL_STAR_FORMATION,         pst,C_FUNLOC(r_star_formation),1,2,"star_formation")
   call mdl_add_service(pst%s%mdl,MDL_SINK_FORMATION,         pst,C_FUNLOC(r_sink_formation),1,2,"sink_formation")
   call mdl_add_service(pst%s%mdl,MDL_SINK_CLUMP,             pst,C_FUNLOC(r_sink_clump),1,2,"sink_clump")
@@ -299,6 +307,18 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_SCAN_FLAG,          pst,C_FUNLOC(r_set_scan_flag),2,0,"set_scan_flag")
   call mdl_add_service(pst%s%mdl,MDL_CMP_RESIDUAL_NORM2,     pst,C_FUNLOC(r_cmp_residual_norm2),1,2,"cmp_residual_norm2")
 #endif
+  call mdl_add_service(pst%s%mdl,MDL_INIT_RT,                pst,C_FUNLOC(r_init_rt),0,0,"init_rt")
+  call mdl_add_service(pst%s%mdl,MDL_RT_UPLOAD_FINE,         pst,C_FUNLOC(r_rt_upload_fine),1,0,"rt_upload_fine")
+  call mdl_add_service(pst%s%mdl,MDL_RT_INPUT_CONDINIT,      pst,C_FUNLOC(r_rt_input_condinit),1,0,"rt_input_condinit")
+  call mdl_add_service(pst%s%mdl,MDL_RT_INPUT_SOURCE_REGIONS,pst,C_FUNLOC(r_rt_input_source_regions),1,0,"rt_input_source_regions")
+  call mdl_add_service(pst%s%mdl,MDL_OUTPUT_RT,              pst,C_FUNLOC(r_output_rt),flen,0,"output_rt")
+  call mdl_add_service(pst%s%mdl,MDL_RT_GODUNOV_FINE,        pst,C_FUNLOC(r_rt_godunov_fine),1,0,"rt_godunov_fine")
+  call mdl_add_service(pst%s%mdl,MDL_SET_EMISSIVITY,         pst,C_FUNLOC(r_set_emissivity),1,0,"set_emissivity")
+  call mdl_add_service(pst%s%mdl,MDL_STAR_RT_FEEDBACK,       pst,C_FUNLOC(r_star_rt_feedback),1,0,"star_rt_feedback")
+  call mdl_add_service(pst%s%mdl,MDL_SET_RTUNEW,             pst,C_FUNLOC(r_set_rtunew),1,0,"set_rtunew")
+  call mdl_add_service(pst%s%mdl,MDL_SET_RTUOLD,             pst,C_FUNLOC(r_set_rtuold),1,0,"set_rtuold")
+  call mdl_add_service(pst%s%mdl,MDL_RT_NEQ_UPDATES,         pst,C_FUNLOC(r_rt_neq_updates),1,0,"rt_neq_updates")
+  call mdl_add_service(pst%s%mdl,MDL_CHECK_PART_EMISSION,    pst,C_FUNLOC(r_check_part_emission),0,0,"check_part_emission")
 end function worker_init
 !##############################################################
 !##############################################################
@@ -631,7 +651,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   ! It can be a flush message, and the routine
   ! unpacks it and combine it in the local memory.
   !
-  integer::i,ind,ivar,idim,info,ipos,iskip,igrid,ichild
+  integer::i,info,iskip,ichild
   integer::grid_cpu,peak_cpu,ilevel,itile,ntile_reply,nflush,ibuf
   integer::buffer_size_fetch_array,buffer_size_msg_array
   integer::buffer_size_fetch_array_clump,buffer_size_msg_array_clump
@@ -962,7 +982,7 @@ subroutine destage(s,igrid,hash_dict)
   ! It assembles flush messages, and when the message
   ! buffer is full, it sends it to the target CPU.
   !
-  integer::ind,ivar,idim,info,icache,iflush,grid_cpu,ibuf
+  integer::info,icache,iflush,grid_cpu,ibuf
   integer::send_flush_id,iskip,nflush
   integer::buffer_size_flush_array,buffer_size_msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -1066,7 +1086,7 @@ subroutine destage_clump(s,local_peak_id,hash_dict)
   ! It assembles flush messages, and when the message
   ! buffer is full, it sends it to the target CPU.
   !
-  integer::ind,ivar,idim,info,icache,iflush,peak_cpu,ibuf
+  integer::info,icache,iflush,peak_cpu,ibuf
   integer::send_flush_id_clump,iskip,nflush
   integer::buffer_size_flush_array_clump,buffer_size_msg_array_clump
   integer(kind=8)::global_peak_id

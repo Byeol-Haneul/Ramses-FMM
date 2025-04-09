@@ -155,8 +155,7 @@ subroutine reset_init(r,g,m,ilevel)
   type(mesh_t)::m
   integer::ilevel
   !----------------------------------------------------------------------
-  ! Using the Courant-Friedrich-Levy stability condition,               !
-  ! this routine computes the maximum allowed time-step.                !
+  ! This routine overwrites all Euler variables with initial conditions.
   !----------------------------------------------------------------------
   ! Local variables
   integer::igrid,ngrid,ind,idim,nstride,i,ivar,irad

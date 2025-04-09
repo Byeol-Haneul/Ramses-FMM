@@ -1,10 +1,13 @@
 module amr_commons
   use amr_parameters
   use hydro_parameters
+  use rt_parameters
   use oct_commons
   use hydro_commons
+  use rt_commons
   use hash
   use domain_m
+  use rt_parameters,only: nrtgrp
   
   type multipole_t
     real(dp),dimension(1:ndim+1)::q
@@ -17,6 +20,7 @@ module amr_commons
      logical::pic     =.false.   ! Particle In Cell activated
      logical::poisson =.false.   ! Poisson solver activated
      logical::hydro   =.false.   ! Hydro activated
+     logical::rt      =.false.   ! RT activated
      logical::part    =.false.   ! Dark matter particles activated
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
@@ -29,7 +33,8 @@ module amr_commons
      integer::nstepmax=1000000   ! Maximum number of time steps
      integer,dimension(1:MAXLEVEL)::nsubcycle=2 ! Subcycling at each level
      integer::nremap=10          ! Load balancing frequency (0: never)
-     logical::static  =.false.   ! Static mode activated     
+     logical::static_mesh=.false.! Static mesh refinement mode activated
+     logical::static_gas=.false. ! Turn off gas dynamics
      integer::geom    =1         ! 1: cartesian, 2: cylindrical, 3: spherical
      integer::overload=1         ! MPI domain overloading
      integer::nsuperoct=0        ! Number of superoct levels
@@ -97,8 +102,8 @@ module amr_commons
      real(kind=8)::tendmov=0.
      real(kind=8)::aendmov=0.
      character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
-     integer,dimension(0:NVAR+2)::movie_vars=0
-     character(len=5),dimension(0:NVAR+2)::movie_vars_txt=''
+     integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
+     character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
      
      ! Hydro solver parameters
      real(dp)::gamma=1.4d0
@@ -126,6 +131,7 @@ module amr_commons
      real(dp)::units_density=1.0 ! [g/cm^3]
      real(dp)::units_time=1.0    ! [seconds]
      real(dp)::units_length=1.0  ! [cm]
+     real(dp)::units_np=1.0      ! [#photon/cm^3]
 
      ! Cosmological parameters (others are read from file)
      real(dp)::omega_b=0.0D0  ! Omega Baryon
@@ -153,9 +159,13 @@ module amr_commons
      real(dp)::err_grad_d=-1.0  ! Density gradient
      real(dp)::err_grad_u=-1.0  ! Velocity gradient
      real(dp)::err_grad_p=-1.0  ! Pressure gradient
+     real(dp)::err_grad_xHI=-1  ! xHI gradient
+     real(dp)::err_grad_xHII=-1 ! xHII gradient
      real(dp)::floor_d=1.d-10   ! Density floor
      real(dp)::floor_u=1.d-10   ! Velocity floor
      real(dp)::floor_p=1.d-10   ! Pressure floor
+     real(dp)::floor_xHI=1d-10  ! xHI floor
+     real(dp)::floor_xHII=1d-10 ! xHII floor
      real(dp)::mass_sph=0.0D0   ! mass_sph
 #ifdef MHD
      real(dp)::err_grad_b2=-1.0
@@ -237,6 +247,7 @@ module amr_commons
      real(dp),dimension(1:MAXBOUND)::C_bound=0
 #endif
      ! Cooling parameters
+     logical::neq_chem=.false.
      logical::cooling=.false.
      logical::cooling_ism=.false.
      logical::metal=.false.
@@ -247,6 +258,17 @@ module amr_commons
      integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
      real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
      real(dp)::T2max
+     real(kind=8) ::mu_mol       = 1.2195d0           ! Mean molecular weight (std ISM value)
+     real(kind=8) ::X_H          = 0.7600d0           !                Hydrogen mass fraction
+     real(kind=8) ::Y_He         = 0.2400d0           !                  Helium mass fraction
+     logical::is_init_xion=.false.          ! Initialize ionization from T profile (neq only)
+     logical::isHe=.true.                             !      He ionization fractions tracked?
+     logical::isH2=.false.                            !                           H2 tracked?
+     integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
+     real(kind=8),dimension(nIon)::ionEvs             !                   Ionization energies
+     real(dp)::neq_Tconst=-1           ! If positive use this value for all T-dependent rates
+     logical::neq_isTconst=.false.                    !             Constant rates activated?
+     logical::upload_equilibrium_x=.false.          ! Enforce equilibrium xion when uploading
 
      ! Star formation parameters
      integer::sf_model=1
@@ -327,8 +349,93 @@ module amr_commons
      real(dp)::IG_T2 = 1.0D7
      real(dp)::IG_metal = 0.01
 
+     ! RT parameters. Some parameters are not (yet) used
+     logical::rt_advect=.false.            ! Advection of photons?                           !
+     logical::rt_smooth=.true.             ! Smooth the discrete RT update of op. splitting  !
+     logical::rt_star=.false.              ! Activate radiation from star particles          !
+     logical::rt_sink=.false.              ! Activate radiation from sink particles          !
+     real(dp)::rt_esc_frac=1d0             ! Photon escape fraction from stellar particles   !
+     logical::rt_is_outflow_bound=.false.  ! Make all boundaries=outflow for RT              !
+     real(dp)::rt_courant_factor=0.8d0     ! Courant factor for RT timesteps                 !
+     real(dp)::rt_err_grad_cn(nrtgrp)=-1   ! Photon flux gradient for refinement             !
+     real(dp)::rt_floor_cn(nrtgrp)=1d-10   ! Photon flux floor for refinement                !
+     real(dp)::rt_refine_aexp=-1           ! Expansion factor for rt refinements             !
+     real(dp),dimension(1:MAXLEVEL)::rt_c_fraction=1d0 ! Reduced light speed on each level   !
+     integer::rt_nsubcycle=1               ! Maximum number of RT-steps during one hydro/    !
+                                           ! gravity/etc timestep                            !
+     logical::rt_otsa=.true.               ! Use on-the-spot approximation                   !
+     logical::rt_isIR=.false.              ! Use IR photon groups                            !
+     logical::is_kIR_T=.false.             ! Kappa IT depends on T_rad                       !
+     logical::rt_T_rad=.false.             ! Use radiation temperature for everything        !
+     logical::rt_isoPress=.false.          ! Use cE, not F, for rad. pressure                !
+     real(dp)::rt_pressBoost=1d0           ! Boost on RT pressure                            !
+     logical::is_mu_H2=.false.
+     real(dp)::Tmu_dissoc=1d3              ! Dissociation temperature [K]                    !
+     integer::iPEH_group=-1                ! Radiation group used for photo-electric heating !
+     logical::cosmic_rays=.false.          ! Include cosmic ray ionisation                   !
+     
+     character(LEN=128)::sed_dir=''        ! Dir containing stellar energy distributions     !
+     !character(LEN=128)::uv_file=''       ! File containing UV background                   !
+     ! SED statistics: Radiation emitted, total, last coarse step [#photons/10^50]-----------
+     logical::rt_emission_stats=.false.    ! Print info about stellar emission in log        !
+     
+     ! Initial condition RT regions parameters----------------------------------------------
+     integer                           ::rt_nregion=0
+     character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
+     real(dp),dimension(1:MAXREGION)   ::rt_reg_x_center=0.
+     real(dp),dimension(1:MAXREGION)   ::rt_reg_y_center=0.
+     real(dp),dimension(1:MAXREGION)   ::rt_reg_z_center=0.
+     real(dp),dimension(1:MAXREGION)   ::rt_reg_length_x=1.E10
+     real(dp),dimension(1:MAXREGION)   ::rt_reg_length_y=1.E10
+     real(dp),dimension(1:MAXREGION)   ::rt_reg_length_z=1.E10
+     real(dp),dimension(1:MAXREGION)   ::rt_exp_region=2.0
+     integer,dimension(1:MAXREGION)    ::rt_reg_group=1
+     real(dp),dimension(1:MAXREGION)   ::rt_n_region=0.                     ! Photon density
+     real(dp),dimension(1:MAXREGION)   ::rt_u_region=0.                     ! Photon flux
+     real(dp),dimension(1:MAXREGION)   ::rt_v_region=0.                     ! Photon flux
+     real(dp),dimension(1:MAXREGION)   ::rt_w_region=0.                     ! Photon flux
+     
+     ! RT source regions parameters----------------------------------------------------------
+     integer                           ::rt_nsource=0
+     character(LEN=10),dimension(1:MAXREGION)::rt_source_type='square'
+     real(dp),dimension(1:MAXREGION)   ::rt_src_x_center=0.
+     real(dp),dimension(1:MAXREGION)   ::rt_src_y_center=0.
+     real(dp),dimension(1:MAXREGION)   ::rt_src_z_center=0.
+     real(dp),dimension(1:MAXREGION)   ::rt_src_length_x=1.E10
+     real(dp),dimension(1:MAXREGION)   ::rt_src_length_y=1.E10
+     real(dp),dimension(1:MAXREGION)   ::rt_src_length_z=1.E10
+     real(dp),dimension(1:MAXREGION)   ::rt_exp_source=2.0
+     integer, dimension(1:MAXREGION)   ::rt_src_group=1  
+     integer, dimension(1:MAXREGION)   ::rt_src_trace_group=1
+     real(dp),dimension(1:MAXREGION)   ::rt_n_source=0.                     ! Photon density
+     real(dp),dimension(1:MAXREGION)   ::rt_u_source=0.                     ! Photon flux
+     real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                     ! Photon flux
+     real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                     ! Photon flux
+
+     ! RT boundary condition parameters-------------------------------------------------------
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
+     real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
+     
+     ! RT groups parameters-------------------------------------------------------------------
+     integer::sedprops_update=-1           ! Update sedprops from stellar populations        
+     ! negative: never update, 0:update on init, pos x: update every x coarse steps
+     ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
+     ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
+     ! Indexes nrtgrp, nIon stand for photon group vs species (e.g. 1=H, 2=He)
+     real(dp),dimension(nrtgrp,nIon)::group_csn=0, group_cse=0         ! Cross sections (cm2)
+     real(dp),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
+     real(dp),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
+     real(dp),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
+     real(dp),dimension(nrtgrp)::kappaAbs=0                         ! Dust absorption opacity
+     real(dp),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
+     real(dp),dimension(nrtgrp)::isLW=0d0                          ! Use to find the LW group 
+     real(dp),dimension(nrtgrp)::ssh2=1d0                      ! Self-shielding factor for H2
+     integer,dimension(nIon)::spec2group=0                 ! Ion -> group # in recombinations
+
   end type run_t
-  
+
   type global_t
 
      ! MPI variables
@@ -358,6 +465,9 @@ module amr_commons
      real(dp)::mass_tot=0.0D0                      ! Total mass in gas
      real(dp)::mass_star_tot=0.0D0                 ! Total mass in new stars
      real(dp)::mass_sink_tot=0.0D0                 ! Total mass in new sinks
+     real(dp)::tot_nPhot=0.0D0, step_nPhot=0.0D0   ! RT bookkeeping
+     real(dp)::step_nStar=0.0D0, step_mStar=0.0D0  ! RT bookkeeping
+
      real(dp)::mass_tot_0=0.0D0                    ! Initial total mass (gas+star+sink)
 
      ! Level related arrays
@@ -419,8 +529,11 @@ module amr_commons
      logical, dimension(1:MAXLEVEL)::safe_mode=.false.
 
      ! Multipole coefficients
-     !real(dp),dimension(1:ndim+1)::multipole
      type(multipole_t)::multipole
+
+     ! RT global variables
+     real(dp),dimension(1:MAXLEVEL)::rt_c=1d0            ! Reduced lightspeed in code units
+     real(dp),dimension(1:MAXLEVEL)::rt_c_cgs            ! Reduced lightspeed in [cm s-1]
 
   end type global_t
 
@@ -473,6 +586,9 @@ module amr_commons
 
      ! Hydro kernel workspace
      type(hydro_workspace_t)::hydro_w
+     
+     ! RT kernel workspace
+     type(rt_workspace_t)::rt_w
 
   end type mesh_t
 

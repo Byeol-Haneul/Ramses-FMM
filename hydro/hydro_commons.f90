@@ -54,6 +54,8 @@ contains
   subroutine init_hydro_kernel(h,nn)
     use amr_parameters, only: ndim
     use hydro_parameters, only: nvar
+    use rt_parameters, only: nrtvar
+
     integer::nn
     class(hydro_kernel_t)::h
 

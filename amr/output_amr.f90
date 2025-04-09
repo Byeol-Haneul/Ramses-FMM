@@ -12,6 +12,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   use output_part_module, only: r_output_part
   use mdl_module, only: mdl_mkdir, mdl_wtime
   use cooling_module, only: output_cool
+  use output_rt_module, only: r_output_rt,file_descriptor_rt,output_rtinfo
   implicit none
   type(pst_t)::pst
   logical::write_bkp_file
@@ -102,6 +103,12 @@ subroutine m_dump_all(pst,write_bkp_file)
         filename=TRIM(filedir)//'hydro_header.txt'
         call file_descriptor_hydro(r,filename,write_bkp_file)
      end if
+     if(r%rt)then
+        filename=TRIM(filedir)//'rt_header.txt'
+        call file_descriptor_rt(r,filename,write_bkp_file)
+        filename=TRIM(filedir)//'rt_info.txt'
+        call output_rtinfo(r,g,filename)
+     end if
      if(r%poisson)then
         filename=TRIM(filedir)//'grav_header.txt'
         call file_descriptor_poisson(r,filename,write_bkp_file)
@@ -152,6 +159,14 @@ subroutine m_dump_all(pst,write_bkp_file)
         input_array=transfer(filename,input_array)
         if(r%verbose)write(*,*)'Writing particle files'
         call r_output_part(pst,input_array,flen/4,dummy,0)
+     end if
+
+     ! Output RT data
+     if(r%rt)then
+        filename=TRIM(filedir)//'rt.'
+        input_array=transfer(filename,input_array)
+        if(r%verbose)write(*,*)'Writing RT files'
+        call r_output_rt(pst,input_array,flen/4,dummy,0)
      end if
 
      ttend = mdl_wtime(mdl)
@@ -546,7 +561,7 @@ subroutine output_info(r,g,filename)
   character(LEN=flen)::filename
 
   integer::ilun
-  real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering output_info'

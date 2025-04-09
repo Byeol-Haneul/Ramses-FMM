@@ -74,6 +74,7 @@ module mdl_parameters
      enumerator::MDL_GRAVITY_HYDRO_FINE
      enumerator::MDL_SOURCE_HYDRO_FINE
      enumerator::MDL_COOLING_FINE
+     enumerator::MDL_INIT_XION
      enumerator::MDL_STAR_FORMATION
      enumerator::MDL_SINK_FORMATION
      enumerator::MDL_SINK_CLUMP
@@ -108,6 +109,18 @@ module mdl_parameters
      enumerator::MDL_OUTPUT_FRAME
      enumerator::MDL_CLUMP_FINDER
      enumerator::MDL_CLUMP_DEALLOC
+     enumerator::MDL_INIT_RT
+     enumerator::MDL_RT_INPUT_CONDINIT
+     enumerator::MDL_RT_INPUT_SOURCE_REGIONS
+     enumerator::MDL_RT_UPLOAD_FINE
+     enumerator::MDL_OUTPUT_RT
+     enumerator::MDL_RT_GODUNOV_FINE
+     enumerator::MDL_SET_EMISSIVITY
+     enumerator::MDL_SET_RTUNEW
+     enumerator::MDL_SET_RTUOLD
+     enumerator::MDL_RT_NEQ_UPDATES
+     enumerator::MDL_CHECK_PART_EMISSION
+     enumerator::MDL_STAR_RT_FEEDBACK
   end enum
   
   ! Maximum number of cpus

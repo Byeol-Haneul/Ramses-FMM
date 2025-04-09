@@ -11,6 +11,7 @@ subroutine m_update_time(pst,ilevel,done)
   use amr_parameters, only: dp,n_frw
   use ramses_commons, only: pst_t
   use mdl_module
+  use update_rt_c_module, only: r_rt_neq_updates
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -78,6 +79,11 @@ subroutine m_update_time(pst,ilevel,done)
         ! Output timing data
         !------------------------
         if(r%verbose)call m_output_timer(pst,.false.,'dummy')
+
+        !----------------------------------------------
+        ! RT and non-equilibrium chemistry updates
+        !----------------------------------------------
+        call r_rt_neq_updates(pst, pst%s%g%nstep_coarse, 1)
 
         !----------------------------------------------
         ! Output mass and energy conservation to screen

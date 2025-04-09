@@ -31,6 +31,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use tree_formation_module, only: m_tree_formation
   use feedback_module, only: out_feedback_t, r_thermal_feedback, m_mechanical_feedback
   use clump_finder_module, only: m_clump_finder
+  use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
+  use rt_step_module, only: m_rt_step
   use sink_accretion_module, only: r_sink_accretion, out_accretion_t
   
   implicit none
@@ -65,7 +67,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
                                     call m_timer(pst,'refine','start')
-     call m_refine_fine(pst,ilevel)
+     if(.not.r%static_mesh)call m_refine_fine(pst,ilevel)
   endif
   
   !-------------------------
@@ -140,7 +142,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 #endif
 
   ! Remove gravity source term with half time step and old force
-  if(r%hydro)then
+  if(r%hydro.and..not.r%static_gas)then
                                     call m_timer(pst,'hydro - gravity','start')
      call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
   endif
@@ -181,7 +183,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   endif
 
   ! Add gravity source term with half time step and new force
-  if(r%hydro)then
+  if(r%hydro.and..not.r%static_gas)then
                                     call m_timer(pst,'hydro - gravity','start')
      call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
   end if
@@ -189,15 +191,24 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------
   ! Compute new time step
   !----------------------
-                                    call m_timer(pst,'courant','start')
+                                    call m_timer(pst,'time step','start')
   call m_newdt_fine(pst,ilevel)
 
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
-  if(r%hydro)then
+  if(r%hydro.and..not.r%static_gas)then
                                     call m_timer(pst,'hydro - set unew','start')
      call r_set_unew(pst,ilevel,1)
+  endif
+
+  !---------------------------
+  ! Set rtunew equal to rtuold
+  !---------------------------
+  if(r%rt)then
+                                    call m_timer(pst,'radiative transfer','start')
+     call r_set_rtunew(pst,ilevel,1)
+     call r_set_emissivity(pst,ilevel,1)
   endif
 
   !---------------------------
@@ -280,10 +291,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Hydro step
   !-----------
   if(r%hydro)then
-
+     if(.not.r%static_gas)then
      ! Hyperbolic solver
                                     call m_timer(pst,'hydro - godunov','start')
-     if(.not.r%static)call r_godunov_fine(pst,ilevel,1)
+     call r_godunov_fine(pst,ilevel,1)
 
      ! Add gravity source terms to unew with half time step
                                     call m_timer(pst,'hydro - gravity','start')
@@ -301,16 +312,28 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      ! to complete the time step with old force (will be removed later)
                                     call m_timer(pst,'hydro - gravity','start')
      call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
-
+     endif
      ! Restriction operator
                                     call m_timer(pst,'hydro - upload','start')
      call m_upload_fine(pst,ilevel)
   endif
 
   !------------------------
+  ! Radiative transfer step
+  !------------------------
+  if(r%rt)then
+     if(r%rt_advect)then
+        call m_timer(pst,'radiative transfer','start')
+        call m_rt_step(pst,ilevel)
+     else
+        if(r%hydro .and. (r%neq_chem.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
+     endif
+  endif
+
+  !------------------------
   ! Compute cooling/heating
   !------------------------
-  if(r%cooling.or.r%isothermal)then
+  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%isothermal.or.r%neq_chem))then
                                     call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif
@@ -338,7 +361,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Compute refinement map
   !-----------------------
                                     call m_timer(pst,'flag','start')
-  if(.not.r%static)call m_flag_fine(pst,ilevel,icount)
+  if(.not.r%static_mesh)call m_flag_fine(pst,ilevel,icount)
 
   !-------------------------------
   ! Update coarser level time-step

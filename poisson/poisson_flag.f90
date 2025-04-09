@@ -3,7 +3,8 @@
 !#####################################################################
 !#####################################################################
 subroutine poisson_flag(s,ilevel)
-  use amr_parameters, only: dp,ndim,twotondim,twopi
+  use amr_parameters, only: dp,ndim,twotondim
+  use constants, only: twopi
   use ramses_commons, only: ramses_t
   use hydro_parameters, only: nvar
   use hash
@@ -89,10 +90,10 @@ end subroutine poisson_flag
 !#####################################################################
 !#####################################################################
 subroutine jeans_length_refine(r,uu,bb,factG,size_cell,n_jeans,ok)
-  use amr_parameters, only: ndim,dp,twopi
+  use amr_parameters, only: ndim,dp
+  use constants, only: twopi
   use amr_commons, only: run_t
   use hydro_parameters, only: nvar, nener
-  use const
   implicit none
   type(run_t)::r
   real(dp)::uu(1:nvar)
@@ -122,12 +123,12 @@ subroutine jeans_length_refine(r,uu,bb,factG,size_cell,n_jeans,ok)
 #endif
 
   ! compute the temperature
-  tempe =  etherm / dens * (r%gamma - one)
+  tempe =  etherm / dens * (r%gamma - 1d0)
   ! prevent numerical crash due to negative temperature
   tempe = max( tempe , r%smallc**2 )
 
   ! compute the Jeans length
-  lamb_jeans = sqrt( tempe * twopi / two / dens / factG )
+  lamb_jeans = sqrt( tempe * twopi / 2d0 / dens / factG )
 
   ! the Jeans length must be smaller
   ! than n_jeans times the size of the pixel

@@ -590,6 +590,7 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
+  use rt_parameters, only: nrtvar
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -617,6 +618,14 @@ subroutine pack_flush_loadbalance(grid,msg_size,msg_array)
   msg%realdp_mhd=grid%bold
 #endif
 
+#ifdef RT
+  do ind=1,twotondim
+     do ivar=1,nrtvar
+        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+     end do
+  end do
+#endif
+  
 #ifdef GRAV
   do ind=1,twotondim
      do idim=1,ndim
@@ -639,6 +648,7 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
   use cache_commons, only: msg_large_realdp
+  use rt_parameters, only: nrtvar
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
@@ -672,6 +682,14 @@ subroutine unpack_flush_loadbalance(grid,msg_size,msg_array,hash_key)
   
 #ifdef MHD
   grid%bold=msg%realdp_mhd
+#endif
+
+#ifdef RT
+  do ind=1,twotondim
+     do ivar=1,nrtvar
+        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+     end do
+  end do
 #endif
 
 #ifdef GRAV

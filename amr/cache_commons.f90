@@ -1,6 +1,7 @@
 module cache_commons
   use amr_parameters, only: dp,ndim,twotondim,nbin
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar, nrtgrp
   use call_back
 
   ! Communication-related taghs
@@ -33,6 +34,9 @@ module cache_commons
   type msg_realdp
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=dp),dimension(1:twotondim,1:nvar)::realdp
+#ifdef RT
+     real(kind=dp),dimension(1:twotondim,1:nrtvar)::realdp_rt
+#endif
 #ifdef MHD
      real(kind=dp),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
@@ -57,6 +61,9 @@ module cache_commons
   type msg_large_realdp
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=dp),dimension(1:twotondim,1:nvar)::realdp_hydro
+#ifdef RT
+     real(kind=dp),dimension(1:twotondim,1:nrtvar)::realdp_rt
+#endif
 #ifdef MHD
      real(kind=dp),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
@@ -64,6 +71,9 @@ module cache_commons
      real(kind=dp),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
   end type msg_large_realdp
+  type msg_rt_emissivity_realdp
+     real(kind=dp),dimension(1:twotondim,1:nrtgrp)::realdp
+  end type msg_rt_emissivity_realdp
   type msg_saddle_clump
      integer(kind=8)::nbor
      real(kind=dp)::dens

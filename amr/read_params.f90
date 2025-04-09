@@ -5,9 +5,12 @@ contains
 subroutine m_read_params(pst)
   use amr_parameters
   use hydro_parameters
+  use rt_parameters, only: nrtgrp
   use ramses_commons, only: pst_t
   use mdl_module
   use movie_module, only: set_movie_vars
+  use rt_params_module
+  use constants
   implicit none
   type(pst_t)::pst
 
@@ -31,18 +34,20 @@ subroutine m_read_params(pst)
   !--------------------------------------------------
 
   ! Run control
-  logical::cosmo   =.false.   ! Cosmology activated
-  logical::pic     =.false.   ! Particle In Cell activated
-  logical::poisson =.false.   ! Poisson solver activated
-  logical::hydro   =.false.   ! Hydro activated
+  logical::cosmo   =.false.    ! Cosmology activated
+  logical::pic     =.false.    ! Particle In Cell activated
+  logical::poisson =.false.    ! Poisson solver activated
+  logical::hydro   =.false.    ! Hydro activated
+  logical::rt      =.false.    ! RT activated
+  logical::star    =.false.    ! Stars and star formation activated
+  logical::sink    =.false.    ! Sinks and sink formation activated
   logical::part    =.false.   ! Dark matter particles activated
-  logical::star    =.false.   ! Stars and star formation activated
-  logical::sink    =.false.   ! Sinks and sink formation activated
   logical::merger_tree=.false. ! Merger tree particles activated
   logical::orphan  =.false.   ! Orphan particles activated
-  logical::verbose =.false.   ! Write everything
-  logical::debug   =.false.   ! Debug mode activated
-  logical::static  =.false.   ! Static mode activated
+  logical::verbose =.false.    ! Write everything
+  logical::debug   =.false.    ! Debug mode activated
+  logical::static_mesh=.false. ! Static mesh refinement activated
+  logical::static_gas=.false.  ! Hydro is turned off
 
   ! Step parameters
   integer::nrestart=0         ! New run or backup file number
@@ -109,8 +114,8 @@ subroutine m_read_params(pst)
   real(kind=8),dimension(1:10)::deltay_frame=0d0
   real(kind=8),dimension(1:10)::deltaz_frame=0d0
   character(LEN=5)::proj_axis='z' ! x->x, y->y, projection along z
-  integer,dimension(0:NVAR+2)::movie_vars=0
-  character(len=5),dimension(0:NVAR+2)::movie_vars_txt=''
+  integer,dimension(0:NVAR+2+nrtgrp)::movie_vars=0
+  character(len=5),dimension(0:NVAR+2+nrtgrp)::movie_vars_txt=''
 
   ! Refinement parameters for each level
   integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion
@@ -133,6 +138,7 @@ subroutine m_read_params(pst)
   real(dp)::units_density=1.0 ! [g/cm^3]
   real(dp)::units_time=1.0    ! [seconds]
   real(dp)::units_length=1.0  ! [cm]
+  real(dp)::units_np=1.0      ! [#photon/cm^3]
 
   ! Initial conditions parameters from grafic
   real(dp)::aexp_ini=10.
@@ -155,13 +161,53 @@ subroutine m_read_params(pst)
   character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
   real(dp)::ic_scale_m=1.0d0
 
+  ! Initial conditions hydro variables
+  real(dp),dimension(1:MAXREGION)::d_region=0.
+  real(dp),dimension(1:MAXREGION)::u_region=0.
+  real(dp),dimension(1:MAXREGION)::v_region=0.
+  real(dp),dimension(1:MAXREGION)::w_region=0.
+  real(dp),dimension(1:MAXREGION)::p_region=0.
+#if NENER>0
+  real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
+#endif
+#if NVAR>5+NENER
+  real(dp),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
+#endif
+#ifdef MHD
+  real(dp),dimension(1:MAXREGION)::B_region=0.
+  real(dp),dimension(1:MAXREGION)::C_region=0.
+  real(dp)::A_ave=0.,B_ave=0.,C_ave=0.
+#endif
+
+  ! Initial condition rt variables
+#ifdef RT
+  integer::rt_nregion=0
+  character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
+  real(dp),dimension(1:MAXREGION)::rt_reg_x_center=0.
+  real(dp),dimension(1:MAXREGION)::rt_reg_y_center=0.
+  real(dp),dimension(1:MAXREGION)::rt_reg_z_center=0.
+  real(dp),dimension(1:MAXREGION)::rt_reg_length_x=1.E10
+  real(dp),dimension(1:MAXREGION)::rt_reg_length_y=1.E10
+  real(dp),dimension(1:MAXREGION)::rt_reg_length_z=1.E10
+  real(dp),dimension(1:MAXREGION)::rt_exp_region=2.0
+  integer ,dimension(1:MAXREGION)::rt_reg_group=1
+  real(dp),dimension(1:MAXREGION)::rt_n_region=0.0 ! Photon density
+  real(dp),dimension(1:MAXREGION)::rt_u_region=0.0 !    Photon flux
+  real(dp),dimension(1:MAXREGION)::rt_v_region=0.0 !    Photon flux
+  real(dp),dimension(1:MAXREGION)::rt_w_region=0.0 !    Photon flux
+#endif
+
   ! Refinement parameters for hydro
   real(dp)::err_grad_d=-1.0  ! Density gradient
   real(dp)::err_grad_u=-1.0  ! Velocity gradient
   real(dp)::err_grad_p=-1.0  ! Pressure gradient
+  real(dp)::err_grad_xHI=-1.0! xHI gradient
+  real(dp)::err_grad_xHII=-1.0 ! xHII gradient
   real(dp)::floor_d=1.d-10   ! Density floor
   real(dp)::floor_u=1.d-10   ! Velocity floor
   real(dp)::floor_p=1.d-10   ! Pressure floor
+  real(dp)::floor_xHI=1d-10  ! xHI floor
+  real(dp)::floor_xHII=1d-10 ! xHII floor
   real(dp)::mass_sph=0.0D0   ! mass_sph
 #ifdef MHD
   real(dp)::err_grad_b2=-1.0
@@ -181,23 +227,13 @@ subroutine m_read_params(pst)
 #endif
   real(dp),dimension(1:MAXLEVEL)::jeans_refine=-1.0
 
-  ! Initial conditions hydro variables
-  real(dp),dimension(1:MAXREGION)::d_region=0.
-  real(dp),dimension(1:MAXREGION)::u_region=0.
-  real(dp),dimension(1:MAXREGION)::v_region=0.
-  real(dp),dimension(1:MAXREGION)::w_region=0.
-  real(dp),dimension(1:MAXREGION)::p_region=0.
-#if NENER>0
-  real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
+  ! Refinement parameters for rt
+#ifdef RT
+  real(dp)::rt_err_grad_cn(nrtgrp)=-1 ! Photon flux gradient for refinement
+  real(dp)::rt_floor_cn(nrtgrp)=1d-10 ! Photon flux floor for refinement
+  real(dp)::rt_refine_aexp=-1.0      ! Start expansion factor for RT refinements
 #endif
-#if NVAR>5+NENER
-  real(dp),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
-#endif
-#ifdef MHD
-  real(dp),dimension(1:MAXREGION)::B_region=0.
-  real(dp),dimension(1:MAXREGION)::C_region=0.
-  real(dp)::A_ave=0.,B_ave=0.,C_ave=0.
-#endif
+
   ! Hydro solver parameters
   integer ::niter_riemann=10
   integer ::slope_type=1
@@ -268,6 +304,12 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
   real(dp),dimension(1:MAXBOUND,1:NVAR-5-NENER)::var_bound=0
 #endif
+#ifdef RT
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
+  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
+#endif
 
   ! Cooling parameters
   logical::cooling=.false.
@@ -280,6 +322,18 @@ subroutine m_read_params(pst)
   integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
   real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
   real(dp)::T2max=1d50
+  logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
+  logical::is_init_xion=.false.   ! Initialize ionization from T profile?
+  logical::upload_equilibrium_x=.false.! Enforce equ. xion when uploading
+  logical::isHe=.true.            !      He ionization fractions tracked?
+  logical::isH2=.false.           !                 H2 tracked (via xHI)?
+  real(dp)::neq_Tconst=-1         !             Const T in neq chemistry?
+  real(kind=8) ::mu_mol=1.2195d0  ! Mean molecular weight (std ISM value)
+  real(kind=8) ::X_H=0.7600d0     !                Hydrogen mass fraction
+  real(kind=8) ::Y_He=0.2400d0    !                  Helium mass fraction
+  integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !   Ionization indices
+  real(kind=8),dimension(nion)::ionEvs=0.          !  Ionization energies
+  integer::icount
 
   ! Star formation parameters
   integer::sf_model=1
@@ -359,13 +413,14 @@ subroutine m_read_params(pst)
   real(dp)::IG_T2 = 1.0D7
   real(dp)::IG_metal = 0.01
 
+
   !--------------------------------------------------
   ! Namelist definitions
   !--------------------------------------------------
   ! Global run parameter
-  namelist/run_params/cosmo,pic,poisson,hydro,verbose,debug &
+  namelist/run_params/cosmo,pic,poisson,hydro,rt,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
-       & ,static,geom,overload,nsuperoct
+       & ,static_mesh,static_gas,geom,overload,nsuperoct
   ! Output parameters
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
@@ -400,11 +455,19 @@ subroutine m_read_params(pst)
 #ifdef MHD
        & ,B_region,C_region,A_ave,B_ave,C_ave &
 #endif
+#ifdef RT
+       & ,rt_nregion, rt_region_type                           &
+       & ,rt_reg_x_center, rt_reg_y_center, rt_reg_z_center    &
+       & ,rt_reg_length_x, rt_reg_length_y, rt_reg_length_z    &
+       & ,rt_exp_region, rt_reg_group                          &
+       & ,rt_n_region, rt_u_region, rt_v_region, rt_w_region   &
+#endif
        & ,d_region,u_region,v_region,w_region,p_region
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
-       & ,niter_riemann,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
-       & ,dual_energy,T2_fix,induction,entropy,turb,scheme,riemann,riemann2d,constant_gravity
+       & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
+       & ,dual_energy,T2_fix,induction,entropy,turb,riemann,riemann2d,constant_gravity &
+       & ,niter_riemann,scheme
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
@@ -418,12 +481,16 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
        & ,err_grad_var &
 #endif
+#ifdef RT
+       & ,rt_err_grad_cn, rt_floor_cn, rt_refine_aexp &
+#endif
+       & ,err_grad_xHI, err_grad_xHII, floor_xHI, floor_xHII &
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type &
        & ,aexp_lock_refine,pic_lock_refine,sink_refine
   ! Units parameters
-  namelist/units_params/units_density,units_time,units_length
+  namelist/units_params/units_density,units_time,units_length,units_np
   ! Boundary conditions parameters
   namelist/boundary_params/periodic,nbound,bound_type,bound_dir,bound_shift &
        & ,bound_xmin,bound_xmax,bound_ymin,bound_ymax,bound_zmin,bound_zmax &
@@ -433,11 +500,15 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
        & ,var_bound &
 #endif
+#ifdef RT
+       & ,rt_n_bound,rt_u_bound,rt_v_bound,rt_w_bound &
+#endif
        & ,d_bound,u_bound,v_bound,w_bound,p_bound
   ! Cooling / basic chemistry parameters
-  namelist/cooling_params/cooling,metal,isothermal,haardt_madau,J21 &
-       & ,eos_type,eos_nH,eos_index,eos_T2 &
-       & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism
+  namelist/cooling_params/neq_chem,cooling,metal,isothermal,haardt_madau,J21 &
+       & ,eos_type,eos_nH,eos_index,eos_T2, mu_mol, X_H, Y_He &
+       & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism &
+       & ,isHe, isH2, is_init_xion, neq_Tconst, upload_equilibrium_x
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -557,6 +628,17 @@ subroutine m_read_params(pst)
   nfile=max(nfile,1)
   nfile=min(nfile,s%g%ncpu)
 
+  !-------------------------------------------------
+  ! Set default initialisation of ionisation states:
+  ! -Off if restarting, but can set to true (for postprocessing)
+  ! -On otherwise, but can set to false
+  !-------------------------------------------------
+  if(nrestart .gt. 0) then
+     is_init_xion=.false.
+  else
+     is_init_xion=.true.
+  endif
+
   !--------------------------------------------------
   ! Check for errors in the namelist so far
   !--------------------------------------------------
@@ -630,6 +712,21 @@ subroutine m_read_params(pst)
      call mdl_abort(s%mdl)
   endif
 #endif
+#ifdef RT
+  if(.not. rt)then
+     write(*,*)'You are not using the rt solver but'
+     write(*,*)'the code was compiled with RT=1'
+     write(*,*)'This is just a warning and RAMSES will continue'
+  endif
+#else
+  if(rt)then
+     write(*,*)'You are using the rt solver but'
+     write(*,*)'the code was compiled with RT=0'
+     write(*,*)'Please recompile with RT=1'
+     call mdl_abort(s%mdl)
+  endif  
+#endif
+
 
   !----------------------------
   ! Read hydro parameters 
@@ -773,6 +870,66 @@ subroutine m_read_params(pst)
      write(*,'(A50)')"__________________________________________________"
   endif
 
+
+  ! Force non-equilibrium chemistry if using rt
+  if(rt .and. cooling) then
+    print*,'Using radiation hydrodynamics, so switching to non-equilibrum cooling'
+    cooling=.false.
+    neq_chem=.true.
+  endif
+  !----------------------------------------------------------------
+  ! Set number of used ionisation fractions, indices of ionization
+  ! fractions, and ionization energies, and check if we have enough
+  ! ionization variables (NION)
+  !----------------------------------------------------------------
+  if(nion.gt.0) then
+     iCount=0
+     ! HI fraction and ionization energy
+     if(isH2) then
+        iCount=iCount+1
+        ixHI=iCount    ; ionEvs(ixHI)=ionEv_HI
+     endif
+     ! HII fraction and ionization energy
+     iCount=iCount+1    ; ixHII=iCount   ; ionEvs(ixHII)=ionEv_HII
+     ! HeII and HeIII fractions and ionization energies
+     if(isHe) then
+        iCount=iCount+1 ; ixHeII=iCount  ; ionEvs(ixHeII)=ionEv_HeII
+        iCount=iCount+1 ; ixHeIII=iCount ; ionEvs(ixHeIII)=ionEv_HeIII
+     endif
+     ! Check that we have enough chemical species
+     if(iCount .gt. NION) then
+        write(*,*) 'Not enough variables for ionization fractions'
+        write(*,*) 'Have NION=',NION
+        write(*,*) 'STOPPING!'
+        call mdl_abort(s%mdl)
+     endif
+     if(iCount .lt. NION) then
+        write(*,*) 'Too many variables for ionization fractions'
+        write(*,*) 'Have NION=',NION
+        write(*,*) 'Need NION=',iCount
+        write(*,*) 'Probably no harm, so still continuing...'
+     endif
+     ! Starting index of ionized species
+     iIons = ichem
+     ichem = ichem + icount
+     ! Check we have enough passive scalar
+     if(iIons+iCount-1 .gt. nvar) then
+        write(*,*) 'Something wrong with NVAR.'
+        write(*,*) 'Have NVAR=',nvar
+        write(*,*) 'Should have NVAR=',iIons+iCount-1
+        write(*,*) 'STOPPING!'
+        call mdl_abort(s%mdl)
+     endif
+     ! Output indices for the user to check
+     write(*,'(A39, I2)') 'The number of ionization fractions is:',iCount
+     write(*,*) 'Their indices in U are:'
+     if(isH2) write(*,'(A10, I2)') '  iHI =    ', iIons-1+ixHI
+     write(*,'(A10, I2)')          '  iHII =   ', iIons-1+ixHII
+     if(isHe) write(*,'(A10, I2)') '  iHeII =  ', iIons-1+ixHeII
+     if(isHe) write(*,'(A10, I2)') '  iHeIII = ', iIons-1+ixHeIII
+     !if(isHe) print '(I3, A9)', iIons-1+ixHeIII, 'iHeIII'
+  endif
+
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'
      write(*,*)'Aborting...'
@@ -785,6 +942,7 @@ subroutine m_read_params(pst)
   s%r%pic=pic
   s%r%poisson=poisson
   s%r%hydro=hydro
+  s%r%rt=rt
   s%r%part=part
   s%r%star=star
   s%r%sink=sink
@@ -797,7 +955,8 @@ subroutine m_read_params(pst)
   s%r%nstepmax=nstepmax
   s%r%nsubcycle=nsubcycle
   s%r%nremap=nremap
-  s%r%static=static
+  s%r%static_mesh=static_mesh
+  s%r%static_gas=static_gas
   s%r%geom=geom
   s%r%overload=overload
   s%r%nsuperoct=nsuperoct
@@ -919,6 +1078,7 @@ subroutine m_read_params(pst)
   s%r%units_density=units_density
   s%r%units_time=units_time
   s%r%units_length=units_length
+  s%r%units_np=units_np
 
   s%r%m_refine=m_refine
   s%r%r_refine=r_refine
@@ -960,6 +1120,15 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
   s%r%err_grad_var=err_grad_var
 #endif
+  s%r%err_grad_xHI=err_grad_xHI
+  s%r%err_grad_xHII=err_grad_xHII
+  s%r%floor_xHI=floor_xHI
+  s%r%floor_xHII=floor_xHII
+#ifdef RT
+  s%r%rt_err_grad_cn=rt_err_grad_cn
+  s%r%rt_floor_cn=rt_floor_cn
+  s%r%rt_refine_aexp=rt_refine_aexp
+#endif
 
   if(nrestart>0)filetype='restart'
   s%r%filetype=filetype
@@ -996,6 +1165,22 @@ subroutine m_read_params(pst)
   s%r%B_ave=B_ave
   s%r%C_ave=C_ave
 #endif
+#ifdef RT
+  s%r%rt_nregion=rt_nregion
+  s%r%rt_region_type=rt_region_type
+  s%r%rt_reg_x_center=rt_reg_x_center
+  s%r%rt_reg_y_center=rt_reg_y_center
+  s%r%rt_reg_z_center=rt_reg_z_center
+  s%r%rt_reg_length_x=rt_reg_length_x
+  s%r%rt_reg_length_y=rt_reg_length_y
+  s%r%rt_reg_length_z=rt_reg_length_z
+  s%r%rt_exp_region=rt_exp_region
+  s%r%rt_reg_group=rt_reg_group
+  s%r%rt_n_region=rt_n_region
+  s%r%rt_u_region=rt_u_region
+  s%r%rt_v_region=rt_v_region
+  s%r%rt_w_region=rt_w_region
+#endif
 
   s%r%periodic=periodic
   s%r%nbound=nbound
@@ -1020,6 +1205,12 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
   s%r%var_bound=var_bound
 #endif
+#ifdef RT
+  s%r%rt_n_bound=rt_n_bound
+  s%r%rt_u_bound=rt_u_bound
+  s%r%rt_v_bound=rt_v_bound
+  s%r%rt_w_bound=rt_w_bound
+#endif
 
   s%r%cooling=cooling
   s%r%cooling_ism=cooling_ism
@@ -1036,6 +1227,23 @@ subroutine m_read_params(pst)
   s%r%eos_index=eos_index
   s%r%eos_T2=eos_T2
   s%r%T2max=T2max
+  s%r%mu_mol=mu_mol
+  s%r%X_H=X_H
+  s%r%Y_He=Y_He
+  s%r%neq_chem=neq_chem
+  s%r%is_init_xion=is_init_xion
+  s%r%isHe=isHe
+  s%r%isH2=isH2
+  s%r%neq_Tconst=neq_Tconst
+  if(neq_Tconst .ge. 0d0) s%r%neq_isTconst=.true.
+  s%r%upload_equilibrium_x = upload_equilibrium_x
+
+  s%r%iIons=iIons
+  s%r%ixHI=ixHI
+  s%r%ixHII=ixHII
+  s%r%ixHeII=ixHeII
+  s%r%ixHeIII=ixHeIII
+  s%r%ionEvs=ionEvs
 
   s%r%T2_star=T2_star
   s%r%n_star=n_star
@@ -1109,6 +1317,10 @@ subroutine m_read_params(pst)
   s%r%gadget_scale_m=gadget_scale_m
   s%r%gadget_scale_t=gadget_scale_t
   s%r%ic_skip_type=ic_skip_type
+
+
+  ! Read RT parameters from namelist
+  if(rt)call m_read_rt_params(pst)
 
   ! Broadcast parameters to all CPUs.
   call m_broadcast_params(pst)

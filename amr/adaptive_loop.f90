@@ -5,13 +5,16 @@ subroutine adaptive_loop(pst)
   use params_module, only: m_read_params
   use init_time_module, only: r_init_time
   use init_hydro_module, only: r_init_hydro
+  use init_rt_module, only: r_init_rt
   use init_part_module, only: r_init_part
+  use init_xion_module, only: m_init_xion
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
   use init_refine_restart_module, only: m_init_refine_restart
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
+
   implicit none
   type(pst_t)::pst
   logical::done
@@ -31,11 +34,14 @@ subroutine adaptive_loop(pst)
   ! Initialize grid variables
   call r_init_amr(pst)
 
-  ! Initialize time variables
+  ! Initialize time variables and cooling tables
   call r_init_time(pst)
 
   ! Initialize hydro kernel workspace
   if(r%hydro)call r_init_hydro(pst)
+
+  ! Initialize rt kernel workspace
+  if(r%rt)call r_init_rt(pst)
 
   ! Initialize particle variables
   if(r%pic)call r_init_part(pst)
@@ -54,6 +60,9 @@ subroutine adaptive_loop(pst)
   else
      call m_init_refine_restart(pst) ! Build AMR grid from restart file
   endif
+
+  ! Initialization of ionization fractions
+  if(r%neq_chem .and. r%is_init_xion) call m_init_xion(pst)
 
   ! Timing since startup
   tt2 = mdl_wtime(mdl)

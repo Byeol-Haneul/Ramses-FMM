@@ -9,7 +9,7 @@ program amr2map
   integer,parameter::flen=200
   
   integer::ndim,twotondim,nvar
-  integer::n,i,j,k,type=0,dopeak=0,domax=0,dograv=0,backup=0
+  integer::n,i,j,k,type=0,dopeak=0,domax=0,dograv=0,dort=0,backup=0
   integer::ivar,lmax=0
   integer::ilevel,idim,jdim,kdim,ldim,icell
   integer::nlevel
@@ -34,7 +34,7 @@ program amr2map
   character(LEN=5)::nchar,ncharcpu
   character(LEN=flen)::nomfich,repository,outfich,mapfiletype='bin'
   character(LEN=flen)::file_amr,file_hydro
-  logical::ok,ok_part,ok_cell,do_max,do_grav,do_peak
+  logical::ok,ok_part,ok_cell,do_max,do_grav,do_peak,do_rt
   logical::backup_file=.false.
   logical::check_ramses_exist
 
@@ -202,6 +202,8 @@ program amr2map
            file_hydro=TRIM(repository)//'/grav.'//TRIM(ncharcpu)
         else if(do_peak)then
            file_hydro=TRIM(repository)//'/peak_grid.'//TRIM(ncharcpu)
+        else if(do_rt)then
+           file_hydro=TRIM(repository)//'/rt.'//TRIM(ncharcpu)
         else
            file_hydro=TRIM(repository)//'/hydro.'//TRIM(ncharcpu)
         endif
@@ -211,7 +213,6 @@ program amr2map
         else
            iskip_hydro=17+4*(p%nlevelmax-p%levelmin+1)+(4*twotondim*nvar)*noct_skip
         endif
-
         ! Loop over useful octs in file
         do i=1,noct_file
 
@@ -288,6 +289,13 @@ program amr2map
                        map = pres
                     else
                        map = rho*pres
+                    endif
+                 case (66) ! H2 fraction 
+                    metmax = max(metmax,qold(ind,type))
+                    if(do_max)then
+                       map = qold(ind,type)
+                    else
+                       map = rho*(1.-qold(ind,6)-qold(ind,7))
                     endif
                  case default ! Passive scalar
                     metmax = max(metmax,qold(ind,type))
@@ -398,7 +406,7 @@ program amr2map
      write(*,*)'as unformatted binary file'
      open(unit=20,file=nomfich,form='unformatted')
      if(nx_sample==0)then
-        write(20)p%t, xxmax-xxmin, yymax-yymin, zzmax-zzmin
+        write(20)p%t, (xxmax-xxmin)*p%boxlen, (yymax-yymin)*p%boxlen, (zzmax-zzmin)*p%boxlen
         write(20)imax-imin+1,jmax-jmin+1
         allocate(filemap(imax-imin+1,jmax-jmin+1))
         if(do_max)then
@@ -572,6 +580,8 @@ contains
           read (arg,*) dograv
        case ('-pk')
           read (arg,*) dopeak
+       case ('-rt')
+          read (arg,*) dort
        case default
           print '("unknown option ",a2," ignored")', opt
        end select
@@ -583,6 +593,8 @@ contains
     if(dograv==1)do_grav=.true.
     do_peak=.false.
     if(dopeak==1)do_peak=.true.
+    do_rt=.false.
+    if(dort==1)do_rt=.true.
 
     if(rad>0)then
        xmin=xcen-rad
@@ -639,6 +651,8 @@ contains
        file_hydro=TRIM(repository)//'/grav.00001'
     else if(do_peak)then
        file_hydro=TRIM(repository)//'/peak_grid.00001'
+    else if(do_rt)then
+       file_hydro=TRIM(repository)//'/rt.00001'
     else
        file_hydro=TRIM(repository)//'/hydro.00001'
     endif

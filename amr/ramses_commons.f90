@@ -4,6 +4,8 @@ module ramses_commons
   use mdl_module, only: mdl_t
   use clfind_commons, only: clump_t
   use cooling_module, only: cooling_t
+  use coolrates_module, only: neq_cooling_t
+  use SED_module, only: sed_table_t
 
   type ramses_t
 
@@ -17,18 +19,20 @@ module ramses_commons
      type(part_t)::gas
      type(clump_t)::c
      type(cooling_t)::cool
+     type(neq_cooling_t)::tables
+     type(sed_table_t)::SED
      type(mdl_t),pointer::mdl => null()
 
   end type ramses_t
 
   type pst_t
-     
+
      type(ramses_t),pointer::s => null()
      type(pst_t),pointer::pLower => null()
      integer::iUpper = -1
      integer::nLower = 0
      integer::nUpper = 0
-     
+
   end type pst_t
 
 contains
@@ -38,6 +42,7 @@ contains
 !#########################################################################
 subroutine open_file(s,filename,nskip,ilun)
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar
   use amr_parameters, only: ndim,flen,twotondim
 #ifndef WITHOUTMPI
   use mpi
@@ -131,6 +136,7 @@ subroutine open_file(s,filename,nskip,ilun)
 #endif
         if(index(filename,'grav').NE.0)write(ilun)ndim+1
         if(index(filename,'peak').NE.0)write(ilun)3
+        if(index(filename,'rt').NE.0)write(ilun)nrtvar
         write(ilun)r%levelmin
         write(ilun)r%nlevelmax
         do ilevel=r%levelmin,r%nlevelmax
@@ -147,6 +153,7 @@ subroutine open_file(s,filename,nskip,ilun)
      if(index(filename,'hydro').NE.0)iskip=17+(r%nlevelmax-r%levelmin+1)*4
      if(index(filename,'grav').NE.0)iskip=17+(r%nlevelmax-r%levelmin+1)*4
      if(index(filename,'peak').NE.0)iskip=17+(r%nlevelmax-r%levelmin+1)*4
+     if(index(filename,'rt').NE.0)iskip=17+(r%nlevelmax-r%levelmin+1)*4
 
      do ilevel=r%levelmin,r%nlevelmax
         nskip(ilevel)=iskip
@@ -158,6 +165,7 @@ subroutine open_file(s,filename,nskip,ilun)
 #endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*noct(ilevel)
         if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*3)*noct(ilevel)
+        if(index(filename,'rt').NE.0)iskip=iskip+(4*twotondim*nrtvar)*noct(ilevel)
      end do
 
   elseif(g%myid.GT.istart(ifile))then
@@ -192,6 +200,7 @@ end subroutine open_file
 !#########################################################################
 subroutine close_file(s,filename,nskip,ilun)
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar
   use amr_parameters, only: ndim,flen,twotondim
 #ifndef WITHOUTMPI
   use mpi
@@ -244,6 +253,7 @@ subroutine close_file(s,filename,nskip,ilun)
 #endif
         if(index(filename,'grav').NE.0)iskip=iskip+(4*twotondim*(ndim+1))*m%noct(ilevel)
         if(index(filename,'peak').NE.0)iskip=iskip+(4*twotondim*3)*m%noct(ilevel)
+        if(index(filename,'rt').NE.0)iskip=iskip+(4*twotondim*nrtvar)*m%noct(ilevel)
         nskip(ilevel)=iskip
      end do
 
@@ -278,7 +288,7 @@ subroutine open_part_file(s,p,filename,nskip,ilun)
   character(LEN=flen)::fileloc
   character(LEN=5)::nchar
   integer,dimension(1:s%r%nfile+1)::istart
-  integer::i,idim,ivar,ifile,ncpufile,nremain,ilevel,ierr
+  integer::i,idim,ivar,ifile,ncpufile,nremain,ierr
   integer(kind=8)::npart
   logical::file_exist
 
@@ -447,7 +457,7 @@ subroutine close_part_file(s,p,filename,nskip,ilun)
 #endif
   integer,dimension(1:s%r%nfile+1)::istart
   integer::ncpufile,nremain
-  integer::i,ivar,idim,ifile,ilevel
+  integer::i,ivar,idim,ifile
 
   associate(r=>s%r,g=>s%g)
 

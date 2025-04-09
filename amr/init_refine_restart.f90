@@ -231,6 +231,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   use mdl_module, only: mdl_abort
   use amr_parameters, only: dp,nhilbert,ndim,twotondim,nvector
   use hydro_parameters, only: nvar
+  use rt_parameters, only: nrtvar
   use ramses_commons, only: ramses_t
   use hash
   use hilbert
@@ -242,10 +243,10 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   integer(kind=8),dimension(1:nhilbert,0:s%g%ncpu)::bound_key_target
 
   ! Local variables
-  integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,ilun
+  integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,iskip_rt,ilun
   integer::i,ind,istart,iend,noct_tmp,ilev,ioct
   integer::igrid,igrid_start,nleft,nright,ileft,iright
-  character(LEN=80)::file_params,file_amr,file_hydro,file_grav
+  character(LEN=80)::file_params,file_amr,file_hydro,file_grav,file_rt
   character(LEN=5)::nchar,ncharcpu
 
   integer,dimension(1:ncpu_file)::noct_cum
@@ -262,6 +263,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   integer,dimension(1:ndim)::ckey
   logical,dimension(1:twotondim)::refined
   real(dp),dimension(1:twotondim,1:nvar)::uold
+  real(dp),dimension(1:twotondim,1:nrtvar)::rtuold
   real(dp),dimension(1:twotondim,1:6)::bold
   real(dp),dimension(1:twotondim,1:3)::f
   real(dp),dimension(1:twotondim)::phi,rho
@@ -366,6 +368,13 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
         iskip_grav=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*(ndim+1))*nskip_file(icpu)
      endif
 
+     ! Prepare reading the RT file
+     if(r%rt)then
+        file_rt='backup_'//TRIM(nchar)//'/rt.'//TRIM(ncharcpu)
+        open(unit=13,file=file_rt,access="stream",action="read",form='unformatted')
+        iskip_rt=17+4*(nlevelmax_file-levelmin_file+1)+(8*twotondim*nrtvar)*nskip_file(icpu)
+     endif
+
      ! Loop over useful octs in file
      do i=istart,iend
 
@@ -397,6 +406,11 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
            read(12,POS=ipos)f
         endif
 
+        ! Read values from RT files
+        if(r%rt)then
+           ipos=iskip_rt+(8*twotondim*nrtvar)*(i-1)
+           read(13,POS=ipos)rtuold
+        endif
         ! Create new oct in memory
         igrid=igrid+1
         if(igrid.GT.r%ngridmax)then
@@ -427,6 +441,9 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
            m%grid(igrid)%f=f
         endif
 #endif
+#ifdef RT
+           m%grid(igrid)%rtuold=rtuold
+#endif
         ! Set flag1 to preserve refinements
         do ind=1,twotondim
            if(m%grid(igrid)%refined(ind))then
@@ -453,6 +470,9 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
      endif
      if(r%poisson)then
         close(12)
+     endif
+     if(r%rt)then
+        close(13)
      endif
   end do
   

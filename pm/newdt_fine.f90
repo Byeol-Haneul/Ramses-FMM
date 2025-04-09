@@ -33,7 +33,7 @@ subroutine m_newdt_fine(pst,ilevel)
   type(out_courant_fine_t)::out_courant_fine
   type(out_newdt_part_t)::out_newdt_part
   type(in_broadcast_dt_t)::in_broadcast_dt
-  
+
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   if(m%noct_tot(ilevel)==0)return
@@ -85,8 +85,13 @@ subroutine m_newdt_fine(pst,ilevel)
      g%eint_tot=g%eint_tot+out_courant_fine%eint
      g%emag_tot=g%emag_tot+out_courant_fine%emag
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),out_courant_fine%dt)
-  endif  
-  
+  endif
+
+  if(r%rt.and.r%rt_advect)then
+     if(r%verbose)write(*,'("   Entering newdt_rt for level ",I2)')ilevel
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%rt_nsubcycle*r%rt_courant_factor*dx/3d0/g%rt_c(ilevel))
+  endif
+
   ! Adaptive time step condition
   if(ilevel>r%levelmin)then
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel-1)/real(r%nsubcycle(ilevel-1)),g%dtnew(ilevel))
@@ -100,7 +105,7 @@ subroutine m_newdt_fine(pst,ilevel)
   call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
 
   end associate
-  
+
 end subroutine m_newdt_fine
 !#####################################################################
 !#####################################################################
