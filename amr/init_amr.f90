@@ -320,6 +320,16 @@ subroutine init_amr(mdl,r,g,m)
   m%noct_used=0  ! Number of oct used across all levels
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
 
+  ! Allocate head, tail, numbers and indice for clean and dirty octs at each level
+  allocate(m%head_clean(r%levelmin:r%nlevelmax))
+  allocate(m%tail_clean(r%levelmin:r%nlevelmax))
+  allocate(m%noct_clean(r%levelmin:r%nlevelmax))
+  allocate(m%indx_clean(1:r%ngridmax))
+  allocate(m%head_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%tail_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%noct_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%indx_dirty(1:r%ngridmax))
+
   if(r%nrestart>0)then
      ! Read parameters from restart file
      call title(r%nrestart,nchar)

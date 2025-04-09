@@ -542,37 +542,46 @@ module amr_commons
      integer(kind=4),allocatable,dimension(:)::head      ! Starting index for each level
      integer(kind=4),allocatable,dimension(:)::tail      ! Final index for each level
      integer(kind=4),allocatable,dimension(:)::noct      ! Number of octs for each level
+     integer::ifree                                      ! Index of first oct in free memory
+
      integer(kind=4),allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
      integer(kind=4),allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
-     integer(kind=4),allocatable,dimension(:)::ckey_max  ! Max. Cartesian key per level
-     integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the domain
-     integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the domain
-     integer(kind=8),allocatable,dimension(:,:)::hkey_max ! Max. Hilbert key
+
+     integer(kind=4),allocatable,dimension(:)::ckey_max        ! Max. Cartesian key per level
+     integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the box
+     integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the box
+     integer(kind=8),allocatable,dimension(:,:)::hkey_max      ! Max. Hilbert key per level
+
      integer(kind=4),allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
      integer(kind=4),allocatable,dimension(:)::tail_cache ! Final index in the cache for each level
+
      integer(kind=4)::noct_used,noct_used_max,noct_used_tot ! Total used octs in local memory
+
      integer(kind=4)::nx,ny,nz                   ! Size of mesh at levelmin
      real(kind=8),allocatable,dimension(:)::skip ! Coordinates of lower left corner of the box
 
      ! Persistent array for the AMR grid
-!     type(oct),dimension(:),allocatable::grid
-     type(oct),dimension(:),pointer::grid
+     type(oct),dimension(:),pointer::grid ! type(oct),dimension(:),allocatable::grid
      type(hash_table)::grid_dict   ! Oct hash table
+
+     ! Clean/dirty octs for first neighbors
+     integer(kind=4),allocatable,dimension(:)::indx_clean, head_clean, tail_clean, noct_clean
+     integer(kind=4),allocatable,dimension(:)::indx_dirty, head_dirty, tail_dirty, noct_dirty
 
      ! Arrays for the MG solver
      type(hash_table)::mg_dict     ! MG hash table
      integer(kind=4),allocatable,dimension(:)::head_mg ! Starting index for each level
      integer(kind=4),allocatable,dimension(:)::tail_mg ! Final index for each level
      integer(kind=4),allocatable,dimension(:)::noct_mg ! Number of octs for each level
-     integer(kind=4)::ifree_mg ! Starting index in free memory
+     integer(kind=4)::ifree_mg ! Starting index in free MG memory
 
      ! Software cache array for the AMR grid
      logical,allocatable,dimension(:)::dirty
      logical,allocatable,dimension(:)::occupied
      logical,allocatable,dimension(:)::locked
      integer,allocatable,dimension(:)::parent_cpu
-     integer::free_cache,ncache,ifree
+     integer::free_cache,ncache
 
      ! Software cache array for failed requests
      logical,allocatable,dimension(:)::occupied_null

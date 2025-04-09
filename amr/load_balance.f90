@@ -578,8 +578,47 @@ subroutine load_balance(s,ilevel)
      end do
   end do
 
+  !---------------------
+  ! Clean and dirty octs
+  !---------------------
+  do ilev=ilevel+1,r%nlevelmax
+     m%head_clean(ilev)=m%head_clean(ilev-1)+m%noct_clean(ilev-1)
+     m%head_dirty(ilev)=m%head_dirty(ilev-1)+m%noct_dirty(ilev-1)
+     m%noct_clean(ilev)=0
+     m%noct_dirty(ilev)=0
+     hkey(0)=ilev
+     do ioct=m%head(ilev),m%tail(ilev)
+        clean=.true.
+#if NDIM>2
+        do k1=-1,1
+        hkey(3)=m%grid(ioct)%ckey(3)+k1
+#endif
+#if NDIM>1
+        do j1=-1,1
+        hkey(2)=m%grid(ioct)%ckey(2)+j1
+#endif
+        do i1=-1,1
+           hkey(1)=m%grid(ioct)%ckey(1)+i1
+           clean=clean.and.hash_is_clean(m%grid_dict,hkey)
+        end do
+#if NDIM>1
+        end do
+#endif
+#if NDIM>2
+        end do
+#endif
+        if(clean)then
+           m%indx_clean(m%head_clean(ilev)+m%noct_clean(ilev))=ioct
+           m%noct_clean(ilev)=m%noct_clean(ilev)+1
+        else
+           m%indx_dirty(m%head_dirty(ilev)+m%noct_dirty(ilev))=ioct
+           m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
+        endif
+     end do
+  end do
+
   end associate
-  
+
 end subroutine load_balance
 !#########################################################################
 !#########################################################################
