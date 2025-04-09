@@ -69,10 +69,14 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         call r_reset_rho(pst,i,1)
      endif
 
-     ! Gas mass deposition using pseudo-particles
-     if(r%hydro.AND.m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
-        if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
-        call r_cic_multipole(pst,i,1)
+     ! Mass deposition into array rho using gas pseudo-particles
+     if(r%hydro)then
+
+        if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
+           if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
+           call r_cic_multipole(pst,i,1)
+        endif
+
      endif
 
   end do
@@ -82,17 +86,29 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   ! Compute particle contribution to density field
   !-------------------------------------------------------
   if(r%pic)then
+     ! Loop over all finer levels from coarse to fine
      do i=ilevel,r%nlevelmax
+
+        ! Sort particles according to their Hilbert index
+        if(m%noct_tot(i)>0)then
+           if(r%verbose)write(*,'(" Sort particles for level ",I2)')i
+           call r_sort_part(pst,i,1)
+        endif
+
+        ! Mass deposition into array rho using all massive particle types
         if(m%noct_tot(i)>0)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
            input_array(1)=i
            input_array(2)=rtype
            call r_cic_part(pst,input_array,2)
         endif
+
+        ! Sort particles between coarse and fine levels
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
            if(r%verbose)write(*,'(" Split particles for level ",I2)')i
            call r_split_part(pst,i,1)
         endif
+
      end do
   endif
 
@@ -615,10 +631,35 @@ recursive subroutine r_cic_part(pst,input_array,input_size)
   else
      ilevel=input_array(1)
      rtype=input_array(2)
-                     call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
-     if(pst%s%r%star)call cic_part(pst%s,pst%s%star,ilevel,rtype)
-     if(pst%s%r%sink)call cic_part(pst%s,pst%s%sink,ilevel,rtype)
-     if(pst%s%r%tree)call cic_part(pst%s,pst%s%tree,ilevel,rtype)
+     ! Mass deposition for various components (DM particles, star, sink)
+     ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
+     if(pst%s%r%part)then
+        if(pst%s%r%part_mass_deposition_scheme==1)then
+           call cic_part(pst%s,pst%s%p   ,ilevel,rtype)
+        else if(pst%s%r%part_mass_deposition_scheme==2)then
+           call tsc_part(pst%s,pst%s%p   ,ilevel,rtype)
+        else if(pst%s%r%part_mass_deposition_scheme==3)then
+           call pcs_part(pst%s,pst%s%p   ,ilevel,rtype)
+        endif
+     endif
+     if(pst%s%r%star)then 
+        if(pst%s%r%star_mass_deposition_scheme==1)then
+           call cic_part(pst%s,pst%s%star,ilevel,rtype)
+        elseif(pst%s%r%star_mass_deposition_scheme==2)then
+           call tsc_part(pst%s,pst%s%star,ilevel,rtype)
+        elseif(pst%s%r%star_mass_deposition_scheme==3)then
+           call pcs_part(pst%s,pst%s%star,ilevel,rtype)
+        endif
+     endif
+     if(pst%s%r%sink)then
+        if(pst%s%r%sink_mass_deposition_scheme==1)then
+           call cic_part(pst%s,pst%s%sink,ilevel,rtype)
+        elseif(pst%s%r%sink_mass_deposition_scheme==2)then
+           call tsc_part(pst%s,pst%s%sink,ilevel,rtype)
+        elseif(pst%s%r%sink_mass_deposition_scheme==3)then
+           call pcs_part(pst%s,pst%s%sink,ilevel,rtype)
+        endif
+     endif
   endif
 
 end subroutine r_cic_part
@@ -643,41 +684,32 @@ subroutine cic_part(s,p,ilevel,rtype)
   integer::ilevel,rtype
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,dr,dl
   integer,dimension(1:ndim)::ir,il,ix
+  real(kind=8)::dx_loc,vol_loc
+  real(dp),dimension(1:ndim)::x,dr,dl
   real(dp),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
-  real(kind=8)::dx_loc,vol_loc
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::dark,star,sink,tree
-  
+  logical::part,star,sink
+
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
 
-  ! Are particles dark  matter, tree, stars or sinks?
-  dark = p%type.eq.  DM_TYPE
-  tree = p%type.eq.TREE_TYPE
+  ! Are particles dark matter, stars or sinks?
+  part = p%type.eq.PART_TYPE
   star = p%type.eq.STAR_TYPE
   sink = p%type.eq.SINK_TYPE
 
-  ! Sort particle according to current level Hilbert key
-  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
-     p%sortp(i)=i
-  end do
-  ix=0
-  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
-
   ! Don't deposit mass depending on rho action type and paticle type
-  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(part.and.rtype.NE.0.and.rtype.NE.1)return
   if(star.and.rtype.NE.0.and.rtype.NE.2)return
   if(sink.and.rtype.NE.0.and.rtype.NE.3)return
-  if(tree)return
 
   ! Compute contribution to multipole
   if(ilevel==r%levelmin)then
@@ -694,9 +726,9 @@ subroutine cic_part(s,p,ilevel,rtype)
   ! Open write-only cache for array rho
   hash_nbor(0)=ilevel+1
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
-                pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
-                init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
+       hilbert=m%domain,pack_size=storage_size(dummy_twin_realdp)/32,&
+       pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
+       init=init_flush_rho, flush=pack_flush_rho, combine=unpack_flush_rho)
 
   ! Loop over particles in Hilbert order
   do i=p%headp(ilevel),p%tailp(r%nlevelmax)
@@ -735,17 +767,11 @@ subroutine cic_part(s,p,ilevel,rtype)
         ! Get parent cell using write-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
         if(associated(gridp))then
-           ! Compute mass density field
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
-           ! Compute refinement criterion
-#ifdef HYDRO
-           ! For stars or sinks use the baryonic mass
            if(star.or.sink)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
            endif
-#endif
-           ! For dark matter particles, use particle count
-           if(dark)then
+           if(part)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
@@ -788,16 +814,15 @@ subroutine tsc_part(s,p,ilevel,rtype)
   !
   ! Local variables
   integer,dimension(1:ndim)::ix,cl,cc,cr
+  real(kind=8)::dx_loc,vol_loc,xl,xc,xr
   real(dp),dimension(1:ndim)::x,wl,wr,wc
   real(dp),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
-  real(kind=8)::dx_loc,vol_loc
-  real(kind=8)::xl,xc,xr
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::dark,tree,star,sink
+  logical::part,star,sink
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -805,24 +830,15 @@ subroutine tsc_part(s,p,ilevel,rtype)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
 
-  ! Are particles dark  matter, tree, stars or sinks?
-  dark = p%type.eq.  DM_TYPE
-  tree = p%type.eq.TREE_TYPE
+  ! Are particles dark matter, stars or sinks?
+  part = p%type.eq.PART_TYPE
   star = p%type.eq.STAR_TYPE
   sink = p%type.eq.SINK_TYPE
 
-  ! Sort particle according to current level Hilbert key
-  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
-     p%sortp(i)=i
-  end do
-  ix=0
-  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
-
   ! Don't deposit mass depending on rho action type and paticle type
-  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(part.and.rtype.NE.0.and.rtype.NE.1)return
   if(star.and.rtype.NE.0.and.rtype.NE.2)return
   if(sink.and.rtype.NE.0.and.rtype.NE.3)return
-  if(tree)return
 
   ! Compute contribution to multipole
   if(ilevel==r%levelmin)then
@@ -887,7 +903,8 @@ subroutine tsc_part(s,p,ilevel,rtype)
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
            if(star.or.sink)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
-           else
+           endif
+           if(part)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
@@ -930,16 +947,15 @@ subroutine pcs_part(s,p,ilevel,rtype)
   !
   ! Local variables
   integer,dimension(1:ndim)::ix,cll,cl,cr,crr
+  real(kind=8)::dx_loc,vol_loc,xll,xl,xr,xrr
   real(dp),dimension(1:ndim)::x,wll,wl,wr,wrr
   real(dp),dimension(1:fourtondim)::vol
   integer,dimension(1:ndim,1:fourtondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
-  real(kind=8)::dx_loc,vol_loc
-  real(kind=8)::xll,xl,xr,xrr
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
-  logical::dark,tree,star,sink
+  logical::part,star,sink
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -947,24 +963,15 @@ subroutine pcs_part(s,p,ilevel,rtype)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
 
-  ! Are particles dark  matter, tree, stars or sinks?
-  dark = p%type.eq.  DM_TYPE
-  tree = p%type.eq.TREE_TYPE
+  ! Are particles dark matter, stars or sinks?
+  part = p%type.eq.PART_TYPE
   star = p%type.eq.STAR_TYPE
   sink = p%type.eq.SINK_TYPE
 
-  ! Sort particle according to current level Hilbert key
-  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
-     p%sortp(i)=i
-  end do
-  ix=0
-  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
-
   ! Don't deposit mass depending on rho action type and paticle type
-  if(dark.and.rtype.NE.0.and.rtype.NE.1)return
+  if(part.and.rtype.NE.0.and.rtype.NE.1)return
   if(star.and.rtype.NE.0.and.rtype.NE.2)return
   if(sink.and.rtype.NE.0.and.rtype.NE.3)return
-  if(tree)return
 
   ! Compute contribution to multipole
   if(ilevel==r%levelmin)then
@@ -1012,10 +1019,10 @@ subroutine pcs_part(s,p,ilevel,rtype)
 
      ! Periodic boundary conditions
      do idim=1,ndim
-        if(cll(idim)<0)cll(idim)=m%ckey_max(ilevel+1)-1
-        if(cl (idim)<0)cl (idim)=m%ckey_max(ilevel+1)-1
-        if(cr (idim)==m%ckey_max(ilevel+1))cr (idim)=0
-        if(crr(idim)==m%ckey_max(ilevel+1))crr(idim)=0
+        if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
+        if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
+        if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
+        if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
      enddo
 
      ! Compute cloud volumes
@@ -1034,7 +1041,8 @@ subroutine pcs_part(s,p,ilevel,rtype)
            gridp%rho(icell)=gridp%rho(icell)+p%mp(ipart)*vol(ind)/vol_loc
            if(star.or.sink)then
               gridp%nref(icell)=gridp%nref(icell)+p%mp(ipart)*vol(ind)/r%mass_sph
-           else
+           endif
+           if(part)then
               if(r%mass_cut_refine>0)then
                  if(p%mp(ipart)<r%mass_cut_refine)then
                     gridp%nref(icell)=gridp%nref(icell)+vol(ind)
@@ -1151,7 +1159,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      call r_split_part(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-                     call split_part(pst%s,pst%s%p   ,ilevel)
+     if(pst%s%r%part)call split_part(pst%s,pst%s%p   ,ilevel)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
@@ -1280,12 +1288,12 @@ subroutine split_part(s,p,ilevel)
         do idim=1,ndim
            x(idim)=p%xp(ipart,idim)/dx_loc
         end do
-        
+
         ! Shift particle position to to 2x2x2 grid corner
         do idim=1,ndim
            ii(idim)=int(x(idim)-2*ix_ref(idim))
         end do
-        
+
         ! Compute parent cell index
 #if NDIM==1
         icell=1+ii(1)
@@ -1828,6 +1836,68 @@ function pcs_index(cll,cl,cr,crr)
   pcs_index(1:3,64)=(/crr(1),crr(2),crr(3)/)
 #endif
 end function pcs_index
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_sort_part(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_SORT_PART,pst%iUpper+1,input_size,0,ilevel)
+     call r_sort_part(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     if(pst%s%r%part)call sort_part(pst%s,pst%s%p   ,ilevel)
+     if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
+     if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
+     if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
+  endif
+
+end subroutine r_sort_part
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+subroutine sort_part(s,p,ilevel)
+  use amr_parameters, only: ndim,twotondim,dp
+  use amr_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use pm_parameters
+  use pm_commons, only: part_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  use hilbert
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  !
+  ! Local variables
+  integer,dimension(1:ndim)::ix
+  integer::i
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  ! Sort particle according to current level Hilbert key
+  do i=p%headp(ilevel),p%tailp(r%nlevelmax)
+     p%sortp(i)=i
+  end do
+  ix=0
+  call sort_hilbert(r,g,p,p%headp(ilevel),p%tailp(r%nlevelmax),ix,0,1,ilevel-1)
+
+  end associate
+
+end subroutine sort_part
 !##############################################################################
 !##############################################################################
 !##############################################################################

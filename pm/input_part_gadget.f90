@@ -41,7 +41,7 @@ subroutine m_input_part_gadget(pst)
   write(*,*)'Total number of particles in dark matter=',output%nhalo
   write(*,*)'Total number of particles in stars=',output%nstar
 
-  if(pst%s%r%pic)pst%s%p%npart_tot=output%nhalo
+  if(pst%s%r%part)pst%s%p%npart_tot=output%nhalo
   if(pst%s%r%hydro)pst%s%gas%npart_tot=output%ngas
   if(pst%s%r%star)pst%s%star%npart_tot=output%nstar
 
@@ -357,7 +357,7 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo,npart_star,npart_gas,npart_halo)
   endif
 
   ! Read halo particles
-  if(r%pic.and.nhalo>0.and..not.skip(2))then
+  if(r%part.and.nhalo>0.and..not.skip(2))then
      if(g%myid==1)write(*,'(A)') " Reading halo particles..."
      p%npart=nhalo/g%ncpu
      p%npart_tot=nhalo
@@ -446,19 +446,19 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo,npart_star,npart_gas,npart_halo)
 
   ! Use header mass if missing mass block
   if(mass_blck.eq.-1)then
-     if(r%pic)p%mp(1:p%npart)=header%mass(2)
+     if(r%part)p%mp(1:p%npart)=header%mass(2)
      if(r%hydro)gas%mp(1:gas%npart)=header%mass(1)
      if(r%star)star%mp(1:star%npart)=header%mass(3)
   endif
 
   ! Set particle level to levelmin
-  if(r%pic)p%levelp(1:p%npart)=r%levelmin
+  if(r%part)p%levelp(1:p%npart)=r%levelmin
   if(r%hydro)gas%levelp(1:gas%npart)=r%levelmin
   if(r%star)star%levelp(1:star%npart)=r%levelmin
 
   ! Compute ids if missing id block
   if(id_blck.eq.-1)then
-     if(r%pic)then
+     if(r%part)then
         do i=1,p%npart
            p%idp(i)=ihalo+i
         end do
@@ -477,29 +477,29 @@ subroutine input_part_gadget(s,mstar,mgas,mhalo,npart_star,npart_gas,npart_halo)
   endif
 
   ! Rescale from Gadget code units to Ramses code units
-  if(r%pic)call rescale_gadget(r,g,p)
+  if(r%part)call rescale_gadget(r,g,p)
   if(r%hydro)call rescale_gadget(r,g,gas)
   if(r%star)call rescale_gadget(r,g,star)
 
   ! Trim particles that are outside of the Ramses box
-  if(r%pic)call trim_box(r,g,p)
+  if(r%part)call trim_box(r,g,p)
   if(r%hydro)call trim_box(r,g,gas)
   if(r%star)call trim_box(r,g,star)
 
   ! Compute total mass in star, gas and dark matter
   mstar=0.; mhalo=0.; mgas=0.
-  if(r%pic)mhalo=sum(p%mp(1:p%npart))
+  if(r%part)mhalo=sum(p%mp(1:p%npart))
   if(r%hydro)mgas=sum(gas%mp(1:gas%npart))
   if(r%star)mstar=sum(star%mp(1:star%npart))
 
   ! Compute number of particles in star, gas and dark matter
   npart_star=0; npart_halo=0; npart_gas=0
-  if(r%pic)npart_halo=p%npart
+  if(r%part)npart_halo=p%npart
   if(r%hydro)npart_gas=gas%npart
   if(r%star)npart_star=star%npart
 
   ! Put all particles inside levelmin 
-  if(r%pic)call init_levelmin(r,p)
+  if(r%part)call init_levelmin(r,p)
   if(r%hydro)call init_levelmin(r,gas)
   if(r%star)call init_levelmin(r,star)
 

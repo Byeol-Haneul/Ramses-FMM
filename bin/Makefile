@@ -3,9 +3,6 @@
 #############################################################################
 # Compilation time parameters
 COMPILER = GNU
-NHILBERT = 1
-NVECTOR = 32
-NPRE = 8
 NDIM = 3
 MPI = 0
 HYDRO = 1
@@ -13,12 +10,15 @@ GRAV = 0
 MHD = 0
 RT = 0
 INIT =
-UNIT =
+UNITS =
 NENER = 0
 NMETAL = 0
 NION = 0
 NPSCAL = 0
 NRTGRP = 0
+NHILBERT = 1
+NVECTOR = 32
+NPRE = 8
 PATCH =
 DEBUG = 0
 HDF5 = 0
@@ -55,6 +55,15 @@ ifneq ($(NENER),0)
 endif
 ifeq ($(RT),1)
    DEFINES += -DRT -DNRTGRP=$(NRTGRP)
+endif
+ifneq ($(NVECTOR),32)
+   DEFINES += -DNVECTOR=$(NVECTOR)
+endif
+ifneq ($(NPRE),8)
+   DEFINES += -DNPRE=$(NPRE)
+endif
+ifneq ($(NHILBERT),1)
+   DEFINES += -DNHILBERT=$(NHILBERT)
 endif
 #############################################################################
 # Set proper units and initial conditions

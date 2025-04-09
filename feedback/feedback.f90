@@ -253,6 +253,7 @@ end subroutine r_mechanical_feedback
 !##############################################################################
 subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   use amr_parameters, only: ndim,twotondim,dp
+  use hydro_parameters, only: nvar
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t

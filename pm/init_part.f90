@@ -21,7 +21,9 @@ recursive subroutine r_init_part(pst)
      call r_init_part(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call init_part(pst%s%r,pst%s%g,pst%s%p)
+     if(pst%s%r%part)then
+        call init_part(pst%s%r,pst%s%g,pst%s%p   )
+     endif
      if(pst%s%r%star)then
         call init_star(pst%s%r,pst%s%g,pst%s%star)
      end if
@@ -41,16 +43,16 @@ end subroutine r_init_part
 subroutine init_part(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
-  use pm_parameters, only: DM_TYPE
+  use pm_parameters, only: PART_TYPE
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   type(part_t)::p
   !---------------------------------
-  ! Allocate DM particle variables
+  ! Allocate PART particle variables
   !---------------------------------
-  p%type=DM_TYPE
+  p%type=PART_TYPE
   allocate(p%xp    (r%npartmax,ndim))
   allocate(p%vp    (r%npartmax,ndim))
   allocate(p%mp    (r%npartmax))
@@ -135,7 +137,7 @@ subroutine init_sink(r,g,p)
   allocate(p%tp    (r%nsinkmax))
   allocate(p%levelp(r%nsinkmax))
   allocate(p%idp   (r%nsinkmax))
-  p%nvaralloc=3*ndim+4
+  p%nvaralloc=4*ndim+4
 #ifdef OUTPUT_PARTICLE_POTENTIAL
   allocate(p%phip  (r%nsinkmax))
   p%nvaralloc=p%nvaralloc+1

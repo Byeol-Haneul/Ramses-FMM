@@ -17,6 +17,7 @@ recursive subroutine m_sink_formation(pst)
   use mdl_parameters
   implicit none
   type(pst_t)::pst
+
   type(out_sink_formation_t)::output_sink
   double precision::ttend, ttstart
 
@@ -38,6 +39,8 @@ recursive subroutine m_sink_formation(pst)
      endif
   endif
 
+  if(pst%s%r%sink_dump)call dump_sink_particles(pst)
+
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
@@ -47,6 +50,49 @@ recursive subroutine m_sink_formation(pst)
   print '(A,F14.7)',' Time elapsed in creating sinks:',ttend-ttstart
 
 end subroutine m_sink_formation
+!###########################################################
+!###########################################################
+!###########################################################
+!###########################################################
+subroutine dump_sink_particles(pst)
+    use amr_parameters, only: ndim,flen
+    use ramses_commons, only: pst_t
+    use output_part_module, only: r_output_part
+    use output_clump_module, only: r_output_clump
+    use mdl_module, only: mdl_mkdir
+    use output_amr_module, only: r_output_amr,output_info
+    use output_poisson_module, only: r_output_poisson,in_output_poisson_t
+    implicit none
+    type(pst_t)::pst
+    type(in_output_poisson_t)::in_output_poisson
+    ! Local variables
+    integer::i,dummy(1)
+    character(LEN=flen)::filename,filedir,filecmd
+    integer,dimension(1:flen/4)::input_array
+    character(len=20) :: str
+
+    filedir='dump/'
+    call mdl_mkdir(pst%s%mdl,filedir)
+    write(str,'(I0)') pst%s%g%nstep_coarse
+    filedir='dump/'//TRIM(str)//'_'
+
+    filename=TRIM(filedir) ! Note that suffix will be added later
+    input_array=transfer(filename,input_array)
+    !in_output_poisson%filename=TRIM(filedir)//'grav.'
+    if(pst%s%r%verbose)write(*,*)'Writing particle files'
+    if(pst%s%c%npeak_tot>0)then
+       call r_output_clump(pst,input_array,flen/4,dummy,0)
+    endif
+
+    !call r_output_poisson(pst,in_output_poisson,storage_size(in_output_poisson)/32)
+    !call r_output_part(pst,input_array,flen/4,dummy,0)
+    !filename=TRIM(filedir)//'amr.'
+    !input_array=transfer(filename,input_array)
+    !call r_output_amr(pst,input_array,flen/4,dummy,0)
+    !filename=TRIM(filedir)//'info.txt'
+    !call output_info(pst%s%r,pst%s%g,filename)  
+
+end subroutine dump_sink_particles
 !###########################################################
 !###########################################################
 !###########################################################
@@ -126,8 +172,6 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
      if(c%clump_mass(j)<=c%mass_threshold)ok=.false.
      if(c%nsink(j)>0)ok=.false.
-     purity=c%npart(j)*g%mp_min/c%particle_mass(j)
-     if(purity<=c%purity_threshold)ok=.false.
      ! Set sink formation flag
      if(ok)c%form_sink(j)=1
      if(ok)nsite=nsite+1
@@ -219,7 +263,6 @@ subroutine m_formation_site(pst)
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
   use ramses_commons, only: pst_t
-  use clump_merger_module, only: r_deallocate_clump
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
@@ -293,7 +336,6 @@ subroutine sink_clump(s)
   s%c%saddle_threshold = s%r%sink_saddle_threshold
   s%c%mass_threshold = s%r%sink_mass_threshold
   s%c%fraction_threshold = s%r%sink_fraction_threshold
-  s%c%purity_threshold = s%r%sink_purity_threshold
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
   ! We call these cell test particles for the watershed algorithm.
@@ -336,7 +378,7 @@ subroutine sink_clump(s)
   !----------------------------------------------------------------------
   ! Compute additional particle-based clump properties.
   !----------------------------------------------------------------------
-  if(s%r%pic)then
+  if(s%r%part)then
      call particle_peak_id(s,s%p)
      if(s%r%rho_type_sink.eq.1)then
         call particle_clump_properties(s,s%p)
@@ -407,7 +449,7 @@ subroutine sink_in_peak(s,reset_sink_pos,count_sink)
      do i=1+p%norphan_peak,p%npart
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
-        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
+        call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
         ! Compute sink particle position from peak position
         p%xp(ipart,1)=c%peak_com(peak_nr,1)
         p%xp(ipart,2)=c%peak_com(peak_nr,2)

@@ -56,7 +56,7 @@ module hash
 
 contains
 
-  ! ============================================================================= 
+  ! =============================================================================
   pure function hash_func(key)
     integer(kind=8), dimension(0:ndim), intent(in) :: key
     integer(kind=8)                                :: hash_func
@@ -70,11 +70,9 @@ contains
     type(hash_table), intent(inout) :: htable
     integer         , intent(in)    :: req_size
     character(6)    , intent(in)    :: hash_type
-
     ! Allocate all hash table arrays and variables.
     ! Chose size (excluding the chaining space) as the smallest
     ! power of two >= the required_size.
-
     if (hash_type .ne. 'simple') then
        print*, 'only simple hash is currently supported'
        stop
@@ -88,14 +86,14 @@ contains
     call reset_entire_hash(htable, .false.)
 
   end subroutine init_empty_hash
+  ! =============================================================================
 
+  ! =============================================================================
   subroutine init_empty_hash_simple(htable, req_size)
     implicit none
     type(hash_simple), intent(inout) :: htable
     integer          , intent(in)    :: req_size
-
     ! Allocate all hash table arrays and variables.
-
     integer :: bit_length, ncode
 
     ncode = req_size
@@ -115,11 +113,9 @@ contains
     implicit none
     logical, intent(in)             :: resize
     type(hash_table), intent(inout) :: htable
-    
     ! Subroutine to reset the entire hash table
     ! IMPORTANT: The new size of the hash table is adapted based on the
     ! load factor before resetting the hash table.
-
     integer :: i
     real :: load_factor
 
@@ -156,13 +152,13 @@ contains
     htable%next_free(htable%total_size) = 0
 
   end subroutine reset_entire_hash
+  ! =============================================================================
 
+  ! =============================================================================
   subroutine reset_entire_hash_simple(htable)
     implicit none
     type(hash_simple), intent(inout) :: htable
-
     ! Subroutine to reset the entire hash table
-
     integer :: i
 
     ! Compute sizes and allocate arrays
@@ -192,19 +188,17 @@ contains
   subroutine reset_bucket(buck)
     implicit none
     type(bucket), intent(inout) :: buck
-
     ! Reset the content of a bucket
-
     buck%next_ibucket = -1
     buck%key = 0
   end subroutine reset_bucket
+  ! =============================================================================
 
+  ! =============================================================================
   subroutine reset_bucket_simple(buck)
     implicit none
     type(bucket_simple), intent(inout) :: buck
-
     ! Reset the content of a bucket
-
     buck%next_ibucket = -1
     buck%key = 0
   end subroutine reset_bucket_simple
@@ -217,10 +211,8 @@ contains
     type(hash_table),                    intent(inout) :: htable
     integer(kind=8) , dimension(0:ndim), intent(in)    :: key
     type(*),optional,target,             intent(in)    :: val
-    
     ! Add a key/value pair to the hash table. If there is already a key/value
     ! pair stored for this key, return an error message.
-
     integer(kind=8) :: full_hash
     integer(kind=8) :: ibucket
 
@@ -280,16 +272,16 @@ contains
        stop
     end if
   end subroutine hash_setp
+  ! =============================================================================
 
+  ! =============================================================================
   subroutine hash_setp_simple(htable, key, val)
     implicit none
     type(hash_simple), intent(inout) :: htable
     integer(kind=8),   intent(in)    :: key
     integer,           intent(in)    :: val
-
     ! Add a key/value pair to the hash table. If there is already a key/value
     ! pair stored for this key, return an error message.
-
     integer :: ibucket
 
     ! Compute ibucket
@@ -378,16 +370,16 @@ contains
     hash_getp = C_NULL_PTR
 
   end function hash_getp
+  ! =============================================================================
 
+  ! =============================================================================
   function hash_getp_simple(htable, key)
     USE oct_commons
     implicit none
     type(hash_simple), intent(in) :: htable
     integer(kind=8),   intent(in) :: key
     integer :: hash_getp_simple
-
     ! Function which retrieves the hash table value for a given key. If no entry exists, return 0.
-
     integer :: ibucket
 
     ibucket = MOD(key,int(htable%size,kind=8)) + 1
@@ -491,9 +483,68 @@ contains
     end do
 
   end function hash_getp_vec
-  ! =============================================================================  
-  
-  ! =============================================================================  
+  ! =============================================================================
+
+  ! =============================================================================
+  function hash_is_clean(htable, key)
+    USE oct_commons
+    implicit none
+    type(hash_table),                    intent(in) :: htable
+    integer(kind=8) , dimension(0:ndim), intent(in) :: key
+    logical                                         :: hash_is_clean
+    ! Function which check if the input key is clean.
+    ! Clean here means the bucket is full and there is no collision.
+    integer(kind=8) :: ibucket, full_hash
+
+    full_hash = hash_func(key)
+    ibucket = IAND(full_hash, htable%bitmask) + 1
+
+    if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
+       hash_is_clean = .true.
+       return
+    end if
+
+    ! Nothing found or there is a collision...
+    hash_is_clean = .false.
+
+  end function hash_is_clean
+  ! =============================================================================
+
+  ! =============================================================================`
+  function get_index_clean(htable, keys, n, n1, n2)
+    USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_PTR, C_NULL_PTR, C_ASSOCIATED
+    use oct_commons
+    implicit none
+    integer, dimension(1:nvector)                                :: get_index_clean
+    type(hash_table),                                 intent(in) :: htable
+    integer(kind = 8) , dimension(1:nvector, 0:ndim), intent(in) :: keys
+    integer                                                      :: n, n1, n2
+    ! Function to obtain up to nvector values from the hash key at once.
+    ! This subroutine is only valid if the simple hash is used
+    ! and for clean octs only
+    integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
+    integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys
+    integer :: i, idim
+
+    full_hash = 0
+    do idim = 0, ndim
+       do i = 1, n
+          full_hash(i) = full_hash(i) + keys(i, idim) * constants(idim)
+       end do
+    end do
+
+    do i = 1, n
+       ibucket(i) = IAND(full_hash(i), htable%bitmask) + 1
+    end do
+
+    do i = 1, n
+       get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
+    end do
+
+  end function get_index_clean
+  ! =============================================================================
+
+  ! =============================================================================
   subroutine hash_free(htable, key)
     implicit none
     type(hash_table),                    intent(inout) :: htable

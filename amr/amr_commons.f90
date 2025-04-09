@@ -21,6 +21,7 @@ module amr_commons
      logical::poisson =.false.   ! Poisson solver activated
      logical::hydro   =.false.   ! Hydro activated
      logical::rt      =.false.   ! RT activated
+     logical::part    =.false.   ! Dark matter particles activated
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
@@ -69,11 +70,19 @@ module amr_commons
           
      ! Poisson solver parameters
      real(dp)::epsilon=1.0D-4     ! Convergence criterion for Poisson solvers
-     integer ::gravity_type=0     ! Type of force computation
      real(dp),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
+     integer :: gravity_type=0     ! Type of force computation
      integer :: cic_levelmax=0     ! Maximum level for CIC dark matter interpolation
      integer :: cg_levelmin=999    ! Min level for CG solver
      logical :: fast_solver = .false. ! Fast solver with MPI pre-fetch (memory intensive)
+     integer :: part_mass_deposition_scheme=1     ! part mass deposition schemes (CIC 1, TSC 2, PCS 3)
+     integer :: part_force_interpolation_scheme=1 ! part force interpolation schemes (CIC 1, TSC 2, PCS 3)
+     integer :: star_mass_deposition_scheme=1     ! star mass deposition schemes
+     integer :: star_force_interpolation_scheme=1 ! star force interpolation schemes
+     integer :: sink_mass_deposition_scheme=1     ! sink mass deposition schemes
+     integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
+     integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
+     integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
 
      ! Movie parameters
      integer::levelmax_frame=0
@@ -306,8 +315,9 @@ module amr_commons
      real(dp)::sink_purity_threshold=-1
      real(dp)::sink_fraction_threshold=2d0
      real(dp)::sink_radius=-1
-     logical::form_sinks=.false.
-     logical::sink_refine=.true.
+     logical::sink_form=.false.
+     logical::sink_refine=.false.
+     logical::sink_dump=.false.
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
@@ -441,7 +451,7 @@ module amr_commons
      integer::nstep_coarse=0                       ! Coarse step
      integer::nstep_coarse_old=0                   ! Old coarse step
      integer::nflag,ncreate,nkill                  ! Refinements
-     
+
      real(dp)::ekin_tot=0.0D0                      ! Total kinetic energy
      real(dp)::eint_tot=0.0D0                      ! Total internal energy
      real(dp)::emag_tot=0.0D0                      ! Total magnetic energy
@@ -452,18 +462,18 @@ module amr_commons
      real(dp)::aexp_old=1.0D0                      ! Old expansion factor
      real(dp)::rho_tot=0.0D0                       ! Mean density in the box
      real(dp)::t=0.0D0                             ! Time variable
-     real(dp)::mass_tot=0.0D0                      ! Total gass mass
-     real(dp)::mass_tot_0=0.0D0                    ! Initial total gas mass
+     real(dp)::mass_tot=0.0D0                      ! Total mass in gas
      real(dp)::mass_star_tot=0.0D0                 ! Total mass in new stars
      real(dp)::mass_sink_tot=0.0D0                 ! Total mass in new sinks
      real(dp)::tot_nPhot=0.0D0, step_nPhot=0.0D0   ! RT bookkeeping
      real(dp)::step_nStar=0.0D0, step_mStar=0.0D0  ! RT bookkeeping
 
-     
+     real(dp)::mass_tot_0=0.0D0                    ! Initial total mass (gas+star+sink)
+
      ! Level related arrays
-     real(dp),dimension(1:MAXLEVEL)::dtold,dtnew ! Time step at each level
-     real(dp),dimension(1:MAXLEVEL)::rho_max     ! Maximum density at each level
-     integer,dimension(1:MAXLEVEL)::isubcycle    ! Current subcycling step at each level
+     real(dp),dimension(1:MAXLEVEL)::dtold,dtnew   ! Time step at each level
+     real(dp),dimension(1:MAXLEVEL)::rho_max       ! Maximum density at each level
+     integer,dimension(1:MAXLEVEL)::isubcycle      ! Current subcycling step at each level
 
      ! Only one process can write at a time in an I/O group
      integer::IOGROUPSIZE=0           ! Main snapshot
@@ -472,12 +482,12 @@ module amr_commons
      logical::withoutmkdir=.false.    ! If true mkdir should be done before the run
      logical::print_when_io=.false.   ! If true print when IO
      logical::synchro_when_io=.false. ! If true synchronize when IO
-     
+
      ! Lightcone parameters
      real(dp)::thetay_cone=12.5
      real(dp)::thetaz_cone=12.5
      real(dp)::zmax_cone=2.0
-     
+
      ! Cosmology parameters
      real(dp)::boxlen_ini     ! Box size in h-1 Mpc
      real(dp)::omega_b=0.0D0  ! Omega Baryon
@@ -549,7 +559,7 @@ module amr_commons
 !     type(oct),dimension(:),allocatable::grid
      type(oct),dimension(:),pointer::grid
      type(hash_table)::grid_dict   ! Oct hash table
-     
+
      ! Arrays for the MG solver
      type(hash_table)::mg_dict     ! MG hash table
      integer(kind=4),allocatable,dimension(:)::head_mg ! Starting index for each level
@@ -563,13 +573,13 @@ module amr_commons
      logical,allocatable,dimension(:)::locked
      integer,allocatable,dimension(:)::parent_cpu
      integer::free_cache,ncache,ifree
-     
+
      ! Software cache array for failed requests
      logical,allocatable,dimension(:)::occupied_null
      integer,allocatable,dimension(:)::lev_null
      integer,allocatable,dimension(:,:)::ckey_null
      integer::free_null,nnull
-     
+
      ! Peano-Hilbert key boundaries for cpu domains
      type(domain_t),pointer,dimension(:)::domain,domain_mg
      type(domain_t),pointer,dimension(:)::domain_hilbert
@@ -579,7 +589,7 @@ module amr_commons
      
      ! RT kernel workspace
      type(rt_workspace_t)::rt_w
-     
+
   end type mesh_t
 
   ! Peano-Hilbert key boundaries for cpu domains

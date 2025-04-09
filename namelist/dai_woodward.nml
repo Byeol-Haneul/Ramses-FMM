@@ -44,7 +44,6 @@ C_region=0.5641895835477563,0.5641895835477563
 /
 
 &OUTPUT_PARAMS
-noutput=1
 tout=0.2
 /
 

@@ -726,7 +726,9 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
      call mdl_get_reply(pst%s%mdl,rID,output_size)
   else
 #ifndef WITHOUTMPI
-     call balance_part(pst%s,pst%s%p,ilevel)
+     if(pst%s%r%part)then
+        call balance_part(pst%s,pst%s%p   ,ilevel)
+     endif
      if(pst%s%r%star)then
         call balance_part(pst%s,pst%s%star,ilevel)
      endif
@@ -910,7 +912,7 @@ subroutine balance_part(s,p,ilevel)
               ! Note that the right key is always larger than the left key
               ! so the difference is always positive unless it overflows
               diff_key=difference_keys(bound_key_right(1:nhilbert,icpu),bound_key_left(1:nhilbert,icpu))
-#if NHILBERT==1
+#if NHILBERT<=1
               unbalance=MAX(unbalance,ABS(diff_key(1)))
 #endif
 #if NHILBERT==2

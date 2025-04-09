@@ -14,7 +14,7 @@ subroutine m_input_part_ramses(pst)
   use amr_parameters, only: ndim,dp
   use ramses_commons, only: pst_t
   use output_amr_module, only: input_header
-  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
+  use pm_parameters, only: PART_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
@@ -30,36 +30,40 @@ subroutine m_input_part_ramses(pst)
   
   if(pst%s%r%verbose)write(*,*)'Entering input_part_ramses'
 
-  ! Read particle files header
-  file_head=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part_header.txt'
-  call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
-  write(*,'(" Output folder has ",I12," DM particles")')npart_tot_file
+  if(pst%s%r%part)then
 
-  ! Allocate local array
-  allocate(npart_file(0:ncpu_file))
+     ! Read particle files header
+     file_head=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part_header.txt'
+     call input_header(pst%s%r,pst%s%g,file_head,npart_tot_file,ncpu_file)
+     write(*,'(" Output folder has ",I12," DM particles")')npart_tot_file
 
-  ! Read number of particles in each file
-  npart_tot_check=0
-  npart_file(0)=DM_TYPE
-  do icpu=1,ncpu_file
-     file_part=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part.'//TRIM(ncharcpu)
-     ilun=10
-     open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
-     read(ilun,POS=5)npart_file(icpu)
-     npart_tot_check=npart_tot_check+npart_file(icpu)
-     close(ilun)
-  end do
-  if(npart_tot_check.NE.npart_tot_file)then
-     write(*,*)' Input file corrupted'
-     call mdl_abort(pst%s%mdl)
+     ! Allocate local array
+     allocate(npart_file(0:ncpu_file))
+
+     ! Read number of particles in each file
+     npart_tot_check=0
+     npart_file(0)=PART_TYPE
+     do icpu=1,ncpu_file
+        file_part=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part.'//TRIM(ncharcpu)
+        ilun=10
+        open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
+        read(ilun,POS=5)npart_file(icpu)
+        npart_tot_check=npart_tot_check+npart_file(icpu)
+        close(ilun)
+     end do
+     if(npart_tot_check.NE.npart_tot_file)then
+        write(*,*)' Input file corrupted'
+        call mdl_abort(pst%s%mdl)
+     endif
+
+     ! Call recursive slave routine
+     call r_input_part_ramses(pst,npart_file,ncpu_file+1,output,2)
+     write(*,*)'Total mass in dark matter=',output%mass
+
+     ! Deallocate local array
+     deallocate(npart_file)
+
   endif
-
-  ! Call recursive slave routine
-  call r_input_part_ramses(pst,npart_file,ncpu_file+1,output,2)
-  write(*,*)'Total mass in dark matter=',output%mass
-
-  ! Deallocate local array
-  deallocate(npart_file)
 
   if(pst%s%r%star)then
 
@@ -142,7 +146,7 @@ recursive subroutine r_input_part_ramses(pst,input_array,input_size,output,outpu
   use mdl_module
   use amr_parameters, only: dp
   use ramses_commons, only: pst_t
-  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
+  use pm_parameters, only: PART_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -152,7 +156,7 @@ recursive subroutine r_input_part_ramses(pst,input_array,input_size,output,outpu
   type(out_input_star_t)::output, next_output
 
   integer::rID
-  integer::part_type
+  integer::p_type
 
   !--------------------------------------------------------------------
   ! This routine is the recursive slave procedure to read and dispatch
@@ -165,14 +169,14 @@ recursive subroutine r_input_part_ramses(pst,input_array,input_size,output,outpu
      call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
      output%mass=output%mass+next_output%mass
   else
-     part_type=input_array(1)
-     if(part_type==DM_TYPE)then
+     p_type=input_array(1)
+     if(p_type==PART_TYPE)then
         call input_part_ramses(pst%s%r,pst%s%g,pst%s%p,input_size-1,input_array(2:input_size),output%mass)
      endif
-     if(part_type==STAR_TYPE)then
+     if(p_type==STAR_TYPE)then
         call input_part_ramses(pst%s%r,pst%s%g,pst%s%star,input_size-1,input_array(2:input_size),output%mass)
      endif
-     if(part_type==SINK_TYPE)then
+     if(p_type==SINK_TYPE)then
         call input_part_ramses(pst%s%r,pst%s%g,pst%s%sink,input_size-1,input_array(2:input_size),output%mass)
      endif
   endif
@@ -185,7 +189,7 @@ end subroutine r_input_part_ramses
 subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
   use amr_parameters, only: ndim,dp,i8b
   use amr_commons, only: run_t,global_t
-  use pm_parameters, only: DM_TYPE, STAR_TYPE, SINK_TYPE
+  use pm_parameters, only: PART_TYPE, STAR_TYPE, SINK_TYPE
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
@@ -255,7 +259,7 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
   endif
   
   ! Determine prefix based on particle type
-  if(p%type==DM_TYPE)prefix='part'
+  if(p%type==PART_TYPE)prefix='part'
   if(p%type==STAR_TYPE)prefix='star'
   if(p%type==SINK_TYPE)prefix='sink'
   
@@ -437,7 +441,7 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
 
      deallocate(isp8)
 
-     ! Close the PART file
+     ! Close the particle file
      close(10)
      ipart_old=ipart
 

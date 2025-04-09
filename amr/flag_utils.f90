@@ -495,9 +495,9 @@ subroutine sink_flag(s,p,ilevel)
                  pack=pack_fetch_flag, unpack=unpack_fetch_flag, &
                  init=init_flush_initflag, flush=pack_flush_initflag, combine=unpack_flush_initflag)
  
-   ! Loop over sink particles at current level
+   ! Loop over sink particles at current level and finer levels
    hash_nbor(0) = ilevel+1
-   do ipart = p%headp(ilevel), p%tailp(ilevel)
+   do ipart = p%headp(ilevel), p%npart
  
       ! Sink sphere center in units of current level Cartesian coordinates
       xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
