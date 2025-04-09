@@ -153,7 +153,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
         do idim=1,3
            do i=1,nleaf
               emag(i)=emag(i)+0.125d0*(m%grid(ind_leaf(i))%bold(ind,idim) &
-                   &              +m%grid(ind_leaf(i))%bold(ind,idim+3))**2
+                   &                  +m%grid(ind_leaf(i))%bold(ind,idim+3))**2
            end do
         end do
 #endif
@@ -285,8 +285,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
   emag=0.0d0
 #ifdef MHD
   do idim=1,3
-     emag(i)=emag(i) &
-            +0.125d0*(gridp%bold(icell,idim)+gridp%uold(icell,idim+3))**2
+     emag=emag+0.125d0*(gridp%bold(icell,idim)+gridp%bold(icell,idim+3))**2
   end do
 #endif
   ! Gas thermal pressure

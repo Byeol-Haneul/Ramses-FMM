@@ -4,7 +4,7 @@ You need an ascii file for the initial conditions. You can download one from
 tigress by executing in the command line the following script:
 ./utils/scripts/load_nfw_ic.sh
 To compile the code with MPI, type in the command line:
-make NDIM=3 MPI=1 UNITS=MERGER PATCH=../patch/init/halo HYDRO=1 GRAV=1 NVAR=7
+make NDIM=3 MPI=1 UNITS=MERGER PATCH=../patch/init/halo HYDRO=1 GRAV=1 NPSCAL=2
 
 &RUN_PARAMS
 cosmo=.false.

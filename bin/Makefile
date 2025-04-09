@@ -25,19 +25,17 @@ HDF5 = 0
 MPIF90 = mpif90
 SOLVER = hydro
 EXEC = ramses
-
+#############################################################################
 # Compute NVAR
 NHYDRO = 5
 NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
-
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
-DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNHILBERT=$(NHILBERT) \
-	-DNVAR=$(NVAR)
+DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR)
 ifneq ($(NION),0)
    DEFINES += -DNION=$(NION)
 endif
