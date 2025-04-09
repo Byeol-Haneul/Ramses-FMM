@@ -121,7 +121,7 @@ function worker_init(mdl) result(pst)
   use init_refine_restart_module, only: r_init_refine_restart
   use init_refine_ramses_module, only: r_init_refine_ramses
   use load_balance_module, only: r_load_balance,r_balance_part,r_broadcast_bound_key,r_collect_bound_key
-  use refine_utils, only: r_refine_fine
+  use refine_utils, only: r_refine_fine, r_clean_dirty
   use smooth_module, only: r_smooth_fine
   use input_hydro_condinit_module, only: r_input_hydro_condinit
   use input_hydro_grafic_module, only: r_input_hydro_grafic, r_input_refmap_grafic
@@ -234,6 +234,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_LOAD_BALANCE,           pst,C_FUNLOC(r_load_balance),1,0,"load_balance")
   call mdl_add_service(pst%s%mdl,MDL_BALANCE_PART,           pst,C_FUNLOC(r_balance_part),0,0,"balance_part")
   call mdl_add_service(pst%s%mdl,MDL_REFINE_FINE,            pst,C_FUNLOC(r_refine_fine),1,2,"refine_fine")
+  call mdl_add_service(pst%s%mdl,MDL_CLEAN_DIRTY,            pst,C_FUNLOC(r_clean_dirty),1,0,"clean_dirty")
   call mdl_add_service(pst%s%mdl,MDL_SMOOTH_FINE,            pst,C_FUNLOC(r_smooth_fine),1,1,"smooth_fine")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_CONDINIT,   pst,C_FUNLOC(r_input_hydro_condinit),1,0,"input_hydro_condinit")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_HYDRO_GRAFIC,     pst,C_FUNLOC(r_input_hydro_grafic),0,0,"input_hydro_grafic")

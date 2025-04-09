@@ -53,6 +53,9 @@ subroutine m_refine_fine(pst,ilevel)
   ! Load balance all levels across cpus
   call m_load_balance(pst,ilevel)
 
+  ! Find clean and dirty octs
+  call r_clean_dirty(pst,ilevel,1)
+
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
      call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),2)
@@ -862,6 +865,97 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   end associate
 
 end subroutine make_new_oct
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_clean_dirty(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_DIRTY,pst%iUpper+1,input_size,0,ilevel)
+     call r_clean_dirty(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call clean_dirty(pst%s,ilevel)
+  endif
+
+end subroutine r_clean_dirty
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine clean_dirty(s,ilevel)
+  use amr_parameters, only: ndim,twotondim,nhilbert,dp
+  use ramses_commons, only: ramses_t
+  use hilbert
+  use hash
+  implicit none
+  type(ramses_t)::s
+  integer::ilevel
+  !-------------------------------------------------
+  ! This routine identifies clean and dirty octs for
+  ! optimization purposes. Dirty octs require MPI or
+  ! inter-level communications. Clean octs have all
+  ! their 26 neighbors around them.
+  !-------------------------------------------------
+  integer::ioct,ilev,i1,j1,k1
+  logical::clean
+
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  !---------------------
+  ! Clean and dirty octs
+  !---------------------
+  do ilev=ilevel+1,r%nlevelmax
+     m%head_clean(ilev)=m%head_clean(ilev-1)+m%noct_clean(ilev-1)
+     m%head_dirty(ilev)=m%head_dirty(ilev-1)+m%noct_dirty(ilev-1)
+     m%noct_clean(ilev)=0
+     m%noct_dirty(ilev)=0
+     hash_key(0)=ilev
+     do ioct=m%head(ilev),m%tail(ilev)
+        clean=.true.
+#if NDIM>2
+        do k1=-1,1
+        hash_key(3)=m%grid(ioct)%ckey(3)+k1
+#endif
+#if NDIM>1
+        do j1=-1,1
+        hash_key(2)=m%grid(ioct)%ckey(2)+j1
+#endif
+        do i1=-1,1
+           hash_key(1)=m%grid(ioct)%ckey(1)+i1
+           clean=clean.and.hash_is_clean(m%grid_dict,hash_key)
+        end do
+#if NDIM>1
+        end do
+#endif
+#if NDIM>2
+        end do
+#endif
+        if(clean)then
+           m%indx_clean(m%head_clean(ilev)+m%noct_clean(ilev))=ioct
+           m%noct_clean(ilev)=m%noct_clean(ilev)+1
+        else
+           m%indx_dirty(m%head_dirty(ilev)+m%noct_dirty(ilev))=ioct
+           m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
+        endif
+     end do
+  end do
+
+  end associate
+
+end subroutine clean_dirty
 !###############################################################
 !###############################################################
 !###############################################################

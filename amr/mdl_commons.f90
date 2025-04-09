@@ -37,6 +37,7 @@ module mdl_parameters
      enumerator::MDL_LOAD_BALANCE
      enumerator::MDL_BALANCE_PART
      enumerator::MDL_REFINE_FINE
+     enumerator::MDL_CLEAN_DIRTY
      enumerator::MDL_SMOOTH_FINE
      enumerator::MDL_INPUT_HYDRO_CONDINIT
      enumerator::MDL_INPUT_HYDRO_GRAFIC

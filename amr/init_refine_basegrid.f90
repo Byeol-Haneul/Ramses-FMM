@@ -215,7 +215,7 @@ subroutine init_refine_basegrid(s,ilevel)
   use amr_parameters, only: nhilbert,ndim,twotondim
   use ramses_commons, only: ramses_t
   use hilbert
-  use hash, only: hash_setp
+  use hash, only: hash_setp, hash_is_clean
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -223,7 +223,8 @@ subroutine init_refine_basegrid(s,ilevel)
   ! This routine builds a fully refined Cartesian grid
   ! at level ilevel. Always starts at levelmin.
   !-------------------------------------------------------
-  integer::i,igrid,ioct,ilev,istart
+  logical::clean
+  integer::i,igrid,ioct,ilev,istart,i1,j1,k1
   integer(kind=8)::ikey
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
@@ -310,7 +311,44 @@ subroutine init_refine_basegrid(s,ilevel)
         endif
      end do
   end do
-  
+
+  !---------------------
+  ! Clean and dirty octs
+  !---------------------
+  m%head_clean(ilev)=1
+  m%head_dirty(ilev)=1
+  m%noct_clean(ilev)=0
+  m%noct_dirty(ilev)=0
+  hash_key(0)=ilev
+  do ioct=m%head(ilev),m%tail(ilev)
+     clean=.true.
+#if NDIM>2
+     do k1=-1,1
+     hash_key(3)=m%grid(ioct)%ckey(3)+k1
+#endif
+#if NDIM>1
+     do j1=-1,1
+     hash_key(2)=m%grid(ioct)%ckey(2)+j1
+#endif
+     do i1=-1,1
+        hash_key(1)=m%grid(ioct)%ckey(1)+i1
+        clean=clean.and.hash_is_clean(m%grid_dict,hash_key)
+     end do
+#if NDIM>1
+     end do
+#endif
+#if NDIM>2
+     end do
+#endif
+     if(clean)then
+        m%indx_clean(m%head_clean(ilev)+m%noct_clean(ilev))=ioct
+        m%noct_clean(ilev)=m%noct_clean(ilev)+1
+     else
+        m%indx_dirty(m%head_dirty(ilev)+m%noct_dirty(ilev))=ioct
+        m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
+     endif
+  end do
+
   end associate
 
 end subroutine init_refine_basegrid
