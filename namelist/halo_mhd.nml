@@ -75,7 +75,6 @@ m_star=1
 
 &FEEDBACK_PARAMS
 mechanical_feedback=.true.
-thermal_feedback=.true.
 /
 
 &REFINE_PARAMS
