@@ -68,8 +68,8 @@ endif
 ifneq ($(INIT),)
    DEFINES += -DINIT=$(INIT)
 endif
-ifneq ($(UNIT),)
-   DEFINES += -DUNITS=$(UNIT)
+ifneq ($(UNITS),)
+   DEFINES += -DUNITS=$(UNITS)
 endif
 #############################################################################
 # GNU compiler (gfortran)
