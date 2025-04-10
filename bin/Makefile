@@ -23,7 +23,6 @@ PATCH =
 DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
-SOLVER = hydro
 EXEC = ramses
 #############################################################################
 # Compute NVAR
@@ -152,7 +151,7 @@ endif
 LIBS += $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):$(GPU_PATH):../$(SOLVER):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
+VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
 #############################################################################
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \

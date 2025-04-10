@@ -47,7 +47,6 @@ tout=0.05,0.1,0.15,0.2
 gamma=1.4
 courant_factor=0.8
 slope_type=2
-scheme='muscl'
 riemann='hllc'
 /
 

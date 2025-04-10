@@ -1,8 +1,7 @@
 ! ---------------------------------------------------------------
 !  UNSPLIT     Unsplit second order Godunov integrator for
-!              polytropic gas dynamics using either
-!              MUSCL-HANCOCK scheme or Collela's PLMDE scheme
-!              with various slope limiters.
+!              polytropic gas dynamics using the famous
+!              MUSCL-HANCOCK scheme with various slope limiters.
 !
 !  inputs/outputs
 !  uin         => (const)  input state

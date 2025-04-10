@@ -32,7 +32,6 @@ tend = 5.6
 &HYDRO_PARAMS
 gamma=1.6666667
 courant_factor=0.8
-scheme='muscl'
 slope_type=1
 riemann='hllc'
 /
