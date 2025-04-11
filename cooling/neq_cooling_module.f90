@@ -291,9 +291,11 @@ contains
     real(kind=8),dimension(nrtgrp):: dustSc, kAbs_loc, kSc_loc
     real(kind=8),dimension(nrtgrp,nion)::signc
     real(kind=8):: rt_c_fraction, rt_c_cgs
+    real(kind=8):: TR, one_over_C_v, E_rad, dE_T
+    real(kind=8):: G0, eff_peh, cdex
+    real(kind=8):: fluxMag, mom_fact
 #endif
-    real(kind=8):: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
-    real(kind=8):: G0, eff_peh, cdex, ncr
+    real(kind=8):: rho, ncr
     logical:: newAtomicCons=.true.
     !-----------------------------------------------------------------------
     associate(ixHI=>r%ixHi,ixHII=>r%ixHII,ixHeII=>r%ixHeII,ixHeIII=>r%ixHeIII)
@@ -303,7 +305,6 @@ contains
     rt_c_fraction = r%rt_c_fraction(ilevel)
     rt_c_cgs = tables%rt_c_cgs(ilevel)
 #endif
-
     dt_ok=.false.
     nHe=0.25*nH(icell)*r%Y_He/r%X_H       ! Helium number density
     ! U contains the original values, dU the updated ones
@@ -430,7 +431,7 @@ contains
        endif
 
        dmom(1:ndim)=0d0
-       do igroup=1,nrtgrp  ! ----------------- Do the update of N and F
+       do igroup=1,nrtgrp     ! ----------------- Do the update of N and F
           dNp(igroup)= MAX(smallNp,                                      &
                         (ddt(icell)*(recRad(igroup)+dNpdt(igroup,icell)) &
                                     +dNp(igroup))                        &
@@ -1304,8 +1305,7 @@ FUNCTION getMu(r, xion, Tmu)
   if(r%isHe) xHeII=xion(r%ixHeII)
   if(r%isHe) xHeIII=xion(r%ixHeIII)
   getMu = 1./(r%X_H*(0.5+0.5*xHI+1.5*xHII) + 0.25*r%Y_He*(1.+xHeII+2.*xHeIII))
-  if(r%is_kIR_T .or. r%is_mu_H2) &
-       getMu = getMu + exp(-1d0*(Tmu/r%Tmu_dissoc)**2) * (2.33-getMu)
+  if(r%is_mu_H2) getMu = getMu + exp(-1d0*(Tmu/r%Tmu_dissoc)**2) * (2.33-getMu)
 END FUNCTION getMu
 
 !************************************************************************
