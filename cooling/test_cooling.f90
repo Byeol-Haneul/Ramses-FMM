@@ -116,8 +116,8 @@ program test_cool
            end do
 
            ! Solve cooling over target time step for all densities
-           call neq_solve_cooling(r, tables, Tmu, xion, &
-                & nH, Zsolar, dtcool, nnH)
+           call neq_solve_cooling(r, tables, Tmu, xion, nH, Zsolar, &
+                & dtcool, nnH)
 
            ! Store results in data cube
            if(r%isH2)cells(1:nnH,k,j,i,r%ixHI+1) = xion(r%ixHI,1:nnH)

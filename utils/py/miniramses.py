@@ -118,7 +118,7 @@ def test_cool(filename):
                 axis[id,it].plot(np.log10(times),data[id,it,ix,:,2],color='g')
                 axis[id,it].plot(np.log10(times),data[id,it,ix,:,3],color='b')
 
-            axis[id,it].set_xlim([-3,3])
+            axis[id,it].set_xlim([-3.2,3.2])
             if it>0:
                 axis[id,it].set_yticklabels([])
             else:

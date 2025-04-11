@@ -90,11 +90,11 @@ END SUBROUTINE neq_set_model
 !!$END SUBROUTINE update_UVrates
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
+SUBROUTINE neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
 #ifdef RT
-     & Np, Fp, p_gas, dNpdt, dFpdt, &
+     & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
-     & nH, Zsolar, dt, nCell, ilevel)
+     & dt, nCell)
   ! Semi-implicitly solve for new temperature, ionization states,
   ! photon density/flux, and gas velocity in a number of cells.
   ! Parameters:
@@ -120,15 +120,16 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
   type(neq_cooling_t):: tables
   real(kind=8),dimension(1:nvector):: T2
   real(kind=8),dimension(1:nion, 1:nvector):: xion
+  real(kind=8),dimension(1:nvector):: nH, Zsolar
 #ifdef RT
   real(kind=8),dimension(1:ndim, 1:nvector):: p_gas
   real(kind=8),dimension(1:nrtgrp, 1:nvector):: Np, dNpdt
   real(kind=8),dimension(1:ndim, 1:nrtgrp, 1:nvector):: Fp, dFpdt
+  integer::ilevel
 #endif
-  real(kind=8),dimension(1:nvector):: nH, Zsolar
 !  logical,dimension(1:nvector):: c_switch
   real(kind=8)::dt
-  integer::ncell, ilevel
+  integer::ncell
   !--------------------------------------------------------
   real(kind=8),dimension(1:nvector):: tLeft, ddt
   logical:: dt_ok
@@ -213,9 +214,9 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, &
         if(loopcnt .gt. 100000) then
            call display_coolinfo(.true., loopcnt, i, dt-tleft(i), dt, ddt(i), nH(i), &
 #ifdef RT
-                &                Np(:,i), Fp(:,:,i), p_gas(:,i), dNp, dFp, dp_gas, &
+                &                Np(:,i), Fp(:,:,i), p_gas(:,i), dNp, dFp, dp_gas, ilevel, &
 #endif
-                &                T2(i), xion(:,i), dT2, dXion, code, ilevel)
+                &                T2(i), xion(:,i), dT2, dXion, code)
         endif
         if(.not. dt_ok) then
            ddt(i)=ddt(i)/2.                    ! Try again with smaller dt
@@ -289,18 +290,19 @@ contains
     real(kind=8),dimension(nrtgrp):: recRad, phAbs, phSc, dustAbs
     real(kind=8),dimension(nrtgrp):: dustSc, kAbs_loc, kSc_loc
     real(kind=8),dimension(nrtgrp,nion)::signc
+    real(kind=8):: rt_c_fraction, rt_c_cgs
 #endif
     real(kind=8):: rho, TR, one_over_C_v, E_rad, dE_T, fluxMag, mom_fact
-    real(kind=8):: G0, eff_peh, cdex, ncr, rt_c_fraction, rt_c_cgs
+    real(kind=8):: G0, eff_peh, cdex, ncr
     logical:: newAtomicCons=.true.
     !-----------------------------------------------------------------------
     associate(ixHI=>r%ixHi,ixHII=>r%ixHII,ixHeII=>r%ixHeII,ixHeIII=>r%ixHeIII)
 
 #ifdef RT
     signc=tables%signc(:,:,ilevel)
-#endif
     rt_c_fraction = r%rt_c_fraction(ilevel)
     rt_c_cgs = tables%rt_c_cgs(ilevel)
+#endif
 
     dt_ok=.false.
     nHe=0.25*nH(icell)*r%Y_He/r%X_H       ! Helium number density
@@ -802,9 +804,9 @@ contains
   !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
   SUBROUTINE display_coolinfo(stopRun, loopcnt, i, dtDone, dt, ddt, nH,    &
 #ifdef RT
-       &                      Np,  Fp,  p_gas, dNp, dFp, dp_gas,           &
+       &                      Np,  Fp,  p_gas, dNp, dFp, dp_gas,ilevel,    &
 #endif
-       &                      T2,  xion, dT2, dXion, code, ilevel)
+       &                      T2,  xion, dT2, dXion, code)
     ! Print cooling information to standard output, and maybe stop execution.
     !------------------------------------------------------------------------
     real(kind=8),dimension(nion):: xion, dXion
@@ -812,10 +814,11 @@ contains
     real(kind=8),dimension(nrtgrp):: Np, dNp
     real(kind=8),dimension(ndim, nrtgrp):: Fp, dFp
     real(kind=8),dimension(ndim):: p_gas, dp_gas
+    integer::ilevel
 #endif
     real(kind=8)::T2, dT2, dtDone, dt, ddt, nH
     logical::stopRun
-    integer::loopcnt,i, code, ilevel
+    integer::loopcnt,i, code
     !------------------------------------------------------------------------
     if(stopRun) write(*, 111) loopcnt
     if(.true.) then
@@ -1100,11 +1103,11 @@ SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
 
      nH(1) = nH_com/aexp**3
      T2(1) = T2(1)/aexp**2
-     call neq_solve_cooling(r, tables, T2, xion, &
+     call neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
 #ifdef RT
-          &         Np, Fp, p_gas, dNpdt, dFpdt, &
+          & Np, Fp, p_gas, dNpdt, dFpdt, r%levelmin, &
 #endif
-          & nH, Zsolar, dt_cool, 1, r%levelmin)
+          & dt_cool, 1)
      T2(1) = T2(1)*aexp**2
      aexp = aexp + daexp
      if (if_write_result) write(*,'(4(1pe10.3))')aexp,nH(1),T2_com*mu/aexp**2,n_spec(1)/nH(1)
