@@ -27,6 +27,12 @@ We describe the meaning and default values of the namelist variables in each of 
 
 [Cooling parameters](./cooling_params.md): Parameters controlling the cooling function used in the code.
 
+[Radiative transfer parameters](./rt_params.md): Parameters controlling the M1 radiation solver.
+
+[Radiation sources parameters](./rt_sources.md): Parameters controlling the sources of radiation for the M1 solver.
+
+[Radiation groups parameters](./rt_groups.md): Parameters controlling the radiation energy groups for the M1 solver.
+
 [Star formation parameters](./star_params.md): Parameters controlling the subgrid star formation model used in the code.
 
 [Clump finder parameters](./clump_params.md): Parameters controlling the clump finder.
