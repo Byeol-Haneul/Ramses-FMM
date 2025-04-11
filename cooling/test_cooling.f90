@@ -1,4 +1,17 @@
 program test_cool
+  !===============================================
+  ! This is the test cooling code to test the
+  ! RAMSES non-equilibrium chemsitry solver.
+  ! Compile in the bin/ folder using:
+  ! make NDIM=3 HYDRO=1 NION=3 test_cooling
+  ! Execute in the ramses/ folder using:
+  ! bin/test_cooling
+  ! Visualize using pyton following these steps:
+  ! import miniramses as ram
+  ! import matplotlib.pyplot as plt
+  ! ram.test_cool("onecell_cooling.bin")
+  ! plt.savefig("onecell_cooling.png")
+  !===============================================
   use constants
   use amr_parameters, only: dp, ndim, nvector, twotondim
   use hydro_parameters, only: nener, nion
