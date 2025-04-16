@@ -57,9 +57,9 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   real(kind=8)::macc_loc
   !==================================================================
   ! This is the RAMSES routine for sink (black hole) particle accretion.
-  ! For now, it is focused on a simple mass-weighted Bondi-Hoyle-Lyttleton accretion scheme
+  ! For now, it is focused on a simple Bondi-Hoyle-Lyttleton accretion scheme.
   ! The routine modifies hydro variables unew, as well as sink particle properties.
-  ! Written by Nicholas Choustikov (Feb 2025)
+  ! Written by Nicholas Choustikov (Apr 2025)
   !==================================================================
   ! Local variables
   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,factG ! Units
@@ -75,7 +75,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,j,k,ipart,icelln,ind,idim
   real(dp)::d,e,ethermal,r2_sink,v_bondi,cs_gas,cs,rho_gas,velocity
-  real(dp)::weight
+  real(dp)::weight,r_rel
   real(dp),dimension(1:ndim)::vv,v_rel,x_acc,p_acc,l_acc,vel_gas
   type(oct),pointer::gridn
   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,d_acc,m_gas,bondi_mass
@@ -85,7 +85,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
 #ifdef HYDRO
 #if NDIM==3
-
+  if(s%r%accretion_type==0)return
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   if(r%verbose)write(*,*)'Entering accrete_sink...'
@@ -104,12 +104,16 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   ! Bondi sonic constant
   ! NOTE: This is also computed in bondi_alpha...
   ! TODO: Check if this is a conflict
-  if(abs(r%gamma - 1).le.0.01)then
-     lambda = 0.25d0*exp(1.5d0)
-  else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
-     lambda = 0.25d0
+  if(r%use_bondi_lambda)then
+     if(abs(r%gamma - 1).le.0.01)then
+        lambda = 0.25d0*exp(1.5d0)
+     else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
+        lambda = 0.25d0
+     else
+        lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+     end if
   else
-     lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+     lambda = 1.0d0
   end if
 
   ! Mesh spacing in that level
@@ -127,14 +131,14 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
   ! Open Cache
   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
+  
   ! Open cache for array uold (fetch) and unew (flush)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
                 pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
                 init=init_flush_godunov, flush=pack_flush_godunov,&
                 combine=unpack_flush_godunov, bound=init_bound_refine)
-
+  
   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
   ! Begin loop over sink particles
   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -144,10 +148,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   xBHnei=0d0; ckeynei=0d0; vol=0d0
   macc_loc=0d0
   do ipart = p%headp(ilevel), p%tailp(ilevel)
-     
+     ! Skip young sinks if needed
+     if((g%t - p%tp(ipart)).lt.r%t_start_black_hole)then
+        write(*,*)'Skipping: ',ipart,p%tp(ipart),g%t - p%tp(ipart),r%t_start_black_hole
+        cycle
+     end if
+
      ! Black hole position
      xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
-
+     
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      ! Initialise B-spline interpolation
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -162,7 +171,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         write(*,*)'This is an unknown B-spline order'
         ckeynei = -1 ! To cause a seg-fault
      end if
-
+     
      ! Initialise sink information at zero
      rho_gas=0d0; vel_gas=0d0; cs_gas=0d0; m_gas=0d0; weighted_bondi=0d0; total_divergence=0d0
 
@@ -176,11 +185,12 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         ! Get neighbouring cell coordinates
         ! Note, periodic BCs for xnei are already enforced in sink_B_spline_weights_PCS etc.
         xnei(1:ndim) = xBHnei(1:ndim,j)
+        xrel(1:ndim) = xnei(1:ndim) - xcen(1:ndim)
 
         ! Get neighboring cell at current level
         hash_nbor(1:ndim)  = ckeynei(1:ndim,j)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
-
+        
         ! If missing then cycle
         if(.not.associated(gridn))cycle
 
@@ -195,15 +205,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         e                =     gridn%uold(icelln,5)
         ethermal         = (e - 0.5d0*d*sum(vv(:)**2)) / d
         cs               = sqrt(max(r%gamma*(r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0))
-
+        
         ! Add to average (weighted) information
         rho_gas          = rho_gas         + d          * weight
         vel_gas(1:ndim)  = vel_gas(1:ndim) + vv(1:ndim) * weight
         cs_gas           = cs_gas          + cs         * weight
         m_gas            = m_gas           + d          * weight * vol_loc
 
-        ! Compute local mass divergence for Bleuler+14 flux accretion
         if(r%accretion_type==2)then
+           ! Compute local mass divergence for Bleuler+14 flux accretion
            div_cell = 0
            do idim =1,ndim
               ! 'Right' value
@@ -217,7 +227,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               if(.not.associated(gridn))cycle
 
               ! Compute the 'Right' contribution
-              div_right = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/(2.0d0*dx_loc)
+              div_right = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/dx_loc
 
               ! 'Left' value
               ckey_div(1:ndim) = ckeynei(1:ndim,j)
@@ -230,7 +240,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               if(.not.associated(gridn))cycle
 
               ! Compute the 'Left' contribution
-              div_left = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/(2.0d0*dx_loc)
+              div_left = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/dx_loc
 
               ! Compute the 'Total' contribution
               div_cell = div_right - div_left
@@ -255,11 +265,13 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
            end if
            r2_sink     = (factG * bondi_mass / v_bondi**2)**2
            if(r%use_rho_inf)then
-              rho_inf = d / (bondi_alpha(0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+              !rho_inf = d / (bondi_alpha(dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0)) ! <<< This is the old approach, works fairly well but breaks down at high resolutions
+              r_rel = sqrt(sum(xrel(:)**2))*dx_loc
+              rho_inf = d / (bondi_alpha(r_rel/(r2_sink+tiny(0.0_dp))**0.5d0))
            else
               rho_inf = d
            end if
-           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi! * lambda
+           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
            weighted_bondi = weighted_bondi + dMBH_overdt*weight
         end if
      end do
@@ -269,76 +281,74 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
      !!! Compute BHL accretion rate
-     if(r%use_local_bondi_rate)then
-        dMBH_overdt = weighted_bondi
-     else
-        ! Bondi velocity
-        v_rel(1:ndim) = vel_gas(1:ndim) - p%vp(ipart,1:ndim)
-        if(r%bondi_use_vrel)then
-           velocity   = sum(v_rel(:)**2)
-           v_bondi    = sqrt(velocity + cs_gas**2)
+     if(r%accretion_type==1)then
+        if(r%use_local_bondi_rate)then
+           dMBH_overdt = weighted_bondi
         else
-           v_bondi    = cs_gas
+           ! Bondi velocity
+           v_rel(1:ndim) = vel_gas(1:ndim) - p%vp(ipart,1:ndim)
+           if(r%bondi_use_vrel)then
+              velocity   = sum(v_rel(:)**2)
+              v_bondi    = sqrt(velocity + cs_gas**2)
+           else
+              v_bondi    = cs_gas
+           end if
+
+           ! Bondi mass
+           if(r%bondi_use_gas_mass)then
+              bondi_mass = p%mp(ipart) + m_gas ! can add a check for m_gas > M_sink
+           else
+              bondi_mass = p%mp(ipart)
+           end if
+
+           ! Bondi radius
+           r2_sink     = (factG * bondi_mass / v_bondi**2)**2
+
+           ! Density at infinity (using extrapolation)
+           if(r%use_rho_inf)then
+              rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+           else
+              rho_inf = rho_gas
+           end if
+
+           ! Bondi-Hoyle-Lyttleton accretion rate
+           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
         end if
+        if(r%verbose_sink)write(*,*)'Bondi: ',dMBH_overdt
 
-        ! Bondi mass
-        if(r%bondi_use_gas_mass)then
-           bondi_mass = p%mp(ipart)! + m_gas ! can add a check for m_gas > M_sink
-        else
-           bondi_mass = p%mp(ipart)
-        end if
+        ! Free-fall timescale cap
+        !if(dx_loc .lt. sqrt(r2_sink)/4.0d0)then
+        !   t_ff = sqrt((3.0d0*pi)/(32.0d0*factG*rho_gas))
+        !   dMdt_freefall = (m_gas * dble(nBHnei)) / t_ff
+        !   if(r%verbose_sink)then
+        !      write(*,*)'Freefall: ',dMBH_overdt, dMdt_freefall, dx_loc / sqrt(r2_sink), (rho_gas * vol_loc * dble(nBHnei)) / t_ff, (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3/2)) / t_ff
+        !   end if
+        !   dMBH_overdt = min(dMBH_overdt, dMdt_freefall)
+        !end if
 
-        ! Bondi radius
-        r2_sink     = (factG * bondi_mass / v_bondi**2)**2
-
-        ! Density at infinity (using extrapolation)
-        if(r%use_rho_inf)then
-           rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
-        else
-           rho_inf = rho_gas
-        end if
-
-        ! Bondi-Hoyle-Lyttleton accretion rate
-        dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi! * lambda
-     end if
-     if(r%accretion_type==1.and.r%verbose_sink)write(*,*)'Bondi',dMBH_overdt
-
-     if(r%accretion_type==2)then
-        write(*,*)'Divergence: ',total_divergence, -1.0*total_divergence*vol_loc, dMBH_overdt
+     !!! Compute flux accretion rate
+     else if(r%accretion_type==2)then
+        write(*,*)'Divergence: ',total_divergence, -1.0*total_divergence*vol_loc*dble(nBHnei)
         ! Use Divergence of the flow as your accretion rate
-        dMBH_overdt = -1.0*total_divergence*vol_loc
-
-        ! TODO: Add some checks based on the resolution
-        ! When sonic radius is not resolved, use the Bondi rate...
+        dMBH_overdt = -1.0*total_divergence*vol_loc*dble(nBHnei)
      end if
 
-     ! Eddington accretion rate, which introduces an optional cap
-     dMEd_overdt = 4.0d0 * pi * factG_in_cgs * p%mp(ipart) * mH / (0.1d0 * sigma_T * c_cgs) * scale_t
-     !if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
-
+     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+     ! Limit overall accretion rate
+     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      !!! Add accretion limiters across the entire accretion region
      ! (this preserves the scheme we are using, as compared to cell-specific limiters)
 
-     ! limiting total accreted mass to 25% of the weighted mass of the accretion region
+     ! Eddington accretion rate, which introduces an optional cap
+     dMEd_overdt = 4.0d0 * pi * factG_in_cgs * p%mp(ipart) * mH / (0.1d0 * sigma_T * c_cgs) * scale_t
+     if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
+
+     ! limiting total accreted mass to 75% of the weighted mass of the accretion region (c.f. Beckmann+2018)
      !if(r%verbose_sink)then
-     !   write(*,*)'Correction: ',dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
+     !   write(*,*)'Correction: ',dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
      !end if
-     !dMBH_overdt = min(dMBH_overdt, 0.25d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
+     !dMBH_overdt = min(dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
 
-     ! TODO: Another option is to limit the accretion rate by
-     !dMBH_overdt = min(dMBH_overdt, dMBH_overdt * rho_min / rho_gas) 
-
-     ! Limit the accretion rate based on the free-fall timescale
-     t_ff = sqrt((3.0d0*pi)/(32.0d0*factG*rho_gas))
-     !if(dx_loc <= sqrt(r2_sink))then ! I think there should be a prefactor here...
-     dMdt_freefall = (rho_gas * vol_loc * dble(nBHnei)) / t_ff
-     !else
-     !dMdt_freefall = (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3/2)) / t_ff
-     !end if
-     if(r%verbose_sink)then
-        write(*,*)'Freefall: ',dMBH_overdt, dMdt_freefall, dx_loc / sqrt(r2_sink), (rho_gas * vol_loc * dble(nBHnei)) / t_ff, (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3/2)) / t_ff
-     end if
-     if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMdt_freefall)
 
      if(r%verbose_sink)then
         write(*,*)'Run Properties: ',ilevel,p%levelp(ipart),dx_loc,vol_loc
@@ -387,9 +397,6 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
         ! Accrete from the cell
         gridn%unew(icelln,1)          = gridn%unew(icelln,1)          - d_acc
-        !do idim=1,ndim
-        !   gridn%unew(icelln,idim+1) = gridn%unew(icelln,idim+1) - d_acc * vv(idim)
-        !end do
         gridn%unew(icelln,2:(ndim+1)) = gridn%unew(icelln,2:(ndim+1)) - d_acc * vv(1:ndim)
         gridn%unew(icelln,5)          = gridn%unew(icelln,5)          - d_acc * e
         ! TODO: Add passive scalar accretion here
