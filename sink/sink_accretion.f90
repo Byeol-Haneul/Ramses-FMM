@@ -149,10 +149,10 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   macc_loc=0d0
   do ipart = p%headp(ilevel), p%tailp(ilevel)
      ! Skip young sinks if needed
-     if((g%t - p%tp(ipart)).lt.r%t_start_black_hole)then
-        write(*,*)'Skipping: ',ipart,p%tp(ipart),g%t - p%tp(ipart),r%t_start_black_hole
-        cycle
-     end if
+     !if((g%t - p%tp(ipart)).lt.r%t_start_black_hole)then
+     !   write(*,*)'Skipping: ',ipart,p%tp(ipart),g%t - p%tp(ipart),r%t_start_black_hole
+     !   cycle
+     !end if
 
      ! Black hole position
      xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
@@ -344,11 +344,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
 
      ! limiting total accreted mass to 75% of the weighted mass of the accretion region (c.f. Beckmann+2018)
-     !if(r%verbose_sink)then
-     !   write(*,*)'Correction: ',dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
-     !end if
-     !dMBH_overdt = min(dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
+     if(r%verbose_sink)then
+        write(*,*)'75% Correction: ',dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
+     end if
+     dMBH_overdt = min(dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
 
+     if(((g%t - p%tp(ipart)).lt.r%t_start_black_hole).and.r%t_start_black_hole.gt.0.0)then
+        write(*,*)'Dampening: ',ipart, g%t - p%tp(ipart),dMBH_overdt, exp(0.2d0*(g%t - r%t_start_black_hole)) * dMBH_overdt
+        dMBH_overdt = exp(g%t - p%tp(ipart) - r%t_start_black_hole) * dMBH_overdt
+     end if
 
      if(r%verbose_sink)then
         write(*,*)'Run Properties: ',ilevel,p%levelp(ipart),dx_loc,vol_loc
