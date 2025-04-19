@@ -290,7 +290,19 @@ subroutine file_descriptor_hydro(r,filename,write_bkp_file)
      ! Passive scalars
      ivar=ie+1+nener
      do while(ivar.le.nprim)
-        if(ivar.ge.r%iions.and.ivar.lt.r%iions+nion) then
+        if(r%entropy.and.ivar.eq.r%ientropy)then
+           write(ilun,'("variable #",I2,": entropy")')ivar
+           ivar=ivar+1
+        else if (r%metal.and.ivar.eq.r%imetal)then
+           write(ilun,'("variable #",I2,": metal_mass_fraction")')ivar
+           ivar=ivar+1
+        else if (r%turb.and.ivar.eq.r%iturb)then
+           write(ilun,'("variable #",I2,": turb_kinetic_energy")')ivar
+           ivar=ivar+1
+        else if (r%ivar_refine.gt.0.and.ivar.eq.r%ivar_refine)then
+           write(ilun,'("variable #",I2,": refinement_mask")')ivar
+           ivar=ivar+1
+        else if(ivar.ge.r%iions.and.ivar.lt.r%iions+nion) then
           ! Special cases for ionisation fractions
           if(r%ixHI.gt.0) then
             write(ilun,'("variable #",I2,": xHI")')ivar
