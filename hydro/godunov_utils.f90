@@ -224,7 +224,7 @@ subroutine cmpdt(r,uu,bb,gg,dx,dt)
   real(dp),dimension(1:6)::bb
   
   real(dp)::dtcell,smallp
-  real(dp)::b2,a2,c2,cfast2,ctot
+  real(dp)::b2,a2,c2,cfast2,ctot,grav
   integer::idim
 #if NENER>0
   integer::irad
@@ -304,16 +304,16 @@ subroutine cmpdt(r,uu,bb,gg,dx,dt)
   endif
 
   ! Compute gravity strength ratio
-  uu(1) = zero
+  grav = zero
   do idim = 1,ndim
-     uu(1) = uu(1)+abs(gg(idim))
+     grav = grav+abs(gg(idim))
   end do
-  uu(1) = uu(1)*dx/ctot**2
-  uu(1) = MAX(uu(1),0.0001_dp)
+  grav = grav*dx/ctot**2
+  grav = MAX(grav,0.0001_dp)
 
   ! Compute maximum time step for each authorized cell
   dt = r%courant_factor*dx/r%smallc
-  dtcell = dx/ctot*(sqrt(one+two*r%courant_factor*uu(1))-one)/uu(1)
+  dtcell = dx/ctot*(sqrt(one+two*r%courant_factor*grav)-one)/grav
   dt = min(dt,dtcell)
 
 end subroutine cmpdt
