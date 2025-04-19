@@ -504,7 +504,16 @@ contains
        return
     end if
 
-    ! Nothing found or there is a collision...
+    ! Walk linked list until key is found or to the end is reached
+    do while( htable%data(ibucket)%next_ibucket > 0)
+       ibucket = htable%data(ibucket)%next_ibucket
+       if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
+          hash_is_clean = .true.
+          return
+       end if
+    end do
+
+    ! Nothing found
     hash_is_clean = .false.
 
   end function hash_is_clean
@@ -524,7 +533,8 @@ contains
     ! and for clean octs only
     integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
     integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys
-    integer :: i, idim
+    logical          , dimension(1:nvector)         :: ok
+    integer :: i, idim, n_coll
 
     full_hash = 0
     do idim = 0, ndim
@@ -537,8 +547,34 @@ contains
        ibucket(i) = IAND(full_hash(i), htable%bitmask) + 1
     end do
 
+    ok = .true.
+    do idim = 0, ndim
+       do i = 1, n
+          ok(i) = ok(i) .and. (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))
+       end do
+    end do
+
+    n_coll = 0
     do i = 1, n
-       get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
+       if (ok(i)) then
+          get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
+       else
+          n_coll = n_coll + 1
+       endif
+    end do
+
+    if(n_coll == 0)return
+
+    do i = 1, n
+       if (.not. ok(i)) then
+          ! Walk linked list until key is found or to the end is reached
+          do while( htable%data(ibucket(i))%next_ibucket > 0)
+             ibucket(i) = htable%data(ibucket(i))%next_ibucket
+             if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
+                get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
+             end if
+          end do
+       end if
     end do
 
   end function get_index_clean
