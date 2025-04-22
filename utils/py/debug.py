@@ -57,17 +57,13 @@ if(backup):
     ux=c.u[1]/c.u[0]
     uy=c.u[2]/c.u[0]
     uz=c.u[3]/c.u[0]
-    bx=0.5*(c.u[7]+c.u[10])
-    by=0.5*(c.u[8]+c.u[11])
-    bz=0.5*(c.u[9]+c.u[12])
-    emag=0.5*(bx*bx+by*by+bz*bz)
 else:
     ux=c.u[1]
     uy=c.u[2]
     uz=c.u[3]
 if(backup):
     ekin=0.5*d*(ux*ux+uy*uy+uz*uz)
-    p=2/3*(c.u[4]-ekin-emag)
+    p=2/3*(c.u[4]-ekin)
 else:
     p=c.u[4]
 cs=np.sqrt(5/3*p/d)
