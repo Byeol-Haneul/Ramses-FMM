@@ -203,6 +203,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   end do
   ncreate=g%ncreate
 
+#ifdef HYDRO
   if(r%neq_chem .and. r%upload_equilibrium_x) then
      ! Enforce equilibrium on ionization states when derefining, to
      ! prevent unnatural values (e.g when merging hot and cold cells).
@@ -222,6 +223,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         end do
      end do
   endif
+#endif
 
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,

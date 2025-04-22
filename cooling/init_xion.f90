@@ -91,6 +91,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   pHI_rates(:)=0.0                   ! No UV background for the time being
 
+#ifdef HYDRO
   ! Loop over cells
   do ind=1,twotondim
      ! Loop over octs with vector sweeps
@@ -211,6 +212,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
      ! End loop over grid
   end do
   ! End loop over cells
+#endif
   end associate
 
 end subroutine init_xion
@@ -247,6 +249,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
   integer::irad
 #endif
 !-------------------------------------------------------------------------
+#ifdef HYDRO
   ! Conversion factor from user units to cgs units
   call units(s%r,s%g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
 #ifdef RT
@@ -308,7 +311,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
      xion(s%r%ixHeII) = ns(6)/(ns(5)+ns(6)+ns(7))          ! HeII fraction
      xion(s%r%ixHeIII) = ns(7)/(ns(5)+ns(6)+ns(7))         !HeIII fraction
   endif
-
+#endif
 end subroutine calc_equilibrium_xion
 
 end module init_xion_module
