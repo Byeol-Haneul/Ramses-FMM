@@ -39,6 +39,7 @@ end subroutine r_sink_accretion
 subroutine sink_accretion(s,p,ilevel,macc_loc)
   use constants
   use amr_parameters, only: ndim,twotondim,dp
+  use hydro_parameters, only: nvar, nener
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t,cross
@@ -91,6 +92,12 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   real(dp),dimension(1:ndim,1:twotondim)::xCIC
   integer,dimension(1:ndim,1:twotondim)::ckeyCIC
   real(dp),dimension(1:twotondim)::volCIC
+#ifdef MHD
+  real(dp)::bx,by,bz,emag
+#endif
+#if NENER>0
+  real(dp)::erad
+#endif
 
 
 #ifdef HYDRO
@@ -239,6 +246,26 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         vv(2)            =     gridn%uold(icelln,3)/d
         vv(3)            =     gridn%uold(icelln,4)/d
         e                =     gridn%uold(icelln,5)
+        
+        ! We need to remove all non-thermal energies as they are not accreted
+#ifdef MHD
+        ! Deal with MHD
+        bx=0.5d0*(gridn%bold(icelln,1) + gridn%bold(icelln,4))
+        by=0.5d0*(gridn%bold(icelln,2) + gridn%bold(icelln,5))
+        bz=0.5d0*(gridn%bold(icelln,3) + gridn%bold(icelln,6))
+        emag=0.5d0*(bx**2+by**2+bz**2)
+        e = e - emag
+#endif
+
+#if NENER>0
+        ! Deal with RT
+        erad = 0.0d0
+        do irad=1,nener
+           erad = erad + gridn%uold(icelln,5+irad)
+        end do
+        e = e - erad
+#endif
+
         ethermal         = (e - 0.5d0*d*sum(vv(:)**2)) / d
         cs               = sqrt(max(r%gamma*(r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0))
         
@@ -445,7 +472,25 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         d          = max(gridn%uold(icelln,1),r%smallr)
         vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
         e          =     gridn%uold(icelln,5)/d
+        
         ! We need to remove all non-thermal energies as they are not accreted
+#ifdef MHD
+        ! Deal with MHD
+        bx=0.5d0*(gridn%bold(icelln,1) + gridn%bold(icelln,4))
+        by=0.5d0*(gridn%bold(icelln,2) + gridn%bold(icelln,5))
+        bz=0.5d0*(gridn%bold(icelln,3) + gridn%bold(icelln,6))
+        emag=0.5d0*(bx**2+by**2+bz**2)
+        e = e - emag/d
+#endif
+
+#if NENER>0
+        ! Deal with RT
+        erad = 0.0d0
+        do irad=1,nener
+           erad = erad + gridn%uold(icelln,5+irad)
+        end do
+        e = e - erad/d
+#endif
 
         ! Get the weight for this cell based on the B-spline interpolation
         weight = vol(j)
@@ -467,9 +512,11 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         gridn%unew(icelln,5)          = gridn%unew(icelln,5)          - d_acc * e
 
         ! Accrete passive scalars
-        do ivar=6,nvar
+        do ivar=6+nener,nvar
            gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar) - d_acc*gridn%uold(icelln,ivar)/d
         end do
+        
+        !!! NOTE: We do not accrete non-thermal energies 
 
         !!! Accretion onto the black hole
         ! First, account for radiated/jet mass-energy
@@ -655,9 +702,8 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
               ! Get the local gas properties
               d          = max(gridn%uold(icelln,1),r%smallr)
-              vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
-              e          =     gridn%uold(icelln,5)/d
-              ! We need to remove all non-thermal energies as they are not accreted
+              !vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
+              !e          =     gridn%uold(icelln,5)/d
 
               ! Get the weight
               weight = volCIC(j) * weight_fb_nei(iBHnei)
