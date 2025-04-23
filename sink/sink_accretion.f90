@@ -56,7 +56,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   integer::ilevel
   real(kind=8)::macc_loc
   !==================================================================
-  ! This is the RAMSES routine for sink (black hole) particle accretion.
+  ! This is the RAMSES routine for sink (black hole) particle accretion and feedback.
   ! For now, it is focused on a simple Bondi-Hoyle-Lyttleton accretion scheme.
   ! The routine modifies hydro variables unew, as well as sink particle properties.
   ! Written by Nicholas Choustikov (Apr 2025)
@@ -74,7 +74,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
   integer,dimension(1:ndim)::ckey,ckey_nbor,ckey_div
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,j,k,ii,jj,kk,ipart,icelln,ind,idim,ivar
-  real(dp)::d,e,ethermal,r2_sink,v_bondi,cs_gas,cs,rho_gas,velocity
+  real(dp)::d,e,ethermal,r2_sink,v_bondi,cs_gas,cs,rho_gas,velocity,rho_gas_fb
   real(dp)::weight,r_rel
   real(dp),dimension(1:ndim)::vv,v_rel,x_acc,p_acc,l_acc,vel_gas
   type(oct),pointer::gridn
@@ -197,7 +197,6 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      ! Initialise B-spline interpolation
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-     ! TODO: In principle these weights can be computed once for every sink
      if      (r%sink_b_spline_order==2)then
         call sink_B_spline_weights_CIC(s,xcen(1:ndim),xBHnei,ckeynei,vol,ilevel)
      else if (r%sink_b_spline_order==3)then
@@ -468,7 +467,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         gridn%unew(icelln,5)          = gridn%unew(icelln,5)          - d_acc * e
 
         ! Accrete passive scalars
-        do ivar=r%imetal,nvar
+        do ivar=6,nvar
            gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar) - d_acc*gridn%uold(icelln,ivar)/d
         end do
 
@@ -512,7 +511,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
      end if
 
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-     ! AGN Feedback
+     ! AGN Feedback: Set everything up
      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      if(r%agn)then
         !!! Check if feedback should go off
@@ -521,6 +520,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
         ok_blast_agn = .true.
 
         fbk_mass_agn=0d0;fbk_mom_agn=0d0;fbk_ener_agn=0d0
+        rho_gas_fb=0d0
         if(ok_blast_agn)then
            !!! Set up the feedback
            ! Compute chi (fraction of Eddington)
@@ -554,6 +554,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
                        do idim=1,ndim
                           ! New CIC version
                           xBH_fb_nei(idim,iBHnei) = x_rel(idim) + xcen(idim)
+                          ckey_fb_nei(idim,iBHnei) = int(xBH_fb_nei(idim,iBHnei))
 
                           ! Old non-CIC version
                           ! Cartesian key
@@ -581,7 +582,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
                           call psy_function(acc_ratio.gt.r%agn_fbk_mode_switch_threshold,r_rel,local_weight)
                           weight_fb_nei(iBHnei) = local_weight
                           total_weight = total_weight + local_weight
+
+                          hash_nbor(1:ndim)  = ckey_fb_nei(1:ndim,iBHnei)
+                          call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+                          ! If missing cycle
+                          if(.not.associated(gridn))cycle
+                          d = max(gridn%uold(icelln,1), r%smallr)
+                          rho_gas_fb = rho_gas_fb + d*local_weight
                        end if
+
                     end if
                  end do ! End loop over ii
               end do ! End loop over jj
@@ -590,6 +599,12 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
            ! Normalise the weights
            if(total_weight==0.0d0)write(*,*)'PROBLEM: total weight 0'
            weight_fb_nei = weight_fb_nei / total_weight
+           rho_gas_fb = rho_gas_fb / total_weight
+           write(*,*)'density: ',rho_gas, rho_gas_fb
+
+           !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+           ! Compute feedback strength
+           !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
            ! Compute the global energy/momenta needed
            ! NOTE: All done here in terms of canonical units (i.e. mass, not density)
@@ -608,7 +623,9 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               fbk_ener_agn = r%epsilon_therm_jet*r%epsilon_rad*jet_mass/r%kin_mass_loading*(c_cgs/scale_v)**2!*(fbk_mass_agn)
            end if
 
-           !!! Do the Feedback
+           !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+           ! Administer the AGN Feedback
+           !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
            ! Loop over the affected cells
            write(*,*)'Begin loop over feedback cells...'
            do iBHnei=1,nBH_fb_nei
@@ -646,12 +663,11 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               weight = volCIC(j) * weight_fb_nei(iBHnei)
 
               !!! Proceed with the feedback
-              ! Question: Since this is a different region to acc, is it still fair to use rho_gas?
               if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
                  !!! Quasar mode (energy)
                  ! Get the local feedback quantities (accounting for weightings)
                  fbk_ener_agn_loc = fbk_ener_agn*weight
-                 if(r%agn_use_mass_weighting)fbk_ener_agn_loc=fbk_ener_agn_loc*(d/rho_gas)
+                 if(r%agn_use_mass_weighting)fbk_ener_agn_loc=fbk_ener_agn_loc*(d/rho_gas_fb)
 
                  ! Conversion to conserved quantities
                  fbk_ener_agn_loc = fbk_ener_agn_loc*d/vol_loc
@@ -660,17 +676,17 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
                  gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc  
               else
                  !!! Radio mode (mass,momentum,energy)
-                 ! Weightings
+                 ! Get the local feedback quantities (accounting for weightings)
                  fbk_mass_agn_loc = fbk_mass_agn * weight
                  fbk_mom_agn_loc  = fbk_mom_agn  * weight
                  fbk_ener_agn_loc = fbk_ener_agn * weight
                  if(r%agn_use_mass_weighting)then
-                    fbk_mass_agn_loc = fbk_mass_agn_loc * (d/rho_gas)
-                    fbk_mom_agn_loc  = fbk_mom_agn_loc  * (d/rho_gas)
-                    fbk_ener_agn_loc = fbk_ener_agn_loc * (d/rho_gas)
+                    fbk_mass_agn_loc = fbk_mass_agn_loc * (d/rho_gas_fb)
+                    fbk_mom_agn_loc  = fbk_mom_agn_loc  * (d/rho_gas_fb)
+                    fbk_ener_agn_loc = fbk_ener_agn_loc * (d/rho_gas_fb)
                  end if
 
-                 ! Conversion
+                 ! Conversion to conserved quantities
                  fbk_mass_agn_loc = fbk_mass_agn_loc/vol_loc
                  fbk_mom_agn_loc  = fbk_mom_agn_loc/vol_loc
                  fbk_ener_agn_loc = fbk_ener_agn_loc*(d+fbk_mass_agn_loc)/vol_loc
@@ -681,13 +697,15 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
                  gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc
               end if
 
-              ! TODO: Figure out the RT side of things
+              ! All of the RT stuff can come here.
               end do ! End loop over j
            end do ! End loop over nBH_fb_nei
         end if ! End if ok_blast_agn
      end if ! End if agn
 
-     !!! Save data
+     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+     ! Save sink data at a high cadence if needed
+     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
      if((r%output_sink_fine.gt.0).and.(mod(g%nstep, r%output_sink_fine)==0))then
         if(r%agn)then
            call dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
