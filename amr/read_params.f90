@@ -547,17 +547,26 @@ subroutine m_read_params(pst)
   write(*,*)'_/    _/   _/    _/   _/    _/    _/_/_/   _/_/_/_/    _/_/_/  '
   write(*,*)'                        Version 3.0                            '
   write(*,*)'       written by Romain Teyssier (Princeton University)       '
-  write(*,*)'        (c) CEA 1999-2007, UZH 2008-2021, PU 2022-2023         '
+  write(*,*)'        (c) CEA 1999-2007, UZH 2008-2021, PU 2022-2025         '
   write(*,*)' '
 
+  write(*,'(" Working with ndim = ",I1)')ndim
+#ifdef GRAV
+  write(*,'(" Using gravity solver")')
+#endif
+#ifdef HYDRO
+  write(*,'(" Using hydro solver with nvar = ",I2)')nvar
   ! Check nvar is not too small
-  write(*,'(" Using solver = hydro with nvar = ",I2," and ndim = ",I1)')nvar,ndim
   if(nvar<5)then
      write(*,*)'You should have: nvar>=5'
      write(*,'(" Please recompile with -DNVAR=5")')
      call mdl_abort(s%mdl)
   endif
-  
+#endif
+#ifdef RT
+  write(*,'(" Using radiation solver with nrtgrp = ",I2)')nrtgrp
+#endif
+
   ! Write information about git version
   call write_gitinfo
 
