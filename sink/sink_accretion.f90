@@ -667,7 +667,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
               
               fbk_mass_agn = jet_mass
               fbk_mom_agn  = jet_mass * jet_speed / scale_v
-              fbk_ener_agn = r%epsilon_therm_jet*r%epsilon_rad*jet_mass/r%kin_mass_loading*(c_cgs/scale_v)**2!*(fbk_mass_agn)
+              !fbk_ener_agn = r%epsilon_therm_jet*r%epsilon_rad*jet_mass/r%kin_mass_loading*(c_cgs/scale_v)**2!*(fbk_mass_agn)
            end if
 
            !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -702,7 +702,7 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
 
               ! Get the local gas properties
               d          = max(gridn%uold(icelln,1),r%smallr)
-              !vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
+              vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
               !e          =     gridn%uold(icelln,5)/d
 
               ! Get the weight
@@ -719,28 +719,31 @@ subroutine sink_accretion(s,p,ilevel,macc_loc)
                  fbk_ener_agn_loc = fbk_ener_agn_loc*d/vol_loc
 
                  ! Now we inject the actual feedback
-                 gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc  
+                 gridn%unew(icelln,5)          = gridn%unew(icelln,5)          + fbk_ener_agn_loc  
               else
                  !!! Radio mode (mass,momentum,energy)
                  ! Get the local feedback quantities (accounting for weightings)
                  fbk_mass_agn_loc = fbk_mass_agn * weight
                  fbk_mom_agn_loc  = fbk_mom_agn  * weight
-                 fbk_ener_agn_loc = fbk_ener_agn * weight
+                 !fbk_ener_agn_loc = fbk_ener_agn * weight
                  if(r%agn_use_mass_weighting)then
                     fbk_mass_agn_loc = fbk_mass_agn_loc * (d/rho_gas_fb)
                     fbk_mom_agn_loc  = fbk_mom_agn_loc  * (d/rho_gas_fb)
-                    fbk_ener_agn_loc = fbk_ener_agn_loc * (d/rho_gas_fb)
+                    !fbk_ener_agn_loc = fbk_ener_agn_loc * (d/rho_gas_fb)
                  end if
 
                  ! Conversion to conserved quantities
                  fbk_mass_agn_loc = fbk_mass_agn_loc/vol_loc
                  fbk_mom_agn_loc  = fbk_mom_agn_loc/vol_loc
-                 fbk_ener_agn_loc = fbk_ener_agn_loc*(d+fbk_mass_agn_loc)/vol_loc
+                 !fbk_ener_agn_loc = fbk_ener_agn_loc*(d+fbk_mass_agn_loc)/vol_loc
 
-                 ! Now we inject the actual feedback
+                 ! Now we inject the actual feedback (note, all energy is due to work done)
                  gridn%unew(icelln,1)          = gridn%unew(icelln,1)          + fbk_mass_agn_loc
-                 gridn%unew(icelln,2:(ndim+1)) = gridn%unew(icelln,2:(ndim+1)) + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
-                 gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc
+                 gridn%unew(icelln,2:4)        = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
+                 gridn%unew(icelln,5)          = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+
+                 ! If we want to have a separate reservoir
+                 !gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc
               end if
 
               ! All of the RT stuff can come here.
