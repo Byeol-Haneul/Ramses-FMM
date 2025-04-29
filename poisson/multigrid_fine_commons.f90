@@ -435,7 +435,7 @@ subroutine build_mg(s,ifinelevel)
      ! Gather twotondim neighboring father grids
      do inbor=1,twotondim
 
-#if !defined(WITHOUTMPI) && !defined(MDL2)
+#ifndef WITHOUTMPI
         ! If counter is good, check on incoming messages and perform actions
         if(mdl%mail_counter==32)then
            call check_mail(s,MPI_REQUEST_NULL,m%mg_dict)
@@ -470,7 +470,6 @@ subroutine build_mg(s,ifinelevel)
            in_rank = ge_keys(hk,m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
                 &    gt_keys(m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)),hk)
            if(in_rank)then
-!           if( m%domain_mg(icoarselevel)%in_rank(hk)) then
 
               ! Set grid index to a virtual grid in local main memory
               ichild=m%ifree
@@ -487,12 +486,9 @@ subroutine build_mg(s,ifinelevel)
               call hash_setp(m%mg_dict,hash_father,child)
 
            else
+
               ! Otherwise, determine parent processor and use the cache
               grid_cpu = m%domain_mg(icoarselevel)%get_rank(hk)
-#ifdef MDL2
-              call get_grid(s,hash_father,m%mg_dict,child,flush_cache=.true.,fetch_cache=.false.)
-#else
-              
               ! If next cache line is occupied, free it.
               if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%mg_dict)
               ! Set grid index to a virtual grid in local cache memory
@@ -501,6 +497,8 @@ subroutine build_mg(s,ifinelevel)
               m%occupied(m%free_cache)=.true.
               m%parent_cpu(m%free_cache)=grid_cpu
               m%dirty(m%free_cache)=.true.
+              m%ghost_parent_grid(m%free_cache)=0
+              m%ghost_parent_cell(m%free_cache)=0
               ! Go to next free cache line
               m%free_cache=m%free_cache+1
               m%ncache=m%ncache+1
@@ -508,9 +506,9 @@ subroutine build_mg(s,ifinelevel)
               if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
               ! Insert new grid in hash table
               call hash_setp(m%mg_dict,hash_father,child)
-#endif
+
            endif
-           
+
            child%lev=icoarselevel
            child%ckey(1:ndim)=cart_key(1:ndim)
            child%hkey(1:nhilbert)=hk(1:nhilbert)
@@ -528,7 +526,7 @@ subroutine build_mg(s,ifinelevel)
         end if
      end do
      ! End loop over coarse neighbors
-     
+
   end do
   ! End loop over grids
   

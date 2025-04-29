@@ -354,18 +354,7 @@ subroutine load_balance(s,ilevel)
 
         ! Check if grid sits outside future processor boundaries
         if (.not. m%domain(ilev)%in_rank(m%grid(ioct)%hkey)) then
-#ifdef MDL2
-           ! Free grid from hash table
-           hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-           call hash_free(m%grid_dict,hash_key)
-           ! Now construct a remote grid and clone the local
-           call get_grid(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
-           ! Copy all data to the new cache grid
-           child=m%grid(ioct)
-           ! Set grid level to zero to mark it as deleted
-           m%grid(ioct)%lev=0
-#else
-           
+
            ! Determine the future processor
            hk = m%grid(ioct)%hkey(1:nhilbert)
            grid_cpu = m%domain(ilev)%get_rank(hk)
@@ -377,6 +366,8 @@ subroutine load_balance(s,ilevel)
            m%occupied(m%free_cache)=.true.
            m%parent_cpu(m%free_cache)=grid_cpu
            m%dirty(m%free_cache)=.true.
+           m%ghost_parent_grid(m%free_cache)=0
+           m%ghost_parent_cell(m%free_cache)=0
            ! Go to next free cache line
            m%free_cache=m%free_cache+1
            m%ncache=m%ncache+1
@@ -391,10 +382,10 @@ subroutine load_balance(s,ilevel)
            ! Free grid from hash table
            hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
            call hash_free(m%grid_dict,hash_key)
-           
+
            ! Insert new cache grid in hash table
            call hash_setp(m%grid_dict,hash_key,m%grid(ichild))
-#endif
+
         endif
 
      end do

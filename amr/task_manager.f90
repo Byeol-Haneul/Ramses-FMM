@@ -6,11 +6,6 @@ subroutine mdl_init
   use call_back
   use amr_parameters, only: flen
   use mdl_module
-#ifdef MDL2
-  use ramses_commons, only: pst_t
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_NULL_PTR, C_FUNLOC
-  call mdl_launch( command_argument_count(), C_NULL_PTR, C_FUNLOC(master), C_FUNLOC(worker_init), C_FUNLOC(worker_done) )
-#else
   use ramses_commons, only: pst_t, ramses_t
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNLOC, C_SIZEOF
 #ifndef WITHOUTMPI
@@ -25,7 +20,6 @@ subroutine mdl_init
 
   allocate(mdl)
   call mdl_initialize(mdl)
-!  associate(mdl=>pst%s%mdl)
 
   pst = worker_init(mdl)
 
@@ -44,17 +38,8 @@ subroutine mdl_init
      call master(mdl,pst)
   endif
 
-! #ifndef WITHOUTMPI
-!   write(*,*)"MYID ",mdl_self(mdl)," TERMINATING AND EXITING"
-! #else
-!   write(*,*)"TERMINATING AND EXITING"
-! #endif  
-  
 #ifndef WITHOUTMPI
   call MPI_FINALIZE(info)
-#endif
-
-!  end associate
 #endif
 
 contains
@@ -62,7 +47,6 @@ contains
 !##############################################################
 !##############################################################
 !##############################################################
-#ifndef MDL2
 recursive subroutine r_clean_stop(pst)
   use mdl_module
   use ramses_commons, only: pst_t
@@ -79,7 +63,6 @@ recursive subroutine r_clean_stop(pst)
   endif
   
 end subroutine r_clean_stop
-#endif
 !##############################################################
 !##############################################################
 !##############################################################
@@ -91,9 +74,7 @@ subroutine master(mdl,pst)
   type(pst_t)::pst
   call r_set_add(pst,mdl_threads(pst%s%mdl),1)
   call adaptive_loop(pst)
-#ifndef MDL2
   call r_clean_stop(pst)
-#endif
 end subroutine master
 !##############################################################
 !##############################################################
@@ -174,23 +155,12 @@ function worker_init(mdl) result(pst)
   integer::dummy
   integer(kind=8)::dummy8
   integer::ncpu
-#ifdef MDL2
-  type(c_ptr),value::mdl
-  type(mdl_t),pointer::mdl_wrapper
-#else
   type(mdl_t),target::mdl
-#endif
   type(pst_t),allocatable::pst
 
   allocate(pst)
   allocate(pst%s)
-#ifdef MDL2
-  allocate(mdl_wrapper)
-  mdl_wrapper%mdl2 = mdl
-  pst%s%mdl => mdl_wrapper
-#else
   pst%s%mdl => mdl
-#endif
   ncpu = mdl_threads(pst%s%mdl)
 
   ! Store cpu info as a global variable
@@ -198,9 +168,7 @@ function worker_init(mdl) result(pst)
   pst%s%g%ncpu=mdl_threads(pst%s%mdl)
 
   ! Input and output sizes are in units of integer (single precision)
-#ifndef MDL2
   call mdl_add_service(pst%s%mdl,MDL_CLEAN_STOP,             pst,C_FUNLOC(r_clean_stop),0,0,"clean_stop")
-#endif
   call mdl_add_service(pst%s%mdl,MDL_SET_ADD,                pst,C_FUNLOC(r_set_add),storage_size(dummy)/32,0, "set_add")
   call mdl_add_service(pst%s%mdl,MDL_BCAST_PARAMS,           pst,C_FUNLOC(r_broadcast_params),storage_size(pst%s%r)/32,0,"broadcast_params")
   call mdl_add_service(pst%s%mdl,MDL_BCAST_GLOBAL,           pst,C_FUNLOC(r_broadcast_global),storage_size(pst%s%g)/32,0,"broadcast_global")
@@ -338,7 +306,6 @@ end subroutine mdl_init
 !##############################################################
 !##############################################################
 !##############################################################
-#ifndef MDL2
 subroutine mdl_wait(pst)
   use ramses_commons, only: pst_t
   use call_back, only: call_back_f, ramses_function
@@ -371,7 +338,7 @@ subroutine mdl_wait(pst)
   integer,dimension(1:32)::header
 
   associate(s=>pst%s,mdl=>pst%s%mdl)
-  
+
   ! Post the first RECV for a launch order
   call MPI_IRECV(mdl%mpi_input_buffer,mdl%MDL_INPUT_MAXSIZE+32,MPI_INTEGER,MPI_ANY_SOURCE,order_tag,MPI_COMM_WORLD,order_id,info)
 
@@ -379,7 +346,7 @@ subroutine mdl_wait(pst)
   do while(.NOT. stop_order_received)
 
      call MPI_Test(order_id,order_received,order_status,info)
-     
+
      if(order_received)then
 
         ! Execute call-back functions
@@ -388,32 +355,26 @@ subroutine mdl_wait(pst)
         if(function_id==0)stop_order_received=.true.
         ! Get source cpu
         source_cpu=order_status(MPI_SOURCE)
-        
+
         ! Allocate input and output arrays
         input_size=header(2)
         output_size=header(3)
-        
-!        if(input_size>0)then
-           allocate(input_array(1:input_size))
-           input_array(1:input_size)=mdl%mpi_input_buffer(33:32+input_size)
-!        endif
-        
-!        if(output_size>0)then
-           allocate(output_array(1:output_size))
-           output_array=0
-!        endif
-        
+
+        allocate(input_array(1:input_size))
+        input_array(1:input_size)=mdl%mpi_input_buffer(33:32+input_size)
+
+        allocate(output_array(1:output_size))
+        output_array=0
+
         ! Launch the corresponding call-back function
         call c_f_pointer(c_loc(input_array),ipar)
         call c_f_pointer(c_loc(output_array),opar)
         CALL C_F_PROCPOINTER (mdl%callback(function_id), mdl_function)
         call mdl_function(pst,ipar,input_size,opar,output_size)
-        
+
         ! Deallocate input array
-!        if(input_size>0)then
         deallocate(input_array)
-!        endif
-        
+
         ! Always send the output back to the source cpu (even if not allocated = handshake)
         if(output_size>0)then
            call MPI_ISEND(output_array,output_size,MPI_INTEGER,source_cpu,output_tag,MPI_COMM_WORLD,output_id,info)
@@ -424,10 +385,8 @@ subroutine mdl_wait(pst)
         call MPI_WAIT(output_id,output_status,info)
 
         ! Deallocate output array
-!        if(output_size>0)then
         deallocate(output_array)
-!        endif
-        
+
         ! Post a new RECV for the next launch order
         if(.NOT. stop_order_received)then
            call MPI_IRECV(mdl%mpi_input_buffer,mdl%MDL_INPUT_MAXSIZE+32,MPI_INTEGER,MPI_ANY_SOURCE,order_tag,MPI_COMM_WORLD,order_id,info)
@@ -621,7 +580,6 @@ subroutine kill_cache_clump(mdl)
 #endif
 
 end subroutine kill_cache_clump
-#endif
 !##############################################################
 !##############################################################
 !##############################################################
@@ -629,7 +587,6 @@ end subroutine kill_cache_clump
 subroutine check_mail(s,comm_id,hash_dict)
   USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
   use mdl_module
-#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -652,7 +609,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   ! It can be a flush message, and the routine
   ! unpacks it and combine it in the local memory.
   !
-  integer::i,info,iskip,ichild
+  integer::i,info,iskip,ichild,igrid
   integer::grid_cpu,peak_cpu,ilevel,itile,ntile_reply,nflush,ibuf
   integer::buffer_size_fetch_array,buffer_size_msg_array
   integer::buffer_size_fetch_array_clump,buffer_size_msg_array_clump
@@ -672,6 +629,7 @@ subroutine check_mail(s,comm_id,hash_dict)
   type(nbor),dimension(1:ntilemax)::grid
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_unbind_clump)::dummy_large_clump
+  logical::child_exist
 
 #ifndef WITHOUTMPI
 
@@ -715,8 +673,15 @@ subroutine check_mail(s,comm_id,hash_dict)
                  ibuf=mdl%ibuffer_fetch
               endif
 
+              child_exist=.true.
+              child_exist=child_exist.and.associated(child)
+              if(associated(child))then
+                 igrid=(loc(child)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
+                 child_exist=child_exist.and.igrid<=r%ngridmax
+              endif
+
               ! If grid does not exist, send a null reply
-              if(.not.ASSOCIATED(child))then
+              if(.not.child_exist)then
 
                  ! Store type corresponding to a null reply
                  iskip=1
@@ -957,7 +922,6 @@ subroutine check_mail(s,comm_id,hash_dict)
   end associate
 
 #endif
-#endif
 end subroutine check_mail
 !##############################################################
 !##############################################################
@@ -965,7 +929,6 @@ end subroutine check_mail
 !##############################################################
 subroutine destage(s,igrid,hash_dict)
   USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
-#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -1062,14 +1025,12 @@ subroutine destage(s,igrid,hash_dict)
 
   end associate
 
-#endif
 end subroutine destage
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
 subroutine destage_clump(s,local_peak_id,hash_dict)
-#ifndef MDL2
   use amr_parameters, only: ndim,nhilbert,twotondim
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
@@ -1164,7 +1125,6 @@ subroutine destage_clump(s,local_peak_id,hash_dict)
 
   end associate
 
-#endif
 end subroutine destage_clump
 !##############################################################
 !##############################################################

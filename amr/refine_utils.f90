@@ -675,7 +675,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-#if !defined(WITHOUTMPI) && !defined(MDL2)
+#ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
   if(mdl%mail_counter==32)then
      call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
@@ -712,28 +712,33 @@ subroutine make_new_oct(s,parent,icell,ilevel)
         write(*,*)'Increase ngridmax'
         call mdl_abort(mdl)
      end if
+
+     ! Insert new grid in hash table
      call hash_setp(m%grid_dict,hash_key,child)
-     ! Otherwise, determine parent processor and use the cache
+
+  ! Otherwise, determine parent processor and use the cache
   else
-#ifdef MDL2
-     call get_grid(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
-#else
      grid_cpu = m%domain(ilevel)%get_rank(hk)
+
      ! If next cache line is occupied, free it.
      if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
+
      ! Set grid index to a virtual grid in local cache memory
      child => m%grid(r%ngridmax+m%free_cache)
      m%occupied(m%free_cache)=.true.
      m%parent_cpu(m%free_cache)=grid_cpu
      m%dirty(m%free_cache)=.true.
+     m%ghost_parent_grid(m%free_cache)=0
+     m%ghost_parent_cell(m%free_cache)=0
+
      ! Go to next free cache line
      m%free_cache=m%free_cache+1
      m%ncache=m%ncache+1
      if(m%free_cache.GT.r%ncachemax)m%free_cache=1
      if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+
      ! Insert new grid in hash table
      call hash_setp(m%grid_dict,hash_key,child)
-#endif
   endif
 
   child%lev=ilevel
@@ -743,9 +748,6 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   child%flag1(1:twotondim)=0
   child%flag2(1:twotondim)=0
   child%superoct=1
-
-  ! Set status of parent cell to "refined"
-!  parent%refined(icell)=.true.
 
   !====================================
   ! Interplotate parent hydro variables
@@ -847,7 +849,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   do inbor=1,twondim
      call unlock_cache(s,grid_nbor(inbor)%p)
   end do
-  
+
 #endif
   
   !================================
@@ -953,6 +955,7 @@ subroutine clean_dirty(s,ilevel)
            m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
         endif
      end do
+!     write(*,*)ilev,m%noct_clean(ilev),m%noct_dirty(ilev)
   end do
 
   end associate

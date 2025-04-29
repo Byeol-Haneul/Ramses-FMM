@@ -120,7 +120,7 @@ contains
     real :: load_factor
 
     if (resize) then
-       load_factor = (htable%size - htable%nfree) * 1.0 / htable%size    
+       load_factor = real(htable%size - htable%nfree) / real(htable%size)
        if (load_factor > 0.6) then
           htable%size = htable%size * 2
           deallocate(htable%data, htable%next_free)
@@ -346,7 +346,7 @@ contains
     integer(kind=8) :: ibucket, full_hash
 
     if(present(absent)) absent = .false.
-    
+
     full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
@@ -355,7 +355,7 @@ contains
        if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
        return
     end if
-    
+
     ! Walk linked list until key is found or to the end is reached
     do while( htable%data(ibucket)%next_ibucket > 0)
        ibucket = htable%data(ibucket)%next_ibucket
@@ -532,7 +532,6 @@ contains
     ! This subroutine is only valid if the simple hash is used
     ! and for clean octs only
     integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
-    integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys
     logical          , dimension(1:nvector)         :: ok
     integer :: i, idim, n_coll
 
@@ -686,8 +685,8 @@ contains
     write(*,*)"Total collisions in hash table: "&
          ,htable%total_size - htable%size - htable%nfree_chain
     write(*,*)"Collision fraction: "&
-         ,(htable%total_size - htable%size - htable%nfree_chain)&
-         *1./(htable%total_size - htable%nfree - htable%nfree_chain + tiny(0.D0))
+         ,real(htable%total_size - htable%size - htable%nfree_chain)&
+         /(real(htable%total_size - htable%nfree - htable%nfree_chain) + tiny(0.E0))
     write(*,*)"Perfect collision fraction (assuming perfect randomness): "&
          ,(htable%total_size - htable%nfree - htable%nfree_chain - &
          htable%size * (1.d0 - ((htable%size - 1.d0)/(htable%size)) &
