@@ -33,7 +33,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use clump_finder_module, only: m_clump_finder
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use rt_step_module, only: m_rt_step
-  use sink_accretion_module, only: r_sink_accretion, out_accretion_t
+  use sink_evolution_module, only: r_sink_evolution, out_accretion_t
   
   implicit none
 
@@ -291,8 +291,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Sink accretion and feedback
   !----------------------------
   if(r%sink.and.(r%accretion_type>0))then
-     call m_timer(pst,'sink - accretion','start')
-     call r_sink_accretion(pst,ilevel,1,output_acc,2)
+                                    call m_timer(pst,'sink - accretion','start')
+     call r_sink_evolution(pst,ilevel,1,output_acc,2)
      if(output_acc%mass>0)then
         if(r%verbose_sink)write(*,*)'Total sink accreted mass:',output_acc%mass
         g%mass_sink_tot=g%mass_sink_tot+output_acc%mass

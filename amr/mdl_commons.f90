@@ -83,7 +83,7 @@ module mdl_parameters
      enumerator::MDL_TREE_CLUMP
      enumerator::MDL_THERMAL_FEEDBACK
      enumerator::MDL_MECHANICAL_FEEDBACK
-     enumerator::MDL_SINK_ACCRETION
+     enumerator::MDL_SINK_EVOLUTION
      enumerator::MDL_NEWDT_PART
      enumerator::MDL_BROADCAST_DT
      enumerator::MDL_MAKE_INITIAL_PHI

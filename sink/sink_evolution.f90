@@ -1,4 +1,4 @@
-module sink_accretion_module
+module sink_evolution_module
    use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
    type :: out_accretion_t
       real(kind=8)::mass
@@ -9,7 +9,7 @@ module sink_accretion_module
  !##############################################################################
  !##############################################################################
  !##############################################################################`
- recursive subroutine r_sink_accretion(pst,ilevel,input_size,output,output_size)
+ recursive subroutine r_sink_evolution(pst,ilevel,input_size,output,output_size)
    use mdl_module
    use ramses_commons, only: pst_t
    use mdl_parameters
@@ -23,15 +23,15 @@ module sink_accretion_module
    integer::rID
  
    if(pst%nLower>0)then
-      rID = mdl_send_request(pst%s%mdl,MDL_SINK_ACCRETION,pst%iUpper+1,input_size,output_size,ilevel)
-      call r_sink_accretion(pst%pLower,ilevel,input_size,output,output_size)
+      rID = mdl_send_request(pst%s%mdl,MDL_SINK_EVOLUTION,pst%iUpper+1,input_size,output_size,ilevel)
+      call r_sink_evolution(pst%pLower,ilevel,input_size,output,output_size)
       call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
       output%mass=output%mass+next_output%mass
    else
       call sink_evolution(pst%s,pst%s%sink,ilevel,output%mass)
    endif
 
-end subroutine r_sink_accretion
+end subroutine r_sink_evolution
 
 
 subroutine sink_evolution(s,p,ilevel,macc_loc)
@@ -61,9 +61,9 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    !==================================================================
    ! Local variables
    real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,factG ! Units
-   real(dp)::lambda,dx_loc,vol_loc
+   real(dp)::dx_loc,vol_loc
    integer::nBHnei,nBH_fb_nei
-   real(dp)::jet_angle,tan_theta
+   real(dp)::jet_angle,tan_theta,lambda_sonic
    integer::kk,jj,ii,ipart
    real(dp),dimension(1:ndim)::x_rel
    real(dp)::r_rel,dmacc_loc
@@ -92,14 +92,14 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    ! Bondi sonic constant
    if(r%use_bondi_lambda)then
       if(abs(r%gamma - 1).le.0.01)then
-         lambda = 0.25d0*exp(1.5d0)
+         lambda_sonic = 0.25d0*exp(1.5d0)
       else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
-         lambda = 0.25d0
+         lambda_sonic = 0.25d0
       else
-         lambda = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+         lambda_sonic = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
       end if
    else
-      lambda = 1.0d0
+      lambda_sonic = 1.0d0
    end if
 
    ! Mesh spacing in that level
@@ -112,6 +112,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
 
    ! Compute number of cells within B-spline region
    nBHnei = int(r%sink_b_spline_order**ndim)
+   !allocate(xBHnei(1:ndim,1:nBHnei),ckeynei(1:ndim,1:nBHnei),vol(1:nBHnei))
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Prepare for feedback
@@ -132,6 +133,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
             end do
          end do
       end do
+      !allocate(xBH_fb_nei(1:ndim,1:nBH_fb_nei),ckey_fb_nei(1:ndim,1:nBH_fb_nei),weight_fb_nei(1:nBH_fb_nei))
 
       ! Jet geometry safety net
       jet_angle = max(tiny(0.0d0),r%agn_jet_opening_angle)
@@ -162,7 +164,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink Accretion
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
       macc_loc = macc_loc + dmacc_loc
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -183,6 +185,9 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
 
    end do ! End loop over ipart
 
+   !deallocate(xBHnei,ckeynei,vol)
+   !if(agn)deallocate(xBH_fb_nei,ckey_fb_nei,weight_fb_nei)
+
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Close cache
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -198,7 +203,7 @@ end subroutine sink_evolution
 !##############################################################################
 !##############################################################################
 
-subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -219,7 +224,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    integer::ilevel,ipart,nBHnei
    real(dp)::scale_l,scale_t,scale_d,factG
    real(dp)::dx_loc,vol_loc
-   real(dp)::macc_loc,lambda
+   real(dp)::macc_loc,lambda_sonic
    real(dp)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
    !==================================================================
    ! This is the RAMSES routine for sink (black hole) particle accretion.
@@ -228,9 +233,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    ! Written by Nicholas Choustikov (Apr 2025)
    !==================================================================
    ! Local variables
-   real(dp),dimension(:,:),allocatable::xBHnei
-   integer,dimension(:,:),allocatable::ckeynei
-   real(dp),dimension(:),allocatable::vol
+   real(dp),dimension(1:ndim,1:nBHnei)::xBHnei
+   integer,dimension(1:ndim,1:nBHnei)::ckeynei
+   real(dp),dimension(1:nBHnei)::vol
    real(dp),dimension(1:ndim)::xcen,xnei,x_rel
    integer,dimension(1:ndim)::ckey,ckey_nbor,ckey_div
    integer(kind=8),dimension(0:ndim)::hash_nbor
@@ -247,8 +252,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    associate(r=>s%r,g=>s%g,m=>s%m)
 
    if(r%verbose)write(*,*)'Entering sink_accretion...'
-
-   allocate(xBHnei(1:ndim,1:nBHnei),ckeynei(1:ndim,1:nBHnei),vol(1:nBHnei))
 
    hash_nbor(0) = ilevel+1
    xBHnei=0d0; ckeynei=0d0; vol=0d0
@@ -390,7 +393,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
          else
             rho_inf = d
          end if
-         dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
+         dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda_sonic
          weighted_bondi = weighted_bondi + dMBH_overdt*weight
       end if
    end do
@@ -431,7 +434,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
          end if
 
          ! Bondi-Hoyle-Lyttleton accretion rate
-         dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda
+         dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda_sonic
       end if
       if(r%verbose_sink)write(*,*)'Bondi: ',dMBH_overdt
 
@@ -613,8 +616,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       write(*,*)'Accreted properties:',ipart,m_acc/g%dtnew(ilevel),sqrt(sum(x_acc(:)**2)),sqrt(sum(p_acc(:)**2)),sqrt(sum(l_acc(:)**2))
    end if
 
-   deallocate(xBHnei,ckeynei,vol)
-
    end associate
 
 contains
@@ -697,9 +698,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    !==================================================================
    ! Local variables
    real(dp)::rr,x,y,z,rrad
-   real(dp),dimension(:,:),allocatable::xBH_fb_nei
-   integer,dimension(:,:),allocatable::ckey_fb_nei
-   real(dp),dimension(:),allocatable::weight_fb_nei
+   real(dp),dimension(1:ndim,1:nBH_fb_nei)::xBH_fb_nei
+   integer,dimension(1:ndim,1:nBH_fb_nei)::ckey_fb_nei
+   real(dp),dimension(1:nBH_fb_nei)::weight_fb_nei
    real(dp),dimension(1:ndim)::xcen,xnei,x_rel
    integer(kind=8),dimension(0:ndim)::hash_nbor
    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar,iBHnei
@@ -720,14 +721,11 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    if(r%verbose)write(*,*)'Entering sink_accretion...'
    if(.not.r%agn)return
 
-   allocate(xBH_fb_nei(1:ndim,1:nBH_fb_nei),ckey_fb_nei(1:ndim,1:nBH_fb_nei),weight_fb_nei(1:nBH_fb_nei))
-
    hash_nbor(0) = ilevel+1
    xBH_fb_nei=0d0; ckey_fb_nei=0d0; weight_fb_nei=0d0
 
    ! Black hole position
    xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
-
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! AGN Feedback: Set everything up
@@ -912,10 +910,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
       end do ! End loop over nBH_fb_nei
    end if ! End if ok_blast_agn
 
-   deallocate(xBH_fb_nei,ckey_fb_nei,weight_fb_nei)
-
    end associate
-
 
 end subroutine AGN_feedback
 
@@ -1283,4 +1278,4 @@ end subroutine dump_sink_data_fine_AGN
 !##############################################################################
 !##############################################################################
 !##############################################################################
-end module sink_accretion_module
+end module sink_evolution_module
