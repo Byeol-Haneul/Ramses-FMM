@@ -426,7 +426,7 @@ subroutine m_read_params(pst)
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
        & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
   ! AMR grid basic parameters
-  namelist/amr_params/levelmin,levelmax,ngridmax,ngridtot &
+  namelist/amr_params/levelmin,levelmax,ngridmax,ncachemax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen,box_size &
        & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
   ! Poisson solver parameters

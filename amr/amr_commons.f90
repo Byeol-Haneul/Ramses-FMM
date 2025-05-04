@@ -583,7 +583,7 @@ module amr_commons
      integer,allocatable,dimension(:)::parent_cpu
      integer,allocatable,dimension(:)::ghost_parent_grid
      integer,allocatable,dimension(:)::ghost_parent_cell
-     integer::free_cache,ncache
+     integer::free_cache,ncache,nlocked,nlocked_max
 
      ! Software cache array for failed requests
      logical,allocatable,dimension(:)::occupied_null

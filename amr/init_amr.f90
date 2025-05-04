@@ -111,7 +111,7 @@ subroutine init_amr(mdl,r,g,m)
   m%occupied=.false.
   m%ghost_parent_grid=0
   m%ghost_parent_cell=0
-  m%free_cache=1; m%ncache=0
+  m%free_cache=1; m%ncache=0; m%nlocked=0; m%nlocked_max=0
 
   allocate(m%lev_null(1:r%ncachemax))
   allocate(m%ckey_null(1:ndim,1:r%ncachemax))

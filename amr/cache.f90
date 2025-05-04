@@ -86,6 +86,7 @@ subroutine close_cache(s,hash_dict)
      end do
      m%free_cache=1
      m%ncache=0
+     m%nlocked=0
      do icache=1,m%nnull
         if(m%occupied_null(icache))then
            hash_child(0)=m%lev_null(icache)

@@ -277,6 +277,10 @@ subroutine lock_cache(s,child)
   child_grid=(loc(child)-loc(s%m%grid(1)))/(loc(s%m%grid(2))-loc(s%m%grid(1)))+1
   if(child_grid>s%r%ngridmax)then
      icache=child_grid-s%r%ngridmax
+     if(.not.s%m%locked(icache))then
+        s%m%nlocked=s%m%nlocked+1
+        s%m%nlocked_max=max(s%m%nlocked,s%m%nlocked_max)
+     endif
      s%m%locked(icache)=.true.
   endif
 end subroutine lock_cache
@@ -301,6 +305,7 @@ subroutine unlock_cache(s,child)
   child_grid=(loc(child)-loc(s%m%grid(1)))/(loc(s%m%grid(2))-loc(s%m%grid(1)))+1
   if(child_grid>s%r%ngridmax)then
      icache=child_grid-s%r%ngridmax
+     if(s%m%locked(icache))s%m%nlocked=s%m%nlocked-1
      s%m%locked(icache)=.false.
   endif
 end subroutine unlock_cache
