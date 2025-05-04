@@ -115,7 +115,7 @@ subroutine m_output_timer(pst,write_file,filename)
      total = total + time(itimer)
   end do
   do itimer = 1,ntimer
-     if (time(itimer)/total > 0.0001) write (ilun,'(f12.3,4x,f6.1,4x,a24)') &
+     if (time(itimer)/total >= 0.001) write (ilun,'(f12.3,4x,f6.1,4x,a24)') &
           time(itimer), 100.*time(itimer)/total,labels(itimer)
   end do
   write (ilun,'(f12.3,4x,f6.1,4x,a)') total, 100., 'TOTAL'

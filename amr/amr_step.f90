@@ -66,7 +66,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! balance grids and particles.
   !------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
-     if(.not.r%static_mesh)then
+     if(.not.r%static_mesh.and.r%nlevelmax>r%levelmin)then
         call m_timer(pst,'refine','start')
         call m_refine_fine(pst,ilevel)
      endif
@@ -224,8 +224,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !---------------------------
   ! Recursive call to amr_step
   !---------------------------
-  call m_timer(pst,'recursive call','start')
   if(ilevel<r%nlevelmax)then
+     call m_timer(pst,'recursive call','start')
      if(m%noct_tot(ilevel+1)>0)then
         if(r%nsubcycle(ilevel)==2)then
            call m_amr_step(pst,ilevel+1,1,done)
@@ -246,9 +246,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
 
         ! Update time variable
+        call m_timer(pst,'update time','start')
         call m_update_time(pst,ilevel,done)
      end if
   else
+     call m_timer(pst,'update time','start')
      call m_update_time(pst,ilevel,done)
   end if
   if (done)return
@@ -330,8 +332,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
 
      ! Restriction operator
-     call m_timer(pst,'hydro - upload','start')
-     call m_upload_fine(pst,ilevel)
+     if(ilevel<r%nlevelmax)then
+        call m_timer(pst,'hydro - upload','start')
+        call m_upload_fine(pst,ilevel)
+     endif
   endif
 
   !------------------------
@@ -376,8 +380,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-----------------------
   ! Compute refinement map
   !-----------------------
-  call m_timer(pst,'flag','start')
-  if(.not.r%static_mesh)call m_flag_fine(pst,ilevel,icount)
+  if(ilevel<r%nlevelmax)then
+     call m_timer(pst,'flag','start')
+     if(.not.r%static_mesh)call m_flag_fine(pst,ilevel,icount)
+  endif
 
   !-------------------------------
   ! Update coarser level time-step
