@@ -20,7 +20,7 @@ recursive subroutine r_godunov_fine(pst,ilevel,input_size)
      call r_godunov_fine(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call godunov_fine(pst,pst%s,ilevel)
+     call godunov_fine(pst%s,ilevel)
   endif
 
 end subroutine r_godunov_fine
@@ -28,15 +28,13 @@ end subroutine r_godunov_fine
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine godunov_fine(pst,s,ilevel)
-  use ramses_commons, only: pst_t
+subroutine godunov_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
   use marshal, only: pack_fetch_refine,unpack_fetch_refine
   use boundaries, only: init_bound_refine
   implicit none
-  type(pst_t)::pst
   type(ramses_t)::s
   integer::ilevel
   type(msg_large_realdp)::dummy_large_realdp
@@ -62,13 +60,11 @@ subroutine godunov_fine(pst,s,ilevel)
   ! These could be octs at processor domain boundaries,
   ! octs at the physical domain boundaries, 
   ! or octs at coarse-fine boundaries.
-  write(*,*)"myid=",g%myid," level=",ilevel," clean=",m%noct_clean(ilevel)," dirty=",m%noct_dirty(ilevel)
+!  write(*,*)"myid=",g%myid," level=",ilevel," clean=",m%noct_clean(ilevel)," dirty=",m%noct_dirty(ilevel)
 
-  call m_timer(pst,'hydro - boundaries','start')
   call make_boundaries(s,ilevel)
 
   ! Loop over active grids by vector sweeps
-  call m_timer(pst,'hydro - solve','start')
   igrid=m%head(ilevel)
   do while(igrid.LE.m%tail(ilevel))
      SELECT CASE (m%grid(igrid)%superoct)
@@ -88,7 +84,7 @@ subroutine godunov_fine(pst,s,ilevel)
      igrid=igrid+m%grid(igrid)%superoct
   end do
 
-  write(*,*)"myid=",g%myid," level=",ilevel," locked max=",m%nlocked_max," ncache=",m%ncache," cache max=",r%ncachemax
+!  write(*,*)"myid=",g%myid," level=",ilevel," locked max=",m%nlocked_max," ncache=",m%ncache," cache max=",r%ncachemax
 
   call close_cache(s,m%grid_dict)
 
