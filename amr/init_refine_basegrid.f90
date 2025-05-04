@@ -348,7 +348,6 @@ subroutine init_refine_basegrid(s,ilevel)
         m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
      endif
   end do
-!  write(*,*)ilev,m%noct_clean(ilev),m%noct_dirty(ilev)
 
   end associate
 
