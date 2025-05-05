@@ -420,6 +420,9 @@ subroutine m_read_params(pst)
   integer::disc_model_type = 1 ! Which disc model to use for the sub-grid disc
   real(dp)::disc_viscosity = 0.01d0 ! Alpha viscosity parameter for Shakura & Sunyaev discs
   real(dp)::jet_mass_loading = 1.0d0 ! Jet mass loading factor (Bourne+2017;Talbot+2021)
+  real(dp)::disc_viscosity_zeta = 0.7 ! Ratio between the vertical and horizontal disc viscosities, see Lodato & Pringle 2007
+  real(dp)::max_internal_accretion_rate = -1 ! Cap for accretion rate within the sub-grid disc
+  real(dp)::bh_spin_max = 0.998 ! Maximum allowed Black Hole spin (Thorne+1974)
 #endif
 
   ! Gadget initial conditions parameters
@@ -552,6 +555,7 @@ subroutine m_read_params(pst)
        & ,agn_jet_opening_angle,manual_accretion_rate,agn_use_mass_weighting &
 #ifdef BZ_sink
        & ,fedd_ADAF,fedd_Edd,disc_model_type,disc_viscosity,jet_mass_loading &
+       & ,disc_viscosity_zeta,max_internal_accretion_rate,bh_spin_max &
 #endif 
        & ,eddington_floor
 
@@ -1360,6 +1364,9 @@ subroutine m_read_params(pst)
   s%r%disc_model_type = disc_model_type
   s%r%disc_viscosity = disc_viscosity
   s%r%jet_mass_loading = jet_mass_loading
+  s%r%disc_viscosity_zeta = disc_viscosity_zeta
+  s%r%max_internal_accretion_rate = max_internal_accretion_rate
+  s%r%bh_spin_max = bh_spin_max
 #endif
 
   s%r%ic_file=ic_file

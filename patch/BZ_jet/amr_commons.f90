@@ -349,13 +349,18 @@ module amr_commons
      logical::agn_use_mass_weighting = .false. ! Whether to use a mass-weighted feedback scheme
      real(dp)::eddington_floor = -1 ! Accretion rate floor below which nothing happens
 
+#ifdef BZ_sink
      ! BZ Sink parameters
      real(dp)::fedd_ADAF = 0.01d0 ! Transition at which the disc enters the ADAF stage
      real(dp)::fedd_Edd = 1.0d0 ! Transition at which the disc becomes super-Eddington
      integer::disc_model_type = 1 ! Which disc model to use for the sub-grid disc
      real(dp)::disc_viscosity = 0.01d0 ! Alpha viscosity parameter for Shakura & Sunyaev discs
      real(dp)::jet_mass_loading = 1.0d0 ! Jet mass loading factor (Bourne+2017;Talbot+2021)
-     
+     real(dp)::disc_viscosity_zeta = 0.7 ! Ratio between the vertical and horizontal disc viscosities, see Lodato & Pringle 2007
+     real(dp)::max_internal_accretion_rate = -1 ! Cap for accretion rate within the sub-grid disc
+     real(dp)::bh_spin_max = 0.998 ! Maximum allowed Black Hole spin (Thorne+1974)
+#endif
+
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format
      integer,dimension(1:6)::ic_skip_type=-1

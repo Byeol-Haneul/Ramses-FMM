@@ -173,7 +173,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Evolve the internal BH/Disc system
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-      call evolve_BH_disk_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc)
+      call evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,l_acc)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Prepare for Blandford-Znajek jet
@@ -320,6 +320,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    real(dp)::d_acc,m_gas,bondi_mass
    real(dp)::weighted_bondi,dMdt_freefall,t_ff
    real(dp)::div_cell,total_divergence,div_right,div_left
+   real(dp)::scale_m_msun,m_sg,J_D_mag
 
    if(s%r%accretion_type==0)return
    associate(r=>s%r,g=>s%g,m=>s%m)
@@ -575,6 +576,16 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       write(*,*)'Run Properties: ',ilevel,p%levelp(ipart),dx_loc,vol_loc
       write(*,*)'Sink properties:',rho_gas,rho_inf,cs_gas,v_bondi,r2_sink
    end if
+
+#ifdef BZ_sink
+   ! Cap the max possible disc mass to be less than the self-gravity mass (e.g. Fiacconi+18;Talbot+21;Kao+25)
+   ! NOTE: For now we assume the self-gravity mass computed using region c of the SSD, even if we use a multi-zone model.
+   scale_m_msun = scale_d * scale_l**3 / m_sun
+   J_D_mag = norm2(p%jD(ipart,1:ndim)) * scale_d * scale_l**5 / scale_t
+   m_sg = 19518.0d0 * (r%disc_viscosity/0.1)**(-5/63) * (p%mD(ipart) * scale_m_msun / 1d4)**(4/45) * (p%mBH(ipart) * scale_m_msun / 1d6)**(19/105) * (c_cgs * J_D_mag / (3 * factG_in_cgs * (p%mBH(ipart) * scale_d*scale_l**3)**2))
+
+   dMBH_overdt = min(dMBH_overdt, (1/g%dtnew(ilevel)) * (m_sg/scale_m_msun - p%mD(ipart)))
+#endif
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Accrete from local cells
