@@ -401,7 +401,7 @@ subroutine build_mg(s,ifinelevel)
   implicit none
   type(ramses_t)::s
   integer,intent(in)::ifinelevel
-  
+
   integer::icoarselevel,igrid,inbor,idim,ichild,grid_cpu,ind
   integer(kind=8),dimension(0:ndim)::hash_key,hash_father,hash_nbor
   integer(kind=4),dimension(1:ndim)::cart_key
@@ -419,19 +419,19 @@ subroutine build_mg(s,ifinelevel)
   icoarselevel=ifinelevel-1
   m%ifree=m%noct_used+1
   m%head_mg(icoarselevel)=m%ifree
-  
+
   hash_father(0)=icoarselevel
-  
+
   call open_cache(s,table=m%mg_dict,     data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain_mg, pack_size=storage_size(dummy_small_realdp)/32,&
                      pack=pack_fetch_phi,unpack=unpack_fetch_phi,&
                      flush=pack_flush_build_mg, combine=unpack_flush_build_mg)
-  
+
   ! Loop over fine grids
   do igrid=m%head_mg(ifinelevel),m%tail_mg(ifinelevel)
-     
+
      hash_key(1:ndim)=m%grid(igrid)%ckey(1:ndim)
-     
+
      ! Gather twotondim neighboring father grids
      do inbor=1,twotondim
 
@@ -458,14 +458,14 @@ subroutine build_mg(s,ifinelevel)
 
         ! If grid does not exist, create it in memory
         if(.not.associated(father))then
-           
+
            ! Compute Cartesian keys of new oct
            cart_key(1:ndim)=int(hash_father(1:ndim),kind=4)
-           
+
            ! Compute Hilbert keys of new octs
            ix(1:ndim)=cart_key(1:ndim)
            hk(1:nhilbert)=hilbert_key(ix,icoarselevel-1)
-           
+
            ! Check if grid sits inside processor boundaries
            in_rank = ge_keys(hk,m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)-1)).and. &
                 &    gt_keys(m%domain_mg(icoarselevel)%b(1:nhilbert,mdl_self(mdl)),hk)
