@@ -1,12 +1,227 @@
 module BZ_sink_module
-
+   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
 contains
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
 
-subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,l_acc)
+subroutine prepare_blandford_znajek_jet(s,p,ipart,f_edd,eta_rad,eta_BZ,scale_t,scale_v,edot_jet,pdot_jet,mdot_jet)
+   use constants
+   use amr_parameters, only: ndim,dp
+   use ramses_commons, only: ramses_t
+   use pm_commons, only: part_t
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ipart
+   real(dp)::f_edd,eta_rad,eta_BZ,scale_t,scale_v
+   real(dp)::edot_jet,pdot_jet,mdot_jet
+   !==================================================================
+   ! This is the RAMSES routine to compute all necessary feedback quantities
+   ! for the Blandford-Znajek jet. See Talbot+2021 for details.
+   ! Written by Nicholas Choustikov (May 2025)
+   !==================================================================
+   real(dp)::t_salp,m_dot_internal
+
+   ! Compute the internal accretion rate
+   t_salp = (sigma_T * c_cgs / (4.0d0 * pi * factG_in_cgs * mH)) * (eta_rad/0.1d0) / scale_t
+   m_dot_internal = f_edd * p%mBH(ipart) / t_salp
+
+   ! Compute the jet mass flux
+   mdot_jet = m_dot_internal * s%r%jet_mass_loading / (1.0d0 + s%r%jet_mass_loading)
+
+   ! Compute the jet energy flux
+   edot_jet = eta_BZ/(1.0d0 + s%r%jet_mass_loading) * m_dot_internal * (c_cgs/scale_v)**2
+
+   ! Compute the jet momentum flux
+   pdot_jet = sqrt(2.0d0*s%r%jet_mass_loading*eta_BZ)*(c_cgs/scale_v)/(1.0d0 + s%r%jet_mass_loading) * m_dot_internal
+
+end subroutine prepare_blandford_znajek_jet
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+
+subroutine launch_blandford_znajek_jet(s,p,ipart,ilevel,edot_jet,pdot_jet,mdot_jet,tan_theta,nBH_fb_nei,dx_loc,vol_loc)
+   use constants
+   use amr_parameters, only: ndim,twotondim,dp
+   use hydro_parameters, only: nvar, nener
+   use amr_commons, only: nbor,oct
+   use ramses_commons, only: ramses_t
+   use pm_commons, only: part_t,cross
+   use params_module
+   use nbors_utils
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ilevel,ipart,nBH_fb_nei
+   real(dp)::edot_jet,pdot_jet,mdot_jet,tan_theta
+   real(dp)::dx_loc,vol_loc
+   !==================================================================
+   ! This is the RAMSES routine which launches the Blandford-Znajek jet.
+   ! Written by Nicholas Choustikov (Apr 2025)
+   !==================================================================
+   real(dp)::rr,x,y,z,rrad
+   real(dp),dimension(1:ndim,1:nBH_fb_nei)::xBH_fb_nei
+   integer,dimension(1:ndim,1:nBH_fb_nei)::ckey_fb_nei
+   real(dp),dimension(1:nBH_fb_nei)::weight_fb_nei
+   real(dp),dimension(1:ndim)::xcen,xnei,x_rel
+   integer(kind=8),dimension(0:ndim)::hash_nbor
+   real(dp),dimension(1:ndim)::jet_direction
+   integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar,iBHnei
+   real(dp)::d,e,ethermal,r_rel,rho_gas_fb
+   real(dp),dimension(1:ndim)::vv
+   real(dp)::cone_dist,orth_dist,weight,local_weight,total_weight
+   type(oct),pointer::gridn
+   logical::ok
+   real(dp)::fbk_mass_agn_loc,fbk_mom_agn_loc,fbk_ener_agn_loc
+   real(dp),dimension(1:ndim,1:twotondim)::xCIC
+   integer,dimension(1:ndim,1:twotondim)::ckeyCIC
+   real(dp),dimension(1:twotondim)::volCIC
+
+   associate(r=>s%r,g=>s%g,m=>s%m)
+
+   if(r%verbose)write(*,*)'Entering launch_blandford_znajek_jet...'
+   if(.not.r%agn)return
+
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   ! AGN Feedback: Set everything up
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   
+   hash_nbor(0) = ilevel+1
+   xBH_fb_nei=0d0; ckey_fb_nei=0d0; weight_fb_nei=0d0
+
+   ! Black hole position
+   xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
+
+   ! Find the jet direction
+   jet_direction(1:ndim) = p%jp(ipart,1:ndim) / (norm2(p%jp(ipart,:)) + tiny(0.0_dp)) 
+
+   !!! Compute all of the necessary weights
+   ! Loop over all possible cells within the feedback region
+   iBHnei = 0
+   weight_fb_nei = 0d0; xBH_fb_nei = 0d0; total_weight=0d0
+   do kk=-r%agn_feedback_radius,r%agn_feedback_radius
+      x_rel(3)=dble(kk)
+      do jj=-r%agn_feedback_radius,r%agn_feedback_radius
+         x_rel(2)=dble(jj)
+         do ii=-r%agn_feedback_radius,r%agn_feedback_radius
+            x_rel(1)=dble(ii)
+            r_rel=norm2(x_rel(:))
+            if(r_rel.lt.dble(r%agn_feedback_radius))then
+               iBHnei = iBHnei + 1
+
+               !!! Collect all of the necessary positions and cartesian keys
+               do idim=1,ndim
+                  ! New CIC version
+                  xBH_fb_nei(idim,iBHnei) = x_rel(idim) + xcen(idim)
+                  ckey_fb_nei(idim,iBHnei) = int(xBH_fb_nei(idim,iBHnei))
+               end do
+
+               !!! Compute the weight of the cell in question
+               ok=.false.
+
+               cone_dist = dot_product(x_rel(1:ndim),jet_direction(1:ndim))
+               orth_dist = norm2((x_rel(1:ndim) - cone_dist*jet_direction(1:ndim)))
+               if(orth_dist.le.abs(cone_dist)*tan_theta)ok=.true.
+               if(r_rel.lt.1)ok=.false. ! Exclude the central cell in jet mode
+
+               if(ok)then
+                  call BZ_psy_function(r_rel,local_weight)
+                  weight_fb_nei(iBHnei) = local_weight
+                  total_weight = total_weight + local_weight
+
+                  hash_nbor(1:ndim)  = ckey_fb_nei(1:ndim,iBHnei)
+                  call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+                  ! If missing cycle
+                  if(.not.associated(gridn))cycle
+                  d = max(gridn%uold(icelln,1), r%smallr)
+                  rho_gas_fb = rho_gas_fb + d*local_weight
+               end if
+
+            end if
+         end do ! End loop over ii
+      end do ! End loop over jj
+   end do ! End loop over kk
+
+   ! Normalise the weights
+   if(total_weight==0.0d0)write(*,*)'PROBLEM: total weight 0'
+   weight_fb_nei = weight_fb_nei / total_weight
+   rho_gas_fb = rho_gas_fb / total_weight
+
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   ! Administer the AGN Feedback
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   ! Loop over the affected cells
+   do iBHnei=1,nBH_fb_nei
+      ! Skip cells with zero weight
+      if(weight_fb_nei(iBHnei)==0.0d0)cycle
+      call BZ_sink_B_spline_weights_CIC(s,xBH_fb_nei(1:ndim,iBHnei),xCIC,ckeyCIC,volCIC,ilevel)
+      
+      do j=1,twotondim              
+         ! Compute neighbouring cell coordinates
+         xnei(1:ndim) = xCIC(1:ndim,j) 
+         !xnei(1:ndim) = xBH_fb_nei(1:ndim,iBHnei) ! For now we use this, as otherwise some of the cells do overlap with the central cell
+         x_rel(1:ndim) = xnei(1:ndim) - xcen(1:ndim)
+
+         ! Periodic boundary conditions
+         do idim=1,ndim
+            ! Note, periodic BCs for xCIC are already enforced in sink_B_spline_weights_CIC
+            if(x_rel(idim)<-r%boxlen/2d0)x_rel(idim)=x_rel(idim)+r%boxlen
+            if(x_rel(idim)> r%boxlen/2d0)x_rel(idim)=x_rel(idim)-r%boxlen
+         end do
+         r_rel = norm2(x_rel(:))
+
+         ! Get neighboring cell at current level
+         hash_nbor(1:ndim)  = ckeyCIC(1:ndim,j)
+         call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+         ! If missing cycle
+         if(.not.associated(gridn))cycle
+
+         ! Get the local gas properties
+         d          = max(gridn%uold(icelln,1),r%smallr)
+         vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
+         !e          =     gridn%uold(icelln,5)/d
+
+         ! Get the weight
+         weight = volCIC(j) * weight_fb_nei(iBHnei)
+
+         !!! Do the feedback in this cell
+         ! Get the local feedback properties
+         fbk_mass_agn_loc = mdot_jet * g%dtnew(ilevel) * weight / vol_loc
+         fbk_mom_agn_loc  = pdot_jet * g%dtnew(ilevel) * weight / vol_loc
+         if(.not.r%BZ_momentum_conserving_jet)fbk_ener_agn_loc = edot_jet*g%dtnew(ilevel)*weight*(d+fbk_mass_agn_loc)/vol_loc
+   
+         ! Mass-weigh if required
+         if(r%agn_use_mass_weighting)then
+            fbk_mass_agn_loc = fbk_mass_agn_loc * (d/rho_gas_fb)
+            fbk_mom_agn_loc  = fbk_mom_agn_loc  * (d/rho_gas_fb)
+            if(.not.r%BZ_momentum_conserving_jet)fbk_ener_agn_loc=fbk_ener_agn_loc*(d/rho_gas_fb)
+         end if
+
+         ! Now we inject the actual feedback
+         gridn%unew(icelln,1)     = gridn%unew(icelln,1)   + fbk_mass_agn_loc
+         gridn%unew(icelln,2:4)   = gridn%unew(icelln,2:4) + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
+         if(r%BZ_momentum_conserving_jet)then
+            gridn%unew(icelln,5)  = gridn%unew(icelln,5)   + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+         else
+            gridn%unew(icelln,5)  = gridn%unew(icelln,5)   + fbk_ener_agn_loc
+         end if
+      end do ! End loop over j
+   end do ! End loop over iBHnei
+
+   end associate
+
+end subroutine launch_blandford_znajek_jet
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+
+subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,l_acc,f_edd,eta_rad,eta_BZ)
    use constants
    use amr_parameters, only: ndim,dp
    use ramses_commons, only: ramses_t
@@ -17,6 +232,7 @@ subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,
    type(part_t)::p
    integer::ipart,ilevel
    real(dp)::factG,scale_d,scale_l,scale_t,scale_v
+   real(dp)::f_edd,eta_rad,eta_BZ
    real(dp),dimension(1:ndim)::l_acc
    !==================================================================
    ! This is the RAMSES routine to drive the evolution of the internal
@@ -26,7 +242,6 @@ subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,
    ! Written by Nicholas Choustikov (May 2025)
    !==================================================================
    real(dp)::a,J_BH_mag,J_Disc_mag,grade
-   real(dp)::f_edd,eta_rad,eta_BZ
    real(dp)::scale_m_msun,m_acc,m_acc_interior
 
    associate(r=>s%r,g=>s%g,m=>s%m)
@@ -71,11 +286,6 @@ subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    call drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd,a,grade,m_acc,m_acc_interior,l_acc,eta_rad,eta_BZ,scale_t,scale_m_msun)
 
-   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-   ! While we are here, compute some base feedback quantities?
-   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-   !call 
-
    end associate
    
 end subroutine evolve_BH_disc_system
@@ -117,14 +327,6 @@ subroutine drive_mass_evolution(s,p,ipart,ilevel,f_edd,a,m_acc,eta_rad,eta_BZ,sc
    ! Do the corrector step of the integration
    p%mBH(ipart) = p%mBH(ipart) + ((1.0d0 - eta_rad - eta_BZ)/(1 + s%r%jet_mass_loading)) * (f_edd / t_salp) * 0.5d0 * (p%mBH(ipart) + m_bh_temp) * s%g%dtnew(ilevel)
    p%mD(ipart)  = p%mD(ipart)  - (f_edd/t_salp)*0.5d0*(p%mBH(ipart) + m_bh_temp)*s%g%dtnew(ilevel)
-
-   ! Compute the self-gravity mass of the disc
-   !call compute_self_gravity_mass(s,p,ipart,a,scale_m_msun,f_edd,eta_rad,self_gravity_mass)
-
-   ! Limit the disc to the self-gravity mass
-   ! NOTE: This is now done during the accretion step...
-   !surplus_mass  = max(p%mD(ipart)-self_gravity_mass, 0.0d0)
-   !p%mD(ipart)  = min(p%mD(ipart),self_gravity_mass)
 
    ! Update the dynamical mass of the particle (i.e. BH + Disc mass)
    p%mp(ipart)  = p%mBH(ipart) + p%mD(ipart)
@@ -172,7 +374,7 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
 
    ! Evolve the first step (ISM->Disc accretion + Disc->ISCO accretion + BH->Jet)
    J_BH_mag            = norm2(p%jp(ipart,1:ndim))
-   J_BH_hat(1:ndim)    = p%jp(ipart,1:ndim) / J_BH_mag
+   J_BH_hat(1:ndim)    = p%jp(ipart,1:ndim) / (J_BH_mag + tiny(0.0_dp)) 
 
    J_D_temp(1:ndim)    = p%jD(ipart,1:ndim) + l_acc(1:ndim) - (s%r%jet_mass_loading/(1.0d0 + s%r%jet_mass_loading))*L_ISCO*m_acc_interior*J_BH_hat(1:ndim)
    J_BH_temp(1:ndim)   = p%jp(ipart,1:ndim) - (1.0d0/(1.0d0 + s%r%jet_mass_loading)) * L_BZ * m_acc_interior * J_BH_hat(1:ndim)
@@ -193,10 +395,11 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
    ! Compute the critical accretion rate between the Diffusive (i.e. Bardeen-Peterson) and wave regimes (see Ingram & Motta 2019) following Kao+2025
    ! Here, we define it such that r_pt = r_warp. Also, we assume zeta = 1 (otherwise there's a factor of zeta^(-20/41))
    f_edd_crit = 16.0d0 * (s%r%disc_viscosity_zeta)**(-20/41) * (s%r%disc_viscosity/0.1d0)**(24/41) * (eta_rad/0.1) * (p%mBH(ipart) * scale_m_msun / 1d6)**(-4/41) * a**(20/41)
+   if(s%r%disc_model_type==1)f_edd_crit=huge(0.0_dp) ! We should never enter this regime for pure-thin-disc models
 
    ! Find the temporary Black Hole and Disc unit vectors
-   J_BH_temp_hat(1:ndim) = J_BH_temp(1:ndim) / norm2(J_BH_temp(1:ndim))
-   J_D_temp_hat(1:ndim)  = J_D_temp(1:ndim)  / norm2(J_D_temp(1:ndim))
+   J_BH_temp_hat(1:ndim) = J_BH_temp(1:ndim) / (norm2(J_BH_temp(1:ndim)) + tiny(0.0_dp)) 
+   J_D_temp_hat(1:ndim)  = J_D_temp(1:ndim)  / (norm2(J_D_temp(1:ndim))  + tiny(0.0_dp)) 
 
    ! Evolve the direction of the BH spin (Lense-Thirring etc.)
    if(f_edd>=f_edd_crit)then
@@ -219,22 +422,22 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
       t_acc = (sigma_T * c_cgs / (4.0d0 * pi * factG_in_cgs * mH)) * (eta_rad/0.1) / scale_t / f_edd
 
       ! Update the Black Hole spin direction
-      p%jp(ipart,1:ndim) = p%jp(ipart,1:ndim) - J_BH_mag_new*((J_trap/J_BH_mag_new)*omega_prec*cross(J_BH_temp_hat,J_D_temp_hat) + (2.0d0*pi/t_acc)*cross(J_BH_temp_hat,cross(J_BH_temp_hat,J_D_temp_hat)))
+      p%jp(ipart,1:ndim) = p%jp(ipart,1:ndim) - J_BH_mag_new*((J_trap/(J_BH_mag_new+tiny(0.0_dp)) )*omega_prec*cross(J_BH_temp_hat,J_D_temp_hat) + (2.0d0*pi/t_acc)*cross(J_BH_temp_hat,cross(J_BH_temp_hat,J_D_temp_hat)))
    else
       ! We are in the diffusive, first we check if the BH exceeds the warp mass
       if(p%mBH(ipart)>=m_bh_warp)then
          !!! We align instantly, following King+2005
          ! The Black Hole aligns along the total angular momentum
-         p%jp(ipart,1:ndim) = J_BH_mag_new/norm2(J_cons_temp) * J_cons_temp(1:ndim)
+         p%jp(ipart,1:ndim) = J_BH_mag_new/(norm2(J_cons_temp)+tiny(0.0_dp))  * J_cons_temp(1:ndim)
 
          ! Check how the disc should align, following King+2005
-         king_check = (dot_product(J_BH_temp_hat,J_D_temp_hat)>=-norm2(J_D_temp)/(2.0d0*J_BH_mag_new))
+         king_check = (dot_product(J_BH_temp_hat,J_D_temp_hat)>=-norm2(J_D_temp)/(2.0d0*(J_BH_mag_new + tiny(0.0_dp)) ))
 
          ! Align the disc as required
          if(king_check)then
-            p%jD(ipart,1:ndim) = norm2(J_D_temp)/norm2(J_cons_temp) * J_cons_temp(1:ndim)
+            p%jD(ipart,1:ndim) = norm2(J_D_temp)/(norm2(J_cons_temp)+tiny(0.0_dp))  * J_cons_temp(1:ndim)
          else
-            p%jD(ipart,1:ndim) = -norm2(J_D_temp)/norm2(J_cons_temp) * J_cons_temp(1:ndim)
+            p%jD(ipart,1:ndim) = -norm2(J_D_temp)/(norm2(J_cons_temp)+tiny(0.0_dp))  * J_cons_temp(1:ndim)
          end if
       else
          !!! We are in the Bardeen-Peterson 1975 configuration
@@ -330,10 +533,18 @@ subroutine compute_self_gravity_mass(s,p,ipart,a,scale_m_msun,f_edd,eta_rad,m_sg
    ! Written by Nicholas Choustikov (May 2025)
    !==================================================================
 
-   if(s%r%disc_model_type==1)then
-      call thin_disk_one_zone_sg_mass(s,p,ipart,a,scale_m_msun,f_edd,eta_rad,m_sg)
+   if(f_edd>=0)then
+      if(s%r%disc_model_type==1)then
+         call thin_disk_one_zone_sg_mass(s,p,ipart,a,scale_m_msun,f_edd,eta_rad,m_sg)
+      else
+         write(*,*)'Unknown internal accretion disk model used...'
+      end if
    else
-      write(*,*)'Unknown internal accretion disk model used...'
+      if(s%r%disc_model_type==1)then
+         call thin_disk_one_zone_sg_mass_no_fedd(s,p,ipart,scale_m_msun,m_sg)
+      else
+         write(*,*)'Unknown internal accretion disk model used...'
+      end if
    end if
 end subroutine compute_self_gravity_mass
 
@@ -360,6 +571,26 @@ subroutine thin_disk_one_zone_sg_mass(s,p,ipart,a,scale_m_msun,f_edd,eta_rad,m_s
    m_sg = 2.0d4 * (s%r%disc_viscosity/0.1)**(-1/45) * (p%mBH(ipart) * scale_m_msun / 1d6)**(34/45) * (f_edd/(eta_rad/0.1))**(4/45)
    
 end subroutine thin_disk_one_zone_sg_mass
+
+subroutine thin_disk_one_zone_sg_mass_no_fedd(s,p,ipart,scale_m_msun,m_sg)
+   use constants, only: c_cgs,factG_in_cgs,m_sun
+   use amr_parameters, only: dp,ndim
+   use ramses_commons, only: ramses_t
+   use pm_commons, only: part_t
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ipart
+   real(dp)::scale_m_msun,m_sg
+   !==================================================================
+   ! Disc self-gravity mass computation assuming outer solution (region c) of 
+   ! Shakura & Sunyaev 1973 solution. Here, we take the no-fedd approach.
+   ! Written by Nicholas Choustikov (May 2025)
+   !==================================================================
+   
+   m_sg = 19518.0d0 * (s%r%disc_viscosity/0.1)**(-5/63) * (p%mD(ipart) * scale_m_msun / 1d4)**(4/45) * (p%mBH(ipart) * scale_m_msun / 1d6)**(19/105) * (c_cgs * norm2(p%jD(ipart,1:ndim)) / (3 * factG_in_cgs * (p%mBH(ipart) * scale_m_msun*m_sun)**2))
+   
+end subroutine thin_disk_one_zone_sg_mass_no_fedd
 
 !##############################################################################
 !##############################################################################
@@ -412,6 +643,85 @@ subroutine BZ_efficiency(a,f_edd,fedd_ADAF,eta_BZ)
    transition = 1.0d0 - (1.0d0 + (fedd_ADAF/f_edd)**6)**(-1)
    eta_BZ = ((1.0d0 / (24.0d0 * pi**2)) * phi_BH**2 * omega_BH**2 * (1.0d0 + 1.38d0*omega_BH**2 - 9.2d0*omega_BH**4)) * (((f_edd/1.88d0)**(1.29d0) / (1.0d0 + (f_edd/1.88d0)**(1.29d0)))**2 + transition)
 end subroutine BZ_efficiency
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+
+subroutine BZ_sink_B_spline_weights_CIC(s,x,xnei,ckey,vol,ilevel)
+   use amr_parameters, only: ndim,dp,twotondim
+   use ramses_commons, only: ramses_t
+   implicit none
+   type(ramses_t)::s
+   real(dp),dimension(1:ndim)::x
+   real(dp),dimension(1:ndim,1:twotondim)::xnei
+   integer,dimension(1:ndim,1:twotondim)::ckey
+   real(dp),dimension(1:twotondim)::vol
+   integer::ilevel
+   !==================================================================
+   ! Simple routine to compute B-spline cells and weights for a given sink
+   ! Nicholas Choustikov
+   !==================================================================
+   integer::idim,j
+   integer,dimension(1:ndim)::ir,il
+   real(dp),dimension(1:ndim)::dr,dl
+
+   associate(r=>s%r,m=>s%m)
+
+   ! CIC at level ilevel (dr: right cloud boundary; dl: left cloud boundary)
+   do idim=1,ndim
+      dr(idim)=x(idim)+0.5D0
+      ir(idim)=int(dr(idim))
+      dr(idim)=dr(idim)-ir(idim)
+      dl(idim)=1.0D0-dr(idim)
+      il(idim)=ir(idim)-1
+   end do
+
+   ! Periodic boundary conditions
+   do idim=1,ndim
+      if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
+      if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+   enddo
+
+   ! Compute cloud volumes
+   vol = cic_weight(dl,dr)
+
+   ! Compute cartesian keys
+   ckey = cic_index(il,ir)
+
+   ! Compute neighbour positions
+   do j = 1,twotondim
+      do idim = 1,ndim
+         xnei(idim,j) = dble(ckey(idim,j)) + 0.5d0
+      end do
+   end do
+
+   end associate
+
+end subroutine BZ_sink_B_spline_weights_CIC
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+
+subroutine BZ_psy_function(r,psy)
+   use amr_commons
+   implicit none
+
+   real(dp)::r,psy
+   logical::mode
+
+   if(mode)then
+      !!! Quasar mode
+      psy = 1.0d0
+   else
+      !!! Radio mode
+      psy = 1.0d0
+   end if
+
+end subroutine BZ_psy_function
 
 !##############################################################################
 !##############################################################################

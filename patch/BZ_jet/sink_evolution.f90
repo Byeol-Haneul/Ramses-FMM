@@ -78,6 +78,8 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf
    real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc
    real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc
+   real(dp)::f_edd,eta_rad,eta_BZ
+   real(dp)::edot_jet,pdot_jet,mdot_jet
 
 #ifdef HYDRO
 #if NDIM==3
@@ -173,17 +175,17 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Evolve the internal BH/Disc system
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-      call evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,l_acc)
+      call evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,l_acc,f_edd,eta_rad,eta_BZ)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Prepare for Blandford-Znajek jet
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-      !call
+      call prepare_blandford_znajek_jet(s,p,ipart,f_edd,eta_rad,eta_BZ,scale_t,scale_v,edot_jet,pdot_jet,mdot_jet)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Launch Blandford-Znajek jet
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-      !call
+      call launch_blandford_znajek_jet(s,p,ipart,ilevel,edot_jet,pdot_jet,mdot_jet,tan_theta,nBH_fb_nei,dx_loc,vol_loc)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Prepare the AGN thermal/non-thermal SEDs
@@ -288,6 +290,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    use pm_commons, only: part_t,cross
    use params_module
    use nbors_utils
+#ifdef BZ_sink
+   use BZ_sink_module, only: compute_self_gravity_mass
+#endif
    implicit none
    type(ramses_t)::s
    type(part_t)::p
@@ -579,12 +584,10 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
 #ifdef BZ_sink
    ! Cap the max possible disc mass to be less than the self-gravity mass (e.g. Fiacconi+18;Talbot+21;Kao+25)
-   ! NOTE: For now we assume the self-gravity mass computed using region c of the SSD, even if we use a multi-zone model.
    scale_m_msun = scale_d * scale_l**3 / m_sun
-   J_D_mag = norm2(p%jD(ipart,1:ndim)) * scale_d * scale_l**5 / scale_t
-   m_sg = 19518.0d0 * (r%disc_viscosity/0.1)**(-5/63) * (p%mD(ipart) * scale_m_msun / 1d4)**(4/45) * (p%mBH(ipart) * scale_m_msun / 1d6)**(19/105) * (c_cgs * J_D_mag / (3 * factG_in_cgs * (p%mBH(ipart) * scale_d*scale_l**3)**2))
+   call compute_self_gravity_mass(s,p,ipart,-1.0d0,scale_m_msun,-1.0d0,0.0d0,m_sg)
 
-   dMBH_overdt = min(dMBH_overdt, (1/g%dtnew(ilevel)) * (m_sg/scale_m_msun - p%mD(ipart)))
+   dMBH_overdt = min(dMBH_overdt,(m_sg/scale_m_msun-p%mD(ipart))/g%dtnew(ilevel))
 #endif
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-

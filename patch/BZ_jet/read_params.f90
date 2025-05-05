@@ -423,6 +423,7 @@ subroutine m_read_params(pst)
   real(dp)::disc_viscosity_zeta = 0.7 ! Ratio between the vertical and horizontal disc viscosities, see Lodato & Pringle 2007
   real(dp)::max_internal_accretion_rate = -1 ! Cap for accretion rate within the sub-grid disc
   real(dp)::bh_spin_max = 0.998 ! Maximum allowed Black Hole spin (Thorne+1974)
+  logical::BZ_momentum_conserving_jet = .true. ! Whether the BZ jet should be kinetic energy or momentum conserving
 #endif
 
   ! Gadget initial conditions parameters
@@ -556,6 +557,7 @@ subroutine m_read_params(pst)
 #ifdef BZ_sink
        & ,fedd_ADAF,fedd_Edd,disc_model_type,disc_viscosity,jet_mass_loading &
        & ,disc_viscosity_zeta,max_internal_accretion_rate,bh_spin_max &
+       & ,BZ_momentum_conserving_jet &
 #endif 
        & ,eddington_floor
 
@@ -1367,6 +1369,7 @@ subroutine m_read_params(pst)
   s%r%disc_viscosity_zeta = disc_viscosity_zeta
   s%r%max_internal_accretion_rate = max_internal_accretion_rate
   s%r%bh_spin_max = bh_spin_max
+  s%r%BZ_momentum_conserving_jet = BZ_momentum_conserving_jet
 #endif
 
   s%r%ic_file=ic_file

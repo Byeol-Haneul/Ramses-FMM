@@ -359,6 +359,7 @@ module amr_commons
      real(dp)::disc_viscosity_zeta = 0.7 ! Ratio between the vertical and horizontal disc viscosities, see Lodato & Pringle 2007
      real(dp)::max_internal_accretion_rate = -1 ! Cap for accretion rate within the sub-grid disc
      real(dp)::bh_spin_max = 0.998 ! Maximum allowed Black Hole spin (Thorne+1974)
+     logical::BZ_momentum_conserving_jet = .true. ! Whether the BZ jet should be kinetic energy or momentum conserving
 #endif
 
      ! Gadget initial conditions parameters
