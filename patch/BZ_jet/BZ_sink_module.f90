@@ -728,6 +728,73 @@ end subroutine BZ_psy_function
 !##############################################################################
 !##############################################################################
 
+subroutine BZ_dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_overdt,dMEd_overdt,m_acc,f_edd,eta_rad,eta_BZ,edot_jet,pdot_jet,mdot_jet)
+   use constants
+   use amr_parameters, only: dp,ndim
+   use ramses_commons, only: ramses_t
+   use pm_commons, only: part_t
+   use mdl_module, only: mdl_mkdir
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ilevel,ipart
+   real(dp)::dMBH_overdt,dMEd_overdt,m_acc
+   real(dp)::f_edd,eta_rad,eta_BZ
+   real(dp)::edot_jet,pdot_jet,mdot_jet
+   real(dp)::scale_l,scale_t,scale_d
+   !==================================================================
+   ! Simple routine to dump sink data to a CSV on every fine time step
+   ! Nicholas Choustikov
+   !==================================================================
+   character(LEN=80)::filename
+   integer::id_sink_loc,unit
+   character(LEN=5)::nchar
+   logical::file_exist
+   real(dp)::a
+
+   associate(r=>s%r, g=>s%g, mdl=>s%mdl)
+
+   if(r%verbose_sink)write(*,*)'Entering output_sink_csv'
+
+   ! Computing extra units and constants
+   a = (c_cgs*scale_t/scale_l) * norm2(p%jp(ipart,1:ndim)) / (1.0d0 * p%mBH(ipart)**2)
+   
+   ! Check if the SINK file exists
+   filename=TRIM('SINK')
+   inquire(file=filename, exist=file_exist)
+   if(.not.file_exist)call mdl_mkdir(mdl,filename)
+
+   ! Get the filename for this sink
+   call title(p%idp(ipart),nchar)
+   filename=TRIM('SINK/sink_'//TRIM(nchar)//'.csv')
+
+   ! If this is a new sink, then we need to make the file associated with that sink
+   inquire(file=filename, exist=file_exist)
+   unit = 10 !+g%myid
+   if(.not.file_exist)then
+      if(r%verbose_sink)write(*,*)'Creating file: ',filename
+      open(unit=unit,file=filename,form='formatted')
+      write(unit,*)'nstep,time,dt,mass,MBH,MD,dMBH,dMEd,m_acc,f_edd,eta_rad,eta_BZ,edot_jet,pdot_jet,mdot_jet,'
+      close(unit)
+   end if
+   
+   ! Open the sink file
+   open(unit=unit,file=filename,form='formatted',status='unknown',position='append')
+
+   ! Write data to the sink file
+   write(unit,'(I10,21(A1,ES21.10),A1,I10)')g%nstep,',',g%t,',',g%dtnew(ilevel),',',p%mp(ipart),',',p%mBH(ipart),',',p%mD(ipart),',',dMBH_overdt,',',dMEd_overdt,',',m_acc,',',f_edd,',',eta_rad,',',eta_BZ,',',edot_jet,',',pdot_jet,',',mdot_jet
+   ! Close the sink file
+   close(unit)
+
+   !42 format((8,1x,f23.15,1x),42(e23.15,1x))
+   end associate
+end subroutine BZ_dump_sink_data_fine_AGN
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+
 function Lam(a,grade)
    use amr_parameters, only:dp
    real(dp)::a,grade,Lam

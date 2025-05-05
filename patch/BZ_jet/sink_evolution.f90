@@ -185,7 +185,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Launch Blandford-Znajek jet
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-      call launch_blandford_znajek_jet(s,p,ipart,ilevel,edot_jet,pdot_jet,mdot_jet,tan_theta,nBH_fb_nei,dx_loc,vol_loc)
+      if(r%agn)call launch_blandford_znajek_jet(s,p,ipart,ilevel,edot_jet,pdot_jet,mdot_jet,tan_theta,nBH_fb_nei,dx_loc,vol_loc)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Prepare the AGN thermal/non-thermal SEDs
@@ -196,6 +196,10 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       ! Launch AGN Photons
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       !call 
+
+      if((r%output_sink_fine.gt.0).and.(mod(g%nstep, r%output_sink_fine)==0))then
+         call BZ_dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_overdt,dMEd_overdt,m_acc,f_edd,eta_rad,eta_BZ,edot_jet,pdot_jet,mdot_jet)
+      end if
 
 !!! Basic Sink routines
 #else
