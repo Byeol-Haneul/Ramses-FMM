@@ -12,8 +12,9 @@ program part2map
   integer::nx_sample=128,ny_sample=128,nx,ny
   integer::i,j,idim,jdim,icpu
   integer::ix,iy,ixp1,iyp1
-  integer::npart_file, ndim_file, ipos, npart_actual
-
+  integer::npart_file, ndim_file, npart_actual
+  integer(kind=8)::ipos
+  
   real(KIND=8)::xmin=-1,xmax=-1,ymin=-1,ymax=-1,zmin=-1,zmax=-1
   real(KIND=8)::xxmin,xxmax,yymin,yymax,zzmin,zzmax
   real(KIND=8)::dx,dy,dz,xx,yy,zz,mtot
@@ -154,7 +155,7 @@ program part2map
      allocate(m(1:npart_file))
      ipos=9
      read(10,POS=ipos)x
-     ipos=9+4*npart_file*2*ndim_file
+     ipos=9+4*int(npart_file,kind=8)*2*int(ndim_file,kind=8)
      read(10,POS=ipos)m
 
      do i=1,npart_file
@@ -314,6 +315,7 @@ contains
        print *, '               [-ny  ny] '
        print *, '               [-fil filetype] '
        print *, '               [-pre prefix] '
+       print *, '               [-per periodic] '
        print *, 'ex: part2map -inp output_00001 -out map.dat'// &
             &   ' -dir z -xmi 0.1 -xma 0.7'
        print *, ' '
@@ -362,6 +364,8 @@ contains
           read (arg,*) filetype
        case ('-pre')
           read (arg,*) prefix
+       case ('-per')
+          read (arg,*) periodic
        case default
           print '("unknown option ",a2," ignored")', opt
        end select
