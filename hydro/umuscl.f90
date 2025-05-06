@@ -327,9 +327,10 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
   integer::irad
   real(dp),dimension(1:nener)::e, dex, se0
 #endif
+  real(dp)::smallp
 
-  dtdx = dt/dx
-
+  dtdx=dt/dx
+  smallp=smallr*smallc**2
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
   jlo=MIN(1,ju1+1); jhi=MAX(1,ju2-1)
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
@@ -415,6 +416,7 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
            qp(i,j,k,iw,1) = w - dwx
            qp(i,j,k,ip,1) = p - dpx
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,1)<smallp)qp(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,1) = A
            qp(i,j,k,iB,1) = B - dBx
@@ -432,6 +434,7 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
            qm(i,j,k,iw,1) = w + dwx
            qm(i,j,k,ip,1) = p + dpx
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,1)<smallp)qm(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,1) = A
            qm(i,j,k,iB,1) = B + dBx
@@ -523,8 +526,10 @@ subroutine trace2d(q,dq,qm,qp, &
   integer::irad
   real(dp),dimension(1:nener)::e, dex, dey, se0
 #endif
+  real(dp)::smallp
   
-  dtdx = dt/dx
+  dtdx=dt/dx
+  smallp=smallr*smallc**2
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
   jlo=MIN(1,ju1+1); jhi=MAX(1,ju2-1)
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
@@ -670,6 +675,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qp(i,j,k,iC,1) = C - dCx
 #endif
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,1)<smallp)qp(i,j,k,ip,1)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qp(i,j,k,ie+irad,1) = e(irad) - dex(irad)
@@ -687,6 +693,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qm(i,j,k,iC,1) = C + dCx
 #endif
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,1)<smallp)qm(i,j,k,ip,1)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qm(i,j,k,ie+irad,1) = e(irad) + dex(irad)
@@ -704,6 +711,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qp(i,j,k,iC,2) = C - dCy
 #endif
            if(qp(i,j,k,ir,2)<smallr)qp(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,2)<smallp)qp(i,j,k,ip,2)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qp(i,j,k,ie+irad,2) = e(irad) - dey(irad)
@@ -721,6 +729,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qm(i,j,k,iC,2) = C + dCy
 #endif
            if(qm(i,j,k,ir,2)<smallr)qm(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,2)<smallp)qm(i,j,k,ip,2)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qm(i,j,k,ie+irad,2) = e(irad) + dey(irad)
@@ -737,6 +746,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qRT(i,j,k,iA,3) = AR+ (   +dARy)
            qRT(i,j,k,iB,3) = BR+ (+dBRx   )
            if (qRT(i,j,k,ir,3)<smallr) qRT(i,j,k,ir,3)=r
+           if (qRT(i,j,k,ip,3)<smallp) qRT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)+dey(irad))
@@ -752,6 +762,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qRB(i,j,k,iA,3) = AR+ (   -dARy)
            qRB(i,j,k,iB,3) = BL+ (+dBLx   )
            if (qRB(i,j,k,ir,3)<smallr) qRB(i,j,k,ir,3)=r
+           if (qRB(i,j,k,ip,3)<smallp) qRB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)-dey(irad))
@@ -767,6 +778,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qLT(i,j,k,iA,3) = AL+ (   +dALy)
            qLT(i,j,k,iB,3) = BR+ (-dBRx   )
            if (qLT(i,j,k,ir,3)<smallr) qLT(i,j,k,ir,3)=r
+           if (qLT(i,j,k,ip,3)<smallp) qLT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)+dey(irad))
@@ -782,6 +794,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qLB(i,j,k,iA,3) = AL+ (   -dALy)
            qLB(i,j,k,iB,3) = BL+ (-dBLx   )
            if (qLB(i,j,k,ir,3)<smallr) qLB(i,j,k,ir,3)=r
+           if (qLB(i,j,k,ip,3)<smallp) qLB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)-dey(irad))
@@ -884,8 +897,10 @@ subroutine trace3d(q,dq,qm,qp, &
   integer::irad
   real(dp),dimension(1:nener)::e, dex, dey, dez, se0
 #endif
-  
-  dtdx = dt/dx
+  real(dp)::smallp
+
+  dtdx=dt/dx
+  smallp=smallr*smallc**2
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
   jlo=MIN(1,ju1+1); jhi=MAX(1,ju2-1)
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
@@ -1085,6 +1100,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qp(i,j,k,iw,1) = w - dwx
            qp(i,j,k,ip,1) = p - dpx
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,1)<smallp)qp(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,1) = AL
            qp(i,j,k,iB,1) = B - dBx
@@ -1102,6 +1118,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qm(i,j,k,iw,1) = w + dwx
            qm(i,j,k,ip,1) = p + dpx
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,1)<smallp)qm(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,1) = AR
            qm(i,j,k,iB,1) = B + dBx
@@ -1119,6 +1136,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qp(i,j,k,iw,2) = w - dwy
            qp(i,j,k,ip,2) = p - dpy
            if(qp(i,j,k,ir,2)<smallr)qp(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,2)<smallp)qp(i,j,k,ip,2)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,2) = A - dAy
            qp(i,j,k,iB,2) = BL
@@ -1136,6 +1154,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qm(i,j,k,iw,2) = w + dwy
            qm(i,j,k,ip,2) = p + dpy
            if(qm(i,j,k,ir,2)<smallr)qm(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,2)<smallp)qm(i,j,k,ip,2)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,2) = A + dAy
            qm(i,j,k,iB,2) = BR
@@ -1153,6 +1172,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qp(i,j,k,iw,3) = w - dwz
            qp(i,j,k,ip,3) = p - dpz
            if(qp(i,j,k,ir,3)<smallr)qp(i,j,k,ir,3)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,3)<smallp)qp(i,j,k,ip,3)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,3) = A - dAz
            qp(i,j,k,iB,3) = B - dBz
@@ -1170,6 +1190,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qm(i,j,k,iw,3) = w + dwz
            qm(i,j,k,ip,3) = p + dpz
            if(qm(i,j,k,ir,3)<smallr)qm(i,j,k,ir,3)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,3)<smallp)qm(i,j,k,ip,3)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,3) = A + dAz
            qm(i,j,k,iB,3) = B + dBz
@@ -1191,6 +1212,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRT(i,j,k,iB,1) = BR+ (   +dBRz)
            qRT(i,j,k,iC,1) = CR+ (+dCRy   )
            if (qRT(i,j,k,ir,1)<smallr) qRT(i,j,k,ir,1)=r
+           if (qRT(i,j,k,ip,1)<smallp) qRT(i,j,k,ip,1)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,1) = e(irad) + (+dey(irad)+dez(irad))
@@ -1206,6 +1228,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRB(i,j,k,iB,1) = BR+ (   -dBRz)
            qRB(i,j,k,iC,1) = CL+ (+dCLy   )
            if (qRB(i,j,k,ir,1)<smallr) qRB(i,j,k,ir,1)=r
+           if (qRB(i,j,k,ip,1)<smallp) qRB(i,j,k,ip,1)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,1) = e(irad) + (+dey(irad)-dez(irad))
@@ -1221,6 +1244,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLT(i,j,k,iB,1) = BL+ (   +dBLz)
            qLT(i,j,k,iC,1) = CR+ (-dCRy   )
            if (qLT(i,j,k,ir,1)<smallr) qLT(i,j,k,ir,1)=r
+           if (qLT(i,j,k,ip,1)<smallp) qLT(i,j,k,ip,1)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,1) = e(irad) + (-dey(irad)+dez(irad))
@@ -1236,6 +1260,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLB(i,j,k,iB,1) = BL+ (   -dBLz)
            qLB(i,j,k,iC,1) = CL+ (-dCLy   )
            if (qLB(i,j,k,ir,1)<smallr) qLB(i,j,k,ir,1)=r
+           if (qLB(i,j,k,ip,1)<smallp) qLB(i,j,k,ir,1)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,1) = e(irad) + (-dey(irad)-dez(irad))
@@ -1251,6 +1276,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRT(i,j,k,iB,2) = B + (+dBx+dBz)
            qRT(i,j,k,iC,2) = CR+ (+dCRx   )
            if (qRT(i,j,k,ir,2)<smallr) qRT(i,j,k,ir,2)=r
+           if (qRT(i,j,k,ip,2)<smallp) qRT(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,2) = e(irad) + (+dex(irad)+dez(irad))
@@ -1266,6 +1292,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRB(i,j,k,iB,2) = B + (+dBx-dBz)
            qRB(i,j,k,iC,2) = CL+ (+dCLx   )
            if (qRB(i,j,k,ir,2)<smallr) qRB(i,j,k,ir,2)=r
+           if (qRB(i,j,k,ip,2)<smallp) qRB(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,2) = e(irad) + (+dex(irad)-dez(irad))
@@ -1281,6 +1308,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLT(i,j,k,iB,2) = B + (-dBx+dBz)
            qLT(i,j,k,iC,2) = CR+ (-dCRx   )
            if (qLT(i,j,k,ir,2)<smallr) qLT(i,j,k,ir,2)=r
+           if (qLT(i,j,k,ip,2)<smallp) qLT(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,2) = e(irad) + (-dex(irad)+dez(irad))
@@ -1296,6 +1324,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLB(i,j,k,iB,2) = B + (-dBx-dBz)
            qLB(i,j,k,iC,2) = CL+ (-dCLx   )
            if (qLB(i,j,k,ir,2)<smallr) qLB(i,j,k,ir,2)=r
+           if (qLB(i,j,k,ip,2)<smallp) qLB(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,2) = e(irad) + (-dex(irad)-dez(irad))
@@ -1311,6 +1340,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRT(i,j,k,iB,3) = BR+ (+dBRx   )
            qRT(i,j,k,iC,3) = C + (+dCx+dCy)
            if (qRT(i,j,k,ir,3)<smallr) qRT(i,j,k,ir,3)=r
+           if (qRT(i,j,k,ip,3)<smallp) qRT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)+dey(irad))
@@ -1326,6 +1356,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRB(i,j,k,iB,3) = BL+ (+dBLx   )
            qRB(i,j,k,iC,3) = C + (+dCx-dCy)
            if (qRB(i,j,k,ir,3)<smallr) qRB(i,j,k,ir,3)=r
+           if (qRB(i,j,k,ip,3)<smallp) qRB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)-dey(irad))
@@ -1341,6 +1372,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLT(i,j,k,iB,3) = BR+ (-dBRx   )
            qLT(i,j,k,iC,3) = C + (-dCx+dCy)
            if (qLT(i,j,k,ir,3)<smallr) qLT(i,j,k,ir,3)=r
+           if (qLT(i,j,k,ip,3)<smallp) qLT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)+dey(irad))
@@ -1356,6 +1388,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLB(i,j,k,iB,3) = BL+ (-dBLx   )
            qLB(i,j,k,iC,3) = C + (-dCx-dCy)
            if (qLB(i,j,k,ir,3)<smallr) qLB(i,j,k,ir,3)=r
+           if (qLB(i,j,k,ip,3)<smallp) qLB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)-dey(irad))
@@ -1744,7 +1777,7 @@ subroutine ctoprim(uin,q,c,gravin, &
            q(i,j,k,3) = uin(i,j,k,3)*oneoverrho
            q(i,j,k,4) = uin(i,j,k,4)*oneoverrho
 
-           ! Compute specific kinetic energy
+           ! Compute kinetic energy
            ekin =        half*q(i,j,k,1)*q(i,j,k,2)**2
            ekin = ekin + half*q(i,j,k,1)*q(i,j,k,3)**2
            ekin = ekin + half*q(i,j,k,1)*q(i,j,k,4)**2
@@ -1770,7 +1803,7 @@ subroutine ctoprim(uin,q,c,gravin, &
            enddo
 #endif
            ! Compute thermal pressure
-           eint = MAX(uin(i,j,k,5)-ekin-erad-emag,smalle)
+           eint = MAX(uin(i,j,k,5)-ekin-erad-emag,smalle*q(i,j,k,1))
            q(i,j,k,5) = (gamma-one)*eint
 
            ! Compute thermal sound speed
