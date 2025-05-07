@@ -321,14 +321,14 @@ end subroutine cmpdt
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+subroutine riemann_llf(qleft,qright,fgdnv,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
   ! dummy arguments
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   real(dp),dimension(1:nprim)::qleft,qright
   real(dp),dimension(1:nprim+1)::fgdnv
 
@@ -336,11 +336,16 @@ subroutine riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   real(dp),dimension(1:nprim+1)::uleft,uright
   real(dp)::cmax
   integer::n
-  real(dp)::smallp, entho
+  real(dp)::gamma,smallr,smallc,smallp, entho
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp)::rl,ul,pl,cl
   real(dp)::rr,ur,pr,cr
 
   ! Constants
+  gamma = params%gamma
+  gamma_rad = params%gamma_rad
+  smallr = params%smallr
+  smallc = params%smallc
   smallp = smallc**2/gamma
   entho = one/(gamma-one)
 
@@ -464,16 +469,16 @@ end subroutine riemann_llf
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+subroutine riemann_hll(qleft,qright,fgdnv,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
   ! 1D HLL Riemann solver
 
   ! dummy arguments
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   real(dp),dimension(1:nprim)::qleft,qright
   real(dp),dimension(1:nprim+1)::fgdnv
 
@@ -481,11 +486,16 @@ subroutine riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   real(dp),dimension(1:nprim+1)::uleft,uright
   real(dp)::SL,SR
   integer::n
-  real(dp)::smallp, entho
+  real(dp)::gamma,smallr,smallc,smallp, entho
+  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp)::rl,ul,pl,cl
   real(dp)::rr,ur,pr,cr
 
   ! Constants
+  gamma = params%gamma
+  gamma_rad = params%gamma_rad
+  smallr = params%smallr
+  smallc = params%smallc
   smallp = smallc**2/gamma
   entho = one/(gamma-one)
 
@@ -611,16 +621,16 @@ end subroutine riemann_hll
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+subroutine riemann_hllc(qleft,qright,fgdnv,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
   ! HLLC Riemann solver (Toro)
 
   ! dummy arguments
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   real(dp),dimension(1:nprim)::qleft,qright
   real(dp),dimension(1:nprim+1)::fgdnv
 
@@ -633,15 +643,22 @@ subroutine riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   REAL(dp)::etotstarl,etotstarr
   REAL(dp)::ustar,ptotstar
   REAL(dp)::ro,uo,vo,wo,ptoto,etoto,eo
-  REAL(dp)::smallp
+  real(dp)::gamma,smallr,smallc,smallp
+  real(dp),dimension(1:nener+1)::gamma_rad
 #if NENER>0
   INTEGER::irad
   REAL(dp),dimension(1:nener)::eradl,eradr,erado
   REAL(dp),dimension(1:nener)::eradstarl,eradstarr
 #endif
+#if NVAR>5+NENER
   INTEGER::ivar
+#endif
 
   ! constants
+  gamma = params%gamma
+  gamma_rad = params%gamma_rad
+  smallr = params%smallr
+  smallc = params%smallc
   smallp = smallc**2/gamma
   entho = one/(gamma-one)
 
@@ -824,17 +841,17 @@ end subroutine riemann_hllc
 !###########################################################
 !###########################################################
 #ifdef MHD
-SUBROUTINE riemann_upwind_mhd(qleft,qright,fgdnv,zero_flux,gamma,gamma_rad,smallr,smallc)
+SUBROUTINE riemann_upwind_mhd(qleft,qright,fgdnv,zero_flux,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   ! 1D Upwind Riemann solver
   IMPLICIT NONE
-  REAL(dp)::zero_flux
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
   REAL(dp),DIMENSION(1:nprim+1)::fgdnv
+  REAL(dp)::zero_flux
 
   REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fmean
   REAL(dp),DIMENSION(1:nprim+1)::uleft,uright,udiff
@@ -845,8 +862,8 @@ SUBROUTINE riemann_upwind_mhd(qleft,qright,fgdnv,zero_flux,gamma,gamma_rad,small
   qleft (6)=bx_mean
   qright(6)=bx_mean
 
-  CALL find_mhd_flux(qleft ,uleft ,fleft ,gamma,gamma_rad)
-  CALL find_mhd_flux(qright,uright,fright,gamma,gamma_rad)
+  CALL find_mhd_flux(qleft ,uleft ,fleft ,params)
+  CALL find_mhd_flux(qright,uright,fright,params)
 
   ! find the mean flux
   fmean =  half * ( fright + fleft ) * zero_flux
@@ -865,35 +882,36 @@ END SUBROUTINE riemann_upwind_mhd
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE riemann_llf_mhd(qleft,qright,fgdnv,zero_flux,gamma,gamma_rad,smallr,smallc)
+SUBROUTINE riemann_llf_mhd(qleft,qright,fgdnv,zero_flux,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   ! 1D local Lax-Friedrich Riemann solver
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
-  REAL(dp)::zero_flux
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
+  REAL(dp),DIMENSION(1:nprim+1)::fgdnv
+  REAL(dp)::zero_flux
 
-  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fmean,fgdnv
+  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fmean
   REAL(dp),DIMENSION(1:nprim+1)::uleft,uright,udiff
-  REAL(dp):: vleft,vright,bx_mean
+  REAL(dp)::vleft,vright,bx_mean
 
   ! Enforce continuity of normal component
   bx_mean=half*(qleft(6)+qright(6))
   qleft (6)=bx_mean
   qright(6)=bx_mean
 
-  CALL find_mhd_flux(qleft ,uleft ,fleft ,gamma,gamma_rad)
-  CALL find_mhd_flux(qright,uright,fright,gamma,gamma_rad)
+  CALL find_mhd_flux(qleft ,uleft ,fleft ,params)
+  CALL find_mhd_flux(qright,uright,fright,params)
 
   ! find the mean flux
   fmean =  half * ( fright + fleft ) * zero_flux
 
   ! find the largest eigenvalue in the normal direction to the interface
-  CALL find_speed_info(qleft ,vleft ,gamma,gamma_rad)
-  CALL find_speed_info(qright,vright,gamma,gamma_rad)
+  CALL find_speed_info(qleft ,vleft ,params)
+  CALL find_speed_info(qright,vright,params)
 
   ! difference between the 2 states
   udiff  = half * ( uright - uleft )
@@ -906,30 +924,32 @@ END SUBROUTINE riemann_llf_mhd
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE riemann_hll_mhd(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+SUBROUTINE riemann_hll_mhd(qleft,qright,fgdnv,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   ! 1D HLL Riemann solver
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fgdnv
+  REAL(dp),DIMENSION(1:nprim+1)::fgdnv
+
+  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright
   REAL(dp),DIMENSION(1:nprim+1)::uleft,uright
-  REAL(dp):: vleft,vright,bx_mean,cfleft,cfright,SL,SR
+  REAL(dp)::vleft,vright,bx_mean,cfleft,cfright,SL,SR
 
   ! Enforce continuity of normal component
   bx_mean=half*(qleft(6)+qright(6))
   qleft (6)=bx_mean
   qright(6)=bx_mean
 
-  CALL find_mhd_flux(qleft ,uleft ,fleft ,gamma,gamma_rad)
-  CALL find_mhd_flux(qright,uright,fright,gamma,gamma_rad)
+  CALL find_mhd_flux(qleft ,uleft ,fleft ,params)
+  CALL find_mhd_flux(qright,uright,fright,params)
 
   ! find the largest eigenvalue in the normal direction to the interface
-  CALL find_speed_fast(qleft ,cfleft ,gamma,gamma_rad)
-  CALL find_speed_fast(qright,cfright,gamma,gamma_rad)
+  CALL find_speed_fast(qleft ,cfleft ,params)
+  CALL find_speed_fast(qright,cfright,params)
   vleft =qleft (2)
   vright=qright(2)
   SL=min(min(vleft,vright)-max(cfleft,cfright),zero)
@@ -943,19 +963,20 @@ END SUBROUTINE riemann_hll_mhd
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+SUBROUTINE riemann_hlld(qleft,qright,fgdnv,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   ! HLLD Riemann solver (Miyoshi & Kusano, 2005, JCP, 208, 315)
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
   REAL(dp),DIMENSION(1:nprim+1)::fgdnv
 
   REAL(dp)::SL,SR,SAL,SAR
-  REAL(dp)::entho,A,sgnm
+  real(dp)::gamma,smallc,entho,A,sgnm
+  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp)::rl,pl,ul,vl,wl,cl,ekinl,emagl,etotl,ptotl,vdotbl,bl,el
   REAL(dp)::rr,pr,ur,vr,wr,cr,ekinr,emagr,etotr,ptotr,vdotbr,br,er
   REAL(dp)::cfastl,calfvenl,rcl,rstarl,vstarl,wstarl,bstarl,cstarl,vdotbstarl
@@ -966,12 +987,18 @@ SUBROUTINE riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   REAL(dp)::ro,uo,vo,wo,bo,co,ptoto,etoto,vdotbo
   REAL(dp)::einto,eintl,eintr,eintstarr,eintstarl
 
+#if NVAR>5+NENER
   INTEGER ::ivar
+#endif
 #if NENER>0
   INTEGER ::irad
   REAL(dp),dimension(1:nener)::erado,eradl,eradr
   REAL(dp),dimension(1:nener)::eradstarl,eradstarr
 #endif
+
+  gamma = params%gamma
+  gamma_rad = params%gamma_rad
+  smallc = params%smallc
   entho = one/(gamma-one)
 
   ! Enforce continuity of normal component
@@ -1014,8 +1041,8 @@ SUBROUTINE riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
   eintr=Pr*entho
 
   ! Find the largest eigenvalues in the normal direction to the interface
-  CALL find_speed_fast(qleft ,cfastl,gamma,gamma_rad)
-  CALL find_speed_fast(qright,cfastr,gamma,gamma_rad)
+  CALL find_speed_fast(qleft ,cfastl,params)
+  CALL find_speed_fast(qright,cfastr,params)
 
   ! Compute HLL wave speed
   SL=min(ul,ur)-max(cfastl,cfastr)
@@ -1223,31 +1250,40 @@ END SUBROUTINE riemann_hlld
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE find_mhd_flux(qvar,cvar,ff,gamma,gamma_rad)
+SUBROUTINE find_mhd_flux(qvar,cvar,ff,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   !! compute the 1D MHD fluxes from the conservative variables
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1, Btransverse1, Vtransverse2, Btransverse2
+  type(hydro_params_t)::params
+  REAL(dp),DIMENSION(1:nprim)::qvar
+  REAL(dp),DIMENSION(1:nprim+1)::cvar,ff
+
+  REAL(dp)::ekin,emag,etot,d,u,v,w,A,B,C,P,Ptot,entho
   real(dp)::gamma
   real(dp),dimension(1:nener+1)::gamma_rad
-#if NENER>0
-  INTEGER :: irad
+#if NVAR>5+NENER
+  INTEGER::ivar
 #endif
-  INTEGER :: ivar
-  REAL(dp),DIMENSION(1:nprim  ):: qvar
-  REAL(dp),DIMENSION(1:nprim+1):: cvar,ff
-  REAL(dp) :: ekin,emag,etot,d,u,v,w,A,B,C,P,Ptot,entho
+#if NENER>0
+  INTEGER::irad
+#endif
+
+  ! Constants
+  gamma = params%gamma
+  gamma_rad = params%gamma_rad
+  entho = one/(gamma-one)
 
   ! Local variables
-  entho = one/(gamma-one)
   d=qvar(1); u=qvar(2); v=qvar(3); w=qvar(4)
   P=qvar(5); A=qvar(6); B=qvar(7); C=qvar(8)
   ekin = half*(u*u+v*v+w*w)*d
   emag = half*(A*A+B*B+C*C)
-  etot = P*entho+ekin+emag
+  etot = P*entho + ekin + emag
   Ptot = P + emag
 #if NENER>0
   do irad = 1,nener
@@ -1305,23 +1341,30 @@ END SUBROUTINE find_mhd_flux
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE find_speed_info(qvar,vel_info,gamma,gamma_rad)
+SUBROUTINE find_speed_info(qvar,vel_info,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   !! calculate the fastest velocity at which information is exchanged
   !! at the interface: we mean c_fast + abs(v).
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1,Btransverse1,Vtransverse2,Btransverse2
+  type(hydro_params_t)::params
+  REAL(dp),DIMENSION(1:nprim)::qvar
+  REAL(dp)::vel_info
+
   real(dp)::gamma
   real(dp),dimension(1:nener+1)::gamma_rad
+  REAL(dp)::d,P,u,A,B,C,B2,c2,d2,cf
 #if NENER>0
-  INTEGER :: irad
+  INTEGER::irad
 #endif
-  REAL(dp),DIMENSION(1:nprim):: qvar
-  REAL(dp) :: vel_info
-  REAL(dp) :: d,P,u,A,B,C,B2,c2,d2,cf
+
+  ! Constants
+  gamma = params%gamma
+  gamma_rad = params%gamma_rad
 
   d=qvar(1); u=qvar(2); P=qvar(5)
   A=qvar(6); B=qvar(7); C=qvar(8)
@@ -1342,22 +1385,29 @@ END SUBROUTINE find_speed_info
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE find_speed_fast(qvar,vel_info,gamma,gamma_rad)
+SUBROUTINE find_speed_fast(qvar,vel_info,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   !! calculate the fast magnetosonic velocity
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1,Btransverse1,Vtransverse2,Btransverse2
+  type(hydro_params_t)::params
+  REAL(dp),DIMENSION(1:nprim)::qvar
+  REAL(dp)::vel_info
+
+  REAL(dp)::d,P,A,B,C,B2,c2,d2,cf
   real(dp)::gamma
   real(dp),dimension(1:nener+1)::gamma_rad
 #if NENER>0
-  INTEGER :: irad
+  INTEGER::irad
 #endif
-  REAL(dp),DIMENSION(1:nprim):: qvar
-  REAL(dp) :: vel_info
-  REAL(dp) :: d,P,A,B,C,B2,c2,d2,cf
+
+  ! Constants
+  gamma = params%gamma
+  gamma_rad = params%gamma_rad
 
   d=qvar(1); P=qvar(5); A=qvar(6); B=qvar(7); C=qvar(8)
   B2 = A*A+B*B+C*C
@@ -1386,8 +1436,9 @@ SUBROUTINE find_speed_alfven(qvar,vel_info)
   IMPLICIT NONE
 
   REAL(dp),DIMENSION(1:nprim):: qvar
-  REAL(dp) :: vel_info
-  REAL(dp) :: d,A
+  REAL(dp)::vel_info
+
+  REAL(dp)::d,A
 
   d=qvar(1); A=qvar(6)
   vel_info = sqrt(A*A/d)
@@ -1397,35 +1448,37 @@ END SUBROUTINE find_speed_alfven
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE riemann_roe_mhd(qleft,qright,fmean,zero_flux,gamma,gamma_rad,smallr,smallc)
+SUBROUTINE riemann_roe_mhd(qleft,qright,fmean,zero_flux,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
 
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
-
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fmean
+  REAL(dp),DIMENSION(1:nprim+1)::fmean
+  REAL(dp)::zero_flux
+
+  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright
   REAL(dp),DIMENSION(1:nprim+1)::uleft,uright,udiff
 
-  REAL(dp), DIMENSION(7,7) :: lem, rem
-  REAL(dp), DIMENSION(7)   :: lambda, lambdal, lambdar, a
+  REAL(dp), DIMENSION(7,7)::lem, rem
+  REAL(dp), DIMENSION(7)  ::lambda, lambdal, lambdar, a
 
-  REAL(dp) :: droe, vxroe, vyroe, vzroe, sqrtdl, sqrtdr
-  REAL(dp) :: hroe, byroe, bzroe, Xfactor, Yfactor
-  REAL(dp) :: pbr, pbl
+  REAL(dp)::droe, vxroe, vyroe, vzroe, sqrtdl, sqrtdr
+  REAL(dp)::hroe, byroe, bzroe, Xfactor, Yfactor
+  REAL(dp)::pbr, pbl
 
-  REAL(dp) :: fluxd, fluxmx, fluxmy, fluxmz, fluxe
-  REAL(dp) :: fluxby, fluxbz, byl, byr, bzl, bzr, bx
-  REAL(dp) :: dl, vxl, vyl, vzl, pl, hl
-  REAL(dp) :: dr, vxr, vyr, vzr, pr, hr
-  REAL(dp) :: mxl, myl, mzl, el
-  REAL(dp) :: mxr, myr, mzr, er
-  REAL(dp) :: coef, bx_mean
-  REAL(dp) :: vleft,vright
-  REAL(dp) :: zero_flux,dim,eim,mxm,mym,mzm,bym,bzm,etm,l1,l2
+  REAL(dp)::fluxd, fluxmx, fluxmy, fluxmz, fluxe
+  REAL(dp)::fluxby, fluxbz, byl, byr, bzl, bzr, bx
+  REAL(dp)::dl, vxl, vyl, vzl, pl, hl
+  REAL(dp)::dr, vxr, vyr, vzr, pr, hr
+  REAL(dp)::mxl, myl, mzl, el
+  REAL(dp)::mxr, myr, mzr, er
+  REAL(dp)::coef, bx_mean
+  REAL(dp)::vleft,vright
+  REAL(dp)::dim,eim,mxm,mym,mzm,bym,bzm,etm,l1,l2
 
   INTEGER :: n
   LOGICAL :: llf
@@ -1437,8 +1490,8 @@ SUBROUTINE riemann_roe_mhd(qleft,qright,fmean,zero_flux,gamma,gamma_rad,smallr,s
 
   ! compute the fluxes and the conserved variables
   ! remember the convention : rho, E, rhovx, bx, rhovy, by, vz, rhobz
-  CALL find_mhd_flux(qleft ,uleft ,fleft ,gamma,gamma_rad)
-  CALL find_mhd_flux(qright,uright,fright,gamma,gamma_rad)
+  CALL find_mhd_flux(qleft ,uleft ,fleft ,params)
+  CALL find_mhd_flux(qright,uright,fright,params)
 
   ! define the primitive quantities explicitly
   dl  = qleft (1)
@@ -1502,12 +1555,12 @@ SUBROUTINE riemann_roe_mhd(qleft,qright,fmean,zero_flux,gamma,gamma_rad,smallr,s
   !
   ! Step 3 : Compute eigenvalues and eigenmatrices from Roe-averaged values
   !
-  call eigen_cons(droe,vxroe,vyroe,vzroe,hroe,bx,byroe,bzroe,Xfactor,Yfactor,lambda,rem,lem,gamma,gamma_rad,smallr,smallc)
+  call eigen_cons(droe,vxroe,vyroe,vzroe,hroe,bx,byroe,bzroe,Xfactor,Yfactor,lambda,rem,lem,params)
   !
   ! Step 4: Compute eigenvalues from left and right states
   !
-  call eigenvalues(dl,vxl,vyl,vzl,pl,bx,byl,bzl,lambdal,gamma,gamma_rad,smallr,smallc)
-  call eigenvalues(dr,vxr,vyr,vzr,pr,bx,byr,bzr,lambdar,gamma,gamma_rad,smallr,smallc)
+  call eigenvalues(dl,vxl,vyl,vzl,pl,bx,byl,bzl,lambdal,params)
+  call eigenvalues(dr,vxr,vyr,vzr,pr,bx,byr,bzr,lambdar,params)
   !
   ! Step 5 : Create intermediate states from eigenmatrices
   !
@@ -1546,8 +1599,8 @@ SUBROUTINE riemann_roe_mhd(qleft,qright,fmean,zero_flux,gamma,gamma_rad,smallr,s
 
   IF( llf ) THEN
      fmean = half * ( fright + fleft ) * zero_flux
-     CALL find_speed_info(qleft ,vleft ,gamma,gamma_rad)
-     CALL find_speed_info(qright,vright,gamma,gamma_rad)
+     CALL find_speed_info(qleft ,vleft ,params)
+     CALL find_speed_info(qright,vright,params)
      udiff = half * ( uright - uleft )
      fmean = fmean - MAX(vleft,vright) * udiff
      RETURN
@@ -1614,9 +1667,10 @@ END SUBROUTINE riemann_roe_mhd
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine eigenvalues(d,vx,vy,vz,p,bx,by,bz,lambda,gamma,gamma_rad,smallr,smallc)
+subroutine eigenvalues(d,vx,vy,vz,p,bx,by,bz,lambda,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
 !
@@ -1636,14 +1690,17 @@ subroutine eigenvalues(d,vx,vy,vz,p,bx,by,bz,lambda,gamma,gamma_rad,smallr,small
 !
 !   lambda  = eigenvalues
 !
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   real(dp),intent(IN)::d, vx, vy, vz, p
   real(dp),intent(IN)::bx, by, bz
   real(dp),dimension(1:7),intent(OUT)::lambda
   ! local variables
-  real(dp):: btsq, bt, vsq, vax,  vaxsq
-  real(dp):: asq, astarsq, cfsq, cfast, cssq, cslow
+  real(dp)::btsq, bt, vsq, vax,  vaxsq
+  real(dp)::asq, astarsq, cfsq, cfast, cssq, cslow
+  real(dp)::gamma, smallc
+
+  gamma = params%gamma
+  smallc = params%smallc
 
   vsq = vx**2+vy**2+vz**2
   btsq = by**2+bz**2
@@ -1674,9 +1731,10 @@ end subroutine eigenvalues
 !###########################################################
 !###########################################################
 !###########################################################
-SUBROUTINE eigen_cons(d,vx,vy,vz,h,Bx,by,bz,Xfac,Yfac,lambda,rem,lem,gamma,gamma_rad,smallr,smallc)
+SUBROUTINE eigen_cons(d,vx,vy,vz,h,Bx,by,bz,Xfac,Yfac,lambda,rem,lem,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
 !
@@ -1698,22 +1756,25 @@ SUBROUTINE eigen_cons(d,vx,vy,vz,h,Bx,by,bz,Xfac,Yfac,lambda,rem,lem,gamma,gamma
 !   rem     = right eigenmatrix
 !   lem     = left  eigenmatrix
 !
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
-  REAL (dp) :: d, vx, vy, vz, h
-  REAL (dp) :: Bx, by, bz, Xfac, Yfac
+  type(hydro_params_t)::params
+  REAL(dp)::d, vx, vy, vz, h
+  REAL(dp)::Bx, by, bz, Xfac, Yfac
 
-  REAL(dp), DIMENSION(7,7) :: lem, rem
-  REAL(dp), DIMENSION(7)        :: lambda
+  REAL(dp),DIMENSION(7,7)::lem, rem
+  REAL(dp),DIMENSION(7)  ::lambda
 
-  REAL(dp) :: btsq, bt_starsq, bt, bt_star
-  REAL(dp) :: vsq, vax,  vaxsq, hp, twid_asq, q_starsq
-  REAL(dp) :: cfsq, cfast, cssq, cslow
-  REAL(dp) :: beta_y, beta_z, beta_ystar, beta_zstar, beta_starsq, vbeta
-  REAL(dp) :: alpha_f, alpha_s, droot, s, twid_a
-  REAL(dp) :: Qfast, Qslow, af_prime, as_prime, Afpbb, Aspbb, na
-  REAL(dp) :: cff, css, af, as, Afpb, Aspb, vqstr, norm
-  REAL(dp) :: Q_ystar, Q_zstar
+  real(dp)::gamma, smallc
+  REAL(dp)::btsq, bt_starsq, bt, bt_star
+  REAL(dp)::vsq, vax,  vaxsq, hp, twid_asq, q_starsq
+  REAL(dp)::cfsq, cfast, cssq, cslow
+  REAL(dp)::beta_y, beta_z, beta_ystar, beta_zstar, beta_starsq, vbeta
+  REAL(dp)::alpha_f, alpha_s, droot, s, twid_a
+  REAL(dp)::Qfast, Qslow, af_prime, as_prime, Afpbb, Aspbb, na
+  REAL(dp)::cff, css, af, as, Afpb, Aspb, vqstr, norm
+  REAL(dp)::Q_ystar, Q_zstar
+
+  gamma = params%gamma
+  smallc = params%smallc
 
   vsq = vx*vx+vy*vy+vz*vz
   btsq = by*by+bz*bz
@@ -1726,7 +1787,7 @@ SUBROUTINE eigen_cons(d,vx,vy,vz,h,Bx,by,bz,Xfac,Yfac,lambda,rem,lem,gamma,gamma
 
   hp = h - (vaxsq + btsq/d)
   twid_asq = ((gamma-1.)*(hp-.5*vsq)-(gamma-2.)*Xfac)
-  twid_asq = MAX(twid_asq,smallc*smallc)
+  twid_asq = MAX(twid_asq,smallc**2)
   q_starsq = twid_asq+(vaxsq+bt_starsq/d)
 
   cfsq = .5*(q_starsq + sqrt(q_starsq*q_starsq-4.0*twid_asq*vaxsq))
@@ -1930,40 +1991,47 @@ END SUBROUTINE eigen_cons
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
+subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   ! HLLD 2D Riemann solver (Miyoshi & Kusano, 2005, JCP, 208, 315)
   IMPLICIT NONE
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 
-#if NENER>0
-  INTEGER :: irad
-#endif
   REAL(dp),DIMENSION(1:nprim)::qtmp
-  REAL(dp) :: ELL,ERL,ELR,ERR,SL,SR,SB,ST,SAL,SAR,SAT,SAB
-  REAL(dp) :: cLLx,cRLx,cLRx,cRRx,cLLy,cRLy,cLRy,cRRy
-  REAL(dp) :: cfastLLx,cfastRLx,cfastLRx,cfastRRx,cfastLLy,cfastRLy,cfastLRy,cfastRRy
-  REAL(dp) :: calfvenR,calfvenL,calfvenT,calfvenB
-  REAL(dp) :: vLLx,vRLx,vLRx,vRRx,vLLy,vRLy,vLRy,vRRy
-  REAL(dp) :: rLL,rLR,rRL,rRR,pLL,pLR,pRL,pRR,uLL,uLR,uRL,uRR,vLL,vLR,vRL,vRR
-  REAL(dp) :: ALL,ALR,ARL,ARR,BLL,BLR,BRL,BRR,CLL,CLR,CRL,CRR
-  REAL(dp) :: PtotLL,PtotLR,PtotRL,PtotRR,rcLLx,rcLRx,rcRLx,rcRRx,rcLLy,rcLRy,rcRLy,rcRRy
-  REAL(dp) :: ustar,vstar,rstarLLx,rstarLRx,rstarRLx,rstarRRx,rstarLLy,rstarLRy,rstarRLy,rstarRRy
-  REAL(dp) :: rstarLL,rstarLR,rstarRL,rstarRR,AstarLL,AstarLR,AstarRL,AstarRR,BstarLL,BstarLR,BstarRL,BstarRR
-  REAL(dp) :: EstarLLx,EstarLRx,EstarRLx,EstarRRx,EstarLLy,EstarLRy,EstarRLy,EstarRRy,EstarLL,EstarLR,EstarRL,EstarRR
-  REAL(dp) :: AstarT,AstarB,BstarR,BstarL
-  REAL(dp) :: rmin,Smax
+  REAL(dp)::ELL,ERL,ELR,ERR,SL,SR,SB,ST,SAL,SAR,SAT,SAB
+  REAL(dp)::cfastLLx,cfastRLx,cfastLRx,cfastRRx,cfastLLy,cfastRLy,cfastLRy,cfastRRy
+  REAL(dp)::calfvenR,calfvenL,calfvenT,calfvenB
+  REAL(dp)::rLL,rLR,rRL,rRR,pLL,pLR,pRL,pRR,uLL,uLR,uRL,uRR,vLL,vLR,vRL,vRR
+  REAL(dp)::ALL,ALR,ARL,ARR,BLL,BLR,BRL,BRR,CLL,CLR,CRL,CRR
+  REAL(dp)::PtotLL,PtotLR,PtotRL,PtotRR,rcLLx,rcLRx,rcRLx,rcRRx,rcLLy,rcLRy,rcRLy,rcRRy
+  REAL(dp)::ustar,vstar,rstarLLx,rstarLRx,rstarRLx,rstarRRx,rstarLLy,rstarLRy,rstarRLy,rstarRRy
+  REAL(dp)::rstarLL,rstarLR,rstarRL,rstarRR,AstarLL,AstarLR,AstarRL,AstarRR,BstarLL,BstarLR,BstarRL,BstarRR
+  REAL(dp)::EstarLLx,EstarLRx,EstarRLx,EstarRRx
+  real(dp)::EstarLLy,EstarLRy,EstarRLy,EstarRRy
+  real(dp)::EstarLL,EstarLR,EstarRL,EstarRR
+  REAL(dp)::AstarT,AstarB,BstarR,BstarL
+  REAL(dp)::rmin,pmin,Smax
+  real(dp)::smallc,switch_llf_dmin,switch_llf_pmin
+#if NENER>0
+  INTEGER::irad
+#endif
+  logical::switch_to_llf
+
+  switch_llf_dmin = params%switch_llf_dmin
+  switch_llf_pmin = params%switch_llf_pmin
+  smallc = params%smallc
 
   rLL=qLL(1); pLL=qLL(5); uLL=qLL(2); vLL=qLL(3); ALL=qLL(6); BLL=qLL(7) ; CLL=qLL(8)
   rLR=qLR(1); pLR=qLR(5); uLR=qLR(2); vLR=qLR(3); ALR=qLR(6); BLR=qLR(7) ; CLR=qLR(8)
   rRL=qRL(1); pRL=qRL(5); uRL=qRL(2); vRL=qRL(3); ARL=qRL(6); BRL=qRL(7) ; CRL=qRL(8)
   rRR=qRR(1); pRR=qRR(5); uRR=qRR(2); vRR=qRR(3); ARR=qRR(6); BRR=qRR(7) ; CRR=qRR(8)
   rmin=MIN(rLL, rLR, rRL, rRR)
+  pmin=MIN(pLL, pLR, pRL, pRR)
 
   ! Compute 4 fast magnetosonic velocity relative to x direction
   qtmp(1)=rLL; qtmp(5)=pLL; qtmp(8)=CLL
@@ -1973,7 +2041,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLL(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastLLx,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastLLx,params)
   qtmp(1)=rLR; qtmp(5)=pLR; qtmp(8)=CLR
   qtmp(6)=ALR; qtmp(7)=BLR
 #if NENER>0
@@ -1981,7 +2049,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLR(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastLRx,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastLRx,params)
   qtmp(1)=rRL; qtmp(5)=pRL; qtmp(8)=CRL
   qtmp(6)=ARL; qtmp(7)=BRL
 #if NENER>0
@@ -1989,7 +2057,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRL(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastRLx,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastRLx,params)
   qtmp(1)=rRR; qtmp(5)=pRR; qtmp(8)=CRR
   qtmp(6)=ARR; qtmp(7)=BRR
 #if NENER>0
@@ -1997,7 +2065,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRR(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastRRx,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastRRx,params)
 
   ! Compute 4 fast magnetosonic velocity relative to y direction
   qtmp(1)=rLL; qtmp(5)=pLL; qtmp(8)=CLL
@@ -2007,7 +2075,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLL(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastLLy,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastLLy,params)
   qtmp(1)=rLR; qtmp(5)=pLR; qtmp(8)=CLR
   qtmp(6)=BLR; qtmp(7)=ALR
 #if NENER>0
@@ -2015,7 +2083,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLR(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastLRy,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastLRy,params)
   qtmp(1)=rRL; qtmp(5)=pRL; qtmp(8)=CRL
   qtmp(6)=BRL; qtmp(7)=ARL
 #if NENER>0
@@ -2023,7 +2091,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRL(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastRLy,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastRLy,params)
   qtmp(1)=rRR; qtmp(5)=pRR; qtmp(8)=CRR
   qtmp(6)=BRR; qtmp(7)=ARR
 #if NENER>0
@@ -2031,7 +2099,7 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRR(8+irad)
   end do
 #endif
-  call find_speed_fast(qtmp,cfastRRy,gamma,gamma_rad)
+  call find_speed_fast(qtmp,cfastRRy,params)
 
   SL=min(uLL,uLR,uRL,uRR)-max(cfastLLx,cfastLRx,cfastRLx,cfastRRx)
   SR=max(uLL,uLR,uRL,uRR)+max(cfastLLx,cfastLRx,cfastRLx,cfastRRx)
@@ -2044,11 +2112,14 @@ subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
   ERL=uRL*BRL-vRL*ARL
   ERR=uRR*BRR-vRR*ARR
 
-!!$  ! Switch to llf and exit
-!!$  if(allow_switch_solver2D .and. (rmin < switch_solv_min_dens)) then
-!!$     E = forth*(ERR+ERL+ELR+ELL)+half*Smax*(qRR(6)-qLL(6))-half*Smax*(qRR(7)-qLL(7))
-!!$     return
-!!$  endif
+  ! Switch to llf and exit
+  switch_to_llf=.false.
+  if(switch_llf_dmin.gt.0)switch_to_llf=rmin.lt.switch_llf_dmin
+  if(switch_llf_pmin.gt.0)switch_to_llf=pmin.lt.switch_llf_pmin
+  if(switch_to_llf)then
+     E = forth*(ERR+ERL+ELR+ELL)+half*Smax*(qRR(6)-qLL(6))-half*Smax*(qRR(7)-qLL(7))
+     return
+  endif
 
 #if NENER>0
  do irad = 1,nener
@@ -2142,14 +2213,14 @@ end subroutine riemann2d_hlld
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
+subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   ! HLL 2D Riemann solver using the fast magnetosonic speed
   IMPLICIT NONE
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 
@@ -2157,6 +2228,9 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
   REAL(dp)::ELL,ERL,ELR,ERR,SL,SR,SB,ST
   REAL(dp)::cLLx,cRLx,cLRx,cRRx,cLLy,cRLy,cLRy,cRRy
   REAL(dp)::uLL,uRL,uLR,uRR,vLL,vRL,vLR,vRR
+#if NENER>0
+  INTEGER::irad
+#endif
 
   ! vx*by - vy*bx at the four edge centers
   ELL = qLL(2)*qLL(7) - qLL(3)*qLL(6)
@@ -2172,7 +2246,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLL(8+irad)
   end do
 #endif
-  uLL=qtmp(2); call find_speed_fast(qtmp,cLLx,gamma,gamma_rad)
+  uLL=qtmp(2); call find_speed_fast(qtmp,cLLx,params)
   qtmp(1)=qLR(1); qtmp(5)=qLR(5); qtmp(8)=qLR(8)
   qtmp(6)=qLR(6); qtmp(7)=qLR(7)
 #if NENER>0
@@ -2180,7 +2254,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLR(8+irad)
   end do
 #endif
-  uLR=qtmp(2); call find_speed_fast(qtmp,cLRx,gamma,gamma_rad)
+  uLR=qtmp(2); call find_speed_fast(qtmp,cLRx,params)
   qtmp(1)=qRL(1); qtmp(5)=qRL(5); qtmp(8)=qRL(8)
   qtmp(6)=qRL(6); qtmp(7)=qRL(7)
 #if NENER>0
@@ -2188,7 +2262,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRL(8+irad)
   end do
 #endif
-  uRL=qtmp(2); call find_speed_fast(qtmp,cRLx,gamma,gamma_rad)
+  uRL=qtmp(2); call find_speed_fast(qtmp,cRLx,params)
   qtmp(1)=qRR(1); qtmp(5)=qRR(5); qtmp(8)=qRR(8)
   qtmp(6)=qRR(6); qtmp(7)=qRR(7)
 #if NENER>0
@@ -2196,7 +2270,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRR(8+irad)
   end do
 #endif
-  uRR=qtmp(2); call find_speed_fast(qtmp,cRRx,gamma,gamma_rad)
+  uRR=qtmp(2); call find_speed_fast(qtmp,cRRx,params)
 
   ! Compute 4 fast magnetosonic velocity relative to y direction
   qtmp(1)=qLL(1); qtmp(5)=qLL(5); qtmp(8)=qLL(8)
@@ -2206,7 +2280,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLL(8+irad)
   end do
 #endif
-  vLL=qtmp(3); call find_speed_fast(qtmp,cLLy,gamma,gamma_rad)
+  vLL=qtmp(3); call find_speed_fast(qtmp,cLLy,params)
   qtmp(1)=qLR(1); qtmp(5)=qLR(5); qtmp(8)=qLR(8)
   qtmp(6)=qLR(7); qtmp(7)=qLR(6)
 #if NENER>0
@@ -2214,7 +2288,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qLR(8+irad)
   end do
 #endif
-  vLR=qtmp(3); call find_speed_fast(qtmp,cLRy,gamma,gamma_rad)
+  vLR=qtmp(3); call find_speed_fast(qtmp,cLRy,params)
   qtmp(1)=qRL(1); qtmp(5)=qRL(5); qtmp(8)=qRL(8)
   qtmp(6)=qRL(7); qtmp(7)=qRL(6)
 #if NENER>0
@@ -2222,7 +2296,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRL(8+irad)
   end do
 #endif
-  vRL=qtmp(3); call find_speed_fast(qtmp,cRLy,gamma,gamma_rad)
+  vRL=qtmp(3); call find_speed_fast(qtmp,cRLy,params)
   qtmp(1)=qRR(1); qtmp(5)=qRR(5); qtmp(8)=qRR(8)
   qtmp(6)=qRR(7); qtmp(7)=qRR(6)
 #if NENER>0
@@ -2230,7 +2304,7 @@ subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
      qtmp(8+irad) = qRR(8+irad)
   end do
 #endif
-  vRR=qtmp(3); call find_speed_fast(qtmp,cRRy,gamma,gamma_rad)
+  vRR=qtmp(3); call find_speed_fast(qtmp,cRRy,params)
 
   SL=min(min(uLL,uLR,uRL,uRR)-max(cLLx,cLRx,cRLx,cRRx),zero)
   SR=max(max(uLL,uLR,uRL,uRR)+max(cLLx,cLRx,cRLx,cRRx),zero)
@@ -2246,14 +2320,12 @@ end subroutine riemann2d_hll_fast
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann2d_hll_alfven(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
+subroutine riemann2d_hll_alfven(qLL,qLR,qRL,qRR,E)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener
   use const
   ! HLL 2D Riemann solver using the Alfven speed
   IMPLICIT NONE
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 
@@ -2302,21 +2374,26 @@ end subroutine riemann2d_hll_alfven
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine riemann2d_simple(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc,iriemann2d)
+subroutine riemann2d_simple(qLL,qLR,qRL,qRR,E,params)
   use amr_parameters, only: dp, ndim
+  use amr_commons, only: hydro_params_t
   use hydro_parameters
   use const
   ! HLL 2D Riemann solver using the Alfven speed
   IMPLICIT NONE
-  integer::iriemann2d
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
   REAL(dp)::E
 
+  integer::riemann2d
   REAL(dp),DIMENSION(1:nprim)::qleft,qright
   REAL(dp),DIMENSION(1:nprim+1)::fmean_x,fmean_y
   REAL(dp)::ELL,ERL,ELR,ERR,zero_flux
+#if NENER>0
+  INTEGER::irad
+#endif
+
+  riemann2d=params%riemann2d
 
   ! vx*by - vy*bx at the four edge centers
   ELL = qLL(2)*qLL(7) - qLL(3)*qLL(6)
@@ -2369,13 +2446,13 @@ subroutine riemann2d_simple(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc,irie
 #endif
 
   zero_flux = 0.
-  SELECT CASE (iriemann2d)
+  SELECT CASE (riemann2d)
   CASE (solver2d_roe)
-     CALL riemann_roe_mhd(qleft,qright,fmean_x,zero_flux,gamma,gamma_rad,smallr,smallc)
+     CALL riemann_roe_mhd(qleft,qright,fmean_x,zero_flux,params)
   CASE (solver2d_llf)
-     CALL riemann_llf_mhd(qleft,qright,fmean_x,zero_flux,gamma,gamma_rad,smallr,smallc)
+     CALL riemann_llf_mhd(qleft,qright,fmean_x,zero_flux,params)
   CASE (solver2d_upwind)
-     CALL riemann_upwind_mhd(qleft,qright,fmean_x,zero_flux,gamma,gamma_rad,smallr,smallc)
+     CALL riemann_upwind_mhd(qleft,qright,fmean_x,zero_flux,params)
   CASE DEFAULT
      write(*,*)'unknown 2D riemann solver'
      stop
@@ -2423,13 +2500,13 @@ subroutine riemann2d_simple(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc,irie
 #endif
 
   zero_flux = 0.
-  SELECT CASE (iriemann2d)
+  SELECT CASE (riemann2d)
   CASE (solver2d_roe)
-     CALL riemann_roe_mhd(qleft,qright,fmean_y,zero_flux,gamma,gamma_rad,smallr,smallc)
+     CALL riemann_roe_mhd(qleft,qright,fmean_y,zero_flux,params)
   CASE (solver2d_llf)
-     CALL riemann_llf_mhd(qleft,qright,fmean_y,zero_flux,gamma,gamma_rad,smallr,smallc)
+     CALL riemann_llf_mhd(qleft,qright,fmean_y,zero_flux,params)
   CASE (solver2d_upwind)
-     CALL riemann_upwind_mhd(qleft,qright,fmean_y,zero_flux,gamma,gamma_rad,smallr,smallc)
+     CALL riemann_upwind_mhd(qleft,qright,fmean_y,zero_flux,params)
   CASE DEFAULT
      write(*,*)'unknown 2D riemann solver'
      stop

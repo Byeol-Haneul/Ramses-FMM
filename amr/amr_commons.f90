@@ -124,6 +124,8 @@ module amr_commons
      character(LEN=10)::scheme='muscl'
      integer::riemann=0
      integer::riemann2d=0
+     real(dp)::switch_llf_dmin=-1
+     real(dp)::switch_llf_pmin=-1
      real(dp),dimension(1:3)::constant_gravity
      integer::inener,ientropy,imetal,iturb,ichem
      
@@ -436,6 +438,18 @@ module amr_commons
 
   end type run_t
 
+  type hydro_params_t
+     integer::slope_type,slope_mag_type,riemann,riemann2d
+     real(dp),dimension(1:nener+1)::gamma_rad
+     real(dp)::gamma,smallr,smallc
+     real(dp)::difmag
+     real(dp)::switch_llf_dmin,switch_llf_pmin
+#ifdef MHD
+     real(dp)::etamag
+     logical::induction
+#endif
+  end type hydro_params_t
+
   type global_t
 
      ! MPI variables
@@ -616,6 +630,27 @@ contains
     run_params = run_p
     write(*,NML=run_parameters)
   end subroutine print_run_parameters
+
+  subroutine set_hydro_parameters(r,h_params)
+    type(run_t)::r
+    type(hydro_params_t)::h_params
+    ! Transfer hydro parameters
+    h_params%gamma=r%gamma
+    h_params%gamma_rad=r%gamma_rad
+    h_params%smallr=r%smallr
+    h_params%smallc=r%smallc
+    h_params%slope_type=r%slope_type
+    h_params%slope_mag_type=r%slope_mag_type
+    h_params%riemann=r%riemann
+    h_params%riemann2d=r%riemann2d
+    h_params%difmag=r%difmag
+    h_params%switch_llf_dmin=r%switch_llf_dmin
+    h_params%switch_llf_pmin=r%switch_llf_pmin
+#ifdef MHD
+    h_params%etamag=r%etamag
+    h_params%induction=r%induction
+#endif
+  end subroutine set_hydro_parameters
 
 end module amr_commons
 

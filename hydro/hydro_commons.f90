@@ -50,7 +50,7 @@ module hydro_commons
   end type hydro_workspace_t
 
 contains
-  
+
   subroutine init_hydro_kernel(h,nn)
     use amr_parameters, only: ndim
     use hydro_parameters, only: nvar
@@ -68,7 +68,7 @@ contains
     h%io1=0; h%io2=nn/2+1
     h%jo1=(1-ndim/2); h%jo2=(1-ndim/2)+(nn/2+1)*(ndim/2)
     h%ko1=(1-ndim/3); h%ko2=(1-ndim/3)+(nn/2+1)*(ndim/3)
-    
+
     allocate(h%uloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nvar))
     allocate(h%gloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:ndim))
     allocate(h%qloc (h%iu1:h%iu2,h%ju1:h%ju2,h%ku1:h%ku2,1:nprim))

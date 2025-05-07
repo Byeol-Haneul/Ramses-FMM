@@ -368,12 +368,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
        & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
 #ifdef MHD
        & h%bloc,h%emfx,h%emfy,h%emfz,h%bf,h%dbf,h%Ex,h%Ey,h%Ez,h%qRT,h%qRB,h%qLT,h%qLB,&
-       & r%etamag,r%induction, &
 #endif
-       & dx,dx,dx,g%dtnew(ilevel),&
+       & dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2,&
-       & r%gamma,r%gamma_rad,r%smallr,r%smallc,r%slope_type,r%slope_mag_type,r%riemann,r%riemann2d,r%difmag)
+       & s%h_params)
 
   ! If finest level, skip
   if(ilevel < r%nlevelmax)then

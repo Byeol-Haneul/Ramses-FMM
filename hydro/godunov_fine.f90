@@ -175,7 +175,7 @@ subroutine set_uold(r,g,m,ilevel)
   ! This routine sets array uold to its new value unew 
   ! after the hydro step.
   !---------------------------------------------------------
-  integer::i,ind
+  integer::i
 
 #ifdef HYDRO
   ! Set uold to unew
@@ -219,7 +219,7 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   ! coarser level if necessary.
   !-------------------------------------------------------------------
   integer::ivar,idim,ind,ind_son,ind_oct
-  integer::igrid,icell,inbor,ipass
+  integer::icell,inbor,ipass
   integer::i0,j0,k0,i1,j1,k1,i2,j2,k2,i3,j3,k3
   integer::ii0,jj0,kk0,ii1,jj1,kk1
   integer::i1min,i1max,j1min,j1max,k1min,k1max
@@ -615,12 +615,11 @@ subroutine godfine1(s,ind_grid,ilevel,h)
        & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
 #ifdef MHD
        & h%bloc,h%emfx,h%emfy,h%emfz,h%bf,h%dbf,h%Ex,h%Ey,h%Ez,h%qRT,h%qRB,h%qLT,h%qLB,&
-       & r%etamag,r%induction, &
 #endif
-       & dx,dx,dx,g%dtnew(ilevel),&
+       & dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2,&
-       & r%gamma,r%gamma_rad,r%smallr,r%smallc,r%slope_type,r%slope_mag_type,r%riemann,r%riemann2d,r%difmag)
+       & s%h_params)
 
   !-------------------------------------------------
   ! Reset flux along direction at refined interfaces
@@ -1302,8 +1301,8 @@ subroutine init_flush_godunov(grid,hash_key)
 
   integer::ind,ivar
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  grid%lev=int(hash_key(0),kind=4)
+  grid%ckey(1:ndim)=int(hash_key(1:ndim),kind=4)
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
@@ -1365,8 +1364,8 @@ subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
   integer::ind,ivar
   type(msg_large_realdp)::msg
 
-  grid%lev=hash_key(0)
-  grid%ckey(1:ndim)=hash_key(1:ndim)
+  grid%lev=int(hash_key(0),kind=4)
+  grid%ckey(1:ndim)=int(hash_key(1:ndim),kind=4)
   msg=transfer(msg_array,msg)
 
 #ifdef HYDRO

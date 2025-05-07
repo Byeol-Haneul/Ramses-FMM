@@ -254,6 +254,8 @@ subroutine m_read_params(pst)
   real(dp)::dual_energy=-1
   real(dp)::T2_fix=0d0
   real(dp),dimension(1:3)::constant_gravity=0.0d0
+  real(dp)::switch_llf_dmin=-1
+  real(dp)::switch_llf_pmin=-1
 
   ! Non-thernal energies and passive scalars index
   integer ::inener,ientropy,imetal,iturb,ichem
@@ -467,7 +469,7 @@ subroutine m_read_params(pst)
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
        & ,dual_energy,T2_fix,induction,entropy,turb,riemann,riemann2d,constant_gravity &
-       & ,niter_riemann,scheme
+       & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
        & ,a_refine,b_refine,exp_refine,jeans_refine,mass_cut_refine &
@@ -1083,6 +1085,8 @@ subroutine m_read_params(pst)
   if(riemann2d=='roe')s%r%riemann2d=solver2d_roe
   if(riemann2d=='upwind')s%r%riemann2d=solver2d_upwind
 #endif
+  s%r%switch_llf_dmin=switch_llf_dmin
+  s%r%switch_llf_pmin=switch_llf_pmin
 
   s%r%units_density=units_density
   s%r%units_time=units_time
@@ -1360,7 +1364,7 @@ end subroutine m_broadcast_params
 recursive subroutine r_broadcast_params(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
-  use amr_commons, only: run_t
+  use amr_commons, only: run_t, set_hydro_parameters
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -1370,11 +1374,12 @@ recursive subroutine r_broadcast_params(pst,input,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-    rID = mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,input_size,0,input)
-    call r_broadcast_params(pst%pLower,input,input_size)
-    call mdl_get_reply(pst%s%mdl,rID,0)
+     rID = mdl_send_request(pst%s%mdl,MDL_BCAST_PARAMS,pst%iUpper+1,input_size,0,input)
+     call r_broadcast_params(pst%pLower,input,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
   else
-    pst%s%r=input
+     pst%s%r=input
+     call set_hydro_parameters(pst%s%r,pst%s%h_params)
   endif
 
 end subroutine r_broadcast_params
