@@ -35,7 +35,7 @@ subroutine mdl_init
   if(mdl_self(mdl)>1)then
      call mdl_wait(pst)
   else
-     call master(mdl,pst)
+     call master(pst)
   endif
 
 #ifndef WITHOUTMPI
@@ -67,10 +67,9 @@ end subroutine r_clean_stop
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine master(mdl,pst)
+subroutine master(pst)
   use init_amr_module, only: r_set_add
   implicit none
-  type(*)::mdl
   type(pst_t)::pst
   call r_set_add(pst,mdl_threads(pst%s%mdl),1)
   call adaptive_loop(pst)
@@ -293,14 +292,6 @@ end function worker_init
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine worker_done(mdl,pst)
-  type(mdl_t)::mdl
-  type(pst_t),allocatable::pst
-  ! FIXME: These should be deallocatable, but they are not ???
-  !deallocate(pst%s)
-  !deallocate(pst)
-end subroutine worker_done
-
 end subroutine mdl_init
 !##############################################################
 !##############################################################
@@ -676,7 +667,7 @@ subroutine check_mail(s,comm_id,hash_dict)
               child_exist=.true.
               child_exist=child_exist.and.associated(child)
               if(associated(child))then
-                 igrid=(loc(child)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
+                 igrid=int((loc(child)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1,kind=4)
                  child_exist=child_exist.and.igrid<=r%ngridmax
               endif
 
@@ -704,7 +695,7 @@ subroutine check_mail(s,comm_id,hash_dict)
 
                  ! Store data, depending on reply type
                  do i=1,ntile_reply
-                    mdl%send_fetch(ibuf)%array(iskip:iskip+ndim)=raw_keys(0:ndim,i)
+                    mdl%send_fetch(ibuf)%array(iskip:iskip+ndim)=int(raw_keys(0:ndim,i),kind=4)
                     iskip=iskip+1+ndim ! Skip over the key already present
                     call pack_fetch%proc(grid(i)%p,mdl%size_msg_array,mdl%send_fetch(ibuf)%array(iskip:iskip+mdl%size_msg_array-1))
                     iskip=iskip+mdl%size_msg_array
@@ -825,7 +816,7 @@ subroutine check_mail(s,comm_id,hash_dict)
 
               ! Assemble a reply and send it back
               global_peak_id=transfer(mdl%recv_request_array_clump(1:2),global_peak_id)
-              local_peak_id=global_peak_id-c%npeak_cum(g%myid-1)
+              local_peak_id=int(global_peak_id-c%npeak_cum(g%myid-1),kind=4)
               peak_cpu=request_status_clump(MPI_SOURCE)+1
 
               ! Identify the corresponding communication buffer
@@ -895,7 +886,7 @@ subroutine check_mail(s,comm_id,hash_dict)
               do i=1,nflush
                  global_peak_id=transfer(mdl%recv_flush_array_clump(iskip:iskip+1),global_peak_id)
                  iskip=iskip+2
-                 local_peak_id=global_peak_id-c%npeak_cum(g%myid-1)
+                 local_peak_id=int(global_peak_id-c%npeak_cum(g%myid-1),kind=4)
                  call unpack_flush_clump%proc(c,local_peak_id,mdl%size_msg_array_clump,mdl%recv_flush_array_clump(iskip:iskip+mdl%size_msg_array_clump-1))
                  iskip=iskip+mdl%size_msg_array_clump
               end do

@@ -136,10 +136,11 @@ SUBROUTINE neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
   real(kind=8):: dt_rec
   real(kind=8):: dT2
   real(kind=8),dimension(nion):: dXion
-  integer::i, ia, ig, nAct, nAct_next, loopcnt, code
+  integer::i, ia, nAct, nAct_next, loopcnt, code
   integer,dimension(1:nvector):: indAct              ! Active cell indexes
   real(kind=8):: one_over_x_FRAC, one_over_T_FRAC
 #ifdef RT
+  integer::ig
   real(kind=8):: one_over_rt_c_cgs, one_over_egy_IR_erg
   real(kind=8):: one_over_Np_FRAC, one_over_Fp_FRAC
   real(kind=8),dimension(1:ndim):: dp_gas
@@ -284,8 +285,8 @@ contains
     real(kind=8):: xHI,dxHI, xH2=0d0,dXH2=0d0, xHeI,dxHeI
     real(kind=8):: Crate, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
     real(kind=8):: photoRate, metal_tot, metal_prime, ss_factor, f_dust
-    integer:: iion,igroup,idim
 #ifdef RT
+    integer:: iion,igroup,idim
     real(kind=8),dimension(ndim):: dmom
     real(kind=8),dimension(nrtgrp):: recRad, phAbs, phSc, dustAbs
     real(kind=8),dimension(nrtgrp):: dustSc, kAbs_loc, kSc_loc
@@ -1307,7 +1308,6 @@ FUNCTION getMu(r, xion, Tmu)
   getMu = 1./(r%X_H*(0.5+0.5*xHI+1.5*xHII) + 0.25*r%Y_He*(1.+xHeII+2.*xHeIII))
   if(r%is_mu_H2) getMu = getMu + exp(-1d0*(Tmu/r%Tmu_dissoc)**2) * (2.33-getMu)
 END FUNCTION getMu
-
 !************************************************************************
 SUBROUTINE updateRTGroups_CoolConstants(r,tables)
   ! Update photon group cooling and heating constants, to reflect an update
@@ -1316,10 +1316,10 @@ SUBROUTINE updateRTGroups_CoolConstants(r,tables)
   implicit none
   type(run_t)::r
   type(neq_cooling_t)::tables
+#ifdef RT
   !------------------------------------------------------------------------
   integer::iP, iI, i
   !------------------------------------------------------------------------
-#ifdef RT
   do i=r%nlevelmax,r%levelmin,-1
     tables%signc(:,:,i) = r%group_csn*tables%rt_c_cgs(i)        ! [cm3 s-1]
     tables%sigec(:,:,i) = r%group_cse*tables%rt_c_cgs(i)        ! [cm3 s-1]
@@ -1334,8 +1334,8 @@ SUBROUTINE updateRTGroups_CoolConstants(r,tables)
   end do
 #endif
 END SUBROUTINE updateRTGroups_CoolConstants
-
 !************************************************************************
+#ifdef RT
 SUBROUTINE reduce_flux(Fp, cNp)
   ! Make sure the reduced photon flux is less than one
   !------------------------------------------------------------------------
@@ -1347,6 +1347,6 @@ SUBROUTINE reduce_flux(Fp, cNp)
   fred = sqrt(sum(Fp**2))/cNp
   if(fred .gt. 1d0) Fp = Fp/fred
 END SUBROUTINE reduce_flux
-
+#endif
 END MODULE neq_cooling_module
 

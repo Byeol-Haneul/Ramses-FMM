@@ -39,7 +39,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
   type(pst_t) :: pst
   integer :: ilevel,icount
-  logical :: done,ok_fbk,ok_acc
+  logical :: done,ok_fbk
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
