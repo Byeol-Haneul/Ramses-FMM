@@ -161,7 +161,7 @@ subroutine set_uold(r,g,m,ilevel)
   ! This routine sets array uold to its new value unew 
   ! after the hydro step.
   !---------------------------------------------------------
-  integer::i,ind
+  integer::i
 
 #ifdef HYDRO
   ! Set uold to unew
@@ -413,10 +413,10 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   !-----------------------------------------------
   call unsplit(h%uloc,h%gloc,h%qloc,h%cloc,&
        & h%flux,h%tmp,h%dq,h%qm,h%qp,h%fx,h%tx,h%divu,&
-       & dx,dx,dx,g%dtnew(ilevel),&
+       & dx,g%dtnew(ilevel),&
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,&
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2,&
-       & r%gamma,r%gamma_rad,r%smallr,r%smallc,r%slope_type,r%slope_mag_type,r%riemann,r%riemann2d,r%difmag)
+       & s%h_params)
 
   !--------------------------------------
   ! Conservative update at level ilevel
@@ -504,16 +504,10 @@ subroutine init_flush_godunov(grid,hash_key)
   type(oct)::grid
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  integer::ind,ivar
-
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
 #ifdef HYDRO
-  do ivar=1,nvar
-     do ind=1,twotondim
-        grid%unew(ind,ivar)=0.0d0
-     enddo
-  enddo
+  grid%unew=0.0d0
 #endif
 
 #ifdef MHD
@@ -534,15 +528,10 @@ subroutine pack_flush_godunov(grid,msg_size,msg_array)
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
-  integer::ind,ivar
   type(msg_large_realdp)::msg
 
 #ifdef HYDRO
-  do ivar=1,nvar
-     do ind=1,twotondim
-        msg%realdp_hydro(ind,ivar)=grid%unew(ind,ivar)
-     end do
-  end do
+  msg%realdp_hydro=grid%unew
 #endif
 
 #ifdef MHD
@@ -566,7 +555,6 @@ subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
-  integer::ind,ivar
   type(msg_large_realdp)::msg
 
   grid%lev=hash_key(0)
@@ -574,11 +562,7 @@ subroutine unpack_flush_godunov(grid,msg_size,msg_array,hash_key)
   msg=transfer(msg_array,msg)
 
 #ifdef HYDRO
-  do ivar=1,nvar
-     do ind=1,twotondim
-        grid%unew(ind,ivar)=grid%unew(ind,ivar)+msg%realdp_hydro(ind,ivar)
-     end do
-  end do
+  grid%unew=grid%unew+msg%realdp_hydro
 #endif
 
 #ifdef MHD
