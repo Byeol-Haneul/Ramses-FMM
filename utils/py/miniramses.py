@@ -925,6 +925,37 @@ def rd_info(nout,**kwargs):
     i.unit_d=info[18][1]
     i.unit_t=info[19][1]
 
+    rd_rt_info = kwargs.get("rt",False)
+    if rd_rt_info:
+      if(backup):
+          rt_filename = path+"/backup_"+car1+"/rt_info.txt"
+      else:
+          rt_filename = path+"/output_"+car1+"/rt_info.txt"
+
+      rt_info=ascii.read(rt_filename,delimiter="=",format='no_header')
+
+      i.nrtvar = int(rt_info[0][1])
+      i.nrtgrp = int(rt_info[1][1])
+      i.nion   = int(rt_info[2][1])
+      i.iion   = int(rt_info[3][1])
+      i.x_h    = rt_info[4][1]
+      i.y_he   = rt_info[5][1]
+      i.unit_np= rt_info[6][1]
+      i.unit_fp= rt_info[7][1]
+      i.rt_c_fraction= np.array(rt_info[8][1].split(),dtype=float)
+      i.groupL0 = np.array(rt_info[10][1].split(),dtype=float)
+      i.groupL1 = np.array(rt_info[11][1].split(),dtype=float)
+      i.group_egy = np.zeros(i.nrtgrp)
+      i.group_csn = np.zeros((i.nrtgrp, i.nion))
+      i.group_cse = np.zeros((i.nrtgrp, i.nion))
+
+      for igrp in range(i.nrtgrp):
+        iline = 14 + igrp*4
+        print(iline,igrp)
+        i.group_egy[igrp] = rt_info[iline][1]
+        i.group_csn[igrp,:] = np.array(rt_info[iline+1][1].split(),dtype=float)
+        i.group_cse[igrp,:] = np.array(rt_info[iline+2][1].split(),dtype=float)
+
     return i
 
 def hilbert3d(x,y,z,bit_length):
