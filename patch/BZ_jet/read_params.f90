@@ -614,6 +614,10 @@ subroutine m_read_params(pst)
   END IF
   CALL getarg(1,infile)
 
+#ifdef BZ_sink
+  write(*,*)'BZ_SINK routines activated!'
+#endif
+
   !-------------------------------------------------
   ! Read the namelist
   !-------------------------------------------------

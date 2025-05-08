@@ -171,11 +171,12 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dMBH_overdt,dMEd_overdt,rho_inf,cs_gas,m_acc,x_acc,p_acc,l_acc)
       macc_loc = macc_loc + m_acc
+      !write(*,*)'accreted mass: ',m_acc,g%dtnew(ilevel)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Evolve the internal BH/Disc system
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-      call evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,l_acc,f_edd,eta_rad,eta_BZ)
+      call evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,x_acc,p_acc,l_acc,f_edd,eta_rad,eta_BZ)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Prepare for Blandford-Znajek jet
@@ -586,13 +587,14 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       write(*,*)'Sink properties:',rho_gas,rho_inf,cs_gas,v_bondi,r2_sink
    end if
 
-#ifdef BZ_sink
+!#ifdef BZ_sink
    ! Cap the max possible disc mass to be less than the self-gravity mass (e.g. Fiacconi+18;Talbot+21;Kao+25)
-   scale_m_msun = scale_d * scale_l**3 / m_sun
-   call compute_self_gravity_mass(s,p,ipart,-1.0d0,scale_m_msun,-1.0d0,0.0d0,m_sg)
+   !scale_m_msun = scale_d * scale_l**3 / m_sun
+   !call compute_self_gravity_mass(s,p,ipart,-1.0d0,scale_m_msun,-1.0d0,0.0d0,m_sg)
 
-   dMBH_overdt = min(dMBH_overdt,(m_sg/scale_m_msun-p%mD(ipart))/g%dtnew(ilevel))
-#endif
+   !dMBH_overdt = min(dMBH_overdt,(m_sg/scale_m_msun-p%mD(ipart))/g%dtnew(ilevel))
+   !dMBH_overdt = max(dMBH_overdt, 0.0d0)
+!#endif
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Accrete from local cells
@@ -687,6 +689,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       ! Accreted relative angular momentum
       l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(x_rel(1:ndim), vv(1:ndim) - p%vp(ipart,1:ndim)) * vol_loc * dx_loc
    end do ! End loop over j
+
+   write(*,*)'Accreted mass: ',m_acc
+   write(*,*)'Accreted lacc: ',l_acc(:)
 
    end associate
 

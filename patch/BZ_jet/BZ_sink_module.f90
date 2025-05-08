@@ -147,6 +147,7 @@ subroutine launch_blandford_znajek_jet(s,p,ipart,ilevel,edot_jet,pdot_jet,mdot_j
    end do ! End loop over kk
 
    ! Normalise the weights
+   write(*,*)'Jet direction: ',jet_direction
    if(total_weight==0.0d0)write(*,*)'PROBLEM: total weight 0'
    weight_fb_nei = weight_fb_nei / total_weight
    rho_gas_fb = rho_gas_fb / total_weight
@@ -221,7 +222,7 @@ end subroutine launch_blandford_znajek_jet
 !##############################################################################
 !##############################################################################
 
-subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,l_acc,f_edd,eta_rad,eta_BZ)
+subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,m_acc,x_acc,p_acc,l_acc,f_edd,eta_rad,eta_BZ)
    use constants
    use amr_parameters, only: ndim,dp
    use ramses_commons, only: ramses_t
@@ -233,7 +234,7 @@ subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,
    integer::ipart,ilevel
    real(dp)::factG,scale_d,scale_l,scale_t,scale_v
    real(dp)::f_edd,eta_rad,eta_BZ
-   real(dp),dimension(1:ndim)::l_acc
+   real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc
    !==================================================================
    ! This is the RAMSES routine to drive the evolution of the internal
    ! Black hole/disk sub-grid model. This is designed to be modular,
@@ -254,9 +255,9 @@ subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,
    ! Get the black hole spin parameter
    ! TODO: Figure out exactly when this should be pro/retro-grade
    J_BH_mag = norm2(p%jp(ipart,1:ndim))
-   
-   a = (c_cgs*scale_l/scale_t) * J_BH_mag / (factG * p%mBH(ipart)**2)
-   !a = min(a,0.998d0) ! Limit spin parameter Thorne+1974
+   scale_v = scale_l / scale_t
+   a = (c_cgs/scale_v) * J_BH_mag / (factG * p%mBH(ipart)**2)
+   a = min(a,s%r%bh_spin_max) ! Limit spin parameter Thorne+1974
 
    ! Compute if the accretion is pro- or retro-grade
    grade = sign(1.0d0, dot_product(p%jp(ipart,1:ndim),p%jD(ipart,1:ndim)))
@@ -274,17 +275,29 @@ subroutine evolve_BH_disc_system(s,p,ipart,ilevel,factG,scale_d,scale_l,scale_t,
    ! Compute all efficiencies
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    call radiative_efficiency(a,grade,f_edd,r%fedd_ADAF,r%fedd_Edd,eta_rad)
+   write(*,*)'computed eta_rad: ',eta_rad
    call BZ_efficiency(a,f_edd,r%fedd_ADAF,eta_BZ)
+   write(*,*)'computed eta_BZ: ',eta_BZ
+   if(.not.r%agn)eta_rad=0.0d0
+   if(.not.r%agn)eta_BZ =0.0d0
+   write(*,*)'used eta_rad: ',eta_rad
+   write(*,*)'used eta_BZ: ',eta_BZ
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Compute mass evolution of BH/Disc system
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-   call drive_mass_evolution(s,p,ipart,ilevel,f_edd,a,m_acc,eta_rad,eta_BZ,scale_t,scale_m_msun,m_acc_interior)
+   call drive_mass_evolution(s,p,ipart,ilevel,f_edd,a,grade,m_acc,radiative_efficiency_thin(a,grade),eta_BZ,scale_t,scale_m_msun,m_acc_interior)
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Compute angular momentum evolution for BH/Disc system
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    call drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd,a,grade,m_acc,m_acc_interior,l_acc,eta_rad,eta_BZ,scale_t,scale_m_msun)
+
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   ! Update the particle's position and momentum
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   if(.not.p%static)p%xp(ipart,1:ndim)   = ( p%mp(ipart) * p%xp(ipart,1:ndim) + x_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
+   p%vp(ipart,1:ndim)                    = ( p%mp(ipart) * p%vp(ipart,1:ndim) + p_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
 
    end associate
    
@@ -295,7 +308,7 @@ end subroutine evolve_BH_disc_system
 !##############################################################################
 !##############################################################################
 
-subroutine drive_mass_evolution(s,p,ipart,ilevel,f_edd,a,m_acc,eta_rad,eta_BZ,scale_t,scale_m_msun,m_acc_interior)
+subroutine drive_mass_evolution(s,p,ipart,ilevel,f_edd,a,grade,m_acc,eta_rad,eta_BZ,scale_t,scale_m_msun,m_acc_interior)
    use constants
    use amr_parameters, only: dp
    use ramses_commons, only: ramses_t
@@ -304,7 +317,7 @@ subroutine drive_mass_evolution(s,p,ipart,ilevel,f_edd,a,m_acc,eta_rad,eta_BZ,sc
    type(ramses_t)::s
    type(part_t)::p
    integer::ipart,ilevel
-   real(dp)::f_edd,a,m_acc,eta_rad,eta_BZ
+   real(dp)::f_edd,a,grade,m_acc,eta_rad,eta_BZ
    real(dp)::scale_t,scale_m_msun,scale_v,m_acc_interior
    !==================================================================
    ! Update the black hole and disc masses based on the internal evolution
@@ -315,21 +328,30 @@ subroutine drive_mass_evolution(s,p,ipart,ilevel,f_edd,a,m_acc,eta_rad,eta_BZ,sc
    real(dp)::t_salp,self_gravity_mass
 
    ! Compute the Salpeter time
-   t_salp       = (sigma_T * c_cgs / (4.0d0 * pi * factG_in_cgs * mH)) * (eta_rad/0.1) / scale_t
+   t_salp       = (sigma_T * c_cgs / (4.0d0 * pi * factG_in_cgs * mH)) * (radiative_efficiency_thin(a,grade)/0.1) / scale_t
    
+   write(*,*)'Initial masses, M_BH, M_Disc',p%mBH(ipart),p%mD(ipart)
    ! Internal mass accretion
    m_acc_interior = (f_edd / t_salp) * p%mBH(ipart) * s%g%dtnew(ilevel)
+   m_acc_interior = max(min(m_acc_interior, p%mD(ipart)),0.0d0)
+   write(*,*)'ME1, Interior m_acc, exterior m_acc: ',m_acc_interior, m_acc
 
    ! Do the predicter step of the integration
    m_bh_temp    = p%mBH(ipart) + ((1.0d0 - eta_rad - eta_BZ)/(1 + s%r%jet_mass_loading)) * m_acc_interior
    m_disc_temp  = p%mD(ipart)  - m_acc_interior + m_acc
-   
+   write(*,*)'ME2, predicter: ',m_bh_temp,m_disc_temp
+
    ! Do the corrector step of the integration
    p%mBH(ipart) = p%mBH(ipart) + ((1.0d0 - eta_rad - eta_BZ)/(1 + s%r%jet_mass_loading)) * (f_edd / t_salp) * 0.5d0 * (p%mBH(ipart) + m_bh_temp) * s%g%dtnew(ilevel)
-   p%mD(ipart)  = p%mD(ipart)  - (f_edd/t_salp)*0.5d0*(p%mBH(ipart) + m_bh_temp)*s%g%dtnew(ilevel)
+   p%mD(ipart)  = p%mD(ipart)  - (f_edd/t_salp)*0.5d0*(p%mBH(ipart) + m_bh_temp)*s%g%dtnew(ilevel) + m_acc
+   write(*,*)'ME3, corrector: ',p%mBH(ipart),p%mD(ipart)
+
+   p%mD(ipart) = max(p%mD(ipart), 0.0d0)
 
    ! Update the dynamical mass of the particle (i.e. BH + Disc mass)
    p%mp(ipart)  = p%mBH(ipart) + p%mD(ipart)
+   write(*,*)'New total mass: ',p%mp(ipart)
+   write(*,*)'Final masses, M_BH, M_Disc',p%mBH(ipart),p%mD(ipart)
 
 end subroutine drive_mass_evolution
 
@@ -354,10 +376,13 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
    real(dp)::L_ISCO,L_BZ,L,phi_BH,omega_BH
    real(dp)::J_BH_mag,J_BH_mag_new
    real(dp),dimension(1:ndim)::J_BH_temp,J_D_temp,J_BH_hat,J_cons_temp,J_BH_temp_hat,J_D_temp_hat
-   real(dp)::eta_rad_thin,m_bh_warp,f_edd_crit
+   real(dp)::eta_rad_thin,m_bh_warp,f_edd_crit,a_temp
    real(dp)::t_GM,t_acc,omega_prec
    logical::king_check
    real(dp)::r_in,r_trap,r_isco,r_bending_wave,r_s,J_trap
+
+   write(*,*)'Starting J_Disc: ', norm2(p%jD(ipart,1:ndim)),p%jD(ipart,:)
+   write(*,*)'Starting J_BH: ', norm2(p%jp(ipart,1:ndim)),p%jp(ipart,:)
 
    ! Compute the specific angular momentum at ISCO (Bardeen+1972) 
    L = Lam(a,grade)
@@ -372,21 +397,26 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
    omega_BH = (a / 2.0d0) / (1.0d0 + sqrt(1.0d0 - a**2))    ! See Tchekhovskoy+2012
    L_BZ     = 1.0d0/(12.0d0*pi**2) * phi_BH**2 * omega_BH * (factG * p%mBH(ipart) / (c_cgs/scale_v)) ! See Talbot+2021
 
+   write(*,*)'L_ISCO, L_BZ: ', L_ISCO, L_BZ
+
    ! Evolve the first step (ISM->Disc accretion + Disc->ISCO accretion + BH->Jet)
    J_BH_mag            = norm2(p%jp(ipart,1:ndim))
    J_BH_hat(1:ndim)    = p%jp(ipart,1:ndim) / (J_BH_mag + tiny(0.0_dp)) 
 
    J_D_temp(1:ndim)    = p%jD(ipart,1:ndim) + l_acc(1:ndim) - (s%r%jet_mass_loading/(1.0d0 + s%r%jet_mass_loading))*L_ISCO*m_acc_interior*J_BH_hat(1:ndim)
-   J_BH_temp(1:ndim)   = p%jp(ipart,1:ndim) - (1.0d0/(1.0d0 + s%r%jet_mass_loading)) * L_BZ * m_acc_interior * J_BH_hat(1:ndim)
+   !J_BH_temp(1:ndim)   = p%jp(ipart,1:ndim) - (1.0d0/(1.0d0 + s%r%jet_mass_loading)) * L_BZ * m_acc_interior * J_BH_hat(1:ndim)
+   J_BH_temp(1:ndim)   = p%jp(ipart,1:ndim) - (s%r%jet_mass_loading/(1.0d0 + s%r%jet_mass_loading)) * L_BZ * m_acc_interior * J_BH_hat(1:ndim)
 
    ! Compute the (temporary) conserved angular momentum
    J_cons_temp(1:ndim) = J_BH_temp(1:ndim) + J_D_temp(1:ndim)
+   write(*,*)'Conserved total J: ',J_cons_temp(:)
 
    ! Evolve the second step (ISCO accretion -> BH)
    J_BH_mag_new = norm2(J_BH_temp(1:ndim)) + (1.0d0/(1.0d0 + s%r%jet_mass_loading)) * L_ISCO * m_acc_interior
 
    ! Cap the new spin at 0.998 (Thorne+1974)
-   J_BH_mag_new = min(J_BH_mag_new, factG * p%mBH(ipart)**2 * c_cgs/scale_v * s%r%BH_spin_max)
+   write(*,*)'Capping spin: ',J_BH_mag_new, factG * p%mBH(ipart)**2 * s%r%BH_spin_max / (c_cgs/scale_v)
+   J_BH_mag_new = min(J_BH_mag_new, factG * p%mBH(ipart)**2 * s%r%BH_spin_max / (c_cgs/scale_v))
 
    ! Compute the warping mass of the Black Hole (Fiacconi+18;Talbot+21;Kao+25)
    eta_rad_thin = radiative_efficiency_thin(a,grade)
@@ -394,8 +424,8 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
 
    ! Compute the critical accretion rate between the Diffusive (i.e. Bardeen-Peterson) and wave regimes (see Ingram & Motta 2019) following Kao+2025
    ! Here, we define it such that r_pt = r_warp. Also, we assume zeta = 1 (otherwise there's a factor of zeta^(-20/41))
-   f_edd_crit = 16.0d0 * (s%r%disc_viscosity_zeta)**(-20/41) * (s%r%disc_viscosity/0.1d0)**(24/41) * (eta_rad/0.1) * (p%mBH(ipart) * scale_m_msun / 1d6)**(-4/41) * a**(20/41)
-   if(s%r%disc_model_type==1)f_edd_crit=huge(0.0_dp) ! We should never enter this regime for pure-thin-disc models
+   f_edd_crit = 16.0d0 * (s%r%disc_viscosity_zeta)**(-20/41) * (s%r%disc_viscosity/0.1d0)**(24/41) * (eta_rad_thin/0.1) * (p%mBH(ipart) * scale_m_msun / 1d6)**(-4/41) * a**(20/41)
+   if(s%r%disc_model_type==1)f_edd_crit=f_edd+1 ! We should never enter this regime for pure-thin-disc models
 
    ! Find the temporary Black Hole and Disc unit vectors
    J_BH_temp_hat(1:ndim) = J_BH_temp(1:ndim) / (norm2(J_BH_temp(1:ndim)) + tiny(0.0_dp)) 
@@ -403,10 +433,11 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
 
    ! Evolve the direction of the BH spin (Lense-Thirring etc.)
    if(f_edd>=f_edd_crit)then
+      write(*,*)'Working in the wave regime...'
       !!! We are in the wave regime, follow Ingram & Motta 2019 (see also Koudmani+24,Kao+25)
       ! Compute all needed radii (all normalised to r_s)
       r_isco = Lam(a,grade)/2.0d0
-      r_trap = 15.0d0 * (f_edd / (eta_rad/0.1d0))
+      r_trap = 15.0d0 * (f_edd / (eta_rad_thin/0.1d0))
       r_bending_wave = 3.0d0 * a**(2/5) ! Note, we assume H/R = 1
       r_in = max(r_isco,r_bending_wave)
       r_s = 2.0d0*factG*p%mBH(ipart)/(c_cgs/scale_v)**2
@@ -426,6 +457,7 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
    else
       ! We are in the diffusive, first we check if the BH exceeds the warp mass
       if(p%mBH(ipart)>=m_bh_warp)then
+         write(*,*)'King alignment...'
          !!! We align instantly, following King+2005
          ! The Black Hole aligns along the total angular momentum
          p%jp(ipart,1:ndim) = J_BH_mag_new/(norm2(J_cons_temp)+tiny(0.0_dp))  * J_cons_temp(1:ndim)
@@ -440,9 +472,10 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
             p%jD(ipart,1:ndim) = -norm2(J_D_temp)/(norm2(J_cons_temp)+tiny(0.0_dp))  * J_cons_temp(1:ndim)
          end if
       else
+         write(*,*)'Working in the Bardeen-Peterson configuration...'
          !!! We are in the Bardeen-Peterson 1975 configuration
          ! Compute the gravito-magnetic timescale (Martin+2007;Perego+2009;Dotti+2013)
-         t_GM = 1.7d5 * (p%mBH(ipart) * scale_m_msun / 1d6)**(-2/35) * (f_edd/(eta_rad_thin/0.1))**(-32/35) * (s%r%disc_viscosity/0.1d0)**(58/35) * a**(5/7) / scale_t
+         t_GM = 1.7d5 * (p%mBH(ipart) * scale_m_msun / 1d6)**(-2/35) * (f_edd/(eta_rad_thin/0.1))**(-32/35) * (s%r%disc_viscosity/0.1d0)**(58/35) * a**(5/7) / scale_t * (60*60*24*365.25)
 
          ! Update the Black Hole spin direction
          p%jp(ipart,1:ndim) = p%jp(ipart,1:ndim) - (s%g%dtnew(ilevel)/t_GM) * J_BH_mag_new * (sin(pi/7.0d0)*cross(J_BH_temp_hat,J_D_temp_hat) + cos(pi/7.0d0)*cross(J_BH_temp_hat,cross(J_BH_temp_hat,J_D_temp_hat)))
@@ -452,6 +485,8 @@ subroutine drive_angular_momentum_evolution(s,p,ipart,ilevel,factG,scale_v,f_edd
    ! Evolve the disc angular momentum using the conserved angular momentum
    p%jD(ipart,1:ndim) = J_cons_temp(1:ndim) - p%jp(ipart,1:ndim)
 
+   write(*,*)'Ending J_Disc: ', norm2(p%jD(ipart,1:ndim)),p%jD(ipart,:)
+   write(*,*)'Ending J_BH: ', norm2(p%jp(ipart,1:ndim)),p%jp(ipart,:)
 end subroutine drive_angular_momentum_evolution
 
 !##############################################################################
@@ -482,7 +517,10 @@ subroutine solve_for_internal_accretion_rate(s,p,ipart,a,grade,scale_m_msun,f_ed
    end if
 
    ! If desired, limit this accretion rate
-   f_edd = min(f_edd, s%r%max_internal_accretion_rate)
+   if(s%r%max_internal_accretion_rate>0)f_edd = min(f_edd, s%r%max_internal_accretion_rate)
+   f_edd = max(f_edd, 0.0d0)
+   write(*,*)'used f_edd: ',f_edd
+   
 
 end subroutine solve_for_internal_accretion_rate
 
@@ -509,7 +547,12 @@ subroutine thin_disk_one_zone_f_edd(s,p,ipart,a,grade,scale_m_msun,f_edd)
 
    J_BH_mag = norm2(p%jp(ipart,1:ndim))
    J_D_mag = norm2(p%jD(ipart,1:ndim))
-   f_edd = 0.76d0 * (radiative_efficiency_thin(a,grade)/0.1d0) * (s%r%disc_viscosity/0.1d0)**(8/7) * (p%mD(ipart) * scale_m_msun / 1d4)**5 * (p%mBH(ipart) * scale_m_msun / 1d6)**(-47/7) * (a*J_D_mag*sign(1.0d0,dot_product(p%jp(ipart,1:ndim),p%jD(ipart,1:ndim)))/(3.0d0 * J_BH_mag))**(-25/7)
+   f_edd = 0.76d0 * (radiative_efficiency_thin(a,grade)/0.1d0) * (s%r%disc_viscosity/0.1d0)**(8/7) * ((p%mD(ipart)+tiny(0.0_dp)) * scale_m_msun / 1d4)**5 * (p%mBH(ipart) * scale_m_msun / 1d6)**(-47/7) * (a*(J_D_mag+tiny(0.0_dp))/(3.0d0 * (J_BH_mag+tiny(0.0_dp))))**(-25/7)
+
+   if(isnan(f_edd))f_edd = 0.0d0
+   write(*,*)'fedd check: ',radiative_efficiency_thin(a,grade)/0.1d0,s%r%disc_viscosity/0.1d0,(p%mD(ipart)+tiny(0.0_dp)) * scale_m_msun / 1d4,p%mBH(ipart) * scale_m_msun / 1d6,a*J_D_mag/(3.0d0 * (J_BH_mag+tiny(0.0_dp)))
+   write(*,*)'BH properties: ', p%mp(ipart),p%mBH(ipart),p%mD(ipart),a
+   write(*,*)'internal f_edd: ',f_edd
 
 end subroutine thin_disk_one_zone_f_edd
 
@@ -774,15 +817,18 @@ subroutine BZ_dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d,d
    if(.not.file_exist)then
       if(r%verbose_sink)write(*,*)'Creating file: ',filename
       open(unit=unit,file=filename,form='formatted')
-      write(unit,*)'nstep,time,dt,mass,MBH,MD,dMBH,dMEd,m_acc,f_edd,eta_rad,eta_BZ,edot_jet,pdot_jet,mdot_jet,'
+      write(unit,*)'nstep,time,dt,mass,MBH,MD,vx,vy,vz,dMBH,dMEd,m_acc,a,f_edd,jbhx,jbhy,jbhz,jdx,jdy,jdz,eta_rad,eta_BZ,edot_jet,pdot_jet,mdot_jet'
       close(unit)
    end if
    
    ! Open the sink file
    open(unit=unit,file=filename,form='formatted',status='unknown',position='append')
 
+   if(isnan(edot_jet))edot_jet=0.0d0
+   if(isnan(mdot_jet))mdot_jet=0.0d0
+   if(isnan(pdot_jet))pdot_jet=0.0d0
    ! Write data to the sink file
-   write(unit,'(I10,21(A1,ES21.10),A1,I10)')g%nstep,',',g%t,',',g%dtnew(ilevel),',',p%mp(ipart),',',p%mBH(ipart),',',p%mD(ipart),',',dMBH_overdt,',',dMEd_overdt,',',m_acc,',',f_edd,',',eta_rad,',',eta_BZ,',',edot_jet,',',pdot_jet,',',mdot_jet
+   write(unit,'(I10,35(A1,ES21.10),A1)')g%nstep,',',g%t,',',g%dtnew(ilevel),',',p%mp(ipart),',',p%mBH(ipart),',',p%mD(ipart),',',p%vp(ipart,1),',',p%vp(ipart,2),',',p%vp(ipart,3),',',dMBH_overdt,',',dMEd_overdt,',',m_acc,',',a,',',f_edd,',',p%jp(ipart,1),',',p%jp(ipart,2),',',p%jp(ipart,3),',',p%jD(ipart,1),',',p%jD(ipart,2),',',p%jD(ipart,3),',',eta_rad,',',eta_BZ,',',edot_jet,',',pdot_jet,',',mdot_jet
    ! Close the sink file
    close(unit)
 
