@@ -155,7 +155,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   type(msg_int4)::dummy_int4
   real(dp),dimension(nion)::xion
 
-
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   !---------------------------------------------------
@@ -201,6 +200,26 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   end do
   ncreate=g%ncreate
 
+  if(r%neq_chem .and. r%upload_equilibrium_x) then
+     ! Enforce equilibrium on ionization states when derefining, to
+     ! prevent unnatural values (e.g when merging hot and cold cells).
+     ! Skip this during grid initialization (i.e. nstep_coarse=0)
+     do ilev=ilevel,r%nlevelmax-1
+        do ioct=m%head(ilev),m%tail(ilev)
+           do ind=1,twotondim
+              ok   = m%grid(ioct)%flag1(ind)==0 .and. &
+                   & m%grid(ioct)%refined(ind)
+              if(ok)then
+                 ind_cell=ind
+                 gridp=>m%grid(ioct)
+                 call calc_equilibrium_xion(s, gridp, ind_cell, ilev, xion)
+                 m%grid(ioct)%uold(ind,r%iIons:r%iIons+nion-1)=xion*m%grid(ioct)%uold(ind,1)
+              endif
+           end do
+        end do
+     end do
+  endif
+
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
   ! but it is refined, then destroy the child grid.
@@ -211,7 +230,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
                 pack=pack_fetch_flag,unpack=unpack_fetch_flag,&
-                init=init_flush_derefine,flush=pack_flush_derefine, combine=unpack_flush_derefine)
+                init=init_flush_derefine,flush=pack_flush_derefine,combine=unpack_flush_derefine)
 
      hash_key(0)=ilev
      do ioct=m%head(ilev),m%tail(ilev)
@@ -225,13 +244,6 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         ok   = gridp%flag1(icell)==0 .and. &
              & gridp%refined(icell)
         if(ok)then
-           if(r%neq_chem .and. r%upload_equilibrium_x .and. g%nstep_coarse.ne.0) then
-              ! Enforce equilibrium on ionization states when merging, to
-              ! prevent unnatural values (e.g when merging hot and cold cells).
-              ! Skip this during grid initialization (i.e. nstep_coarse=0)
-              call calc_equilibrium_xion(s, gridp, icell, xion)
-              gridp%uold(icell,r%iIons:r%iIons+nion-1)=xion*gridp%uold(icell,1)
-            endif
            ! Set grid level to zero
            m%grid(ioct)%lev=0
            ! Set parent cell to "unrefined" status
@@ -821,6 +833,9 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   do ivar=1,nrtvar
      do ind=1,twotondim
         child%rtuold(ind,ivar)=rtu2(ind,ivar)
+        ! Rescale according to speed of light difference
+        if (mod(ivar,ndim+1).eq.1) &
+          child%rtuold(ind,ivar) = child%rtuold(ind,ivar) * g%rt_c(ilevel-1)/g%rt_c(ilevel)
      enddo
   end do
 #endif

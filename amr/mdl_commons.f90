@@ -48,6 +48,7 @@ module mdl_parameters
      enumerator::MDL_RESET_RHO
      enumerator::MDL_CIC_MULTIPOLE
      enumerator::MDL_CIC_PART
+     enumerator::MDL_SORT_PART
      enumerator::MDL_SPLIT_PART
      enumerator::MDL_KICK_DRIFT_PART
      enumerator::MDL_MASS_MIN_PART

@@ -283,9 +283,11 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
               s%levelp(s%npart)=ilevel
               ! Remove corresponding mass from gas mass density
               m%grid(igrid)%uold(ind,1)=d-dstar
-              ! Star formation is isobaric, adjust entropy
+              ! Star formation is isothermal, adjust pressure
+              m%grid(igrid)%uold(ind,5)=m%grid(igrid)%uold(ind,1)*p/d
+              ! If dual energy, adjust entropy
               if(r%entropy.and.r%dual_energy.GE.0)then
-                 m%grid(igrid)%uold(ind,r%ientropy)=p/(d-dstar)**r%gamma
+                 m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)/m%grid(igrid)%uold(ind,1)**r%gamma
               endif
            endif
         endif

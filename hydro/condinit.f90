@@ -35,6 +35,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #define DOUBLEMACH 3
 #define OT 4
 #define PONO 5
+#define CURRENTSHEET 6
 
   integer::i
 #if INIT==COEUR
@@ -51,6 +52,8 @@ subroutine condinit(r,g,x,q,dx,nn)
   real(dp)::pi,xc,yc
 #elif INIT==PONO
   real(dp)::xx,yy,zz,vx,vy,vz,rr,tt,omega,R0,twopi
+#elif INIT==CURRENTSHEET
+  real(dp)::pi,xc,yc,beta,v0
 #else
   ! Call built-in initial condition generator
   call region_condinit(r,g,x,q,dx,nn)
@@ -179,7 +182,7 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,3)=+sin(2.0*pi*xc)
      q(i,4)=0.0
      q(i,5)=5.0/(12.0*pi)
-     q(i,6)=0.0
+     q(i,nvar+1)=0.0 ! Bz
   end do
 #endif
 
@@ -214,6 +217,22 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,2)=vx
      q(i,3)=vy
      q(i,4)=vz
+  end do
+#endif
+
+#if INIT==CURRENTSHEET
+  pi=acos(-1.0d0)
+  beta = 0.1
+  v0 = 0.1
+  do i = 1,nn
+     xc = x(i,1)
+     yc = x(i,2)
+     q(i,1) = 1.0
+     q(i,2) = v0*sin(pi*yc)
+     q(i,3) = 0.0
+     q(i,4) = 0.0
+     q(i,5) = 0.5*beta
+     q(i,nvar+1) = 0.0 ! Bz
   end do
 #endif
 

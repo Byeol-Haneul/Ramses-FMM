@@ -3,9 +3,6 @@
 #############################################################################
 # Compilation time parameters
 COMPILER = GNU
-NHILBERT = 1
-NVECTOR = 32
-NPRE = 8
 NDIM = 3
 MPI = 0
 HYDRO = 1
@@ -13,31 +10,35 @@ GRAV = 0
 MHD = 0
 RT = 0
 INIT =
-UNIT =
+UNITS =
 NENER = 0
 NMETAL = 0
 NION = 0
 NPSCAL = 0
 NRTGRP = 0
+NHILBERT = 1
+NVECTOR = 32
+NPRE = 8
 PATCH =
 DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
 SOLVER = hydro
 EXEC = ramses
-
+#############################################################################
 # Compute NVAR
 NHYDRO = 5
 NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
-
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
-DEFINES = -DNVECTOR=$(NVECTOR) -DNDIM=$(NDIM) -DNPRE=$(NPRE) -DNHILBERT=$(NHILBERT) \
-	-DNVAR=$(NVAR) -DNION=$(NION)
+DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR)
+ifneq ($(NION),0)
+   DEFINES += -DNION=$(NION)
+endif
 ifeq ($(HYDRO),1)
    DEFINES += -DHYDRO
 endif
@@ -47,11 +48,20 @@ endif
 ifeq ($(GRAV),1)
    DEFINES += -DGRAV
 endif
-ifneq ($(NENER),)
+ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
 endif
 ifeq ($(RT),1)
    DEFINES += -DRT -DNRTGRP=$(NRTGRP)
+endif
+ifneq ($(NVECTOR),32)
+   DEFINES += -DNVECTOR=$(NVECTOR)
+endif
+ifneq ($(NPRE),8)
+   DEFINES += -DNPRE=$(NPRE)
+endif
+ifneq ($(NHILBERT),1)
+   DEFINES += -DNHILBERT=$(NHILBERT)
 endif
 #############################################################################
 # Set proper units and initial conditions
@@ -176,6 +186,9 @@ MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooli
 #############################################################################
 ramses:	$(MODOBJ) ramses.o
 	$(F90) $(FFLAGS) $(MODOBJ) ramses.o -o $(EXEC)$(NDIM)d $(LIBS)
+#############################################################################
+test_cooling:	$(MODOBJ) test_cooling.o
+	$(F90) $(FFLAGS) $(MODOBJ) test_cooling.o -o test_cooling $(LIBS)
 #############################################################################
 write_gitinfo.o: FORCE
 	$(FC) -O0 -cpp -DPATCH=\'"$(PATCH)"\' -DGITBRANCH=\'"$(GITBRANCH)"\' -DGITHASH=\'"$(GITHASH)"\' \

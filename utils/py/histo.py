@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import argparse
 import miniramses as ram
 
@@ -17,10 +18,6 @@ parser.add_argument("--xcen", help="specify the image center x-coordinate")
 parser.add_argument("--ycen", help="specify the image center y-coordinate")
 parser.add_argument("--zcen", help="specify the image center z-coordinate")
 parser.add_argument("--rad", help="specify the image radius")
-parser.add_argument("--clump", help="specify if clumps are overplotted")
-parser.add_argument("--sink", help="specify if sinks are overplotted")
-parser.add_argument("--dir", help="specify the projection axis")
-parser.add_argument("--grid", help="overlay the AMR grid",action="store_true")
 args = parser.parse_args()
 # path the the file
 path = args.path
@@ -32,21 +29,8 @@ radius = args.rad
 xcenter = args.xcen
 ycenter = args.ycen
 zcenter = args.zcen
-clump = args.clump
-sink = args.sink
-axis = args.dir
 log = args.log
-grid = args.grid
 
-grid0 = None
-if grid:
-    grid0=1
-if clump==None:
-    clump=False
-if sink==None:
-    sink=False
-if axis==None:
-    axis="z"
 if xcenter==None:
     xcenter=None
 else:
@@ -64,11 +48,9 @@ if radius==None:
 else:
     radius=float(radius)
 center=np.array([xcenter,ycenter,zcenter])
-
 log0=None
 if log:
     log0=1
-
 if ivar==None:
     ivar=0
 else:
@@ -91,55 +73,14 @@ if prefix=="rt":
 nout = args.nout
 print("Reading output number ",nout)
 
-if axis=="x":
-    ii=2; jj=3
-if axis=="y":
-    ii=1; jj=3
-if axis=="z":
-    ii=1; jj=2
-
 c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
-ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax,grid=grid0)
-
-if clump:
-    h=ram.rd_clump(nout)
-    if radius is not None:
-        r = np.sqrt((h.x-center[0])**2+(h.y-center[1])**2+(h.z-center[2])**2)
-        nn = np.count_nonzero(r < radius)
-        xx = h.x[r < radius]
-        yy = h.y[r < radius]
-        zz = h.z[r < radius]
-        mm = h.mass[r < radius]
-    else:
-        xx = h.x
-        yy = h.y
-        zz = h.z
-    if axis=="x":
-        plt.plot(yy,zz,'r.')
-    if axis=="y":
-        plt.plot(xx,zz,'r.')
-    if axis=="z":
-        plt.plot(xx,yy,'r.')
-
-if sink:
-    s=ram.rd_part(nout,sink=True)
-    if radius is not None:
-        r = np.sqrt((s.xp[0]-center[0])**2+(s.xp[1]-center[1])**2+(s.xp[2]-center[2])**2)
-        nn = np.count_nonzero(r < radius)
-        xx = s.xp[0][r < radius]
-        yy = s.xp[1][r < radius]
-        zz = s.xp[2][r < radius]
-        mm = s.mp[r < radius]
-    else:
-        xx = s.xp[0]
-        yy = s.xp[1]
-        zz = s.xp[2]
-    if axis=="x":
-        plt.plot(yy,zz,'r.')
-    if axis=="y":
-        plt.plot(xx,zz,'r.')
-    if axis=="z":
-        plt.plot(xx,yy,'r.')
+i=ram.rd_info(nout,path=path)
+m_p=1.66e-24
+k_b=1.38e-16
+plt.hist2d(np.log10(c.u[0]*i.unit_d/m_p),np.log10(c.u[4]/c.u[0]/k_b*m_p*(i.unit_l/i.unit_t)**2),weights=c.u[0]*c.dx**3,density=True,bins=100,norm=colors.LogNorm())
+plt.xlabel('log10(n_H) [H/cc]')
+plt.ylabel('log10(T/mu) [K]')
+plt.title('Mass-weighted Histogram with Logarithmic Color Scale')
 
 if args.out:
     plt.savefig(args.out)

@@ -31,13 +31,12 @@ subroutine m_rt_step(pst,ilevel)
   t_rad = t_save - dt_save
 
   ! Get RT courant time step at coarse level
-  call rt_courant_coarse(r,g,dt_rad)
-
+  call get_rt_courant_dt(r,g,dt_rad,ilevel)
   ! Compute RT courant time step at fine level
-  dt_rad = MIN(dt_rad/2**(ilevel-r%levelmin),dt_save)
+  dt_rad = MIN(dt_rad,dt_save)
 
   ! Compute number of subcycles
-  i_substep = ceiling(dt_save/dt_rad)
+  i_substep = ceiling(dt_save/dt_rad-1e-12)
   dt_rad = dt_save/dble(i_substep)
 
   ! Compute isotropic emissivity from stars

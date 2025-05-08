@@ -30,11 +30,11 @@ end subroutine r_cooling_fine
 !###########################################################
 subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use constants
-  use amr_parameters, only:dp,ndim,nvector,twotondim
+  use amr_parameters, only: dp, ndim, nvector, twotondim
   use hydro_parameters, only: nener, nion
-  use rt_parameters, only: nrtgrp,smallnp
-  use amr_commons, only:run_t,global_t,mesh_t
-  use cooling_module, only:cooling_t,solve_cooling,T2_min_fix,set_table
+  use rt_parameters, only: nrtgrp, smallnp
+  use amr_commons, only: run_t, global_t, mesh_t
+  use cooling_module, only: cooling_t, solve_cooling, T2_min_fix, set_table
   use coolrates_module, only: neq_cooling_t
   use neq_cooling_module, only: neq_solve_cooling
   implicit none
@@ -280,7 +280,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, &
 #endif
-                & nH, Zsolar, dtcool, nleaf)
+                & nH, Zsolar, dtcool, nleaf, ilevel)
         endif
 
         ! Compute rho in code units

@@ -77,6 +77,63 @@ def rd_cool(filename):
             c.xion[i,:] = c.spec[0,i,:] - c.nH
         return c
 
+def test_cool(filename):
+    """This function reads a binary file produced by the non-equilibrium chemistry solver
+    of the RAMSES-RT code and make a plot.
+
+    Args:
+        filename: the complete path (including the name) of the cooling table file.
+
+    Authors: Romain Teyssier (Princeton University, March 2025)
+    """
+    np.set_printoptions(linewidth=120)
+    n_d = np.fromfile(filename,dtype=np.int32,count=1,offset=0)[0]
+    n_t = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
+    n_x = np.fromfile(filename,dtype=np.int32,count=1,offset=8)[0]
+    n_time = np.fromfile(filename,dtype=np.int32,count=1,offset=12)[0]
+    n_vec = np.fromfile(filename,dtype=np.int32,count=1,offset=16)[0]
+    skip = 20
+    nh = np.fromfile(filename,dtype=np.float64,count=n_d,offset=skip)
+    skip = skip + n_d*8
+    times = np.fromfile(filename,dtype=np.float64,count=n_time,offset=skip)
+    skip = skip + n_time*8
+    size = n_d*n_t*n_x*n_time*n_vec
+    data = np.fromfile(filename,dtype=np.float64,count=size,offset=skip)
+    data = np.reshape(data,(n_d,n_t,n_x,n_time,n_vec),order='F')
+    print('shape of data =',n_d,n_t,n_x,n_time,n_vec)
+    print('n_H[H/cc] =',nh)
+    print('T_ini[K] =',data[0,:,0,0,0])
+
+    figure, axis = plt.subplots(n_d, n_t, figsize=(15, 15))
+    plt.subplots_adjust(wspace=0,hspace=0)
+    i=0
+    ix=n_x-1
+    for id in range(0,n_d):
+        for it in range(0,n_t):
+            axis[id,it].plot([],color='r',label='xHII')
+            axis[id,it].plot([],color='g',label='xHeII')
+            axis[id,it].plot([],color='b',label='xHeIII')
+            for ix in range(0,n_x):
+                axis[id,it].plot(np.log10(times),data[id,it,ix,:,1],color='r')
+                axis[id,it].plot(np.log10(times),data[id,it,ix,:,2],color='g')
+                axis[id,it].plot(np.log10(times),data[id,it,ix,:,3],color='b')
+
+            axis[id,it].set_xlim([-3,3])
+            if it>0:
+                axis[id,it].set_yticklabels([])
+            else:
+                axis[id,it].set_ylabel("fraction")
+            if id<n_d-1:
+                axis[id,it].set_ylim([0.0001,1.2])
+            else:
+                axis[id,it].set_ylim([0,1.2])
+                axis[id,it].set_xlabel("log time [Myr]")
+            if it==n_t-1 and id==n_d-1:
+                axis[id,it].legend(loc="lower right")
+            axis[id,it].set_title('log nH = ' + str(np.log10(nh[id])) + 
+                                  ' log T = ' + str(np.log10(data[id,it,ix,0,0])), y=0.9, va="top")
+            i=i+1
+
 class Map:
     """This class defines a map object.
     """
@@ -448,7 +505,12 @@ def rd_part(nout,**kwargs):
             xp[xp>boxlen/2]=xp[xp>boxlen/2]-boxlen
             xp[xp<-boxlen/2]=xp[xp<-boxlen/2]+boxlen
             p.xp[idim] = xp+center[idim]
-        r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
+        if ndim==1:
+            r = np.sqrt((p.xp[0]-center[0])**2)
+        if ndim==2:
+            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2)
+        if ndim==3:
+            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
         p.np = np.count_nonzero(r < radius)
         p.mp = p.mp[r < radius]
         p.xp = p.xp[:,r < radius]
@@ -612,7 +674,7 @@ def rd_hydro(nout,**kwargs):
 
     nvar = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
     
-    txt = "ncpu="+str(ncpu)+" ndim="+str(ndim)+" nlevelmax="+str(nlevelmax)+" nvar="+str(nvar)
+    txt = "Found nvar="+str(nvar)
     print(txt)
     print("Reading "+prefix+" data...")
 
@@ -780,7 +842,12 @@ def rd_cell(nout,**kwargs):
             xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
             xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
             c.x[idim] = xx+center[idim]
-        r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
+        if ndim==1:
+            r = np.sqrt((c.x[0]-center[0])**2) - dx
+        if ndim==2:
+            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2) - dx
+        if ndim==3:
+            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
         c.ncell = np.count_nonzero(r < radius)
         c.u  = c.u[:,r < radius]
         c.x  = c.x[:,r < radius]
@@ -1198,8 +1265,8 @@ def visu(x,y,dx,v,**kwargs):
             v = np.log10(abs(v+float(vmin)))            
             vmin = np.log10(float(vmin))
 
-    if( not (vmax==None)):
-        vmax = np.log10(float(vmax))
+        if( not (vmax==None)):
+            vmax = np.log10(float(vmax))
 
     print("min=",np.min(v)," max=",np.max(v))
 

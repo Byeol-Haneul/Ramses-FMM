@@ -153,7 +153,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
         do idim=1,3
            do i=1,nleaf
               emag(i)=emag(i)+0.125d0*(m%grid(ind_leaf(i))%bold(ind,idim) &
-                   &              +m%grid(ind_leaf(i))%bold(ind,idim+3))**2
+                   &                  +m%grid(ind_leaf(i))%bold(ind,idim+3))**2
            end do
         end do
 #endif
@@ -218,12 +218,13 @@ end subroutine init_xion
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine calc_equilibrium_xion(s, gridp, icell, xion)
+subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
 
 ! Calculate and return photoionization equilibrium abundance states for
 ! a cell
 ! gridp     => Pointer to (type oct) grid containing the cell in question
 ! icell     => Index for cell in grid
+! ilevel    => Cell refinement level
 ! xion      <= Returned equilibrium ionization fractions of cell
 !-------------------------------------------------------------------------
   use amr_commons, only: oct
@@ -235,7 +236,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, xion)
   implicit none
   type(ramses_t)::s
   type(oct),pointer::gridp
-  integer::icell
+  integer::icell, ilevel
   real(kind=8),dimension(nion)::xion
   integer::ip, iI, idim, iNp
   real(kind=8)::scale_nH, scale_T2, scale_l, scale_d, scale_t, scale_v
@@ -259,7 +260,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, xion)
      do iI=1,nion
         phI_rates(iI) = phI_rates(iI) &
                       + gridp%rtuold(icell, iNp) &
-                      * scale_Np*s%tables%signc(ip,iI)
+                      * scale_Np*s%tables%signc(ip,iI,ilevel)
      end do
 #endif
   end do
@@ -284,8 +285,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, xion)
   emag=0.0d0
 #ifdef MHD
   do idim=1,3
-     emag(i)=emag(i) &
-            +0.125d0*(gridp%bold(icell,idim)+gridp%uold(icell,idim+3))**2
+     emag=emag+0.125d0*(gridp%bold(icell,idim)+gridp%bold(icell,idim+3))**2
   end do
 #endif
   ! Gas thermal pressure

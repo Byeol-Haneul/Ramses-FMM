@@ -26,8 +26,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
   else
      filename=transfer(input_array,filename)
      if(index(filename,'output')==0)then
-        filename2=TRIM(filename)//'part.'
-        call backup_part(pst%s%r,pst%s%g,pst%s%p,filename2)
+        if(pst%s%r%part)then
+           filename2=TRIM(filename)//'part.'
+           call backup_part(pst%s%r,pst%s%g,pst%s%p,filename2)
+        endif
         if(pst%s%r%star)then
            filename2=TRIM(filename)//'star.'
            call backup_part(pst%s%r,pst%s%g,pst%s%star,filename2)
@@ -41,8 +43,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            call backup_part(pst%s%r,pst%s%g,pst%s%tree,filename2)
         endif
      else
-        filename2=TRIM(filename)//'part.'
-        call output_part(pst%s,pst%s%p,filename2)
+        if(pst%s%r%part)then
+           filename2=TRIM(filename)//'part.'
+           call output_part(pst%s,pst%s%p,filename2)
+        endif
         if(pst%s%r%star)then
            filename2=TRIM(filename)//'star.'
            call output_part(pst%s,pst%s%star,filename2)

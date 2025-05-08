@@ -5,7 +5,7 @@ using the DICE code (https://bitbucket.org/vperret/dice).
 You can also download from tigress by executing in the command line the following script:
 ./utils/scripts/load_agora_ic.sh
 To compile the code with MPI, type in bin/ the command line:
-make NDIM=3 MPI=1 HYDRO=1 GRAV=1 NVAR=7
+make NDIM=3 MPI=1 HYDRO=1 GRAV=1 NPSCAL=2
 
 &RUN_PARAMS
 cosmo=.false.

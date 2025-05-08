@@ -55,10 +55,10 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
         filename=TRIM(filedir)//'peak_grid_header.txt'
         call file_descriptor_clump(r,filename)
      endif
-     if(r%output_peak_part.and.r%pic)then
+     if(r%output_peak_part.and.r%part)then
         write(*,*)'Writing peak part files'
         filename=TRIM(filedir)//'peak_part_header.txt'
-        call output_peak_header(r,g,p,filename)
+        call output_peak_header(r,g,p   ,filename)
      endif
      if(r%output_peak_star.and.r%star)then
         write(*,*)'Writing peak star files'
@@ -180,7 +180,7 @@ subroutine clump_finder(s)
   ! Compute particle peak ids and store them in array pid.
   ! Compute particle-based peak-patch properties.
   !----------------------------------------------------------------------
-  if(s%r%pic)then
+  if(s%r%part)then
      call particle_peak_id(s,s%p)
      if(s%r%rho_type_clump.eq.1)then
         call particle_clump_properties(s,s%p)
@@ -215,7 +215,7 @@ subroutine clump_finder(s)
   ! Particle peak ids need to be reset after that.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
+     if(s%r%part.and.s%r%rho_type_clump.eq.1)then
         call particle_potential(s,s%p)
         call particle_peak_id(s,s%p)
      endif
@@ -226,7 +226,7 @@ subroutine clump_finder(s)
   ! The halo patch is used as garbage collector.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
+     if(s%r%part.and.s%r%rho_type_clump.eq.1)then
         call particle_unbind(s,s%p)
      endif
   endif
@@ -234,7 +234,7 @@ subroutine clump_finder(s)
   ! Compute final clump mass profiles hierarchically.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     if(s%r%pic.and.s%r%rho_type_clump.eq.1)then
+     if(s%r%part.and.s%r%rho_type_clump.eq.1)then
         call mass_profile(s,s%p)
      endif
   endif
@@ -248,7 +248,7 @@ subroutine clump_finder(s)
   ! Compute particle halo ids and store them in array hid.
   !----------------------------------------------------------------------
   if(s%c%saddle_threshold>0)then
-     if(s%r%pic)then
+     if(s%r%part)then
         call particle_halo_id(s,s%p)
      endif
      if(s%r%star)then

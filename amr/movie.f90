@@ -417,7 +417,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
                        ! Photon flux
                        map(ind_map) = map(ind_map) &
                                     + dvol * max(m%grid(igrid)%uold(ind,1),r%smallr) &
-                                    * m%grid(igrid)%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1)) * g%rt_c
+                                    * m%grid(igrid)%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1)) * g%rt_c(ilevel)
 #endif
                     else
                        ! Other variables

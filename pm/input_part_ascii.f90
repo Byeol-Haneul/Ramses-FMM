@@ -18,39 +18,50 @@ subroutine m_input_part_ascii(pst)
   integer(kind=8)::npart_tot,nstar_tot,nsink_tot
   character(LEN=80)::filename
   integer,allocatable,dimension(:)::input_array
+  logical::file_exist
 
   associate(s=>pst%s)
 
   if(s%r%nrestart>0)return
   if(s%r%verbose)write(*,*)'Entering init_part_ascii'
 
-  ! Compute total number of particles in file
-  if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
-     filename=TRIM(s%r%initfile(s%r%levelmin))//'/ic_part'
-     write(*,*)'Opening file '//TRIM(filename)
-     open(10,file=filename,form='formatted')
-     npart_tot=0
-     do
-        read(10,*,end=101)xx1,xx2,xx3,vv1,vv2,vv3,mm1
-        if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
-           npart_tot=npart_tot+1
-        endif
-     end do
-101  continue
-     s%p%npart_tot=npart_tot
-     write(*,*)'Found npart_tot=',s%p%npart_tot
-     close(10)
-  else
-     s%p%npart_tot=0
-  endif
+  if(s%r%part)then
 
-  ! If no particle found, no need to read
-  if(s%p%npart_tot>0)then
-     ! Call recursive slave routine
-     allocate(input_array(1:storage_size(npart_tot)/32))
-     input_array=transfer(npart_tot,input_array)
-     call r_input_part_ascii(pst,input_array,2)
-     deallocate(input_array)
+     ! Compute total number of particles in file
+     if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
+        filename=TRIM(s%r%initfile(s%r%levelmin))//'/ic_part'
+        inquire(file=filename, exist=file_exist)
+        if(file_exist)then
+           write(*,*)'Opening file '//TRIM(filename)
+           open(10,file=filename,form='formatted')
+           npart_tot=0
+           do
+              read(10,*,end=101)xx1,xx2,xx3,vv1,vv2,vv3,mm1
+              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+                 npart_tot=npart_tot+1
+              endif
+           end do
+101        continue
+           s%p%npart_tot=npart_tot
+           write(*,*)'Found npart_tot=',s%p%npart_tot
+           close(10)
+        else
+           write(*,*)'File '//TRIM(filename)//' not found'
+           s%p%npart_tot=0
+        endif
+     else
+        s%p%npart_tot=0
+     endif
+
+     ! If no particle found, no need to read
+     if(s%p%npart_tot>0)then
+        ! Call recursive slave routine
+        allocate(input_array(1:storage_size(npart_tot)/32))
+        input_array=transfer(npart_tot,input_array)
+        call r_input_part_ascii(pst,input_array,2)
+        deallocate(input_array)
+     endif
+
   endif
 
   if(s%r%star)then
@@ -58,20 +69,26 @@ subroutine m_input_part_ascii(pst)
      ! Compute total number of stars in file
      if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
         filename=TRIM(s%r%initfile(s%r%levelmin))//'/ic_star'
-        write(*,*)'Opening file '//TRIM(filename)
-        open(10,file=filename,form='formatted')
-        nstar_tot=0
-        do
-           read(10,*,end=102)xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
-           if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
-              nstar_tot=nstar_tot+1
-              s%g%mass_star_tot=s%g%mass_star_tot+mm1
-           endif
-        end do
-102     continue
-        s%star%npart_tot=nstar_tot
-        write(*,*)'Found nstar_tot=',s%star%npart_tot
-        close(10)
+        inquire(file=filename, exist=file_exist)
+        if(file_exist)then
+           write(*,*)'Opening file '//TRIM(filename)
+           open(10,file=filename,form='formatted')
+           nstar_tot=0
+           do
+              read(10,*,end=102)xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
+              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+                 nstar_tot=nstar_tot+1
+                 s%g%mass_star_tot=s%g%mass_star_tot+mm1
+              endif
+           end do
+102        continue
+           s%star%npart_tot=nstar_tot
+           write(*,*)'Found nstar_tot=',s%star%npart_tot
+           close(10)
+        else
+           write(*,*)'File '//TRIM(filename)//' not found'
+           s%star%npart_tot=0
+        endif
      else
         s%star%npart_tot=0
      endif
@@ -89,37 +106,43 @@ subroutine m_input_part_ascii(pst)
 
   if(s%r%sink)then
 
-   ! Compute total number of sinks in file
-   if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
-      filename=TRIM(s%r%initfile(s%r%levelmin))//'/ic_sink'
-      write(*,*)'Opening file '//TRIM(filename)
-      open(10,file=filename,form='formatted')
-      nsink_tot=0
-      do
-         read(10,*,end=103)xx1,xx2,xx3,vv1,vv2,vv3,jj1,jj2,jj3,mm1,tt1
-         if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
-            nsink_tot=nsink_tot+1
-            !s%g%mass_star_tot=s%g%mass_star_tot+mm1
-         endif
-      end do
-103     continue
-      s%sink%npart_tot=nsink_tot
-      write(*,*)'Found nsink_tot=',s%sink%npart_tot
-      close(10)
-   else
-      s%sink%npart_tot=0
-   endif
+     ! Compute total number of sinks in file
+     if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
+        filename=TRIM(s%r%initfile(s%r%levelmin))//'/ic_sink'
+        inquire(file=filename, exist=file_exist)
+        if(file_exist)then
+           write(*,*)'Opening file '//TRIM(filename)
+           open(10,file=filename,form='formatted')
+           nsink_tot=0
+           do
+              read(10,*,end=103)xx1,xx2,xx3,vv1,vv2,vv3,jj1,jj2,jj3,mm1,tt1
+              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+                 nsink_tot=nsink_tot+1
+                 s%g%mass_sink_tot=s%g%mass_sink_tot+mm1
+              endif
+           end do
+103        continue
+           s%sink%npart_tot=nsink_tot
+           write(*,*)'Found nsink_tot=',s%sink%npart_tot
+           close(10)
+        else
+           write(*,*)'File '//TRIM(filename)//' not found'
+           s%sink%npart_tot=0
+        endif
+     else
+        s%sink%npart_tot=0
+     endif
 
-   ! If no particle found, no need to read
-   if(s%sink%npart_tot>0)then
-      ! Call recursive slave routine
-      allocate(input_array(1:storage_size(nsink_tot)/32))
-      input_array=transfer(nsink_tot,input_array)
-      call r_input_sink_ascii(pst,input_array,2)
-      deallocate(input_array)
-   endif
+     ! If no particle found, no need to read
+     if(s%sink%npart_tot>0)then
+        ! Call recursive slave routine
+        allocate(input_array(1:storage_size(nsink_tot)/32))
+        input_array=transfer(nsink_tot,input_array)
+        call r_input_sink_ascii(pst,input_array,2)
+        deallocate(input_array)
+     endif
 
-endif
+  endif
 
   end associate
 

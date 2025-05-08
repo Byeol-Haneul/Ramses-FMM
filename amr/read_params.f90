@@ -41,6 +41,7 @@ subroutine m_read_params(pst)
   logical::rt      =.false.    ! RT activated
   logical::star    =.false.    ! Stars and star formation activated
   logical::sink    =.false.    ! Sinks and sink formation activated
+  logical::part    =.false.   ! Dark matter particles activated
   logical::merger_tree=.false. ! Merger tree particles activated
   logical::orphan  =.false.   ! Orphan particles activated
   logical::verbose =.false.    ! Write everything
@@ -200,9 +201,13 @@ subroutine m_read_params(pst)
   real(dp)::err_grad_d=-1.0  ! Density gradient
   real(dp)::err_grad_u=-1.0  ! Velocity gradient
   real(dp)::err_grad_p=-1.0  ! Pressure gradient
+  real(dp)::err_grad_xHI=-1.0! xHI gradient
+  real(dp)::err_grad_xHII=-1.0 ! xHII gradient
   real(dp)::floor_d=1.d-10   ! Density floor
   real(dp)::floor_u=1.d-10   ! Velocity floor
   real(dp)::floor_p=1.d-10   ! Pressure floor
+  real(dp)::floor_xHI=1d-10  ! xHI floor
+  real(dp)::floor_xHII=1d-10 ! xHII floor
   real(dp)::mass_sph=0.0D0   ! mass_sph
 #ifdef MHD
   real(dp)::err_grad_b2=-1.0
@@ -224,12 +229,8 @@ subroutine m_read_params(pst)
 
   ! Refinement parameters for rt
 #ifdef RT
-  real(dp)::rt_err_grad_n(nrtgrp)=-1 ! Photon number density gradient for refinement
-  real(dp)::rt_floor_n(nrtgrp)=1d-10 ! Photon number density floor for refinement
-  real(dp)::rt_err_grad_xHI=-1.0     ! Ionization state gradient for refinement
-  real(dp)::rt_err_grad_xHII=-1.0    ! Ionization state gradient for refinement
-  real(dp)::rt_floor_xHI=1d-10       ! Ionization state floor for refinement
-  real(dp)::rt_floor_xHII=1d-10      ! Ionization state floor for refinement
+  real(dp)::rt_err_grad_cn(nrtgrp)=-1 ! Photon flux gradient for refinement
+  real(dp)::rt_floor_cn(nrtgrp)=1d-10 ! Photon flux floor for refinement
   real(dp)::rt_refine_aexp=-1.0      ! Start expansion factor for RT refinements
 #endif
 
@@ -263,13 +264,21 @@ subroutine m_read_params(pst)
 
   ! Poisson solver parameters
   real(dp)::epsilon=1.0D-4 ! Convergence criterion
-  integer ::gravity_type=0 ! Type of gravity calculations (see user guide)
   real(dp),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
+  integer :: gravity_type=0 ! Type of gravity calculations (see user guide)
   integer :: cic_levelmax=0 ! Maximum level for CIC dark matter interpolation
   integer :: cg_levelmin=999   ! Min level for CG solver
   ! level < cg_levelmin uses fine multigrid
   ! level >=cg_levelmin uses conjugate gradient
   logical :: fast_solver = .false.   ! Fast solver with MPI pre-fetch (memory intensive)
+  integer :: part_mass_deposition_scheme=1     ! part mass deposition schemes (CIC 1, TSC 2, PCS 3)
+  integer :: part_force_interpolation_scheme=1 ! part force interpolation schemes (CIC 1, TSC 2, PCS 3)
+  integer :: star_mass_deposition_scheme=1     ! star mass deposition schemes
+  integer :: star_force_interpolation_scheme=1 ! star force interpolation schemes
+  integer :: sink_mass_deposition_scheme=1     ! sink mass deposition schemes
+  integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
+  integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
+  integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -315,7 +324,7 @@ subroutine m_read_params(pst)
   real(dp)::T2max=1d50
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
-  logical::upload_equilibrium_x=.true.  ! Enforce equilibrium xion when uploading         !
+  logical::upload_equilibrium_x=.false.! Enforce equ. xion when uploading
   logical::isHe=.true.            !      He ionization fractions tracked?
   logical::isH2=.false.           !                 H2 tracked (via xHI)?
   real(dp)::neq_Tconst=-1         !             Const T in neq chemistry?
@@ -370,8 +379,9 @@ subroutine m_read_params(pst)
   real(dp)::sink_mass_threshold=0
   real(dp)::sink_purity_threshold=-1
   real(dp)::sink_fraction_threshold=2d0
-  logical::form_sinks=.false.
-  logical::sink_refine=.true.
+  logical::sink_form=.false.
+  logical::sink_refine=.false.
+  logical::sink_dump=.false.
 
   ! Black hole parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi
@@ -412,7 +422,7 @@ subroutine m_read_params(pst)
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
        & ,static_mesh,static_gas,geom,overload,nsuperoct
   ! Output parameters
-  namelist/output_params/noutput,foutput,aout,tout,output_mode &
+  namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
        & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
   ! AMR grid basic parameters
@@ -421,7 +431,11 @@ subroutine m_read_params(pst)
        & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax,fast_solver
+       & ,cg_levelmin,cic_levelmax,fast_solver,part_mass_deposition_scheme &
+       & ,part_force_interpolation_scheme,star_mass_deposition_scheme &
+       & ,star_force_interpolation_scheme,sink_mass_deposition_scheme &
+       & ,sink_force_interpolation_scheme,tree_mass_deposition_scheme &
+       & ,tree_force_interpolation_scheme 
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
@@ -468,9 +482,9 @@ subroutine m_read_params(pst)
        & ,err_grad_var &
 #endif
 #ifdef RT
-       & ,rt_err_grad_n, rt_floor_n, rt_err_grad_xHI, rt_err_grad_xHII &
-       & ,rt_refine_aexp, rt_floor_xHI, rt_floor_xHII &
+       & ,rt_err_grad_cn, rt_floor_cn, rt_refine_aexp &
 #endif
+       & ,err_grad_xHI, err_grad_xHII, floor_xHI, floor_xHII &
        & ,m_refine,mass_sph,err_grad_d,err_grad_p,err_grad_u &
        & ,floor_d,floor_u,floor_p,ivar_refine,var_cut_refine &
        & ,interpol_var,interpol_type &
@@ -502,8 +516,8 @@ subroutine m_read_params(pst)
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
        & ,accretion_type,acc_sink_boost,bondi_use_vrel,accretion_method &
-       & ,eddington_cap,form_sinks,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
-       & ,use_local_bondi_rate
+       & ,eddington_cap,sink_form,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
+       & ,use_local_bondi_rate,sink_dump
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -605,6 +619,7 @@ subroutine m_read_params(pst)
         aout(i)=dble(i)*delta_aout
      end do
   endif
+  noutput=max(count(aout>0.and.aout<=1),count(tout>0))
   noutput=MIN(noutput,MAXOUT)
   if(imovout>0) then
      if(tendmov==0.and.aendmov==0)movie=.false.
@@ -653,17 +668,21 @@ subroutine m_read_params(pst)
   if(npartmax==0)then
      npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
   endif
+  if(pic.and.npartmax>0)part=.true.
   if(nstarmax==0)then
      nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
+     if(nstarmax==0)star=.false.
   endif
   if(nsinkmax==0)then
      nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
+     if(nsinkmax==0)sink=.false.
   endif
   if(ntreemax==0)then
      ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
      if(ntreemax==0)then
         ntreemax=int(npartmax/100)
      endif
+     if(ntreemax==0)merger_tree=.false.
   endif
 #ifdef HYDRO
   if(.not. hydro)then
@@ -924,6 +943,7 @@ subroutine m_read_params(pst)
   s%r%poisson=poisson
   s%r%hydro=hydro
   s%r%rt=rt
+  s%r%part=part
   s%r%star=star
   s%r%sink=sink
   s%r%tree=merger_tree
@@ -977,6 +997,14 @@ subroutine m_read_params(pst)
   s%r%cic_levelmax=cic_levelmax
   s%r%cg_levelmin=cg_levelmin
   s%r%fast_solver=fast_solver
+  s%r%part_mass_deposition_scheme=part_mass_deposition_scheme
+  s%r%part_force_interpolation_scheme=part_force_interpolation_scheme
+  s%r%star_mass_deposition_scheme=star_mass_deposition_scheme
+  s%r%star_force_interpolation_scheme=star_force_interpolation_scheme
+  s%r%sink_mass_deposition_scheme=sink_mass_deposition_scheme
+  s%r%sink_force_interpolation_scheme=sink_force_interpolation_scheme
+  s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
+  s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
 
   s%r%nw_frame=nw_frame
   s%r%nh_frame=nh_frame
@@ -1092,13 +1120,13 @@ subroutine m_read_params(pst)
 #if NVAR>5+NENER
   s%r%err_grad_var=err_grad_var
 #endif
+  s%r%err_grad_xHI=err_grad_xHI
+  s%r%err_grad_xHII=err_grad_xHII
+  s%r%floor_xHI=floor_xHI
+  s%r%floor_xHII=floor_xHII
 #ifdef RT
-  s%r%rt_err_grad_n=rt_err_grad_n
-  s%r%rt_floor_n=rt_floor_n
-  s%r%rt_err_grad_xHI=rt_err_grad_xHI
-  s%r%rt_err_grad_xHII=rt_err_grad_xHII
-  s%r%rt_floor_xHI=rt_floor_xHI
-  s%r%rt_floor_xHII=rt_floor_xHII
+  s%r%rt_err_grad_cn=rt_err_grad_cn
+  s%r%rt_floor_cn=rt_floor_cn
   s%r%rt_refine_aexp=rt_refine_aexp
 #endif
 
@@ -1263,8 +1291,9 @@ subroutine m_read_params(pst)
   s%r%acc_sink_boost = acc_sink_boost
   s%r%bondi_use_vrel = bondi_use_vrel
   s%r%eddington_cap = eddington_cap
-  s%r%form_sinks = form_sinks
+  s%r%sink_form = sink_form
   s%r%sink_refine = sink_refine
+  s%r%sink_dump = sink_dump
   s%r%sink_b_spline_order = sink_b_spline_order
   s%r%verbose_sink = verbose_sink
   s%r%bondi_use_gas_mass = bondi_use_gas_mass

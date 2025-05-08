@@ -2,7 +2,7 @@
 !================================================================
 !================================================================
 !================================================================
-subroutine rt_condinit(r,g,x,q,dx,nn)
+subroutine rt_condinit(r,g,x,q,dx,nn,ilevel)
   use amr_parameters, only: dp, ndim, nvector
   use rt_parameters, only: nrtvar
   use amr_commons, only: run_t, global_t
@@ -10,7 +10,7 @@ subroutine rt_condinit(r,g,x,q,dx,nn)
   implicit none
   type(run_t)::r
   type(global_t)::g
-  integer ::nn                            ! Number of cells
+  integer ::nn,ilevel
   real(dp)::dx                            ! Cell size
   real(dp),dimension(1:nvector,1:nrtvar)::q ! RT variables
   real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
@@ -21,7 +21,7 @@ subroutine rt_condinit(r,g,x,q,dx,nn)
   ! Q is the RT variable vector in code units.
   !================================================================
   ! Call built-in initial condition generator
-  call rt_region_condinit(r,g,x,q,dx,nn)
+  call rt_region_condinit(r,g,x,q,dx,nn,ilevel)
 
   ! Add here, if you wish, some user-defined initial conditions
   ! ........

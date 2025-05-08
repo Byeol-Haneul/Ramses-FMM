@@ -83,21 +83,21 @@ subroutine m_dump_all(pst,write_bkp_file)
      ttstart = mdl_wtime(mdl)
      
      if(r%verbose)write(*,*)'Writing header files'
-     if(r%pic)then
+     if(r%part)then
         filename=TRIM(filedir)//'part_header.txt'
-        call output_header(r,g,p,filename)
-        if(r%star)then
-           filename=TRIM(filedir)//'star_header.txt'
-           call output_header(r,g,star,filename)
-        endif
-        if(r%sink)then
-           filename=TRIM(filedir)//'sink_header.txt'
-           call output_header(r,g,sink,filename)
-        endif
-        if(r%tree)then
-           filename=TRIM(filedir)//'tree_header.txt'
-           call output_header(r,g,tree,filename)
-        endif
+        call output_header(r,g,p   ,filename)
+     endif
+     if(r%star)then
+        filename=TRIM(filedir)//'star_header.txt'
+        call output_header(r,g,star,filename)
+     endif
+     if(r%sink)then
+        filename=TRIM(filedir)//'sink_header.txt'
+        call output_header(r,g,sink,filename)
+     endif
+     if(r%tree)then
+        filename=TRIM(filedir)//'tree_header.txt'
+        call output_header(r,g,tree,filename)
      endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_header.txt'

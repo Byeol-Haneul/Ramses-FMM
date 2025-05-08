@@ -93,7 +93,7 @@ recursive subroutine r_rt_neq_updates(pst, nstep_coarse, input_size)
      endif
 
      ! Update radiation heating and cooling constants
-     if(r%cosmo.or.(r%star.and.r%rt))then
+     if(r%cosmo.or.(r%rt))then
         call updateRTGroups_CoolConstants(r, s%tables)
      endif
 

@@ -63,7 +63,7 @@ subroutine rt_input_condinit(r,g,m,ilevel)
            end do
         end do
         ! Call initial condition routine
-        call rt_condinit(r,g,xx,qq,dx,ngrid)
+        call rt_condinit(r,g,xx,qq,dx,ngrid,ilevel)
         ! Scatter primitive variables to main memory
         do ivar=1,nrtvar
            do i=1,ngrid
@@ -82,14 +82,14 @@ end subroutine rt_input_condinit
 !################################################################
 !################################################################
 !################################################################
-subroutine rt_region_condinit(r,g,x,q,dx,nn)
+subroutine rt_region_condinit(r,g,x,q,dx,nn,ilevel)
   use amr_parameters, only:dp, nvector, ndim
   use rt_parameters, only: nrtvar, nrtgrp, smallnp
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  integer ::nn,idim,igrp
+  integer ::nn,ilevel,idim,igrp
   real(dp)::dx
   real(dp),dimension(1:nvector,1:nrtvar)::q
   real(dp),dimension(1:nvector,1:ndim)::x
@@ -143,12 +143,12 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
            ! If cell lies within region,
            if(rad<1.0)then
               q(i,group_ind)=r%rt_n_region(k)
-              q(i,group_ind+1)=r%rt_u_region(k) * g%rt_c 
+              q(i,group_ind+1)=r%rt_u_region(k) * g%rt_c(ilevel) 
 #if NDIM>1 
-              q(i,group_ind+2)=r%rt_v_region(k) * g%rt_c
+              q(i,group_ind+2)=r%rt_v_region(k) * g%rt_c(ilevel)
 #endif
 #if NDIM>2
-              q(i,group_ind+3)=r%rt_w_region(k) * g%rt_c
+              q(i,group_ind+3)=r%rt_w_region(k) * g%rt_c(ilevel)
 #endif
            end if
         end do
@@ -174,14 +174,14 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn)
               ! Convert photon number to photon number density
               q(i,group_ind) = r%rt_n_region(k)/scale_np *weight/vol 
               q(i,group_ind+1) = r%rt_u_region(k)/scale_np*weight/vol &
-                               * g%rt_c
+                               * g%rt_c(ilevel)
 #if NDIM>1
               q(i,group_ind+2) = r%rt_v_region(k)/scale_np*weight/vol   &
-                               * g%rt_c
+                               * g%rt_c(ilevel)
 #endif
 #if NDIM>2
               q(i,group_ind+3) = r%rt_w_region(k)/scale_np *weight/vol  &
-                               * g%rt_c
+                               * g%rt_c(ilevel)
 #endif
            endif
         end do
@@ -263,7 +263,7 @@ subroutine rt_input_source_regions(r,g,m,ilevel)
         end do
 
         ! Inject sources
-        call rt_source_regions_sweep(r,g,xx,qq,dx,g%dtnew(ilevel),ngrid)
+        call rt_source_regions_sweep(r,g,xx,qq,dx,g%dtnew(ilevel),ngrid, ilevel)
 
         ! Scatter primitive variables to main memory
         do ivar=1,nrtvar
@@ -284,14 +284,14 @@ end subroutine rt_input_source_regions
 !################################################################
 !################################################################
 !################################################################
-subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
+subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn,ilevel)
   use amr_parameters, only:dp, nvector, ndim
   use rt_parameters, only: nrtvar, nrtgrp, smallnp
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  integer ::nn
+  integer ::nn, ilevel
   real(dp)::dx,dt
   real(dp),dimension(1:nvector,1:nrtvar)::q
   real(dp),dimension(1:nvector,1:ndim)::x
@@ -337,7 +337,7 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
            end if
            ! If cell lies within region,
            if(rad<1.0)then
-              q(i,group_ind)=r%rt_n_source(k)/g%rt_c/scale_fp
+              q(i,group_ind)=r%rt_n_source(k)/g%rt_c(ilevel)/scale_fp
               ! The input flux is the fraction Fp/(c*Np) (Max 1 magnitude)
               q(i,group_ind+1)=r%rt_u_source(k)*r%rt_n_source(k)/scale_fp
 #if NDIM>1 
@@ -374,16 +374,16 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn)
               ! The input flux is the fraction Fp/(c*Np) (Max 1 magnitude)
               q(i,group_ind+1) = q(i,group_ind+1) &
                                + r%rt_u_source(k)*r%rt_n_source(k)/scale_np &
-                               * weight/vol * g%rt_c * dt_cgs 
+                               * weight/vol * g%rt_c(ilevel) * dt_cgs 
 #if NDIM>1
               q(i,group_ind+2) = q(i,group_ind+2) &
                                + r%rt_v_source(k)*r%rt_n_source(k)/scale_np   &
-                               * weight/vol * g%rt_c * dt_cgs
+                               * weight/vol * g%rt_c(ilevel) * dt_cgs
 #endif
 #if NDIM>2
               q(i,group_ind+3) = q(i,group_ind+3) &
                                + r%rt_w_source(k)*r%rt_n_source(k)/scale_np  &
-                               * weight/vol * g%rt_c * dt_cgs
+                               * weight/vol * g%rt_c(ilevel) * dt_cgs
 #endif
            endif
         end do

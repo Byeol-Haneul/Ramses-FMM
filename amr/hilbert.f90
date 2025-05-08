@@ -407,7 +407,7 @@ contains
     logical::ge_keys
     integer(kind=8), intent(in), dimension(:) :: key_a, key_b
 
-#if NHILBERT == 1
+#if NHILBERT <= 1
     ge_keys = (key_a(1) >= key_b(1))
 #endif
   
@@ -458,7 +458,7 @@ contains
     integer(kind=8), intent(in), dimension(:) :: key_a, key_b
     ! This function assumes that key_a and key_b contain only positive integers
 
-#if NHILBERT == 1
+#if NHILBERT <= 1
     sum_keys(1) = key_a(1) + key_b(1)
     average_keys(1) = ishft(sum_keys(1),-1) ! Avoid overflow
 #endif
@@ -494,7 +494,7 @@ contains
     ! This function assumes that key_a is always greater or equal than key_b
     ! and that key_a and key_b contain only positive integers
 
-#if NHILBERT == 1
+#if NHILBERT <= 1
     difference_keys(1) = key_a(1) - key_b(1)
 #endif
 
@@ -521,7 +521,7 @@ contains
     logical::gt_keys
     integer(kind=8), intent(in), dimension (:):: key_a, key_b
 
-#if NHILBERT == 1
+#if NHILBERT <= 1
     gt_keys = (key_a(1) > key_b(1))
 #endif
 
@@ -568,7 +568,7 @@ contains
     logical::eq_keys
     integer(kind=8), intent(in), dimension (:):: key_a, key_b
 
-#if NHILBERT == 1
+#if NHILBERT <= 1
     eq_keys = (key_a(1) == key_b(1))
 #endif
 

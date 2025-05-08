@@ -40,7 +40,6 @@ bound_ymax=-13,-13, 13, 13,-12
 /
 
 &OUTPUT_PARAMS
-noutput=4
 tout=0.05,0.1,0.15,0.2
 /
 

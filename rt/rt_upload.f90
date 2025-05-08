@@ -120,6 +120,9 @@ subroutine rt_upload_fine(s,ilevel)
         ! Scatter result to parent cell
 #ifdef RT
         gridp%rtuold(icell,ivar)=average/dble(twotondim)
+        ! Rescale according to light speed difference between levels
+        if (mod(ivar,ndim+1).eq.1) &
+            gridp%rtuold(icell,ivar) = gridp%rtuold(icell,ivar) * g%rt_c(ilevel+1)/g%rt_c(ilevel)
 #endif
      end do
 

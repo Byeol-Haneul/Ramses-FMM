@@ -229,7 +229,7 @@ subroutine set_rtuold(r, g, m, ilevel)
         do j = 1, twotondim
           ! No negative photon densities:
           m%grid(i)%rtuold(j,iN) = max(m%grid(i)%rtuold(j,iN),smallNp)
-          Npc=m%grid(i)%rtuold(j,iN)*g%rt_c
+          Npc=m%grid(i)%rtuold(j,iN)*g%rt_c(ilevel)
           ! Reduced flux, should always be .le. 1
           fred = sqrt(sum((m%grid(i)%rtuold(j,iN+1:iN+ndim))**2))/Npc
           if(fred .gt. 1d0) then ! Too big so normalize flux to one
@@ -284,7 +284,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::ind_nbor
   type(nbor),dimension(0:twondim)::grid_nbor
-  real(dp)::dx,oneontwotondim
+  real(dp)::dx,oneontwotondim,rt_c_diff
   real(dp),dimension(0:twondim  ,1:nrtvar)::u1
   real(dp),dimension(1:twotondim,1:nrtvar)::u2
   logical::okx,oky,okz,oknbor
@@ -517,28 +517,34 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
                        !----------------------------------------------------
                        if(associated(childp))then
 
+                          ! Gather refinement flag
+                          h%okloc(i3,j3,k3)=childp%refined(ind_son)
                           ! Gather RT variables
                           do ivar=1,nrtvar
 #ifdef RT
                              h%rtuloc(i3,j3,k3,ivar)=childp%rtuold(ind_son,ivar)
 #endif
                           end do
-                          ! Gather refinement flag
-                          h%okloc(i3,j3,k3)=childp%refined(ind_son)
 
                        !-----------------------------------------------------------
                        ! If neighboring grid doesn't exist, use interpolated values
                        !-----------------------------------------------------------
                        else
 
+                          ! Gather refinement flag
+                          h%okloc(i3,j3,k3)=.false.
                           ! Gather interpolated hydro variables
                           do ivar=1,nrtvar
 #ifdef RT
                              h%rtuloc(i3,j3,k3,ivar)=u2(ind_son,ivar)
+                             if(mod(ivar,ndim+1)==1) then
+                                ! Variable light speed correction for coarser level
+                                h%rtuloc(i3,j3,k3,ivar)           &
+                                  = h%rtuloc(i3,j3,k3,ivar)       &
+                                  * g%rt_c(ilevel-1)/g%rt_c(ilevel)
+                             endif
 #endif
                           end do
-                          ! Gather refinement flag
-                          h%okloc(i3,j3,k3)=.false.
                        end if
 
                     end do
@@ -557,7 +563,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   !-------------------------------------------------
 #ifdef RT
   call rt_unsplit(h%rtuloc,h%rtflux,h%cFlx,        &
-       & g%rt_c,dx,dx,dx,g%dtnew(ilevel),          &
+       & g%rt_c(ilevel),dx,dx,dx,g%dtnew(ilevel),  &
        & h%iu1,h%iu2,h%ju1,h%ju2,h%ku1,h%ku2,      &
        & h%if1,h%if2,h%jf1,h%jf2,h%kf1,h%kf2)
 #endif
@@ -699,9 +705,16 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nrtvar
+                             ! For VSLA, when updating coarser level, rescale radiation flux
+                             ! to the expression which would be seen from there.
+                             rt_c_diff = g%rt_c(ilevel-1)/g%rt_c(ilevel)
+                             if (mod(ivar,ndim+1)==1) then
+                                rt_c_diff=1.d0
+                             end if
 #ifdef RT
                              gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
-                                  & -h%rtflux(i3,j3,k3,ivar,idim)*oneontwotondim
+                                  & -h%rtflux(i3,j3,k3,ivar,idim)              &
+                                  & * oneontwotondim * rt_c_diff
 #endif
                           end do
                        end do
@@ -748,9 +761,15 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
                           ! Conservative update of new state variables
                           do ivar=1,nrtvar
+                             ! Rescale for VSLA, as above
+                             rt_c_diff = g%rt_c(ilevel-1)/g%rt_c(ilevel)
+                             if (mod(ivar,ndim+1)==1) then
+                                rt_c_diff=1.d0
+                             end if
 #ifdef RT
                              gridp%rtunew(icell,ivar)=gridp%rtunew(icell,ivar) &
-                                  & +h%rtflux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
+                                  & +h%rtflux(i3+i0,j3+j0,k3+k0,ivar,idim)     &
+                                  & *oneontwotondim * rt_c_diff
 #endif
                           end do
                        end do
