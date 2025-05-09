@@ -477,6 +477,10 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       dMBH_overdt = exp(g%t - p%tp(ipart) - r%t_start_black_hole) * dMBH_overdt
    end if
 
+   if(r%manual_accretion_rate.gt.0.0d0)then
+      dMBH_overdt = r%manual_accretion_rate * dMEd_overdt
+   end if
+
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Accrete from local cells
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -530,7 +534,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
       ! Get accreted mass for this cell
       d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
-      
+
       ! NOTE: Jet mass will be returned during the feedback step
 
       ! Ensure that the accreted amount is positive
