@@ -291,7 +291,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Sink accretion and feedback
   !----------------------------
   if(r%sink.and.(r%accretion_type>0))then
-                                    call m_timer(pst,'sink - evolution','start')
+     call m_timer(pst,'sink - evolution','start')
      call r_sink_evolution(pst,ilevel,1,output_acc,2)
      if(output_acc%mass>0)then
         if(r%verbose_sink)write(*,*)'Total sink accreted mass:',output_acc%mass

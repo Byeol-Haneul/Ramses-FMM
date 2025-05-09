@@ -32,8 +32,10 @@ module sink_evolution_module
    endif
 
 end subroutine r_sink_evolution
-
-
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
 subroutine sink_evolution(s,p,ilevel,macc_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
@@ -154,6 +156,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Begin loop over sink particles
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+   macc_loc=0
    do ipart = p%headp(ilevel), p%tailp(ilevel)
       ! Skip young sinks if needed
       !if((g%t - p%tp(ipart)).lt.r%t_start_black_hole)then
@@ -170,7 +173,8 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink/AGN Feedback
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
+      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmacc_loc)
+      macc_loc = macc_loc + dmacc_loc
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Save sink data at a high cadence if needed
@@ -197,12 +201,10 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
 #endif
 #endif
 end subroutine sink_evolution
-
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-
 subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
@@ -629,13 +631,11 @@ contains
    end function bondi_alpha
 
 end subroutine sink_accretion
-
 !##############################################################################
 !##############################################################################
 !##############################################################################
 !##############################################################################
-
-subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
+subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,macc_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -651,7 +651,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    real(dp)::dx_loc,vol_loc
    real(dp)::scale_v
    real(dp)::dMBH_overdt,dMEd_overdt,tan_theta
-   real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn
+   real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,macc_loc
    !==================================================================
    ! This is the RAMSES routine for AGN feedback
    ! For now, it is focused on a simple two-regime model to deploy quasar and radio mode feedback
@@ -687,6 +687,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 
    hash_nbor(0) = ilevel+1
    xBH_fb_nei=0d0; ckey_fb_nei=0d0; weight_fb_nei=0d0
+   macc_loc=0d0
 
    ! Black hole position
    xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
@@ -862,6 +863,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 
             ! If we want to have a separate reservoir
             !gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc
+
+            ! Update total sink mass
+            macc_loc=macc_loc-fbk_mass_agn_loc*vol_loc
          end if
 
          ! All of the RT stuff can come here.

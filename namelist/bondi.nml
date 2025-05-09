@@ -1,12 +1,12 @@
-! Basic namelist to test the sink accretion and refinement code.
-! Here, we simulate the canonical Bondi problem.
-! To run, compile mini-ramses with HYDRO=1,GRAV=1,NDIM=3
+Basic namelist to test the sink accretion and refinement code.
+Here, we simulate the canonical Bondi problem.
+To run, compile mini-ramses with:
+make HYDRO=1 GRAV=1 NDIM=3
 
-! An initial conditions file is required: ICs/ic_sink, which should contain:
-! 0,0,0,0,0,0,0,0,0,0.001,0
+An initial conditions file is required: ICs/ic_sink, which should contain:
+0,0,0,0,0,0,0,0,0,0.001,0
 
-! For this setup, we expect an accretion rate of ~4*pi*0.001**2 = 1.26e-5 
-
+For this setup, we expect an accretion rate of 4*pi*0.001**2=1.26e-5
 
 &RUN_PARAMS
 hydro=.true.
@@ -91,9 +91,6 @@ use_bondi_lambda=.false.
 fix_sink_mass=.true.
 /
 
-
 &refine_params
 sink_refine=.true.
 /
-
-
