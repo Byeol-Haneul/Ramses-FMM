@@ -321,7 +321,7 @@ module amr_commons
      logical::sink_refine=.false.
      logical::sink_dump=.false.
      logical::static_sink=.false.
-     integer::output_sink_fine=0 ! In future, this should be an integer to allow the user to control how often this dump is done
+     integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
      logical::fix_sink_mass = .false. 
 
      ! Black hole parameters

@@ -438,33 +438,13 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       end if
       if(r%verbose_sink)write(*,*)'Bondi: ',dMBH_overdt
 
-      ! Free-fall timescale cap
-      !if(dx_loc .lt. sqrt(r2_sink)/4.0d0)then
-      !   t_ff = sqrt((3.0d0*pi)/(32.0d0*factG*rho_gas))
-      !   dMdt_freefall = (m_gas * dble(nBHnei)) / t_ff
-      !   if(r%verbose_sink)then
-      !      write(*,*)'Freefall: ',dMBH_overdt, dMdt_freefall, dx_loc / sqrt(r2_sink), (rho_gas * vol_loc * dble(nBHnei)) / t_ff, (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3/2)) / t_ff
-      !   end if
-      !   dMBH_overdt = min(dMBH_overdt, dMdt_freefall)
-      !end if
-
    !!! Compute flux accretion rate
    else if(r%accretion_type==2)then
-      write(*,*)'Divergence: ',total_divergence, -1.0*total_divergence*vol_loc, -1.0*total_divergence*vol_loc* (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
       ! Use Divergence of the flow as your accretion rate
       dMBH_overdt = -1.0*total_divergence*vol_loc
 
       ! Applying the correction from Bleuler+14
       dMBH_overdt = dMBH_overdt * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
-
-      !t_ff = sqrt((3.0d0*pi)/(32.0d0*factG*rho_gas))
-      !dMdt_freefall = (m_gas * 8.0d0) / t_ff ! the characteristic radius is ~dx_min, so we take this volume as an oct
-      !if(r%verbose_sink)then
-      !   write(*,*)'Freefall: ',dMBH_overdt, dMdt_freefall, (rho_gas * vol_loc * dble(nBHnei)) / t_ff, (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3.0d0/2.0d0)) / t_ff
-      !   r2_sink = (factG*p%mp(ipart)/(cs_gas**2d0))
-      !   write(*,*)'Freefall 2: ',dMBH_overdt, (rho_gas * vol_loc * 8.0d0) / t_ff, (rho_gas * 4.0d0/3.0d0 * pi * r2_sink**(3d0)) / t_ff / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
-      !end if
-      !dMBH_overdt = min(dMBH_overdt, dMdt_freefall)
 
    !!! Compute threshold accretion rate   
    else if(r%accretion_type==3)then
@@ -483,24 +463,14 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
    ! If the accretion rate is too low, do nothing
    if((r%eddington_floor>0).and.(dMBH_overdt/dMEd_overdt<r%eddington_floor))then
-      write(*,*)'Below the Eddington floor, skipping...'
       return
    end if
 
    ! limiting total accreted mass to 75% of the weighted mass of the accretion region (c.f. Beckmann+2018)
-   if(r%verbose_sink)then
-      write(*,*)'75% Correction: ',dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel)
-   end if
    dMBH_overdt = min(dMBH_overdt, 0.75d0*rho_gas*vol_loc*dble(nBHnei) / g%dtnew(ilevel))
 
    if(((g%t - p%tp(ipart)).lt.r%t_start_black_hole).and.r%t_start_black_hole.gt.0.0)then
-      write(*,*)'Dampening: ',ipart, g%t - p%tp(ipart),dMBH_overdt, exp(0.2d0*(g%t - r%t_start_black_hole)) * dMBH_overdt
       dMBH_overdt = exp(g%t - p%tp(ipart) - r%t_start_black_hole) * dMBH_overdt
-   end if
-
-   if(r%verbose_sink)then
-      write(*,*)'Run Properties: ',ilevel,p%levelp(ipart),dx_loc,vol_loc
-      write(*,*)'Sink properties:',rho_gas,rho_inf,cs_gas,v_bondi,r2_sink
    end if
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -611,11 +581,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    ! Save accreted mass to total
    macc_loc = macc_loc + m_acc
 
-   if(r%verbose_sink)then
-      write(*,*)'Accretion:',ipart,dMBH_overdt,dMEd_overdt,p%mp(ipart)
-      write(*,*)'Accreted properties:',ipart,m_acc/g%dtnew(ilevel),sqrt(sum(x_acc(:)**2)),sqrt(sum(p_acc(:)**2)),sqrt(sum(l_acc(:)**2))
-   end if
-
    end associate
 
 contains
@@ -676,12 +641,6 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    use pm_commons, only: part_t,cross
    use params_module
    use nbors_utils
-   !use cache_commons
-   !use cache
-   !use marshal, only: pack_fetch_refine,unpack_fetch_refine
-   !use boundaries, only: init_bound_refine
-   !use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
-   !use hilbert
    implicit none
    type(ramses_t)::s
    type(part_t)::p
@@ -746,11 +705,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          acc_ratio = dMBH_overdt/dMEd_overdt
       end if
       acc_ratio = max(acc_ratio, 0.0d0)
-      write(*,*)'Accretion ratio: ',acc_ratio
 
       ! Compute the jet direction
       jet_direction(1:ndim) = p%jp(ipart,1:ndim) / (norm2(p%jp(ipart,:)) + tiny(0.0_dp)) 
-      write(*,*)'Jet direction: ',jet_direction(:)
 
       !!! Compute all of the necessary weights
       ! Loop over all possible cells within the feedback region
@@ -816,11 +773,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
       ! NOTE: All done here in terms of canonical units (i.e. mass, not density)
       if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
          !!! Quasar mode (energy)
-         write(*,*)'Computing Quasar mode props'
          fbk_ener_agn = r%epsilon_therm_quasar*r%epsilon_rad*acc_ratio*dMEd_overdt*g%dtnew(ilevel)*(c_cgs/scale_v)**2
       else
          !!! Radio mode (mass,momentum,energy)
-         write(*,*)'Computing Radio mode props'
          jet_mass     = r%kin_mass_loading*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
          jet_speed    = (2*r%epsilon_rad*r%epsilon_therm_jet/r%kin_mass_loading)**0.5d0*c_cgs ! in cm/s 
          
@@ -833,7 +788,6 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
       ! Administer the AGN Feedback
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Loop over the affected cells
-      write(*,*)'Begin loop over feedback cells...'
       do iBHnei=1,nBH_fb_nei
          ! Skip cells with zero weight
          if(weight_fb_nei(iBHnei)==0.0d0)cycle
