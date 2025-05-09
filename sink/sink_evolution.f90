@@ -248,6 +248,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    real(dp)::weighted_bondi,dMdt_freefall,t_ff
    real(dp)::div_cell,total_divergence,div_right,div_left
 
+#ifdef HYDRO
+#if NDIM==3
    if(s%r%accretion_type==0)return
    associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -582,7 +584,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    macc_loc = macc_loc + m_acc
 
    end associate
-
+#endif
+#endif
 contains
    ! Routine to return alpha, defined as rho/rho_inf, for a critical
    ! Bondi accretion solution. The argument is x = r / r_Bondi.
@@ -675,6 +678,8 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    integer,dimension(1:ndim,1:twotondim)::ckeyCIC
    real(dp),dimension(1:twotondim)::volCIC
 
+#ifdef HYDRO
+#if NDIM==3
    associate(r=>s%r,g=>s%g,m=>s%m)
 
    if(r%verbose)write(*,*)'Entering sink_accretion...'
@@ -865,7 +870,8 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    end if ! End if ok_blast_agn
 
    end associate
-
+#endif
+#endif
 end subroutine AGN_feedback
 
 !##############################################################################
