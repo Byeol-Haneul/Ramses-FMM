@@ -752,6 +752,7 @@ class Cell:
         self.x = np.empty(shape=(nndim,0))
         self.u = np.empty(shape=(nnvar,0))
         self.dx = np.empty(shape=(0))
+        self.level = np.empty(shape=(0),dtype=np.int8)
 
 def rd_cell(nout,**kwargs):
     """This function reads RAMSES AMR and hydro files (unformatted Fortran binary) 
@@ -775,6 +776,7 @@ def rd_cell(nout,**kwargs):
             c.x: coordinates of the cells. c.x[0] gives the x coordinate as a numpy array.
             c.u: hydro variables in each cell. For example, c.u[0] gives the gas density as a numpy array.
             c.dx: array containing the individual AMR cell sizes.
+            c.level: refinement levels of cells.
 
     Example:
         import miniramses as ram
@@ -832,6 +834,8 @@ def rd_cell(nout,**kwargs):
                 c.u = np.append(c.u,uc,axis=1)
                 dd = np.ones(nc)*dx
                 c.dx = np.append(c.dx,dd)
+                dd = np.ones(nc,dtype=np.int8) * ilev
+                c.level = np.append(c.level,dd)
 
     # Filtering cells
     if ( not (center is None)  and not (radius is None) ):
@@ -852,12 +856,14 @@ def rd_cell(nout,**kwargs):
         c.u  = c.u[:,r < radius]
         c.x  = c.x[:,r < radius]
         c.dx = c.dx[r < radius]
+        c.level = c.level[r < radius]
 
     if(ndim==1):
         c.x = c.x[0]
         ind = np.argsort(c.x)
         c.x = c.x[ind]
         c.dx = c.dx[ind]
+        c.level = c.level[ind]
         for  ivar in range(0,nvar):
             c.u[ivar]=c.u[ivar,ind]
         
@@ -872,6 +878,7 @@ def save_cell(c,filename):
         np.save(f,c.dx)
         np.save(f,c.x)
         np.save(f,c.u)
+        np.save(f,c.level)
 
 def load_cell(filename):
 
@@ -886,6 +893,7 @@ def load_cell(filename):
         c.dx = np.append(c.dx,np.load(f))
         c.x  = np.append(c.x, np.load(f),axis=1)
         c.u  = np.append(c.u, np.load(f),axis=1)
+        c.level  = np.append(c.level, np.load(f),axis=1)
 
     return c
 
