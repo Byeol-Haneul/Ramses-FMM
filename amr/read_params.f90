@@ -384,17 +384,36 @@ subroutine m_read_params(pst)
   logical::sink_form=.false.
   logical::sink_refine=.false.
   logical::sink_dump=.false.
+  logical::static_sink=.false.
+  integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
+  logical::fix_sink_mass = .false. 
 
   ! Black hole parameters
-  integer::accretion_type = 0 ! 0: None, 1: Bondi
-  character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
+  integer::accretion_type = 0 ! 0: None, 1: Bondi, 2: Flux
   real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
   logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
   real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
   integer::sink_b_spline_order = 4 ! Order of B-spline interpolation used for sink accretion and dynamics
   logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
-  logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
+  logical::bondi_use_gas_mass = .false. ! Whether to include the local gas mass in the Bondi calculation
   logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
+  logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
+  real(dp)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines (code units)
+  logical::use_bondi_lambda = .true.
+
+  ! AGN Feedback parameters
+  logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles
+  integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
+  integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
+  real(dp)::epsilon_rad = 0.1d0 ! Radiative efficiency
+  real(dp)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
+  real(dp)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+  real(dp)::kin_mass_loading = 100d0 ! Mass loading factor of the jet
+  real(dp)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
+  real(dp)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
+  real(dp)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
+  logical::agn_use_mass_weighting = .false. ! Whether to use a mass-weighted feedback scheme
+  real(dp)::eddington_floor = -1 ! Accretion rate floor below which nothing happens
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -517,9 +536,16 @@ subroutine m_read_params(pst)
   namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
-       & ,accretion_type,acc_sink_boost,bondi_use_vrel,accretion_method &
-       & ,eddington_cap,sink_form,sink_b_spline_order,verbose_sink,bondi_use_gas_mass &
-       & ,use_local_bondi_rate,sink_dump
+       & ,sink_form,verbose_sink,sink_dump
+  ! Black Hole accretion parameters
+  namelist/sink_accretion_params/accretion_type,acc_sink_boost,bondi_use_vrel,use_rho_inf &
+       & ,eddington_cap,sink_b_spline_order,bondi_use_gas_mass,use_bondi_lambda &
+       & ,t_start_black_hole,use_local_bondi_rate,static_sink,output_sink_fine &
+       & ,fix_sink_mass,eddington_floor
+  ! AGN Feedback parameters
+  namelist/sink_feedback_params/agn,agn_feedback_radius,agn_weighting_scheme,epsilon_rad &
+       & ,epsilon_therm_jet,epsilon_therm_quasar,kin_mass_loading,agn_fbk_mode_switch_threshold &
+       & ,agn_jet_opening_angle,manual_accretion_rate,agn_use_mass_weighting
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
@@ -775,6 +801,12 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=sink_params,END=112)
 112 continue
+  rewind(1)
+  read(1,NML=sink_accretion_params,END=113)
+113 continue
+  rewind(1)
+  read(1,NML=sink_feedback_params,END=114)
+114 continue
   close(1)
 
   !-----------------
@@ -1298,9 +1330,11 @@ subroutine m_read_params(pst)
   s%r%sink_mass_threshold=sink_mass_threshold
   s%r%sink_purity_threshold=sink_purity_threshold
   s%r%sink_fraction_threshold=sink_fraction_threshold
+  s%r%static_sink=static_sink
+  s%r%output_sink_fine=output_sink_fine
+  s%r%fix_sink_mass=fix_sink_mass
 
   s%r%accretion_type = accretion_type
-  s%r%accretion_method = accretion_method
   s%r%acc_sink_boost = acc_sink_boost
   s%r%bondi_use_vrel = bondi_use_vrel
   s%r%eddington_cap = eddington_cap
@@ -1311,6 +1345,22 @@ subroutine m_read_params(pst)
   s%r%verbose_sink = verbose_sink
   s%r%bondi_use_gas_mass = bondi_use_gas_mass
   s%r%use_local_bondi_rate = use_local_bondi_rate
+  s%r%use_rho_inf = use_rho_inf
+  s%r%t_start_black_hole = t_start_black_hole
+  s%r%use_bondi_lambda = use_bondi_lambda
+
+  s%r%agn = agn
+  s%r%agn_feedback_radius = agn_feedback_radius
+  s%r%agn_weighting_scheme = agn_weighting_scheme
+  s%r%epsilon_rad = epsilon_rad
+  s%r%epsilon_therm_jet = epsilon_therm_jet
+  s%r%epsilon_therm_quasar = epsilon_therm_quasar
+  s%r%kin_mass_loading = kin_mass_loading
+  s%r%agn_fbk_mode_switch_threshold = agn_fbk_mode_switch_threshold
+  s%r%agn_jet_opening_angle = agn_jet_opening_angle
+  s%r%manual_accretion_rate = manual_accretion_rate
+  s%r%agn_use_mass_weighting = agn_use_mass_weighting
+  s%r%eddington_floor = eddington_floor
 
   s%r%ic_file=ic_file
   s%r%ic_format=ic_format

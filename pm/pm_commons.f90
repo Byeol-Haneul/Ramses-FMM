@@ -11,6 +11,7 @@ module pm_commons
      integer :: nvaralloc ! Number of allocated variables
      integer :: norphan_peak ! Number of orphan particles outside of peak patch
      integer :: norphan_halo ! Number of orphan particles outside of halo patch
+     logical :: static=.false. ! Whether the particle is allowed to move
 
      ! Particle dependent arrays
      real(dp),allocatable,dimension(:,:)   ::xp       ! Position

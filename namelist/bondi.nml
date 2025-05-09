@@ -1,0 +1,99 @@
+! Basic namelist to test the sink accretion and refinement code.
+! Here, we simulate the canonical Bondi problem.
+! To run, compile mini-ramses with HYDRO=1,GRAV=1,NDIM=3
+
+! An initial conditions file is required: ICs/ic_sink, which should contain:
+! 0,0,0,0,0,0,0,0,0,0.001,0
+
+! For this setup, we expect an accretion rate of ~4*pi*0.001**2 = 1.26e-5 
+
+
+&RUN_PARAMS
+hydro=.true.
+poisson=.true.
+ncontrol=1
+nrestart=0
+nremap=10
+nsubcycle=2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+                2, 2, 2, 2, 2, 2
+verbose=.false.
+debug=.false.
+nsuperoct=0
+pic=.true.
+/
+
+&AMR_PARAMS
+levelmin=5
+levelmax=7
+ngridtot=3000000
+nexpand=2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+              2, 2, 2, 2, 2, 2, 2, 2, 2, 2
+boxlen=1
+/
+
+&INIT_PARAMS
+nregion=1
+region_type(1)='square'
+x_center=0.5
+y_center=0.5
+z_center=0.5
+length_x=1.0
+length_y=1.0
+length_z=1.0
+exp_region=10.0
+d_region=1.0
+u_region=0.0
+v_region=0.0
+w_region=0.0
+p_region=0.999999
+initfile='ICs'
+filetype='ascii'
+/
+
+&OUTPUT_PARAMS
+delta_tout=0.01
+tend=0.5
+/
+
+&units_params
+units_density = 9.701214037999999e-23
+units_time = 392998825700775.44
+units_length = 5.4137730359807626e+20
+/
+
+&poisson_params
+gravity_type = 2
+gravity_params = 0.001,0.0078125,0.50,0.50,0.50
+/
+
+&HYDRO_PARAMS
+gamma=1.00001
+courant_factor=0.8
+scheme='muscl'
+slope_type=1
+riemann='hllc'
+/
+
+&sink_params
+sink=.true.
+nsinkmax = 10
+sink_form=.false.
+verbose_sink=.true.
+/
+
+&sink_accretion_params
+accretion_type=1 !1=Bondi,2=Divergence
+sink_b_spline_order=4
+bondi_use_vrel=.false.
+bondi_use_gas_mass=.false.
+static_sink=.true.
+use_bondi_lambda=.false.
+fix_sink_mass=.true.
+/
+
+
+&refine_params
+sink_refine=.true.
+/
+
+

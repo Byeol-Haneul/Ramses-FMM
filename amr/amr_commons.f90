@@ -320,10 +320,12 @@ module amr_commons
      logical::sink_form=.false.
      logical::sink_refine=.false.
      logical::sink_dump=.false.
+     logical::static_sink=.false.
+     integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
+     logical::fix_sink_mass = .false. 
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
-     character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
      real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
      logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
      real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
@@ -331,6 +333,23 @@ module amr_commons
      logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
      logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
      logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
+     logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
+     real(dp)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines
+     logical::use_bondi_lambda = .true.
+
+     ! AGN Feedback parameters
+     logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles
+     integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
+     integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
+     real(dp)::epsilon_rad = 0.1d0 ! Radiative efficiency
+     real(dp)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
+     real(dp)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+     real(dp)::kin_mass_loading = 100d0 ! Mass loading factor of the jet
+     real(dp)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
+     real(dp)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
+     real(dp)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
+     logical::agn_use_mass_weighting = .false. ! Whether to use a mass-weighted feedback scheme
+     real(dp)::eddington_floor = -1 ! Accretion rate floor below which nothing happens
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format
