@@ -68,7 +68,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    real(dp)::jet_angle,tan_theta,lambda_sonic
    integer::kk,jj,ii,ipart
    real(dp),dimension(1:ndim)::x_rel
-   real(dp)::r_rel,dmacc_loc
+   real(dp)::r_rel,dmacc_loc,dmjet_loc
    type(msg_large_realdp)::dummy_large_realdp
    real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf
    real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc
@@ -173,8 +173,8 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink/AGN Feedback
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmacc_loc)
-      macc_loc = macc_loc + dmacc_loc
+      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmjet_loc)
+      macc_loc = macc_loc - dmjet_loc
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Save sink data at a high cadence if needed
@@ -635,7 +635,7 @@ end subroutine sink_accretion
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,macc_loc)
+subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -651,7 +651,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    real(dp)::dx_loc,vol_loc
    real(dp)::scale_v
    real(dp)::dMBH_overdt,dMEd_overdt,tan_theta
-   real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,macc_loc
+   real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc
    !==================================================================
    ! This is the RAMSES routine for AGN feedback
    ! For now, it is focused on a simple two-regime model to deploy quasar and radio mode feedback
@@ -687,7 +687,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 
    hash_nbor(0) = ilevel+1
    xBH_fb_nei=0d0; ckey_fb_nei=0d0; weight_fb_nei=0d0
-   macc_loc=0d0
+   mjet_loc=0d0
 
    ! Black hole position
    xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
@@ -864,8 +864,8 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
             ! If we want to have a separate reservoir
             !gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc
 
-            ! Update total sink mass
-            macc_loc=macc_loc-fbk_mass_agn_loc*vol_loc
+            ! Update total ejected mass
+            mjet_loc=mjet_loc+fbk_mass_agn_loc*vol_loc
          end if
 
          ! All of the RT stuff can come here.
