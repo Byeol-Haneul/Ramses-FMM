@@ -1,15 +1,14 @@
-Basic namelist to test the sink feedback code.
-To run, compile mini-ramses with:
-make HYDRO=1 GRAV=1 NDIM=3
+! Basic namelist to test the sink feedback code.
+! To run, compile mini-ramses with HYDRO=1,GRAV=1,NDIM=3
 
-An initial conditions file is required: ICs/ic_sink, which should contain:
-0,0,0,0,0,0,0,0,1,0.001,0
+! An initial conditions file is required: ICs/ic_sink, which should contain:
+! 0,0,0,0,0,0,0,0,1,0.001,0
 
-For this setup, you will produce a jet fired continuously along the z axis.
+! For this setup, you will produce a jet fired continuously along the z axis.
 
-By modifying manual_accretion_rate (the enforced accretion rate as a fraction of Eddington)
-and agn_fbk_mode_switch_threshold (the Eddington fraction at which quasar mode takes over)
-you can turn this into a quasar mode test.
+! Manual_accretion_rate (the enforced accretion rate as a fraction of Eddington)
+! and agn_fbk_mode_switch_threshold (the Eddington fraction at which quasar mode takes over)
+! can both be used to change the power of the feedback and/or to turn this into a quasar mode test.
 
 &RUN_PARAMS
 hydro=.true.
@@ -55,7 +54,7 @@ filetype='ascii'
 
 &OUTPUT_PARAMS
 delta_tout=0.01
-tend=0.2
+tend=1
 /
 
 &units_params
@@ -96,10 +95,14 @@ agn_feedback_radius=6
 agn_fbk_mode_switch_threshold=100
 agn_jet_opening_angle=30
 agn_use_mass_weighting=.true.
-kin_mass_loading = 100
-manual_accretion_rate=0.01 ! Enforces a continuous accretion rate
+kin_mass_loading = 0.5
+manual_accretion_rate=-0.01 ! Enforces a continuous accretion rate
 /
+
 
 &refine_params
 sink_refine=.true.
 /
+
+
+
