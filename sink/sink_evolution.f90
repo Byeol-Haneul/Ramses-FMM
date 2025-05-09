@@ -174,7 +174,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       ! Sink/AGN Feedback
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
       call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmjet_loc)
-      macc_loc = macc_loc - dmjet_loc
+      !macc_loc = macc_loc - dmjet_loc
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Save sink data at a high cadence if needed
@@ -530,11 +530,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
       ! Get accreted mass for this cell
       d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
-      ! Acount for the jet mass (if in jet mode)
-      ! This will then be re-added as required during feedback
-      if(r%agn.and.(dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
-         d_acc = d_acc*(1.0d0 + r%kin_mass_loading/dble(nBHnei))
-      end if
+      
+      ! NOTE: Jet mass will be returned during the feedback step
 
       ! Ensure that the accreted amount is positive
       d_acc = max(d_acc, 0.0_dp)
@@ -554,9 +551,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       !!! Accretion onto the black hole
       ! First, account for radiated/jet mass-energy
       if(r%agn)then
-         d_acc = d_acc*(1 - r%epsilon_rad)
+         !d_acc = d_acc*(1 - r%epsilon_rad)
          if((dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
-            d_acc = d_acc/(1.0d0 + r%kin_mass_loading/dble(nBHnei))
+            d_acc = d_acc*(1.0d0 - r%kin_mass_loading)
          end if
       end if
 
@@ -783,7 +780,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
       else
          !!! Radio mode (mass,momentum,energy)
          jet_mass     = r%kin_mass_loading*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
-         jet_speed    = (2*r%epsilon_rad*r%epsilon_therm_jet/r%kin_mass_loading)**0.5d0*c_cgs ! in cm/s 
+         jet_speed    = (r%epsilon_rad*r%epsilon_therm_jet)**0.5d0*r%kin_mass_loading*c_cgs ! in cm/s 
          
          fbk_mass_agn = jet_mass
          fbk_mom_agn  = jet_mass * jet_speed / scale_v
