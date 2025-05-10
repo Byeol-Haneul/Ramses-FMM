@@ -68,7 +68,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    real(dp)::jet_angle,tan_theta,lambda_sonic
    integer::kk,jj,ii,ipart
    real(dp),dimension(1:ndim)::x_rel
-   real(dp)::r_rel,dmacc_loc,dmjet_loc
+   real(dp)::r_rel,dmacc_loc
    type(msg_large_realdp)::dummy_large_realdp
    real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf
    real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc
@@ -173,8 +173,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink/AGN Feedback
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmjet_loc)
-      !macc_loc = macc_loc - dmjet_loc
+      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Save sink data at a high cadence if needed
@@ -636,7 +635,7 @@ end subroutine sink_accretion
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc)
+subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
