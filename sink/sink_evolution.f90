@@ -39,7 +39,7 @@ end subroutine r_sink_evolution
 subroutine sink_evolution(s,p,ilevel,macc_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
-   !use hydro_parameters, only: nvar, nener
+   use hydro_parameters, only: nvar, nener
    !use amr_commons, only: nbor,oct
    use ramses_commons, only: ramses_t
    use pm_commons, only: part_t
@@ -68,10 +68,12 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    real(dp)::jet_angle,tan_theta,lambda_sonic
    integer::kk,jj,ii,ipart
    real(dp),dimension(1:ndim)::x_rel
-   real(dp)::r_rel,dmacc_loc
+   real(dp)::r_rel,dmacc_loc,dmjet_loc
    type(msg_large_realdp)::dummy_large_realdp
    real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf
-   real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc
+   real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
+   real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc
+   real(dp),dimension(6+nener,nvar)::passive_acc
 
 #ifdef HYDRO
 #if NDIM==3
@@ -167,13 +169,14 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink Accretion
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas)
       macc_loc = macc_loc + dmacc_loc
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink/AGN Feedback
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
+      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmjet_loc)
+      macc_loc = macc_loc - dmjet_loc
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Save sink data at a high cadence if needed
@@ -204,7 +207,7 @@ end subroutine sink_evolution
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -213,12 +216,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    use pm_commons, only: part_t,cross
    use params_module
    use nbors_utils
-   !use cache_commons
-   !use cache
-   !use marshal, only: pack_fetch_refine,unpack_fetch_refine
-   !use boundaries, only: init_bound_refine
-   !use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
-   !use hilbert
    implicit none
    type(ramses_t)::s
    type(part_t)::p
@@ -226,7 +223,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    real(dp)::scale_l,scale_t,scale_d,factG
    real(dp)::dx_loc,vol_loc
    real(dp)::macc_loc,lambda_sonic
-   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
+   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,e_acc,rho_inf,cs_gas
+   real(dp),dimension(1:ndim)::p_acc,l_acc
+   real(dp),dimension(6+nener,nvar)::passive_acc
    !==================================================================
    ! This is the RAMSES routine for sink (black hole) particle accretion.
    ! For now, it is focused on a simple Bondi-Hoyle-Lyttleton accretion scheme.
@@ -243,7 +242,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar
    real(dp)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
    real(dp)::weight,r_rel
-   real(dp),dimension(1:ndim)::vv,v_rel,x_acc,p_acc,l_acc,vel_gas
+   real(dp),dimension(1:ndim)::vv,v_rel,vel_gas,x_acc
    type(oct),pointer::gridn
    real(dp)::d_acc,m_gas,bondi_mass
    real(dp)::weighted_bondi,dMdt_freefall,t_ff
@@ -440,6 +439,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
          dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda_sonic
       end if
       if(r%verbose_sink)write(*,*)'Bondi: ',dMBH_overdt
+      write(*,*)'Bondi vals: ',rho_gas,cs_gas,r2_sink,vel_gas
 
    !!! Compute flux accretion rate
    else if(r%accretion_type==2)then
@@ -485,7 +485,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
    ! Loop over all cells in the accretion region, proceeding with accretion
-   m_acc=0.0d0; x_acc=0.0d0; p_acc=0.0d0; l_acc=0.0d0
+   m_acc=0.0d0; e_acc = 0.0d0; x_acc=0.0d0; p_acc=0.0d0; l_acc=0.0d0; passive_acc=0.0d0
    do j = 1, nBHnei
 
       ! Compute neighbouring cell coordinates
@@ -534,7 +534,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       ! Get accreted mass for this cell
       d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
 
-      ! NOTE: Jet mass will be returned during the feedback step
+      if(r%agn.and.(dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
+         d_acc = d_acc*(1.0d0 + r%kin_mass_loading)
+      end if
 
       ! Ensure that the accreted amount is positive
       d_acc = max(d_acc, 0.0_dp)
@@ -551,25 +553,24 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
       !!! NOTE: We do not accrete non-thermal energies 
 
-      !!! Accretion onto the black hole
-      ! First, account for radiated/jet mass-energy
-      if(r%agn)then
-         !d_acc = d_acc*(1 - r%epsilon_rad)
-         if((dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
-            d_acc = d_acc*(1.0d0 - r%kin_mass_loading)
-         end if
-      end if
-
       ! Proceed with accretion
       ! Accreted mass
       m_acc = m_acc + d_acc * vol_loc
+      ! Accreted energy
+      e_acc = e_acc + d_acc * e * vol_loc
       ! Accreted relative center of mass
       x_acc(1:ndim) = x_acc(1:ndim) + d_acc * x_rel(1:ndim) * vol_loc * dx_loc
       ! Accreted relative momentum
       p_acc(1:ndim) = p_acc(1:ndim) + d_acc * vv(1:ndim)  * vol_loc
       ! Accreted relative angular momentum
       l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(x_rel(1:ndim), vv(1:ndim) - p%vp(ipart,1:ndim)) * vol_loc * dx_loc
+      ! Passive scalars
+      !do ivar=6+nener,nvar
+      !   passive_acc(ivar) = passive_acc(ivar) + d_acc * gridn%uold(icelln,ivar) / d * vol_loc
+      !end do
    end do ! End loop over j
+
+   write(*,*)'acc test: ',m_acc,e_acc,p_acc,l_acc
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Add accreted quantities to sink
@@ -581,6 +582,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    p%vp(ipart,1:ndim)                  = ( p%mp(ipart) * p%vp(ipart,1:ndim) + p_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
    p%jp(ipart,1:ndim)                  = ( p%mp(ipart) * p%jp(ipart,1:ndim) + l_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
    if(.not.r%fix_sink_mass)p%mp(ipart) =   p%mp(ipart) + m_acc
+
+   write(*,*)'after accretion: ',p%vp(ipart,1:ndim),p%jp(ipart,1:ndim)
 
    ! Save accreted mass to total
    macc_loc = macc_loc + m_acc
@@ -635,7 +638,7 @@ end subroutine sink_accretion
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
+subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -652,11 +655,18 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    real(dp)::scale_v
    real(dp)::dMBH_overdt,dMEd_overdt,tan_theta
    real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc
+   real(dp)::m_acc,e_acc
+   real(dp),dimension(6+nener,nvar)::passive_acc
+   real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc
    !==================================================================
    ! This is the RAMSES routine for AGN feedback
    ! For now, it is focused on a simple two-regime model to deploy quasar and radio mode feedback
    ! depending on the accretion rate.
    ! Written by Nicholas Choustikov (Apr 2025)
+
+   ! NOTE: We now aim to return mass and linear momentum accounting for 
+   ! (epsilon_r + kin_mass_loading) of the accreted quantities.
+   ! This should ensure that all conserved quantities are maintained.
    !==================================================================
    ! Local variables
    real(dp)::rr,x,y,z,rrad
@@ -714,6 +724,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 
       ! Compute the jet direction
       jet_direction(1:ndim) = p%jp(ipart,1:ndim) / (norm2(p%jp(ipart,:)) + tiny(0.0_dp)) 
+      write(*,*)'jet direction: ',jet_direction
 
       !!! Compute all of the necessary weights
       ! Loop over all possible cells within the feedback region
@@ -777,17 +788,34 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 
       ! Compute the global energy/momenta needed
       ! NOTE: All done here in terms of canonical units (i.e. mass, not density)
+      ! NOTE: Presently we assume that no angular momentum is dumped (i.e. the black hole is maximally spinning)
       if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
-         !!! Quasar mode (energy)
+         !!! Quasar mode
+         fbk_mass_agn = r%epsilon_rad*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
          fbk_ener_agn = r%epsilon_therm_quasar*r%epsilon_rad*acc_ratio*dMEd_overdt*g%dtnew(ilevel)*(c_cgs/scale_v)**2
+
+         ! Book-keeping for conserved quantities
+         m_acc = r%epsilon_rad*m_acc
+         e_acc = r%epsilon_rad*e_acc
+         x_acc = r%epsilon_rad*x_acc/dx_loc
+         p_acc = r%epsilon_rad*p_acc
+         l_acc = r%epsilon_rad*l_acc/dx_loc
+         passive_acc = r%epsilon_rad*passive_acc
       else
-         !!! Radio mode (mass,momentum,energy)
-         jet_mass     = r%kin_mass_loading*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
-         jet_speed    = (r%epsilon_rad*r%epsilon_therm_jet)**0.5d0*r%kin_mass_loading*c_cgs ! in cm/s 
+         !!! Radio mode
+         jet_mass     = (r%epsilon_rad + r%kin_mass_loading)*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
+         jet_speed    = (2.0d0*r%epsilon_rad*r%epsilon_therm_jet/r%kin_mass_loading)**0.5d0*c_cgs ! in cm/s 
          
          fbk_mass_agn = jet_mass
          fbk_mom_agn  = jet_mass * jet_speed / scale_v
-         !fbk_ener_agn = r%epsilon_therm_jet*r%epsilon_rad*jet_mass/r%kin_mass_loading*(c_cgs/scale_v)**2
+
+         ! Book-keeping for conserved quantities
+         m_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*m_acc
+         e_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*e_acc
+         x_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*x_acc/dx_loc
+         p_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*p_acc
+         l_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*l_acc/dx_loc
+         passive_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*passive_acc
       end if
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -822,55 +850,78 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          ! Get the local gas properties
          d          = max(gridn%uold(icelln,1),r%smallr)
          vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
-         !e          =     gridn%uold(icelln,5)/d
+         e          =     gridn%uold(icelln,5)/d
 
          ! Get the weight
          weight = volCIC(j) * weight_fb_nei(iBHnei)
+         if(r%agn_use_mass_weighting)weight=weight*d/rho_gas_fb
 
          !!! Proceed with the feedback
          if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
             !!! Quasar mode (energy)
             ! Get the local feedback quantities (accounting for weightings)
-            fbk_ener_agn_loc = fbk_ener_agn*weight
-            if(r%agn_use_mass_weighting)fbk_ener_agn_loc=fbk_ener_agn_loc*(d/rho_gas_fb)
+            fbk_mass_agn_loc = fbk_mass_agn * weight
+            fbk_ener_agn_loc = fbk_ener_agn * weight
 
             ! Conversion to conserved quantities
-            fbk_ener_agn_loc = fbk_ener_agn_loc*d/vol_loc
+            fbk_mass_agn_loc = fbk_mass_agn_loc     / vol_loc
+            fbk_ener_agn_loc = fbk_ener_agn_loc * d / vol_loc
 
             ! Now we inject the actual feedback
-            gridn%unew(icelln,5)          = gridn%unew(icelln,5)          + fbk_ener_agn_loc  
+            gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + fbk_mass_agn_loc
+            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_ener_agn_loc
+            
+            ! Account for conserved quantities
+            ! Mass is handled above
+            gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + p_acc(1:ndim)*weight/vol_loc
+            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + e_acc*weight/vol_loc
+            ! Handle the passive scalars
+            !do ivar=6+nener,nvar
+            !   gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*weight/vol_loc
+            !end do
          else
             !!! Radio mode (mass,momentum,energy)
             ! Get the local feedback quantities (accounting for weightings)
             fbk_mass_agn_loc = fbk_mass_agn * weight
             fbk_mom_agn_loc  = fbk_mom_agn  * weight
-            !fbk_ener_agn_loc = fbk_ener_agn * weight
-            if(r%agn_use_mass_weighting)then
-               fbk_mass_agn_loc = fbk_mass_agn_loc * (d/rho_gas_fb)
-               fbk_mom_agn_loc  = fbk_mom_agn_loc  * (d/rho_gas_fb)
-               !fbk_ener_agn_loc = fbk_ener_agn_loc * (d/rho_gas_fb)
-            end if
 
             ! Conversion to conserved quantities
-            fbk_mass_agn_loc = fbk_mass_agn_loc/vol_loc
-            fbk_mom_agn_loc  = fbk_mom_agn_loc/vol_loc
-            !fbk_ener_agn_loc = fbk_ener_agn_loc*(d+fbk_mass_agn_loc)/vol_loc
+            fbk_mass_agn_loc = fbk_mass_agn_loc / vol_loc
+            fbk_mom_agn_loc  = fbk_mom_agn_loc  / vol_loc
 
             ! Now we inject the actual feedback (note, all energy is due to work done)
-            gridn%unew(icelln,1)          = gridn%unew(icelln,1)          + fbk_mass_agn_loc
-            gridn%unew(icelln,2:4)        = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
-            gridn%unew(icelln,5)          = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+            !write(*,*)'feedback test 1: ',d,e,vv
+            !write(*,*)'feedback test 2: ',fbk_mass_agn_loc,fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp)),fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+            gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + fbk_mass_agn_loc
+            gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
+            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
 
-            ! If we want to have a separate reservoir
-            !gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc
-
-            ! Update total ejected mass
-            mjet_loc=mjet_loc+fbk_mass_agn_loc*vol_loc
+            ! Account for conserved quantities
+            ! Mass is handled above
+            gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + p_acc(1:ndim)*weight/vol_loc
+            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + e_acc*weight/vol_loc
+            ! Handle the passive scalars
+            !do ivar=6+nener,nvar
+            !   gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*weight/vol_loc
+            !end do
          end if
 
          ! All of the RT stuff can come here.
+
          end do ! End loop over j
       end do ! End loop over nBH_fb_nei
+
+      ! Remove feedback quantities from the BH which was acting as a reservoir
+      ! NOTE: Angular momentum is assumed to stay on the sink
+      !write(*,*)'mass test: ',p%mp(ipart) - m_acc
+      if(.not.p%static)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) - x_acc(1:ndim) ) / ( p%mp(ipart) - m_acc )
+      p%vp(ipart,1:ndim)                  = ( p%mp(ipart) * p%vp(ipart,1:ndim) - p_acc(1:ndim) ) / ( p%mp(ipart) - m_acc )
+      if(.not.r%fix_sink_mass)p%mp(ipart) =   p%mp(ipart) - m_acc
+
+      !write(*,*)'after feedback: ',p%vp(ipart,1:ndim),p%jp(ipart,1:ndim)
+   ! Save accreted mass to total
+   mjet_loc = mjet_loc + m_acc
+
    end if ! End if ok_blast_agn
 
    end associate
