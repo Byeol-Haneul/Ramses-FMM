@@ -27,7 +27,7 @@ program amr2map
   real(KIND=8)::xmin=0,xmax=1,ymin=0,ymax=1,zmin=0,zmax=1
   real(KIND=8)::xxmin,xxmax,yymin,yymax,zzmin,zzmax
   real(KIND=8)::dx,dy,dz,xx,yy,zz
-  real(KIND=8)::rho,map,ekin,pres
+  real(KIND=8)::rho,map,ekin,bx,by,bz,emag,pres
   real(KIND=8)::metmax=0d0
 
   character(LEN=1)::proj='z'
@@ -257,6 +257,16 @@ program amr2map
                     else
                        map = pres
                     endif
+                 case (16) ! Magnetic pressure
+                    bx = 0.5*(uold(ind,nvar-5)+uold(ind,nvar-2))
+                    by = 0.5*(uold(ind,nvar-4)+uold(ind,nvar-1))
+                    bz = 0.5*(uold(ind,nvar-3)+uold(ind,nvar  ))
+                    emag = 0.5*(bx**2+by**2+bz**2)
+                    if(do_max)then
+                       map = emag
+                    else
+                       map = rho*emag
+                    endif
                  case default ! Passive scalar
                     if(do_max)then
                        map = uold(ind,type)
@@ -359,7 +369,7 @@ program amr2map
   case (15) ! Temperature
      write(*,*)"Max sound speed =",sqrt(metmax)
   case (16) ! Magnetic pressure
-     write(*,*)"Max field strngth =",sqrt(metmax)
+     write(*,*)"Max field strength =",sqrt(metmax)
   case default ! Passive scalar
      write(*,*)"Max variable",type,"=",metmax
   end select
@@ -395,7 +405,7 @@ program amr2map
   end do
 
   if(.not. do_max)then
-     write(*,*)'Norm=',sum(mapgrid(lmax)%rho(imin:imax,jmin:jmax))/(imax-imin+1)/(jmax-jmin+1)
+     write(*,*)'Norm rho=',sum(mapgrid(lmax)%rho(imin:imax,jmin:jmax))/(imax-imin+1)/(jmax-jmin+1)
   endif
 
   ! Output file
