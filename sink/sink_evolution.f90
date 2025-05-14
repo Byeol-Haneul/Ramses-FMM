@@ -278,7 +278,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    
    ! Initialise sink information at zero
    rho_gas=0d0; vel_gas=0d0; cs_gas=0d0; m_gas=0d0; weighted_bondi=0d0; total_divergence=0d0
-
+   
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Collect local gas information
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -336,6 +336,12 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       cs_gas           = cs_gas          + cs         * weight
       m_gas            = m_gas           + d          * weight * vol_loc
 
+      if(isnan(vv(1)).or.isnan(vv(2)).or.isnan(vv(3)))then
+         write(*,*)'nantest: ',gridn%uold(icelln,1:5)
+         write(*,*)'nantest 2: ', vv
+         write(*,*)'nantest 3: ', x_rel(1:ndim)
+
+      end if
       if(r%accretion_type==2)then
          ! Compute local mass divergence for Bleuler+14 flux accretion
          div_cell = 0
@@ -367,7 +373,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
             div_left = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/dx_loc
 
             ! Compute the 'Total' contribution
-            div_cell = (div_right - div_left)/2.0d0
+            div_cell = (div_right - div_left)!/2.0d0
          end do
          total_divergence = total_divergence + div_cell!*weight
       end if
@@ -447,11 +453,15 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       dMBH_overdt = -1.0*total_divergence*vol_loc
 
       ! Applying the correction from Bleuler+14
-      dMBH_overdt = dMBH_overdt * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
+      if(r%sink_density_threshold.gt.0.0)dMBH_overdt = dMBH_overdt * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
+
+      if(r%verbose_sink)write(*,*)'Flux: ',dMBH_overdt
+      write(*,*)'Bondi vals: ',rho_gas,cs_gas,vel_gas
 
    !!! Compute threshold accretion rate   
    else if(r%accretion_type==3)then
       dMBH_overdt = 0.5d0*(rho_gas - r%sink_density_threshold)*vol_loc*dble(nBHnei)
+      if(r%verbose_sink)write(*,*)'Threshold: ',dMBH_overdt
    end if
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -534,18 +544,20 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       ! Get accreted mass for this cell
       d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
 
-      if(r%agn.and.(dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
-         d_acc = d_acc*(1.0d0 + r%kin_mass_loading)
-      end if
+      !if(r%agn.and.(dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
+      !   d_acc = d_acc*(1.0d0 + r%kin_mass_loading)
+      !end if
 
       ! Ensure that the accreted amount is positive
       d_acc = max(d_acc, 0.0_dp)
 
+      !write(*,*)'full info 1: ',gridn%unew(icelln,1:5)
       ! Accrete from the cell
       gridn%unew(icelln,1)          = gridn%unew(icelln,1)          - d_acc
       gridn%unew(icelln,2:(ndim+1)) = gridn%unew(icelln,2:(ndim+1)) - d_acc * vv(1:ndim)
       gridn%unew(icelln,5)          = gridn%unew(icelln,5)          - d_acc * e
 
+      !write(*,*)'full info 2: ',gridn%unew(icelln,1:5)
       ! Accrete passive scalars
       do ivar=6+nener,nvar
          gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar) - d_acc*gridn%uold(icelln,ivar)/d
@@ -565,9 +577,13 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       ! Accreted relative angular momentum
       l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(x_rel(1:ndim), vv(1:ndim) - p%vp(ipart,1:ndim)) * vol_loc * dx_loc
       ! Passive scalars
-      !do ivar=6+nener,nvar
-      !   passive_acc(ivar) = passive_acc(ivar) + d_acc * gridn%uold(icelln,ivar) / d * vol_loc
-      !end do
+#if NVAR>NENER+6
+      if(r%agn)then
+      do ivar=6+nener,nvar
+         passive_acc(ivar) = passive_acc(ivar) + d_acc * gridn%uold(icelln,ivar) / d * vol_loc
+      end do
+      end if
+#endif
    end do ! End loop over j
 
    write(*,*)'acc test: ',m_acc,e_acc,p_acc,l_acc
@@ -786,6 +802,13 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
       ! Compute feedback strength
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
+      m_acc = r%epsilon_rad*m_acc
+      e_acc = r%epsilon_rad*e_acc
+      x_acc = r%epsilon_rad*x_acc/dx_loc
+      p_acc = r%epsilon_rad*p_acc
+      l_acc = r%epsilon_rad*l_acc/dx_loc
+      passive_acc = r%epsilon_rad*passive_acc
+
       ! Compute the global energy/momenta needed
       ! NOTE: All done here in terms of canonical units (i.e. mass, not density)
       ! NOTE: Presently we assume that no angular momentum is dumped (i.e. the black hole is maximally spinning)
@@ -795,27 +818,28 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          fbk_ener_agn = r%epsilon_therm_quasar*r%epsilon_rad*acc_ratio*dMEd_overdt*g%dtnew(ilevel)*(c_cgs/scale_v)**2
 
          ! Book-keeping for conserved quantities
-         m_acc = r%epsilon_rad*m_acc
-         e_acc = r%epsilon_rad*e_acc
-         x_acc = r%epsilon_rad*x_acc/dx_loc
-         p_acc = r%epsilon_rad*p_acc
-         l_acc = r%epsilon_rad*l_acc/dx_loc
-         passive_acc = r%epsilon_rad*passive_acc
+         !m_acc = r%epsilon_rad*m_acc
+         !e_acc = r%epsilon_rad*e_acc
+         !x_acc = r%epsilon_rad*x_acc/dx_loc
+         !p_acc = r%epsilon_rad*p_acc
+         !l_acc = r%epsilon_rad*l_acc/dx_loc
+         !passive_acc = r%epsilon_rad*passive_acc
       else
          !!! Radio mode
-         jet_mass     = (r%epsilon_rad + r%kin_mass_loading)*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
+         !jet_mass     = (r%epsilon_rad + r%kin_mass_loading)*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
+         jet_mass     = r%kin_mass_loading*(1-r%epsilon_rad)/(1+r%kin_mass_loading)*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
          jet_speed    = (2.0d0*r%epsilon_rad*r%epsilon_therm_jet/r%kin_mass_loading)**0.5d0*c_cgs ! in cm/s 
          
          fbk_mass_agn = jet_mass
          fbk_mom_agn  = jet_mass * jet_speed / scale_v
 
          ! Book-keeping for conserved quantities
-         m_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*m_acc
-         e_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*e_acc
-         x_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*x_acc/dx_loc
-         p_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*p_acc
-         l_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*l_acc/dx_loc
-         passive_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*passive_acc
+         !m_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*m_acc
+         !e_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*e_acc
+         !x_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*x_acc/dx_loc
+         !p_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*p_acc
+         !l_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*l_acc/dx_loc
+         !passive_acc = (r%epsilon_rad+r%kin_mass_loading)/(1.0d0 + r%kin_mass_loading)*passive_acc
       end if
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -873,12 +897,15 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
             
             ! Account for conserved quantities
             ! Mass is handled above
+            gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + m_acc*weight/vol_loc
             gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + p_acc(1:ndim)*weight/vol_loc
             gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + e_acc*weight/vol_loc
             ! Handle the passive scalars
-            !do ivar=6+nener,nvar
-            !   gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*weight/vol_loc
-            !end do
+#if NVAR>NENER+6
+            do ivar=6+nener,nvar
+               gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*weight/vol_loc
+            end do
+#endif
          else
             !!! Radio mode (mass,momentum,energy)
             ! Get the local feedback quantities (accounting for weightings)
@@ -888,7 +915,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
             ! Conversion to conserved quantities
             fbk_mass_agn_loc = fbk_mass_agn_loc / vol_loc
             fbk_mom_agn_loc  = fbk_mom_agn_loc  / vol_loc
-
+            
             ! Now we inject the actual feedback (note, all energy is due to work done)
             !write(*,*)'feedback test 1: ',d,e,vv
             !write(*,*)'feedback test 2: ',fbk_mass_agn_loc,fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp)),fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
@@ -898,12 +925,17 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 
             ! Account for conserved quantities
             ! Mass is handled above
+            gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + m_acc*weight/vol_loc
             gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + p_acc(1:ndim)*weight/vol_loc
             gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + e_acc*weight/vol_loc
             ! Handle the passive scalars
-            !do ivar=6+nener,nvar
-            !   gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*weight/vol_loc
-            !end do
+
+            !write(*,*)'speed after injection:',gridn%unew(icelln,2:4)/gridn%unew(icelln,1) * scale_v
+#if NVAR>NENER+6
+            do ivar=6+nener,nvar
+               gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*weight/vol_loc
+            end do
+#endif
          end if
 
          ! All of the RT stuff can come here.
@@ -918,9 +950,10 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
       p%vp(ipart,1:ndim)                  = ( p%mp(ipart) * p%vp(ipart,1:ndim) - p_acc(1:ndim) ) / ( p%mp(ipart) - m_acc )
       if(.not.r%fix_sink_mass)p%mp(ipart) =   p%mp(ipart) - m_acc
 
-      !write(*,*)'after feedback: ',p%vp(ipart,1:ndim),p%jp(ipart,1:ndim)
-   ! Save accreted mass to total
-   mjet_loc = mjet_loc + m_acc
+      write(*,*)'after feedback: ',p%vp(ipart,1:ndim),p%jp(ipart,1:ndim)
+
+      ! Save accreted mass to total
+      mjet_loc = mjet_loc + m_acc + fbk_mass_agn
 
    end if ! End if ok_blast_agn
 
