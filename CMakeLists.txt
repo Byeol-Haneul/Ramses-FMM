@@ -16,12 +16,15 @@ set(NDIM 2 CACHE STRING "Set the number of dimensions")
 set(EXEC ramses${NDIM}d)
 set(NPRE 8)
 set(NVAR 5)
+set(NION 0)
 set(NENER 0)
+set(NRTGRP 0)
 set(UNITS DEF CACHE STRING "Set the unit system")
 set(INIT DEF CACHE STRING "Set the initial conditions")
 set(GRAV false CACHE BOOL "Activate gravity solver")
 set(HYDRO true CACHE BOOL "Activate hydro solver")
 set(MHD false CACHE BOOL "Activate MHD solver")
+set(RT false CACHE BOOL "Activate RT solver")
 
 add_executable(${EXEC} "")
 
@@ -39,9 +42,9 @@ else()
   set(MDL2 false CACHE BOOL "Enable the new MDL version of RAMSES")
 endif()
 
-cmake_print_variables(NDIM NVAR UNITS INIT GRAV HYDRO MHD)
+cmake_print_variables(NDIM NVAR NENER NION NRTGRP UNITS INIT GRAV HYDRO MHD RT)
 
-add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS=${UNITS} -DINIT=${INIT})
+add_definitions(-DNVECTOR=${NVECTOR} -DNDIM=${NDIM} -DNPRE=${NPRE} -DNENER=${NENER} -DNVAR=${NVAR} -DNHILBERT=${NHILBERT} -DUNITS=${UNITS} -DINIT=${INIT} -DNION=${NION} -DNRTGRP=${NRTGRP})
 
 if(NOT MPI_FOUND)
   add_definitions(-DWITHOUTMPI)
@@ -57,6 +60,10 @@ endif()
 
 if(MHD)
   add_definitions(-DMHD)
+endif()
+
+if(RT)
+  add_definitions(-DRT)
 endif()
 
 add_custom_command(
@@ -89,6 +96,7 @@ set(fortran_files
   amr/init_refine_basegrid.f90
   amr/init_refine_adaptive.f90
   amr/init_refine_restart.f90
+  amr/init_refine_ramses.f90
   amr/adaptive_loop.f90
   amr/update_time.f90
   amr/title.f90
@@ -107,22 +115,18 @@ set(fortran_files
   amr/boundaries.f90
   amr/marshal.f90
   amr/amr_parameters.f90
-  hydro/hydro_parameters.f90
-  pm/pm_parameters.f90
-  pm/pm_commons.f90
   amr/hilbert.f90
   amr/domain_hilbert.f90
-  hydro/hydro_commons.f90
   amr/oct_commons.f90
   amr/amr_commons.f90
-  poisson/poisson_parameters.f90
   amr/mdl_commons.f90
   amr/ramses_commons.f90
   amr/call_back.f90
   amr/cache_commons.f90
-  pm/gadgetreadfile.f90
   amr/rngstream.f90
   
+  hydro/hydro_parameters.f90
+  hydro/hydro_commons.f90
   hydro/boundana.f90
   hydro/init_hydro.f90
   hydro/init_flow_fine.f90
@@ -140,7 +144,10 @@ set(fortran_files
   hydro/output_hydro.f90
   hydro/synchro_hydro_fine.f90
   hydro/source_hydro_fine.f90
+  hydro/upload.f90
   
+  pm/pm_parameters.f90
+  pm/pm_commons.f90
   pm/newdt_fine.f90
   pm/init_part.f90
   pm/input_part.f90
@@ -148,17 +155,19 @@ set(fortran_files
   pm/input_part_ascii.f90
   pm/input_part_grafic.f90
   pm/input_part_gadget.f90
+  pm/input_part_ramses.f90
   pm/input_part_zoom.f90
   pm/rho_fine.f90
   pm/move_fine.f90
-  poisson/rho_ana.f90
   pm/output_part.f90
+  pm/gadgetreadfile.f90
   
+  poisson/poisson_parameters.f90
   poisson/output_poisson.f90
   poisson/force_fine.f90
   poisson/grav_ana.f90
+  poisson/rho_ana.f90
   poisson/phi_fine_cg.f90
-  hydro/upload.f90
   poisson/poisson_flag.f90
   poisson/multigrid_fine_commons.f90
   poisson/multigrid_fine_coarse.f90
@@ -168,6 +177,28 @@ set(fortran_files
   cooling/cooling_module.f90
   cooling/cooling_module_ism.f90
   cooling/init_cooling.f90
+  cooling/coolrates_module.f90
+  cooling/init_neq_chem.f90
+  cooling/init_xion.f90
+  cooling/neq_cooling_module.f90
+
+  rt/init_rt.f90
+  rt/rt_flag.f90
+  rt/rt_parameters.f90
+  rt/interpol_rt.f90
+  rt/rt_flux_module.f90
+  rt/rt_spectra.f90
+  rt/output_rt.f90
+  rt/rt_godunov_fine.f90
+  rt/rt_step.f90
+  rt/read_rt_params.f90
+  rt/rt_godunov_utils.f90
+  rt/rt_units.f90
+  rt/rt_commons.f90
+  rt/rt_init_flow_fine.f90
+  rt/rt_upload.f90
+  rt/rt_condinit.f90
+  rt/rt_input_condinit.f90
 
   clump/clfind_commons.f90
   clump/clump_finder.f90
@@ -176,8 +207,11 @@ set(fortran_files
   clump/tree_formation.f90
 
   star/star_formation.f90
-  star/sink_formation.f90
+  sink/sink_formation.f90
+  sink/sink_evolution.f90
+
   feedback/feedback.f90
+  feedback/rt_star_feedback.f90
 
   ${CMAKE_BINARY_DIR}/write_gitinfo.f90
   ${CMAKE_BINARY_DIR}/write_makefile.f90

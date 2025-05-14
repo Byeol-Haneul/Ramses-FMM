@@ -129,6 +129,7 @@ subroutine init_sink(r,g,p)
   ! Allocate sink particle variables
   !------------------------------------
   p%type=SINK_TYPE
+  p%static=r%static_sink
   allocate(p%xp    (r%nsinkmax,ndim))
   allocate(p%vp    (r%nsinkmax,ndim))
   allocate(p%fp    (r%nsinkmax,ndim))

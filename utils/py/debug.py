@@ -8,8 +8,8 @@ import miniramses as ram
 parser = argparse.ArgumentParser()
 parser.add_argument("nout", help="enter output number")
 parser.add_argument("--path", help="specify a path")
-parser.add_argument("--log", help="plot log SFR",action="store_true")
-parser.add_argument("--out", help="output a png image")
+parser.add_argument("--bkp", help="plot log variable",action="store_true")
+parser.add_argument("--prefix", help="specify a file prefix")
 parser.add_argument("--xcen", help="specify the image center x-coordinate")
 parser.add_argument("--ycen", help="specify the image center y-coordinate")
 parser.add_argument("--zcen", help="specify the image center z-coordinate")
@@ -17,16 +17,13 @@ parser.add_argument("--rad", help="specify the image radius")
 args = parser.parse_args()
 # path the the file
 path = args.path
+prefix = args.prefix
 radius = args.rad
 xcenter = args.xcen
 ycenter = args.ycen
 zcenter = args.zcen
-log = args.log
+backup = args.bkp
 
-if path==None:
-    path="./"
-else:
-    path=path+"/"
 if xcenter==None:
     xcenter=None
 else:
@@ -44,23 +41,41 @@ if radius==None:
 else:
     radius=float(radius)
 center=np.array([xcenter,ycenter,zcenter])
+if path==None:
+    path="./"
+else:
+    path=path+"/"
 
 nout = args.nout
 print("Reading output number ",nout)
 
-s=ram.rd_part(nout,path=path,prefix='star',center=center,radius=radius)
-i=ram.rd_info(nout,path=path)
-time=abs(s.tp*i.unit_t/i.aexp**2/(365*24*3600*1e9))
-bins=np.linspace(0,np.max(time),100)
-unit_m=i.unit_d*i.unit_l**3/2e33/(bins[1]-bins[0])/1e9
-plt.hist(time,weights=s.mp*unit_m,bins=bins)
-if log:
-    plt.yscale("log")
-plt.xlabel('t [Gyr]')
-plt.ylabel('SFR [Msol/yr]')
+i=ram.rd_info(nout,backup=backup)
+c=ram.rd_cell(nout,backup=backup)
 
-if args.out:
-    plt.savefig(args.out)
+d=c.u[0]
+if(backup):
+    ux=c.u[1]/c.u[0]
+    uy=c.u[2]/c.u[0]
+    uz=c.u[3]/c.u[0]
+else:
+    ux=c.u[1]
+    uy=c.u[2]
+    uz=c.u[3]
+if(backup):
+    ekin=0.5*d*(ux*ux+uy*uy+uz*uz)
+    p=2/3*(c.u[4]-ekin)
+else:
+    p=c.u[4]
+cs=np.sqrt(5/3*p/d)
+dt=c.dx/(3*cs+np.abs(ux)+np.abs(uy)+np.abs(uz))
 
-plt.show()
+print("min d=",np.min(d)," max d=",np.max(d))
+print("max ux=",np.max(np.abs(ux)))
+print("max uy=",np.max(np.abs(uy)))
+print("max uz=",np.max(np.abs(uz)))
+print("max cs=",np.max(np.abs(cs)))
+print("min dt=",np.min(np.abs(dt)))
+
+
+
 

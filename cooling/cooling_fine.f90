@@ -276,11 +276,11 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            ! Use cooling from cooling_module_frig described in Audit & Hennebelle 2005
            call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,r%mu_mol,nleaf)
         else if(r%neq_chem)then
-           call neq_solve_cooling(r, tables, T2, xion, &
+           call neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
 #ifdef RT
-                & Np, Fp, p_gas, dNpdt, dFpdt, &
+                & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
-                & nH, Zsolar, dtcool, nleaf, ilevel)
+                & dtcool, nleaf)
         endif
 
         ! Compute rho in code units

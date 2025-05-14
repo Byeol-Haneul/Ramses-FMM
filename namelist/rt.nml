@@ -50,7 +50,6 @@ tout=2.0
 gamma=1.4
 courant_factor=0.8
 slope_type=2
-scheme='muscl'
 constant_gravity=1.0,0.0,0.0
 /
 

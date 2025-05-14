@@ -1,5 +1,4 @@
 module cache
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY: c_int32_t
   type cache_key_ptr
      integer(kind=8),dimension(:),pointer::p
   end type cache_key_ptr
@@ -47,40 +46,6 @@ end subroutine get_tile
 !##############################################################
 !##############################################################
 !##############################################################
-integer(c_int32_t) function get_tile_stub(s,cchild,nkey,ckeys,cgrid)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_PTR, C_F_POINTER, C_LOC
-  use ramses_commons, only: ramses_t
-  use amr_commons, only: nbor,oct
-  use amr_parameters, only: ndim
-!  use cache_commons, only: ntilemax
-  implicit none
-  type(ramses_t)::s
-  integer,value::nkey
-  type(c_ptr),value::cchild
-  type(c_ptr),dimension(1:nkey),intent(in)::ckeys
-  type(c_ptr),dimension(1:nkey),intent(out)::cgrid
-  integer::ntile
-
-  type(oct),pointer::child
-  type(cache_key_ptr),dimension(1:nkey)::keys
-  type(nbor),dimension(1:nkey)::grid
-  integer::i
-
-  call C_F_POINTER(cchild,child)
-  do i=1,nkey
-    call C_F_POINTER(ckeys(i),keys(i)%p,[ndim+1])
-    keys(i)%p(0:ndim)=>keys(i)%p ! Remap the bounds
-  end do
-  call get_tile(s,child,nkey,keys,grid,ntile)
-  do i=1,ntile
-    cgrid(i)=C_LOC(grid(i)%p)
-  end do
-  get_tile_stub = ntile
-end function get_tile_stub
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
 subroutine close_cache(s,hash_dict)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use ramses_commons, only: ramses_t
@@ -108,10 +73,6 @@ subroutine close_cache(s,hash_dict)
   
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,mdl=>s%mdl)
 
-#ifdef MDL2
-  call mdl_cache_close(mdl%mdl2,0)
-#else
-
   ! EMPTY AND CLEAN THE GRID CACHE
   if(mdl%cache_opened)then
      do icache=1,m%ncache
@@ -120,9 +81,12 @@ subroutine close_cache(s,hash_dict)
         if(m%occupied(icache))call destage(s,igrid,hash_dict)
         m%occupied(icache)=.false.
         m%dirty(icache)=.false.
+        m%ghost_parent_grid(icache)=0
+        m%ghost_parent_cell(icache)=0
      end do
      m%free_cache=1
      m%ncache=0
+     m%nlocked=0
      do icache=1,m%nnull
         if(m%occupied_null(icache))then
            hash_child(0)=m%lev_null(icache)
@@ -258,59 +222,9 @@ subroutine close_cache(s,hash_dict)
   mdl%cache_opened=.false.
   mdl%cache_opened_clump=.false.
 
-#endif
   end associate
   
 end subroutine close_cache
-!##############################################################
-!##############################################################
-!##############################################################
-!##############################################################
-! This function is called by MDL when a new grid is flushed
-! and it doesn't exist in the hash table. We allocate a new
-! grid and and return it. MDL will add the hash table entry.
-function create_grid(s,uhash,hash_key) result(gridp)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_ASSOCIATED
-  use amr_parameters, only: ndim, nhilbert, twotondim
-  use ramses_commons, only: ramses_t
-  use amr_commons, only: oct
-  use mdl_module
-  use hilbert
-  use hash
-  implicit none
-  type(ramses_t)::s
-  integer,value::uhash
-  integer::ilevel
-  integer(kind=8),dimension(0:ndim)::hash_key
-  integer(kind=8),dimension(1:ndim)::ix
-  integer(kind=8),dimension(1:nhilbert)::hk
-  type(oct),pointer::gridp
-
-  associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-    ! Set grid index to a virtual grid in local main memory
-    gridp => m%grid(m%ifree)
-
-    ! Go to next main memory free line
-    m%ifree=m%ifree+1
-    if(m%ifree.GT.r%ngridmax)then
-      write(*,*)'No more free memory'
-      write(*,*)'Increase ngridmax'
-      call mdl_abort(mdl)
-    endif
-
-    ! TODO: We could do this here. Now the "unpack" or "init" routine does it.
-    gridp%lev=hash_key(0)
-    gridp%ckey(1:ndim)=hash_key(1:ndim)
-    ! TODO: Is the rest of this needed? It was done in nbors_utils.f90
-    ilevel=hash_key(0)
-    ix(1:ndim)=hash_key(1:ndim)
-    hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
-    gridp%hkey(1:nhilbert)=hk(1:nhilbert)
-    gridp%superoct=1
-    gridp%flag1(1:twotondim)=0
-    gridp%flag2(1:twotondim)=0
-  end associate
-end function create_grid
 !##############################################################
 !##############################################################
 !##############################################################
@@ -349,9 +263,7 @@ end function get_thread_id
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine open_cache(s,table,data_size,hilbert,pack_size,&
-                         pack,unpack,init,flush,combine,bound)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_BOOL, C_FUNLOC, C_NULL_PTR
+subroutine open_cache(s,table,data_size,hilbert,pack_size,pack,unpack,init,flush,combine,bound)
   use amr_parameters, only: ndim,nhilbert,twotondim
   use ramses_commons, only: ramses_t
   use cache_commons
@@ -374,7 +286,6 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
   procedure(cache_function_unpack),optional::combine
   procedure(cache_function_bound),optional::bound
   integer::info,icpu,iskip
-  logical(C_BOOL)::modify
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -391,16 +302,6 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
        stop
     end if
 
-#ifdef MDL2
-    modify = .false.
-    if (present(combine)) modify = .true.
-    call ramses_cache_open(mdl%mdl2,0,table%mdl_cache_table,c_funloc(hash_func),data_size*4,modify,&
-                      s,c_funloc(get_thread_id),c_funloc(get_tile_stub),&
-                        pack_size*4,c_funloc(pack),c_funloc(unpack),&
-                        c_funloc(init),&
-                        pack_size*4,c_funloc(flush), c_funloc(combine),&
-                        c_funloc(create_grid) )
-#else
     mdl%size_msg_array = pack_size
 
     pack_fetch%proc => pack
@@ -442,7 +343,7 @@ subroutine open_cache(s,table,data_size,hilbert,pack_size,&
     ! Post the first RECV for flush
     call MPI_IRECV(mdl%recv_flush_array,mdl%size_flush_array,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag,MPI_COMM_WORLD,mdl%flush_id,info)
 #endif
-#endif
+
   end associate
 
 end subroutine open_cache
@@ -451,7 +352,6 @@ end subroutine open_cache
 !##############################################################
 !##############################################################
 subroutine open_cache_clump(s,pack_size,pack,unpack,init,flush,combine)
-  USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_BOOL, C_FUNLOC, C_NULL_PTR
   use amr_parameters, only: ndim,nhilbert,twotondim
   use ramses_commons, only: ramses_t
   use cache_commons

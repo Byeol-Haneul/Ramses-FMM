@@ -1,7 +1,7 @@
 This is the RAMSES parameter file for 3D core collapse test.
 Compile the code with:
 
-make NDIM=3 MPI=1 GRAV=1 HYDRO=1 UNIT=COEUR INIT=COEUR
+make NDIM=3 MPI=1 GRAV=1 HYDRO=1 UNITS=COEUR INIT=COEUR
 
 &RUN_PARAMS 
 hydro=.true.
@@ -32,7 +32,6 @@ tend = 5.6
 &HYDRO_PARAMS
 gamma=1.6666667
 courant_factor=0.8
-scheme='muscl'
 slope_type=1
 riemann='hllc'
 /

@@ -9,6 +9,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("nout", help="enter output number")
 parser.add_argument("--path", help="specify a path")
 parser.add_argument("--log", help="plot log variable",action="store_true")
+parser.add_argument("--bkp", help="plot log variable",action="store_true")
 parser.add_argument("--out", help="output a png image")
 parser.add_argument("--prefix", help="specify a file prefix")
 parser.add_argument("--min", help="specify a minimum variable value")
@@ -30,6 +31,7 @@ xcenter = args.xcen
 ycenter = args.ycen
 zcenter = args.zcen
 log = args.log
+backup = args.bkp
 
 if xcenter==None:
     xcenter=None
@@ -73,11 +75,17 @@ if prefix=="rt":
 nout = args.nout
 print("Reading output number ",nout)
 
-c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
-i=ram.rd_info(nout,path=path)
+c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius,backup=backup)
+i=ram.rd_info(nout,path=path,backup=backup)
 m_p=1.66e-24
 k_b=1.38e-16
-plt.hist2d(np.log10(c.u[0]*i.unit_d/m_p),np.log10(c.u[4]/c.u[0]/k_b*m_p*(i.unit_l/i.unit_t)**2),weights=c.u[0]*c.dx**3,density=True,bins=100,norm=colors.LogNorm())
+d=c.u[0]
+if(backup):
+    p=(i.gamma-1)*(c.u[4]-0.5*(c.u[1]**2+c.u[2]**2+c.u[3]**2)/c.u[0])
+else:
+    p=c.u[4]
+
+plt.hist2d(np.log10(d*i.unit_d/m_p),np.log10(p/d/k_b*m_p*(i.unit_l/i.unit_t)**2),weights=c.u[0]*c.dx**3,density=True,bins=100,norm=colors.LogNorm())
 plt.xlabel('log10(n_H) [H/cc]')
 plt.ylabel('log10(T/mu) [K]')
 plt.title('Mass-weighted Histogram with Logarithmic Color Scale')

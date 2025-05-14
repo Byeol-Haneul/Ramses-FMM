@@ -244,10 +244,11 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
 
   ! Local variables
   integer::icpu,iskip_amr=0,iskip_hydro=0,iskip_grav=0,iskip_rt,ilun
-  integer::i,ind,istart,iend,noct_tmp,ilev,ioct
+  integer::i,ind,istart,iend,noct_tmp,ilev,ioct,i1,j1,k1
   integer::igrid,igrid_start,nleft,nright,ileft,iright
   character(LEN=80)::file_params,file_amr,file_hydro,file_grav,file_rt
   character(LEN=5)::nchar,ncharcpu
+  logical::clean
 
   integer,dimension(1:ncpu_file)::noct_cum
   integer,dimension(1:s%g%ncpu)::ntarget_cum
@@ -277,8 +278,12 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   ! Compute starting grid index at that level
   if(ilevel.EQ.r%levelmin)then
      igrid_start=1
+     m%head_clean(ilevel)=1
+     m%head_dirty(ilevel)=1
   else
      igrid_start=m%tail(ilevel-1)+1
+     m%head_clean(ilevel)=m%head_clean(ilevel-1)+m%noct_clean(ilevel-1)
+     m%head_dirty(ilevel)=m%head_dirty(ilevel-1)+m%noct_dirty(ilevel-1)
   endif
 
   ! Set grid at current level
@@ -501,6 +506,41 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
            m%grid(ioct-npatch(i)+1:ioct)%superoct=npatch(i)
         endif
      end do
+  end do
+
+  !---------------------
+  ! Clean and dirty octs
+  !---------------------
+  m%noct_clean(ilevel)=0
+  m%noct_dirty(ilevel)=0
+  hash_key(0)=ilevel
+  do ioct=m%head(ilevel),m%tail(ilevel)
+     clean=.true.
+#if NDIM>2
+     do k1=-1,1
+     hash_key(3)=m%grid(ioct)%ckey(3)+k1
+#endif
+#if NDIM>1
+     do j1=-1,1
+     hash_key(2)=m%grid(ioct)%ckey(2)+j1
+#endif
+     do i1=-1,1
+        hash_key(1)=m%grid(ioct)%ckey(1)+i1
+        clean=clean.and.hash_is_clean(m%grid_dict,hash_key)
+     end do
+#if NDIM>1
+     end do
+#endif
+#if NDIM>2
+     end do
+#endif
+     if(clean)then
+        m%indx_clean(m%head_clean(ilevel)+m%noct_clean(ilevel))=ioct
+        m%noct_clean(ilevel)=m%noct_clean(ilevel)+1
+     else
+        m%indx_dirty(m%head_dirty(ilevel)+m%noct_dirty(ilevel))=ioct
+        m%noct_dirty(ilevel)=m%noct_dirty(ilevel)+1
+     endif
   end do
 
   end associate

@@ -124,6 +124,8 @@ module amr_commons
      character(LEN=10)::scheme='muscl'
      integer::riemann=0
      integer::riemann2d=0
+     real(dp)::switch_llf_dmin=-1
+     real(dp)::switch_llf_pmin=-1
      real(dp),dimension(1:3)::constant_gravity
      integer::inener,ientropy,imetal,iturb,ichem
      
@@ -318,10 +320,12 @@ module amr_commons
      logical::sink_form=.false.
      logical::sink_refine=.false.
      logical::sink_dump=.false.
+     logical::static_sink=.false.
+     integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
+     logical::fix_sink_mass = .false. 
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
-     character(len=10)::accretion_method = 'mass' ! Whether to mass-weigh the accretion 
      real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
      logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
      real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
@@ -329,6 +333,23 @@ module amr_commons
      logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
      logical::bondi_use_gas_mass = .true. ! Whether to include the local gas mass in the Bondi calculation
      logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
+     logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
+     real(dp)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines
+     logical::use_bondi_lambda = .true.
+
+     ! AGN Feedback parameters
+     logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles
+     integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
+     integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
+     real(dp)::epsilon_rad = 0.1d0 ! Radiative efficiency
+     real(dp)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
+     real(dp)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+     real(dp)::kin_mass_loading = 100d0 ! Mass loading factor of the jet
+     real(dp)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
+     real(dp)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
+     real(dp)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
+     logical::agn_use_mass_weighting = .false. ! Whether to use a mass-weighted feedback scheme
+     real(dp)::eddington_floor = -1 ! Accretion rate floor below which nothing happens
 
      ! Gadget initial conditions parameters
      character(len=flen)::ic_file, ic_format
@@ -436,6 +457,18 @@ module amr_commons
 
   end type run_t
 
+  type hydro_params_t
+     integer::slope_type,slope_mag_type,riemann,riemann2d
+     real(dp),dimension(1:nener+1)::gamma_rad
+     real(dp)::gamma,smallr,smallc
+     real(dp)::difmag
+     real(dp)::switch_llf_dmin,switch_llf_pmin
+#ifdef MHD
+     real(dp)::etamag
+     logical::induction
+#endif
+  end type hydro_params_t
+
   type global_t
 
      ! MPI variables
@@ -542,37 +575,48 @@ module amr_commons
      integer(kind=4),allocatable,dimension(:)::head      ! Starting index for each level
      integer(kind=4),allocatable,dimension(:)::tail      ! Final index for each level
      integer(kind=4),allocatable,dimension(:)::noct      ! Number of octs for each level
+     integer::ifree                                      ! Index of first oct in free memory
+
      integer(kind=4),allocatable,dimension(:)::noct_min  ! Min. number of octs across cpus
      integer(kind=4),allocatable,dimension(:)::noct_max  ! Max. number of octs across cpus
      integer(kind=8),allocatable,dimension(:)::noct_tot  ! Total number of octs across cpus
-     integer(kind=4),allocatable,dimension(:)::ckey_max  ! Max. Cartesian key per level
-     integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the domain
-     integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the domain
-     integer(kind=8),allocatable,dimension(:,:)::hkey_max ! Max. Hilbert key
+
+     integer(kind=4),allocatable,dimension(:)::ckey_max        ! Max. Cartesian key per level
+     integer(kind=4),allocatable,dimension(:,:)::box_ckey_min  ! Min. Cartesian key per level for the box
+     integer(kind=4),allocatable,dimension(:,:)::box_ckey_max  ! Max. Cartesian key per level for the box
+     integer(kind=8),allocatable,dimension(:,:)::hkey_max      ! Max. Hilbert key per level
+
      integer(kind=4),allocatable,dimension(:)::head_cache ! Starting index in the cache for each level
      integer(kind=4),allocatable,dimension(:)::tail_cache ! Final index in the cache for each level
+
      integer(kind=4)::noct_used,noct_used_max,noct_used_tot ! Total used octs in local memory
+
      integer(kind=4)::nx,ny,nz                   ! Size of mesh at levelmin
      real(kind=8),allocatable,dimension(:)::skip ! Coordinates of lower left corner of the box
 
      ! Persistent array for the AMR grid
-!     type(oct),dimension(:),allocatable::grid
-     type(oct),dimension(:),pointer::grid
+     type(oct),dimension(:),pointer::grid ! type(oct),dimension(:),allocatable::grid
      type(hash_table)::grid_dict   ! Oct hash table
+
+     ! Clean/dirty octs for first neighbors
+     integer(kind=4),allocatable,dimension(:)::indx_clean, head_clean, tail_clean, noct_clean
+     integer(kind=4),allocatable,dimension(:)::indx_dirty, head_dirty, tail_dirty, noct_dirty
 
      ! Arrays for the MG solver
      type(hash_table)::mg_dict     ! MG hash table
      integer(kind=4),allocatable,dimension(:)::head_mg ! Starting index for each level
      integer(kind=4),allocatable,dimension(:)::tail_mg ! Final index for each level
      integer(kind=4),allocatable,dimension(:)::noct_mg ! Number of octs for each level
-     integer(kind=4)::ifree_mg ! Starting index in free memory
+     integer(kind=4)::ifree_mg ! Starting index in free MG memory
 
      ! Software cache array for the AMR grid
      logical,allocatable,dimension(:)::dirty
      logical,allocatable,dimension(:)::occupied
      logical,allocatable,dimension(:)::locked
      integer,allocatable,dimension(:)::parent_cpu
-     integer::free_cache,ncache,ifree
+     integer,allocatable,dimension(:)::ghost_parent_grid
+     integer,allocatable,dimension(:)::ghost_parent_cell
+     integer::free_cache,ncache,nlocked,nlocked_max
 
      ! Software cache array for failed requests
      logical,allocatable,dimension(:)::occupied_null
@@ -605,6 +649,27 @@ contains
     run_params = run_p
     write(*,NML=run_parameters)
   end subroutine print_run_parameters
+
+  subroutine set_hydro_parameters(r,h_params)
+    type(run_t)::r
+    type(hydro_params_t)::h_params
+    ! Transfer hydro parameters
+    h_params%gamma=r%gamma
+    h_params%gamma_rad=r%gamma_rad
+    h_params%smallr=r%smallr
+    h_params%smallc=r%smallc
+    h_params%slope_type=r%slope_type
+    h_params%slope_mag_type=r%slope_mag_type
+    h_params%riemann=r%riemann
+    h_params%riemann2d=r%riemann2d
+    h_params%difmag=r%difmag
+    h_params%switch_llf_dmin=r%switch_llf_dmin
+    h_params%switch_llf_pmin=r%switch_llf_pmin
+#ifdef MHD
+    h_params%etamag=r%etamag
+    h_params%induction=r%induction
+#endif
+  end subroutine set_hydro_parameters
 
 end module amr_commons
 

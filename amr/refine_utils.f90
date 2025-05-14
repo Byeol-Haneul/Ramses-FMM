@@ -53,6 +53,9 @@ subroutine m_refine_fine(pst,ilevel)
   ! Load balance all levels across cpus
   call m_load_balance(pst,ilevel)
 
+  ! Find clean and dirty octs
+  call r_clean_dirty(pst,ilevel,1)
+
   ! Get total, min and max grid count (only in master).
   do ilev=ilevel+1,s%r%nlevelmax
      call r_noct_tot(pst,ilev,1,s%m%noct_tot(ilev),2)
@@ -200,6 +203,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   end do
   ncreate=g%ncreate
 
+#ifdef HYDRO
   if(r%neq_chem .and. r%upload_equilibrium_x) then
      ! Enforce equilibrium on ionization states when derefining, to
      ! prevent unnatural values (e.g when merging hot and cold cells).
@@ -219,6 +223,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         end do
      end do
   endif
+#endif
 
   !----------------------------------------------------------
   ! Step 2: if the parent cell is not flagged for refinement,
@@ -670,7 +675,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
-#if !defined(WITHOUTMPI) && !defined(MDL2)
+#ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
   if(mdl%mail_counter==32)then
      call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
@@ -707,28 +712,33 @@ subroutine make_new_oct(s,parent,icell,ilevel)
         write(*,*)'Increase ngridmax'
         call mdl_abort(mdl)
      end if
+
+     ! Insert new grid in hash table
      call hash_setp(m%grid_dict,hash_key,child)
-     ! Otherwise, determine parent processor and use the cache
+
+  ! Otherwise, determine parent processor and use the cache
   else
-#ifdef MDL2
-     call get_grid(s,hash_key,m%grid_dict,child,flush_cache=.true.,fetch_cache=.false.)
-#else
      grid_cpu = m%domain(ilevel)%get_rank(hk)
+
      ! If next cache line is occupied, free it.
      if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,m%grid_dict)
+
      ! Set grid index to a virtual grid in local cache memory
      child => m%grid(r%ngridmax+m%free_cache)
      m%occupied(m%free_cache)=.true.
      m%parent_cpu(m%free_cache)=grid_cpu
      m%dirty(m%free_cache)=.true.
+     m%ghost_parent_grid(m%free_cache)=0
+     m%ghost_parent_cell(m%free_cache)=0
+
      ! Go to next free cache line
      m%free_cache=m%free_cache+1
      m%ncache=m%ncache+1
      if(m%free_cache.GT.r%ncachemax)m%free_cache=1
      if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+
      ! Insert new grid in hash table
      call hash_setp(m%grid_dict,hash_key,child)
-#endif
   endif
 
   child%lev=ilevel
@@ -738,9 +748,6 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   child%flag1(1:twotondim)=0
   child%flag2(1:twotondim)=0
   child%superoct=1
-
-  ! Set status of parent cell to "refined"
-!  parent%refined(icell)=.true.
 
   !====================================
   ! Interplotate parent hydro variables
@@ -842,7 +849,7 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   do inbor=1,twondim
      call unlock_cache(s,grid_nbor(inbor)%p)
   end do
-  
+
 #endif
   
   !================================
@@ -862,6 +869,97 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   end associate
 
 end subroutine make_new_oct
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+recursive subroutine r_clean_dirty(pst,ilevel,input_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+  integer,VALUE::input_size
+  integer::ilevel
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_CLEAN_DIRTY,pst%iUpper+1,input_size,0,ilevel)
+     call r_clean_dirty(pst%pLower,ilevel,input_size)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call clean_dirty(pst%s,ilevel)
+  endif
+
+end subroutine r_clean_dirty
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine clean_dirty(s,ilevel)
+  use amr_parameters, only: ndim,twotondim,nhilbert,dp
+  use ramses_commons, only: ramses_t
+  use hilbert
+  use hash
+  implicit none
+  type(ramses_t)::s
+  integer::ilevel
+  !-------------------------------------------------
+  ! This routine identifies clean and dirty octs for
+  ! optimization purposes. Dirty octs require MPI or
+  ! inter-level communications. Clean octs have all
+  ! their 26 neighbors around them.
+  !-------------------------------------------------
+  integer::ioct,ilev,i1,j1,k1
+  logical::clean
+
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+
+  !---------------------
+  ! Clean and dirty octs
+  !---------------------
+  do ilev=ilevel+1,r%nlevelmax
+     m%head_clean(ilev)=m%head_clean(ilev-1)+m%noct_clean(ilev-1)
+     m%head_dirty(ilev)=m%head_dirty(ilev-1)+m%noct_dirty(ilev-1)
+     m%noct_clean(ilev)=0
+     m%noct_dirty(ilev)=0
+     hash_key(0)=ilev
+     do ioct=m%head(ilev),m%tail(ilev)
+        clean=.true.
+#if NDIM>2
+        do k1=-1,1
+        hash_key(3)=m%grid(ioct)%ckey(3)+k1
+#endif
+#if NDIM>1
+        do j1=-1,1
+        hash_key(2)=m%grid(ioct)%ckey(2)+j1
+#endif
+        do i1=-1,1
+           hash_key(1)=m%grid(ioct)%ckey(1)+i1
+           clean=clean.and.hash_is_clean(m%grid_dict,hash_key)
+        end do
+#if NDIM>1
+        end do
+#endif
+#if NDIM>2
+        end do
+#endif
+        if(clean)then
+           m%indx_clean(m%head_clean(ilev)+m%noct_clean(ilev))=ioct
+           m%noct_clean(ilev)=m%noct_clean(ilev)+1
+        else
+           m%indx_dirty(m%head_dirty(ilev)+m%noct_dirty(ilev))=ioct
+           m%noct_dirty(ilev)=m%noct_dirty(ilev)+1
+        endif
+     end do
+  end do
+
+  end associate
+
+end subroutine clean_dirty
 !###############################################################
 !###############################################################
 !###############################################################

@@ -23,7 +23,6 @@ PATCH =
 DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
-SOLVER = hydro
 EXEC = ramses
 #############################################################################
 # Compute NVAR
@@ -68,8 +67,8 @@ endif
 ifneq ($(INIT),)
    DEFINES += -DINIT=$(INIT)
 endif
-ifneq ($(UNIT),)
-   DEFINES += -DUNITS=$(UNIT)
+ifneq ($(UNITS),)
+   DEFINES += -DUNITS=$(UNITS)
 endif
 #############################################################################
 # GNU compiler (gfortran)
@@ -152,7 +151,7 @@ endif
 LIBS += $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):$(GPU_PATH):../$(SOLVER):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
+VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt
 #############################################################################
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
@@ -181,7 +180,7 @@ MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooli
 	 init_refine_ramses.o title.o units.o move_fine.o rho_ana.o \
 	 star_formation.o feedback.o clump_merger.o output_clump.o clump_finder.o \
 	 rt_star_feedback.o sink_formation.o tree_formation.o \
-	 sink_accretion.o task_manager.o rt_step.o amr_step.o adaptive_loop.o \
+	 sink_evolution.o task_manager.o rt_step.o amr_step.o adaptive_loop.o \
 	 write_gitinfo.o
 #############################################################################
 ramses:	$(MODOBJ) ramses.o

@@ -50,7 +50,6 @@ slope_type=1
 T2_fix=1d4
 dual_energy=0.2
 entropy=.true.
-scheme='muscl'
 riemann='hllc'
 /
 

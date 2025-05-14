@@ -277,6 +277,10 @@ subroutine lock_cache(s,child)
   child_grid=(loc(child)-loc(s%m%grid(1)))/(loc(s%m%grid(2))-loc(s%m%grid(1)))+1
   if(child_grid>s%r%ngridmax)then
      icache=child_grid-s%r%ngridmax
+     if(.not.s%m%locked(icache))then
+        s%m%nlocked=s%m%nlocked+1
+        s%m%nlocked_max=max(s%m%nlocked,s%m%nlocked_max)
+     endif
      s%m%locked(icache)=.true.
   endif
 end subroutine lock_cache
@@ -291,9 +295,6 @@ subroutine unlock_cache(s,child)
   implicit none
   type(ramses_t)::s
   type(oct),pointer::child
-#ifdef MDL2
-  call mdl_release(s%mdl%mdl2,0,child)
-#else
   !
   ! This routine unlocks a cache line because
   ! it has been updated and can be flushed.
@@ -304,15 +305,15 @@ subroutine unlock_cache(s,child)
   child_grid=(loc(child)-loc(s%m%grid(1)))/(loc(s%m%grid(2))-loc(s%m%grid(1)))+1
   if(child_grid>s%r%ngridmax)then
      icache=child_grid-s%r%ngridmax
+     if(s%m%locked(icache))s%m%nlocked=s%m%nlocked-1
      s%m%locked(icache)=.false.
   endif
-#endif
 end subroutine unlock_cache
 !##############################################################
 !##############################################################
 !##############################################################
 !##############################################################
-subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
+subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock,use_ghost)
   USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED, C_BOOL
   use mdl_module
   use amr_parameters, only: ndim,nhilbert,twotondim
@@ -331,6 +332,7 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   type(oct),pointer::child
   logical::flush_cache,fetch_cache
   logical,optional::lock
+  logical,optional::use_ghost
   integer(kind=8),dimension(0:ndim)::hash_key
   type(hash_table)::hash_dict
   !
@@ -349,24 +351,13 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   integer::i,ind,idim,ivar,iskip,ichild,ilevel,info,ibound
   integer::grid_cpu,ntile_response,icounter,child_grid
   integer::send_request_id,response_id  
-  logical::failed_request,in_rank,in_domain
+  logical::failed_request,in_rank,in_domain,do_ghost
   type(oct),pointer::child_ref
 #ifndef WITHOUTMPI
   integer,dimension(MPI_STATUS_SIZE)::send_request_status
 #endif
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-
-#ifdef MDL2
-  full_hash = hash_func(hash_key)
-  do_lock = .false.
-  modify = flush_cache
-  virtual = .not.fetch_cache
-  if (present(lock)) then
-    if (lock) do_lock=.true.
-  endif
-  call c_f_pointer(cache_fetch(mdl%mdl2,0,hash=full_hash,key=hash_key,lock=do_lock,modify=modify,virtual=virtual),child)
-#else /* Not MDL2 */
 
 #ifndef WITHOUTMPI
   ! If counter is good, check on incoming messages and perform actions
@@ -387,6 +378,12 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   ! Now we know child_grid=0
   child_grid = 0
 
+  ! Check if we do null grid or ghost grid
+  do_ghost=.false.
+  if (present(use_ghost)) then
+     if (use_ghost) do_ghost=.true.
+  endif
+
   ! Compute the Hilbert key
   ilevel=hash_key(0)
   ix(1:ndim)=hash_key(1:ndim)
@@ -405,7 +402,7 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
 #endif
 
 #ifndef WITHOUTMPI
-     ! Conpute Hilbert key
+     ! Compute Hilbert key
      hk(1:nhilbert)=hilbert_key(ix,ilevel-1)
 
      ! Check if grid sits inside processor boundaries
@@ -448,28 +445,30 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
         failed_request=(mdl%recv_fetch_array(iskip)==-1)
         iskip=iskip+1
 
-        ! If grid does not exist, store -1 in the cache
-        ! The output grid index is still zero
+        ! If grid does not exist and we don't do ghost grid, store null in the cache
+        ! The output grid index is zero
         if(failed_request)then
 
-           ! Delete old null grid if occupied
-           if(m%occupied_null(m%free_null))then
-              hash_child(0)=m%lev_null(m%free_null)
-              hash_child(1:ndim)=m%ckey_null(1:ndim,m%free_null)
-              call hash_free(hash_dict,hash_child)
+           if(.not. do_ghost)then
+              ! Delete old null grid if occupied
+              if(m%occupied_null(m%free_null))then
+                 hash_child(0)=m%lev_null(m%free_null)
+                 hash_child(1:ndim)=m%ckey_null(1:ndim,m%free_null)
+                 call hash_free(hash_dict,hash_child)
+              endif
+              call hash_setp(hash_dict,hash_key)
+              m%occupied_null(m%free_null)=.true.
+              m%lev_null(m%free_null)=ilevel
+              m%ckey_null(1:ndim,m%free_null)=hash_key(1:ndim)
+              ! Go to next free cache line
+              m%free_null=m%free_null+1
+              m%nnull=m%nnull+1
+              if(m%free_null.GT.r%ncachemax)then
+                 m%free_null=1
+              endif
+              if(m%nnull.GT.r%ncachemax)m%nnull=r%ncachemax
            endif
-           call hash_setp(hash_dict,hash_key)
-           m%occupied_null(m%free_null)=.true.
-           m%lev_null(m%free_null)=ilevel
-           m%ckey_null(1:ndim,m%free_null)=hash_key(1:ndim)
 
-           ! Go to next free cache line
-           m%free_null=m%free_null+1
-           m%nnull=m%nnull+1
-           if(m%free_null.GT.r%ncachemax)then
-              m%free_null=1
-           endif
-           if(m%nnull.GT.r%ncachemax)m%nnull=r%ncachemax
            child_grid = 0
 
         ! If grid exists, store incoming tile in the cache
@@ -515,6 +514,8 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
                  m%occupied(m%free_cache)=.true.
                  m%parent_cpu(m%free_cache)=grid_cpu
                  m%dirty(m%free_cache)=.false.
+                 m%ghost_parent_grid(m%free_cache)=0
+                 m%ghost_parent_cell(m%free_cache)=0
 
                  ! Set the grid index of the requested grid
                  if(same_keys(hash_key,hash_child))then
@@ -576,6 +577,8 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
         m%occupied(m%free_cache)=.true.
         m%parent_cpu(m%free_cache)=grid_cpu
         m%dirty(m%free_cache)=.true.
+        m%ghost_parent_grid(m%free_cache)=0
+        m%ghost_parent_cell(m%free_cache)=0
 
         ! Set initialisation rule for combiner operation
         call init_flush%proc(m%grid(child_grid),hash_key)
@@ -624,6 +627,8 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
         m%occupied(m%free_cache)=.true.
         m%parent_cpu(m%free_cache)=0
         m%dirty(m%free_cache)=.false.
+        m%ghost_parent_grid(m%free_cache)=0
+        m%ghost_parent_cell(m%free_cache)=0
 
         ! Set initialisation rule for boundary grid using reference grid
         if(associated(init_bound%proc))then
@@ -640,24 +645,28 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
 
      else
 
-        ! Delete old null grid if occupied
-        if(m%occupied_null(m%free_null))then
-           hash_child(0)=m%lev_null(m%free_null)
-           hash_child(1:ndim)=m%ckey_null(1:ndim,m%free_null)
-           call hash_free(hash_dict,hash_child)
-        endif
-        call hash_setp(hash_dict,hash_key)
-        m%occupied_null(m%free_null)=.true.
-        m%lev_null(m%free_null)=ilevel
-        m%ckey_null(1:ndim,m%free_null)=hash_key(1:ndim)
+        if(.not. do_ghost)then
 
-        ! Go to next free cache line
-        m%free_null=m%free_null+1
-        m%nnull=m%nnull+1
-        if(m%free_null.GT.r%ncachemax)then
-           m%free_null=1
+           ! Delete old null grid if occupied
+           if(m%occupied_null(m%free_null))then
+              hash_child(0)=m%lev_null(m%free_null)
+              hash_child(1:ndim)=m%ckey_null(1:ndim,m%free_null)
+              call hash_free(hash_dict,hash_child)
+           endif
+           call hash_setp(hash_dict,hash_key)
+           m%occupied_null(m%free_null)=.true.
+           m%lev_null(m%free_null)=ilevel
+           m%ckey_null(1:ndim,m%free_null)=hash_key(1:ndim)
+
+           ! Go to next free cache line
+           m%free_null=m%free_null+1
+           m%nnull=m%nnull+1
+           if(m%free_null.GT.r%ncachemax)then
+              m%free_null=1
+           endif
+           if(m%nnull.GT.r%ncachemax)m%nnull=r%ncachemax
         endif
-        if(m%nnull.GT.r%ncachemax)m%nnull=r%ncachemax
+
         child_grid = 0
 
      endif
@@ -672,8 +681,6 @@ subroutine get_grid(s,hash_key,hash_dict,child,flush_cache,fetch_cache,lock)
   else
      nullify(child)
   endif
-
-#endif /* MDL2 */
 
   end associate
 end subroutine get_grid

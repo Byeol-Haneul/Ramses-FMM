@@ -993,7 +993,7 @@ subroutine cmp_cooling(c,T2,nH,t_rad_spec,h_rad_spec,cool_tot,heat_tot,cool_com,
   cr2 = cool_rec(HEI ,T)*n_E*n_HEII /nH**2
   cr3 = cool_rec(HEII,T)*n_E*n_HEIII/nH**2
   ! Dielectric recombination cooling
-  cd  = cool_die(c,T   )*n_E*n_HEII /nH**2
+  cd  = cool_die(     T)*n_E*n_HEII /nH**2
   ! Line cooling
   ce1 = cool_exc(HI  ,T)*n_E*n_HI   /nH**2
   ce2 = cool_exc(HEI, T)*n_E*n_HEI  /nH**2
@@ -1006,10 +1006,10 @@ subroutine cmp_cooling(c,T2,nH,t_rad_spec,h_rad_spec,cool_tot,heat_tot,cool_com,
   heat_tot = ch1+ch2+ch3
   cool_tot = cb1+cb2+cb3+ci1+ci2+ci3+cr1+cr2+cr3+cd+ce1+ce2+ce3
   ! Compton cooling
-  coc = cool_compton(c,T,aexp)*n_E/nH
+  coc = cool_compton(T,aexp)*n_E/nH
   cool_com = coc
   ! Compton heating
-  coh = heat_compton(c,T,aexp)*n_E/nH
+  coh = heat_compton(T,aexp)*n_E/nH
   heat_com = coh
   ! Mean molecular weight
   mu_out = mu
@@ -1120,10 +1120,9 @@ function cool_rec(ispec,T)
   return
 end function cool_rec
 !=======================================================================
-function cool_die(c,T)
+function cool_die(T)
 !=======================================================================
   implicit none
-  type(cooling_t)::c
   real(kind=8) :: T,cool_die
   cool_die=1.24D-13*T**(-1.5D0)*exp(-470000d0/T)*(1d0+0.3D0*exp(-94000d0/T))
   return
@@ -1140,15 +1139,14 @@ function taux_rec(c,ispec,T)
   T6 = 1d-06*T
   taux_rec = 0
   if(ispec==HI  )taux_rec = c%dumfac_rec*8.40d-11/SQRT(T)/T3**(0.2d0)/(1d0+T6**0.7d0)
-  if(ispec==HEI )taux_rec = 1.50d-10/T**0.6353d0+taux_die(c,T)
+  if(ispec==HEI )taux_rec = 1.50d-10/T**0.6353d0+taux_die(T)
   if(ispec==HEII)taux_rec = 3.36d-10/SQRT(T)/T3**(0.2d0)/(1d0+T6**0.7d0)
   return
 end function taux_rec
 !=======================================================================
-function taux_die(c,T)
+function taux_die(T)
 !=======================================================================
   implicit none
-  type(cooling_t)::c
   real(kind=8) :: T,taux_die
   taux_die=1.9D-3*T**(-1.5D0)*exp(-470000d0/T)*(1d0+0.3D0*exp(-94000d0/T))
   return
@@ -1169,19 +1167,17 @@ function cool_ion(c,ispec,T)
   return
 end function cool_ion
 !=======================================================================
-function cool_compton(c,T,aexp)
+function cool_compton(T,aexp)
 !=======================================================================
   implicit none
-  type(cooling_t)::c
   real(kind=8) ::T,aexp,cool_compton
   cool_compton=5.406D-36*T/aexp**4
   return
 end function cool_compton
 !=======================================================================
-function heat_compton(c,T,aexp)
+function heat_compton(T,aexp)
 !=======================================================================
   implicit none
-  type(cooling_t)::c
   real(kind=8) ::T,aexp,heat_compton
   real(kind=8) ::T5
   T5 = 1d-05*T

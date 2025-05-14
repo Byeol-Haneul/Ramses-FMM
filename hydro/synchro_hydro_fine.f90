@@ -85,7 +85,7 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
         do idim=1,3
            ener=ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
         end do
-  
+
         ! Update momentum
 #ifdef GRAV
         do idim=1,ndim

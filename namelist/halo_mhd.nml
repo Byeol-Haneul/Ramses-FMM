@@ -51,7 +51,6 @@ slope_mag_type=2
 T2_fix=1d4
 dual_energy=0.2
 entropy=.true.
-scheme='muscl'
 riemann='hlld'
 riemann2d='hlld'
 /
@@ -75,7 +74,6 @@ m_star=1
 
 &FEEDBACK_PARAMS
 mechanical_feedback=.true.
-thermal_feedback=.true.
 /
 
 &REFINE_PARAMS

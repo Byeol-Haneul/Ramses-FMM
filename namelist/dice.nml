@@ -47,7 +47,6 @@ courant_factor=0.8
 slope_type=1
 dual_energy=0.2
 entropy=.true.
-scheme='muscl'
 riemann='hllc'
 /
 

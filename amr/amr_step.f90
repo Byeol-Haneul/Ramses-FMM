@@ -33,13 +33,13 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use clump_finder_module, only: m_clump_finder
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use rt_step_module, only: m_rt_step
-  use sink_accretion_module, only: r_sink_accretion, out_accretion_t
+  use sink_evolution_module, only: r_sink_evolution, out_accretion_t
   
   implicit none
 
   type(pst_t) :: pst
   integer :: ilevel,icount
-  logical :: done,ok_fbk,ok_acc
+  logical :: done,ok_fbk
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
   ! Each routine is called using a specific order, don't change it,   !
@@ -66,15 +66,17 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! balance grids and particles.
   !------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
-                                    call m_timer(pst,'refine','start')
-     if(.not.r%static_mesh)call m_refine_fine(pst,ilevel)
+     if(.not.r%static_mesh.and.r%nlevelmax>r%levelmin)then
+        call m_timer(pst,'refine','start')
+        call m_refine_fine(pst,ilevel)
+     endif
   endif
-  
+
   !-------------------------
   ! Sink formation in clumps
   !-------------------------
   if(r%sink.and.ilevel==r%levelmin.and.r%sink_form)then
-                                    call m_timer(pst,'sink - formation','start')
+     call m_timer(pst,'sink - formation','start')
      call m_sink_formation(pst)
   endif
 
@@ -82,13 +84,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Merging tree particle formation
   !--------------------------------
   if(r%tree.and.ilevel==r%levelmin)then
-                                    call m_timer(pst,'tree - formation','start')
+     call m_timer(pst,'tree - formation','start')
      call m_tree_formation(pst)
   endif
 
-  !------------------------
-  ! Output results to files
-  !------------------------
   if(ilevel==r%levelmin)then
      if(r%foutput>0)then
         if(mod(g%nstep_coarse,r%foutput)==0.or.g%aexp>=r%aout(g%iout).or.g%t>=r%tout(g%iout))then
@@ -96,34 +95,41 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            ! Call the clump finder
            !----------------------------
            if(r%clump_finder)then ! Create output and no need to keep alive
-                                    call m_timer(pst,'clump','start')
+              call m_timer(pst,'clump','start')
               call m_clump_finder(pst,.true.,.false.)
            endif
-                                    call m_timer(pst,'output','start')
+           !---------------------------
+           ! Write output files to disk
+           !---------------------------
+           call m_timer(pst,'output','start')
            call m_dump_all(pst,.false.)
         endif
      endif
+     !----------------------------
+     ! Write restart files to disk
+     !----------------------------
      tcurr=wallclock()
      if(tcurr>tprev+r%bkp_time_hrs*3600)then
-                                    call m_timer(pst,'backup','start')
+        call m_timer(pst,'backup','start')
         call m_dump_all(pst,.true.)
         tprev=tcurr
      endif
      if(r%run_time_hrs>0.and..not.bkp_last_done)then
         if(tcurr>r%run_time_hrs*3600-r%bkp_last_min*60)then
-                                    call m_timer(pst,'backup','start')
+           call m_timer(pst,'backup','start')
            call m_dump_all(pst,.true.)
            bkp_last_done=.true.
         endif
      endif
   endif
 
-  !----------------------------
-  ! Output frame to movie dump
-  !----------------------------
+  !--------------------------
+  ! Write movie frame to disk
+  !--------------------------
   if(r%movie) then
      if(r%imov.le.r%imovout)then 
-        if((r%aendmov>0.and.g%aexp>=r%aendmov*dble(r%imov)/dble(r%imovout)).or.(r%tendmov>0.and.g%t>=r%tendmov*dble(r%imov)/dble(r%imovout)))then
+        if((r%aendmov>0.and.g%aexp>=r%aendmov*dble(r%imov)/dble(r%imovout)) &
+             & .or.(r%tendmov>0.and.g%t>=r%tendmov*dble(r%imov)/dble(r%imovout)))then
            call m_output_frame(pst)
         endif
      endif
@@ -135,7 +141,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 #ifdef GRAV
   if(r%poisson)then
      if(ilevel==r%levelmin.or.icount>1)then
-                                    call m_timer(pst,'rho','start')
+        call m_timer(pst,'rho','start')
         call m_rho_fine(pst,ilevel,0)
      endif
   endif
@@ -143,8 +149,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
   ! Remove gravity source term with half time step and old force
   if(r%hydro.and..not.r%static_gas)then
-                                    call m_timer(pst,'hydro - gravity','start')
-     call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
+     if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
+        call m_timer(pst,'hydro - gravity','start')
+        call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
+     end if
   endif
 
   !---------------
@@ -152,7 +160,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !---------------
 #ifdef GRAV
   if(r%poisson)then
-                                    call m_timer(pst,'poisson','start')
+     call m_timer(pst,'poisson','start')
      ! Save old potential for time-extrapolation at level boundaries
      call r_save_phi_old(pst,ilevel,1)
 
@@ -178,27 +186,29 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
   ! Perform second kick for particles
   if(r%pic)then
-                                    call m_timer(pst,'particle - kickdrift','start')
+     call m_timer(pst,'particle - kickdrift','start')
      call m_kick_drift_part(pst,ilevel,action_kick_only)
   endif
 
   ! Add gravity source term with half time step and new force
   if(r%hydro.and..not.r%static_gas)then
-                                    call m_timer(pst,'hydro - gravity','start')
-     call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+     if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
+        call m_timer(pst,'hydro - gravity','start')
+        call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+     endif
   end if
 
   !----------------------
   ! Compute new time step
   !----------------------
-                                    call m_timer(pst,'time step','start')
+  call m_timer(pst,'time step','start')
   call m_newdt_fine(pst,ilevel)
 
   !-----------------------
   ! Set unew equal to uold
   !-----------------------
   if(r%hydro.and..not.r%static_gas)then
-                                    call m_timer(pst,'hydro - set unew','start')
+     call m_timer(pst,'hydro - set unew','start')
      call r_set_unew(pst,ilevel,1)
   endif
 
@@ -206,7 +216,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Set rtunew equal to rtuold
   !---------------------------
   if(r%rt)then
-                                    call m_timer(pst,'radiative transfer','start')
+     call m_timer(pst,'radiative transfer','start')
      call r_set_rtunew(pst,ilevel,1)
      call r_set_emissivity(pst,ilevel,1)
   endif
@@ -214,8 +224,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !---------------------------
   ! Recursive call to amr_step
   !---------------------------
-                                    call m_timer(pst,'recursive call','start')
   if(ilevel<r%nlevelmax)then
+     call m_timer(pst,'recursive call','start')
      if(m%noct_tot(ilevel+1)>0)then
         if(r%nsubcycle(ilevel)==2)then
            call m_amr_step(pst,ilevel+1,1,done)
@@ -236,9 +246,11 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
 
         ! Update time variable
+        call m_timer(pst,'update time','start')
         call m_update_time(pst,ilevel,done)
      end if
   else
+     call m_timer(pst,'update time','start')
      call m_update_time(pst,ilevel,done)
   end if
   if (done)return
@@ -247,7 +259,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Thermal feedback
   !------------------
   if(r%star.and.r%thermal_feedback)then
-                                    call m_timer(pst,'star - feedback','start')
+     call m_timer(pst,'star - feedback','start')
      call r_thermal_feedback(pst,ilevel,1,output_fbk,2)
      if(output_fbk%mass>0)then
         g%mass_star_tot=g%mass_star_tot-output_fbk%mass
@@ -267,7 +279,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         endif
      end if
      if(ok_fbk)then
-                                    call m_timer(pst,'star - feedback','start')
+        call m_timer(pst,'star - feedback','start')
         call m_mechanical_feedback(pst,ilevel,mass_fbk)           
         if(mass_fbk>0)then
            g%mass_star_tot=g%mass_star_tot-mass_fbk
@@ -275,12 +287,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
   endif
 
-  !--------------------
-  ! Sink Accretion
-  !--------------------
+  !----------------------------
+  ! Sink accretion and feedback
+  !----------------------------
   if(r%sink.and.(r%accretion_type>0))then
-                                    call m_timer(pst,'sink - accretion','start')
-     call r_sink_accretion(pst,ilevel,1,output_acc,2)
+     call m_timer(pst,'sink - evolution','start')
+     call r_sink_evolution(pst,ilevel,1,output_acc,2)
      if(output_acc%mass>0)then
         if(r%verbose_sink)write(*,*)'Total sink accreted mass:',output_acc%mass
         g%mass_sink_tot=g%mass_sink_tot+output_acc%mass
@@ -291,31 +303,39 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Hydro step
   !-----------
   if(r%hydro)then
+
      if(.not.r%static_gas)then
-     ! Hyperbolic solver
-                                    call m_timer(pst,'hydro - godunov','start')
-     call r_godunov_fine(pst,ilevel,1)
+        ! Hyperbolic solver
+        call m_timer(pst,'hydro - godunov','start')
+        call r_godunov_fine(pst,ilevel,1)
 
-     ! Add gravity source terms to unew with half time step
-                                    call m_timer(pst,'hydro - gravity','start')
-     call r_gravity_hydro_fine(pst,ilevel,1)
+        ! Add gravity source terms to unew with half time step
+        if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
+           call m_timer(pst,'hydro - gravity','start')
+           call r_gravity_hydro_fine(pst,ilevel,1)
+        endif
 
-     ! Add other hydro source terms to unew
-                                    call m_timer(pst,'hydro - source','start')
-     call r_source_hydro_fine(pst,ilevel,1)
+        ! Add other hydro source terms to unew
+        call m_timer(pst,'hydro - source','start')
+        call r_source_hydro_fine(pst,ilevel,1)
 
-     ! Set uold equal to unew
-                                    call m_timer(pst,'hydro - set uold','start')
-     call r_set_uold(pst,ilevel,1)
+        ! Set uold equal to unew
+        call m_timer(pst,'hydro - set uold','start')
+        call r_set_uold(pst,ilevel,1)
 
-     ! Add gravity source terms to uold with half time step
-     ! to complete the time step with old force (will be removed later)
-                                    call m_timer(pst,'hydro - gravity','start')
-     call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+        ! Add gravity source terms to uold with half time step
+        ! to complete the time step with old force (will be removed later)
+        if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
+           call m_timer(pst,'hydro - gravity','start')
+           call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+        endif
      endif
+
      ! Restriction operator
-                                    call m_timer(pst,'hydro - upload','start')
-     call m_upload_fine(pst,ilevel)
+     if(ilevel<r%nlevelmax)then
+        call m_timer(pst,'hydro - upload','start')
+        call m_upload_fine(pst,ilevel)
+     endif
   endif
 
   !------------------------
@@ -334,7 +354,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Compute cooling/heating
   !------------------------
   if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%isothermal.or.r%neq_chem))then
-                                    call m_timer(pst,'cooling','start')
+     call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif
 
@@ -342,7 +362,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Perform first kick and drift for particles
   !-------------------------------------------
   if(r%pic)then
-                                    call m_timer(pst,'particle - kickdrift','start')
+     call m_timer(pst,'particle - kickdrift','start')
      call m_kick_drift_part(pst,ilevel,action_kick_drift)
   endif
 
@@ -350,7 +370,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Star formation in leaf cells only
   !----------------------------------
   if(r%star.and.r%hydro)then
-                                    call m_timer(pst,'star - formation','start')
+     call m_timer(pst,'star - formation','start')
      call r_star_formation(pst,ilevel,1,output_star,2)
      if(output_star%mass>0)then
         g%mass_star_tot=g%mass_star_tot+output_star%mass
@@ -360,8 +380,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-----------------------
   ! Compute refinement map
   !-----------------------
-                                    call m_timer(pst,'flag','start')
-  if(.not.r%static_mesh)call m_flag_fine(pst,ilevel,icount)
+  if(ilevel<r%nlevelmax)then
+     call m_timer(pst,'flag','start')
+     if(.not.r%static_mesh)call m_flag_fine(pst,ilevel,icount)
+  endif
 
   !-------------------------------
   ! Update coarser level time-step
@@ -372,7 +394,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(icount==2)g%dtnew(ilevel-1)=g%dtold(ilevel)+g%dtnew(ilevel)
 
      ! Broadcast updated time step to all CPUs
-                                    call m_timer(pst,'recursive call','start')
+     call m_timer(pst,'recursive call','start')
      in_broadcast_dt%ilevel=ilevel-1
      in_broadcast_dt%dtnew=g%dtnew(ilevel-1)
      in_broadcast_dt%dtold=g%dtold(ilevel-1)

@@ -104,10 +104,14 @@ subroutine init_amr(mdl,r,g,m)
   allocate(m%locked(1:r%ncachemax))
   allocate(m%occupied(1:r%ncachemax))
   allocate(m%parent_cpu(1:r%ncachemax))
+  allocate(m%ghost_parent_grid(1:r%ncachemax))
+  allocate(m%ghost_parent_cell(1:r%ncachemax))
   m%dirty=.false.
   m%locked=.false.
   m%occupied=.false.
-  m%free_cache=1; m%ncache=0
+  m%ghost_parent_grid=0
+  m%ghost_parent_cell=0
+  m%free_cache=1; m%ncache=0; m%nlocked=0; m%nlocked_max=0
 
   allocate(m%lev_null(1:r%ncachemax))
   allocate(m%ckey_null(1:ndim,1:r%ncachemax))
@@ -319,6 +323,16 @@ subroutine init_amr(mdl,r,g,m)
   m%noct_max=0   ! Maximum number of oct across all cpus
   m%noct_used=0  ! Number of oct used across all levels
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
+
+  ! Allocate head, tail, numbers and indice for clean and dirty octs at each level
+  allocate(m%head_clean(r%levelmin:r%nlevelmax))
+  allocate(m%tail_clean(r%levelmin:r%nlevelmax))
+  allocate(m%noct_clean(r%levelmin:r%nlevelmax))
+  allocate(m%indx_clean(1:r%ngridmax))
+  allocate(m%head_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%tail_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%noct_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%indx_dirty(1:r%ngridmax))
 
   if(r%nrestart>0)then
      ! Read parameters from restart file

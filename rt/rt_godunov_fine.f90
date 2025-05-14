@@ -511,7 +511,7 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
 #endif
 #if NDIM>2
                        k3=1+2*(k1-1)+k2
-#endif             
+#endif
                        !----------------------------------------------------
                        ! If neighboring grid exists, use refined grid values
                        !----------------------------------------------------

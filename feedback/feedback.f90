@@ -559,7 +559,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         endif
         if(vload > vload_rad) vload = vload_rad ! safety
 
-        ! Compute radial momentun and kinetic energy
+        ! Compute radial momentum and kinetic energy
         p_solid = (1d0+f_w_cell)*dm_ejecta*vload
         ek_solid = p_solid*(vload*f_LOAD)/2d0
 

@@ -120,7 +120,7 @@ contains
     real :: load_factor
 
     if (resize) then
-       load_factor = (htable%size - htable%nfree) * 1.0 / htable%size    
+       load_factor = real(htable%size - htable%nfree) / real(htable%size)
        if (load_factor > 0.6) then
           htable%size = htable%size * 2
           deallocate(htable%data, htable%next_free)
@@ -346,7 +346,7 @@ contains
     integer(kind=8) :: ibucket, full_hash
 
     if(present(absent)) absent = .false.
-    
+
     full_hash = hash_func(key)
     ibucket = IAND(full_hash, htable%bitmask) + 1
 
@@ -355,7 +355,7 @@ contains
        if(present(absent) .and. .not.C_ASSOCIATED(hash_getp)) absent = .true.
        return
     end if
-    
+
     ! Walk linked list until key is found or to the end is reached
     do while( htable%data(ibucket)%next_ibucket > 0)
        ibucket = htable%data(ibucket)%next_ibucket
@@ -504,7 +504,16 @@ contains
        return
     end if
 
-    ! Nothing found or there is a collision...
+    ! Walk linked list until key is found or to the end is reached
+    do while( htable%data(ibucket)%next_ibucket > 0)
+       ibucket = htable%data(ibucket)%next_ibucket
+       if (same_keys(htable%data(ibucket)%key(0:ndim), key(0:ndim)))then
+          hash_is_clean = .true.
+          return
+       end if
+    end do
+
+    ! Nothing found
     hash_is_clean = .false.
 
   end function hash_is_clean
@@ -523,8 +532,8 @@ contains
     ! This subroutine is only valid if the simple hash is used
     ! and for clean octs only
     integer(kind = 8), dimension(1:nvector)         :: ibucket, full_hash
-    integer(kind = 8), dimension(1:nvector, 0:ndim) :: bucket_keys
-    integer :: i, idim
+    logical          , dimension(1:nvector)         :: ok
+    integer :: i, idim, n_coll
 
     full_hash = 0
     do idim = 0, ndim
@@ -537,8 +546,34 @@ contains
        ibucket(i) = IAND(full_hash(i), htable%bitmask) + 1
     end do
 
+    ok = .true.
+    do idim = 0, ndim
+       do i = 1, n
+          ok(i) = ok(i) .and. (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))
+       end do
+    end do
+
+    n_coll = 0
     do i = 1, n
-       get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
+       if (ok(i)) then
+          get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
+       else
+          n_coll = n_coll + 1
+       endif
+    end do
+
+    if(n_coll == 0)return
+
+    do i = 1, n
+       if (.not. ok(i)) then
+          ! Walk linked list until key is found or to the end is reached
+          do while( htable%data(ibucket(i))%next_ibucket > 0)
+             ibucket(i) = htable%data(ibucket(i))%next_ibucket
+             if (same_keys(htable%data(ibucket(i))%key(0:ndim), keys(i,0:ndim)))then
+                get_index_clean(i) = (loc(htable%data(ibucket(i))%valuep)-n1)/(n2-n1)
+             end if
+          end do
+       end if
     end do
 
   end function get_index_clean
@@ -650,8 +685,8 @@ contains
     write(*,*)"Total collisions in hash table: "&
          ,htable%total_size - htable%size - htable%nfree_chain
     write(*,*)"Collision fraction: "&
-         ,(htable%total_size - htable%size - htable%nfree_chain)&
-         *1./(htable%total_size - htable%nfree - htable%nfree_chain + tiny(0.D0))
+         ,real(htable%total_size - htable%size - htable%nfree_chain)&
+         /(real(htable%total_size - htable%nfree - htable%nfree_chain) + tiny(0.E0))
     write(*,*)"Perfect collision fraction (assuming perfect randomness): "&
          ,(htable%total_size - htable%nfree - htable%nfree_chain - &
          htable%size * (1.d0 - ((htable%size - 1.d0)/(htable%size)) &

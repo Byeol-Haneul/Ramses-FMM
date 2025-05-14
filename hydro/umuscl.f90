@@ -1,8 +1,7 @@
 ! ---------------------------------------------------------------
 !  UNSPLIT     Unsplit second order Godunov integrator for
-!              polytropic gas dynamics using either
-!              MUSCL-HANCOCK scheme or Collela's PLMDE scheme
-!              with various slope limiters.
+!              polytropic gas dynamics using the famous
+!              MUSCL-HANCOCK scheme with various slope limiters.
 !
 !  inputs/outputs
 !  uin         => (const)  input state
@@ -14,28 +13,25 @@
 !  if1,if2     => (const)  first and last index of output array,
 !  jf1,jf2     => (const)  edge centered,
 !  kf1,kf2     => (const)  for active cells only.
-!  dx,dy,dz    => (const)  (dx,dy,dz)
+!  dx          => (const)  dx
 !  dt          => (const)  time step
 !  ndim        => (const)  number of dimensions
 ! ----------------------------------------------------------------
 subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
      & bin,emfx,emfy,emfz,bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB,&
-     & etamag,induction, &
 #endif
-     & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,&
-     & gamma,gamma_rad,smallr,smallc,slope_type,slope_mag_type,riemann,riemann2d,difmag)
+     & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,&
+     & params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nvar, nprim, nener
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
 
   ! Input parameters
-  real(dp)::dx,dy,dz,dt
-  real(dp)::gamma,smallr,smallc,difmag,etamag
-  logical::induction
-  real(dp),dimension(1:nener+1)::gamma_rad
-  integer::slope_type,slope_mag_type,riemann,riemann2d
+  real(dp)::dx,dt
+  type(hydro_params_t)::params
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
 
@@ -103,33 +99,32 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
        & bin,bf, &
 #endif
-       & dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+       & dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
 
   ! Compute TVD slopes
   call uslope(qin,dq,&
 #ifdef MHD
        & bf,dbf, &
 #endif
-       & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type,slope_mag_type)
+       & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
 
   ! Compute 3D traced-states in all three directions
 #if NDIM==1
-  call trace1d(qin,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+  call trace1d(qin,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
 #endif
 #if NDIM==2
   call trace2d(qin,dq,qm,qp,&
 #ifdef MHD
        & bf,dbf,Ez,qRT,qRB,qLT,qLB, &
 #endif
-       & dx,dy,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+       & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
 #endif
 #if NDIM==3
   call trace3d(qin,dq,qm,qp,&
 #ifdef MHD
        & bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB, &
-       & induction, &
 #endif
-       & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+       & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
 #endif
 
   ! Solve for 1D flux in X direction
@@ -139,7 +134,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
        &       6,7,8, &
 #endif
-       &       2,3,4,fx,tx,gamma,gamma_rad,smallr,smallc,riemann)
+       &       2,3,4,fx,tx,params)
   ! Save flux in output array
   do ivar=1,nprim
      do k=klo,khi
@@ -168,13 +163,13 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
        &       7,6,8, &
 #endif
-       &       3,2,4,fx,tx,gamma,gamma_rad,smallr,smallc,riemann)
+       &       3,2,4,fx,tx,params)
   ! Save flux in output array
   do ivar=1,nprim
      do k=klo,khi
         do j=jf1,jf2
            do i=ilo,ihi
-              flux(i,j,k,ivar,2)=fx(i,j,k,ivar)*dt/dy
+              flux(i,j,k,ivar,2)=fx(i,j,k,ivar)*dt/dx
            end do
         end do
      end do
@@ -183,7 +178,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
      do k=klo,khi
         do j=jf1,jf2
            do i=ilo,ihi
-              tmp(i,j,k,ivar,2)=tx(i,j,k,ivar)*dt/dy
+              tmp(i,j,k,ivar,2)=tx(i,j,k,ivar)*dt/dx
            end do
         end do
      end do
@@ -198,13 +193,13 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
        &       8,6,7, &
 #endif
-       &       4,2,3,fx,tx,gamma,gamma_rad,smallr,smallc,riemann)
+       &       4,2,3,fx,tx,params)
   ! Save flux in output array
   do ivar=1,nprim
      do k=kf1,kf2
         do j=jlo,jhi
            do i=ilo,ihi
-              flux(i,j,k,ivar,3)=fx(i,j,k,ivar)*dt/dz
+              flux(i,j,k,ivar,3)=fx(i,j,k,ivar)*dt/dx
            end do
         end do
      end do
@@ -213,7 +208,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
      do k=kf1,kf2
         do j=jlo,jhi
            do i=ilo,ihi
-              tmp(i,j,k,ivar,3)=tx(i,j,k,ivar)*dt/dz
+              tmp(i,j,k,ivar,3)=tx(i,j,k,ivar)*dt/dx
            end do
         end do
      end do
@@ -227,7 +222,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
        &           qLT,iu1  ,iu2  ,ju1+1,ju2+1,ku1  ,ku2  , &
        &           qLB,iu1  ,iu2  ,ju1  ,ju2  ,ku1  ,ku2  , &
        &               if1  ,if2  ,jf1  ,jf2  ,klo  ,khi  , &
-       &           2,3,4,6,7,8,Ez,gamma,gamma_rad,smallr,smallc,riemann2d)
+       &           2,3,4,6,7,8,Ez,params)
 
   ! Save vector in output array
   do k=klo,khi
@@ -245,7 +240,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
        &           qRB,iu1+1,iu2+1,ju1,ju2,ku1  ,ku2  , &
        &           qLB,iu1  ,iu2  ,ju1,ju2,ku1  ,ku2  , &
        &               if1  ,if2  ,jlo,jhi,kf1  ,kf2  , &
-       &           4,2,3,8,6,7,Ey,gamma,gamma_rad,smallr,smallc,riemann2d)
+       &           4,2,3,8,6,7,Ey,params)
   ! Save vector in output array
   do k=kf1,kf2
      do j=jlo,jhi
@@ -260,7 +255,7 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
        &           qLT,iu1,iu2,ju1  ,ju2  ,ku1+1,ku2+1, &
        &           qLB,iu1,iu2,ju1  ,ju2  ,ku1  ,ku2  , &
        &               ilo,ihi,jf1  ,jf2  ,kf1  ,kf2  , &
-       &           3,4,2,7,8,6,Ex,gamma,gamma_rad,smallr,smallc,riemann2d)
+       &           3,4,2,7,8,6,Ex,params)
   ! Save vector in output array
   do k=kf1,kf2
      do j=jf1,jf2
@@ -271,8 +266,8 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   end do
 #endif
 #endif
-  if(difmag>0.0)then
-     call cmpdivu(qin,divu,dx,dy,dz,&
+  if(params%difmag>0.0)then
+     call cmpdivu(qin,divu,dx,&
           & iu1,iu2,ju1,ju2,ku1,ku2,&
           & if1,if2,jf1,jf2,kf1,kf2)
      call cmpdiff(uin,flux,divu,dt,&
@@ -280,13 +275,13 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
           & bin, &
 #endif
           & iu1,iu2,ju1,ju2,ku1,ku2,&
-          & if1,if2,jf1,jf2,kf1,kf2,difmag)
+          & if1,if2,jf1,jf2,kf1,kf2,params%difmag)
   endif
 #ifdef MHD
-  if(etamag>0.0)then
-     call cmpcurrent(bf,emfx,emfy,emfz,dx,dy,dz,dt,&
+  if(params%etamag>0.0)then
+     call cmpcurrent(bf,emfx,emfy,emfz,dx,dt,&
           & iu1,iu2,ju1,ju2,ku1,ku2,&
-          & if1,if2,jf1,jf2,kf1,kf2,etamag)
+          & if1,if2,jf1,jf2,kf1,kf2,params%etamag)
   endif
 #endif
 
@@ -295,23 +290,26 @@ end subroutine unsplit
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener, ie
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
 
   real(dp)::dx, dt
   integer::iu1, iu2, ju1, ju2, ku1, ku2
-  real(dp)::gamma, smallr, smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
 
   ! Local variables
-  integer::i, j, k, n
+  integer::i, j, k
+#if NVAR>5+NENER
+  integer::n
+#endif
   integer::ilo, ihi, jlo, jhi, klo, khi
   integer::ir, iu, iv, iw, ip
   real(dp)::dtdx
@@ -321,16 +319,22 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
 #ifdef MHD
   integer::iA, iB, iC
   real(dp)::A, B, C
-  real(dp)::dAx, dBx, dCx
-  real(dp)::sA0, sB0, sC0
+  real(dp)::dBx, dCx
+  real(dp)::sB0, sC0
 #endif
 #if NENER>0
   integer::irad
   real(dp),dimension(1:nener)::e, dex, se0
 #endif
+  real(dp)::gamma, smallr, smallc, smallp
+  real(dp),dimension(1:nener+1)::gamma_rad
 
-  dtdx = dt/dx
-
+  dtdx=dt/dx
+  gamma=params%gamma
+  gamma_rad=params%gamma_rad
+  smallr=params%smallr
+  smallc=params%smallc
+  smallp=smallr*smallc**2
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
   jlo=MIN(1,ju1+1); jhi=MAX(1,ju2-1)
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
@@ -416,6 +420,7 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
            qp(i,j,k,iw,1) = w - dwx
            qp(i,j,k,ip,1) = p - dpx
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,1)<smallp)qp(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,1) = A
            qp(i,j,k,iB,1) = B - dBx
@@ -433,6 +438,7 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smal
            qm(i,j,k,iw,1) = w + dwx
            qm(i,j,k,ip,1) = p + dpx
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,1)<smallp)qm(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,1) = A
            qm(i,j,k,iB,1) = B + dBx
@@ -476,16 +482,16 @@ subroutine trace2d(q,dq,qm,qp, &
 #ifdef MHD
        & bf,dbf,Ez,qRT,qRB,qLT,qLB, &
 #endif
-       & dx,dy,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
-  use amr_parameters, only:dp, ndim
+       & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
+  use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener, ie
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
 
-  real(dp)::dx, dy, dt
+  real(dp)::dx, dt
+  type(hydro_params_t)::params
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
@@ -501,7 +507,10 @@ subroutine trace2d(q,dq,qm,qp, &
 #endif
 
   ! declare local variables
-  integer::i, j, k, n
+  integer::i, j, k
+#if NVAR>5+NENER
+  integer::n
+#endif
   integer::ilo,ihi,jlo,jhi,klo,khi
   integer::ir, iu, iv, iw, ip
   real(dp)::dtdx
@@ -512,9 +521,9 @@ subroutine trace2d(q,dq,qm,qp, &
 #ifdef MHD
   integer::iA, iB, iC
   real(dp)::A, B, C
-  real(dp)::dAx, dBx, dCx
-  real(dp)::dAy, dBy, dCy
-  real(dp)::sA0, sB0, sC0
+  real(dp)::dBx, dCx
+  real(dp)::dAy, dCy
+  real(dp)::sC0
   real(dp)::AL, AR, BL, BR
   real(dp)::dALy, dARy, dBLx, dBRx
   real(dp)::sAL0, sAR0, sBL0, sBR0
@@ -524,8 +533,15 @@ subroutine trace2d(q,dq,qm,qp, &
   integer::irad
   real(dp),dimension(1:nener)::e, dex, dey, se0
 #endif
-  
-  dtdx = dt/dx
+  real(dp)::gamma,smallr,smallc,smallp
+  real(dp),dimension(1:nener+1)::gamma_rad
+
+  dtdx=dt/dx
+  gamma=params%gamma
+  gamma_rad=params%gamma_rad
+  smallr=params%smallr
+  smallc=params%smallc
+  smallp=smallr*smallc**2
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
   jlo=MIN(1,ju1+1); jhi=MAX(1,ju2-1)
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
@@ -671,6 +687,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qp(i,j,k,iC,1) = C - dCx
 #endif
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,1)<smallp)qp(i,j,k,ip,1)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qp(i,j,k,ie+irad,1) = e(irad) - dex(irad)
@@ -688,6 +705,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qm(i,j,k,iC,1) = C + dCx
 #endif
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,1)<smallp)qm(i,j,k,ip,1)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qm(i,j,k,ie+irad,1) = e(irad) + dex(irad)
@@ -705,6 +723,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qp(i,j,k,iC,2) = C - dCy
 #endif
            if(qp(i,j,k,ir,2)<smallr)qp(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,2)<smallp)qp(i,j,k,ip,2)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qp(i,j,k,ie+irad,2) = e(irad) - dey(irad)
@@ -722,6 +741,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qm(i,j,k,iC,2) = C + dCy
 #endif
            if(qm(i,j,k,ir,2)<smallr)qm(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,2)<smallp)qm(i,j,k,ip,2)=q(i,j,k,ip)
 #if NENER>0
            do irad=1,nener
               qm(i,j,k,ie+irad,2) = e(irad) + dey(irad)
@@ -738,6 +758,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qRT(i,j,k,iA,3) = AR+ (   +dARy)
            qRT(i,j,k,iB,3) = BR+ (+dBRx   )
            if (qRT(i,j,k,ir,3)<smallr) qRT(i,j,k,ir,3)=r
+           if (qRT(i,j,k,ip,3)<smallp) qRT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)+dey(irad))
@@ -753,6 +774,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qRB(i,j,k,iA,3) = AR+ (   -dARy)
            qRB(i,j,k,iB,3) = BL+ (+dBLx   )
            if (qRB(i,j,k,ir,3)<smallr) qRB(i,j,k,ir,3)=r
+           if (qRB(i,j,k,ip,3)<smallp) qRB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)-dey(irad))
@@ -768,6 +790,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qLT(i,j,k,iA,3) = AL+ (   +dALy)
            qLT(i,j,k,iB,3) = BR+ (-dBRx   )
            if (qLT(i,j,k,ir,3)<smallr) qLT(i,j,k,ir,3)=r
+           if (qLT(i,j,k,ip,3)<smallp) qLT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)+dey(irad))
@@ -783,6 +806,7 @@ subroutine trace2d(q,dq,qm,qp, &
            qLB(i,j,k,iA,3) = AL+ (   -dALy)
            qLB(i,j,k,iB,3) = BL+ (-dBLx   )
            if (qLB(i,j,k,ir,3)<smallr) qLB(i,j,k,ir,3)=r
+           if (qLB(i,j,k,ip,3)<smallp) qLB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)-dey(irad))
@@ -826,24 +850,22 @@ end subroutine trace2d
 subroutine trace3d(q,dq,qm,qp, &
 #ifdef MHD
      & bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB, &
-     & induction, &
 #endif
-     & dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+     & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim, nener, ie
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
 
-  real(dp)::dx, dy, dz, dt
+  real(dp)::dx, dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
 #ifdef MHD
-  logical::induction
   real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
   real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
   REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
@@ -856,7 +878,10 @@ subroutine trace3d(q,dq,qm,qp, &
 #endif
 
   ! declare local variables
-  integer::i, j, k, n
+  integer::i, j, k
+#if NVAR>5+NENER
+  integer::n
+#endif
   integer::ilo,ihi,jlo,jhi,klo,khi
   integer::ir, iu, iv, iw, ip
   real(dp)::dtdx
@@ -868,10 +893,9 @@ subroutine trace3d(q,dq,qm,qp, &
 #ifdef MHD
   integer::iA, iB, iC
   real(dp)::A, B, C
-  real(dp)::dAx, dBx, dCx
-  real(dp)::dAy, dBy, dCy
+  real(dp)::dBx, dCx
+  real(dp)::dAy, dCy
   real(dp)::dAz, dBz, dCz
-  real(dp)::sA0, sB0, sC0
   real(dp)::AL, AR, BL, BR, CL, CR
   REAL(dp)::dALy, dARy, dALz, dARz
   REAL(dp)::dBLx, dBRx, dBLz, dBRz
@@ -880,13 +904,24 @@ subroutine trace3d(q,dq,qm,qp, &
   REAL(dp)::ELL, ELR, ERL, ERR
   REAL(dp)::FLL, FLR, FRL, FRR
   REAL(dp)::GLL, GLR, GRL, GRR
+  logical::induction
 #endif
 #if NENER>0
   integer::irad
   real(dp),dimension(1:nener)::e, dex, dey, dez, se0
 #endif
-  
-  dtdx = dt/dx
+  real(dp)::gamma,smallr,smallc,smallp
+  real(dp),dimension(1:nener+1)::gamma_rad
+
+  dtdx=dt/dx
+  gamma=params%gamma
+  gamma_rad=params%gamma_rad
+  smallr=params%smallr
+  smallc=params%smallc
+  smallp=smallr*smallc**2
+#ifdef MHD
+  induction=params%induction
+#endif
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
   jlo=MIN(1,ju1+1); jhi=MAX(1,ju2-1)
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
@@ -1086,6 +1121,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qp(i,j,k,iw,1) = w - dwx
            qp(i,j,k,ip,1) = p - dpx
            if(qp(i,j,k,ir,1)<smallr)qp(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,1)<smallp)qp(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,1) = AL
            qp(i,j,k,iB,1) = B - dBx
@@ -1103,6 +1139,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qm(i,j,k,iw,1) = w + dwx
            qm(i,j,k,ip,1) = p + dpx
            if(qm(i,j,k,ir,1)<smallr)qm(i,j,k,ir,1)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,1)<smallp)qm(i,j,k,ip,1)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,1) = AR
            qm(i,j,k,iB,1) = B + dBx
@@ -1120,6 +1157,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qp(i,j,k,iw,2) = w - dwy
            qp(i,j,k,ip,2) = p - dpy
            if(qp(i,j,k,ir,2)<smallr)qp(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,2)<smallp)qp(i,j,k,ip,2)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,2) = A - dAy
            qp(i,j,k,iB,2) = BL
@@ -1137,6 +1175,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qm(i,j,k,iw,2) = w + dwy
            qm(i,j,k,ip,2) = p + dpy
            if(qm(i,j,k,ir,2)<smallr)qm(i,j,k,ir,2)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,2)<smallp)qm(i,j,k,ip,2)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,2) = A + dAy
            qm(i,j,k,iB,2) = BR
@@ -1154,6 +1193,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qp(i,j,k,iw,3) = w - dwz
            qp(i,j,k,ip,3) = p - dpz
            if(qp(i,j,k,ir,3)<smallr)qp(i,j,k,ir,3)=q(i,j,k,ir)
+           if(qp(i,j,k,ip,3)<smallp)qp(i,j,k,ip,3)=q(i,j,k,ip)
 #ifdef MHD
            qp(i,j,k,iA,3) = A - dAz
            qp(i,j,k,iB,3) = B - dBz
@@ -1171,6 +1211,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qm(i,j,k,iw,3) = w + dwz
            qm(i,j,k,ip,3) = p + dpz
            if(qm(i,j,k,ir,3)<smallr)qm(i,j,k,ir,3)=q(i,j,k,ir)
+           if(qm(i,j,k,ip,3)<smallp)qm(i,j,k,ip,3)=q(i,j,k,ip)
 #ifdef MHD
            qm(i,j,k,iA,3) = A + dAz
            qm(i,j,k,iB,3) = B + dBz
@@ -1192,6 +1233,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRT(i,j,k,iB,1) = BR+ (   +dBRz)
            qRT(i,j,k,iC,1) = CR+ (+dCRy   )
            if (qRT(i,j,k,ir,1)<smallr) qRT(i,j,k,ir,1)=r
+           if (qRT(i,j,k,ip,1)<smallp) qRT(i,j,k,ip,1)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,1) = e(irad) + (+dey(irad)+dez(irad))
@@ -1207,6 +1249,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRB(i,j,k,iB,1) = BR+ (   -dBRz)
            qRB(i,j,k,iC,1) = CL+ (+dCLy   )
            if (qRB(i,j,k,ir,1)<smallr) qRB(i,j,k,ir,1)=r
+           if (qRB(i,j,k,ip,1)<smallp) qRB(i,j,k,ip,1)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,1) = e(irad) + (+dey(irad)-dez(irad))
@@ -1222,6 +1265,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLT(i,j,k,iB,1) = BL+ (   +dBLz)
            qLT(i,j,k,iC,1) = CR+ (-dCRy   )
            if (qLT(i,j,k,ir,1)<smallr) qLT(i,j,k,ir,1)=r
+           if (qLT(i,j,k,ip,1)<smallp) qLT(i,j,k,ip,1)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,1) = e(irad) + (-dey(irad)+dez(irad))
@@ -1237,6 +1281,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLB(i,j,k,iB,1) = BL+ (   -dBLz)
            qLB(i,j,k,iC,1) = CL+ (-dCLy   )
            if (qLB(i,j,k,ir,1)<smallr) qLB(i,j,k,ir,1)=r
+           if (qLB(i,j,k,ip,1)<smallp) qLB(i,j,k,ir,1)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,1) = e(irad) + (-dey(irad)-dez(irad))
@@ -1252,6 +1297,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRT(i,j,k,iB,2) = B + (+dBx+dBz)
            qRT(i,j,k,iC,2) = CR+ (+dCRx   )
            if (qRT(i,j,k,ir,2)<smallr) qRT(i,j,k,ir,2)=r
+           if (qRT(i,j,k,ip,2)<smallp) qRT(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,2) = e(irad) + (+dex(irad)+dez(irad))
@@ -1267,6 +1313,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRB(i,j,k,iB,2) = B + (+dBx-dBz)
            qRB(i,j,k,iC,2) = CL+ (+dCLx   )
            if (qRB(i,j,k,ir,2)<smallr) qRB(i,j,k,ir,2)=r
+           if (qRB(i,j,k,ip,2)<smallp) qRB(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,2) = e(irad) + (+dex(irad)-dez(irad))
@@ -1282,6 +1329,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLT(i,j,k,iB,2) = B + (-dBx+dBz)
            qLT(i,j,k,iC,2) = CR+ (-dCRx   )
            if (qLT(i,j,k,ir,2)<smallr) qLT(i,j,k,ir,2)=r
+           if (qLT(i,j,k,ip,2)<smallp) qLT(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,2) = e(irad) + (-dex(irad)+dez(irad))
@@ -1297,6 +1345,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLB(i,j,k,iB,2) = B + (-dBx-dBz)
            qLB(i,j,k,iC,2) = CL+ (-dCLx   )
            if (qLB(i,j,k,ir,2)<smallr) qLB(i,j,k,ir,2)=r
+           if (qLB(i,j,k,ip,2)<smallp) qLB(i,j,k,ip,2)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,2) = e(irad) + (-dex(irad)-dez(irad))
@@ -1312,6 +1361,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRT(i,j,k,iB,3) = BR+ (+dBRx   )
            qRT(i,j,k,iC,3) = C + (+dCx+dCy)
            if (qRT(i,j,k,ir,3)<smallr) qRT(i,j,k,ir,3)=r
+           if (qRT(i,j,k,ip,3)<smallp) qRT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRT(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)+dey(irad))
@@ -1327,6 +1377,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qRB(i,j,k,iB,3) = BL+ (+dBLx   )
            qRB(i,j,k,iC,3) = C + (+dCx-dCy)
            if (qRB(i,j,k,ir,3)<smallr) qRB(i,j,k,ir,3)=r
+           if (qRB(i,j,k,ip,3)<smallp) qRB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qRB(i,j,k,iC+irad,3) = e(irad) + (+dex(irad)-dey(irad))
@@ -1342,6 +1393,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLT(i,j,k,iB,3) = BR+ (-dBRx   )
            qLT(i,j,k,iC,3) = C + (-dCx+dCy)
            if (qLT(i,j,k,ir,3)<smallr) qLT(i,j,k,ir,3)=r
+           if (qLT(i,j,k,ip,3)<smallp) qLT(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLT(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)+dey(irad))
@@ -1357,6 +1409,7 @@ subroutine trace3d(q,dq,qm,qp, &
            qLB(i,j,k,iB,3) = BL+ (-dBLx   )
            qLB(i,j,k,iC,3) = C + (-dCx-dCy)
            if (qLB(i,j,k,ir,3)<smallr) qLB(i,j,k,ir,3)=r
+           if (qLB(i,j,k,ip,3)<smallp) qLB(i,j,k,ip,3)=p
 #if NENER>0
            do irad=1,nener
               qLB(i,j,k,iC+irad,3) = e(irad) + (-dex(irad)-dey(irad))
@@ -1407,8 +1460,9 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
      &             bn,bt1,bt2, &
 #endif
      &             ln,lt1,lt2,flx,tmp, &
-     &             gamma,gamma_rad,smallr,smallc,riemann)
+     &             params)
   use amr_parameters, only: dp,ndim
+  use amr_commons, only: hydro_params_t
   use hydro_parameters
   use const
   implicit none
@@ -1420,23 +1474,25 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
   integer::im1,im2,jm1,jm2,km1,km2
   integer::ip1,ip2,jp1,jp2,kp1,kp2
   integer::ilo,ihi,jlo,jhi,klo,khi
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
-  integer::riemann
+  type(hydro_params_t)::params
   real(dp),dimension(im1:im2,jm1:jm2,km1:km2,1:nprim,1:ndim)::qm
   real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nprim,1:ndim)::qp
   real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nprim)::flx
   real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:2)::tmp
   ! local variables
-  integer ::i,j,k,xdim
-  real(dp)::entho
+  integer ::i,j,k,xdim,riemann
   real(dp),dimension(1:nprim)::qleft,qright
   real(dp),dimension(1:nprim+1)::fgdnv
 #if NVAR>5
   integer::n
 #endif
-  
-  entho=one/(gamma-one)
+  real(dp)::switch_llf_dmin,switch_llf_pmin
+  logical::switch_to_llf
+
+  riemann=params%riemann
+  switch_llf_dmin=params%switch_llf_dmin
+  switch_llf_pmin=params%switch_llf_pmin
+
   xdim=ln-1
 
   do k = klo, khi
@@ -1475,24 +1531,31 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
 #ifndef MHD
            ! Solve hydro Riemann problem
            if(riemann.eq.solver_llf)then
-              call riemann_llf(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+              call riemann_llf(qleft,qright,fgdnv,params)
            else if (riemann.eq.solver_hllc)then
-              call riemann_hllc(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+              call riemann_hllc(qleft,qright,fgdnv,params)
            else if (riemann.eq.solver_hll)then
-              call riemann_hll(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+              call riemann_hll(qleft,qright,fgdnv,params)
 #endif
 #ifdef MHD
               ! Solve MHD Riemann problem
            if (riemann.eq.solver_llf)then
-              call riemann_llf_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),gamma,gamma_rad,smallr,smallc)
+              call riemann_llf_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
            else if (riemann.eq.solver_hlld)then
-              call riemann_hlld(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+              switch_to_llf=.false.
+              if(switch_llf_dmin.gt.0)switch_to_llf=min(qleft(1),qright(1)).lt.switch_llf_dmin
+              if(switch_llf_pmin.gt.0)switch_to_llf=min(qleft(5),qright(5)).lt.switch_llf_pmin
+              if(.not.switch_to_llf)then
+                 call riemann_hlld(qleft,qright,fgdnv,params)
+              else
+                 call riemann_llf_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
+              endif
            else if (riemann.eq.solver_hll)then
-              call riemann_hll_mhd(qleft,qright,fgdnv,gamma,gamma_rad,smallr,smallc)
+              call riemann_hll_mhd(qleft,qright,fgdnv,params)
            else if (riemann.eq.solver_roe)then
-              call riemann_roe_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),gamma,gamma_rad,smallr,smallc)
+              call riemann_roe_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
            else if (riemann.eq.solver_upwind)then
-              call riemann_upwind_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),gamma,gamma_rad,smallr,smallc)
+              call riemann_upwind_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
 #endif
            else
               write(*,*)'unknown Riemann solver'
@@ -1537,9 +1600,10 @@ subroutine cmp_mag_flx(qRT,irt1,irt2,jrt1,jrt2,krt1,krt2, &
        &               qLB,ilb1,ilb2,jlb1,jlb2,klb1,klb2, &
        &                   ilo ,ihi ,jlo ,jhi ,klo ,khi , &
        &                   lp1 ,lp2 ,lor ,bp1 ,bp2 ,bor , &
-       &               emf,gamma,gamma_rad,smallr,smallc,riemann2d)
+       &               emf,params)
   ! 2D Riemann solver to compute EMF at cell edges
   use amr_parameters, only: dp,ndim
+  use amr_commons, only: hydro_params_t
   use hydro_parameters
   use const
   implicit none
@@ -1553,20 +1617,20 @@ subroutine cmp_mag_flx(qRT,irt1,irt2,jrt1,jrt2,krt1,krt2, &
   integer::ilt1,ilt2,jlt1,jlt2,klt1,klt2
   integer::ilb1,ilb2,jlb1,jlb2,klb1,klb2
   integer::ilo,ihi,jlo,jhi,klo,khi
-  real(dp)::gamma,smallr,smallc
-  real(dp),dimension(1:nener+1)::gamma_rad
-  integer::riemann2d
+  type(hydro_params_t)::params
   real(dp),dimension(irt1:irt2,jrt1:jrt2,krt1:krt2,1:nprim,1:3)::qRT
   real(dp),dimension(irb1:irb2,jrb1:jrb2,krb1:krb2,1:nprim,1:3)::qRB
   real(dp),dimension(ilt1:ilt2,jlt1:jlt2,klt1:klt2,1:nprim,1:3)::qLT
   real(dp),dimension(ilb1:ilb2,jlb1:jlb2,klb1:klb2,1:nprim,1:3)::qLB
   real(dp),dimension(ilb1:ilb2,jlb1:jlb2,klb1:klb2)::emf
   ! local variables
+  integer::riemann2d
   integer::i, j, k, xdim
   real(dp),dimension(1:nprim)::qLL,qRL,qLR,qRR
   real(dp)::E
 
   xdim = lor - 1
+  riemann2d = params%riemann2d
 
   DO k = klo, khi
      DO j = jlo, jhi
@@ -1631,13 +1695,13 @@ subroutine cmp_mag_flx(qRT,irt1,irt2,jrt1,jrt2,krt1,krt2, &
 #endif
            ! Solve 2D Riemann problem
            if(riemann2d.eq.solver2d_hlld)then
-              call riemann2d_hlld(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
+              call riemann2d_hlld(qLL,qLR,qRL,qRR,E,params)
            else if(riemann2d.eq.solver2d_hllf)then
-              call riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
+              call riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,params)
            else if(riemann2d.eq.solver2d_hlla)then
-              call riemann2d_hll_alfven(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc)
+              call riemann2d_hll_alfven(qLL,qLR,qRL,qRR,E)
            else
-              call riemann2d_simple(qLL,qLR,qRL,qRR,E,gamma,gamma_rad,smallr,smallc,riemann2d)
+              call riemann2d_simple(qLL,qLR,qRL,qRR,E,params)
            endif
 
            ! Store EMF
@@ -1657,16 +1721,16 @@ subroutine ctoprim(uin,q,c,gravin, &
 #ifdef MHD
      & bin,bf, &
 #endif
-     & dt,iu1,iu2,ju1,ju2,ku1,ku2,gamma,gamma_rad,smallr,smallc)
+     & dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nvar, nprim, nener, ie
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
 
   real(dp)::dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-  real(dp)::smallr,smallc,gamma
-  real(dp),dimension(1:nener+1)::gamma_rad
+  type(hydro_params_t)::params
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
 #ifdef MHD
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
@@ -1676,7 +1740,7 @@ subroutine ctoprim(uin,q,c,gravin, &
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2)::c  
 
-  real(dp)::eint, smalle, dtxhalf, oneoverrho
+  real(dp)::eint, dtxhalf, oneoverrho
   real(dp)::ekin, erad, emag
   integer ::i, j, k
 #if NENER>0
@@ -1685,7 +1749,13 @@ subroutine ctoprim(uin,q,c,gravin, &
 #if NVAR>5+NENER
   integer ::n
 #endif
+  real(dp)::smallr,smallc,smalle,gamma
+  real(dp),dimension(1:nener+1)::gamma_rad
 
+  gamma=params%gamma
+  gamma_rad=params%gamma_rad
+  smallr=params%smallr
+  smallc=params%smallc
   smalle=smallc**2/gamma/(gamma-one)
   dtxhalf=dt*half
 
@@ -1745,7 +1815,7 @@ subroutine ctoprim(uin,q,c,gravin, &
            q(i,j,k,3) = uin(i,j,k,3)*oneoverrho
            q(i,j,k,4) = uin(i,j,k,4)*oneoverrho
 
-           ! Compute specific kinetic energy
+           ! Compute kinetic energy
            ekin =        half*q(i,j,k,1)*q(i,j,k,2)**2
            ekin = ekin + half*q(i,j,k,1)*q(i,j,k,3)**2
            ekin = ekin + half*q(i,j,k,1)*q(i,j,k,4)**2
@@ -1771,7 +1841,7 @@ subroutine ctoprim(uin,q,c,gravin, &
            enddo
 #endif
            ! Compute thermal pressure
-           eint = MAX(uin(i,j,k,5)-ekin-erad-emag,smalle)
+           eint = MAX(uin(i,j,k,5)-ekin-erad-emag,smalle*q(i,j,k,1))
            q(i,j,k,5) = (gamma-one)*eint
 
            ! Compute thermal sound speed
@@ -1818,15 +1888,16 @@ subroutine uslope(q,dq, &
 #ifdef MHD
      & bf,dbf, &
 #endif
-     & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,slope_type,slope_mag_type)
+     & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
   use amr_parameters, only: dp, ndim
   use hydro_parameters, only: nprim
+  use amr_commons, only: hydro_params_t
   use const
   implicit none
   ! routine arguments
   real(dp)::dx,dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-  integer::slope_type,slope_mag_type
+  type(hydro_params_t)::params
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
 #ifdef MHD
@@ -1834,22 +1905,27 @@ subroutine uslope(q,dq, &
   real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
 #endif
   ! local arrays
-  integer::i, j, k,  n
+  integer::slope_type, slope_mag_type
+  integer::i, j, k, n
+  integer::ilo, ihi, jlo, jhi, klo, khi
   real(dp)::dsgn, dlim, dcen, dlft, drgt, slop
+  real(dp)::vmin,vmax
 #if NDIM==2
   real(dp)::dfll,dflm,dflr,dfml,dfmm,dfmr,dfrl,dfrm,dfrr
+  real(dp)::dfx,dfy,dff
 #endif
 #if NDIM==3
   real(dp)::dflll,dflml,dflrl,dfmll,dfmml,dfmrl,dfrll,dfrml,dfrrl
   real(dp)::dfllm,dflmm,dflrm,dfmlm,dfmmm,dfmrm,dfrlm,dfrmm,dfrrm
   real(dp)::dfllr,dflmr,dflrr,dfmlr,dfmmr,dfmrr,dfrlr,dfrmr,dfrrr
+  real(dp)::dfx,dfy,dfz,dff
 #endif
-  real(dp)::vmin,vmax,dfx,dfy,dfz,dff
-  integer::ilo,ihi,jlo,jhi,klo,khi
   
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
   jlo=MIN(1,ju1+1); jhi=MAX(1,ju2-1)
   klo=MIN(1,ku1+1); khi=MAX(1,ku2-1)
+  slope_type=params%slope_type
+  slope_mag_type=params%slope_mag_type
 
 #if NDIM==1
   if(slope_type==0)then
@@ -2267,7 +2343,7 @@ end subroutine uslope
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cmpdivu(q,div,dx,dy,dz,&
+subroutine cmpdivu(q,div,dx,&
      & iu1,iu2,ju1,ju2,ku1,ku2,&
      & if1,if2,jf1,jf2,kf1,kf2)
   use amr_parameters, only: dp, ndim
@@ -2275,39 +2351,37 @@ subroutine cmpdivu(q,div,dx,dy,dz,&
   use const
   implicit none
   ! This routine computes the velocity divergence at the corners of the cells.
-  real(dp)::dx, dy, dz
+  real(dp)::dx
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
   real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
 
   integer::i, j, k
-  real(dp)::factorx, factory, factorz
+  real(dp)::fact
   real(dp)::ux, vy, wz
 
-  factorx=half**(ndim-1)/dx
-  factory=half**(ndim-1)/dy
-  factorz=half**(ndim-1)/dz
+  fact=half**(ndim-1)/dx
 
   do k = kf1, kf2
      do j = jf1, jf2
         do i = if1, if2
            ux=zero; vy=zero; wz=zero
-           ux=ux+factorx*(q(i,j,k,2) - q(i-1,j,k,2))
+           ux=ux+fact*(q(i,j,k,2) - q(i-1,j,k,2))
 #if NDIM>1
-           ux=ux+factorx*(q(i  ,j-1,k,2) - q(i-1,j-1,k,2))
-           vy=vy+factory*(q(i  ,j  ,k,3) - q(i  ,j-1,k,3)+&
-                &         q(i-1,j  ,k,3) - q(i-1,j-1,k,3))
+           ux=ux+fact*(q(i  ,j-1,k,2) - q(i-1,j-1,k,2))
+           vy=vy+fact*(q(i  ,j  ,k,3) - q(i  ,j-1,k,3)+&
+                &      q(i-1,j  ,k,3) - q(i-1,j-1,k,3))
 #endif
 #if NDIM>2
-           ux=ux+factorx*(q(i  ,j  ,k-1,2) - q(i-1,j  ,k-1,2)+&
-                &         q(i  ,j-1,k-1,2) - q(i-1,j-1,k-1,2))
-           vy=vy+factory*(q(i  ,j  ,k-1,3) - q(i  ,j-1,k-1,3)+&
-                &         q(i-1,j  ,k-1,3) - q(i-1,j-1,k-1,3))
-           wz=wz+factorz*(q(i  ,j  ,k  ,4) - q(i  ,j  ,k-1,4)+&
-                &         q(i  ,j-1,k  ,4) - q(i  ,j-1,k-1,4)+&
-                &         q(i-1,j  ,k  ,4) - q(i-1,j  ,k-1,4)+&
-                &         q(i-1,j-1,k  ,4) - q(i-1,j-1,k-1,4))
+           ux=ux+fact*(q(i  ,j  ,k-1,2) - q(i-1,j  ,k-1,2)+&
+                &      q(i  ,j-1,k-1,2) - q(i-1,j-1,k-1,2))
+           vy=vy+fact*(q(i  ,j  ,k-1,3) - q(i  ,j-1,k-1,3)+&
+                &      q(i-1,j  ,k-1,3) - q(i-1,j-1,k-1,3))
+           wz=wz+fact*(q(i  ,j  ,k  ,4) - q(i  ,j  ,k-1,4)+&
+                &      q(i  ,j-1,k  ,4) - q(i  ,j-1,k-1,4)+&
+                &      q(i-1,j  ,k  ,4) - q(i-1,j  ,k-1,4)+&
+                &      q(i-1,j-1,k  ,4) - q(i-1,j-1,k-1,4))
 #endif
            div(i,j,k) = ux + vy + wz
 
@@ -2341,22 +2415,21 @@ subroutine cmpdiff(uin,flux,div,dt,&
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nprim,1:ndim)::flux
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
 
-  integer:: i, j, k, n
-  real(dp)::factor
-  real(dp)::div1
+  integer::i, j, k, n
+  real(dp)::fact,div1
 
-  factor=half**(ndim-1)
+  fact=half**(ndim-1)
 
   do n = 1, nprim
      do k = kf1, MAX(kf1,ku2-2)
         do j = jf1, MAX(jf1, ju2-2)
            do i = if1, if2
-              div1 = factor*div(i,j,k)
+              div1 = fact*div(i,j,k)
 #if NDIM>1
-              div1 = div1 + factor*div(i,j+1,k)
+              div1 = div1 + fact*div(i,j+1,k)
 #endif
 #if NDIM>2
-              div1 = div1 + factor*(div(i,j,k+1)+div(i,j+1,k+1))
+              div1 = div1 + fact*(div(i,j,k+1)+div(i,j+1,k+1))
 #endif
               div1 = difmag*min(zero,div1)
               if(n.LE.5)then
@@ -2377,9 +2450,9 @@ subroutine cmpdiff(uin,flux,div,dt,&
         do j = jf1, jf2
            do i = iu1+2, iu2-2
               div1 = zero
-              div1 = div1 + factor*(div(i,j,k ) + div(i+1,j,k))
+              div1 = div1 + fact*(div(i,j,k ) + div(i+1,j,k))
 #if NDIM>2
-              div1 = div1 + factor*(div(i,j,k+1) + div(i+1,j,k+1))
+              div1 = div1 + fact*(div(i,j,k+1) + div(i+1,j,k+1))
 #endif
               div1 = difmag*min(zero,div1)
               if(n.LE.5)then
@@ -2400,7 +2473,7 @@ subroutine cmpdiff(uin,flux,div,dt,&
      do k = kf1, kf2
         do j = ju1+2, ju2-2
            do i = iu1+2, iu2-2
-              div1 = factor*(div(i,j  ,k) + div(i+1,j  ,k) + div(i,j+1,k) + div(i+1,j+1,k))
+              div1 = fact*(div(i,j  ,k) + div(i+1,j  ,k) + div(i,j+1,k) + div(i+1,j+1,k))
               div1 = difmag*min(zero,div1)
               if(n.LE.5)then
                  flux(i,j,k,n,3) = flux(i,j,k,n,3) + dt*div1*(uin(i,j,k,n) - uin(i,j,k-1,n))
@@ -2423,7 +2496,7 @@ end subroutine cmpdiff
 !###########################################################
 !###########################################################
 !###########################################################
-subroutine cmpcurrent(bf,emfx,emfy,emfz,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,etamag)
+subroutine cmpcurrent(bf,emfx,emfy,emfz,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,etamag)
   use amr_parameters,ONLY:dp
   implicit none
   integer::iu1,iu2,ju1,ju2,ku1,ku2
@@ -2432,7 +2505,7 @@ subroutine cmpcurrent(bf,emfx,emfy,emfz,dx,dy,dz,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfx
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfy
   real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfz
-  real(dp)::dx,dy,dz,dt,etamag
+  real(dp)::dx,dt,etamag
   ! Add to EMF -eta J where J = nabla x B
   real(dp)::dBx_arete_dy,dBx_arete_dz
   real(dp)::dBy_arete_dx,dBy_arete_dz

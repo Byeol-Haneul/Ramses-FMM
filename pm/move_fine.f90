@@ -130,6 +130,16 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
+  if(p%static)then
+     ! We still need to set the particle levels correctly, even if they are not moved
+     ! Loop over particles
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        ! Update level
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  end if
+
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel 
   vol_loc=dx_loc**ndim
@@ -348,6 +358,16 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
+  if(p%static)then
+     ! We still need to set the particle levels correctly, even if they are not moved
+     ! Loop over particles
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        ! Update level
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  end if
+
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
@@ -516,6 +536,16 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
+
+  if(p%static)then
+     ! We still need to set the particle levels correctly, even if they are not moved
+     ! Loop over particles
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        ! Update level
+        p%levelp(ipart)=ilevel
+     end do
+     return
+  end if
 
   ! Mesh spacing in that level
   dx_loc=r%boxlen/2**ilevel

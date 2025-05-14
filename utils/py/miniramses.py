@@ -118,7 +118,7 @@ def test_cool(filename):
                 axis[id,it].plot(np.log10(times),data[id,it,ix,:,2],color='g')
                 axis[id,it].plot(np.log10(times),data[id,it,ix,:,3],color='b')
 
-            axis[id,it].set_xlim([-3,3])
+            axis[id,it].set_xlim([-3.2,3.2])
             if it>0:
                 axis[id,it].set_yticklabels([])
             else:
@@ -569,7 +569,7 @@ def rd_amr(nout,**kwargs):
     #else:
     #    cpulist = range(1,ncpu+1)
     cpulist = range(1,ncpu+1)
-    
+
     amr=[]
     for ilevel in range(0,nlevelmax):
         amr.append(Level(ndim))
@@ -664,7 +664,7 @@ def rd_hydro(nout,**kwargs):
     #else:
     #    cpulist = range(1,ncpu+1)
     cpulist = range(1,ncpu+1)
-    
+
     # Get number of hydro variables
     car1 = str(nout).zfill(5)
     if(backup):
@@ -978,7 +978,10 @@ def rd_info(nout,**kwargs):
 
     info=ascii.read(filename,delimiter="=",format='no_header')
 
-    ncpu=int(info[0][1])
+    nfile=int(info[0][1])
+    ncpu =int(info[1][1])
+    if( not backup ):
+        ncpu=nfile
 
     i = Info(ncpu)
 
