@@ -305,14 +305,24 @@ subroutine output_photon_emission_stats(r,g)
   g%step_mStar  = step_mStar_all
 #endif
   g%tot_nPhot = g%tot_nPhot + g%step_nPhot
-  if (g%myid .eq. 1)                                                 &
-      write(*, 113) g%step_nPhot, g%tot_nPhot                        &
+  if (g%myid .eq. 1) then
+      if(r%cosmo) then
+          write(*, 113) g%step_nPhot, g%tot_nPhot                    &
+                  , g%step_nStar/g%dtnew(r%levelmin)                 &
+                  , g%step_mStar/g%dtnew(r%levelmin)                 &
+                  , g%aexp, g%texp
+      else
+          write(*, 114) g%step_nPhot, g%tot_nPhot                    &
                   , g%step_nStar/g%dtnew(r%levelmin)                 &
                   , g%step_mStar/g%dtnew(r%levelmin)                 &
                   , g%t*scale_t/yr2sec
+      endif
+  endif
   g%step_nPhot = 0d0 ; g%step_nStar = 0d0 ; g%step_mStar = 0d0
-113 format(' Stellar radiation(phot/step, phot/tot, *, */Msun, t[yr])= '  &
-                                                             , 10(1pe9.2))
+113 format(' Stellar radiation(phot/step, phot/tot, *, */Msun, aexp, texp)= '  &
+                                                             , 10(1pe11.3))
+114 format(' Stellar radiation(phot/step, phot/tot, *, */Msun, t_yr)= '  &
+                                                             , 10(1pe11.3))
 end subroutine output_photon_emission_stats
 
 end module output_rt_module
