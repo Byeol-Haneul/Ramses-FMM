@@ -72,7 +72,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    type(msg_large_realdp)::dummy_large_realdp
    real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf
    real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
-   real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc
+   real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc,vel_gas
    real(dp),dimension(6+nener,nvar)::passive_acc
 
 #ifdef HYDRO
@@ -169,8 +169,13 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink Accretion
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas)
+      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas,vel_gas)
       macc_loc = macc_loc + dmacc_loc
+
+      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+      ! Dynamics
+      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+      call dynamical_friction(s,p,ilevel,ipart,rho_inf,cs_gas,vel_gas,factG)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink/AGN Feedback
@@ -207,7 +212,7 @@ end subroutine sink_evolution
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas)
+subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas,vel_gas)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -224,7 +229,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    real(dp)::dx_loc,vol_loc
    real(dp)::macc_loc,lambda_sonic
    real(dp)::dMBH_overdt,dMEd_overdt,m_acc,e_acc,rho_inf,cs_gas
-   real(dp),dimension(1:ndim)::p_acc,l_acc
+   real(dp),dimension(1:ndim)::p_acc,l_acc,vel_gas
    real(dp),dimension(6+nener,nvar)::passive_acc
    !==================================================================
    ! This is the RAMSES routine for sink (black hole) particle accretion.
@@ -242,7 +247,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar
    real(dp)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
    real(dp)::weight,r_rel
-   real(dp),dimension(1:ndim)::vv,v_rel,vel_gas,x_acc
+   real(dp),dimension(1:ndim)::vv,v_rel,x_acc
    type(oct),pointer::gridn
    real(dp)::d_acc,m_gas,bondi_mass
    real(dp)::weighted_bondi,dMdt_freefall,t_ff
@@ -263,8 +268,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-     ! Initialise B-spline interpolation
-     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   ! Initialise B-spline interpolation
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    if      (r%sink_b_spline_order==2)then
       call sink_B_spline_weights_CIC(s,xcen(1:ndim),xBHnei,ckeynei,vol,ilevel)
    else if (r%sink_b_spline_order==3)then
@@ -373,9 +378,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
             div_left = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/dx_loc
 
             ! Compute the 'Total' contribution
-            div_cell = (div_right - div_left)!/2.0d0
+            div_cell = (div_right - div_left)
          end do
-         total_divergence = total_divergence + div_cell!*weight
+         total_divergence = total_divergence + div_cell
       end if
 
       ! Compute local bondi rate
@@ -961,6 +966,58 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 #endif
 #endif
 end subroutine AGN_feedback
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+
+subroutine dynamical_friction(s,p,ilevel,ipart,rho_inf,cs_gas,vel_gas,factG)
+   use constants
+   use amr_parameters, only: ndim,twotondim,dp
+   use hydro_parameters, only: nvar
+   use ramses_commons, only: ramses_t
+   use pm_commons, only: part_t,cross
+   use params_module
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ipart,ilevel
+   real(dp)::rho_inf,cs_gas,factG
+   real(dp),dimension(1:ndim)::vel_gas
+   !==================================================================
+   ! This is the RAMSES routine for dynamical friction, with the goal
+   ! of informing the dynamics of the black hole.
+   ! Here, we follow the approach of Ostriker 1999.
+   ! Written by Nicholas Choustikov (Apr 2025)
+   !==================================================================
+   real(dp)::mach,vel_gas_mag,I,drag_force
+   real(dp),dimension(1:ndim)::vel_gas_direction
+
+   if(.not.s%r%drag_sink)return
+
+   ! Calculate the mach number in the local gas
+   vel_gas_mag = norm2(vel_gas)
+   mach = vel_gas_mag/cs_gas
+
+   ! Calculate the gas velocity direction
+   vel_gas_direction = vel_gas / (vel_gas_mag + tiny(0.0_dp))
+
+   ! Compute the drag force
+   if(mach.lt.0.01)then
+      I = mach/3.0d0
+   else if(abs(mach-1).lt.0.01)then
+      I = 0.5*(0.5d0*log((mach+0.01)**2 - 1.0d0 + tiny(0.0_dp)) + 4.0d0 +  0.5d0*log((1.0d0+mach-0.01)/(1.0d0-mach+0.01+tiny(0.0_dp))) - mach+0.01)
+   else
+      ! Value for log(Lambda) taken from Beckmann+2018
+      I = 0.5d0*log(mach**2 - 1.0d0 + tiny(0.0_dp)) + 4.0d0
+   end if
+   drag_force = -I * 4.0d0*pi *factG**2 * p%mp(ipart)**2 *rho_inf / vel_gas_mag**2
+
+   ! Update the velocity of the sink due to the gas
+   p%vp(ipart,1:ndim) = p%vp(ipart,1:ndim) - drag_force * vel_gas(1:ndim) * s%g%dtnew(ilevel)
+
+end subroutine dynamical_friction
 
 !##############################################################################
 !##############################################################################
