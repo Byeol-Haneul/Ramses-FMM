@@ -198,27 +198,21 @@ subroutine output_rtinfo(r, g, filename)
 
   ! Write run parameters
   write(ilun,'("nrtvar       = ", I11)') nrtvar
-  !write(ilun,'("nion         = ", I11)') nion
   write(ilun,'("nrtgrp       = ", I11)') nrtgrp
-  !write(ilun,'("iion         = ", I11)') r%iions
-  write(ilun,*)
+  write(ilun,'("nion         = ", I11)') nion
+  write(ilun,'("iion         = ", I11)') r%iions
 
   ! Write cooling parameters
   write(ilun,'("x_h          = ", E23.15)') r%x_h
   write(ilun,'("y_he         = ", E23.15)') r%y_he
-  write(ilun,*)
 
   ! Write physical parameters
   write(ilun,'("unit_np      = ", E23.15)') scale_np
   write(ilun,'("unit_fp      = ", E23.15)') scale_fp
-  write(ilun,'("rt_c_fraction= ", E23.15)') r%rt_c_fraction
+  write(ilun,'("rt_c_fraction= ", 100(E15.7))') r%rt_c_fraction
   write(ilun,*)
 
-  ! Write polytropic parameters
-  write(ilun,'("n_star       = ", E23.15)') r%eos_nH
-  write(ilun,'("T2_star      = ", E23.15)') r%eos_T2
-  write(ilun,'("g_star       = ", E23.15)') r%eos_index
-  write(ilun,*)
+  ! Write photon group properties
   call write_group_props(r, .false., ilun)
 
   close(ilun)
@@ -242,7 +236,7 @@ subroutine write_group_props(r, update, lun)
   integer :: ip, lun
 !------------------------------------------------------------------------
   if (.not. update) then
-     write(lun,*) 'Photon group properties------------------------------ '
+     write(lun,*) 'Photon group properties=------------------------------ '
   else
      write(lun,*) 'Photon properties have been changed to--------------- '
   end if
@@ -255,7 +249,7 @@ subroutine write_group_props(r, update, lun)
      write(lun, 905) r%group_csn(ip,:)
      write(lun, 906) r%group_cse(ip,:)
   end do
-  write (lun,*) '-------------------------------------------------------'
+  write (lun,*) '=-----------------------------------------------------'
 
 901 format ('  groupL0  [eV]  = ', 20f12.3)
 902 format ('  groupL1  [eV]  = ', 20f12.3)
@@ -263,7 +257,7 @@ subroutine write_group_props(r, update, lun)
 904 format ('  egy      [eV]  = ', 1pe12.3)
 905 format ('  csn    [cm^2]  = ', 20(1pe12.3))
 906 format ('  cse    [cm^2]  = ', 20(1pe12.3))
-907 format ('  ---Group', I2)
+907 format ('  --=Group', I2)
 
 end subroutine write_group_props
 

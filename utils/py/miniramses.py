@@ -752,6 +752,7 @@ class Cell:
         self.x = np.empty(shape=(nndim,0))
         self.u = np.empty(shape=(nnvar,0))
         self.dx = np.empty(shape=(0))
+        self.level = np.empty(shape=(0),dtype=np.int8)
 
 def rd_cell(nout,**kwargs):
     """This function reads RAMSES AMR and hydro files (unformatted Fortran binary) 
@@ -775,6 +776,7 @@ def rd_cell(nout,**kwargs):
             c.x: coordinates of the cells. c.x[0] gives the x coordinate as a numpy array.
             c.u: hydro variables in each cell. For example, c.u[0] gives the gas density as a numpy array.
             c.dx: array containing the individual AMR cell sizes.
+            c.level: refinement levels of cells.
 
     Example:
         import miniramses as ram
@@ -832,6 +834,8 @@ def rd_cell(nout,**kwargs):
                 c.u = np.append(c.u,uc,axis=1)
                 dd = np.ones(nc)*dx
                 c.dx = np.append(c.dx,dd)
+                dd = np.ones(nc,dtype=np.int8) * ilev
+                c.level = np.append(c.level,dd)
 
     # Filtering cells
     if ( not (center is None)  and not (radius is None) ):
@@ -852,12 +856,14 @@ def rd_cell(nout,**kwargs):
         c.u  = c.u[:,r < radius]
         c.x  = c.x[:,r < radius]
         c.dx = c.dx[r < radius]
+        c.level = c.level[r < radius]
 
     if(ndim==1):
         c.x = c.x[0]
         ind = np.argsort(c.x)
         c.x = c.x[ind]
         c.dx = c.dx[ind]
+        c.level = c.level[ind]
         for  ivar in range(0,nvar):
             c.u[ivar]=c.u[ivar,ind]
         
@@ -872,6 +878,7 @@ def save_cell(c,filename):
         np.save(f,c.dx)
         np.save(f,c.x)
         np.save(f,c.u)
+        np.save(f,c.level)
 
 def load_cell(filename):
 
@@ -886,6 +893,7 @@ def load_cell(filename):
         c.dx = np.append(c.dx,np.load(f))
         c.x  = np.append(c.x, np.load(f),axis=1)
         c.u  = np.append(c.u, np.load(f),axis=1)
+        c.level  = np.append(c.level, np.load(f),axis=1)
 
     return c
 
@@ -991,6 +999,37 @@ def rd_info(nout,**kwargs):
     i.unit_l=info[17][1]
     i.unit_d=info[18][1]
     i.unit_t=info[19][1]
+
+    rd_rt_info = kwargs.get("rt",False)
+    if rd_rt_info:
+      if(backup):
+          rt_filename = path+"/backup_"+car1+"/rt_info.txt"
+      else:
+          rt_filename = path+"/output_"+car1+"/rt_info.txt"
+
+      rt_info=ascii.read(rt_filename,delimiter="=",format='no_header')
+
+      i.nrtvar = int(rt_info[0][1])
+      i.nrtgrp = int(rt_info[1][1])
+      i.nion   = int(rt_info[2][1])
+      i.iion   = int(rt_info[3][1])
+      i.x_h    = rt_info[4][1]
+      i.y_he   = rt_info[5][1]
+      i.unit_np= rt_info[6][1]
+      i.unit_fp= rt_info[7][1]
+      i.rt_c_fraction= np.array(rt_info[8][1].split(),dtype=float)
+      i.groupL0 = np.array(rt_info[10][1].split(),dtype=float)
+      i.groupL1 = np.array(rt_info[11][1].split(),dtype=float)
+      i.group_egy = np.zeros(i.nrtgrp)
+      i.group_csn = np.zeros((i.nrtgrp, i.nion))
+      i.group_cse = np.zeros((i.nrtgrp, i.nion))
+
+      for igrp in range(i.nrtgrp):
+        iline = 14 + igrp*4
+        print(iline,igrp)
+        i.group_egy[igrp] = rt_info[iline][1]
+        i.group_csn[igrp,:] = np.array(rt_info[iline+1][1].split(),dtype=float)
+        i.group_cse[igrp,:] = np.array(rt_info[iline+2][1].split(),dtype=float)
 
     return i
 
