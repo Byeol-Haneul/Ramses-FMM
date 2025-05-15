@@ -35,7 +35,8 @@ subroutine condinit(r,g,x,q,dx,nn)
 #define DOUBLEMACH 3
 #define OT 4
 #define PONO 5
-#define CURRENTSHEET 6
+#define ABC 6
+#define CURRENTSHEET 7
 
   integer::i
 #if INIT==COEUR
@@ -52,6 +53,8 @@ subroutine condinit(r,g,x,q,dx,nn)
   real(dp)::pi,xc,yc
 #elif INIT==PONO
   real(dp)::xx,yy,zz,vx,vy,vz,rr,tt,omega,R0,twopi
+#elif INIT==ABC
+  real(dp)::xx,yy,zz,vx,vy,vz,A0,twopi
 #elif INIT==CURRENTSHEET
   real(dp)::pi,xc,yc,beta,v0
 #else
@@ -214,6 +217,24 @@ subroutine condinit(r,g,x,q,dx,nn)
         vx=0.0
         vy=0.0
      endif
+     q(i,2)=vx
+     q(i,3)=vy
+     q(i,4)=vz
+  end do
+#endif
+
+#if INIT==ABC
+  A0=1.0
+  twopi=2d0*ACOS(-1d0)
+  do i=1,nn
+     q(i,1)=1.0
+     q(i,5)=1.0*(r%gamma-1.0)
+     xx=x(i,1)-r%boxlen/2.
+     yy=x(i,2)-r%boxlen/2.
+     zz=x(i,3)-r%boxlen/2.
+     vx=A0*(cos(twopi*yy)+sin(twopi*zz))
+     vy=A0*(sin(twopi*xx)+cos(twopi*zz))
+     vz=A0*(cos(twopi*xx)+sin(twopi*yy))
      q(i,2)=vx
      q(i,3)=vy
      q(i,4)=vz

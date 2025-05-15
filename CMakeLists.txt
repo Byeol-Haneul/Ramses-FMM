@@ -208,7 +208,7 @@ set(fortran_files
 
   star/star_formation.f90
   sink/sink_formation.f90
-  sink/sink_accretion.f90
+  sink/sink_evolution.f90
 
   feedback/feedback.f90
   feedback/rt_star_feedback.f90

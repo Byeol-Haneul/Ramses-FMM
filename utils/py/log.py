@@ -32,9 +32,13 @@ try:
 except Exception as e:
     print("no magnetic energy")
     do_mag=False
-
-lines = ascii.read("/tmp/time.txt")
-time = lines["col2"]
+do_time=True
+try:
+    lines = ascii.read("/tmp/time.txt")
+    time = lines["col2"]
+except Exception as e:
+    print("no time")
+    do_time=False
 lines = ascii.read("/tmp/dt.txt")
 dt = lines["col2"]
 lines = ascii.read("/tmp/aexp.txt")
@@ -54,10 +58,17 @@ if do_mag:
         plt.savefig(args.out)
     plt.show()
 
-if args.sym:
-    plt.plot(time,dt,"o")
+if do_time:
+    if args.sym:
+        plt.plot(time,dt,"o")
+    else:
+        plt.plot(time,dt)
 else:
-    plt.plot(time,dt)
+    if args.sym:
+        plt.plot(aexp,dt,"o")
+    else:
+        plt.plot(aexp,dt)
+    
 if args.log:
     plt.yscale("log")
 plt.xlabel('time')
