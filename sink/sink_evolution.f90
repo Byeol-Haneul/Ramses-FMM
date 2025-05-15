@@ -252,6 +252,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    real(dp)::d_acc,m_gas,bondi_mass
    real(dp)::weighted_bondi,dMdt_freefall,t_ff
    real(dp)::div_cell,total_divergence,div_right,div_left
+#ifdef MHD
+   real(dp)::bx,by,bz,emag
+#endif
 
 #ifdef HYDRO
 #if NDIM==3
@@ -708,6 +711,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    real(dp),dimension(1:ndim,1:twotondim)::xCIC
    integer,dimension(1:ndim,1:twotondim)::ckeyCIC
    real(dp),dimension(1:twotondim)::volCIC
+#ifdef MHD
+   real(dp)::bx,by,bz,emag
+#endif
 
 #ifdef HYDRO
 #if NDIM==3
