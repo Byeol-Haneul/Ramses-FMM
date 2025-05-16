@@ -323,6 +323,7 @@ module amr_commons
      logical::static_sink=.false.
      integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
      logical::fix_sink_mass = .false. 
+     logical::drag_sink = .false. ! Whether to use dynamical friction for black hole dynamics
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
@@ -344,7 +345,7 @@ module amr_commons
      real(dp)::epsilon_rad = 0.1d0 ! Radiative efficiency
      real(dp)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
      real(dp)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
-     real(dp)::kin_mass_loading = 100d0 ! Mass loading factor of the jet
+     real(dp)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
      real(dp)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
      real(dp)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
      real(dp)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)

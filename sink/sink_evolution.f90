@@ -39,8 +39,7 @@ end subroutine r_sink_evolution
 subroutine sink_evolution(s,p,ilevel,macc_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
-   !use hydro_parameters, only: nvar, nener
-   !use amr_commons, only: nbor,oct
+   use hydro_parameters, only: nvar, nener
    use ramses_commons, only: ramses_t
    use pm_commons, only: part_t
    use params_module
@@ -70,8 +69,10 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    real(dp),dimension(1:ndim)::x_rel
    real(dp)::r_rel,dmacc_loc,dmjet_loc
    type(msg_large_realdp)::dummy_large_realdp
-   real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf
-   real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc
+   real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf,rho_av_all
+   real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
+   real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc,vel_gas
+   real(dp),dimension(6+nener,nvar)::passive_acc
 
 #ifdef HYDRO
 #if NDIM==3
@@ -114,7 +115,6 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
 
    ! Compute number of cells within B-spline region
    nBHnei = int(r%sink_b_spline_order**ndim)
-   !allocate(xBHnei(1:ndim,1:nBHnei),ckeynei(1:ndim,1:nBHnei),vol(1:nBHnei))
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Prepare for feedback
@@ -135,7 +135,6 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
             end do
          end do
       end do
-      !allocate(xBH_fb_nei(1:ndim,1:nBH_fb_nei),ckey_fb_nei(1:ndim,1:nBH_fb_nei),weight_fb_nei(1:nBH_fb_nei))
 
       ! Jet geometry safety net
       jet_angle = max(tiny(0.0d0),r%agn_jet_opening_angle)
@@ -158,22 +157,22 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
    macc_loc=0
    do ipart = p%headp(ilevel), p%tailp(ilevel)
-      ! Skip young sinks if needed
-      !if((g%t - p%tp(ipart)).lt.r%t_start_black_hole)then
-      !   write(*,*)'Skipping: ',ipart,p%tp(ipart),g%t - p%tp(ipart),r%t_start_black_hole
-      !   cycle
-      !end if
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink Accretion
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+      call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas,vel_gas,rho_av_all)
       macc_loc = macc_loc + dmacc_loc
+
+      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+      ! Dynamics
+      !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+      call dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
       ! Sink/AGN Feedback
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmjet_loc)
+      call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,m_acc,e_acc,x_acc,p_acc,passive_acc,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmjet_loc)
       macc_loc = macc_loc - dmjet_loc
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -189,9 +188,6 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
 
    end do ! End loop over ipart
 
-   !deallocate(xBHnei,ckeynei,vol)
-   !if(agn)deallocate(xBH_fb_nei,ckey_fb_nei,weight_fb_nei)
-
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Close cache
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -205,7 +201,7 @@ end subroutine sink_evolution
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas,vel_gas,rho_av_all)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -214,12 +210,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    use pm_commons, only: part_t,cross
    use params_module
    use nbors_utils
-   !use cache_commons
-   !use cache
-   !use marshal, only: pack_fetch_refine,unpack_fetch_refine
-   !use boundaries, only: init_bound_refine
-   !use godunov_fine_module, only: init_flush_godunov,pack_flush_godunov,unpack_flush_godunov
-   !use hilbert
    implicit none
    type(ramses_t)::s
    type(part_t)::p
@@ -227,7 +217,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    real(dp)::scale_l,scale_t,scale_d,factG
    real(dp)::dx_loc,vol_loc
    real(dp)::macc_loc,lambda_sonic
-   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
+   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,e_acc,rho_inf,cs_gas,rho_av_all
+   real(dp),dimension(1:ndim)::p_acc,l_acc,vel_gas
+   real(dp),dimension(6+nener,nvar)::passive_acc
    !==================================================================
    ! This is the RAMSES routine for sink (black hole) particle accretion.
    ! For now, it is focused on a simple Bondi-Hoyle-Lyttleton accretion scheme.
@@ -244,7 +236,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar
    real(dp)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
    real(dp)::weight,r_rel
-   real(dp),dimension(1:ndim)::vv,v_rel,x_acc,p_acc,l_acc,vel_gas
+   real(dp),dimension(1:ndim)::vv,v_rel,x_acc
    type(oct),pointer::gridn
    real(dp)::d_acc,m_gas,bondi_mass
    real(dp)::weighted_bondi,dMdt_freefall,t_ff
@@ -268,8 +260,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-     ! Initialise B-spline interpolation
-     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   ! Initialise B-spline interpolation
+   !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    if      (r%sink_b_spline_order==2)then
       call sink_B_spline_weights_CIC(s,xcen(1:ndim),xBHnei,ckeynei,vol,ilevel)
    else if (r%sink_b_spline_order==3)then
@@ -283,7 +275,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    
    ! Initialise sink information at zero
    rho_gas=0d0; vel_gas=0d0; cs_gas=0d0; m_gas=0d0; weighted_bondi=0d0; total_divergence=0d0
-
+   rho_av_all=0d0
+   
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Collect local gas information
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -340,6 +333,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       vel_gas(1:ndim)  = vel_gas(1:ndim) + vv(1:ndim) * weight
       cs_gas           = cs_gas          + cs         * weight
       m_gas            = m_gas           + d          * weight * vol_loc
+      rho_av_all       = rho_av_all      + gridn%rho(icelln) * weight
 
       if(r%accretion_type==2)then
          ! Compute local mass divergence for Bleuler+14 flux accretion
@@ -372,14 +366,12 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
             div_left = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/dx_loc
 
             ! Compute the 'Total' contribution
-            div_cell = (div_right - div_left)/2.0d0
+            div_cell = (div_right - div_left)
          end do
-         total_divergence = total_divergence + div_cell!*weight
+         total_divergence = total_divergence + div_cell
       end if
 
       ! Compute local bondi rate
-      !!! Compute Bondi boosts here (e.g. c_s boost due to unresolved fluctuations)
-      ! Perhaps we should model these unresolved fluctuations with a log-normal distribution, with uncertainty given by sigma_v (as in star-formation routines)
       if(r%use_local_bondi_rate)then
          v_rel(1:ndim) = vv(1:ndim) - p%vp(ipart,1:ndim)
          if(r%bondi_use_vrel)then
@@ -388,13 +380,12 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
             v_bondi    = cs
          end if
          if(r%bondi_use_gas_mass)then
-            bondi_mass = p%mp(ipart) + d*vol_loc ! can add a check for m_gas > M_sink
+            bondi_mass = p%mp(ipart) + d*vol_loc
          else
             bondi_mass = p%mp(ipart)
          end if
          r2_sink     = (factG * bondi_mass / v_bondi**2)**2
          if(r%use_rho_inf)then
-            !rho_inf = d / (bondi_alpha(dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0)) ! <<< This is the old approach, works fairly well but breaks down at high resolutions
             r_rel = norm2(x_rel(:))*dx_loc 
             rho_inf = d / (bondi_alpha(r_rel/(r2_sink+tiny(0.0_dp))**0.5d0))
          else
@@ -425,7 +416,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
          ! Bondi mass
          if(r%bondi_use_gas_mass)then
-            bondi_mass = p%mp(ipart) + m_gas ! can add a check for m_gas > M_sink
+            bondi_mass = p%mp(ipart) + m_gas
          else
             bondi_mass = p%mp(ipart)
          end if
@@ -451,7 +442,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       dMBH_overdt = -1.0*total_divergence*vol_loc
 
       ! Applying the correction from Bleuler+14
-      dMBH_overdt = dMBH_overdt * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
+      if(r%sink_density_threshold.gt.0.0)dMBH_overdt = dMBH_overdt * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
+
+      if(r%verbose_sink)write(*,*)'Flux: ',dMBH_overdt
 
    !!! Compute threshold accretion rate   
    else if(r%accretion_type==3)then
@@ -480,12 +473,16 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       dMBH_overdt = exp(g%t - p%tp(ipart) - r%t_start_black_hole) * dMBH_overdt
    end if
 
+   if(r%manual_accretion_rate.gt.0.0d0)then
+      dMBH_overdt = r%manual_accretion_rate * dMEd_overdt
+   end if
+
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Accrete from local cells
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
    ! Loop over all cells in the accretion region, proceeding with accretion
-   m_acc=0.0d0; x_acc=0.0d0; p_acc=0.0d0; l_acc=0.0d0
+   m_acc=0.0d0; e_acc = 0.0d0; x_acc=0.0d0; p_acc=0.0d0; l_acc=0.0d0; passive_acc=0.0d0
    do j = 1, nBHnei
 
       ! Compute neighbouring cell coordinates
@@ -533,11 +530,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
       ! Get accreted mass for this cell
       d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
-      ! Acount for the jet mass (if in jet mode)
-      ! This will then be re-added as required during feedback
-      if(r%agn.and.(dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
-         d_acc = d_acc*(1.0d0 + r%kin_mass_loading/dble(nBHnei))
-      end if
 
       ! Ensure that the accreted amount is positive
       d_acc = max(d_acc, 0.0_dp)
@@ -554,24 +546,25 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
       !!! NOTE: We do not accrete non-thermal energies 
 
-      !!! Accretion onto the black hole
-      ! First, account for radiated/jet mass-energy
-      if(r%agn)then
-         d_acc = d_acc*(1 - r%epsilon_rad)
-         if((dMBH_overdt/dMEd_overdt.lt.r%agn_fbk_mode_switch_threshold))then
-            d_acc = d_acc/(1.0d0 + r%kin_mass_loading/dble(nBHnei))
-         end if
-      end if
-
       ! Proceed with accretion
       ! Accreted mass
       m_acc = m_acc + d_acc * vol_loc
+      ! Accreted energy
+      e_acc = e_acc + d_acc * e * vol_loc
       ! Accreted relative center of mass
       x_acc(1:ndim) = x_acc(1:ndim) + d_acc * x_rel(1:ndim) * vol_loc * dx_loc
       ! Accreted relative momentum
       p_acc(1:ndim) = p_acc(1:ndim) + d_acc * vv(1:ndim)  * vol_loc
       ! Accreted relative angular momentum
       l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(x_rel(1:ndim), vv(1:ndim) - p%vp(ipart,1:ndim)) * vol_loc * dx_loc
+      ! Passive scalars
+#if NVAR>NENER+6
+      if(r%agn)then
+      do ivar=6+nener,nvar
+         passive_acc(ivar) = passive_acc(ivar) + d_acc * gridn%uold(icelln,ivar) / d * vol_loc
+      end do
+      end if
+#endif
    end do ! End loop over j
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -638,7 +631,7 @@ end subroutine sink_accretion
 !##############################################################################
 !##############################################################################
 !##############################################################################
-subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc)
+subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,m_acc,e_acc,x_acc,p_acc,passive_acc,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
@@ -655,11 +648,19 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    real(dp)::scale_v
    real(dp)::dMBH_overdt,dMEd_overdt,tan_theta
    real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc
+   real(dp)::m_acc,e_acc
+   real(dp),dimension(6+nener,nvar)::passive_acc
+   real(dp),dimension(1:ndim)::x_acc,p_acc
    !==================================================================
    ! This is the RAMSES routine for AGN feedback
    ! For now, it is focused on a simple two-regime model to deploy quasar and radio mode feedback
    ! depending on the accretion rate.
    ! Written by Nicholas Choustikov (Apr 2025)
+
+   ! NOTE: We now aim to return mass and linear momentum accounting for 
+   ! (epsilon_r + kin_mass_loading)/(1 + kin_mass_loading) of the accreted quantities.
+   ! This should ensure that all conserved quantities are maintained.
+   ! See also Bourne+2017 for a similar approach.
    !==================================================================
    ! Local variables
    real(dp)::rr,x,y,z,rrad
@@ -680,6 +681,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    real(dp),dimension(1:ndim,1:twotondim)::xCIC
    integer,dimension(1:ndim,1:twotondim)::ckeyCIC
    real(dp),dimension(1:twotondim)::volCIC
+#ifdef MHD
+   real(dp)::bx,by,bz,emag
+#endif
 
 #ifdef HYDRO
 #if NDIM==3
@@ -780,17 +784,18 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
 
       ! Compute the global energy/momenta needed
       ! NOTE: All done here in terms of canonical units (i.e. mass, not density)
+      ! NOTE: Presently we assume that no angular momentum is dumped (i.e. the black hole is maximally spinning)
+      fbk_mass_agn=0.0d0; fbk_mom_agn=0.0d0; fbk_ener_agn=0.0d0
       if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
-         !!! Quasar mode (energy)
+         !!! Quasar mode
          fbk_ener_agn = r%epsilon_therm_quasar*r%epsilon_rad*acc_ratio*dMEd_overdt*g%dtnew(ilevel)*(c_cgs/scale_v)**2
       else
-         !!! Radio mode (mass,momentum,energy)
-         jet_mass     = r%kin_mass_loading*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
-         jet_speed    = (2*r%epsilon_rad*r%epsilon_therm_jet/r%kin_mass_loading)**0.5d0*c_cgs ! in cm/s 
+         !!! Radio mode
+         jet_mass     = r%kin_mass_loading*(1-r%epsilon_rad)/(1+r%kin_mass_loading)*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
+         jet_speed    = (2.0d0*r%epsilon_rad*r%epsilon_therm_jet/r%kin_mass_loading)**0.5d0*c_cgs ! in cm/s 
          
          fbk_mass_agn = jet_mass
          fbk_mom_agn  = jet_mass * jet_speed / scale_v
-         !fbk_ener_agn = r%epsilon_therm_jet*r%epsilon_rad*jet_mass/r%kin_mass_loading*(c_cgs/scale_v)**2
       end if
 
       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -805,7 +810,6 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          do j=1,twotondim              
          ! Compute neighbouring cell coordinates
          xnei(1:ndim) = xCIC(1:ndim,j) 
-         !xnei(1:ndim) = xBH_fb_nei(1:ndim,iBHnei) ! For now we use this, as otherwise some of the cells do overlap with the central cell
          x_rel(1:ndim) = xnei(1:ndim) - xcen(1:ndim)
 
          ! Periodic boundary conditions
@@ -825,61 +829,133 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          ! Get the local gas properties
          d          = max(gridn%uold(icelln,1),r%smallr)
          vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
-         !e          =     gridn%uold(icelln,5)/d
+         e          =     gridn%uold(icelln,5)/d
 
          ! Get the weight
          weight = volCIC(j) * weight_fb_nei(iBHnei)
+         if(r%agn_use_mass_weighting)weight=weight*d/rho_gas_fb
 
          !!! Proceed with the feedback
          if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
             !!! Quasar mode (energy)
             ! Get the local feedback quantities (accounting for weightings)
-            fbk_ener_agn_loc = fbk_ener_agn*weight
-            if(r%agn_use_mass_weighting)fbk_ener_agn_loc=fbk_ener_agn_loc*(d/rho_gas_fb)
+            fbk_ener_agn_loc = fbk_ener_agn * weight
 
             ! Conversion to conserved quantities
-            fbk_ener_agn_loc = fbk_ener_agn_loc*d/vol_loc
+            fbk_ener_agn_loc = fbk_ener_agn_loc * d / vol_loc
 
             ! Now we inject the actual feedback
-            gridn%unew(icelln,5)          = gridn%unew(icelln,5)          + fbk_ener_agn_loc  
+            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_ener_agn_loc
+            
          else
             !!! Radio mode (mass,momentum,energy)
             ! Get the local feedback quantities (accounting for weightings)
             fbk_mass_agn_loc = fbk_mass_agn * weight
             fbk_mom_agn_loc  = fbk_mom_agn  * weight
-            !fbk_ener_agn_loc = fbk_ener_agn * weight
-            if(r%agn_use_mass_weighting)then
-               fbk_mass_agn_loc = fbk_mass_agn_loc * (d/rho_gas_fb)
-               fbk_mom_agn_loc  = fbk_mom_agn_loc  * (d/rho_gas_fb)
-               !fbk_ener_agn_loc = fbk_ener_agn_loc * (d/rho_gas_fb)
-            end if
 
             ! Conversion to conserved quantities
-            fbk_mass_agn_loc = fbk_mass_agn_loc/vol_loc
-            fbk_mom_agn_loc  = fbk_mom_agn_loc/vol_loc
-            !fbk_ener_agn_loc = fbk_ener_agn_loc*(d+fbk_mass_agn_loc)/vol_loc
-
+            fbk_mass_agn_loc = fbk_mass_agn_loc / vol_loc
+            fbk_mom_agn_loc  = fbk_mom_agn_loc  / vol_loc
+            
             ! Now we inject the actual feedback (note, all energy is due to work done)
-            gridn%unew(icelln,1)          = gridn%unew(icelln,1)          + fbk_mass_agn_loc
-            gridn%unew(icelln,2:4)        = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
-            gridn%unew(icelln,5)          = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+            gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + fbk_mass_agn_loc
+            gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
+            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
 
-            ! If we want to have a separate reservoir
-            !gridn%unew(icelln,ndim+2)     = gridn%unew(icelln,ndim+2)     + fbk_ener_agn_loc
-
-            ! Update total ejected mass
-            mjet_loc=mjet_loc+fbk_mass_agn_loc*vol_loc
          end if
 
+         ! Account for conserved quantities
+         gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + m_acc*r%epsilon_rad*weight/vol_loc
+         gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + p_acc(1:ndim)*r%epsilon_rad*weight/vol_loc
+         gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + e_acc*r%epsilon_rad*weight/vol_loc
+         ! Handle the passive scalars
+#if NVAR>NENER+6
+         do ivar=6+nener,nvar
+            gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*r%epsilon_rad*weight/vol_loc
+         end do
+#endif
+
          ! All of the RT stuff can come here.
+
          end do ! End loop over j
       end do ! End loop over nBH_fb_nei
+
+      ! Remove 'radiated' quantities from the BH which was acting as a reservoir
+      ! NOTE: Angular momentum is assumed to stay on the sink here
+      if(.not.p%static)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) - x_acc(1:ndim)*r%epsilon_rad ) / ( p%mp(ipart) - m_acc*r%epsilon_rad )
+      p%vp(ipart,1:ndim)                  = ( p%mp(ipart) * p%vp(ipart,1:ndim) - p_acc(1:ndim)*r%epsilon_rad ) / ( p%mp(ipart) - m_acc*r%epsilon_rad )
+      if(.not.r%fix_sink_mass)p%mp(ipart) =   p%mp(ipart) - m_acc*r%epsilon_rad
+
+      ! Save accreted mass to total
+      mjet_loc = mjet_loc + m_acc*r%epsilon_rad + fbk_mass_agn
+
+      ! Adjust for the impact of this re-radiated mass
+      m_acc = (1.0d0-r%epsilon_rad)*m_acc + fbk_mass_agn
+      e_acc = e_acc*(1.0d0-r%epsilon_rad)
+      p_acc = p_acc*(1.0d0-r%epsilon_rad)
+      x_acc = x_acc*(1.0d0-r%epsilon_rad)
+      passive_acc = passive_acc*(1.0d0-r%epsilon_rad)
+
    end if ! End if ok_blast_agn
 
    end associate
 #endif
 #endif
 end subroutine AGN_feedback
+
+!##############################################################################
+!##############################################################################
+!##############################################################################
+!##############################################################################
+
+subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
+   use constants
+   use amr_parameters, only: ndim,twotondim,dp
+   use hydro_parameters, only: nvar
+   use ramses_commons, only: ramses_t
+   use pm_commons, only: part_t,cross
+   use params_module
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ipart,ilevel
+   real(dp)::rho_av_all,cs_gas,factG
+   real(dp),dimension(1:ndim)::vel_gas
+   !==================================================================
+   ! This is the RAMSES routine for dynamical friction, with the goal
+   ! of informing the dynamics of the black hole.
+   ! Here, we follow the approach of Ostriker 1999.
+   ! Written by Nicholas Choustikov (Apr 2025)
+
+   ! See also Beckmann+2018 for a similar approach.
+   !==================================================================
+   real(dp)::mach,vel_gas_mag,I,drag_force
+   real(dp),dimension(1:ndim)::vel_gas_direction
+
+   if(.not.s%r%drag_sink)return
+
+   ! Calculate the mach number in the local gas
+   vel_gas_mag = norm2(vel_gas)
+   mach = vel_gas_mag/cs_gas
+
+   ! Calculate the gas velocity direction
+   vel_gas_direction(1:ndim) = vel_gas(1:ndim) / (vel_gas_mag + tiny(0.0_dp))
+
+   ! Compute the drag force
+   if(mach.lt.0.01)then
+      I = mach/3.0d0
+   else if(abs(mach-1).lt.0.01)then
+      I = 0.5*(0.5d0*log((mach+0.01)**2 - 1.0d0 + tiny(0.0_dp)) + 4.0d0 +  0.5d0*log((1.0d0+mach-0.01)/(1.0d0-mach+0.01+tiny(0.0_dp))) - mach+0.01)
+   else
+      ! Value for log(Lambda) taken from Beckmann+2018
+      I = 0.5d0*log(mach**2 - 1.0d0 + tiny(0.0_dp)) + 4.0d0
+   end if
+   drag_force = -I * 4.0d0*pi *factG**2 * p%mp(ipart)**2 * rho_av_all / vel_gas_mag**2
+
+   ! Update the velocity of the sink due to the gas
+   p%vp(ipart,1:ndim) = p%vp(ipart,1:ndim) - drag_force * vel_gas_direction(1:ndim) * s%g%dtnew(ilevel)
+
+end subroutine dynamical_friction
 
 !##############################################################################
 !##############################################################################

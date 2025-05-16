@@ -387,6 +387,7 @@ subroutine m_read_params(pst)
   logical::static_sink=.false.
   integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
   logical::fix_sink_mass = .false. 
+  logical::drag_sink = .false. ! Whether to use dynamical friction for black hole dynamics
 
   ! Black hole parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi, 2: Flux
@@ -408,7 +409,7 @@ subroutine m_read_params(pst)
   real(dp)::epsilon_rad = 0.1d0 ! Radiative efficiency
   real(dp)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
   real(dp)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
-  real(dp)::kin_mass_loading = 100d0 ! Mass loading factor of the jet
+  real(dp)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
   real(dp)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
   real(dp)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
   real(dp)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
@@ -536,7 +537,7 @@ subroutine m_read_params(pst)
   namelist/sink_params/sink,nsinkmax,nsinktot,rho_type_sink,sink_descent,fudge_descent &
        & ,sink_relevance_threshold,sink_density_threshold,sink_saddle_threshold &
        & ,sink_mass_threshold,sink_purity_threshold,sink_fraction_threshold &
-       & ,sink_form,verbose_sink,sink_dump
+       & ,sink_form,verbose_sink,sink_dump,drag_sink
   ! Black Hole accretion parameters
   namelist/sink_accretion_params/accretion_type,acc_sink_boost,bondi_use_vrel,use_rho_inf &
        & ,eddington_cap,sink_b_spline_order,bondi_use_gas_mass,use_bondi_lambda &
@@ -1333,6 +1334,7 @@ subroutine m_read_params(pst)
   s%r%static_sink=static_sink
   s%r%output_sink_fine=output_sink_fine
   s%r%fix_sink_mass=fix_sink_mass
+  s%r%drag_sink=drag_sink
 
   s%r%accretion_type = accretion_type
   s%r%acc_sink_boost = acc_sink_boost
