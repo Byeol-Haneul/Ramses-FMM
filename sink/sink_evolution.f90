@@ -540,10 +540,11 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       gridn%unew(icelln,5)          = gridn%unew(icelln,5)          - d_acc * e
 
       ! Accrete passive scalars
+#if NVAR>5+NENER
       do ivar=6+nener,nvar
          gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar) - d_acc*gridn%uold(icelln,ivar)/d
       end do
-
+#endif
       !!! NOTE: We do not accrete non-thermal energies 
 
       ! Proceed with accretion
@@ -874,7 +875,6 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
             gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*r%epsilon_rad*weight/vol_loc
          end do
 #endif
-
          ! All of the RT stuff can come here.
 
          end do ! End loop over j
