@@ -72,7 +72,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf,rho_av_all
    real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
    real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc,vel_gas
-   real(dp),dimension(6+nener,nvar)::passive_acc
+   real(dp),dimension(1:nvar)::passive_acc
 
 #ifdef HYDRO
 #if NDIM==3
@@ -219,7 +219,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    real(dp)::macc_loc,lambda_sonic
    real(dp)::dMBH_overdt,dMEd_overdt,m_acc,e_acc,rho_inf,cs_gas,rho_av_all
    real(dp),dimension(1:ndim)::p_acc,l_acc,vel_gas
-   real(dp),dimension(6+nener,nvar)::passive_acc
+   real(dp),dimension(1:nvar)::passive_acc
    !==================================================================
    ! This is the RAMSES routine for sink (black hole) particle accretion.
    ! For now, it is focused on a simple Bondi-Hoyle-Lyttleton accretion scheme.
@@ -650,7 +650,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    real(dp)::dMBH_overdt,dMEd_overdt,tan_theta
    real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc
    real(dp)::m_acc,e_acc
-   real(dp),dimension(6+nener,nvar)::passive_acc
+   real(dp),dimension(1:nvar)::passive_acc
    real(dp),dimension(1:ndim)::x_acc,p_acc
    !==================================================================
    ! This is the RAMSES routine for AGN feedback
