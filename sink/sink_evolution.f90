@@ -945,7 +945,7 @@ subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
    mach = vel_gas_mag/cs_gas
 
    ! Calculate the gas velocity direction
-   vel_gas_direction = vel_gas / (vel_gas_mag + tiny(0.0_dp))
+   vel_gas_direction(1:ndim) = vel_gas(1:ndim) / (vel_gas_mag + tiny(0.0_dp))
 
    ! Compute the drag force
    if(mach.lt.0.01)then
@@ -959,7 +959,7 @@ subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
    drag_force = -I * 4.0d0*pi *factG**2 * p%mp(ipart)**2 * rho_av_all / vel_gas_mag**2
 
    ! Update the velocity of the sink due to the gas
-   p%vp(ipart,1:ndim) = p%vp(ipart,1:ndim) - drag_force * vel_gas(1:ndim) * s%g%dtnew(ilevel)
+   p%vp(ipart,1:ndim) = p%vp(ipart,1:ndim) - drag_force * vel_gas_direction(1:ndim) * s%g%dtnew(ilevel)
 
 end subroutine dynamical_friction
 
