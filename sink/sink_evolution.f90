@@ -335,12 +335,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       m_gas            = m_gas           + d          * weight * vol_loc
       rho_av_all       = rho_av_all      + gridn%rho(icelln) * weight
 
-      if(isnan(vv(1)).or.isnan(vv(2)).or.isnan(vv(3)))then
-         write(*,*)'nantest: ',gridn%uold(icelln,1:5)
-         write(*,*)'nantest 2: ', vv
-         write(*,*)'nantest 3: ', x_rel(1:ndim)
-
-      end if
       if(r%accretion_type==2)then
          ! Compute local mass divergence for Bleuler+14 flux accretion
          div_cell = 0
