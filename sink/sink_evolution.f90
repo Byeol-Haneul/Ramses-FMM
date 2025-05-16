@@ -40,7 +40,6 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    use constants
    use amr_parameters, only: ndim,twotondim,dp
    use hydro_parameters, only: nvar, nener
-   !use amr_commons, only: nbor,oct
    use ramses_commons, only: ramses_t
    use pm_commons, only: part_t
    use params_module
@@ -116,7 +115,6 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
 
    ! Compute number of cells within B-spline region
    nBHnei = int(r%sink_b_spline_order**ndim)
-   !allocate(xBHnei(1:ndim,1:nBHnei),ckeynei(1:ndim,1:nBHnei),vol(1:nBHnei))
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Prepare for feedback
@@ -137,7 +135,6 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
             end do
          end do
       end do
-      !allocate(xBH_fb_nei(1:ndim,1:nBH_fb_nei),ckey_fb_nei(1:ndim,1:nBH_fb_nei),weight_fb_nei(1:nBH_fb_nei))
 
       ! Jet geometry safety net
       jet_angle = max(tiny(0.0d0),r%agn_jet_opening_angle)
@@ -190,9 +187,6 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       end if
 
    end do ! End loop over ipart
-
-   !deallocate(xBHnei,ckeynei,vol)
-   !if(agn)deallocate(xBH_fb_nei,ckey_fb_nei,weight_fb_nei)
 
    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    ! Close cache
@@ -384,8 +378,6 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       end if
 
       ! Compute local bondi rate
-      !!! Compute Bondi boosts here (e.g. c_s boost due to unresolved fluctuations)
-      ! Perhaps we should model these unresolved fluctuations with a log-normal distribution, with uncertainty given by sigma_v (as in star-formation routines)
       if(r%use_local_bondi_rate)then
          v_rel(1:ndim) = vv(1:ndim) - p%vp(ipart,1:ndim)
          if(r%bondi_use_vrel)then
@@ -394,13 +386,12 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
             v_bondi    = cs
          end if
          if(r%bondi_use_gas_mass)then
-            bondi_mass = p%mp(ipart) + d*vol_loc ! can add a check for m_gas > M_sink
+            bondi_mass = p%mp(ipart) + d*vol_loc
          else
             bondi_mass = p%mp(ipart)
          end if
          r2_sink     = (factG * bondi_mass / v_bondi**2)**2
          if(r%use_rho_inf)then
-            !rho_inf = d / (bondi_alpha(dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0)) ! <<< This is the old approach, works fairly well but breaks down at high resolutions
             r_rel = norm2(x_rel(:))*dx_loc 
             rho_inf = d / (bondi_alpha(r_rel/(r2_sink+tiny(0.0_dp))**0.5d0))
          else
@@ -431,7 +422,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
          ! Bondi mass
          if(r%bondi_use_gas_mass)then
-            bondi_mass = p%mp(ipart) + m_gas ! can add a check for m_gas > M_sink
+            bondi_mass = p%mp(ipart) + m_gas
          else
             bondi_mass = p%mp(ipart)
          end if
@@ -673,8 +664,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    ! Written by Nicholas Choustikov (Apr 2025)
 
    ! NOTE: We now aim to return mass and linear momentum accounting for 
-   ! (epsilon_r + kin_mass_loading) of the accreted quantities.
+   ! (epsilon_r + kin_mass_loading)/(1 + kin_mass_loading) of the accreted quantities.
    ! This should ensure that all conserved quantities are maintained.
+   ! See also Bourne+2017 for a similar approach.
    !==================================================================
    ! Local variables
    real(dp)::rr,x,y,z,rrad
@@ -824,7 +816,6 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          do j=1,twotondim              
          ! Compute neighbouring cell coordinates
          xnei(1:ndim) = xCIC(1:ndim,j) 
-         !xnei(1:ndim) = xBH_fb_nei(1:ndim,iBHnei) ! For now we use this, as otherwise some of the cells do overlap with the central cell
          x_rel(1:ndim) = xnei(1:ndim) - xcen(1:ndim)
 
          ! Periodic boundary conditions
@@ -895,8 +886,8 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          end do ! End loop over j
       end do ! End loop over nBH_fb_nei
 
-      ! Remove feedback quantities from the BH which was acting as a reservoir
-      ! NOTE: Angular momentum is assumed to stay on the sink
+      ! Remove 'radiated' quantities from the BH which was acting as a reservoir
+      ! NOTE: Angular momentum is assumed to stay on the sink here
       if(.not.p%static)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) - x_acc(1:ndim)*r%epsilon_rad ) / ( p%mp(ipart) - m_acc*r%epsilon_rad )
       p%vp(ipart,1:ndim)                  = ( p%mp(ipart) * p%vp(ipart,1:ndim) - p_acc(1:ndim)*r%epsilon_rad ) / ( p%mp(ipart) - m_acc*r%epsilon_rad )
       if(.not.r%fix_sink_mass)p%mp(ipart) =   p%mp(ipart) - m_acc*r%epsilon_rad
@@ -941,6 +932,8 @@ subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
    ! of informing the dynamics of the black hole.
    ! Here, we follow the approach of Ostriker 1999.
    ! Written by Nicholas Choustikov (Apr 2025)
+
+   ! See also Beckmann+2018 for a similar approach.
    !==================================================================
    real(dp)::mach,vel_gas_mag,I,drag_force
    real(dp),dimension(1:ndim)::vel_gas_direction
