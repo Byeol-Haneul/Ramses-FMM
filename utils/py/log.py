@@ -37,7 +37,7 @@ try:
     lines = ascii.read("/tmp/time.txt")
     time = lines["col2"]
 except Exception as e:
-    print("no time")
+    print("no proper time")
     do_time=False
 lines = ascii.read("/tmp/dt.txt")
 dt = lines["col2"]
