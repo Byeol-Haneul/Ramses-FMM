@@ -296,7 +296,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
            ! Compute initial refinement map for zoom-in simulations
            ! only if next level file exists
            if(r%initfile(ilevel+1) .ne.' ')then
-              if(m%grid(igrid)%uold(ind,r%ivar_refine)>0)then
+              if(m%grid(igrid)%uold(ind,r%ivar_refine)>r%var_cut_refine)then
                  m%grid(igrid)%nref(ind)=r%m_refine(ilevel)*1.1d0
               else
                  m%grid(igrid)%nref(ind)=0.0d0
