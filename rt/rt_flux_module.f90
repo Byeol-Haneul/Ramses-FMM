@@ -231,18 +231,21 @@ subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
      if(pflux_sq .gt. 0d0) u(:) = pflux/sqrt(pflux_sq)
      pflux_sq = pflux_sq/Np_c_sq           !      Reduced flux, squared
 
-     if (ndim.eq.2) then
-        ! Use Harley pressure tensor for 2D
+     if (ndim.eq.1) then
+        ! In 1D, the pressure tensor is just N!
+        F(i, j, k, 2, 1) = 1.0_dp
+     else if (ndim.eq.2) then
+        ! Use Harley pressure tensor for 2D (photons confined to plane)
 
         F_norm = pflux / (Np * rt_c)
         F_norm_norm = SQRT(DOT_PRODUCT(F_norm, F_norm))
 
         if (F_norm_norm.lt.1.d-15) then
           ! For small F --> revert to analytic solution
-          pressure_tensor_2D(1,1) = 0.5d0
-          pressure_tensor_2D(1,2) = 0.0d0
-          pressure_tensor_2D(2,1) = 0.0d0
-          pressure_tensor_2D(2,2) = 0.5d0
+          pressure_tensor_2D(1,1) = 0.5_dp
+          pressure_tensor_2D(1,2) = 0.0_dp
+          pressure_tensor_2D(2,1) = 0.0_dp
+          pressure_tensor_2D(2,2) = 0.5_dp
         else
           ! Step 1: Create the rotation matrix
           ! Use unit direction vector to construct rotation matrix
@@ -256,21 +259,21 @@ subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
           
           if (F_rot(1).gt.9.99285459E-01_dp) then
             ! For large F close to 1, use the analytic solution
-            pressure_tensor_2D(1,1) = 1.0d0
-            pressure_tensor_2D(1,2) = 0.0d0
-            pressure_tensor_2D(2,1) = 0.0d0
-            pressure_tensor_2D(2,2) = 0.0d0
+            pressure_tensor_2D(1,1) = 1.0_dp
+            pressure_tensor_2D(1,2) = 0.0_dp
+            pressure_tensor_2D(2,1) = 0.0_dp
+            pressure_tensor_2D(2,2) = 0.0_dp
           else
             ! Step 3: Interpolate the value of lagrange_b 
             ! and then compute lagrange_a
             lagrange_b = interp_b(F_rot(1))
-            lagrange_a = LOG(1.d0 / (2.d0 * ACOS(-1.0d0) * bessel_i0(lagrange_b)))
+            lagrange_a = LOG(1.0_dp / (2.0_dp * ACOS(-1.0_dp) * bessel_i0(lagrange_b)))
 
             ! Step 4: Use lagrange a and b to compute the pressure tensor
-            pressure_tensor_2D_rot(1,1) = ACOS(-1.0d0) * EXP(lagrange_a) * (bessel_i0(lagrange_b) + bessel_i2(lagrange_b))
-            pressure_tensor_2D_rot(2,2) = ACOS(-1.0d0) * EXP(lagrange_a) * (bessel_i0(lagrange_b) - bessel_i2(lagrange_b))
-            pressure_tensor_2D_rot(1,2) = 0.d0
-            pressure_tensor_2D_rot(2,1) = 0.d0
+            pressure_tensor_2D_rot(1,1) = ACOS(-1.0_dp) * EXP(lagrange_a) * (bessel_i0(lagrange_b) + bessel_i2(lagrange_b))
+            pressure_tensor_2D_rot(2,2) = ACOS(-1.0_dp) * EXP(lagrange_a) * (bessel_i0(lagrange_b) - bessel_i2(lagrange_b))
+            pressure_tensor_2D_rot(1,2) = 0.0_dp
+            pressure_tensor_2D_rot(2,1) = 0.0_dp
           endif
 
           ! Step 5: Rotate the pressure tensor back to the correct frame
