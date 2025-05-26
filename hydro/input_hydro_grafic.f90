@@ -151,6 +151,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      INQUIRE(file=filename,exist=ok_file3)
      if(ok_file3)then
         ! Reading the existing file   
+        if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
         open(10,file=filename,form='unformatted')
         rewind 10
         read(10) ! skip first line
@@ -165,6 +166,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      else
         ! If file doesn't exist, initialize variable to default value 
         ! In most cases, this is zero (you can change that if necessary)
+        if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
         init_array=0d0
      endif
      
@@ -294,7 +296,11 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
            ! Compute initial refinement map for zoom-in simulations
            ! only if next level file exists
            if(r%initfile(ilevel+1) .ne.' ')then
-              m%grid(igrid)%nref(ind)=m%grid(igrid)%uold(ind,r%ivar_refine)*r%m_refine(ilevel)*1.1d0
+              if(m%grid(igrid)%uold(ind,r%ivar_refine)>0)then
+                 m%grid(igrid)%nref(ind)=r%m_refine(ilevel)*1.1d0
+              else
+                 m%grid(igrid)%nref(ind)=0.0d0
+              endif
            else
               m%grid(igrid)%nref(ind)=0.0d0
            endif

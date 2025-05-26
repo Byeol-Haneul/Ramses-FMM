@@ -31,6 +31,8 @@ subroutine m_init_refine_adaptive(pst)
 
      call m_refine_fine(pst,pst%s%r%levelmin)
 
+     write(*,*)'Trying maximum level ',istep
+
      do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
         if(pst%s%r%hydro)then
            call m_init_flow_fine(pst,ilevel)
@@ -57,6 +59,8 @@ subroutine m_init_refine_adaptive(pst)
      do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
         call m_flag_fine(pst,ilevel,2)
      end do
+
+     if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%initfile(istep).eq.' ')exit
 
   end do
 
