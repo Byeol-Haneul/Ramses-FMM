@@ -196,8 +196,8 @@ subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
   ! Additional variables added by Harley for 2D computations
   real(dp),dimension(1:ndim,1:ndim)::rotation_matrix
   real(dp),dimension(1:ndim,1:ndim)::pressure_tensor_2D, pressure_tensor_2D_rot
-  real(dp),dimension(1:ndim)::u_rot
-  real(dp)::lagrange_a,lagrange_b
+  real(dp),dimension(1:ndim)::F_norm, F_rot
+  real(dp)::F_norm_norm, lagrange_a, lagrange_b
   !------------------------------------------------------------------------
   ! Loop (N+2)X(N+2)X(N+2) cells in grid, where N=2**(nsuperoct+1) = 2 by 
   ! default. All dimension indices go from 0 to N+1.
@@ -232,40 +232,57 @@ subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
      pflux_sq = pflux_sq/Np_c_sq           !      Reduced flux, squared
 
      if (ndim.eq.2) then
-        ! Use Harley Eddington factor for 2D
+        ! Use Harley pressure tensor for 2D
 
-        ! Step 1: Create the rotation matrix
-        ! Use unit direction vector to construct rotation matrix
-        rotation_matrix(1,1) = u(1)
-        rotation_matrix(1,1) = u(2)
-        rotation_matrix(2,1) = -1.d0 * u(2)
-        rotation_matrix(2,1) = u(1)
+        F_norm = pflux / (Np * rt_c)
+        F_norm_norm = SQRT(DOT_PRODUCT(F_norm, F_norm))
 
-        ! Step 2: Apply the rotation matrix to the normalized
-        ! flux array
-        u_rot = matmul(rotation_matrix,u)
-        
-        ! Step 3: Interpolate the value of lagrange_b 
-        ! and then compute lagrange_a
-        lagrange_b = interp_b(u_rot(1))
-        lagrange_a = LOG(1.d0 / (2.d0 * ACOS(-1.0d0) * bessel_i0(lagrange_b)))
+        if (F_norm_norm.lt.1.d-15) then
+          ! For small F --> revert to analytic solution
+          pressure_tensor_2D(1,1) = 0.5d0
+          pressure_tensor_2D(1,2) = 0.0d0
+          pressure_tensor_2D(2,1) = 0.0d0
+          pressure_tensor_2D(2,2) = 0.5d0
+        else
+          ! Step 1: Create the rotation matrix
+          ! Use unit direction vector to construct rotation matrix
+          rotation_matrix(1,1) = F_norm(1)/F_norm_norm           ! cos(θ)
+          rotation_matrix(1,2) = F_norm(2)/F_norm_norm           ! sin(θ)
+          rotation_matrix(2,1) = -1.d0 * F_norm(2)/F_norm_norm   ! -sin(θ)
+          rotation_matrix(2,2) = F_norm(1)/F_norm_norm           ! cos(θ)
 
-        ! Step 4: Use lagrange a and b to compute the pressure tensor
-        pressure_tensor_2D_rot(1,1) = ACOS(-1.0d0) * EXP(lagrange_a) * (bessel_i0(lagrange_b) + bessel_i2(lagrange_b))
-        pressure_tensor_2D_rot(2,2) = ACOS(-1.0d0) * EXP(lagrange_a) * (bessel_i0(lagrange_b) - bessel_i2(lagrange_b))
-        pressure_tensor_2D_rot(1,2) = 0.d0
-        pressure_tensor_2D_rot(2,1) = 0.d0
+          ! Step 2: Apply the rotation matrix to F/|cN|
+          F_rot = matmul(rotation_matrix,F_norm)
+          
+          if (F_rot(1).gt.9.99285459E-01_dp) then
+            ! For large F close to 1, use the analytic solution
+            pressure_tensor_2D(1,1) = 1.0d0
+            pressure_tensor_2D(1,2) = 0.0d0
+            pressure_tensor_2D(2,1) = 0.0d0
+            pressure_tensor_2D(2,2) = 0.0d0
+          else
+            ! Step 3: Interpolate the value of lagrange_b 
+            ! and then compute lagrange_a
+            lagrange_b = interp_b(F_rot(1))
+            lagrange_a = LOG(1.d0 / (2.d0 * ACOS(-1.0d0) * bessel_i0(lagrange_b)))
 
-        ! Step 5: Rotate the pressure tensor back to the correct frame
-        pressure_tensor_2D = matmul(transpose(rotation_matrix), matmul(pressure_tensor_2D_rot, rotation_matrix))
+            ! Step 4: Use lagrange a and b to compute the pressure tensor
+            pressure_tensor_2D_rot(1,1) = ACOS(-1.0d0) * EXP(lagrange_a) * (bessel_i0(lagrange_b) + bessel_i2(lagrange_b))
+            pressure_tensor_2D_rot(2,2) = ACOS(-1.0d0) * EXP(lagrange_a) * (bessel_i0(lagrange_b) - bessel_i2(lagrange_b))
+            pressure_tensor_2D_rot(1,2) = 0.d0
+            pressure_tensor_2D_rot(2,1) = 0.d0
+          endif
+
+          ! Step 5: Rotate the pressure tensor back to the correct frame
+          pressure_tensor_2D = matmul(transpose(rotation_matrix), matmul(pressure_tensor_2D_rot, rotation_matrix))
+        endif
 
         ! Step 6: Store the pressure tensor back in F
-        do p = 1, ndim
-           do q = 1, ndim
-              F(i,j,k,p,q) = pressure_tensor_2D(p,q)
-           enddo
-        enddo
-
+        ! TODO(code): ASK JOKI WHY ORIENTATION SEEMS OFF AFTER ROTATION
+        F(i,j,k,2,1) = pressure_tensor_2D(2,2)
+        F(i,j,k,3,2) = pressure_tensor_2D(1,1)
+        F(i,j,k,2,2) = -1.d0 * pressure_tensor_2D(1,2)
+        F(i,j,k,3,1) = -1.d0 * pressure_tensor_2D(1,2)
      else
         ! Use Levermore 1984 Eddington factor for 3D
         chi = max(4d0-3d0*pflux_sq, 0d0)   !           Eddington factor
