@@ -631,7 +631,7 @@ contains
        de = beta(ixHI) * nH(icell) + photoRate            ! H2 Destruction
        if(r%cosmic_rays) de = de + cosray_H2
        dxH2 = (cr*ddt(icell)+xH2)/(1.+de*ddt(icell))
-       dxH2 = MIN(MAX(dxH2, x_min), 0.5)
+       dxH2 = MIN(MAX(dxH2, x_min), 0.5d0)
     endif !if(isH2)
     ! Update xHI (also if .not. isH2, for stability)**********************
     if(r%rt_otsa .or. .not. r%rt_advect) then     !    Recombination rates
@@ -650,7 +650,7 @@ contains
     if(r%cosmic_rays) de = de + cosray_HI
     if(r%isH2) de = de + 2. * alpha(ixHI)
     dxHI = (cr*ddt(icell)+xHI)/(1.+de*ddt(icell))
-    dxHI = MIN(MAX(dxHI, x_min),1.)
+    dxHI = MIN(MAX(dxHI, x_min),1d0)
     if(r%isH2) dxion(ixHI)=dxHI
     ! Update xHII*********************************************************
     cr = (beta(ixHII)*ne+photoRate)*dxHI            !             Creation
@@ -719,7 +719,7 @@ contains
 #endif
        if(r%haardt_madau) de = de + tables%UVrates(ixHeII,1) * ss_factor
        dxHeI = (cr*ddt(icell)+xHeI)/(1.+de*ddt(icell))         ! The update
-       dxHeI = MIN(MAX(dxHeI, x_min),1.)
+       dxHeI = MIN(MAX(dxHeI, x_min),1d0)
        ! Update xHeII ****************************************************
        ! Creation = coll.- and photo-ionization of HI + rec. of HeIII
        cr = de * xHeI + alpha(ixHeIII) * ne * dXion(ixHeIII)
@@ -731,14 +731,14 @@ contains
        if(r%haardt_madau) photoRate = photoRate + tables%UVrates(ixHeIII,1) * ss_factor
        de = (alpha(ixHeII) + beta(ixHeIII)) * ne + photoRate
        dXion(ixHeII) = (cr*ddt(icell)+dXion(ixHeII))/(1.+de*ddt(icell))
-       dXion(ixHeII) = MIN(MAX(dXion(ixHeII), x_MIN),1.)
+       dXion(ixHeII) = MIN(MAX(dXion(ixHeII), x_MIN),1d0)
        ! Update xHeIII ***************************************************
        ! Creation = coll.- and photo-ionization of HeII
        cr = (beta(ixHeIII) * ne + photoRate) * dXion(ixHeII)   ! new xHeII
        ! Destruction = rec. of HeIII and e
        de = alpha(ixHeIII) * ne
        dXion(ixHeIII) = (cr*ddt(icell)+dXion(ixHeIII))/(1.+de*ddt(icell))
-       dXion(ixHeIII) = MIN(MAX(dXion(ixHeIII), x_MIN),1.)
+       dXion(ixHeIII) = MIN(MAX(dXion(ixHeIII), x_MIN),1d0)
        ! Atomic conservation of He ***************************************
        if(newAtomicCons) then
           x_tot = dxHeI + dXion(ixHeII) + dxion(ixHeIII)

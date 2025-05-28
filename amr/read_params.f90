@@ -914,7 +914,6 @@ subroutine m_read_params(pst)
      write(*,'(A50)')"__________________________________________________"
   endif
 
-
   ! Force non-equilibrium chemistry if using rt
   if(rt .and. cooling) then
     print*,'Using radiation hydrodynamics, so switching to non-equilibrum cooling'
@@ -926,7 +925,7 @@ subroutine m_read_params(pst)
   ! fractions, and ionization energies, and check if we have enough
   ! ionization variables (NION)
   !----------------------------------------------------------------
-  if(nion.gt.0) then
+  if(neq_chem) then
      iCount=0
      ! HI fraction and ionization energy
      if(isH2) then

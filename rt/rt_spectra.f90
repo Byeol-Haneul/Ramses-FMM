@@ -829,8 +829,8 @@ SUBROUTINE inp_SED_table(SED, age, Z, nProp, same, ret)
      endif
      SED%ia = min(max(floor((lgAge-SED%lgA0)/SED%dlgA ) + 2, 1  ),  SED%nA-1 )
      da = SED%ages(SED%ia+1)-SED%ages(SED%ia)
-     SED%da0 = min( max(   (age-SED%ages(SED%ia)) /da,       0. ), 1.          )
-     SED%da1 = min( max(  (SED%ages(SED%ia+1)-age)/da,       0. ), 1.          )
+     SED%da0 = min( max(   (age-SED%ages(SED%ia)) /da,       0d0 ), 1d0          )
+     SED%da1 = min( max(  (SED%ages(SED%ia+1)-age)/da,       0d0 ), 1d0          )
 
      if(SED%is_SED_single_Z)then
         SED%iz = 1
@@ -840,8 +840,8 @@ SUBROUTINE inp_SED_table(SED, age, Z, nProp, same, ret)
         lgZ = log10(Z)
         SED%iz = min(max(floor((lgZ-SED%lgZ0)/SED%dlgZ ) + 1,   1  ),  SED%nZ-1 )
         dz = SED%Zeds(SED%iz+1)-SED%Zeds(SED%iz)
-        SED%dz0 = min( max(   (Z-SED%Zeds(SED%iz)) /dz,         0. ),  1.         )
-        SED%dz1 = min( max(  (SED%Zeds(SED%iz+1)-Z)/dz,         0. ),  1.         )
+        SED%dz0 = min( max(   (Z-SED%Zeds(SED%iz)) /dz,         0d0 ),  1d0         )
+        SED%dz1 = min( max(  (SED%Zeds(SED%iz+1)-Z)/dz,         0d0 ),  1d0         )
      endif
      if (abs(SED%da0+SED%da1-1.0d0) > 1.0d-5 .or. abs(SED%dz0+SED%dz1-1.0d0) > 1.0d-5) then
         write(*,*) 'Screwed up the sed interpolation ... '
@@ -879,7 +879,7 @@ SUBROUTINE getNPhotonsEmitted(run, SED, age1_Gyr, dt_Gyr, Z, ret)
   call inp_SED_table(SED, age1_Gyr-dt_Gyr, Z, 2, .false., Lc0)
   ! Lc1 = cumulative emitted photons at the end of the timestep
   call inp_SED_table(SED, age1_Gyr, Z, 2, .false., Lc1)
-  ret = max(Lc1-Lc0,0.)
+  ret = max(Lc1-Lc0,0d0)
 
 END SUBROUTINE getNPhotonsEmitted
 
