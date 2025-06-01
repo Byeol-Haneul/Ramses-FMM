@@ -37,6 +37,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #define PONO 5
 #define ABC 6
 #define CURRENTSHEET 7
+#define RTZEQM 8
 
   integer::i
 #if INIT==COEUR
@@ -57,6 +58,8 @@ subroutine condinit(r,g,x,q,dx,nn)
   real(kind=8)::xx,yy,zz,vx,vy,vz,A0,twopi
 #elif INIT==CURRENTSHEET
   real(kind=8)::pi,xc,yc,beta,v0
+#elif INIT==RTZEQM
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 #else
   ! Call built-in initial condition generator
   call region_condinit(r,g,x,q,dx,nn)
@@ -254,6 +257,21 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,4) = 0.0
      q(i,5) = 0.5*beta
      q(i,nvar+1) = 0.0 ! Bz
+  end do
+#endif
+
+#if INIT==RTZEQM
+  ! get the units
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  ! Smoothly interpolate gas density between
+  ! 1e-3 and 1e5, fix T to 10^4, and convert everything to code units
+  ! note that this assumes a boxsize of 1 and Nx = Ny and unigrid
+  do i = 1,nn
+     q(i,1) = (10.d0**(x(i,1) * 8.d0 - 3.d0)) / scale_nH
+     q(i,2) = 0.0 ! Vx
+     q(i,3) = 0.0 ! Vy
+     q(i,4) = 0.0 ! Vz
+     q(i,5) = 1.d4 / scale_T2 ! Temperature is 10^4 K
   end do
 #endif
 
