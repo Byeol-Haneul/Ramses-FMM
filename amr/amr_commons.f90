@@ -306,6 +306,17 @@ module amr_commons
      real(dp)::purity_threshold=-1
      real(dp)::fraction_threshold=0.1d0
 
+     ! Lightcone parameters
+     logical :: lightcone = .false.   ! Lightcone activated
+     real(dp) :: cone_z_min = 0.0 ! Minimum redshift
+     real(dp) :: cone_z_max = 1.0 ! Maximum redshift
+     real(dp) :: cone_opening_angle_y = 0.0 ! Opening angle in y direction in degrees
+     real(dp) :: cone_opening_angle_z = 0.0 ! Opening angle in z direction in degrees
+     real(dp) :: cone_theta = 0.0 ! Rotation of the cone's x-axis around the box's y-axis in degrees
+     real(dp) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
+     real(dp), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
+     real(dp), dimension(1:3, 1:3) :: cone_to_box_rotation, box_to_cone_rotation ! Rotation matrices from cone to box and box to cone coordinates
+
      ! Sink parameters
      integer::rho_type_sink=1
      logical::sink_descent=.false.
@@ -516,11 +527,6 @@ module amr_commons
      logical::withoutmkdir=.false.    ! If true mkdir should be done before the run
      logical::print_when_io=.false.   ! If true print when IO
      logical::synchro_when_io=.false. ! If true synchronize when IO
-
-     ! Lightcone parameters
-     real(dp)::thetay_cone=12.5
-     real(dp)::thetaz_cone=12.5
-     real(dp)::zmax_cone=2.0
 
      ! Cosmology parameters
      real(dp)::boxlen_ini     ! Box size in h-1 Mpc

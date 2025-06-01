@@ -14,6 +14,8 @@ subroutine adaptive_loop(pst)
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
+  use lightcone_io_module, only: output_lightcone_parameters
+  use lightcone_test_module, only: lightcone_test
 
   implicit none
   type(pst_t)::pst
@@ -30,6 +32,8 @@ subroutine adaptive_loop(pst)
 
   ! Read run parameters
   call m_read_params(pst)
+
+  if (r%lightcone .and. r%verbose) call output_lightcone_parameters(pst)
 
   ! Initialize grid variables
   call r_init_amr(pst)
