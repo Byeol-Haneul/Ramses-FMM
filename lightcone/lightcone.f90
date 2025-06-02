@@ -87,6 +87,7 @@ subroutine output_lightcone(s, p, filename)
     type(lightcone_buffer) :: buffer
     integer :: npart, nselected, nbefore, ntotal, nthbuffer
     integer :: i, j, k, ilun
+    real(dp) :: velocity(3)
 #ifndef WITHOUTMPI
     integer :: ierr
 #endif
@@ -175,8 +176,9 @@ subroutine output_lightcone(s, p, filename)
             position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
             if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
-
-              call add_to_buffer(buffer, real(position(:), kind=sp)) ! Change here for additional properties (velocity, redshift, ...)
+              ! Transform velocity to cone coordinates
+              velocity = matmul(box_to_cone_rotation, p%vp(npart, :))
+              call add_to_buffer(buffer, real(position(:), kind=sp), real(velocity(:), kind=sp))
 
               if (buffer_is_full(buffer)) then
                 nthbuffer = nthbuffer + 1

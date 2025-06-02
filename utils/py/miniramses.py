@@ -535,13 +535,12 @@ def rd_part(nout,**kwargs):
 
     return p
 
-def rd_cone(nout, path, verbose=False):
+def rd_cone(nout, path, nproperties=3, verbose=False):
     """
     Read the lightcone shell from the output directory.
     First read number of particles from path/cone_nout/cone_nout.txt (1st line)
+    nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
     """
-    nproperties= 3 # x, y, z (later add vx, vy, vz, ...)
-
     nout_padded = str(nout).zfill(5)
     binfile = f"{path}/cone_{nout_padded}/cone_{nout_padded}"
     txtfile = f"{binfile}.txt"

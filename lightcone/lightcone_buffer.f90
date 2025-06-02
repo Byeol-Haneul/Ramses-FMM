@@ -4,6 +4,7 @@ module lightcone_buffer_module
 
   type :: lightcone_buffer
     real(sp), allocatable :: xp(:,:)
+    real(sp), allocatable :: vp(:,:)
     integer :: nstride
     integer :: ncurrent
   end type lightcone_buffer
@@ -17,15 +18,18 @@ contains
     buffer%nstride = nstride
     buffer%ncurrent = 0
     allocate(buffer%xp(nstride, 3))
+    allocate(buffer%vp(nstride, 3))
   end subroutine init_lightcone_buffer
 
-  subroutine add_to_buffer(buffer, position)
+  subroutine add_to_buffer(buffer, position, velocity)
     type(lightcone_buffer), intent(inout) :: buffer
     real(sp), intent(in) :: position(3)
+    real(sp), intent(in) :: velocity(3)
 
     if (buffer%ncurrent < buffer%nstride) then
       buffer%ncurrent = buffer%ncurrent + 1
       buffer%xp(buffer%ncurrent, :) = position(:)
+      buffer%vp(buffer%ncurrent, :) = velocity(:)
     else
       stop 'add_to_buffer: Cannot add particle to a full buffer'
     end if

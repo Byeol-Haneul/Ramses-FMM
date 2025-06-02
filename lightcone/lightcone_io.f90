@@ -53,6 +53,11 @@ contains
         offset = int(calculate_write_offset(nbefore, ntotal, idim, nthbuffer, buffer%nstride), kind=MPI_OFFSET_KIND)
         call MPI_FILE_WRITE_AT(ilun, offset, buffer%xp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
       end do
+      ! Write velocities (properties 4, 5, 6)
+      do idim = 1, 3
+        offset = int(calculate_write_offset(nbefore, ntotal, idim+3, nthbuffer, buffer%nstride), kind=MPI_OFFSET_KIND)
+        call MPI_FILE_WRITE_AT(ilun, offset, buffer%vp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
+      end do
 #else
       write(*,*) 'Writing buffer to file without MPI'
 #endif
