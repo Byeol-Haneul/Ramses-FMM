@@ -990,7 +990,6 @@ subroutine m_read_params(pst)
   endif
 
   ! Check that lightcone parameters are consistent
-#ifndef WITHOUTMPI
   if (lightcone) then
      if (ndim /= 3) then
         write(*, *) 'Error: lightcone is only supported in 3D'
@@ -1013,12 +1012,6 @@ subroutine m_read_params(pst)
         nml_ok = .false.
      endif
   endif
-#else
-  if (lightcone) then
-     write(*, *) 'Error: lightcone is only supported with MPI'
-     nml_ok = .false.
-  endif
-#endif
 
   if(.not. nml_ok)then
      write(*,*)'Too many errors in the namelist'

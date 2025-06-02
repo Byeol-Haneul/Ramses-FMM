@@ -18,7 +18,7 @@ contains
 #ifndef WITHOUTMPI
     call MPI_FILE_OPEN(MPI_COMM_WORLD, TRIM(filename), MPI_MODE_WRONLY + MPI_MODE_CREATE, MPI_INFO_NULL, ilun, ierr)
 #else
-    write(*,*) 'Opening lightcone file without MPI'
+    open(ilun, file=TRIM(filename), form='unformatted', access='stream')
 #endif
   end subroutine open_lightcone_file
 
@@ -31,7 +31,7 @@ contains
 #ifndef WITHOUTMPI
     call MPI_FILE_CLOSE(ilun, ierr)
 #else
-    write(*,*) 'Closing lightcone file without MPI'
+    close(ilun)
 #endif
   end subroutine close_lightcone_file
 
@@ -40,27 +40,32 @@ contains
 
     type(lightcone_buffer), intent(in) :: buffer
     integer, intent(in) :: ilun, nbefore, ntotal, nthbuffer
-    integer :: idim
+    integer :: idim, offset
 #ifndef WITHOUTMPI
-    integer(kind=MPI_OFFSET_KIND) :: offset
     integer :: ierr, status(MPI_STATUS_SIZE)
 #endif
 
     if (.not. buffer_is_empty(buffer)) then
-#ifndef WITHOUTMPI
+
       ! Write positions (properties 1, 2, 3)
       do idim = 1, 3
-        offset = int(calculate_write_offset(nbefore, ntotal, idim, nthbuffer, buffer%nstride), kind=MPI_OFFSET_KIND)
-        call MPI_FILE_WRITE_AT(ilun, offset, buffer%xp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
+        offset = calculate_write_offset(nbefore, ntotal, idim, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+        call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%xp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
+#else
+        write(unit=ilun, pos=offset) buffer%xp(1:buffer%ncurrent, idim)
+#endif
       end do
+      
       ! Write velocities (properties 4, 5, 6)
       do idim = 1, 3
-        offset = int(calculate_write_offset(nbefore, ntotal, idim+3, nthbuffer, buffer%nstride), kind=MPI_OFFSET_KIND)
-        call MPI_FILE_WRITE_AT(ilun, offset, buffer%vp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
-      end do
+        offset = calculate_write_offset(nbefore, ntotal, idim+3, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+        call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%vp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
-      write(*,*) 'Writing buffer to file without MPI'
+        write(unit=ilun, pos=offset) buffer%vp(1:buffer%ncurrent, idim)
 #endif
+      end do
     end if
   end subroutine write_buffer
 
