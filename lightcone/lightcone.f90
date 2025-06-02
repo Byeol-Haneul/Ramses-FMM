@@ -82,6 +82,7 @@ subroutine output_lightcone(s, p, filename)
                first_zreplica, last_zreplica
     real(dp) :: z1, z2, coverH0, omega_r
     real(dp) :: position(3)
+    real(dp) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
     logical, allocatable :: has_particles(:,:,:)
     type(lightcone_buffer) :: buffer
     integer :: npart, nselected, nbefore, ntotal, nthbuffer
@@ -95,6 +96,9 @@ subroutine output_lightcone(s, p, filename)
     coverH0 = 2.9979246d+5/s%g%h0
     omega_r = 1 - s%g%omega_m - s%g%omega_l
 
+    cone_to_box_rotation = rotation_matrix(deg2rad(s%r%cone_theta), deg2rad(s%r%cone_phi))
+    box_to_cone_rotation = transpose(cone_to_box_rotation)
+
     angle_y = deg2rad(s%r%cone_opening_angle_y)
     angle_z = deg2rad(s%r%cone_opening_angle_z)
 
@@ -102,7 +106,7 @@ subroutine output_lightcone(s, p, filename)
     r_inner = comoving2code(s%g, comoving_distance(z1, s%g%omega_m, s%g%omega_l, omega_r, coverH0))
     r_outer = comoving2code(s%g, comoving_distance(z2, s%g%omega_m, s%g%omega_l, omega_r, coverH0))
 
-    call compute_replica_range(s%r, angle_y, angle_z, r_inner, r_outer, first_xreplica, last_xreplica, first_yreplica, last_yreplica, first_zreplica, last_zreplica)
+    call compute_replica_range(cone_to_box_rotation, s%r%cone_observer, angle_y, angle_z, r_inner, r_outer, first_xreplica, last_xreplica, first_yreplica, last_yreplica, first_zreplica, last_zreplica)
     
     nreplicas = (last_xreplica - first_xreplica + 1) * (last_yreplica - first_yreplica + 1) * (last_zreplica - first_zreplica + 1)
 
@@ -124,7 +128,7 @@ subroutine output_lightcone(s, p, filename)
             position(2) = position(2) + j * s%r%boxlen
             position(3) = position(3) + k * s%r%boxlen
 
-            position = box_to_cone_coordinates(s%r, position)
+            position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
             if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
               nselected = nselected + 1
@@ -168,7 +172,7 @@ subroutine output_lightcone(s, p, filename)
             position(2) = position(2) + j * s%r%boxlen
             position(3) = position(3) + k * s%r%boxlen
 
-            position = box_to_cone_coordinates(s%r, position)
+            position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
             if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
 

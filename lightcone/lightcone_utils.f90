@@ -5,24 +5,24 @@ module lightcone_utils
     implicit none    
     contains
 
-    function cone_to_box_coordinates(r, x_cone) result(x_box)
+    function cone_to_box_coordinates(rotation_matrix, observer, x_cone) result(x_box)
         ! Converts coordinates from the cone coordinate system to the box coordinate system (code units)
-        type(run_t), intent(in) :: r
+        real(dp), intent(in) :: rotation_matrix(3,3), observer(3)
         real(dp), intent(in) :: x_cone(3)
         real(dp) :: x_box(3)
 
-        x_box = matmul(r%cone_to_box_rotation, x_cone)
-        x_box = x_box + r%cone_observer
+        x_box = matmul(rotation_matrix, x_cone)
+        x_box = x_box + observer
     end function cone_to_box_coordinates
 
-    function box_to_cone_coordinates(r, x_box) result(x_cone)
+    function box_to_cone_coordinates(rotation_matrix, observer, x_box) result(x_cone)
         ! Converts coordinates from the box coordinate system to the cone coordinate system (code units)
-        type(run_t), intent(in) :: r
+        real(dp), intent(in) :: rotation_matrix(3,3), observer(3)
         real(dp), intent(in) :: x_box(3)
         real(dp) :: x_cone(3)
 
-        x_cone = x_box - r%cone_observer
-        x_cone = matmul(r%box_to_cone_rotation, x_cone)
+        x_cone = x_box - observer
+        x_cone = matmul(rotation_matrix, x_cone)
     end function box_to_cone_coordinates
 
     function rotation_matrix(theta, phi) result(rot)
@@ -127,11 +127,11 @@ module lightcone_utils
         comoving2code = l * g%h0 / (g%boxlen_ini * 100)
     end function comoving2code
 
-    subroutine compute_replica_range(r, angle_y, angle_z, r_inner, r_outer, &
+    subroutine compute_replica_range(cone_to_box_rotation, cone_observer, angle_y, angle_z, r_inner, r_outer, &
                                      first_xreplica, last_xreplica, &
                                      first_yreplica, last_yreplica, &
                                      first_zreplica, last_zreplica)
-        type(run_t), intent(in) :: r
+        real(dp), intent(in) :: cone_to_box_rotation(3,3), cone_observer(3)
         real(dp), intent(in) :: angle_y, angle_z, r_inner, r_outer
         integer, intent(out) :: first_xreplica, last_xreplica, &
                                 first_yreplica, last_yreplica, &
@@ -146,7 +146,7 @@ module lightcone_utils
 
         ! Transform the corners of the frustum to box coordinates
         do i = 1, 8
-          corner = cone_to_box_coordinates(r, corners(:,i))
+          corner = cone_to_box_coordinates(cone_to_box_rotation, cone_observer, corners(:,i))
           corners(:,i) = corner
         end do
 

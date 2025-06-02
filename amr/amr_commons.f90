@@ -315,7 +315,6 @@ module amr_commons
      real(dp) :: cone_theta = 0.0 ! Rotation of the cone's x-axis around the box's y-axis in degrees
      real(dp) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
      real(dp), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
-     real(dp), dimension(1:3, 1:3) :: cone_to_box_rotation, box_to_cone_rotation ! Rotation matrices from cone to box and box to cone coordinates
 
      ! Sink parameters
      integer::rho_type_sink=1

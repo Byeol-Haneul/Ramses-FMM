@@ -37,43 +37,47 @@ module lightcone_test_module
         real(dp) :: x(3) ! Coordinates of a point in the some coordinate system
         real(dp) :: x_prime(3) ! Coordinates of the same point in a different coordinate system
         real(dp) :: x_back(3) ! Coordinates the same point in the original coordinate system
+        real(dp) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
+
+        cone_to_box_rotation = rotation_matrix(deg2rad(pst%s%r%cone_theta), deg2rad(pst%s%r%cone_phi))
+        box_to_cone_rotation = transpose(cone_to_box_rotation)
         
         write(*,*) ""
         write(*,*) "Testing rotation matrices"
         write(*,*) "  R (cone to box):"
-        call print_dp_matrix(pst%s%r%cone_to_box_rotation)
+        call print_dp_matrix(cone_to_box_rotation)
         write(*,*) ""
         write(*,*) "  R^-1 (box to cone):"
-        call print_dp_matrix(pst%s%r%box_to_cone_rotation)
+        call print_dp_matrix(box_to_cone_rotation)
         write(*,*) ""
         write(*,*) "  R * R^-1:"
-        call print_dp_matrix(matmul(pst%s%r%cone_to_box_rotation, pst%s%r%box_to_cone_rotation))
+        call print_dp_matrix(matmul(cone_to_box_rotation, box_to_cone_rotation))
         write(*,*) ""
 
         write(*,*) ""
         write(*,*) "Testing cone to box coordinates (cone -> box -> cone)"
         ! Test case 0: Origin
         x = (/0.0, 0.0, 0.0/)
-        x_prime = cone_to_box_coordinates(pst%s%r, x)
-        x_back = box_to_cone_coordinates(pst%s%r, x_prime)
+        x_prime = cone_to_box_coordinates(cone_to_box_rotation, pst%s%r%cone_observer, x)
+        x_back = box_to_cone_coordinates(box_to_cone_rotation, pst%s%r%cone_observer, x_prime)
         write(*, '(3F12.2, A, 3F12.2, A, 3F12.2)') x, '  -> ', x_prime, '  -> ', x_back
         
         ! Test case 1: Along x-axis
         x = (/1.0, 0.0, 0.0/)
-        x_prime = cone_to_box_coordinates(pst%s%r, x)
-        x_back = box_to_cone_coordinates(pst%s%r, x_prime)
+        x_prime = cone_to_box_coordinates(cone_to_box_rotation, pst%s%r%cone_observer, x)
+        x_back = box_to_cone_coordinates(box_to_cone_rotation, pst%s%r%cone_observer, x_prime)
         write(*, '(3F12.2, A, 3F12.2, A, 3F12.2)') x, '  -> ', x_prime, '  -> ', x_back
         
         ! Test case 2: Along y-axis
         x = (/0.0, 1.0, 0.0/)
-        x_prime = cone_to_box_coordinates(pst%s%r, x)
-        x_back = box_to_cone_coordinates(pst%s%r, x_prime)
+        x_prime = cone_to_box_coordinates(cone_to_box_rotation, pst%s%r%cone_observer, x)
+        x_back = box_to_cone_coordinates(box_to_cone_rotation, pst%s%r%cone_observer, x_prime)
         write(*, '(3F12.2, A, 3F12.2, A, 3F12.2)') x, '  -> ', x_prime, '  -> ', x_back
 
         ! Test case 3: Along z-axis
         x = (/0.0, 0.0, 1.0/)
-        x_prime = cone_to_box_coordinates(pst%s%r, x)
-        x_back = box_to_cone_coordinates(pst%s%r, x_prime)
+        x_prime = cone_to_box_coordinates(cone_to_box_rotation, pst%s%r%cone_observer, x)
+        x_back = box_to_cone_coordinates(box_to_cone_rotation, pst%s%r%cone_observer, x_prime)
         write(*, '(3F12.2, A, 3F12.2, A, 3F12.2)') x, '  -> ', x_prime, '  -> ', x_back
         write(*,*) ""
         

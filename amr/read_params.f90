@@ -11,7 +11,6 @@ subroutine m_read_params(pst)
   use movie_module, only: set_movie_vars
   use rt_params_module
   use constants
-  use lightcone_utils, only: rotation_matrix, deg2rad
   implicit none
   type(pst_t)::pst
 
@@ -1377,9 +1376,6 @@ subroutine m_read_params(pst)
   s%r%cone_theta = cone_theta
   s%r%cone_phi = cone_phi
   s%r%cone_observer = cone_observer
-  ! Populate the rotation matrices
-  s%r%cone_to_box_rotation = rotation_matrix(deg2rad(cone_theta), deg2rad(cone_phi))
-  s%r%box_to_cone_rotation = transpose(s%r%cone_to_box_rotation)
 
   s%r%rho_type_sink=rho_type_sink
   s%r%sink_descent=sink_descent
