@@ -3,4 +3,8 @@ cd bin
 make NDIM=3 COMPILER=NVHPC PATCH=../gpu
 cd ..
 salloc --nodes=1 --ntasks=1 --time=01:00 --gres=gpu:1
-Once on the compute node: bin/ramses3d namelist/sedov3d.nml
+Once on the compute node:
+    bin/ramses3d namelist/sedov3d.nml
+Debug:
+    compute-sanitizer --tool memcheck --print-level info --report-api-errors all ./bin/ramses3d namelist/sedov3d.nml > sanitizer.log
+

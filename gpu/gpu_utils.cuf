@@ -2,24 +2,25 @@ module gpu_utils
    use amr_parameters, only: dp, twotondim
    use cudafor
    implicit none
+   integer,parameter::ncentral=1 !> The number of octs in each direction of the kernel, excluding the ghost octs
 
    !> @brief
-   !> Contains a 8x8x8 subgrid of primitive variables. Intended to act as a subgrid
-   !> where the inner 4x4x4 cells are "real" and the outer 2 cells are ghost/halo cells.
+   !> Contains a 2*ncentral+4 by 2*ncentral+4 by 2*ncentral+4 subgrid of primitive variables. Intended to act as a subgrid
+   !> where the inner 2*ncentral by 2*ncentral by 2*ncentral cells are "real" and the outer 2 cells are ghost/halo cells.
    !> Can either be used on it's own or allocated in shared memory. Note that it is zero
    !> indexed to make 1D to 3D indexing easier
-   type, public :: subgrid_8x8x8cell_primitive
-      real(kind=dp), dimension(0:7, 0:7, 0:7) :: density, velocity_x, velocity_y, velocity_z, pressure
-   end type subgrid_8x8x8cell_primitive
+   type, public :: subgrid_6x6x6cell_primitive
+      real(kind=dp), dimension(0:2*ncentral+3, 0:2*ncentral+3, 0:2*ncentral+3) :: density, velocity_x, velocity_y, velocity_z, pressure
+   end type subgrid_6x6x6cell_primitive
 
    !> @brief
-   !> Contains a 8x8x8 subgrid of conserved variables. Intended to act as a subgrid
-   !> where the inner 4x4x4 cells are "real" and the outer 2 cells are ghost/halo cells.
+   !> Contains a 2*ncentral+4 by 2*ncentral+4 by 2*ncentral+4 subgrid of conserved variables. Intended to act as a subgrid
+   !> where the inner 2*ncentral by 2*ncentral by 2*ncentral cells are "real" and the outer 2 cells are ghost/halo cells.
    !> Can either but used on it's own or allocated in shared memory. Note that it is zero
    !> indexed to make 1D to 3D indexing easier
-   type, public :: subgrid_8x8x8cell_conserved
-      real(kind=dp), dimension(0:7, 0:7, 0:7) :: density, momentum_x, momentum_y, momentum_z, energy
-   end type subgrid_8x8x8cell_conserved
+   type, public :: subgrid_6x6x6cell_conserved
+      real(kind=dp), dimension(0:2*ncentral+3, 0:2*ncentral+3, 0:2*ncentral+3) :: density, momentum_x, momentum_y, momentum_z, energy
+   end type subgrid_6x6x6cell_conserved
 
 contains
    ! ==========================================================================
