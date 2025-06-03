@@ -116,7 +116,7 @@ endif
 #############################################################################
 # NVHPC compiler
 ifeq ($(COMPILER),NVHPC)
-   FFLAGS = -cpp -gpu=sm_80,sm_90,nordc -cuda $(DEFINES)
+   FFLAGS = -mp -Minfo=mp -cpp -gpu=sm_80,sm_90,nordc -cuda $(DEFINES)
    LIBS = -gpu=sm_80,sm_90,nordc -cuda -cudalib=nvtx
    GPU_PATH = ../gpu
    ifeq ($(MPI),1)

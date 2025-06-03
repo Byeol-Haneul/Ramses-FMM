@@ -72,9 +72,10 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
   emag=0.0D0
   dt=dx/r%smallc
 
- if(r%induction)call reset_init(r,g,m,ilevel)
+  if(r%induction)call reset_init(r,g,m,ilevel)
 
- ! Loop over active grids by vector sweeps
+  ! Loop over active grids by vector sweeps
+!$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(igrid, ind, ivar, idim, uu, bb, gg, dt_lev) REDUCTION(+:mass, ekin, eint, emag) REDUCTION(MIN:dt)
   do igrid=m%head(ilevel),m%tail(ilevel)
      ! Loop over cells
      do ind=1,twotondim                
@@ -136,6 +137,7 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
      end do
      ! End loop over cells
   end do
+!$OMP END PARALLEL DO
   ! End loop over grids
 
 #endif
