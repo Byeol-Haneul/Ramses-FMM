@@ -157,6 +157,8 @@ subroutine output_lightcone(s, p, filename)
     if (s%r%verbose .and. s%g%myid == 1) write(*, *) 'Found ', ntotal, ' lightcone particles across ', nreplicas, ' replicas'
     
     call init_lightcone_buffer(buffer, nstride) ! Allocate the buffer
+
+    ilun = 3 * s%g%ncpu + s%g%myid + 103
     call open_lightcone_file(ilun, filename)
 
     ! Select particles and write in chunks

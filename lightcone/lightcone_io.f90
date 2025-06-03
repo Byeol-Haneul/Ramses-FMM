@@ -53,7 +53,7 @@ contains
 #ifndef WITHOUTMPI
         call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%xp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
-        write(unit=ilun, pos=offset) buffer%xp(1:buffer%ncurrent, idim)
+        write(unit=ilun, pos=offset+1) buffer%xp(1:buffer%ncurrent, idim) ! pos is 1-based
 #endif
       end do
       
@@ -63,7 +63,7 @@ contains
 #ifndef WITHOUTMPI
         call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%vp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
-        write(unit=ilun, pos=offset) buffer%vp(1:buffer%ncurrent, idim)
+        write(unit=ilun, pos=offset+1) buffer%vp(1:buffer%ncurrent, idim) ! pos is 1-based
 #endif
       end do
     end if

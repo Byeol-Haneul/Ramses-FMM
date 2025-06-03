@@ -1,4 +1,4 @@
-This namelist performs a cosmological simulation with dark matter only.
+This namelist performs a cosmological simulation with dark matter only and lightcone.
 You need a grafic file for the initial conditions. You can download one
 easily by executing in the command line the following script:
 ./utils/scripts/load_cosmo_ic.sh
@@ -11,9 +11,9 @@ pic=.true.
 poisson=.true.
 hydro=.false.
 nrestart=0
-nsubcycle=1,2
+nsubcycle=1,1,2
 ncontrol=1
-verbose=.true.
+verbose=.false.
 /
 
 &OUTPUT_PARAMS
@@ -28,9 +28,9 @@ initfile(1)='ics_ramses'
 
 &AMR_PARAMS
 levelmin=7
-levelmax=12
+levelmax=15
 ngridmax=2000000
-npartmax=2000000
+npartmax=4000000
 nexpand=1,
 /
 
@@ -39,7 +39,7 @@ epsilon=1.d-4
 /
 
 &REFINE_PARAMS
-m_refine=7*8.,
+m_refine=10*8.,
 /
 
 &LIGHTCONE_PARAMS
