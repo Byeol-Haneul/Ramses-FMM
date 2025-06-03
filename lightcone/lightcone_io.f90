@@ -47,25 +47,25 @@ contains
 
     if (.not. buffer_is_empty(buffer)) then
 
-      ! Write positions (properties 1, 2, 3)
-      do idim = 1, 3
-        offset = calculate_write_offset(nbefore, ntotal, idim, nthbuffer, buffer%nstride)
+       ! Write positions (properties 1, 2, 3)
+       do idim = 1, 3
+          offset = calculate_write_offset(nbefore, ntotal, idim, nthbuffer, buffer%nstride)
 #ifndef WITHOUTMPI
-        call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%xp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
+          call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%xp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
-        write(unit=ilun, pos=offset+1) buffer%xp(1:buffer%ncurrent, idim) ! pos is 1-based
+          write(unit=ilun, pos=offset+1) buffer%xp(1:buffer%ncurrent, idim) ! pos is 1-based
 #endif
-      end do
+       end do
       
-      ! Write velocities (properties 4, 5, 6)
-      do idim = 1, 3
-        offset = calculate_write_offset(nbefore, ntotal, idim+3, nthbuffer, buffer%nstride)
+       ! Write velocities (properties 4, 5, 6)
+       do idim = 1, 3
+          offset = calculate_write_offset(nbefore, ntotal, idim+3, nthbuffer, buffer%nstride)
 #ifndef WITHOUTMPI
-        call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%vp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
+          call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%vp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
-        write(unit=ilun, pos=offset+1) buffer%vp(1:buffer%ncurrent, idim) ! pos is 1-based
+          write(unit=ilun, pos=offset+1) buffer%vp(1:buffer%ncurrent, idim) ! pos is 1-based
 #endif
-      end do
+       end do
     end if
   end subroutine write_buffer
 
@@ -86,19 +86,19 @@ contains
   end subroutine write_lightcone_txt_file
 
   subroutine output_lightcone_parameters(pst)
-        type(pst_t), intent(in) :: pst
+    type(pst_t), intent(in) :: pst
 
-        write(*, *) ""
-        write(*, *) "Lightcone parameters"
-        write(*, *) "  opening_angle_y: ", pst%s%r%cone_opening_angle_y
-        write(*, *) "  opening_angle_z: ", pst%s%r%cone_opening_angle_z
-        write(*, *) "  cone_x_theta: ", pst%s%r%cone_theta
-        write(*, *) "  cone_x_phi: ", pst%s%r%cone_phi
-        write(*, *) "  z_max: ", pst%s%r%cone_z_max
-        write(*, *) "  z_min: ", pst%s%r%cone_z_min
-        write(*, *) "  observer position: ", pst%s%r%cone_observer
-        write(*, *) ""
-    end subroutine output_lightcone_parameters
+    write(*, *) ""
+    write(*, *) "Lightcone parameters"
+    write(*, *) "  opening_angle_y: ", pst%s%r%cone_opening_angle_y
+    write(*, *) "  opening_angle_z: ", pst%s%r%cone_opening_angle_z
+    write(*, *) "  cone_x_theta: ", pst%s%r%cone_theta
+    write(*, *) "  cone_x_phi: ", pst%s%r%cone_phi
+    write(*, *) "  z_max: ", pst%s%r%cone_z_max
+    write(*, *) "  z_min: ", pst%s%r%cone_z_min
+    write(*, *) "  observer position: ", pst%s%r%cone_observer
+    write(*, *) ""
+  end subroutine output_lightcone_parameters
 
   integer function calculate_write_offset(nbefore, ntotal, nthproperty, nthbuffer, nstride)
     ! Calculate the offset at which to write the buffer
@@ -118,4 +118,4 @@ contains
     calculate_write_offset = bytes_per_int * ((nthproperty - 1) * ntotal + nbefore + (nthbuffer - 1) * nstride)
   end function calculate_write_offset
 
-end module lightcone_io_module 
+end module lightcone_io_module

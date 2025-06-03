@@ -2,8 +2,7 @@ module lightcone_module
   use amr_parameters, only: sp, dp, flen
   use ramses_commons, only: pst_t, ramses_t
   implicit none
-
-  contains
+contains
   subroutine m_output_lightcone(pst)  
     use mdl_module, only: mdl_mkdir
 
@@ -18,7 +17,7 @@ module lightcone_module
 
     z2 = 1 / g%aexp_old - 1.0_dp
     z1 = 1 / g%aexp - 1.0_dp
-    
+
     if (g%nstep_coarse < 2 .or. z1 > r%cone_z_max .or. z2 < r%cone_z_min .or. abs(z2 - z1) < 1d-6) return
     if (r%verbose) write(*,*) 'Entering output_lightcone, nstep_coarse: ', g%nstep_coarse
 
@@ -47,18 +46,18 @@ module lightcone_module
     character(LEN=5) :: nchar
 
     if (pst%nLower > 0) then
-      rID = mdl_send_request(pst%s%mdl, MDL_OUTPUT_LIGHTCONE, pst%iUpper+1, input_size, output_size, input_array)
-      call r_output_lightcone(pst%pLower, input_array, input_size, output_array, output_size)
-      call mdl_get_reply(pst%s%mdl, rID, output_size)
+       rID = mdl_send_request(pst%s%mdl, MDL_OUTPUT_LIGHTCONE, pst%iUpper+1, input_size, output_size, input_array)
+       call r_output_lightcone(pst%pLower, input_array, input_size, output_array, output_size)
+       call mdl_get_reply(pst%s%mdl, rID, output_size)
     else
-      call title(pst%s%g%myid, nchar)
-      filename = TRIM(transfer(input_array, filename))
-      call output_lightcone(pst%s, pst%s%p, filename)
+       call title(pst%s%g%myid, nchar)
+       filename = TRIM(transfer(input_array, filename))
+       call output_lightcone(pst%s, pst%s%p, filename)
     endif
 
   end subroutine r_output_lightcone
 
-subroutine output_lightcone(s, p, filename)
+  subroutine output_lightcone(s, p, filename)
     use pm_commons, only: part_t
     use lightcone_utils
     use lightcone_buffer_module
@@ -77,9 +76,9 @@ subroutine output_lightcone(s, p, filename)
     ! Local variables
     real(dp) :: r_inner, r_outer, angle_y, angle_z
     integer :: nreplicas, &
-               first_xreplica, last_xreplica, &
-               first_yreplica, last_yreplica, &
-               first_zreplica, last_zreplica
+         first_xreplica, last_xreplica, &
+         first_yreplica, last_yreplica, &
+         first_zreplica, last_zreplica
     real(dp) :: z1, z2, coverH0, omega_r
     real(dp) :: position(3)
     real(dp) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
@@ -108,15 +107,15 @@ subroutine output_lightcone(s, p, filename)
     r_outer = comoving2code(s%g, comoving_distance(z2, s%g%omega_m, s%g%omega_l, omega_r, coverH0))
 
     call compute_replica_range(cone_to_box_rotation, s%r%cone_observer, angle_y, angle_z, r_inner, r_outer, first_xreplica, last_xreplica, first_yreplica, last_yreplica, first_zreplica, last_zreplica)
-    
+
     nreplicas = (last_xreplica - first_xreplica + 1) * (last_yreplica - first_yreplica + 1) * (last_zreplica - first_zreplica + 1)
 
     ! Check that total number of replicas does not exceed max_replicas
     if (nreplicas > max_replicas) stop 'Number of replicas exceeds max_replicas in lightcone'
-    
+
     allocate(has_particles(first_xreplica:last_xreplica, first_yreplica:last_yreplica, first_zreplica:last_zreplica))
     has_particles = .false.
-    
+
     ! Count selection particles and fill has_particles array
     nselected = 0
     do i = first_xreplica, last_xreplica
@@ -155,7 +154,7 @@ subroutine output_lightcone(s, p, filename)
 #endif
 
     if (s%r%verbose .and. s%g%myid == 1) write(*, *) 'Found ', ntotal, ' lightcone particles across ', nreplicas, ' replicas'
-    
+
     call init_lightcone_buffer(buffer, nstride) ! Allocate the buffer
 
     ilun = 3 * s%g%ncpu + s%g%myid + 103
@@ -164,43 +163,43 @@ subroutine output_lightcone(s, p, filename)
     ! Select particles and write in chunks
     nthbuffer = 0 ! We need to keep track of the number of buffers previously written to correctly offset the write position
     do i = first_xreplica, last_xreplica
-      do j = first_yreplica, last_yreplica
-        do k = first_zreplica, last_zreplica
+       do j = first_yreplica, last_yreplica
+          do k = first_zreplica, last_zreplica
 
-          if (.not. has_particles(i, j, k)) cycle
+             if (.not. has_particles(i, j, k)) cycle
 
-          do npart = 1, p%npart
-            position = p%xp(npart, :)
-            position(1) = position(1) + i * s%r%boxlen
-            position(2) = position(2) + j * s%r%boxlen
-            position(3) = position(3) + k * s%r%boxlen
+             do npart = 1, p%npart
+                position = p%xp(npart, :)
+                position(1) = position(1) + i * s%r%boxlen
+                position(2) = position(2) + j * s%r%boxlen
+                position(3) = position(3) + k * s%r%boxlen
 
-            position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
+                position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
-            if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
-              ! Transform velocity to cone coordinates
-              velocity = matmul(box_to_cone_rotation, p%vp(npart, :))
-              call add_to_buffer(buffer, real(position(:), kind=sp), real(velocity(:), kind=sp))
+                if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
+                   ! Transform velocity to cone coordinates
+                   velocity = matmul(box_to_cone_rotation, p%vp(npart, :))
+                   call add_to_buffer(buffer, real(position(:), kind=sp), real(velocity(:), kind=sp))
 
-              if (buffer_is_full(buffer)) then
-                nthbuffer = nthbuffer + 1
-                call write_buffer(ilun, buffer, nbefore, ntotal, nthbuffer)
-                call empty_buffer(buffer)
-              end if
+                   if (buffer_is_full(buffer)) then
+                      nthbuffer = nthbuffer + 1
+                      call write_buffer(ilun, buffer, nbefore, ntotal, nthbuffer)
+                      call empty_buffer(buffer)
+                   end if
 
-            end if
+                end if
+             end do
           end do
-        end do
-      end do
+       end do
     end do
 
     ! Write any remaining particles
     if (.not. buffer_is_empty(buffer)) then
-      nthbuffer = nthbuffer + 1
-      call write_buffer(ilun, buffer, nbefore, ntotal, nthbuffer)
-      call empty_buffer(buffer)
+       nthbuffer = nthbuffer + 1
+       call write_buffer(ilun, buffer, nbefore, ntotal, nthbuffer)
+       call empty_buffer(buffer)
     end if
-    
+
     call close_lightcone_file(ilun)
     if (s%g%myid == 1) call write_lightcone_txt_file(filename, ntotal, s%g%aexp_old, s%g%aexp)
 

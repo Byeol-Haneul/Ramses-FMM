@@ -3,10 +3,10 @@ module lightcone_buffer_module
   implicit none
 
   type :: lightcone_buffer
-    real(sp), allocatable :: xp(:,:)
-    real(sp), allocatable :: vp(:,:)
-    integer :: nstride
-    integer :: ncurrent
+     real(sp), allocatable :: xp(:,:)
+     real(sp), allocatable :: vp(:,:)
+     integer :: nstride
+     integer :: ncurrent
   end type lightcone_buffer
 
 contains
@@ -27,11 +27,11 @@ contains
     real(sp), intent(in) :: velocity(3)
 
     if (buffer%ncurrent < buffer%nstride) then
-      buffer%ncurrent = buffer%ncurrent + 1
-      buffer%xp(buffer%ncurrent, :) = position(:)
-      buffer%vp(buffer%ncurrent, :) = velocity(:)
+       buffer%ncurrent = buffer%ncurrent + 1
+       buffer%xp(buffer%ncurrent, :) = position(:)
+       buffer%vp(buffer%ncurrent, :) = velocity(:)
     else
-      stop 'add_to_buffer: Cannot add particle to a full buffer'
+       stop 'add_to_buffer: Cannot add particle to a full buffer'
     end if
   end subroutine add_to_buffer
 
@@ -49,8 +49,8 @@ contains
 
   subroutine empty_buffer(buffer)
     type(lightcone_buffer), intent(inout) :: buffer
-    
+
     buffer%ncurrent = 0
   end subroutine empty_buffer
 
-end module lightcone_buffer_module 
+end module lightcone_buffer_module
