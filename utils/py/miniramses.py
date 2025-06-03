@@ -535,6 +535,24 @@ def rd_part(nout,**kwargs):
 
     return p
 
+def rd_cone(nout, path, nproperties=3, verbose=False):
+    """
+    Read the lightcone shell from the output directory.
+    First read number of particles from path/cone_nout/cone_nout.txt (1st line)
+    nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
+    """
+    nout_padded = str(nout).zfill(5)
+    binfile = f"{path}/cone_{nout_padded}/cone_{nout_padded}"
+    txtfile = f"{binfile}.txt"
+    with open(txtfile, 'r') as file:
+        npart = int(file.readline().strip())
+        aexp_old = float(file.readline().strip())
+        aexp = float(file.readline().strip())
+
+    verbose and print(f"Found {npart} particles in {txtfile}")
+
+    return np.fromfile(binfile, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
+
 class Level:
     def __init__(self,nndim):
         self.level = 0

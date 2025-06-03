@@ -371,6 +371,16 @@ subroutine m_read_params(pst)
   real(dp)::purity_threshold=-1
   real(dp)::fraction_threshold=0.1d0
 
+  ! Lightcone parameters
+  logical :: lightcone = .false.   ! Lightcone activated
+  real(dp) :: cone_z_min = 0.0 ! Minimum redshift
+  real(dp) :: cone_z_max = 1.0 ! Maximum redshift
+  real(dp) :: cone_opening_angle_y = 0.0 ! Opening angle in y direction in degrees
+  real(dp) :: cone_opening_angle_z = 0.0 ! Opening angle in z direction in degrees
+  real(dp) :: cone_theta = 0.0 ! Rotation of the cone's x-axis around the box's y-axis in degrees
+  real(dp) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
+  real(dp), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
+
   ! Sink parameters
   integer::rho_type_sink=1
   logical::sink_descent=.false.
@@ -555,6 +565,9 @@ subroutine m_read_params(pst)
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
+  ! Lightcone parameters
+  namelist/lightcone_params/lightcone,cone_z_min,cone_z_max,cone_opening_angle_y,cone_opening_angle_z &
+       & ,cone_theta,cone_phi,cone_observer
   ! Gadget initial conditions parameters
   namelist/gadget_params/ic_file,ic_format,IG_rho,IG_T2,IG_metal &
        & ,ic_head_name,ic_pos_name,ic_vel_name,ic_id_name,ic_mass_name &
@@ -808,6 +821,9 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=sink_feedback_params,END=114)
 114 continue
+  rewind(1)
+  read(1, NML=lightcone_params, END=115)
+115 continue 
   close(1)
 
   !-----------------
@@ -971,6 +987,30 @@ subroutine m_read_params(pst)
      if(isHe) write(*,'(A10, I2)') '  iHeII =  ', iIons-1+ixHeII
      if(isHe) write(*,'(A10, I2)') '  iHeIII = ', iIons-1+ixHeIII
      !if(isHe) print '(I3, A9)', iIons-1+ixHeIII, 'iHeIII'
+  endif
+
+  ! Check that lightcone parameters are consistent
+  if (lightcone) then
+     if (ndim /= 3) then
+        write(*, *) 'Error: lightcone is only supported in 3D'
+        nml_ok = .false.
+     endif
+     if (cone_z_min >= cone_z_max) then
+        write(*, *) 'Error: cone_z_min >= cone_z_max'
+        nml_ok = .false.
+     endif
+     if (cone_z_min < 0.0) then
+        write(*, *) 'Error: cone_z_min must be greater than 0'
+        nml_ok = .false.
+     endif
+     if (cone_opening_angle_y <= 0.0 .or. cone_opening_angle_z <= 0.0) then
+        write(*, *) 'Error: cone opening angles must be positive'
+        nml_ok = .false.
+     endif
+     if (cone_opening_angle_y >= 90.0 .or. cone_opening_angle_z >= 90.0) then
+        write(*, *) 'Error: cone opening angles must be < 90 degrees'
+        nml_ok = .false.
+     endif
   endif
 
   if(.not. nml_ok)then
@@ -1320,6 +1360,15 @@ subroutine m_read_params(pst)
   s%r%purity_threshold=purity_threshold
   s%r%fraction_threshold=fraction_threshold
   s%r%rho_type_clump=rho_type_clump
+
+  s%r%lightcone = lightcone
+  s%r%cone_z_min = cone_z_min
+  s%r%cone_z_max = cone_z_max
+  s%r%cone_opening_angle_y = cone_opening_angle_y
+  s%r%cone_opening_angle_z = cone_opening_angle_z
+  s%r%cone_theta = cone_theta
+  s%r%cone_phi = cone_phi
+  s%r%cone_observer = cone_observer
 
   s%r%rho_type_sink=rho_type_sink
   s%r%sink_descent=sink_descent

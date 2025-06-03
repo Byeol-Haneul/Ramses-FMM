@@ -139,6 +139,7 @@ function worker_init(mdl) result(pst)
   use clump_finder_module, only: r_clump_finder
   use clump_merger_module, only: r_deallocate_clump
   use output_clump_module, only: r_output_clump
+  use lightcone_module, only: r_output_lightcone
   use movie_module, only: r_output_frame
   use amr_parameters, only: nhilbert
   use init_rt_module, only: r_init_rt
@@ -238,6 +239,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_GRAVITY_HYDRO_FINE,     pst,C_FUNLOC(r_gravity_hydro_fine),1,0,"gravity_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_SOURCE_HYDRO_FINE,      pst,C_FUNLOC(r_source_hydro_fine),1,0,"source_hydro_fine")
   call mdl_add_service(pst%s%mdl,MDL_CLUMP_FINDER,           pst,C_FUNLOC(r_clump_finder),1,0,"clump_finder")
+  call mdl_add_service(pst%s%mdl,MDL_OUTPUT_LIGHTCONE,       pst,C_FUNLOC(r_output_lightcone),1,0,"output_lightcone")
   call mdl_add_service(pst%s%mdl,MDL_CLUMP_DEALLOC,          pst,C_FUNLOC(r_deallocate_clump),1,0,"deallocate_clump")
   call mdl_add_service(pst%s%mdl,MDL_SPLIT_PART,             pst,C_FUNLOC(r_split_part),0,0,"split_part")
   call mdl_add_service(pst%s%mdl,MDL_SORT_PART,              pst,C_FUNLOC(r_sort_part),0,0,"sort_part")

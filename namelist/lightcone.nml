@@ -1,0 +1,54 @@
+This namelist performs a cosmological simulation with dark matter only and lightcone.
+You need a grafic file for the initial conditions. You can download one
+easily by executing in the command line the following script:
+./utils/scripts/load_cosmo_ic.sh
+To compile the code with MPI, type in the command line:
+make NDIM=3 MPI=1 UNITS=COSMO GRAV=1 HYDRO=0
+
+&RUN_PARAMS
+cosmo=.true.
+pic=.true.
+poisson=.true.
+hydro=.false.
+nrestart=0
+nsubcycle=1,1,2
+ncontrol=1
+verbose=.false.
+/
+
+&OUTPUT_PARAMS
+delta_aout=0.1
+aend=1.0
+/
+
+&INIT_PARAMS
+filetype='grafic'
+initfile(1)='ics_ramses'
+/
+
+&AMR_PARAMS
+levelmin=7
+levelmax=15
+ngridmax=2000000
+npartmax=4000000
+nexpand=1,
+/
+
+&POISSON_PARAMS
+epsilon=1.d-4
+/
+
+&REFINE_PARAMS
+m_refine=10*8.,
+/
+
+&LIGHTCONE_PARAMS
+lightcone=.true.
+cone_opening_angle_y=22.5
+cone_opening_angle_z=5
+cone_theta=25.
+cone_phi=17.
+cone_z_max=0.4
+cone_z_min=0.
+cone_observer=0.5,0.5,0.5
+/

@@ -1,6 +1,7 @@
 module update_time_module
   type :: in_broadcast_aexp_t
     real(kind=8)::t,texp,aexp,hexp
+    real(kind=8)::aexp_old
   end type in_broadcast_aexp_t
 contains
 !################################################################
@@ -170,10 +171,11 @@ subroutine m_update_time(pst,ilevel,done)
      g%texp = g%t
   end if
 
-  ! Broadcast t, aexp, texp and hexp to all CPUs
+  ! Broadcast t, aexp, aexp_old, texp and hexp to all CPUs
   in_broadcast_aexp%t=g%t
   in_broadcast_aexp%texp=g%texp
   in_broadcast_aexp%aexp=g%aexp
+  in_broadcast_aexp%aexp_old = g%aexp_old
   in_broadcast_aexp%hexp=g%hexp
   call r_broadcast_aexp(pst,in_broadcast_aexp,storage_size(in_broadcast_aexp)/32)
 
@@ -203,6 +205,7 @@ recursive subroutine r_broadcast_aexp(pst,input,input_size)
      pst%s%g%t   =input%t
      pst%s%g%texp=input%texp
      pst%s%g%aexp=input%aexp
+     pst%s%g%aexp_old = input%aexp_old
      pst%s%g%hexp=input%hexp
   endif
 
