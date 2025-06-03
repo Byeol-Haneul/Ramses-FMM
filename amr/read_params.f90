@@ -325,6 +325,8 @@ subroutine m_read_params(pst)
   real(kind=8)::eos_nH=huge(1d0),eos_index=1,eos_T2=10
   real(kind=8)::T2max=huge(1d0)
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
+  logical::rtz_cooling=.false. ! RTZ Non-equilibrium cooling ------------
+  logical::rtz_equilibrium_test=.false. ! RTZ EQM test ------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
   logical::upload_equilibrium_x=.false.! Enforce equ. xion when uploading
   logical::isHe=.true.            !      He ionization fractions tracked?
@@ -540,7 +542,8 @@ subroutine m_read_params(pst)
   namelist/cooling_params/neq_chem,cooling,metal,isothermal,haardt_madau,J21 &
        & ,eos_type,eos_nH,eos_index,eos_T2, mu_mol, X_H, Y_He &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism &
-       & ,isHe, isH2, is_init_xion, neq_Tconst, upload_equilibrium_x
+       & ,isHe, isH2, is_init_xion, neq_Tconst, upload_equilibrium_x &
+       & ,rtz_cooling, rtz_equilibrium_test
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -1316,6 +1319,8 @@ subroutine m_read_params(pst)
   s%r%X_H=X_H
   s%r%Y_He=Y_He
   s%r%neq_chem=neq_chem
+  s%r%rtz_cooling=rtz_cooling
+  s%r%rtz_equilibrium_test=rtz_equilibrium_test
   s%r%is_init_xion=is_init_xion
   s%r%isHe=isHe
   s%r%isH2=isH2

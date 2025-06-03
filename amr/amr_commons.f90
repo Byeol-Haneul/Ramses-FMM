@@ -252,6 +252,8 @@ module amr_commons
      logical::neq_chem=.false.
      logical::cooling=.false.
      logical::cooling_ism=.false.
+     logical::rtz_cooling=.false.
+     logical::rtz_equilibrium_test=.false.
      logical::metal=.false.
      logical::isothermal=.false.
      logical::haardt_madau=.false.
