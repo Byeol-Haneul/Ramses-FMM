@@ -1,8 +1,9 @@
 ! Non-equlibrium (in H2, HI, HII, HeI, HeII, HeIII)
+! as well as (CO, C, N, O, Mg, Ne, Si, S, Fe)
 ! cooling module for radiation-hydrodynamics.
 ! For details, see Rosdahl et al. (2013), Rosdahl & Teyssier (2015),
-! and Nickerson, Teyssier, & Rosdahl (2018).
-! Joki Rosdahl, Sarah Nickerson, Andreas Bleuler, and Romain Teyssier.
+! and Katz et al. RTZ and PRISM papers
+! Joki Rosdahl, Sarah Nickerson, Andreas Bleuler, Romain Teyssier, and Harley Katz.
 ! NOTE: T2=T/mu, Np = photon density, Fp = photon flux,
 module neq_cooling_module
   use amr_parameters, only: ndim, nvector
@@ -16,6 +17,9 @@ module neq_cooling_module
   private   ! default
   public neq_set_model, neq_solve_cooling, updateRTGroups_CoolConstants &
        ,update_metal_cooling, cmp_equilibrium_abundances, getmu
+#ifdef RT       
+  public reduce_flux
+#endif
 
   real(kind=8),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 

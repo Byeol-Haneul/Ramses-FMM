@@ -9,15 +9,24 @@ HYDRO = 1
 GRAV = 0
 MHD = 0
 RT = 0
+RTZ = 0
 INIT =
 UNITS =
 NENER = 0
 NMETAL = 0
+N_CARBON_IONS = 0
+N_NITROGEN_IONS = 0
+N_OXYGEN_IONS = 0
+N_NEON_IONS = 0
+N_MAGNESIUM_IONS = 0
+N_SILICON_IONS = 0
+N_SULFUR_IONS = 0
+N_IRON_IONS = 0
 NION = 0
 NPSCAL = 0
 NRTGRP = 0
 NHILBERT = 1
-NVECTOR = 32
+NVECTOR = 1
 NPRE = 8
 PATCH =
 DEBUG = 0
@@ -28,6 +37,9 @@ EXEC = ramses
 # Compute NVAR
 NHYDRO = 5
 NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
+NVAR := $(NVAR)+$(N_CARBON_IONS)+$(N_NITROGEN_IONS)+$(N_OXYGEN_IONS)
+NVAR := $(NVAR)+$(N_NEON_IONS)+$(N_MAGNESIUM_IONS)+$(N_SILICON_IONS)
+NVAR := $(NVAR)+$(N_SULFUR_IONS)+$(N_IRON_IONS)
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
@@ -52,6 +64,9 @@ ifneq ($(NENER),0)
 endif
 ifeq ($(RT),1)
    DEFINES += -DRT -DNRTGRP=$(NRTGRP)
+endif
+ifeq ($(RTZ),1)
+   DEFINES += -DRTZ
 endif
 ifneq ($(NVECTOR),32)
    DEFINES += -DNVECTOR=$(NVECTOR)
@@ -158,7 +173,10 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
 	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
-	 coolrates_module.o neq_cooling_module.o init_neq_chem.o \
+	 coolrates_module.o collisional_ionization_module.o recombination_module.o \
+    cosmic_ray_ionization_module.o photoionization_UVB_module.o dust_recombination_module.o \
+    molecules_module.o charge_exchange_module.o neq_cooling_module.o \
+    rtz_module.o rtz_cooling_module.o init_neq_chem.o \
 	 mdl_commons.o mdl.o rt_spectra.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \

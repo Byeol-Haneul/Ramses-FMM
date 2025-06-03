@@ -93,7 +93,7 @@ end subroutine r_init_time
   end if                                                                   
 
   ! Initialize cooling model
-  if(r%cooling.and..not.r%cooling_ism.and..not.r%neq_chem)then
+  if(r%cooling.and..not.r%cooling_ism.and..not.r%neq_chem.and..not.r%rtz_cooling)then
      call init_cooling(r,g,c)
      call set_table(c,dble(g%aexp))
   endif

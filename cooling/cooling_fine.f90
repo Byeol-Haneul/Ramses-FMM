@@ -37,6 +37,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use cooling_module, only: cooling_t, solve_cooling, T2_min_fix, set_table
   use coolrates_module, only: neq_cooling_t
   use neq_cooling_module, only: neq_solve_cooling
+  use rtz_cooling_module, only: rtz_solve_cooling, n_elements
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -54,7 +55,11 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   real(kind=8),dimension(1:nvector)::nH,T2,delta_T2,ekk,err,emag
   real(kind=8),dimension(1:nvector)::T2min,Zsolar,boost
 !  logical,dimension(1:nvector)::cooling_on=.true.
+#ifdef RTZ
+  real(kind=8),dimension(1:n_elements, 1:n_elements, 1:nvector):: xion
+#else
   real(kind=8),dimension(nion, 1:nvector):: xion
+#endif
 #ifdef RT
   integer::ig,iNp
   real(kind=8),dimension(1:ndim)::Fpnew
@@ -62,6 +67,9 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   real(kind=8),dimension(ndim, nrtgrp, 1:nvector):: Fp, dFpdt=0
   real(kind=8),dimension(ndim, 1:nvector):: p_gas
   real(kind=8)::scale_Np,scale_Fp,Npnew
+#endif
+#ifdef RTZ
+  real(kind=8), dimension(n_elements, 1:nvector):: nElement
 #endif
 #if NENER>0
   integer::irad
@@ -181,6 +189,12 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         endif
 
         ! Compute ionization fraction
+#ifdef RTZ
+        ! TODO(code): need to fill out with correct ionization fractions
+        ! for now we simple set everything to neutral
+        xion(:,:,:) = 0.d0
+        xion(:,1,:) = 1.d0
+#else
         if(r%neq_chem) then
            do ii=0,nIon-1
               do i=1,nleaf
@@ -189,6 +203,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
               end do
            end do
         endif
+#endif
 
         ! Get photon densities and flux magnitudes
 #ifdef RT
@@ -275,6 +290,28 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         else if(r%cooling_ism)then
            ! Use cooling from cooling_module_frig described in Audit & Hennebelle 2005
            call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,r%mu_mol,nleaf)
+        else if(r%neq_chem.and.r%rtz_cooling) then
+           ! If both non-equilibrium chemistry and rtz_cooling are turned on
+           ! we use a detailed model for the chemistry
+
+           !TODO(code): fill nelement with correct number densities
+           ! for now, just assume some density solar metallicity
+           nElement(1:n_elements,1:nleaf)  = 0.d0  ! Initialize to zero
+           nElement(1,1:nleaf)  = 1.d-3                          ! Hydrogen      
+           nElement(2,1:nleaf)  = nElement(1,1:nleaf) * 8.51d-02 ! Helium
+           nElement(6,1:nleaf)  = nElement(1,1:nleaf) * 2.69d-04 ! Carbon
+           nElement(7,1:nleaf)  = nElement(1,1:nleaf) * 6.76d-05 ! Nitrogen
+           nElement(8,1:nleaf)  = nElement(1,1:nleaf) * 4.90d-04 ! Oxygen
+           nElement(10,1:nleaf) = nElement(1,1:nleaf) * 8.51d-05 ! Neon
+           nElement(12,1:nleaf) = nElement(1,1:nleaf) * 3.98d-05 ! Magnesium
+           nElement(14,1:nleaf) = nElement(1,1:nleaf) * 3.24d-05 ! Silicon
+           nElement(16,1:nleaf) = nElement(1,1:nleaf) * 1.32d-05 ! Sulfur
+           nElement(26,1:nleaf) = nElement(1,1:nleaf) * 3.16d-05 ! Iron
+           call rtz_solve_cooling(r, tables, T2, xion, nElement, &
+#ifdef RT
+                & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
+#endif
+                & dtcool, nleaf)           
         else if(r%neq_chem)then
            call neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
 #ifdef RT
@@ -330,6 +367,9 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         endif
 
         ! Update ionization fraction
+#ifdef RTZ
+        !TODO(code): put ionization fractions back into uold array
+#else
         if(r%neq_chem) then
            do ii=0,nion-1
               do i=1,nleaf
@@ -337,6 +377,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
               end do
            end do
         endif
+#endif
 
         ! Update entropy if dual energy scheme is activated
         if(r%entropy.and.r%dual_energy.GE.0)then
