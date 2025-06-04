@@ -344,6 +344,7 @@ subroutine m_read_params(pst)
   logical::rtz_include_photoionization=.true.
   logical::rtz_include_cosmic_ray_ionization=.true.
   logical::rtz_include_charge_exchange=.true.
+  logical::isH2_rtz=.false.
   real(kind=8)::rtz_UV_background_G0=0.d0
   real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
 
@@ -554,7 +555,7 @@ subroutine m_read_params(pst)
        & ,rtz_cooling, rtz_equilibrium_test, rtz_include_collisional_ionization &
        & ,rtz_include_photoionization, rtz_include_cosmic_ray_ionization &
        & ,rtz_include_charge_exchange, rtz_UV_background_G0 &
-       & ,rtz_total_cosmic_ray_ionization_rate
+       & ,rtz_total_cosmic_ray_ionization_rate, isH2_rtz
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -1345,6 +1346,7 @@ subroutine m_read_params(pst)
   s%r%rtz_include_charge_exchange=rtz_include_charge_exchange
   s%r%rtz_UV_background_G0=rtz_UV_background_G0
   s%r%rtz_total_cosmic_ray_ionization_rate=rtz_total_cosmic_ray_ionization_rate
+  s%r%isH2_rtz=isH2_rtz
 
   s%r%iIons=iIons
   s%r%ixHI=ixHI

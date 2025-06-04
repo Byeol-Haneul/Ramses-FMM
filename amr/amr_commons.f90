@@ -279,6 +279,7 @@ module amr_commons
      logical::rtz_include_photoionization=.true.
      logical::rtz_include_cosmic_ray_ionization=.true.
      logical::rtz_include_charge_exchange=.true.
+     logical::isH2_rtz=.false.
      real(kind=8)::rtz_UV_background_G0=0.d0
      real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
 
