@@ -217,8 +217,9 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
   real(kind=8)::current_mass_frac
   integer:: i_interp, convergence_counter
   integer :: base_unit = 100
-  integer :: element_unit, j
+  integer :: element_unit, j, iIon
   character(len=50) :: element_filename
+  real(kind=8), allocatable :: ytmp(:)
 
   ! Store some temporary variables reduce computations
   one_over_T_FRAC = 1d0 / T_FRAC
@@ -274,17 +275,12 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
             do iElement=1,n_elements
                ! Check if we are actually using that element
                if (elements(iElement)%atomic_number .gt. 0) then
-                  ! Get the indices of the number of ions + number of molecules
+                  ! REDUCE SO THAT IONIZATION FRACTIONS SUM TO 1
                   ion_fracs = elements(iElement)%n_ions + elements(iElement)%n_mol
-
-                  ! Sum the ionization mass fractions
                   current_mass_frac = sum(xion(iElement,1:ion_fracs,i))
-
-                  ! Get the index of the maximum 
-                  idx_max = MAXLOC(xion(iElement,1:ion_fracs,i), DIM=1)
-
-                  ! Update the max ionization state so that it sums to 1
-                  xion(iElement,idx_max,i) = 1.d0 - (current_mass_frac - xion(iElement,idx_max,i))
+                  do iIon=1,ion_fracs
+                     xion(iElement,iIon,i) = xion(iElement,iIon,i) + ((1.d0 - current_mass_frac) * (xion(iElement,iIon,i) / current_mass_frac))
+                  end do
                end if
             end do
          end do
@@ -311,12 +307,12 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
                T2(i) = T2(i) + dT2
                ! Check for convergence
                xion(:,:,i) = xion(:,:,i) + dXion(:,:)
-               if (convergence_counter .gt. 1000) then
+               if (convergence_counter .gt. 3000) then
                   tleft(i) = 0.0 ! Finish the cell if we have reached convergence
                else
                   tleft(i)=tleft(i)-ddt(i)
                   ! Take at least 100 iterations
-                  if (convergence_counter .lt. 1000) then
+                  if (convergence_counter .lt. 3000) then
                      tleft(i)=max(tleft(i),ddt(i))
                   endif
                endif
@@ -338,7 +334,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
          do i = 1, n_elements
             if (elements(i)%atomic_number .gt. 0) then
                element_unit = base_unit + i
-               write(element_unit,'(ES15.6, I8, *(ES15.6))') r%neq_TConst, loopcnt, &
+               write(element_unit,'(ES15.6, I14, *(ES15.6))') r%neq_TConst, loopcnt, &
                   (xion(i,j,1), j=1,elements(i)%n_ions)
             end if
          end do
@@ -377,17 +373,12 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
          do iElement=1,n_elements
             ! Check if we are actually using that element
             if (elements(iElement)%atomic_number .gt. 0) then
-               ! Get the indices of the number of ions + number of molecules
+               ! REDUCE SO THAT IONIZATION FRACTIONS SUM TO 1
                ion_fracs = elements(iElement)%n_ions + elements(iElement)%n_mol
-
-               ! Sum the ionization mass fractions
                current_mass_frac = sum(xion(iElement,1:ion_fracs,i))
-
-               ! Get the index of the maximum 
-               idx_max = MAXLOC(xion(iElement,1:ion_fracs,i), DIM=1)
-
-               ! Update the max ioniztion state so that it sums to 1
-               xion(iElement,idx_max,i) = 1.d0 - (current_mass_frac - xion(iElement,idx_max,i))
+               do iIon=1,ion_fracs
+                  xion(iElement,iIon,i) = xion(iElement,iIon,i) + ((1.d0 - current_mass_frac) * (xion(iElement,iIon,i) / current_mass_frac))
+               end do
             end if
          end do
 #ifdef RT
@@ -507,7 +498,7 @@ contains
     real(kind=8):: total_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate
     real(kind=8):: phi_s, cosmic_ray_scale_factor, primary_cosmic_ray_ionization_rate
     real(kind=8):: UV_background_G0
-    integer:: atomic_number, n_ions, i_other_Element, i_other_Ion, iIon
+    integer:: atomic_number, n_ions, i_other_Element, i_other_Ion
     real(kind=8):: Zsolar
     !-----------------------------------------------------------------------
 
@@ -542,7 +533,9 @@ contains
     neInit = ne
     fracMax = 0d0 ! Max fractional update, to check if dt can be increased
     ss_factor = 1d0                  ! UV background self_shielding factor
-    if(r%self_shielding) ss_factor = exp(-nH(icell)/1d-2)
+    if (.not.r%rtz_equilibrium_test) then 
+       if(r%self_shielding) ss_factor = exp(-nH(icell)/1d-2)
+    end if
     rho = nH(icell) / r%X_H * mH ! TODO(code): update this to the correct value
 
     ! RTZ -- initialize cosmiv ray variables
@@ -780,10 +773,10 @@ contains
                 cr = cr + (collisional_ionization(TK, iIon-1, iElement) * ne * dXion(iElement,iIon-1))
              end if
 
-             ! Photoionization of the less excited state
-            !  if (iIon.gt.1) then 
-            !     cr = cr + (HM12_UVB_z(iElement,iIon-1,1) * ss_factor * dXion(iElement,iIon-1))
-            !  end if
+             ! UVB Photoionization of the less excited state
+             if (iIon.gt.1) then 
+                cr = cr + (HM12_UVB_z(iElement,iIon-1,1) * ss_factor * dXion(iElement,iIon-1))
+             end if
 
              ! Photoionization by sub-ionizing ISRF --> only impacts lowest ionization states
             !  if (iIon.eq.2) then 
@@ -822,10 +815,10 @@ contains
                 de = de + (collisional_ionization(TK, iIon, iElement) * ne)
              end if
 
-             ! Photoionization
-            !  if (iIon .lt. n_ions) then 
-            !     de = de + (HM12_UVB_z(iElement,iIon,1) * ss_factor)
-            !  end if
+             ! UVB Photoionization
+             if (iIon .lt. n_ions) then 
+                de = de + (HM12_UVB_z(iElement,iIon,1) * ss_factor)
+             end if
 
              ! Photoionization by sub-ionizing ISRF --> only impacts lowest ionization states
             !  if (iIon .eq. 1) then
@@ -935,17 +928,11 @@ contains
           end do ! END ION LOOP
 
           ! REDUCE SO THAT IONIZATION FRACTIONS SUM TO 1
-          ! Get the indices of the number of ions + number of molecules
           ion_fracs = elements(iElement)%n_ions + elements(iElement)%n_mol
-
-          ! Sum the ionization mass fractions
           current_mass_frac = sum(dXion(iElement,1:ion_fracs))
-
-          ! Get the index of the maximum 
-          idx_max = MAXLOC(dXion(iElement,1:ion_fracs), DIM=1)
-
-          ! Update the max ioniztion state so that it sums to 1
-          dXion(iElement,idx_max) = 1.d0 - (current_mass_frac - dXion(iElement,idx_max))
+          do iIon=1,ion_fracs
+             dXion(iElement,iIon) = dXion(iElement,iIon) + ((1.d0 - current_mass_frac) * (dXion(iElement,iIon) / current_mass_frac))
+          end do
        end if
     end do ! END ELEMENT LOOP
 
@@ -969,6 +956,7 @@ contains
     else
        dt_rec=ddt(icell)
     endif
+   !  dt_rec = 0.9 * ddt(icell) / ((0.07d0+fracMax)**0.3d0)
     dt_ok=.true.
     code=0
 

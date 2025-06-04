@@ -45,6 +45,7 @@ subroutine init_neq_chem(r,g,tables)
 
   ! Initialize the UV background data
   call load_UVB_data() 
+
   if(r%cosmo)then
      call update_UVB((1.d0/dble(g%aexp_ini))-1.d0)
   else
