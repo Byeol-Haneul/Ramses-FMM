@@ -80,7 +80,7 @@ FUNCTION alpha_H2_dust(T, dust_to_gas_mass_ratio_over_mw) result(rate)
 
   clumping_factor = 1.d0
   T2 = T / 100.d0
-  rate = dust_to_gas_mass_ratio_over_mw * (3.5d-17) * clumping_factor * sqrt(min(T2,5.d0))
+  rate = dust_to_gas_mass_ratio_over_mw * (3.5d-17) * clumping_factor * sqrt(T2)
 
 END FUNCTION alpha_H2_dust
 
@@ -97,7 +97,7 @@ FUNCTION alpha_H2(T, dust_to_gas_mass_ratio_over_mw, xe, H2_cosmic_ray_ionizatio
   rate = 0.d0
 
   ! Formation rate on dust. Consider only HI
-  rate = rate + alpha_H2_dust(T, dust_to_gas_mass_ratio_over_mw) * xHI
+  rate = rate + alpha_H2_dust(T, dust_to_gas_mass_ratio_over_mw) * xHI * nH
 
   ! Primordial H- channel
   rate = rate + alpha_H2_prim(T, xe, H2_cosmic_ray_ionization_rate, G0, xHI, xHII) * xHI * nH
@@ -108,23 +108,26 @@ FUNCTION alpha_H2(T, dust_to_gas_mass_ratio_over_mw, xe, H2_cosmic_ray_ionizatio
 END FUNCTION alpha_H2
 
 FUNCTION beta_H2_umist(T, nH, ne, nH2) result(rate)
-  ! H2 destrubtion from umist
-  ! http://udfa.ajmarkwick.net/index.php?species=4
+  ! H2 destruction from umist
   implicit none
 
   real(KIND=8), intent(in) :: T, nH, ne, nH2
   real(KIND=8) :: rate
+  real(KIND=8) :: T_loc
 
   rate = 0.d0
 
   !H2 + H2 --> H2 + H + H TODO(CODE): double check exponent
-  rate = rate + (1.00d-8 * ((T/300d0)**0.0d0) * exp(-84100.d0/T) * nH2)
+  T_loc = max(min(T,41000.d0),2803.d0)
+  rate = rate + (1.00d-8 * ((T_loc/300d0)**0.0d0) * exp(-84100.d0/T_loc) * nH2)
 
   !H2 + e- --> H + H + e-
-  rate = rate + (3.22d-9 * ((T/300d0)**0.35d0) * exp(-102000.d0/T) * ne)
+  T_loc = max(min(T,41000.d0),3400.d0)
+  rate = rate + (3.22d-9 * ((T_loc/300d0)**0.35d0) * exp(-102000.d0/T_loc) * ne)
 
   !H2 + H --> H + H + H
-  rate = rate + (4.67d-7 * ((T/300d0)**(-1.d0)) * exp(-55000.d0/T) * nH)
+  T_loc = max(min(T,41000.d0),1833.d0)
+  rate = rate + (4.67d-7 * ((T_loc/300d0)**(-1.d0)) * exp(-55000.d0/T_loc) * nH)
 
 END FUNCTION beta_H2_umist
 

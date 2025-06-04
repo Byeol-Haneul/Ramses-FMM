@@ -57,7 +57,7 @@ SUBROUTINE initialize_elements()
    elements(1)%z_solar = 1.0
    elements(1)%G0_photo_rate = 0.0 ! No subionizing PI
    elements(1)%n_ions = 2
-   elements(1)%n_mol = 0
+   elements(1)%n_mol = 1
    elements(1)%depletion = 1.0
 
    ! Element 2: Helium
@@ -328,7 +328,11 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
          end do ! end iterative loop
 
          ! Write hydrogen for debugging
-         write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1)
+         if (r%isH2_rtz) then 
+            write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
+         else
+            write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1)
+         end if
 
          ! Write data to file
          do i = 1, n_elements
@@ -467,6 +471,7 @@ contains
     use dust_recombination_module
     use photoionization_UVB_module
     use cosmic_ray_ionization_module
+    use molecules_module
     implicit none
     integer, intent(in):: icell
     !-----------------------------------------------------------------------
@@ -491,7 +496,7 @@ contains
     logical:: newAtomicCons=.true.
     !-----------------------------------------------------------------------
     ! Variables specific to RTZ
-    real(kind=8):: alpha_H2_loc, de_H2, xe
+    real(kind=8):: xe
     real(kind=8):: dust_effective_number_density, dust_to_gas_mass_ratio_over_mw
     real(kind=8):: HI_number_density, HII_number_density
     real(kind=8):: paired_ion_number_density
@@ -499,7 +504,8 @@ contains
     real(kind=8):: phi_s, cosmic_ray_scale_factor, primary_cosmic_ray_ionization_rate
     real(kind=8):: UV_background_G0
     integer:: atomic_number, n_ions, i_other_Element, i_other_Ion
-    real(kind=8):: Zsolar
+    real(kind=8):: Zsolar, total_G0
+    real(kind=8):: alpha_H2_loc, beta_H2_loc, cr_H2, de_H2, xH2_loc
     !-----------------------------------------------------------------------
 
     ! RTZ variable initialization
@@ -734,7 +740,59 @@ contains
     !/////////////////////////////////////////
     !//           UPDATE MOLECULES          //
     !/////////////////////////////////////////
+
+    ! TODO(code): update with value from local radition field
+    total_G0 = UV_background_G0
+
     alpha_H2_loc = 0.d0
+    beta_H2_loc = 0.d0
+    cr_H2 = 0.d0
+    de_H2 = 0.d0
+    if (r%isH2_rtz) then
+       xH2_loc = dXion(1,3) / 2.d0 ! Note that we actually store 2 * xH2
+
+       !! Creation !!
+
+       ! Contains formation on dust and via the primordial channel
+       alpha_H2_loc = alpha_H2(TK, dust_to_gas_mass_ratio_over_mw, xe, H2_cosmic_ray_ionization_rate, &
+                               total_G0, dXion(1,1), dXion(1,2), nElement(1, icell)) 
+       cr_H2 = cr_H2 + alpha_H2_loc
+
+       !! Destruction !!
+
+       ! Collisional dissociation
+       if (r%rtz_include_collisional_ionization) then 
+         beta_H2_loc = beta_H2_umist(TK,dXion(1,1)*nElement(1, icell),ne,xH2_loc*nElement(1, icell))
+         de_H2 = de_H2 + beta_H2_loc
+       end if
+
+       ! Photodissociation
+       if (r%rtz_include_photoionization) then 
+         de_H2 = de_H2 + total_G0 * 5.68d-11
+       end if 
+
+       ! Cosmic ray destruction
+       if (r%rtz_include_cosmic_ray_ionization) then 
+         de_H2 = de_H2 + H2_cosmic_ray_ionization_rate
+       end if
+
+       ! Update xH2 and store in dXion
+       xH2_loc = (cr_H2*ddt(icell) + xH2_loc)/(1.+de_H2*ddt(icell))
+       dXion(1,3) = 2.0 * min(max(xH2_loc,x_MIN),0.5d0)
+
+       ! TODO(code) add destruction from local radiation field
+
+       ! Check for convergence
+       dUU = MAX(dUU,ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM)))
+       dUU = dUU * one_over_x_FRAC
+       if(dUU .gt. 1.) then
+          code=6 !TODO(code) update this code for each ion
+          RETURN
+       end if
+
+      fracMax=MAX(fracMax,dUU)
+
+    end if
 
     !/////////////////////////////////////////
     !//       UPDATE IONIZATION STATES      //
@@ -764,10 +822,10 @@ contains
              cr = 0.d0
 
              ! Account for molecular hydrogen
-            !  if (iElement.eq.1 .and. iIon.eq.0 .and. r%isH2) then
-            !     ! Note: no factor of 2 needed since is 2*xH2
-            !     cr = cr + de_H2 * dXion(1,2)
-            !  end if
+             if (iElement.eq.1 .and. iIon.eq.0 .and. r%isH2_rtz) then
+                ! Note: no factor of 2 needed since is 2*xH2
+                cr = cr + (de_H2 * dXion(1,3))
+             end if
 
              ! Recombination of the more excited ionization state
              if (iIon.lt.n_ions) then  
@@ -822,9 +880,9 @@ contains
              de = 0.d0
 
              ! Account for molecular hydrogen
-            !  if (iElement.eq.1 .and. iIon.eq.1 .and. r%isH2) then
-            !    de = de + alpha_H2_loc
-            !  end if
+             if (iElement.eq.1 .and. iIon.eq.1 .and. r%isH2_rtz) then
+               de = de + alpha_H2_loc
+             end if
 
              ! Collisional ionization 
              if (r%rtz_include_collisional_ionization) then
