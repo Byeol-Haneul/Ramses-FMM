@@ -54,10 +54,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 1
-            read(unit_num, *, iostat=ios) HM12_UVB_hydrogen(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_hydrogen(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -70,10 +67,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 1
-            read(unit_num, *, iostat=ios) HM12_UVB_hydrogen(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_hydrogen(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -86,10 +80,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 2
-            read(unit_num, *, iostat=ios) HM12_UVB_helium(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_helium(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -102,10 +93,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 2
-            read(unit_num, *, iostat=ios) HM12_UVB_helium(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_helium(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -118,10 +106,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 6
-            read(unit_num, *, iostat=ios) HM12_UVB_carbon(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_carbon(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -134,10 +119,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 6
-            read(unit_num, *, iostat=ios) HM12_UVB_carbon(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_carbon(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -150,10 +132,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 7
-            read(unit_num, *, iostat=ios) HM12_UVB_nitrogen(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_nitrogen(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -166,10 +145,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 7
-            read(unit_num, *, iostat=ios) HM12_UVB_nitrogen(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_nitrogen(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -182,10 +158,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 8
-            read(unit_num, *, iostat=ios) HM12_UVB_oxygen(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_oxygen(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -198,10 +171,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 8
-            read(unit_num, *, iostat=ios) HM12_UVB_oxygen(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_oxygen(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -214,10 +184,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 10
-            read(unit_num, *, iostat=ios) HM12_UVB_neon(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_neon(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -230,10 +197,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 10
-            read(unit_num, *, iostat=ios) HM12_UVB_neon(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_neon(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -246,10 +210,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 12
-            read(unit_num, *, iostat=ios) HM12_UVB_magnesium(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_magnesium(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -262,10 +223,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 12
-            read(unit_num, *, iostat=ios) HM12_UVB_magnesium(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_magnesium(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -278,10 +236,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 14
-            read(unit_num, *, iostat=ios) HM12_UVB_silicon(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_silicon(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -294,10 +249,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 14
-            read(unit_num, *, iostat=ios) HM12_UVB_silicon(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_silicon(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -310,10 +262,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 16
-            read(unit_num, *, iostat=ios) HM12_UVB_sulfur(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_sulfur(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -326,10 +275,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 16
-            read(unit_num, *, iostat=ios) HM12_UVB_sulfur(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_sulfur(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -342,10 +288,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 26
-            read(unit_num, *, iostat=ios) HM12_UVB_iron(i, j, 1)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_iron(i, :, 1)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -358,10 +301,7 @@ subroutine load_UVB_data()
     end if
     
     do i = 1, N_UVB_POINTS
-        do j = 1, 26
-            read(unit_num, *, iostat=ios) HM12_UVB_iron(i, j, 2)
-            if (ios /= 0) exit
-        end do
+        read(unit_num, *, iostat=ios) HM12_UVB_iron(i, :, 2)
         if (ios /= 0) exit
     end do
     close(unit_num)
@@ -407,7 +347,7 @@ subroutine update_UVB(redshift)
                   HM12_UVB_z(6,j,1)  = (scale_low * HM12_UVB_carbon(i,j,1))  + (scale_high * HM12_UVB_carbon(i+1,j,1))
                   HM12_UVB_z(6,j,2)  = (scale_low * HM12_UVB_carbon(i,j,2))  + (scale_high * HM12_UVB_carbon(i+1,j,2)) 
                end if
-               if (j<8) then
+               if (j.lt.8) then
                   HM12_UVB_z(7,j,1)  = (scale_low * HM12_UVB_nitrogen(i,j,1))  + (scale_high * HM12_UVB_nitrogen(i+1,j,1))
                   HM12_UVB_z(7,j,2)  = (scale_low * HM12_UVB_nitrogen(i,j,2))  + (scale_high * HM12_UVB_nitrogen(i+1,j,2))                
                end if
@@ -431,7 +371,7 @@ subroutine update_UVB(redshift)
                   HM12_UVB_z(16,j,1)  = (scale_low * HM12_UVB_sulfur(i,j,1))  + (scale_high * HM12_UVB_sulfur(i+1,j,1))
                   HM12_UVB_z(16,j,2)  = (scale_low * HM12_UVB_sulfur(i,j,2))  + (scale_high * HM12_UVB_sulfur(i+1,j,2))
                end if
-               if (j<27) then
+               if (j.lt.7) then
                   HM12_UVB_z(26,j,1)  = (scale_low * HM12_UVB_iron(i,j,1))  + (scale_high * HM12_UVB_iron(i+1,j,1))
                   HM12_UVB_z(26,j,2)  = (scale_low * HM12_UVB_iron(i,j,2))  + (scale_high * HM12_UVB_iron(i+1,j,2))
                end if
