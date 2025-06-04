@@ -252,8 +252,6 @@ module amr_commons
      logical::neq_chem=.false.
      logical::cooling=.false.
      logical::cooling_ism=.false.
-     logical::rtz_cooling=.false.
-     logical::rtz_equilibrium_test=.false.
      logical::metal=.false.
      logical::isothermal=.false.
      logical::haardt_madau=.false.
@@ -273,6 +271,16 @@ module amr_commons
      real(kind=8)::neq_Tconst=-1           ! If positive use this value for all T-dependent rates
      logical::neq_isTconst=.false.                    !             Constant rates activated?
      logical::upload_equilibrium_x=.false.          ! Enforce equilibrium xion when uploading
+
+     ! RTZ cooling parameters
+     logical::rtz_cooling=.false.
+     logical::rtz_equilibrium_test=.false.
+     logical::rtz_include_collisional_ionization=.true.
+     logical::rtz_include_photoionization=.true.
+     logical::rtz_include_cosmic_ray_ionization=.true.
+     logical::rtz_include_charge_exchange=.true.
+     real(kind=8)::rtz_UV_background_G0=0.d0
+     real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
 
      ! Star formation parameters
      integer::sf_model=1

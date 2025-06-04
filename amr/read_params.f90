@@ -325,8 +325,6 @@ subroutine m_read_params(pst)
   real(kind=8)::eos_nH=huge(1d0),eos_index=1,eos_T2=10
   real(kind=8)::T2max=huge(1d0)
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
-  logical::rtz_cooling=.false. ! RTZ Non-equilibrium cooling ------------
-  logical::rtz_equilibrium_test=.false. ! RTZ EQM test ------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
   logical::upload_equilibrium_x=.false.! Enforce equ. xion when uploading
   logical::isHe=.true.            !      He ionization fractions tracked?
@@ -338,6 +336,16 @@ subroutine m_read_params(pst)
   integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !   Ionization indices
   real(kind=8),dimension(nion)::ionEvs=0.          !  Ionization energies
   integer::icount
+
+  ! RTZ cooling parameters
+  logical::rtz_cooling=.false. ! RTZ Non-equilibrium cooling ------------
+  logical::rtz_equilibrium_test=.false. ! RTZ EQM test ------------------
+  logical::rtz_include_collisional_ionization=.true.
+  logical::rtz_include_photoionization=.true.
+  logical::rtz_include_cosmic_ray_ionization=.true.
+  logical::rtz_include_charge_exchange=.true.
+  real(kind=8)::rtz_UV_background_G0=0.d0
+  real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
 
   ! Star formation parameters
   integer::sf_model=1
@@ -543,7 +551,10 @@ subroutine m_read_params(pst)
        & ,eos_type,eos_nH,eos_index,eos_T2, mu_mol, X_H, Y_He &
        & ,a_spec,self_shielding,z_ave,z_reion,T2max,cooling_ism &
        & ,isHe, isH2, is_init_xion, neq_Tconst, upload_equilibrium_x &
-       & ,rtz_cooling, rtz_equilibrium_test
+       & ,rtz_cooling, rtz_equilibrium_test, rtz_include_collisional_ionization &
+       & ,rtz_include_photoionization, rtz_include_cosmic_ray_ionization &
+       & ,rtz_include_charge_exchange, rtz_UV_background_G0 &
+       & ,rtz_total_cosmic_ray_ionization_rate
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -1319,14 +1330,21 @@ subroutine m_read_params(pst)
   s%r%X_H=X_H
   s%r%Y_He=Y_He
   s%r%neq_chem=neq_chem
-  s%r%rtz_cooling=rtz_cooling
-  s%r%rtz_equilibrium_test=rtz_equilibrium_test
   s%r%is_init_xion=is_init_xion
   s%r%isHe=isHe
   s%r%isH2=isH2
   s%r%neq_Tconst=neq_Tconst
   if(neq_Tconst .ge. 0d0) s%r%neq_isTconst=.true.
   s%r%upload_equilibrium_x = upload_equilibrium_x
+
+  s%r%rtz_cooling=rtz_cooling
+  s%r%rtz_equilibrium_test=rtz_equilibrium_test
+  s%r%rtz_include_collisional_ionization=rtz_include_collisional_ionization
+  s%r%rtz_include_photoionization=rtz_include_photoionization
+  s%r%rtz_include_cosmic_ray_ionization=rtz_include_cosmic_ray_ionization
+  s%r%rtz_include_charge_exchange=rtz_include_charge_exchange
+  s%r%rtz_UV_background_G0=rtz_UV_background_G0
+  s%r%rtz_total_cosmic_ray_ionization_rate=rtz_total_cosmic_ray_ionization_rate
 
   s%r%iIons=iIons
   s%r%ixHI=ixHI
