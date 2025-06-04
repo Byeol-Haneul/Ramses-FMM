@@ -472,7 +472,7 @@ contains
     !-----------------------------------------------------------------------
     real(kind=8),dimension(nion):: alpha, beta, nN, nI
     real(kind=8):: dUU, fracMax, x_tot
-    real(kind=8):: mu, TK, nHe, ne, neInit, Hrate
+    real(kind=8):: mu, TK, ne, neInit, Hrate
     real(kind=8):: xHI,dxHI, xH2=0d0,dXH2=0d0, xHeI,dxHeI
     real(kind=8):: Crate, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
     real(kind=8):: photoRate, metal_tot, metal_prime, ss_factor, f_dust
@@ -503,12 +503,21 @@ contains
     !-----------------------------------------------------------------------
 
     ! RTZ variable initialization
-    dust_to_gas_mass_ratio_over_mw = 0.d0
+
+    ! Include dust if we are tracking oxygen
+    if (elements(8)%atomic_number .lt. 1) then
+       dust_to_gas_mass_ratio_over_mw = 0.d0
+       Zsolar = 1.d-40
+    else
+       Zsolar = 12.d0 + log10((nElement(8, icell)+1.d-20)/(nElement(1, icell)+1.d-10))
+       dust_to_gas_mass_ratio_over_mw = dust_to_gas_scale_RR14(Zsolar)
+       Zsolar = Zsolar - 8.69
+    end if
+
     total_cosmic_ray_ionization_rate = 1.d-16
 
-    ! Scale solar metallicity based on oxygen abundance
-    !Zsolar = 10.d0**((12.d0 + log10((nElement(8,icell)+1.d-20)/nElement(1,icell))) - 8.69d0)
-    Zsolar = 1.d-40
+    UV_background_G0 = 1.d0
+
     ! END RTZ variable initialization
 
 
@@ -518,7 +527,6 @@ contains
     rt_c_cgs = tables%rt_c_cgs(ilevel)
 #endif
     dt_ok=.false.
-    nHe=0.25*nH(icell)*r%Y_He/r%X_H       ! Helium number density
     ! U contains the original values, dU the updated ones
     dT2 = T2(icell) ; dXion(:,:) = xion(:,:,icell)
 #ifdef RT
@@ -538,7 +546,7 @@ contains
     end if
     rho = nH(icell) / r%X_H * mH ! TODO(code): update this to the correct value
 
-    ! RTZ -- initialize cosmiv ray variables
+    ! RTZ -- initialize cosmic ray variables
     ! Measure phi_s for secondary CR ionization
     phi_s = secondary_cr_rates(xe)
     ! Now calculate the total CR ionization rate
@@ -747,8 +755,6 @@ contains
           ! Get the number of ions
           n_ions = elements(iElement)%n_ions
 
-         !  write(*,*) iElement, atomic_number, n_ions, icell, nElement(iElement, icell)
-
           ! Loop over the number of ions
           do iIon = 1,n_ions
 
@@ -779,9 +785,9 @@ contains
              end if
 
              ! Photoionization by sub-ionizing ISRF --> only impacts lowest ionization states
-            !  if (iIon.eq.2) then 
-            !     cr = cr + (UV_background_G0 * elements(iElement)%G0_photo_rate * dXion(iElement,iIon-1))
-            !  end if
+             if (iIon.eq.2) then 
+                cr = cr + (UV_background_G0 * elements(iElement)%G0_photo_rate * dXion(iElement,iIon-1))
+             end if
 
              ! Cosmic ray ionization of the less excited state
             !  if (iIon > 1) then 
@@ -794,9 +800,9 @@ contains
             !  end if
 
              ! Recombination on dust from the more excited state
-            !  if (iIon.lt.n_ions) then 
-            !     cr = cr + (dust_recombination(iIon+1, i, TK, UV_background_G0, ne) * dust_effective_number_density * dXion(iElement,iIon+1))
-            !  end if
+             if (iIon.lt.n_ions) then 
+                cr = cr + (dust_recombination(iIon+1, i, TK, UV_background_G0, ne) * dust_effective_number_density * dXion(iElement,iIon+1))
+             end if
 
              !TODO(code): add creation from local radiation
 
@@ -821,9 +827,9 @@ contains
              end if
 
              ! Photoionization by sub-ionizing ISRF --> only impacts lowest ionization states
-            !  if (iIon .eq. 1) then
-            !     de = de + (UV_background_G0 * elements(iElement)%G0_photo_rate)
-            !  end if
+             if (iIon .eq. 1) then
+                de = de + (UV_background_G0 * elements(iElement)%G0_photo_rate)
+             end if
 
              ! Recombination
              if (iIon .gt. 1) then 
@@ -841,9 +847,9 @@ contains
             !  end if
 
              ! Recombination on dust
-            !  if (iIon .gt. 1) then 
-            !     de = de + (dust_recombination(iIon, iElement, TK, UV_background_G0, ne) * dust_effective_number_density)
-            !  end if
+             if (iIon .gt. 1) then 
+                de = de + (dust_recombination(iIon, iElement, TK, UV_background_G0, ne) * dust_effective_number_density)
+             end if
 
              !TODO(code): add destruction from local radiation
 
@@ -851,48 +857,47 @@ contains
              !//   Charge Transfer   //
              !/////////////////////////
              ! Note, this was split off due to cross species
-             !coupling. Saves us an extra double loop
-             !Charge exchange
-            !  if (iElement.eq.1) then !If element is hydrogen
-            !     ! Loop over all other elements
-            !     do i_other_Element = 2,n_elements
-            !        if (elements(i_other_Element)%atomic_number > 0) then
-            !           ! Loop over all other ionization states
-            !           do i_other_Ion = 1,elements(i_other_Element)%n_ions
-            !              ! Get the number density of the other ion
-            !              paired_ion_number_density = nElement(i_other_Element, icell) * dXion(i_other_Element,i_other_Ion)
+             ! coupling. Saves us an extra double loop
+             if (iElement.eq.1) then !If element is hydrogen
+                ! Loop over all other elements
+                do i_other_Element = 2,n_elements
+                   if (elements(i_other_Element)%atomic_number > 0) then
+                      ! Loop over all other ionization states
+                      do i_other_Ion = 1,elements(i_other_Element)%n_ions
+                         ! Get the number density of the other ion
+                         paired_ion_number_density = nElement(i_other_Element, icell) * dXion(i_other_Element,i_other_Ion)
 
-            !              if (iIon.eq.1) then !H
-            !                 cr = cr + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon+1) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
-            !                 de = de + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O+ + H => O + H+
-            !              else !H+
-            !                 de = de + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
-            !                 cr = cr + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon-1) * paired_ion_number_density) ! Example:  O+ + H => O + H+
-            !              end if
+                         if (iIon.eq.1) then !H
+                            cr = cr + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon+1) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
+                            de = de + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O+ + H => O + H+
+                         else !H+
+                            de = de + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
+                            cr = cr + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon-1) * paired_ion_number_density) ! Example:  O+ + H => O + H+
+                         end if
 
-            !           end do !end loop over ionization states
-            !        end if
-            !     end do ! end loop over other elements
-            !  else
-            !     HI_number_density = dXion(1,1) * nElement(1, icell)
-            !     HII_number_density = dXion(1,2) * nElement(1, icell)
+                      end do !end loop over ionization states
+                   end if
+                end do ! end loop over other elements
+             else !All other elements
+                HI_number_density = dXion(1,1) * nElement(1, icell)
+                HII_number_density = dXion(1,2) * nElement(1, icell)
 
-            !     if (iIon.gt.1) then
-            !        ! Ionization from less excited state
-            !        cr = cr + (charge_transfer_ionization(iIon-1,iElement,TK) * dXion(iElement,iIon-1) * HII_number_density) ! Example:  O + H+ => O+ + H   
+                if (iIon.gt.1) then
+                   ! Ionization from less excited state
+                   cr = cr + (charge_transfer_ionization(iIon-1,iElement,TK) * dXion(iElement,iIon-1) * HII_number_density) ! Example:  O + H+ => O+ + H   
 
-            !        ! Charge exchange recombination 
-            !        de = de + (charge_transfer_recombination(iIon,iElement,TK) * HI_number_density) ! Example:  O+ + H => O + H+
-            !     end if
+                   ! Charge exchange recombination 
+                   de = de + (charge_transfer_recombination(iIon,iElement,TK) * HI_number_density) ! Example:  O+ + H => O + H+
+                end if
 
-            !     if (iIon.lt.n_ions) then
-            !        ! Charge exchange ionization
-            !        de = de + (charge_transfer_ionization(iIon,iElement,TK) * HII_number_density) ! Example:  O + H+ => O+ + H   
+                if (iIon.lt.n_ions) then
+                   ! Charge exchange ionization
+                   de = de + (charge_transfer_ionization(iIon,iElement,TK) * HII_number_density) ! Example:  O + H+ => O+ + H   
 
-            !        ! Charge exchange recombination from the more excited state
-            !        cr = cr + (charge_transfer_recombination(iIon+1,iElement,TK) * dXion(iElement,iIon+1) * HI_number_density) ! Example:  O+ + H => O + H+
-            !     end if
-            !  end if
+                   ! Charge exchange recombination from the more excited state
+                   cr = cr + (charge_transfer_recombination(iIon+1,iElement,TK) * dXion(iElement,iIon+1) * HI_number_density) ! Example:  O+ + H => O + H+
+                end if
+             end if
 
              !/////////////////////////
              !//       Update        //
@@ -1030,5 +1035,49 @@ FUNCTION secondary_cr_rates(xe) result(phi_s)
   phi_s = (1.d0 - (xe / 1.2d0)) * (0.67d0 / (1.d0 + (xe / 0.05d0)))
 
 END FUNCTION secondary_cr_rates
+
+FUNCTION dust_to_gas_scale_RR14(log10_O_over_H) result(ratio)
+   ! This returns the dust-to-metal ratio relative to the local value
+   !------------------------------------
+   ! Zsolar: metallicity in solar units
+   ! D2Z_solar ~ D2Z / 0.3
+   !------------------------------------
+   ! based on Remy-Ruyer, Madden, Galliano et al. (2014)
+   ! https://arxiv.org/pdf/1312.3442.pdfR
+   ! Broken power law with X_{CO,Z} case (Table 1)
+   implicit none
+
+   real(kind=8),intent(in)::log10_O_over_H
+   real(kind=8)::ratio
+   real(kind=8)::a,alphaH,b,alphaL,xt,x,Xsun
+   real(kind=8)::G2D,G2D_sol,y
+
+   ! y = log (G/D)
+   ! x = 12 + log10(O/H)
+   ! Xsun = 8.69
+   ! 
+   ! y = a + alphaH * (Xsun - x) for x>xt
+   ! y = b + alphaL * (Xsun - x) for x<=xt
+   a      = 2.21d0
+   alphaH = 1.00d0 ! MW case
+   b      = 0.96d0 ! 0.68
+   alphaL = 3.10d0 ! 3.08 
+   xt     = 8.10d0 ! 7.96
+   Xsun   = 8.69d0
+   x = Xsun - log10_O_over_H
+   x = max(log10_O_over_H,5.d0) ! Mild extrapolation
+
+   if (log10_O_over_H>xt)then
+      y = a + alphaH * (Xsun - log10_O_over_H)
+   else
+      y = b + alphaL * (Xsun - log10_O_over_H)
+   endif
+
+   G2D = 10.d0**y
+   G2D_sol = 10.d0**a
+
+   ratio = max(min(G2D_sol / G2D, 1.d0), 0.d0)
+
+END FUNCTION dust_to_gas_scale_RR14
 
 END MODULE rtz_cooling_module

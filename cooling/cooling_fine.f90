@@ -297,7 +297,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            !TODO(code): fill nelement with correct number densities
            ! for now, just assume some density solar metallicity
            nElement(1:n_elements,1:nleaf)  = 0.d0  ! Initialize to zero
-           nElement(1,1:nleaf)  = 1.d0                          ! Hydrogen      
+           nElement(1,1:nleaf)  = 1.d-1                          ! Hydrogen      
            nElement(2,1:nleaf)  = nElement(1,1:nleaf) * 8.51d-02 ! Helium
            nElement(6,1:nleaf)  = nElement(1,1:nleaf) * 2.69d-04 ! Carbon
            nElement(7,1:nleaf)  = nElement(1,1:nleaf) * 6.76d-05 ! Nitrogen
