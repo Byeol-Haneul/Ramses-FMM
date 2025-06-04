@@ -515,11 +515,11 @@ contains
     end if
 
     total_cosmic_ray_ionization_rate = 1.d-16
+    cosmic_ray_scale_factor = total_cosmic_ray_ionization_rate / 1.d-16
 
     UV_background_G0 = 1.d0
 
     ! END RTZ variable initialization
-
 
 #ifdef RT
     signc=tables%signc(:,:,ilevel)
@@ -790,14 +790,14 @@ contains
              end if
 
              ! Cosmic ray ionization of the less excited state
-            !  if (iIon > 1) then 
-            !     cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * total_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
-            !  end if
+             if (iIon > 1) then 
+                cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * total_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
+             end if
 
              ! Cosmic ray ionization of the less excited state from induced UV
-            !  if (iIon.eq.2) then 
-            !     cr = cr + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor * dXion(iElement,iIon-1))
-            !  end if
+             if (iIon.eq.2) then 
+                cr = cr + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor * dXion(iElement,iIon-1))
+             end if
 
              ! Recombination on dust from the more excited state
              if (iIon.lt.n_ions) then 
@@ -837,14 +837,14 @@ contains
              end if 
 
              ! Cosmic ray ionization
-            !  if (iIon .lt. n_ions) then
-            !     de = de + (cosmic_ray_ionization_rates(iElement,iIon) * total_cosmic_ray_ionization_rate)
-            !  end if
+             if (iIon .lt. n_ions) then
+                de = de + (cosmic_ray_ionization_rates(iElement,iIon) * total_cosmic_ray_ionization_rate)
+             end if
 
              ! Cosmic ray ionization from induced UV
-            !  if (iIon .eq. 1) then 
-            !     de = de + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor)
-            !  end if
+             if (iIon .eq. 1) then 
+                de = de + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor)
+             end if
 
              ! Recombination on dust
              if (iIon .gt. 1) then 
@@ -1024,17 +1024,6 @@ FUNCTION getNe(xion,nion) result(ne)
   end do
 
 END FUNCTION getNe
-
-FUNCTION secondary_cr_rates(xe) result(phi_s)
-  ! Secondary CR ionization rate
-  implicit none
-
-  real(KIND=8), intent(in):: xe
-  real(KIND=8):: phi_s
-
-  phi_s = (1.d0 - (xe / 1.2d0)) * (0.67d0 / (1.d0 + (xe / 0.05d0)))
-
-END FUNCTION secondary_cr_rates
 
 FUNCTION dust_to_gas_scale_RR14(log10_O_over_H) result(ratio)
    ! This returns the dust-to-metal ratio relative to the local value
