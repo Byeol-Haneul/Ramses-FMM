@@ -87,14 +87,8 @@ FUNCTION charge_transfer_recombination(ion, nelem, T) result(rate)
      rate = 1.92d-9 * real(ipIon, kind=8)
      return
   end if
-    
-  ! No Charge exchange outside the allowed boundaries
-!   if (T.lt.CTRecomb(5,ipIon,nelem).or.T.gt.CTRecomb(6,ipIon,nelem)) then
-!      rate = 0.d0
-!      return
-!   end if
 
-  !Make sure te is between temp. boundaries; set constant outside of range
+  !Make sure T is between temp. boundaries
   tused = max(min(T,CTRecomb(6,ipIon,nelem)),CTRecomb(5,ipIon,nelem))
   tused = tused * 1d-4
   tused = max(tused,1d-10) ! harley added to prevent zero temperature
@@ -127,13 +121,7 @@ FUNCTION charge_transfer_ionization(ion, nelem, T) result(rate)
      return
   end if
 
-  ! No Charge exchange outside the allowed boundaries
-!   if (T.lt.CTIon(5,ipIon,nelem).or.T.gt.CTIon(6,ipIon,nelem)) then
-!      rate = 0.d0
-!      return
-!   end if
-
-  ! Make sure te is between temp. boundaries; set constant outside of range
+  ! Make sure T is between temp. boundaries
   tused = max(min(T,CTIon(6,ipIon,nelem)),CTIon(5,ipIon,nelem))
   tused = tused * 1d-4
   tused = max(tused,1d-10) ! harley added to prevent zero temperature
