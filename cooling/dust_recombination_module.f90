@@ -5,9 +5,8 @@ module dust_recombination_module
   private  ! everything is private by default
   public :: dust_recombination
 
-  real(KIND=8), dimension(27,7) :: dust_rec_coefs = reshape( &
-  [ 0.000d0, 0.000d0,  0.000d0, 0.000d0, 0.000d0,  0.0000d0, 0.000d0, &    ! NA
-    12.25d0, 8.074d-6, 1.378d0, 5.087d2, 1.586d-2, 0.4723d0, 1.102d-5, &   ! Hydrogen
+  real(KIND=8), dimension(7,26) :: dust_rec_coefs = reshape( &
+  [ 12.25d0, 8.074d-6, 1.378d0, 5.087d2, 1.586d-2, 0.4723d0, 1.102d-5, &   ! Hydrogen
     5.572d0, 3.185d-7, 1.512d0, 5.115d3, 3.903d-7, 0.4956d0, 5.494d-7, &   ! Helium
     0.000d0, 0.000d0,  0.000d0, 0.000d0, 0.000d0,  0.0000d0, 0.000d0, &    ! NA
     0.000d0, 0.000d0,  0.000d0, 0.000d0, 0.000d0,  0.0000d0, 0.000d0, &    ! NA
@@ -33,7 +32,7 @@ module dust_recombination_module
     0.000d0, 0.000d0,  0.000d0, 0.000d0, 0.000d0,  0.0000d0, 0.000d0, &    ! NA
     0.000d0, 0.000d0,  0.000d0, 0.000d0, 0.000d0,  0.0000d0, 0.000d0, &    ! NA
     1.701d0, 9.554d-8, 1.851d0, 5.763d4, 4.116d-8, 0.9456d0, 2.198d-5 ], & ! Iron
-    shape=[27,7])
+    shape=[7,26])
 
 CONTAINS
 
@@ -52,9 +51,9 @@ FUNCTION dust_recombination(ion, nelem, T, G, ne) result(rate)
   ! initialize rate to 0.0
   rate = 0.d0
 
-  ! No dust recombination except for the first ionization state.
+  ! No dust recombination except for the first excited state.
   ! Maybe this will change later...
-  if (ion.ne.1) then
+  if (ion.ne.2) then
      return
   end if
 
@@ -85,11 +84,11 @@ FUNCTION dust_recombination(ion, nelem, T, G, ne) result(rate)
   ! Extra fac on the denominator to avoid divide by zero
   phi = (G + 1d-8) * sqrt(T) / (ne + 1d-10) ! units K^1/2 cm^3
 
-  a1 = dust_rec_coefs(nelem,2) * (phi**dust_rec_coefs(nelem,3))
-  a2 = dust_rec_coefs(nelem,4) * (T**dust_rec_coefs(nelem,5))
-  a3 = (-1.d0 * dust_rec_coefs(nelem,6)) - (dust_rec_coefs(nelem,7) * log(T))
+  a1 = dust_rec_coefs(2,nelem) * (phi**dust_rec_coefs(3,nelem))
+  a2 = dust_rec_coefs(4,nelem) * (T**dust_rec_coefs(5,nelem))
+  a3 = (-1.d0 * dust_rec_coefs(nelem,6)) - (dust_rec_coefs(7,nelem) * log(T))
 
-  rate = 1.d-14 * dust_rec_coefs(nelem,1)
+  rate = 1.d-14 * dust_rec_coefs(1,nelem)
   rate = rate / (1.d0 + (a1 * (1.d0 + (a2 * (phi**a3)))))
   rate = rate * dr_sf
 
