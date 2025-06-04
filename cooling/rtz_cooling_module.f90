@@ -514,10 +514,10 @@ contains
        Zsolar = Zsolar - 8.69
     end if
 
-    total_cosmic_ray_ionization_rate = 1.d-16
+    total_cosmic_ray_ionization_rate = r%rtz_total_cosmic_ray_ionization_rate
     cosmic_ray_scale_factor = total_cosmic_ray_ionization_rate / 1.d-16
 
-    UV_background_G0 = 1.d0
+    UV_background_G0 = r%rtz_UV_background_G0
 
     ! END RTZ variable initialization
 
@@ -775,28 +775,38 @@ contains
              end if
 
              ! Collisional ionization of the less excited state
-             if (iIon.gt.1) then 
-                cr = cr + (collisional_ionization(TK, iIon-1, iElement) * ne * dXion(iElement,iIon-1))
+             if (r%rtz_include_collisional_ionization) then
+               if (iIon.gt.1) then 
+                  cr = cr + (collisional_ionization(TK, iIon-1, iElement) * ne * dXion(iElement,iIon-1))
+               end if
              end if
 
              ! UVB Photoionization of the less excited state
-             if (iIon.gt.1) then 
-                cr = cr + (HM12_UVB_z(iElement,iIon-1,1) * ss_factor * dXion(iElement,iIon-1))
+             if (r%rtz_include_photoionization) then 
+               if (iIon.gt.1) then 
+                  cr = cr + (HM12_UVB_z(iElement,iIon-1,1) * ss_factor * dXion(iElement,iIon-1))
+               end if
              end if
 
              ! Photoionization by sub-ionizing ISRF --> only impacts lowest ionization states
-             if (iIon.eq.2) then 
-                cr = cr + (UV_background_G0 * elements(iElement)%G0_photo_rate * dXion(iElement,iIon-1))
+             if (r%rtz_include_photoionization) then 
+               if (iIon.eq.2) then 
+                  cr = cr + (UV_background_G0 * elements(iElement)%G0_photo_rate * dXion(iElement,iIon-1))
+               end if
              end if
 
              ! Cosmic ray ionization of the less excited state
-             if (iIon > 1) then 
-                cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * total_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
+             if (r%rtz_include_cosmic_ray_ionization) then 
+               if (iIon > 1) then 
+                  cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * total_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
+               end if
              end if
 
              ! Cosmic ray ionization of the less excited state from induced UV
-             if (iIon.eq.2) then 
-                cr = cr + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor * dXion(iElement,iIon-1))
+             if (r%rtz_include_cosmic_ray_ionization) then 
+               if (iIon.eq.2) then 
+                  cr = cr + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor * dXion(iElement,iIon-1))
+               end if
              end if
 
              ! Recombination on dust from the more excited state
@@ -817,18 +827,24 @@ contains
             !  end if
 
              ! Collisional ionization 
-             if (iIon .lt. n_ions) then 
-                de = de + (collisional_ionization(TK, iIon, iElement) * ne)
+             if (r%rtz_include_collisional_ionization) then
+               if (iIon .lt. n_ions) then 
+                  de = de + (collisional_ionization(TK, iIon, iElement) * ne)
+               end if
              end if
 
              ! UVB Photoionization
-             if (iIon .lt. n_ions) then 
-                de = de + (HM12_UVB_z(iElement,iIon,1) * ss_factor)
+             if (r%rtz_include_photoionization) then 
+               if (iIon .lt. n_ions) then 
+                  de = de + (HM12_UVB_z(iElement,iIon,1) * ss_factor)
+               end if
              end if
 
              ! Photoionization by sub-ionizing ISRF --> only impacts lowest ionization states
-             if (iIon .eq. 1) then
-                de = de + (UV_background_G0 * elements(iElement)%G0_photo_rate)
+             if (r%rtz_include_photoionization) then 
+               if (iIon .eq. 1) then
+                  de = de + (UV_background_G0 * elements(iElement)%G0_photo_rate)
+               end if
              end if
 
              ! Recombination
@@ -837,15 +853,19 @@ contains
              end if 
 
              ! Cosmic ray ionization
-             if (iIon .lt. n_ions) then
-                de = de + (cosmic_ray_ionization_rates(iElement,iIon) * total_cosmic_ray_ionization_rate)
+             if (r%rtz_include_cosmic_ray_ionization) then 
+               if (iIon .lt. n_ions) then
+                  de = de + (cosmic_ray_ionization_rates(iElement,iIon) * total_cosmic_ray_ionization_rate)
+               end if
              end if
 
              ! Cosmic ray ionization from induced UV
-             if (iIon .eq. 1) then 
-                de = de + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor)
+             if (r%rtz_include_cosmic_ray_ionization) then 
+               if (iIon .eq. 1) then 
+                  de = de + (cosmic_ray_ionization_rates_induced_UV(iElement) * cosmic_ray_scale_factor)
+               end if
              end if
-
+            
              ! Recombination on dust
              if (iIon .gt. 1) then 
                 de = de + (dust_recombination(iIon, iElement, TK, UV_background_G0, ne) * dust_effective_number_density)
@@ -858,45 +878,47 @@ contains
              !/////////////////////////
              ! Note, this was split off due to cross species
              ! coupling. Saves us an extra double loop
-             if (iElement.eq.1) then !If element is hydrogen
-                ! Loop over all other elements
-                do i_other_Element = 2,n_elements
-                   if (elements(i_other_Element)%atomic_number > 0) then
-                      ! Loop over all other ionization states
-                      do i_other_Ion = 1,elements(i_other_Element)%n_ions
-                         ! Get the number density of the other ion
-                         paired_ion_number_density = nElement(i_other_Element, icell) * dXion(i_other_Element,i_other_Ion)
+             if (r%rtz_include_charge_exchange) then
+               if (iElement.eq.1) then !If element is hydrogen
+                  ! Loop over all other elements
+                  do i_other_Element = 2,n_elements
+                     if (elements(i_other_Element)%atomic_number > 0) then
+                        ! Loop over all other ionization states
+                        do i_other_Ion = 1,elements(i_other_Element)%n_ions
+                           ! Get the number density of the other ion
+                           paired_ion_number_density = nElement(i_other_Element, icell) * dXion(i_other_Element,i_other_Ion)
 
-                         if (iIon.eq.1) then !H
-                            cr = cr + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon+1) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
-                            de = de + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O+ + H => O + H+
-                         else !H+
-                            de = de + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
-                            cr = cr + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon-1) * paired_ion_number_density) ! Example:  O+ + H => O + H+
-                         end if
+                           if (iIon.eq.1) then !H
+                              cr = cr + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon+1) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
+                              de = de + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O+ + H => O + H+
+                           else !H+
+                              de = de + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
+                              cr = cr + (charge_transfer_recombination(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon-1) * paired_ion_number_density) ! Example:  O+ + H => O + H+
+                           end if
 
-                      end do !end loop over ionization states
-                   end if
-                end do ! end loop over other elements
-             else !All other elements
-                HI_number_density = dXion(1,1) * nElement(1, icell)
-                HII_number_density = dXion(1,2) * nElement(1, icell)
+                        end do !end loop over ionization states
+                     end if
+                  end do ! end loop over other elements
+               else !All other elements
+                  HI_number_density = dXion(1,1) * nElement(1, icell)
+                  HII_number_density = dXion(1,2) * nElement(1, icell)
 
-                if (iIon.gt.1) then
-                   ! Ionization from less excited state
-                   cr = cr + (charge_transfer_ionization(iIon-1,iElement,TK) * dXion(iElement,iIon-1) * HII_number_density) ! Example:  O + H+ => O+ + H   
+                  if (iIon.gt.1) then
+                     ! Ionization from less excited state
+                     cr = cr + (charge_transfer_ionization(iIon-1,iElement,TK) * dXion(iElement,iIon-1) * HII_number_density) ! Example:  O + H+ => O+ + H   
 
-                   ! Charge exchange recombination 
-                   de = de + (charge_transfer_recombination(iIon,iElement,TK) * HI_number_density) ! Example:  O+ + H => O + H+
-                end if
+                     ! Charge exchange recombination 
+                     de = de + (charge_transfer_recombination(iIon,iElement,TK) * HI_number_density) ! Example:  O+ + H => O + H+
+                  end if
 
-                if (iIon.lt.n_ions) then
-                   ! Charge exchange ionization
-                   de = de + (charge_transfer_ionization(iIon,iElement,TK) * HII_number_density) ! Example:  O + H+ => O+ + H   
+                  if (iIon.lt.n_ions) then
+                     ! Charge exchange ionization
+                     de = de + (charge_transfer_ionization(iIon,iElement,TK) * HII_number_density) ! Example:  O + H+ => O+ + H   
 
-                   ! Charge exchange recombination from the more excited state
-                   cr = cr + (charge_transfer_recombination(iIon+1,iElement,TK) * dXion(iElement,iIon+1) * HI_number_density) ! Example:  O+ + H => O + H+
-                end if
+                     ! Charge exchange recombination from the more excited state
+                     cr = cr + (charge_transfer_recombination(iIon+1,iElement,TK) * dXion(iElement,iIon+1) * HI_number_density) ! Example:  O+ + H => O + H+
+                  end if
+               end if
              end if
 
              !/////////////////////////
