@@ -398,6 +398,78 @@ SUBROUTINE initialize_high_temperature_metal_cooling()
 
 END SUBROUTINE initialize_high_temperature_metal_cooling
 
+FUNCTION get_high_t_cooling_rates(T, ne, element_number_densities, element_ion_fractions, temp_smooth) result(rate)
+    !// Computes the high-temperature cooling rates
+    !// derived from Harley's custom cloudy models
+    use rtz_module, only: elements
+    implicit none
+    real(KIND=8), intent(in):: T, ne, temp_smooth
+    real(KIND=8), intent(in):: element_number_densities(27)
+    real(KIND=8), intent(in):: element_ion_fractions(27,27)
+    real(KIND=8):: rate
+    real(KIND=8):: loc_T, log_T, t_min, t_max, dt, t_scale_fac
+    real(KIND=8):: frac_high, frac_low, loc_cooling_rate, loc_temp_smooth
+    integer:: idx_low, i, j
+
+    loc_T = max(T,1000.d0)
+    log_T = log10(loc_T)
+    t_min = 3.d0
+    t_max = 9.d0
+    dt = 0.05d0
+    rate = 0.d0
+    t_scale_fac = exp(-1.d0 * ((2000.d0/loc_T)**5.d0))
+
+    ! bounds for temperature --> no cooling
+    if (log_T < t_min) then
+        return
+    end if
+
+    !// Still cool above 10^9 K but set a bound
+    if (log_T > t_max) then 
+        log_T = t_max
+    end if
+
+    !// Prepare for 1D interpolation
+    idx_low = floor((log_T - t_min)/dt) + 1
+
+    frac_high = (log_T - (3.d0 + (real(idx_low, kind=8) * dt))) / dt
+    frac_low = 1.0 - frac_high
+
+    ! Loop over all ions -- not including H and He
+    do i = 3, 27
+       ! Skip unused elements
+       if (elements(i)%atomic_number .lt. 1) then
+          cycle
+       end if
+
+       ! Skip elements with too low number density
+       if (element_number_densities(i) .lt. MIN_COOL_ION) then
+          cycle
+       end if
+
+       do j = 1, elements(i)%n_ions
+          ! Interpolate the cooling rate for the ion
+          loc_cooling_rate = frac_low * high_t_cooling_rates(idx_low,i,j)
+          loc_cooling_rate = loc_cooling_rate + (frac_high * high_t_cooling_rates(idx_low+1,i,j)) 
+          loc_cooling_rate = 10.d0**loc_cooling_rate
+
+          ! Smooth with temeprature if necessary
+          loc_temp_smooth = 1.d0
+          if (high_t_cooling_rates_tflag(i,j)) then
+              loc_temp_smooth = temp_smooth
+          end if
+
+
+         ! Multiply cooling rate by ion and electron number densities
+         rate = rate + (element_number_densities(i) * element_ion_fractions(i,j) * ne * loc_cooling_rate * loc_temp_smooth)
+
+       end do
+    end do
+
+    rate =  rate * t_scale_fac
+    
+END FUNCTION get_high_t_cooling_rates
+
 SUBROUTINE initialize_fine_structure_tables()
     ! Initialization for fine structure cooling tables
     implicit none
