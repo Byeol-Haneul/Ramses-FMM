@@ -37,7 +37,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use cooling_module, only: cooling_t, solve_cooling, T2_min_fix, set_table
   use coolrates_module, only: neq_cooling_t
   use neq_cooling_module, only: neq_solve_cooling
-  use rtz_cooling_module, only: rtz_solve_cooling, n_elements
+  use rtz_cooling_module, only: rtz_solve_cooling
+  use rtz_module, only: n_elements
   implicit none
   type(run_t)::r
   type(global_t)::g

@@ -8,10 +8,11 @@ subroutine init_neq_chem(r,g,tables)
   use amr_commons, only: run_t, global_t
   use neq_cooling_module, only: neq_set_model
   use coolrates_module, only: neq_cooling_t, update_rt_c
-  use rtz_cooling_module, only: initialize_elements
+  use rtz_module, only: initialize_elements
   use cosmic_ray_ionization_module, only: initialize_cr_rates
   use photoionization_UVB_module, only: load_UVB_data, update_UVB
   use charge_exchange_module, only: load_ct_rates
+  use rtz_coolrates_module, only: initialize_high_temperature_metal_cooling, initialize_fine_structure_tables
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -55,13 +56,12 @@ subroutine init_neq_chem(r,g,tables)
   !Initialize the charge transfer rates
   call load_ct_rates()
 
-  ! TODO(code): WE NEED THE FOLLOWING INITIALIZATIONS
+  ! Initialize high temperature cooling tables
+  call initialize_high_temperature_metal_cooling()
 
-  !// Initialize high temperature cooling tables
-  !initialize_high_temperature_metal_cooling();
-
-  !// Initialize the low temperature cooling tables
-  !init_fine_structure_tables();
+  ! Initialize the low temperature cooling tables
+  call initialize_fine_structure_tables()
+  stop
 
 #endif
 
