@@ -12,6 +12,7 @@ contains
 recursive subroutine r_courant_fine(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
+  use gpu_runner, only: gpu_cmpdt
   use mdl_parameters
   implicit none
   type(pst_t)::pst

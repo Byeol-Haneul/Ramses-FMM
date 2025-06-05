@@ -1,7 +1,6 @@
 module hydro_integrator
   use amr_parameters, only: dp
   use gpu_utils, only: subgrid_8x8x8cell_conserved, subgrid_8x8x8cell_primitive
-  use gpu_reduce, only: block_reduce_sum, block_reduce_min
   use oct_commons, only: oct
   use cudafor
   implicit none
@@ -41,6 +40,134 @@ module hydro_integrator
   end type primitive_t
 
 contains
+
+  ! =========================================================================
+  !> @brief
+  !> Performm a reduction SUM within a warp.
+  !>
+  !> @param[in] mass : The variable to sum over warps
+  attributes(device) subroutine warp_reduce_sum(mass)
+    real(kind=dp) :: mass
+
+    integer :: offset
+
+    offset = warpsize/2
+    do
+       if (offset.le.0) exit
+       mass = mass + __shfl_down(mass,offset)
+       offset = offset / 2
+    enddo
+
+  end subroutine warp_reduce_sum
+  ! =========================================================================
+
+  ! =========================================================================
+  !> @brief
+  !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
+  !> Parentheses are used to guarantee associativity of transverse terms.
+  !>
+  !> @param[in] x : The x component of the vector
+  !> @param[in] y : The y component of the vector
+  !> @param[in] z : The z component of the vector
+  attributes(device) function block_reduce_sum(mass)
+    implicit none
+    real(kind=dp) :: block_reduce_sum
+    real(kind=dp) :: mass
+    real(kind=dp), shared :: svalues(32)
+    integer :: tid, lane, wid
+
+    tid = threadIdx%x
+    lane = mod(tid-1,warpsize)+1
+    wid = (tid-1)/warpsize+1
+
+    ! each warp performs its own reduction
+    call warp_reduce_sum(mass)
+
+    ! write reduced value to shared memory
+    if (lane.eq.1) svalues(wid) = mass
+
+    ! wait for all partial reductions
+    call syncthreads()
+
+    ! real from shared memory only if that warp existed
+    if (tid .le. ((blockdim%x) / warpsize)) then
+       mass = svalues(lane)
+    else
+       mass = 0
+    endif
+
+    ! final reduce within first warp 
+    if (wid.eq.1) call warp_reduce_sum(mass)
+    block_reduce_sum = mass
+
+  end function block_reduce_sum
+  ! =========================================================================
+
+  ! =========================================================================
+  !> @brief
+  !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
+  !> Parentheses are used to guarantee associativity of transverse terms.
+  !>
+  !> @param[in] x : The x component of the vector
+  !> @param[in] y : The y component of the vector
+  !> @param[in] z : The z component of the vector
+  attributes(device) subroutine warp_reduce_min(dt)
+    real(kind=dp) :: dt
+
+    integer :: offset
+
+    offset = warpsize/2
+    do
+       if (offset.le.0) exit
+       dt = min(dt,__shfl_down(dt,offset))
+       offset = offset / 2
+    enddo
+
+  end subroutine warp_reduce_min
+  ! =========================================================================
+
+  ! ==========================================================================
+  !> @brief
+  !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
+  !> Parentheses are used to guarantee associativity of transverse terms.
+  !>
+  !> @param[in] x : The x component of the vector
+  !> @param[in] y : The y component of the vector
+  !> @param[in] z : The z component of the vector
+  attributes(device) function block_reduce_min(dt)
+    implicit none
+    real(kind=dp) :: block_reduce_min
+    real(kind=dp) :: dt
+    real(kind=dp), shared :: svalues(32)
+    integer :: tid, lane, wid
+
+    tid = threadIdx%x
+    lane = mod(tid-1,warpsize)+1
+    wid = (tid-1)/warpsize+1
+
+    ! each warp performs its own reduction
+    call warp_reduce_min(dt)
+
+    ! write reduced value to shared memory
+    if (lane.eq.1) svalues(wid) = dt
+
+    ! wait for all partial reductions
+    call syncthreads()
+
+    ! real from shared memory only if that warp existed
+    if (tid .le. ((blockdim%x) / warpsize)) then
+       dt = svalues(lane)
+    else
+       dt = 0
+    endif
+
+    ! final reduce within first warp 
+    if (wid.eq.1) call warp_reduce_min(dt)
+    block_reduce_min = dt
+
+  end function block_reduce_min
+  ! =========================================================================
+
   ! ==========================================================================
   !> @brief
   !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
