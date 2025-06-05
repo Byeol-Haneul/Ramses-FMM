@@ -1,7 +1,7 @@
 module gpu_cmpdt
   use amr_parameters, only: dp
-  use hydro_integrator, only: conserved_t, primitive_t
-  use gpu_reduce, only: block_reduce_sum, bock_reduce_min
+  use hydro_integrator
+  use gpu_reduce, only: block_reduce_sum, block_reduce_min
   use oct_commons, only: oct
   use cudafor
   implicit none
@@ -9,13 +9,13 @@ module gpu_cmpdt
 contains
 
   ! =========================================================================
-  attributes(global) subroutine cmpdt_kernel(oct_grid, num_oct, mass, ekin, eint, emag, dt, dx, gammma)
+  attributes(global) subroutine cmpdt_kernel(oct_grid, num_oct, mass, ekin, eint, emag, dt, dx, gamma)
     type(oct), device, dimension(*) :: oct_grid
     integer(kind=8), intent(in), value :: num_oct
-    real(kind=8), intent(in), value :: dx, gamma
-    real(kind=8), device, intent(inout) :: mass, ekin, eint, emag, dt
+    real(kind=dp), device, intent(inout) :: mass, ekin, eint, emag, dt
+    real(kind=dp), value :: dx, gamma
 
-    type(primitive_t) :: primitive
+    type(primitive_t) :: primitive, conserved_2_primitve
     type(conserved_t) :: conserved
     integer :: info
     integer :: block_idx  ! The index of this block, corresponds to the oct to load
