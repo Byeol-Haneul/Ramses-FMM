@@ -3,7 +3,7 @@ module molecules_module
   implicit none
 
   private  ! everything is private by default
-  public :: alpha_H2, beta_H2_umist, beta_H2, alpha_CO, beta_CO
+  public :: alpha_H2, beta_H2_umist, beta_H2, alpha_CO, beta_CO, alpha_H2_prim, alpha_H2_dust
 
 CONTAINS
 
