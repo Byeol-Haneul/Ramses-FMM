@@ -80,7 +80,7 @@ FUNCTION alpha_H2_dust(T, dust_to_gas_mass_ratio_over_mw) result(rate)
 
   clumping_factor = 1.d0
   T2 = T / 100.d0
-  rate = dust_to_gas_mass_ratio_over_mw * (3.5d-17) * clumping_factor * sqrt(T2)
+  rate = dust_to_gas_mass_ratio_over_mw * (3.5d-17) * clumping_factor * sqrt(min(T2,1.d2))
 
 END FUNCTION alpha_H2_dust
 
@@ -101,9 +101,6 @@ FUNCTION alpha_H2(T, dust_to_gas_mass_ratio_over_mw, xe, H2_cosmic_ray_ionizatio
 
   ! Primordial H- channel
   rate = rate + alpha_H2_prim(T, xe, H2_cosmic_ray_ionization_rate, G0, xHI, xHII) * xHI * nH
-
-  ! Artificially down-weight creation at high T to prevent excess compute???
-  rate = rate * exp(-1.d0 * ((T / 1d5)**2.d0))
 
 END FUNCTION alpha_H2
 
