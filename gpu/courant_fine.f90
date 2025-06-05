@@ -32,7 +32,7 @@ recursive subroutine r_courant_fine(pst,ilevel,input_size,output,output_size)
      output%emag=output%emag+next_output%emag
      output%dt=MIN(output%dt,next_output%dt)
   else
-     call gpu_cmpdt(s,ilevel,output%mass,output%ekin,output%eint,output%emag,output%dt)
+     call gpu_cmpdt(pst%s,ilevel,output%mass,output%ekin,output%eint,output%emag,output%dt)
   endif
 
 end subroutine r_courant_fine

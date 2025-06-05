@@ -27,7 +27,7 @@ contains
   !>
   subroutine gpu_cmpdt(sim, ilevel, mass, ekin, eint, emag, dt)
     use nvtx
-    use hydro_integrator, only: set_uold_kernel
+    use gpu_cmpdt, only: cmpdt_kernel
     use ramses_commons, only: ramses_t
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel

@@ -173,7 +173,7 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
 	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o
 ifeq ($(COMPILER),NVHPC)
-MODOBJ += gpu_utils.o hydro_integrator.o gpu_runner.o
+MODOBJ += gpu_utils.o gpu_reduce.o hydro_integrator.o gpu_runner.o
 endif
 MODOBJ += godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 input_hydro_condinit.o input_hydro_grafic.o input_hydro_gadget.o init_flow_fine.o \

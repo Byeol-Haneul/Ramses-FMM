@@ -1,15 +1,16 @@
 module gpu_reduce
   use amr_parameters, only: dp
-  use hydro_integrator, only: conserved_t, primitive_t
   use oct_commons, only: oct
   use cudafor
   implicit none
 
+  public
+  
 contains
 
   ! =========================================================================
   attributes(device) subroutine warp_reduce_sum(mass)
-    real(kind=dp), value :: mass
+    real(kind=dp) :: mass
 
     integer :: offset
 
@@ -60,7 +61,7 @@ contains
 
   ! =========================================================================
   attributes(device) subroutine warp_reduce_min(dt)
-    real(kind=dp), value :: dt
+    real(kind=dp) :: dt
 
     integer :: offset
 
