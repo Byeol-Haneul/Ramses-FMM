@@ -1,116 +1,222 @@
 module gpu_runner
-   use gpu_utils
-   use cudafor
-   use oct_commons
-   implicit none
+  use gpu_utils
+  use cudafor
+  use oct_commons
+  implicit none
 
-   !> Fortran array to hold the grid on the device and the C_DEVPTR to it
-   type(oct), device, pointer, dimension(:) :: grid_device
-   type(C_DEVPTR) :: grid_device_cptr
+  !> Fortran array to hold the grid on the device and the C_DEVPTR to it
+  type(oct), device, pointer, dimension(:) :: grid_device
+  type(C_DEVPTR) :: grid_device_cptr
 
-   !> The Fortran array of subgrid indices on the host and the C_PTR to it
-   integer, pointer, dimension(:,:,:,:) :: subgrid_indices_host
-   type(C_PTR) :: subgrid_indices_host_cptr
+  !> The Fortran array of subgrid indices on the host and the C_PTR to it
+  integer, pointer, dimension(:,:,:,:) :: subgrid_indices_host
+  type(C_PTR) :: subgrid_indices_host_cptr
 
-   !> The Fortran array of subgrid indices on the device and the C_DEVPTR to it
-   integer, device, pointer, dimension(:,:,:,:) :: subgrid_indices_device
-   type(C_DEVPTR) :: subgrid_indices_device_cptr
+  !> The Fortran array of subgrid indices on the device and the C_DEVPTR to it
+  integer, device, pointer, dimension(:,:,:,:) :: subgrid_indices_device
+  type(C_DEVPTR) :: subgrid_indices_device_cptr
 
 contains
-   !> @brief
-   !> Perform the hydro integration on a GPU
-   !>
-   !> @detail
-   !> Perform the hydro integration on the GPU with the following steps
-   !> 1. Pack the array of subgrids and copy it to the device. This currently assumes
-   !>    no refinement and no MPI but should be reasonably easy to modify for both.
-   !> 2. Perform the hydro integration on the GPU, breaking into multiple kernels as needed
-   !> 3. Copy the array of subgrids back to the CPU and unpack it back into the grid
-   !>
-   !> @param[in] sim : The simulation object
-   !> @param[in] ilevel : The refinement level to update
-   !>
-   subroutine gpu_integrator(sim, ilevel)
-      use nvtx
-      use hydro_integrator, only: hydro_integrator_kernel
-      use, intrinsic :: iso_c_binding
-      use ramses_commons, only: ramses_t
-      type(ramses_t), intent(inout)::sim
-      integer, intent(in)::ilevel
-      integer(kind=8) :: num_subgrids
-      integer :: err_code, threads_per_block, num_blocks
-      integer, parameter :: subgrid_size = 8
-      real(kind=dp) :: dt, dx
 
-      ! get the number of octs in each direction and compute the number of subgrids
-      num_subgrids = sim%m%tail(ilevel)/8
+  !> @brief
+  !> Set uold equal to unew on a GPU
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_cmpdt(sim, ilevel, mass, ekin, eint, emag, dt)
+    use nvtx
+    use hydro_integrator, only: set_uold_kernel
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+    real(kind=8)::mass,ekin,eint,emag,dt
 
-      ! Allocate arrays if they're not allocated
-      if (.not. (allocated(subgrid_indices_host))) then
-         ! Allocate the device arrays
-         err_code = cudaMalloc(grid_device_cptr,     sizeof(sim%m%grid))
-         ! Note dt is used here just to get the sizeof a float
-         err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(dt))
-         err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(dt)) 
+    integer(kind=8) :: num_octs
+    integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
+    real(kind=8) :: gamma, dx
+    real(kind=8), device :: mass_d,ekin_d,eint_d,emag_d,dt_d
 
-         ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
-         call c_f_pointer(grid_device_cptr, grid_device, [sim%m%tail(ilevel)])
-         call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
-         call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
+    gamma = sim%r%gamma
+    dx = sim%r%boxlen/2**ilevel
+    dt = dx/sim%r%smallc
 
-         ! Setup the subgrid mapping
-         call nvtxStartRange("Setup Index Mapping", color=1)!blue
-         call setup_subgrid_mapping(sim, ilevel)
-         call nvtxEndRange()
+    ! host to device
+    dt_d = dt
+    mass_d = 0d0
+    ekin_d = 0d0
+    eint_d = 0d0
+    emag_d = 0d0
 
-         ! Copy subgrid map to device. This has to be done outside of the 
-         ! setup_subgrid_mapping subroutine due to a compiler bug with nested NVTX statements
-         call nvtxStartRange("Copy subgrid mapping to device", color=5)!red
-         subgrid_indices_device = subgrid_indices_host
-         call GPU_Error_Check(__FILE__, __LINE__)
-         call nvtxEndRange()
-      end if
+    num_octs = sim%m%tail(ilevel)
+    threadsX_per_block=8
+    threadsY_per_block=4
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    call nvtxStartRange("GPU cmpdt", color=0)!green
+    call cmpdt_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block)>>>(grid_device, num_octs, mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma)
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
 
-      ! Copy grid from host to device
-      call nvtxStartRange("Copy sim%m%grid to device", color=5)!red
-      grid_device = sim%m%grid
-      call GPU_Error_Check(__FILE__, __LINE__)
-      call nvtxEndRange()
+    ! device to host
+    dt = dt_d
+    mass = mass_d
+    ekin = ekin_d
+    eint = eint_d
+    emag = emag_d
 
-      ! =============================
-      ! GPU Integration
-      ! =============================
-      num_blocks = num_subgrids
+  end subroutine gpu_cmpdt
 
-      ! Perform integration
-      dt = sim%g%dtnew(ilevel)
-      dx = sim%r%boxlen/2**ilevel
-      threads_per_block = 128
+  !> @brief
+  !> Set uold equal to unew on a GPU
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_set_uold(sim, ilevel)
+    use nvtx
+    use hydro_integrator, only: set_uold_kernel
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
 
-      call nvtxStartRange("GPU Integration", color=0)!green
-      call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid_device, subgrid_indices_device, num_subgrids, subgrid_size, sim%r%gamma, dt/dx)
-      call GPU_Error_Check(__FILE__, __LINE__)
-      call nvtxEndRange()
+    integer(kind=8) :: num_octs
+    integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
 
-      ! ====================================
-      ! Copy updated values back to the host
-      ! ====================================
-      call nvtxStartRange("Copy sim%m%grid to host", color=5)!red
-      sim%m%grid = grid_device
-      call GPU_Error_Check(__FILE__, __LINE__)
-      call nvtxEndRange()
+    num_octs = sim%m%tail(ilevel)
+    threadsX_per_block=8
+    threadsY_per_block=4
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    call nvtxStartRange("GPU Set_uold", color=0)!green
+    call set_uold_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block)>>>(grid_device, num_octs)
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
 
-   end subroutine gpu_integrator
+  end subroutine gpu_set_uold
 
-   !> @brief
-   !> Check if an index is within bounds, if not then set periodic boundary conditions
-   !>
-   !> @param[in] index : The index in the grid
-   !> @param[in] max_n : The size of the grid
-   !>
-   !> @return
-   !> The fixed index, accounting for periodic boundaries
-   function check_boundaries(index, max_n) result(fixed_index)
+  !> @brief
+  !> Set unew equal to uold on a GPU
+  !>
+  !> @detail
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_set_unew(sim, ilevel)
+    use nvtx
+    use hydro_integrator, only: set_uold_kernel
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+
+    integer(kind=8) :: num_octs
+    integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
+
+    num_octs = sim%m%tail(ilevel)
+    threadsX_per_block=8
+    threadsY_per_block=4
+    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    call nvtxStartRange("GPU Set_uold", color=0)!green
+    call set_unew_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block)>>>(grid_device, num_octs)
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+  end subroutine gpu_set_unew
+
+  !> @brief
+  !> Perform the hydro integration on a GPU
+  !>
+  !> @detail
+  !> Perform the hydro integration on the GPU with the following steps
+  !> 1. Pack the array of subgrids and copy it to the device. This currently assumes
+  !>    no refinement and no MPI but should be reasonably easy to modify for both.
+  !> 2. Perform the hydro integration on the GPU, breaking into multiple kernels as needed
+  !> 3. Copy the array of subgrids back to the CPU and unpack it back into the grid
+  !>
+  !> @param[in] sim : The simulation object
+  !> @param[in] ilevel : The refinement level to update
+  !>
+  subroutine gpu_integrator(sim, ilevel)
+    use nvtx
+    use hydro_integrator, only: hydro_integrator_kernel
+    use, intrinsic :: iso_c_binding
+    use ramses_commons, only: ramses_t
+    type(ramses_t), intent(inout)::sim
+    integer, intent(in)::ilevel
+    integer(kind=8) :: num_subgrids
+    integer :: err_code, threads_per_block, num_blocks
+    integer, parameter :: subgrid_size = 8
+    real(kind=dp) :: dt, dx
+
+    ! get the number of octs in each direction and compute the number of subgrids
+    num_subgrids = sim%m%tail(ilevel)/8
+
+    ! Allocate arrays if they're not allocated
+    if (.not. (allocated(subgrid_indices_host))) then
+       ! Allocate the device arrays
+       err_code = cudaMalloc(grid_device_cptr,     sizeof(sim%m%grid))
+       ! Note dt is used here just to get the sizeof a float
+       err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(dt))
+       err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(dt)) 
+
+       ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
+       call c_f_pointer(grid_device_cptr, grid_device, [sim%m%tail(ilevel)])
+       call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
+       call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
+
+       ! Setup the subgrid mapping
+       call nvtxStartRange("Setup Index Mapping", color=1)!blue
+       call setup_subgrid_mapping(sim, ilevel)
+       call nvtxEndRange()
+
+       ! Copy subgrid map to device. This has to be done outside of the 
+       ! setup_subgrid_mapping subroutine due to a compiler bug with nested NVTX statements
+       call nvtxStartRange("Copy subgrid mapping to device", color=5)!red
+       subgrid_indices_device = subgrid_indices_host
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    end if
+
+    ! Copy grid from host to device
+    call nvtxStartRange("Copy sim%m%grid to device", color=5)!red
+    grid_device = sim%m%grid
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+    ! =============================
+    ! GPU Integration
+    ! =============================
+    num_blocks = num_subgrids
+
+    ! Perform integration
+    dt = sim%g%dtnew(ilevel)
+    dx = sim%r%boxlen/2**ilevel
+    threads_per_block = 128
+
+    call nvtxStartRange("GPU Integration", color=0)!green
+    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid_device, subgrid_indices_device, num_subgrids, subgrid_size, sim%r%gamma, dt/dx)
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+    ! ====================================
+    ! Copy updated values back to the host
+    ! ====================================
+    call nvtxStartRange("Copy sim%m%grid to host", color=5)!red
+    sim%m%grid = grid_device
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+  end subroutine gpu_integrator
+
+  !> @brief
+  !> Check if an index is within bounds, if not then set periodic boundary conditions
+  !>
+  !> @param[in] index : The index in the grid
+  !> @param[in] max_n : The size of the grid
+  !>
+  !> @return
+  !> The fixed index, accounting for periodic boundaries
+  function check_boundaries(index, max_n) result(fixed_index)
       integer, intent(in)::index, max_n
       integer::fixed_index
 

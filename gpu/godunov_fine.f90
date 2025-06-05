@@ -74,7 +74,8 @@ recursive subroutine r_set_unew(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
-  implicit none
+  use gpu_runner, only: gpu_set_unew 
+ implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::ilevel
@@ -86,7 +87,8 @@ recursive subroutine r_set_unew(pst,ilevel,input_size)
      call r_set_unew(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
+!     call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call gpu_set_unew(pst%s,ilevel)
   endif
 
 end subroutine r_set_unew
@@ -134,6 +136,7 @@ recursive subroutine r_set_uold(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
+  use gpu_runner, only: gpu_set_uold
   implicit none
   type(pst_t)::pst
   integer,VALUE::input_size
@@ -145,7 +148,8 @@ recursive subroutine r_set_uold(pst,ilevel,input_size)
      call r_set_uold(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     !call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
+     call gpu_set_uold(pst%s,ilevel)
   endif
 
 end subroutine r_set_uold

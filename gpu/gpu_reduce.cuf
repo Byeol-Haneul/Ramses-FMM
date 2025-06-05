@@ -1,0 +1,113 @@
+module gpu_reduce
+  use amr_parameters, only: dp
+  use hydro_integrator, only: conserved_t, primitive_t
+  use oct_commons, only: oct
+  use cudafor
+  implicit none
+
+contains
+
+  ! =========================================================================
+  attributes(device) subroutine warp_reduce_sum(mass)
+    real(kind=dp), value :: mass
+
+    integer :: offset
+
+    offset = warpsize/2
+    do
+       if (offset.le.0) exit
+       mass = mass + __shfl_down(mass,offset)
+       offset = offset / 2
+    enddo
+
+  end subroutine warp_reduce_sum
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) function block_reduce_sum(mass)
+    implicit none
+    real(kind=dp) :: block_reduce_sum
+    real(kind=dp) :: mass
+    real(kind=dp), shared :: svalues(32)
+    integer :: tid, lane, wid
+
+    tid = threadIdx%x
+    lane = mod(tid-1,warpsize)+1
+    wid = (tid-1)/warpsize+1
+
+    ! each warp performs its own reduction
+    call warp_reduce_sum(mass)
+
+    ! write reduced value to shared memory
+    if (lane.eq.1) svalues(wid) = mass
+
+    ! wait for all partial reductions
+    call syncthreads()
+
+    ! real from shared memory only if that warp existed
+    if (tid .le. ((blockdim%x) / warpsize)) then
+       mass = svalues(lane)
+    else
+       mass = 0
+    endif
+
+    ! final reduce within first warp 
+    if (wid.eq.1) call warp_reduce_sum(mass)
+    block_reduce_sum = mass
+
+  end function block_reduce_sum
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) subroutine warp_reduce_min(dt)
+    real(kind=dp), value :: dt
+
+    integer :: offset
+
+    offset = warpsize/2
+    do
+       if (offset.le.0) exit
+       dt = min(dt,__shfl_down(dt,offset))
+       offset = offset / 2
+    enddo
+
+  end subroutine warp_reduce_min
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(device) function block_reduce_min(dt)
+    implicit none
+    real(kind=dp) :: block_reduce_min
+    real(kind=dp) :: dt
+    real(kind=dp), shared :: svalues(32)
+    integer :: tid, lane, wid
+
+    tid = threadIdx%x
+    lane = mod(tid-1,warpsize)+1
+    wid = (tid-1)/warpsize+1
+
+    ! each warp performs its own reduction
+    call warp_reduce_min(dt)
+
+    ! write reduced value to shared memory
+    if (lane.eq.1) svalues(wid) = dt
+
+    ! wait for all partial reductions
+    call syncthreads()
+
+    ! real from shared memory only if that warp existed
+    if (tid .le. ((blockdim%x) / warpsize)) then
+       dt = svalues(lane)
+    else
+       dt = 0
+    endif
+
+    ! final reduce within first warp 
+    if (wid.eq.1) call warp_reduce_min(dt)
+    block_reduce_min = dt
+
+  end function block_reduce_min
+  ! =========================================================================
+
+end module gpu_reduce
+
