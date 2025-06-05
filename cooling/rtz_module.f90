@@ -20,10 +20,11 @@ module rtz_module
 
 CONTAINS
 
-SUBROUTINE initialize_elements()
+SUBROUTINE initialize_elements(r)
    ! Initializes the atomic data we need for the RTZ module
-
+   use amr_commons, only: run_t
    implicit none
+   type(run_t):: r
    integer::i
    
    ! Initialize everything to zero
@@ -43,7 +44,11 @@ SUBROUTINE initialize_elements()
    elements(1)%z_solar = 1.0
    elements(1)%G0_photo_rate = 0.0 ! No subionizing PI
    elements(1)%n_ions = 2
-   elements(1)%n_mol = 1
+   if (r%isH2_rtz) then 
+      elements(1)%n_mol = 1
+   else
+      elements(1)%n_mol = 0
+   end if
    elements(1)%depletion = 1.0
 
    ! Element 2: Helium

@@ -45,7 +45,7 @@ CONTAINS
 !!$END SUBROUTINE update_UVrates
 
 !XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
+SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
 #ifdef RT
      & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
@@ -76,9 +76,10 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
   implicit none
   type(run_t):: r
   type(neq_cooling_t):: tables
+  real(kind=8):: aexp
   real(kind=8),dimension(1:nvector):: T2
   real(kind=8),dimension(1:n_elements, 1:n_elements, 1:nvector):: xion
-  real(kind=8),dimension(1:n_elements, 1:nvector):: nElement
+  real(kind=8),dimension(1:n_elements, 1:nvector):: nElement 
   real(kind=8),dimension(1:nvector):: nH
 #ifdef RT
   real(kind=8),dimension(1:ndim, 1:nvector):: p_gas
@@ -143,12 +144,43 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
          end if
       end do
 
+      !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
+      T2 = 1.d5 ! --> initialize at high temperature
+      ! Set the ionization states to completely ionized
+      ! TODO(code): put in a loop
+      xion = 0.d0
+      xion(1,1,:) = 1.d0 ! Hydrogen
+      xion(2,1,:) = 1.d0 ! Helium
+      xion(6,1,:) = 1.d0 ! Carbon
+      xion(7,1,:) = 1.d0 ! Nitrogen
+      xion(8,1,:) = 1.d0 ! Oxygen
+      xion(10,1,:) = 1.d0 ! Neon
+      xion(12,1,:) = 1.d0 ! Magnesium
+      xion(14,1,:) = 1.d0 ! Silicon
+      xion(16,1,:) = 1.d0 ! Sulfur
+      xion(26,2,:) = 1.d0 ! Iron
+
       do i_interp = 1,300
          ! Initialize the convergence counter
          convergence_counter = 0
 
+         !!! USE FOR EQM TESTS AT CONSTANT T
          ! Set the temperature
-         r%neq_TConst = 10.d0**(((8.d0 - 2.d0) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + 2.d0)
+         !r%neq_TConst = 10.d0**(((8.d0 - 2.d0) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + 2.d0)
+
+         !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
+         ! Interpolate over density
+         nElement(1:n_elements,1:ncell)  = 0.d0  ! Initialize to zero
+         nElement(1,1:ncell)  = 10.d0**(((5.d0 - (-2.d0)) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + (-2.d0))                          ! Hydrogen      
+         nElement(2,1:ncell)  = nElement(1,1:ncell) * 8.51d-02 ! Helium
+         nElement(6,1:ncell)  = nElement(1,1:ncell) * 2.69d-04 * r%z_ave ! Carbon
+         nElement(7,1:ncell)  = nElement(1,1:ncell) * 6.76d-05 * r%z_ave ! Nitrogen
+         nElement(8,1:ncell)  = nElement(1,1:ncell) * 4.90d-04 * r%z_ave ! Oxygen
+         nElement(10,1:ncell) = nElement(1,1:ncell) * 8.51d-05 * r%z_ave ! Neon
+         nElement(12,1:ncell) = nElement(1,1:ncell) * 3.98d-05 * r%z_ave ! Magnesium
+         nElement(14,1:ncell) = nElement(1,1:ncell) * 3.24d-05 * r%z_ave ! Silicon
+         nElement(16,1:ncell) = nElement(1,1:ncell) * 1.32d-05 * r%z_ave ! Sulfur
+         nElement(26,1:ncell) = nElement(1,1:ncell) * 3.16d-05 * r%z_ave ! Iron
 
          tleft(1:ncell) = 1.d20             ! Set to an arbitrarily large number
          ddt(1:ncell) = 10000.d0 * 365.25d0 * 60.d0 * 60.d0 ! First guess at sub-timestep lengths
@@ -202,12 +234,12 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
                T2(i) = T2(i) + dT2
                ! Check for convergence
                xion(:,:,i) = xion(:,:,i) + dXion(:,:)
-               if (convergence_counter .gt. 3000) then
+               if (convergence_counter .gt. 15000) then
                   tleft(i) = 0.0 ! Finish the cell if we have reached convergence
                else
                   tleft(i)=tleft(i)-ddt(i)
                   ! Take at least 100 iterations
-                  if (convergence_counter .lt. 3000) then
+                  if (convergence_counter .lt. 15000) then
                      tleft(i)=max(tleft(i),ddt(i))
                   endif
                endif
@@ -223,10 +255,15 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, xion, nElement, &
          end do ! end iterative loop
 
          ! Write hydrogen for debugging
+         ! if (r%isH2_rtz) then 
+         !    write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
+         ! else
+         !    write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1)
+         ! end if
          if (r%isH2_rtz) then 
-            write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
+            write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
          else
-            write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1)
+            write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1)
          end if
 
          ! Write data to file
@@ -367,15 +404,16 @@ contains
     use photoionization_UVB_module
     use cosmic_ray_ionization_module
     use molecules_module
+    use rtz_coolrates_module, only: all_cooling
     implicit none
     integer, intent(in):: icell
     !-----------------------------------------------------------------------
     real(kind=8),dimension(nion):: alpha, beta, nN, nI
     real(kind=8):: dUU, fracMax, x_tot
-    real(kind=8):: mu, TK, ne, neInit, Hrate
+    real(kind=8):: mu, TK, ne, neInit
     real(kind=8):: xHI,dxHI, xH2=0d0,dXH2=0d0, xHeI,dxHeI
-    real(kind=8):: Crate, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
-    real(kind=8):: photoRate, metal_tot, metal_prime, ss_factor, f_dust
+    real(kind=8):: Crate, Crate_prime, dCdT2, X_nHkb, rate, dRate, cr, de=0d0
+    real(kind=8):: photoRate, ss_factor, f_dust
 #ifdef RT
     integer::igroup,idim
     real(kind=8),dimension(ndim):: dmom
@@ -401,6 +439,7 @@ contains
     integer:: atomic_number, n_ions, i_other_Element, i_other_Ion
     real(kind=8):: Zsolar, total_G0
     real(kind=8):: alpha_H2_loc, beta_H2_loc, cr_H2, de_H2, xH2_loc
+    real(kind=8):: nElement_dep(n_elements)
     !-----------------------------------------------------------------------
 
     ! RTZ variable initialization
@@ -409,16 +448,23 @@ contains
     if (elements(8)%atomic_number .lt. 1) then
        dust_to_gas_mass_ratio_over_mw = 0.d0
        Zsolar = 1.d-40
+       nElement_dep(1:n_elements) = nElement(1:n_elements,icell)
     else
        Zsolar = 12.d0 + log10((nElement(8, icell)+1.d-20)/(nElement(1, icell)+1.d-10))
        dust_to_gas_mass_ratio_over_mw = dust_to_gas_scale_RR14(Zsolar)
        Zsolar = Zsolar - 8.69
+       do iElement=1,n_elements
+          nElement_dep(iElement) = nElement(iElement,icell) * (1.d0 - ((1.d0 - elements(iElement)%depletion) * dust_to_gas_mass_ratio_over_mw))
+       end do
     end if
 
     total_cosmic_ray_ionization_rate = r%rtz_total_cosmic_ray_ionization_rate
     cosmic_ray_scale_factor = total_cosmic_ray_ionization_rate / 1.d-16
 
     UV_background_G0 = r%rtz_UV_background_G0
+
+    ! TODO(code): update with value from local radition field
+    total_G0 = UV_background_G0
 
     ! END RTZ variable initialization
 
@@ -438,7 +484,7 @@ contains
     mu = getMu(r, dXion, dT2)
     TK = dT2 * mu                                        !      Temperature
     if(r%neq_isTconst) TK=r%neq_Tconst                   ! Force constant T
-    ne = getNe(dXion, nElement(:,icell))
+    ne = getNe(dXion, nElement_dep(:))
     neInit = ne
     fracMax = 0d0 ! Max fractional update, to check if dt can be increased
     ss_factor = 1d0                  ! UV background self_shielding factor
@@ -573,24 +619,31 @@ contains
     ! UPDATE TEMPERATURE *************************************************
     !if(c_switch(icell) .and. .not. rt_isTconst .and. .not. r%rt_T_rad) then
     if(.not. r%neq_isTconst .and. .not. r%rt_T_rad) then
-       Hrate = 0.d0          !  Heating rate [erg cm-3 s-1]
-       Crate = 0.d0          ! Cooling
-       dCdT2 = dCdT2 * mu                            ! dC/dT2 = mu * dC/dT
-       metal_tot=0d0 ; metal_prime=0d0                     ! Metal cooling
+       Crate = all_cooling(r, TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+                           primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
+                           ss_factor)
+       Crate_prime = all_cooling(r, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+                                 primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
+                                 ss_factor)
+       Crate_prime = (Crate_prime - Crate) / ((1.001d0*TK) - TK)
+       dCdT2 = Crate_prime * mu                            ! dC/dT2 = mu * dC/dT
+       !TODO(code) should there be a mu in Crate? --> mu's in general confuse me
+
        !TODO(code) update X_nHkb to the correct value
-      !  X_nHkb = r%X_H/(1.5 * nH(icell) * kB)        ! Multiplication factor
-      !  rate  = X_nHkb*(Hrate - Crate - Zsolar*metal_tot)
-      !  dRate = -X_nHkb*(dCdT2 + Zsolar*metal_prime)     ! dRate/dT2
-      !                                                ! 1st order dt constr
-      !  dUU   = ABS(MAX(T2_min_fix, T2(icell)+rate*ddt(icell))-T2(icell))
-      !                                                       ! New T2 value
-      !  dT2   = MAX(T2_min_fix &
-      !             ,T2(icell)+rate*ddt(icell)/(1.-dRate*ddt(icell)))
-      !  dUU   = MAX(dUU, ABS(dT2-T2(icell))) / (T2(icell)+T_MIN) &
-      !                   *one_over_T_FRAC
-      dT2 = 0.d0
-      dUU = 0.d0
+      !  X_nHkb = r%X_H/(1.5d0 * nH(icell) * kB)         ! Multiplication factor
+       X_nHkb = r%X_H/(1.5d0 * mu * nH(icell) * kB)    ! Multiplication factor ! HARLEY EDIT because nH is different
+       rate  = X_nHkb*Crate
+       dRate = -X_nHkb*dCdT2                         ! dRate/dT2
+                                                     ! 1st order dt constr
+       dUU   = ABS(MAX(T2_min_fix, T2(icell)+rate*ddt(icell))-T2(icell))
+                                                            ! New T2 value
+       dT2   = MAX(T2_min_fix &
+                  ,T2(icell)+rate*ddt(icell)/(1.d0-dRate*ddt(icell)))
+       dUU   = MAX(dUU, ABS(dT2-T2(icell))) / (T2(icell)+T_MIN) &
+                        *one_over_T_FRAC
+      !  if (nH(icell).gt.3.8) write(*,*) "tupd",ddt(icell),T2(icell),dT2,dUU     
        if(dUU .gt. 1.) then                                     ! 10% rule
+         !  write(*,*) "Broken Temperature", T2(icell), dT2, ddt(icell)/1.d12, Crate
           code=3 ; RETURN
        endif
        fracMax=MAX(fracMax,dUU)
@@ -635,10 +688,7 @@ contains
     !/////////////////////////////////////////
     !//           UPDATE MOLECULES          //
     !/////////////////////////////////////////
-
-    ! TODO(code): update with value from local radition field
-    total_G0 = UV_background_G0
-
+    dUU = 0.d0
     alpha_H2_loc = 0.d0
     beta_H2_loc = 0.d0
     cr_H2 = 0.d0
@@ -650,14 +700,14 @@ contains
 
        ! Contains formation on dust and via the primordial channel
        alpha_H2_loc = alpha_H2(TK, dust_to_gas_mass_ratio_over_mw, xe, H2_cosmic_ray_ionization_rate, &
-                               total_G0, dXion(1,1), dXion(1,2), nElement(1, icell)) 
+                               total_G0, dXion(1,1), dXion(1,2), nElement_dep(1)) 
        cr_H2 = cr_H2 + alpha_H2_loc
 
        !! Destruction !!
 
        ! Collisional dissociation
        if (r%rtz_include_collisional_ionization) then 
-         beta_H2_loc = beta_H2_umist(TK,dXion(1,1)*nElement(1, icell),ne,xH2_loc*nElement(1, icell))
+         beta_H2_loc = beta_H2_umist(TK,dXion(1,1)*nElement_dep(1),ne,xH2_loc*nElement_dep(1))
          de_H2 = de_H2 + beta_H2_loc
        end if
 
@@ -681,6 +731,7 @@ contains
        dUU = MAX(dUU,ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM)))
        dUU = dUU * one_over_x_FRAC
        if(dUU .gt. 1.) then
+         !  write(*,*) "Broken H2", TK, dXion(1,3), xion(1,3,icell), ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM))
           code=6 !TODO(code) update this code for each ion
           RETURN
        end if
@@ -693,15 +744,13 @@ contains
     !//       UPDATE IONIZATION STATES      //
     !/////////////////////////////////////////
 
-    ! Initialize the change to zero
-    dUU = 0.d0
-
     ! Get the effective dust number density
-    dust_effective_number_density = nElement(1, icell) * dust_to_gas_mass_ratio_over_mw
+    dust_effective_number_density = nElement_dep(1) * dust_to_gas_mass_ratio_over_mw
 
     ! Loop over all elements
     do iElement = 1,n_elements
        if (elements(iElement)%atomic_number > 0) then
+
           ! Get the atomic number
           atomic_number = elements(iElement)%atomic_number
 
@@ -710,6 +759,8 @@ contains
 
           ! Loop over the number of ions
           do iIon = 1,n_ions
+             ! Initialize the change to zero
+             dUU = 0.d0
 
              !/////////////////////////
              !//       Creation      //
@@ -763,8 +814,10 @@ contains
              end if
 
              ! Recombination on dust from the more excited state
-             if (iIon.lt.n_ions) then 
-                cr = cr + (dust_recombination(iIon+1, i, TK, UV_background_G0, ne) * dust_effective_number_density * dXion(iElement,iIon+1))
+             if (r%rtz_include_dust_recombination) then 
+               if (iIon.lt.n_ions) then 
+                  cr = cr + (dust_recombination(iIon+1, i, TK, UV_background_G0, ne) * dust_effective_number_density * dXion(iElement,iIon+1))
+               end if
              end if
 
              !TODO(code): add creation from local radiation
@@ -820,8 +873,10 @@ contains
              end if
             
              ! Recombination on dust
-             if (iIon .gt. 1) then 
-                de = de + (dust_recombination(iIon, iElement, TK, UV_background_G0, ne) * dust_effective_number_density)
+             if (r%rtz_include_dust_recombination) then 
+               if (iIon .gt. 1) then 
+                  de = de + (dust_recombination(iIon, iElement, TK, UV_background_G0, ne) * dust_effective_number_density)
+               end if
              end if
 
              !TODO(code): add destruction from local radiation
@@ -839,7 +894,7 @@ contains
                         ! Loop over all other ionization states
                         do i_other_Ion = 1,elements(i_other_Element)%n_ions
                            ! Get the number density of the other ion
-                           paired_ion_number_density = nElement(i_other_Element, icell) * dXion(i_other_Element,i_other_Ion)
+                           paired_ion_number_density = nElement_dep(i_other_Element) * dXion(i_other_Element,i_other_Ion)
 
                            if (iIon.eq.1) then !H
                               cr = cr + (charge_transfer_ionization(i_other_Ion,i_other_Element,TK) * dXion(iElement,iIon+1) * paired_ion_number_density) ! Example:  O + H+ => O+ + H
@@ -853,8 +908,8 @@ contains
                      end if
                   end do ! end loop over other elements
                else !All other elements
-                  HI_number_density = dXion(1,1) * nElement(1, icell)
-                  HII_number_density = dXion(1,2) * nElement(1, icell)
+                  HI_number_density = dXion(1,1) * nElement_dep(1)
+                  HII_number_density = dXion(1,2) * nElement_dep(1)
 
                   if (iIon.gt.1) then
                      ! Ionization from less excited state
@@ -881,8 +936,8 @@ contains
              dXion(iElement,iIon) = min(max(dXion(iElement,iIon),x_MIN),1.d0)
 
              ! Get the new electron fraction
-             ne = getNe(dXion, nElement(:,icell))
-             xe = ne / nElement(1, icell)
+             ne = getNe(dXion, nElement_dep(:))
+             xe = ne / nElement_dep(1)
              phi_s = secondary_cr_rates(xe)
              primary_cosmic_ray_ionization_rate = total_cosmic_ray_ionization_rate / (1.d0 + phi_s)
 
@@ -890,6 +945,7 @@ contains
              dUU = MAX(dUU,ABS((dXion(iElement,iIon)-xion(iElement,iIon,icell))/(xion(iElement,iIon,icell)+x_FM)))
              dUU = dUU * one_over_x_FRAC
              if(dUU .gt. 1.) then
+               !  write(*,*) "Broken element/ion", iElement, iIon, dXion(iElement,iIon), xion(iElement,iIon,icell)
                 code=6 !TODO(code) update this code for each ion
                 RETURN
              end if
@@ -899,6 +955,7 @@ contains
              ! Check for convergence -- Fractional change in electrons
              dUU=ABS((ne-neInit)) / (neInit+x_FM) * one_over_x_FRAC
              if(dUU .gt. 1.) then
+               !  write(*,*) "Broken electron", TK, ABS((ne-neInit)) / (neInit+x_FM)
                 code=8
                 RETURN
              endif
@@ -931,12 +988,15 @@ contains
     ! Now the dUs are really changes, not new values
     ! Check if we are safe to use a bigger timestep in next iteration:
     ! TODO(code) update with smarter timestep criteria
-    if(fracMax .lt. 0.5) then
-       dt_rec=ddt(icell)*2.
-    else
-       dt_rec=ddt(icell)
-    endif
+   !  if(fracMax .lt. 0.5) then
+   !     dt_rec=ddt(icell)*2.
+   !  else
+   !     dt_rec=ddt(icell)
+   !  endif
+   !  dt_rec = min(dt_rec,1.d12)
    !  dt_rec = 0.9 * ddt(icell) / ((0.07d0+fracMax)**0.3d0)
+    dt_rec = 0.5d0 * ddt(icell) / ((0.01d0 + fracMax)**0.5d0)
+    dt_rec = min(dt_rec,1.d11)
     dt_ok=.true.
     code=0
 

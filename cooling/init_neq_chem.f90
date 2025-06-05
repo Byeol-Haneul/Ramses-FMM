@@ -39,7 +39,7 @@ subroutine init_neq_chem(r,g,tables)
   ! If we are running with RTZ than we have numerous other initializations
 
   ! First initialize the element structure
-  call initialize_elements()
+  call initialize_elements(r)
 
   ! Initialize cosmic ray data
   call initialize_cr_rates()
@@ -61,7 +61,6 @@ subroutine init_neq_chem(r,g,tables)
 
   ! Initialize the low temperature cooling tables
   call initialize_fine_structure_tables()
-  stop
 
 #endif
 

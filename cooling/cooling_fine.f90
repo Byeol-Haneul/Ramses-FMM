@@ -308,7 +308,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            nElement(14,1:nleaf) = nElement(1,1:nleaf) * 3.24d-05 ! Silicon
            nElement(16,1:nleaf) = nElement(1,1:nleaf) * 1.32d-05 ! Sulfur
            nElement(26,1:nleaf) = nElement(1,1:nleaf) * 3.16d-05 ! Iron
-           call rtz_solve_cooling(r, tables, T2, xion, nElement, &
+           call rtz_solve_cooling(r, tables, T2, g%aexp, xion, nElement, &
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
