@@ -601,7 +601,8 @@ module amr_commons
      real(kind=8),allocatable,dimension(:)::skip ! Coordinates of lower left corner of the box
 
      ! Persistent array for the AMR grid
-     type(oct),dimension(:),pointer::grid ! type(oct),dimension(:),allocatable::grid
+     !type(oct),dimension(:),allocatable,pinned::grid
+     type(oct),dimension(:),pointer::grid
      type(hash_table)::grid_dict   ! Oct hash table
 
      ! Clean/dirty octs for first neighbors

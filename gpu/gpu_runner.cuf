@@ -26,17 +26,18 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_cmpdt(sim, ilevel, mass, ekin, eint, emag, dt)
+    use amr_parameters, only: twotondim
     use nvtx
     use hydro_integrator, only: cmpdt_kernel
     use ramses_commons, only: ramses_t
-    type(ramses_t), intent(inout)::sim
-    integer, intent(in)::ilevel
-    real(kind=8)::mass,ekin,eint,emag,dt
+    type(ramses_t), intent(inout) :: sim
+    integer, intent(in) :: ilevel
+    real(kind=8), intent(inout) :: mass, ekin, eint, emag, dt
 
     integer(kind=8) :: num_octs
-    integer :: err_code, threadsX_per_block, threadsY_per_block, num_blocks
+    integer :: num_threads, num_blocks
     real(kind=8) :: gamma, dx
-    real(kind=8), device :: mass_d,ekin_d,eint_d,emag_d,dt_d
+    real(kind=8), device :: mass_d, ekin_d, eint_d, emag_d, dt_d
 
     gamma = sim%r%gamma
     dx = sim%r%boxlen/2**ilevel
@@ -50,11 +51,10 @@ contains
     emag_d = 0d0
 
     num_octs = sim%m%tail(ilevel)
-    threadsX_per_block=8
-    threadsY_per_block=4
-    num_blocks = (num_octs + threadsY_per_block - 1) / threadsY_per_block
+    num_threads = 1024
+    num_blocks = (num_octs / num_threads) * twotondim
     call nvtxStartRange("GPU cmpdt", color=0)!green
-    call cmpdt_kernel<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_device, num_octs, mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma)
+    call cmpdt_kernel<<<num_blocks, num_threads>>>(grid_device, num_octs, mass_d, ekin_d, eint_d, emag_d, dt_d, dx, gamma)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 
@@ -153,14 +153,11 @@ contains
 
     ! Allocate arrays if they're not allocated
     if (.not. (allocated(subgrid_indices_host))) then
-       ! Allocate the device arrays
-       err_code = cudaMalloc(grid_device_cptr,     sizeof(sim%m%grid))
        ! Note dt is used here just to get the sizeof a float
        err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(dt))
        err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(dt)) 
 
        ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
-       call c_f_pointer(grid_device_cptr, grid_device, [sim%m%tail(ilevel)])
        call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
        call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
 
@@ -177,12 +174,6 @@ contains
        call nvtxEndRange()
     end if
 
-    ! Copy grid from host to device
-    call nvtxStartRange("Copy sim%m%grid to device", color=5)!red
-    grid_device = sim%m%grid
-    call GPU_Error_Check(__FILE__, __LINE__)
-    call nvtxEndRange()
-
     ! =============================
     ! GPU Integration
     ! =============================
@@ -195,14 +186,6 @@ contains
 
     call nvtxStartRange("GPU Integration", color=0)!green
     call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid_device, subgrid_indices_device, num_subgrids, subgrid_size, sim%r%gamma, dt/dx)
-    call GPU_Error_Check(__FILE__, __LINE__)
-    call nvtxEndRange()
-
-    ! ====================================
-    ! Copy updated values back to the host
-    ! ====================================
-    call nvtxStartRange("Copy sim%m%grid to host", color=5)!red
-    sim%m%grid = grid_device
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 

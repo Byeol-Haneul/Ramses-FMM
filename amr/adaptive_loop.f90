@@ -14,6 +14,12 @@ subroutine adaptive_loop(pst)
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
+#ifdef _CUDA
+  use cudafor
+  use nvtx
+  use gpu_utils
+  use gpu_runner
+#endif
 
   implicit none
   type(pst_t)::pst
@@ -77,6 +83,14 @@ subroutine adaptive_loop(pst)
 999 format(' Level ',I2,' has ',I11,' grids (',3(I8,','),')')
 
   g%nstep_coarse_old=g%nstep_coarse
+
+  ! Copy grid from host to device
+#ifdef _CUDA
+  call nvtxStartRange("Copy m%grid to device", color=5)!red
+  grid_device = m%grid
+  call GPU_Error_Check(__FILE__, __LINE__)
+  call nvtxEndRange()
+#endif
 
   write(*,*)'Starting time integration' 
 

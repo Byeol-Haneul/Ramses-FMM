@@ -1,5 +1,5 @@
 module hydro_integrator
-  use amr_parameters, only: dp
+  use amr_parameters, only: dp, twotondim
   use gpu_utils, only: subgrid_8x8x8cell_conserved, subgrid_8x8x8cell_primitive
   use oct_commons, only: oct
   use cudafor
@@ -43,9 +43,9 @@ contains
 
   ! =========================================================================
   !> @brief
-  !> Performm a reduction SUM within a warp.
+  !> Performs a reduction sum within a warp.
   !>
-  !> @param[in] mass : The variable to sum over warps
+  !> @param[in] mass : The variable to sum over the warp
   attributes(device) subroutine warp_reduce_sum(mass)
     real(kind=dp) :: mass
 
@@ -63,12 +63,9 @@ contains
 
   ! =========================================================================
   !> @brief
-  !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
-  !> Parentheses are used to guarantee associativity of transverse terms.
+  !> Performs a reduction sum within a block.
   !>
-  !> @param[in] x : The x component of the vector
-  !> @param[in] y : The y component of the vector
-  !> @param[in] z : The z component of the vector
+  !> @param[in] mass : The variable to sum over the block
   attributes(device) function block_reduce_sum(mass)
     implicit none
     real(kind=dp) :: block_reduce_sum
@@ -98,19 +95,18 @@ contains
 
     ! final reduce within first warp 
     if (wid.eq.1) call warp_reduce_sum(mass)
-    block_reduce_sum = mass
 
+    block_reduce_sum = mass
+    return
   end function block_reduce_sum
   ! =========================================================================
 
   ! =========================================================================
   !> @brief
-  !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
-  !> Parentheses are used to guarantee associativity of transverse terms.
+  !> @brief
+  !> Performs a reduction min within a warp.
   !>
-  !> @param[in] x : The x component of the vector
-  !> @param[in] y : The y component of the vector
-  !> @param[in] z : The z component of the vector
+  !> @param[in] mass : The variable to min over the warp
   attributes(device) subroutine warp_reduce_min(dt)
     real(kind=dp) :: dt
 
@@ -128,12 +124,9 @@ contains
 
   ! ==========================================================================
   !> @brief
-  !> Compute the magnitude squared of a vector. Returns x^2 + y^2 + z^2.
-  !> Parentheses are used to guarantee associativity of transverse terms.
+  !> Performs a reduction min within a block.
   !>
-  !> @param[in] x : The x component of the vector
-  !> @param[in] y : The y component of the vector
-  !> @param[in] z : The z component of the vector
+  !> @param[in] mass : The variable to min over the block
   attributes(device) function block_reduce_min(dt)
     implicit none
     real(kind=dp) :: block_reduce_min
@@ -158,7 +151,7 @@ contains
     if (tid .le. ((blockdim%x) / warpsize)) then
        dt = svalues(lane)
     else
-       dt = 0
+       dt = huge(0d0)
     endif
 
     ! final reduce within first warp 
@@ -944,20 +937,22 @@ contains
     type(primitive_t) :: primitive, conserved_2_primitve
     type(conserved_t) :: conserved
     integer :: info
-    integer :: block_idx  ! The index of this block, corresponds to the oct to load
-    integer :: cell_idx ! The index of the cell within the block
-    integer :: oct_idx ! The index of the oct  within the block
+    integer :: tid, bid ! The index of the thread and the block
+    integer :: cell_idx ! The index of the cell
+    integer :: oct_idx ! The index of the oct
     real(kind=8) :: vol_loc, mass_loc, ekin_loc, eint_loc, emag_loc, dt_loc
     real(kind=8) :: sound_speed
 
-    block_idx = blockIdx%x - 1
+    ! Thread and block id
+    tid = threadIdx%x
+    bid = blockIdx%x
 
     ! Compute the oct idx
-    oct_idx = block_idx * blockDim%y + threadIdx%y
+    oct_idx =( (tid-1) + (bid-1) * blockDim%x ) / twotondim + 1
     if (oct_idx > num_oct) return
 
     ! Compute the cell idx
-    cell_idx = threadIdx%x
+    cell_idx = mod(tid-1, twotondim) + 1
 
     ! Load the cell
     conserved%density    = oct_grid(oct_idx)%uold(cell_idx, 1)
@@ -986,7 +981,7 @@ contains
     eint_loc = block_reduce_sum(eint_loc)
     emag_loc = block_reduce_sum(emag_loc)
 
-    if(threadIdx%x==1 .and. threadIdx%y==1)then
+    if(tid==1)then
        info = atomicmin(dt,dt_loc)
        info = atomicadd(mass,mass_loc)
        info = atomicadd(ekin,ekin_loc)

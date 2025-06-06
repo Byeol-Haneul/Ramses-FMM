@@ -70,6 +70,10 @@ subroutine init_amr(mdl,r,g,m)
   use hash
   use hilbert
   use output_amr_module, only: input_params
+#ifdef _CUDA
+  use cudafor
+  use gpu_runner
+#endif
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
@@ -77,6 +81,9 @@ subroutine init_amr(mdl,r,g,m)
   type(mesh_t)::m
 
   ! Local variables
+#ifdef _CUDA
+  integer::err_code
+#endif
   integer::ilevel,icpu,igrid
   integer(kind=8)::max_key
   character(len=5)::nchar
@@ -98,6 +105,12 @@ subroutine init_amr(mdl,r,g,m)
   do igrid=1,r%ngridmax+r%ncachemax
      m%grid(igrid)%lev=0
   end do
+
+  ! Allocate the device array
+#ifdef _CUDA
+  err_code = cudaMalloc(grid_device_cptr, sizeof(m%grid))
+  call c_f_pointer(grid_device_cptr, grid_device, [r%ngridmax+r%ncachemax])
+#endif
 
   ! Allocate cache-related arrays
   allocate(m%dirty(1:r%ncachemax))
