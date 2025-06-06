@@ -339,7 +339,7 @@ subroutine m_read_params(pst)
 
   ! RTZ cooling parameters
   logical::rtz_cooling=.false. ! RTZ Non-equilibrium cooling ------------
-  logical::rtz_equilibrium_test=.false. ! RTZ EQM test ------------------
+  integer::rtz_equilibrium_test=-1 ! RTZ EQM test ------------------
   logical::rtz_include_collisional_ionization=.true.
   logical::rtz_include_photoionization=.true.
   logical::rtz_include_cosmic_ray_ionization=.true.
@@ -349,6 +349,8 @@ subroutine m_read_params(pst)
   logical::isH2_rtz=.false.
   real(kind=8)::rtz_UV_background_G0=0.d0
   real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
+  real(kind=8)::rtz_max_cool_timestep=1.d11
+  integer::rtz_eqm_min_its
 
   ! Star formation parameters
   integer::sf_model=1
@@ -557,7 +559,8 @@ subroutine m_read_params(pst)
        & ,rtz_cooling, rtz_equilibrium_test, rtz_include_collisional_ionization &
        & ,rtz_include_photoionization, rtz_include_cosmic_ray_ionization &
        & ,rtz_include_charge_exchange, rtz_include_dust_recombination, rtz_UV_background_G0 &
-       & ,rtz_total_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz
+       & ,rtz_total_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
+       & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -1351,6 +1354,8 @@ subroutine m_read_params(pst)
   s%r%rtz_UV_background_G0=rtz_UV_background_G0
   s%r%rtz_total_cosmic_ray_ionization_rate=rtz_total_cosmic_ray_ionization_rate
   s%r%isH2_rtz=isH2_rtz
+  s%r%rtz_max_cool_timestep=rtz_max_cool_timestep
+  s%r%rtz_eqm_min_its=rtz_eqm_min_its
 
   s%r%iIons=iIons
   s%r%ixHI=ixHI

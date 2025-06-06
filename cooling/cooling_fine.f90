@@ -295,19 +295,20 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            ! If both non-equilibrium chemistry and rtz_cooling are turned on
            ! we use a detailed model for the chemistry
 
-           !TODO(code): fill nelement with correct number densities
-           ! for now, just assume some density solar metallicity
-           nElement(1:n_elements,1:nleaf)  = 0.d0  ! Initialize to zero
-           nElement(1,1:nleaf)  = 1.d-1                          ! Hydrogen      
-           nElement(2,1:nleaf)  = nElement(1,1:nleaf) * 8.51d-02 ! Helium
-           nElement(6,1:nleaf)  = nElement(1,1:nleaf) * 2.69d-04 ! Carbon
-           nElement(7,1:nleaf)  = nElement(1,1:nleaf) * 6.76d-05 ! Nitrogen
-           nElement(8,1:nleaf)  = nElement(1,1:nleaf) * 4.90d-04 ! Oxygen
-           nElement(10,1:nleaf) = nElement(1,1:nleaf) * 8.51d-05 ! Neon
-           nElement(12,1:nleaf) = nElement(1,1:nleaf) * 3.98d-05 ! Magnesium
-           nElement(14,1:nleaf) = nElement(1,1:nleaf) * 3.24d-05 ! Silicon
-           nElement(16,1:nleaf) = nElement(1,1:nleaf) * 1.32d-05 ! Sulfur
-           nElement(26,1:nleaf) = nElement(1,1:nleaf) * 3.16d-05 ! Iron
+           if (r%rtz_equilibrium_test.eq.2) then 
+               ! for now, just assume some density solar metallicity
+               nElement(1:n_elements,1:nleaf)  = 0.d0  ! Initialize to zero
+               nElement(1,1:nleaf)  = 1.d-1                          ! Hydrogen      
+               nElement(2,1:nleaf)  = nElement(1,1:nleaf) * 8.51d-02 ! Helium
+               nElement(6,1:nleaf)  = nElement(1,1:nleaf) * 2.69d-04 ! Carbon
+               nElement(7,1:nleaf)  = nElement(1,1:nleaf) * 6.76d-05 ! Nitrogen
+               nElement(8,1:nleaf)  = nElement(1,1:nleaf) * 4.90d-04 ! Oxygen
+               nElement(10,1:nleaf) = nElement(1,1:nleaf) * 8.51d-05 ! Neon
+               nElement(12,1:nleaf) = nElement(1,1:nleaf) * 3.98d-05 ! Magnesium
+               nElement(14,1:nleaf) = nElement(1,1:nleaf) * 3.24d-05 ! Silicon
+               nElement(16,1:nleaf) = nElement(1,1:nleaf) * 1.32d-05 ! Sulfur
+               nElement(26,1:nleaf) = nElement(1,1:nleaf) * 3.16d-05 ! Iron
+            end if
            call rtz_solve_cooling(r, tables, T2, g%aexp, xion, nElement, &
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
