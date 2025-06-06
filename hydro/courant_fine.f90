@@ -12,6 +12,9 @@ contains
 recursive subroutine r_courant_fine(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
+#ifdef _CUDA
+  use gpu_runner, only: gpu_cmpdt
+#endif
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -32,7 +35,11 @@ recursive subroutine r_courant_fine(pst,ilevel,input_size,output,output_size)
      output%emag=output%emag+next_output%emag
      output%dt=MIN(output%dt,next_output%dt)
   else
+#ifdef _CUDA
+     call gpu_cmpdt(pst%s,ilevel,output%mass,output%ekin,output%eint,output%emag,output%dt)
+#else
      call courant_fine(pst%s%r,pst%s%g,pst%s%m,ilevel,output%mass,output%ekin,output%eint,output%emag,output%dt)
+#endif
   endif
 
 end subroutine r_courant_fine
