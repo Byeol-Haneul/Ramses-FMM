@@ -133,7 +133,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
   !-----------------------------------------------------------------------
 
   ! Check if we are running in equilibrium mode
-  if (r%rtz_equilibrium_test) then
+  if (r%rtz_equilibrium_test.gt.0) then
 
       ! Open files for all elements
       do i = 1, n_elements
@@ -144,43 +144,50 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
          end if
       end do
 
-      !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
-      T2 = 1.d5 ! --> initialize at high temperature
-      ! Set the ionization states to completely ionized
-      ! TODO(code): put in a loop
-      xion = 0.d0
-      xion(1,1,:) = 1.d0 ! Hydrogen
-      xion(2,1,:) = 1.d0 ! Helium
-      xion(6,1,:) = 1.d0 ! Carbon
-      xion(7,1,:) = 1.d0 ! Nitrogen
-      xion(8,1,:) = 1.d0 ! Oxygen
-      xion(10,1,:) = 1.d0 ! Neon
-      xion(12,1,:) = 1.d0 ! Magnesium
-      xion(14,1,:) = 1.d0 ! Silicon
-      xion(16,1,:) = 1.d0 ! Sulfur
-      xion(26,2,:) = 1.d0 ! Iron
+      if (r%rtz_equilibrium_test.eq.1) then 
+         !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
+         T2 = 1.d5 ! --> initialize at high temperature
+         ! Set the ionization states to completely ionized
+         ! TODO(code): put in a loop
+         xion = 0.d0
+         xion(1,1,:) = 1.d0 ! Hydrogen
+         xion(2,1,:) = 1.d0 ! Helium
+         xion(6,1,:) = 1.d0 ! Carbon
+         xion(7,1,:) = 1.d0 ! Nitrogen
+         xion(8,1,:) = 1.d0 ! Oxygen
+         xion(10,1,:) = 1.d0 ! Neon
+         xion(12,1,:) = 1.d0 ! Magnesium
+         xion(14,1,:) = 1.d0 ! Silicon
+         xion(16,1,:) = 1.d0 ! Sulfur
+         xion(26,2,:) = 1.d0 ! Iron
+      end if
 
       do i_interp = 1,300
          ! Initialize the convergence counter
          convergence_counter = 0
 
-         !!! USE FOR EQM TESTS AT CONSTANT T
-         ! Set the temperature
-         !r%neq_TConst = 10.d0**(((8.d0 - 2.d0) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + 2.d0)
+         if (r%rtz_equilibrium_test.eq.2) then
+            !!! USE FOR EQM TESTS AT CONSTANT T
+            ! Set the temperature
+            r%neq_isTconst = .true.
+            r%neq_TConst = 10.d0**(((8.d0 - 2.d0) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + 2.d0)
+         end if
 
-         !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
-         ! Interpolate over density
-         nElement(1:n_elements,1:ncell)  = 0.d0  ! Initialize to zero
-         nElement(1,1:ncell)  = 10.d0**(((5.d0 - (-2.d0)) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + (-2.d0))                          ! Hydrogen      
-         nElement(2,1:ncell)  = nElement(1,1:ncell) * 8.51d-02 ! Helium
-         nElement(6,1:ncell)  = nElement(1,1:ncell) * 2.69d-04 * r%z_ave ! Carbon
-         nElement(7,1:ncell)  = nElement(1,1:ncell) * 6.76d-05 * r%z_ave ! Nitrogen
-         nElement(8,1:ncell)  = nElement(1,1:ncell) * 4.90d-04 * r%z_ave ! Oxygen
-         nElement(10,1:ncell) = nElement(1,1:ncell) * 8.51d-05 * r%z_ave ! Neon
-         nElement(12,1:ncell) = nElement(1,1:ncell) * 3.98d-05 * r%z_ave ! Magnesium
-         nElement(14,1:ncell) = nElement(1,1:ncell) * 3.24d-05 * r%z_ave ! Silicon
-         nElement(16,1:ncell) = nElement(1,1:ncell) * 1.32d-05 * r%z_ave ! Sulfur
-         nElement(26,1:ncell) = nElement(1,1:ncell) * 3.16d-05 * r%z_ave ! Iron
+         if (r%rtz_equilibrium_test.eq.1) then 
+            !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
+            ! Interpolate over density
+            nElement(1:n_elements,1:ncell)  = 0.d0  ! Initialize to zero
+            nElement(1,1:ncell)  = 10.d0**(((5.d0 - (-2.d0)) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + (-2.d0))                          ! Hydrogen      
+            nElement(2,1:ncell)  = nElement(1,1:ncell) * 8.51d-02 ! Helium
+            nElement(6,1:ncell)  = nElement(1,1:ncell) * 2.69d-04 * r%z_ave ! Carbon
+            nElement(7,1:ncell)  = nElement(1,1:ncell) * 6.76d-05 * r%z_ave ! Nitrogen
+            nElement(8,1:ncell)  = nElement(1,1:ncell) * 4.90d-04 * r%z_ave ! Oxygen
+            nElement(10,1:ncell) = nElement(1,1:ncell) * 8.51d-05 * r%z_ave ! Neon
+            nElement(12,1:ncell) = nElement(1,1:ncell) * 3.98d-05 * r%z_ave ! Magnesium
+            nElement(14,1:ncell) = nElement(1,1:ncell) * 3.24d-05 * r%z_ave ! Silicon
+            nElement(16,1:ncell) = nElement(1,1:ncell) * 1.32d-05 * r%z_ave ! Sulfur
+            nElement(26,1:ncell) = nElement(1,1:ncell) * 3.16d-05 * r%z_ave ! Iron
+         end if
 
          tleft(1:ncell) = 1.d20             ! Set to an arbitrarily large number
          ddt(1:ncell) = 10000.d0 * 365.25d0 * 60.d0 * 60.d0 ! First guess at sub-timestep lengths
@@ -234,12 +241,12 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
                T2(i) = T2(i) + dT2
                ! Check for convergence
                xion(:,:,i) = xion(:,:,i) + dXion(:,:)
-               if (convergence_counter .gt. 15000) then
+               if (convergence_counter .gt. r%rtz_eqm_min_its) then
                   tleft(i) = 0.0 ! Finish the cell if we have reached convergence
                else
                   tleft(i)=tleft(i)-ddt(i)
                   ! Take at least 100 iterations
-                  if (convergence_counter .lt. 15000) then
+                  if (convergence_counter .lt. r%rtz_eqm_min_its) then
                      tleft(i)=max(tleft(i),ddt(i))
                   endif
                endif
@@ -254,16 +261,21 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
             nAct=nAct_next
          end do ! end iterative loop
 
-         ! Write hydrogen for debugging
-         ! if (r%isH2_rtz) then 
-         !    write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
-         ! else
-         !    write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1)
-         ! end if
-         if (r%isH2_rtz) then 
-            write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
-         else
-            write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1)
+         ! Write for debugging
+         if (r%rtz_equilibrium_test.eq.2) then
+            if (r%isH2_rtz) then 
+               write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
+            else
+               write(*,*) r%neq_TConst, loopcnt, xion(1,1,1), xion(1,2,1)
+            end if
+         end if
+
+         if (r%rtz_equilibrium_test.eq.1) then
+            if (r%isH2_rtz) then 
+               write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
+            else
+               write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1)
+            end if
          end if
 
          ! Write data to file
@@ -488,7 +500,7 @@ contains
     neInit = ne
     fracMax = 0d0 ! Max fractional update, to check if dt can be increased
     ss_factor = 1d0                  ! UV background self_shielding factor
-    if (.not.r%rtz_equilibrium_test) then 
+    if (r%rtz_equilibrium_test.lt.0) then 
        if(r%self_shielding) ss_factor = exp(-nH(icell)/1d-2)
     end if
     rho = nH(icell) / r%X_H * mH ! TODO(code): update this to the correct value
@@ -986,17 +998,9 @@ contains
     dp_gas(:)= dp_gas(:)-p_gas(:,icell)
 #endif
     ! Now the dUs are really changes, not new values
-    ! Check if we are safe to use a bigger timestep in next iteration:
-    ! TODO(code) update with smarter timestep criteria
-   !  if(fracMax .lt. 0.5) then
-   !     dt_rec=ddt(icell)*2.
-   !  else
-   !     dt_rec=ddt(icell)
-   !  endif
-   !  dt_rec = min(dt_rec,1.d12)
-   !  dt_rec = 0.9 * ddt(icell) / ((0.07d0+fracMax)**0.3d0)
+    ! Update the timestep for the next iteration:
     dt_rec = 0.5d0 * ddt(icell) / ((0.01d0 + fracMax)**0.5d0)
-    dt_rec = min(dt_rec,1.d11)
+    dt_rec = min(dt_rec,r%rtz_max_cool_timestep)
     dt_ok=.true.
     code=0
 

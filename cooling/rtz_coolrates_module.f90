@@ -1786,7 +1786,7 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     
     !!!!!! Sum all of the cooling rates
     total_cooling = total_primordial_cooling + dust_cooling + high_T_metal_cooling + total_fine_structure 
-
+    
     !!!!!! Sum all of the heating rates
     total_heating = photoelectric_heat + uvb_photoheat_G0
 

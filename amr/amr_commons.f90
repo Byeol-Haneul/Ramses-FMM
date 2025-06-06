@@ -274,7 +274,7 @@ module amr_commons
 
      ! RTZ cooling parameters
      logical::rtz_cooling=.false.
-     logical::rtz_equilibrium_test=.false.
+     integer::rtz_equilibrium_test=-1
      logical::rtz_include_collisional_ionization=.true.
      logical::rtz_include_photoionization=.true.
      logical::rtz_include_cosmic_ray_ionization=.true.
@@ -284,6 +284,8 @@ module amr_commons
      logical::isH2_rtz=.false.
      real(kind=8)::rtz_UV_background_G0=0.d0
      real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
+     real(kind=8)::rtz_max_cool_timestep=1.d11
+     integer::rtz_eqm_min_its=3000
 
      ! Star formation parameters
      integer::sf_model=1
