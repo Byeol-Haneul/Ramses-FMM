@@ -1,8 +1,12 @@
 module courant_fine_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_cmpdt
+  use nvtx
+#endif
 
-type :: out_courant_fine_t
-  real(kind=8)::mass,ekin,eint,emag,dt
-end type out_courant_fine_t
+  type :: out_courant_fine_t
+     real(kind=8)::mass,ekin,eint,emag,dt
+  end type out_courant_fine_t
 
 contains
 !###########################################################
@@ -12,9 +16,6 @@ contains
 recursive subroutine r_courant_fine(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t
-#ifdef _CUDA
-  use gpu_runner, only: gpu_cmpdt
-#endif
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -36,7 +37,9 @@ recursive subroutine r_courant_fine(pst,ilevel,input_size,output,output_size)
      output%dt=MIN(output%dt,next_output%dt)
   else
 #ifdef _CUDA
+     call nvtxStartRange("GPU cmpdt", color=6)!teal
      call gpu_cmpdt(pst%s,ilevel,output%mass,output%ekin,output%eint,output%emag,output%dt)
+     call nvtxEndRange()
 #else
      call courant_fine(pst%s%r,pst%s%g,pst%s%m,ilevel,output%mass,output%ekin,output%eint,output%emag,output%dt)
 #endif

@@ -1,4 +1,8 @@
 module godunov_fine_module
+#ifdef _CUDA
+  use gpu_runner, only: gpu_integrator, gpu_set_unew, gpu_set_uold
+  use nvtx
+#endif
 contains
 !###########################################################
 !###########################################################
@@ -20,7 +24,13 @@ recursive subroutine r_godunov_fine(pst,ilevel,input_size)
      call r_godunov_fine(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call godunov_fine(pst%s,ilevel)
+#ifdef _CUDA
+     call nvtxStartRange("GPU integrator", color=6)!teal
+     call gpu_integrator(pst%s, ilevel)
+     call nvtxEndRange()
+#else
+     call godunov_fine(pst%s, ilevel)
+#endif
   endif
 
 end subroutine r_godunov_fine
@@ -100,7 +110,13 @@ recursive subroutine r_set_unew(pst,ilevel,input_size)
      call r_set_unew(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call nvtxStartRange("GPU set_unew", color=6)!teal
+     call gpu_set_unew(pst%s, ilevel)
+     call nvtxEndRange()
+#else
      call set_unew(pst%s%r,pst%s%g,pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_set_unew
@@ -124,15 +140,19 @@ subroutine set_unew(r,g,m,ilevel)
 
 #ifdef HYDRO
   ! Set unew to uold for myid cells
+  !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%unew = m%grid(i)%uold
   end do
+  !$OMP END PARALLEL DO
 #endif
 #ifdef MHD
   ! Set bnew to bold for myid cells
+  !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%bnew = m%grid(i)%bold
   end do
+  !$OMP END PARALLEL DO
 #endif
 
 end subroutine set_unew
@@ -155,7 +175,13 @@ recursive subroutine r_set_uold(pst,ilevel,input_size)
      call r_set_uold(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
+#ifdef _CUDA
+     call nvtxStartRange("GPU set_uold", color=6)!teal
+     call gpu_set_uold(pst%s, ilevel)
+     call nvtxEndRange()
+#else
      call set_uold(pst%s%r,pst%s%g,pst%s%m,ilevel)
+#endif
   endif
 
 end subroutine r_set_uold
@@ -179,15 +205,19 @@ subroutine set_uold(r,g,m,ilevel)
 
 #ifdef HYDRO
   ! Set uold to unew
+  !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%uold = m%grid(i)%unew
   end do
+  !$OMP END PARALLEL DO
 #endif
 #ifdef MHD
   ! Set bold to bnew
+  !$OMP PARALLEL DO
   do i = m%head(ilevel),m%tail(ilevel)
      m%grid(i)%bold = m%grid(i)%bnew
   end do
+  !$OMP END PARALLEL DO
 #endif
 
 end subroutine set_uold
