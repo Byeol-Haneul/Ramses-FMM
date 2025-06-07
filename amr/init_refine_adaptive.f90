@@ -25,18 +25,24 @@ subroutine m_init_refine_adaptive(pst)
   real(kind=8)::mp_min
   integer::istep,ilevel
 
-  write(*,*)'Building initial adaptive grid'
+  if(pst%s%r%verbose)write(*,*)'Entering init_refine_adaptive'
 
-  do istep=pst%s%r%levelmin,pst%s%r%nlevelmax+1
+  do istep=pst%s%r%levelmin+1,pst%s%r%nlevelmax
+
+     if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%initfile(istep).eq.' ')exit
+
+     write(*,*)'Building initial fine grid at level ',istep
+
+     do ilevel=pst%s%r%nlevelmax-1,pst%s%r%levelmin,-1
+        call m_flag_fine(pst,ilevel,2)
+     end do
 
      call m_refine_fine(pst,pst%s%r%levelmin)
 
-     write(*,*)'Trying maximum level ',istep
-
-     do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
+     do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin+1,-1
         if(pst%s%r%hydro)then
            call m_init_flow_fine(pst,ilevel)
-           call m_upload_fine(pst,ilevel)
+           call m_upload_fine(pst,ilevel-1)
         endif
         if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%ivar_refine==0)then
            call r_input_refmap_grafic(pst,ilevel,1)
@@ -44,9 +50,9 @@ subroutine m_init_refine_adaptive(pst)
      end do
 
      if(pst%s%r%rt)then
-        do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
+        do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin+1,-1
            call m_rt_init_flow_fine(pst,ilevel)
-           call m_rt_upload_fine(pst,ilevel)
+           call m_rt_upload_fine(pst,ilevel-1)
         end do
      endif
 
@@ -55,12 +61,6 @@ subroutine m_init_refine_adaptive(pst)
         call m_rho_fine(pst,pst%s%r%levelmin,0)
      endif
 #endif
-
-     do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin,-1
-        call m_flag_fine(pst,ilevel,2)
-     end do
-
-     if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%initfile(istep).eq.' ')exit
 
   end do
 

@@ -19,6 +19,8 @@ subroutine m_init_refine_basegrid(pst)
   
   if(r%verbose)write(*,*)'Entering init_refine_basegrid'
 
+  write(*,*)'Building initial base grid at level ',r%levelmin
+
   ! Call recursive slave routine
   call r_init_refine_basegrid(pst,r%levelmin,1)
 
@@ -215,7 +217,7 @@ subroutine init_refine_basegrid(s,ilevel)
   use amr_parameters, only: nhilbert,ndim,twotondim
   use ramses_commons, only: ramses_t
   use hilbert
-  use hash, only: hash_setp, hash_is_clean
+  use hash, only: hash_setp, hash_is_clean, hash_stats
   implicit none
   type(ramses_t)::s
   integer::ilevel

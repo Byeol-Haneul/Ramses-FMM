@@ -584,7 +584,7 @@ subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
         F(i, j, k, 2, 1) = 1.0_dp
      else if (ndim.eq.2) then
         ! Use Harley pressure tensor for 2D (photons confined to plane)
-
+#if NDIM==2
         F_norm = pflux / (Np * rt_c)
         F_norm_norm = SQRT(DOT_PRODUCT(F_norm, F_norm))
 
@@ -633,7 +633,7 @@ subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
         F(i,j,k,3,2) = pressure_tensor_2D(2,2)
         F(i,j,k,2,2) = pressure_tensor_2D(1,2)
         F(i,j,k,3,1) = pressure_tensor_2D(1,2)
-
+#endif
      else
         ! Use Levermore 1984 Eddington factor for 3D
         chi = max(4d0-3d0*pflux_sq, 0d0)   !           Eddington factor
