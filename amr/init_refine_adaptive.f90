@@ -22,7 +22,7 @@ subroutine m_init_refine_adaptive(pst)
   ! This routine is the master procedure to set the base grid
   ! and initialize all cell-based variables within it.
   !--------------------------------------------------------------------
-  real(dp)::mp_min
+  real(kind=8)::mp_min
   integer::istep,ilevel
 
   write(*,*)'Building initial adaptive grid'

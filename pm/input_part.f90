@@ -19,7 +19,7 @@ subroutine m_input_part(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from many different initial conditions file formats.
   !--------------------------------------------------------------------
-  real(dp)::mp_min
+  real(kind=8)::mp_min
 
   ! Input particle properties from files
   select case(pst%s%r%filetype)

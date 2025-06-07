@@ -615,11 +615,11 @@ subroutine cmp_flux_tensors(uin, iP0, F, rt_c &
             ! Step 3: Interpolate the value of lagrange_b 
             ! and then compute lagrange_a
             lagrange_b = interp_b(F_rot(1))
-            lagrange_a = LOG(1.0_dp / (2.0_dp * ACOS(-1.0_dp) * bessel_i0(lagrange_b)))
+            lagrange_a = LOG(1.0_dp / (2.0_dp * ACOS(-1.0_dp) * bessel_i0(dble(lagrange_b))))
 
             ! Step 4: Use lagrange a and b to compute the pressure tensor
-            pressure_tensor_2D_rot(1,1) = ACOS(-1.0_dp) * EXP(lagrange_a) * (bessel_i0(lagrange_b) + bessel_i2(lagrange_b))
-            pressure_tensor_2D_rot(2,2) = ACOS(-1.0_dp) * EXP(lagrange_a) * (bessel_i0(lagrange_b) - bessel_i2(lagrange_b))
+            pressure_tensor_2D_rot(1,1) = ACOS(-1.0_dp) * EXP(lagrange_a) * (bessel_i0(dble(lagrange_b)) + bessel_i2(dble(lagrange_b)))
+            pressure_tensor_2D_rot(2,2) = ACOS(-1.0_dp) * EXP(lagrange_a) * (bessel_i0(dble(lagrange_b)) - bessel_i2(dble(lagrange_b)))
             pressure_tensor_2D_rot(1,2) = 0.0_dp
             pressure_tensor_2D_rot(2,1) = 0.0_dp
           endif

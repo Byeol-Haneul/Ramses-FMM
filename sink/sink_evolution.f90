@@ -590,18 +590,18 @@ contains
    ! Routine to return alpha, defined as rho/rho_inf, for a critical
    ! Bondi accretion solution. The argument is x = r / r_Bondi.
    ! This is from Krumholz et al. 2004 (AJC)
-   REAL(dp) function bondi_alpha(x)
+   REAL(kind=8) function bondi_alpha(x)
      implicit none
-     REAL(dp) x
-     REAL(dp), PARAMETER :: XMIN=0.01d0, XMAX=2.0d0
+     REAL(kind=8) x
+     REAL(kind=8), PARAMETER :: XMIN=0.01d0, XMAX=2.0d0
      INTEGER, PARAMETER :: NTABLE=51
-     REAL(dp) lambda_c, xtable, xtablep1, alpha_exp
+     REAL(kind=8) lambda_c, xtable, xtablep1, alpha_exp
      integer idx
      !     Table of alpha values. These correspond to x values that run from
      !     0.01 to 2.0 with uniform logarithmic spacing. The reason for
      !     this choice of range is that the asymptotic expressions are
      !     accurate to better than 2% outside this range.
-     REAL(dp), PARAMETER, DIMENSION(NTABLE) :: alphatable = (/ &
+     REAL(kind=8), PARAMETER, DIMENSION(NTABLE) :: alphatable = (/ &
           820.254, 701.882, 600.752, 514.341, 440.497, 377.381, 323.427, &
           277.295, 237.845, 204.1, 175.23, 150.524, 129.377, 111.27, 95.7613, &
           82.4745, 71.0869, 61.3237, 52.9498, 45.7644, 39.5963, 34.2989, &

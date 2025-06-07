@@ -26,7 +26,7 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_cmpdt(sim, ilevel, mass, ekin, eint, emag, dt)
-    use amr_parameters, only: twotondim
+    use amr_parameters, only: dp, twotondim
     use nvtx
     use hydro_integrator, only: cmpdt_kernel
     use ramses_commons, only: ramses_t
@@ -36,7 +36,7 @@ contains
 
     integer(kind=8) :: num_octs
     integer :: num_threads, num_blocks
-    real(kind=8) :: gamma, dx
+    real(kind=dp) :: gamma, dx
     real(kind=8), device :: mass_d, ekin_d, eint_d, emag_d, dt_d
 
     gamma = sim%r%gamma

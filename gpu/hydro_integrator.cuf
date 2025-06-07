@@ -47,7 +47,7 @@ contains
   !>
   !> @param[in] mass : The variable to sum over the warp
   attributes(device) subroutine warp_reduce_sum(mass)
-    real(kind=dp) :: mass
+    real(kind=8) :: mass
 
     integer :: offset
 
@@ -68,9 +68,9 @@ contains
   !> @param[in] mass : The variable to sum over the block
   attributes(device) function block_reduce_sum(mass)
     implicit none
-    real(kind=dp) :: block_reduce_sum
-    real(kind=dp) :: mass
-    real(kind=dp), shared :: svalues(32)
+    real(kind=8) :: block_reduce_sum
+    real(kind=8) :: mass
+    real(kind=8), shared :: svalues(32)
     integer :: tid, lane, wid
 
     tid = threadIdx%x
@@ -108,7 +108,7 @@ contains
   !>
   !> @param[in] mass : The variable to min over the warp
   attributes(device) subroutine warp_reduce_min(dt)
-    real(kind=dp) :: dt
+    real(kind=8) :: dt
 
     integer :: offset
 
@@ -129,9 +129,9 @@ contains
   !> @param[in] mass : The variable to min over the block
   attributes(device) function block_reduce_min(dt)
     implicit none
-    real(kind=dp) :: block_reduce_min
-    real(kind=dp) :: dt
-    real(kind=dp), shared :: svalues(32)
+    real(kind=8) :: block_reduce_min
+    real(kind=8) :: dt
+    real(kind=8), shared :: svalues(32)
     integer :: tid, lane, wid
 
     tid = threadIdx%x
@@ -931,7 +931,7 @@ contains
   attributes(global) subroutine cmpdt_kernel(oct_grid, num_oct, mass, ekin, eint, emag, dt, dx, gamma)
     type(oct), device, dimension(*) :: oct_grid
     integer(kind=8), intent(in), value :: num_oct
-    real(kind=dp), device, intent(inout) :: mass, ekin, eint, emag, dt
+    real(kind=8), device, intent(inout) :: mass, ekin, eint, emag, dt
     real(kind=dp), value :: dx, gamma
 
     type(primitive_t) :: primitive, conserved_2_primitve

@@ -346,8 +346,8 @@ function erfc(x)
   ! complementary error function
   use amr_parameters, ONLY: dp
   implicit none
-  real(dp) :: erfc
-  real(dp) :: x, y
+  real(kind=8) :: erfc
+  real(kind=8) :: x, y
   real(kind=8) :: pv, ph
   real(kind=8) :: q0, q1, q2, q3, q4, q5, q6, q7
   real(kind=8) :: p0, p1, p2, p3, p4, p5, p6, p7

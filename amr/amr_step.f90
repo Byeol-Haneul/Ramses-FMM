@@ -158,7 +158,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%hydro.and..not.r%static_gas)then
      if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
         call m_timer(pst,'hydro - gravity','start')
-        call m_synchro_hydro_fine(pst,ilevel,-0.5d0*g%dtnew(ilevel))
+        call m_synchro_hydro_fine(pst,ilevel,-0.5d0*dble(g%dtnew(ilevel)))
      end if
   endif
 
@@ -201,7 +201,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%hydro.and..not.r%static_gas)then
      if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
         call m_timer(pst,'hydro - gravity','start')
-        call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+        call m_synchro_hydro_fine(pst,ilevel,+0.5d0*dble(g%dtnew(ilevel)))
      endif
   end if
 
@@ -334,7 +334,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         ! to complete the time step with old force (will be removed later)
         if(r%poisson.or.maxval(abs(r%constant_gravity))>0)then
            call m_timer(pst,'hydro - gravity','start')
-           call m_synchro_hydro_fine(pst,ilevel,+0.5d0*g%dtnew(ilevel))
+           call m_synchro_hydro_fine(pst,ilevel,+0.5d0*dble(g%dtnew(ilevel)))
         endif
      endif
 

@@ -177,7 +177,7 @@ contains
     integer :: error
 
     zz = abs(z)
-    error = integrate_f(2.0d0/sqrt(1.0d0+zz), 2.0d0, eps, res, del, Omega0, OmegaL, OmegaR)
+    error = integrate_f(2.0_dp/sqrt(1.0_dp+zz), 2.0_dp, eps, res, del, Omega0, OmegaL, OmegaR)
     comoving_distance = coverH0 * res
     if (z < 0) comoving_distance = -comoving_distance
 

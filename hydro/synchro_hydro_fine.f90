@@ -10,7 +10,7 @@ subroutine m_synchro_hydro_fine(pst,ilevel,dteff)
   implicit none
   type(pst_t)::pst
   integer::ilevel
-  real(dp)::dteff
+  real(kind=8)::dteff
   !--------------------------------------------------------------
   ! Add gravity source terms to uold with time step dteff.
   !--------------------------------------------------------------
@@ -41,7 +41,7 @@ recursive subroutine r_synchro_hydro_fine(pst,input_array,input_size,output_arra
   integer,dimension(1:output_size)::output_array
 
   integer::ilevel
-  real(dp)::dteff
+  real(kind=8)::dteff
   integer::rID
   
   if(pst%nLower>0)then
@@ -66,7 +66,7 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
   type(run_t)::r
   type(mesh_t)::m
   integer::ilevel
-  real(dp)::dteff
+  real(kind=8)::dteff
   !--------------------------------------------------------------
   ! Add gravity source terms to uold with time step dteff.
   !--------------------------------------------------------------
