@@ -267,6 +267,9 @@ module amr_commons
      logical::isHe=.true.                             !      He ionization fractions tracked?
      logical::isH2=.false.                            !                           H2 tracked?
      integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
+#ifdef RTZ
+     real(kind=8),dimension(1:27,1:27)::ionEvs        !                   Ionization energies
+#else
      real(kind=8),dimension(nIon)::ionEvs             !                   Ionization energies
      real(kind=8)::neq_Tconst=-1           ! If positive use this value for all T-dependent rates
      logical::neq_isTconst=.false.                    !             Constant rates activated?
@@ -471,7 +474,12 @@ module amr_commons
      ! logical::SED_isEgy=.false. ! Integrate energy out of SEDs rather than photon count
      ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
      ! Indexes nrtgrp, nIon stand for photon group vs species (e.g. 1=H, 2=He)
+     ! Note that this is not true in the case of RTZ
+#ifdef RTZ
+     real(kind=8),dimension(nrtgrp,1:27,1:27)::group_csn=0, group_cse=0         ! Cross sections (cm2)
+#else
      real(kind=8),dimension(nrtgrp,nIon)::group_csn=0, group_cse=0         ! Cross sections (cm2)
+#endif
      real(kind=8),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
      real(kind=8),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
      real(kind=8),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
@@ -479,6 +487,7 @@ module amr_commons
      real(kind=8),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
      real(kind=8),dimension(nrtgrp)::isLW=0d0                          ! Use to find the LW group 
      real(kind=8),dimension(nrtgrp)::ssh2=1d0                      ! Self-shielding factor for H2
+     ! HK note --> OTSA required for RTZ
      integer,dimension(nIon)::spec2group=0                 ! Ion -> group # in recombinations
 
   end type run_t

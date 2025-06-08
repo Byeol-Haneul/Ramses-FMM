@@ -36,9 +36,12 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use amr_commons, only: run_t, global_t, mesh_t
   use cooling_module, only: cooling_t, solve_cooling, T2_min_fix, set_table
   use coolrates_module, only: neq_cooling_t
-  use neq_cooling_module, only: neq_solve_cooling
+#ifdef RTZ
   use rtz_cooling_module, only: rtz_solve_cooling
   use rtz_module, only: n_elements
+#else
+  use neq_cooling_module, only: neq_solve_cooling
+#endif
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -291,6 +294,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         else if(r%cooling_ism)then
            ! Use cooling from cooling_module_frig described in Audit & Hennebelle 2005
            call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,r%mu_mol,nleaf)
+#ifdef RTZ
         else if(r%neq_chem.and.r%rtz_cooling) then
            ! If both non-equilibrium chemistry and rtz_cooling are turned on
            ! we use a detailed model for the chemistry
@@ -313,13 +317,15 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
-                & dtcool, nleaf)           
+                & dtcool, nleaf)   
+#else        
         else if(r%neq_chem)then
            call neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
                 & dtcool, nleaf)
+#endif
         endif
 
         ! Compute rho in code units
