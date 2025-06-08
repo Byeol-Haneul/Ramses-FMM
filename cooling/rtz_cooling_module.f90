@@ -95,7 +95,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
   logical:: dt_ok
   real(kind=8):: dt_rec
   real(kind=8):: dT2
-  real(kind=8),dimension(1:n_elements,1:n_elements):: dXion ! TODO(code): fix this
+  real(kind=8),dimension(1:n_elements,1:n_elements):: dXion
   integer::i, ia, nAct, nAct_next, loopcnt, code
   integer,dimension(1:nvector):: indAct              ! Active cell indexes
   real(kind=8):: one_over_x_FRAC, one_over_T_FRAC
@@ -147,19 +147,13 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
       if (r%rtz_equilibrium_test.eq.1) then 
          !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
          T2 = 1.d5 ! --> initialize at high temperature
-         ! Set the ionization states to completely ionized
-         ! TODO(code): put in a loop
+         ! Set the ionization states to neutral
          xion = 0.d0
-         xion(1,1,:) = 1.d0 ! Hydrogen
-         xion(2,1,:) = 1.d0 ! Helium
-         xion(6,1,:) = 1.d0 ! Carbon
-         xion(7,1,:) = 1.d0 ! Nitrogen
-         xion(8,1,:) = 1.d0 ! Oxygen
-         xion(10,1,:) = 1.d0 ! Neon
-         xion(12,1,:) = 1.d0 ! Magnesium
-         xion(14,1,:) = 1.d0 ! Silicon
-         xion(16,1,:) = 1.d0 ! Sulfur
-         xion(26,2,:) = 1.d0 ! Iron
+         do iElement=1,n_elements
+            if (elements(i)%atomic_number .gt. 0) then
+               xion(iElement,1,:) = 1.d0
+            end if
+         end do
       end if
 
       do i_interp = 1,300
@@ -195,7 +189,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
          do i=1,ncell
             indact(i) = i                   !      Set up indexes of active cells
 
-            ! set nH -- TODO(code): maybe put bounds on nH here
+            ! set nH
             nH(i) = nElement(1,i)
 
             ! Ensure all state vars are legal:
@@ -307,7 +301,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
       do i=1,ncell
          indact(i) = i                   !      Set up indexes of active cells
 
-         ! set nH -- TODO(code): maybe put bounds on nH here
+         ! set nH
          nH(i) = nElement(1,i)
 
          ! Ensure all state vars are legal:
@@ -408,7 +402,6 @@ contains
     !-----------------------------------------------------------------------
     use amr_commons
     use const
-    use neq_cooling_module, only: getMu
     use collisional_ionization_module
     use recombination_module
     use charge_exchange_module
@@ -464,7 +457,7 @@ contains
     else
        Zsolar = 12.d0 + log10((nElement(8, icell)+1.d-20)/(nElement(1, icell)+1.d-10))
        dust_to_gas_mass_ratio_over_mw = dust_to_gas_scale_RR14(Zsolar)
-       Zsolar = Zsolar - 8.69
+       Zsolar = Zsolar - 8.69d0
        do iElement=1,n_elements
           nElement_dep(iElement) = nElement(iElement,icell) * (1.d0 - ((1.d0 - elements(iElement)%depletion) * dust_to_gas_mass_ratio_over_mw))
        end do
@@ -493,7 +486,7 @@ contains
     dp_gas(:) = p_gas(:,icell)
 #endif
 
-    mu = getMu(r, dXion, dT2)
+    mu = getMu_RTZ(r, ne, nElement_dep, dXion)
     TK = dT2 * mu                                        !      Temperature
     if(r%neq_isTconst) TK=r%neq_Tconst                   ! Force constant T
     ne = getNe(dXion, nElement_dep(:))
@@ -503,7 +496,7 @@ contains
     if (r%rtz_equilibrium_test.lt.0) then 
        if(r%self_shielding) ss_factor = exp(-nH(icell)/1d-2)
     end if
-    rho = nH(icell) / r%X_H * mH ! TODO(code): update this to the correct value
+    rho = get_rho_rtz(nElement(:,icell))
 
     ! RTZ -- initialize cosmic ray variables
     ! Measure phi_s for secondary CR ionization
@@ -547,7 +540,7 @@ contains
        ! Scattering rate; reduce the photon flux, but not photon density:
        phSc(1:nrtgrp)=0.
 
-       ! HKnote: we do not allow OTSA with RTZ (for now)
+       ! HKnote: OTSA is required with RTZ (for now)
 
        ! ABSORPTION/SCATTERING OF PHOTONS BY GAS
        do igroup=1,nrtgrp       ! ----------------Ionization absorbtion
@@ -641,9 +634,7 @@ contains
        dCdT2 = Crate_prime * mu                            ! dC/dT2 = mu * dC/dT
        !TODO(code) should there be a mu in Crate? --> mu's in general confuse me
 
-       !TODO(code) update X_nHkb to the correct value
-      !  X_nHkb = r%X_H/(1.5d0 * nH(icell) * kB)         ! Multiplication factor
-       X_nHkb = r%X_H/(1.5d0 * mu * nH(icell) * kB)    ! Multiplication factor ! HARLEY EDIT because nH is different
+       X_nHkb = 1.d0/(1.5d0 * get_n_rtz(nElement_dep, ne) * kB) ! TODO(code) --> since we're updating T/mu dont include n_e in n?
        rate  = X_nHkb*Crate
        dRate = -X_nHkb*dCdT2                         ! dRate/dT2
                                                      ! 1st order dt constr
@@ -653,7 +644,7 @@ contains
                   ,T2(icell)+rate*ddt(icell)/(1.d0-dRate*ddt(icell)))
        dUU   = MAX(dUU, ABS(dT2-T2(icell))) / (T2(icell)+T_MIN) &
                         *one_over_T_FRAC
-      !  if (nH(icell).gt.3.8) write(*,*) "tupd",ddt(icell),T2(icell),dT2,dUU     
+     
        if(dUU .gt. 1.) then                                     ! 10% rule
          !  write(*,*) "Broken Temperature", T2(icell), dT2, ddt(icell)/1.d12, Crate
           code=3 ; RETURN
@@ -734,15 +725,15 @@ contains
        end if
 
        ! Update xH2 and store in dXion
-       xH2_loc = (cr_H2*ddt(icell) + xH2_loc)/(1.+de_H2*ddt(icell))
-       dXion(1,3) = 2.0 * min(max(xH2_loc,x_MIN),0.5d0)
+       xH2_loc = (cr_H2*ddt(icell) + xH2_loc)/(1.d0+de_H2*ddt(icell))
+       dXion(1,3) = 2.d0 * min(max(xH2_loc,x_MIN),0.5d0)
 
        ! TODO(code) add destruction from local radiation field
 
        ! Check for convergence
        dUU = MAX(dUU,ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM)))
        dUU = dUU * one_over_x_FRAC
-       if(dUU .gt. 1.) then
+       if(dUU .gt. 1.d0) then
          !  write(*,*) "Broken H2", TK, dXion(1,3), xion(1,3,icell), ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM))
           code=6 !TODO(code) update this code for each ion
           RETURN
@@ -814,7 +805,7 @@ contains
              ! Cosmic ray ionization of the less excited state
              if (r%rtz_include_cosmic_ray_ionization) then 
                if (iIon > 1) then 
-                  cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * total_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
+                  cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * primary_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
                end if
              end if
 
@@ -873,7 +864,7 @@ contains
              ! Cosmic ray ionization
              if (r%rtz_include_cosmic_ray_ionization) then 
                if (iIon .lt. n_ions) then
-                  de = de + (cosmic_ray_ionization_rates(iElement,iIon) * total_cosmic_ray_ionization_rate)
+                  de = de + (cosmic_ray_ionization_rates(iElement,iIon) * primary_cosmic_ray_ionization_rate)
                end if
              end if
 
@@ -987,7 +978,7 @@ contains
 
     ! UPDATE CONSTANT T WITH NEW MU **************************************
     if(r%neq_isTconst)then
-       mu = getMu(r, dXion, dT2)
+       mu = getMu_RTZ(r, ne, nElement_dep, dXion)
        dT2 = r%neq_Tconst/mu
     endif
 
@@ -1107,5 +1098,85 @@ FUNCTION dust_to_gas_scale_RR14(log10_O_over_H) result(ratio)
    ratio = max(min(G2D_sol / G2D, 1.d0), 0.d0)
 
 END FUNCTION dust_to_gas_scale_RR14
+
+FUNCTION getMu_RTZ(r, ne, element_number_densities, element_ion_fractions) result(mu)
+   use amr_commons, only: run_t
+   implicit none
+   type(run_t):: r
+   real(KIND=8), intent(in):: ne
+   real(KIND=8), intent(in):: element_number_densities(27)
+   real(KIND=8), intent(in):: element_ion_fractions(27,27)
+   real(KIND=8):: mu
+   real(KIND=8):: m_bar, n_hat
+
+   integer:: i, j
+
+   m_bar = 0.d0
+   n_hat = 0.d0
+
+   do i=1,n_elements
+      if (elements(i)%atomic_number.lt.1) then
+         cycle
+      end if
+
+      do j=1,elements(i)%n_ions
+         m_bar = m_bar + (element_number_densities(i) * element_ion_fractions(i,j) * elements(i)%atomic_mass)
+         n_hat = n_hat + element_number_densities(i) * element_ion_fractions(i,j)
+      end do
+
+   end do
+
+   ! Include electrons
+   n_hat = n_hat + ne
+
+   ! Include contribution from H2
+   if (r%isH2_rtz) then
+      m_bar = m_bar + (element_number_densities(1) * element_ion_fractions(1,3) * elements(1)%atomic_mass)
+      n_hat = n_hat + (0.5d0 * element_number_densities(1) * element_ion_fractions(1,3))
+   end if
+
+   mu = m_bar / n_hat
+
+END FUNCTION getMu_RTZ
+
+FUNCTION get_rho_rtz(element_number_densities) result(rho)
+   use constants, only: mH
+   implicit none
+   real(KIND=8), intent(in):: element_number_densities(27)
+   real(KIND=8):: rho
+
+   integer:: i
+
+   rho = 0.d0
+
+   do i=1,n_elements
+      if (elements(i)%atomic_number.lt.1) then
+         cycle
+      end if
+      rho = rho + (element_number_densities(i) * elements(i)%atomic_mass) ! gives amu/cm^3
+   end do
+
+   rho = mH * rho ! gives g/cm^3
+END FUNCTION get_rho_rtz
+
+FUNCTION get_n_rtz(element_number_densities, ne) result(rho_n)
+   implicit none
+   real(KIND=8), intent(in):: element_number_densities(27)
+   real(KIND=8), intent(in):: ne
+   real(KIND=8):: rho_n
+
+   integer:: i
+
+   rho_n = 0.d0
+
+   do i=1,n_elements
+      if (elements(i)%atomic_number.lt.1) then
+         cycle
+      end if
+      rho_n = rho_n + element_number_densities(i)  ! gives 1/cm^3
+   end do
+
+   rho_n = rho_n + ne
+END FUNCTION get_n_rtz
 
 END MODULE rtz_cooling_module

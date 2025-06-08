@@ -166,6 +166,16 @@ FUNCTION collisional_excitation_cooling_HI(T) result(rate)
 
 END FUNCTION collisional_excitation_cooling_HI
 
+FUNCTION collisional_excitation_cooling_HI_seon20(T) result(rate)
+    ! From Cen 1992
+    implicit none
+    real(KIND=8), intent(in):: T
+    real(KIND=8):: rate
+
+    rate = 4.13d-19 * exp(-117744.0d0/T)
+
+END FUNCTION collisional_excitation_cooling_HI_seon20
+
 FUNCTION collisional_excitation_cooling_HeII(T) result(rate)
     ! From Cen 1992
     implicit none
@@ -1011,7 +1021,7 @@ FUNCTION SiII_fine_structure(T, n_ion, nH, nHp, &
                     A_10, &
                     z, T, &
                     n_ion, ne, nH, nHp, nHe, nHep, nHepp, nH2, &
-                    13)
+                    12)
 END FUNCTION SiII_fine_structure
 
 FUNCTION NeII_fine_structure(T, n_ion, nH, nHp, &
@@ -1149,8 +1159,8 @@ FUNCTION dust_recombination_cooling(T, G0, ne, f_dg, nH) result(rate)
     real(KIND=8):: beta_drc
 
     beta_drc = 0.74d0 / (T**0.068d0)
-    rate = (1.5d0 * 4.65d-30) * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
-    ! rate = 4.65d-30 * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
+    ! rate = (1.5d0 * 4.65d-30) * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
+    rate = 4.65d-30 * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
 
 END FUNCTION dust_recombination_cooling
 
@@ -1183,7 +1193,8 @@ FUNCTION dust_gas_collisional_cooling(T, G0, xH2, aexp, nH, f_dg) result(rate)
     T_dust = max( T_dust, 2.725d0 * ( (1.d0/aexp) - 1.d0 ) ) ! Limit dust temp minimum to CMB temp
 
     rate = dust_hc_const * sqrt(T) * (T - T_dust) * ( 1.d0 - ( 0.8d0 * exp(-75.d0/T) ) )
-    rate = 1.5d0 * rate * nH * nH * f_dg
+    ! rate = 1.5d0 * rate * nH * nH * f_dg
+    rate = rate * nH * nH * f_dg
 
 END FUNCTION dust_gas_collisional_cooling
 
@@ -1206,8 +1217,8 @@ FUNCTION photoelectric_heating(T, G0, ne, f_dg, nH) result(rate)
     real(KIND=8):: eps_PE
 
     eps_PE = PE_efficiency(G0, T, ne);
-    rate = 1.5d0 * 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
-    ! rate = 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
+    ! rate = 1.5d0 * 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
+    rate = 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
 
 END FUNCTION photoelectric_heating
 
@@ -1298,7 +1309,7 @@ FUNCTION cosmic_ray_heating(xe, n_HI, n_HeI, n_H2, ne, xi_h_cr, &
           rate = rate + (element_number_densities(i) * x_ion * q_cr * cosmic_ray_ionization_rates(i,j) * total_cosmic_ray_ionization_rate) ! erg/s/cm^3
 
           ! This is the secondary heating term from induced UV emission
-          ! Only happend for the ground state
+          ! Only happens for the ground state
             if (j .eq. 1) then
                 rate = rate + ( element_number_densities(i) * x_ion & 
                                 * cosmic_ray_ionization_rates_induced_UV_heat(i) & 
@@ -1451,7 +1462,7 @@ FUNCTION H2_heating(G0, nH2, nH, T, xH2, xHI, xHII, xe, f_dg, xi_h2_cr) result(r
 
     rate = 0.d0
 
-    ! Heating from destructiona and pumping
+    ! Heating from destruction and pumping
     fpump = 6.94d0 ! Pumping fraction in the ISM: Draine and Bertoldi 1996
     Ebpump = max(Epump(nH, T, xH2, xHI), 0.d0) ! Pumping energy in ergs
     EUV = 0.4d0 * EV_2_ERG ! Energy from photodissociation in ergs (Black and Dalgarno 1977)
@@ -1598,7 +1609,7 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     xHI = element_ion_fractions(1,1)
     xHII = element_ion_fractions(1,1)
     if (r%isH2_rtz) then 
-       xH2 = element_ion_fractions(1,2) * 0.5d0 ! TODO(CODE) use H2 flag here
+       xH2 = element_ion_fractions(1,2) * 0.5d0 
     else
        xH2 = 1.d-40
     end if
@@ -1608,7 +1619,7 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     metal_cool_smooth_f2 = 0.5d0 * (tanh( (5.d-3) * ( (-1.d0 * T) + 1.d4 ) ) + 1.d0 )
 
     ! Cooling from primordial species
-    cooling_HI = (collisional_ionization_cooling_HI(T) + collisional_excitation_cooling_HI(T)) * ne * nH_I
+    cooling_HI = (collisional_ionization_cooling_HI(T) + collisional_excitation_cooling_HI_seon20(T)) * ne * nH_I
     cooling_HII = recombination_cooling_case_B_HII(T) * ne * nH_II
     cooling_HeI = collisional_ionization_cooling_HeI(T) * ne * nHe_I
     cooling_HeII = (collisional_ionization_cooling_HeII(T) + collisional_excitation_cooling_HeII(T) + recombination_cooling_case_B_HeII(T) + dielectronic_recombination_cooling_HeII(T)) * ne * nHe_II
@@ -1616,7 +1627,7 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     cooling_bremmstrahlung = bremmstrahlung(T) * ne * (nH_II + nHe_II + (4.d0 * nHe_III))
     cooling_compton = compton_cooling(T,aexp) * ne
     if (r%isH2_rtz) then 
-       cooling_H2 = H2_cooling(nH, nH2, T) ! TODO(CODE) use H2 flag here
+       cooling_H2 = H2_cooling(nH, nH2, T) 
     else
        cooling_H2 = 0.d0
     end if
@@ -1754,7 +1765,7 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     ! Dust cooling
     dust_cooling = dust_recombination_cooling(T, G0, ne, f_dg, element_number_densities(1))
     ! dust_cooling = dust_recombination_cooling_WD01(T, G0, ne, f_dg, element_number_densities(1))
-    dust_cooling = dust_cooling + dust_gas_collisional_cooling(T, G0, element_ion_fractions(1,3), aexp, element_number_densities(1), f_dg) ! TODO(code) --> need H2 for this
+    dust_cooling = dust_cooling + dust_gas_collisional_cooling(T, G0, xH2*2.d0, aexp, element_number_densities(1), f_dg) 
     
     ! Photoelectric heating --> note factor of 1.7 is because IUV
     photoelectric_heat = photoelectric_heating(T, G0, ne, f_dg, element_number_densities(1))
