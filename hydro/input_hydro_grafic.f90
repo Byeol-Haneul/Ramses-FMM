@@ -496,7 +496,11 @@ subroutine input_refmap_grafic(mdl,r,g,m,ilevel)
         i3=int(xx3)+1
 #ifdef GRAV
         ! Scatter to corresponding refinement variable
-        m%grid(igrid)%nref(ind)=init_array(i1,i2,i3)*r%m_refine(ilevel)*1.1d0
+        if(r%initfile(ilevel+1) .ne.' ')then
+           m%grid(igrid)%nref(ind)=init_array(i1,i2,i3)*r%m_refine(ilevel)*1.1d0
+        else
+           m%grid(igrid)%nref(ind)=0d0
+        endif
 #endif
      end do
   end do
