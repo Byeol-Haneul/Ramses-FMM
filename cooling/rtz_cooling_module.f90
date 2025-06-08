@@ -15,7 +15,7 @@ module rtz_cooling_module
   implicit none
 
   private   ! default
-  public rtz_updateRTGroups_CoolConstants, rtz_solve_cooling
+  public rtz_updateRTGroups_CoolConstants, rtz_solve_cooling, rtz_set_model
 
   real(kind=8),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 
@@ -28,6 +28,58 @@ module rtz_cooling_module
   integer,parameter::iIR=1
 
 CONTAINS
+
+SUBROUTINE rtz_set_model(r, tables, h, omegab, omega0, omegaL, astart_sim, T2_sim)
+  ! Initialize cooling. All these parameters are unused at the moment and
+  ! are only there for the original cooling-module.
+  ! h (dble)            => H0/100
+  ! omegab (dble)       => Omega Baryons
+  ! omega0 (dble)       => Omega Matter total
+  ! omegaL (dble)       => Omega Lambda
+  ! astart_sim (dble)   => Redshift at which we start the simulation
+  ! T2_sim (dble)      <=  Starting temperature in simulation?
+  !-------------------------------------------------------------------------
+!  use UV_module
+  type(run_t) :: r
+  type(neq_cooling_t) :: tables
+  real(kind=8) :: h, omegab, omega0, omegaL, astart_sim, T2_sim
+  real(kind=8) :: z_decoupling, z_start_sim
+  real(kind=8) :: astart=0.0001, aend, dasura, T2end=T2_min_fix, mu=1., ne
+  !-------------------------------------------------------------------------
+
+  ! Calculate initial temperature
+  if (astart_sim < astart) then
+     write(*,*) 'ERROR in set_model : astart_sim is too small.'
+     write(*,*) 'astart     =',astart
+     write(*,*) 'astart_sim =',astart_sim
+     STOP
+  endif
+  aend=astart_sim
+  dasura=0.02d0
+
+  call rtz_updateRTGroups_CoolConstants(r, tables)
+
+  if(r%nrestart==0 .and. r%cosmo) then
+      ! Use approximate temperature evolution from 
+      ! https://arxiv.org/pdf/astro-ph/0608032
+      ! This ignores compton cooling but should be ok
+      ! Just don't start the simulation at too high of redshift
+      z_decoupling = 150.d0 * ((omegab * h * h /0.023d0)**(2.d0/5.d0))
+      z_decoupling = z_decoupling - 1.d0
+
+      z_start_sim = (1.d0 / astart_sim) - 1.d0
+
+      ! If redshift is less than the decoupling redshift, scale by (1+z)^2      
+      if (z_start_sim .lt. z_decoupling) then
+         T2_sim = 2.725 * (1.d0 + z_decoupling)
+         T2_sim = T2_sim * ((1.d0 + z_start_sim)/(1.d0 + z_decoupling))**2.d0
+      ! If redshift is greater than the decoupling redshift, use CMB temp.
+      else
+         T2_sim = 2.725 * (1.d0 + z_start_sim)
+      end if
+  end if                                   
+
+END SUBROUTINE rtz_set_model
 
 !!$!XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 !!$SUBROUTINE update_UVrates(aexp)
@@ -50,10 +102,6 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
      & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
      & dt, nCell)
-
-#ifdef RT
-  use neq_cooling_module, only: reduce_flux
-#endif
   ! Semi-implicitly solve for new temperature, ionization states,
   ! photon density/flux, and gas velocity in a number of cells.
   ! Parameters:
@@ -424,7 +472,7 @@ contains
     real(kind=8),dimension(ndim):: dmom
     real(kind=8),dimension(nrtgrp):: recRad, phAbs, phSc, dustAbs
     real(kind=8),dimension(nrtgrp):: dustSc, kAbs_loc, kSc_loc
-    real(kind=8),dimension(nrtgrp,nion)::signc
+    real(kind=8),dimension(nrtgrp,1:27,1:27)::signc
     real(kind=8):: rt_c_fraction, rt_c_cgs
     real(kind=8):: TR, one_over_C_v, E_rad, dE_T
     real(kind=8):: G0, eff_peh, cdex
@@ -441,7 +489,8 @@ contains
     real(kind=8):: total_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate
     real(kind=8):: phi_s, cosmic_ray_scale_factor, primary_cosmic_ray_ionization_rate
     real(kind=8):: UV_background_G0
-    integer:: atomic_number, n_ions, i_other_Element, i_other_Ion
+    integer:: atomic_number, n_ions, i_other_Element, i_other_Ion, i_current_Element
+    integer:: i_current_Ion
     real(kind=8):: Zsolar, total_G0
     real(kind=8):: alpha_H2_loc, beta_H2_loc, cr_H2, de_H2, xH2_loc
     real(kind=8):: nElement_dep(n_elements)
@@ -474,7 +523,7 @@ contains
     ! END RTZ variable initialization
 
 #ifdef RT
-    signc=tables%signc(:,:,ilevel)
+    signc=tables%signc(:,:,:,ilevel)
     rt_c_fraction = r%rt_c_fraction(ilevel)
     rt_c_cgs = tables%rt_c_cgs(ilevel)
 #endif
@@ -544,8 +593,20 @@ contains
 
        ! ABSORPTION/SCATTERING OF PHOTONS BY GAS
        do igroup=1,nrtgrp       ! ----------------Ionization absorbtion
-          !TODO(code): need to loop over all elements and ionz here
-          phAbs(igroup) = SUM(nN(:)*signc(igroup,:)*r%ssh2(igroup)) ! s-1
+          phAbs(igroup) = 0.d0
+          do i_current_Element=1,n_elements ! loop over elements
+             if (elements(i_current_Element)%atomic_number.gt.0) then
+                do i_current_Ion=1,elements(i_current_Element)%n_ions-1 ! loop over ions
+                  phAbs(igroup) = nElement_dep(i_current_Element) * dXion(i_current_Element, i_current_Ion) * signc(igroup,i_current_Element,i_current_Ion)  ! s-1
+                end do  ! end loop over ions
+             end if
+          end do ! end loop over elements
+
+          ! Deal with molecules separately
+          if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
+             !TODO(code): add H2 self-shielding here
+             phAbs(igroup) = 0.5d0 * nElement_dep(1) * dXion(1, 3) * signc(igroup,1,3)  ! s-1
+          end if
        end do
        ! IR, optical and UV depletion by dust absorption: ----------------
        ! IR scattering/abs on dust (abs after T update)
@@ -1010,19 +1071,25 @@ SUBROUTINE rtz_updateRTGroups_CoolConstants(r,tables)
   type(neq_cooling_t)::tables
 #ifdef RT
   !------------------------------------------------------------------------
-  integer::iP, iI, i
+  integer::iP, iE, iI, i
   !------------------------------------------------------------------------
   do i=r%nlevelmax,r%levelmin,-1
-    tables%signc(:,:,i) = r%group_csn*tables%rt_c_cgs(i)        ! [cm3 s-1]
-    tables%sigec(:,:,i) = r%group_cse*tables%rt_c_cgs(i)        ! [cm3 s-1]
+    tables%signc(:,:,:,i) = r%group_csn*tables%rt_c_cgs(i)        ! [cm3 s-1]
+    tables%sigec(:,:,:,i) = r%group_cse*tables%rt_c_cgs(i)        ! [cm3 s-1]
+
+    !Photoheating rates for photons on ions
     do iP = 1,nrtgrp
-      do iI = 1,nion               ! Photoheating rates for photons on ions
-        tables%PHrate(iP,iI,i) =  eV2erg * &    ! See eq (19) in Aubert(08)
-             (tables%sigec(iP,iI,i) * r%group_egy(iP)  &
-             -tables%signc(iP,iI,i)*r%ionEvs(iI))
-        tables%PHrate(iP,iI,i) = max(tables%PHrate(iP,iI,i),0d0)!Heating>0
-      end do
-    end do
+      do iE = 1,n_elements
+        if (elements(i)%atomic_number.gt.0) then 
+          do iI = 1,elements(i)%n_ions-1
+            tables%PHrate(iP,iE,iI,i) =  eV2erg * &    ! See eq (19) in Aubert(08)
+                  (tables%sigec(iP,iE,iI,i) * r%group_egy(iP)  &
+                  -tables%signc(iP,iE,iI,i)*r%ionEvs(iE,iI))
+            tables%PHrate(iP,iE,iI,i) = max(tables%PHrate(iP,iE,iI,i),0d0)!Heating>0
+          end do
+        end if
+      end do ! End element loop
+    end do ! End group loop
   end do
 #endif
 END SUBROUTINE rtz_updateRTGroups_CoolConstants
@@ -1178,5 +1245,19 @@ FUNCTION get_n_rtz(element_number_densities, ne) result(rho_n)
 
    rho_n = rho_n + ne
 END FUNCTION get_n_rtz
+
+#ifdef RT
+SUBROUTINE reduce_flux(Fp, cNp)
+  ! Make sure the reduced photon flux is less than one
+  !------------------------------------------------------------------------
+  implicit none
+  real(kind=8),dimension(ndim)::Fp
+  real(kind=8)::cNp
+  !------------------------------------------------------------------------
+  real(kind=8)::fred
+  fred = sqrt(sum(Fp**2))/cNp
+  if(fred .gt. 1d0) Fp = Fp/fred
+END SUBROUTINE reduce_flux
+#endif
 
 END MODULE rtz_cooling_module

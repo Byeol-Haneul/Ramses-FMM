@@ -12,6 +12,7 @@ subroutine m_read_rt_params(pst)
   use ramses_commons, only: pst_t
   use mdl_module
   use movie_module, only: set_movie_vars
+  use SED_module, only: initialize_cross_sections_from_blackbody, initialize_group_energies_from_blackbody
   implicit none
   type(pst_t)::pst
 
@@ -75,8 +76,13 @@ subroutine m_read_rt_params(pst)
 
   ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
   ! Indices nrtgrp, nion stand for photon group vs species (e.g. 1=H, 2=He).
+#ifdef RTZ
+  real(kind=8),dimension(nrtgrp,1:27,1:27)::group_csn=0                   !    Cross sections (cm2)
+  real(kind=8),dimension(nrtgrp,1:27,1:27)::group_cse=0                   !    Cross sections (cm2)
+#else
   real(kind=8),dimension(nrtgrp,nion)::group_csn=0                   !    Cross sections (cm2)
   real(kind=8),dimension(nrtgrp,nion)::group_cse=0                   !    Cross sections (cm2)
+#endif
   real(kind=8),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
   real(kind=8),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
   real(kind=8),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
@@ -115,8 +121,8 @@ subroutine m_read_rt_params(pst)
   !--------------------------------------------------
   ! Set defaults for radiation groups
   !--------------------------------------------------
-  
 #if NRTGRP>0
+#ifndef RTZ
   !  Use H2, HI, HeI, HeII ionization energies  as default group intervals
   group_L0(1:min(nrtgrp,nion))=ionEvs(1:min(nrtgrp,nion))   ! Lower bounds
   group_L1(1:min(nrtgrp,nion-1))=ionEvs(2:min(nrtgrp+1,nion)) ! Upper bnds
@@ -185,6 +191,7 @@ subroutine m_read_rt_params(pst)
      group_egy(igroup_HeIII)=65.666
   endif
 #endif
+#endif
 
   do i=1,min(nion,nrtgrp)
      spec2group(i)=i                   ! Species contributions to groups
@@ -242,6 +249,19 @@ subroutine m_read_rt_params(pst)
      endif
   end do
   if(.not. rt_vsla) write(*,213) rt_c_fraction(s%r%levelmin)
+
+#if NRTGRP>0
+#ifdef RTZ
+  ! in the case of RTZ, perform initialization after reading in group
+  ! energies
+
+  ! Initialize cross sections to be a blackbody at 1e5 K
+  call initialize_cross_sections_from_blackbody(s%r, 1.d5, group_L0, group_L1, group_csn, group_cse, .true.)
+
+  ! Initialize group energies for the same black body
+  call initialize_group_energies_from_blackbody(s%r, 1.d5, group_L0, group_L1, group_egy)
+#endif
+#endif
 
   ! Fill in all run parameters in corresponding structure
   s%r%rt_otsa=rt_otsa

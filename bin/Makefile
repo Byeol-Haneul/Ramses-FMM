@@ -14,6 +14,9 @@ INIT =
 UNITS =
 NENER = 0
 NMETAL = 0
+N_HYDROGEN_IONS = 0
+N_H2 = 0
+N_HELIUM_IONS = 0
 N_CARBON_IONS = 0
 N_NITROGEN_IONS = 0
 N_OXYGEN_IONS = 0
@@ -36,10 +39,13 @@ EXEC = ramses
 #############################################################################
 # Compute NVAR
 NHYDRO = 5
+ifeq ($(RTZ),1)
+NION := $(N_CARBON_IONS)+$(N_NITROGEN_IONS)+$(N_OXYGEN_IONS)
+NION := $(NION)+$(N_NEON_IONS)+$(N_MAGNESIUM_IONS)+$(N_SILICON_IONS)
+NION := $(NION)+$(N_SULFUR_IONS)+$(N_IRON_IONS)
+NION := $(NION)+$(N_HYDROGEN_IONS)+$(N_H2)+$(N_HELIUM_IONS)
+endif
 NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
-NVAR := $(NVAR)+$(N_CARBON_IONS)+$(N_NITROGEN_IONS)+$(N_OXYGEN_IONS)
-NVAR := $(NVAR)+$(N_NEON_IONS)+$(N_MAGNESIUM_IONS)+$(N_SILICON_IONS)
-NVAR := $(NVAR)+$(N_SULFUR_IONS)+$(N_IRON_IONS)
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
 GITHASH = $(shell git log --pretty=format:'%H' -n 1)
@@ -175,9 +181,16 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
 	 coolrates_module.o collisional_ionization_module.o recombination_module.o \
     cosmic_ray_ionization_module.o photoionization_UVB_module.o dust_recombination_module.o \
-    molecules_module.o charge_exchange_module.o neq_cooling_module.o \
-    rtz_module.o rtz_coolrates_module.o rtz_cooling_module.o init_neq_chem.o \
-	 mdl_commons.o mdl.o rt_spectra.o clfind_commons.o ramses_commons.o \
+    molecules_module.o charge_exchange_module.o 
+ifeq ($(RTZ),0)
+MODOBJ += neq_cooling_module.o 
+endif
+MODOBJ += rtz_module.o rtz_coolrates_module.o 
+ifeq ($(RTZ),1)
+MODOBJ += rtz_cooling_module.o 
+endif
+MODOBJ += init_neq_chem.o \
+	 mdl_commons.o mdl.o cross_sections_module.o rt_spectra.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o init_xion.o

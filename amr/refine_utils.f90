@@ -126,7 +126,9 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   use call_back, only: cache_f
   use nbors_utils
   use hydro_parameters, only: nion
+#ifndef RTZ
   use init_xion_module, only: calc_equilibrium_xion
+#endif
   implicit none
   type(ramses_t)::s
   integer::ilevel
@@ -203,6 +205,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   end do
   ncreate=g%ncreate
 
+#ifndef RTZ
 #ifdef HYDRO
   if(r%neq_chem .and. r%upload_equilibrium_x) then
      ! Enforce equilibrium on ionization states when derefining, to
@@ -223,6 +226,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         end do
      end do
   endif
+#endif
 #endif
 
   !----------------------------------------------------------

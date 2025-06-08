@@ -230,10 +230,12 @@ subroutine write_group_props(r, update, lun)
 !------------------------------------------------------------------------
   use amr_commons, only: run_t
   use rt_parameters, only: nrtgrp
+  use rtz_module, only: elements, n_elements
   implicit none
   type(run_t)::r
   logical :: update
   integer :: ip, lun
+  integer :: iE
 !------------------------------------------------------------------------
   if (.not. update) then
      write(lun,*) 'Photon group properties=------------------------------ '
@@ -246,8 +248,17 @@ subroutine write_group_props(r, update, lun)
   do ip = 1, nrtgrp
      write(lun, 907) ip
      write(lun, 904) r%group_egy(ip)
+#ifdef RTZ
+     do iE=1,n_elements
+        if (elements(iE)%atomic_number.gt.0) then
+           write(lun, 905) iE, r%group_csn(ip,iE,:)
+           write(lun, 905) iE, r%group_cse(ip,iE,:)
+        end if
+     end do
+#else
      write(lun, 905) r%group_csn(ip,:)
      write(lun, 906) r%group_cse(ip,:)
+#endif
   end do
   write (lun,*) '=-----------------------------------------------------'
 
@@ -255,8 +266,13 @@ subroutine write_group_props(r, update, lun)
 902 format ('  groupL1  [eV]  = ', 20f12.3)
 903 format ('  spec2group     = ', 20I12)
 904 format ('  egy      [eV]  = ', 1pe12.3)
+#ifdef RTZ
+905 format ('  csn    [cm^2]  = ', I5, 27(1pe12.3))
+906 format ('  cse    [cm^2]  = ', I5, 27(1pe12.3))
+#else
 905 format ('  csn    [cm^2]  = ', 20(1pe12.3))
 906 format ('  cse    [cm^2]  = ', 20(1pe12.3))
+#endif
 907 format ('  --=Group', I2)
 
 end subroutine write_group_props

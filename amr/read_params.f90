@@ -11,6 +11,9 @@ subroutine m_read_params(pst)
   use movie_module, only: set_movie_vars
   use rt_params_module
   use constants
+#ifdef RTZ
+  use rtz_module, only: elements, n_elements, initialize_elements
+#endif
   implicit none
   type(pst_t)::pst
 
@@ -334,7 +337,13 @@ subroutine m_read_params(pst)
   real(kind=8) ::X_H=0.7600d0     !                Hydrogen mass fraction
   real(kind=8) ::Y_He=0.2400d0    !                  Helium mass fraction
   integer::iIons,ixHI=0,ixHII=0,ixHeII=0,ixHeIII=0 !   Ionization indices
+#ifdef RTZ
+  integer::element_first_idx(1:27)       !  Start idx of elements in uold
+  integer::molecules_first_idx(1:3)     !  Start idx of molecules in uold 
+  real(kind=8),dimension(1:27,1:27)::ionEvs=0.     !  Ionization energies
+#else
   real(kind=8),dimension(nion)::ionEvs=0.          !  Ionization energies
+#endif
   integer::icount
 
   ! RTZ cooling parameters
@@ -460,6 +469,9 @@ subroutine m_read_params(pst)
   real(kind=8)::IG_T2 = 1.0D7
   real(kind=8)::IG_metal = 0.01
 
+#ifdef RTZ
+  integer::i_Element, i_Iion
+#endif
 
   !--------------------------------------------------
   ! Namelist definitions
@@ -617,7 +629,7 @@ subroutine m_read_params(pst)
   write(*,'(" Using gravity solver")')
 #endif
 #ifdef HYDRO
-  write(*,'(" Using hydro solver with nvar = ",I2)')nvar
+  write(*,'(" Using hydro solver with nvar = ",I3)')nvar
   ! Check nvar is not too small
   if(nvar<5)then
      write(*,*)'You should have: nvar>=5'
@@ -963,18 +975,36 @@ subroutine m_read_params(pst)
   !----------------------------------------------------------------
   if(neq_chem) then
      iCount=0
+#ifdef RTZ
+     do i_Element=1,n_elements ! loop over elements
+        if (elements(i_Element)%atomic_number.gt.0) then 
+           do i_Iion=1,elements(i_Element)%n_ions ! loop over ions
+              icount = icount + 1
+              if (i_Iion.eq.1) then 
+                 element_first_idx(i_Element) = icount
+              end if
+           end do ! end loop over ions
+        end if
+     end do ! end loop over elements
+
+     ! Deal with molecules separately
+     if (elements(1)%atomic_number.gt.0 .and. isH2_rtz) then 
+        icount = icount + 1
+        molecules_first_idx(1) = icount
+     end if
+#else
      ! HI fraction and ionization energy
      if(isH2) then
-        iCount=iCount+1
-        ixHI=iCount    ; ionEvs(ixHI)=ionEv_HI
+        iCount=iCount+1 ; ixHI=iCount ; ionEvs(ixHI)=ionEv_HI
      endif
      ! HII fraction and ionization energy
-     iCount=iCount+1    ; ixHII=iCount   ; ionEvs(ixHII)=ionEv_HII
+     iCount=iCount+1 ; ixHII=iCount ; ionEvs(ixHII)=ionEv_HII
      ! HeII and HeIII fractions and ionization energies
      if(isHe) then
-        iCount=iCount+1 ; ixHeII=iCount  ; ionEvs(ixHeII)=ionEv_HeII
+        iCount=iCount+1 ; ixHeII=iCount ; ionEvs(ixHeII)=ionEv_HeII
         iCount=iCount+1 ; ixHeIII=iCount ; ionEvs(ixHeIII)=ionEv_HeIII
      endif
+#endif
      ! Check that we have enough chemical species
      if(iCount .gt. NION) then
         write(*,*) 'Not enough variables for ionization fractions'
@@ -1000,13 +1030,26 @@ subroutine m_read_params(pst)
         call mdl_abort(s%mdl)
      endif
      ! Output indices for the user to check
-     write(*,'(A39, I2)') 'The number of ionization fractions is:',iCount
+     write(*,'(A39, I4)') 'The number of ionization fractions is:',iCount
      write(*,*) 'Their indices in U are:'
+#ifdef RTZ
+     do i_Element=1,n_elements ! Loop over elements
+        if (elements(i_Element)%atomic_number.gt.0) then 
+           write(*,'(A10, I4)') 'i' // trim(elements(i_Element)%element_name) // '=', iIons-1+element_first_idx(i_Element)
+        end if
+     end do
+
+     ! Deal with molecules separately
+     if (elements(1)%atomic_number.gt.0 .and. isH2_rtz) then 
+        write(*,'(A10, I4)') 'iH2 =', iIons-1+molecules_first_idx(1)
+     end if
+#else
      if(isH2) write(*,'(A10, I2)') '  iHI =    ', iIons-1+ixHI
      write(*,'(A10, I2)')          '  iHII =   ', iIons-1+ixHII
      if(isHe) write(*,'(A10, I2)') '  iHeII =  ', iIons-1+ixHeII
      if(isHe) write(*,'(A10, I2)') '  iHeIII = ', iIons-1+ixHeIII
      !if(isHe) print '(I3, A9)', iIons-1+ixHeIII, 'iHeIII'
+#endif
   endif
 
   ! Check that lightcone parameters are consistent
