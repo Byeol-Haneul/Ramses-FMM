@@ -38,7 +38,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use coolrates_module, only: neq_cooling_t
 #ifdef RTZ
   use rtz_cooling_module, only: rtz_solve_cooling
-  use rtz_module, only: n_elements
+  use rtz_module, only: n_elements, elements
 #else
   use neq_cooling_module, only: neq_solve_cooling
 #endif
@@ -52,7 +52,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   !-------------------------------------------------------------------
   ! Compute cooling for leaf cells at level ilevel
   !-------------------------------------------------------------------
-  integer::i,ii,ind,igrid,idim,ngrid,nleaf
+  integer::i,ii,jj,ind,igrid,idim,ngrid,nleaf,counter,e_counter
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dtcool,nH_eos,nCOM,damp_factor,cooling_switch,t_blast
   integer,dimension(1:nvector)::ind_leaf
@@ -194,10 +194,34 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Compute ionization fraction
 #ifdef RTZ
-        ! TODO(code): need to fill out with correct ionization fractions
-        ! for now we simple set everything to neutral
-        xion = 0.d0
-        xion(:,1,:) = 1.d0
+        counter = 0
+        e_counter = 0
+        do ii=1,n_elements ! loop over elements
+           if (elements(ii)%atomic_number.gt.0) then
+              do jj=1,elements(ii)%n_ions ! loop over ions
+                 do i=1,nleaf !loop over leaf cells
+                    xion(ii,jj,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) &
+                                   /m%grid(ind_leaf(i))%uold(ind,1)
+                    if (jj.eq.1) then
+                       ! This gives us a number density [Atoms/cm^3]
+                       nElement(ii,i) = m%grid(ind_leaf(i))%uold(ind,r%ichem+e_counter) &
+                                       *scale_nH / elements(ii)%atomic_mass
+                       e_counter = e_counter + 1
+                    end if
+                 end do ! end loop over leaf cells
+                 counter = counter + 1
+              end do ! end loop over ions
+           end if
+        end do ! end loop over elements
+
+        ! deal with molecules separately
+        if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
+           do i=1,nleaf !loop over leaf cells
+              xion(1,3,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) &
+                           /m%grid(ind_leaf(i))%uold(ind,1)
+           end do ! end loop over leaf cells
+           counter = counter + 1
+        endif
 #else
         if(r%neq_chem) then
            do ii=0,nIon-1
@@ -312,7 +336,8 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
                nElement(14,1:nleaf) = nElement(1,1:nleaf) * 3.24d-05 ! Silicon
                nElement(16,1:nleaf) = nElement(1,1:nleaf) * 1.32d-05 ! Sulfur
                nElement(26,1:nleaf) = nElement(1,1:nleaf) * 3.16d-05 ! Iron
-            end if
+           end if
+
            call rtz_solve_cooling(r, tables, T2, g%aexp, xion, nElement, &
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
@@ -376,7 +401,25 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Update ionization fraction
 #ifdef RTZ
-        !TODO(code): put ionization fractions back into uold array
+        counter = 0
+        do ii=1,n_elements ! loop over elements
+           if (elements(ii)%atomic_number.gt.0) then
+              do jj=1,elements(ii)%n_ions ! loop over ions
+                 do i=1,nleaf !loop over leaf cells
+                    m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(ii,jj,i) * nH(i)
+                 end do ! end loop over leaf cells
+                 counter = counter + 1
+              end do ! end loop over ions
+           end if
+        end do ! end loop over elements
+
+        ! deal with molecules separately
+        if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
+           do i=1,nleaf !loop over leaf cells
+              m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(1,3,i) * nH(i)
+           end do ! end loop over leaf cells
+           counter = counter + 1
+        endif
 #else
         if(r%neq_chem) then
            do ii=0,nion-1
