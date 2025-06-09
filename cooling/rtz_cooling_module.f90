@@ -884,7 +884,12 @@ contains
                end if
              end if
 
-             !TODO(code): add creation from local radiation
+             ! Photoionization of less excited state from the local radiation field
+             if (r%rtz_include_photoionization) then
+                if (iIon > 1) then 
+                   cr = cr + (dXion(iElement,iIon-1) * SUM(signc(:,iElement,iIon-1)*dNp))
+                end if
+             end if
 
              !/////////////////////////
              !//     Destruction     //
@@ -943,7 +948,12 @@ contains
                end if
              end if
 
-             !TODO(code): add destruction from local radiation
+             ! Photoionization  from the local radiation field
+             if (r%rtz_include_photoionization) then
+                if (iIon .lt. n_ions) then 
+                   de = de + (dXion(iElement,iIon) * SUM(signc(:,iElement,iIon)*dNp))
+                end if
+             end if
 
              !/////////////////////////
              !//   Charge Transfer   //
