@@ -238,9 +238,11 @@ MODULE SED_module
   implicit none
 
   PUBLIC sed_table_t, init_SED_table, inp_SED_table &
-        ,update_SED_group_props, getNPhotonsEmitted &
-        ,initialize_cross_sections_from_blackbody &
+        ,update_SED_group_props, getNPhotonsEmitted 
+#ifdef RTZ
+  PUBLIC initialize_cross_sections_from_blackbody &
         ,initialize_group_energies_from_blackbody
+#endif
 
   PRIVATE   ! default
 
@@ -776,6 +778,7 @@ FUNCTION getSEDcse(run, X, Y, N, e0, e1, species, ion)
 #endif
      getSEDcse = 0. ; RETURN    ! [e0,e1] below ionization energy of species
   endif
+
   norm = integrateSpectrum(run, X, Y, N, e0, e1, species, ion, f1)
   getSEDcse = integrateSpectrum(run, X, Y, N, e0, e1, species, ion, fSig) / norm
 
@@ -1056,7 +1059,7 @@ SUBROUTINE initialize_cross_sections_from_blackbody(r, T, group_L0, group_L1, gr
   logical, intent(in):: isH2_rtz
   real(kind=8), intent(inout):: group_csn(nrtgrp,1:27,1:27), group_cse(nrtgrp,1:27,1:27)
   real(kind=8), intent(in):: group_L0(nrtgrp), group_L1(nrtgrp)
-  real(kind=8):: lambda_min, lambda_max, delta_lambda
+  real(kind=8):: lambda_min, lambda_max, delta_lambda, tmp
   real(kind=8):: X(1000), Y(1000)
   integer:: ip, ii, jj
 
@@ -1069,7 +1072,7 @@ SUBROUTINE initialize_cross_sections_from_blackbody(r, T, group_L0, group_L1, gr
      ! Fill out the X and Y arrays for integration
      lambda_max = (hplanck * c_cgs / (group_L0(ip)*eV2erg)) * 1d8 ! [A]
      lambda_min = (hplanck * c_cgs / (group_L1(ip)*eV2erg)) * 1d8 ! [A]
-     delta_lambda = (lambda_max - lambda_min) / 1000.0
+     delta_lambda = (lambda_max - lambda_min) / 999.d0
 
      ! Initialize X and Y arrays and fill them out
      X = 0.d0
