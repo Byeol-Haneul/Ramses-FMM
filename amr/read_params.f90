@@ -12,7 +12,7 @@ subroutine m_read_params(pst)
   use rt_params_module
   use constants
 #ifdef RTZ
-  use rtz_module, only: elements, n_elements, initialize_elements
+  use rtz_module, only: elements, n_elements !, initialize_elements
 #endif
   implicit none
   type(pst_t)::pst
@@ -862,6 +862,7 @@ subroutine m_read_params(pst)
   ! Max size checks
   !-----------------
   if(nlevelmax>MAXLEVEL)then
+     write(*,*) "Hello",nlevelmax
      write(*,*) 'Error: nlevelmax>MAXLEVEL'
      call mdl_abort(s%mdl)
   end if
@@ -1394,11 +1395,15 @@ subroutine m_read_params(pst)
   s%r%rtz_include_charge_exchange=rtz_include_charge_exchange
   s%r%rtz_include_dust_recombination=rtz_include_dust_recombination
   s%r%rtz_include_HM12_UVB=rtz_include_HM12_UVB
+  s%r%isH2_rtz=isH2_rtz
   s%r%rtz_UV_background_G0=rtz_UV_background_G0
   s%r%rtz_total_cosmic_ray_ionization_rate=rtz_total_cosmic_ray_ionization_rate
-  s%r%isH2_rtz=isH2_rtz
   s%r%rtz_max_cool_timestep=rtz_max_cool_timestep
   s%r%rtz_eqm_min_its=rtz_eqm_min_its
+#ifdef RTZ
+  s%r%element_first_idx=element_first_idx
+  s%r%molecules_first_idx=molecules_first_idx
+#endif
 
   s%r%iIons=iIons
   s%r%ixHI=ixHI

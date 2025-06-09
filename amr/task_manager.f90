@@ -7,6 +7,9 @@ subroutine mdl_init
   use amr_parameters, only: flen
   use mdl_module
   use ramses_commons, only: pst_t, ramses_t
+#ifdef RTZ
+  use rtz_module, only: initialize_elements
+#endif
   USE, INTRINSIC :: ISO_C_BINDING, ONLY: C_FUNLOC, C_SIZEOF
 #ifndef WITHOUTMPI
   use mpi
@@ -31,6 +34,10 @@ subroutine mdl_init
   call init_cache(mdl)
 #endif
   
+#ifdef RTZ
+  call initialize_elements()
+#endif
+
   ! For slave workers, go into waiting loop
   if(mdl_self(mdl)>1)then
      call mdl_wait(pst)

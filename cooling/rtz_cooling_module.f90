@@ -198,7 +198,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
          ! Set the ionization states to neutral
          xion = 0.d0
          do iElement=1,n_elements
-            if (elements(i)%atomic_number .gt. 0) then
+            if (elements(iElement)%atomic_number .gt. 0) then
                xion(iElement,1,:) = 1.d0
             end if
          end do
@@ -389,6 +389,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
          do ia=1,nAct                             ! Loop over the active cells
             i = indAct(ia)                        !                 Cell index
             call rtz_cool_step(i)
+
       !         if(loopcnt .gt. 100000) then
       !            call display_coolinfo(.true., loopcnt, i, dt-tleft(i), dt, ddt(i), nH(i), &
       ! #ifdef RT
@@ -398,6 +399,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
       !         endif
             if(.not. dt_ok) then
                ddt(i)=ddt(i)/2.                    ! Try again with smaller dt
+               ! ddt(i) = dt_rec              ! Potentially optimized approach
                nAct_next=nAct_next+1 ; indAct(nAct_next) = i
                loopCodes(code) = loopCodes(code)+1
                cycle
@@ -421,6 +423,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
          end do ! end loop over active cells
          nAct=nAct_next
       end do ! end iterative loop
+      if (loopcnt.gt.500) write(*,*) "My loop count",loopcnt
 
   end if
 
@@ -535,11 +538,11 @@ contains
     dp_gas(:) = p_gas(:,icell)
 #endif
 
+    ne = getNe(dXion, nElement_dep(:))
+    neInit = ne
     mu = getMu_RTZ(r, ne, nElement_dep, dXion)
     TK = dT2 * mu                                        !      Temperature
     if(r%neq_isTconst) TK=r%neq_Tconst                   ! Force constant T
-    ne = getNe(dXion, nElement_dep(:))
-    neInit = ne
     fracMax = 0d0 ! Max fractional update, to check if dt can be increased
     ss_factor = 1d0                  ! UV background self_shielding factor
     if (r%rtz_equilibrium_test.lt.0) then 
@@ -625,10 +628,12 @@ contains
 
           dUU = ABS(dNp(igroup)-Np(igroup,icell))                        &
                 /(Np(igroup,icell)+Np_MIN) * one_over_Np_FRAC
+          fracMax=MAX(fracMax,dUU)      ! To check if ddt can be increased
           if(dUU .gt. 1d0) then
+             dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
              code=1 ;   RETURN                        ! ddt(icell) too big
           endif
-          fracMax=MAX(fracMax,dUU)      ! To check if ddt can be increased
+          
 
           do idim=1,ndim
              dFp(idim,igroup) = &
@@ -641,10 +646,11 @@ contains
              dUU = ABS(dFp(idim,igroup)-Fp(idim,igroup,icell))           &
                   / (ABS(Fp(idim,igroup,icell))+Np_MIN*rt_c_cgs)         &
                   * one_over_Fp_FRAC
+             fracMax=MAX(fracMax,dUU)   ! To check if ddt can be increased
              if(dUU .gt. 1d0) then
+                dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
                 code=2 ;   RETURN                     ! ddt(icell) too big
              endif
-             fracMax=MAX(fracMax,dUU)   ! To check if ddt can be increased
           end do
 
        end do
@@ -693,9 +699,8 @@ contains
                                  ss_factor)
        Crate_prime = (Crate_prime - Crate) / ((1.001d0*TK) - TK)
        dCdT2 = Crate_prime * mu                            ! dC/dT2 = mu * dC/dT
-       !TODO(code) should there be a mu in Crate? --> mu's in general confuse me
 
-       X_nHkb = 1.d0/(1.5d0 * get_n_rtz(nElement_dep, ne) * kB) ! TODO(code) --> since we're updating T/mu dont include n_e in n?
+       X_nHkb = 1.d0/(1.5d0 * (rho/mH) * kB)
        rate  = X_nHkb*Crate
        dRate = -X_nHkb*dCdT2                         ! dRate/dT2
                                                      ! 1st order dt constr
@@ -706,11 +711,12 @@ contains
        dUU   = MAX(dUU, ABS(dT2-T2(icell))) / (T2(icell)+T_MIN) &
                         *one_over_T_FRAC
      
+       fracMax=MAX(fracMax,dUU)
        if(dUU .gt. 1.) then                                     ! 10% rule
          !  write(*,*) "Broken Temperature", T2(icell), dT2, ddt(icell)/1.d12, Crate
+          dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
           code=3 ; RETURN
        endif
-       fracMax=MAX(fracMax,dUU)
        TK=dT2*mu
     endif
 
@@ -733,16 +739,18 @@ contains
           ! 10% rule for photon density:
           dUU = ABS(dNp(iIR)-Np(iIR,icell)) / (Np(iIR,icell)+Np_MIN)     &
                                             * one_over_Np_FRAC
+          fracMax=MAX(fracMax,dUU)
           if(dUU .gt. 1.) then
+             dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
              code=4 ;   RETURN
           endif
-          fracMax=MAX(fracMax,dUU)
 
           dUU   = ABS(dT2-T2(icell)) / (T2(icell)+T_MIN) * one_over_T_FRAC
+          fracMax=MAX(fracMax,dUU)
           if(dUU .gt. 1.) then                           ! 10% rule for T2
+             dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
              code=5 ; RETURN
           endif
-          fracMax=MAX(fracMax,dUU)
           TK=dT2*mu
           call reduce_flux(dFp(:,iIR),dNp(iIR)*rt_c_cgs)
        endif
@@ -794,13 +802,13 @@ contains
        ! Check for convergence
        dUU = MAX(dUU,ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM)))
        dUU = dUU * one_over_x_FRAC
+       fracMax=MAX(fracMax,dUU)
        if(dUU .gt. 1.d0) then
          !  write(*,*) "Broken H2", TK, dXion(1,3), xion(1,3,icell), ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM))
+          dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
           code=6 !TODO(code) update this code for each ion
           RETURN
        end if
-
-      fracMax=MAX(fracMax,dUU)
 
     end if
 
@@ -884,12 +892,14 @@ contains
                end if
              end if
 
+#ifdef RT
              ! Photoionization of less excited state from the local radiation field
              if (r%rtz_include_photoionization) then
                 if (iIon > 1) then 
                    cr = cr + (dXion(iElement,iIon-1) * SUM(signc(:,iElement,iIon-1)*dNp))
                 end if
              end if
+#endif
 
              !/////////////////////////
              !//     Destruction     //
@@ -948,13 +958,14 @@ contains
                end if
              end if
 
+#ifdef RT
              ! Photoionization  from the local radiation field
              if (r%rtz_include_photoionization) then
                 if (iIon .lt. n_ions) then 
                    de = de + (dXion(iElement,iIon) * SUM(signc(:,iElement,iIon)*dNp))
                 end if
              end if
-
+#endif
              !/////////////////////////
              !//   Charge Transfer   //
              !/////////////////////////
@@ -1018,23 +1029,23 @@ contains
              ! Check for convergence -- Fractional change in ion
              dUU = MAX(dUU,ABS((dXion(iElement,iIon)-xion(iElement,iIon,icell))/(xion(iElement,iIon,icell)+x_FM)))
              dUU = dUU * one_over_x_FRAC
+             fracMax=MAX(fracMax,dUU)
              if(dUU .gt. 1.) then
                !  write(*,*) "Broken element/ion", iElement, iIon, dXion(iElement,iIon), xion(iElement,iIon,icell)
+                dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
                 code=6 !TODO(code) update this code for each ion
                 RETURN
              end if
 
-             fracMax=MAX(fracMax,dUU)
-
              ! Check for convergence -- Fractional change in electrons
              dUU=ABS((ne-neInit)) / (neInit+x_FM) * one_over_x_FRAC
+             fracMax=MAX(fracMax,dUU)
              if(dUU .gt. 1.) then
                !  write(*,*) "Broken electron", TK, ABS((ne-neInit)) / (neInit+x_FM)
+                dt_rec = 0.9d0 * ddt(icell) / sqrt(2.d0+fracMax)
                 code=8
                 RETURN
              endif
-
-             fracMax=MAX(fracMax,dUU)
 
           end do ! END ION LOOP
 
@@ -1061,7 +1072,8 @@ contains
 #endif
     ! Now the dUs are really changes, not new values
     ! Update the timestep for the next iteration:
-    dt_rec = 0.5d0 * ddt(icell) / ((0.01d0 + fracMax)**0.5d0)
+   !  dt_rec = 0.5d0 * ddt(icell) / ((0.01d0 + fracMax)**0.5d0)
+    dt_rec = 0.9d0 * ddt(icell) / ((0.07d0 + fracMax)**0.3d0)
     dt_rec = min(dt_rec,r%rtz_max_cool_timestep)
     dt_ok=.true.
     code=0
@@ -1192,15 +1204,12 @@ FUNCTION getMu_RTZ(r, ne, element_number_densities, element_ion_fractions) resul
    n_hat = 0.d0
 
    do i=1,n_elements
-      if (elements(i)%atomic_number.lt.1) then
-         cycle
+      if (elements(i)%atomic_number.gt.0) then
+         do j=1,elements(i)%n_ions
+            m_bar = m_bar + (element_number_densities(i) * element_ion_fractions(i,j) * elements(i)%atomic_mass)
+            n_hat = n_hat + element_number_densities(i) * element_ion_fractions(i,j)
+         end do
       end if
-
-      do j=1,elements(i)%n_ions
-         m_bar = m_bar + (element_number_densities(i) * element_ion_fractions(i,j) * elements(i)%atomic_mass)
-         n_hat = n_hat + element_number_densities(i) * element_ion_fractions(i,j)
-      end do
-
    end do
 
    ! Include electrons
