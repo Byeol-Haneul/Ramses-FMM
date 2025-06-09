@@ -320,9 +320,9 @@ subroutine m_read_params(pst)
   logical::isothermal=.false. ! Force temperature to eos value
   logical::haardt_madau=.false.
   logical::self_shielding=.false.
-  real(dp)::J21=0d0,a_spec=1d0,z_ave=0d0,z_reion=8.5d0
+  real(dp)::J21=0,a_spec=1,z_ave=0,z_reion=8.5
   integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
-  real(dp)::eos_nH=1d50,eos_index=1d0,eos_T2=10d0
+  real(dp)::eos_nH=1d50,eos_index=1,eos_T2=10d0
   real(dp)::T2max=1d50
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?

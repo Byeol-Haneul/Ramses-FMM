@@ -72,7 +72,7 @@ subroutine m_newdt_fine(pst,ilevel)
      g%ekin_tot=g%ekin_tot+ekin
      vmax=out_newdt_part%vmax
      if(vmax>0.0d0)then
-        g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%courant_factor*dx/vmax)
+        g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8),r%courant_factor*dx/vmax)
      endif
   endif
 
@@ -84,12 +84,12 @@ subroutine m_newdt_fine(pst,ilevel)
      g%ekin_tot=g%ekin_tot+out_courant_fine%ekin
      g%eint_tot=g%eint_tot+out_courant_fine%eint
      g%emag_tot=g%emag_tot+out_courant_fine%emag
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),out_courant_fine%dt)
+     g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8),out_courant_fine%dt)
   endif
 
   if(r%rt.and.r%rt_advect)then
      if(r%verbose)write(*,'("   Entering newdt_rt for level ",I2)')ilevel
-     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),r%rt_nsubcycle*r%rt_courant_factor*dx/3d0/g%rt_c(ilevel))
+     g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8),r%rt_nsubcycle*r%rt_courant_factor*dx/3d0/g%rt_c(ilevel))
   endif
 
   ! Adaptive time step condition
@@ -169,7 +169,7 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
   ! Compute maximum particle velocity
   do idim = 1, ndim
      do ipart = p%headp(ilevel), p%tailp(ilevel)
-        vmax = MAX(vmax, ABS(p%vp(ipart, idim)))
+        vmax = MAX(vmax, ABS(dble(p%vp(ipart, idim))))
      end do
   end do
 

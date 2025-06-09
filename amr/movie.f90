@@ -238,7 +238,7 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   real(dp)::dx_cell,dy_cell,dz_cell,dvol
   logical::ok
   real(dp),dimension(1:ndim)::xx
-  real(kind=8)::temp,ekk
+  real(dp)::temp,ekk
   integer::igrid,idim,ilevel
 
   if(r%levelmax_frame==0)then
@@ -286,16 +286,16 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   dy_frame=dely/dble(r%nh_frame)
 
   ! Careful with box boundaries
-  xcen=min(max(xcen,delx/2.0d0),r%boxlen-delx/2.0d0)
-  ycen=min(max(ycen,dely/2.0d0),r%boxlen-dely/2.0d0)
-  zcen=min(max(zcen,delz/2.0d0),r%boxlen-delz/2.0d0)
+  xcen=min(max(xcen,delx/2.0_dp),r%boxlen-delx/2.0_dp)
+  ycen=min(max(ycen,dely/2.0_dp),r%boxlen-dely/2.0_dp)
+  zcen=min(max(zcen,delz/2.0_dp),r%boxlen-delz/2.0_dp)
 
-  xleft_frame =xcen-delx/2.0d0
-  xright_frame=xcen+delx/2.0d0
-  yleft_frame =ycen-dely/2.0d0
-  yright_frame=ycen+dely/2.0d0
-  zleft_frame =zcen-delz/2.0d0
-  zright_frame=zcen+delz/2.0d0
+  xleft_frame =xcen-delx/2.0_dp
+  xright_frame=xcen+delx/2.0_dp
+  yleft_frame =ycen-dely/2.0_dp
+  yright_frame=ycen+dely/2.0_dp
+  zleft_frame =zcen-delz/2.0_dp
+  zright_frame=zcen+delz/2.0_dp
   
   ! Loop over levels
   do ilevel=r%levelmin,nlevelmax_frame

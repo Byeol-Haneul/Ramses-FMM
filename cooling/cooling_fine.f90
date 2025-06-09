@@ -237,7 +237,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! Compute thermal temperature by subtracting the polytrope
         if(r%cooling.or.r%cooling_ism.or.r%neq_chem)then
            do i=1,nleaf
-              T2(i) = min(max(T2(i)-T2min(i),T2_min_fix),r%T2max)
+              T2(i) = min(max(T2(i)-T2min(i),T2_min_fix),dble(r%T2max))
            end do
         endif
 

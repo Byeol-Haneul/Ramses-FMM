@@ -88,7 +88,7 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
   integer::plane_size
   real(dp)::dx,xx1,xx2,xx3
-  real(kind=8)::dispmax=0.0
+  real(dp)::dispmax=0.0
   integer,dimension(1:g%ncpu)::npart_loc
   integer(kind=8)::ipart_grafic
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind

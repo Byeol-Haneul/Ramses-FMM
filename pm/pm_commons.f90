@@ -41,8 +41,8 @@ module pm_commons
 contains
   function cross(a,b)
      use amr_parameters, only:dp
-     real(dp),dimension(1:3)::a,b
-     real(dp),dimension(1:3)::cross
+     real(kind=8),dimension(1:3)::a,b
+     real(kind=8),dimension(1:3)::cross
      !computes the cross product c = a x b
      cross(1)=a(2)*b(3)-a(3)*b(2)
      cross(2)=a(3)*b(1)-a(1)*b(3)

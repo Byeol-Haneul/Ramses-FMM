@@ -194,10 +194,10 @@ subroutine input_hydro_gadget(s,ilevel)
         do ivar=nvar,1,-1
            if(m%grid(igrid)%uold(ind,1)<r%IG_rho/scale_nH)then
               m%grid(igrid)%uold(ind,ivar)=0.0
-              if(ivar.eq.1)m%grid(igrid)%uold(ind,ivar)=max(r%IG_rho/scale_nH,r%smallr)
-              if(ivar.eq.5)m%grid(igrid)%uold(ind,ivar)=r%IG_T2/scale_T2/(r%gamma-1)*max(r%IG_rho/scale_nH,r%smallr)
+              if(ivar.eq.1)m%grid(igrid)%uold(ind,ivar)=max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
+              if(ivar.eq.5)m%grid(igrid)%uold(ind,ivar)=r%IG_T2/scale_T2/(r%gamma-1)*max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
               if(r%metal)then
-                 if(ivar.eq.r%imetal)m%grid(igrid)%uold(ind,ivar)=r%IG_metal*max(r%IG_rho/scale_nH,r%smallr)
+                 if(ivar.eq.r%imetal)m%grid(igrid)%uold(ind,ivar)=r%IG_metal*max(dble(r%IG_rho)/scale_nH,dble(r%smallr))
               endif
            endif
         end do

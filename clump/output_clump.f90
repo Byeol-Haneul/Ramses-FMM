@@ -203,7 +203,7 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
   v200b=sqrt(G*4d0*pi/3d0*200d0*r200b**2)
   ! Find concentration parameter
   vmax=max(vmax,v200b)
-  const=MIN(vmax**2/v200b**2,4d0)*c0/(log(1d0+c0)-c0/(1d0+c0))
+  const=MIN(dble(vmax**2/v200b**2),4d0)*c0/(log(1d0+c0)-c0/(1d0+c0))
   ! Find large root
   cl=c0
   cr=100d0

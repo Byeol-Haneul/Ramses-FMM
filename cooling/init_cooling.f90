@@ -22,7 +22,7 @@ contains
   endif
   if(r%cosmo)then
      ! Reonization redshift has to be later than starting redshift
-     r%z_reion=min(1d0/(1.1d0*g%aexp_ini)-1d0,r%z_reion)
+     r%z_reion=min(1d0/(1.1d0*dble(g%aexp_ini))-1d0,dble(r%z_reion))
      call set_model(c,Nmodel,dble(r%J21*1d-21),-1.0d0,dble(r%a_spec),-1.0d0,dble(r%z_reion), &
           & -1,2, &
           & dble(g%h0/100.),dble(g%omega_b),dble(g%omega_m),dble(g%omega_l), &

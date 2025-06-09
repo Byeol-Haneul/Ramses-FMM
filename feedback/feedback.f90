@@ -64,9 +64,9 @@ subroutine thermal_feedback(s,p,ilevel,msn_loc)
   integer(kind=8),dimension(0:ndim)::hash_cell
   integer::i,ipart,icellp,ind,idim
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::mejecta,dloss,dzloss,zloss,ekinetic,ethermal
-  real(dp)::birth_time,t_sn,e_sn,dteff,dold
+  real(kind=8)::dx_loc,vol_loc,vol_cell
+  real(kind=8)::mejecta,dloss,dzloss,zloss,ekinetic,ethermal
+  real(kind=8)::birth_time,t_sn,e_sn,dteff,dold
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   logical::ok_level,ok_leaf
@@ -277,37 +277,37 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
   !==================================================================
   ! Parameters
   ! Number of neighboring cells to deposit mass/momentum/energy
-  integer, parameter::nSNnei=48
+  integer,parameter::nSNnei=48
   ! Number of cells corresponding to the central cell to deposit mass
-  real(dp),parameter::nSNcen=4
+  integer,parameter::nSNcen=4
   ! Momentum input
   ! p_sn = A_SN*nH**(alpha)*ESN**(beta)*ZpSN**(gamma)
   ! ex) Thornton et al.
   !     A_SN = 3e5, alphaN = -2/17, beta = 16/17, gamma = -0.14
   ! ex) Kim & Ostriker (2015) uniform case
   !     A_SN = 2.17e5, alpha = -0.13, beta = 0.93
-  real(dp),parameter::A_SN=3d5
-  real(dp),parameter::expN_SN=-2d0/17d0
-  real(dp),parameter::expE_SN=+16d0/17d0
-  real(dp),parameter::expZ_SN=-0.14
+  real(kind=8),parameter::A_SN=3d5
+  real(kind=8),parameter::expN_SN=-2d0/17d0
+  real(kind=8),parameter::expE_SN=+16d0/17d0
+  real(kind=8),parameter::expZ_SN=-0.14
 
-  real(dp)::d,d_nei,dloss,ekloss,dzloss,zloss,dm_ejecta,dm_load,m_SN
-  real(dp)::e,ekk,eth,p_solid,ek_solid,f_esn2,f_w_cell,f_w_crit
-  real(dp)::nH_nei,u,v,w,up,vp,wp,T2,x,y,z,rr,Z_nei,Zdepen
-  real(dp)::vload,vload_rad,vol_nei
-  real(dp),dimension(1:3,1:nSNnei)::xSNnei
-  real(dp),dimension(1:3,1:nSNnei)::vSNnei
-  real(dp)::f_LOAD,f_CANCEL,f_ESN,f_LOAD_CEN
+  real(kind=8)::d,d_nei,dloss,ekloss,dzloss,zloss,dm_ejecta,dm_load,m_SN
+  real(kind=8)::e,ekk,eth,p_solid,ek_solid,f_esn2,f_w_cell,f_w_crit
+  real(kind=8)::nH_nei,u,v,w,up,vp,wp,T2,x,y,z,rr,Z_nei,Zdepen
+  real(kind=8)::vload,vload_rad,vol_nei
+  real(kind=8),dimension(1:3,1:nSNnei)::xSNnei
+  real(kind=8),dimension(1:3,1:nSNnei)::vSNnei
+  real(kind=8)::f_LOAD,f_CANCEL,f_ESN,f_LOAD_CEN
   integer,dimension(1:ndim)::ckey,ckey_ref,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
   integer::i,j,k,ipart,icellp,icelln,ind,idim,ivar,ipart_ref
   integer,dimension(1:ndim)::ix
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::dx_loc,vol_loc,vol_cell
-  real(dp)::mejecta,ekinetic,ethermal
-  real(dp)::birth_time,t_sn,e_sn,dteff,dold,num_SN
-  real(dp),dimension(1:3)::xcen,xnei
-  real(dp),dimension(1:nvar)::q
+  real(kind=8)::dx_loc,vol_loc,vol_cell
+  real(kind=8)::mejecta,ekinetic,ethermal
+  real(kind=8)::birth_time,t_sn,e_sn,dteff,dold,num_SN
+  real(kind=8),dimension(1:3)::xcen,xnei
+  real(kind=8),dimension(1:nvar)::q
   integer,dimension(1:nSNnei)::icell_nbor,level_nbor
   type(nbor),dimension(1:nSNnei)::grid_nbor
   type(oct),pointer::gridp,gridn
@@ -543,7 +543,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
 
         ! Compute critical mass ratio
         nH_nei = d_nei*scale_nH
-        Zdepen = (max(0.01_dp,Z_nei/0.02))**(expZ_SN*2d0)
+        Zdepen = (max(0.01d0,Z_nei/0.02))**(expZ_SN*2d0)
         f_w_crit = (A_SN/1d4)**2d0/(f_ESN*r%M_SNII)*num_sn**((expE_SN-1d0)*2d0)*nH_nei**(expN_SN*2d0)*Zdepen - 1d0
         f_w_crit = max(0d0,f_w_crit) ! safety
 

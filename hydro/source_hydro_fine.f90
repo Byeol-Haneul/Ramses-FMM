@@ -62,16 +62,16 @@ subroutine source_hydro_fine(s,ilevel)
   integer::igrid,ind,idim,jdim,ivar,irad,i_nbor
   integer::igridd,igridg,icelld,icellg,igridp,icellp
   integer,dimension(1:twondim)::igridn,icelln
-  real(dp),dimension(1:twondim)::dxn
+  real(kind=8),dimension(1:twondim)::dxn
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
-  real(dp),dimension(1:ndim,1:ndim)::vg,vd,gradu,E
-  real(dp),dimension(1:ndim)::dxg,dxd
+  real(kind=8),dimension(1:ndim,1:ndim)::vg,vd,gradu,E
+  real(kind=8),dimension(1:ndim)::dxg,dxd
   type(nbor),dimension(1:twondim)::gridn
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
-  real(dp)::dx,phi_diss,div,divu
-  real(dp)::d,u,v,w,bx,by,bz,d_old,sigma
-  real(dp)::e_kin,e_mag,e_cons,e_prim,e_turb,e_trunc,T2_cons,T2_fix
+  real(kind=8)::dx,phi_diss,div,divu
+  real(kind=8)::d,u,v,w,bx,by,bz,d_old,sigma
+  real(kind=8)::e_kin,e_mag,e_cons,e_prim,e_turb,e_trunc,T2_cons,T2_fix
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
 
 #ifdef HYDRO
@@ -232,7 +232,7 @@ subroutine source_hydro_fine(s,ilevel)
               ! Implicit solution wrt to decay term only
               d_old=max(m%grid(igrid)%uold(ind,1),r%smallr)
               e_turb=m%grid(igrid)%uold(ind,r%iturb)
-              sigma=sqrt(max(2.0*e_turb/d_old,r%smallc**2))
+              sigma=sqrt(max(2.0*e_turb/d_old,dble(r%smallc)**2))
               m%grid(igrid)%unew(ind,r%iturb)=(m%grid(igrid)%unew(ind,r%iturb) &
                    &  +d_old*dx*sigma*phi_diss*g%dtnew(ilevel)) &
                    & /(1.0+sigma/dx*g%dtnew(ilevel))

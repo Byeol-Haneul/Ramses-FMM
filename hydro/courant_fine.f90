@@ -140,7 +140,7 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
 #endif
            ! Compute CFL time-step
            call cmpdt(r,uu,bb,gg,dx,dt_lev)
-           dt=min(dt,dt_lev)
+           dt=min(dt,real(dt_lev,kind=8))
 
         endif
 

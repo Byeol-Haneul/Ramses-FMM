@@ -61,18 +61,18 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
    ! Written by Nicholas Choustikov (Apr 2025)
    !==================================================================
    ! Local variables
-   real(dp)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,factG ! Units
-   real(dp)::dx_loc,vol_loc
+   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,factG ! Units
+   real(kind=8)::dx_loc,vol_loc
    integer::nBHnei,nBH_fb_nei
-   real(dp)::jet_angle,tan_theta,lambda_sonic
+   real(kind=8)::jet_angle,tan_theta,lambda_sonic
    integer::kk,jj,ii,ipart
-   real(dp),dimension(1:ndim)::x_rel
-   real(dp)::r_rel,dmacc_loc,dmjet_loc
+   real(kind=8),dimension(1:ndim)::x_rel
+   real(kind=8)::r_rel,dmacc_loc,dmjet_loc
    type(msg_large_realdp)::dummy_large_realdp
-   real(dp)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf,rho_av_all
-   real(dp)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
-   real(dp),dimension(1:ndim)::x_acc,p_acc,l_acc,vel_gas
-   real(dp),dimension(1:nvar)::passive_acc
+   real(kind=8)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf,rho_av_all
+   real(kind=8)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
+   real(kind=8),dimension(1:ndim)::x_acc,p_acc,l_acc,vel_gas
+   real(kind=8),dimension(1:nvar)::passive_acc
 
 #ifdef HYDRO
 #if NDIM==3
@@ -137,7 +137,7 @@ subroutine sink_evolution(s,p,ilevel,macc_loc)
       end do
 
       ! Jet geometry safety net
-      jet_angle = max(tiny(0.0d0),r%agn_jet_opening_angle)
+      jet_angle = max(tiny(0.0d0),dble(r%agn_jet_opening_angle))
       jet_angle = min(jet_angle, 180d0)
       tan_theta = tan(pi/180d0*jet_angle/2) ! tangent of half of the opening angle
    end if
@@ -214,12 +214,12 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    type(ramses_t)::s
    type(part_t)::p
    integer::ilevel,ipart,nBHnei
-   real(dp)::scale_l,scale_t,scale_d,factG
-   real(dp)::dx_loc,vol_loc
-   real(dp)::macc_loc,lambda_sonic
-   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,e_acc,rho_inf,cs_gas,rho_av_all
-   real(dp),dimension(1:ndim)::p_acc,l_acc,vel_gas
-   real(dp),dimension(1:nvar)::passive_acc
+   real(kind=8)::scale_l,scale_t,scale_d,factG
+   real(kind=8)::dx_loc,vol_loc
+   real(kind=8)::macc_loc,lambda_sonic
+   real(kind=8)::dMBH_overdt,dMEd_overdt,m_acc,e_acc,rho_inf,cs_gas,rho_av_all
+   real(kind=8),dimension(1:ndim)::p_acc,l_acc,vel_gas
+   real(kind=8),dimension(1:nvar)::passive_acc
    !==================================================================
    ! This is the RAMSES routine for sink (black hole) particle accretion.
    ! For now, it is focused on a simple Bondi-Hoyle-Lyttleton accretion scheme.
@@ -227,22 +227,22 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
    ! Written by Nicholas Choustikov (Apr 2025)
    !==================================================================
    ! Local variables
-   real(dp),dimension(1:ndim,1:nBHnei)::xBHnei
+   real(kind=8),dimension(1:ndim,1:nBHnei)::xBHnei
    integer,dimension(1:ndim,1:nBHnei)::ckeynei
-   real(dp),dimension(1:nBHnei)::vol
-   real(dp),dimension(1:ndim)::xcen,xnei,x_rel
+   real(kind=8),dimension(1:nBHnei)::vol
+   real(kind=8),dimension(1:ndim)::xcen,xnei,x_rel
    integer,dimension(1:ndim)::ckey,ckey_nbor,ckey_div
    integer(kind=8),dimension(0:ndim)::hash_nbor
    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar
-   real(dp)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
-   real(dp)::weight,r_rel
-   real(dp),dimension(1:ndim)::vv,v_rel,x_acc
+   real(kind=8)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
+   real(kind=8)::weight,r_rel
+   real(kind=8),dimension(1:ndim)::vv,v_rel,x_acc
    type(oct),pointer::gridn
-   real(dp)::d_acc,m_gas,bondi_mass
-   real(dp)::weighted_bondi,dMdt_freefall,t_ff
-   real(dp)::div_cell,total_divergence,div_right,div_left
+   real(kind=8)::d_acc,m_gas,bondi_mass
+   real(kind=8)::weighted_bondi,dMdt_freefall,t_ff
+   real(kind=8)::div_cell,total_divergence,div_right,div_left
 #ifdef MHD
-   real(dp)::bx,by,bz,emag
+   real(kind=8)::bx,by,bz,emag
 #endif   
    
 #ifdef HYDRO
@@ -326,7 +326,8 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 #endif
 
       ethermal         = (e - 0.5d0*d*sum(vv(:)**2)) / d
-      cs               = sqrt(max(r%gamma*(r%gamma-1.0d0)*ethermal,r%smallc**2)*r%acc_sink_boost**(-2d0/3d0))
+      cs               = sqrt(max(dble(r%gamma)*(dble(r%gamma)-1.0d0)*ethermal,dble(r%smallc)**2) &
+                       & *dble(r%acc_sink_boost)**(-2d0/3d0))
       
       ! Add to average (weighted) information
       rho_gas          = rho_gas         + d          * weight
@@ -533,7 +534,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
 
       ! Ensure that the accreted amount is positive
-      d_acc = max(d_acc, 0.0_dp)
+      d_acc = max(d_acc, 0.0d0)
 
       ! Accrete from the cell
       gridn%unew(icelln,1)          = gridn%unew(icelln,1)          - d_acc
@@ -646,13 +647,13 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    type(ramses_t)::s
    type(part_t)::p
    integer::ilevel,ipart,nBH_fb_nei
-   real(dp)::dx_loc,vol_loc
-   real(dp)::scale_v
-   real(dp)::dMBH_overdt,dMEd_overdt,tan_theta
-   real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc
-   real(dp)::m_acc,e_acc
-   real(dp),dimension(1:nvar)::passive_acc
-   real(dp),dimension(1:ndim)::x_acc,p_acc
+   real(kind=8)::dx_loc,vol_loc
+   real(kind=8)::scale_v
+   real(kind=8)::dMBH_overdt,dMEd_overdt,tan_theta
+   real(kind=8)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc
+   real(kind=8)::m_acc,e_acc
+   real(kind=8),dimension(1:nvar)::passive_acc
+   real(kind=8),dimension(1:ndim)::x_acc,p_acc
    !==================================================================
    ! This is the RAMSES routine for AGN feedback
    ! For now, it is focused on a simple two-regime model to deploy quasar and radio mode feedback
@@ -665,26 +666,26 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
    ! See also Bourne+2017 for a similar approach.
    !==================================================================
    ! Local variables
-   real(dp)::rr,x,y,z,rrad
-   real(dp),dimension(1:ndim,1:nBH_fb_nei)::xBH_fb_nei
+   real(kind=8)::rr,x,y,z,rrad
+   real(kind=8),dimension(1:ndim,1:nBH_fb_nei)::xBH_fb_nei
    integer,dimension(1:ndim,1:nBH_fb_nei)::ckey_fb_nei
-   real(dp),dimension(1:nBH_fb_nei)::weight_fb_nei
-   real(dp),dimension(1:ndim)::xcen,xnei,x_rel
+   real(kind=8),dimension(1:nBH_fb_nei)::weight_fb_nei
+   real(kind=8),dimension(1:ndim)::xcen,xnei,x_rel
    integer(kind=8),dimension(0:ndim)::hash_nbor
    integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar,iBHnei
-   real(dp)::d,e,ethermal,r_rel,rho_gas_fb
-   real(dp),dimension(1:ndim)::vv
+   real(kind=8)::d,e,ethermal,r_rel,rho_gas_fb
+   real(kind=8),dimension(1:ndim)::vv
    type(oct),pointer::gridn
    logical::ok,ok_blast_agn
-   real(dp)::acc_ratio,jet_mass,local_weight,total_weight,jet_speed
-   real(dp)::fbk_mass_agn_loc,fbk_mom_agn_loc,fbk_ener_agn_loc
-   real(dp),dimension(1:ndim)::jet_direction
-   real(dp)::cone_dist,orth_dist,weight
-   real(dp),dimension(1:ndim,1:twotondim)::xCIC
+   real(kind=8)::acc_ratio,jet_mass,local_weight,total_weight,jet_speed
+   real(kind=8)::fbk_mass_agn_loc,fbk_mom_agn_loc,fbk_ener_agn_loc
+   real(kind=8),dimension(1:ndim)::jet_direction
+   real(kind=8)::cone_dist,orth_dist,weight
+   real(kind=8),dimension(1:ndim,1:twotondim)::xCIC
    integer,dimension(1:ndim,1:twotondim)::ckeyCIC
-   real(dp),dimension(1:twotondim)::volCIC
+   real(kind=8),dimension(1:twotondim)::volCIC
 #ifdef MHD
-   real(dp)::bx,by,bz,emag
+   real(kind=8)::bx,by,bz,emag
 #endif
 
 #ifdef HYDRO
@@ -920,8 +921,8 @@ subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
    type(ramses_t)::s
    type(part_t)::p
    integer::ipart,ilevel
-   real(dp)::rho_av_all,cs_gas,factG
-   real(dp),dimension(1:ndim)::vel_gas
+   real(kind=8)::rho_av_all,cs_gas,factG
+   real(kind=8),dimension(1:ndim)::vel_gas
    !==================================================================
    ! This is the RAMSES routine for dynamical friction, with the goal
    ! of informing the dynamics of the black hole.
@@ -930,8 +931,8 @@ subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
 
    ! See also Beckmann+2018 for a similar approach.
    !==================================================================
-   real(dp)::mach,vel_gas_mag,I,drag_force
-   real(dp),dimension(1:ndim)::vel_gas_direction
+   real(kind=8)::mach,vel_gas_mag,I,drag_force
+   real(kind=8),dimension(1:ndim)::vel_gas_direction
 
    if(.not.s%r%drag_sink)return
 
@@ -968,10 +969,10 @@ subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol,ilevel)
    use ramses_commons, only: ramses_t
    implicit none
    type(ramses_t)::s
-   real(dp),dimension(1:ndim)::x
-   real(dp),dimension(1:ndim,1:fourtondim)::xnei
+   real(kind=8),dimension(1:ndim)::x
+   real(kind=8),dimension(1:ndim,1:fourtondim)::xnei
    integer,dimension(1:ndim,1:fourtondim)::ckey
-   real(dp),dimension(1:fourtondim)::vol
+   real(kind=8),dimension(1:fourtondim)::vol
    integer::ilevel
    !==================================================================
    ! Simple routine to compute B-spline cells and weights for a given sink
@@ -979,7 +980,7 @@ subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol,ilevel)
    !==================================================================
    integer::idim,j
    integer,dimension(1:ndim)::crr,cr,cl,cll
-   real(dp)::xrr,xr,xl,xll
+   real(kind=8)::xrr,xr,xl,xll
    real(dp),dimension(1:ndim)::wrr,wr,wl,wll
 
    associate(r=>s%r,m=>s%m)
@@ -1035,10 +1036,10 @@ subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol,ilevel)
    use ramses_commons, only: ramses_t
    implicit none
    type(ramses_t)::s
-   real(dp),dimension(1:ndim)::x
-   real(dp),dimension(1:ndim,1:threetondim)::xnei
+   real(kind=8),dimension(1:ndim)::x
+   real(kind=8),dimension(1:ndim,1:threetondim)::xnei
    integer,dimension(1:ndim,1:threetondim)::ckey
-   real(dp),dimension(1:threetondim)::vol
+   real(kind=8),dimension(1:threetondim)::vol
    integer::ilevel
    !==================================================================
    ! Simple routine to compute B-spline cells and weights for a given sink
@@ -1046,7 +1047,7 @@ subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol,ilevel)
    !==================================================================
    integer::idim,j
    integer,dimension(1:ndim)::cr,cl,cc
-   real(dp)::xr,xl,xc
+   real(kind=8)::xr,xl,xc
    real(dp),dimension(1:ndim)::wr,wl,wc
 
    associate(r=>s%r,m=>s%m)
@@ -1097,10 +1098,10 @@ subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol,ilevel)
    use ramses_commons, only: ramses_t
    implicit none
    type(ramses_t)::s
-   real(dp),dimension(1:ndim)::x
-   real(dp),dimension(1:ndim,1:twotondim)::xnei
+   real(kind=8),dimension(1:ndim)::x
+   real(kind=8),dimension(1:ndim,1:twotondim)::xnei
    integer,dimension(1:ndim,1:twotondim)::ckey
-   real(dp),dimension(1:twotondim)::vol
+   real(kind=8),dimension(1:twotondim)::vol
    integer::ilevel
    !==================================================================
    ! Simple routine to compute B-spline cells and weights for a given sink
@@ -1153,7 +1154,7 @@ subroutine psy_function(mode,r,psy)
    use amr_commons
    implicit none
 
-   real(dp)::r,psy
+   real(kind=8)::r,psy
    logical::mode
 
    if(mode)then
@@ -1180,8 +1181,8 @@ subroutine dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_ove
    type(ramses_t)::s
    type(part_t)::p
    integer::ilevel,ipart
-   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
-   real(dp)::scale_l,scale_t,scale_d
+   real(kind=8)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
+   real(kind=8)::scale_l,scale_t,scale_d
    !==================================================================
    ! Simple routine to dump sink data to a CSV on every fine time step
    ! Nicholas Choustikov
@@ -1190,8 +1191,8 @@ subroutine dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_ove
    integer::id_sink_loc,unit
    character(LEN=5)::nchar
    logical::file_exist
-   real(dp)::scale_m,scale_v
-   real(dp)::unit_amu,unit_pc,unit_msun,unit_dotM,unit_yr
+   real(kind=8)::scale_m,scale_v
+   real(kind=8)::unit_amu,unit_pc,unit_msun,unit_dotM,unit_yr
 
    associate(r=>s%r, g=>s%g, mdl=>s%mdl)
 
@@ -1255,9 +1256,9 @@ subroutine dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH
    type(ramses_t)::s
    type(part_t)::p
    integer::ilevel,ipart
-   real(dp)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
-   real(dp)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn
-   real(dp)::scale_l,scale_t,scale_d
+   real(kind=8)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
+   real(kind=8)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn
+   real(kind=8)::scale_l,scale_t,scale_d
    !==================================================================
    ! Simple routine to dump sink data to a CSV on every fine time step
    ! Nicholas Choustikov
@@ -1266,8 +1267,8 @@ subroutine dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH
    integer::id_sink_loc,unit
    character(LEN=5)::nchar
    logical::file_exist
-   real(dp)::scale_m,scale_v,scale_E
-   real(dp)::unit_amu,unit_pc,unit_msun,unit_dotM,unit_yr
+   real(kind=8)::scale_m,scale_v,scale_E
+   real(kind=8)::unit_amu,unit_pc,unit_msun,unit_dotM,unit_yr
 
    associate(r=>s%r, g=>s%g, mdl=>s%mdl)
 

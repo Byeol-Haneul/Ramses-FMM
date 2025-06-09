@@ -489,9 +489,9 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
         mass = mass / (1d0-r%eta_SNII)
      endif
      if(r%metal) then
-        Z = max(p%zp(i), 1d-5)                               ! [m_metals/m_tot]
+        Z = max(dble(p%zp(i)), 1d-5)                               ! [m_metals/m_tot]
      else
-        Z = max(r%z_ave*0.02, 1d-5)                          ! [m_metals/m_tot]
+        Z = max(dble(r%z_ave)*0.02d0, 1d-5)                          ! [m_metals/m_tot]
      endif
      call inp_SED_table(SED, age, Z, 1, .false., L_star)     !  [# s-1 M_sun-1]
      call inp_SED_table(SED, age, Z, 3, .true., egy_star)    !             [eV]

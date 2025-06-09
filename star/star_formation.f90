@@ -197,7 +197,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         endif
         ! Compute sound speed squared
         p = m%grid(igrid)%uold(ind,5)
-        cs2 = max(r%gamma*p/d,r%smallc**2)
+        cs2 = max(dble(r%gamma)*p/d,dble(r%smallc)**2)
         ! Turbulence 1D velocity dispersion
         sigma2 = 0d0
         if(r%turb)then
@@ -223,7 +223,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
            case(3)
               ! Multi-freefall model a la Krumholz & McKee
               alpha_vir = (15d0*(sigma2+cs2))/(pi*factG*d*dx**2)
-              Mach2 = max(sigma2/cs2,r%smallr)
+              Mach2 = max(sigma2/cs2,dble(r%smallr))
               b_turb = 1.0 ! Turbulent forcing parameter (Federrath 2008 & 2010)
               sigs = log(1d0+b_turb**2*Mach2)
               scrit = log(alpha_vir*(1d0+(2d0*Mach2**2/(1d0+Mach2))))

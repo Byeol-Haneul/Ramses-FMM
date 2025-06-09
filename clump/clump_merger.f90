@@ -2292,7 +2292,7 @@ function total_energy(x1,x2,v1,v2,phi,radius,boxlen)
   end do
   r=sqrt(r2)
   dr=2d0*radius/dble(nbin)
-  xbin=min(r/dr,dble(nbin))
+  xbin=min(dble(r/dr),dble(nbin))
   ibin=int(xbin)
   ileft=ibin+1
   iright=ileft+1
