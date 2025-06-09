@@ -406,7 +406,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
            if (elements(ii)%atomic_number.gt.0) then
               do jj=1,elements(ii)%n_ions ! loop over ions
                  do i=1,nleaf !loop over leaf cells
-                    m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(ii,jj,i) * nH(i)
+                    m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(ii,jj,i)*nH(i)
                  end do ! end loop over leaf cells
                  counter = counter + 1
               end do ! end loop over ions
@@ -416,7 +416,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         ! deal with molecules separately
         if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
            do i=1,nleaf !loop over leaf cells
-              m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(1,3,i) * nH(i)
+              m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(1,3,i)*nH(i)
            end do ! end loop over leaf cells
            counter = counter + 1
         endif
@@ -469,11 +469,13 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   end do
   ! End loop over cells
 
+#ifndef RTZ
   ! Compute new cooling table
   if(r%cooling.and.ilevel==r%levelmin.and.r%cosmo)then
      if(g%myid==1)write(*,*)'Computing new cooling table'
      call set_table(c,dble(g%aexp))
   endif
+#endif
 #endif
 
 end subroutine cooling_fine

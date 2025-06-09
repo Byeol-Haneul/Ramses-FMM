@@ -530,6 +530,7 @@ subroutine region_condinit(r,g,x,q,dx,nn)
               total_mass_density = 0.d0
               do ivar=1,n_elements ! loop over elements
                  if (elements(ivar)%atomic_number.gt.0) then
+                  !   write(*,*) g%myid,elements(ivar)%atomic_number,elements(ivar)%z_solar,r%z_ave
                     ! This gives us the total mass density
                     q(i,r%ichem+counter) = elements(ivar)%z_solar * r%z_ave * elements(ivar)%atomic_mass
                     total_mass_density = total_mass_density + q(i,r%ichem+counter)

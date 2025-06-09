@@ -268,6 +268,8 @@ module amr_commons
      logical::isH2=.false.                            !                           H2 tracked?
      integer::iIons, ixHI, ixHII, ixHeII, ixHeIII     !       Indexes of ionization fractions
 #ifdef RTZ
+     integer::element_first_idx(1:27)       !  Start idx of elements in uold
+     integer::molecules_first_idx(1:3)     !  Start idx of molecules in uold 
      real(kind=8),dimension(1:27,1:27)::ionEvs        !                   Ionization energies
 #else
      real(kind=8),dimension(nIon)::ionEvs             !                   Ionization energies

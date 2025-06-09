@@ -1644,7 +1644,8 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     ! Metal line cooling -- low temperature (fine structure)
     z = (1.d0 / aexp) - 1.d0
     total_fine_structure = 0.d0
-    if (T .lt. 1.1E4) then 
+
+    if (T .lt. 1.1d4) then 
         if (elements(6)%atomic_number .gt. 0) then 
             ! CI cooling
             n_ion_fs = element_number_densities(6) * element_ion_fractions(6,1)

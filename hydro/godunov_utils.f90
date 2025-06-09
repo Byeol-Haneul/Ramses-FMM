@@ -137,6 +137,7 @@ subroutine hydro_refine(r,ug,um,ud,ok)
      end if
   end if
 
+  !TODO(code): fix in the case of RTZ
   if(r%neq_chem .and. r%err_grad_xHII >= 0.)then
      ii=r%iIons
      error=2.0d0*MAX( &

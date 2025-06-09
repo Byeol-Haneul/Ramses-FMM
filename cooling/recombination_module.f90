@@ -585,6 +585,7 @@ FUNCTION recombination(T, ion, element_idx) result(rate)
 
   case (6)  ! Carbon
     rate = alpha_RR(T, RR_rates_carbon(:,ion)) + alpha_DR(T, DR_rates_e_carbon(:,ion), DR_rates_c_carbon(:,ion))
+    
   case (7)  ! Nitrogen
     rate = alpha_RR(T, RR_rates_nitrogen(:,ion)) + alpha_DR(T, DR_rates_e_nitrogen(:,ion), DR_rates_c_nitrogen(:,ion))
 
