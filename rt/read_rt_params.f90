@@ -12,7 +12,10 @@ subroutine m_read_rt_params(pst)
   use ramses_commons, only: pst_t
   use mdl_module
   use movie_module, only: set_movie_vars
+#ifdef RTZ
   use SED_module, only: initialize_cross_sections_from_blackbody, initialize_group_energies_from_blackbody
+  use cross_sections_module, only: initialize_cross_sections
+#endif
   implicit none
   type(pst_t)::pst
 
@@ -255,11 +258,15 @@ subroutine m_read_rt_params(pst)
   ! in the case of RTZ, perform initialization after reading in group
   ! energies
 
+  ! Frist initialize the cross sections data
+  call initialize_cross_sections()
+
   ! Initialize cross sections to be a blackbody at 1e5 K
   call initialize_cross_sections_from_blackbody(s%r, 1.d5, group_L0, group_L1, group_csn, group_cse, .true.)
 
   ! Initialize group energies for the same black body
   call initialize_group_energies_from_blackbody(s%r, 1.d5, group_L0, group_L1, group_egy)
+
 #endif
 #endif
 
@@ -309,7 +316,7 @@ subroutine m_read_rt_params(pst)
      write(*,*) '========================================================='
   endif
 
-  if(s%r%isH2) then
+  if(s%r%isH2.or.s%r%isH2_rtz) then
      do i=1,nrtgrp
         if(    (s%r%group_L0(i) .ge. 11.2) .and. (s%r%group_L1(i) .le. 13.6) .and. &
              & (s%r%group_L0(i) .le. 13.6) .and. (s%r%group_L1(i) .ge. 11.2) )then
