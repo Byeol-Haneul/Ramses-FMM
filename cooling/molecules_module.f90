@@ -46,12 +46,13 @@ FUNCTION alpha_H2_prim(T, xe, H2_cosmic_ray_ionization_rate, G0, xHI, xHII) resu
   k13 = -1.801849334d1 + 2.36085220d0*lnTe - 2.82744300d-1*(lnTe**2.d0) &
                  +1.62331664d-2*(lnTe**3.d0)-3.36501203d-2*(lnTe**4.d0)+1.17832978d-2*(lnTe**5.) &
                  -1.65619470d-3*(lnTe**6.d0)+1.06827520d-4*(lnTe**7.d0)-2.63128581d-6*(lnTe**8.)
-  k13 = exp(k13)
+  k13 = exp(max(k13,-92.d0)) ! Max needed to prevent result from diverging at low temperature
 
   ! H- + H --> H + H + e-
   ! I think this reaction was broken in glover so I took the results from
   ! https://www.aanda.org/articles/aa/pdf/2016/02/aa27262-15.pdf Table A1
-  k14 = 2.5634d-15 * (exp(lnTe)**1.78186d0) ! Note that T must be in eV for this reaction to make sense
+  ! Harley added the fudge factor for continuity
+  k14 = 1.357772745525155d0 * 2.5634d-15 * (exp(lnTe)**1.78186d0) ! Note that T must be in eV for this reaction to make sense
   if (T .gt. 1160.d0) then
      k14 = -3.388464953d1 + 1.13944933d0*lnTe - 1.4210135d-1*(lnTe**2.d0) &
             + 8.4644554d-3*(lnTe**3.d0) - 1.4328641d-3*(lnTe**4.d0) + 2.0122503d-4*(lnTe**5.d0) &

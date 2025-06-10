@@ -251,6 +251,187 @@ FUNCTION H2_cooling(nH, nH2, T) result(rate)
 
 END FUNCTION H2_cooling
 
+FUNCTION H2_cooling_G15(T) result(rate)
+    ! Cooling due to molecular hydrogen from https://ui.adsabs.harvard.edu/abs/2015MNRAS.453.2901G/abstract
+    ! see appendix 4.2.1 eqn 30
+    ! returns erg/s
+    implicit none
+    real(KIND=8), intent(in)::T
+    real(KIND=8)::rate
+    real(KIND=8)::logT3
+
+    logT3 = LOG10(T/1.d3)
+    rate = 0.d0
+    rate = -20.584225d0
+    rate = rate + (5.0194035d0 * logT3)
+    rate = rate - (1.5738805d0 * logT3**2.d0)
+    rate = rate - (4.7155769d0 * logT3**3.d0)
+    rate = rate + (2.4714161d0 * logT3**4.d0)
+    rate = rate + (5.4710750d0 * logT3**5.d0)
+    rate = rate - (3.9467356d0 * logT3**6.d0)
+    rate = rate - (2.2148338d0 * logT3**7.d0)
+    rate = rate + (1.8161874d0 * logT3**8.d0)
+    rate = (10.d0**(rate))
+
+END FUNCTION H2_cooling_G15
+
+FUNCTION H2_cooling_GA08(T, n_e, n_HI, n_HII, n_HeI, n_H2) result(rate)
+    ! Cooling due to molecular hydrogen
+    implicit none
+    real(KIND=8), intent(in)::T, n_e, n_HI, n_HII, n_HeI, n_H2
+    real(KIND=8)::t3, lt, lt3, ltt, loc_T
+    real(KIND=8)::gphdl, HDLR, HDLV, gaHI, gaH2, gaHp, gaHe, gael, galdl
+    real(KIND=8)::rate
+
+    rate = 0d0
+    loc_T = min(T,9999.9d0)
+    if (loc_T .le. 10.d0) then
+        return
+    end if
+    
+    lt = log10(loc_T)
+    t3 = loc_T/1000.d0
+    lt3 = log10(t3)
+
+    ! From glover 2011
+    gphdl = H2_cooling_G15(loc_T)
+
+    ! Initialise
+    gaHI = 0.d0
+    gaH2 = 0.d0
+    gaHp = 0.d0
+    gaHe = 0.d0
+    gael = 0.d0
+
+    ! Glover & Abel (2008) ; low-density limit
+
+    ! Excitation by HI
+    if (loc_T .lt. 100.d0) then
+        gaHI = 10.d0**(-16.818342d0        &
+        &         + 37.383713d0*lt3      &
+        &         + 58.145166d0*lt3**2.d0   &
+        &         + 48.656103d0*lt3**3.d0   &
+        &         + 20.159831d0*lt3**4.d0   &
+        &         + 3.847961d0*lt3**5.d0)
+    else if (loc_T .lt. 1000.d0) then
+        gaHI = 10.d0**(-24.311209d0        &
+        &         + 3.5692468d0*lt3      &
+        &         - 11.33286d0*lt3**2.d0    &
+        &         - 27.850082d0*lt3**3.d0   &
+        &         - 21.328264d0*lt3**4.d0   &
+        &         - 4.2519023d0*lt3**5.d0)
+    ! harley checked that extrapolation to 1e4K is ok
+    else if (loc_T .lt. 10000.d0) then
+        gaHI = 10.d0**(-24.311209d0        &
+        &         + 4.6450521d0*lt3       &
+        &         - 3.7209846d0*lt3**2.d0    &
+        &         + 5.9369081d0*lt3**3.d0    &
+        &         - 5.5108047d0*lt3**4.d0    &
+        &         + 1.5538288d0*lt3**5.d0)
+    end if
+
+    ! Excitation by H2
+    ! harley checked that extrapolation to 1e4K is ok
+    if (loc_T .lt. 10000.d0) then
+        gaH2 = 10.d0**(-23.962112d0         &
+        &        + 2.0943374d0*lt3       &
+        &        - 0.77151436d0*lt3**2.d0   &
+        &        + 0.43693353d0*lt3**3.d0   &
+        &        - 0.14913216d0*lt3**4.d0   &
+        &        - 0.033638326d0*lt3**5.d0)
+    end if
+
+    ! Excitation by He
+    ! harley checked that extrapolation to 1e4K is ok
+    if (loc_T .lt. 10000.d0) then
+        gaHe = 10.d0**(-23.689237d0        &
+        &        + 2.1892372d0*lt3      &
+        &        - 0.81520438d0*lt3**2.d0   &
+        &        + 0.29036281d0*lt3**3.d0   &
+        &        - 0.16596184d0*lt3**4.d0   &
+        &        + 0.19191375d0*lt3**5.d0)
+    end if
+
+    ! Excitation by H+
+    ! Update from glover 2015
+    if (loc_T .lt. 10000.d0) then
+        gaHp = 10.d0**(-22.089523d0      &
+        &        + 1.5714711d0*lt3       &
+        &        + 0.015391166d0*lt3**2.d0  &
+        &        - 0.23619985d0*lt3**3.d0   &
+        &        - 0.51002221d0*lt3**4.d0   &
+        &        + 0.32168730d0*lt3**5.d0)
+    end if
+
+    ! Excitation by electrons
+    ! Update from glover 2015
+    if (loc_T .lt. 500.d0) then
+        gael = 10.d0**(-21.928796d0         &
+        &           + 16.815730d0*lt3       &
+        &           + 96.743155d0*lt3**2.d0    &
+        &           + 343.19180d0*lt3**3.d0    &
+        &           + 734.71651d0*lt3**4.d0    &
+        &           + 983.67576d0*lt3**5.d0    &
+        &           + 801.81247d0*lt3**6.d0    &
+        &           + 364.14446d0*lt3**7.d0    &
+        &           + 70.609154d0*lt3**8.d0)    
+    else if (loc_T .lt. 10000.d0) then
+        gael = 10.d0**(-22.921189d0         &
+        &           + 1.6802758d0*lt3       &
+        &           + 0.93310622d0*lt3**2.d0   &
+        &           + 4.0406627d0*lt3**3.d0    &
+        &           - 4.7274036d0*lt3**4.d0    &
+        &           - 8.8077017d0*lt3**5.d0    &
+        &           + 8.9167183d0*lt3**6.d0    &
+        &           + 6.4380698d0*lt3**7.d0    &
+        &           - 6.3701156d0*lt3**8.d0)    
+    end if
+
+    galdl = gaHI*n_HI + gaH2*n_H2 + gaHe*n_HeI + gaHp*n_HII + gael*n_e ! erg/s
+
+    rate = n_H2*gphdl/(1.d0 + gphdl/galdl) ! erg/cm^3/s
+
+END FUNCTION H2_cooling_GA08
+
+FUNCTION cooling_H2GP(nH,nH2,Tgas) result(rate)
+    !cooling from Galli&Palla98
+    !taken fron krome
+    real(KIND=8), intent(in)::nH,nH2,Tgas
+    real(KIND=8)::tm, logT, T3
+    real(KIND=8)::rate
+    real(KIND=8)::LDL,HDLR,HDLV,HDL
+
+    rate = 0.d0
+
+    tm = max(Tgas, 13.0d0)    ! no cooling below 13 Kelvin
+    tm = min(Tgas, 1.d5)      ! fixes numerics
+    logT = log10(tm)
+    T3 = tm * 1.d-3
+
+    !low density limit in erg/s
+    LDL = 1.d1**(-103.d0+97.59d0*logT-48.05d0*logT**2 + 10.8d0*logT**3-0.9032d0*logT**4)*nH
+
+    !this will avoid a division by zero and useless calculations
+    if(LDL.eq.0d0) then
+        rate = 0d0
+        return
+    end if
+
+    !high density limit
+    HDLR = ((9.5e-22*t3**3.76)/(1.+0.12*t3**2.1)*exp(-(0.13/t3)**3)+&
+        3.e-24*exp(-0.51/t3)) !erg/s
+    HDLV = (6.7e-19*exp(-5.86/t3) + 1.6e-18*exp(-11.7/t3)) !erg/s
+    HDL  = HDLR + HDLV !erg/s
+
+    !to avoid division by zero
+    if (HDL.eq.0d0) then
+        rate = 0d0
+    else
+        rate = nH2/(1d0/HDL+1d0/LDL) !erg/cm3/s
+    endif
+
+END FUNCTION cooling_H2GP
+
 SUBROUTINE initialize_high_temperature_metal_cooling()
     ! Cloudy tables of metal line cooling
     ! which are valid at high temperature
@@ -1368,8 +1549,8 @@ FUNCTION photoheating_UVB_G0(G0, element_number_densities, element_ion_fractions
 
     rate = 0.d0
 
-    ! Loop over all elements
-    do i = 1, 27
+    ! Loop over all elements except H and He
+    do i = 3, 27
        ! Skip unused elements
        if (elements(i)%atomic_number .lt. 1) then
           cycle
@@ -1662,7 +1843,9 @@ SUBROUTINE all_cooling(r, tables, T, ne, aexp, element_number_densities, element
     cooling_bremmstrahlung = bremmstrahlung(T) * ne * (nH_II + nHe_II + (4.d0 * nHe_III))
     cooling_compton = compton_cooling(T,aexp) * ne
     if (r%isH2_rtz) then 
-       cooling_H2 = H2_cooling(nH, nH2, T) 
+       cooling_H2 = H2_cooling(nH_I, nH2, T) 
+    !    cooling_H2 = H2_cooling_GA08(T, ne, nH_I, nH_II, nHe_I, nH2)
+    !    cooling_H2 = cooling_H2GP(nH_I,nH2,T)
     else
        cooling_H2 = 0.d0
     end if

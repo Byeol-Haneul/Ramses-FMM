@@ -20,7 +20,7 @@ module rtz_cooling_module
   real(kind=8),parameter::T2_min_fix=1d-2 ! Min temperature [K]
 
   real(kind=8),parameter::T_min=0.1, T_frac=0.1
-  real(kind=8),parameter::x_min=1d-20, x_fm=1d-6, x_frac=0.1
+  real(kind=8),parameter::x_min=1d-20, x_fm=1d-7, x_frac=0.1
   real(kind=8),parameter::Np_min=1d-13, Np_frac=0.2
   real(kind=8),parameter::Fp_frac=0.5
 
@@ -225,7 +225,8 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
             !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
             ! Interpolate over density
             nElement(1:n_elements,1:ncell)  = 0.d0  ! Initialize to zero
-            nElement(1,1:ncell)  = 10.d0**(((5.d0 - (-2.d0)) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + (-2.d0))                          ! Hydrogen      
+            nElement(1,1:ncell)  = 10.d0**(((5.d0 - (-2.d0)) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + (-2.d0))
+            ! nElement(1,1:ncell)  = 10.d0**(((8.d0 - 1.d0) * (real(i_interp,kind=8) - 1.d0)/(300.d0-1.d0)) + 1.d0)      
             nElement(2,1:ncell)  = nElement(1,1:ncell) * 8.51d-02 ! Helium
             nElement(6,1:ncell)  = nElement(1,1:ncell) * 2.69d-04 * r%z_ave ! Carbon
             nElement(7,1:ncell)  = nElement(1,1:ncell) * 6.76d-05 * r%z_ave ! Nitrogen
@@ -806,7 +807,7 @@ contains
 
        ! Photodissociation
        if (r%rtz_include_photoionization) then 
-         de_H2 = de_H2 + total_G0 * 5.68d-11
+         de_H2 = de_H2 + (total_G0 * 5.68d-11)
        end if 
 
        ! Cosmic ray destruction
@@ -830,6 +831,10 @@ contains
           code=6 !TODO(code) update this code for each ion
           RETURN
        end if
+
+      ! Update mu and T
+      mu = getMu_RTZ(r, ne, nElement_dep, dXion)
+      TK = dT2 * mu   
 
     end if
 
@@ -1046,6 +1051,10 @@ contains
              xe = ne / nElement_dep(1)
              phi_s = secondary_cr_rates(xe)
              total_cosmic_ray_ionization_rate = primary_cosmic_ray_ionization_rate * (1.d0 + phi_s)
+
+             ! Update mu and T
+             mu = getMu_RTZ(r, ne, nElement_dep, dXion)
+             TK = dT2 * mu   
 
              ! Check for convergence -- Fractional change in ion
              dUU = MAX(dUU,ABS((dXion(iElement,iIon)-xion(iElement,iIon,icell))/(xion(iElement,iIon,icell)+x_FM)))
