@@ -767,10 +767,9 @@ contains
 
     ! Note that we're now excluding the ghost cells since this operation doesn't need them.
     do work_idx = thread_idx, work_size**3 - 1, blockDim%x
-       call index_1Dto3D(work_idx, work_size, work_size, i, j, k)
 
        ! Compute the index within the indices array to load
-       call index_1Dto3D(work_idx/8, subgrid_size/4, subgrid_size/4, i_subgrid, j_subgrid, k_subgrid)
+       call index_1Dto3D(work_idx/8, work_size/2, work_size/2, i_subgrid, j_subgrid, k_subgrid)
        i_subgrid = i_subgrid + 2
        j_subgrid = j_subgrid + 2
        k_subgrid = k_subgrid + 2
@@ -780,7 +779,7 @@ contains
        cell_idx = mod(work_idx, 8) + 1
 
        ! Compute the flux indices
-       call index_1Dto3D(cell_idx-1, 2, 2,i,j,k)
+       call index_1Dto3D(cell_idx-1, 2, 2, i, j, k)
        i = i + 2*i_subgrid - 4
        j = j + 2*j_subgrid - 4
        k = k + 2*k_subgrid - 4
@@ -819,7 +818,7 @@ contains
        oct_grid(oct_grid_index)%unew(cell_idx, 5) = oct_grid(oct_grid_index)%uold(cell_idx, 5) + dtdx * update_term%energy
 
     end do
-   
+
   end subroutine conservative_update
   ! =========================================================================
 
