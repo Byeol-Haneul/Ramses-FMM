@@ -423,7 +423,6 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
          end do ! end loop over active cells
          nAct=nAct_next
       end do ! end iterative loop
-      if (loopcnt.gt.500) write(*,*) "My loop count",loopcnt
 
   end if
 
@@ -691,12 +690,12 @@ contains
     ! UPDATE TEMPERATURE *************************************************
     !if(c_switch(icell) .and. .not. rt_isTconst .and. .not. r%rt_T_rad) then
     if(.not. r%neq_isTconst .and. .not. r%rt_T_rad) then
-       Crate = all_cooling(r, TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+       Crate = all_cooling(r, tables, TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
                            primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
-                           ss_factor)
-       Crate_prime = all_cooling(r, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+                           ss_factor, dNp, ilevel)
+       Crate_prime = all_cooling(r, tables, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
                                  primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
-                                 ss_factor)
+                                 ss_factor, dNp, ilevel)
        Crate_prime = (Crate_prime - Crate) / ((1.001d0*TK) - TK)
        dCdT2 = Crate_prime * mu                            ! dC/dT2 = mu * dC/dT
 
@@ -1102,8 +1101,8 @@ SUBROUTINE rtz_updateRTGroups_CoolConstants(r,tables)
     !Photoheating rates for photons on ions
     do iP = 1,nrtgrp
       do iE = 1,n_elements
-        if (elements(i)%atomic_number.gt.0) then 
-          do iI = 1,elements(i)%n_ions-1
+        if (elements(iE)%atomic_number.gt.0) then 
+          do iI = 1,elements(iE)%n_ions-1
             tables%PHrate(iP,iE,iI,i) =  eV2erg * &    ! See eq (19) in Aubert(08)
                   (tables%sigec(iP,iE,iI,i) * r%group_egy(iP)  &
                   -tables%signc(iP,iE,iI,i)*r%ionEvs(iE,iI))
