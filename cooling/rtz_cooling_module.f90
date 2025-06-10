@@ -164,6 +164,9 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
   integer :: element_unit, j, iIon
   character(len=50) :: element_filename
   real(kind=8), allocatable :: ytmp(:)
+  real(kind=8), dimension(1:50)::saved_cooling_rates
+  character(len=20), dimension(1:50)::saved_cooling_rates_names
+  real(kind=8)::TK_to_save(1:nvector), mu_to_save(1:nvector)
 
   ! Store some temporary variables reduce computations
   one_over_T_FRAC = 1d0 / T_FRAC
@@ -184,13 +187,16 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
   if (r%rtz_equilibrium_test.gt.0) then
 
       ! Open files for all elements
-      do i = 1, n_elements
-         if (elements(i)%atomic_number .gt. 0) then
-            element_unit = base_unit + i
-            write(element_filename, '("element_", I0, "_ions.dat")') i
+      do iElement= 1, n_elements
+         if (elements(iElement)%atomic_number .gt. 0) then
+            element_unit = base_unit + iElement
+            write(element_filename, '("element_", I0, "_ions.dat")') iElement
             open(unit=element_unit, file=element_filename, status='unknown')
          end if
       end do
+
+      ! Open file to save cooling and heating rates
+      open(unit=base_unit+100, file='coolrates.dat', status='unknown')
 
       if (r%rtz_equilibrium_test.eq.1) then 
          !!! USE FOR EQM TESTS WITH COOLING AT CONSTANT RHO
@@ -231,7 +237,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
             nElement(26,1:ncell) = nElement(1,1:ncell) * 3.16d-05 * r%z_ave ! Iron
          end if
 
-         tleft(1:ncell) = 1.d20             ! Set to an arbitrarily large number
+         tleft(1:ncell) = 1.d40             ! Set to an arbitrarily large number
          ddt(1:ncell) = 10000.d0 * 365.25d0 * 60.d0 * 60.d0 ! First guess at sub-timestep lengths
 
          do i=1,ncell
@@ -314,29 +320,35 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
 
          if (r%rtz_equilibrium_test.eq.1) then
             if (r%isH2_rtz) then 
-               write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
+               write(*,*) nH(i), TK_to_save(i), T2(i), mu_to_save(i), loopcnt, xion(1,1,1), xion(1,2,1), xion(1,3,1)
             else
-               write(*,*) nH(i), T2(i), loopcnt, xion(1,1,1), xion(1,2,1)
+               write(*,*) nH(i), TK_to_save(i), T2(i), mu_to_save(i), loopcnt, xion(1,1,1), xion(1,2,1)
             end if
+
+            ! Write the cooling and heating rates to file
+            if (i_interp.eq.1) write(base_unit+100,'(*(A20, ", "))') 'rho', 'T', 'Tmu', 'mu', saved_cooling_rates_names
+            write(base_unit+100,'(*(ES15.6E3, ", "))') nH(i), TK_to_save(i), T2(i), mu_to_save(i), saved_cooling_rates
          end if
 
          ! Write data to file
-         do i = 1, n_elements
-            if (elements(i)%atomic_number .gt. 0) then
-               element_unit = base_unit + i
+         do iElement = 1, n_elements
+            if (elements(iElement)%atomic_number .gt. 0) then
+               element_unit = base_unit + iElement
                write(element_unit,'(ES15.6, I14, *(ES15.6))') r%neq_TConst, loopcnt, &
-                  (xion(i,j,1), j=1,elements(i)%n_ions)
+                  (xion(iElement,j,1), j=1,elements(i)%n_ions)
             end if
          end do
 
       end do
 
       ! Close all element files
-      do i = 1, n_elements
-         if (elements(i)%atomic_number .gt. 0) then
-            close(base_unit + i)
+      do i = iElement, n_elements
+         if (elements(iElement)%atomic_number .gt. 0) then
+            close(base_unit + iElement)
          end if
       end do
+
+      close(unit=base_unit+100)
 
       write(*,*) '!************************************************!'
       stop "Program terminated due to equilibrium test"
@@ -514,9 +526,7 @@ contains
        end do
     end if
 
-    total_cosmic_ray_ionization_rate = r%rtz_total_cosmic_ray_ionization_rate
-    cosmic_ray_scale_factor = total_cosmic_ray_ionization_rate / 1.d-16
-
+    primary_cosmic_ray_ionization_rate = r%rtz_primary_cosmic_ray_ionization_rate
     UV_background_G0 = r%rtz_UV_background_G0
 
     ! TODO(code): update with value from local radition field
@@ -553,8 +563,9 @@ contains
     ! Measure phi_s for secondary CR ionization
     phi_s = secondary_cr_rates(xe)
     ! Now calculate the total CR ionization rate
-    primary_cosmic_ray_ionization_rate = total_cosmic_ray_ionization_rate / (1.d0 + phi_s)
+    total_cosmic_ray_ionization_rate = primary_cosmic_ray_ionization_rate * (1.d0 + phi_s)
     H2_cosmic_ray_ionization_rate = 2.d0 * primary_cosmic_ray_ionization_rate * (1.d0 + phi_s)
+    cosmic_ray_scale_factor = H2_cosmic_ray_ionization_rate / 1.d-16
     ! END RTZ
 
 #ifdef RT
@@ -690,12 +701,21 @@ contains
     ! UPDATE TEMPERATURE *************************************************
     !if(c_switch(icell) .and. .not. rt_isTconst .and. .not. r%rt_T_rad) then
     if(.not. r%neq_isTconst .and. .not. r%rt_T_rad) then
-       Crate = all_cooling(r, tables, TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
-                           primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
-                           ss_factor, dNp, ilevel)
-       Crate_prime = all_cooling(r, tables, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
-                                 primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
-                                 ss_factor, dNp, ilevel)
+      !  Crate = all_cooling(r, tables, TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+      !                      primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
+      !                      ss_factor, dNp, ilevel)
+      !  Crate_prime = all_cooling(r, tables, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+      !                            primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
+      !                            ss_factor, dNp, ilevel)
+       !HKnote: we call prime first so what we can store the correct cooling rates
+       saved_cooling_rates = 0.d0
+       call all_cooling(r, tables, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+                        primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
+                        ss_factor, dNp, ilevel, Crate_prime, saved_cooling_rates, saved_cooling_rates_names)
+       saved_cooling_rates = 0.d0
+       call all_cooling(r, tables, TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
+                        primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
+                        ss_factor, dNp, ilevel, Crate, saved_cooling_rates, saved_cooling_rates_names)
        Crate_prime = (Crate_prime - Crate) / ((1.001d0*TK) - TK)
        dCdT2 = Crate_prime * mu                            ! dC/dT2 = mu * dC/dT
 
@@ -717,6 +737,8 @@ contains
           code=3 ; RETURN
        endif
        TK=dT2*mu
+       TK_to_save(icell)=TK
+       mu_to_save(icell)=mu
     endif
 
 #ifdef RT
@@ -873,7 +895,7 @@ contains
              ! Cosmic ray ionization of the less excited state
              if (r%rtz_include_cosmic_ray_ionization) then 
                if (iIon > 1) then 
-                  cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * primary_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
+                  cr = cr + (cosmic_ray_ionization_rates(iElement,iIon-1) * total_cosmic_ray_ionization_rate * dXion(iElement,iIon-1))
                end if
              end if
 
@@ -939,7 +961,7 @@ contains
              ! Cosmic ray ionization
              if (r%rtz_include_cosmic_ray_ionization) then 
                if (iIon .lt. n_ions) then
-                  de = de + (cosmic_ray_ionization_rates(iElement,iIon) * primary_cosmic_ray_ionization_rate)
+                  de = de + (cosmic_ray_ionization_rates(iElement,iIon) * total_cosmic_ray_ionization_rate)
                end if
              end if
 
@@ -1023,7 +1045,7 @@ contains
              ne = getNe(dXion, nElement_dep(:))
              xe = ne / nElement_dep(1)
              phi_s = secondary_cr_rates(xe)
-             primary_cosmic_ray_ionization_rate = total_cosmic_ray_ionization_rate / (1.d0 + phi_s)
+             total_cosmic_ray_ionization_rate = primary_cosmic_ray_ionization_rate * (1.d0 + phi_s)
 
              ! Check for convergence -- Fractional change in ion
              dUU = MAX(dUU,ABS((dXion(iElement,iIon)-xion(iElement,iIon,icell))/(xion(iElement,iIon,icell)+x_FM)))

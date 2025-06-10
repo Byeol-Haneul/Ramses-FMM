@@ -410,8 +410,8 @@ SUBROUTINE initialize_high_temperature_metal_cooling()
 END SUBROUTINE initialize_high_temperature_metal_cooling
 
 FUNCTION get_high_t_cooling_rates(T, ne, element_number_densities, element_ion_fractions, temp_smooth) result(rate)
-    !// Computes the high-temperature cooling rates
-    !// derived from Harley's custom cloudy models
+    ! Computes the high-temperature cooling rates
+    ! derived from Harley's custom cloudy models
     use rtz_module, only: elements
     implicit none
     real(KIND=8), intent(in):: T, ne, temp_smooth
@@ -477,7 +477,7 @@ FUNCTION get_high_t_cooling_rates(T, ne, element_number_densities, element_ion_f
        end do
     end do
 
-    rate =  rate * t_scale_fac
+    rate = rate * t_scale_fac
 
 END FUNCTION get_high_t_cooling_rates
 
@@ -518,8 +518,8 @@ SUBROUTINE initialize_fine_structure_tables()
 END SUBROUTINE initialize_fine_structure_tables
 
 FUNCTION three_level(g_0, g_1, g_2, lam_10, lam_20, lam_21, &
-                     A_10, A_20, A_21, z,  T,  n_ion, ne,  nH, &
-                     nHp, nHe,  nHep,  nHepp, nH2, &
+                     A_10, A_20, A_21, z, T, n_ion, ne, nH, &
+                     nHp, nHe, nHep, nHepp, nH2, &
                      idx_0, idx_1, idx_2) result(rate)
     ! Harley's three-level ion solver
     implicit none
@@ -531,7 +531,6 @@ FUNCTION three_level(g_0, g_1, g_2, lam_10, lam_20, lam_21, &
     integer, intent(in):: idx_0, idx_1, idx_2
     real(KIND=8):: rate
 
-    real(KIND=8):: three_level_cooling
     real(KIND=8):: T_cmb, logT, tmin, tmax, delta_temp
     real(KIND=8):: nu_10, nu_20, nu_21
     real(KIND=8):: E_10, E_20, E_21
@@ -696,7 +695,6 @@ FUNCTION two_level(g_0, g_1, lam_10, A_10, z, T, &
     integer, intent(in):: idx_0
     real(KIND=8):: rate
 
-    real(KIND=8):: three_level_cooling
     real(KIND=8):: T_cmb, logT, tmin, tmax, delta_temp
     real(KIND=8):: nu_10
     real(KIND=8):: E_10
@@ -987,7 +985,7 @@ FUNCTION SiI_fine_structure(T, n_ion, nH, nHp, &
     A_20 = 3.490d-10
     A_21 = 4.210d-5
     
-    ! Call three_level function */
+    ! Call three_level function
     rate = three_level(g_0, g_1, g_2, &
                        lam_10, lam_20, lam_21, &
                        A_10, A_20, A_21, &
@@ -1076,7 +1074,7 @@ FUNCTION FeI_fine_structure(T, n_ion, nH, nHp, &
     A_20 = 1.000d-30
     A_21 = 1.560d-3
     
-    ! Call three_level function */
+    ! Call three_level function
     rate = three_level(g_0, g_1, g_2, &
                        lam_10, lam_20, lam_21, &
                        A_10, A_20, A_21, &
@@ -1109,7 +1107,7 @@ FUNCTION FeII_fine_structure(T, n_ion, nH, nHp, &
     A_20 = 1.000d-30
     A_21 = 1.560d-3
     
-    ! Call three_level function */
+    ! Call three_level function 
     rate = three_level(g_0, g_1, g_2, &
                        lam_10, lam_20, lam_21, &
                        A_10, A_20, A_21, &
@@ -1138,11 +1136,11 @@ FUNCTION SI_fine_structure(T, n_ion, nH, nHp, &
     lam_20 = 17.4278d0
     lam_21 = 56.2957d0
     
-    A_10 = 1.400E-3
-    A_20 = 7.050E-8
-    A_21 = 3.020E-4
+    A_10 = 1.400d-3
+    A_20 = 7.050d-8
+    A_21 = 3.020d-4
     
-    ! Call three_level function */
+    ! Call three_level function 
     rate = three_level(g_0, g_1, g_2, &
                        lam_10, lam_20, lam_21, &
                        A_10, A_20, A_21, &
@@ -1159,8 +1157,8 @@ FUNCTION dust_recombination_cooling(T, G0, ne, f_dg, nH) result(rate)
     real(KIND=8):: beta_drc
 
     beta_drc = 0.74d0 / (T**0.068d0)
-    ! rate = (1.5d0 * 4.65d-30) * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
-    rate = 4.65d-30 * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
+    rate = (1.5d0 * 4.65d-30) * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
+    ! rate = 4.65d-30 * (T**0.94d0) * ((G0 * sqrt(T) / (0.5*ne))**beta_drc) * ne * 0.5d0 * f_dg * nH
 
 END FUNCTION dust_recombination_cooling
 
@@ -1187,7 +1185,7 @@ FUNCTION dust_gas_collisional_cooling(T, G0, xH2, aexp, nH, f_dg) result(rate)
     real(KIND=8):: rate
     real(KIND=8):: dust_hc_const, T_dust
 
-    dust_hc_const = 1.0d-33 + (3.8d-33 - 1.0d-33) * max(min(xH2,1.d0),0.d0)
+    dust_hc_const = 1.0d-33 + ((3.8d-33 - 1.0d-33) * max(min(xH2,1.d0),0.d0))
 
     T_dust = 16.4d0 * ((1.7d0 * G0)**(1.d0/6.d0))
     T_dust = max( T_dust, 2.725d0 * ( (1.d0/aexp) - 1.d0 ) ) ! Limit dust temp minimum to CMB temp
@@ -1216,9 +1214,9 @@ FUNCTION photoelectric_heating(T, G0, ne, f_dg, nH) result(rate)
     real(KIND=8):: rate
     real(KIND=8):: eps_PE
 
-    eps_PE = PE_efficiency(G0, T, ne);
-    ! rate = 1.5d0 * 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
-    rate = 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
+    eps_PE = PE_efficiency(G0, T, ne)
+    rate = 1.5d0 * 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
+    ! rate = 1.3d-24 * eps_PE * G0 * f_dg * nH ! [erg/cm3/s]
 
 END FUNCTION photoelectric_heating
 
@@ -1267,8 +1265,8 @@ FUNCTION cosmic_ray_heating(xe, n_HI, n_HeI, n_H2, ne, xi_h_cr, &
     phi_s = secondary_cr_rates(xe)
     total_cosmic_ray_ionization_rate = xi_h_cr * (1.0 + phi_s)
 
-    HI_cosmic_ray_ionization_rate_primary = 1.0d0 * xi_h_cr
-    He_cosmic_ray_ionization_rate_primary = 1.1d0 * xi_h_cr
+    HI_cosmic_ray_ionization_rate_primary = cosmic_ray_ionization_rates(1,1) * xi_h_cr
+    He_cosmic_ray_ionization_rate_primary = cosmic_ray_ionization_rates(2,1) * xi_h_cr
     H2_cosmic_ray_ionization_rate_primary = 2.0d0 * xi_h_cr
 
     rate = 0.d0
@@ -1288,7 +1286,6 @@ FUNCTION cosmic_ray_heating(xe, n_HI, n_HeI, n_H2, ne, xi_h_cr, &
     ! Cosmic ray heating on metals
     ! --> Here we skip H and He as it's done separately above
     induced_UV_heat_scale_fac = H2_cosmic_ray_ionization_rate_primary / 1d-16
-
 
     do i = 3, 27
        ! Skip unused elements
@@ -1396,7 +1393,7 @@ FUNCTION Epump(nH, T, xH2, xHI) result(Ep)
     real(KIND=8), intent(in):: nH, T, xH2, xHI
     real(KIND=8):: Ep
     real(KIND=8):: Crad, Cdex, Cfrac
-    Crad = 2.0d-7;     !radiation de-excitation rate Burton 1990
+    Crad = 2.0d-7     !radiation de-excitation rate Burton 1990
     Cdex = (1.0d-12)*((1.4d0*xH2*exp(-18100.d0/(T + 1200.d0))) + (1.d0*xHI*exp(-1000.d0/T)))*sqrt(T)*nH !collisional de-excitation rate Burton 1990
     Cfrac = Cdex / (Cdex + Crad)
     Ep = 2.d0 * Cfrac * EV_2_ERG  !ergs
@@ -1415,11 +1412,10 @@ FUNCTION H2_heating_bialy(G0, nH2, nH, T, xH2, xHI, xHII, xe, f_dg, xi_h2_cr) re
     real(KIND=8):: E_form1_dust, E_form2_dust, H2_formation_rate_dust
     real(KIND=8):: E_form1_prim, E_form2_prim, H2_formation_rate_prim
 
-
     D0 = 5.68d-11
     I_UV = 1.7d0 * G0
 
-    E_pump = 1.12d0 * EV_2_ERG;
+    E_pump = 1.12d0 * EV_2_ERG
     n_crit = 1.1d5 / sqrt(T/1000.d0)
     ncrit_factor = 1.d0 / (1.d0 + (n_crit/nH))
 
@@ -1474,7 +1470,6 @@ FUNCTION H2_heating(G0, nH2, nH, T, xH2, xHI, xHII, xe, f_dg, xi_h2_cr) result(r
 
     ! Heating from H2 formation
     H2_formation_rate = alpha_H2(T, f_dg, xe, xi_h2_cr, G0, xHI, xHII, nH)
-    ! TODO(code): double check scaling on this
     rate = rate + (2.4d-12 * H2_formation_rate * xHI * nH * nH) ! [cm3 s-1]
 
 END FUNCTION H2_heating
@@ -1550,6 +1545,7 @@ FUNCTION CT_heat_cool(T, element_number_densities, element_ion_fractions) result
 END FUNCTION CT_heat_cool
 
 FUNCTION local_photoheating(tables, dNp, element_number_densities, element_ion_fractions, ilevel) result(rate)
+    ! Heating due to photoionization from the local radiation field
     use rtz_module, only: elements, n_elements
     use coolrates_module, only: neq_cooling_t
     use rt_parameters, only: nrtgrp
@@ -1575,8 +1571,9 @@ FUNCTION local_photoheating(tables, dNp, element_number_densities, element_ion_f
     end do
 END FUNCTION local_photoheating
 
-FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_ion_fractions, &
-                     G0, f_dg, xe, xi_h_cr, xi_h2_cr, ss_factor, dNp, ilevel) result(rate)
+SUBROUTINE all_cooling(r, tables, T, ne, aexp, element_number_densities, element_ion_fractions, &
+                     G0, f_dg, xe, xi_h_cr, xi_h2_cr, ss_factor, dNp, ilevel, rate, &
+                     saved_cooling_rates, saved_cooling_rates_names)
     ! Main cooling driver
     ! 
     ! T --> Temperature [K]
@@ -1601,7 +1598,9 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
     real(KIND=8), intent(in):: element_ion_fractions(27,27)
     real(kind=8), dimension(nrtgrp), intent(in):: dNp
     integer, intent(in):: ilevel
-    real(KIND=8):: rate
+    real(KIND=8), intent(inout):: rate
+    real(KIND=8), dimension(50), intent(inout)::saved_cooling_rates
+    character(len=20), dimension(50), intent(inout)::saved_cooling_rates_names
     real(KIND=8):: nH_I, nH_II, nH2, nHe_I, nHe_II, nHe_III, nH, xHI, xHII, xH2
     real(KIND=8):: metal_cool_smooth_f1, metal_cool_smooth_f2
     real(KIND=8):: cooling_HI, cooling_HII, cooling_HeI, cooling_HeII
@@ -1616,7 +1615,7 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
     real(KIND=8):: cooling_fine_structure_SiI, cooling_fine_structure_SiII
     real(KIND=8):: cooling_fine_structure_SI
     real(KIND=8):: cooling_fine_structure_FeI, cooling_fine_structure_FeII
-    real(KIND=8):: dust_cooling
+    real(KIND=8):: dust_cooling, dust_rec_cooling, dust_coll_cooling
     real(KIND=8):: photoelectric_heat
     real(KIND=8):: cosmic_ray_heat
     real(KIND=8):: uvb_photoheat
@@ -1625,6 +1624,10 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
     real(KIND=8):: charge_transfer_heat_cool
     real(KIND=8):: photoheating
     real(KIND=8):: total_cooling, total_heating
+    integer:: save_cooling_counter
+
+    save_cooling_counter = 1
+    saved_cooling_rates_names = ''
 
     nH_I = element_number_densities(1) * element_ion_fractions(1,1)
     nH_II = element_number_densities(1) * element_ion_fractions(1,2)
@@ -1668,10 +1671,23 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
     total_primordial_cooling = total_primordial_cooling + cooling_HeI + cooling_HeII + cooling_HeIII
     total_primordial_cooling = total_primordial_cooling + cooling_bremmstrahlung + cooling_compton + cooling_H2
 
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = cooling_HI; saved_cooling_rates_names(save_cooling_counter) = 'cool_HI'; save_cooling_counter = save_cooling_counter + 1
+    saved_cooling_rates(save_cooling_counter) = cooling_HII; saved_cooling_rates_names(save_cooling_counter) = 'cool_HII'; save_cooling_counter = save_cooling_counter + 1
+    saved_cooling_rates(save_cooling_counter) = cooling_HeI; saved_cooling_rates_names(save_cooling_counter) = 'cool_HeI'; save_cooling_counter = save_cooling_counter + 1
+    saved_cooling_rates(save_cooling_counter) = cooling_HeII; saved_cooling_rates_names(save_cooling_counter) = 'cool_HeII'; save_cooling_counter = save_cooling_counter + 1
+    saved_cooling_rates(save_cooling_counter) = cooling_HeIII; saved_cooling_rates_names(save_cooling_counter) = 'cool_HeIII'; save_cooling_counter = save_cooling_counter + 1; 
+    saved_cooling_rates(save_cooling_counter) = cooling_bremmstrahlung; saved_cooling_rates_names(save_cooling_counter) = 'cool_bremm'; save_cooling_counter = save_cooling_counter + 1
+    saved_cooling_rates(save_cooling_counter) = cooling_compton; saved_cooling_rates_names(save_cooling_counter) = 'cool_compton'; save_cooling_counter = save_cooling_counter + 1
+    saved_cooling_rates(save_cooling_counter) = cooling_H2; saved_cooling_rates_names(save_cooling_counter) = 'cool_H2'; save_cooling_counter = save_cooling_counter + 1
+
     ! Metal line cooling -- high temperature
     high_T_metal_cooling = 0.d0
     high_T_metal_cooling = get_high_t_cooling_rates(T, ne, element_number_densities, &
                                                     element_ion_fractions, metal_cool_smooth_f1)
+
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = high_T_metal_cooling; saved_cooling_rates_names(save_cooling_counter) = 'high_T_metal_cool'; save_cooling_counter = save_cooling_counter + 1
 
     ! Metal line cooling -- low temperature (fine structure)
     z = (1.d0 / aexp) - 1.d0
@@ -1681,114 +1697,147 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
         if (elements(6)%atomic_number .gt. 0) then 
             ! CI cooling
             n_ion_fs = element_number_densities(6) * element_ion_fractions(6,1)
+            cooling_fine_structure_CI = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_CI = CI_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                             ne, nH2, nHe_I, nHe_II, &
                                                             nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_CI
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_CI * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_CI'; save_cooling_counter = save_cooling_counter + 1
             
             ! CII cooling
             n_ion_fs = element_number_densities(6) * element_ion_fractions(6,2)
+            cooling_fine_structure_CII = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then 
                 cooling_fine_structure_CII = CII_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
                                                                 nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_CII
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_CII * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_CII'; save_cooling_counter = save_cooling_counter + 1
         end if
         
         if (elements(7)%atomic_number .gt. 0) then 
             ! NII cooling
             n_ion_fs = element_number_densities(7) * element_ion_fractions(7,2)
+            cooling_fine_structure_NII = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_NII = NII_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
                                                                 nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_NII
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_NII * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_NII'; save_cooling_counter = save_cooling_counter + 1
         end if
         
         if (elements(8)%atomic_number .gt. 0) then 
             ! OI cooling
             n_ion_fs = element_number_densities(8) * element_ion_fractions(8,1)
+            cooling_fine_structure_OI = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_OI = OI_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                             ne, nH2, nHe_I, nHe_II, &
                                                             nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_OI
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_OI * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_OI'; save_cooling_counter = save_cooling_counter + 1
 
             ! OIII cooling
             n_ion_fs = element_number_densities(8) * element_ion_fractions(8,3)
+            cooling_fine_structure_OIII = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_OIII = OIII_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
                                                                 nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_OIII
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_OIII * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_OIII'; save_cooling_counter = save_cooling_counter + 1
         end if
 
         if (elements(10)%atomic_number .gt. 0) then 
             ! NeII cooling
             n_ion_fs = element_number_densities(10) * element_ion_fractions(10,2)
+            cooling_fine_structure_NeII = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_NeII = NeII_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
                                                                 nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_NeII
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_NeII * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_NeII'; save_cooling_counter = save_cooling_counter + 1
         end if
         
         if (elements(14)%atomic_number .gt. 0) then 
             ! SiI cooling
             n_ion_fs = element_number_densities(14) * element_ion_fractions(14,1)
+            cooling_fine_structure_SiI = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_SiI = SiI_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
                                                                 nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_SiI
             end if
-            
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_SiI * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_SiI'; save_cooling_counter = save_cooling_counter + 1
+
             ! SiII cooling
             n_ion_fs = element_number_densities(14) * element_ion_fractions(14,2)
+            cooling_fine_structure_SiII = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_SiII = SiII_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
                                                                 nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_SiII
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_SiII * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_SiII'; save_cooling_counter = save_cooling_counter + 1
         end if
         
         if (elements(16)%atomic_number .gt. 0) then 
             ! SI cooling
             n_ion_fs = element_number_densities(16) * element_ion_fractions(16,1)
+            cooling_fine_structure_SI = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_SI = SI_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                               ne, nH2, nHe_I, nHe_II, &
                                                               nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_SI
             end if
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_SI * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_SI'; save_cooling_counter = save_cooling_counter + 1
         end if
         
         if (elements(26)%atomic_number .gt. 0) then 
             ! FeI cooling
             n_ion_fs = element_number_densities(26) * element_ion_fractions(26,1)
+            cooling_fine_structure_FeI = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then 
                 cooling_fine_structure_FeI = FeI_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
                                                                 nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_FeI
             end if 
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_FeI * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_FeI'; save_cooling_counter = save_cooling_counter + 1
             
             ! FeII cooling
             n_ion_fs = element_number_densities(26) * element_ion_fractions(26,2)
+            cooling_fine_structure_FeII = 0.d0
             if (n_ion_fs .gt. MIN_COOL_ION) then
                 cooling_fine_structure_FeII = FeII_fine_structure(T, n_ion_fs, nH_I, nH_II, &
                                                                 ne, nH2, nHe_I, nHe_II, &
-                                                                nHe_III, z);
+                                                                nHe_III, z)
                 total_fine_structure = total_fine_structure + cooling_fine_structure_FeII
             end if  
+            ! Save cooling rates
+            saved_cooling_rates(save_cooling_counter) = cooling_fine_structure_FeII * metal_cool_smooth_f2; saved_cooling_rates_names(save_cooling_counter) = 'cool_FeII'; save_cooling_counter = save_cooling_counter + 1
         end if   
     end if
 
@@ -1796,13 +1845,21 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
     total_fine_structure = total_fine_structure * metal_cool_smooth_f2
 
     ! Dust cooling
-    dust_cooling = dust_recombination_cooling(T, G0, ne, f_dg, element_number_densities(1))
-    ! dust_cooling = dust_recombination_cooling_WD01(T, G0, ne, f_dg, element_number_densities(1))
-    dust_cooling = dust_cooling + dust_gas_collisional_cooling(T, G0, xH2*2.d0, aexp, element_number_densities(1), f_dg) 
+    dust_rec_cooling = dust_recombination_cooling(T, G0, ne, f_dg, element_number_densities(1))
+    ! dust_rec_cooling = dust_recombination_cooling_WD01(T, G0, ne, f_dg, element_number_densities(1))
+    dust_coll_cooling =  dust_gas_collisional_cooling(T, G0, xH2*2.d0, aexp, element_number_densities(1), f_dg) 
+    dust_cooling = dust_rec_cooling + dust_coll_cooling
     
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = dust_rec_cooling; saved_cooling_rates_names(save_cooling_counter) = 'cool_dust_rec'; save_cooling_counter = save_cooling_counter + 1
+    saved_cooling_rates(save_cooling_counter) = dust_coll_cooling; saved_cooling_rates_names(save_cooling_counter) = 'cool_dust_col'; save_cooling_counter = save_cooling_counter + 1
+
     ! Photoelectric heating --> note factor of 1.7 is because IUV
     photoelectric_heat = photoelectric_heating(T, G0, ne, f_dg, element_number_densities(1))
     ! photoelectric_heat = photoelectric_heating_WD01(T, G0, ne, f_dg, element_number_densities(1))
+
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = photoelectric_heat; saved_cooling_rates_names(save_cooling_counter) = 'heat_PE'; save_cooling_counter = save_cooling_counter + 1
 
     ! Cosmic ray heating
     cosmic_ray_heat = cosmic_ray_heating(xe, nH_I, nHe_I, nH2, &
@@ -1810,23 +1867,41 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
                                          element_number_densities, &
                                          element_ion_fractions)
 
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = cosmic_ray_heat; saved_cooling_rates_names(save_cooling_counter) = 'heat_CR'; save_cooling_counter = save_cooling_counter + 1
+
     ! Photoheating from the UV background
     uvb_photoheat = photoheating_UVB(element_number_densities, element_ion_fractions)
     uvb_photoheat = uvb_photoheat * ss_factor ! Account for self-shielding
 
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = uvb_photoheat; saved_cooling_rates_names(save_cooling_counter) = 'heat_UVB'; save_cooling_counter = save_cooling_counter + 1
+
     ! Photoheating from the G0 FUV background
     uvb_photoheat_G0 = photoheating_UVB_G0(G0, element_number_densities,element_ion_fractions)
+
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = uvb_photoheat_G0; saved_cooling_rates_names(save_cooling_counter) = 'heat_G0'; save_cooling_counter = save_cooling_counter + 1
 
     ! Heating from H2 formation and destruction
     ! h2_heat = H2_heating(G0, nH2, nH, T, xH2, xHI, xHII, xe, f_dg, xi_h2_cr)
     h2_heat = H2_heating_bialy(G0, nH2, nH, T, xH2, xHI, xHII, xe, f_dg, xi_h2_cr)
 
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = h2_heat; saved_cooling_rates_names(save_cooling_counter) = 'heat_H2'; save_cooling_counter = save_cooling_counter + 1
+
     ! Heating and cooling from charge transfer reactions
     charge_transfer_heat_cool = CT_heat_cool(T, element_number_densities, element_ion_fractions)
+
+    ! Save cooling rates
+    saved_cooling_rates(save_cooling_counter) = charge_transfer_heat_cool; saved_cooling_rates_names(save_cooling_counter) = 'heat_CT'; save_cooling_counter = save_cooling_counter + 1
 
     ! Photoheating from the local radiation field
     if (r%rt_advect) then
        photoheating = local_photoheating(tables, dNp, element_number_densities, element_ion_fractions, ilevel)
+
+       ! Save cooling rates
+       saved_cooling_rates(save_cooling_counter) = photoheating; saved_cooling_rates_names(save_cooling_counter) = 'heat_PH'; save_cooling_counter = save_cooling_counter + 1
     end if
 
     !////////////////////////////////////////////////////
@@ -1861,6 +1936,6 @@ FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_i
 
     rate = total_heating - total_cooling
 
-END FUNCTION all_cooling
+END SUBROUTINE all_cooling
 
 end module rtz_coolrates_module

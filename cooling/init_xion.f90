@@ -180,8 +180,8 @@ subroutine init_xion(r,g,m,tables,ilevel)
         ! Do the main computation of equilibrium abundances
 #ifdef RTZ
         ! In the case of RTZ, we set everything to neutral to start
-        counter = 1
         do i=1,nleaf ! loop over cells
+          counter = 1
           do iE=1,n_elements ! loop over elements
              if (elements(iE)%atomic_number.gt.0) then 
                 do iI=1,elements(iE)%n_ions + elements(iE)%n_mol ! loop over ions + molecules

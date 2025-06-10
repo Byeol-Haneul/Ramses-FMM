@@ -357,7 +357,7 @@ subroutine m_read_params(pst)
   logical::rtz_include_HM12_UVB=.true.
   logical::isH2_rtz=.false.
   real(kind=8)::rtz_UV_background_G0=0.d0
-  real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
+  real(kind=8)::rtz_primary_cosmic_ray_ionization_rate=0.d0
   real(kind=8)::rtz_max_cool_timestep=1.d11
   integer::rtz_eqm_min_its
 
@@ -571,7 +571,7 @@ subroutine m_read_params(pst)
        & ,rtz_cooling, rtz_equilibrium_test, rtz_include_collisional_ionization &
        & ,rtz_include_photoionization, rtz_include_cosmic_ray_ionization &
        & ,rtz_include_charge_exchange, rtz_include_dust_recombination, rtz_UV_background_G0 &
-       & ,rtz_total_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
+       & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
@@ -862,7 +862,6 @@ subroutine m_read_params(pst)
   ! Max size checks
   !-----------------
   if(nlevelmax>MAXLEVEL)then
-     write(*,*) "Hello",nlevelmax
      write(*,*) 'Error: nlevelmax>MAXLEVEL'
      call mdl_abort(s%mdl)
   end if
@@ -1397,7 +1396,7 @@ subroutine m_read_params(pst)
   s%r%rtz_include_HM12_UVB=rtz_include_HM12_UVB
   s%r%isH2_rtz=isH2_rtz
   s%r%rtz_UV_background_G0=rtz_UV_background_G0
-  s%r%rtz_total_cosmic_ray_ionization_rate=rtz_total_cosmic_ray_ionization_rate
+  s%r%rtz_primary_cosmic_ray_ionization_rate=rtz_primary_cosmic_ray_ionization_rate
   s%r%rtz_max_cool_timestep=rtz_max_cool_timestep
   s%r%rtz_eqm_min_its=rtz_eqm_min_its
 #ifdef RTZ

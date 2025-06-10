@@ -288,7 +288,7 @@ module amr_commons
      logical::rtz_include_HM12_UVB=.true.
      logical::isH2_rtz=.false.
      real(kind=8)::rtz_UV_background_G0=0.d0
-     real(kind=8)::rtz_total_cosmic_ray_ionization_rate=0.d0
+     real(kind=8)::rtz_primary_cosmic_ray_ionization_rate=0.d0
      real(kind=8)::rtz_max_cool_timestep=1.d11
      integer::rtz_eqm_min_its=3000
 
