@@ -1549,8 +1549,34 @@ FUNCTION CT_heat_cool(T, element_number_densities, element_ion_fractions) result
 
 END FUNCTION CT_heat_cool
 
-FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fractions, &
-                     G0, f_dg, xe, xi_h_cr, xi_h2_cr, ss_factor) result(rate)
+FUNCTION local_photoheating(tables, dNp, element_number_densities, element_ion_fractions, ilevel) result(rate)
+    use rtz_module, only: elements, n_elements
+    use coolrates_module, only: neq_cooling_t
+    use rt_parameters, only: nrtgrp
+    implicit none
+    type(neq_cooling_t)::tables
+    real(KIND=8), intent(in):: element_number_densities(27)
+    real(KIND=8), intent(in):: element_ion_fractions(27,27)
+    real(KIND=8), dimension(nrtgrp), intent(in):: dNp
+    integer, intent(in):: ilevel
+    real(KIND=8):: rate
+    integer:: ii,jj,kk
+
+    rate = 0.d0
+    do ii=1,n_elements
+       if (elements(ii)%atomic_number.gt.0) then
+          do jj=1,elements(ii)%n_ions - 1
+             do kk=1,nrtgrp
+                rate = rate + dNp(kk) * element_number_densities(ii) &
+                       * element_ion_fractions(ii,jj) * tables%PHrate(kk,ii,jj,ilevel)
+             end do
+          end do
+       end if
+    end do
+END FUNCTION local_photoheating
+
+FUNCTION all_cooling(r, tables, T, ne, aexp, element_number_densities, element_ion_fractions, &
+                     G0, f_dg, xe, xi_h_cr, xi_h2_cr, ss_factor, dNp, ilevel) result(rate)
     ! Main cooling driver
     ! 
     ! T --> Temperature [K]
@@ -1565,11 +1591,16 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     ! 
     use amr_commons, only: run_t
     use rtz_module, only: elements
+    use coolrates_module, only: neq_cooling_t
+    use rt_parameters, only: nrtgrp
     implicit none
     type(run_t):: r
+    type(neq_cooling_t)::tables
     real(KIND=8), intent(in):: T, ne, aexp, G0, f_dg, xe, xi_h_cr, xi_h2_cr, ss_factor
     real(KIND=8), intent(in):: element_number_densities(27)
     real(KIND=8), intent(in):: element_ion_fractions(27,27)
+    real(kind=8), dimension(nrtgrp), intent(in):: dNp
+    integer, intent(in):: ilevel
     real(KIND=8):: rate
     real(KIND=8):: nH_I, nH_II, nH2, nHe_I, nHe_II, nHe_III, nH, xHI, xHII, xH2
     real(KIND=8):: metal_cool_smooth_f1, metal_cool_smooth_f2
@@ -1592,6 +1623,7 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     real(KIND=8):: uvb_photoheat_G0
     real(KIND=8):: h2_heat
     real(KIND=8):: charge_transfer_heat_cool
+    real(KIND=8):: photoheating
     real(KIND=8):: total_cooling, total_heating
 
     nH_I = element_number_densities(1) * element_ion_fractions(1,1)
@@ -1792,6 +1824,11 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
     ! Heating and cooling from charge transfer reactions
     charge_transfer_heat_cool = CT_heat_cool(T, element_number_densities, element_ion_fractions)
 
+    ! Photoheating from the local radiation field
+    if (r%rt_advect) then
+       photoheating = local_photoheating(tables, dNp, element_number_densities, element_ion_fractions, ilevel)
+    end if
+
     !////////////////////////////////////////////////////
     !//           Calculate Heatint & Cooling          //
     !////////////////////////////////////////////////////
@@ -1816,6 +1853,10 @@ FUNCTION all_cooling(r, T, ne, aexp, element_number_densities, element_ion_fract
 
     if (r%isH2_rtz) then
        total_heating = total_heating + h2_heat
+    end if
+
+    if (r%rt_advect) then
+       total_heating = total_heating + photoheating
     end if
 
     rate = total_heating - total_cooling
