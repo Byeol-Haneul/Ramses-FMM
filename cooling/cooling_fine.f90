@@ -206,11 +206,11 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
                        ! This gives us a number density [Atoms/cm^3]
                        nElement(ii,i) = m%grid(ind_leaf(i))%uold(ind,r%ichem+e_counter) &
                                        *scale_nH / elements(ii)%atomic_mass
-                       e_counter = e_counter + 1
                     end if
                  end do ! end loop over leaf cells
-                 counter = counter + 1
+                 counter = counter + 1 ! increment ionization counter
               end do ! end loop over ions
+              e_counter = e_counter + 1 ! increment element counter
            end if
         end do ! end loop over elements
 
