@@ -3,13 +3,13 @@
 !##########################################################################
 !##########################################################################
 subroutine interpol_hydro(u1,u2,interpol_var,interpol_type,smallr)
-  use amr_parameters, only: dp, ndim,twotondim,twondim
+  use amr_parameters, only: ndim,twotondim,twondim
   use hydro_parameters, only: nvar, nener
   implicit none
   integer::interpol_var,interpol_type
-  real(dp)::smallr
-  real(dp),dimension(0:twondim  ,1:nvar)::u1
-  real(dp),dimension(1:twotondim,1:nvar)::u2
+  real(kind=8)::smallr
+  real(kind=8),dimension(0:twondim  ,1:nvar)::u1
+  real(kind=8),dimension(1:twotondim,1:nvar)::u2
   !----------------------------------------------------------
   ! This routine performs a prolongation (interpolation)
   ! operation for newly refined cells or buffer cells.
@@ -26,10 +26,10 @@ subroutine interpol_hydro(u1,u2,interpol_var,interpol_type,smallr)
   integer::irad
 #endif
   integer::j,ivar,idim,ind,ix,iy,iz
-  real(dp),dimension(1:8,1:3)::xc
-  real(dp),dimension(0:twondim)::a
-  real(dp),dimension(1:ndim)::w
-  real(dp)::ekin,erad
+  real(kind=8),dimension(1:8,1:3)::xc
+  real(kind=8),dimension(0:twondim)::a
+  real(kind=8),dimension(1:ndim)::w
+  real(kind=8)::ekin,erad
 
 #ifdef HYDRO
 
@@ -112,16 +112,16 @@ end subroutine interpol_hydro
 !##########################################################################
 !##########################################################################
 subroutine interpol_mhd(u1,u2,B1,B2,B3,refined,interpol_var,interpol_type,smallr)
-  use amr_parameters, only: dp,ndim,twotondim,twondim
+  use amr_parameters, only: ndim,twotondim,twondim
   use hydro_parameters, only: nvar, nener
   implicit none
   integer::interpol_var,interpol_type
-  real(dp)::smallr
-  real(dp),dimension(0:twondim,1:nvar)::u1
-  real(dp),dimension(0:twondim,1:6)::B1
-  real(dp),dimension(1:twotondim,1:nvar)::u2
-  real(dp),dimension(1:twotondim,1:6)::B2
-  real(dp),dimension(1:twondim,1:twotondim,1:6)::B3
+  real(kind=8)::smallr
+  real(kind=8),dimension(0:twondim,1:nvar)::u1
+  real(kind=8),dimension(0:twondim,1:6)::B1
+  real(kind=8),dimension(1:twotondim,1:nvar)::u2
+  real(kind=8),dimension(1:twotondim,1:6)::B2
+  real(kind=8),dimension(1:twondim,1:twotondim,1:6)::B3
   logical,dimension(1:twondim)::refined
   !----------------------------------------------------------
   ! This routine performs a prolongation (interpolation)
@@ -139,10 +139,10 @@ subroutine interpol_mhd(u1,u2,B1,B2,B3,refined,interpol_var,interpol_type,smallr
   integer::irad
 #endif
   integer::i,j,ivar,idim,ind,ix,iy,iz
-  real(dp),dimension(1:twotondim,1:3)::xc
-  real(dp),dimension(0:twondim)::a
-  real(dp),dimension(1:ndim)::w
-  real(dp)::ekin,emag,erad
+  real(kind=8),dimension(1:twotondim,1:3)::xc
+  real(kind=8),dimension(0:twondim)::a
+  real(kind=8),dimension(1:ndim)::w
+  real(kind=8)::ekin,emag,erad
 
   ! Set position of cell centers relative to grid center
   do ind=1,twotondim
@@ -288,11 +288,11 @@ end subroutine interpol_mhd
 !###########################################################
 !###########################################################
 subroutine interpol_mag(B1,B2,B3,refined,interpol_type)
-  use amr_parameters, only: dp, twondim, twotondim
+  use amr_parameters, only: twondim, twotondim
   implicit none
-  real(dp),dimension(0:twondim,1:6)::B1
-  real(dp),dimension(1:twotondim,1:6)::B2
-  real(dp),dimension(1:twondim,1:twotondim,1:6)::B3
+  real(kind=8),dimension(0:twondim,1:6)::B1
+  real(kind=8),dimension(1:twotondim,1:6)::B2
+  real(kind=8),dimension(1:twondim,1:twotondim,1:6)::B3
   logical ,dimension(1:twondim)::refined
   integer::interpol_type
   !----------------------------------------------------------
@@ -302,9 +302,9 @@ subroutine interpol_mag(B1,B2,B3,refined,interpol_type)
   ! Divergence free is garanteed as in Balsara (2001) JCP, 174, 614.
   !----------------------------------------------------------
   integer::i,j,k,ind,imax,jmax,kmax
-  real(dp),dimension(-1:1,0:1,0:1),save::u
-  real(dp),dimension(0:1,-1:1,0:1),save::v
-  real(dp),dimension(0:1,0:1,-1:1),save::w
+  real(kind=8),dimension(-1:1,0:1,0:1),save::u
+  real(kind=8),dimension(0:1,-1:1,0:1),save::v
+  real(kind=8),dimension(0:1,0:1,-1:1),save::w
 
   imax=1; jmax=0; kmax=0
 #if NDIM>1
@@ -348,12 +348,12 @@ end subroutine interpol_mag
 !###########################################################
 !###########################################################
 subroutine interpol_faces(B1,u,v,w,interpol_type)
-  use amr_parameters, only: dp, twondim
+  use amr_parameters, only: twondim
   implicit none
-  real(dp),dimension(0:twondim,1:6)::B1
-  real(dp),dimension(-1:1,0:1,0:1)::u
-  real(dp),dimension(0:1,-1:1,0:1)::v
-  real(dp),dimension(0:1,0:1,-1:1)::w
+  real(kind=8),dimension(0:twondim,1:6)::B1
+  real(kind=8),dimension(-1:1,0:1,0:1)::u
+  real(kind=8),dimension(0:1,-1:1,0:1)::v
+  real(kind=8),dimension(0:1,0:1,-1:1)::w
   integer::interpol_type
   ! TVD interpolation from coarse faces
   ! interpol_mag_type=0: straight injection
@@ -361,8 +361,8 @@ subroutine interpol_faces(B1,u,v,w,interpol_type)
   ! interpol_mag_type=2: linear interpolation with Monotonized Central slope
   ! interpol_mag_type=3: linear interpolation without limiters
   integer::i,j,k,imax,jmax,kmax
-  real(dp),dimension(0:4)::b
-  real(dp),dimension(1:2)::s
+  real(kind=8),dimension(0:4)::b
+  real(kind=8),dimension(1:2)::s
 
   imax=1; jmax=0; kmax=0
 #if NDIM>1
@@ -503,13 +503,13 @@ end subroutine interpol_faces
 !###########################################################
 !###########################################################
 subroutine copy_from_refined_faces(B3,refined,u,v,w)
-  use amr_parameters,only:dp,twondim,twotondim
+  use amr_parameters,only: twondim, twotondim
   implicit none
   logical,dimension(1:twondim)::refined
-  real(dp),dimension(1:twondim,1:twotondim,1:6)::B3
-  real(dp),dimension(-1:1,0:1,0:1)::u
-  real(dp),dimension(0:1,-1:1,0:1)::v
-  real(dp),dimension(0:1,0:1,-1:1)::w
+  real(kind=8),dimension(1:twondim,1:twotondim,1:6)::B3
+  real(kind=8),dimension(-1:1,0:1,0:1)::u
+  real(kind=8),dimension(0:1,-1:1,0:1)::v
+  real(kind=8),dimension(0:1,0:1,-1:1)::w
 
   ! TVD interpolation from coarse faces
   integer::i,j,k,ind,imax,jmax,kmax
@@ -592,14 +592,13 @@ end subroutine copy_from_refined_faces
 !###########################################################
 !###########################################################
 subroutine cmp_central_faces(u,v,w)
-  use amr_parameters,only:dp
   implicit none
-  real(dp),dimension(-1:1,0:1,0:1)::u
-  real(dp),dimension(0:1,-1:1,0:1)::v
-  real(dp),dimension(0:1,0:1,-1:1)::w
+  real(kind=8),dimension(-1:1,0:1,0:1)::u
+  real(kind=8),dimension(0:1,-1:1,0:1)::v
+  real(kind=8),dimension(0:1,0:1,-1:1)::w
 
   integer::i,j,k,ii,jj,kk,imax,jmax,kmax
-  real(dp)::UXX,VYY,WZZ,UXYZ,VXYZ,WXYZ
+  real(kind=8)::UXX,VYY,WZZ,UXYZ,VXYZ,WXYZ
 
   imax=1; jmax=0; kmax=0
 #if NDIM>1
@@ -609,12 +608,12 @@ subroutine cmp_central_faces(u,v,w)
   kmax=1
 #endif
 
-  UXX = 0.0_dp
-  VYY = 0.0_dp
-  WZZ = 0.0_dp
-  UXYZ = 0.0_dp
-  VXYZ = 0.0_dp
-  WXYZ = 0.0_dp
+  UXX = 0.0
+  VYY = 0.0
+  WZZ = 0.0
+  UXYZ = 0.0
+  VXYZ = 0.0
+  WXYZ = 0.0
 
 #if NDIM==2
   do i = 0,imax
@@ -698,14 +697,13 @@ end subroutine cmp_central_faces
 !###########################################################
 !###########################################################
 subroutine compute_2d_tvd(b,s,interpol_type)
-  use amr_parameters,only:dp
   use const
   implicit none
-  real(dp),dimension(0:4)::b
-  real(dp),dimension(1:2)::s
+  real(kind=8),dimension(0:4)::b
+  real(kind=8),dimension(1:2)::s
   integer::interpol_type
 
-  real(dp)::dsgn, dlim, dcen, dlft, drgt, slop
+  real(kind=8)::dsgn, dlim, dcen, dlft, drgt, slop
 
   if(interpol_type==3)then
      dlft = half*(b(0) - b(1))
@@ -741,14 +739,13 @@ end subroutine compute_2d_tvd
 !###########################################################
 !###########################################################
 subroutine compute_1d_tvd(b,s,interpol_type)
-  use amr_parameters,only:dp
   use const
   implicit none
-  real(dp),dimension(0:4)::b
-  real(dp),dimension(1:2)::s
+  real(kind=8),dimension(0:4)::b
+  real(kind=8),dimension(1:2)::s
   integer::interpol_type
 
-  real(dp)::dsgn, dlim, dcen, dlft, drgt, slop
+  real(kind=8)::dsgn, dlim, dcen, dlft, drgt, slop
 
   if(interpol_type==3)then
      dlft = half*(b(0) - b(1))
@@ -771,15 +768,15 @@ end subroutine compute_1d_tvd
 !###########################################################
 !###########################################################
 subroutine compute_limiter_minmod(a,w)
-  use amr_parameters, only: dp, ndim,twondim,twotondim
+  use amr_parameters, only: ndim,twondim,twotondim
   implicit none
-  real(dp),dimension(0:twondim)::a
-  real(dp),dimension(1:ndim)::w
+  real(kind=8),dimension(0:twondim)::a
+  real(kind=8),dimension(1:ndim)::w
   !---------------
   ! MinMod slope
   !---------------
   integer::idim
-  real(dp)::diff_left,diff_right,minmod
+  real(kind=8)::diff_left,diff_right,minmod
 
   do idim=1,ndim
      diff_left=0.5*(a(2*idim)-a(0))
@@ -799,19 +796,19 @@ end subroutine compute_limiter_minmod
 !###########################################################
 !###########################################################
 subroutine compute_limiter_central(a,w)
-  use amr_parameters, only: dp, ndim,twondim,twotondim
+  use amr_parameters, only: ndim,twondim,twotondim
   implicit none
-  real(dp),dimension(0:twondim)::a
-  real(dp),dimension(1:ndim)::w
+  real(kind=8),dimension(0:twondim)::a
+  real(kind=8),dimension(1:ndim)::w
   !---------------------------
   ! Monotonized Central slope
   !---------------------------
   integer::j,idim,ind,ix,iy,iz
-  real(dp),dimension(1:twotondim,1:3)::xc
-  real(dp)::xxc
-  real(dp),dimension(1:twotondim)::ac
-  real(dp)::corner,kernel,diff_corner,diff_kernel
-  real(dp)::max_limiter,min_limiter,limiter
+  real(kind=8),dimension(1:twotondim,1:3)::xc
+  real(kind=8)::xxc
+  real(kind=8),dimension(1:twotondim)::ac
+  real(kind=8)::corner,kernel,diff_corner,diff_kernel
+  real(kind=8)::max_limiter,min_limiter,limiter
 
   ! Set position of cell centers relative to grid center
   do ind=1,twotondim
@@ -859,7 +856,7 @@ subroutine compute_limiter_central(a,w)
   ! Compute max_limiter
   max_limiter=0.0D0
   if(diff_kernel*diff_corner > 0.0D0)then
-     max_limiter=MIN(1.0_dp,diff_kernel/diff_corner)
+     max_limiter=MIN(1.0d0,diff_kernel/diff_corner)
   end if
 
   ! Compute min of corners
@@ -881,7 +878,7 @@ subroutine compute_limiter_central(a,w)
   ! Compute min_limiter
   min_limiter=0.0D0
   if(diff_kernel*diff_corner > 0.0D0)then
-     min_limiter=MIN(1.0_dp,diff_kernel/diff_corner)
+     min_limiter=MIN(1.0d0,diff_kernel/diff_corner)
   end if
 
   ! Compute limiter
@@ -898,10 +895,10 @@ end subroutine compute_limiter_central
 !###########################################################
 !###########################################################
 subroutine compute_central(a,w)
-  use amr_parameters, only: dp, ndim,twondim,twotondim
+  use amr_parameters, only: ndim,twondim,twotondim
   implicit none
-  real(dp),dimension(0:twondim)::a
-  real(dp),dimension(1:ndim)::w
+  real(kind=8),dimension(0:twondim)::a
+  real(kind=8),dimension(1:ndim)::w
   !---------------------------
   ! Unlimited Central slope
   !---------------------------

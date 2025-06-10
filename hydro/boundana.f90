@@ -3,17 +3,17 @@
 !############################################################
 !############################################################
 subroutine boundana(r,g,x,u,dx,ibound,ncell)
-  use amr_parameters, only: dp, ndim, nvector
+  use amr_parameters, only: ndim, nvector
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  integer ::ibound                        ! Index of boundary region
-  integer ::ncell                         ! Number of active cells
-  real(dp)::dx                            ! Cell size
-  real(dp),dimension(1:nvector,1:nvar)::u ! Conservative variables
-  real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
+  integer ::ibound                            ! Index of boundary region
+  integer ::ncell                             ! Number of active cells
+  real(kind=8)::dx                            ! Cell size
+  real(kind=8),dimension(1:nvector,1:nvar)::u ! Conservative variables
+  real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine generates boundary conditions for RAMSES.
   ! Positions are in user (aka code) units:

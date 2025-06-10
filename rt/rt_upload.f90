@@ -70,7 +70,7 @@ subroutine rt_upload_fine(s,ilevel)
   integer::ioct,ind,ivar,icell
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:6,1:4)::hh
-  real(dp)::average
+  real(kind=8)::average
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 

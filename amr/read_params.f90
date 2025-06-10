@@ -73,14 +73,14 @@ subroutine m_read_params(pst)
   integer::nlevelmax=1        ! Maximum number of level
   integer::ngridmax=0         ! Maximum number of grids
   integer::ncachemax=10000    ! Maximum number of cache lines
-  real(dp)::boxlen=1.0D0      ! Cell sixe at level 0
-  real(dp)::box_size=0.0D0    ! Box length in active domain along x direction
-  integer::box_xmin=0         ! Min. Cartesian key for the box at levelmin in x direction
-  integer::box_xmax=0         ! Max. Cartesian key for the box at levelmin in x direction
-  integer::box_ymin=0         ! Min. Cartesian key for the box at levelmin in y direction
-  integer::box_ymax=0         ! Max. Cartesian key for the box at levelmin in y direction
-  integer::box_zmin=0         ! Min. Cartesian key for the box at levelmin in z direction
-  integer::box_zmax=0         ! Max. Cartesian key for the box at levelmin in z direction
+  real(kind=8)::boxlen=1.0D0      ! Cell sixe at level 0
+  real(kind=8)::box_size=0.0D0    ! Box length in active domain along x direction
+  integer::box_xmin=0 ! Min. Cartesian key for the box at levelmin in x direction
+  integer::box_xmax=0 ! Max. Cartesian key for the box at levelmin in x direction
+  integer::box_ymin=0 ! Min. Cartesian key for the box at levelmin in y direction
+  integer::box_ymax=0 ! Max. Cartesian key for the box at levelmin in y direction
+  integer::box_zmin=0 ! Min. Cartesian key for the box at levelmin in z direction
+  integer::box_zmax=0 ! Max. Cartesian key for the box at levelmin in z direction
 
   ! Output parameters
   integer::noutput=1          ! Total number of outputs
@@ -91,15 +91,15 @@ subroutine m_read_params(pst)
   real(kind=8)::run_time_hrs=0   ! Estimated run time in hrs
   real(kind=8)::bkp_last_min=10  ! Backup file before the end of run in min
   integer::bkp_modulo=0       ! Use modulo for backup file count
-  integer::nfile=1            ! Number of file per snapshot. Use -1 for nfile=ncpu
+  integer::nfile=1          ! Number of file per snapshot. Use -1 for nfile=ncpu
 
   ! Output times
-  real(dp),dimension(1:MAXOUT)::aout=1.1       ! Output expansion factors
-  real(dp),dimension(1:MAXOUT)::tout=0.0       ! Output times
+  real(kind=8),dimension(1:MAXOUT)::aout=1.1  ! Output expansion factors
+  real(kind=8),dimension(1:MAXOUT)::tout=0.0  ! Output times
 
   ! Movie
-  integer::imovout=0             ! Increment for output times
-  integer::imov=1                ! Initialize
+  integer::imovout=0     ! Increment for output times
+  integer::imov=1        ! Initialize
   real(kind=8)::tendmov=0.,aendmov=0.
   logical::movie=.false.
   logical::zoom_only=.false.
@@ -120,142 +120,142 @@ subroutine m_read_params(pst)
   ! Refinement parameters for each level
   integer ,dimension(1:MAXLEVEL)::nexpand = 1 ! Number of mesh expansion
   integer ,dimension(1:MAXLEVEL)::nsubcycle = 2 ! Subcycling at each level
-  real(dp),dimension(1:MAXLEVEL)::m_refine =-1.0 ! Lagrangian threshold
-  real(dp),dimension(1:MAXLEVEL)::r_refine =-1.0 ! Radius of refinement region
-  real(dp),dimension(1:MAXLEVEL)::x_refine = 0.0 ! Center of refinement region
-  real(dp),dimension(1:MAXLEVEL)::y_refine = 0.0 ! Center of refinement region
-  real(dp),dimension(1:MAXLEVEL)::z_refine = 0.0 ! Center of refinement region
-  real(dp),dimension(1:MAXLEVEL)::exp_refine = 2.0 ! Exponent for distance
-  real(dp),dimension(1:MAXLEVEL)::a_refine = 1.0 ! Ellipticity (Y/X)
-  real(dp),dimension(1:MAXLEVEL)::b_refine = 1.0 ! Ellipticity (Z/X)
-  real(dp)::var_cut_refine=-1.0 ! Threshold for variable-based refinement
-  real(dp)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
+  real(kind=8),dimension(1:MAXLEVEL)::m_refine =-1.0 ! Lagrangian threshold
+  real(kind=8),dimension(1:MAXLEVEL)::r_refine =-1.0 ! Radius of refinement region
+  real(kind=8),dimension(1:MAXLEVEL)::x_refine = 0.0 ! Center of refinement region
+  real(kind=8),dimension(1:MAXLEVEL)::y_refine = 0.0 ! Center of refinement region
+  real(kind=8),dimension(1:MAXLEVEL)::z_refine = 0.0 ! Center of refinement region
+  real(kind=8),dimension(1:MAXLEVEL)::exp_refine = 2.0 ! Exponent for distance
+  real(kind=8),dimension(1:MAXLEVEL)::a_refine = 1.0 ! Ellipticity (Y/X)
+  real(kind=8),dimension(1:MAXLEVEL)::b_refine = 1.0 ! Ellipticity (Z/X)
+  real(kind=8)::var_cut_refine=-1.0 ! Threshold for variable-based refinement
+  real(kind=8)::mass_cut_refine=-1.0 ! Mass threshold for particle-based refinement
   integer::ivar_refine=-1 ! Variable index for refinement
-  real(dp)::aexp_lock_refine=-1.0
+  real(kind=8)::aexp_lock_refine=-1.0
   logical::pic_lock_refine=.false.
 
   ! Default units
-  real(dp)::units_density=1.0 ! [g/cm^3]
-  real(dp)::units_time=1.0    ! [seconds]
-  real(dp)::units_length=1.0  ! [cm]
-  real(dp)::units_np=1.0      ! [#photon/cm^3]
+  real(kind=8)::units_density=1.0 ! [g/cm^3]
+  real(kind=8)::units_time=1.0    ! [seconds]
+  real(kind=8)::units_length=1.0  ! [cm]
+  real(kind=8)::units_np=1.0      ! [#photon/cm^3]
 
   ! Initial conditions parameters from grafic
-  real(dp)::aexp_ini=10.
-  real(dp)::omega_b=0.045
+  real(kind=8)::aexp_ini=10.
+  real(kind=8)::omega_b=0.045
 
   ! Initial condition regions parameters
   integer::nregion=0
   character(LEN=10),dimension(1:MAXREGION)::region_type='square'
-  real(dp),dimension(1:MAXREGION)::x_center=0.
-  real(dp),dimension(1:MAXREGION)::y_center=0.
-  real(dp),dimension(1:MAXREGION)::z_center=0.
-  real(dp),dimension(1:MAXREGION)::length_x=1.E10
-  real(dp),dimension(1:MAXREGION)::length_y=1.E10
-  real(dp),dimension(1:MAXREGION)::length_z=1.E10
-  real(dp),dimension(1:MAXREGION)::exp_region=2.0
+  real(kind=8),dimension(1:MAXREGION)::x_center=0.
+  real(kind=8),dimension(1:MAXREGION)::y_center=0.
+  real(kind=8),dimension(1:MAXREGION)::z_center=0.
+  real(kind=8),dimension(1:MAXREGION)::length_x=1.E10
+  real(kind=8),dimension(1:MAXREGION)::length_y=1.E10
+  real(kind=8),dimension(1:MAXREGION)::length_z=1.E10
+  real(kind=8),dimension(1:MAXREGION)::exp_region=2.0
 
   ! Initial condition files for each level
   logical::multiple=.false.
   character(LEN=20)::filetype='ascii'
   character(LEN=80),dimension(1:MAXLEVEL)::initfile=' '
-  real(dp)::ic_scale_m=1.0d0
+  real(kind=8)::ic_scale_m=1.0d0
 
   ! Initial conditions hydro variables
-  real(dp),dimension(1:MAXREGION)::d_region=0.
-  real(dp),dimension(1:MAXREGION)::u_region=0.
-  real(dp),dimension(1:MAXREGION)::v_region=0.
-  real(dp),dimension(1:MAXREGION)::w_region=0.
-  real(dp),dimension(1:MAXREGION)::p_region=0.
+  real(kind=8),dimension(1:MAXREGION)::d_region=0.
+  real(kind=8),dimension(1:MAXREGION)::u_region=0.
+  real(kind=8),dimension(1:MAXREGION)::v_region=0.
+  real(kind=8),dimension(1:MAXREGION)::w_region=0.
+  real(kind=8),dimension(1:MAXREGION)::p_region=0.
 #if NENER>0
-  real(dp),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
+  real(kind=8),dimension(1:MAXREGION,1:NENER)::prad_region=0.0
 #endif
 #if NVAR>5+NENER
-  real(dp),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
+  real(kind=8),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
 #endif
 #ifdef MHD
-  real(dp),dimension(1:MAXREGION)::B_region=0.
-  real(dp),dimension(1:MAXREGION)::C_region=0.
-  real(dp)::A_ave=0.,B_ave=0.,C_ave=0.
+  real(kind=8),dimension(1:MAXREGION)::B_region=0.
+  real(kind=8),dimension(1:MAXREGION)::C_region=0.
+  real(kind=8)::A_ave=0.,B_ave=0.,C_ave=0.
 #endif
 
   ! Initial condition rt variables
 #ifdef RT
   integer::rt_nregion=0
   character(LEN=10),dimension(1:MAXREGION)::rt_region_type='square'
-  real(dp),dimension(1:MAXREGION)::rt_reg_x_center=0.
-  real(dp),dimension(1:MAXREGION)::rt_reg_y_center=0.
-  real(dp),dimension(1:MAXREGION)::rt_reg_z_center=0.
-  real(dp),dimension(1:MAXREGION)::rt_reg_length_x=1.E10
-  real(dp),dimension(1:MAXREGION)::rt_reg_length_y=1.E10
-  real(dp),dimension(1:MAXREGION)::rt_reg_length_z=1.E10
-  real(dp),dimension(1:MAXREGION)::rt_exp_region=2.0
+  real(kind=8),dimension(1:MAXREGION)::rt_reg_x_center=0.
+  real(kind=8),dimension(1:MAXREGION)::rt_reg_y_center=0.
+  real(kind=8),dimension(1:MAXREGION)::rt_reg_z_center=0.
+  real(kind=8),dimension(1:MAXREGION)::rt_reg_length_x=1.E10
+  real(kind=8),dimension(1:MAXREGION)::rt_reg_length_y=1.E10
+  real(kind=8),dimension(1:MAXREGION)::rt_reg_length_z=1.E10
+  real(kind=8),dimension(1:MAXREGION)::rt_exp_region=2.0
   integer ,dimension(1:MAXREGION)::rt_reg_group=1
-  real(dp),dimension(1:MAXREGION)::rt_n_region=0.0 ! Photon density
-  real(dp),dimension(1:MAXREGION)::rt_u_region=0.0 !    Photon flux
-  real(dp),dimension(1:MAXREGION)::rt_v_region=0.0 !    Photon flux
-  real(dp),dimension(1:MAXREGION)::rt_w_region=0.0 !    Photon flux
+  real(kind=8),dimension(1:MAXREGION)::rt_n_region=0.0 ! Photon density
+  real(kind=8),dimension(1:MAXREGION)::rt_u_region=0.0 !    Photon flux
+  real(kind=8),dimension(1:MAXREGION)::rt_v_region=0.0 !    Photon flux
+  real(kind=8),dimension(1:MAXREGION)::rt_w_region=0.0 !    Photon flux
 #endif
 
   ! Refinement parameters for hydro
-  real(dp)::err_grad_d=-1.0  ! Density gradient
-  real(dp)::err_grad_u=-1.0  ! Velocity gradient
-  real(dp)::err_grad_p=-1.0  ! Pressure gradient
-  real(dp)::err_grad_xHI=-1.0! xHI gradient
-  real(dp)::err_grad_xHII=-1.0 ! xHII gradient
-  real(dp)::floor_d=1.d-10   ! Density floor
-  real(dp)::floor_u=1.d-10   ! Velocity floor
-  real(dp)::floor_p=1.d-10   ! Pressure floor
-  real(dp)::floor_xHI=1d-10  ! xHI floor
-  real(dp)::floor_xHII=1d-10 ! xHII floor
-  real(dp)::mass_sph=0.0D0   ! mass_sph
+  real(kind=8)::err_grad_d=-1.0  ! Density gradient
+  real(kind=8)::err_grad_u=-1.0  ! Velocity gradient
+  real(kind=8)::err_grad_p=-1.0  ! Pressure gradient
+  real(kind=8)::err_grad_xHI=-1.0! xHI gradient
+  real(kind=8)::err_grad_xHII=-1.0 ! xHII gradient
+  real(kind=8)::floor_d=1.d-10   ! Density floor
+  real(kind=8)::floor_u=1.d-10   ! Velocity floor
+  real(kind=8)::floor_p=1.d-10   ! Pressure floor
+  real(kind=8)::floor_xHI=1d-10  ! xHI floor
+  real(kind=8)::floor_xHII=1d-10 ! xHII floor
+  real(kind=8)::mass_sph=0.0D0   ! mass_sph
 #ifdef MHD
-  real(dp)::err_grad_b2=-1.0
-  real(dp)::err_grad_A=-1.0
-  real(dp)::err_grad_B=-1.0
-  real(dp)::err_grad_C=-1.0
-  real(dp)::floor_b2=1.d-10
-  real(dp)::floor_A=1.d-10
-  real(dp)::floor_B=1.d-10
-  real(dp)::floor_C=1.d-10
+  real(kind=8)::err_grad_b2=-1.0
+  real(kind=8)::err_grad_A=-1.0
+  real(kind=8)::err_grad_B=-1.0
+  real(kind=8)::err_grad_C=-1.0
+  real(kind=8)::floor_b2=1.d-10
+  real(kind=8)::floor_A=1.d-10
+  real(kind=8)::floor_B=1.d-10
+  real(kind=8)::floor_C=1.d-10
 #endif
 #if NENER>0
-  real(dp),dimension(1:NENER)::err_grad_prad=-1.0
+  real(kind=8),dimension(1:NENER)::err_grad_prad=-1.0
 #endif
 #if NVAR>5+NENER
-  real(dp),dimension(1:NVAR-5-NENER)::err_grad_var=-1.0
+  real(kind=8),dimension(1:NVAR-5-NENER)::err_grad_var=-1.0
 #endif
-  real(dp),dimension(1:MAXLEVEL)::jeans_refine=-1.0
+  real(kind=8),dimension(1:MAXLEVEL)::jeans_refine=-1.0
 
   ! Refinement parameters for rt
 #ifdef RT
-  real(dp)::rt_err_grad_cn(nrtgrp)=-1 ! Photon flux gradient for refinement
-  real(dp)::rt_floor_cn(nrtgrp)=1d-10 ! Photon flux floor for refinement
-  real(dp)::rt_refine_aexp=-1.0      ! Start expansion factor for RT refinements
+  real(kind=8)::rt_err_grad_cn(nrtgrp)=-1 ! Photon flux gradient for refinement
+  real(kind=8)::rt_floor_cn(nrtgrp)=1d-10 ! Photon flux floor for refinement
+  real(kind=8)::rt_refine_aexp=-1.0      ! Start expansion factor for RT refinements
 #endif
 
   ! Hydro solver parameters
   integer ::niter_riemann=10
   integer ::slope_type=1
   integer ::slope_mag_type=-1
-  real(dp)::gamma=1.4d0
-  real(dp),dimension(1:512)::gamma_rad=1.33333333334d0
-  real(dp)::courant_factor=0.5d0
-  real(dp)::difmag=0.0d0
-  real(dp)::etamag=0.0d0
-  real(dp)::smallc=1.d-10
-  real(dp)::smallr=1.d-10
+  real(kind=8)::gamma=1.4d0
+  real(kind=8),dimension(1:512)::gamma_rad=1.33333333334d0
+  real(kind=8)::courant_factor=0.5d0
+  real(kind=8)::difmag=0.0d0
+  real(kind=8)::etamag=0.0d0
+  real(kind=8)::smallc=1.d-10
+  real(kind=8)::smallr=1.d-10
   character(LEN=10)::scheme='muscl'
   character(LEN=10)::riemann='llf'
   character(LEN=10)::riemann2d='none'
   logical ::induction=.false.
   logical ::entropy=.false.
   logical ::turb=.false.
-  real(dp)::dual_energy=-1
-  real(dp)::T2_fix=0d0
-  real(dp),dimension(1:3)::constant_gravity=0.0d0
-  real(dp)::switch_llf_dmin=-1
-  real(dp)::switch_llf_pmin=-1
+  real(kind=8)::dual_energy=-1
+  real(kind=8)::T2_fix=0d0
+  real(kind=8),dimension(1:3)::constant_gravity=0.0d0
+  real(kind=8)::switch_llf_dmin=-1
+  real(kind=8)::switch_llf_pmin=-1
 
   ! Non-thernal energies and passive scalars index
   integer ::inener,ientropy,imetal,iturb,ichem
@@ -265,8 +265,8 @@ subroutine m_read_params(pst)
   integer ::interpol_type=1
 
   ! Poisson solver parameters
-  real(dp)::epsilon=1.0D-4 ! Convergence criterion
-  real(dp),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
+  real(kind=8)::epsilon=1.0D-4 ! Convergence criterion
+  real(kind=8),dimension(1:10)::gravity_params=0.0 ! Gravity parameters
   integer :: gravity_type=0 ! Type of gravity calculations (see user guide)
   integer :: cic_levelmax=0 ! Maximum level for CIC dark matter interpolation
   integer :: cg_levelmin=999   ! Min level for CG solver
@@ -295,22 +295,22 @@ subroutine m_read_params(pst)
   integer,dimension(1:MAXBOUND)::bound_ymax=0
   integer,dimension(1:MAXBOUND)::bound_zmin=0
   integer,dimension(1:MAXBOUND)::bound_zmax=0
-  real(dp),dimension(1:MAXBOUND)::d_bound=0
-  real(dp),dimension(1:MAXBOUND)::p_bound=0
-  real(dp),dimension(1:MAXBOUND)::u_bound=0
-  real(dp),dimension(1:MAXBOUND)::v_bound=0
-  real(dp),dimension(1:MAXBOUND)::w_bound=0
+  real(kind=8),dimension(1:MAXBOUND)::d_bound=0
+  real(kind=8),dimension(1:MAXBOUND)::p_bound=0
+  real(kind=8),dimension(1:MAXBOUND)::u_bound=0
+  real(kind=8),dimension(1:MAXBOUND)::v_bound=0
+  real(kind=8),dimension(1:MAXBOUND)::w_bound=0
 #if NENER>0
-  real(dp),dimension(1:MAXBOUND,1:NENER)::prad_bound=0
+  real(kind=8),dimension(1:MAXBOUND,1:NENER)::prad_bound=0
 #endif
 #if NVAR>5+NENER
-  real(dp),dimension(1:MAXBOUND,1:NVAR-5-NENER)::var_bound=0
+  real(kind=8),dimension(1:MAXBOUND,1:NVAR-5-NENER)::var_bound=0
 #endif
 #ifdef RT
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
-  real(dp),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
+  real(kind=8),dimension(1:MAXBOUND,1:nrtgrp)::rt_n_bound=0.0d0
+  real(kind=8),dimension(1:MAXBOUND,1:nrtgrp)::rt_u_bound=0.0d0
+  real(kind=8),dimension(1:MAXBOUND,1:nrtgrp)::rt_v_bound=0.0d0
+  real(kind=8),dimension(1:MAXBOUND,1:nrtgrp)::rt_w_bound=0.0d0
 #endif
 
   ! Cooling parameters
@@ -320,16 +320,16 @@ subroutine m_read_params(pst)
   logical::isothermal=.false. ! Force temperature to eos value
   logical::haardt_madau=.false.
   logical::self_shielding=.false.
-  real(dp)::J21=0,a_spec=1,z_ave=0,z_reion=8.5
+  real(kind=8)::J21=0,a_spec=1,z_ave=0,z_reion=8.5
   integer::eos_type=1 ! 1=isothermal, 2=polytrope, 3=isothermal+polytrope
-  real(dp)::eos_nH=1d50,eos_index=1,eos_T2=10d0
-  real(dp)::T2max=1d50
+  real(kind=8)::eos_nH=huge(1d0),eos_index=1,eos_T2=10
+  real(kind=8)::T2max=huge(1d0)
   logical::neq_chem=.false. ! Non-equilibrium cooling -------------------
   logical::is_init_xion=.false.   ! Initialize ionization from T profile?
   logical::upload_equilibrium_x=.false.! Enforce equ. xion when uploading
   logical::isHe=.true.            !      He ionization fractions tracked?
   logical::isH2=.false.           !                 H2 tracked (via xHI)?
-  real(dp)::neq_Tconst=-1         !             Const T in neq chemistry?
+  real(kind=8)::neq_Tconst=-1         !             Const T in neq chemistry?
   real(kind=8) ::mu_mol=1.2195d0  ! Mean molecular weight (std ISM value)
   real(kind=8) ::X_H=0.7600d0     !                Hydrogen mass fraction
   real(kind=8) ::Y_He=0.2400d0    !                  Helium mass fraction
@@ -339,18 +339,18 @@ subroutine m_read_params(pst)
 
   ! Star formation parameters
   integer::sf_model=1
-  real(dp)::T2_star=2e4
-  real(dp)::n_star=0.1
-  real(dp)::eps_star=0.01
+  real(kind=8)::T2_star=2e4
+  real(kind=8)::n_star=0.1
+  real(kind=8)::eps_star=0.01
   integer(kind=8),dimension(1:6)::seed=(/123,456,789,1,1,1/)
-  real(dp)::m_star=1
+  real(kind=8)::m_star=1
 
   ! Supernovae feedback parameters
-  real(dp)::M_SNII=10.
-  real(dp)::E_SNII=1d51
-  real(dp)::t_SNII=20.
-  real(dp)::eta_SNII=0.1
-  real(dp)::yield_SNII=0.1
+  real(kind=8)::M_SNII=10.
+  real(kind=8)::E_SNII=1d51
+  real(kind=8)::t_SNII=20.
+  real(kind=8)::eta_SNII=0.1
+  real(kind=8)::yield_SNII=0.1
   logical::thermal_feedback=.false.
   logical::mechanical_feedback=.false.
 
@@ -364,33 +364,33 @@ subroutine m_read_params(pst)
   logical::output_peak_sink=.false.
   logical::output_peak_tree=.false.
   integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
-  real(dp)::relevance_threshold=2
-  real(dp)::density_threshold=-1
-  real(dp)::saddle_threshold=-1
-  real(dp)::mass_threshold=0
-  real(dp)::purity_threshold=-1
-  real(dp)::fraction_threshold=0.1d0
+  real(kind=8)::relevance_threshold=2
+  real(kind=8)::density_threshold=-1
+  real(kind=8)::saddle_threshold=-1
+  real(kind=8)::mass_threshold=0
+  real(kind=8)::purity_threshold=-1
+  real(kind=8)::fraction_threshold=0.1d0
 
   ! Lightcone parameters
   logical :: lightcone = .false.   ! Lightcone activated
-  real(dp) :: cone_z_min = 0.0 ! Minimum redshift
-  real(dp) :: cone_z_max = 1.0 ! Maximum redshift
-  real(dp) :: cone_opening_angle_y = 0.0 ! Opening angle in y direction in degrees
-  real(dp) :: cone_opening_angle_z = 0.0 ! Opening angle in z direction in degrees
-  real(dp) :: cone_theta = 0.0 ! Rotation of the cone's x-axis around the box's y-axis in degrees
-  real(dp) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
-  real(dp), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
+  real(kind=8) :: cone_z_min = 0.0 ! Minimum redshift
+  real(kind=8) :: cone_z_max = 1.0 ! Maximum redshift
+  real(kind=8) :: cone_opening_angle_y = 0.0 ! Opening angle in y direction in degrees
+  real(kind=8) :: cone_opening_angle_z = 0.0 ! Opening angle in z direction in degrees
+  real(kind=8) :: cone_theta = 0.0 ! Rotation of the cone's x-axis around the box's y-axis in degrees
+  real(kind=8) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
+  real(kind=8), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
 
   ! Sink parameters
   integer::rho_type_sink=1
   logical::sink_descent=.false.
-  real(dp)::fudge_descent=0.5d0
-  real(dp)::sink_relevance_threshold=2
-  real(dp)::sink_density_threshold=-1
-  real(dp)::sink_saddle_threshold=-1
-  real(dp)::sink_mass_threshold=0
-  real(dp)::sink_purity_threshold=-1
-  real(dp)::sink_fraction_threshold=2d0
+  real(kind=8)::fudge_descent=0.5d0
+  real(kind=8)::sink_relevance_threshold=2
+  real(kind=8)::sink_density_threshold=-1
+  real(kind=8)::sink_saddle_threshold=-1
+  real(kind=8)::sink_mass_threshold=0
+  real(kind=8)::sink_purity_threshold=-1
+  real(kind=8)::sink_fraction_threshold=2d0
   logical::sink_form=.false.
   logical::sink_refine=.false.
   logical::sink_dump=.false.
@@ -401,30 +401,30 @@ subroutine m_read_params(pst)
 
   ! Black hole parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi, 2: Flux
-  real(dp)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
+  real(kind=8)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
   logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
-  real(dp)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
+  real(kind=8)::eddington_cap = -1 ! Factor of Eddington rate to cap accretion at
   integer::sink_b_spline_order = 4 ! Order of B-spline interpolation used for sink accretion and dynamics
   logical::verbose_sink = .false. ! Whether to print verbose statements for sink particles
   logical::bondi_use_gas_mass = .false. ! Whether to include the local gas mass in the Bondi calculation
   logical::use_local_bondi_rate = .false. ! Switch to average after (true) or before (false) computing the Bondi rate
   logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
-  real(dp)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines (code units)
+  real(kind=8)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines (code units)
   logical::use_bondi_lambda = .true.
 
   ! AGN Feedback parameters
   logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles
   integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
   integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
-  real(dp)::epsilon_rad = 0.1d0 ! Radiative efficiency
-  real(dp)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
-  real(dp)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
-  real(dp)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
-  real(dp)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
-  real(dp)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
-  real(dp)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
+  real(kind=8)::epsilon_rad = 0.1d0 ! Radiative efficiency
+  real(kind=8)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
+  real(kind=8)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+  real(kind=8)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
+  real(kind=8)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
+  real(kind=8)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
+  real(kind=8)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
   logical::agn_use_mass_weighting = .false. ! Whether to use a mass-weighted feedback scheme
-  real(dp)::eddington_floor = -1 ! Accretion rate floor below which nothing happens
+  real(kind=8)::eddington_floor = -1 ! Accretion rate floor below which nothing happens
 
   ! Gadget initial conditions parameters
   character(len=flen)::ic_file, ic_format
@@ -437,13 +437,13 @@ subroutine m_read_params(pst)
   character(len=4)::ic_u_name = 'U   '
   character(len=4)::ic_metal_name = 'Z   '
   character(len=4)::ic_age_name = 'AGE '
-  real(dp)::gadget_scale_l = 3.085677581282D21 ! Gadget units in cgs
-  real(dp)::gadget_scale_v = 1.0D5
-  real(dp)::gadget_scale_m = 1.9891D43
-  real(dp)::gadget_scale_t = 1.0D6*365*24*3600
-  real(dp)::IG_rho = 1.0D-6
-  real(dp)::IG_T2 = 1.0D7
-  real(dp)::IG_metal = 0.01
+  real(kind=8)::gadget_scale_l = 3.085677581282D21 ! Gadget units in cgs
+  real(kind=8)::gadget_scale_v = 1.0D5
+  real(kind=8)::gadget_scale_m = 1.9891D43
+  real(kind=8)::gadget_scale_t = 1.0D6*365*24*3600
+  real(kind=8)::IG_rho = 1.0D-6
+  real(kind=8)::IG_T2 = 1.0D7
+  real(kind=8)::IG_metal = 0.01
 
 
   !--------------------------------------------------

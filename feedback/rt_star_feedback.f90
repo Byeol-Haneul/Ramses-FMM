@@ -40,7 +40,7 @@ end subroutine r_star_rt_feedback
 !##############################################################################
 !##############################################################################
 subroutine star_rt_feedback(s, p, ilevel)
-  use amr_parameters, only: ndim, twotondim, dp
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -65,12 +65,12 @@ subroutine star_rt_feedback(s, p, ilevel)
   integer::ipart,icell,idim
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::scale_Np,scale_Fp,scale_inp,scale_inp_cell,scale_msun
-  real(dp)::dx_loc,vol_loc
-  real(dp)::z,mass,age,code2Gyr,dt_Gyr,dt_Gyr_parent,dt_loc_Gyr,t_SN_Gyr
+  real(kind=8)::dx_loc,vol_loc
+  real(kind=8)::z,mass,age,code2Gyr,dt_Gyr,dt_Gyr_parent,dt_loc_Gyr,t_SN_Gyr
   type(oct),pointer::gridp
   type(msg_rt_emissivity_realdp)::dummy_rt_emissivity_realdp
   logical::ok_level
-  real(dp),dimension(nrtgrp)::part_NpInp, lum
+  real(kind=8),dimension(nrtgrp)::part_NpInp, lum
 
 
 #ifdef RT

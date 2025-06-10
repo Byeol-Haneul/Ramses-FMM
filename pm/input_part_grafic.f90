@@ -5,7 +5,6 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_input_part_grafic(pst)
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -73,8 +72,8 @@ end subroutine r_input_part_grafic
 !#########################################################################
 !#########################################################################
 subroutine input_part_grafic(r,g,p,npart_tot)
-  use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
@@ -87,8 +86,8 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   integer::icpu,ipart,idim
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
   integer::plane_size
-  real(dp)::dx,xx1,xx2,xx3
-  real(dp)::dispmax=0.0
+  real(kind=8)::dx,xx1,xx2,xx3
+  real(kind=8)::dispmax=0.0
   integer,dimension(1:g%ncpu)::npart_loc
   integer(kind=8)::ipart_grafic
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind

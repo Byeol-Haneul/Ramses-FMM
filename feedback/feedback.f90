@@ -453,7 +453,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      num_sn=mejecta/m_SN
 
      ! Compute central cell properties
-     d=max(gridp%uold(icellp,1),r%smallr)
+     d=max(dble(gridp%uold(icellp,1)),r%smallr)
      u=gridp%uold(icellp,2)/d
      v=gridp%uold(icellp,3)/d
      w=gridp%uold(icellp,4)/d
@@ -517,7 +517,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
      ! Update passive scalars so that they don't change
      do ivar=6,nvar
         if(r%metal.and.ivar==r%imetal)cycle
-        q(ivar)=gridp%uold(icellp,ivar)/max(gridp%uold(icellp,1),r%smallr)
+        q(ivar)=gridp%uold(icellp,ivar)/max(dble(gridp%uold(icellp,1)),r%smallr)
         gridp%unew(icellp,ivar)=gridp%unew(icellp,ivar)+(dloss-dloss*f_LOAD-d*f_LOAD_CEN)*q(ivar)
      end do
 
@@ -535,7 +535,7 @@ subroutine mechanical_feedback(s,p,ilevel,msn_loc)
         ! Neighboring cell properties
         vol_nei = dble(twotondim)**(hash_cell(0)-1-level_nbor(j))
         Z_nei = r%z_ave*0.02
-        d_nei = max(gridn%uold(icelln,1),r%smallr)
+        d_nei = max(dble(gridn%uold(icelln,1)),r%smallr)
         if(r%metal) Z_nei = gridn%uold(icelln,r%imetal)/d_nei
 
         ! Compute actual mass ratio

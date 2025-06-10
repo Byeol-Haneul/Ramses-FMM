@@ -110,7 +110,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
 
         ! Compute rho
         do i=1,nleaf
-           nH(i)=MAX(m%grid(ind_leaf(i))%uold(ind,1),r%smallr)
+           nH(i)=MAX(dble(m%grid(ind_leaf(i))%uold(ind,1)),r%smallr)
         end do
 
         ! Compute metallicity in solar units
@@ -268,7 +268,7 @@ subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
 #endif
   end do
 
-  nH = MAX(gridp%uold(icell,1),s%r%smallr)      !   Nb density of gas [UU]
+  nH = MAX(dble(gridp%uold(icell,1)),s%r%smallr)      !   Nb density of gas [UU]
 
   Zsolar = s%r%z_ave
   if(s%r%metal) Zsolar=gridp%uold(icell,s%r%imetal)/nH/0.02  ! Z (Solar U)

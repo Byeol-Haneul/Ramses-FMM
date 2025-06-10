@@ -5,7 +5,7 @@ contains
 !################################################################
 !################################################################
 subroutine m_synchro_hydro_fine(pst,ilevel,dteff)
-  use amr_parameters, only: ndim,dp,twotondim
+  use amr_parameters, only: ndim,twotondim
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -30,7 +30,6 @@ end subroutine m_synchro_hydro_fine
 !################################################################
 recursive subroutine r_synchro_hydro_fine(pst,input_array,input_size,output_array,output_size)
   use mdl_module
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -60,8 +59,8 @@ end subroutine r_synchro_hydro_fine
 !################################################################
 !################################################################
 subroutine synchro_hydro_fine(r,m,ilevel,dteff)
-  use amr_parameters, only: ndim,dp,twotondim
-  use amr_commons, only: run_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, mesh_t
   implicit none
   type(run_t)::r
   type(mesh_t)::m
@@ -72,7 +71,7 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
   !--------------------------------------------------------------
   integer::igrid,ind
   integer::idim
-  real(dp)::ener
+  real(kind=8)::ener
 
 #ifdef HYDRO
   ! Loop over octs
@@ -83,7 +82,7 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
         ! Remove kinetic energy from total energy
         ener=m%grid(igrid)%uold(ind,5)
         do idim=1,3
-           ener=ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
+           ener=ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
         end do
 
         ! Update momentum
@@ -95,12 +94,12 @@ subroutine synchro_hydro_fine(r,m,ilevel,dteff)
 #else
         do idim=1,ndim
            m%grid(igrid)%uold(ind,idim+1)=m%grid(igrid)%uold(ind,idim+1)+&
-                & max(m%grid(igrid)%uold(ind,1),r%smallr)*r%constant_gravity(idim)*dteff
+                & max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)*r%constant_gravity(idim)*dteff
         end do        
 #endif
         ! Update total energy
         do idim=1,3
-           ener=ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
+           ener=ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
         end do
         m%grid(igrid)%uold(ind,5)=ener
 
@@ -118,7 +117,6 @@ end subroutine synchro_hydro_fine
 !################################################################
 recursive subroutine r_gravity_hydro_fine(pst,ilevel,input_size)
   use mdl_module
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -142,8 +140,8 @@ end subroutine r_gravity_hydro_fine
 !################################################################
 !################################################################
 subroutine gravity_hydro_fine(r,g,m,ilevel)
-  use amr_parameters, only: ndim,dp,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -155,7 +153,7 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
   ! total energy are modified in array unew.
   !--------------------------------------------------------------
   integer::igrid,ind
-  real(dp)::d,u,v,w,e_kin,e_prim,d_old,fact
+  real(kind=8)::d,u,v,w,e_kin,e_prim,d_old,fact
 
 #ifdef HYDRO
 
@@ -165,14 +163,14 @@ subroutine gravity_hydro_fine(r,g,m,ilevel)
   do igrid=m%head(ilevel),m%tail(ilevel)
      do ind=1,twotondim
 
-        d=max(m%grid(igrid)%unew(ind,1),r%smallr)
+        d=max(dble(m%grid(igrid)%unew(ind,1)),r%smallr)
         u=0.0d0; v=0.0d0; w=0.0d0
         u=m%grid(igrid)%unew(ind,2)/d
         v=m%grid(igrid)%unew(ind,3)/d
         w=m%grid(igrid)%unew(ind,4)/d
         e_kin=0.5d0*d*(u**2+v**2+w**2)
         e_prim=m%grid(igrid)%unew(ind,5)-e_kin
-        d_old=max(m%grid(igrid)%uold(ind,1),r%smallr)
+        d_old=max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
         fact=d_old/d*0.5d0*g%dtnew(ilevel)
 #ifdef GRAV
         u=u+m%grid(igrid)%f(ind,1)*fact

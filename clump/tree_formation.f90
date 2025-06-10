@@ -70,10 +70,10 @@ end subroutine r_tree_formation
 subroutine tree_formation(r,g,m,p,c)
   use rng
   use constants
-  use hydro_parameters, only:nvar
-  use amr_parameters, only:dp,ndim,twotondim
-  use amr_commons, only:run_t,global_t,mesh_t
-  use pm_commons, only:part_t
+  use hydro_parameters, only: nvar
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
+  use pm_commons, only: part_t
   use clfind_commons, only:clump_t
 #ifndef WITHOUTMPI
   use mpi
@@ -95,7 +95,7 @@ subroutine tree_formation(r,g,m,p,c)
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,ntree_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,ntree_cpu
   integer::i,j,icpu,nsite,ntree,ntree_loc,peak_nr
-  real(dp)::purity
+  real(kind=8)::purity
   logical::ok
 
 #if NDIM>2
@@ -425,7 +425,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
      endif
      ! If live (not yet merged) tree particle sits in a halo-patch, update parent halo mass
      if(p%idp(ipart).EQ.c%min_tree_id(peak_nr).AND.global_peak_id.EQ.c%ind_halo(peak_nr))then
-        p%mp(ipart)=max(p%mp(ipart),c%halo_mass(peak_nr))
+        p%mp(ipart)=max(dble(p%mp(ipart)),c%halo_mass(peak_nr))
      endif
   end do
   call close_cache(s,m%grid_dict)

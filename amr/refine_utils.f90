@@ -653,9 +653,9 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   integer(kind=8),dimension(1:ndim)::cart_key
   integer(kind=8),dimension(0:ndim)::hash_key
 #ifdef MHD
-  real(dp),dimension(0:twondim,1:6)::b1
-  real(dp),dimension(1:twotondim,1:6)::b2
-  real(dp),dimension(1:twondim,1:twotondim,1:6)::b3
+  real(kind=8),dimension(0:twondim,1:6)::b1
+  real(kind=8),dimension(1:twotondim,1:6)::b2
+  real(kind=8),dimension(1:twondim,1:twotondim,1:6)::b3
   logical,dimension(1:twondim)::refined
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
@@ -663,12 +663,12 @@ subroutine make_new_oct(s,parent,icell,ilevel)
   type(oct),pointer::gridn
 #endif
 #ifdef RT
-  real(dp),dimension(0:twondim  ,1:nrtvar)::rtu1
-  real(dp),dimension(1:twotondim,1:nrtvar)::rtu2
+  real(kind=8),dimension(0:twondim  ,1:nrtvar)::rtu1
+  real(kind=8),dimension(1:twotondim,1:nrtvar)::rtu2
 #endif
   integer,dimension(0:twondim)::ind_nbor
-  real(dp),dimension(0:twondim,1:nvar)::u1
-  real(dp),dimension(1:twotondim,1:nvar)::u2
+  real(kind=8),dimension(0:twondim,1:nvar)::u1
+  real(kind=8),dimension(1:twotondim,1:nvar)::u2
   type(nbor),dimension(0:twondim)::grid_nbor
   type(oct),pointer::child
   logical::ok
@@ -898,7 +898,7 @@ end subroutine r_clean_dirty
 !#########################################################################
 !#########################################################################
 subroutine clean_dirty(s,ilevel)
-  use amr_parameters, only: ndim,twotondim,nhilbert,dp
+  use amr_parameters, only: ndim, twotondim, nhilbert
   use ramses_commons, only: ramses_t
   use hilbert
   use hash

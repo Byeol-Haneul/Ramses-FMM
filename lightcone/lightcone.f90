@@ -1,5 +1,5 @@
 module lightcone_module
-  use amr_parameters, only: sp, dp, flen
+  use amr_parameters, only: flen
   use ramses_commons, only: pst_t, ramses_t
   implicit none
 contains
@@ -11,12 +11,12 @@ contains
     integer :: dummy(1)
     integer, dimension(1:flen/4) :: input_array
     character(LEN=flen) :: filename, filedir
-    real(dp) :: z1, z2
+    real(kind=8) :: z1, z2
 
     associate(r=>pst%s%r, g=>pst%s%g, mdl=>pst%s%mdl)
 
-    z2 = 1 / g%aexp_old - 1.0_dp
-    z1 = 1 / g%aexp - 1.0_dp
+    z2 = 1 / g%aexp_old - 1.0d0
+    z1 = 1 / g%aexp - 1.0d0
 
     if (g%nstep_coarse < 2 .or. z1 > r%cone_z_max .or. z2 < r%cone_z_min .or. abs(z2 - z1) < 1d-6) return
     if (r%verbose) write(*,*) 'Entering output_lightcone, nstep_coarse: ', g%nstep_coarse
@@ -74,25 +74,25 @@ contains
     integer, parameter :: nstride = 65536, max_replicas = 10000
 
     ! Local variables
-    real(dp) :: r_inner, r_outer, angle_y, angle_z
+    real(kind=8) :: r_inner, r_outer, angle_y, angle_z
     integer :: nreplicas, &
          first_xreplica, last_xreplica, &
          first_yreplica, last_yreplica, &
          first_zreplica, last_zreplica
-    real(dp) :: z1, z2, coverH0, omega_r
-    real(dp) :: position(3)
-    real(dp) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
+    real(kind=8) :: z1, z2, coverH0, omega_r
+    real(kind=8) :: position(3)
+    real(kind=8) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
     logical, allocatable :: has_particles(:,:,:)
     type(lightcone_buffer) :: buffer
     integer :: npart, nselected, nbefore, ntotal, nthbuffer
     integer :: i, j, k, ilun
-    real(dp) :: velocity(3)
+    real(kind=8) :: velocity(3)
 #ifndef WITHOUTMPI
     integer :: ierr
 #endif
 
-    z2 = 1/s%g%aexp_old - 1.0_dp
-    z1 = 1/s%g%aexp - 1.0_dp
+    z2 = 1/s%g%aexp_old - 1.0d0
+    z1 = 1/s%g%aexp - 1.0d0
     coverH0 = 2.9979246d+5/s%g%h0
     omega_r = 1 - s%g%omega_m - s%g%omega_l
 
@@ -179,7 +179,7 @@ contains
                 if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
                    ! Transform velocity to cone coordinates
                    velocity = matmul(box_to_cone_rotation, p%vp(npart, :))
-                   call add_to_buffer(buffer, real(position(:), kind=sp), real(velocity(:), kind=sp))
+                   call add_to_buffer(buffer, real(position(:), kind=4), real(velocity(:), kind=4))
 
                    if (buffer_is_full(buffer)) then
                       nthbuffer = nthbuffer + 1

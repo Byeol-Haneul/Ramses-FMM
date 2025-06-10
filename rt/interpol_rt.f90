@@ -3,12 +3,12 @@
 !##########################################################################
 !##########################################################################
 subroutine interpol_rt(u1,u2,interpol_type)
-  use amr_parameters, only: dp, ndim,twotondim,twondim
+  use amr_parameters, only: ndim, twotondim, twondim
   use rt_parameters, only: nrtvar
   implicit none
   integer::interpol_type
-  real(dp),dimension(0:twondim  ,1:nrtvar)::u1
-  real(dp),dimension(1:twotondim,1:nrtvar)::u2
+  real(kind=8),dimension(0:twondim  ,1:nrtvar)::u1
+  real(kind=8),dimension(1:twotondim,1:nrtvar)::u2
   !----------------------------------------------------------
   ! This routine performs a prolongation (interpolation)
   ! operation for newly refined cells or buffer cells.
@@ -19,9 +19,9 @@ subroutine interpol_rt(u1,u2,interpol_type)
   ! interpol_type=3 linear interpolation with unlimited Central slope
   !----------------------------------------------------------
   integer::j,ivar,idim,ind,ix,iy,iz
-  real(dp),dimension(1:8,1:3)::xc
-  real(dp),dimension(0:twondim)::a
-  real(dp),dimension(1:ndim)::w
+  real(kind=8),dimension(1:8,1:3)::xc
+  real(kind=8),dimension(0:twondim)::a
+  real(kind=8),dimension(1:ndim)::w
 
   ! Set position of cell centers relative to grid center
   do ind=1,twotondim

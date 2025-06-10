@@ -40,9 +40,9 @@ subroutine rt_input_condinit(r,g,m,ilevel)
   ! Local variables
   integer::igrid,ngrid,ind,idim,nstride,i,ivar
   !integer::l
-  real(dp),dimension(1:nvector,1:ndim)::xx
-  real(dp),dimension(1:nvector,1:nrtvar)::qq
-  real(dp)::dx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector,1:nrtvar)::qq
+  real(kind=8)::dx
 
   if(m%noct(ilevel)==0)return
   !-----------------------------------------------------------
@@ -90,9 +90,9 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn,ilevel)
   type(run_t)::r
   type(global_t)::g
   integer ::nn,ilevel,idim,igrp
-  real(dp)::dx
-  real(dp),dimension(1:nvector,1:nrtvar)::q
-  real(dp),dimension(1:nvector,1:ndim)::x
+  real(kind=8)::dx
+  real(kind=8),dimension(1:nvector,1:nrtvar)::q
+  real(kind=8),dimension(1:nvector,1:ndim)::x
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::scale_np, scale_fp, dx_cgs
   !----------------------------------------------------
@@ -100,7 +100,7 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn,ilevel)
   ! conditions, like points, squares, etc.
   !----------------------------------------------------
   integer::i,k,group_ind
-  real(dp)::vol,rad,weight,xn,yn,zn,en
+  real(kind=8)::vol,rad,weight,xn,yn,zn,en
   ! Units are needed for point regions
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   call rt_units(r,g,scale_np, scale_fp)
@@ -161,12 +161,12 @@ subroutine rt_region_condinit(r,g,x,q,dx,nn,ilevel)
         ! Compute CIC weights relative to region center
         do i=1,nn
            xn=1.0; yn=1.0; zn=1.0
-           xn=max(1.0-abs(x(i,1)-r%rt_reg_x_center(k))/dx,0.0_dp)
+           xn=max(1.0-abs(x(i,1)-r%rt_reg_x_center(k))/dx,0.0d0)
 #if NDIM>1
-           yn=max(1.0-abs(x(i,2)-r%rt_reg_x_center(k))/dx,0.0_dp)
+           yn=max(1.0-abs(x(i,2)-r%rt_reg_x_center(k))/dx,0.0d0)
 #endif
 #if NDIM>2
-           zn=max(1.0-abs(x(i,3)-r%rt_reg_x_center(k))/dx,0.0_dp)
+           zn=max(1.0-abs(x(i,3)-r%rt_reg_x_center(k))/dx,0.0d0)
 #endif
            weight=xn*yn*zn
            if(weight.gt.0) then
@@ -230,9 +230,9 @@ subroutine rt_input_source_regions(r,g,m,ilevel)
   ! Local variables
   integer::igrid,ngrid,ind,idim,nstride,i,ivar
   !integer::l
-  real(dp),dimension(1:nvector,1:ndim)::xx
-  real(dp),dimension(1:nvector,1:nrtvar)::qq
-  real(dp)::dx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector,1:nrtvar)::qq
+  real(kind=8)::dx
 
   if(m%noct(ilevel)==0)return
   !-----------------------------------------------------------
@@ -292,9 +292,9 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn,ilevel)
   type(run_t)::r
   type(global_t)::g
   integer ::nn, ilevel
-  real(dp)::dx,dt
-  real(dp),dimension(1:nvector,1:nrtvar)::q
-  real(dp),dimension(1:nvector,1:ndim)::x
+  real(kind=8)::dx,dt
+  real(kind=8),dimension(1:nvector,1:nrtvar)::q
+  real(kind=8),dimension(1:nvector,1:ndim)::x
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::scale_np, scale_fp, dx_cgs, dt_cgs
   !----------------------------------------------------
@@ -302,7 +302,7 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn,ilevel)
   ! conditions, like points, squares, etc.
   !----------------------------------------------------
   integer::i,k,group_ind
-  real(dp)::vol,rad,weight,xn,yn,zn,en
+  real(kind=8)::vol,rad,weight,xn,yn,zn,en
   ! Units are needed for point source regions
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   call rt_units(r,g,scale_np, scale_fp)
@@ -357,12 +357,12 @@ subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn,ilevel)
         ! Compute CIC weights relative to region center
         do i=1,nn
            xn=1.0; yn=1.0; zn=1.0
-           xn=max(1.0-abs(x(i,1)-r%rt_src_x_center(k))/dx,0.0_dp)
+           xn=max(1.0-abs(x(i,1)-r%rt_src_x_center(k))/dx,0.0d0)
 #if NDIM>1
-           yn=max(1.0-abs(x(i,2)-r%rt_src_x_center(k))/dx,0.0_dp)
+           yn=max(1.0-abs(x(i,2)-r%rt_src_x_center(k))/dx,0.0d0)
 #endif
 #if NDIM>2
-           zn=max(1.0-abs(x(i,3)-r%rt_src_x_center(k))/dx,0.0_dp)
+           zn=max(1.0-abs(x(i,3)-r%rt_src_x_center(k))/dx,0.0d0)
 #endif
            weight=xn*yn*zn
            if(weight.gt.0) then

@@ -214,7 +214,7 @@ subroutine compute_new_bound_key(r,g,m,ilevel,noct,bound_key_target)
   integer,dimension(1:g%ncpu)::noct_cum
   integer,dimension(1:g%ncpu)::ntarget_cum
   integer(kind=8),dimension(1:nhilbert)::one_key
-  real(dp)::xtarget
+  real(kind=8)::xtarget
 
   ! Hilbert key corresponding to one units
   one_key=0
@@ -785,7 +785,7 @@ subroutine balance_part(s,p,ilevel)
   integer::npart_lev,npart_lev_tot,iter
   integer,dimension(0:s%g%ncpu)::npart_cum,npart_cum_tot
   integer,dimension(1:s%g%ncpu)::npart_cpu,npart_cpu_tot
-  real(dp)::xpart_target,xcum_target
+  real(kind=8)::xpart_target,xcum_target
 
   real(dp),dimension(1:ndim)::xp_tmp,vp_tmp,fp_tmp,jp_tmp
   real(dp)::mp_tmp,zp_tmp,tp_tmp
@@ -793,7 +793,7 @@ subroutine balance_part(s,p,ilevel)
   integer(i8b)::idp_tmp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-  
+
   !----------------------------------------------------
   ! Default for particle domains are grid domains
   !----------------------------------------------------

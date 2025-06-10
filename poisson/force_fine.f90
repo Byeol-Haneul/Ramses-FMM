@@ -9,7 +9,7 @@ contains
 !#########################################################
 #ifdef GRAV  
 subroutine m_force_fine(pst,ilevel,icount)
-  use amr_parameters, only: ndim,twotondim,nvector,dp
+  use amr_parameters, only: ndim, twotondim, nvector
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -76,8 +76,8 @@ end subroutine r_force_analytic
 !#########################################################
 !#########################################################
 subroutine force_analytic(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,nvector,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim, nvector
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -87,8 +87,8 @@ subroutine force_analytic(r,g,m,ilevel)
   ! Compute analytical gravity force
   !-------------------------------------
   integer::igrid,ind,i,ngrid,idim,nstride
-  real(dp)::dx
-  real(dp),dimension(1:nvector,1:ndim)::xx,ff
+  real(kind=8)::dx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx,ff
  
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
@@ -155,8 +155,8 @@ end subroutine r_gradient_phi
 !#########################################################
 subroutine gradient_phi(s,ilevel,icount)
   use mdl_module
-  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
+  use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -180,10 +180,10 @@ subroutine gradient_phi(s,ilevel,icount)
   integer,dimension(1:3,1:6)::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(dp),dimension(1:8)::bbb
-  real(dp)::dx,a,b,aa,bb,cc,dd,tfrac
-  real(dp)::phi1,phi2,phi3,phi4
-  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
+  real(kind=8),dimension(1:8)::bbb
+  real(kind=8)::dx,a,b,aa,bb,cc,dd,tfrac
+  real(kind=8)::phi1,phi2,phi3,phi4
+  real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor
   type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
 
@@ -353,8 +353,8 @@ end subroutine r_compute_epot
 !#########################################################
 !#########################################################
 subroutine compute_epot(r,g,m,ilevel,epot)
-  use amr_parameters, only: ndim,twotondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -365,7 +365,7 @@ subroutine compute_epot(r,g,m,ilevel,epot)
   ! This routine computes the potential energy
   !----------------------------------------------------------
   integer::igrid,ind,idim
-  real(dp)::dx,fact,fourpi
+  real(kind=8)::dx,fact,fourpi
  
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
@@ -425,8 +425,8 @@ end subroutine r_compute_rhomax
 !#########################################################
 !#########################################################
 subroutine compute_rhomax(r,g,m,ilevel,rhomax)
-  use amr_parameters, only: ndim,twotondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g

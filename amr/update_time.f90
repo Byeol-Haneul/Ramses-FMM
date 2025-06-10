@@ -21,7 +21,7 @@ subroutine m_update_time(pst,ilevel,done)
   ! Local variables
   double precision::ttend
   double precision,save::ttstart=0.0
-  real(dp)::dt,econs,mcons
+  real(kind=8)::dt,econs,mcons
   integer::i,itest
   type(in_broadcast_aexp_t)::in_broadcast_aexp
   

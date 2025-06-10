@@ -14,13 +14,13 @@ subroutine hydro_refine(r,ug,um,ud,ok)
   implicit none
   ! routine arguments
   type(run_t)::r
-  real(dp)::ug(1:nvar)
-  real(dp)::um(1:nvar)
-  real(dp)::ud(1:nvar)
+  real(kind=8)::ug(1:nvar)
+  real(kind=8)::um(1:nvar)
+  real(kind=8)::ud(1:nvar)
 #ifdef MHD
-  real(dp)::bg(1:6)
-  real(dp)::bm(1:6)
-  real(dp)::bd(1:6)
+  real(kind=8)::bg(1:6)
+  real(kind=8)::bm(1:6)
+  real(kind=8)::bd(1:6)
 #endif
   logical ::ok
   ! local variables
@@ -31,9 +31,9 @@ subroutine hydro_refine(r,ug,um,ud,ok)
 #if NVAR>5+NENER
   integer::n
 #endif
-  real(dp)::eking,ekinm,ekind,eradg,eradm,eradd
-  real(dp)::emagg,emagm,emagd
-  real(dp)::dg,dm,dd,pg,pm,pd,vg,vm,vd,cg,cm,cd,error
+  real(kind=8)::eking,ekinm,ekind,eradg,eradm,eradd
+  real(kind=8)::emagg,emagm,emagd
+  real(kind=8)::dg,dm,dd,pg,pm,pd,vg,vm,vd,cg,cm,cd,error
 
   ! Density
   ug(1) = max(ug(1),r%smallr)
@@ -212,19 +212,19 @@ end subroutine hydro_refine
 !###########################################################
 !###########################################################
 subroutine cmpdt(r,uu,bb,gg,dx,dt)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t
   use const
   implicit none
   type(run_t)::r
-  real(dp)::dx,dt
-  real(dp),dimension(1:nvar)::uu
-  real(dp),dimension(1:ndim)::gg
-  real(dp),dimension(1:6)::bb
+  real(kind=8)::dx,dt
+  real(kind=8),dimension(1:nvar)::uu
+  real(kind=8),dimension(1:ndim)::gg
+  real(kind=8),dimension(1:6)::bb
   
-  real(dp)::dtcell,smallp
-  real(dp)::b2,a2,c2,cfast2,ctot,grav
+  real(kind=8)::dtcell,smallp
+  real(kind=8)::b2,a2,c2,cfast2,ctot,grav
   integer::idim
 #if NENER>0
   integer::irad
@@ -309,7 +309,7 @@ subroutine cmpdt(r,uu,bb,gg,dx,dt)
      grav = grav+abs(gg(idim))
   end do
   grav = grav*dx/ctot**2
-  grav = MAX(grav,0.0001_dp)
+  grav = MAX(grav,0.0001d0)
 
   ! Compute maximum time step for each authorized cell
   dt = r%courant_factor*dx/r%smallc
@@ -322,24 +322,24 @@ end subroutine cmpdt
 !###########################################################
 !###########################################################
 subroutine riemann_llf(qleft,qright,fgdnv,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   implicit none
   ! dummy arguments
   type(hydro_params_t)::params
-  real(dp),dimension(1:nprim)::qleft,qright
-  real(dp),dimension(1:nprim+1)::fgdnv
+  real(kind=8),dimension(1:nprim)::qleft,qright
+  real(kind=8),dimension(1:nprim+1)::fgdnv
 
-  real(dp),dimension(1:nprim+1)::fleft,fright
-  real(dp),dimension(1:nprim+1)::uleft,uright
-  real(dp)::cmax
+  real(kind=8),dimension(1:nprim+1)::fleft,fright
+  real(kind=8),dimension(1:nprim+1)::uleft,uright
+  real(kind=8)::cmax
   integer::n
-  real(dp)::gamma,smallr,smallc,smallp, entho
-  real(dp),dimension(1:nener+1)::gamma_rad
-  real(dp)::rl,ul,pl,cl
-  real(dp)::rr,ur,pr,cr
+  real(kind=8)::gamma,smallr,smallc,smallp, entho
+  real(kind=8),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::rl,ul,pl,cl
+  real(kind=8)::rr,ur,pr,cr
 
   ! Constants
   gamma = params%gamma
@@ -470,7 +470,7 @@ end subroutine riemann_llf
 !###########################################################
 !###########################################################
 subroutine riemann_hll(qleft,qright,fgdnv,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
@@ -479,17 +479,17 @@ subroutine riemann_hll(qleft,qright,fgdnv,params)
 
   ! dummy arguments
   type(hydro_params_t)::params
-  real(dp),dimension(1:nprim)::qleft,qright
-  real(dp),dimension(1:nprim+1)::fgdnv
+  real(kind=8),dimension(1:nprim)::qleft,qright
+  real(kind=8),dimension(1:nprim+1)::fgdnv
 
-  real(dp),dimension(1:nprim+1)::fleft,fright
-  real(dp),dimension(1:nprim+1)::uleft,uright
-  real(dp)::SL,SR
+  real(kind=8),dimension(1:nprim+1)::fleft,fright
+  real(kind=8),dimension(1:nprim+1)::uleft,uright
+  real(kind=8)::SL,SR
   integer::n
-  real(dp)::gamma,smallr,smallc,smallp, entho
-  real(dp),dimension(1:nener+1)::gamma_rad
-  real(dp)::rl,ul,pl,cl
-  real(dp)::rr,ur,pr,cr
+  real(kind=8)::gamma,smallr,smallc,smallp, entho
+  real(kind=8),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::rl,ul,pl,cl
+  real(kind=8)::rr,ur,pr,cr
 
   ! Constants
   gamma = params%gamma
@@ -622,7 +622,7 @@ end subroutine riemann_hll
 !###########################################################
 !###########################################################
 subroutine riemann_hllc(qleft,qright,fgdnv,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
@@ -631,24 +631,24 @@ subroutine riemann_hllc(qleft,qright,fgdnv,params)
 
   ! dummy arguments
   type(hydro_params_t)::params
-  real(dp),dimension(1:nprim)::qleft,qright
-  real(dp),dimension(1:nprim+1)::fgdnv
+  real(kind=8),dimension(1:nprim)::qleft,qright
+  real(kind=8),dimension(1:nprim+1)::fgdnv
 
-  REAL(dp)::SL,SR
-  REAL(dp)::entho
-  REAL(dp)::rl,pl,ul,vl,wl,ekinl,etotl,el,ptotl
-  REAL(dp)::rr,pr,ur,vr,wr,ekinr,etotr,er,ptotr
-  REAL(dp)::cfastl,rcl,rstarl,estarl
-  REAL(dp)::cfastr,rcr,rstarr,estarr
-  REAL(dp)::etotstarl,etotstarr
-  REAL(dp)::ustar,ptotstar
-  REAL(dp)::ro,uo,vo,wo,ptoto,etoto,eo
-  real(dp)::gamma,smallr,smallc,smallp
-  real(dp),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::SL,SR
+  real(kind=8)::entho
+  real(kind=8)::rl,pl,ul,vl,wl,ekinl,etotl,el,ptotl
+  real(kind=8)::rr,pr,ur,vr,wr,ekinr,etotr,er,ptotr
+  real(kind=8)::cfastl,rcl,rstarl,estarl
+  real(kind=8)::cfastr,rcr,rstarr,estarr
+  real(kind=8)::etotstarl,etotstarr
+  real(kind=8)::ustar,ptotstar
+  real(kind=8)::ro,uo,vo,wo,ptoto,etoto,eo
+  real(kind=8)::gamma,smallr,smallc,smallp
+  real(kind=8),dimension(1:nener+1)::gamma_rad
 #if NENER>0
   INTEGER::irad
-  REAL(dp),dimension(1:nener)::eradl,eradr,erado
-  REAL(dp),dimension(1:nener)::eradstarl,eradstarr
+  real(kind=8),dimension(1:nener)::eradl,eradr,erado
+  real(kind=8),dimension(1:nener)::eradstarl,eradstarr
 #endif
 #if NVAR>5+NENER
   INTEGER::ivar
@@ -842,20 +842,20 @@ end subroutine riemann_hllc
 !###########################################################
 #ifdef MHD
 SUBROUTINE riemann_upwind_mhd(qleft,qright,fgdnv,zero_flux,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   ! 1D Upwind Riemann solver
   IMPLICIT NONE
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fgdnv
-  REAL(dp)::zero_flux
+  real(kind=8),DIMENSION(1:nprim)::qleft,qright
+  real(kind=8),DIMENSION(1:nprim+1)::fgdnv
+  real(kind=8)::zero_flux
 
-  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fmean
-  REAL(dp),DIMENSION(1:nprim+1)::uleft,uright,udiff
-  REAL(dp):: vleft,bx_mean
+  real(kind=8),DIMENSION(1:nprim+1)::fleft,fright,fmean
+  real(kind=8),DIMENSION(1:nprim+1)::uleft,uright,udiff
+  real(kind=8):: vleft,bx_mean
 
   ! Enforce continuity of normal component
   bx_mean=half*(qleft(6)+qright(6))
@@ -883,20 +883,20 @@ END SUBROUTINE riemann_upwind_mhd
 !###########################################################
 !###########################################################
 SUBROUTINE riemann_llf_mhd(qleft,qright,fgdnv,zero_flux,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   ! 1D local Lax-Friedrich Riemann solver
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fgdnv
-  REAL(dp)::zero_flux
+  real(kind=8),DIMENSION(1:nprim)::qleft,qright
+  real(kind=8),DIMENSION(1:nprim+1)::fgdnv
+  real(kind=8)::zero_flux
 
-  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright,fmean
-  REAL(dp),DIMENSION(1:nprim+1)::uleft,uright,udiff
-  REAL(dp)::vleft,vright,bx_mean
+  real(kind=8),DIMENSION(1:nprim+1)::fleft,fright,fmean
+  real(kind=8),DIMENSION(1:nprim+1)::uleft,uright,udiff
+  real(kind=8)::vleft,vright,bx_mean
 
   ! Enforce continuity of normal component
   bx_mean=half*(qleft(6)+qright(6))
@@ -925,19 +925,19 @@ END SUBROUTINE riemann_llf_mhd
 !###########################################################
 !###########################################################
 SUBROUTINE riemann_hll_mhd(qleft,qright,fgdnv,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   ! 1D HLL Riemann solver
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fgdnv
+  real(kind=8),DIMENSION(1:nprim)::qleft,qright
+  real(kind=8),DIMENSION(1:nprim+1)::fgdnv
 
-  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright
-  REAL(dp),DIMENSION(1:nprim+1)::uleft,uright
-  REAL(dp)::vleft,vright,bx_mean,cfleft,cfright,SL,SR
+  real(kind=8),DIMENSION(1:nprim+1)::fleft,fright
+  real(kind=8),DIMENSION(1:nprim+1)::uleft,uright
+  real(kind=8)::vleft,vright,bx_mean,cfleft,cfright,SL,SR
 
   ! Enforce continuity of normal component
   bx_mean=half*(qleft(6)+qright(6))
@@ -964,36 +964,36 @@ END SUBROUTINE riemann_hll_mhd
 !###########################################################
 !###########################################################
 SUBROUTINE riemann_hlld(qleft,qright,fgdnv,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
   ! HLLD Riemann solver (Miyoshi & Kusano, 2005, JCP, 208, 315)
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fgdnv
+  real(kind=8),DIMENSION(1:nprim)::qleft,qright
+  real(kind=8),DIMENSION(1:nprim+1)::fgdnv
 
-  REAL(dp)::SL,SR,SAL,SAR
-  real(dp)::gamma,smallc,entho,A,sgnm
-  real(dp),dimension(1:nener+1)::gamma_rad
-  REAL(dp)::rl,pl,ul,vl,wl,cl,ekinl,emagl,etotl,ptotl,vdotbl,bl,el
-  REAL(dp)::rr,pr,ur,vr,wr,cr,ekinr,emagr,etotr,ptotr,vdotbr,br,er
-  REAL(dp)::cfastl,calfvenl,rcl,rstarl,vstarl,wstarl,bstarl,cstarl,vdotbstarl
-  REAL(dp)::cfastr,calfvenr,rcr,rstarr,vstarr,wstarr,bstarr,cstarr,vdotbstarr
-  REAL(dp)::sqrrstarl,etotstarl,etotstarstarl
-  REAL(dp)::sqrrstarr,etotstarr,etotstarstarr
-  REAL(dp)::ustar,ptotstar,estar,vstarstar,wstarstar,bstarstar,cstarstar,vdotbstarstar
-  REAL(dp)::ro,uo,vo,wo,bo,co,ptoto,etoto,vdotbo
-  REAL(dp)::einto,eintl,eintr,eintstarr,eintstarl
+  real(kind=8)::SL,SR,SAL,SAR
+  real(kind=8)::gamma,smallc,entho,A,sgnm
+  real(kind=8),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::rl,pl,ul,vl,wl,cl,ekinl,emagl,etotl,ptotl,vdotbl,bl,el
+  real(kind=8)::rr,pr,ur,vr,wr,cr,ekinr,emagr,etotr,ptotr,vdotbr,br,er
+  real(kind=8)::cfastl,calfvenl,rcl,rstarl,vstarl,wstarl,bstarl,cstarl,vdotbstarl
+  real(kind=8)::cfastr,calfvenr,rcr,rstarr,vstarr,wstarr,bstarr,cstarr,vdotbstarr
+  real(kind=8)::sqrrstarl,etotstarl,etotstarstarl
+  real(kind=8)::sqrrstarr,etotstarr,etotstarstarr
+  real(kind=8)::ustar,ptotstar,estar,vstarstar,wstarstar,bstarstar,cstarstar,vdotbstarstar
+  real(kind=8)::ro,uo,vo,wo,bo,co,ptoto,etoto,vdotbo
+  real(kind=8)::einto,eintl,eintr,eintstarr,eintstarl
 
 #if NVAR>5+NENER
   INTEGER ::ivar
 #endif
 #if NENER>0
   INTEGER ::irad
-  REAL(dp),dimension(1:nener)::erado,eradl,eradr
-  REAL(dp),dimension(1:nener)::eradstarl,eradstarr
+  real(kind=8),dimension(1:nener)::erado,eradl,eradr
+  real(kind=8),dimension(1:nener)::eradstarl,eradstarr
 #endif
 
   gamma = params%gamma
@@ -1251,7 +1251,7 @@ END SUBROUTINE riemann_hlld
 !###########################################################
 !###########################################################
 SUBROUTINE find_mhd_flux(qvar,cvar,ff,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
@@ -1260,12 +1260,12 @@ SUBROUTINE find_mhd_flux(qvar,cvar,ff,params)
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1, Btransverse1, Vtransverse2, Btransverse2
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qvar
-  REAL(dp),DIMENSION(1:nprim+1)::cvar,ff
+  real(kind=8),DIMENSION(1:nprim)::qvar
+  real(kind=8),DIMENSION(1:nprim+1)::cvar,ff
 
-  REAL(dp)::ekin,emag,etot,d,u,v,w,A,B,C,P,Ptot,entho
-  real(dp)::gamma
-  real(dp),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::ekin,emag,etot,d,u,v,w,A,B,C,P,Ptot,entho
+  real(kind=8)::gamma
+  real(kind=8),dimension(1:nener+1)::gamma_rad
 #if NVAR>5+NENER
   INTEGER::ivar
 #endif
@@ -1342,7 +1342,7 @@ END SUBROUTINE find_mhd_flux
 !###########################################################
 !###########################################################
 SUBROUTINE find_speed_info(qvar,vel_info,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
@@ -1352,12 +1352,12 @@ SUBROUTINE find_speed_info(qvar,vel_info,params)
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1,Btransverse1,Vtransverse2,Btransverse2
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qvar
-  REAL(dp)::vel_info
+  real(kind=8),DIMENSION(1:nprim)::qvar
+  real(kind=8)::vel_info
 
-  real(dp)::gamma
-  real(dp),dimension(1:nener+1)::gamma_rad
-  REAL(dp)::d,P,u,A,B,C,B2,c2,d2,cf
+  real(kind=8)::gamma
+  real(kind=8),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::d,P,u,A,B,C,B2,c2,d2,cf
 #if NENER>0
   INTEGER::irad
 #endif
@@ -1386,7 +1386,7 @@ END SUBROUTINE find_speed_info
 !###########################################################
 !###########################################################
 SUBROUTINE find_speed_fast(qvar,vel_info,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
@@ -1395,12 +1395,12 @@ SUBROUTINE find_speed_fast(qvar,vel_info,params)
   !! the structure of qvar is : rho, Pressure, Vnormal, Bnormal,
   !! Vtransverse1,Btransverse1,Vtransverse2,Btransverse2
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qvar
-  REAL(dp)::vel_info
+  real(kind=8),DIMENSION(1:nprim)::qvar
+  real(kind=8)::vel_info
 
-  REAL(dp)::d,P,A,B,C,B2,c2,d2,cf
-  real(dp)::gamma
-  real(dp),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::d,P,A,B,C,B2,c2,d2,cf
+  real(kind=8)::gamma
+  real(kind=8),dimension(1:nener+1)::gamma_rad
 #if NENER>0
   INTEGER::irad
 #endif
@@ -1435,10 +1435,10 @@ SUBROUTINE find_speed_alfven(qvar,vel_info)
   !! Vtransverse1,Btransverse1,Vtransverse2,Btransverse2
   IMPLICIT NONE
 
-  REAL(dp),DIMENSION(1:nprim):: qvar
-  REAL(dp)::vel_info
+  real(kind=8),DIMENSION(1:nprim):: qvar
+  real(kind=8)::vel_info
 
-  REAL(dp)::d,A
+  real(kind=8)::d,A
 
   d=qvar(1); A=qvar(6)
   vel_info = sqrt(A*A/d)
@@ -1449,36 +1449,36 @@ END SUBROUTINE find_speed_alfven
 !###########################################################
 !###########################################################
 SUBROUTINE riemann_roe_mhd(qleft,qright,fmean,zero_flux,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   IMPLICIT NONE
 
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fmean
-  REAL(dp)::zero_flux
+  real(kind=8),DIMENSION(1:nprim)::qleft,qright
+  real(kind=8),DIMENSION(1:nprim+1)::fmean
+  real(kind=8)::zero_flux
 
-  REAL(dp),DIMENSION(1:nprim+1)::fleft,fright
-  REAL(dp),DIMENSION(1:nprim+1)::uleft,uright,udiff
+  real(kind=8),DIMENSION(1:nprim+1)::fleft,fright
+  real(kind=8),DIMENSION(1:nprim+1)::uleft,uright,udiff
 
-  REAL(dp), DIMENSION(7,7)::lem, rem
-  REAL(dp), DIMENSION(7)  ::lambda, lambdal, lambdar, a
+  real(kind=8), DIMENSION(7,7)::lem, rem
+  real(kind=8), DIMENSION(7)  ::lambda, lambdal, lambdar, a
 
-  REAL(dp)::droe, vxroe, vyroe, vzroe, sqrtdl, sqrtdr
-  REAL(dp)::hroe, byroe, bzroe, Xfactor, Yfactor
-  REAL(dp)::pbr, pbl
+  real(kind=8)::droe, vxroe, vyroe, vzroe, sqrtdl, sqrtdr
+  real(kind=8)::hroe, byroe, bzroe, Xfactor, Yfactor
+  real(kind=8)::pbr, pbl
 
-  REAL(dp)::fluxd, fluxmx, fluxmy, fluxmz, fluxe
-  REAL(dp)::fluxby, fluxbz, byl, byr, bzl, bzr, bx
-  REAL(dp)::dl, vxl, vyl, vzl, pl, hl
-  REAL(dp)::dr, vxr, vyr, vzr, pr, hr
-  REAL(dp)::mxl, myl, mzl, el
-  REAL(dp)::mxr, myr, mzr, er
-  REAL(dp)::coef, bx_mean
-  REAL(dp)::vleft,vright
-  REAL(dp)::dim,eim,mxm,mym,mzm,bym,bzm,etm,l1,l2
+  real(kind=8)::fluxd, fluxmx, fluxmy, fluxmz, fluxe
+  real(kind=8)::fluxby, fluxbz, byl, byr, bzl, bzr, bx
+  real(kind=8)::dl, vxl, vyl, vzl, pl, hl
+  real(kind=8)::dr, vxr, vyr, vzr, pr, hr
+  real(kind=8)::mxl, myl, mzl, el
+  real(kind=8)::mxr, myr, mzr, er
+  real(kind=8)::coef, bx_mean
+  real(kind=8)::vleft,vright
+  real(kind=8)::dim,eim,mxm,mym,mzm,bym,bzm,etm,l1,l2
 
   INTEGER :: n
   LOGICAL :: llf
@@ -1668,7 +1668,7 @@ END SUBROUTINE riemann_roe_mhd
 !###########################################################
 !###########################################################
 subroutine eigenvalues(d,vx,vy,vz,p,bx,by,bz,lambda,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
@@ -1691,13 +1691,13 @@ subroutine eigenvalues(d,vx,vy,vz,p,bx,by,bz,lambda,params)
 !   lambda  = eigenvalues
 !
   type(hydro_params_t)::params
-  real(dp),intent(IN)::d, vx, vy, vz, p
-  real(dp),intent(IN)::bx, by, bz
-  real(dp),dimension(1:7),intent(OUT)::lambda
+  real(kind=8),intent(IN)::d, vx, vy, vz, p
+  real(kind=8),intent(IN)::bx, by, bz
+  real(kind=8),dimension(1:7),intent(OUT)::lambda
   ! local variables
-  real(dp)::btsq, bt, vsq, vax,  vaxsq
-  real(dp)::asq, astarsq, cfsq, cfast, cssq, cslow
-  real(dp)::gamma, smallc
+  real(kind=8)::btsq, bt, vsq, vax,  vaxsq
+  real(kind=8)::asq, astarsq, cfsq, cfast, cssq, cslow
+  real(kind=8)::gamma, smallc
 
   gamma = params%gamma
   smallc = params%smallc
@@ -1732,7 +1732,7 @@ end subroutine eigenvalues
 !###########################################################
 !###########################################################
 SUBROUTINE eigen_cons(d,vx,vy,vz,h,Bx,by,bz,Xfac,Yfac,lambda,rem,lem,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
@@ -1757,21 +1757,21 @@ SUBROUTINE eigen_cons(d,vx,vy,vz,h,Bx,by,bz,Xfac,Yfac,lambda,rem,lem,params)
 !   lem     = left  eigenmatrix
 !
   type(hydro_params_t)::params
-  REAL(dp)::d, vx, vy, vz, h
-  REAL(dp)::Bx, by, bz, Xfac, Yfac
+  real(kind=8)::d, vx, vy, vz, h
+  real(kind=8)::Bx, by, bz, Xfac, Yfac
 
-  REAL(dp),DIMENSION(7,7)::lem, rem
-  REAL(dp),DIMENSION(7)  ::lambda
+  real(kind=8),DIMENSION(7,7)::lem, rem
+  real(kind=8),DIMENSION(7)  ::lambda
 
-  real(dp)::gamma, smallc
-  REAL(dp)::btsq, bt_starsq, bt, bt_star
-  REAL(dp)::vsq, vax,  vaxsq, hp, twid_asq, q_starsq
-  REAL(dp)::cfsq, cfast, cssq, cslow
-  REAL(dp)::beta_y, beta_z, beta_ystar, beta_zstar, beta_starsq, vbeta
-  REAL(dp)::alpha_f, alpha_s, droot, s, twid_a
-  REAL(dp)::Qfast, Qslow, af_prime, as_prime, Afpbb, Aspbb, na
-  REAL(dp)::cff, css, af, as, Afpb, Aspb, vqstr, norm
-  REAL(dp)::Q_ystar, Q_zstar
+  real(kind=8)::gamma, smallc
+  real(kind=8)::btsq, bt_starsq, bt, bt_star
+  real(kind=8)::vsq, vax,  vaxsq, hp, twid_asq, q_starsq
+  real(kind=8)::cfsq, cfast, cssq, cslow
+  real(kind=8)::beta_y, beta_z, beta_ystar, beta_zstar, beta_starsq, vbeta
+  real(kind=8)::alpha_f, alpha_s, droot, s, twid_a
+  real(kind=8)::Qfast, Qslow, af_prime, as_prime, Afpbb, Aspbb, na
+  real(kind=8)::cff, css, af, as, Afpb, Aspb, vqstr, norm
+  real(kind=8)::Q_ystar, Q_zstar
 
   gamma = params%gamma
   smallc = params%smallc
@@ -1992,31 +1992,31 @@ END SUBROUTINE eigen_cons
 !###########################################################
 !###########################################################
 subroutine riemann2d_hlld(qLL,qLR,qRL,qRR,E,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   ! HLLD 2D Riemann solver (Miyoshi & Kusano, 2005, JCP, 208, 315)
   IMPLICIT NONE
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
-  REAL(dp)::E
+  real(kind=8),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
+  real(kind=8)::E
 
-  REAL(dp),DIMENSION(1:nprim)::qtmp
-  REAL(dp)::ELL,ERL,ELR,ERR,SL,SR,SB,ST,SAL,SAR,SAT,SAB
-  REAL(dp)::cfastLLx,cfastRLx,cfastLRx,cfastRRx,cfastLLy,cfastRLy,cfastLRy,cfastRRy
-  REAL(dp)::calfvenR,calfvenL,calfvenT,calfvenB
-  REAL(dp)::rLL,rLR,rRL,rRR,pLL,pLR,pRL,pRR,uLL,uLR,uRL,uRR,vLL,vLR,vRL,vRR
-  REAL(dp)::ALL,ALR,ARL,ARR,BLL,BLR,BRL,BRR,CLL,CLR,CRL,CRR
-  REAL(dp)::PtotLL,PtotLR,PtotRL,PtotRR,rcLLx,rcLRx,rcRLx,rcRRx,rcLLy,rcLRy,rcRLy,rcRRy
-  REAL(dp)::ustar,vstar,rstarLLx,rstarLRx,rstarRLx,rstarRRx,rstarLLy,rstarLRy,rstarRLy,rstarRRy
-  REAL(dp)::rstarLL,rstarLR,rstarRL,rstarRR,AstarLL,AstarLR,AstarRL,AstarRR,BstarLL,BstarLR,BstarRL,BstarRR
-  REAL(dp)::EstarLLx,EstarLRx,EstarRLx,EstarRRx
-  real(dp)::EstarLLy,EstarLRy,EstarRLy,EstarRRy
-  real(dp)::EstarLL,EstarLR,EstarRL,EstarRR
-  REAL(dp)::AstarT,AstarB,BstarR,BstarL
-  REAL(dp)::rmin,pmin,Smax
-  real(dp)::smallc,switch_llf_dmin,switch_llf_pmin
+  real(kind=8),DIMENSION(1:nprim)::qtmp
+  real(kind=8)::ELL,ERL,ELR,ERR,SL,SR,SB,ST,SAL,SAR,SAT,SAB
+  real(kind=8)::cfastLLx,cfastRLx,cfastLRx,cfastRRx,cfastLLy,cfastRLy,cfastLRy,cfastRRy
+  real(kind=8)::calfvenR,calfvenL,calfvenT,calfvenB
+  real(kind=8)::rLL,rLR,rRL,rRR,pLL,pLR,pRL,pRR,uLL,uLR,uRL,uRR,vLL,vLR,vRL,vRR
+  real(kind=8)::ALL,ALR,ARL,ARR,BLL,BLR,BRL,BRR,CLL,CLR,CRL,CRR
+  real(kind=8)::PtotLL,PtotLR,PtotRL,PtotRR,rcLLx,rcLRx,rcRLx,rcRRx,rcLLy,rcLRy,rcRLy,rcRRy
+  real(kind=8)::ustar,vstar,rstarLLx,rstarLRx,rstarRLx,rstarRRx,rstarLLy,rstarLRy,rstarRLy,rstarRRy
+  real(kind=8)::rstarLL,rstarLR,rstarRL,rstarRR,AstarLL,AstarLR,AstarRL,AstarRR,BstarLL,BstarLR,BstarRL,BstarRR
+  real(kind=8)::EstarLLx,EstarLRx,EstarRLx,EstarRRx
+  real(kind=8)::EstarLLy,EstarLRy,EstarRLy,EstarRRy
+  real(kind=8)::EstarLL,EstarLR,EstarRL,EstarRR
+  real(kind=8)::AstarT,AstarB,BstarR,BstarL
+  real(kind=8)::rmin,pmin,Smax
+  real(kind=8)::smallc,switch_llf_dmin,switch_llf_pmin
 #if NENER>0
   INTEGER::irad
 #endif
@@ -2214,20 +2214,20 @@ end subroutine riemann2d_hlld
 !###########################################################
 !###########################################################
 subroutine riemann2d_hll_fast(qLL,qLR,qRL,qRR,E,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   ! HLL 2D Riemann solver using the fast magnetosonic speed
   IMPLICIT NONE
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
-  REAL(dp)::E
+  real(kind=8),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
+  real(kind=8)::E
 
-  REAL(dp),DIMENSION(1:nprim)::qtmp
-  REAL(dp)::ELL,ERL,ELR,ERR,SL,SR,SB,ST
-  REAL(dp)::cLLx,cRLx,cLRx,cRRx,cLLy,cRLy,cLRy,cRRy
-  REAL(dp)::uLL,uRL,uLR,uRR,vLL,vRL,vLR,vRR
+  real(kind=8),DIMENSION(1:nprim)::qtmp
+  real(kind=8)::ELL,ERL,ELR,ERR,SL,SR,SB,ST
+  real(kind=8)::cLLx,cRLx,cLRx,cRRx,cLLy,cRLy,cLRy,cRRy
+  real(kind=8)::uLL,uRL,uLR,uRR,vLL,vRL,vLR,vRR
 #if NENER>0
   INTEGER::irad
 #endif
@@ -2321,18 +2321,18 @@ end subroutine riemann2d_hll_fast
 !###########################################################
 !###########################################################
 subroutine riemann2d_hll_alfven(qLL,qLR,qRL,qRR,E)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener
   use const
   ! HLL 2D Riemann solver using the Alfven speed
   IMPLICIT NONE
-  REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
-  REAL(dp)::E
+  real(kind=8),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
+  real(kind=8)::E
 
-  REAL(dp),DIMENSION(1:nprim)::qtmp
-  REAL(dp)::ELL,ERL,ELR,ERR,SL,SR,SB,ST
-  REAL(dp)::cLLx,cRLx,cLRx,cRRx,cLLy,cRLy,cLRy,cRRy
-  REAL(dp)::uLL,uRL,uLR,uRR,vLL,vRL,vLR,vRR
+  real(kind=8),DIMENSION(1:nprim)::qtmp
+  real(kind=8)::ELL,ERL,ELR,ERR,SL,SR,SB,ST
+  real(kind=8)::cLLx,cRLx,cLRx,cRRx,cLLy,cRLy,cLRy,cRRy
+  real(kind=8)::uLL,uRL,uLR,uRR,vLL,vRL,vLR,vRR
 
   ! vx*by - vy*bx at the four edge centers
   ELL = qLL(2)*qLL(7) - qLL(3)*qLL(6)
@@ -2375,20 +2375,20 @@ end subroutine riemann2d_hll_alfven
 !###########################################################
 !###########################################################
 subroutine riemann2d_simple(qLL,qLR,qRL,qRR,E,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use amr_commons, only: hydro_params_t
   use hydro_parameters
   use const
   ! HLL 2D Riemann solver using the Alfven speed
   IMPLICIT NONE
   type(hydro_params_t)::params
-  REAL(dp),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
-  REAL(dp)::E
+  real(kind=8),DIMENSION(1:nprim)::qLL,qLR,qRL,qRR
+  real(kind=8)::E
 
   integer::riemann2d
-  REAL(dp),DIMENSION(1:nprim)::qleft,qright
-  REAL(dp),DIMENSION(1:nprim+1)::fmean_x,fmean_y
-  REAL(dp)::ELL,ERL,ELR,ERR,zero_flux
+  real(kind=8),DIMENSION(1:nprim)::qleft,qright
+  real(kind=8),DIMENSION(1:nprim+1)::fmean_x,fmean_y
+  real(kind=8)::ELL,ERL,ELR,ERR,zero_flux
 #if NENER>0
   INTEGER::irad
 #endif

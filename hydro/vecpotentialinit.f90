@@ -3,15 +3,15 @@
 !================================================================
 !================================================================
 subroutine vecpotentialinit(r,g,x,A,idim,nn)
-  use amr_parameters, only: dp, ndim, nvector
+  use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
-  integer::nn                             ! Number of cells
-  integer::idim                           ! Direction of the component
-  real(dp),dimension(1:nvector)::A        ! Vector potential component
-  real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
+  integer::nn                                 ! Number of cells
+  integer::idim                               ! Direction of the component
+  real(kind=8),dimension(1:nvector)::A        ! Vector potential component
+  real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
   ! Positions are in user (aka code) units:
@@ -27,16 +27,16 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
 
   integer::i
 #if INIT==LOOP
-  real(dp)::R0, A0, xx, yy
+  real(kind=8)::R0, A0, xx, yy
 #endif
 #if INIT==OT
-  real(dp)::B0, pi, xx, yy
+  real(kind=8)::B0, pi, xx, yy
 #endif
 #if INIT==PONO
-  real(dp)::A0, twopi, xx, yy, zz, rr, tt
+  real(kind=8)::A0, twopi, xx, yy, zz, rr, tt
 #endif
 #if INIT==CURRENTSHEET
-  real(dp)::B0, pi, xx, yy, tt
+  real(kind=8)::B0, pi, xx, yy, tt
 #else
   do i = 1,nn
      A(i)=0.0
@@ -51,7 +51,7 @@ subroutine vecpotentialinit(r,g,x,A,idim,nn)
      yy = x(i,2)-r%boxlen/2.0
      if(idim==1)A(i) = 0.0
      if(idim==2)A(i) = 0.0
-     if(idim==3)A(i) = A0*max(R0-sqrt(xx**2+yy**2),0.0_dp)
+     if(idim==3)A(i) = A0*max(R0-sqrt(xx**2+yy**2),0.0d0)
   end do
 #endif
 

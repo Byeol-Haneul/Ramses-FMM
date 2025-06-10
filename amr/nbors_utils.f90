@@ -699,9 +699,9 @@ subroutine interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
   integer,dimension(1:8,1:8)::ccc
-  real(dp),dimension(1:8)::bbb
-  real(dp)::tfrac
-  real(dp),dimension(1:twotondim)::phi_int
+  real(kind=8),dimension(1:8)::bbb
+  real(kind=8)::tfrac
+  real(kind=8),dimension(1:twotondim)::phi_int
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Routine for interpolation at level-boundaries. Interpolation is used for
   ! - boundary conditions for solving poisson equation at fine level
@@ -712,7 +712,7 @@ subroutine interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   integer::ind,ind_average,ind_father
   integer::ind_nbr,ind_cen
-  real(dp)::coeff,add
+  real(kind=8)::coeff,add
   type(oct),pointer::grid_cen,grid_nbr
 #ifdef GRAV
   ! Store central cell

@@ -212,7 +212,7 @@ subroutine output_compil(filename)
   use pm_commons
   use hydro_commons
   implicit none
-  real(dp)::xxx
+  real(dp)::real_size
   character(LEN=flen)::filename
   character(LEN=30)::mystring
   ! Copy compilation details to output directory
@@ -229,7 +229,7 @@ subroutine output_compil(filename)
   write(11,'(" NVECTOR = ",A)')adjustl(mystring)
   write(mystring,*)ndim
   write(11,'(" NDIM = ",A)')adjustl(mystring)
-  if(sizeof(xxx)==8)then
+  if(sizeof(real_size)==8)then
      write(11,'(" NPRE = 8")')
   else
      write(11,'(" NPRE = 4")')
@@ -373,7 +373,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   integer::ilun
   integer::ndim_file,nfile_file,noutput_file
   integer::noutput_min,nlevelmax_min
-  real(dp)::mass_sph_file,gamma_file
+  real(kind=8)::mass_sph_file,gamma_file
   character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering input_params'

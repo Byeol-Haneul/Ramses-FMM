@@ -3,21 +3,21 @@
 !#########################################################
 !#########################################################
 subroutine grav_ana(x,f,dx,ncell,gravity_type,gravity_params)
-  use amr_parameters, only: dp, ndim, nvector
+  use amr_parameters, only: ndim, nvector
   implicit none
   integer::gravity_type
-  real(dp),dimension(1:10)::gravity_params
+  real(kind=8),dimension(1:10)::gravity_params
   integer ::ncell                         ! Size of input arrays
-  real(dp)::dx                            ! Cell size
-  real(dp),dimension(1:nvector,1:ndim)::f ! Gravitational acceleration
-  real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
+  real(kind=8)::dx                            ! Cell size
+  real(kind=8),dimension(1:nvector,1:ndim)::f ! Gravitational acceleration
+  real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine computes the acceleration using analytical models.
   ! x(i,1:ndim) are cell center position in [0,boxlen] (user units).
   ! f(i,1:ndim) is the gravitational acceleration in user units.
   !================================================================
   integer::idim,i
-  real(dp)::gmass,emass,xmass,ymass,zmass,rr,rx,ry,rz
+  real(kind=8)::gmass,emass,xmass,ymass,zmass,rr,rx,ry,rz
 
   ! Constant vector
   if(gravity_type==1)then 
@@ -61,17 +61,17 @@ end subroutine grav_ana
 !#########################################################
 !#########################################################
 subroutine phi_ana(rr,pp,ngrid,multipole)
-  use amr_commons, only: dp, ndim, nvector
+  use amr_commons, only: ndim, nvector
   implicit none
   integer::ngrid
-  real(dp),dimension(1:ndim+1)::multipole
-  real(dp),dimension(1:nvector)::rr,pp
+  real(kind=8),dimension(1:ndim+1)::multipole
+  real(kind=8),dimension(1:nvector)::rr,pp
   ! -------------------------------------------------------------------
   ! This routine set up boundary conditions for fine levels.
   ! -------------------------------------------------------------------
 
   integer :: i
-  real(dp):: fourpi
+  real(kind=8):: fourpi
 
   fourpi=4.D0*ACOS(-1.0D0)
 

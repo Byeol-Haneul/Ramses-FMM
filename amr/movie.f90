@@ -21,7 +21,7 @@ subroutine m_output_frame(pst)
   character(len=flen),dimension(0:nvar+2+nrtgrp)::moviefiles
   integer::ilun,info,kk,ind_proj,input_size,output_size
   integer,dimension(:),allocatable::input_array,output_array
-  real(dp)::delx,dely,delz
+  real(kind=8)::delx,dely,delz
   real(kind=8),dimension(:),allocatable::data_frame
   real(kind=8),dimension(:),allocatable::dens
   real(kind=4),dimension(:),allocatable::data_single
@@ -229,16 +229,16 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   integer::ilun,ind,ind_map
   integer::imin,imax,jmin,jmax,ii,jj
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::xcen,ycen,zcen
-  real(dp)::xleft_frame,xright_frame,yleft_frame,yright_frame,zleft_frame,zright_frame
-  real(dp)::xleft,xright,yleft,yright,zleft,zright
-  real(dp)::xxleft,xxright,yyleft,yyright
-  real(dp)::delx,dely,delz
-  real(dp)::dx_frame,dy_frame,dx
-  real(dp)::dx_cell,dy_cell,dz_cell,dvol
+  real(kind=8)::xcen,ycen,zcen
+  real(kind=8)::xleft_frame,xright_frame,yleft_frame,yright_frame,zleft_frame,zright_frame
+  real(kind=8)::xleft,xright,yleft,yright,zleft,zright
+  real(kind=8)::xxleft,xxright,yyleft,yyright
+  real(kind=8)::delx,dely,delz
+  real(kind=8)::dx_frame,dy_frame,dx
+  real(kind=8)::dx_cell,dy_cell,dz_cell,dvol
   logical::ok
-  real(dp),dimension(1:ndim)::xx
-  real(dp)::temp,ekk
+  real(kind=8),dimension(1:ndim)::xx
+  real(kind=8)::temp,ekk
   integer::igrid,idim,ilevel
 
   if(r%levelmax_frame==0)then
@@ -286,16 +286,16 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
   dy_frame=dely/dble(r%nh_frame)
 
   ! Careful with box boundaries
-  xcen=min(max(xcen,delx/2.0_dp),r%boxlen-delx/2.0_dp)
-  ycen=min(max(ycen,dely/2.0_dp),r%boxlen-dely/2.0_dp)
-  zcen=min(max(zcen,delz/2.0_dp),r%boxlen-delz/2.0_dp)
+  xcen=min(max(xcen,delx/2.0),r%boxlen-delx/2.0)
+  ycen=min(max(ycen,dely/2.0),r%boxlen-dely/2.0)
+  zcen=min(max(zcen,delz/2.0),r%boxlen-delz/2.0)
 
-  xleft_frame =xcen-delx/2.0_dp
-  xright_frame=xcen+delx/2.0_dp
-  yleft_frame =ycen-dely/2.0_dp
-  yright_frame=ycen+dely/2.0_dp
-  zleft_frame =zcen-delz/2.0_dp
-  zright_frame=zcen+delz/2.0_dp
+  xleft_frame =xcen-delx/2.0
+  xright_frame=xcen+delx/2.0
+  yleft_frame =ycen-dely/2.0
+  yright_frame=ycen+dely/2.0
+  zleft_frame =zcen-delz/2.0
+  zright_frame=zcen+delz/2.0
   
   ! Loop over levels
   do ilevel=r%levelmin,nlevelmax_frame
@@ -396,27 +396,27 @@ subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
 #ifdef HYDRO
                     if(ind_var==0)then
                        ! Compute column density map
-                       map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)
+                       map(ind_map)=map(ind_map)+dvol*max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
                     else if(ind_var==1)then
                        ! Compute mass-weighted mean density
-                       map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)**2
+                       map(ind_map)=map(ind_map)+dvol*max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)**2
                     else if(ind_var==5)then
                        ! Compute mass-weighted mean temperature
                        ! Kinetic energy
                        ekk=0.0d0
                        do idim=1,3
-                          ekk=ekk+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(m%grid(igrid)%uold(ind,1),r%smallr)
+                          ekk=ekk+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
                        enddo
                        ! Pressure
                        temp=(r%gamma-1.0d0)*(m%grid(igrid)%uold(ind,5)-ekk)
                        ! Temperature in K
-                       temp=max(temp/max(m%grid(igrid)%uold(ind,1),r%smallr),r%smallc**2)*scale_T2
-                       map(ind_map)=map(ind_map)+dvol*max(m%grid(igrid)%uold(ind,1),r%smallr)*temp
+                       temp=max(temp/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr),r%smallc**2)*scale_T2
+                       map(ind_map)=map(ind_map)+dvol*max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)*temp
 #ifdef RT
                     else if(ind_var.ge.nvar+1 .and. ind_var.lt.nvar+1+nrtgrp)then
                        ! Photon flux
                        map(ind_map) = map(ind_map) &
-                                    + dvol * max(m%grid(igrid)%uold(ind,1),r%smallr) &
+                                    + dvol * max(dble(m%grid(igrid)%uold(ind,1)),r%smallr) &
                                     * m%grid(igrid)%rtuold(ind,1+(ind_var-nvar-1)*(ndim+1)) * g%rt_c(ilevel)
 #endif
                     else

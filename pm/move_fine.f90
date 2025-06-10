@@ -6,7 +6,7 @@ contains
 !################################################################
 !################################################################
 subroutine m_kick_drift_part(pst,ilevel,action_part)
-  use amr_parameters, only: ndim,dp,twotondim
+  use amr_parameters, only: ndim, twotondim
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -32,7 +32,6 @@ end subroutine m_kick_drift_part
 !################################################################
 recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,output_size)
   use mdl_module
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
@@ -99,7 +98,7 @@ end subroutine r_kick_drift_part
 !################################################################
 !################################################################
 subroutine cic_kick_drift_part(s,p,ilevel,action_part)
-  use amr_parameters, only: dp,ndim,twotondim
+  use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
   use amr_commons, only: nbor
@@ -114,16 +113,16 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   integer::action_part
   !
   !
-  real(dp),dimension(1:ndim)::x,dr,dl
+  real(kind=8),dimension(1:ndim)::x,dr,dl
   integer,dimension(1:ndim)::ir,il
-  real(dp),dimension(1:twotondim)::vol
+  real(kind=8),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer,dimension(1:twotondim)::icell
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc,dteff
   real(kind=8)::gamma,norm2,fnorm,delta
-  real(dp),dimension(1:ndim)::ff
+  real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
@@ -327,7 +326,7 @@ end subroutine cic_kick_drift_part
 !################################################################
 !################################################################
 subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
-  use amr_parameters, only: dp, ndim, threetondim
+  use amr_parameters, only: ndim, threetondim
   use pm_parameters
   use pm_commons, only: part_t
   use oct_commons, only: oct
@@ -342,16 +341,16 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   integer::action_part
   !
   !
-  real(dp),dimension(1:ndim)::x,wl,wc,wr
+  real(kind=8),dimension(1:ndim)::x,wl,wc,wr
   integer,dimension(1:ndim)::cl,cc,cr
-  real(dp),dimension(1:threetondim)::vol
+  real(kind=8),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,icell,ind,idim
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc,vol_loc,dteff
   real(kind=8)::gamma,norm2,fnorm,delta
-  real(dp),dimension(1:ndim)::ff
+  real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
   type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
@@ -521,16 +520,16 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   integer::action_part
   !
   !
-  real(dp),dimension(1:ndim)::x,wll,wl,wr,wrr
+  real(kind=8),dimension(1:ndim)::x,wll,wl,wr,wrr
   integer,dimension(1:ndim)::cll,cl,cr,crr
-  real(dp),dimension(1:fourtondim)::vol
+  real(kind=8),dimension(1:fourtondim)::vol
   integer,dimension(1:ndim,1:fourtondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,icell,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc,vol_loc,dteff
   real(kind=8)::gamma,norm2,fnorm,delta
-  real(dp),dimension(1:ndim)::ff
+  real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
   type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp

@@ -46,9 +46,9 @@ subroutine input_hydro_gadget(s,ilevel)
   !-----------------------------------------------------
   ! Compute initial conditions from gadget gas particles
   !-----------------------------------------------------
-  real(dp),dimension(1:ndim)::x,dd,dg
+  real(kind=8),dimension(1:ndim)::x,dd,dg
   integer,dimension(1:ndim)::ig,id,ix
-  real(dp),dimension(1:twotondim)::vol
+  real(kind=8),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::igrid,ipart,icell,ind,idim,ivar

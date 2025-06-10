@@ -38,7 +38,7 @@ end subroutine r_sink_evolution
 !##############################################################################
 subroutine sink_evolution(s,p,ilevel,macc_loc)
    use constants
-   use amr_parameters, only: ndim,twotondim,dp
+   use amr_parameters, only: ndim, twotondim
    use hydro_parameters, only: nvar, nener
    use ramses_commons, only: ramses_t
    use pm_commons, only: part_t
@@ -203,11 +203,11 @@ end subroutine sink_evolution
 !##############################################################################
 subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d,factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc,x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas,vel_gas,rho_av_all)
    use constants
-   use amr_parameters, only: ndim,twotondim,dp
+   use amr_parameters, only: ndim, twotondim
    use hydro_parameters, only: nvar, nener
-   use amr_commons, only: nbor,oct
+   use amr_commons, only: nbor, oct
    use ramses_commons, only: ramses_t
-   use pm_commons, only: part_t,cross
+   use pm_commons, only: part_t, cross
    use params_module
    use nbors_utils
    implicit none
@@ -300,11 +300,11 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       weight = vol(j)
 
       ! Get physical information
-      d                = max(gridn%uold(icelln,1),r%smallr)
-      vv(1)            =     gridn%uold(icelln,2)/d
-      vv(2)            =     gridn%uold(icelln,3)/d
-      vv(3)            =     gridn%uold(icelln,4)/d
-      e                =     gridn%uold(icelln,5)
+      d                = max(dble(gridn%uold(icelln,1)),r%smallr)
+      vv(1)            = gridn%uold(icelln,2)/d
+      vv(2)            = gridn%uold(icelln,3)/d
+      vv(3)            = gridn%uold(icelln,4)/d
+      e                = gridn%uold(icelln,5)
       
       ! We need to remove all non-thermal energies as they are not accreted
 #ifdef MHD
@@ -352,7 +352,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
             if(.not.associated(gridn))cycle
 
             ! Compute the 'Right' contribution
-            div_right = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/dx_loc
+            div_right = (gridn%uold(icelln,1+idim) - max(dble(gridn%uold(icelln,1)),r%smallr)*p%vp(ipart,idim))/dx_loc
 
             ! 'Left' value
             ckey_div(1:ndim) = ckeynei(1:ndim,j)
@@ -365,7 +365,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
             if(.not.associated(gridn))cycle
 
             ! Compute the 'Left' contribution
-            div_left = (gridn%uold(icelln,1+idim) - max(gridn%uold(icelln,1),r%smallr)*p%vp(ipart,idim))/dx_loc
+            div_left = (gridn%uold(icelln,1+idim) - max(dble(gridn%uold(icelln,1)),r%smallr)*p%vp(ipart,idim))/dx_loc
 
             ! Compute the 'Total' contribution
             div_cell = (div_right - div_left)
@@ -389,7 +389,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
          r2_sink     = (factG * bondi_mass / v_bondi**2)**2
          if(r%use_rho_inf)then
             r_rel = norm2(x_rel(:))*dx_loc 
-            rho_inf = d / (bondi_alpha(r_rel/(r2_sink+tiny(0.0_dp))**0.5d0))
+            rho_inf = d / (bondi_alpha(r_rel/(r2_sink+tiny(0.0d0))**0.5d0))
          else
             rho_inf = d
          end if
@@ -428,7 +428,7 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
 
          ! Density at infinity (using extrapolation)
          if(r%use_rho_inf)then
-            rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0_dp))**0.5d0))
+            rho_inf = rho_gas / (bondi_alpha(dble(r%sink_b_spline_order)*0.5d0*dx_loc/(r2_sink+tiny(0.0d0))**0.5d0))
          else
             rho_inf = rho_gas
          end if
@@ -504,9 +504,9 @@ subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t
       if(.not.associated(gridn))cycle
 
       ! Get physical information
-      d          = max(gridn%uold(icelln,1),r%smallr)
-      vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
-      e          =     gridn%uold(icelln,5)/d
+      d          = max(dble(gridn%uold(icelln,1)),r%smallr)
+      vv(1:ndim) = gridn%uold(icelln,2:ndim+1)/d
+      e          = gridn%uold(icelln,5)/d
       
       ! We need to remove all non-thermal energies as they are not accreted
 #ifdef MHD
@@ -636,11 +636,11 @@ end subroutine sink_accretion
 !##############################################################################
 subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_overdt,dMEd_overdt,tan_theta,m_acc,e_acc,x_acc,p_acc,passive_acc,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc)
    use constants
-   use amr_parameters, only: ndim,twotondim,dp
+   use amr_parameters, only: ndim, twotondim
    use hydro_parameters, only: nvar, nener
-   use amr_commons, only: nbor,oct
+   use amr_commons, only: nbor, oct
    use ramses_commons, only: ramses_t
-   use pm_commons, only: part_t,cross
+   use pm_commons, only: part_t, cross
    use params_module
    use nbors_utils
    implicit none
@@ -723,7 +723,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
       acc_ratio = max(acc_ratio, 0.0d0)
 
       ! Compute the jet direction
-      jet_direction(1:ndim) = p%jp(ipart,1:ndim) / (norm2(p%jp(ipart,:)) + tiny(0.0_dp)) 
+      jet_direction(1:ndim) = p%jp(ipart,1:ndim) / (norm2(p%jp(ipart,:)) + tiny(0.0d0)) 
 
       !!! Compute all of the necessary weights
       ! Loop over all possible cells within the feedback region
@@ -767,7 +767,7 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
                      call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
                      ! If missing cycle
                      if(.not.associated(gridn))cycle
-                     d = max(gridn%uold(icelln,1), r%smallr)
+                     d = max(dble(gridn%uold(icelln,1)), r%smallr)
                      rho_gas_fb = rho_gas_fb + d*local_weight
                   end if
 
@@ -830,9 +830,9 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
          if(.not.associated(gridn))cycle
 
          ! Get the local gas properties
-         d          = max(gridn%uold(icelln,1),r%smallr)
-         vv(1:ndim) =     gridn%uold(icelln,2:ndim+1)/d
-         e          =     gridn%uold(icelln,5)/d
+         d          = max(dble(gridn%uold(icelln,1)),r%smallr)
+         vv(1:ndim) = gridn%uold(icelln,2:ndim+1)/d
+         e          = gridn%uold(icelln,5)/d
 
          ! Get the weight
          weight = volCIC(j) * weight_fb_nei(iBHnei)
@@ -862,8 +862,8 @@ subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v,dMBH_
             
             ! Now we inject the actual feedback (note, all energy is due to work done)
             gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + fbk_mass_agn_loc
-            gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0_dp))
-            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0_dp)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+            gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0d0))
+            gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0d0)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
 
          end if
 
@@ -912,10 +912,10 @@ end subroutine AGN_feedback
 
 subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
    use constants
-   use amr_parameters, only: ndim,twotondim,dp
+   use amr_parameters, only: ndim, twotondim
    use hydro_parameters, only: nvar
    use ramses_commons, only: ramses_t
-   use pm_commons, only: part_t,cross
+   use pm_commons, only: part_t, cross
    use params_module
    implicit none
    type(ramses_t)::s
@@ -941,16 +941,16 @@ subroutine dynamical_friction(s,p,ilevel,ipart,rho_av_all,cs_gas,vel_gas,factG)
    mach = vel_gas_mag/cs_gas
 
    ! Calculate the gas velocity direction
-   vel_gas_direction(1:ndim) = vel_gas(1:ndim) / (vel_gas_mag + tiny(0.0_dp))
+   vel_gas_direction(1:ndim) = vel_gas(1:ndim) / (vel_gas_mag + tiny(0.0d0))
 
    ! Compute the drag force
    if(mach.lt.0.01)then
       I = mach/3.0d0
    else if(abs(mach-1).lt.0.01)then
-      I = 0.5*(0.5d0*log((mach+0.01)**2 - 1.0d0 + tiny(0.0_dp)) + 4.0d0 +  0.5d0*log((1.0d0+mach-0.01)/(1.0d0-mach+0.01+tiny(0.0_dp))) - mach+0.01)
+      I = 0.5*(0.5d0*log((mach+0.01)**2 - 1.0d0 + tiny(0.0d0)) + 4.0d0 +  0.5d0*log((1.0d0+mach-0.01)/(1.0d0-mach+0.01+tiny(0.0d0))) - mach+0.01)
    else
       ! Value for log(Lambda) taken from Beckmann+2018
-      I = 0.5d0*log(mach**2 - 1.0d0 + tiny(0.0_dp)) + 4.0d0
+      I = 0.5d0*log(mach**2 - 1.0d0 + tiny(0.0d0)) + 4.0d0
    end if
    drag_force = -I * 4.0d0*pi *factG**2 * p%mp(ipart)**2 * rho_av_all / vel_gas_mag**2
 
@@ -965,7 +965,7 @@ end subroutine dynamical_friction
 !##############################################################################
 
 subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol,ilevel)
-   use amr_parameters, only: ndim,dp,fourtondim
+   use amr_parameters, only: ndim, fourtondim
    use ramses_commons, only: ramses_t
    implicit none
    type(ramses_t)::s
@@ -981,7 +981,7 @@ subroutine sink_B_spline_weights_PCS(s,x,xnei,ckey,vol,ilevel)
    integer::idim,j
    integer,dimension(1:ndim)::crr,cr,cl,cll
    real(kind=8)::xrr,xr,xl,xll
-   real(dp),dimension(1:ndim)::wrr,wr,wl,wll
+   real(kind=8),dimension(1:ndim)::wrr,wr,wl,wll
 
    associate(r=>s%r,m=>s%m)
 
@@ -1032,7 +1032,7 @@ end subroutine sink_B_spline_weights_PCS
 !##############################################################################
 
 subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol,ilevel)
-   use amr_parameters, only: ndim,dp,threetondim
+   use amr_parameters, only: ndim, threetondim
    use ramses_commons, only: ramses_t
    implicit none
    type(ramses_t)::s
@@ -1048,7 +1048,7 @@ subroutine sink_B_spline_weights_TSC(s,x,xnei,ckey,vol,ilevel)
    integer::idim,j
    integer,dimension(1:ndim)::cr,cl,cc
    real(kind=8)::xr,xl,xc
-   real(dp),dimension(1:ndim)::wr,wl,wc
+   real(kind=8),dimension(1:ndim)::wr,wl,wc
 
    associate(r=>s%r,m=>s%m)
 
@@ -1094,7 +1094,7 @@ end subroutine sink_B_spline_weights_TSC
 !##############################################################################
 
 subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol,ilevel)
-   use amr_parameters, only: ndim,dp,twotondim
+   use amr_parameters, only: ndim, twotondim
    use ramses_commons, only: ramses_t
    implicit none
    type(ramses_t)::s
@@ -1109,7 +1109,7 @@ subroutine sink_B_spline_weights_CIC(s,x,xnei,ckey,vol,ilevel)
    !==================================================================
    integer::idim,j
    integer,dimension(1:ndim)::ir,il
-   real(dp),dimension(1:ndim)::dr,dl
+   real(kind=8),dimension(1:ndim)::dr,dl
 
    associate(r=>s%r,m=>s%m)
 
@@ -1173,7 +1173,7 @@ end subroutine psy_function
 !##############################################################################
 
 subroutine dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
-   use amr_parameters, only: dp,ndim
+   use amr_parameters, only: ndim
    use ramses_commons, only: ramses_t
    use pm_commons, only: part_t
    use mdl_module, only: mdl_mkdir
@@ -1248,7 +1248,7 @@ end subroutine dump_sink_data_fine
 !##############################################################################
 
 subroutine dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d,dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
-   use amr_parameters, only: dp,ndim
+   use amr_parameters, only: ndim
    use ramses_commons, only: ramses_t
    use pm_commons, only: part_t
    use mdl_module, only: mdl_mkdir

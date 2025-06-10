@@ -1,5 +1,5 @@
 module cache_commons
-  use amr_parameters, only: dp,ndim,twotondim,nbin
+  use amr_parameters, only: ndim, twotondim, nbin
   use hydro_parameters, only: nvar
   use rt_parameters, only: nrtvar, nrtgrp
   use call_back
@@ -33,104 +33,104 @@ module cache_commons
   end type msg_int4
   type msg_realdp
      integer(kind=4),dimension(1:twotondim)::int4
-     real(kind=dp),dimension(1:twotondim,1:nvar)::realdp
+     real(kind=8),dimension(1:twotondim,1:nvar)::realdp
 #ifdef RT
-     real(kind=dp),dimension(1:twotondim,1:nrtvar)::realdp_rt
+     real(kind=8),dimension(1:twotondim,1:nrtvar)::realdp_rt
 #endif
 #ifdef MHD
-     real(kind=dp),dimension(1:twotondim,1:6)::realdp_mhd
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
   end type msg_realdp
   type msg_small_realdp
-     real(kind=dp),dimension(1:twotondim)::realdp
+     real(kind=8),dimension(1:twotondim)::realdp
   end type msg_small_realdp
   type msg_int4_small_realdp
      integer(kind=4),dimension(1:twotondim)::flg
      integer(kind=4),dimension(1:twotondim)::ref
-     real(kind=dp),dimension(1:twotondim)::realdp
+     real(kind=8),dimension(1:twotondim)::realdp
   end type msg_int4_small_realdp
   type msg_twin_realdp
-     real(kind=dp),dimension(1:twotondim)::realdp_phi
-     real(kind=dp),dimension(1:twotondim)::realdp_dis
+     real(kind=8),dimension(1:twotondim)::realdp_phi
+     real(kind=8),dimension(1:twotondim)::realdp_dis
   end type msg_twin_realdp
   type msg_three_realdp
-     real(kind=dp),dimension(1:twotondim)::realdp_phi
-     real(kind=dp),dimension(1:twotondim)::realdp_phi_old
-     real(kind=dp),dimension(1:twotondim)::realdp_dis
+     real(kind=8),dimension(1:twotondim)::realdp_phi
+     real(kind=8),dimension(1:twotondim)::realdp_phi_old
+     real(kind=8),dimension(1:twotondim)::realdp_dis
   end type msg_three_realdp
   type msg_large_realdp
      integer(kind=4),dimension(1:twotondim)::int4
-     real(kind=dp),dimension(1:twotondim,1:nvar)::realdp_hydro
+     real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
 #ifdef RT
-     real(kind=dp),dimension(1:twotondim,1:nrtvar)::realdp_rt
+     real(kind=8),dimension(1:twotondim,1:nrtvar)::realdp_rt
 #endif
 #ifdef MHD
-     real(kind=dp),dimension(1:twotondim,1:6)::realdp_mhd
+     real(kind=8),dimension(1:twotondim,1:6)::realdp_mhd
 #endif
 #ifdef GRAV
-     real(kind=dp),dimension(1:twotondim,1:ndim+2)::realdp_poisson
+     real(kind=8),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
   end type msg_large_realdp
   type msg_rt_emissivity_realdp
-     real(kind=dp),dimension(1:twotondim,1:nrtgrp)::realdp
+     real(kind=8),dimension(1:twotondim,1:nrtgrp)::realdp
   end type msg_rt_emissivity_realdp
   type msg_saddle_clump
      integer(kind=8)::nbor
-     real(kind=dp)::dens
+     real(kind=8)::dens
   end type msg_saddle_clump
   type msg_merge_clump
      integer(kind=8)::npeak
-     real(kind=dp)::mdens
+     real(kind=8)::mdens
   end type msg_merge_clump
   type msg_prop_clump
      integer::ncell
      integer(kind=8)::ind
-     real(kind=dp)::dens
-     real(kind=dp)::mass
-     real(kind=dp)::vol
-     real(kind=dp),dimension(1:ndim)::pos
-     real(kind=dp),dimension(1:ndim)::vel
+     real(kind=8)::dens
+     real(kind=8)::mass
+     real(kind=8)::vol
+     real(kind=8),dimension(1:ndim)::pos
+     real(kind=8),dimension(1:ndim)::vel
   end type msg_prop_clump
   type msg_halo_clump
      integer::ihalo
-     real(kind=dp)::mhalo
+     real(kind=8)::mhalo
   end type msg_halo_clump
   type msg_mbin_clump
      integer::npart
      integer::lev
      integer(kind=8)::ind
-     real(kind=dp)::dens
-     real(kind=dp)::mass
-     real(kind=dp),dimension(1:ndim)::pos
-     real(kind=dp),dimension(1:nbin)::mbin
+     real(kind=8)::dens
+     real(kind=8)::mass
+     real(kind=8),dimension(1:ndim)::pos
+     real(kind=8),dimension(1:nbin)::mbin
   end type msg_mbin_clump
   type msg_unbind_clump
      integer::lev
      integer(kind=8)::ind
-     real(kind=dp)::dens
-     real(kind=dp)::mass
-     real(kind=dp),dimension(1:ndim)::pos
-     real(kind=dp),dimension(1:ndim)::vel
-     real(kind=dp),dimension(1:nbin)::mbin
+     real(kind=8)::dens
+     real(kind=8)::mass
+     real(kind=8),dimension(1:ndim)::pos
+     real(kind=8),dimension(1:ndim)::vel
+     real(kind=8),dimension(1:nbin)::mbin
   end type msg_unbind_clump
   type msg_sink_clump
      integer::lev
-     real(kind=dp),dimension(1:ndim)::pos
-     real(kind=dp),dimension(1:ndim)::vel
-     real(kind=dp),dimension(1:ndim)::acc
+     real(kind=8),dimension(1:ndim)::pos
+     real(kind=8),dimension(1:ndim)::vel
+     real(kind=8),dimension(1:ndim)::acc
   end type msg_sink_clump
   type msg_tree_clump
      integer::id
      integer::lev
-     real(kind=dp)::mass
-     real(kind=dp),dimension(1:ndim)::pos
-     real(kind=dp),dimension(1:ndim)::vel
-     real(kind=dp),dimension(1:ndim)::acc
+     real(kind=8)::mass
+     real(kind=8),dimension(1:ndim)::pos
+     real(kind=8),dimension(1:ndim)::vel
+     real(kind=8),dimension(1:ndim)::acc
   end type msg_tree_clump
   type msg_tree_minid
      integer::id
      integer(kind=8)::ind
-     real(kind=dp)::mass
+     real(kind=8)::mass
   end type msg_tree_minid
 
   ! Cache call back functions

@@ -11,9 +11,9 @@ subroutine rt_condinit(r,g,x,q,dx,nn,ilevel)
   type(run_t)::r
   type(global_t)::g
   integer ::nn,ilevel
-  real(dp)::dx                            ! Cell size
-  real(dp),dimension(1:nvector,1:nrtvar)::q ! RT variables
-  real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
+  real(kind=8)::dx                            ! Cell size
+  real(kind=8),dimension(1:nvector,1:nrtvar)::q ! RT variables
+  real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
   ! Positions are in user (aka code) units:

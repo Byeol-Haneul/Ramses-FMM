@@ -146,7 +146,7 @@ contains
     integer(kind=8) :: num_subgrids
     integer :: err_code, threads_per_block, num_blocks
     integer, parameter :: subgrid_size = 8
-    real(kind=dp) :: dt, dx
+    real(dp) :: dt, dx, gamma
 
     ! get the number of octs in each direction and compute the number of subgrids
     num_subgrids = sim%m%tail(ilevel)/8
@@ -182,10 +182,11 @@ contains
     ! Perform integration
     dt = sim%g%dtnew(ilevel)
     dx = sim%r%boxlen/2**ilevel
+    gamma = sim%r%gamma
     threads_per_block = 128
 
     call nvtxStartRange("GPU Integration", color=0)!green
-    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid_device, subgrid_indices_device, num_subgrids, subgrid_size, sim%r%gamma, dt/dx)
+    call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid_device, subgrid_indices_device, num_subgrids, subgrid_size, gamma, dt/dx)
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
 

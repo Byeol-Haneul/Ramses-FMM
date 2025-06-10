@@ -269,7 +269,7 @@ end subroutine clump_finder
 !################################################################
 #if NDIM==3 && defined(GRAV)
 subroutine collect_test(s)
-  use amr_parameters, only: twotondim,ndim,dp
+  use amr_parameters, only: twotondim, ndim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use multigrid_fine_coarse, only: pack_fetch_rho, unpack_fetch_rho
@@ -301,7 +301,7 @@ subroutine collect_test(s)
   logical::ok
   real(kind=8)::dx,vol
   real(kind=8)::d,dx_loc
-  real(dp),allocatable,dimension(:)::dens
+  real(kind=8),allocatable,dimension(:)::dens
   integer,allocatable,dimension(:)::isort
   integer,allocatable,dimension(:)::iswap
   integer(kind=8),dimension(0:ndim)::hash_key
@@ -470,12 +470,12 @@ subroutine collect_peak(s)
   integer,dimension(1:s%g%ncpu)::npeak_cpu
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  real(dp),dimension(1:ndim)::xcen,xnei
+  real(kind=8),dimension(1:ndim)::xcen,xnei
   integer, parameter::nSnei=56
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor,level_nbor
-  real(dp),dimension(1:ndim,1:nSnei)::xSnei
-  real(dp)::dens_nbor,density_max,x,y,z
+  real(kind=8),dimension(1:ndim,1:nSnei)::xSnei
+  real(kind=8)::dens_nbor,density_max,x,y,z
   logical::ok,ok_peak
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)    

@@ -29,7 +29,7 @@ end subroutine r_input_hydro_condinit
 !#########################################################################
 !#########################################################################
 subroutine input_hydro_condinit(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_parameters, only: ndim, twotondim, nvector
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -43,13 +43,13 @@ subroutine input_hydro_condinit(r,g,m,ilevel)
   ! Finally convert primitive to conservative variables.
   !------------------------------------------------------------
   integer::igrid,ngrid,ind,idim,nstride,i,ivar,irad
-  real(dp),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
 #ifdef MHD
-  real(dp),dimension(1:nvector,1:nvar+3-ndim)::qq
+  real(kind=8),dimension(1:nvector,1:nvar+3-ndim)::qq
 #else
-  real(dp),dimension(1:nvector,1:nvar)::qq
+  real(kind=8),dimension(1:nvector,1:nvar)::qq
 #endif
-  real(dp)::dx
+  real(kind=8)::dx
 
   if(m%noct(ilevel)==0)return
 
@@ -112,8 +112,8 @@ end subroutine input_hydro_condinit
 !#########################################################################
 !#########################################################################
 subroutine input_hydro_vecpot(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp,nvector
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim, nvector
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -124,12 +124,12 @@ subroutine input_hydro_vecpot(r,g,m,ilevel)
   !------------------------------------------------------------------------------
   integer::igrid,ngrid,ind,i
   integer::l,nfine,ii,jj,kk
-  real(dp),dimension(1:nvector,1:ndim)::xll,xrl,xlr,xrr
-  real(dp),dimension(1:nvector)::ax,ay,az
-  real(dp),dimension(1:nvector)::axll,axrl,axlr,axrr
-  real(dp),dimension(1:nvector)::ayll,ayrl,aylr,ayrr
-  real(dp),dimension(1:nvector)::azll,azrl,azlr,azrr
-  real(dp)::dx,dxmin
+  real(kind=8),dimension(1:nvector,1:ndim)::xll,xrl,xlr,xrr
+  real(kind=8),dimension(1:nvector)::ax,ay,az
+  real(kind=8),dimension(1:nvector)::axll,axrl,axlr,axrr
+  real(kind=8),dimension(1:nvector)::ayll,ayrl,aylr,ayrr
+  real(kind=8),dimension(1:nvector)::azll,azrl,azlr,azrr
+  real(kind=8)::dx,dxmin
 
   if(m%noct(ilevel)==0)return
 
@@ -291,7 +291,7 @@ end subroutine input_hydro_vecpot
 !#########################################################################
 !#########################################################################
 subroutine cons_from_prim(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_parameters, only: ndim, twotondim, nvector
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -303,9 +303,9 @@ subroutine cons_from_prim(r,g,m,ilevel)
   ! Convert primitive to conservative variables
   !--------------------------------------------
   integer::igrid,ind,idim,i,ivar,irad
-  real(dp)::rr,vx,vy,vz,pp
-  real(dp)::bx,by,bz
-  real(dp)::eint,ekin,emag,erad
+  real(kind=8)::rr,vx,vy,vz,pp
+  real(kind=8)::bx,by,bz
+  real(kind=8)::eint,ekin,emag,erad
 
   if(m%noct(ilevel)==0)return
 
@@ -363,9 +363,9 @@ end subroutine cons_from_prim
 !#########################################################################
 !#########################################################################
 subroutine prim_from_cons(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_parameters, only: ndim, twotondim, nvector
   use hydro_parameters, only: nvar, nener
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -375,9 +375,9 @@ subroutine prim_from_cons(r,g,m,ilevel)
   ! Convert primitive to conservative variables
   !--------------------------------------------
   integer::igrid,ind,idim,i,ivar,irad
-  real(dp)::rr,vx,vy,vz,pp
-  real(dp)::bx,by,bz
-  real(dp)::eint,ekin,emag,erad,etot
+  real(kind=8)::rr,vx,vy,vz,pp
+  real(kind=8)::bx,by,bz
+  real(kind=8)::eint,ekin,emag,erad,etot
 
   if(m%noct(ilevel)==0)return
 
@@ -435,20 +435,20 @@ end subroutine prim_from_cons
 !################################################################
 !################################################################
 subroutine region_condinit(r,g,x,q,dx,nn)
-  use amr_parameters, only:dp, nvector, ndim
+  use amr_parameters, only: nvector, ndim
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g
   integer ::nn
-  real(dp)::dx
+  real(kind=8)::dx
 #ifdef MHD
-  real(dp),dimension(1:nvector,1:nvar+3-ndim)::q
+  real(kind=8),dimension(1:nvector,1:nvar+3-ndim)::q
 #else
-  real(dp),dimension(1:nvector,1:nvar)::q
+  real(kind=8),dimension(1:nvector,1:nvar)::q
 #endif
-  real(dp),dimension(1:nvector,1:ndim)::x
+  real(kind=8),dimension(1:nvector,1:ndim)::x
   !----------------------------------------------------
   ! This routine sets simple pre-defined initial
   ! conditions, like points, squares, etc.
@@ -457,7 +457,7 @@ subroutine region_condinit(r,g,x,q,dx,nn)
   integer::ivar
 #endif
   integer::i,k
-  real(dp)::vol,rad,weight,xn,yn,zn,en
+  real(kind=8)::vol,rad,weight,xn,yn,zn,en
 
   ! Set some (tiny) default values in case n_region=0
   q(1:nn,1)=r%smallr
@@ -540,12 +540,12 @@ subroutine region_condinit(r,g,x,q,dx,nn)
         ! Compute CIC weights relative to region center
         do i=1,nn
            xn=1.0; yn=1.0; zn=1.0
-           xn=max(1.0-abs(x(i,1)-r%x_center(k))/dx,0.0_dp)
+           xn=max(1.0-abs(x(i,1)-r%x_center(k))/dx,0.0d0)
 #if NDIM>1
-           yn=max(1.0-abs(x(i,2)-r%y_center(k))/dx,0.0_dp)
+           yn=max(1.0-abs(x(i,2)-r%y_center(k))/dx,0.0d0)
 #endif
 #if NDIM>2
-           zn=max(1.0-abs(x(i,3)-r%z_center(k))/dx,0.0_dp)
+           zn=max(1.0-abs(x(i,3)-r%z_center(k))/dx,0.0d0)
 #endif
            weight=xn*yn*zn
            ! If cell lies within CIC cloud, 

@@ -6,7 +6,7 @@ contains
 !###############################################
 #ifdef GRAV
 subroutine m_rho_fine(pst,ilevel,rtype)
-  use amr_parameters, only: dp,ndim
+  use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use amr_commons, only: multipole_t
   implicit none
@@ -158,8 +158,8 @@ end subroutine r_multipole_leaf_cells
 !###########################################################
 !###########################################################
 subroutine multipole_leaf_cells(r,g,m,ilevel)
-  use amr_parameters, only: ndim,dp,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   use cache_commons
   implicit none
   type(run_t)::r
@@ -173,7 +173,7 @@ subroutine multipole_leaf_cells(r,g,m,ilevel)
   ! routine is not even called.
   !-------------------------------------------------------------------
   integer::igrid,ind,idim,ivar,nstride,icell
-  real(dp),dimension(1:ndim)::xx
+  real(kind=8),dimension(1:ndim)::xx
   real(kind=8)::dx_loc,vol_loc,mmm,dd
   logical::leaf_cell
 
@@ -264,11 +264,11 @@ end subroutine r_multipole_split_cells
 !###########################################################
 !###########################################################
 subroutine multipole_split_cells(s,ilevel)
-  use amr_parameters, only: ndim,dp,twotondim
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
-  use hydro_flag_module, only: pack_fetch_hydro,unpack_fetch_hydro
+  use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
   use cache_commons
   use cache
   implicit none
@@ -487,21 +487,21 @@ end subroutine r_cic_multipole
 !###########################################################
 subroutine cic_multipole(s,ilevel)
   use mdl_module
-  use amr_parameters, only: ndim,twotondim,dp
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
   use cache
-  use multigrid_fine_coarse, only:pack_fetch_phi,unpack_fetch_phi
+  use multigrid_fine_coarse, only:pack_fetch_phi, unpack_fetch_phi
   implicit none
   type(ramses_t)::s
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,dd,dg
+  real(kind=8),dimension(1:ndim)::x,dd,dg
   integer,dimension(1:ndim)::ig,id
-  real(dp),dimension(1:twotondim)::vol
+  real(kind=8),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::inbor,igrid,ind,idim,icell
@@ -668,7 +668,7 @@ end subroutine r_cic_part
 !##############################################################################
 !##############################################################################
 subroutine cic_part(s,p,ilevel,rtype)
-  use amr_parameters, only: ndim,twotondim,dp
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_parameters
@@ -686,8 +686,8 @@ subroutine cic_part(s,p,ilevel,rtype)
   ! Local variables
   integer,dimension(1:ndim)::ir,il,ix
   real(kind=8)::dx_loc,vol_loc
-  real(dp),dimension(1:ndim)::x,dr,dl
-  real(dp),dimension(1:twotondim)::vol
+  real(kind=8),dimension(1:ndim)::x,dr,dl
+  real(kind=8),dimension(1:twotondim)::vol
   integer,dimension(1:ndim,1:twotondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
@@ -815,8 +815,8 @@ subroutine tsc_part(s,p,ilevel,rtype)
   ! Local variables
   integer,dimension(1:ndim)::ix,cl,cc,cr
   real(kind=8)::dx_loc,vol_loc,xl,xc,xr
-  real(dp),dimension(1:ndim)::x,wl,wr,wc
-  real(dp),dimension(1:threetondim)::vol
+  real(kind=8),dimension(1:ndim)::x,wl,wr,wc
+  real(kind=8),dimension(1:threetondim)::vol
   integer,dimension(1:ndim,1:threetondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
@@ -948,8 +948,8 @@ subroutine pcs_part(s,p,ilevel,rtype)
   ! Local variables
   integer,dimension(1:ndim)::ix,cll,cl,cr,crr
   real(kind=8)::dx_loc,vol_loc,xll,xl,xr,xrr
-  real(dp),dimension(1:ndim)::x,wll,wl,wr,wrr
-  real(dp),dimension(1:fourtondim)::vol
+  real(kind=8),dimension(1:ndim)::x,wll,wl,wr,wrr
+  real(kind=8),dimension(1:fourtondim)::vol
   integer,dimension(1:ndim,1:fourtondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::i,ipart,icell,ind,idim
@@ -1225,7 +1225,7 @@ end subroutine unpack_fetch_split
 !##############################################################################
 !##############################################################################
 subroutine split_part(s,p,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp,i8b
+  use amr_parameters, only: ndim, twotondim, i8b
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -1239,13 +1239,13 @@ subroutine split_part(s,p,ilevel)
   integer::ilevel
   !
   ! Local variables
-  real(dp),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp,jp_tmp
+  real(kind=8),dimension(1:ndim)::x,xp_tmp,vp_tmp,fp_tmp,jp_tmp
   integer,dimension(1:ndim)::ii,ix,ix_ref
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::i,ipart,jpart,idim,icell,ilev
   integer::npart_coarse,npart_fine
   real(kind=8)::dx_loc,vol_loc
-  real(dp)::mp_tmp
+  real(kind=8)::mp_tmp
   integer::levelp_tmp
   integer(i8b)::idp_tmp
   type(oct),pointer::gridp
@@ -1477,9 +1477,9 @@ end subroutine r_broadcast_multipole
 !##############################################################################
 !##############################################################################
 function cic_weight(dl,dr)
-  use amr_parameters, only: dp, ndim, twotondim
-  real(dp),dimension(1:twotondim)::cic_weight
-  real(dp),dimension(1:ndim)::dl,dr
+  use amr_parameters, only: ndim, twotondim
+  real(kind=8),dimension(1:twotondim)::cic_weight
+  real(kind=8),dimension(1:ndim)::dl,dr
 #if NDIM==1
   cic_weight(1)=dl(1)
   cic_weight(2)=dr(1)
@@ -1535,9 +1535,9 @@ end function cic_index
 !##############################################################################
 !##############################################################################
 function tsc_weight(wl,wc,wr)
-  use amr_parameters, only: dp, ndim, threetondim
-  real(dp),dimension(1:threetondim)::tsc_weight
-  real(dp),dimension(1:ndim)::wl,wc,wr
+  use amr_parameters, only: ndim, threetondim
+  real(kind=8),dimension(1:threetondim)::tsc_weight
+  real(kind=8),dimension(1:ndim)::wl,wc,wr
 #if NDIM==1
   tsc_weight(1)=wl(1)
   tsc_weight(2)=wc(1)
@@ -1643,9 +1643,9 @@ end function tsc_index
 !##############################################################################
 !##############################################################################
 function pcs_weight(wll,wl,wr,wrr)
-  use amr_parameters, only: dp, ndim, fourtondim
-  real(dp),dimension(1:fourtondim)::pcs_weight
-  real(dp),dimension(1:ndim)::wll,wl,wr,wrr
+  use amr_parameters, only: ndim, fourtondim
+  real(kind=8),dimension(1:fourtondim)::pcs_weight
+  real(kind=8),dimension(1:ndim)::wll,wl,wr,wrr
 #if NDIM==1
   pcs_weight(1)=wll(1)
   pcs_weight(2)=wl (1)
@@ -1868,7 +1868,7 @@ end subroutine r_sort_part
 !##############################################################################
 !##############################################################################
 subroutine sort_part(s,p,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_parameters
@@ -1903,10 +1903,10 @@ end subroutine sort_part
 !##############################################################################
 !##############################################################################
 recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_coarse, ilevel, final_level)
-  use amr_parameters, only: dp, ndim, twotondim
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t
   use pm_commons, only: part_t
-  use hilbert, only: next_state_diagram_reverse,one_digit_diagram
+  use hilbert, only: next_state_diagram_reverse, one_digit_diagram
   implicit none
   
   type(run_t),intent(in)::r
@@ -1937,15 +1937,15 @@ recursive subroutine sort_hilbert(r,g,p,head_part, tail_part, ix_coarse, cstate_
   ! Local variables
   integer :: ip, ind_part, idim, ipart, new_ipart
   integer :: ckey_max, cstate_fine, ind_cart_part, head_fine, tail_fine
-  real(dp) :: ckey_factor
   integer, dimension(1:ndim) :: ix_fine, ix_ref, ix_part
   integer, dimension(0:twotondim-1,1:ndim) :: ix, ix_child
   integer, dimension(0:twotondim-1) :: nstate, sdigit, ind, ind_cart, ind_hilbert
   integer, dimension(0:twotondim-1) :: numb_part, offset
+  real(kind=8) :: ckey_factor
   
   ! Compute particle position to cartesian key factor
   ckey_max = 2**ilevel
-  ckey_factor = 2.0**ilevel / dble(r%boxlen)
+  ckey_factor = 2.0**ilevel / r%boxlen
   
   ! Initial Cartesian offset for fine cells
   do idim = 1, ndim

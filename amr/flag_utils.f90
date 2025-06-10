@@ -437,13 +437,13 @@ subroutine sink_flag(s,p,ilevel)
    ! This routine flag for refinement cells that are close enough
    ! from sink particles.
    !==================================================================
-   real(dp),dimension(:,:),allocatable::x_nei
+   real(kind=8),dimension(:,:),allocatable::x_nei
    integer,dimension(1:ndim)::ckey,ckey_ref,ckey_nbor
    integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
    integer::i,j,k,ipart,icellp,icelln,ind,idim,i_nei,n_nei,nrad
    integer,dimension(1:ndim)::ix
-   real(dp)::dx_loc,vol_loc,x,y,z,rrad,rr
-   real(dp),dimension(1:3)::xcen,xnei
+   real(kind=8)::dx_loc,vol_loc,x,y,z,rrad,rr
+   real(kind=8),dimension(1:3)::xcen,xnei
    type(oct),pointer::gridp,gridn
    type(msg_int4)::dummy_int4
  

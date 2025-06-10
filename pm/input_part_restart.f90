@@ -11,7 +11,7 @@ contains
 !#########################################################################
 subroutine m_input_part_restart(pst)
   use mdl_module
-  use amr_parameters, only: ndim,dp
+  use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use output_amr_module, only: input_header
   use pm_parameters, only: PART_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
@@ -186,7 +186,6 @@ end subroutine m_input_part_restart
 !#########################################################################
 recursive subroutine r_input_part_restart(pst,input_array,input_size,output,output_size)
   use mdl_module
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use pm_parameters, only: PART_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
   use mdl_parameters
@@ -232,8 +231,8 @@ end subroutine r_input_part_restart
 !#########################################################################
 !#########################################################################
 subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
-  use amr_parameters, only: ndim,dp,i8b
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim, dp, i8b
+  use amr_commons, only: run_t, global_t
   use pm_parameters, only: PART_TYPE, STAR_TYPE, SINK_TYPE, TREE_TYPE
   use pm_commons, only: part_t
   implicit none

@@ -51,7 +51,7 @@ end subroutine r_courant_fine
 !###########################################################
 !###########################################################
 subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
-  use amr_parameters, only: dp,nvector,ndim,twotondim
+  use amr_parameters, only: nvector, ndim, twotondim
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -65,10 +65,10 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
   ! this routine computes the maximum allowed time-step.                !
   !----------------------------------------------------------------------
   integer::ivar,idim,ind,igrid
-  real(dp)::dt_lev,dx,vol
-  real(dp),dimension(1:nvar)::uu
-  real(dp),dimension(1:ndim)::gg
-  real(dp),dimension(1:6)::bb
+  real(kind=8)::dt_lev,dx,vol
+  real(kind=8),dimension(1:nvar)::uu
+  real(kind=8),dimension(1:ndim)::gg
+  real(kind=8),dimension(1:6)::bb
 
 #ifdef HYDRO
 
@@ -140,7 +140,7 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
 #endif
            ! Compute CFL time-step
            call cmpdt(r,uu,bb,gg,dx,dt_lev)
-           dt=min(dt,real(dt_lev,kind=8))
+           dt=min(dt,dt_lev)
 
         endif
 
@@ -158,9 +158,9 @@ end subroutine courant_fine
 !###########################################################
 !###########################################################
 subroutine reset_init(r,g,m,ilevel)
-  use amr_parameters, only: dp,nvector,ndim,twotondim
+  use amr_parameters, only: nvector, ndim, twotondim
   use hydro_parameters, only: nvar, nener
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -172,16 +172,16 @@ subroutine reset_init(r,g,m,ilevel)
   ! Local variables
   integer::igrid,ngrid,ind,idim,nstride,i,ivar,irad
   integer::l,nfine,ii,jj,kk
-  real(dp),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
 #ifdef MHD
-  real(dp),dimension(1:nvector,1:nvar+3-ndim)::qq
+  real(kind=8),dimension(1:nvector,1:nvar+3-ndim)::qq
 #else
-  real(dp),dimension(1:nvector,1:nvar)::qq
+  real(kind=8),dimension(1:nvector,1:nvar)::qq
 #endif
-  real(dp)::dx,dxmin
-  real(dp)::rr,vx,vy,vz,pp
-  real(dp)::bx,by,bz
-  real(dp)::eint,ekin,emag,erad
+  real(kind=8)::dx,dxmin
+  real(kind=8)::rr,vx,vy,vz,pp
+  real(kind=8)::bx,by,bz
+  real(kind=8)::eint,ekin,emag,erad
 
 #ifdef HYDRO
 

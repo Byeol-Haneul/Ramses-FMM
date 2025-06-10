@@ -38,9 +38,9 @@ end subroutine r_output_hydro
 !###################################################
 !###################################################
 subroutine output_hydro(s,filename)
-  use amr_parameters, only: ndim,twotondim,flen,dp
-  use hydro_parameters, only: nvar,nprim,nener,ie
-  use ramses_commons, only: ramses_t,open_file,close_file
+  use amr_parameters, only: ndim, twotondim, flen
+  use hydro_parameters, only: nvar, nprim, nener,ie
+  use ramses_commons, only: ramses_t, open_file, close_file
   implicit none
   type(ramses_t)::s
   character(LEN=flen)::filename
@@ -50,11 +50,11 @@ subroutine output_hydro(s,filename)
   integer::ilevel,igrid,ilun,irad,n,ind
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim,1:nprim)::qout
-  real(dp),dimension(1:twotondim,1:nprim)::qold
-  real(dp),dimension(1:twotondim,1:nvar)::uold
-  real(dp),dimension(1:twotondim,1:6)::bold
-  real(dp)::vx,vy,vz,bx,by,bz
-  real(dp)::etot,ekin,emag,erad,dd,pp
+  real(kind=8),dimension(1:twotondim,1:nprim)::qold
+  real(kind=8),dimension(1:twotondim,1:nvar)::uold
+  real(kind=8),dimension(1:twotondim,1:6)::bold
+  real(kind=8)::vx,vy,vz,bx,by,bz
+  real(kind=8)::etot,ekin,emag,erad,dd,pp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
 
@@ -146,9 +146,9 @@ end subroutine output_hydro
 !###################################################
 !###################################################
 subroutine backup_hydro(r,g,m,mdl,filename)
-  use amr_parameters, only: ndim,flen
+  use amr_parameters, only: ndim, flen
   use hydro_parameters, only: nvar
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t, global_t, mesh_t
   use mdl_module
   implicit none
   type(run_t)::r
@@ -201,8 +201,8 @@ end subroutine backup_hydro
 !###################################################
 !###################################################
 subroutine file_descriptor_hydro(r,filename,write_bkp_file)
-  use amr_parameters, only: ndim,flen
-  use hydro_parameters, only: nvar,nener,nprim,ie,nion
+  use amr_parameters, only: ndim, flen
+  use hydro_parameters, only: nvar, nener, nprim, ie, nion
   use amr_commons, only: run_t
   implicit none
   type(run_t)::r

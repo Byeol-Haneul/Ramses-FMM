@@ -5,7 +5,6 @@ contains
 !#####################################################################
 !#####################################################################
 subroutine m_rt_step(pst,ilevel)
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use cooling_fine_module, only: r_cooling_fine
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold
@@ -16,8 +15,8 @@ subroutine m_rt_step(pst,ilevel)
   type(pst_t)::pst
   integer::ilevel
 
-  real(dp) :: dt_save, t_save
-  real(dp) :: dt_rad, t_rad
+  real(kind=8) :: dt_save, t_save
+  real(kind=8) :: dt_rad, t_rad
   integer  :: i, i_substep
 
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,mdl=>pst%s%mdl)
@@ -90,7 +89,7 @@ end subroutine m_rt_step
 !#####################################################################
 !#####################################################################
 subroutine m_rt_update_time(pst,ilevel,t,dt)
-  use amr_parameters, only: dp,n_frw
+  use amr_parameters, only: n_frw
   use ramses_commons, only: pst_t
   use update_time_module, only: in_broadcast_aexp_t, r_broadcast_aexp
   use newdt_fine_module, only: in_broadcast_dt_t, r_broadcast_dt
@@ -98,7 +97,7 @@ subroutine m_rt_update_time(pst,ilevel,t,dt)
   implicit none
   type(pst_t)::pst
   integer::ilevel
-  real(dp)::dt,t
+  real(kind=8)::dt,t
 
   type(in_broadcast_dt_t)::in_broadcast_dt
   type(in_broadcast_aexp_t)::in_broadcast_aexp

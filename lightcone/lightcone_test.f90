@@ -1,5 +1,4 @@
 module lightcone_test_module
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use lightcone_utils
   use lightcone_io_module
@@ -34,10 +33,10 @@ contains
 
   subroutine test_rotation_matrices(pst)
     type(pst_t), intent(in) :: pst
-    real(dp) :: x(3) ! Coordinates of a point in the some coordinate system
-    real(dp) :: x_prime(3) ! Coordinates of the same point in a different coordinate system
-    real(dp) :: x_back(3) ! Coordinates the same point in the original coordinate system
-    real(dp) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
+    real(kind=8) :: x(3) ! Coordinates of a point in the some coordinate system
+    real(kind=8) :: x_prime(3) ! Coordinates of the same point in a different coordinate system
+    real(kind=8) :: x_back(3) ! Coordinates the same point in the original coordinate system
+    real(kind=8) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
 
     cone_to_box_rotation = rotation_matrix(deg2rad(pst%s%r%cone_theta), deg2rad(pst%s%r%cone_phi))
     box_to_cone_rotation = transpose(cone_to_box_rotation)
@@ -85,11 +84,11 @@ contains
 
   subroutine test_comoving_distance(pst)
     type(pst_t), intent(in) :: pst
-    real(dp) :: z, dist, Omega0, OmegaL, OmegaR, h0, coverH0
+    real(kind=8) :: z, dist, Omega0, OmegaL, OmegaR, h0, coverH0
 
     Omega0 = pst%s%g%omega_m
     OmegaL = pst%s%g%omega_l
-    OmegaR = 1.0_dp - Omega0 - OmegaL
+    OmegaR = 1.0d0 - Omega0 - OmegaL
     h0 = pst%s%g%h0
     coverH0 = 2.9979246d+5/h0
 
@@ -101,45 +100,45 @@ contains
     write(*,*) "  h0 = ", h0
     write(*,*) ""
 
-    z = 0.5_dp
+    z = 0.5d0
     dist = comoving_distance(z, Omega0, OmegaL, OmegaR, coverH0)
     write(*,*) "    Distance at z = ", z, " is ", dist, " Mpc"
 
-    z = 1.0_dp
+    z = 1.0d0
     dist = comoving_distance(z, Omega0, OmegaL, OmegaR, coverH0)
     write(*,*) "    Distance at z = ", z, " is ", dist, " Mpc"
 
-    z = 2.0_dp
+    z = 2.0d0
     dist = comoving_distance(z, Omega0, OmegaL, OmegaR, coverH0)
     write(*,*) "    Distance at z = ", z, " is ", dist, " Mpc"
 
-    z = 10.0_dp
+    z = 10.0d0
     dist = comoving_distance(z, Omega0, OmegaL, OmegaR, coverH0)
     write(*,*) "    Distance at z = ", z, " is ", dist, " Mpc"
 
-    z = 100.0_dp
+    z = 100.0d0
     dist = comoving_distance(z, Omega0, OmegaL, OmegaR, coverH0)
     write(*,*) "    Distance at z = ", z, " is ", dist, " Mpc"
 
-    z = 1000.0_dp
+    z = 1000.0d0
     dist = comoving_distance(z, Omega0, OmegaL, OmegaR, coverH0)
     write(*,*) "    Distance at z = ", z, " is ", dist, " Mpc"
   end subroutine test_comoving_distance
 
   subroutine test_comoving2code(pst)
     type(pst_t), intent(in) :: pst
-    real(dp) :: l, code_l
+    real(kind=8) :: l, code_l
 
     write(*,*) ""
     write(*,*) "Testing conversion of comoving distance to code units"
-    l = 1.0_dp
+    l = 1.0d0
     code_l = comoving2code(pst%s%g, l) ! This tells us how many code units per Mpc, the inverse of which is how many Mpc per code unit
-    write(*,*) "    Box comoving size is ", 1.0_dp / code_l, " Mpc" 
+    write(*,*) "    Box comoving size is ", 1.0d0 / code_l, " Mpc" 
     write(*,*) ""
   end subroutine test_comoving2code
 
   subroutine print_dp_matrix(matrix)
-    real(dp), dimension(:,:), intent(in) :: matrix
+    real(kind=8), dimension(:,:), intent(in) :: matrix
     integer :: i, n, m
     character(len=32) :: fmt
 

@@ -11,7 +11,6 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_input_part_zoom(pst)
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -71,8 +70,8 @@ end subroutine r_input_part_zoom
 !#########################################################################
 !#########################################################################
 subroutine input_part_zoom(r,g,p,m)
-  use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r
@@ -85,12 +84,12 @@ subroutine input_part_zoom(r,g,p,m)
   integer::icpu,ipart,idim,igrid,ilevel,ind
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
   integer::plane_size
-  real(dp)::dx,xx1,xx2,xx3
+  real(kind=8)::dx,xx1,xx2,xx3
   real(kind=8)::dispmax=0.0
   integer(kind=8)::ipart_old
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind
-  real(dp),allocatable,dimension(:,:,:)::init_array
-  real(dp),allocatable,dimension(:,:,:)::init_array_x
+  real(kind=8),allocatable,dimension(:,:,:)::init_array
+  real(kind=8),allocatable,dimension(:,:,:)::init_array_x
   real(kind=4),dimension(:,:),allocatable::init_plane
   character(LEN=80)::filename,filename_x
   character(LEN=5)::nchar

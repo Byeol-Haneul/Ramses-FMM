@@ -5,15 +5,15 @@ contains
 !###########################################################
 !###########################################################
 subroutine interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
-  use amr_parameters, only: ndim,dp,twotondim,threetondim
+  use amr_parameters, only: ndim, twotondim, threetondim
   use amr_commons, only: mesh_t
   implicit none
   type(mesh_t)::m
   integer,dimension(1:threetondim)::igrid_nbor,ind_nbor
   integer,dimension(1:8,1:8)::ccc
-  real(dp),dimension(1:8)::bbb
-  real(dp)::tfrac
-  real(dp),dimension(1:twotondim)::phi_int
+  real(kind=8),dimension(1:8)::bbb
+  real(kind=8)::tfrac
+  real(kind=8),dimension(1:twotondim)::phi_int
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Routine for interpolation at level-boundaries. Interpolation is used for
   ! - boundary conditions for solving poisson equation at fine level
@@ -24,7 +24,7 @@ subroutine interpol_phi(m,igrid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   integer::ind,ind_average,ind_father
   integer::igrid_nbr,ind_nbr,igrid_cen,ind_cen
-  real(dp)::coeff,add
+  real(kind=8)::coeff,add
 #ifdef GRAV
   ! Store central cell
   igrid_cen=igrid_nbor(threetondim/2+1)
@@ -82,7 +82,7 @@ end subroutine r_save_phi_old
 !###########################################################
 !###########################################################
 subroutine save_phi_old(m,ilevel)
-  use amr_parameters, only: ndim,dp,twotondim,threetondim
+  use amr_parameters, only: ndim, twotondim, threetondim
   use amr_commons, only: mesh_t
   implicit none
   type(mesh_t)::m

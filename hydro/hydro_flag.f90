@@ -5,8 +5,8 @@ contains
 !#####################################################################
 !#####################################################################
 subroutine hydro_flag(s,ilevel)
-  use amr_parameters, only: ndim,twotondim,twondim,dp
-  use amr_commons, only: oct,nbor
+  use amr_parameters, only: ndim, twotondim, twondim
+  use amr_commons, only: oct, nbor
   use ramses_commons, only: ramses_t
   use hydro_parameters, only: nvar
   use cache_commons
@@ -28,9 +28,9 @@ subroutine hydro_flag(s,ilevel)
   integer::igridd,igridg,icelld,icellg,igridp,icellp
   integer,dimension(1:twondim)::igridn,icelln
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
-  real(dp),dimension(1:nvar)::uug,uum,uud
+  real(kind=8),dimension(1:nvar)::uug,uum,uud
 #ifdef MHD
-  real(dp),dimension(1:6)::bbg,bbm,bbd
+  real(kind=8),dimension(1:6)::bbg,bbm,bbd
 #endif
   logical::ok
   type(nbor),dimension(1:twondim)::gridn

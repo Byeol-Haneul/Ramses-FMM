@@ -6,7 +6,6 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_input_part_ascii(pst)
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
@@ -14,7 +13,7 @@ subroutine m_input_part_ascii(pst)
   ! This routine is the master procedure to read and dispatch particles
   ! from an ascii file.
   !--------------------------------------------------------------------
-  real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1,jj1,jj2,jj3
+  real(kind=8)::xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1,jj1,jj2,jj3
   integer(kind=8)::npart_tot,nstar_tot,nsink_tot
   character(LEN=80)::filename
   integer,allocatable,dimension(:)::input_array
@@ -182,7 +181,6 @@ end subroutine r_input_part_ascii
 !#########################################################################
 subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   use mdl_module
-  use amr_parameters, only: dp
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -203,7 +201,7 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   integer(kind=8)::indglob
   integer(kind=8)::jpart,npart,nremain
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind
-  real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
+  real(kind=8)::xx1,xx2,xx3,vv1,vv2,vv3,mm1
   character(LEN=80)::filename
 
   !--------------------------------------
@@ -300,7 +298,6 @@ end subroutine r_input_star_ascii
 !#########################################################################
 subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   use mdl_module
-  use amr_parameters, only: dp
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -321,7 +318,7 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   integer(kind=8)::indglob
   integer(kind=8)::jpart,npart,nremain
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind
-  real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
+  real(kind=8)::xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
   character(LEN=80)::filename
 
   !--------------------------------------
@@ -421,7 +418,6 @@ end subroutine r_input_sink_ascii
 !#########################################################################
 subroutine input_sink_ascii(mdl,r,g,p,npart_tot)
   use mdl_module
-  use amr_parameters, only: dp
   use amr_commons, only: run_t,global_t
   use pm_commons, only: part_t
   implicit none
@@ -442,7 +438,7 @@ subroutine input_sink_ascii(mdl,r,g,p,npart_tot)
   integer(kind=8)::indglob
   integer(kind=8)::jpart,npart,nremain
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind
-  real(dp)::xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1,jj1,jj2,jj3
+  real(kind=8)::xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1,jj1,jj2,jj3
   character(LEN=80)::filename
 
   !--------------------------------------

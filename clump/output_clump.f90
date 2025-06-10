@@ -75,8 +75,8 @@ subroutine output_clump_properties(s,filename)
   integer::ilun,j,ind,igrid,hid
   character(LEN=flen)::fileloc
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
-  real(dp)::pi,grav,rho,rad,mass,r200b,rmax,concentration,purity
-  real(dp),dimension(1:nbin)::mbin
+  real(kind=8)::pi,grav,rho,rad,mass,r200b,rmax,concentration,purity
+  real(kind=8),dimension(1:nbin)::mbin
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -144,10 +144,10 @@ subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
   use amr_parameters, only: nbin, dp
   use ramses_commons, only: ramses_t
   type(ramses_t)::s
-  real(dp),dimension(1:nbin)::mbin
-  real(dp)::rad,rmax,r200b,c,deltamax,cmin,cmax
-  real(dp)::pi,G,delta,deltaold,rbin,vcirc,volbin,alpha
-  real(dp)::vmax,v200b,c0,cl,cr,err,const,dr
+  real(kind=8),dimension(1:nbin)::mbin
+  real(kind=8)::rad,rmax,r200b,c,deltamax,cmin,cmax
+  real(kind=8)::pi,G,delta,deltaold,rbin,vcirc,volbin,alpha
+  real(kind=8)::vmax,v200b,c0,cl,cr,err,const,dr
   integer::i,imax
   ! Constants
   pi=ACOS(-1.0D0)

@@ -280,7 +280,7 @@ end subroutine get_global_peak_cpu
 !################################################################
 !################################################################
 subroutine allocate_peak_patch_arrays(s)
-  use amr_parameters, ONLY: ndim, dp, nbin
+  use amr_parameters, ONLY: ndim, nbin
   use clfind_commons
   use ramses_commons, ONLY: ramses_t
   implicit none
@@ -563,10 +563,10 @@ subroutine collect_saddle(s)
   integer(kind=8),dimension(1:s%g%ncpu)::npeak_cpu,npeak_cpu_all
   integer,dimension(1:ndim)::ckey,ckey_nbor
   integer(kind=8),dimension(0:ndim)::hash_cell,hash_nbor
-  real(dp)::dens_cen,dens_ave,dens_nbor,x,y,z
-  real(dp),dimension(1:ndim)::xcen,xnei
+  real(kind=8)::dens_cen,dens_ave,dens_nbor,x,y,z
+  real(kind=8),dimension(1:ndim)::xcen,xnei
   integer,parameter::nSnei=56
-  real(dp),dimension(1:ndim,1:nSnei)::xSnei
+  real(kind=8),dimension(1:ndim,1:nSnei)::xSnei
   type(nbor),dimension(1:nSnei) :: grid_nbor
   integer(kind=8),dimension(1:nSnei)::icell_nbor
   integer(kind=8)::global_peak_id
@@ -846,7 +846,7 @@ end subroutine unpack_flush_saddle
 !################################################################
 !################################################################
 subroutine merge_clumps(s,action)
-  use amr_commons, only: dp, ndim
+  use amr_commons, only: ndim
   use ramses_commons, only: ramses_t
   use cache_commons, only: msg_merge_clump, msg_prop_clump, msg_halo_clump
   use cache
@@ -869,10 +869,10 @@ subroutine merge_clumps(s,action)
   integer::nsurvive,nzero,idepth
   integer::ilev,ilevel
   integer(kind=8)::global_peak_id,merge_to
-  real(dp)::value_iij,zero=0,relevance_peak
-  real(dp)::d,dx_loc,vol
+  real(kind=8)::value_iij,zero=0,relevance_peak
+  real(kind=8)::d,dx_loc,vol
   integer,dimension(1:s%c%npeak_max)::alive,ind_sort
-  real(dp),dimension(1:s%c%npeak_max)::peakd
+  real(kind=8),dimension(1:s%c%npeak_max)::peakd
   logical::do_merge=.false.
   type(msg_merge_clump)::dummy_merge_clump
   type(msg_prop_clump)::dummy_prop_clump
@@ -1277,7 +1277,7 @@ end subroutine unpack_flush_halo
 !################################################################
 !################################################################
 subroutine compute_clump_properties(s,rtype)
-  use amr_commons, only: dp,ndim
+  use amr_commons, only: ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
   use cache_commons, only: msg_prop_clump
@@ -1299,17 +1299,17 @@ subroutine compute_clump_properties(s,rtype)
   type(msg_prop_clump)::dummy_prop_clump
   integer(kind=8)::global_peak_id
   integer::ipart,grid,peak_nr,ilevel,ipeak,plevel,igrid,itest,idim,ind
-  real(dp),dimension(1:ndim)::xcell,accel
-  real(dp)::dx_loc,tot_mass
-  real(dp)::zero=0
+  real(kind=8),dimension(1:ndim)::xcell,accel
+  real(kind=8)::dx_loc,tot_mass
+  real(kind=8)::zero=0
   ! variables needed temporarily store cell properties
-  real(dp)::d=0, vol=0, nref=0
+  real(kind=8)::d=0, vol=0, nref=0
   ! variables related to the size of a cell on a given level
   integer::nx_loc
   logical::periodic
 #ifndef WITHOUTMPI
   integer::i
-  real(dp)::tot_mass_tot
+  real(kind=8)::tot_mass_tot
 #endif
 
   associate(g=>s%g,r=>s%r,m=>s%m,c=>s%c)
@@ -1406,11 +1406,11 @@ end subroutine compute_clump_properties
 !################################################################
 !################################################################
 subroutine init_flush_prop(c,local_peak_id)
-  use amr_commons, only: dp,ndim
+  use amr_commons, only: ndim
   use clfind_commons, only: clump_t
   type(clump_t)::c
   integer::local_peak_id
-  real(dp)::zero
+  real(kind=8)::zero
 
   c%n_cells(local_peak_id)=0
   c%min_dens(local_peak_id)=huge(zero)
@@ -1472,7 +1472,7 @@ subroutine trim_clumps(s)
 #ifndef WITHOUTMPI
   use mpi
 #endif
-  use amr_commons, only: dp,ndim
+  use amr_commons, only: ndim
   use clfind_commons
   use ramses_commons, only: ramses_t
   use cache_commons, only: msg_prop_clump
@@ -1611,7 +1611,7 @@ end subroutine trim_clumps
 !################################################################
 !################################################################
 subroutine trim_particles(s,p)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_parameters, only: ndim, nbin, twotondim
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use cache_commons
@@ -1699,7 +1699,7 @@ end subroutine unpack_fetch_prop
 !##############################################################################
 !##############################################################################
 subroutine particle_clump_properties(s,p)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_parameters, only: ndim, nbin, twotondim
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use cache_commons
@@ -1717,8 +1717,8 @@ subroutine particle_clump_properties(s,p)
   integer::i,ipeak,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::halo_nr,peak_nr
-  real(dp)::xx,rad,dx_loc,r2
-  real(dp),dimension(1:ndim)::xpart
+  real(kind=8)::xx,rad,dx_loc,r2
+  real(kind=8),dimension(1:ndim)::xpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -1894,7 +1894,7 @@ end subroutine unpack_flush_part
 !##############################################################################
 !##############################################################################
 subroutine particle_potential(s,p)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_parameters, only: ndim, nbin, twotondim
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use cache_commons
@@ -1913,8 +1913,8 @@ subroutine particle_potential(s,p)
   integer::i,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::ipeak
-  real(dp)::pi,grav,rho,rad,dist,dr
-  real(dp),dimension(1:ndim)::xpart,vpart
+  real(kind=8)::pi,grav,rho,rad,dist,dr
+  real(kind=8),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -2018,7 +2018,7 @@ end subroutine particle_potential
 !##############################################################################
 !##############################################################################
 subroutine particle_unbind(s,p)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_parameters, only: ndim, nbin, twotondim
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use cache_commons
@@ -2036,8 +2036,8 @@ subroutine particle_unbind(s,p)
   integer::i,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::ipeak
-  real(dp)::pi,rho,rad,vel,bound
-  real(dp),dimension(1:ndim)::xpart,vpart
+  real(kind=8)::pi,rho,rad,vel,bound
+  real(kind=8),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -2067,8 +2067,8 @@ subroutine particle_unbind(s,p)
            ! Compute clump tidal radius
            rad=(c%clump_mass(ipeak)/4d0/pi/rho*3d0)**(1d0/3d0)
            ! Compute total energy
-           bound=total_energy(p%xp(ipart,1:ndim),c%peak_pos(ipeak,1:ndim), &
-                &             p%vp(ipart,1:ndim),c%peak_vel(ipeak,1:ndim), &
+           bound=total_energy(dble(p%xp(ipart,1:ndim)),c%peak_pos(ipeak,1:ndim), &
+                &             dble(p%vp(ipart,1:ndim)),c%peak_vel(ipeak,1:ndim), &
                 &             c%phi(ipeak,1:nbin),rad,r%boxlen)
            ! If unbound, assign to next peak in hierarchy
            if(bound.GE.0d0.or.c%clump_mass(ipeak).LE.c%mass_threshold)then
@@ -2141,7 +2141,7 @@ end subroutine unpack_fetch_unbind
 !##############################################################################
 !##############################################################################
 subroutine mass_profile(s,p)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_parameters, only: ndim, nbin, twotondim
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use cache_commons
@@ -2159,8 +2159,8 @@ subroutine mass_profile(s,p)
   integer::i,ipart,ind,idim,ibin,ilevel
   integer(kind=8)::global_peak_id
   integer::ipeak,jpeak
-  real(dp)::pi,rad,rho,dist,dr
-  real(dp),dimension(1:ndim)::xpart,vpart
+  real(kind=8)::pi,rad,rho,dist,dr
+  real(kind=8),dimension(1:ndim)::xpart,vpart
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c)
 
@@ -2237,16 +2237,16 @@ end subroutine mass_profile
 !################################################################
 !################################################################
 function cmp_distance(x1,x2,v1,v2,radius,velocity,boxlen)
-  use amr_parameters, only: ndim, dp
-  real(dp),dimension(1:ndim)::x1,x2,v1,v2
-  real(dp)::radius,velocity,boxlen
-  real(dp)::cmp_distance
+  use amr_parameters, only: ndim
+  real(kind=8),dimension(1:ndim)::x1,x2,v1,v2
+  real(kind=8)::radius,velocity,boxlen
+  real(kind=8)::cmp_distance
   !-----------------------------------------------------------
   ! This function computes the phase-space Euclidian distance
   !-----------------------------------------------------------
   integer::idim
-  real(dp)::xdist,vdist
-  real(dp),dimension(1:ndim)::xpart,vpart
+  real(kind=8)::xdist,vdist
+  real(kind=8),dimension(1:ndim)::xpart,vpart
   xdist=0d0
   xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
   ! In case of periodic boundaries
@@ -2272,17 +2272,17 @@ end function cmp_distance
 !################################################################
 !################################################################
 function total_energy(x1,x2,v1,v2,phi,radius,boxlen)
-  use amr_parameters, only: ndim, dp, nbin
-  real(dp),dimension(1:ndim)::x1,x2,v1,v2
-  real(dp),dimension(1:nbin)::phi
-  real(dp)::radius,boxlen
-  real(dp)::total_energy
+  use amr_parameters, only: ndim, nbin
+  real(kind=8),dimension(1:ndim)::x1,x2,v1,v2
+  real(kind=8),dimension(1:nbin)::phi
+  real(kind=8)::radius,boxlen
+  real(kind=8)::total_energy
   !-----------------------------------------------------------
   ! This function computes the phase-space Euclidian distance
   !-----------------------------------------------------------
   integer::idim,ibin,ileft,iright
-  real(dp)::epot,ekin,xbin,dr,r,r2
-  real(dp),dimension(1:ndim)::xpart,vpart
+  real(kind=8)::epot,ekin,xbin,dr,r,r2
+  real(kind=8),dimension(1:ndim)::xpart,vpart
   r2=0d0
   xpart(1:ndim)=x1(1:ndim)-x2(1:ndim)
   do idim=1,ndim  ! In case of periodic boundaries
@@ -2418,7 +2418,7 @@ end subroutine unpack_flush_mbin
 !##############################################################################
 !##############################################################################
 subroutine particle_peak_id(s,p)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_parameters, only: ndim, nbin, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -2441,7 +2441,7 @@ subroutine particle_peak_id(s,p)
   integer(kind=8)::global_peak_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
-  real(dp)::dx_loc,rmin,rmax,xx
+  real(kind=8)::dx_loc,rmin,rmax,xx
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf
@@ -2506,7 +2506,7 @@ end subroutine particle_peak_id
 !##############################################################################
 !##############################################################################
 subroutine particle_halo_id(s,p)
-  use amr_parameters, only: ndim,nbin,twotondim,dp
+  use amr_parameters, only: ndim, nbin, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -2530,7 +2530,7 @@ subroutine particle_halo_id(s,p)
   integer(kind=8)::global_halo_id
   integer::local_peak_id,ipeak,jpeak,merge_to
   integer::halo_nr,peak_nr
-  real(dp)::dx_loc,rmin,rmax,xx
+  real(kind=8)::dx_loc,rmin,rmax,xx
   type(oct),pointer::gridp
   type(msg_int4)::dummy_int4
   logical::ok_level,ok_leaf

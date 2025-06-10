@@ -13,7 +13,7 @@ program test_cool
   ! plt.savefig("onecell_cooling.png")
   !===============================================
   use constants
-  use amr_parameters, only: dp, ndim, nvector, twotondim
+  use amr_parameters, only: ndim, nvector, twotondim
   use hydro_parameters, only: nener, nion
   use rt_parameters, only: nrtgrp, smallnp
   use amr_commons, only: run_t, global_t, mesh_t
@@ -27,15 +27,15 @@ program test_cool
   type(cooling_t) :: c
   type(neq_cooling_t) :: tables
   integer, parameter :: nnH=6, nT=5, nXHi=5, nIt=1000
-  real(dp),dimension(1:nvector):: Tmu, TK
-  real(dp),dimension(1:nion, 1:nvector):: xion
-  real(dp),dimension(1:nvector):: nH, Zsolar
+  real(kind=8),dimension(1:nvector):: Tmu, TK
+  real(kind=8),dimension(1:nion, 1:nvector):: xion
+  real(kind=8),dimension(1:nvector):: nH, Zsolar
 
-  real(dp),dimension(nnH, nT, nXHi, nIt, 1+2*nion):: cells
-  real(dp),dimension(nIt)::times
+  real(kind=8),dimension(nnH, nT, nXHi, nIt, 1+2*nion):: cells
+  real(kind=8),dimension(nIt)::times
 
-  real(dp) :: nH0, nH1, T0, T1, x0, x1, dlognH, dlogT, dx, mu
-  real(dp) :: nHeCell, cooltime, dtcool, time0, time1, dlogTime
+  real(kind=8) :: nH0, nH1, T0, T1, x0, x1, dlognH, dlogT, dx, mu
+  real(kind=8) :: nHeCell, cooltime, dtcool, time0, time1, dlogTime
   integer :: i, j, k, l
   integer :: icount
   

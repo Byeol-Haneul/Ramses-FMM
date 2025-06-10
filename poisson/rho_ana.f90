@@ -3,19 +3,19 @@
 !#########################################################
 !#########################################################
 subroutine rho_ana(x,d,dx,gravity_params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   implicit none
-  real(dp),dimension(1:10)::gravity_params
-  real(dp)::dx                  ! Cell size
-  real(dp)::d                   ! Density
-  real(dp),dimension(1:ndim)::x ! Cell center position.
+  real(kind=8),dimension(1:10)::gravity_params
+  real(kind=8)::dx                  ! Cell size
+  real(kind=8)::d                   ! Density
+  real(kind=8),dimension(1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine generates analytical Poisson source term.
   ! Positions are in user units:
   ! x(1:ndim) are in [0,boxlen]**ndim.
   ! d is the density field in user units.
   !================================================================
-  real(dp)::dmass,emass,xmass,ymass,zmass,rr,rx,ry,rz,dd
+  real(kind=8)::dmass,emass,xmass,ymass,zmass,rr,rx,ry,rz,dd
 
   emass=gravity_params(1) ! Softening length
   xmass=gravity_params(2) ! Point mass coordinates

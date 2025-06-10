@@ -1,5 +1,4 @@
 module lightcone_utils
-  use amr_parameters, only: dp
   use amr_commons, only: run_t, global_t
 
   implicit none    
@@ -7,9 +6,9 @@ contains
 
   function cone_to_box_coordinates(rotation_matrix, observer, x_cone) result(x_box)
     ! Converts coordinates from the cone coordinate system to the box coordinate system (code units)
-    real(dp), intent(in) :: rotation_matrix(3,3), observer(3)
-    real(dp), intent(in) :: x_cone(3)
-    real(dp) :: x_box(3)
+    real(kind=8), intent(in) :: rotation_matrix(3,3), observer(3)
+    real(kind=8), intent(in) :: x_cone(3)
+    real(kind=8) :: x_box(3)
 
     x_box = matmul(rotation_matrix, x_cone)
     x_box = x_box + observer
@@ -17,9 +16,9 @@ contains
 
   function box_to_cone_coordinates(rotation_matrix, observer, x_box) result(x_cone)
     ! Converts coordinates from the box coordinate system to the cone coordinate system (code units)
-    real(dp), intent(in) :: rotation_matrix(3,3), observer(3)
-    real(dp), intent(in) :: x_box(3)
-    real(dp) :: x_cone(3)
+    real(kind=8), intent(in) :: rotation_matrix(3,3), observer(3)
+    real(kind=8), intent(in) :: x_box(3)
+    real(kind=8) :: x_cone(3)
 
     x_cone = x_box - observer
     x_cone = matmul(rotation_matrix, x_cone)
@@ -27,9 +26,9 @@ contains
 
   function rotation_matrix(theta, phi) result(rot)
     ! Computes the rotation matrix for a given theta and phi (in radians)
-    real(dp), intent(in) :: theta, phi
-    real(dp) :: rot(3,3)
-    real(dp) :: cos_theta, sin_theta, cos_phi, sin_phi
+    real(kind=8), intent(in) :: theta, phi
+    real(kind=8) :: rot(3,3)
+    real(kind=8) :: cos_theta, sin_theta, cos_phi, sin_phi
 
     cos_theta = cos(theta)
     sin_theta = sin(theta)
@@ -49,8 +48,8 @@ contains
 
   function frustum_corners(x1, x2, y_angle, z_angle) result(corners)
     ! Computes the corners of a frustum delimited by the inner and outer radii x1, x2 and opening angles y_angle, z_angle (in radians)
-    real(dp), intent(in) :: x1, x2, y_angle, z_angle
-    real(dp) :: corners(3,8)
+    real(kind=8), intent(in) :: x1, x2, y_angle, z_angle
+    real(kind=8) :: corners(3,8)
 
     ! Part of the polygon close to the observer
     corners(1, 1:4) = x1/sqrt(1.0d0 + tan(y_angle)**2 + tan(z_angle)**2)
@@ -82,9 +81,9 @@ contains
 
   function is_in_lightcone_sector(position, r1, r2, opening_angle_y, opening_angle_z)
     ! Checks if a position is inside the lightcone sector defined by the inner and outer radii r1, r2 and angle y_angle, z_angle (in radians)
-    real(dp), intent(in) :: position(3), r1, r2, opening_angle_y, opening_angle_z
+    real(kind=8), intent(in) :: position(3), r1, r2, opening_angle_y, opening_angle_z
     logical :: is_in_lightcone_sector
-    real(dp) :: r
+    real(kind=8) :: r
 
     r = sqrt(position(1)**2 + position(2)**2 + position(3)**2)
 
@@ -95,9 +94,9 @@ contains
 
   function is_in_2d_sector(x, y, angle)
     ! Checks if a point's angle is inside [-angle, angle]
-    real(dp), intent(in) :: x, y, angle
+    real(kind=8), intent(in) :: x, y, angle
     logical :: is_in_2d_sector
-    real(dp) :: cos_xy, r
+    real(kind=8) :: cos_xy, r
 
     r = sqrt(x**2 + y**2)
     if (r == 0) then
@@ -111,18 +110,18 @@ contains
 
   function deg2rad(deg)
     ! Converts degrees to radians
-    real(dp), intent(in) :: deg
-    real(dp) :: deg2rad
-    real(dp), parameter :: pi = 3.14159265358979323846_dp
+    real(kind=8), intent(in) :: deg
+    real(kind=8) :: deg2rad
+    real(kind=8), parameter :: pi = 3.14159265358979323846d0
 
-    deg2rad = deg * pi / 180.0_dp
+    deg2rad = deg * pi / 180.0d0
   end function deg2rad
 
   function comoving2code(g, l)
     ! Converts comoving distance (Mpc) to code units
     type(global_t), intent(in) :: g
-    real(dp), intent(in) :: l
-    real(dp) :: comoving2code
+    real(kind=8), intent(in) :: l
+    real(kind=8) :: comoving2code
 
     comoving2code = l * g%h0 / (g%boxlen_ini * 100)
   end function comoving2code
@@ -131,14 +130,14 @@ contains
        first_xreplica, last_xreplica, &
        first_yreplica, last_yreplica, &
        first_zreplica, last_zreplica)
-    real(dp), intent(in) :: cone_to_box_rotation(3,3), cone_observer(3)
-    real(dp), intent(in) :: angle_y, angle_z, r_inner, r_outer
+    real(kind=8), intent(in) :: cone_to_box_rotation(3,3), cone_observer(3)
+    real(kind=8), intent(in) :: angle_y, angle_z, r_inner, r_outer
     integer, intent(out) :: first_xreplica, last_xreplica, &
                           & first_yreplica, last_yreplica, &
                           & first_zreplica, last_zreplica
-    real(dp) :: xmin, xmax, ymin, ymax, zmin, zmax
-    real(dp) :: corners(3, 8)
-    real(dp) :: corner(3)
+    real(kind=8) :: xmin, xmax, ymin, ymax, zmin, zmax
+    real(kind=8) :: corners(3, 8)
+    real(kind=8) :: corner(3)
     integer :: i
 
     ! Find the corners of the frustum in cone coordinates
@@ -170,22 +169,22 @@ contains
   !====================== The following is pasted from old ramses code - Refactor and clean up later ======================
   function comoving_distance(z, Omega0, OmegaL, OmegaR, coverH0)
     ! Computes the comoving distance at a given redshift for a given cosmology
-    real(dp) :: comoving_distance, z
-    real(dp) :: Omega0, OmegaL, OmegaR, coverH0
-    real(dp) :: res, zz, del
-    real(dp), parameter :: eps=1.0d-12
+    real(kind=8) :: comoving_distance, z
+    real(kind=8) :: Omega0, OmegaL, OmegaR, coverH0
+    real(kind=8) :: res, zz, del
+    real(kind=8), parameter :: eps=1.0d-12
     integer :: error
 
     zz = abs(z)
-    error = integrate_f(2.0_dp/sqrt(1.0_dp+zz), 2.0_dp, eps, res, del, Omega0, OmegaL, OmegaR)
+    error = integrate_f(2.0d0/sqrt(1.0d0+zz), 2.0d0, eps, res, del, Omega0, OmegaL, OmegaR)
     comoving_distance = coverH0 * res
     if (z < 0) comoving_distance = -comoving_distance
 
   end function comoving_distance
 
   function f(y, Omega0, OmegaL, OmegaR)
-    real(dp) :: f
-    real(dp) :: y, omega0, omegaL, OmegaR
+    real(kind=8) :: f
+    real(kind=8) :: y, omega0, omegaL, OmegaR
 
     f = 1d0/sqrt(Omega0 + OmegaR * (y/2.0d0)**2 + OmegaL * (y/2.0d0)**6)
 
@@ -193,10 +192,10 @@ contains
 
   function integrate_f(a, b, eps, ans, del, omega0, OmegaL, OmegaR)
     integer :: integrate_f ! This is not the value of the integral, which is in ans
-    real(dp) :: a, b, eps, ans, del
-    real(dp) :: Omega0, OmegaL, OmegaR  
-    real(dp) :: t(0:24, 0:24)
-    real(dp) :: c, d, e, s, y, x, p
+    real(kind=8) :: a, b, eps, ans, del
+    real(kind=8) :: Omega0, OmegaL, OmegaR  
+    real(kind=8) :: t(0:24, 0:24)
+    real(kind=8) :: c, d, e, s, y, x, p
     integer :: n, m, i, j, k
 
     c = 0.5d0 * (b + a)

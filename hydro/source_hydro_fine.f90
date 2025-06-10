@@ -165,7 +165,7 @@ subroutine source_hydro_fine(s,ilevel)
 #endif     
         ! Correct total energy if internal energy is too small
         if(r%entropy.and.r%dual_energy.GE.0)then
-           d=max(m%grid(igrid)%unew(ind,1),r%smallr)
+           d=max(dble(m%grid(igrid)%unew(ind,1)),r%smallr)
            u=m%grid(igrid)%unew(ind,2)/d
            v=m%grid(igrid)%unew(ind,3)/d
            w=m%grid(igrid)%unew(ind,4)/d
@@ -230,7 +230,7 @@ subroutine source_hydro_fine(s,ilevel)
               m%grid(igrid)%unew(ind,r%iturb)=m%grid(igrid)%uold(ind,1)*dx**2*phi_diss
            else
               ! Implicit solution wrt to decay term only
-              d_old=max(m%grid(igrid)%uold(ind,1),r%smallr)
+              d_old=max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
               e_turb=m%grid(igrid)%uold(ind,r%iturb)
               sigma=sqrt(max(2.0*e_turb/d_old,dble(r%smallc)**2))
               m%grid(igrid)%unew(ind,r%iturb)=(m%grid(igrid)%unew(ind,r%iturb) &

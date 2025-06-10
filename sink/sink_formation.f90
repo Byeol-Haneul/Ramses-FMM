@@ -127,11 +127,11 @@ end subroutine r_sink_formation
 subroutine sink_formation(r,g,m,p,c,msink_loc)
   use rng
   use constants
-  use hydro_parameters, only:nvar
-  use amr_parameters, only:dp,ndim,twotondim
-  use amr_commons, only:run_t,global_t,mesh_t
-  use pm_commons, only:part_t
-  use clfind_commons, only:clump_t
+  use hydro_parameters, only: nvar
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
+  use pm_commons, only: part_t
+  use clfind_commons, only: clump_t
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -153,7 +153,7 @@ subroutine sink_formation(r,g,m,p,c,msink_loc)
   integer(kind=8),dimension(0:g%ncpu)::nsite_cum,nsink_cum
   integer,dimension(1:g%ncpu)::nsite_cpu,nsink_cpu
   integer::i,j,icpu,nsite,nsink,nsink_loc,peak_nr
-  real(dp)::purity
+  real(kind=8)::purity
   logical::ok
 
 #if NDIM>2

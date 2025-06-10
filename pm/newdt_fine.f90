@@ -15,7 +15,7 @@ contains
 !#####################################################################
 !#####################################################################
 subroutine m_newdt_fine(pst,ilevel)
-  use amr_parameters, only: dp,nvector
+  use amr_parameters, only: nvector
   use ramses_commons, only: pst_t
   use courant_fine_module, only: r_courant_fine, out_courant_fine_t
   implicit none
@@ -28,7 +28,7 @@ subroutine m_newdt_fine(pst,ilevel)
   ! 3- 10% maximum variation for aexp 
   ! This routine also compute the particle kinetic energy.
   !-----------------------------------------------------------
-  real(dp)::dx,tff,fourpi,threepi2
+  real(kind=8)::dx,tff,fourpi,threepi2
   real(kind=8)::ekin,vmax
   type(out_courant_fine_t)::out_courant_fine
   type(out_newdt_part_t)::out_newdt_part
@@ -154,7 +154,7 @@ end subroutine r_newdt_part
 !#####################################################################
 subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
   use amr_parameters, only: ndim
-  use amr_commons, only: run_t,global_t
+  use amr_commons, only: run_t, global_t
   use pm_commons, only: part_t
   use pm_parameters, only: TREE_TYPE
   implicit none

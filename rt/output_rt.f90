@@ -37,7 +37,7 @@ end subroutine r_output_rt
 !###################################################
 !###################################################
 subroutine output_rt(s,filename)
-  use amr_parameters, only: ndim,twotondim, flen, dp
+  use amr_parameters, only: ndim,twotondim, flen
   use rt_parameters, only: nrtvar, nrtgrp
   use ramses_commons, only: ramses_t, open_file, close_file
   implicit none
@@ -49,8 +49,8 @@ subroutine output_rt(s,filename)
   integer::ilevel,igrid,ilun,igrp,idim,ind
   integer(kind=8),dimension(s%r%levelmin:s%r%nlevelmax)::nskip
   real(kind=4),dimension(1:twotondim,1:nrtvar)::qout
-  real(dp),dimension(1:twotondim,1:nrtvar)::qold
-  real(dp),dimension(1:twotondim,1:nrtvar)::rtuold
+  real(kind=8),dimension(1:twotondim,1:nrtvar)::qold
+  real(kind=8),dimension(1:twotondim,1:nrtvar)::rtuold
   logical::overflow_reported=.false.
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -69,8 +69,8 @@ subroutine output_rt(s,filename)
               end do
             end do
         end do
-        qout=real(max(qold,tiny(0.E0)),kind=4)
-        if(maxval(qout).gt.1d31 .and. s%g%myid==1 .and. .not. overflow_reported) then
+        qout=real(max(qold,tiny(0d0)),kind=4)
+        if(maxval(dble(qout)).gt.1d31 .and. s%g%myid==1 .and. .not. overflow_reported) then
             print*,'The RT variables have very high values and are overflowing in the outputs'
             overflow_reported=.true.
         endif

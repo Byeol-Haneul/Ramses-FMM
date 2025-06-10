@@ -3,7 +3,7 @@
 !================================================================
 !================================================================
 subroutine condinit(r,g,x,q,dx,nn)
-  use amr_parameters, only: dp, ndim, nvector
+  use amr_parameters, only: ndim, nvector
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
   use input_hydro_condinit_module, only: region_condinit
@@ -11,13 +11,13 @@ subroutine condinit(r,g,x,q,dx,nn)
   type(run_t)::r
   type(global_t)::g
   integer ::nn                            ! Number of cells
-  real(dp)::dx                            ! Cell size
+  real(kind=8)::dx                            ! Cell size
 #ifdef MHD
-  real(dp),dimension(1:nvector,1:nvar+3-ndim)::q ! Primitive variables
+  real(kind=8),dimension(1:nvector,1:nvar+3-ndim)::q ! Primitive variables
 #else
-  real(dp),dimension(1:nvector,1:nvar)::q ! Primitive variables
+  real(kind=8),dimension(1:nvector,1:nvar)::q ! Primitive variables
 #endif
-  real(dp),dimension(1:nvector,1:ndim)::x ! Cell center position.
+  real(kind=8),dimension(1:nvector,1:ndim)::x ! Cell center position.
   !================================================================
   ! This routine generates initial conditions for RAMSES.
   ! Positions are in user (aka code) units:
@@ -40,23 +40,23 @@ subroutine condinit(r,g,x,q,dx,nn)
 
   integer::i
 #if INIT==COEUR
-  real(dp)::r2,rx,ry,rz,d,p,vx,vy,vz,r_trunc,r2_trunc,c2
-  real(dp)::omega_code,AU,Msol,pi,M,sigma,r_min,r2_min,omega_const,r_vortex,invr2_vortex
+  real(kind=8)::r2,rx,ry,rz,d,p,vx,vy,vz,r_trunc,r2_trunc,c2
+  real(kind=8)::omega_code,AU,Msol,pi,M,sigma,r_min,r2_min,omega_const,r_vortex,invr2_vortex
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 #elif INIT==INSTA
   integer::id,iu,iv,iw,ip,ix,iy
-  real(dp)::x0,lambday,ky,lambdaz,kz,rho1,rho2,p0,v0,v1,v2
+  real(kind=8)::x0,lambday,ky,lambdaz,kz,rho1,rho2,p0,v0,v1,v2
 #elif INIT==DOUBLEMACH
   integer::id,iu,iv,iw,ip
-  real(dp)::pi,xp
+  real(kind=8)::pi,xp
 #elif INIT==OT
-  real(dp)::pi,xc,yc
+  real(kind=8)::pi,xc,yc
 #elif INIT==PONO
-  real(dp)::xx,yy,zz,vx,vy,vz,rr,tt,omega,R0,twopi
+  real(kind=8)::xx,yy,zz,vx,vy,vz,rr,tt,omega,R0,twopi
 #elif INIT==ABC
-  real(dp)::xx,yy,zz,vx,vy,vz,A0,twopi
+  real(kind=8)::xx,yy,zz,vx,vy,vz,A0,twopi
 #elif INIT==CURRENTSHEET
-  real(dp)::pi,xc,yc,beta,v0
+  real(kind=8)::pi,xc,yc,beta,v0
 #else
   ! Call built-in initial condition generator
   call region_condinit(r,g,x,q,dx,nn)

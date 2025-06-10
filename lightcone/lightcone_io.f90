@@ -1,6 +1,6 @@
 module lightcone_io_module
   use ramses_commons, only: pst_t
-  use amr_parameters, only: flen, dp
+  use amr_parameters, only: flen
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -72,7 +72,7 @@ contains
   subroutine write_lightcone_txt_file(filename, ntotal, aexp_old, aexp)
     character(LEN=flen), intent(in) :: filename
     integer, intent(in) :: ntotal
-    real(dp), intent(in) :: aexp_old, aexp
+    real(kind=8), intent(in) :: aexp_old, aexp
     integer :: ilun
 
     ilun = 1171 ! random number

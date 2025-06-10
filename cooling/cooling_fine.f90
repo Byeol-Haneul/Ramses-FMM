@@ -102,7 +102,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 
         ! Compute rho
         do i=1,nleaf
-           nH(i)=MAX(m%grid(ind_leaf(i))%uold(ind,1),r%smallr)
+           nH(i)=MAX(dble(m%grid(ind_leaf(i))%uold(ind,1)),r%smallr)
         end do
 
         ! Compute metallicity in solar units

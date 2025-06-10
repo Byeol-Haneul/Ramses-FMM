@@ -75,7 +75,7 @@ subroutine upload_fine(s,ilevel)
   integer::ioct,ind,ivar,icell,idim
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:6,1:4)::hh
-  real(dp)::average,ekin,erad,emag
+  real(kind=8)::average,ekin,erad,emag
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 
@@ -186,7 +186,7 @@ subroutine upload_fine(s,ilevel)
         do ind=1,twotondim
            ekin=0.0d0
            do idim=1,3
-              ekin=ekin+0.5d0*m%grid(ioct)%uold(ind,idim+1)**2/max(m%grid(ioct)%uold(ind,1),r%smallr)
+              ekin=ekin+0.5d0*m%grid(ioct)%uold(ind,idim+1)**2/max(dble(m%grid(ioct)%uold(ind,1)),r%smallr)
            end do
            emag=0.0d0
 #ifdef MHD
@@ -205,7 +205,7 @@ subroutine upload_fine(s,ilevel)
         ! Scatter result to parent cell
         ekin=0.0d0
         do idim=1,3
-           ekin=ekin+0.5d0*gridp%uold(icell,idim+1)**2/max(gridp%uold(icell,1),r%smallr)
+           ekin=ekin+0.5d0*gridp%uold(icell,idim+1)**2/max(dble(gridp%uold(icell,1)),r%smallr)
         end do
         emag=0.0d0
 #ifdef MHD

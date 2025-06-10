@@ -5,8 +5,8 @@ contains
 !#####################################################################
 !#####################################################################
 subroutine rt_flag(s,ilevel)
-  use amr_parameters, only: ndim,twotondim,twondim,dp
-  use amr_commons, only: oct,nbor
+  use amr_parameters, only: ndim, twotondim, twondim
+  use amr_commons, only: oct, nbor
   use ramses_commons, only: ramses_t
   use rt_parameters, only: nrtvar, nrtgrp
   use cache_commons
@@ -28,10 +28,10 @@ subroutine rt_flag(s,ilevel)
   integer::icelld,icellg,icellp,igroup
   integer,dimension(1:twondim)::icelln
   integer(kind=8),dimension(0:ndim)::hash_key,hash_nbor
-  real(dp),dimension(1:nrtvar)::uug,uum,uud
+  real(kind=8),dimension(1:nrtvar)::uug,uum,uud
   logical::ok, do_rt_refine
   type(nbor),dimension(1:twondim)::gridn
-  real(dp),dimension(1:twondim)::c_factor
+  real(kind=8),dimension(1:twondim)::c_factor
   type(oct),pointer::gridp
   type(msg_realdp)::dummy_realdp
 

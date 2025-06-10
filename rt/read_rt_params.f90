@@ -31,17 +31,17 @@ subroutine m_read_rt_params(pst)
   logical::rt_star=.false.             ! Activate radiation from star particles          !
   logical::rt_sink=.false.             ! Activate radiation from sink particles          !
   logical::rt_emission_stats=.false.   ! Print stellar emission info                     !
-  real(dp)::rt_esc_frac=1d0            ! Photon escape fraction from stellar particles   !
+  real(kind=8)::rt_esc_frac=1d0            ! Photon escape fraction from stellar particles   !
   !character(LEN=10)::rt_flux_scheme='glf'                                               !
   !logical::rt_use_hll=.false.         ! Use hll flux (or the default glf)               !
   !logical::rt_is_outflow_bound=.false.! Make all boundaries=outflow for RT              !
-  real(dp)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
-  real(dp),dimension(1:MAXLEVEL)::rt_c_fraction=1d0 ! Lightspeed fraction for RT         !
+  real(kind=8)::rt_courant_factor=0.8d0    ! Courant factor for RT timesteps                 !
+  real(kind=8),dimension(1:MAXLEVEL)::rt_c_fraction=1d0 ! Lightspeed fraction for RT         !
   !logical::rt_vsla=.false.            ! Are we using level variable light speed?        !
   integer::rt_nsubcycle=1              ! Maximum number of RT subcycles per hydro step   !
   logical::rt_otsa=.true.              ! Use on-the-spot approximation                   !
   !logical::rt_isDiffuseUVsrc=.false.  ! UV emission from low-density cells              !
-  !real(dp)::rt_UVsrc_nHmax=-1d0       ! Density threshold for UV emission               !
+  !real(kind=8)::rt_UVsrc_nHmax=-1d0       ! Density threshold for UV emission               !
   !logical::upload_equilibrium_x=.true.! Enforce equilibrium xion when uploading         !
   !integer::heat_unresolved_HII=0      ! Subgrid model heating unresolved HII regions    !
   !integer::iHIIheat=6                 ! Var index for HII heating                       !
@@ -54,19 +54,19 @@ subroutine m_read_rt_params(pst)
   ! RT source regions parameters----------------------------------------------------------
   integer                           ::rt_nsource=0
   character(LEN=10),dimension(1:MAXREGION)::rt_source_type='square'
-  real(dp),dimension(1:MAXREGION)   ::rt_src_x_center=0.
-  real(dp),dimension(1:MAXREGION)   ::rt_src_y_center=0.
-  real(dp),dimension(1:MAXREGION)   ::rt_src_z_center=0.
-  real(dp),dimension(1:MAXREGION)   ::rt_src_length_x=1.E10
-  real(dp),dimension(1:MAXREGION)   ::rt_src_length_y=1.E10
-  real(dp),dimension(1:MAXREGION)   ::rt_src_length_z=1.E10
-  real(dp),dimension(1:MAXREGION)   ::rt_exp_source=2.0
+  real(kind=8),dimension(1:MAXREGION)   ::rt_src_x_center=0.
+  real(kind=8),dimension(1:MAXREGION)   ::rt_src_y_center=0.
+  real(kind=8),dimension(1:MAXREGION)   ::rt_src_z_center=0.
+  real(kind=8),dimension(1:MAXREGION)   ::rt_src_length_x=1.E10
+  real(kind=8),dimension(1:MAXREGION)   ::rt_src_length_y=1.E10
+  real(kind=8),dimension(1:MAXREGION)   ::rt_src_length_z=1.E10
+  real(kind=8),dimension(1:MAXREGION)   ::rt_exp_source=2.0
   integer, dimension(1:MAXREGION)   ::rt_src_group=1  
   !integer, dimension(1:MAXREGION)   ::rt_src_trace_group=1
-  real(dp),dimension(1:MAXREGION)   ::rt_n_source=0.                      ! Photon density
-  real(dp),dimension(1:MAXREGION)   ::rt_u_source=0.                      !    Photon flux
-  real(dp),dimension(1:MAXREGION)   ::rt_v_source=0.                      !    Photon flux
-  real(dp),dimension(1:MAXREGION)   ::rt_w_source=0.                      !    Photon flux
+  real(kind=8),dimension(1:MAXREGION)   ::rt_n_source=0.                      ! Photon density
+  real(kind=8),dimension(1:MAXREGION)   ::rt_u_source=0.                      !    Photon flux
+  real(kind=8),dimension(1:MAXREGION)   ::rt_v_source=0.                      !    Photon flux
+  real(kind=8),dimension(1:MAXREGION)   ::rt_w_source=0.                      !    Photon flux
 
   ! RT_GROUPS namelist---------------------------------------------------------------------
   integer::sedprops_update=-1           ! Update sedprops from stellar populations        !
@@ -75,13 +75,13 @@ subroutine m_read_rt_params(pst)
 
   ! Group props: avg and energy weigthed photoionization c-section (cm2), avg. energy (ev)
   ! Indices nrtgrp, nion stand for photon group vs species (e.g. 1=H, 2=He).
-  real(dp),dimension(nrtgrp,nion)::group_csn=0                   !    Cross sections (cm2)
-  real(dp),dimension(nrtgrp,nion)::group_cse=0                   !    Cross sections (cm2)
-  real(dp),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
-  real(dp),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
-  real(dp),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
-  real(dp),dimension(nrtgrp)::kappaAbs=0                         ! Dust absorption opacity
-  real(dp),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
+  real(kind=8),dimension(nrtgrp,nion)::group_csn=0                   !    Cross sections (cm2)
+  real(kind=8),dimension(nrtgrp,nion)::group_cse=0                   !    Cross sections (cm2)
+  real(kind=8),dimension(nrtgrp)::group_egy=0                        !  Avg photon energy (ev)
+  real(kind=8),dimension(nrtgrp)::group_L0=13.60                     ! Wavelength lower limits
+  real(kind=8),dimension(nrtgrp)::group_L1=0                         ! Wavelength upper limits
+  real(kind=8),dimension(nrtgrp)::kappaAbs=0                         ! Dust absorption opacity
+  real(kind=8),dimension(nrtgrp)::kappaSc=0                          ! Dust scattering opacity
   integer,dimension(nion)::spec2group=0                 ! Ion -> group # in recombinations
 
   integer::i, igroup_HI=0, igroup_HII=0, igroup_HeII=0, igroup_HeIII=0
