@@ -76,7 +76,6 @@ SUBROUTINE initialize_cr_rates()
      cosmic_ray_ionization_rates_induced_UV(i) = 0.d0
   end do
 
-  !TODO(code): fix secondary rates...
   cosmic_ray_ionization_rates_induced_UV(1)  = 0.d0 !4.08d-16 ! Hydrogen
   cosmic_ray_ionization_rates_induced_UV(2)  = 0.00d+00 ! Helium  --> ground state too high
   cosmic_ray_ionization_rates_induced_UV(6)  = 2.60d-14 ! Carbon
@@ -88,7 +87,7 @@ SUBROUTINE initialize_cr_rates()
   cosmic_ray_ionization_rates_induced_UV(16) = 7.91d-14 ! Sulfur
   cosmic_ray_ionization_rates_induced_UV(26) = 4.81d-14 ! Iron
 
-  cosmic_ray_ionization_rates_induced_UV_heat(1)  = 0.d0 ! Hydrogen TODO(code) SHOULD THIS BE > 0???
+  cosmic_ray_ionization_rates_induced_UV_heat(1)  = 0.d0 ! Hydrogen
   cosmic_ray_ionization_rates_induced_UV_heat(2)  = 0.00d0 ! Helium  --> ground state too high
   cosmic_ray_ionization_rates_induced_UV_heat(6)  = 0.96d0 ! Carbon
   cosmic_ray_ionization_rates_induced_UV_heat(7)  = 1.17d0 ! Nitrogen

@@ -101,7 +101,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
 #ifdef RT
      & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
-     & dt, nCell)
+     & dt, nCell, dx_SS_H2)
   ! Semi-implicitly solve for new temperature, ionization states,
   ! photon density/flux, and gas velocity in a number of cells.
   ! Parameters:
@@ -118,6 +118,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
   ! dt      =>  Timestep size             [s]
   ! nCell   =>  Number of cells (length of all the above vectors)
   ! ilevel  =>  Refinement levels
+  ! dx_SS_H2=>  Cell size [cm] used for H2 self shielding 
   !
   ! We use a slightly modified method of Anninos et al. (1997).
   !-------------------------------------------------------------------------
@@ -134,6 +135,7 @@ SUBROUTINE rtz_solve_cooling(r, tables, T2, aexp, xion, nElement, &
   real(kind=8),dimension(1:nrtgrp, 1:nvector):: Np, dNpdt
   real(kind=8),dimension(1:ndim, 1:nrtgrp, 1:nvector):: Fp, dFpdt
   integer::ilevel
+  real(kind=8):: dx_SS_H2 
 #endif
 !  logical,dimension(1:nvector):: c_switch
   real(kind=8)::dt
@@ -507,7 +509,7 @@ contains
     integer:: atomic_number, n_ions, i_other_Element, i_other_Ion, i_current_Element
     integer:: i_current_Ion
     real(kind=8):: Zsolar, total_G0
-    real(kind=8):: alpha_H2_loc, beta_H2_loc, cr_H2, de_H2, xH2_loc
+    real(kind=8):: alpha_H2_loc, beta_H2_loc, cr_H2, de_H2, xH2_loc, f_shd
     real(kind=8):: nElement_dep(n_elements)
     !-----------------------------------------------------------------------
 
@@ -527,10 +529,14 @@ contains
        end do
     end if
 
+    f_shd = 1.d0
+    if (r%isH2_rtz) then
+       f_shd = comp_SH2(nElement_dep(1)*dXion(1,3), dx_SS_H2) * comp_Sd(nElement_dep(1)*dXion(1,1), nElement_dep(1)*dXion(1,3), dx_SS_H2, dust_to_gas_mass_ratio_over_mw)
+    end if
+
     primary_cosmic_ray_ionization_rate = r%rtz_primary_cosmic_ray_ionization_rate
     UV_background_G0 = r%rtz_UV_background_G0
 
-    ! TODO(code): update with value from local radition field
     total_G0 = UV_background_G0
 
     ! END RTZ variable initialization
@@ -618,8 +624,11 @@ contains
 
           ! Deal with molecules separately
           if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
-             !TODO(code): add H2 self-shielding here
-             phAbs(igroup) = 0.5d0 * nElement_dep(1) * dXion(1, 3) * signc(igroup,1,3)  ! s-1
+             if (r%isLW(igroup).eq.1.d0) then 
+                phAbs(igroup) = 0.5d0 * nElement_dep(1) * dXion(1, 3) * signc(igroup,1,3) * f_shd  ! s-1
+             else
+                phAbs(igroup) = 0.5d0 * nElement_dep(1) * dXion(1, 3) * signc(igroup,1,3)
+             end if
           end if
        end do
        ! IR, optical and UV depletion by dust absorption: ----------------
@@ -645,6 +654,10 @@ contains
              code=1 ;   RETURN                        ! ddt(icell) too big
           endif
           
+          ! Update total G0
+          if (r%group_egy(igroup).gt.5.6d0 .and. r%group_egy(igroup).lt.13.6d0) then 
+             total_G0 = total_G0 + (dNp(igroup) * rt_c_cgs * r%group_egy(igroup) * eV2erg / (1.6d-3))
+          end if
 
           do idim=1,ndim
              dFp(idim,igroup) = &
@@ -803,7 +816,7 @@ contains
 
        ! Photodissociation
        if (r%rtz_include_photoionization) then 
-         de_H2 = de_H2 + (total_G0 * 5.68d-11)
+         de_H2 = de_H2 + (UV_background_G0 * 5.68d-11)
        end if 
 
        ! Cosmic ray destruction
@@ -811,11 +824,22 @@ contains
          de_H2 = de_H2 + H2_cosmic_ray_ionization_rate
        end if
 
+#ifdef RT
+       ! Photodissociation from the local radiation field
+       if (r%rtz_include_photoionization.and.r%rt_advect) then
+          do igroup=1,nrtgrp
+             if (r%isLW(igroup).eq.1.d0) then
+                de_H2 = de_H2 + (dXion(1,3) * SUM(signc(igroup,1,3) * dNp * f_shd))
+             else
+                de_H2 = de_H2 + (dXion(1,3) * SUM(signc(igroup,1,3) * dNp * f_shd))
+             end if  
+          end do
+       end if
+#endif
+
        ! Update xH2 and store in dXion
        xH2_loc = (cr_H2*ddt(icell) + xH2_loc)/(1.d0+de_H2*ddt(icell))
        dXion(1,3) = 2.d0 * min(max(xH2_loc,x_MIN),0.5d0)
-
-       ! TODO(code) add destruction from local radiation field
 
        ! Check for convergence
        dUU = MAX(dUU,ABS((dXion(1,3)-xion(1,3,icell))/(xion(1,3,icell)+x_FM)))
@@ -916,7 +940,7 @@ contains
 
 #ifdef RT
              ! Photoionization of less excited state from the local radiation field
-             if (r%rtz_include_photoionization) then
+             if (r%rtz_include_photoionization.and.r%rt_advect) then
                 if (iIon > 1) then 
                    cr = cr + (dXion(iElement,iIon-1) * SUM(signc(:,iElement,iIon-1)*dNp))
                 end if
@@ -982,7 +1006,7 @@ contains
 
 #ifdef RT
              ! Photoionization  from the local radiation field
-             if (r%rtz_include_photoionization) then
+             if (r%rtz_include_photoionization.and.r%rt_advect) then
                 if (iIon .lt. n_ions) then 
                    de = de + (dXion(iElement,iIon) * SUM(signc(:,iElement,iIon)*dNp))
                 end if

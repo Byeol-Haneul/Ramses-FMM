@@ -74,6 +74,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
 #endif
 #ifdef RTZ
   real(kind=8), dimension(n_elements, 1:nvector):: nElement
+  real(kind=8):: dx_SS_H2
 #endif
 #if NENER>0
   integer::irad
@@ -338,11 +339,17 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
                nElement(26,1:nleaf) = nElement(1,1:nleaf) * 3.16d-05 ! Iron
            end if
 
+           ! Compute the cell length in cm if needed
+           dx_SS_H2 = 0.d0
+           if (r%isH2_rtz) then
+              dx_SS_H2 = (r%boxlen/(2.d0**ilevel)) * scale_l
+           endif
+
            call rtz_solve_cooling(r, tables, T2, g%aexp, xion, nElement, &
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
-                & dtcool, nleaf)   
+                & dtcool, nleaf, dx_SS_H2)   
 #else        
         else if(r%neq_chem)then
            call neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
