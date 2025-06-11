@@ -3,7 +3,7 @@ module molecules_module
   implicit none
 
   private  ! everything is private by default
-  public :: alpha_H2, beta_H2_umist, beta_H2, alpha_CO, beta_CO, alpha_H2_prim, alpha_H2_dust
+  public :: alpha_H2, beta_H2_umist, beta_H2, beta_H2_krome, alpha_CO, beta_CO, alpha_H2_prim, alpha_H2_dust
 
 CONTAINS
 
@@ -128,6 +128,29 @@ FUNCTION beta_H2_umist(T, nH, ne, nH2) result(rate)
   rate = rate + (4.67d-7 * ((T_loc/300d0)**(-1.d0)) * exp(-55000.d0/T_loc) * nH)
 
 END FUNCTION beta_H2_umist
+
+FUNCTION beta_H2_krome(T, nH, ne, nH2, nHe) result(rate)
+  ! From bovino 2016
+  ! https://www.aanda.org/articles/aa/pdf/2016/06/aa28158-16.pdf
+  implicit none
+  real(KIND=8), intent(in) :: T, nH, ne, nH2, nHe
+  real(KIND=8) :: rate
+
+  rate = 0.d0
+
+  ! H2 + H --> H + H + H (k18)
+  rate = rate + ((6.67d-12 * sqrt(T) * exp(-1.d0 * (1.d0 + (63593.d0/T)))) * nH)
+
+  ! H2 + H2 --> H2 + H + H (k19)
+  rate = rate + ((5.996d-30 * (T**4.1881d0) * ((1.d0 + (6.761d0 * T))**(-5.6881d0)) * exp(-54657.4d0/T)) * nH2)
+
+  ! H2 + e- --> H + H + e- (k22)
+  rate = rate + (4.38d-10 * (T**0.35d0) * exp(-102000.d0/T) * ne)
+
+  ! H2 + He --> H + H + He
+  rate = rate + ((10.d0**(-27.029d0 + (3.801d0 * log10(T)) - (29487.d0/T))) * nHe)
+
+END FUNCTION beta_H2_krome
 
 FUNCTION beta_H2(T, nH, xHI, xH2, xHe, ne, nHI, nH2, nHeI) result(rate)
   ! Returns the collisional dissociation rates of H2 for four different
