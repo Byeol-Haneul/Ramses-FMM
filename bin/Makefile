@@ -4,6 +4,7 @@
 # Compilation time parameters
 COMPILER = GNU
 NDIM = 3
+TPB = 128
 MPI = 0
 HYDRO = 1
 GRAV = 0
@@ -52,7 +53,7 @@ GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
-DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR) 
+DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR) -DTPB=$(TPB)
 ifeq ($(RTZ),1)
 DEFINES += -DN_HYDROGEN_IONS=$(N_HYDROGEN_IONS)
 DEFINES += -DN_HELIUM_IONS=$(N_HELIUM_IONS)
