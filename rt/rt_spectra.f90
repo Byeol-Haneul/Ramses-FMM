@@ -896,7 +896,6 @@ END SUBROUTINE rebin_log
 
 !*************************************************************************
 SUBROUTINE write_SED_table(SED)
-  ! TODO(code) edit this to not depend on nion in the case of RTZ
   ! Write the SED properties to a file (this is just in debugging, to check
   ! if the SEDs are being read correctly).
   ! Photon group properties: age [Gyr], metal mass fraction,
@@ -905,11 +904,24 @@ SUBROUTINE write_SED_table(SED)
   ! and HeII; H2 and He are optional
   !-------------------------------------------------------------------------
   use hydro_parameters, only: nion
+  use rtz_module, only: n_elements, elements
   type(sed_table_t) :: SED
   !-------------------------------------------------------------------------
   character(len=128) :: filename
-  integer :: ip, i, j, k
+  integer :: ip, i, j, k, nv
   !-------------------------------------------------------------------------
+
+#ifdef RTZ
+  do i=1,n_elements
+     if (elements(i)%atomic_number.gt.0) then 
+        nv = nv + (2 * elements(i)%n_ions)
+     end if
+#if N_H2 > 0
+     nv = nv + 2
+#endif
+  end do
+#endif
+
   do ip = 1, nrtgrp
      write(filename,'(A, I1, A)') 'SEDtable', ip, '.list'
      open(10, file=filename, status='unknown')
@@ -921,6 +933,12 @@ SUBROUTINE write_SED_table(SED)
                 SED%ages(i)        ,    SED%zeds(j)        ,            &
                 SED%table(i,j,ip,1),    SED%table(i,j,ip,2),            &
                 SED%table(i,j,ip,3)
+#ifdef RTZ
+           do k=1,(nv/2)-1
+              write(10,901,advance='no') SED%table(i,j,ip,2+2*k), SED%table(i,j,ip,3+2*k)
+           end do
+           write(10,901) SED%table(i,j,ip,2+2*(nv/2)), SED%table(i,j,ip,3+2*(nv/2))
+#else
            if(nion .gt. 1) then
               do k = 1,nion-1
                  write(10,901,advance='no')                              &
@@ -929,6 +947,7 @@ SUBROUTINE write_SED_table(SED)
            endif
            write(10,901)                                                 &
                 SED%table(i,j,ip,2+2*nion), SED%table(i,j,ip,3+2*nion)
+#endif
         end do
      end do
      close(10)
