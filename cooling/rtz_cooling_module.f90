@@ -702,12 +702,6 @@ contains
     ! UPDATE TEMPERATURE *************************************************
     !if(c_switch(icell) .and. .not. rt_isTconst .and. .not. r%rt_T_rad) then
     if(.not. r%neq_isTconst .and. .not. r%rt_T_rad) then
-      !  Crate = all_cooling(r, tables, TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
-      !                      primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
-      !                      ss_factor, dNp, ilevel)
-      !  Crate_prime = all_cooling(r, tables, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
-      !                            primary_cosmic_ray_ionization_rate, H2_cosmic_ray_ionization_rate, & 
-      !                            ss_factor, dNp, ilevel)
        !HKnote: we call prime first so what we can store the correct cooling rates
        saved_cooling_rates = 0.d0
        call all_cooling(r, tables, 1.001d0*TK, ne, aexp, nElement_dep(1:n_elements), dXion, total_G0, dust_to_gas_mass_ratio_over_mw, xe, &
@@ -738,8 +732,6 @@ contains
           code=3 ; RETURN
        endif
        TK=dT2*mu
-       TK_to_save(icell)=TK
-       mu_to_save(icell)=mu
     endif
 
 #ifdef RT
@@ -801,7 +793,11 @@ contains
 
        ! Collisional dissociation
        if (r%rtz_include_collisional_ionization) then 
-         beta_H2_loc = beta_H2_umist(TK,dXion(1,1)*nElement_dep(1),ne,xH2_loc*nElement_dep(1))
+         if (elements(2)%atomic_number.gt.0) then
+            beta_H2_loc = beta_H2_krome(TK, dXion(1,1)*nElement_dep(1), ne, xH2_loc*nElement_dep(1), dXion(2,1)*nElement_dep(2)) 
+         else
+            beta_H2_loc = beta_H2_krome(TK, dXion(1,1)*nElement_dep(1), ne, xH2_loc*nElement_dep(1), 0.d0)
+         end if
          de_H2 = de_H2 + beta_H2_loc
        end if
 
@@ -1052,9 +1048,11 @@ contains
              phi_s = secondary_cr_rates(xe)
              total_cosmic_ray_ionization_rate = primary_cosmic_ray_ionization_rate * (1.d0 + phi_s)
 
-             ! Update mu and T
-             mu = getMu_RTZ(r, ne, nElement_dep, dXion)
-             TK = dT2 * mu   
+             ! Update mu and T --> only H and He (others don't matter)
+             if (iElement.lt.3) then 
+                mu = getMu_RTZ(r, ne, nElement_dep, dXion)
+                TK = dT2 * mu   
+             end if
 
              ! Check for convergence -- Fractional change in ion
              dUU = MAX(dUU,ABS((dXion(iElement,iIon)-xion(iElement,iIon,icell))/(xion(iElement,iIon,icell)+x_FM)))
@@ -1108,13 +1106,16 @@ contains
     dt_ok=.true.
     code=0
 
+    ! Save T and mu
+    TK_to_save(icell)=TK
+    mu_to_save(icell)=mu
+
   END SUBROUTINE rtz_cool_step
 
 END SUBROUTINE rtz_solve_cooling
 
 !************************************************************************
 SUBROUTINE rtz_updateRTGroups_CoolConstants(r,tables)
-  ! TODO(code): update this for the metals
   ! Update photon group cooling and heating constants, to reflect an update
   ! in rt_c_cgs and in the cross-sections and energies in the groups.
   !------------------------------------------------------------------------
