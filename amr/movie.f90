@@ -5,7 +5,7 @@ contains
 !=======================================================================
 !=======================================================================
 subroutine m_output_frame(pst)
-  use amr_parameters, only: dp,ndim,nvector,twotondim,flen
+  use amr_parameters, only: ndim, nvector, twotondim, flen
   use hydro_parameters, only: nvar
   use rt_parameters, only: nrtgrp
   use ramses_commons, only: pst_t
@@ -213,10 +213,10 @@ end subroutine r_output_frame
 !=======================================================================
 !=======================================================================
 subroutine output_frame(r,g,m,ind_proj,ind_var,map_size,map)
-  use amr_parameters, only: dp,ndim,nvector,twotondim
+  use amr_parameters, only:ndim, nvector, twotondim
   use hydro_parameters, only: nvar
   use rt_parameters, only: nrtgrp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g

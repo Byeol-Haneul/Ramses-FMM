@@ -419,8 +419,8 @@ end subroutine ensure_ref_rules
 !############################################################
 !############################################################
 subroutine sink_flag(s,p,ilevel)
-   use amr_parameters, only: ndim,twotondim,dp
-   use amr_commons, only: nbor,oct
+   use amr_parameters, only: ndim, twotondim
+   use amr_commons, only: nbor, oct
    use ramses_commons, only: ramses_t
    use pm_commons, only: part_t
    use nbors_utils

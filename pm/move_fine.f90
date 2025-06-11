@@ -505,7 +505,7 @@ end subroutine tsc_kick_drift_part
 !################################################################
 !################################################################
 subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
-  use amr_parameters, only: dp, ndim, fourtondim
+  use amr_parameters, only: ndim, fourtondim
   use pm_parameters
   use pm_commons, only: part_t
   use oct_commons, only: oct

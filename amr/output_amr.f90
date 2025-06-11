@@ -357,8 +357,8 @@ end subroutine output_params
 !#########################################################################
 subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   use mdl_module
-  use amr_parameters, only: ndim,nhilbert,dp,flen
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim, nhilbert, flen
+  use amr_commons, only: run_t, global_t
   implicit none
   type(mdl_t)::mdl
   type(run_t)::r
@@ -507,8 +507,8 @@ end subroutine output_amr
 !#########################################################################
 !#########################################################################
 subroutine backup_amr(r,g,m,mdl,filename)
-  use amr_parameters, only: ndim,sp,dp,flen
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, flen
+  use amr_commons, only: run_t, global_t, mesh_t
   use mdl_module
   implicit none
   type(run_t)::r
@@ -553,8 +553,8 @@ end subroutine backup_amr
 !#########################################################################
 !#########################################################################
 subroutine output_info(r,g,filename)
-  use amr_parameters, only: ndim,sp,dp,flen
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim, flen
+  use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g

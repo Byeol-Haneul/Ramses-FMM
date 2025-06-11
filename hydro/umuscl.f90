@@ -23,68 +23,68 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #endif
      & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,&
      & params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nvar, nprim, nener
   use amr_commons, only: hydro_params_t
   use const
   implicit none
 
   ! Input parameters
-  real(dp)::dx,dt
+  real(kind=8)::dx,dt
   type(hydro_params_t)::params
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
 
   ! Input states
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gravin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gravin
 
   ! Output fluxes
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nprim,1:ndim)::flux
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:2    ,1:ndim)::tmp
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nprim,1:ndim)::flux
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2,1:2    ,1:ndim)::tmp
 #ifdef MHD
   ! Input left and right face magnetic field
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
 
   ! Face-centered magnetic field
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
 
   ! Face-centered magnetic field slopes
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
 
   ! Output electromotive force
-  REAL(dp),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfx
-  REAL(dp),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfy
-  REAL(dp),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfz
+  real(kind=8),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfx
+  real(kind=8),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfy
+  real(kind=8),DIMENSION(if1:if2,jf1:jf2,kf1:kf2)::emfz
 
   ! Intermediate electromotive force
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ey
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ez
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ey
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ez
 
   ! Edge-averaged left-right and top-bottom state arrays
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRT
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRB
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLT
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLB
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRT
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRB
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLT
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLB
 #endif
   ! Primitive variables
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::qin
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2        )::cin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::qin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2        )::cin
 
   ! Slopes
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
 
   ! Left and right state arrays
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
 
   ! Intermediate fluxes
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::fx
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:2    )::tx
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::fx
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:2    )::tx
 
   ! Velocity divergence
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::divu
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2)::divu
 
   ! Local scalar variables
   integer::i,j,k,ivar
@@ -291,19 +291,19 @@ end subroutine unsplit
 !###########################################################
 !###########################################################
 subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener, ie
   use amr_commons, only: hydro_params_t
   use const
   implicit none
 
-  real(dp)::dx, dt
+  real(kind=8)::dx, dt
   integer::iu1, iu2, ju1, ju2, ku1, ku2
   type(hydro_params_t)::params
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
 
   ! Local variables
   integer::i, j, k
@@ -312,22 +312,22 @@ subroutine trace1d(q,dq,qm,qp,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
 #endif
   integer::ilo, ihi, jlo, jhi, klo, khi
   integer::ir, iu, iv, iw, ip
-  real(dp)::dtdx
-  real(dp)::r, u, v, w, p
-  real(dp)::drx, dux, dvx, dwx, dpx
-  real(dp)::sr0, su0, sv0, sw0, sp0
+  real(kind=8)::dtdx
+  real(kind=8)::r, u, v, w, p
+  real(kind=8)::drx, dux, dvx, dwx, dpx
+  real(kind=8)::sr0, su0, sv0, sw0, sp0
 #ifdef MHD
   integer::iA, iB, iC
-  real(dp)::A, B, C
-  real(dp)::dBx, dCx
-  real(dp)::sB0, sC0
+  real(kind=8)::A, B, C
+  real(kind=8)::dBx, dCx
+  real(kind=8)::sB0, sC0
 #endif
 #if NENER>0
   integer::irad
-  real(dp),dimension(1:nener)::e, dex, se0
+  real(kind=8),dimension(1:nener)::e, dex, se0
 #endif
-  real(dp)::gamma, smallr, smallc, smallp
-  real(dp),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::gamma, smallr, smallc, smallp
+  real(kind=8),dimension(1:nener+1)::gamma_rad
 
   dtdx=dt/dx
   gamma=params%gamma
@@ -483,27 +483,27 @@ subroutine trace2d(q,dq,qm,qp, &
        & bf,dbf,Ez,qRT,qRB,qLT,qLB, &
 #endif
        & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener, ie
   use amr_commons, only: hydro_params_t
   use const
   implicit none
 
-  real(dp)::dx, dt
+  real(kind=8)::dx, dt
   type(hydro_params_t)::params
   integer::iu1,iu2,ju1,ju2,ku1,ku2
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
 #ifdef MHD
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ez
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRT
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRB
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLT
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLB
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ez
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRT
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRB
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLT
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLB
 #endif
 
   ! declare local variables
@@ -513,28 +513,28 @@ subroutine trace2d(q,dq,qm,qp, &
 #endif
   integer::ilo,ihi,jlo,jhi,klo,khi
   integer::ir, iu, iv, iw, ip
-  real(dp)::dtdx
-  real(dp)::r, u, v, w, p
-  real(dp)::drx, dux, dvx, dwx, dpx
-  real(dp)::dry, duy, dvy, dwy, dpy
-  real(dp)::sr0, su0, sv0, sw0, sp0
+  real(kind=8)::dtdx
+  real(kind=8)::r, u, v, w, p
+  real(kind=8)::drx, dux, dvx, dwx, dpx
+  real(kind=8)::dry, duy, dvy, dwy, dpy
+  real(kind=8)::sr0, su0, sv0, sw0, sp0
 #ifdef MHD
   integer::iA, iB, iC
-  real(dp)::A, B, C
-  real(dp)::dBx, dCx
-  real(dp)::dAy, dCy
-  real(dp)::sC0
-  real(dp)::AL, AR, BL, BR
-  real(dp)::dALy, dARy, dBLx, dBRx
-  real(dp)::sAL0, sAR0, sBL0, sBR0
-  real(dp)::ELL, ELR, ERL, ERR
+  real(kind=8)::A, B, C
+  real(kind=8)::dBx, dCx
+  real(kind=8)::dAy, dCy
+  real(kind=8)::sC0
+  real(kind=8)::AL, AR, BL, BR
+  real(kind=8)::dALy, dARy, dBLx, dBRx
+  real(kind=8)::sAL0, sAR0, sBL0, sBR0
+  real(kind=8)::ELL, ELR, ERL, ERR
 #endif
 #if NENER>0
   integer::irad
-  real(dp),dimension(1:nener)::e, dex, dey, se0
+  real(kind=8),dimension(1:nener)::e, dex, dey, se0
 #endif
-  real(dp)::gamma,smallr,smallc,smallp
-  real(dp),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::gamma,smallr,smallc,smallp
+  real(kind=8),dimension(1:nener+1)::gamma_rad
 
   dtdx=dt/dx
   gamma=params%gamma
@@ -852,29 +852,29 @@ subroutine trace3d(q,dq,qm,qp, &
      & bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB, &
 #endif
      & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim, nener, ie
   use amr_commons, only: hydro_params_t
   use const
   implicit none
 
-  real(dp)::dx, dt
+  real(kind=8)::dx, dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   type(hydro_params_t)::params
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qm
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::qp
 #ifdef MHD
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ey
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ez
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRT
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRB
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLT
-  REAL(dp),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLB
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ex
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ey
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2)::Ez
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRT
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qRB
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLT
+  real(kind=8),DIMENSION(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:3)::qLB
 #endif
 
   ! declare local variables
@@ -884,34 +884,34 @@ subroutine trace3d(q,dq,qm,qp, &
 #endif
   integer::ilo,ihi,jlo,jhi,klo,khi
   integer::ir, iu, iv, iw, ip
-  real(dp)::dtdx
-  real(dp)::r, u, v, w, p
-  real(dp)::drx, dux, dvx, dwx, dpx
-  real(dp)::dry, duy, dvy, dwy, dpy
-  real(dp)::drz, duz, dvz, dwz, dpz
-  real(dp)::sr0, su0, sv0, sw0, sp0
+  real(kind=8)::dtdx
+  real(kind=8)::r, u, v, w, p
+  real(kind=8)::drx, dux, dvx, dwx, dpx
+  real(kind=8)::dry, duy, dvy, dwy, dpy
+  real(kind=8)::drz, duz, dvz, dwz, dpz
+  real(kind=8)::sr0, su0, sv0, sw0, sp0
 #ifdef MHD
   integer::iA, iB, iC
-  real(dp)::A, B, C
-  real(dp)::dBx, dCx
-  real(dp)::dAy, dCy
-  real(dp)::dAz, dBz, dCz
-  real(dp)::AL, AR, BL, BR, CL, CR
-  REAL(dp)::dALy, dARy, dALz, dARz
-  REAL(dp)::dBLx, dBRx, dBLz, dBRz
-  REAL(dp)::dCLx, dCRx, dCLy, dCRy
-  real(dp)::sAL0, sAR0, sBL0, sBR0, sCL0, sCR0
-  REAL(dp)::ELL, ELR, ERL, ERR
-  REAL(dp)::FLL, FLR, FRL, FRR
-  REAL(dp)::GLL, GLR, GRL, GRR
+  real(kind=8)::A, B, C
+  real(kind=8)::dBx, dCx
+  real(kind=8)::dAy, dCy
+  real(kind=8)::dAz, dBz, dCz
+  real(kind=8)::AL, AR, BL, BR, CL, CR
+  real(kind=8)::dALy, dARy, dALz, dARz
+  real(kind=8)::dBLx, dBRx, dBLz, dBRz
+  real(kind=8)::dCLx, dCRx, dCLy, dCRy
+  real(kind=8)::sAL0, sAR0, sBL0, sBR0, sCL0, sCR0
+  real(kind=8)::ELL, ELR, ERL, ERR
+  real(kind=8)::FLL, FLR, FRL, FRR
+  real(kind=8)::GLL, GLR, GRL, GRR
   logical::induction
 #endif
 #if NENER>0
   integer::irad
-  real(dp),dimension(1:nener)::e, dex, dey, dez, se0
+  real(kind=8),dimension(1:nener)::e, dex, dey, dez, se0
 #endif
-  real(dp)::gamma,smallr,smallc,smallp
-  real(dp),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::gamma,smallr,smallc,smallp
+  real(kind=8),dimension(1:nener+1)::gamma_rad
 
   dtdx=dt/dx
   gamma=params%gamma
@@ -1461,7 +1461,7 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
 #endif
      &             ln,lt1,lt2,flx,tmp, &
      &             params)
-  use amr_parameters, only: dp,ndim
+  use amr_parameters, only: ndim
   use amr_commons, only: hydro_params_t
   use hydro_parameters
   use const
@@ -1475,18 +1475,18 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
   integer::ip1,ip2,jp1,jp2,kp1,kp2
   integer::ilo,ihi,jlo,jhi,klo,khi
   type(hydro_params_t)::params
-  real(dp),dimension(im1:im2,jm1:jm2,km1:km2,1:nprim,1:ndim)::qm
-  real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nprim,1:ndim)::qp
-  real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nprim)::flx
-  real(dp),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:2)::tmp
+  real(kind=8),dimension(im1:im2,jm1:jm2,km1:km2,1:nprim,1:ndim)::qm
+  real(kind=8),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nprim,1:ndim)::qp
+  real(kind=8),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:nprim)::flx
+  real(kind=8),dimension(ip1:ip2,jp1:jp2,kp1:kp2,1:2)::tmp
   ! local variables
   integer ::i,j,k,xdim,riemann
-  real(dp),dimension(1:nprim)::qleft,qright
-  real(dp),dimension(1:nprim+1)::fgdnv
+  real(kind=8),dimension(1:nprim)::qleft,qright
+  real(kind=8),dimension(1:nprim+1)::fgdnv
 #if NVAR>5
   integer::n
 #endif
-  real(dp)::switch_llf_dmin,switch_llf_pmin
+  real(kind=8)::switch_llf_dmin,switch_llf_pmin
   logical::switch_to_llf
 
   riemann=params%riemann
@@ -1540,7 +1540,7 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
 #ifdef MHD
               ! Solve MHD Riemann problem
            if (riemann.eq.solver_llf)then
-              call riemann_llf_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
+              call riemann_llf_mhd(qleft,qright,fgdnv,1.0d0,params)
            else if (riemann.eq.solver_hlld)then
               switch_to_llf=.false.
               if(switch_llf_dmin.gt.0)switch_to_llf=min(qleft(1),qright(1)).lt.switch_llf_dmin
@@ -1548,14 +1548,14 @@ subroutine cmpflxm(qm,im1,im2,jm1,jm2,km1,km2, &
               if(.not.switch_to_llf)then
                  call riemann_hlld(qleft,qright,fgdnv,params)
               else
-                 call riemann_llf_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
+                 call riemann_llf_mhd(qleft,qright,fgdnv,1.0d0,params)
               endif
            else if (riemann.eq.solver_hll)then
               call riemann_hll_mhd(qleft,qright,fgdnv,params)
            else if (riemann.eq.solver_roe)then
-              call riemann_roe_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
+              call riemann_roe_mhd(qleft,qright,fgdnv,1.0d0,params)
            else if (riemann.eq.solver_upwind)then
-              call riemann_upwind_mhd(qleft,qright,fgdnv,real(1.0,kind=dp),params)
+              call riemann_upwind_mhd(qleft,qright,fgdnv,1.0d0,params)
 #endif
            else
               write(*,*)'unknown Riemann solver'
@@ -1602,7 +1602,7 @@ subroutine cmp_mag_flx(qRT,irt1,irt2,jrt1,jrt2,krt1,krt2, &
        &                   lp1 ,lp2 ,lor ,bp1 ,bp2 ,bor , &
        &               emf,params)
   ! 2D Riemann solver to compute EMF at cell edges
-  use amr_parameters, only: dp,ndim
+  use amr_parameters, only: ndim
   use amr_commons, only: hydro_params_t
   use hydro_parameters
   use const
@@ -1618,16 +1618,16 @@ subroutine cmp_mag_flx(qRT,irt1,irt2,jrt1,jrt2,krt1,krt2, &
   integer::ilb1,ilb2,jlb1,jlb2,klb1,klb2
   integer::ilo,ihi,jlo,jhi,klo,khi
   type(hydro_params_t)::params
-  real(dp),dimension(irt1:irt2,jrt1:jrt2,krt1:krt2,1:nprim,1:3)::qRT
-  real(dp),dimension(irb1:irb2,jrb1:jrb2,krb1:krb2,1:nprim,1:3)::qRB
-  real(dp),dimension(ilt1:ilt2,jlt1:jlt2,klt1:klt2,1:nprim,1:3)::qLT
-  real(dp),dimension(ilb1:ilb2,jlb1:jlb2,klb1:klb2,1:nprim,1:3)::qLB
-  real(dp),dimension(ilb1:ilb2,jlb1:jlb2,klb1:klb2)::emf
+  real(kind=8),dimension(irt1:irt2,jrt1:jrt2,krt1:krt2,1:nprim,1:3)::qRT
+  real(kind=8),dimension(irb1:irb2,jrb1:jrb2,krb1:krb2,1:nprim,1:3)::qRB
+  real(kind=8),dimension(ilt1:ilt2,jlt1:jlt2,klt1:klt2,1:nprim,1:3)::qLT
+  real(kind=8),dimension(ilb1:ilb2,jlb1:jlb2,klb1:klb2,1:nprim,1:3)::qLB
+  real(kind=8),dimension(ilb1:ilb2,jlb1:jlb2,klb1:klb2)::emf
   ! local variables
   integer::riemann2d
   integer::i, j, k, xdim
-  real(dp),dimension(1:nprim)::qLL,qRL,qLR,qRR
-  real(dp)::E
+  real(kind=8),dimension(1:nprim)::qLL,qRL,qLR,qRR
+  real(kind=8)::E
 
   xdim = lor - 1
   riemann2d = params%riemann2d
@@ -1722,26 +1722,26 @@ subroutine ctoprim(uin,q,c,gravin, &
      & bin,bf, &
 #endif
      & dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nvar, nprim, nener, ie
   use amr_commons, only: hydro_params_t
   use const
   implicit none
 
-  real(dp)::dt
+  real(kind=8)::dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   type(hydro_params_t)::params
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
 #ifdef MHD
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
 #endif
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gravin
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2)::c  
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:ndim)::gravin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2)::c  
 
-  real(dp)::eint, dtxhalf, oneoverrho
-  real(dp)::ekin, erad, emag
+  real(kind=8)::eint, dtxhalf, oneoverrho
+  real(kind=8)::ekin, erad, emag
   integer ::i, j, k
 #if NENER>0
   integer ::irad
@@ -1749,8 +1749,8 @@ subroutine ctoprim(uin,q,c,gravin, &
 #if NVAR>5+NENER
   integer ::n
 #endif
-  real(dp)::smallr,smallc,smalle,gamma
-  real(dp),dimension(1:nener+1)::gamma_rad
+  real(kind=8)::smallr,smallc,smalle,gamma
+  real(kind=8),dimension(1:nener+1)::gamma_rad
 
   gamma=params%gamma
   gamma_rad=params%gamma_rad
@@ -1889,36 +1889,36 @@ subroutine uslope(q,dq, &
      & bf,dbf, &
 #endif
      & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,params)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nprim
   use amr_commons, only: hydro_params_t
   use const
   implicit none
   ! routine arguments
-  real(dp)::dx,dt
+  real(kind=8)::dx,dt
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   type(hydro_params_t)::params
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim,1:ndim)::dq
 #ifdef MHD
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3,1:2)::dbf
 #endif
   ! local arrays
   integer::slope_type, slope_mag_type
   integer::i, j, k, n
   integer::ilo, ihi, jlo, jhi, klo, khi
-  real(dp)::dsgn, dlim, dcen, dlft, drgt, slop
-  real(dp)::vmin,vmax
+  real(kind=8)::dsgn, dlim, dcen, dlft, drgt, slop
+  real(kind=8)::vmin,vmax
 #if NDIM==2
-  real(dp)::dfll,dflm,dflr,dfml,dfmm,dfmr,dfrl,dfrm,dfrr
-  real(dp)::dfx,dfy,dff
+  real(kind=8)::dfll,dflm,dflr,dfml,dfmm,dfmr,dfrl,dfrm,dfrr
+  real(kind=8)::dfx,dfy,dff
 #endif
 #if NDIM==3
-  real(dp)::dflll,dflml,dflrl,dfmll,dfmml,dfmrl,dfrll,dfrml,dfrrl
-  real(dp)::dfllm,dflmm,dflrm,dfmlm,dfmmm,dfmrm,dfrlm,dfrmm,dfrrm
-  real(dp)::dfllr,dflmr,dflrr,dfmlr,dfmmr,dfmrr,dfrlr,dfrmr,dfrrr
-  real(dp)::dfx,dfy,dfz,dff
+  real(kind=8)::dflll,dflml,dflrl,dfmll,dfmml,dfmrl,dfrll,dfrml,dfrrl
+  real(kind=8)::dfllm,dflmm,dflrm,dfmlm,dfmmm,dfmrm,dfrlm,dfrmm,dfrrm
+  real(kind=8)::dfllr,dflmr,dflrr,dfmlr,dfmmr,dfmrr,dfrlr,dfrmr,dfrrr
+  real(kind=8)::dfx,dfy,dfz,dff
 #endif
   
   ilo=MIN(1,iu1+1); ihi=MAX(1,iu2-1)
@@ -2346,20 +2346,20 @@ end subroutine uslope
 subroutine cmpdivu(q,div,dx,&
      & iu1,iu2,ju1,ju2,ku1,ku2,&
      & if1,if2,jf1,jf2,kf1,kf2)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nvar, nprim
   use const
   implicit none
   ! This routine computes the velocity divergence at the corners of the cells.
-  real(dp)::dx
+  real(kind=8)::dx
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nprim)::q
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
 
   integer::i, j, k
-  real(dp)::fact
-  real(dp)::ux, vy, wz
+  real(kind=8)::fact
+  real(kind=8)::ux, vy, wz
 
   fact=half**(ndim-1)/dx
 
@@ -2400,23 +2400,23 @@ subroutine cmpdiff(uin,flux,div,dt,&
 #endif
      & iu1,iu2,ju1,ju2,ku1,ku2,&
      & if1,if2,jf1,jf2,kf1,kf2,difmag)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use hydro_parameters, only: nvar, nprim, ie
   use const
   implicit none
   ! Add diffusive flux where flow is compressing
-  real(dp)::dt,difmag
+  real(kind=8)::dt,difmag
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:nvar)::uin
 #ifdef MHD
-  real(dp),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
+  real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
 #endif
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nprim,1:ndim)::flux
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nprim,1:ndim)::flux
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2)::div
 
   integer::i, j, k, n
-  real(dp)::fact,div1
+  real(kind=8)::fact,div1
 
   fact=half**(ndim-1)
 
@@ -2497,20 +2497,19 @@ end subroutine cmpdiff
 !###########################################################
 !###########################################################
 subroutine cmpcurrent(bf,emfx,emfy,emfz,dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,etamag)
-  use amr_parameters,ONLY:dp
   implicit none
   integer::iu1,iu2,ju1,ju2,ku1,ku2
   integer::if1,if2,jf1,jf2,kf1,kf2
-  real(dp),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfx
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfy
-  real(dp),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfz
-  real(dp)::dx,dt,etamag
+  real(kind=8),dimension(iu1:iu2+1,ju1:ju2+1,ku1:ku2+1,1:3)::bf
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfx
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfy
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2)::emfz
+  real(kind=8)::dx,dt,etamag
   ! Add to EMF -eta J where J = nabla x B
-  real(dp)::dBx_arete_dy,dBx_arete_dz
-  real(dp)::dBy_arete_dx,dBy_arete_dz
-  real(dp)::dBz_arete_dx,dBz_arete_dy
-  real(dp)::fact
+  real(kind=8)::dBx_arete_dy,dBx_arete_dz
+  real(kind=8)::dBy_arete_dx,dBy_arete_dz
+  real(kind=8)::dBz_arete_dx,dBz_arete_dy
+  real(kind=8)::fact
   integer::i,j,k
   integer::ilo,ihi,jlo,jhi,klo,khi
 

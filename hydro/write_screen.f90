@@ -1,5 +1,5 @@
 subroutine write_screen(r,m)
-  use amr_parameters, only: dp,ndim
+  use amr_parameters, only: ndim
   use amr_commons, only: mesh_t, run_t
   use hydro_parameters, only: nener
   implicit none

@@ -5,7 +5,6 @@ contains
 !#########################################################################
 !#########################################################################
 subroutine m_input_part(pst)
-  use amr_parameters, only: dp
   use mdl_module
   use ramses_commons, only: pst_t
   use input_part_grafic_module, only: m_input_part_grafic

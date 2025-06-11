@@ -16,7 +16,7 @@ contains
 !#########################################################################
 subroutine m_input_part_gadget(pst)
   use mdl_module
-  use amr_parameters, only: ndim,dp
+  use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
   use output_amr_module, only: input_header
   implicit none
@@ -511,7 +511,7 @@ end subroutine input_part_gadget
 !#########################################################################
 !#########################################################################
 subroutine rescale_gadget(r,g,p)
-  use amr_parameters, only: dp, ndim
+  use amr_parameters, only: ndim
   use amr_commons, only: run_t, global_t
   use pm_commons, only: part_t
   type(part_t)::p

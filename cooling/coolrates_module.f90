@@ -9,7 +9,7 @@ MODULE coolrates_module
   ! Nickerson, Teyssier, and Rosdahl, March 2018.
 
   use constants
-  use amr_parameters, only: dp, MAXLEVEL
+  use amr_parameters, only: MAXLEVEL
   use hydro_parameters, only: nion
   use rt_parameters, only: nrtgrp
   use amr_commons, only: run_t

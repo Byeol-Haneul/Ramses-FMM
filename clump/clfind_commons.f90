@@ -1,5 +1,4 @@
 module clfind_commons
-    use amr_parameters, only: dp
     use hash
 
     type clump_t

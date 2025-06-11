@@ -229,7 +229,7 @@ subroutine init_refine_restart(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,n
   ! the initial AMR grid.
   !--------------------------------------------------------------
   use mdl_module, only: mdl_abort
-  use amr_parameters, only: dp,nhilbert,ndim,twotondim,nvector
+  use amr_parameters, only: dp, nhilbert, ndim, twotondim, nvector
   use hydro_parameters, only: nvar
   use rt_parameters, only: nrtvar
   use ramses_commons, only: ramses_t

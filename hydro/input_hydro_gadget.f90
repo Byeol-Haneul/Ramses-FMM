@@ -29,7 +29,7 @@ end subroutine r_input_hydro_gadget
 !#########################################################################
 !#########################################################################
 subroutine input_hydro_gadget(s,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t

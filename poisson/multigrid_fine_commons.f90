@@ -26,19 +26,19 @@ contains
 ! ------------------------------------------------------------------------
 
 subroutine multigrid(pst,ilevel,icount)
-  use amr_parameters, only: dp,twotondim
-  use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
+  use amr_parameters, only: twotondim
+  use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
   use phi_fine_cg_module, only: r_make_initial_phi, in_make_initial_phi_t
-  use multigrid_fine_coarse, only: r_cmp_residual_mg, r_cmp_residual_norm2,r_gauss_seidel_mg,&
-        r_interpolate_and_correct,r_reset_correction,r_restrict_mask,r_restrict_residual,r_set_scan_flag,&
-        in_cmp_residual_mg_t,in_gauss_seidel_mg_t,in_set_scan_flag_t
+  use multigrid_fine_coarse, only: r_cmp_residual_mg, r_cmp_residual_norm2, r_gauss_seidel_mg,&
+        r_interpolate_and_correct, r_reset_correction, r_restrict_mask, r_restrict_residual, r_set_scan_flag,&
+        in_cmp_residual_mg_t, in_gauss_seidel_mg_t, in_set_scan_flag_t
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ilevel,icount
   
   integer,parameter  :: MAXITER  = 10
-  real(dp),parameter :: SAFE_FACTOR = 0.5
+  real(kind=8),parameter :: SAFE_FACTOR = 0.5
   
   integer :: igrid, ifine, i, iter, allmasked
   integer,dimension(1:4) :: output_array
@@ -213,11 +213,11 @@ end subroutine multigrid
 ! ------------------------------------------------------------------------
 
 recursive subroutine recursive_multigrid(pst,ifinelevel, safe)
-  use amr_parameters, only: dp,twotondim
-  use poisson_parameters, only: ngs_fine,ngs_coarse,ncycles_coarse_safe
+  use amr_parameters, only: twotondim
+  use poisson_parameters, only: ngs_fine, ngs_coarse, ncycles_coarse_safe
   use ramses_commons, only: pst_t
-  use multigrid_fine_coarse, only: r_cmp_residual_mg,r_gauss_seidel_mg,r_interpolate_and_correct,&
-        r_reset_correction,r_restrict_residual,in_cmp_residual_mg_t,in_gauss_seidel_mg_t
+  use multigrid_fine_coarse, only: r_cmp_residual_mg, r_gauss_seidel_mg, r_interpolate_and_correct,&
+        r_reset_correction, r_restrict_residual, in_cmp_residual_mg_t, in_gauss_seidel_mg_t
   implicit none
   type(pst_t)::pst
   integer,intent(in) :: ifinelevel
@@ -319,7 +319,7 @@ recursive subroutine r_init_mg(pst,ilevel,input_size)
 end subroutine r_init_mg
 
 subroutine init_mg(r,m,ilevel)
-  use amr_parameters, only: dp,nhilbert
+  use amr_parameters, only: nhilbert
   use amr_commons, only: run_t,mesh_t
   use hilbert
   implicit none
@@ -386,7 +386,7 @@ end subroutine r_build_mg
 subroutine build_mg(s,ifinelevel)
   USE, INTRINSIC :: ISO_C_BINDING, ONLY : C_F_POINTER, C_ASSOCIATED
   use mdl_module
-  use amr_parameters, only: dp,nhilbert,ndim,twotondim
+  use amr_parameters, only: nhilbert, ndim, twotondim
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
@@ -742,8 +742,8 @@ end subroutine r_make_bc_rhs
 
 subroutine make_bc_rhs(s,ilevel,icount)
   use mdl_module
-  use amr_parameters, only: dp,ndim,twondim,twotondim,threetondim
-  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim, twondim, twotondim, threetondim
+  use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -757,18 +757,18 @@ subroutine make_bc_rhs(s,ilevel,icount)
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
   integer::igrid,idim,ind,igridn,inbor,ig,id
   integer,dimension(1:8,1:8)::ccc
-  real(dp)::aa,bb,cc,dd,tfrac
-  real(dp),dimension(1:8)::bbb
+  real(kind=8)::aa,bb,cc,dd,tfrac
+  real(kind=8),dimension(1:8)::bbb
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
-  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
+  real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   type(oct),pointer::gridp
 
-  real(dp) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
-  real(dp) :: fourpi
+  real(kind=8) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
+  real(kind=8) :: fourpi
   type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)

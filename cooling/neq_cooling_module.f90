@@ -5,7 +5,7 @@
 ! Joki Rosdahl, Sarah Nickerson, Andreas Bleuler, and Romain Teyssier.
 ! NOTE: T2=T/mu, Np = photon density, Fp = photon flux,
 module neq_cooling_module
-  use amr_parameters, only: ndim, dp, nvector
+  use amr_parameters, only: ndim, nvector
   use amr_commons, only: run_t
   use hydro_parameters, only: nion
   use rt_parameters
@@ -1058,7 +1058,6 @@ SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
   real(kind=8)::aexp, daexp, dt_cool, T2_com, nH_com
   real(kind=8),dimension(nion)::pHI_rates
   real(kind=8)::mu
-  real(kind=8)::mu_dp
   real(kind=8)::n_spec(1:7)
   real(kind=8),dimension(1:nvector):: T2
   real(kind=8),dimension(1:nion, 1:nvector):: xion
@@ -1077,9 +1076,8 @@ SUBROUTINE neq_evol_single_cell(r, tables, astart, aend, dasura, &
   nH_com = omegab*rhoc*h**2*r%X_H/mH
   pHI_rates = 0.                              ! Initially no UV background
 
-  mu_dp = mu
   call cmp_equilibrium_abundances(r,tables,T2_com/aexp**2,nH_com/aexp**3 &
-        ,pHI_rates, mu_dp, n_Spec, 0d0)
+        ,pHI_rates, mu, n_Spec, 0d0)
 
   ! Initialize cell state
   T2(1)=T2_com                                          !      Temperature

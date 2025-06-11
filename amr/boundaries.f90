@@ -68,7 +68,7 @@ end subroutine get_bound
 !################################################################
 !################################################################
 subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
-  use amr_parameters, only: ndim, twotondim, dp, nvector
+  use amr_parameters, only: ndim, twotondim, nvector
   use hydro_parameters, only: nvar, nener
   use rt_parameters, only: nrtvar, nrtgrp
   use amr_commons, only: run_t, global_t, mesh_t, oct

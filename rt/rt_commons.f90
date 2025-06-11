@@ -13,9 +13,9 @@ module rt_commons
      type(nbor),dimension(:,:,:),allocatable::gridloc
      type(nbor),dimension(:,:,:,:),allocatable::nborloc
 #ifdef RT
-     real(dp),dimension(:,:,:,:),allocatable::rtuloc
-     real(dp),dimension(:,:,:,:,:),allocatable::rtflux
-     real(dp),dimension(:,:,:,:,:),allocatable::cFlx
+     real(kind=8),dimension(:,:,:,:),allocatable::rtuloc
+     real(kind=8),dimension(:,:,:,:,:),allocatable::rtflux
+     real(kind=8),dimension(:,:,:,:,:),allocatable::cFlx
 #endif
    contains
      procedure :: init => init_rt_kernel

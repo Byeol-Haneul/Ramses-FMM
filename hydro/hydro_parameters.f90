@@ -44,7 +44,6 @@ module hydro_parameters
 end module hydro_parameters
 
 module const
-  use amr_parameters, only: dp
 
   ! Some useful constant
   real(kind=8),parameter ::bigreal = 1.0d+30

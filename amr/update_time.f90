@@ -9,7 +9,7 @@ contains
 !################################################################
 !################################################################
 subroutine m_update_time(pst,ilevel,done)
-  use amr_parameters, only: dp,n_frw
+  use amr_parameters, only: n_frw
   use ramses_commons, only: pst_t
   use mdl_module
   use update_rt_c_module, only: r_rt_neq_updates

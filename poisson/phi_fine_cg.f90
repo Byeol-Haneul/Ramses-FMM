@@ -16,7 +16,7 @@ contains
 !###########################################################
 !###########################################################
 subroutine m_phi_fine_cg(pst,ilevel,icount)
-  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
   use ramses_commons, only: pst_t
   use cache_commons
   implicit none
@@ -240,8 +240,8 @@ end subroutine r_cmp_residual_cg
 
 subroutine cmp_residual_cg(s,ilevel,icount)
   use mdl_module
-  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
+  use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -256,11 +256,11 @@ subroutine cmp_residual_cg(s,ilevel,icount)
   integer::inbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
   integer,dimension(1:8,1:8)::ccc
-  real(dp)::dx2,fourpi,oneoversix,fact,residu
-  real(dp)::aa,bb,cc,dd,tfrac
-  real(dp),dimension(1:8)::bbb
+  real(kind=8)::dx2,fourpi,oneoversix,fact,residu
+  real(kind=8)::aa,bb,cc,dd,tfrac
+  real(kind=8),dimension(1:8)::bbb
   integer,dimension(1:3,1:2,1:8)::iii,jjj
-  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
+  real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
@@ -417,7 +417,7 @@ recursive subroutine r_cmp_Ap_cg(pst,ilevel,input_size)
 end subroutine r_cmp_Ap_cg
 
 subroutine cmp_Ap_cg(s,ilevel)
-  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -432,9 +432,9 @@ subroutine cmp_Ap_cg(s,ilevel)
   !------------------------------------------------------------------
   integer::inbor,igrid,idim,ind,igridn
   integer::id1,id2,ig1,ig2
-  real(dp)::oneoversix,residu
+  real(kind=8)::oneoversix,residu
   integer,dimension(1:3,1:2,1:8)::iii,jjj
-  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor
+  real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
@@ -553,7 +553,7 @@ end subroutine r_make_initial_phi
 !###########################################################
 subroutine make_initial_phi(s,ilevel,icount)
   use mdl_module
-  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
+  use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
   use amr_commons, only: nbor
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -567,12 +567,12 @@ subroutine make_initial_phi(s,ilevel,icount)
   !
   integer::igrid,idim,ind
   integer,dimension(1:8,1:8)::ccc
-  real(dp)::aa,bb,cc,dd,tfrac
-  real(dp),dimension(1:8)::bbb
+  real(kind=8)::aa,bb,cc,dd,tfrac
+  real(kind=8),dimension(1:8)::bbb
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
-  real(dp),dimension(1:twotondim)::phi_int
+  real(kind=8),dimension(1:twotondim)::phi_int
   type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)

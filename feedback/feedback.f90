@@ -37,7 +37,7 @@ end subroutine r_thermal_feedback
 !##############################################################################
 !##############################################################################
 subroutine thermal_feedback(s,p,ilevel,msn_loc)
-  use amr_parameters, only: ndim,twotondim,dp
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
@@ -252,9 +252,9 @@ end subroutine r_mechanical_feedback
 !##############################################################################
 !##############################################################################
 subroutine mechanical_feedback(s,p,ilevel,msn_loc)
-  use amr_parameters, only: ndim,twotondim,dp
+  use amr_parameters, only: ndim, twotondim
   use hydro_parameters, only: nvar
-  use amr_commons, only: nbor,oct
+  use amr_commons, only: nbor, oct
   use ramses_commons, only: ramses_t
   use pm_commons, only: part_t
   use nbors_utils

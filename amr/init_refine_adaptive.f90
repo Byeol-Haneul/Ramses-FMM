@@ -3,7 +3,6 @@
 !#########################################################################
 !#########################################################################
 subroutine m_init_refine_adaptive(pst)
-  use amr_parameters, only: dp
   use ramses_commons, only: pst_t
   use flag_utils, only: m_flag_fine
   use refine_utils, only: m_refine_fine

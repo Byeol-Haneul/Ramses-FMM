@@ -32,7 +32,7 @@ subroutine godunov_fine(s,ilevel)
   use ramses_commons, only: ramses_t
   use cache_commons
   use cache
-  use marshal, only: pack_fetch_refine,unpack_fetch_refine
+  use marshal, only: pack_fetch_refine, unpack_fetch_refine
   use boundaries, only: init_bound_refine
   implicit none
   type(ramses_t)::s
@@ -119,8 +119,8 @@ end subroutine r_set_unew
 !###########################################################
 !###########################################################
 subroutine set_unew(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -174,8 +174,8 @@ end subroutine r_set_uold
 !###########################################################
 !###########################################################
 subroutine set_uold(r,g,m,ilevel)
-  use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -208,8 +208,8 @@ end subroutine set_uold
 subroutine godfine1(s,ind_grid,ilevel,h)
   use, intrinsic :: iso_c_binding, only: c_f_pointer
   use mdl_module
-  use amr_parameters, only: ndim,twondim,twotondim,dp
-  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim, twondim, twotondim
+  use amr_commons, only: nbor, oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -238,14 +238,14 @@ subroutine godfine1(s,ind_grid,ilevel,h)
   integer::i3min,i3max,j3min,j3max,k3min,k3max
   integer::ii1min,ii1max,jj1min,jj1max,kk1min,kk1max
 #ifdef MHD
-  real(dp)::dflux,dflux_x,dflux_y,dflux_z,weight
+  real(kind=8)::dflux,dflux_x,dflux_y,dflux_z,weight
   type(oct),pointer::grid1,grid2,grid3
   integer::icell1,icell2,icell3
   logical::ok1,ok2,ok3
 #endif
   integer,dimension(1:ndim)::ckey_corner,ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  real(dp)::dx,oneontwotondim
+  real(kind=8)::dx,oneontwotondim
   type(oct),pointer::gridp,childp
 
 #ifdef HYDRO
@@ -1120,8 +1120,8 @@ end subroutine unpack_flush_godunov
 !###########################################################
 subroutine make_boundaries(s,ilevel)
   use mdl_module
-  use amr_parameters, only: ndim,twondim,twotondim,dp
-  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim, twondim, twotondim
+  use amr_commons, only: nbor, oct
   use hydro_parameters, only: nvar
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -1271,16 +1271,16 @@ subroutine make_grid_ghost(s,hash_nbor,hash_dict,child,ilevel)
   integer::ivar,idim,ind,icell,inbor
   integer::child_grid
   integer,dimension(0:twondim)::ind_nbor
-  real(dp),dimension(0:twondim  ,1:nvar)::u1
-  real(dp),dimension(1:twotondim,1:nvar)::u2
+  real(kind=8),dimension(0:twondim  ,1:nvar)::u1
+  real(kind=8),dimension(1:twotondim,1:nvar)::u2
   logical::oknbor
   type(oct),pointer::gridp
   type(nbor),dimension(0:twondim)::grid_nbor
 #ifdef MHD
   type(nbor),dimension(1:twondim)::grid_son_nbor
-  real(dp),dimension(0:twondim  ,1:6)::b1
-  real(dp),dimension(1:twotondim,1:6)::b2
-  real(dp),dimension(1:twondim,1:twotondim,1:6)::b3
+  real(kind=8),dimension(0:twondim  ,1:6)::b1
+  real(kind=8),dimension(1:twotondim,1:6)::b2
+  real(kind=8),dimension(1:twondim,1:twotondim,1:6)::b3
   integer(kind=8),dimension(0:ndim)::hash_son_nbor
   logical,dimension(1:twondim)::refined
   integer,dimension(1:3,1:6),save::shift=reshape(&

@@ -37,10 +37,10 @@ end subroutine r_source_hydro_fine
 !################################################################
 !################################################################
 subroutine source_hydro_fine(s,ilevel)
-  use amr_parameters, only: ndim,twondim,twotondim,threetondim,nvector,dp
-  use amr_commons, only: oct,nbor
+  use amr_parameters, only: ndim, twondim, twotondim, threetondim, nvector
+  use amr_commons, only: oct, nbor
   use ramses_commons, only: ramses_t
-  use hydro_parameters, only: nvar,nener
+  use hydro_parameters, only: nvar, nener
   use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
   use cache_commons
   use cache

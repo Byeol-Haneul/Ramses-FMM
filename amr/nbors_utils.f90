@@ -689,7 +689,7 @@ end subroutine get_grid
 !##############################################################
 !##############################################################
 subroutine interpol_phi(mdl,m,grid_nbor,ind_nbor,ccc,bbb,tfrac,phi_int)
-  use amr_parameters, only: ndim,dp,twotondim,threetondim
+  use amr_parameters, only: ndim, twotondim, threetondim
   use amr_commons, only: nbor,oct
   use amr_commons, only: mesh_t
   use mdl_module
@@ -771,7 +771,7 @@ end subroutine r_save_phi_old
 !###########################################################
 !###########################################################
 subroutine save_phi_old(m,ilevel)
-  use amr_parameters, only: ndim,dp,twotondim,threetondim
+  use amr_parameters, only: ndim, twotondim, threetondim
   use amr_commons, only: mesh_t
   implicit none
   type(mesh_t)::m

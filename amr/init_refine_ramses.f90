@@ -228,9 +228,9 @@ subroutine init_refine_ramses(s,ilevel,ncpu_file,levelmin_file,nlevelmax_file,no
   ! the initial AMR grid.
   !--------------------------------------------------------------
   use mdl_module, only: mdl_abort
-  use amr_parameters, only: dp,nhilbert,ndim,twotondim,nvector
-  use input_hydro_condinit_module, only: input_hydro_vecpot,cons_from_prim
-  use hydro_parameters, only: nvar,nprim,nener,ie
+  use amr_parameters, only: nhilbert, ndim, twotondim, nvector
+  use input_hydro_condinit_module, only: input_hydro_vecpot, cons_from_prim
+  use hydro_parameters, only: nvar, nprim, nener, ie
   use ramses_commons, only: ramses_t
   use hash
   use hilbert

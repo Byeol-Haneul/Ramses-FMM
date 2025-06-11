@@ -63,7 +63,7 @@ end subroutine r_output_clump
 !###################################################
 !###################################################
 subroutine output_clump_properties(s,filename)
-  use amr_parameters, only: flen, nbin, ndim, dp
+  use amr_parameters, only: flen, nbin, ndim
   use ramses_commons, only: ramses_t,open_file,close_file
   use clfind_commons
   implicit none
@@ -141,7 +141,7 @@ end subroutine output_clump_properties
 !###################################################
 !###################################################
 subroutine halo_mass_def(s,mbin,rad,r200b,rmax,c)
-  use amr_parameters, only: nbin, dp
+  use amr_parameters, only: nbin
   use ramses_commons, only: ramses_t
   type(ramses_t)::s
   real(kind=8),dimension(1:nbin)::mbin

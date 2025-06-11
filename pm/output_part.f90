@@ -229,8 +229,8 @@ end subroutine output_part
 !#######################################################
 !#######################################################
 subroutine backup_part(r,g,p,filename)
-  use amr_parameters, only: ndim,dp,i8b,flen
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim, dp, i8b, flen
+  use amr_commons, only: run_t, global_t
   use pm_commons, only: part_t
   implicit none
   type(run_t)::r

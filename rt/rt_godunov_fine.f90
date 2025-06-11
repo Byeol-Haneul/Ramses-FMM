@@ -139,8 +139,8 @@ end subroutine r_set_rtunew
 !###########################################################
 !###########################################################
 subroutine set_rtunew(m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(mesh_t)::m
   integer::ilevel
@@ -187,14 +187,14 @@ end subroutine r_set_rtuold
 !###########################################################
 subroutine set_rtuold(r, g, m, ilevel)
   use rt_parameters, only: nrtgrp, smallNp
-  use amr_parameters, only: dp, ndim, twotondim
+  use amr_parameters, only: ndim, twotondim
   use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t) :: r
   type(global_t) :: g
   type(mesh_t) :: m
   integer :: ilevel
-  real(dp)::Npc,fred
+  real(kind=8)::Npc,fred
   !---------------------------------------------------------
   ! This routine sets array rtuold to its new value rtunew 
   ! after the hydro step.
@@ -250,8 +250,8 @@ end subroutine set_rtuold
 !###########################################################
 subroutine rt_godfine1(s,ind_grid,ilevel,h)
   use mdl_module
-  use amr_parameters, only: ndim,twondim,twotondim,dp
-  use amr_commons, only: nbor,oct
+  use amr_parameters, only: ndim, twondim, twotondim
+  use amr_commons, only: nbor, oct
   use rt_parameters, only: nrtvar
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -284,9 +284,9 @@ subroutine rt_godfine1(s,ind_grid,ilevel,h)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(0:twondim)::ind_nbor
   type(nbor),dimension(0:twondim)::grid_nbor
-  real(dp)::dx,oneontwotondim,rt_c_diff
-  real(dp),dimension(0:twondim  ,1:nrtvar)::u1
-  real(dp),dimension(1:twotondim,1:nrtvar)::u2
+  real(kind=8)::dx,oneontwotondim,rt_c_diff
+  real(kind=8),dimension(0:twondim  ,1:nrtvar)::u1
+  real(kind=8),dimension(1:twotondim,1:nrtvar)::u2
   logical::okx,oky,okz,oknbor
   type(oct),pointer::gridp,childp
 

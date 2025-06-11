@@ -59,10 +59,10 @@ end subroutine r_star_formation
 subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
   use rng
   use constants
-  use hydro_parameters, only:nvar
-  use amr_parameters, only:dp,ndim,twotondim
-  use amr_commons, only:run_t,global_t,mesh_t
-  use pm_commons, only:part_t
+  use hydro_parameters, only: nvar
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
+  use pm_commons, only: part_t
   use input_hydro_condinit_module, only: cons_from_prim, prim_from_cons
 #ifndef WITHOUTMPI
   use mpi
@@ -344,7 +344,6 @@ end subroutine star_formation
 !###########################################################
 function erfc(x)
   ! complementary error function
-  use amr_parameters, ONLY: dp
   implicit none
   real(kind=8) :: erfc
   real(kind=8) :: x, y

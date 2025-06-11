@@ -28,9 +28,9 @@ end subroutine r_rt_input_condinit
 !#########################################################################
 !#########################################################################
 subroutine rt_input_condinit(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_parameters, only: ndim, twotondim, nvector
   use rt_parameters,only: nrtvar
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -83,7 +83,7 @@ end subroutine rt_input_condinit
 !################################################################
 !################################################################
 subroutine rt_region_condinit(r,g,x,q,dx,nn,ilevel)
-  use amr_parameters, only:dp, nvector, ndim
+  use amr_parameters, only: nvector, ndim
   use rt_parameters, only: nrtvar, nrtgrp, smallnp
   use amr_commons, only: run_t, global_t
   implicit none
@@ -218,9 +218,9 @@ end subroutine r_rt_input_source_regions
 !#########################################################################
 !#########################################################################
 subroutine rt_input_source_regions(r,g,m,ilevel)
-  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_parameters, only: ndim, twotondim, nvector
   use rt_parameters,only: nrtvar
-  use amr_commons, only: run_t,global_t,mesh_t
+  use amr_commons, only: run_t, global_t, mesh_t
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -285,7 +285,7 @@ end subroutine rt_input_source_regions
 !################################################################
 !################################################################
 subroutine rt_source_regions_sweep(r,g,x,q,dx,dt,nn,ilevel)
-  use amr_parameters, only:dp, nvector, ndim
+  use amr_parameters, only: nvector, ndim
   use rt_parameters, only: nrtvar, nrtgrp, smallnp
   use amr_commons, only: run_t, global_t
   implicit none

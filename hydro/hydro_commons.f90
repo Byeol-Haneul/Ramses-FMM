@@ -7,37 +7,37 @@ module hydro_commons
      integer::iu1,iu2,ju1,ju2,ku1,ku2
      integer::if1,if2,jf1,jf2,kf1,kf2
      integer::io1,io2,jo1,jo2,ko1,ko2
-     real(dp),dimension(:,:,:,:),allocatable::uloc
-     real(dp),dimension(:,:,:,:),allocatable::gloc
-     real(dp),dimension(:,:,:,:),allocatable::qloc
-     real(dp),dimension(:,:,:),allocatable::cloc
-     real(dp),dimension(:,:,:,:,:),allocatable::flux
-     real(dp),dimension(:,:,:,:,:),allocatable::tmp
-     real(dp),dimension(:,:,:,:,:),allocatable::dq
-     real(dp),dimension(:,:,:,:,:),allocatable::qm
-     real(dp),dimension(:,:,:,:,:),allocatable::qp
-     real(dp),dimension(:,:,:,:),allocatable::fx
-     real(dp),dimension(:,:,:,:),allocatable::tx
-     real(dp),dimension(:,:,:),allocatable::divu
+     real(kind=8),dimension(:,:,:,:),allocatable::uloc
+     real(kind=8),dimension(:,:,:,:),allocatable::gloc
+     real(kind=8),dimension(:,:,:,:),allocatable::qloc
+     real(kind=8),dimension(:,:,:),allocatable::cloc
+     real(kind=8),dimension(:,:,:,:,:),allocatable::flux
+     real(kind=8),dimension(:,:,:,:,:),allocatable::tmp
+     real(kind=8),dimension(:,:,:,:,:),allocatable::dq
+     real(kind=8),dimension(:,:,:,:,:),allocatable::qm
+     real(kind=8),dimension(:,:,:,:,:),allocatable::qp
+     real(kind=8),dimension(:,:,:,:),allocatable::fx
+     real(kind=8),dimension(:,:,:,:),allocatable::tx
+     real(kind=8),dimension(:,:,:),allocatable::divu
      logical ,dimension(:,:,:),allocatable::okloc
      integer ,dimension(:,:,:),allocatable::cellloc
      type(nbor),dimension(:,:,:),allocatable::childloc
      type(nbor),dimension(:,:,:),allocatable::gridloc
      type(nbor),dimension(:,:,:,:),allocatable::nborloc
 #ifdef MHD
-     real(dp),dimension(:,:,:,:),allocatable::bloc
-     real(dp),dimension(:,:,:),allocatable::emfx
-     real(dp),dimension(:,:,:),allocatable::emfy
-     real(dp),dimension(:,:,:),allocatable::emfz
-     real(dp),dimension(:,:,:),allocatable::Ex
-     real(dp),dimension(:,:,:),allocatable::Ey
-     real(dp),dimension(:,:,:),allocatable::Ez
-     real(dp),dimension(:,:,:,:),allocatable::bf
-     real(dp),dimension(:,:,:,:,:),allocatable::dbf
-     real(dp),dimension(:,:,:,:,:),allocatable::qRT
-     real(dp),dimension(:,:,:,:,:),allocatable::qRB
-     real(dp),dimension(:,:,:,:,:),allocatable::qLT
-     real(dp),dimension(:,:,:,:,:),allocatable::qLB
+     real(kind=8),dimension(:,:,:,:),allocatable::bloc
+     real(kind=8),dimension(:,:,:),allocatable::emfx
+     real(kind=8),dimension(:,:,:),allocatable::emfy
+     real(kind=8),dimension(:,:,:),allocatable::emfz
+     real(kind=8),dimension(:,:,:),allocatable::Ex
+     real(kind=8),dimension(:,:,:),allocatable::Ey
+     real(kind=8),dimension(:,:,:),allocatable::Ez
+     real(kind=8),dimension(:,:,:,:),allocatable::bf
+     real(kind=8),dimension(:,:,:,:,:),allocatable::dbf
+     real(kind=8),dimension(:,:,:,:,:),allocatable::qRT
+     real(kind=8),dimension(:,:,:,:,:),allocatable::qRB
+     real(kind=8),dimension(:,:,:,:,:),allocatable::qLT
+     real(kind=8),dimension(:,:,:,:,:),allocatable::qLB
      type(nbor),dimension(:,:,:,:),allocatable::nborsonloc
 #endif
    contains

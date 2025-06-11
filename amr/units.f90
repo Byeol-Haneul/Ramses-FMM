@@ -1,7 +1,7 @@
 subroutine units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
-  use amr_parameters, only: dp,ndim
-  use constants, only: kB,mH,rhoc
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim
+  use constants, only: kB, mH, rhoc
+  use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g

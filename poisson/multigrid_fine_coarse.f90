@@ -51,7 +51,7 @@ recursive subroutine r_restrict_mask(pst,ilevel,input_size,masked,output_size)
 end subroutine r_restrict_mask
 
 subroutine restrict_mask(s,ifinelevel,allmasked)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twotondim
+  use amr_parameters, only: nvector, nhilbert, ndim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -66,8 +66,8 @@ subroutine restrict_mask(s,ifinelevel,allmasked)
 
   integer(kind=8),dimension(0:ndim) :: hash_key
   integer :: ichild,ind,igrid,icell
-  real(dp) :: ngpmask, mask_max
-  real(dp) :: dtwotondim = (twotondim)
+  real(kind=8) :: ngpmask, mask_max
+  real(kind=8) :: dtwotondim = (twotondim)
   type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
 
@@ -227,7 +227,7 @@ recursive subroutine r_cmp_residual_mg(pst,input,input_size)
 end subroutine r_cmp_residual_mg
 
 subroutine cmp_residual_mg(s,hash_dict, ilevel)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
+  use amr_parameters, only: nvector, nhilbert, ndim, twondim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -243,13 +243,13 @@ subroutine cmp_residual_mg(s,hash_dict, ilevel)
   ! Computes the residual for MG levels, and stores it into grid(igrid)%f(ind,1)
     
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
+  real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
-  real(dp) :: dx, oneoverdx2, phi_c, dis_c, nb_sum
+  real(kind=8) :: dx, oneoverdx2, phi_c, dis_c, nb_sum
   integer  :: igrid, ind, inbor, idim, igridn, id, ig
-  real(dp) :: dtwondim = (twondim)
+  real(kind=8) :: dtwondim = (twondim)
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
 
@@ -455,7 +455,7 @@ recursive subroutine r_gauss_seidel_mg(pst,input,input_size)
 end subroutine r_gauss_seidel_mg
 
 subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
+  use amr_parameters, only: nvector, nhilbert, ndim, twondim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -474,13 +474,13 @@ subroutine gauss_seidel_mg(s,hash_dict,ilevel,safe,redstep)
   ! The domain mask is also needed.
   
   integer, dimension(1:3,1:2,1:8) :: iii, jjj
-  real(dp),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
+  real(kind=8),dimension(1:twotondim,0:twondim)::phi_nbor,dis_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
   integer(kind=8),dimension(0:ndim) :: hash_nbor
-  real(dp) :: phi_c, dis_c, dx2, nb_sum, weight
+  real(kind=8) :: phi_c, dis_c, dx2, nb_sum, weight
   integer  :: igrid, ind, inbor, idim, igridn, id, ig, ind0
-  real(dp) :: dtwondim = (twondim)
+  real(kind=8) :: dtwondim = (twondim)
   type(oct),pointer::gridp
   type(msg_twin_realdp)::dummy_twin_realdp
 
@@ -673,7 +673,7 @@ recursive subroutine r_restrict_residual(pst,ilevel,input_size)
 end subroutine r_restrict_residual
 
 subroutine restrict_residual(s,ifinelevel)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim
+  use amr_parameters, only: nvector, nhilbert, ndim, twondim, twotondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -691,7 +691,7 @@ subroutine restrict_residual(s,ifinelevel)
   
   integer :: ichild, ind
   integer :: igrid, icell
-  real(dp) :: dtwotondim = (twotondim)
+  real(kind=8) :: dtwotondim = (twotondim)
   integer(kind=8),dimension(0:ndim) :: hash_key
   type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
@@ -877,7 +877,7 @@ recursive subroutine r_interpolate_and_correct(pst,ilevel,input_size)
 end subroutine r_interpolate_and_correct
 
 subroutine interpolate_and_correct(s,ifinelevel)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
+  use amr_parameters, only: nvector, nhilbert, ndim, twondim, twotondim, threetondim
   use amr_commons, only: nbor,oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -896,12 +896,12 @@ subroutine interpolate_and_correct(s,ifinelevel)
   integer,dimension(1:threetondim) :: igrid_nbor,ind_nbor
   type(nbor),dimension(1:threetondim) :: grid_nbor
   integer  :: ichild, ind
-  real(dp) :: aa, bb, cc, dd, coeff
-  real(dp), dimension(1:8)     :: bbb
+  real(kind=8) :: aa, bb, cc, dd, coeff
+  real(kind=8), dimension(1:8)     :: bbb
   integer,  dimension(1:8,1:8) :: ccc
   integer::ind_average,ind_father
   integer::igrid_nbr,ind_nbr
-  real(dp),dimension(1:twotondim)::corr
+  real(kind=8),dimension(1:twotondim)::corr
   type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
   
@@ -1110,7 +1110,7 @@ recursive subroutine r_set_scan_flag(pst,input,input_size)
 end subroutine r_set_scan_flag
 
 subroutine set_scan_flag(s,hash_dict,ilevel)
-  use amr_parameters, only: dp,nvector,nhilbert,ndim,twondim,twotondim,threetondim
+  use amr_parameters, only: nvector, nhilbert, ndim, twondim, twotondim, threetondim
   use amr_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
@@ -1125,11 +1125,11 @@ subroutine set_scan_flag(s,hash_dict,ilevel)
   !
   integer :: ind, igrid, igridn, inbor, idim, id, ig
   integer, dimension(1:3,1:2,1:8)::iii, jjj
-  real(dp),dimension(1:twotondim,0:twondim)::dis_nbor
+  real(kind=8),dimension(1:twotondim,0:twondim)::dis_nbor
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer,dimension(1:3,1:6),save::shift=reshape(&
        & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-  real(dp)::dis_c
+  real(kind=8)::dis_c
   type(oct),pointer::gridp
   type(msg_small_realdp)::dummy_small_realdp
   
@@ -1304,8 +1304,8 @@ recursive subroutine r_cmp_residual_norm2(pst,ilevel,input_size,norm2,output_siz
 end subroutine r_cmp_residual_norm2
 
 subroutine cmp_residual_norm2(r,m,ilevel, norm2)
-  use amr_parameters, only: dp,ndim,twotondim
-  use amr_commons, only: run_t,mesh_t
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, mesh_t
   implicit none
   type(run_t)::r
   type(mesh_t)::m

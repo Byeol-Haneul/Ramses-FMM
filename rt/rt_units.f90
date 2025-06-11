@@ -1,6 +1,6 @@
 subroutine rt_units(r,g,scale_Np,scale_Fp)
-  use amr_parameters, only: dp,ndim
-  use amr_commons, only: run_t,global_t
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t, global_t
   implicit none
   type(run_t)::r
   type(global_t)::g

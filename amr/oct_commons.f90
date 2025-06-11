@@ -6,24 +6,24 @@ module oct_commons
   ! New type for oct structure
   type oct
 #ifdef HYDRO
-     real(kind=dp),dimension(1:twotondim,1:nvar)::uold
-     real(kind=dp),dimension(1:twotondim,1:nvar)::unew
+     real(dp),dimension(1:twotondim,1:nvar)::uold
+     real(dp),dimension(1:twotondim,1:nvar)::unew
 #endif
 #ifdef MHD
-     real(kind=dp),dimension(1:twotondim,1:6)::bold
-     real(kind=dp),dimension(1:twotondim,1:6)::bnew
+     real(dp),dimension(1:twotondim,1:6)::bold
+     real(dp),dimension(1:twotondim,1:6)::bnew
 #endif
 #ifdef RT
-     real(kind=dp),dimension(1:twotondim,1:nrtvar)::rtuold
-     real(kind=dp),dimension(1:twotondim,1:nrtvar)::rtunew
-     real(kind=dp),dimension(1:twotondim,1:nrtgrp)::emissivity
+     real(dp),dimension(1:twotondim,1:nrtvar)::rtuold
+     real(dp),dimension(1:twotondim,1:nrtvar)::rtunew
+     real(dp),dimension(1:twotondim,1:nrtgrp)::emissivity
 #endif
 #ifdef GRAV
-     real(kind=dp),dimension(1:twotondim,1:3)::f
-     real(kind=dp),dimension(1:twotondim)::rho
-     real(kind=dp),dimension(1:twotondim)::phi
-     real(kind=dp),dimension(1:twotondim)::phi_old
-     real(kind=dp),dimension(1:twotondim)::nref
+     real(dp),dimension(1:twotondim,1:3)::f
+     real(dp),dimension(1:twotondim)::rho
+     real(dp),dimension(1:twotondim)::phi
+     real(dp),dimension(1:twotondim)::phi_old
+     real(dp),dimension(1:twotondim)::nref
 #endif
      integer(kind=8),dimension(1:nhilbert)::hkey
      integer(kind=4),dimension(1:twotondim)::flag1
