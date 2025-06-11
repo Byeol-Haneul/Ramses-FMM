@@ -4,6 +4,7 @@ module molecules_module
 
   private  ! everything is private by default
   public :: alpha_H2, beta_H2_umist, beta_H2, beta_H2_krome, alpha_CO, beta_CO, alpha_H2_prim, alpha_H2_dust
+  public :: comp_SH2, comp_Sd
 
 CONTAINS
 
@@ -115,7 +116,7 @@ FUNCTION beta_H2_umist(T, nH, ne, nH2) result(rate)
 
   rate = 0.d0
 
-  !H2 + H2 --> H2 + H + H TODO(CODE): double check exponent
+  !H2 + H2 --> H2 + H + H 
   T_loc = max(min(T,41000.d0),2803.d0)
   rate = rate + (1.00d-8 * ((T_loc/300d0)**0.0d0) * exp(-84100.d0/T_loc) * nH2)
 
@@ -253,5 +254,39 @@ FUNCTION beta_CO(G0, xi_cr_H2) result(rate)
   rate = gammaCO + gammaCO_cr
 
 END FUNCTION beta_CO
+
+FUNCTION comp_Sd(nHI, nH2, dx_SS, Z) result(ss_factor)
+  ! Returns the self shielding factor for dust
+  ! see section 2.2 http://iopscience.iop.org/0004-637X/697/1/55/pdf/apj_697_1_55.pdf
+  implicit none
+  real(KIND=8), intent(in)::nHI, nH2, dx_SS, Z
+  real(KIND=8):: ss_factor
+  real(KIND=8):: Sdeff, cNHI, cNH2
+
+  Sdeff = 2.34d-21    ! dust cross section cm^2 ! Updated for bare-gr-s
+  cNHI = nHI*dx_SS    ! HI column density
+  cNH2 = nH2*dx_SS    ! H2 column density
+
+  ss_factor = exp(-Sdeff*Z*(cNHI + (2.d0*cNH2)))
+END FUNCTION comp_Sd
+
+FUNCTION comp_SH2(nH2, dx_SS) result(ss_factor)
+  ! Returns the self shielding factor for dust
+  ! see section 2.2 http://iopscience.iop.org/0004-637X/697/1/55/pdf/apj_697_1_55.pdf
+  implicit none
+  real(KIND=8), intent(in):: nH2, dx_SS
+  real(KIND=8):: ss_factor
+  real(KIND=8):: xfac, cNH2, wH2, Sa, Sb, Sc
+
+  cNH2 = nH2*dx_SS  !H2 column density
+  xfac = cNH2/(5.d14)
+  wH2 = 0.2d0
+
+  Sa = (1.d0 - wH2)/((1.d0 + xfac)*(1.d0 + xfac))
+  Sb = wH2/sqrt(1.d0 + xfac)
+  Sc = exp(-0.00085d0*sqrt(1.d0 + xfac))
+
+  ss_factor = Sa + (Sb*Sc)
+END FUNCTION comp_SH2
 
 end module molecules_module
