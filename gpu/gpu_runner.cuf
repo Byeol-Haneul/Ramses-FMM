@@ -31,7 +31,7 @@ module gpu_runner
 
   !> The Fortran array of oct index of ghost and halo octs on the device and the C_PTR to it
   integer, device, pointer, dimension(:) :: idx_send_device, idx_recv_device
-  type(C_PTR) :: idx_send_device_cptr, idx_recv_device_cptr
+  type(C_DEVPTR) :: idx_send_device_cptr, idx_recv_device_cptr
 
   !> The Fortran array of the hash keys of ghost and halo octs on the host only
   integer, allocatable, dimension(:) :: key_send_host, key_recv_host
@@ -400,20 +400,26 @@ contains
    !>
    subroutine setup_halo_mapping(sim, ilevel)
 #ifndef WITHOUTMPI
-     use mpi_mod
+     use mpi
 #endif
+     use nvtx
+     use hash
      use nbors_utils, only: unlock_cache, get_grid
      use ramses_commons, only: ramses_t
      use oct_commons, only: oct
      use amr_parameters, only: ndim
-     type(ramses_t), intent(in)::sim
-     integer::ilevel
+     type(ramses_t), intent(in) :: sim
+     integer :: ilevel
      !
 #ifndef WITHOUTMPI
-     integer::icache, icpu, my_integer, info
-     real(dp)::my_real_dp
+     type(oct), pointer:: oct_to_load
+     integer :: icache, icpu, my_integer, info, err_code
+     integer :: ibuffer, ihalo
+     integer, dimension(1:sim%g%ncpu) :: n_skip, i_recv
+     real(dp) :: my_real_dp
+     integer(kind=8),dimension(0:ndim) :: hash_key
 
-     associated(m=>sim%m, g=>sim%g)
+     associated(m=>sim%m, g=>sim%g, r=>sim%r)
 
      allocate(n_recv(1:g%ncpu))
      allocate(n_send(1:g%ncpu))
@@ -464,9 +470,9 @@ contains
      call c_f_pointer(uold_send_device_cptr, uold_send_device, [40*num_send])
      call c_f_pointer(uold_send_host_cptr, uold_send_host, [40*num_send])
 
-     i_skip(1) = 1
+     n_skip(1) = 1
      do icpu = 2, ncpu
-        iskip(icpu) = iskip(icpu-1) + n_recv(icpu)
+        n_skip(icpu) = n_skip(icpu-1) + n_recv(icpu-1)
      end do
 
      i_recv = 0
@@ -474,27 +480,27 @@ contains
         if(m%locked(icache))then
            icpu = m%parent_cpu(icache)
            i_recv(icpu) = i_recv(icpu) + 1
-           ibuffer = iskip(icpu)-1 + i_recv(icpu)
-           idx_recv_host(ibuffer) = m%ngridmax + icache
-           ibuffer = 4*(iskip(icpu)-1) + 4*i_recv(icpu)-3
-           key_recv_host(ibuffer  ) = m%grid(m%ngridmax+icache)%lev
-           key_recv_host(ibuffer+1) = m%grid(m%ngridmax+icache)%ckey(1)
-           key_recv_host(ibuffer+2) = m%grid(m%ngridmax+icache)%ckey(2)
-           key_recv_host(ibuffer+3) = m%grid(m%ngridmax+icache)%ckey(3)
+           ibuffer = n_skip(icpu)-1 + i_recv(icpu)
+           idx_recv_host(ibuffer) = r%ngridmax+icache
+           ibuffer = 4*(n_skip(icpu)-1) + 4*i_recv(icpu)-3
+           key_recv_host(ibuffer  ) = m%grid(r%ngridmax+icache)%lev
+           key_recv_host(ibuffer+1) = m%grid(r%ngridmax+icache)%ckey(1)
+           key_recv_host(ibuffer+2) = m%grid(r%ngridmax+icache)%ckey(2)
+           key_recv_host(ibuffer+3) = m%grid(r%ngridmax+icache)%ckey(3)
         endif
      end do
 
      call halo_exchange_key(sim, ilevel)
 
-     iskip = 1
-     do ibuffer = 1, num_send
+     ibuffer = 1
+     do ihalo = 1, num_send
         hash_key(0) = key_send_host(ibuffer  )
         hash_key(1) = key_send_host(ibuffer+1)
         hash_key(2) = key_send_host(ibuffer+2)
         hash_key(3) = key_send_host(ibuffer+3)
         call c_f_pointer(hash_getp(m%grid_dict,hash_key),oct_to_load)
-        idx_send_host(ibuffer) = (loc(oct_to_load)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
-        iskip = iskip + 4
+        idx_send_host(ihalo) = (loc(oct_to_load)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
+        ibuffer = ibuffer + 4
      end do
 
      deallocate(key_send_host, key_recv_host)
@@ -515,7 +521,7 @@ contains
    !>
    subroutine halo_exchange_uold(sim, ilevel)
 #ifndef WITHOUTMPI
-     use mpi_mod
+     use mpi
 #endif
      use ramses_commons, only: ramses_t
      implicit none
@@ -568,7 +574,7 @@ contains
 
    subroutine halo_exchange_key(sim, ilevel)
 #ifndef WITHOUTMPI
-     use mpi_mod
+     use mpi
 #endif
      use ramses_commons, only: ramses_t
      implicit none
