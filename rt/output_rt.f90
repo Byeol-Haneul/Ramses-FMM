@@ -230,7 +230,9 @@ subroutine write_group_props(r, update, lun)
 !------------------------------------------------------------------------
   use amr_commons, only: run_t
   use rt_parameters, only: nrtgrp
+#ifdef RTZ
   use rtz_module, only: elements, n_elements
+#endif
   implicit none
   type(run_t)::r
   logical :: update

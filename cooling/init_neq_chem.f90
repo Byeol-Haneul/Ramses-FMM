@@ -12,10 +12,12 @@ subroutine init_neq_chem(r,g,tables)
   use neq_cooling_module, only: neq_set_model
 #endif
   use coolrates_module, only: neq_cooling_t, update_rt_c
+#ifdef RTZ
   use cosmic_ray_ionization_module, only: initialize_cr_rates
   use photoionization_UVB_module, only: load_UVB_data, update_UVB
   use charge_exchange_module, only: load_ct_rates
   use rtz_coolrates_module, only: initialize_high_temperature_metal_cooling, initialize_fine_structure_tables
+#endif
   implicit none
   type(run_t)::r
   type(global_t)::g

@@ -286,7 +286,9 @@ SUBROUTINE init_SED_table(r, g, SED)
   ! metallicity.  The SED is read from a directory specified by sed_dir.
   !-------------------------------------------------------------------------
   use spectrum_integrator_module
+#ifdef RTZ
   use rtz_module
+#endif
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -505,7 +507,9 @@ SUBROUTINE update_SED_group_props(r, g, SED, p)
   use amr_commons, only: global_t
   use hydro_parameters, only: nion
   use constants, only: Gyr2sec
+#ifdef RTZ
   use rtz_module, only: elements, n_elements
+#endif
   type(run_t) :: r
   type(part_t) :: p
   type(global_t) :: g
@@ -904,7 +908,9 @@ SUBROUTINE write_SED_table(SED)
   ! and HeII; H2 and He are optional
   !-------------------------------------------------------------------------
   use hydro_parameters, only: nion
+#ifdef RTZ
   use rtz_module, only: n_elements, elements
+#endif
   type(sed_table_t) :: SED
   !-------------------------------------------------------------------------
   character(len=128) :: filename
