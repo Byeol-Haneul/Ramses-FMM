@@ -471,7 +471,7 @@ contains
      call c_f_pointer(uold_send_host_cptr, uold_send_host, [40*num_send])
 
      n_skip(1) = 1
-     do icpu = 2, ncpu
+     do icpu = 2, g%ncpu
         n_skip(icpu) = n_skip(icpu-1) + n_recv(icpu-1)
      end do
 
