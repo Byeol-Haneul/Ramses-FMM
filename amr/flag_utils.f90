@@ -286,6 +286,7 @@ subroutine user_flag(s,ilevel,nflag)
 
   ! Refinement rules for the radiative transfer solver
   if(s%r%rt)call rt_flag(s,ilevel)
+  
   ! Refinement rules around sink particles
   if(s%r%sink.and.s%r%sink_refine)call sink_flag(s,s%sink,ilevel)
 
