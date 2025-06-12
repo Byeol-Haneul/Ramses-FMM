@@ -273,6 +273,7 @@ module amr_commons
      real(kind=8),dimension(1:27,1:27)::ionEvs        !                   Ionization energies
 #else
      real(kind=8),dimension(nIon)::ionEvs             !                   Ionization energies
+#endif
      real(kind=8)::neq_Tconst=-1           ! If positive use this value for all T-dependent rates
      logical::neq_isTconst=.false.                    !             Constant rates activated?
      logical::upload_equilibrium_x=.false.          ! Enforce equilibrium xion when uploading
