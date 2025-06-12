@@ -991,5 +991,85 @@ contains
   end subroutine cmpdt_kernel
   ! =========================================================================
 
+  ! =========================================================================
+  attributes(global) subroutine gather_send_buffer(oct_grid, uold_send, idx_send, num_send)
+    type(oct), device, dimension(*) :: oct_grid
+    real(kind=dp), device, dimension(*) :: uold_send
+    integer, device, dimension(*) :: idx_send
+    integer(kind=8), intent(in), value :: num_send
+
+    integer :: buffer_idx ! The index of the sending buffer
+    integer :: block_idx ! The index of the block
+    integer :: cell_idx ! The index of the cell within the oct
+    integer :: oct_idx ! The index of the oct
+    integer :: pos_idx ! The position in the buffer
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the buffer oct idx
+    buffer_idx = block_idx * blockDim%y + threadIdx%y
+    if (buffer_idx > num_send) return
+
+    ! Compute the grid oct idx
+    oct_idx = idx_send(buffer_idx)
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Compute the buffer position
+    pos_idx = cell_idx + 8*0 + 40*(buffer_idx-1)
+    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,1)
+    pos_idx = cell_idx + 8*1 + 40*(buffer_idx-1)
+    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,2)
+    pos_idx = cell_idx + 8*2 + 40*(buffer_idx-1)
+    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,3)
+    pos_idx = cell_idx + 8*3 + 40*(buffer_idx-1)
+    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,4)
+    pos_idx = cell_idx + 8*4 + 40*(buffer_idx-1)
+    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,5)
+
+  end subroutine gather_send_buffer
+  ! =========================================================================
+
+  ! =========================================================================
+  attributes(global) subroutine scatter_recv_buffer(oct_grid, uold_recv, idx_recv, num_recv)
+    type(oct), device, dimension(*) :: oct_grid
+    real(kind=dp), device, dimension(*) :: uold_recv
+    integer, device, dimension(*) :: idx_recv
+    integer(kind=8), intent(in), value :: num_recv
+
+    integer :: buffer_idx ! The index of the receiving buffer
+    integer :: block_idx ! The index of the block
+    integer :: cell_idx ! The index of the cell within the oct
+    integer :: oct_idx ! The index of the oct
+    integer :: pos_idx ! The position in the buffer
+
+    block_idx = blockIdx%x - 1
+
+    ! Compute the buffer oct idx
+    buffer_idx = block_idx * blockDim%y + threadIdx%y
+    if (buffer_idx > num_recv) return
+
+    ! Compute the grid oct idx
+    oct_idx = idx_recv(buffer_idx)
+
+    ! Compute the cell idx
+    cell_idx = threadIdx%x
+
+    ! Compute the buffer position
+    pos_idx = cell_idx + 8*0 + 40*(buffer_idx-1)
+    oct_grid(oct_idx)%uold(cell_idx,1) = uold_recv(pos_idx)
+    pos_idx = cell_idx + 8*1 + 40*(buffer_idx-1)
+    oct_grid(oct_idx)%uold(cell_idx,2) = uold_recv(pos_idx)
+    pos_idx = cell_idx + 8*2 + 40*(buffer_idx-1)
+    oct_grid(oct_idx)%uold(cell_idx,3) = uold_recv(pos_idx)
+    pos_idx = cell_idx + 8*3 + 40*(buffer_idx-1)
+    oct_grid(oct_idx)%uold(cell_idx,4) = uold_recv(pos_idx)
+    pos_idx = cell_idx + 8*4 + 40*(buffer_idx-1)
+    oct_grid(oct_idx)%uold(cell_idx,5) = uold_recv(pos_idx)
+
+  end subroutine scatter_recv_buffer
+  ! =========================================================================
+
 end module hydro_integrator
 

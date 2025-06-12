@@ -1,4 +1,5 @@
 module gpu_runner
+  use amr_parameters, only: dp
   use gpu_utils
   use cudafor
   use oct_commons
@@ -15,6 +16,31 @@ module gpu_runner
   !> The Fortran array of subgrid indices on the device and the C_DEVPTR to it
   integer, device, pointer, dimension(:,:,:,:) :: subgrid_indices_device
   type(C_DEVPTR) :: subgrid_indices_device_cptr
+
+  !> The Fortran array of hydro variables of ghost and halo octs on the host and the C_PTR to it
+  real(kind=dp), pointer, dimension(:) :: uold_send_host, uold_recv_host
+  type(C_PTR) :: uold_send_host_cptr, uold_recv_host_cptr
+
+  !> The Fortran array of hydro variables of ghost and halo octs on the device and the C_PTR to it
+  real(kind=dp), device, pointer, dimension(:) :: uold_send_device, uold_recv_device
+  type(C_DEVPTR) :: uold_send_device_cptr, uold_recv_device_cptr
+
+  !> The Fortran array of oct index of ghost and halo octs on the host and the C_PTR to it
+  integer, pointer, dimension(:) :: idx_send_host, idx_recv_host
+  type(C_PTR) :: idx_send_host_cptr, idx_recv_host_cptr
+
+  !> The Fortran array of oct index of ghost and halo octs on the device and the C_PTR to it
+  integer, device, pointer, dimension(:) :: idx_send_device, idx_recv_device
+  type(C_PTR) :: idx_send_device_cptr, idx_recv_device_cptr
+
+  !> The Fortran array of the hash keys of ghost and halo octs on the host only
+  integer, allocatable, dimension(:) :: key_send_host, key_recv_host
+
+  !> The number of halo and ghost octs per cpu
+  integer, allocatable, dimension(:) :: n_send, n_recv
+
+  !> The total number of halo and ghost octs
+  integer :: num_send, num_recv
 
 contains
 
@@ -137,14 +163,20 @@ contains
   !> @param[in] ilevel : The refinement level to update
   !>
   subroutine gpu_integrator(sim, ilevel)
+    use, intrinsic :: iso_c_binding
     use nvtx
     use hydro_integrator, only: hydro_integrator_kernel
-    use, intrinsic :: iso_c_binding
     use ramses_commons, only: ramses_t
+    use marshal, only: pack_fetch_refine,unpack_fetch_refine
+    use godunov_fine_module, only: init_flush_godunov, pack_flush_godunov
+    use boundaries, only: init_bound_refine
+    type(msg_large_realdp)::dummy_large_realdp
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
+    !
     integer(kind=8) :: num_subgrids
     integer :: err_code, threads_per_block, num_blocks
+    integer :: threadsX_per_block, threadsY_per_block
     integer, parameter :: subgrid_size = 8
     real(dp) :: dt, dx, gamma
 
@@ -153,6 +185,7 @@ contains
 
     ! Allocate arrays if they're not allocated
     if (.not. (allocated(subgrid_indices_host))) then
+
        ! Note dt is used here just to get the sizeof a float
        err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(dt))
        err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(dt)) 
@@ -161,10 +194,33 @@ contains
        call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
        call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
 
+       ! Open cache
+       call open_cache(sim,table=sim%m%grid_dict,data_size=storage_size(sim%m%grid(1))/32,&
+               hilbert=sim%m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
+               pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
+               init=init_flush_godunov, flush=pack_flush_godunov,&
+               combine=unpack_flush_godunov, bound=init_bound_refine)
+
+       ! Make boundary
+       call make_boundaries(sim,ilevel)
+
+       ! Setup index mapping between halo and ghost octs
+       call setup_halo_mapping(sim, ilevel)
+
+       ! Copy halo and ghost octs index to device
+       call nvtxStartRange("Copy subgrid mapping to device", color=5)!red
+       idx_send_device = idx_send_host
+       idx_recv_device = idx_recv_host
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+
        ! Setup the subgrid mapping
        call nvtxStartRange("Setup Index Mapping", color=1)!blue
        call setup_subgrid_mapping(sim, ilevel)
        call nvtxEndRange()
+
+       ! Close cache
+       call close_cache(sim,sim%m%grid_dict) 
 
        ! Copy subgrid map to device. This has to be done outside of the 
        ! setup_subgrid_mapping subroutine due to a compiler bug with nested NVTX statements
@@ -175,14 +231,46 @@ contains
     end if
 
     ! =============================
+    ! Copy halo octs to send buffer
+    ! =============================
+    if(num_send>0)then
+       call nvtxStartRange("Copy halo octs to buffer", color=5)!red
+       threadsX_per_block=8; threadsY_per_block=4
+       num_blocks = (num_send + threadsY_per_block - 1) / threadsY_per_block
+       call gather_send_buffer<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_device, uold_send_device, idx_send_device, num_send)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    endif
+
+    ! =============================
+    ! MPI ISEND/IRECV on the host
+    ! =============================
+    call nvtxStartRange("Mem copy and MPI", color=5)!red
+    uold_send_host = uold_send_device
+    call halo_exchange_uold(sim, ilevel)
+    uold_recv_device = uold_recv_host
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
+    ! ==============================
+    ! Copy recv buffer to ghost octs
+    ! ==============================
+    if(num_recv>0)then
+       call nvtxStartRange("Copy buffer to ghost octs", color=5)!red
+       threadsX_per_block=8; threadsY_per_block=4
+       num_blocks = (num_recv + threadsY_per_block - 1) / threadsY_per_block
+       call scatter_recv_buffer<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_device, uold_recv_device, idx_recv_device, num_recv)
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+    endif
+
+    ! =============================
     ! GPU Integration
     ! =============================
-    num_blocks = num_subgrids
-
-    ! Perform integration
     dt = sim%g%dtnew(ilevel)
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
+    num_blocks = num_subgrids
     threads_per_block = 128
 
     call nvtxStartRange("GPU Integration", color=0)!green
@@ -253,57 +341,599 @@ contains
    !> @param[in] k_subgrid_loc : The ikindex of the "lower left" real oct in the subgrid to pack
    !>
    subroutine setup_subgrid(sim, ilevel, subgrid_idx, i_subgrid_loc, j_subgrid_loc, k_subgrid_loc)
-      use nbors_utils, only: unlock_cache, get_grid
-      use ramses_commons, only: ramses_t
-      use oct_commons, only: oct
-      use amr_parameters, only: ndim
-      type(ramses_t), intent(in)::sim
-      integer, intent(in)::ilevel
-      integer(kind=8), intent(in):: subgrid_idx ! the index of the subgrid to pack
-      integer(kind=8), intent(in):: i_subgrid_loc, j_subgrid_loc, k_subgrid_loc ! the i, j, k indices of the "lower left" real oct in the subgrid to pack
-      integer :: i_grid, j_grid, k_grid ! the loop indices of the location of the oct
-      integer :: i_oct, j_oct, k_oct ! loop indices within the oct
-      integer :: subgrid_i, subgrid_j, subgrid_k
-      integer(kind=8), dimension(0:ndim)::hash_key
-      type(oct), pointer:: oct_to_load
-      integer :: idx_to_oct
+     use nbors_utils, only: unlock_cache, get_grid
+     use ramses_commons, only: ramses_t
+     use oct_commons, only: oct
+     use amr_parameters, only: ndim
+     type(ramses_t), intent(in)::sim
+     integer, intent(in)::ilevel
+     integer(kind=8), intent(in):: subgrid_idx ! the index of the subgrid to pack
+     integer(kind=8), intent(in):: i_subgrid_loc, j_subgrid_loc, k_subgrid_loc ! the i, j, k indices of the "lower left" real oct in the subgrid to pack
+     integer :: i_grid, j_grid, k_grid ! the loop indices of the location of the oct
+     integer :: i_oct, j_oct, k_oct ! loop indices within the oct
+     integer :: subgrid_i, subgrid_j, subgrid_k
+     integer(kind=8), dimension(0:ndim)::hash_key
+     type(oct), pointer:: oct_to_load
+     integer :: idx_to_oct
 
-      ! Loop over octs in the subgrid. The loop indices are the coordinates
-      ! relative to i_subgrid_loc, j_subgrid_loc, k_subgrid_loc. This all assumes 1 MPI rank
-      do k_grid = k_subgrid_loc - 1, k_subgrid_loc + 2
-         do j_grid = j_subgrid_loc - 1, j_subgrid_loc + 2
-            do i_grid = i_subgrid_loc - 1, i_subgrid_loc + 2
+     ! Loop over octs in the subgrid. The loop indices are the coordinates
+     ! relative to i_subgrid_loc, j_subgrid_loc, k_subgrid_loc. This all assumes 1 MPI rank
+     do k_grid = k_subgrid_loc - 1, k_subgrid_loc + 2
+        do j_grid = j_subgrid_loc - 1, j_subgrid_loc + 2
+           do i_grid = i_subgrid_loc - 1, i_subgrid_loc + 2
 
-               ! Use periodic boundaries for boundary octs.
-               i_oct = check_boundaries(i_grid, sim%m%nx)
-               j_oct = check_boundaries(j_grid, sim%m%ny)
-               k_oct = check_boundaries(k_grid, sim%m%nz)
+              ! Use periodic boundaries for boundary octs.
+              i_oct = check_boundaries(i_grid, sim%m%nx)
+              j_oct = check_boundaries(j_grid, sim%m%ny)
+              k_oct = check_boundaries(k_grid, sim%m%nz)
 
-               ! Assign values to the oct hash
-               hash_key(0) = ilevel ! the refinement level
-               hash_key(1) = i_oct  ! the X index of the oct to load
-               hash_key(2) = j_oct  ! the Y index of the oct to load
-               hash_key(3) = k_oct  ! the Z index of the oct to load
+              ! Assign values to the oct hash
+              hash_key(0) = ilevel ! the refinement level
+              hash_key(1) = i_oct  ! the X index of the oct to load
+              hash_key(2) = j_oct  ! the Y index of the oct to load
+              hash_key(3) = k_oct  ! the Z index of the oct to load
 
-               ! Get a pointer to the oct to load
-               call get_grid(sim, &! sim object
-                             hash_key, &! the hash key (level, x, y, z)
-                             sim%m%grid_dict, &! ???
-                             oct_to_load, &! The pointer to the oct
-                             flush_cache=.false., &
-                             fetch_cache=.true., &
-                             lock=.false.)
-               
-               idx_to_oct = (loc(oct_to_load)-loc(sim%m%grid(1)))/(loc(sim%m%grid(2))-loc(sim%m%grid(1)))+1
+              ! Get a pointer to the oct to load
+              call get_grid(sim, &! sim object
+                            hash_key, &! the hash key (level, x, y, z)
+                            sim%m%grid_dict, &! ???
+                            oct_to_load, &! The pointer to the oct
+                            flush_cache=.false., &
+                            fetch_cache=.true., &
+                            lock=.false.)
 
-               subgrid_i = (i_grid - (i_subgrid_loc - 1)) + 1
-               subgrid_j = (j_grid - (j_subgrid_loc - 1)) + 1
-               subgrid_k = (k_grid - (k_subgrid_loc - 1)) + 1
+              idx_to_oct = (loc(oct_to_load)-loc(sim%m%grid(1)))/(loc(sim%m%grid(2))-loc(sim%m%grid(1)))+1
 
-               subgrid_indices_host(subgrid_i, subgrid_j, subgrid_k, subgrid_idx) = idx_to_oct
-            end do
-         end do
-      end do
+              subgrid_i = (i_grid - (i_subgrid_loc - 1)) + 1
+              subgrid_j = (j_grid - (j_subgrid_loc - 1)) + 1
+              subgrid_k = (k_grid - (k_subgrid_loc - 1)) + 1
+
+              subgrid_indices_host(subgrid_i, subgrid_j, subgrid_k, subgrid_idx) = idx_to_oct
+           end do
+        end do
+     end do
    end subroutine setup_subgrid
+
+   !> @brief
+   !> Setup the communication infrastructure for halo exchange
+   !>
+   !> @param[in] sim : The simulation object
+   !> @param[in] ilevel : 
+   !>
+   subroutine setup_halo_mapping(sim, ilevel)
+#ifndef WITHOUTMPI
+     use mpi_mod
+     use nbors_utils, only: unlock_cache, get_grid
+     use ramses_commons, only: ramses_t
+     use oct_commons, only: oct
+     use amr_parameters, only: ndim
+     type(ramses_t), intent(in)::sim
+     integer::ilevel
+     !
+     integer::icache, icpu, my_integer, info
+     real(dp)::my_real_dp
+
+     associated(m=>sim%m, g=>sim%g)
+
+     allocate(n_recv(1:g%ncpu))
+     allocate(n_send(1:g%ncpu))
+     
+     n_recv = 0
+     do icache = 1, m%ncache
+        if(m%locked(icache))then
+           icpu = m%parent_cpu(icache)
+           n_recv(icpu) = n_recv(icpu) + 1
+        endif
+     end do
+     num_recv = sum(n_recv)
+     allocate(key_recv_host(1:4*num_recv))
+
+     ! Note dt is used here just to get the sizeof a float
+     err_code = cudaMalloc(idx_recv_device_cptr,  num_recv*sizeof(my_integer))
+     err_code = cudaMallocHost(idx_recv_host_cptr, num_recv*sizeof(my_integer)) 
+
+     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
+     call c_f_pointer(idx_recv_device_cptr, idx_recv_device, [num_recv])
+     call c_f_pointer(idx_recv_host_cptr, idx_recv_host, [num_recv])
+
+     ! Note dt is used here just to get the sizeof a float
+     err_code = cudaMalloc(uold_recv_device_cptr,  40*num_recv*sizeof(my_real_dp))
+     err_code = cudaMallocHost(uold_recv_host_cptr, 40*num_recv*sizeof(my_real_dp)) 
+
+     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
+     call c_f_pointer(uold_recv_device_cptr, uold_recv_device, [40*num_recv])
+     call c_f_pointer(uold_recv_host_cptr, uold_recv_host, [40*num_recv])
+
+     call MPI_ALLTOALL(n_recv,1,MPI_INTEGER,n_send,1,MPI_INTEGER,MPI_COMM_WORLD,info)
+     num_send = sum(n_send)
+     allocate(key_send_host(1:4*num_send))
+
+     ! Note dt is used here just to get the sizeof a float
+     err_code = cudaMalloc(idx_send_device_cptr,  num_send*sizeof(my_integer))
+     err_code = cudaMallocHost(idx_send_host_cptr, num_send*sizeof(my_integer)) 
+
+     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
+     call c_f_pointer(idx_send_device_cptr, idx_send_device, [num_send])
+     call c_f_pointer(idx_send_host_cptr, idx_send_host, [num_send])
+
+     ! Note dt is used here just to get the sizeof a float
+     err_code = cudaMalloc(uold_send_device_cptr,  40*num_send*sizeof(my_real_dp))
+     err_code = cudaMallocHost(uold_send_host_cptr, 40*num_send*sizeof(my_real_dp)) 
+
+     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
+     call c_f_pointer(uold_send_device_cptr, uold_send_device, [40*num_send])
+     call c_f_pointer(uold_send_host_cptr, uold_send_host, [40*num_send])
+
+     i_skip(1) = 1
+     do icpu = 2, ncpu
+        iskip(icpu) = iskip(icpu-1) + n_recv(icpu)
+     end do
+
+     i_recv = 0
+     do icache = 1, m%ncache
+        if(m%locked(icache))then
+           icpu = m%parent_cpu(icache)
+           i_recv(icpu) = i_recv(icpu) + 1
+           ibuffer = iskip(icpu)-1 + i_recv(icpu)
+           idx_recv_host(ibuffer) = m%ngridmax + icache
+           ibuffer = 4*(iskip(icpu)-1) + 4*i_recv(icpu)-3
+           key_recv_host(ibuffer  ) = m%grid(m%ngridmax+icache)%lev
+           key_recv_host(ibuffer+1) = m%grid(m%ngridmax+icache)%ckey(1)
+           key_recv_host(ibuffer+2) = m%grid(m%ngridmax+icache)%ckey(2)
+           key_recv_host(ibuffer+3) = m%grid(m%ngridmax+icache)%ckey(3)
+        endif
+     end do
+
+     call halo_exchange_key(sim, ilevel)
+
+     iskip = 1
+     do ibuffer = 1, num_send
+        hash_key(0) = key_send_host(ibuffer  )
+        hash_key(1) = key_send_host(ibuffer+1)
+        hash_key(2) = key_send_host(ibuffer+2)
+        hash_key(3) = key_send_host(ibuffer+3)
+        call c_f_pointer(hash_getp(m%grid_dict,hash_key),oct_to_load)
+        idx_send_host(ibuffer) = (loc(oct_to_load)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
+        iskip = iskip + 4
+     end do
+
+     deallocate(key_send_host, key_recv_host)
+
+   end associate
+
+#endif
+   end subroutine setup_halo_mapping
+
+   !> @brief
+   !> Perforn halo exchange using MPI
+   !>
+   !> @param[in] uold_send: 
+   !> @param[in] n_send:
+   !> @param[in] num_send: 
+   !> @param[in] uold_recv:
+   !> @param[in] n_recv:
+   !> @param[in] num_recv
+   !>
+   subroutine halo_exchange_uold(sim, ilevel)
+#ifndef WITHOUTMPI
+     use mpi_mod
+     use ramses_commons, only: ramses_t
+     type(ramses_t), intent(in) :: sim
+     integer :: ilevel
+     implicit none
+     ! -------------------------------------------------------------------
+     ! This routine communicates virtual boundaries among all cpu's.
+     ! at level ilevel for any double precision array in the AMR grid.
+     ! -------------------------------------------------------------------
+     integer::icpu, i, j, ncache, iskip
+     integer::countsend, countrecv, nbuffer
+     integer::info, tag=101
+     integer,dimension(ncpu)::reqsend, reqrecv
+     integer,dimension(MPI_STATUS_SIZE, ncpu)::statuses
+
+     ! Receive all messages
+     countrecv = 0
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_recv(icpu) !number of octs in the cache for a given cpu
+        if(ncache > 0) then
+           countrecv = countrecv + 1
+           nbuffer = 40*ncache
+           call MPI_IRECV(uold_recv_host(iskip), nbuffer, MPI_DOUBLE_PRECISION, icpu-1, tag, MPI_COMM_WORLD, reqrecv(countrecv), info)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
+     ! Send all messages
+     countsend = 0
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_send(icpu)
+        if(ncache > 0) then
+           countsend = countsend + 1
+           nbuffer = 40*ncache
+           call MPI_ISEND(uold_send_host(iskip), nbuffer, MPI_DOUBLE_PRECISION, icpu-1, tag, MPI_COMM_WORLD, reqsend(countsend), info)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv, reqrecv, statuses, info) 
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend, reqsend, statuses, info)
+
+#endif
+   end subroutine halo_exchange_uold
+
+   subroutine halo_exchange_key(sim, ilevel)
+#ifndef WITHOUTMPI
+     use mpi_mod
+     use ramses_commons, only: ramses_t
+     type(ramses_t), intent(in) :: sim
+     integer :: ilevel
+     implicit none
+     ! -------------------------------------------------------------------
+     ! This routine communicates virtual boundaries among all cpu's.
+     ! at level ilevel for any double precision array in the AMR grid.
+     ! -------------------------------------------------------------------
+     integer::icpu, i, j, ncache, iskip
+     integer::countsend, countrecv, nbuffer
+     integer::info, tag=101
+     integer,dimension(ncpu)::reqsend, reqrecv
+     integer,dimension(MPI_STATUS_SIZE, ncpu)::statuses
+
+     ! Receive all messages
+     countrecv = 0
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_recv(icpu) !number of octs in the cache for a given cpu
+        if(ncache > 0) then
+           countrecv = countrecv + 1
+           nbuffer = 4*ncache
+           call MPI_IRECV(key_recv_host(iskip), nbuffer, MPI_INTEGER, icpu-1, tag, MPI_COMM_WORLD, reqrecv(countrecv), info)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
+     ! Send all messages
+     countsend = 0
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_send(icpu)
+        if(ncache > 0) then
+           countsend = countsend + 1
+           nbuffer = 4*ncache
+           call MPI_ISEND(key_send_host(iskip), nbuffer, MPI_INTEGER, icpu-1, tag, MPI_COMM_WORLD, reqsend(countsend), info)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
+     ! Wait for full completion of receives
+     call MPI_WAITALL(countrecv, reqrecv, statuses, info) 
+
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend, reqsend, statuses, info)
+
+#endif
+   end subroutine halo_exchange_key
+
+   subroutine make_boundaries(s,ilevel)
+     use mdl_module
+     use amr_parameters, only: ndim, twondim, twotondim
+     use amr_commons, only: nbor, oct
+     use hydro_parameters, only: nvar
+     use ramses_commons, only: ramses_t
+     use nbors_utils
+     use hydro_commons
+     use hash
+#ifndef WITHOUTMPI
+     use mpi
+#endif
+     implicit none
+     type(ramses_t)::s
+     integer::ilevel
+     !-------------------------------------------------------------------
+     ! This routine collect remote information and create ghost grids
+     ! in the current processor cache memory. It loops over only dirty
+     ! octs and fill the entire cache space with neighboring octs.
+     !-------------------------------------------------------------------
+#ifndef WITHOUTMPI
+     integer::dummy_int,close_tag=7,close_id,icpu,info
+#endif
+     integer::idim,ipass,igrid,ind_grid,i1,j1,k1
+     integer,dimension(1:ndim)::ckey_corner
+     integer(kind=8),dimension(0:ndim)::hash_nbor
+     type(oct),pointer::gridp,childp
+
+#ifdef HYDRO
+
+     associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+       !--------------------
+       ! Gather grid stencil
+       !--------------------
+
+       ! Loop over dirty octs
+       do igrid=1,m%noct_dirty(ilevel)
+
+          ind_grid=m%indx_dirty(m%head_dirty(ilevel)+igrid-1)
+          hash_nbor(0)=m%grid(ind_grid)%lev
+          ckey_corner(1:ndim)=m%grid(ind_grid)%ckey(1:ndim)
+
+          ! Loop over 3x3x3 neighboring father cells using 27 passes
+          i1=1; j1=1; k1=1 ! ipass = 1 skipped
+          do ipass = 2, threetondim
+
+             if(MOD(ipass,3) == 2)then ! ipass = 2, 5, 8, 11, 14, 17, 20, 23, 26
+                i1=0
+             endif
+             if(MOD(ipass,3) == 0)then ! ipass = 3, 6, 9, 12, 15, 18, 21, 24, 27
+                i1=2
+             endif
+             if(MOD(ipass,9) == 4)then ! ipass = 4, 13, 22
+                i1=1; j1=0
+             endif
+             if(MOD(ipass,9) == 7)then ! ipass = 7, 16, 25
+                i1=1; j1=2
+             endif
+             if(ipass == 10)then
+                i1=1; j1=1; k1=0
+             endif
+             if(ipass == 19)then
+                i1=1; j1=1; k1=2
+             endif
+
+             ! Compute neighboring grid Cartesian index
+             hash_nbor(1)=ckey_corner(1)+i1-1
+#if NDIM>1
+             hash_nbor(2)=ckey_corner(2)+j1-1
+#endif
+#if NDIM>2
+             hash_nbor(3)=ckey_corner(3)+k1-1
+#endif
+             ! Periodic boundary conditions
+             do idim=1,ndim
+                if(r%periodic(idim))then
+                   if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+                   if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+                endif
+             enddo
+
+             ! Get neighboring grid index with read-only cache
+             call get_grid(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.,use_ghost=.true.)
+
+             ! If grid does not exist...
+             if(.not. associated(childp))then
+                ! Create new ghost grid in cache memory
+                call make_grid_ghost(s,hash_nbor,m%grid_dict,gridp,ilevel)
+             endif
+
+          end do
+          ! End loop over pass
+
+       end do
+       ! End loop over dirty octs
+
+#ifndef WITHOUTMPI
+       ! CHECK-IN CHECK-OUT
+       if(g%myid.NE.1)then
+          call MPI_ISEND(dummy_int,1,MPI_INTEGER,0,close_tag,MPI_COMM_WORLD,close_id,info)
+          call check_mail(s,close_id,m%grid_dict)
+          call MPI_IRECV(dummy_int,1,MPI_INTEGER,0,close_tag,MPI_COMM_WORLD,close_id,info)
+          call check_mail(s,close_id,m%grid_dict)
+       else
+          do icpu=2,g%ncpu
+             call MPI_IRECV(dummy_int,1,MPI_INTEGER,MPI_ANY_SOURCE,close_tag,MPI_COMM_WORLD,close_id,info)
+             call check_mail(s,close_id,m%grid_dict)
+          end do
+          do icpu=2,g%ncpu
+             call MPI_ISEND(dummy_int,1,MPI_INTEGER,icpu-1,close_tag,MPI_COMM_WORLD,close_id,info)
+             call check_mail(s,close_id,m%grid_dict)
+          end do
+       endif
+#endif
+
+     end associate
+
+#endif
+
+   end subroutine make_boundaries
+   !###########################################################
+   !###########################################################
+   !###########################################################
+   !###########################################################
+   subroutine make_grid_ghost(s,hash_nbor,hash_dict,child,ilevel)
+     use mdl_module
+     use amr_parameters, only: ndim, twotondim, twondim
+     use amr_commons, only: nbor, oct
+     use hydro_parameters, only: nvar
+     use rt_parameters, only: nrtvar, smallnp
+     use ramses_commons, only: ramses_t
+     use cache_commons
+     use nbors_utils
+     use hilbert
+     use hash
+#ifndef WITHOUTMPI
+     use mpi
+#endif
+     implicit none
+     type(ramses_t)::s
+     integer(kind=8),dimension(0:ndim)::hash_nbor
+     type(hash_table)::hash_dict
+     type(oct),pointer::child
+     integer::ilevel
+     !--------------------------------------------------------------
+     ! This routine creates a ghost oct at level ilevel.
+     ! The new oct is stored in the cache.
+     ! Input argument hash_nbor is the hash key of the new oct.
+     !--------------------------------------------------------------
+     integer::ivar,idim,ind,icell,inbor
+     integer::child_grid
+     integer,dimension(0:twondim)::ind_nbor
+     real(kind=8),dimension(0:twondim  ,1:nvar)::u1
+     real(kind=8),dimension(1:twotondim,1:nvar)::u2
+     logical::oknbor
+     type(oct),pointer::gridp
+     type(nbor),dimension(0:twondim)::grid_nbor
+#ifdef MHD
+     type(nbor),dimension(1:twondim)::grid_son_nbor
+     real(kind=8),dimension(0:twondim  ,1:6)::b1
+     real(kind=8),dimension(1:twotondim,1:6)::b2
+     real(kind=8),dimension(1:twondim,1:twotondim,1:6)::b3
+     integer(kind=8),dimension(0:ndim)::hash_son_nbor
+     logical,dimension(1:twondim)::refined
+     integer,dimension(1:3,1:6),save::shift=reshape(&
+          & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
+     type(oct),pointer::gridn
+#endif
+
+     associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
+
+#ifndef WITHOUTMPI
+       ! If counter is good, check on incoming messages and perform actions
+       if(mdl%mail_counter==32)then
+          call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
+          mdl%mail_counter=0
+       endif
+       mdl%mail_counter=mdl%mail_counter+1
+#endif
+
+       ! Get parent father cell with read-write cache
+       call get_parent_cell(s,hash_nbor,hash_dict,gridp,icell, &
+            & flush_cache=.true.,fetch_cache=.true.,lock=.true.)
+       if(.not.associated(gridp))then
+          write(*,*)'GODUNOV: parent_cell should exist'
+          write(*,*)'PE ',g%myid,hash_nbor
+          call mdl_abort(mdl)
+       endif
+
+       ! Get 2ndim neighboring father cells with read-write cache
+       ! Note that cache grids are locked inside this routine
+       call get_twondim_nbor_parent_cell(s,hash_nbor,hash_dict,grid_nbor,ind_nbor, &
+            & flush_cache=.true.,fetch_cache=.true.)
+       oknbor=.true.
+       do inbor=0,twondim
+          oknbor=oknbor.and.associated(grid_nbor(inbor)%p)
+       end do
+       if(.not. oknbor)then
+          write(*,*)"GODUNOV: parent neighbors should exist"
+          write(*,*)'PE ',g%myid,hash_nbor
+          write(*,*)associated(grid_nbor(0)%p)
+          do idim=1,ndim
+             write(*,*)associated(grid_nbor(2*idim-1)%p)
+             write(*,*)associated(grid_nbor(2*idim)%p)
+          end do
+          call mdl_abort(mdl)
+       endif
+
+       ! Gather hydro variables
+       do inbor=0,twondim
+          do ivar=1,nvar
+             u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
+          end do
+       end do
+#ifdef MHD
+       ! Gather MHD variables
+       do inbor=0,twondim
+          do ivar=1,6
+             b1(inbor,ivar)=grid_nbor(inbor)%p%bold(ind_nbor(inbor),ivar)
+          end do
+       end do
+       ! Get neighboring children grids
+       hash_son_nbor(0)=ilevel
+       do inbor=1,twondim
+          hash_son_nbor(1:ndim)=hash_nbor(1:ndim)+shift(1:ndim,inbor)
+          ! Periodic boundary conditions
+          do idim=1,ndim
+             if(r%periodic(idim))then
+                if(hash_son_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+                if(hash_son_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_min(idim,ilevel)
+             endif
+          enddo
+          call get_grid(s,hash_son_nbor,hash_dict,gridn,flush_cache=.false.,fetch_cache=.true.,lock=.true.,use_ghost=.true.)
+          grid_son_nbor(inbor)%p => gridn
+          refined(inbor)=associated(gridn)
+          if(refined(inbor))then
+             do ind=1,twotondim
+                do ivar=1,6
+                   b3(inbor,ind,ivar)=gridn%bold(ind,ivar)
+                end do
+             end do
+          endif
+       end do
+       ! Interpolate using MHD variables
+       call interpol_mhd(u1,u2,b1,b2,b3,refined,r%interpol_var,r%interpol_type,r%smallr)
+#else
+       ! Interpolate using hydro variables
+       call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
+#endif
+
+       ! If next cache line is occupied, free it.
+       if(m%locked(m%free_cache))then
+          do while(m%locked(m%free_cache))
+             m%free_cache=m%free_cache+1
+             if(m%free_cache>r%ncachemax)m%free_cache=1
+          end do
+       end if
+       if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,hash_dict)
+
+       ! Set grid index to a virtual grid in local memory
+       child_grid=r%ngridmax+m%free_cache
+       child => m%grid(child_grid)
+       call hash_setp(hash_dict,hash_nbor,child)
+
+       ! Store grid coordinates
+       m%grid(child_grid)%lev=hash_nbor(0)
+       m%grid(child_grid)%ckey(1:ndim)=hash_nbor(1:ndim)
+       m%occupied(m%free_cache)=.true.
+       m%parent_cpu(m%free_cache)=0
+       m%dirty(m%free_cache)=.false.
+
+       ! Store parent cell coordinates
+       m%ghost_parent_grid(m%free_cache)=(loc(gridp)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
+       m%ghost_parent_cell(m%free_cache)=icell
+
+       ! Set refined to false
+       m%grid(child_grid)%refined(1:twotondim)=.false.
+
+       ! Store children cell hydro variables
+       do ivar=1,nvar
+          do ind=1,twotondim
+             m%grid(child_grid)%uold(ind,ivar)=u2(ind,ivar)
+          enddo
+       end do
+#ifdef MHD
+       ! Store children cell MHD variables
+       do ivar=1,6
+          do ind=1,twotondim
+             m%grid(child_grid)%bold(ind,ivar)=b2(ind,ivar)
+          enddo
+       end do
+#endif
+#ifdef GRAV
+       ! Store children cell gravity variables using straight injection
+       do ind=1,twotondim
+          m%grid(child_grid)%f(ind,1:ndim)=gridp%f(icell,1:ndim)
+          m%grid(child_grid)%phi(ind)=gridp%phi(icell)
+          m%grid(child_grid)%phi_old(ind)=gridp%phi_old(icell)
+       enddo
+#endif
+
+       ! Go to next free cache line
+       m%free_cache=m%free_cache+1
+       m%ncache=m%ncache+1
+       if(m%free_cache.GT.r%ncachemax)then
+          m%free_cache=1
+       endif
+       if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
+
+     end associate
+
+   end subroutine make_grid_ghost
+   !###############################################################
+   !###############################################################
+   !###############################################################
+   !###############################################################
 
 end module gpu_runner
