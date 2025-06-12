@@ -40,7 +40,7 @@ module gpu_runner
   integer, allocatable, dimension(:) :: n_send, n_recv
 
   !> The total number of halo and ghost octs
-  integer :: num_send, num_recv
+  integer(kind=8) :: num_send, num_recv
 
 contains
 
@@ -167,9 +167,9 @@ contains
     use nvtx
     use hydro_integrator, only: hydro_integrator_kernel
     use ramses_commons, only: ramses_t
+    use cache_commons
+    use cache
     use marshal, only: pack_fetch_refine,unpack_fetch_refine
-    use godunov_fine_module, only: init_flush_godunov, pack_flush_godunov
-    use boundaries, only: init_bound_refine
     type(msg_large_realdp)::dummy_large_realdp
     type(ramses_t), intent(inout)::sim
     integer, intent(in)::ilevel
@@ -197,9 +197,7 @@ contains
        ! Open cache
        call open_cache(sim,table=sim%m%grid_dict,data_size=storage_size(sim%m%grid(1))/32,&
                hilbert=sim%m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
-               pack=pack_fetch_refine,unpack=unpack_fetch_refine,&
-               init=init_flush_godunov, flush=pack_flush_godunov,&
-               combine=unpack_flush_godunov, bound=init_bound_refine)
+               pack=pack_fetch_refine,unpack=unpack_fetch_refine)
 
        ! Make boundary
        call make_boundaries(sim,ilevel)
@@ -403,6 +401,7 @@ contains
    subroutine setup_halo_mapping(sim, ilevel)
 #ifndef WITHOUTMPI
      use mpi_mod
+#endif
      use nbors_utils, only: unlock_cache, get_grid
      use ramses_commons, only: ramses_t
      use oct_commons, only: oct
@@ -410,6 +409,7 @@ contains
      type(ramses_t), intent(in)::sim
      integer::ilevel
      !
+#ifndef WITHOUTMPI
      integer::icache, icpu, my_integer, info
      real(dp)::my_real_dp
 
@@ -500,7 +500,6 @@ contains
      deallocate(key_send_host, key_recv_host)
 
    end associate
-
 #endif
    end subroutine setup_halo_mapping
 
@@ -517,14 +516,16 @@ contains
    subroutine halo_exchange_uold(sim, ilevel)
 #ifndef WITHOUTMPI
      use mpi_mod
+#endif
      use ramses_commons, only: ramses_t
+     implicit none
      type(ramses_t), intent(in) :: sim
      integer :: ilevel
-     implicit none
      ! -------------------------------------------------------------------
      ! This routine communicates virtual boundaries among all cpu's.
      ! at level ilevel for any double precision array in the AMR grid.
      ! -------------------------------------------------------------------
+#ifndef WITHOUTMPI
      integer::icpu, i, j, ncache, iskip
      integer::countsend, countrecv, nbuffer
      integer::info, tag=101
@@ -562,17 +563,18 @@ contains
 
      ! Wait for full completion of sends
      call MPI_WAITALL(countsend, reqsend, statuses, info)
-
 #endif
    end subroutine halo_exchange_uold
 
    subroutine halo_exchange_key(sim, ilevel)
 #ifndef WITHOUTMPI
      use mpi_mod
+#endif
      use ramses_commons, only: ramses_t
+     implicit none
      type(ramses_t), intent(in) :: sim
      integer :: ilevel
-     implicit none
+#ifndef WITHOUTMPI
      ! -------------------------------------------------------------------
      ! This routine communicates virtual boundaries among all cpu's.
      ! at level ilevel for any double precision array in the AMR grid.
@@ -614,7 +616,6 @@ contains
 
      ! Wait for full completion of sends
      call MPI_WAITALL(countsend, reqsend, statuses, info)
-
 #endif
    end subroutine halo_exchange_key
 
@@ -701,13 +702,7 @@ contains
              enddo
 
              ! Get neighboring grid index with read-only cache
-             call get_grid(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.,use_ghost=.true.)
-
-             ! If grid does not exist...
-             if(.not. associated(childp))then
-                ! Create new ghost grid in cache memory
-                call make_grid_ghost(s,hash_nbor,m%grid_dict,gridp,ilevel)
-             endif
+             call get_grid(s,hash_nbor,m%grid_dict,childp,flush_cache=.false.,fetch_cache=.true.,lock=.true.)
 
           end do
           ! End loop over pass
@@ -743,197 +738,5 @@ contains
    !###########################################################
    !###########################################################
    !###########################################################
-   subroutine make_grid_ghost(s,hash_nbor,hash_dict,child,ilevel)
-     use mdl_module
-     use amr_parameters, only: ndim, twotondim, twondim
-     use amr_commons, only: nbor, oct
-     use hydro_parameters, only: nvar
-     use rt_parameters, only: nrtvar, smallnp
-     use ramses_commons, only: ramses_t
-     use cache_commons
-     use nbors_utils
-     use hilbert
-     use hash
-#ifndef WITHOUTMPI
-     use mpi
-#endif
-     implicit none
-     type(ramses_t)::s
-     integer(kind=8),dimension(0:ndim)::hash_nbor
-     type(hash_table)::hash_dict
-     type(oct),pointer::child
-     integer::ilevel
-     !--------------------------------------------------------------
-     ! This routine creates a ghost oct at level ilevel.
-     ! The new oct is stored in the cache.
-     ! Input argument hash_nbor is the hash key of the new oct.
-     !--------------------------------------------------------------
-     integer::ivar,idim,ind,icell,inbor
-     integer::child_grid
-     integer,dimension(0:twondim)::ind_nbor
-     real(kind=8),dimension(0:twondim  ,1:nvar)::u1
-     real(kind=8),dimension(1:twotondim,1:nvar)::u2
-     logical::oknbor
-     type(oct),pointer::gridp
-     type(nbor),dimension(0:twondim)::grid_nbor
-#ifdef MHD
-     type(nbor),dimension(1:twondim)::grid_son_nbor
-     real(kind=8),dimension(0:twondim  ,1:6)::b1
-     real(kind=8),dimension(1:twotondim,1:6)::b2
-     real(kind=8),dimension(1:twondim,1:twotondim,1:6)::b3
-     integer(kind=8),dimension(0:ndim)::hash_son_nbor
-     logical,dimension(1:twondim)::refined
-     integer,dimension(1:3,1:6),save::shift=reshape(&
-          & (/-1,0,0,1,0,0,0,-1,0,0,1,0,0,0,-1,0,0,1/),(/3,6/))
-     type(oct),pointer::gridn
-#endif
-
-     associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
-
-#ifndef WITHOUTMPI
-       ! If counter is good, check on incoming messages and perform actions
-       if(mdl%mail_counter==32)then
-          call check_mail(s,MPI_REQUEST_NULL,m%grid_dict)
-          mdl%mail_counter=0
-       endif
-       mdl%mail_counter=mdl%mail_counter+1
-#endif
-
-       ! Get parent father cell with read-write cache
-       call get_parent_cell(s,hash_nbor,hash_dict,gridp,icell, &
-            & flush_cache=.true.,fetch_cache=.true.,lock=.true.)
-       if(.not.associated(gridp))then
-          write(*,*)'GODUNOV: parent_cell should exist'
-          write(*,*)'PE ',g%myid,hash_nbor
-          call mdl_abort(mdl)
-       endif
-
-       ! Get 2ndim neighboring father cells with read-write cache
-       ! Note that cache grids are locked inside this routine
-       call get_twondim_nbor_parent_cell(s,hash_nbor,hash_dict,grid_nbor,ind_nbor, &
-            & flush_cache=.true.,fetch_cache=.true.)
-       oknbor=.true.
-       do inbor=0,twondim
-          oknbor=oknbor.and.associated(grid_nbor(inbor)%p)
-       end do
-       if(.not. oknbor)then
-          write(*,*)"GODUNOV: parent neighbors should exist"
-          write(*,*)'PE ',g%myid,hash_nbor
-          write(*,*)associated(grid_nbor(0)%p)
-          do idim=1,ndim
-             write(*,*)associated(grid_nbor(2*idim-1)%p)
-             write(*,*)associated(grid_nbor(2*idim)%p)
-          end do
-          call mdl_abort(mdl)
-       endif
-
-       ! Gather hydro variables
-       do inbor=0,twondim
-          do ivar=1,nvar
-             u1(inbor,ivar)=grid_nbor(inbor)%p%uold(ind_nbor(inbor),ivar)
-          end do
-       end do
-#ifdef MHD
-       ! Gather MHD variables
-       do inbor=0,twondim
-          do ivar=1,6
-             b1(inbor,ivar)=grid_nbor(inbor)%p%bold(ind_nbor(inbor),ivar)
-          end do
-       end do
-       ! Get neighboring children grids
-       hash_son_nbor(0)=ilevel
-       do inbor=1,twondim
-          hash_son_nbor(1:ndim)=hash_nbor(1:ndim)+shift(1:ndim,inbor)
-          ! Periodic boundary conditions
-          do idim=1,ndim
-             if(r%periodic(idim))then
-                if(hash_son_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
-                if(hash_son_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_son_nbor(idim)=m%box_ckey_min(idim,ilevel)
-             endif
-          enddo
-          call get_grid(s,hash_son_nbor,hash_dict,gridn,flush_cache=.false.,fetch_cache=.true.,lock=.true.,use_ghost=.true.)
-          grid_son_nbor(inbor)%p => gridn
-          refined(inbor)=associated(gridn)
-          if(refined(inbor))then
-             do ind=1,twotondim
-                do ivar=1,6
-                   b3(inbor,ind,ivar)=gridn%bold(ind,ivar)
-                end do
-             end do
-          endif
-       end do
-       ! Interpolate using MHD variables
-       call interpol_mhd(u1,u2,b1,b2,b3,refined,r%interpol_var,r%interpol_type,r%smallr)
-#else
-       ! Interpolate using hydro variables
-       call interpol_hydro(u1,u2,r%interpol_var,r%interpol_type,r%smallr)
-#endif
-
-       ! If next cache line is occupied, free it.
-       if(m%locked(m%free_cache))then
-          do while(m%locked(m%free_cache))
-             m%free_cache=m%free_cache+1
-             if(m%free_cache>r%ncachemax)m%free_cache=1
-          end do
-       end if
-       if(m%occupied(m%free_cache))call destage(s,r%ngridmax+m%free_cache,hash_dict)
-
-       ! Set grid index to a virtual grid in local memory
-       child_grid=r%ngridmax+m%free_cache
-       child => m%grid(child_grid)
-       call hash_setp(hash_dict,hash_nbor,child)
-
-       ! Store grid coordinates
-       m%grid(child_grid)%lev=hash_nbor(0)
-       m%grid(child_grid)%ckey(1:ndim)=hash_nbor(1:ndim)
-       m%occupied(m%free_cache)=.true.
-       m%parent_cpu(m%free_cache)=0
-       m%dirty(m%free_cache)=.false.
-
-       ! Store parent cell coordinates
-       m%ghost_parent_grid(m%free_cache)=(loc(gridp)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
-       m%ghost_parent_cell(m%free_cache)=icell
-
-       ! Set refined to false
-       m%grid(child_grid)%refined(1:twotondim)=.false.
-
-       ! Store children cell hydro variables
-       do ivar=1,nvar
-          do ind=1,twotondim
-             m%grid(child_grid)%uold(ind,ivar)=u2(ind,ivar)
-          enddo
-       end do
-#ifdef MHD
-       ! Store children cell MHD variables
-       do ivar=1,6
-          do ind=1,twotondim
-             m%grid(child_grid)%bold(ind,ivar)=b2(ind,ivar)
-          enddo
-       end do
-#endif
-#ifdef GRAV
-       ! Store children cell gravity variables using straight injection
-       do ind=1,twotondim
-          m%grid(child_grid)%f(ind,1:ndim)=gridp%f(icell,1:ndim)
-          m%grid(child_grid)%phi(ind)=gridp%phi(icell)
-          m%grid(child_grid)%phi_old(ind)=gridp%phi_old(icell)
-       enddo
-#endif
-
-       ! Go to next free cache line
-       m%free_cache=m%free_cache+1
-       m%ncache=m%ncache+1
-       if(m%free_cache.GT.r%ncachemax)then
-          m%free_cache=1
-       endif
-       if(m%ncache.GT.r%ncachemax)m%ncache=r%ncachemax
-
-     end associate
-
-   end subroutine make_grid_ghost
-   !###############################################################
-   !###############################################################
-   !###############################################################
-   !###############################################################
 
 end module gpu_runner
