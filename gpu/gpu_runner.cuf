@@ -535,8 +535,8 @@ contains
      integer::icpu, i, j, ncache, iskip
      integer::countsend, countrecv, nbuffer
      integer::info, tag=101
-     integer,dimension(ncpu)::reqsend, reqrecv
-     integer,dimension(MPI_STATUS_SIZE, ncpu)::statuses
+     integer,dimension(sim%g%ncpu)::reqsend, reqrecv
+     integer,dimension(MPI_STATUS_SIZE, sim%g%ncpu)::statuses
 
      ! Receive all messages
      countrecv = 0
@@ -588,8 +588,8 @@ contains
      integer::icpu, i, j, ncache, iskip
      integer::countsend, countrecv, nbuffer
      integer::info, tag=101
-     integer,dimension(ncpu)::reqsend, reqrecv
-     integer,dimension(MPI_STATUS_SIZE, ncpu)::statuses
+     integer,dimension(sim%g%ncpu)::reqsend, reqrecv
+     integer,dimension(MPI_STATUS_SIZE, sim%g%ncpu)::statuses
 
      ! Receive all messages
      countrecv = 0
