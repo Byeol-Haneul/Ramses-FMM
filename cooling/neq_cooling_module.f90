@@ -1,6 +1,7 @@
 ! Non-equlibrium (in H2, HI, HII, HeI, HeII, HeIII)
 ! cooling module for radiation-hydrodynamics.
 ! For details, see Rosdahl et al. (2013), Rosdahl & Teyssier (2015),
+! and Nickerson, Teyssier, & Rosdahl (2018)
 ! Joki Rosdahl, Sarah Nickerson, Andreas Bleuler, and Romain Teyssier.
 ! NOTE: T2=T/mu, Np = photon density, Fp = photon flux,
 module neq_cooling_module
