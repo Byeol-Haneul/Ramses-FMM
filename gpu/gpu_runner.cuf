@@ -419,7 +419,7 @@ contains
      real(dp) :: my_real_dp
      integer(kind=8),dimension(0:ndim) :: hash_key
 
-     associated(m=>sim%m, g=>sim%g, r=>sim%r)
+     associate(m=>sim%m, g=>sim%g, r=>sim%r)
 
      allocate(n_recv(1:g%ncpu))
      allocate(n_send(1:g%ncpu))
