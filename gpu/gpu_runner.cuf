@@ -228,9 +228,6 @@ contains
        call nvtxEndRange()
     end if
 
-    write(*,*)'I am after initial setup'
-    stop
-    
     ! =============================
     ! Copy halo octs to send buffer
     ! =============================
@@ -248,7 +245,17 @@ contains
     ! =============================
     call nvtxStartRange("Mem copy and MPI", color=5)!red
     uold_send_host = uold_send_device
+!!$    write(*,*)uold_send_host(1:40)
+!!$    write(*,*)uold_send_host(41:80)
+!!$    write(*,*)uold_send_host(81:120)
+!!$    write(*,*)uold_send_host(121:160)
+
     call halo_exchange_uold(sim, ilevel)
+
+!!$    write(*,*)uold_recv_host(1:40)
+!!$    write(*,*)uold_recv_host(41:80)
+!!$    write(*,*)uold_recv_host(81:120)
+!!$    write(*,*)uold_recv_host(121:160)
     uold_recv_device = uold_recv_host
     call GPU_Error_Check(__FILE__, __LINE__)
     call nvtxEndRange()
@@ -569,6 +576,31 @@ contains
 
      ! Wait for full completion of sends
      call MPI_WAITALL(countsend, reqsend, statuses, info)
+
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_send(icpu)
+        write(*,*)"send ",sim%g%myid,icpu,ncache
+        if(ncache > 0) then
+           countsend = countsend + 1
+           nbuffer = 40*ncache
+           write(*,*)"send ",sim%g%myid,icpu,uold_send_host(iskip:iskip+160)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_recv(icpu)
+        write(*,*)"recv ",sim%g%myid,icpu,ncache
+        if(ncache > 0) then
+           countrecv = countrecv + 1
+           nbuffer = 40*ncache
+           write(*,*)"recv ",sim%g%myid,icpu,uold_recv_host(iskip:iskip+160)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
 #endif
    end subroutine halo_exchange_uold
 
@@ -622,6 +654,30 @@ contains
 
      ! Wait for full completion of sends
      call MPI_WAITALL(countsend, reqsend, statuses, info)
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_recv(icpu)
+        write(*,*)"key recv ",sim%g%myid,icpu,ncache
+        if(ncache > 0) then
+           countrecv = countrecv + 1
+           nbuffer = 4*ncache
+           write(*,*)"key recv ",sim%g%myid,icpu,key_recv_host(iskip:iskip+4)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_send(icpu)
+        write(*,*)"key send ",sim%g%myid,icpu,ncache
+        if(ncache > 0) then
+           countsend = countsend + 1
+           nbuffer = 4*ncache
+           write(*,*)"key send ",sim%g%myid,icpu,key_send_host(iskip:iskip+4)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
 #endif
    end subroutine halo_exchange_key
 
