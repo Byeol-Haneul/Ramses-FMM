@@ -11,7 +11,10 @@ module mdl_module
 
      integer,PRIVATE::myid
      integer,PRIVATE::ncpu
-
+#ifdef _CUDA
+     integer,PRIVATE::mydev
+     integer,PRIVATE::ngpu
+#endif
      integer::MDL_INPUT_MAXSIZE=1
      integer,dimension(:),allocatable::mpi_input_buffer
 
@@ -298,22 +301,35 @@ contains
   !##############################################################
   !##############################################################
   subroutine mdl_initialize(mdl)
+#ifdef _CUDA
+    use cudafor
+#endif
     type(mdl_t)::mdl
-
 #ifndef WITHOUTMPI
     include 'mpif.h'
     integer::info
+#endif
+#ifdef _CUDA
+    integer::error_code
+#endif
+#ifndef WITHOUTMPI
     call MPI_INIT(info)
     call MPI_COMM_RANK(MPI_COMM_WORLD,mdl%myid,info)
     call MPI_COMM_SIZE(MPI_COMM_WORLD,mdl%ncpu,info)
     mdl%myid=mdl%myid+1 ! Careful with this...
     if(mdl_self(mdl)==1)then
-       write(*,'(" Launching MPI with nproc = ",I6)')mdl%ncpu
+       write(*,'(" Launching MPI with ntask = ",I6)')mdl%ncpu
     endif
 #else
     write(*,'(" Serial execution (no MPI).")')
     mdl%ncpu=1
     mdl%myid=1
+#endif
+#ifdef _CUDA
+    err_code = cudaGetDeviceCount(mdl%ngpu) ! Get the number of GPUs available
+    mdl%mydev = mod(mdl%myid, mdl%ngpu) ! Determine which GPU this rank will use
+    err_code = cudaSetDevice(mdl%mydev) ! Set the device for this rank
+    if(mdl%myid==1)write(*,'(" Launching CUDA with ndevice/task =",I6)')mdl%ngpu
 #endif
   end subroutine mdl_initialize
   !##############################################################

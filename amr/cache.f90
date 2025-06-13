@@ -406,7 +406,7 @@ subroutine open_cache_clump(s,pack_size,pack,unpack,init,flush,combine)
   end do
 
   ! Post the first RECV for request
-  call MPI_IRECV(mdl%recv_request_array_clump,mdl%size_request_array_clump,MPI_INTEGER,MPI_ANY_SOURCE,request_tag_clump,MPI_COMM_WORLD,mdl%request_id_clump,info)\
+  call MPI_IRECV(mdl%recv_request_array_clump,mdl%size_request_array_clump,MPI_INTEGER,MPI_ANY_SOURCE,request_tag_clump,MPI_COMM_WORLD,mdl%request_id_clump,info)
 
   ! Post the first RECV for flush
   call MPI_IRECV(mdl%recv_flush_array_clump,mdl%size_flush_array_clump,MPI_INTEGER,MPI_ANY_SOURCE,flush_tag_clump,MPI_COMM_WORLD,mdl%flush_id_clump,info)
