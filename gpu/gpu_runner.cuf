@@ -228,6 +228,9 @@ contains
        call nvtxEndRange()
     end if
 
+    write(*,*)'I am after initial setup'
+    stop
+    
     ! =============================
     ! Copy halo octs to send buffer
     ! =============================
@@ -310,20 +313,16 @@ contains
       use ramses_commons, only: ramses_t
       type(ramses_t), intent(in)::sim
       integer, intent(in)::ilevel
-      integer(kind=8) :: num_subgrids, subgrid_idx, i, j, k
+      integer(kind=8) :: subgrid_idx, oct_idx
+      integer(kind=8),dimension(1:ndim)::ckey_corner
 
       ! Loop through subgrids
       subgrid_idx = 1
-      do i = 0, sim%m%nx - 1, 2
-         do j = 0, sim%m%ny - 1, 2
-            do k = 0, sim%m%nz - 1, 2
-               ! pack this particular subgrid
-               call setup_subgrid(sim, ilevel, subgrid_idx, i, j, k)
-
-               ! increment subgrid index
-               subgrid_idx = subgrid_idx + 1
-            end do
-         end do
+      do oct_idx = sim%m%head(ilevel), sim%m%tail(ilevel), 8 ! in 3x3x3 remove the 8
+         ckey_corner(1:ndim) = (sim%m%grid(oct_idx)%ckey(1:ndim) / 2) * 2 ! in 3x3x3 remove the 2's
+         call setup_subgrid(sim, ilevel, subgrid_idx, ckey_corner(1), ckey_corner(2), ckey_corner(3))
+         ! increment subgrid index
+         subgrid_idx = subgrid_idx + 1
       end do
 
    end subroutine setup_subgrid_mapping
@@ -452,6 +451,7 @@ contains
 
      call MPI_ALLTOALL(n_recv,1,MPI_INTEGER,n_send,1,MPI_INTEGER,MPI_COMM_WORLD,info)
      num_send = sum(n_send)
+
      allocate(key_send_host(1:4*num_send))
 
      ! Note dt is used here just to get the sizeof a float
@@ -591,19 +591,6 @@ contains
      integer,dimension(sim%g%ncpu)::reqsend, reqrecv
      integer,dimension(MPI_STATUS_SIZE, sim%g%ncpu)::statuses
 
-     ! Receive all messages
-     countrecv = 0
-     iskip = 1
-     do icpu = 1, sim%g%ncpu
-        ncache = n_recv(icpu) !number of octs in the cache for a given cpu
-        if(ncache > 0) then
-           countrecv = countrecv + 1
-           nbuffer = 4*ncache
-           call MPI_IRECV(key_recv_host(iskip), nbuffer, MPI_INTEGER, icpu-1, tag, MPI_COMM_WORLD, reqrecv(countrecv), info)
-           iskip = iskip + nbuffer
-        end if
-     end do
-
      ! Send all messages
      countsend = 0
      iskip = 1
@@ -612,7 +599,20 @@ contains
         if(ncache > 0) then
            countsend = countsend + 1
            nbuffer = 4*ncache
-           call MPI_ISEND(key_send_host(iskip), nbuffer, MPI_INTEGER, icpu-1, tag, MPI_COMM_WORLD, reqsend(countsend), info)
+           call MPI_IRECV(key_send_host(iskip), nbuffer, MPI_INTEGER, icpu-1, tag, MPI_COMM_WORLD, reqsend(countsend), info)
+           iskip = iskip + nbuffer
+        end if
+     end do
+
+     ! Receive all messages
+     countrecv = 0
+     iskip = 1
+     do icpu = 1, sim%g%ncpu
+        ncache = n_recv(icpu) !number of octs in the cache for a given cpu
+        if(ncache > 0) then
+           countrecv = countrecv + 1
+           nbuffer = 4*ncache
+           call MPI_ISEND(key_recv_host(iskip), nbuffer, MPI_INTEGER, icpu-1, tag, MPI_COMM_WORLD, reqrecv(countrecv), info)
            iskip = iskip + nbuffer
         end if
      end do
