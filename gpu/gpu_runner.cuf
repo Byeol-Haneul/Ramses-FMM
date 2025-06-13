@@ -202,6 +202,8 @@ contains
        ! Make boundary
        call make_boundaries(sim,ilevel)
 
+       grid_device = sim%m%grid
+
        ! Setup index mapping between halo and ghost octs
        call setup_halo_mapping(sim, ilevel)
 
@@ -384,7 +386,7 @@ contains
                             oct_to_load, &! The pointer to the oct
                             flush_cache=.false., &
                             fetch_cache=.true., &
-                            lock=.false.)
+                            lock=.true.)
 
               idx_to_oct = (loc(oct_to_load)-loc(sim%m%grid(1)))/(loc(sim%m%grid(2))-loc(sim%m%grid(1)))+1
 
