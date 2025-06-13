@@ -218,7 +218,7 @@ contains
        call nvtxEndRange()
 
        ! Close cache
-       call close_cache(sim,sim%m%grid_dict) 
+!       call close_cache(sim,sim%m%grid_dict) 
 
        ! Copy subgrid map to device. This has to be done outside of the 
        ! setup_subgrid_mapping subroutine due to a compiler bug with nested NVTX statements
@@ -580,11 +580,11 @@ contains
      iskip = 1
      do icpu = 1, sim%g%ncpu
         ncache = n_send(icpu)
-        write(*,*)"send ",sim%g%myid,icpu,ncache
+        write(*,'("uold send",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
         if(ncache > 0) then
            countsend = countsend + 1
            nbuffer = 40*ncache
-           write(*,*)"send ",sim%g%myid,icpu,uold_send_host(iskip:iskip+160)
+           write(*,'("uold send",2(1x,I4),40(1x,1PE10.3))')sim%g%myid,icpu,uold_send_host(iskip:iskip+39)
            iskip = iskip + nbuffer
         end if
      end do
@@ -592,11 +592,11 @@ contains
      iskip = 1
      do icpu = 1, sim%g%ncpu
         ncache = n_recv(icpu)
-        write(*,*)"recv ",sim%g%myid,icpu,ncache
+        write(*,'("uold recv",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
         if(ncache > 0) then
            countrecv = countrecv + 1
            nbuffer = 40*ncache
-           write(*,*)"recv ",sim%g%myid,icpu,uold_recv_host(iskip:iskip+160)
+           write(*,'("uold recv",2(1x,I4),40(1x,1PE10.3))')sim%g%myid,icpu,uold_recv_host(iskip:iskip+39)
            iskip = iskip + nbuffer
         end if
      end do
@@ -652,31 +652,31 @@ contains
      ! Wait for full completion of receives
      call MPI_WAITALL(countrecv, reqrecv, statuses, info) 
 
-     ! Wait for full completion of sends
-     call MPI_WAITALL(countsend, reqsend, statuses, info)
-     iskip = 1
-     do icpu = 1, sim%g%ncpu
-        ncache = n_recv(icpu)
-        write(*,*)"key recv ",sim%g%myid,icpu,ncache
-        if(ncache > 0) then
-           countrecv = countrecv + 1
-           nbuffer = 4*ncache
-           write(*,*)"key recv ",sim%g%myid,icpu,key_recv_host(iskip:iskip+4)
-           iskip = iskip + nbuffer
-        end if
-     end do
-
-     iskip = 1
-     do icpu = 1, sim%g%ncpu
-        ncache = n_send(icpu)
-        write(*,*)"key send ",sim%g%myid,icpu,ncache
-        if(ncache > 0) then
-           countsend = countsend + 1
-           nbuffer = 4*ncache
-           write(*,*)"key send ",sim%g%myid,icpu,key_send_host(iskip:iskip+4)
-           iskip = iskip + nbuffer
-        end if
-     end do
+!!$     ! Wait for full completion of sends
+!!$     call MPI_WAITALL(countsend, reqsend, statuses, info)
+!!$     iskip = 1
+!!$     do icpu = 1, sim%g%ncpu
+!!$        ncache = n_recv(icpu)
+!!$        write(*,'("key recv ",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
+!!$        if(ncache > 0) then
+!!$           countrecv = countrecv + 1
+!!$           nbuffer = 4*ncache
+!!$           write(*,'("key recv ",18(1x,I4))')sim%g%myid,icpu,key_recv_host(iskip:iskip+15)
+!!$           iskip = iskip + nbuffer
+!!$        end if
+!!$     end do
+!!$
+!!$     iskip = 1
+!!$     do icpu = 1, sim%g%ncpu
+!!$        ncache = n_send(icpu)
+!!$        write(*,'("key send ",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
+!!$        if(ncache > 0) then
+!!$           countsend = countsend + 1
+!!$           nbuffer = 4*ncache
+!!$           write(*,'("key send ",18(1x,I4))')sim%g%myid,icpu,key_send_host(iskip:iskip+15)
+!!$           iskip = iskip + nbuffer
+!!$        end if
+!!$     end do
 
 #endif
    end subroutine halo_exchange_key

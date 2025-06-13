@@ -1018,7 +1018,7 @@ contains
 
     ! Compute the buffer position
     pos_idx = cell_idx + 8*0 + 40*(buffer_idx-1)
-    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,1)
+    uold_send(pos_idx) =  oct_grid(oct_idx)%uold(cell_idx,1)
     pos_idx = cell_idx + 8*1 + 40*(buffer_idx-1)
     uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,2)
     pos_idx = cell_idx + 8*2 + 40*(buffer_idx-1)
