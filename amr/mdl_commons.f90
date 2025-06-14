@@ -123,10 +123,11 @@ module mdl_parameters
      enumerator::MDL_RT_NEQ_UPDATES
      enumerator::MDL_CHECK_PART_EMISSION
      enumerator::MDL_STAR_RT_FEEDBACK
+     enumerator::MDL_SET_GRID_DEVICE
   end enum
-  
+
   ! Maximum number of cpus
   integer,parameter::MDL_MAX_CPU=262144
-  
+
 end module mdl_parameters
 

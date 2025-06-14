@@ -149,6 +149,9 @@ function worker_init(mdl) result(pst)
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use update_rt_c_module, only: r_rt_neq_updates
   use rt_star_feedback, only: r_star_rt_feedback
+#ifdef _CUDA
+  use gpu_manager, only: r_set_grid_device
+#endif
 
   implicit none
 
@@ -289,6 +292,9 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_SET_RTUOLD,             pst,C_FUNLOC(r_set_rtuold),1,0,"set_rtuold")
   call mdl_add_service(pst%s%mdl,MDL_RT_NEQ_UPDATES,         pst,C_FUNLOC(r_rt_neq_updates),1,0,"rt_neq_updates")
   call mdl_add_service(pst%s%mdl,MDL_CHECK_PART_EMISSION,    pst,C_FUNLOC(r_check_part_emission),0,0,"check_part_emission")
+#ifdef _CUDA
+  call mdl_add_service(pst%s%mdl,MDL_SET_GRID_DEVICE,        pst,C_FUNLOC(r_set_grid_device),0,0,"set_grid_device")
+#endif
 end function worker_init
 !##############################################################
 !##############################################################

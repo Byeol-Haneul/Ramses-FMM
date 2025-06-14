@@ -230,9 +230,6 @@ contains
        call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
 
-       ! Mem copy of entire grid
-       grid_device = sim%m%grid
-
     end if
 
     ! =============================

@@ -15,10 +15,7 @@ subroutine adaptive_loop(pst)
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem
 #ifdef _CUDA
-  use cudafor
-  use nvtx
-  use gpu_utils
-  use gpu_runner
+  use gpu_manager, only: r_set_grid_device
 #endif
 
   implicit none
@@ -84,12 +81,9 @@ subroutine adaptive_loop(pst)
 
   g%nstep_coarse_old=g%nstep_coarse
 
-  ! Copy grid from host to device
 #ifdef _CUDA
-  call nvtxStartRange("Copy m%grid to device", color=5)!red
-  grid_device = m%grid
-  call GPU_Error_Check(__FILE__, __LINE__)
-  call nvtxEndRange()
+  ! Copy entire grid from host to device
+  call r_set_grid_device(pst)
 #endif
 
   write(*,*)'Starting time integration' 
