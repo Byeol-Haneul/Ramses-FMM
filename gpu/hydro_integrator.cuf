@@ -994,8 +994,8 @@ contains
   ! =========================================================================
   attributes(global) subroutine gather_send_buffer(oct_grid, uold_send, idx_send, num_send)
     type(oct), device, dimension(*) :: oct_grid
-    real(kind=dp), device, dimension(*) :: uold_send
-    integer, device, dimension(*) :: idx_send
+    real(dp), device, dimension(1:40*num_send) :: uold_send
+    integer, device, dimension(1:num_send) :: idx_send
     integer(kind=8), intent(in), value :: num_send
 
     integer :: buffer_idx ! The index of the sending buffer
@@ -1018,7 +1018,7 @@ contains
 
     ! Compute the buffer position
     pos_idx = cell_idx + 8*0 + 40*(buffer_idx-1)
-    uold_send(pos_idx) =  oct_grid(oct_idx)%uold(cell_idx,1)
+    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,1)
     pos_idx = cell_idx + 8*1 + 40*(buffer_idx-1)
     uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,2)
     pos_idx = cell_idx + 8*2 + 40*(buffer_idx-1)

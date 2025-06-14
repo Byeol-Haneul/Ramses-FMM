@@ -186,11 +186,9 @@ contains
     ! Allocate arrays if they're not allocated
     if (.not. (allocated(subgrid_indices_host))) then
 
-       ! Note dt is used here just to get the sizeof a float
+       ! Allocate device and host memory for subgrid index
        err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(dt))
        err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(dt)) 
-
-       ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
        call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
        call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
 
@@ -199,42 +197,49 @@ contains
                hilbert=sim%m%domain,pack_size=storage_size(dummy_large_realdp)/32,&
                pack=pack_fetch_refine,unpack=unpack_fetch_refine)
 
-       ! Make boundary
-       call make_boundaries(sim,ilevel)
+       ! Collect cache octs
+       call full_cache_prefetch(sim,ilevel)
 
-       grid_device = sim%m%grid
+       ! Setup ghost octs mapping
+       call setup_ghost_mapping(sim, ilevel)
 
-       ! Setup index mapping between halo and ghost octs
+       ! Setup the subgrid mapping
+       call setup_subgrid_mapping(sim, ilevel)
+
+       ! Close cache
+       call close_cache(sim,sim%m%grid_dict)
+
+       ! Setup halo octs mapping
        call setup_halo_mapping(sim, ilevel)
 
-       ! Copy halo and ghost octs index to device
-       call nvtxStartRange("Copy subgrid mapping to device", color=5)!red
+       ! Copy halo octs map to device
+       call nvtxStartRange("Copy halo octs mapping to device", color=5)!red
        idx_send_device = idx_send_host
+       call GPU_Error_Check(__FILE__, __LINE__)
+       call nvtxEndRange()
+
+       ! Copy ghost octs map to device
+       call nvtxStartRange("Copy ghost octs mapping to device", color=5)!red
        idx_recv_device = idx_recv_host
        call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
 
-       ! Setup the subgrid mapping
-       call nvtxStartRange("Setup Index Mapping", color=1)!blue
-       call setup_subgrid_mapping(sim, ilevel)
-       call nvtxEndRange()
-
-       ! Close cache
-!       call close_cache(sim,sim%m%grid_dict) 
-
-       ! Copy subgrid map to device. This has to be done outside of the 
-       ! setup_subgrid_mapping subroutine due to a compiler bug with nested NVTX statements
+       ! Copy subgrid map to device.
        call nvtxStartRange("Copy subgrid mapping to device", color=5)!red
        subgrid_indices_device = subgrid_indices_host
        call GPU_Error_Check(__FILE__, __LINE__)
        call nvtxEndRange()
+
+       ! Mem copy of entire grid
+       grid_device = sim%m%grid
+
     end if
 
     ! =============================
     ! Copy halo octs to send buffer
     ! =============================
     if(num_send>0)then
-       call nvtxStartRange("Copy halo octs to buffer", color=5)!red
+       call nvtxStartRange("Copy halo octs to buffer on device", color=5)!red
        threadsX_per_block=8; threadsY_per_block=4
        num_blocks = (num_send + threadsY_per_block - 1) / threadsY_per_block
        call gather_send_buffer<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_device, uold_send_device, idx_send_device, num_send)
@@ -242,31 +247,26 @@ contains
        call nvtxEndRange()
     endif
 
+    call nvtxStartRange("Mem copy of halo octs", color=5)!red
+    uold_send_host = uold_send_device
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
     ! =============================
     ! MPI ISEND/IRECV on the host
     ! =============================
-    call nvtxStartRange("Mem copy and MPI", color=5)!red
-    uold_send_host = uold_send_device
-!!$    write(*,*)uold_send_host(1:40)
-!!$    write(*,*)uold_send_host(41:80)
-!!$    write(*,*)uold_send_host(81:120)
-!!$    write(*,*)uold_send_host(121:160)
-
     call halo_exchange_uold(sim, ilevel)
-
-!!$    write(*,*)uold_recv_host(1:40)
-!!$    write(*,*)uold_recv_host(41:80)
-!!$    write(*,*)uold_recv_host(81:120)
-!!$    write(*,*)uold_recv_host(121:160)
-    uold_recv_device = uold_recv_host
-    call GPU_Error_Check(__FILE__, __LINE__)
-    call nvtxEndRange()
 
     ! ==============================
     ! Copy recv buffer to ghost octs
     ! ==============================
+    call nvtxStartRange("Mem copy of ghost octs", color=5)!red
+    uold_recv_device = uold_recv_host
+    call GPU_Error_Check(__FILE__, __LINE__)
+    call nvtxEndRange()
+
     if(num_recv>0)then
-       call nvtxStartRange("Copy buffer to ghost octs", color=5)!red
+       call nvtxStartRange("Copy buffer to ghost octs on device", color=5)!red
        threadsX_per_block=8; threadsY_per_block=4
        num_blocks = (num_recv + threadsY_per_block - 1) / threadsY_per_block
        call scatter_recv_buffer<<<num_blocks, dim3(threadsX_per_block,threadsY_per_block,1)>>>(grid_device, uold_recv_device, idx_recv_device, num_recv)
@@ -347,6 +347,7 @@ contains
    !> @param[in] k_subgrid_loc : The ikindex of the "lower left" real oct in the subgrid to pack
    !>
    subroutine setup_subgrid(sim, ilevel, subgrid_idx, i_subgrid_loc, j_subgrid_loc, k_subgrid_loc)
+     use hash
      use nbors_utils, only: unlock_cache, get_grid
      use ramses_commons, only: ramses_t
      use oct_commons, only: oct
@@ -379,21 +380,16 @@ contains
               hash_key(2) = j_oct  ! the Y index of the oct to load
               hash_key(3) = k_oct  ! the Z index of the oct to load
 
-              ! Get a pointer to the oct to load
-              call get_grid(sim, &! sim object
-                            hash_key, &! the hash key (level, x, y, z)
-                            sim%m%grid_dict, &! ???
-                            oct_to_load, &! The pointer to the oct
-                            flush_cache=.false., &
-                            fetch_cache=.true., &
-                            lock=.true.)
+              ! Get pointer to oct
+              call c_f_pointer(hash_getp(sim%m%grid_dict,hash_key),oct_to_load)
 
+              ! Convert to index
               idx_to_oct = (loc(oct_to_load)-loc(sim%m%grid(1)))/(loc(sim%m%grid(2))-loc(sim%m%grid(1)))+1
 
+              ! Store in subgrid mapping array
               subgrid_i = (i_grid - (i_subgrid_loc - 1)) + 1
               subgrid_j = (j_grid - (j_subgrid_loc - 1)) + 1
               subgrid_k = (k_grid - (k_subgrid_loc - 1)) + 1
-
               subgrid_indices_host(subgrid_i, subgrid_j, subgrid_k, subgrid_idx) = idx_to_oct
            end do
         end do
@@ -401,10 +397,90 @@ contains
    end subroutine setup_subgrid
 
    !> @brief
-   !> Setup the communication infrastructure for halo exchange
+   !> Setup the index mapping for ghost octs
    !>
    !> @param[in] sim : The simulation object
-   !> @param[in] ilevel : 
+   !> @param[in] ilevel : the refinement level
+   !>
+   subroutine setup_ghost_mapping(sim, ilevel)
+#ifndef WITHOUTMPI
+     use mpi
+#endif
+     use nvtx
+     use hash
+     use nbors_utils, only: unlock_cache, get_grid
+     use ramses_commons, only: ramses_t
+     use oct_commons, only: oct
+     use amr_parameters, only: ndim
+     type(ramses_t), intent(in) :: sim
+     integer :: ilevel
+     !
+#ifndef WITHOUTMPI
+     integer :: icache, icpu, my_integer, info, err_code
+     integer :: ibuffer
+     integer, dimension(1:sim%g%ncpu) :: n_skip, i_recv
+     real(dp) :: my_real_dp
+     integer(kind=8),dimension(0:ndim) :: hash_key
+
+     associate(m=>sim%m, g=>sim%g, r=>sim%r)
+
+     ! Compute number of ghost oct per cpu
+     allocate(n_recv(1:g%ncpu))
+     n_recv = 0
+     do icache = 1, m%ncache
+        if(m%locked(icache))then
+           icpu = m%parent_cpu(icache)
+           n_recv(icpu) = n_recv(icpu) + 1
+        endif
+     end do
+     num_recv = sum(n_recv)
+
+     ! Allocate host memory for ghost oct hash ley
+     allocate(key_recv_host(1:4*num_recv))
+
+     ! Allocate device and host memory for ghost oct index
+     err_code = cudaMalloc(idx_recv_device_cptr,  num_recv*sizeof(my_integer))
+     err_code = cudaMallocHost(idx_recv_host_cptr, num_recv*sizeof(my_integer))
+     call c_f_pointer(idx_recv_device_cptr, idx_recv_device, [num_recv])
+     call c_f_pointer(idx_recv_host_cptr, idx_recv_host, [num_recv])
+
+     ! Aloocate device and host memory for ghost oct hydro variables
+     err_code = cudaMalloc(uold_recv_device_cptr,  40*num_recv*sizeof(my_real_dp))
+     err_code = cudaMallocHost(uold_recv_host_cptr, 40*num_recv*sizeof(my_real_dp)) 
+     call c_f_pointer(uold_recv_device_cptr, uold_recv_device, [40*num_recv])
+     call c_f_pointer(uold_recv_host_cptr, uold_recv_host, [40*num_recv])
+
+     ! Compute offset in 1D communicationn buffer
+     n_skip(1) = 1
+     do icpu = 2, g%ncpu
+        n_skip(icpu) = n_skip(icpu-1) + n_recv(icpu-1)
+     end do
+
+     ! Collect ghost oct index and hash key
+     i_recv = 0
+     do icache = 1, m%ncache
+        if(m%locked(icache))then
+           icpu = m%parent_cpu(icache)
+           i_recv(icpu) = i_recv(icpu) + 1
+           ibuffer = n_skip(icpu)-1 + i_recv(icpu)
+           idx_recv_host(ibuffer) = r%ngridmax+icache
+           ibuffer = 4*(n_skip(icpu)-1) + 4*i_recv(icpu)-3
+           key_recv_host(ibuffer  ) = m%grid(r%ngridmax+icache)%lev
+           key_recv_host(ibuffer+1) = m%grid(r%ngridmax+icache)%ckey(1)
+           key_recv_host(ibuffer+2) = m%grid(r%ngridmax+icache)%ckey(2)
+           key_recv_host(ibuffer+3) = m%grid(r%ngridmax+icache)%ckey(3)
+        endif
+     end do
+
+     end associate
+#endif
+   end subroutine setup_ghost_mapping
+
+   !> @brief
+   !> Setup the index mapping for halo octs
+   !>
+   !> @param[in] sim : The simulation object
+   !> @param[in] ilevel : The refinement level
    !>
    subroutine setup_halo_mapping(sim, ilevel)
 #ifndef WITHOUTMPI
@@ -421,86 +497,37 @@ contains
      !
 #ifndef WITHOUTMPI
      type(oct), pointer:: oct_to_load
-     integer :: icache, icpu, my_integer, info, err_code
+     integer :: icpu, my_integer, info, err_code
      integer :: ibuffer, ihalo
-     integer, dimension(1:sim%g%ncpu) :: n_skip, i_recv
      real(dp) :: my_real_dp
      integer(kind=8),dimension(0:ndim) :: hash_key
 
      associate(m=>sim%m, g=>sim%g, r=>sim%r)
 
-     allocate(n_recv(1:g%ncpu))
+     ! Compute number of halo oct per cpu
      allocate(n_send(1:g%ncpu))
-     
-     n_recv = 0
-     do icache = 1, m%ncache
-        if(m%locked(icache))then
-           icpu = m%parent_cpu(icache)
-           n_recv(icpu) = n_recv(icpu) + 1
-        endif
-     end do
-     num_recv = sum(n_recv)
-     allocate(key_recv_host(1:4*num_recv))
-
-     ! Note dt is used here just to get the sizeof a float
-     err_code = cudaMalloc(idx_recv_device_cptr,  num_recv*sizeof(my_integer))
-     err_code = cudaMallocHost(idx_recv_host_cptr, num_recv*sizeof(my_integer)) 
-
-     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
-     call c_f_pointer(idx_recv_device_cptr, idx_recv_device, [num_recv])
-     call c_f_pointer(idx_recv_host_cptr, idx_recv_host, [num_recv])
-
-     ! Note dt is used here just to get the sizeof a float
-     err_code = cudaMalloc(uold_recv_device_cptr,  40*num_recv*sizeof(my_real_dp))
-     err_code = cudaMallocHost(uold_recv_host_cptr, 40*num_recv*sizeof(my_real_dp)) 
-
-     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
-     call c_f_pointer(uold_recv_device_cptr, uold_recv_device, [40*num_recv])
-     call c_f_pointer(uold_recv_host_cptr, uold_recv_host, [40*num_recv])
-
      call MPI_ALLTOALL(n_recv,1,MPI_INTEGER,n_send,1,MPI_INTEGER,MPI_COMM_WORLD,info)
      num_send = sum(n_send)
 
+     ! Allocate host memory for halo oct hash key
      allocate(key_send_host(1:4*num_send))
 
-     ! Note dt is used here just to get the sizeof a float
+     ! Allocate device and host memory for halo oct index
      err_code = cudaMalloc(idx_send_device_cptr,  num_send*sizeof(my_integer))
-     err_code = cudaMallocHost(idx_send_host_cptr, num_send*sizeof(my_integer)) 
-
-     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
+     err_code = cudaMallocHost(idx_send_host_cptr, num_send*sizeof(my_integer))
      call c_f_pointer(idx_send_device_cptr, idx_send_device, [num_send])
      call c_f_pointer(idx_send_host_cptr, idx_send_host, [num_send])
 
-     ! Note dt is used here just to get the sizeof a float
+     ! Allocate device and host memory for halo oct hydro variable
      err_code = cudaMalloc(uold_send_device_cptr,  40*num_send*sizeof(my_real_dp))
      err_code = cudaMallocHost(uold_send_host_cptr, 40*num_send*sizeof(my_real_dp)) 
-
-     ! Copy the C pointers into the Fortran pointers so that the Fortran pointers can be used like Fortran arrays
      call c_f_pointer(uold_send_device_cptr, uold_send_device, [40*num_send])
      call c_f_pointer(uold_send_host_cptr, uold_send_host, [40*num_send])
 
-     n_skip(1) = 1
-     do icpu = 2, g%ncpu
-        n_skip(icpu) = n_skip(icpu-1) + n_recv(icpu-1)
-     end do
-
-     i_recv = 0
-     do icache = 1, m%ncache
-        if(m%locked(icache))then
-           icpu = m%parent_cpu(icache)
-           i_recv(icpu) = i_recv(icpu) + 1
-           ibuffer = n_skip(icpu)-1 + i_recv(icpu)
-           idx_recv_host(ibuffer) = r%ngridmax+icache
-           ibuffer = 4*(n_skip(icpu)-1) + 4*i_recv(icpu)-3
-           key_recv_host(ibuffer  ) = m%grid(r%ngridmax+icache)%lev
-           key_recv_host(ibuffer+1) = m%grid(r%ngridmax+icache)%ckey(1)
-           key_recv_host(ibuffer+2) = m%grid(r%ngridmax+icache)%ckey(2)
-           key_recv_host(ibuffer+3) = m%grid(r%ngridmax+icache)%ckey(3)
-        endif
-     end do
-
+     ! Send ghost hask key to halo hash key
      call halo_exchange_key(sim, ilevel)
 
+     ! Compute halo oct index
      ibuffer = 1
      do ihalo = 1, num_send
         hash_key(0) = key_send_host(ibuffer  )
@@ -511,8 +538,6 @@ contains
         idx_send_host(ihalo) = (loc(oct_to_load)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
         ibuffer = ibuffer + 4
      end do
-
-     deallocate(key_send_host, key_recv_host)
 
    end associate
 #endif
@@ -579,29 +604,29 @@ contains
      ! Wait for full completion of sends
      call MPI_WAITALL(countsend, reqsend, statuses, info)
 
-     iskip = 1
-     do icpu = 1, sim%g%ncpu
-        ncache = n_send(icpu)
-        write(*,'("uold send",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
-        if(ncache > 0) then
-           countsend = countsend + 1
-           nbuffer = 40*ncache
-           write(*,'("uold send",2(1x,I4),40(1x,1PE10.3))')sim%g%myid,icpu,uold_send_host(iskip:iskip+39)
-           iskip = iskip + nbuffer
-        end if
-     end do
-
-     iskip = 1
-     do icpu = 1, sim%g%ncpu
-        ncache = n_recv(icpu)
-        write(*,'("uold recv",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
-        if(ncache > 0) then
-           countrecv = countrecv + 1
-           nbuffer = 40*ncache
-           write(*,'("uold recv",2(1x,I4),40(1x,1PE10.3))')sim%g%myid,icpu,uold_recv_host(iskip:iskip+39)
-           iskip = iskip + nbuffer
-        end if
-     end do
+!!$     iskip = 1
+!!$     do icpu = 1, sim%g%ncpu
+!!$        ncache = n_send(icpu)
+!!$        write(*,'("uold send",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
+!!$        if(ncache > 0) then
+!!$           countsend = countsend + 1
+!!$           nbuffer = 40*ncache
+!!$           write(*,'("uold send",2(1x,I4),40(1x,1PE10.3))')sim%g%myid,icpu,uold_send_host(iskip:iskip+39)
+!!$           iskip = iskip + nbuffer
+!!$        end if
+!!$     end do
+!!$
+!!$     iskip = 1
+!!$     do icpu = 1, sim%g%ncpu
+!!$        ncache = n_recv(icpu)
+!!$        write(*,'("uold recv",2(1x,I4),1x,I6)')sim%g%myid,icpu,ncache
+!!$        if(ncache > 0) then
+!!$           countrecv = countrecv + 1
+!!$           nbuffer = 40*ncache
+!!$           write(*,'("uold recv",2(1x,I4),40(1x,1PE10.3))')sim%g%myid,icpu,uold_recv_host(iskip:iskip+39)
+!!$           iskip = iskip + nbuffer
+!!$        end if
+!!$     end do
 
 #endif
    end subroutine halo_exchange_uold
@@ -654,8 +679,9 @@ contains
      ! Wait for full completion of receives
      call MPI_WAITALL(countrecv, reqrecv, statuses, info) 
 
-!!$     ! Wait for full completion of sends
-!!$     call MPI_WAITALL(countsend, reqsend, statuses, info)
+     ! Wait for full completion of sends
+     call MPI_WAITALL(countsend, reqsend, statuses, info)
+
 !!$     iskip = 1
 !!$     do icpu = 1, sim%g%ncpu
 !!$        ncache = n_recv(icpu)
@@ -683,7 +709,7 @@ contains
 #endif
    end subroutine halo_exchange_key
 
-   subroutine make_boundaries(s,ilevel)
+   subroutine full_cache_prefetch(s,ilevel)
      use mdl_module
      use amr_parameters, only: ndim, twondim, twotondim
      use amr_commons, only: nbor, oct
@@ -797,7 +823,7 @@ contains
 
 #endif
 
-   end subroutine make_boundaries
+   end subroutine full_cache_prefetch
    !###########################################################
    !###########################################################
    !###########################################################
