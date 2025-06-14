@@ -1,5 +1,6 @@
 module hydro_integrator
   use amr_parameters, only: dp, twotondim
+  use hydro_parameters, only: nvar
   use gpu_utils, only: subgrid_8x8x8cell_conserved, subgrid_8x8x8cell_primitive
   use oct_commons, only: oct
   use cudafor
@@ -1003,6 +1004,7 @@ contains
     integer :: cell_idx ! The index of the cell within the oct
     integer :: oct_idx ! The index of the oct
     integer :: pos_idx ! The position in the buffer
+    integer :: ivar
 
     block_idx = blockIdx%x - 1
 
@@ -1017,16 +1019,10 @@ contains
     cell_idx = threadIdx%x
 
     ! Compute the buffer position
-    pos_idx = cell_idx + 8*0 + 40*(buffer_idx-1)
-    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,1)
-    pos_idx = cell_idx + 8*1 + 40*(buffer_idx-1)
-    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,2)
-    pos_idx = cell_idx + 8*2 + 40*(buffer_idx-1)
-    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,3)
-    pos_idx = cell_idx + 8*3 + 40*(buffer_idx-1)
-    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,4)
-    pos_idx = cell_idx + 8*4 + 40*(buffer_idx-1)
-    uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,5)
+    do ivar = 1, nvar
+       pos_idx = cell_idx + twotondim*(ivar-1) + twotondim*nvar*(buffer_idx-1)
+       uold_send(pos_idx) = oct_grid(oct_idx)%uold(cell_idx,ivar)
+    end do
 
   end subroutine gather_send_buffer
   ! =========================================================================
@@ -1043,6 +1039,7 @@ contains
     integer :: cell_idx ! The index of the cell within the oct
     integer :: oct_idx ! The index of the oct
     integer :: pos_idx ! The position in the buffer
+    integer :: ivar
 
     block_idx = blockIdx%x - 1
 
@@ -1057,16 +1054,10 @@ contains
     cell_idx = threadIdx%x
 
     ! Compute the buffer position
-    pos_idx = cell_idx + 8*0 + 40*(buffer_idx-1)
-    oct_grid(oct_idx)%uold(cell_idx,1) = uold_recv(pos_idx)
-    pos_idx = cell_idx + 8*1 + 40*(buffer_idx-1)
-    oct_grid(oct_idx)%uold(cell_idx,2) = uold_recv(pos_idx)
-    pos_idx = cell_idx + 8*2 + 40*(buffer_idx-1)
-    oct_grid(oct_idx)%uold(cell_idx,3) = uold_recv(pos_idx)
-    pos_idx = cell_idx + 8*3 + 40*(buffer_idx-1)
-    oct_grid(oct_idx)%uold(cell_idx,4) = uold_recv(pos_idx)
-    pos_idx = cell_idx + 8*4 + 40*(buffer_idx-1)
-    oct_grid(oct_idx)%uold(cell_idx,5) = uold_recv(pos_idx)
+    do ivar = 1, nvar
+       pos_idx = cell_idx + twotondim*(ivar-1) + twotondim*nvar*(buffer_idx-1)
+       oct_grid(oct_idx)%uold(cell_idx,ivar) = uold_recv(pos_idx)
+    end do
 
   end subroutine scatter_recv_buffer
   ! =========================================================================

@@ -178,6 +178,7 @@ contains
     integer :: err_code, threads_per_block, num_blocks
     integer :: threadsX_per_block, threadsY_per_block
     integer, parameter :: subgrid_size = 8
+    integer :: my_integer
     real(dp) :: dt, dx, gamma
 
     ! get the number of octs in each direction and compute the number of subgrids
@@ -187,8 +188,8 @@ contains
     if (.not. (allocated(subgrid_indices_host))) then
 
        ! Allocate device and host memory for subgrid index
-       err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(dt))
-       err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(dt)) 
+       err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(my_integer))
+       err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(my_integer))
        call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
        call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
 
