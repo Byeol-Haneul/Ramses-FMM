@@ -3,10 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import FortranFile
 import argparse
+
 parser = argparse.ArgumentParser()
 parser.add_argument("file", help="enter filename dens.map")
 parser.add_argument("--log", help="plot log variable",action="store_true")
 parser.add_argument("--out", help="output a png image")
+parser.add_argument("--col", help="choose the color map")
+parser.add_argument("--min", help="minimum value")
+parser.add_argument("--max", help="maximum value")
 args = parser.parse_args()
 print("Reading "+args.file)
 
@@ -30,8 +34,20 @@ fig, ax = plt.subplots(figsize=(512/my_dpi, 512/my_dpi), dpi=my_dpi)
 
 if args.log:
     dat=np.log10(dat)
+
+col="viridis"
+if args.col:
+    col=args.col
     
-ax.imshow(dat[:, :].T, interpolation='nearest', origin='lower')
+vmax=None
+if args.max:
+    vmax=args.max
+
+vmin=None
+if args.min:
+    vmin=args.min
+
+ax.imshow(dat[:, :].T, interpolation='nearest', origin='lower', cmap=col, vmin=vmin, vmax=vmax)
 ax.set_xlabel("nx")
 ax.set_ylabel("ny")
 if args.out:
