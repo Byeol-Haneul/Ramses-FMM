@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib
-from collections import Counter
 from matplotlib import pyplot as plt
 from scipy.io import FortranFile
 from astropy.io import ascii
@@ -767,20 +766,18 @@ def make_image_2D(positions,levels,features,lmin,lmax,boxsize=1.0):
     """
     Function to make image from cell data
     """
-
-    l_pix_per_level = Counter(levels)
-
     base_grid = 2**lmin
 
     image = np.zeros((int((2**(lmax-lmin))*base_grid),int((2**(lmax-lmin))*base_grid)))
     
     for i,l in enumerate(range(lmin,lmax+1)):
-        # Skip levels without cells
-        if l_pix_per_level[l] < 1:
-            continue
 
         # Filter cells on the level
         filt = levels == l
+
+        # Skip levels without cells
+        if (filt.sum() < 1):
+            continue
 
         # Setup the bins
         bins = np.linspace(0,boxsize,int((2**(l-lmin))*base_grid) + 1)

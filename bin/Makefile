@@ -29,7 +29,7 @@ NION = 0
 NPSCAL = 0
 NRTGRP = 0
 NHILBERT = 1
-NVECTOR = 1
+NVECTOR = 32
 NPRE = 8
 PATCH =
 DEBUG = 0
@@ -192,14 +192,14 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
 	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
-	 coolrates_module.o  
-ifeq ($(RTZ),0)
-MODOBJ += neq_cooling_module.o 
-endif
-ifeq ($(RTZ),1)
-MODOBJ += collisional_ionization_module.o recombination_module.o \
+	 coolrates_module.o \
+    collisional_ionization_module.o recombination_module.o \
     cosmic_ray_ionization_module.o photoionization_UVB_module.o dust_recombination_module.o \
-    molecules_module.o charge_exchange_module.o rtz_module.o rtz_coolrates_module.o rtz_cooling_module.o 
+    molecules_module.o charge_exchange_module.o rtz_module.o
+ifeq ($(RTZ),1)
+MODOBJ += rtz_coolrates_module.o rtz_cooling_module.o
+else
+MODOBJ += neq_cooling_module.o 
 endif
 MODOBJ += init_neq_chem.o \
 	 mdl_commons.o mdl.o cross_sections_module.o rt_spectra.o clfind_commons.o ramses_commons.o \
