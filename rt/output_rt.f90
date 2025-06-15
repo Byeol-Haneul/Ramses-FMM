@@ -209,7 +209,7 @@ subroutine output_rtinfo(r, g, filename)
   ! Write physical parameters
   write(ilun,'("unit_np      = ", E23.15)') scale_np
   write(ilun,'("unit_fp      = ", E23.15)') scale_fp
-  write(ilun,'("rt_c_fraction= ", 100(E15.7))') r%rt_c_fraction
+  write(ilun,'("rt_c_fraction= ", 100(E15.7))') r%rt_c_fraction(r%levelmin:r%nlevelmax)
   write(ilun,*)
 
   ! Write photon group properties
@@ -230,10 +230,14 @@ subroutine write_group_props(r, update, lun)
 !------------------------------------------------------------------------
   use amr_commons, only: run_t
   use rt_parameters, only: nrtgrp
+#ifdef RTZ
+  use rtz_module, only: elements, n_elements
+#endif
   implicit none
   type(run_t)::r
   logical :: update
   integer :: ip, lun
+  integer :: iE
 !------------------------------------------------------------------------
   if (.not. update) then
      write(lun,*) 'Photon group properties=------------------------------ '
@@ -242,12 +246,23 @@ subroutine write_group_props(r, update, lun)
   end if
   write(lun, 901) r%group_L0(:)
   write(lun, 902) r%group_L1(:)
+#ifndef RTZ
   write(lun, 903) r%spec2group(:)
+#endif
   do ip = 1, nrtgrp
      write(lun, 907) ip
      write(lun, 904) r%group_egy(ip)
+#ifdef RTZ
+     do iE=1,n_elements
+        if (elements(iE)%atomic_number.gt.0) then
+           write(lun, 905) elements(iE)%element_name, r%group_csn(ip,iE,1:elements(iE)%n_ions+elements(iE)%n_mol)
+           write(lun, 905) elements(iE)%element_name, r%group_cse(ip,iE,1:elements(iE)%n_ions+elements(iE)%n_mol)
+        end if
+     end do
+#else
      write(lun, 905) r%group_csn(ip,:)
      write(lun, 906) r%group_cse(ip,:)
+#endif
   end do
   write (lun,*) '=-----------------------------------------------------'
 
@@ -255,8 +270,13 @@ subroutine write_group_props(r, update, lun)
 902 format ('  groupL1  [eV]  = ', 20f12.3)
 903 format ('  spec2group     = ', 20I12)
 904 format ('  egy      [eV]  = ', 1pe12.3)
+#ifdef RTZ
+905 format ('  csn    [cm^2]  = ', A20, 27(1pe12.3))
+906 format ('  cse    [cm^2]  = ', A20, 27(1pe12.3))
+#else
 905 format ('  csn    [cm^2]  = ', 20(1pe12.3))
 906 format ('  cse    [cm^2]  = ', 20(1pe12.3))
+#endif
 907 format ('  --=Group', I2)
 
 end subroutine write_group_props

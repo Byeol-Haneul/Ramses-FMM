@@ -63,7 +63,11 @@ subroutine init_xion(r,g,m,tables,ilevel)
   use hydro_parameters, only: nener, nion
   use amr_commons, only:run_t,global_t,mesh_t
   use cooling_module, only:cooling_t
+#ifdef RTZ
+  use rtz_module, only: elements, n_elements
+#else
   use neq_cooling_module, only: cmp_equilibrium_abundances
+#endif
   use coolrates_module, only: neq_cooling_t
   implicit none
   type(run_t)::r
@@ -80,6 +84,9 @@ subroutine init_xion(r,g,m,tables,ilevel)
   real(kind=8),dimension(1:nvector, 7)::nSpec    !          Species abundances
 #if NENER>0
   integer::irad
+#endif
+#ifdef RTZ
+  integer::counter, iE, iI
 #endif
 
   if(r%verbose.and.g%myid==1) &
@@ -171,6 +178,24 @@ subroutine init_xion(r,g,m,tables,ilevel)
         end do
 
         ! Do the main computation of equilibrium abundances
+#ifdef RTZ
+        ! In the case of RTZ, we set everything to neutral to start
+        do i=1,nleaf ! loop over cells
+          counter = 1
+          do iE=1,n_elements ! loop over elements
+             if (elements(iE)%atomic_number.gt.0) then 
+                do iI=1,elements(iE)%n_ions + elements(iE)%n_mol ! loop over ions + molecules
+                   x = 0.d0
+                   if (iI.eq.1) then 
+                      x = 1.d0
+                   end if
+                   m%grid(ind_leaf(i))%uold(ind,r%iIons-1+counter) = x*m%grid(ind_leaf(i))%uold(ind,1)
+                   counter = counter + 1
+                end do  ! end loop over ions + molecules
+             end if
+          end do ! end loop over elements
+        end do ! end loop over cells
+#else
         do i=1,nleaf
           call cmp_equilibrium_abundances(r, tables, &
                          T2(i),nH(i),pHI_rates(:),mu,nSpec(i,:),Zsolar(i))
@@ -207,6 +232,7 @@ subroutine init_xion(r,g,m,tables,ilevel)
                                          x*m%grid(ind_leaf(i))%uold(ind,1)
           endif
         end do
+#endif
 
      end do
      ! End loop over grid
@@ -220,6 +246,7 @@ end subroutine init_xion
 !#########################################################################
 !#########################################################################
 !#########################################################################
+#ifndef RTZ
 subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
 
 ! Calculate and return photoionization equilibrium abundance states for
@@ -313,5 +340,5 @@ subroutine calc_equilibrium_xion(s, gridp, icell, ilevel, xion)
   endif
 #endif
 end subroutine calc_equilibrium_xion
-
+#endif
 end module init_xion_module

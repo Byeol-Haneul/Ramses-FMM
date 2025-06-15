@@ -438,6 +438,9 @@ subroutine region_condinit(r,g,x,q,dx,nn)
   use amr_parameters, only: nvector, ndim
   use hydro_parameters, only: nvar, nener
   use amr_commons, only: run_t, global_t
+#ifdef RTZ
+  use rtz_module, only: elements, n_elements
+#endif
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -458,7 +461,10 @@ subroutine region_condinit(r,g,x,q,dx,nn)
 #endif
   integer::i,k
   real(kind=8)::vol,rad,weight,xn,yn,zn,en
-
+#ifdef RTZ
+  integer::counter
+  real(kind=8)::total_mass_density
+#endif
   ! Set some (tiny) default values in case n_region=0
   q(1:nn,1)=r%smallr
   q(1:nn,2)=0.0d0
@@ -519,6 +525,29 @@ subroutine region_condinit(r,g,x,q,dx,nn)
               do ivar=6+nener,nvar
                  q(i,ivar)=r%var_region(k,ivar-5-nener)
               end do
+#ifdef RTZ
+              counter = 0
+              total_mass_density = 0.d0
+              do ivar=1,n_elements ! loop over elements
+                 if (elements(ivar)%atomic_number.gt.0) then
+                  !   write(*,*) g%myid,elements(ivar)%atomic_number,elements(ivar)%z_solar,r%z_ave
+                    ! This gives us the total mass density
+                    q(i,r%ichem+counter) = elements(ivar)%z_solar * r%z_ave * elements(ivar)%atomic_mass
+                    total_mass_density = total_mass_density + q(i,r%ichem+counter)
+                    counter = counter + 1
+                 end if
+              end do ! end loop over elements
+
+              ! Loop again and renormalize
+              counter = 0
+              do ivar=1,n_elements ! loop over elements
+                 if (elements(ivar)%atomic_number.gt.0) then
+                    ! This gives us the total mass density
+                    q(i,r%ichem+counter) = (1.d0 / total_mass_density) * q(i,r%ichem+counter) ! HK note will be multiplied by rho later
+                    counter = counter + 1
+                 end if
+              end do ! end loop over elements
+#endif
 #endif
 #ifdef MHD
 #if NDIM==1

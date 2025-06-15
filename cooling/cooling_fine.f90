@@ -36,7 +36,12 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   use amr_commons, only: run_t, global_t, mesh_t
   use cooling_module, only: cooling_t, solve_cooling, T2_min_fix, set_table
   use coolrates_module, only: neq_cooling_t
+#ifdef RTZ
+  use rtz_cooling_module, only: rtz_solve_cooling
+  use rtz_module, only: n_elements, elements
+#else
   use neq_cooling_module, only: neq_solve_cooling
+#endif
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -47,14 +52,18 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   !-------------------------------------------------------------------
   ! Compute cooling for leaf cells at level ilevel
   !-------------------------------------------------------------------
-  integer::i,ii,ind,igrid,idim,ngrid,nleaf
+  integer::i,ii,jj,ind,igrid,idim,ngrid,nleaf,counter,e_counter
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dtcool,nH_eos,nCOM,damp_factor,cooling_switch,t_blast
   integer,dimension(1:nvector)::ind_leaf
   real(kind=8),dimension(1:nvector)::nH,T2,delta_T2,ekk,err,emag
   real(kind=8),dimension(1:nvector)::T2min,Zsolar,boost
 !  logical,dimension(1:nvector)::cooling_on=.true.
+#ifdef RTZ
+  real(kind=8),dimension(1:n_elements, 1:n_elements, 1:nvector):: xion
+#else
   real(kind=8),dimension(nion, 1:nvector):: xion
+#endif
 #ifdef RT
   integer::ig,iNp
   real(kind=8),dimension(1:ndim)::Fpnew
@@ -62,6 +71,10 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   real(kind=8),dimension(ndim, nrtgrp, 1:nvector):: Fp, dFpdt=0
   real(kind=8),dimension(ndim, 1:nvector):: p_gas
   real(kind=8)::scale_Np,scale_Fp,Npnew
+#endif
+#ifdef RTZ
+  real(kind=8), dimension(n_elements, 1:nvector):: nElement
+  real(kind=8):: dx_SS_H2
 #endif
 #if NENER>0
   integer::irad
@@ -181,6 +194,36 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         endif
 
         ! Compute ionization fraction
+#ifdef RTZ
+        counter = 0
+        e_counter = 0
+        do ii=1,n_elements ! loop over elements
+           if (elements(ii)%atomic_number.gt.0) then
+              do jj=1,elements(ii)%n_ions ! loop over ions
+                 do i=1,nleaf !loop over leaf cells
+                    xion(ii,jj,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) &
+                                   /m%grid(ind_leaf(i))%uold(ind,1)
+                    if (jj.eq.1) then
+                       ! This gives us a number density [Atoms/cm^3]
+                       nElement(ii,i) = m%grid(ind_leaf(i))%uold(ind,r%ichem+e_counter) &
+                                       *scale_nH / elements(ii)%atomic_mass
+                    end if
+                 end do ! end loop over leaf cells
+                 counter = counter + 1 ! increment ionization counter
+              end do ! end loop over ions
+              e_counter = e_counter + 1 ! increment element counter
+           end if
+        end do ! end loop over elements
+
+        ! deal with molecules separately
+        if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
+           do i=1,nleaf !loop over leaf cells
+              xion(1,3,i) = m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) &
+                           /m%grid(ind_leaf(i))%uold(ind,1)
+           end do ! end loop over leaf cells
+           counter = counter + 1
+        endif
+#else
         if(r%neq_chem) then
            do ii=0,nIon-1
               do i=1,nleaf
@@ -189,6 +232,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
               end do
            end do
         endif
+#endif
 
         ! Get photon densities and flux magnitudes
 #ifdef RT
@@ -275,12 +319,45 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         else if(r%cooling_ism)then
            ! Use cooling from cooling_module_frig described in Audit & Hennebelle 2005
            call solve_cooling_ism(nH,T2,dtcool,delta_T2,r%gamma,r%mu_mol,nleaf)
+#ifdef RTZ
+        else if(r%neq_chem.and.r%rtz_cooling) then
+           ! If both non-equilibrium chemistry and rtz_cooling are turned on
+           ! we use a detailed model for the chemistry
+
+           if (r%rtz_equilibrium_test.eq.2) then 
+               ! for now, just assume some density solar metallicity
+               nElement(1:n_elements,1:nleaf)  = 0.d0  ! Initialize to zero
+               nElement(1,1:nleaf)  = 1.d-1                          ! Hydrogen      
+               nElement(2,1:nleaf)  = nElement(1,1:nleaf) * 8.51d-02 ! Helium
+               nElement(6,1:nleaf)  = nElement(1,1:nleaf) * 2.69d-04 ! Carbon
+               nElement(7,1:nleaf)  = nElement(1,1:nleaf) * 6.76d-05 ! Nitrogen
+               nElement(8,1:nleaf)  = nElement(1,1:nleaf) * 4.90d-04 ! Oxygen
+               nElement(10,1:nleaf) = nElement(1,1:nleaf) * 8.51d-05 ! Neon
+               nElement(12,1:nleaf) = nElement(1,1:nleaf) * 3.98d-05 ! Magnesium
+               nElement(14,1:nleaf) = nElement(1,1:nleaf) * 3.24d-05 ! Silicon
+               nElement(16,1:nleaf) = nElement(1,1:nleaf) * 1.32d-05 ! Sulfur
+               nElement(26,1:nleaf) = nElement(1,1:nleaf) * 3.16d-05 ! Iron
+           end if
+
+           ! Compute the cell length in cm if needed
+           dx_SS_H2 = 0.d0
+           if (r%isH2_rtz) then
+              dx_SS_H2 = (r%boxlen/(2.d0**ilevel)) * scale_l
+           endif
+
+           call rtz_solve_cooling(r, tables, T2, g%aexp, xion, nElement, &
+#ifdef RT
+                & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
+#endif
+                & dtcool, nleaf, dx_SS_H2)   
+#else        
         else if(r%neq_chem)then
            call neq_solve_cooling(r, tables, T2, xion, nH, Zsolar, &
 #ifdef RT
                 & Np, Fp, p_gas, dNpdt, dFpdt, ilevel, &
 #endif
                 & dtcool, nleaf)
+#endif
         endif
 
         ! Compute rho in code units
@@ -330,6 +407,27 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
         endif
 
         ! Update ionization fraction
+#ifdef RTZ
+        counter = 0
+        do ii=1,n_elements ! loop over elements
+           if (elements(ii)%atomic_number.gt.0) then
+              do jj=1,elements(ii)%n_ions ! loop over ions
+                 do i=1,nleaf !loop over leaf cells
+                    m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(ii,jj,i)*nH(i)
+                 end do ! end loop over leaf cells
+                 counter = counter + 1
+              end do ! end loop over ions
+           end if
+        end do ! end loop over elements
+
+        ! deal with molecules separately
+        if (elements(1)%atomic_number.gt.0 .and. r%isH2_rtz) then
+           do i=1,nleaf !loop over leaf cells
+              m%grid(ind_leaf(i))%uold(ind,r%iIons+counter) = xion(1,3,i)*nH(i)
+           end do ! end loop over leaf cells
+           counter = counter + 1
+        endif
+#else
         if(r%neq_chem) then
            do ii=0,nion-1
               do i=1,nleaf
@@ -337,6 +435,7 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
               end do
            end do
         endif
+#endif
 
         ! Update entropy if dual energy scheme is activated
         if(r%entropy.and.r%dual_energy.GE.0)then
@@ -377,11 +476,13 @@ subroutine cooling_fine(r,g,m,c,tables,ilevel)
   end do
   ! End loop over cells
 
+#ifndef RTZ
   ! Compute new cooling table
   if(r%cooling.and.ilevel==r%levelmin.and.r%cosmo)then
      if(g%myid==1)write(*,*)'Computing new cooling table'
      call set_table(c,dble(g%aexp))
   endif
+#endif
 #endif
 
 end subroutine cooling_fine

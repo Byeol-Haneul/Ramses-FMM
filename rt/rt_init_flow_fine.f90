@@ -61,7 +61,11 @@ contains
 recursive subroutine r_rt_neq_updates(pst, nstep_coarse, input_size)
   use mdl_module
   use coolrates_module, only: update_rt_c, update_coolrates_tables
+#ifdef RTZ
+  use rtz_cooling_module, only: rtz_updateRTGroups_CoolConstants
+#else
   use neq_cooling_module, only: updateRTGroups_CoolConstants, update_metal_cooling
+#endif
   use ramses_commons, only: pst_t
   use output_rt_module, only: output_photon_emission_stats
   use SED_module, only: update_SED_group_props
@@ -94,12 +98,18 @@ recursive subroutine r_rt_neq_updates(pst, nstep_coarse, input_size)
 
      ! Update radiation heating and cooling constants
      if(r%cosmo.or.(r%rt))then
+#ifdef RTZ
+        call rtz_updateRTGroups_CoolConstants(r, s%tables)
+#else
         call updateRTGroups_CoolConstants(r, s%tables)
+#endif
      endif
 
      ! Update UV background constants for metal cooling
+#ifndef RTZ
      if(r%neq_chem .and. r%cosmo) &
         call update_metal_cooling(s%tables, dble(g%aexp))
+#endif
 
      if(r%rt_advect .and. r%rt_emission_stats .and. r%rt_star) &
         call output_photon_emission_stats(r,g)

@@ -43,10 +43,17 @@ MODULE coolrates_module
      real(kind=8),dimension(nion,2) :: UVrates
 #ifdef RT
      ! Contribution of each group to photo-ionization rates
+#ifdef RTZ
+     real(kind=8),dimension(nrtgrp,1:27,1:27,MAXLEVEL) :: signc
+
+     ! Contribution of each group to photo-heating rates
+     real(kind=8),dimension(nrtgrp,1:27,1:27,MAXLEVEL) :: sigec, PHrate
+#else
      real(kind=8),dimension(nrtgrp,nion,MAXLEVEL) :: signc
 
      ! Contribution of each group to photo-heating rates
      real(kind=8),dimension(nrtgrp,nion,MAXLEVEL) :: sigec, PHrate
+#endif
 #endif
      real(kind=8) :: dlogTinv ! Inverse of the bin space (in K)
      real(kind=8) :: hTable, h2Table, h3Table   ! Interpol constants

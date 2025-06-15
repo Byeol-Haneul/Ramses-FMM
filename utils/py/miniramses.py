@@ -762,6 +762,40 @@ def rd_hydro(nout,**kwargs):
 
     return hydro
 
+def make_image_2D(positions,levels,features,lmin,lmax,boxsize=1.0):
+    """
+    Function to make image from cell data
+    """
+    base_grid = 2**lmin
+
+    image = np.zeros((int((2**(lmax-lmin))*base_grid),int((2**(lmax-lmin))*base_grid)))
+    
+    for i,l in enumerate(range(lmin,lmax+1)):
+
+        # Filter cells on the level
+        filt = levels == l
+
+        # Skip levels without cells
+        if (filt.sum() < 1):
+            continue
+
+        # Setup the bins
+        bins = np.linspace(0,boxsize,int((2**(l-lmin))*base_grid) + 1)
+
+        # Create the image
+        H, _, _ = np.histogram2d(positions[0,:][filt],
+                                 positions[1,:][filt],
+                                 bins=bins,
+                                 range=((0.0,boxsize),(0.0,boxsize)),weights=features[filt])
+
+        if l < lmax:
+            up_samp = int(2**(lmax-l))
+            H = H.repeat(up_samp, axis=1).repeat(up_samp, axis=0)
+
+        image += H
+
+    return image
+
 class Cell:
     def __init__(self,nndim,nnvar):
         self.ncell = 0
@@ -1020,6 +1054,9 @@ def rd_info(nout,**kwargs):
     i.unit_l=info[17][1]
     i.unit_d=info[18][1]
     i.unit_t=info[19][1]
+
+    # Get the temperature conversion
+    i.unit_T2 = ((i.unit_l / i.unit_t)**2) * 1.6605390e-24 / 1.3806490e-16
 
     rd_rt_info = kwargs.get("rt",False)
     if rd_rt_info:

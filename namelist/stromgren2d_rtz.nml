@@ -1,0 +1,118 @@
+This namelist contains various input parameters for a 2d Stromgren sphere test run with all ions of RTZ.
+Compile using:
+make NDIM=2 RT=1 RTZ=1 NRTGRP=1 NMETAL=10 N_HYDROGEN_IONS=2 N_H2=0 N_HELIUM_IONS=3 N_CARBON_IONS=7 N_NITROGEN_IONS=8 N_OXYGEN_IONS=9 N_NEON_IONS=11 N_MAGNESIUM_IONS=13 N_SILICON_IONS=15 N_SULFUR_IONS=17 N_IRON_IONS=27 MPI=1 NVECTOR=1
+
+&RUN_PARAMS 
+hydro=.true.
+rt=.true.
+ncontrol=1
+verbose=.false.
+nsuperoct=0
+static_gas=.true.
+nrestart=0
+/
+
+&AMR_PARAMS
+levelmin=5
+levelmax=11
+ngridmax=800000
+box_size=1.0
+box_xmin=1
+box_ymin=1
+box_xmax=-1
+box_ymax=-1
+/
+
+&BOUNDARY_PARAMS
+nbound=4
+periodic=.false.,.false.
+bound_dir=1,1,2,2
+bound_type=1,1,1,1
+bound_shift=1,-1,1,-1
+bound_xmin= 0,-1, 0, 0
+bound_ymin= 1, 1, 0,-1
+bound_xmax= 1, 0, 0, 0
+bound_ymax=-1,-1, 1, 0
+/
+
+&INIT_PARAMS                    ! Initial conditions of the gas
+nregion=1                       ! Number of geometrical regions
+region_type(1)='square'         ! Region gemoetry
+x_center=0.5                    ! Region center, should be [0,boxlen]
+y_center=0.5                    ! 
+length_x=100.0                  ! Region width, in units of boxlen 
+length_y=100.0                  ! (this region covers the whole box)
+d_region=1d-1                   ! Initial density of the gas in H/cc
+p_region=8.69869d-8 !8.69869d-6		! Initial pressure (corresponds to 10^4 K)
+/
+
+&OUTPUT_PARAMS
+foutput=5
+delta_tout=0.5                    ! Time between sbapshots (in init_time=Myr)
+tend=15                         ! End-time for the simulation (in unit_time=Myr)
+/
+
+&HYDRO_PARAMS
+gamma=1.4
+courant_factor=0.8
+slope_type=1
+/
+
+&UNITS_PARAMS                   ! Unit conversion to cgs. We work in kpc-mp-Myr.
+units_length=3.09d21            ! 1 kpc in cm
+units_density=1.66000d-24       ! 1 proton mass
+units_time=3.1556926d13         ! 1 Myr in seconds
+/
+
+&COOLING_PARAMS                 ! Cooling / basic chemistry
+neq_chem=.true.
+rtz_cooling=.true.
+rtz_equilibrium_test=-1         ! 1 for t-rho eqm curves, 2 for ion fracs at fixed T
+rtz_include_collisional_ionization=.true.
+rtz_include_photoionization=.true.
+rtz_include_cosmic_ray_ionization=.true.
+rtz_include_charge_exchange=.true.
+rtz_include_dust_recombination=.true.
+rtz_include_HM12_UVB=.true.
+rtz_UV_background_G0=1.0d-6
+rtz_primary_cosmic_ray_ionization_rate=1.d-25
+rtz_max_cool_timestep=1.d18
+isHe=.false.
+isH2=.false.
+isH2_rtz=.false.
+X_H=1.0
+Y_He=0.0
+is_init_xion=.true.
+z_ave = 1.d0
+/
+
+&REFINE_PARAMS 
+interpol_var=0
+interpol_type=0
+err_grad_xHII=0.1
+/
+
+&RT_PARAMS
+rt_advect=.true.
+rt_c_fraction=0.001
+rt_nsubcycle=1
+/
+
+&RT_SOURCES
+rt_nsource=1                    !--Idealized radiation sources------------
+rt_source_type=1*'point'        ! Source geometry (point or square)
+rt_src_x_center=0.5             ! Source position (0 to 1)
+rt_src_y_center=0.5
+rt_src_length_x=0.              ! Source size (0 to 1)
+rt_src_length_y=0
+rt_src_group=1                  ! Photon group emitted into
+rt_n_source=2d28                ! Source luminosity (photons per sec)
+rt_u_source=0.                  ! Reduced x-direction flux
+rt_v_source=0.                  ! Reduced y-direction flux
+/
+
+&RT_GROUPS                       ! Photon group properties
+group_L0 = 13.6
+group_L1 = 500.0
+/
+

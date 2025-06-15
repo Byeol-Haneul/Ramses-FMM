@@ -9,10 +9,22 @@ HYDRO = 1
 GRAV = 0
 MHD = 0
 RT = 0
+RTZ = 0
 INIT =
 UNITS =
 NENER = 0
 NMETAL = 0
+N_HYDROGEN_IONS = 0
+N_H2 = 0
+N_HELIUM_IONS = 0
+N_CARBON_IONS = 0
+N_NITROGEN_IONS = 0
+N_OXYGEN_IONS = 0
+N_NEON_IONS = 0
+N_MAGNESIUM_IONS = 0
+N_SILICON_IONS = 0
+N_SULFUR_IONS = 0
+N_IRON_IONS = 0
 NION = 0
 NPSCAL = 0
 NRTGRP = 0
@@ -27,6 +39,12 @@ EXEC = ramses
 #############################################################################
 # Compute NVAR
 NHYDRO = 5
+ifeq ($(RTZ),1)
+NION := $(N_CARBON_IONS)+$(N_NITROGEN_IONS)+$(N_OXYGEN_IONS)
+NION := $(NION)+$(N_NEON_IONS)+$(N_MAGNESIUM_IONS)+$(N_SILICON_IONS)
+NION := $(NION)+$(N_SULFUR_IONS)+$(N_IRON_IONS)
+NION := $(NION)+$(N_HYDROGEN_IONS)+$(N_H2)+$(N_HELIUM_IONS)
+endif
 NVAR := $(NHYDRO)+$(NENER)+$(NPSCAL)+$(NMETAL)+$(NION)
 #############################################################################
 GITBRANCH = $(shell git rev-parse --abbrev-ref HEAD)
@@ -34,7 +52,20 @@ GITHASH = $(shell git log --pretty=format:'%H' -n 1)
 GITREPO = $(shell git config --get remote.origin.url)
 BUILDDATE = $(shell date +"%D-%T")
 BUILDCOMMAND = ${MAKE} ${MAKEFLAGS}
-DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR)
+DEFINES = -DNDIM=$(NDIM) -DNVAR=$(NVAR) 
+ifeq ($(RTZ),1)
+DEFINES += -DN_HYDROGEN_IONS=$(N_HYDROGEN_IONS)
+DEFINES += -DN_HELIUM_IONS=$(N_HELIUM_IONS)
+DEFINES += -DN_CARBON_IONS=$(N_CARBON_IONS)
+DEFINES += -DN_NITROGEN_IONS=$(N_NITROGEN_IONS)
+DEFINES += -DN_OXYGEN_IONS=$(N_OXYGEN_IONS)
+DEFINES += -DN_NEON_IONS=$(N_NEON_IONS)
+DEFINES += -DN_MAGNESIUM_IONS=$(N_MAGNESIUM_IONS)
+DEFINES += -DN_SILICON_IONS=$(N_SILICON_IONS)
+DEFINES += -DN_SULFUR_IONS=$(N_SULFUR_IONS)
+DEFINES += -DN_IRON_IONS=$(N_IRON_IONS)
+DEFINES += -DN_H2=$(N_H2)
+endif
 ifneq ($(NION),0)
    DEFINES += -DNION=$(NION)
 endif
@@ -52,6 +83,9 @@ ifneq ($(NENER),0)
 endif
 ifeq ($(RT),1)
    DEFINES += -DRT -DNRTGRP=$(NRTGRP)
+endif
+ifeq ($(RTZ),1)
+   DEFINES += -DRTZ
 endif
 ifneq ($(NVECTOR),32)
    DEFINES += -DNVECTOR=$(NVECTOR)
@@ -158,8 +192,17 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 hash.o pm_parameters.o pm_commons.o hilbert.o domain_hilbert.o \
 	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
-	 coolrates_module.o neq_cooling_module.o init_neq_chem.o \
-	 mdl_commons.o mdl.o rt_spectra.o clfind_commons.o ramses_commons.o \
+	 coolrates_module.o \
+    collisional_ionization_module.o recombination_module.o \
+    cosmic_ray_ionization_module.o photoionization_UVB_module.o dust_recombination_module.o \
+    molecules_module.o charge_exchange_module.o rtz_module.o
+ifeq ($(RTZ),1)
+MODOBJ += rtz_coolrates_module.o rtz_cooling_module.o
+else
+MODOBJ += neq_cooling_module.o 
+endif
+MODOBJ += init_neq_chem.o \
+	 mdl_commons.o mdl.o cross_sections_module.o rt_spectra.o clfind_commons.o ramses_commons.o \
 	 call_back.o cache_commons.o cache.o gadgetreadfile.o \
 	 boundaries.o output_hydro.o output_poisson.o output_part.o output_rt.o output_amr.o movie.o \
 	 sort.o nbors_utils.o hydro_flag.o multigrid_fine_coarse.o rho_fine.o marshal.o upload.o init_xion.o
