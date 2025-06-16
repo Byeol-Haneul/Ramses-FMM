@@ -325,8 +325,8 @@ contains
 
       ! Loop through subgrids
       subgrid_idx = 1
-      do oct_idx = sim%m%head(ilevel), sim%m%tail(ilevel), 8 ! in 3x3x3 remove the 8
-         ckey_corner(1:ndim) = (sim%m%grid(oct_idx)%ckey(1:ndim) / 2) * 2 ! in 3x3x3 remove the 2's
+      do oct_idx = sim%m%head(ilevel), sim%m%tail(ilevel), ncentral**3
+         ckey_corner(1:ndim) = (sim%m%grid(oct_idx)%ckey(1:ndim) / ncentral) * ncentral
          call setup_subgrid(sim, ilevel, subgrid_idx, ckey_corner(1), ckey_corner(2), ckey_corner(3))
          ! increment subgrid index
          subgrid_idx = subgrid_idx + 1
