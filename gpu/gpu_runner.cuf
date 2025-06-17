@@ -279,7 +279,7 @@ contains
     dx = sim%r%boxlen/2**ilevel
     gamma = sim%r%gamma
     num_blocks = num_subgrids
-    threads_per_block = TPB
+    threads_per_block = 128
 
     call nvtxStartRange("GPU Integration", color=0)!green
     call hydro_integrator_kernel<<<num_blocks, threads_per_block>>>(grid_device, subgrid_indices_device, num_subgrids, subgrid_size, gamma, dt/dx)
