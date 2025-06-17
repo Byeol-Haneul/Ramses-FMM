@@ -49,7 +49,7 @@ tout=1.0
 gamma=1.4
 courant_factor=0.8
 slope_type=1
-riemann='hll'
+riemann='llf'
 /
 
 &REFINE_PARAMS
