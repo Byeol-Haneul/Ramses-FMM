@@ -177,21 +177,21 @@ contains
     integer(kind=8) :: num_subgrids
     integer :: err_code, threads_per_block, num_blocks
     integer :: threadsX_per_block, threadsY_per_block
-    integer, parameter :: subgrid_size = 8
+    integer, parameter :: subgrid_size = 2*ncentral+4
     integer :: my_integer
     real(dp) :: dt, dx, gamma
 
     ! get the number of octs in each direction and compute the number of subgrids
-    num_subgrids = sim%m%tail(ilevel)/8
+    num_subgrids = sim%m%tail(ilevel)/(ncentral**3)
 
     ! Allocate arrays if they're not allocated
     if (.not. (allocated(subgrid_indices_host))) then
 
        ! Allocate device and host memory for subgrid index
-       err_code = cudaMalloc(subgrid_indices_device_cptr,   (4**3)*num_subgrids*sizeof(my_integer))
-       err_code = cudaMallocHost(subgrid_indices_host_cptr, (4**3)*num_subgrids*sizeof(my_integer))
-       call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [4,4,4,num_subgrids])
-       call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [4,4,4,num_subgrids])
+       err_code = cudaMalloc(subgrid_indices_device_cptr,   ((ncentral+2)**3)*num_subgrids*sizeof(my_integer))
+       err_code = cudaMallocHost(subgrid_indices_host_cptr, ((ncentral+2)**3)*num_subgrids*sizeof(my_integer))
+       call c_f_pointer(subgrid_indices_device_cptr, subgrid_indices_device, [ncentral+2,ncentral+2,ncentral+2,num_subgrids])
+       call c_f_pointer(subgrid_indices_host_cptr, subgrid_indices_host, [ncentral+2,ncentral+2,ncentral+2,num_subgrids])
 
        ! Open cache
        call open_cache(sim,table=sim%m%grid_dict,data_size=storage_size(sim%m%grid(1))/32,&
@@ -325,8 +325,8 @@ contains
 
       ! Loop through subgrids
       subgrid_idx = 1
-      do oct_idx = sim%m%head(ilevel), sim%m%tail(ilevel), 8 ! in 3x3x3 remove the 8
-         ckey_corner(1:ndim) = (sim%m%grid(oct_idx)%ckey(1:ndim) / 2) * 2 ! in 3x3x3 remove the 2's
+      do oct_idx = sim%m%head(ilevel), sim%m%tail(ilevel), ncentral**3
+         ckey_corner(1:ndim) = (sim%m%grid(oct_idx)%ckey(1:ndim) / ncentral) * ncentral
          call setup_subgrid(sim, ilevel, subgrid_idx, ckey_corner(1), ckey_corner(2), ckey_corner(3))
          ! increment subgrid index
          subgrid_idx = subgrid_idx + 1
@@ -363,9 +363,9 @@ contains
 
      ! Loop over octs in the subgrid. The loop indices are the coordinates
      ! relative to i_subgrid_loc, j_subgrid_loc, k_subgrid_loc. This all assumes 1 MPI rank
-     do k_grid = k_subgrid_loc - 1, k_subgrid_loc + 2
-        do j_grid = j_subgrid_loc - 1, j_subgrid_loc + 2
-           do i_grid = i_subgrid_loc - 1, i_subgrid_loc + 2
+     do k_grid = k_subgrid_loc - 1, k_subgrid_loc + ncentral
+        do j_grid = j_subgrid_loc - 1, j_subgrid_loc + ncentral
+           do i_grid = i_subgrid_loc - 1, i_subgrid_loc + ncentral
 
               ! Use periodic boundaries for boundary octs.
               i_oct = check_boundaries(i_grid, sim%m%nx)
