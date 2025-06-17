@@ -578,7 +578,11 @@ contains
         if(ncache > 0) then
            countrecv = countrecv + 1
            nbuffer = 40*ncache
+#if NPRE==4
+           call MPI_IRECV(uold_recv_host(iskip), nbuffer, MPI_REAL,             icpu-1, tag, MPI_COMM_WORLD, reqrecv(countrecv), info)
+#else
            call MPI_IRECV(uold_recv_host(iskip), nbuffer, MPI_DOUBLE_PRECISION, icpu-1, tag, MPI_COMM_WORLD, reqrecv(countrecv), info)
+#endif
            iskip = iskip + nbuffer
         end if
      end do
@@ -591,7 +595,11 @@ contains
         if(ncache > 0) then
            countsend = countsend + 1
            nbuffer = 40*ncache
+#if NPRE==4
+           call MPI_ISEND(uold_send_host(iskip), nbuffer, MPI_REAL,             icpu-1, tag, MPI_COMM_WORLD, reqsend(countsend), info)
+#else
            call MPI_ISEND(uold_send_host(iskip), nbuffer, MPI_DOUBLE_PRECISION, icpu-1, tag, MPI_COMM_WORLD, reqsend(countsend), info)
+#endif
            iskip = iskip + nbuffer
         end if
      end do
