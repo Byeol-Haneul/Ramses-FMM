@@ -2,7 +2,7 @@ module gpu_utils
    use amr_parameters, only: dp, twotondim
    use cudafor
    implicit none
-   integer,parameter::ncentral=1 !> The number of octs in each direction of the kernel, excluding the ghost octs
+   integer,parameter::ncentral=2 !> The number of octs in each direction of the kernel, excluding the ghost octs
 
    !> @brief
    !> Contains a 2*ncentral+4 by 2*ncentral+4 by 2*ncentral+4 subgrid of primitive variables. Intended to act as a subgrid
