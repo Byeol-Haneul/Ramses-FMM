@@ -17,3 +17,8 @@ utils/py/*
 
 # Mac stuff
 .DS_Store
+
+# Ignore outputs for now
+output_[0-9][0-9][0-9][0-9][0-9]/
+*.log
+*.out

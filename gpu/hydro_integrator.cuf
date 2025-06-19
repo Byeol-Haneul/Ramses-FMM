@@ -1,24 +1,24 @@
 module hydro_integrator
   use amr_parameters, only: dp, twotondim
   use hydro_parameters, only: nvar
-  use gpu_utils, only: subgrid_8x8x8cell_conserved, subgrid_8x8x8cell_primitive
+  use gpu_utils, only: subgrid_6x6x6cell_conserved, subgrid_6x6x6cell_primitive, ncentral
   use oct_commons, only: oct
   use cudafor
   implicit none
 
   !> @brief
-  !> Contains a 5x5x5 subgrid of primitive variables. Intended to act as a subgrid
+  !> Contains a 2*ncentral+1 x 2*ncentral+1 x 2*ncentral+1 subgrid of primitive variables. Intended to act as a subgrid
   !> for interface states and fluxes. Note that it is zero indexed to make 1D to 3D
   !> indexing easier
-  type, public :: subgrid_5x4x4cell_primitive
-     real(kind=dp), dimension(0:4, 0:3, 0:3) :: density, velocity_x, velocity_y, velocity_z, pressure
-  end type subgrid_5x4x4cell_primitive
-  type, public :: subgrid_4x5x4cell_primitive
-     real(kind=dp), dimension(0:3, 0:4, 0:3) :: density, velocity_x, velocity_y, velocity_z, pressure
-  end type subgrid_4x5x4cell_primitive
-  type, public :: subgrid_4x4x5cell_primitive
-     real(kind=dp), dimension(0:3, 0:3, 0:4) :: density, velocity_x, velocity_y, velocity_z, pressure
-  end type subgrid_4x4x5cell_primitive
+  type, public :: subgrid_3x2x2cell_primitive
+     real(kind=dp), dimension(0:2*ncentral, 0:2*ncentral-1, 0:2*ncentral-1) :: density, velocity_x, velocity_y, velocity_z, pressure
+  end type subgrid_3x2x2cell_primitive
+  type, public :: subgrid_2x3x2cell_primitive
+     real(kind=dp), dimension(0:2*ncentral-1, 0:2*ncentral, 0:2*ncentral-1) :: density, velocity_x, velocity_y, velocity_z, pressure
+  end type subgrid_2x3x2cell_primitive
+  type, public :: subgrid_2x2x3cell_primitive
+     real(kind=dp), dimension(0:2*ncentral-1, 0:2*ncentral-1, 0:2*ncentral) :: density, velocity_x, velocity_y, velocity_z, pressure
+  end type subgrid_2x2x3cell_primitive
 
   !> @brief
   !> A simple type for holding the conserved variables of a cell
@@ -342,11 +342,11 @@ contains
   !>
   attributes(device) subroutine subgrid_conserved_2_primitive(oct_grid, subgrid_indices, block_idx, thread_idx, subgrid_size, gamma, local_subgrid)
     type(oct), device, dimension(*) :: oct_grid
-    integer, device, dimension(4,4,4,*) :: subgrid_indices
+    integer, device, dimension(ncentral+2,ncentral+2,ncentral+2,*) :: subgrid_indices
     integer, value :: block_idx, thread_idx
     integer, value :: subgrid_size
     real(kind=dp), value :: gamma
-    type(subgrid_8x8x8cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
+    type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
     type(conserved_t) :: conserved ! object to hold the conserved variables
     type(primitive_t) :: primitive ! object to hold the primitive variables
     integer :: work_idx   ! Loop index for unit of work
@@ -406,13 +406,13 @@ contains
   !> @param[in] right_interfaces_z : The right side interfaces normal to z
   !>
   attributes(device) subroutine trace_3d(local_subgrid, thread_idx, subgrid_size, gamma, dtdx,left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z)
-    type(subgrid_8x8x8cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
+    type(subgrid_6x6x6cell_primitive), intent(inout) :: local_subgrid ! The subgrid that this block is working on in shared memory
     integer, value :: thread_idx
     integer, value :: subgrid_size
     real(kind=dp), value :: gamma, dtdx
-    type(subgrid_5x4x4cell_primitive) :: left_interfaces_x, right_interfaces_x
-    type(subgrid_4x5x4cell_primitive) :: left_interfaces_y, right_interfaces_y
-    type(subgrid_4x4x5cell_primitive) :: left_interfaces_z, right_interfaces_z
+    type(subgrid_3x2x2cell_primitive) :: left_interfaces_x, right_interfaces_x
+    type(subgrid_2x3x2cell_primitive) :: left_interfaces_y, right_interfaces_y
+    type(subgrid_2x2x3cell_primitive) :: left_interfaces_z, right_interfaces_z
     type(primitive_t) :: cell ! The cell centered primitive variables and (eventually) predicted states
     type(primitive_t) :: slopes_x, slopes_y, slopes_z ! The limited slopes in the x, y, and z directions
     type(primitive_t) :: source_term ! The sources terms
@@ -492,7 +492,7 @@ contains
        ! Compute and write out the interface states
 
        ! The right state at i-1/2
-       if (i > 1 .and. (j > 1 .and. j < 6) .and. (k > 1 .and. k < 6)) then
+       if (i > 1 .and. (j > 1 .and. j < 2*ncentral+2) .and. (k > 1 .and. k < 2*ncentral+2)) then
           right_interfaces_x%   density(i-2, j-2, k-2) = cell%density    - slopes_x%density
           right_interfaces_x%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_x%velocity_x
           right_interfaces_x%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_x%velocity_y
@@ -501,7 +501,7 @@ contains
        end if
 
        ! The left state at i+1/2
-       if (i < 6 .and. (j > 1 .and. j < 6) .and. (k > 1 .and. k < 6)) then
+       if (i < 2*ncentral+2 .and. (j > 1 .and. j < 2*ncentral+2) .and. (k > 1 .and. k < 2*ncentral+2)) then
           left_interfaces_x%   density(i-1, j-2, k-2) = cell%density    + slopes_x%density
           left_interfaces_x%velocity_x(i-1, j-2, k-2) = cell%velocity_x + slopes_x%velocity_x
           left_interfaces_x%velocity_y(i-1, j-2, k-2) = cell%velocity_y + slopes_x%velocity_y
@@ -510,7 +510,7 @@ contains
        end if
 
        ! The right state at j-1/2
-       if ((i > 1 .and. i < 6) .and. j > 1 .and. (k > 1 .and. k < 6)) then
+       if ((i > 1 .and. i < 2*ncentral+2) .and. j > 1 .and. (k > 1 .and. k < 2*ncentral+2)) then
           right_interfaces_y%   density(i-2, j-2, k-2) = cell%density    - slopes_y%density
           right_interfaces_y%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_y%velocity_x
           right_interfaces_y%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_y%velocity_y
@@ -519,7 +519,7 @@ contains
        end if
 
        ! The left state at j+1/2
-       if ((i > 1 .and. i < 6) .and. j < 6 .and. (k > 1 .and. k < 6)) then
+       if ((i > 1 .and. i < 2*ncentral+2) .and. j < 2*ncentral+2 .and. (k > 1 .and. k < 2*ncentral+2)) then
           left_interfaces_y%   density(i-2, j-1, k-2) = cell%density    + slopes_y%density
           left_interfaces_y%velocity_x(i-2, j-1, k-2) = cell%velocity_x + slopes_y%velocity_x
           left_interfaces_y%velocity_y(i-2, j-1, k-2) = cell%velocity_y + slopes_y%velocity_y
@@ -528,7 +528,7 @@ contains
        end if
 
        ! The right state at k-1/2
-       if ((i > 1 .and. i < 6) .and. (j > 1 .and. j < 6) .and. k > 1) then
+       if ((i > 1 .and. i < 2*ncentral+2) .and. (j > 1 .and. j < 2*ncentral+2) .and. k > 1) then
           right_interfaces_z%   density(i-2, j-2, k-2) = cell%density    - slopes_z%density
           right_interfaces_z%velocity_x(i-2, j-2, k-2) = cell%velocity_x - slopes_z%velocity_x
           right_interfaces_z%velocity_y(i-2, j-2, k-2) = cell%velocity_y - slopes_z%velocity_y
@@ -537,7 +537,7 @@ contains
        end if
 
        ! The left state at k+1/2
-       if ((i > 1 .and. i < 6) .and. (j > 1 .and. j < 6) .and. k < 6) then
+       if ((i > 1 .and. i < 2*ncentral+2) .and. (j > 1 .and. j < 2*ncentral+2) .and. k < 2*ncentral+2) then
           left_interfaces_z%   density(i-2, j-2, k-1) = cell%density    + slopes_z%density
           left_interfaces_z%velocity_x(i-2, j-2, k-1) = cell%velocity_x + slopes_z%velocity_x
           left_interfaces_z%velocity_y(i-2, j-2, k-1) = cell%velocity_y + slopes_z%velocity_y
@@ -649,9 +649,9 @@ contains
   !> @param[in] thread_idx : The index of this thread
   !>
   attributes(device) subroutine riemann_driver(left_interfaces_x, right_interfaces_x,left_interfaces_y, right_interfaces_y, left_interfaces_z, right_interfaces_z, gamma, subgrid_size, thread_idx)
-    type(subgrid_5x4x4cell_primitive), intent(inout) :: left_interfaces_x, right_interfaces_x
-    type(subgrid_4x5x4cell_primitive), intent(inout) :: left_interfaces_y, right_interfaces_y
-    type(subgrid_4x4x5cell_primitive), intent(inout) :: left_interfaces_z, right_interfaces_z
+    type(subgrid_3x2x2cell_primitive), intent(inout) :: left_interfaces_x, right_interfaces_x
+    type(subgrid_2x3x2cell_primitive), intent(inout) :: left_interfaces_y, right_interfaces_y
+    type(subgrid_2x2x3cell_primitive), intent(inout) :: left_interfaces_z, right_interfaces_z
     real(kind=dp), value :: gamma
     integer, value :: subgrid_size, thread_idx
     integer :: work_idx, interface_array_size, i, j, k
@@ -751,10 +751,10 @@ contains
   ! =========================================================================
   attributes(device) subroutine  conservative_update(oct_grid, subgrid_indices, fluxes_x, fluxes_y, fluxes_z, block_idx, thread_idx, subgrid_size, dtdx)
     type(oct), device, dimension(*) :: oct_grid
-    integer, device, dimension(4,4,4,*) :: subgrid_indices
-    type(subgrid_5x4x4cell_primitive), intent(in) :: fluxes_x
-    type(subgrid_4x5x4cell_primitive), intent(in) :: fluxes_y
-    type(subgrid_4x4x5cell_primitive), intent(in) :: fluxes_z
+    integer, device, dimension(ncentral+2,ncentral+2,ncentral+2,*) :: subgrid_indices
+    type(subgrid_3x2x2cell_primitive), intent(in) :: fluxes_x
+    type(subgrid_2x3x2cell_primitive), intent(in) :: fluxes_y
+    type(subgrid_2x2x3cell_primitive), intent(in) :: fluxes_z
     integer, value :: block_idx, thread_idx, subgrid_size
     real(kind=dp), value :: dtdx
 
@@ -826,15 +826,15 @@ contains
   ! =========================================================================
   attributes(global) subroutine hydro_integrator_kernel(oct_grid, subgrid_indices, num_subgrids, subgrid_size, gamma, dtdx)
     type(oct), device, dimension(*) :: oct_grid
-    integer, device, dimension(4,4,4,*) :: subgrid_indices
+    integer, device, dimension(ncentral+2,ncentral+2,ncentral+2,*) :: subgrid_indices
     integer(kind=8), intent(in), value :: num_subgrids
     integer, intent(in), value :: subgrid_size
     real(kind=dp), intent(in), value :: gamma
     real(kind=dp), intent(in), value :: dtdx
-    type(subgrid_5x4x4cell_primitive), shared :: left_interfaces_x, right_interfaces_x
-    type(subgrid_4x5x4cell_primitive), shared :: left_interfaces_y, right_interfaces_y
-    type(subgrid_4x4x5cell_primitive), shared :: left_interfaces_z, right_interfaces_z
-    type(subgrid_8x8x8cell_primitive), shared :: local_subgrid ! The subgrid that this block is working on in shared memory
+    type(subgrid_3x2x2cell_primitive), shared :: left_interfaces_x, right_interfaces_x
+    type(subgrid_2x3x2cell_primitive), shared :: left_interfaces_y, right_interfaces_y
+    type(subgrid_2x2x3cell_primitive), shared :: left_interfaces_z, right_interfaces_z
+    type(subgrid_6x6x6cell_primitive), shared :: local_subgrid ! The subgrid that this block is working on in shared memory
     integer :: block_idx  ! The index of this block, corresponds to the subgrid to load
     integer :: thread_idx ! The index of this thread within the block
 
