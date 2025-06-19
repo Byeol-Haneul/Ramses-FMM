@@ -374,18 +374,18 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
      write(*,*)'CREATE_TREE: TREE PARTICLES OUTSIDE PEAKS',p%norphan_peak
   end if
 
-  !--------------------------------------------
-  ! Sort particles according to global clump id
-  !--------------------------------------------
+  !-------------------------------------------------------
+  ! Sort tree particles according to their global clump id
+  !-------------------------------------------------------
   do ipart=1,p%npart
      p%sortp(ipart)=ipart
      p%workp(ipart)=p%pid(ipart)
   end do
   call quick_sort_int_int(p%workp(1),p%sortp(1),p%npart)
 
-  !-------------------------------------
-  ! Reset tree position to peak position
-  !-------------------------------------
+  !-----------------------------------------------
+  ! Reset tree particle positions to peak position
+  !-----------------------------------------------
   if(reset_tree_pos)then
      c%min_tree_id=huge(0)
      call open_cache_clump(s,pack_size=storage_size(dummy_tree_clump)/32,&
@@ -409,29 +409,30 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
      call close_cache(s,m%grid_dict)
   endif
 
-  !------------------------------------
-  ! Merge trees that sit in same clumps
-  !------------------------------------
+  !----------------------------------------------------
+  ! Merge all tree particles that sit in the same clump
+  !----------------------------------------------------
   call open_cache_clump(s,pack_size=storage_size(dummy_tree_minid)/32,&
        pack=pack_fetch_minid,unpack=unpack_fetch_minid)
   do i=1+p%norphan_peak,p%npart
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
      call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
-     ! If tree particle merges, update merging age and merge-to-clump id
+     ! If tree particle merges, update merging age, merge-to clump id and merge-to clump mass
      if(p%idm(ipart).EQ.0.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
         p%idm(ipart)=c%min_tree_id(peak_nr)
         p%tm(ipart)=g%texp
+        p%mp(ipart)=c%clump_mass(peak_nr)
      endif
-     ! If live (not yet merged) tree particle sits in a halo-patch, update parent halo mass
-     if(p%idp(ipart).EQ.c%min_tree_id(peak_nr).AND.global_peak_id.EQ.c%ind_halo(peak_nr))then
-        p%mp(ipart)=max(dble(p%mp(ipart)),c%halo_mass(peak_nr))
+     ! If tree particle not yet merged, update its parent clump mass
+     if(p%idp(ipart).EQ.c%min_tree_id(peak_nr))then
+        p%mp(ipart)=c%clump_mass(peak_nr)
      endif
   end do
   call close_cache(s,m%grid_dict)
 
   !------------------------------------
-  ! Count trees in each halo
+  ! Count tree particles in each halo
   !------------------------------------
   if(count_tree)then
      ! Count trees in each peak
@@ -581,7 +582,7 @@ subroutine pack_fetch_minid(c,local_peak_id,msg_size,msg_array)
 
   msg%id = c%min_tree_id(local_peak_id)
   msg%ind = c%ind_halo(local_peak_id)
-  msg%mass = c%halo_mass(local_peak_id)
+  msg%mass = c%clump_mass(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -605,7 +606,7 @@ subroutine unpack_fetch_minid(c,local_peak_id,msg_size,msg_array)
 
   c%min_tree_id(local_peak_id) = msg%id
   c%ind_halo(local_peak_id) = msg%ind
-  c%halo_mass(local_peak_id) = msg%mass
+  c%clump_mass(local_peak_id) = msg%mass
 
 end subroutine unpack_fetch_minid
 !################################################################
