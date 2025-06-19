@@ -24,6 +24,8 @@ subroutine m_init_refine_adaptive(pst)
   real(kind=8)::mp_min
   integer::istep,ilevel
 
+  if(pst%s%r%filetype=='grafic')return
+
   if(pst%s%r%verbose)write(*,*)'Entering init_refine_adaptive'
 
   do istep=pst%s%r%levelmin,pst%s%r%nlevelmax-1
