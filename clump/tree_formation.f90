@@ -112,7 +112,7 @@ subroutine tree_formation(r,g,m,p,c)
      !-------------------------------------
      if(c%ind_halo(j).NE.j+c%npeak_cum(g%myid-1))ok=.false.
      if(c%relevance(j)<=c%relevance_threshold)ok=.false.
-     if(c%halo_mass(j)<=c%mass_threshold)ok=.false.
+     if(c%halo_mass(j)<=10d0*c%mass_threshold)ok=.false.
      if(c%npart(j)==0)ok=.false.
      if(c%ntree(j)>0)ok=.false.
      if(c%particle_mass(j)>0)then
@@ -281,7 +281,7 @@ subroutine tree_clump(s)
   s%c%relevance_threshold = s%r%relevance_threshold
   s%c%density_threshold = s%r%density_threshold
   s%c%saddle_threshold = s%r%saddle_threshold
-  s%c%mass_threshold = 10d0*s%r%mass_threshold
+  s%c%mass_threshold = s%r%mass_threshold
   s%c%purity_threshold = 0.98
   s%c%fraction_threshold = 2d0
   !----------------------------------------------------------------------
