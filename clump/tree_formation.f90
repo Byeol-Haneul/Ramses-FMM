@@ -282,7 +282,7 @@ subroutine tree_clump(s)
   s%c%density_threshold = s%r%density_threshold
   s%c%saddle_threshold = s%r%saddle_threshold
   s%c%mass_threshold = s%r%mass_threshold
-  s%c%purity_threshold = 0.98
+  s%c%purity_threshold = s%r%purity_threshold
   s%c%fraction_threshold = 2d0
   !----------------------------------------------------------------------
   ! Count and collect all cells above the prescribed density threshold.
