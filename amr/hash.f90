@@ -39,7 +39,7 @@ module hash
      integer(kind=8) :: size
      integer(kind=8) :: bitmask
      integer, allocatable, dimension(:) :: next_free
-  end type hash_table  
+  end type hash_table
 
   type hash_simple
      type(bucket_simple), allocatable, dimension(:)  :: data
@@ -54,13 +54,41 @@ module hash
        & 3145739,6291469,12582917,25165843,50331653,100663319,201326611, &
        & 402653189,805306457,1610612741/)
 
+  integer(kind=8) :: fnv32_basis = 2166136261_8
+  integer(kind=8) :: fnv32_prime = 16777619_8
+
 contains
+
+  ! =============================================================================
+  pure function fnv1a(key)
+    integer(kind=8), dimension(0:ndim), intent(in) :: key
+    integer(kind=8)                                :: fnv1a
+
+    integer :: i, j
+    integer(kind=8) :: k, hash
+
+    hash = fnv32_basis
+
+    do i = 0, ndim
+       do j = 0, 3
+          k = ibits(key(i), 8*j, 8)
+          hash = ieor(hash, k)
+          hash = hash * fnv32_prime
+          hash = ibits(hash, 0, 32)
+       end do
+    end do
+
+    fnv1a = hash
+
+  end function fnv1a
+  ! =============================================================================
 
   ! =============================================================================
   pure function hash_func(key)
     integer(kind=8), dimension(0:ndim), intent(in) :: key
     integer(kind=8)                                :: hash_func
     hash_func = dot_product(key(0:ndim), constants(0:ndim))
+!    hash_func = fnv1a(key)
   end function hash_func
   ! =============================================================================
 
