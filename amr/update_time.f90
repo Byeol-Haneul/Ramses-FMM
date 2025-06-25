@@ -189,7 +189,6 @@ end subroutine m_update_time
 recursive subroutine r_broadcast_aexp(pst,input,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
-  use hash, only: hash_stats
   use mdl_parameters
   implicit none
   type(pst_t)::pst
@@ -208,10 +207,32 @@ recursive subroutine r_broadcast_aexp(pst,input,input_size)
      pst%s%g%aexp=input%aexp
      pst%s%g%aexp_old = input%aexp_old
      pst%s%g%hexp=input%hexp
-     if(pst%s%g%t>pst%s%r%tout(pst%s%r%noutput))call hash_stats(pst%s%m%grid_dict)
   endif
 
 end subroutine r_broadcast_aexp
+!##############################################################
+!##############################################################
+!##############################################################
+!##############################################################
+recursive subroutine r_hash_stats(pst)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use hash, only: hash_stats
+  use mdl_parameters
+  implicit none
+  type(pst_t)::pst
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_HASH_STATS,pst%iUpper+1)
+     call r_hash_stats(pst%pLower)
+     call mdl_get_reply(pst%s%mdl,rID,0)
+  else
+     call hash_stats(pst%s%m%grid_dict)
+  endif
+
+end subroutine r_hash_stats
 !##############################################################
 !##############################################################
 !##############################################################

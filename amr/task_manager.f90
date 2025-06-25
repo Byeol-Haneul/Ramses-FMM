@@ -103,7 +103,7 @@ function worker_init(mdl) result(pst)
   use input_part_ramses_module, only: r_input_part_ramses
   use input_part_gadget_module, only: r_input_part_gadget
   use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min, r_check_part_emission
-  use update_time_module, only: r_broadcast_aexp
+  use update_time_module, only: r_broadcast_aexp, r_hash_stats
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,r_noct_used_max
   use init_refine_restart_module, only: r_init_refine_restart
   use init_refine_ramses_module, only: r_init_refine_ramses
@@ -181,6 +181,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_CLEAN_STOP,             pst,C_FUNLOC(r_clean_stop),0,0,"clean_stop")
   call mdl_add_service(pst%s%mdl,MDL_SET_ADD,                pst,C_FUNLOC(r_set_add),storage_size(dummy)/32,0, "set_add")
   call mdl_add_service(pst%s%mdl,MDL_BCAST_PARAMS,           pst,C_FUNLOC(r_broadcast_params),storage_size(pst%s%r)/32,0,"broadcast_params")
+  call mdl_add_service(pst%s%mdl,MDL_HASH_STATS,             pst,C_FUNLOC(r_hash_stats),0,0,"hash_stats")
   call mdl_add_service(pst%s%mdl,MDL_BCAST_GLOBAL,           pst,C_FUNLOC(r_broadcast_global),storage_size(pst%s%g)/32,0,"broadcast_global")
   call mdl_add_service(pst%s%mdl,MDL_INIT_AMR,               pst,C_FUNLOC(r_init_amr),0,0,"init_amr")
   call mdl_add_service(pst%s%mdl,MDL_INIT_TIME,              pst,C_FUNLOC(r_init_time),0,0,"init_time")

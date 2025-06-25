@@ -13,7 +13,7 @@ subroutine adaptive_loop(pst)
   use init_refine_restart_module, only: m_init_refine_restart
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
-  use update_time_module, only: getmem, writemem
+  use update_time_module, only: getmem, writemem, r_hash_stats
 #ifdef _CUDA
   use gpu_manager, only: r_set_grid_device
 #endif
@@ -118,9 +118,11 @@ subroutine adaptive_loop(pst)
   end do
 
   call m_output_timer(pst,.false.,'dummy')
-  
+
+  call r_hash_stats(pst)
+
   return
 
   end associate
-  
+
 end subroutine adaptive_loop

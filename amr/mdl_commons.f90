@@ -4,6 +4,7 @@ module mdl_parameters
   enum,bind(C)
      enumerator::MDL_CLEAN_STOP
      enumerator::MDL_SET_ADD
+     enumerator::MDL_HASH_STATS
      enumerator::MDL_BCAST_PARAMS
      enumerator::MDL_BCAST_GLOBAL
      enumerator::MDL_INIT_AMR
