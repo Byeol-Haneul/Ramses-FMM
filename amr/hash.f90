@@ -297,6 +297,7 @@ contains
 
     else
        write(*,*)"hash chaining space full "
+       call hash_stats(htable)
        stop
     end if
   end subroutine hash_setp

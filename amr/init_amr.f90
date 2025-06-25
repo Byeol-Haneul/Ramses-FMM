@@ -134,11 +134,11 @@ subroutine init_amr(mdl,r,g,m)
 
   ! Allocate hash table for AMR data
   if(r%verbose.and.g%myid==1)write(*,*)'Initialize empty hash'
-  call init_empty_hash(m%grid_dict,r%ngridmax+r%ncachemax,'simple')
+  call init_empty_hash(m%grid_dict,2*(r%ngridmax+r%ncachemax),'simple')
 
   ! Allocate another smaller hash table for multigrid data
   if(r%poisson)then
-     call init_empty_hash(m%mg_dict,(r%ngridmax+r%ncachemax)/7,'simple')
+     call init_empty_hash(m%mg_dict,2*(r%ngridmax+r%ncachemax)/7,'simple')
   endif
 
   ! Set initial cpu boundaries
