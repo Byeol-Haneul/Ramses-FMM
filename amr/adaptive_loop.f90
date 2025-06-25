@@ -119,7 +119,7 @@ subroutine adaptive_loop(pst)
 
   call m_output_timer(pst,.false.,'dummy')
 
-  call r_hash_stats(pst)
+!  call r_hash_stats(pst)
 
   return
 
