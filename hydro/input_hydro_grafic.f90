@@ -168,6 +168,9 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         ! In most cases, this is zero (you can change that if necessary)
         if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
         init_array=0d0
+        if(r%metal.and.ivar==r%imetal)then
+           init_array=r%z_ave*0.02
+        endif
      endif
      
      ! For cosmo runs, rescale initial conditions to code units
@@ -258,24 +261,6 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
 #ifdef HYDRO
            ! Compute entropy from pressure and density
            m%grid(igrid)%uold(ind,r%ientropy)=m%grid(igrid)%uold(ind,5)/m%grid(igrid)%uold(ind,1)**r%gamma
-#endif
-        end do
-        ! End loop over cells
-     end do
-     ! End loop over grids
-  end if
-
-  !-----------------------------------------
-  ! If required, compute initial metallicity
-  !-----------------------------------------
-  if(r%metal)then
-     ! Loop over grids
-     do igrid=m%head(ilevel),m%tail(ilevel)
-        ! Loop over cells
-        do ind=1,twotondim
-#ifdef HYDRO
-           ! Compute metallicity using z_ave times solar unit
-           m%grid(igrid)%uold(ind,r%imetal)=r%z_ave*0.02
 #endif
         end do
         ! End loop over cells
