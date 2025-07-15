@@ -63,7 +63,7 @@ $ cd bin
 $ make clean
 $ make NDIM=3 HYDRO=0 GRAV=1 UNITS=COSMO
 $ cd ..
-$ utils/script/load_cosmo_ic.sh
+$ utils/scripts/load_cosmo_ic.sh
 $ bin/ramses3d namelist/dmo.nml
 ```
 
