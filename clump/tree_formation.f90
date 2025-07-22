@@ -418,15 +418,15 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
      call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
-     ! If tree particle merges, update merging age, merge-to clump id and merge-to clump mass
+     ! If tree particle merges, update merging age, merge-to clump id and tree particle mass
      if(p%idm(ipart).EQ.0.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
         p%idm(ipart)=c%min_tree_id(peak_nr)
         p%tm(ipart)=g%texp
-        p%mp(ipart)=c%clump_mass(peak_nr)
+        p%mp(ipart)=max(p%mp(ipart),c%clump_mass(peak_nr))
      endif
-     ! If tree particle not yet merged, update its parent clump mass
+     ! If tree particle not yet merged, update its maximum parent clump mass
      if(p%idp(ipart).EQ.c%min_tree_id(peak_nr))then
-        p%mp(ipart)=c%clump_mass(peak_nr)
+        p%mp(ipart)=max(p%mp(ipart),c%clump_mass(peak_nr))
      endif
   end do
   call close_cache(s,m%grid_dict)

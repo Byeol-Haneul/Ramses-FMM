@@ -505,20 +505,20 @@ subroutine collect_peak(s)
         enddo
      enddo
   enddo
-  
+
   !----------------------------------------
   ! Compute hash key of densest neighbor
   !----------------------------------------
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain,pack_size=storage_size(dummy_int4_small_realdp)/32,&
        pack=pack_fetch_saddle, unpack=unpack_fetch_saddle)
-  
+
   c%npeak=0
   do itest=1,c%ntest
      ilevel=c%level(itest)
      igrid=c%grid(itest)
      ind=c%cell(itest)
-     
+
      ! Set pointers to null
      icelln=0
      nullify(gridn)
@@ -535,7 +535,7 @@ subroutine collect_peak(s)
 #endif
      ! Collect all neighboring cell from hash table
      do j=1,nSnei
-        
+
         ! Compute neighboring cell coordinates
         xnei(1:ndim)=xcen(1:ndim)+xSnei(1:ndim,j)
         ! Periodic boundary conditions
@@ -549,14 +549,14 @@ subroutine collect_peak(s)
         hash_nbor(0)=ilevel+1
         hash_nbor(1:ndim)=ckey_nbor(1:ndim)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
-        
+
         ! If missing, get neighboring cell at ilevel-1
         if(.not.associated(gridn))then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)/2.0)
            hash_nbor(0)=ilevel
            hash_nbor(1:ndim)=ckey_nbor(1:ndim)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.false.,fetch_cache=.true.)
-           
+
            ! If refined, get neighboring cell at ilevel+1
         else if (gridn%refined(icelln))then
            ckey_nbor(1:ndim)=int(xnei(1:ndim)*2.0)
@@ -571,46 +571,48 @@ subroutine collect_peak(s)
         grid_nbor(j)%p => gridn
         icell_nbor(j) = icelln
         level_nbor(j) = hash_nbor(0)
-        
+
      end do
-     
+
      density_max=1.0001*m%grid(igrid)%rho(ind)
      ok_peak=.true.
-     
+
      do j=1,nSnei
         gridn => grid_nbor(j)%p ! Gather neighboring grid
         icelln = icell_nbor(j)
-        dens_nbor = gridn%rho(icelln)
-        if(dens_nbor > density_max)then
-           ok_peak=.false.
-           density_max=dens_nbor
-           ! Store hash key of densest neighbor
-           c%hash(itest,0)=level_nbor(j)
-           c%hash(itest,1)=2*gridn%ckey(1)+MOD((icelln-1)  ,2)
+        if(associated(gridn))then
+           dens_nbor = gridn%rho(icelln)
+           if(dens_nbor > density_max)then
+              ok_peak=.false.
+              density_max=dens_nbor
+              ! Store hash key of densest neighbor
+              c%hash(itest,0)=level_nbor(j)
+              c%hash(itest,1)=2*gridn%ckey(1)+MOD((icelln-1)  ,2)
 #if NDIM>1
-           c%hash(itest,2)=2*gridn%ckey(2)+MOD((icelln-1)/2,2)
+              c%hash(itest,2)=2*gridn%ckey(2)+MOD((icelln-1)/2,2)
 #endif
 #if NDIM>2
-           c%hash(itest,3)=2*gridn%ckey(3)+MOD((icelln-1)/4,2)
+              c%hash(itest,3)=2*gridn%ckey(3)+MOD((icelln-1)/4,2)
 #endif
+           endif
         endif
      end do
-     
+
      if(ok_peak)then
         c%npeak=c%npeak+1
         c%hash(itest,0:ndim)=0
      endif
-     
+
      ! Unlock neighboring grids
      do j=1,nSnei
         gridn => grid_nbor(j)%p
         call unlock_cache(s,gridn)
      end do
-     
+
   end do
 
   call close_cache(s,m%grid_dict)
-  
+
   !------------------------------------------------
   ! Compute total number of peaks across all CPUs
   ! Determine offset for global peak IDs

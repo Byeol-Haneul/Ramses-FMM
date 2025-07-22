@@ -762,7 +762,7 @@ def rd_hydro(nout,**kwargs):
 
     return hydro
 
-def mk_im(x,y,dx,var):
+def mk_image(x,y,dx,var):
     """
     Function to make image from cell data
     """
@@ -774,11 +774,13 @@ def mk_im(x,y,dx,var):
     dxmin = np.min(dx)
     dxmax = np.max(dx)
 
-    nx = int((xmax-xmin)/dxmin)
-    ny = int((ymax-ymin)/dxmin)
+    nx = int((xmax-xmin)/dxmax)*int(dxmax/dxmin)
+    ny = int((ymax-ymin)/dxmax)*int(dxmax/dxmin)
 
     nlev = int(np.log(dxmax/dxmin)/np.log(2))+1
 
+    print("Making image of size: ",nx,ny)
+    
     image = np.zeros((nx,ny))
     
     for lev in range(0,nlev):
@@ -792,9 +794,11 @@ def mk_im(x,y,dx,var):
         if (filt.sum() < 1):
             continue
 
+        up_samp = int(2**(nlev-lev-1))
+
         # Setup the bins
-        nxloc = int((xmax-xmin)/dxloc)
-        nyloc = int((ymax-ymin)/dxloc)
+        nxloc = int(nx/up_samp)
+        nyloc = int(ny/up_samp)
 
         bins = (nxloc,nyloc)
 
@@ -805,7 +809,6 @@ def mk_im(x,y,dx,var):
                                  range=((xmin,xmax),(ymin,ymax)),weights=var[filt])
 
         if lev < nlev:
-            up_samp = int(2**(nlev-lev-1))
             H = H.repeat(up_samp, axis=1).repeat(up_samp, axis=0)
 
         image += H

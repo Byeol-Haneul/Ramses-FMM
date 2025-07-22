@@ -682,23 +682,25 @@ subroutine collect_saddle(s)
         gridn => grid_nbor(j)%p ! Gather neighboring grid
         icelln = icell_nbor(j)
 
-        peak_nbor = gridn%flag1(icelln)
+        if(associated(gridn))then
+           peak_nbor = gridn%flag1(icelln)
 #ifdef GRAV
-        dens_nbor = gridn%rho(icelln)
+           dens_nbor = gridn%rho(icelln)
 #endif
-        ok = peak_cen/=0
-        ok = ok .and. peak_nbor/=0
-        ok = ok .and. peak_cen/=peak_nbor
+           ok = peak_cen/=0
+           ok = ok .and. peak_nbor/=0
+           ok = ok .and. peak_cen/=peak_nbor
 
-        ! If saddle density is larger, set new densest saddle point
-        if(ok)then
-           dens_ave = 0.5*(dens_cen+dens_nbor)
-           global_peak_id = peak_cen
-           call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.false.)
-           if(dens_ave>c%saddle_dens(ipeak))then
-              c%saddle_dens(ipeak)=dens_ave
-              c%saddle_nbor(ipeak)=peak_nbor
-           end if
+           ! If saddle density is larger, set new densest saddle point
+           if(ok)then
+              dens_ave = 0.5*(dens_cen+dens_nbor)
+              global_peak_id = peak_cen
+              call get_peak(s,global_peak_id,ipeak,flush_cache=.true.,fetch_cache=.false.)
+              if(dens_ave>c%saddle_dens(ipeak))then
+                 c%saddle_dens(ipeak)=dens_ave
+                 c%saddle_nbor(ipeak)=peak_nbor
+              end if
+           endif
         endif
      end do
 
