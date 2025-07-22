@@ -762,34 +762,50 @@ def rd_hydro(nout,**kwargs):
 
     return hydro
 
-def make_image_2D(positions,levels,features,lmin,lmax,boxsize=1.0):
+def mk_im(x,y,dx,var):
     """
     Function to make image from cell data
     """
-    base_grid = 2**lmin
+    xmin = np.min(x-dx/2)
+    xmax = np.max(x+dx/2)
+    ymin = np.min(y-dx/2)
+    ymax = np.max(y+dx/2)
 
-    image = np.zeros((int((2**(lmax-lmin))*base_grid),int((2**(lmax-lmin))*base_grid)))
+    dxmin = np.min(dx)
+    dxmax = np.max(dx)
+
+    nx = int((xmax-xmin)/dxmin)
+    ny = int((ymax-ymin)/dxmin)
+
+    nlev = int(np.log(dxmax/dxmin)/np.log(2))+1
+
+    image = np.zeros((nx,ny))
     
-    for i,l in enumerate(range(lmin,lmax+1)):
+    for lev in range(0,nlev):
+
+        dxloc = dxmax/2**lev
 
         # Filter cells on the level
-        filt = levels == l
+        filt = dx == dxloc
 
         # Skip levels without cells
         if (filt.sum() < 1):
             continue
 
         # Setup the bins
-        bins = np.linspace(0,boxsize,int((2**(l-lmin))*base_grid) + 1)
+        nxloc = int((xmax-xmin)/dxloc)
+        nyloc = int((ymax-ymin)/dxloc)
+
+        bins = (nxloc,nyloc)
 
         # Create the image
-        H, _, _ = np.histogram2d(positions[0,:][filt],
-                                 positions[1,:][filt],
+        H, _, _ = np.histogram2d(x[filt],
+                                 y[filt],
                                  bins=bins,
-                                 range=((0.0,boxsize),(0.0,boxsize)),weights=features[filt])
+                                 range=((xmin,xmax),(ymin,ymax)),weights=var[filt])
 
-        if l < lmax:
-            up_samp = int(2**(lmax-l))
+        if lev < nlev:
+            up_samp = int(2**(nlev-lev-1))
             H = H.repeat(up_samp, axis=1).repeat(up_samp, axis=0)
 
         image += H
