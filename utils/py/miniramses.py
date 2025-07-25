@@ -813,7 +813,83 @@ def mk_image(x,y,dx,var):
 
         image += H
 
-    return image
+    return image.T
+
+def rotate_view(c,**kwargs):
+    """This function rotate the input cells into a view where the z-axis is aligned with the
+    angular momentum vector and the x- and y-axis are in the rotation plane.
+
+    Args:
+        c: an object of type cell.
+
+    Optional args:
+
+        center: a numpy array containing the coordinates of the center
+
+        velocity: a numpy array containing the velocity of the center
+
+    Returns:
+        x, y, z: the 3-coordinates of the input cells after the rotation.
+
+    Example:
+        import miniramses as ram
+        c = ram.rd_cell(12,center=[0.5,0.5,0.5],radius=0.1)
+        x, y, z = ram.rotate_view(c,center=[0.5,0.5,0.5],velocity=[0,0,0])
+
+    Authors: Carlos Sarkis (Princeton University, July 2025)
+    """
+
+    center = kwargs.get("center")
+    velocity = kwargs.get("velocity")
+
+    if(center is None):
+        xc=np.mean(c.x[0])
+        yc=np.mean(c.x[1])
+        zc=np.mean(c.x[2])
+    else:
+        xc=center[0]
+        yc=center[1]
+        zc=center[2]
+
+    if(velocity is None):
+        uc=np.mean(c.u[1])
+        vc=np.mean(c.u[2])
+        wc=np.mean(c.u[3])
+    else:
+        uc=velocity[0]
+        vc=velocity[1]
+        wc=velocity[2]
+
+    x0=c.x[0]-xc
+    y0=c.x[1]-yc
+    z0=c.x[2]-zc
+    u0=c.u[1]-uc
+    v0=c.u[2]-vc
+    w0=c.u[3]-wc
+
+    m = c.u[0] * c.dx**3  # mass of each cell
+    Lx = np.sum(m * (y0 * w0 - z0 * v0))
+    Ly = np.sum(m * (z0 * u0 - x0 * w0))
+    Lz = np.sum(m * (x0 * v0 - y0 * u0))
+    L = np.array([Lx, Ly, Lz])
+    L_hat = L / np.linalg.norm(L)  # normalized direction vector
+
+    # New basis: u3 = disk normal, u1 and u2 = in-plane axes
+    u3 = L_hat
+    u1 = np.cross(u3, [0, 0, 1])
+    if np.linalg.norm(u1) == 0:
+        u1 = np.cross(u3, [0, 1, 0])
+    u1 /= np.linalg.norm(u1)
+    u2 = np.cross(u3, u1)
+
+    # Rotation matrix: columns = new basis vectors
+    R = np.vstack([u1, u2, u3]).T  # shape (3, 3)
+
+    # Apply rotation to all positions
+    coords = np.vstack([x0, y0, z0])        # shape: (3, N)
+    rotated = R.T @ coords                  # rotate into new frame
+
+    return rotated[0], rotated[1], rotated[2]
 
 class Cell:
     def __init__(self,nndim,nnvar):
