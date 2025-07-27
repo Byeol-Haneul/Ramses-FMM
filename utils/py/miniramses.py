@@ -537,44 +537,48 @@ def rd_part(nout,**kwargs):
     return p
 
 class LightconeReader:
-    import healpy as hp
-    
+
     @staticmethod
-    def rd_metadata(file_path, verbose=False):
+    def rd_metadata(path, verbose=False):
         """
         Read the lightcone shell metadata from the .txt file
         """
-        verbose and print("Reading metadata from", file_path)
-        with open(file_path, 'r') as file:
+        if verbose:
+            print(f"Reading metadata from {path}")
+        with open(path, 'r') as file:
             npart = int(file.readline().strip())
             aexp_old = float(file.readline().strip())
             aexp = float(file.readline().strip())
 
-        verbose and print(f"Found {npart} particles in {file_path}")
+        if verbose:
+            print(f"Found {npart} particles")
 
         return npart, aexp_old, aexp
 
     @staticmethod
-    def rd_data(file_path, nproperties=3, verbose=False):
+    def rd_data(path, nproperties=3, verbose=False):
         """
         Read the lightcone shell from the output directory.
         nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
         """
         # Construct metadata file path by adding .txt extension
-        verbose and print("Reading lightcone data from", file_path)
-        txt_file_path = file_path + ".txt"
-        npart, _, _ = LightconeReader.rd_metadata(txt_file_path, verbose=verbose)
+        if verbose:
+            print(f"Reading lightcone data from {path}")
+        txt_path = path + ".txt"
+        npart, _, _ = LightconeReader.rd_metadata(txt_path, verbose=verbose)
 
-        return np.fromfile(file_path, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
+        return np.fromfile(path, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
 
     @staticmethod
-    def rd_positions_as_healpix(file_path, nside, verbose=False):
+    def rd_positions_as_healpix(path, nside, verbose=False):
         """
         Read the lightcone shell from the output directory and convert it to a Healpix map.
         nside: Healpix resolution parameter
         nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
         """
-        x, y, z = LightconeReader.rd_data(file_path, nproperties=3, verbose=verbose)
+        import healpy as hp
+        
+        x, y, z = LightconeReader.rd_data(path, nproperties=3, verbose=verbose)
         # Convert Cartesian coordinates to spherical coordinates
         # x is the depth (cone axis), y and z are the transverse coordinates
         r = np.sqrt(x**2 + y**2 + z**2)
@@ -595,89 +599,81 @@ class LightconeReader:
         return healpix_map
 
     @staticmethod
-    def get_nouts(path, verbose=False):
+    def get_part_shells(path, verbose=False):
         """
-        Get all cone shell numbers from directories in the given path.
-        Looks for directories named 'cone_xxxxx' and returns the list of xxxxx as integers.
-        Also calculates directory sizes and prints statistics.
+        Get all particle shell information from the lightcone directory.
+        Looks for files named 'part_xxxxx' and returns tuples of (binary_file, txt_file, size).
         
         Args:
-            path: Path to search for cone directories
+            path: Path to the lightcone directory
             verbose: Print debug information
             
         Returns:
-            Tuple of (shell_numbers, dir_sizes):
-            - shell_numbers: List of shell numbers (integers) sorted in descending order (because largest nout corresponds to shell closest to observer)
-            - dir_sizes: Array of directory sizes in bytes corresponding to shell_numbers
+            List of tuples (binary_file, txt_file, size) sorted by shell number in descending order
+            (largest nout corresponds to shell closest to observer)
         """
-        shell_numbers = []
-        dir_sizes = []
+        shells = []
         
         # Check if path exists
         if not os.path.exists(path):
             if verbose:
                 print(f"Path {path} does not exist")
-            return shell_numbers, np.array([])
+            return shells
             
-        # Pattern to match cone_xxxxx directories
-        pattern = re.compile(r'^cone_(\d{5})$')
-        
-        def get_dir_size(directory):
-            """Calculate total size of directory in bytes"""
-            total_size = 0
-            try:
-                for dirpath, dirnames, filenames in os.walk(directory):
-                    for filename in filenames:
-                        filepath = os.path.join(dirpath, filename)
-                        try:
-                            total_size += os.path.getsize(filepath)
-                        except (OSError, IOError):
-                            pass  # Skip files that can't be accessed
-            except (OSError, IOError):
-                pass  # Skip directories that can't be accessed
-            return total_size
+        # Pattern to match part_xxxxx files
+        pattern = re.compile(r'^part_(\d{5})$')
         
         try:
             # Get all items in the directory
             items = os.listdir(path)
+            shell_numbers = []
             
             for item in items:
                 item_path = os.path.join(path, item)
-                # Check if it's a directory and matches the pattern
-                if os.path.isdir(item_path):
+                # Check if it's a file and matches the pattern
+                if os.path.isfile(item_path):
                     match = pattern.match(item)
                     if match:
                         shell_number = int(match.group(1))
-                        dir_size = get_dir_size(item_path)
                         shell_numbers.append(shell_number)
-                        dir_sizes.append(dir_size)
+                        
+            # Sort shell numbers in descending order
+            shell_numbers.sort(reverse=True)
+            
+            # Build the shell information
+            for shell_number in shell_numbers:
+                shell_str = str(shell_number).zfill(5)
+                binary_file = os.path.join(path, f'part_{shell_str}')
+                txt_file = os.path.join(path, f'part_{shell_str}.txt')
+                
+                # Check if both files exist
+                if os.path.exists(binary_file) and os.path.exists(txt_file):
+                    try:
+                        size = os.path.getsize(binary_file)
+                        shells.append((binary_file, txt_file, size))
                         if verbose:
-                            print(f"Found shell: {shell_number}, size: {dir_size/1024**2:.2f} MB")
-                            
+                            print(f"Found shell {shell_number}: {size/1024**2:.2f} MB")
+                    except OSError:
+                        if verbose:
+                            print(f"Warning: Could not get size for shell {shell_number}")
+                        continue
+                elif verbose:
+                    print(f"Warning: Missing files for shell {shell_number}")
+                    
         except OSError as e:
             if verbose:
                 print(f"Error reading directory {path}: {e}")
-            return shell_numbers, np.array([])
+            return shells
         
-        # Sort by shell numbers in descending order and keep sizes aligned
-        if shell_numbers:
-            sorted_indices = np.argsort(shell_numbers)[::-1]
-            shell_numbers = [shell_numbers[i] for i in sorted_indices]
-            dir_sizes = np.array([dir_sizes[i] for i in sorted_indices])
-            
-            # Print statistics
-            total_size = np.sum(dir_sizes)
-            avg_size = np.mean(dir_sizes)
-            print(f"Found {len(shell_numbers)} shells")
-            print(f"Total size: {total_size/1024**3:.2f} GB ({total_size/1024**2:.2f} MB)")
+        # Print statistics only in verbose mode
+        if verbose and shells:
+            total_size = sum(size for _, _, size in shells)
+            avg_size = total_size / len(shells)
+            print(f"Found {len(shells)} particle shells")
+            print(f"Total size: {total_size/1024**3:.2f} GB")
             print(f"Average size per shell: {avg_size/1024**2:.2f} MB")
             
-            if verbose:
-                print(f"Shell numbers: {shell_numbers}")
-        else:
-            dir_sizes = np.array([])
-            
-        return shell_numbers, dir_sizes
+        return shells
 
 class Level:
     def __init__(self,nndim):

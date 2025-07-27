@@ -22,10 +22,10 @@ contains
     if (r%verbose) write(*,*) 'Entering output_lightcone, nstep_coarse: ', g%nstep_coarse
 
     call title(g%nstep_coarse, nchar)
-    filedir='cone_'//TRIM(nchar)//'/'
+    filedir='lightcone/'
     call mdl_mkdir(mdl, filedir)
 
-    filename = TRIM(filedir)//'cone_'//TRIM(nchar)
+    filename = TRIM(filedir)//'part_'//TRIM(nchar)
     input_array = transfer(filename, input_array)
     call r_output_lightcone(pst, input_array, flen/4, dummy, 0)
 
