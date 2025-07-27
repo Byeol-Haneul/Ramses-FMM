@@ -4,7 +4,6 @@ from matplotlib import pyplot as plt
 from scipy.io import FortranFile
 from astropy.io import ascii
 import os
-import healpy as hp
 import re
 
 import time
@@ -538,6 +537,8 @@ def rd_part(nout,**kwargs):
     return p
 
 class LightconeReader:
+    import healpy as hp
+    
     @staticmethod
     def rd_metadata(file_path, verbose=False):
         """
