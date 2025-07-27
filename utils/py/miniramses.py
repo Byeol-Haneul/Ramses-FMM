@@ -4,6 +4,8 @@ from matplotlib import pyplot as plt
 from scipy.io import FortranFile
 from astropy.io import ascii
 import os
+import healpy as hp
+import re
 
 import time
 
@@ -535,31 +537,146 @@ def rd_part(nout,**kwargs):
 
     return p
 
-def rd_cone_metadata(nout, path, verbose=False):
-    """
-    Read the lightcone shell metadata from the .txt file
-    """
-    nout_padded = str(nout).zfill(5)
-    txtfile = f"{path}/cone_{nout_padded}/cone_{nout_padded}.txt"
-    with open(txtfile, 'r') as file:
-        npart = int(file.readline().strip())
-        aexp_old = float(file.readline().strip())
-        aexp = float(file.readline().strip())
+class LightconeReader:
+    @staticmethod
+    def rd_metadata(file_path, verbose=False):
+        """
+        Read the lightcone shell metadata from the .txt file
+        """
+        verbose and print("Reading metadata from", file_path)
+        with open(file_path, 'r') as file:
+            npart = int(file.readline().strip())
+            aexp_old = float(file.readline().strip())
+            aexp = float(file.readline().strip())
 
-    verbose and print(f"Found {npart} particles in {txtfile}")
+        verbose and print(f"Found {npart} particles in {file_path}")
 
-    return npart, aexp_old, aexp
+        return npart, aexp_old, aexp
 
-def rd_cone(nout, path, nproperties=3, verbose=False):
-    """
-    Read the lightcone shell from the output directory.
-    nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
-    """
-    nout_padded = str(nout).zfill(5)
-    binfile = f"{path}/cone_{nout_padded}/cone_{nout_padded}"
-    npart, _, _ = rd_cone_metadata(nout, path, verbose=verbose)
+    @staticmethod
+    def rd_data(file_path, nproperties=3, verbose=False):
+        """
+        Read the lightcone shell from the output directory.
+        nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
+        """
+        # Construct metadata file path by adding .txt extension
+        verbose and print("Reading lightcone data from", file_path)
+        txt_file_path = file_path + ".txt"
+        npart, _, _ = LightconeReader.rd_metadata(txt_file_path, verbose=verbose)
 
-    return np.fromfile(binfile, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
+        return np.fromfile(file_path, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
+
+    @staticmethod
+    def rd_positions_as_healpix(file_path, nside, verbose=False):
+        """
+        Read the lightcone shell from the output directory and convert it to a Healpix map.
+        nside: Healpix resolution parameter
+        nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
+        """
+        x, y, z = LightconeReader.rd_data(file_path, nproperties=3, verbose=verbose)
+        # Convert Cartesian coordinates to spherical coordinates
+        # x is the depth (cone axis), y and z are the transverse coordinates
+        r = np.sqrt(x**2 + y**2 + z**2)
+        theta = np.pi/2 - np.arcsin(z / r)  # polar angle from x-axis
+        phi = np.arcsin(y / r)    # azimuthal angle in y-z plane
+        
+        # Create HEALPix map
+        npix = hp.nside2npix(nside)
+        healpix_map = np.zeros(npix)
+        
+        # Convert spherical coordinates to HEALPix pixel indices
+        pix_indices = hp.ang2pix(nside, theta, phi)
+        
+        # Count particles in each pixel
+        unique_pix, counts = np.unique(pix_indices, return_counts=True)
+        healpix_map[unique_pix] = counts
+
+        return healpix_map
+
+    @staticmethod
+    def get_nouts(path, verbose=False):
+        """
+        Get all cone shell numbers from directories in the given path.
+        Looks for directories named 'cone_xxxxx' and returns the list of xxxxx as integers.
+        Also calculates directory sizes and prints statistics.
+        
+        Args:
+            path: Path to search for cone directories
+            verbose: Print debug information
+            
+        Returns:
+            Tuple of (shell_numbers, dir_sizes):
+            - shell_numbers: List of shell numbers (integers) sorted in descending order (because largest nout corresponds to shell closest to observer)
+            - dir_sizes: Array of directory sizes in bytes corresponding to shell_numbers
+        """
+        shell_numbers = []
+        dir_sizes = []
+        
+        # Check if path exists
+        if not os.path.exists(path):
+            if verbose:
+                print(f"Path {path} does not exist")
+            return shell_numbers, np.array([])
+            
+        # Pattern to match cone_xxxxx directories
+        pattern = re.compile(r'^cone_(\d{5})$')
+        
+        def get_dir_size(directory):
+            """Calculate total size of directory in bytes"""
+            total_size = 0
+            try:
+                for dirpath, dirnames, filenames in os.walk(directory):
+                    for filename in filenames:
+                        filepath = os.path.join(dirpath, filename)
+                        try:
+                            total_size += os.path.getsize(filepath)
+                        except (OSError, IOError):
+                            pass  # Skip files that can't be accessed
+            except (OSError, IOError):
+                pass  # Skip directories that can't be accessed
+            return total_size
+        
+        try:
+            # Get all items in the directory
+            items = os.listdir(path)
+            
+            for item in items:
+                item_path = os.path.join(path, item)
+                # Check if it's a directory and matches the pattern
+                if os.path.isdir(item_path):
+                    match = pattern.match(item)
+                    if match:
+                        shell_number = int(match.group(1))
+                        dir_size = get_dir_size(item_path)
+                        shell_numbers.append(shell_number)
+                        dir_sizes.append(dir_size)
+                        if verbose:
+                            print(f"Found shell: {shell_number}, size: {dir_size/1024**2:.2f} MB")
+                            
+        except OSError as e:
+            if verbose:
+                print(f"Error reading directory {path}: {e}")
+            return shell_numbers, np.array([])
+        
+        # Sort by shell numbers in descending order and keep sizes aligned
+        if shell_numbers:
+            sorted_indices = np.argsort(shell_numbers)[::-1]
+            shell_numbers = [shell_numbers[i] for i in sorted_indices]
+            dir_sizes = np.array([dir_sizes[i] for i in sorted_indices])
+            
+            # Print statistics
+            total_size = np.sum(dir_sizes)
+            avg_size = np.mean(dir_sizes)
+            print(f"Found {len(shell_numbers)} shells")
+            print(f"Total size: {total_size/1024**3:.2f} GB ({total_size/1024**2:.2f} MB)")
+            print(f"Average size per shell: {avg_size/1024**2:.2f} MB")
+            
+            if verbose:
+                print(f"Shell numbers: {shell_numbers}")
+        else:
+            dir_sizes = np.array([])
+            
+        return shell_numbers, dir_sizes
 
 class Level:
     def __init__(self,nndim):
