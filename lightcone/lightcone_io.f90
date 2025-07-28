@@ -66,6 +66,14 @@ contains
           write(unit=ilun, pos=offset+1) buffer%vp(1:buffer%ncurrent, idim) ! pos is 1-based
 #endif
        end do
+
+       ! Write masses (property 7)
+       offset = calculate_write_offset(nbefore, ntotal, 7, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+       call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%mp(1:buffer%ncurrent), buffer%ncurrent, MPI_REAL, status, ierr)
+#else
+       write(unit=ilun, pos=offset+1) buffer%mp(1:buffer%ncurrent) ! pos is 1-based
+#endif
     end if
   end subroutine write_buffer
 
@@ -104,7 +112,7 @@ contains
     ! Calculate the offset at which to write the buffer
     ! nbefore is the number of particles in the preceding processes
     ! ntotal is the total number of particles across all processes
-    ! p is the property number (x=1, y=2, z=3, vx=4, vy=5, vz=6, redshift=7)
+    ! p is the property number (x=1, y=2, z=3, vx=4, vy=5, vz=6, mass=7)
     ! b is the buffer number (i.e if current process has already written 2 buffers, b=3)
     
     ! The final format is:

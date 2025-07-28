@@ -542,6 +542,9 @@ class LightconeReader:
     def rd_metadata(path, verbose=False):
         """
         Read the lightcone shell metadata from the .txt file
+        
+        Returns:
+            Dictionary with keys: 'npart', 'aexp_old', 'aexp'
         """
         if verbose:
             print(f"Reading metadata from {path}")
@@ -553,28 +556,27 @@ class LightconeReader:
         if verbose:
             print(f"Found {npart} particles")
 
-        return npart, aexp_old, aexp
+        return {'npart': npart, 'aexp_old': aexp_old, 'aexp': aexp}
 
     @staticmethod
-    def rd_data(path, nproperties=3, verbose=False):
+    def rd_data(path, nproperties=7, verbose=False):
         """
         Read the lightcone shell from the output directory.
-        nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
+        nproperties: number of properties per particle (default 7 for x,y,z,vx,vy,vz,mass)
         """
         # Construct metadata file path by adding .txt extension
         if verbose:
             print(f"Reading lightcone data from {path}")
         txt_path = path + ".txt"
-        npart, _, _ = LightconeReader.rd_metadata(txt_path, verbose=verbose)
+        metadata = LightconeReader.rd_metadata(txt_path, verbose=verbose)
 
-        return np.fromfile(path, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
+        return np.fromfile(path, dtype=np.float32, count=metadata['npart']*nproperties).reshape(nproperties, metadata['npart'])
 
     @staticmethod
     def rd_positions_as_healpix(path, nside, verbose=False):
         """
         Read the lightcone shell from the output directory and convert it to a Healpix map.
         nside: Healpix resolution parameter
-        nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
         """
         import healpy as hp
         
@@ -599,81 +601,106 @@ class LightconeReader:
         return healpix_map
 
     @staticmethod
-    def get_part_shells(path, verbose=False):
+    def get_shells(path, verbose=False):
         """
-        Get all particle shell information from the lightcone directory.
-        Looks for files named 'part_xxxxx' and returns tuples of (binary_file, txt_file, size).
+        Get all lightcone shell information from the lightcone directory.
+        Looks for files named 'part_xxxxx' and 'tree_xxxxx' and returns shell information.
         
         Args:
             path: Path to the lightcone directory
             verbose: Print debug information
             
         Returns:
-            List of tuples (binary_file, txt_file, size) sorted by shell number in descending order
+            List of dictionaries with shell information, sorted by nstep in descending order
             (largest nout corresponds to shell closest to observer)
+            
+            Each dictionary contains:
+            - 'nstep': shell number (int)
+            - 'part_file': path to part binary file (str, or None if doesn't exist)
+            - 'part_metadata': path to part .txt file (str, or None if doesn't exist)
+            - 'part_size': size of part binary file in bytes (int, or None if doesn't exist)
+            - 'tree_file': path to tree binary file (str, or None if doesn't exist)
+            - 'tree_metadata': path to tree .txt file (str, or None if doesn't exist)
+            - 'tree_size': size of tree binary file in bytes (int, or None if doesn't exist)
         """
-        shells = []
-        
         # Check if path exists
         if not os.path.exists(path):
             if verbose:
                 print(f"Path {path} does not exist")
-            return shells
-            
-        # Pattern to match part_xxxxx files
-        pattern = re.compile(r'^part_(\d{5})$')
+            return []
+        
+        # Define patterns for each file type
+        patterns = {
+            'part_file': re.compile(r'^part_(\d{5})$'),
+            'part_metadata': re.compile(r'^part_(\d{5})\.txt$'),
+            'tree_file': re.compile(r'^tree_(\d{5})$'),
+            'tree_metadata': re.compile(r'^tree_(\d{5})\.txt$')
+        }
+        
+        shells = {}  # Dictionary to collect shell information by nstep
         
         try:
-            # Get all items in the directory
-            items = os.listdir(path)
-            shell_numbers = []
-            
-            for item in items:
-                item_path = os.path.join(path, item)
-                # Check if it's a file and matches the pattern
-                if os.path.isfile(item_path):
-                    match = pattern.match(item)
-                    if match:
-                        shell_number = int(match.group(1))
-                        shell_numbers.append(shell_number)
-                        
-            # Sort shell numbers in descending order
-            shell_numbers.sort(reverse=True)
-            
-            # Build the shell information
-            for shell_number in shell_numbers:
-                shell_str = str(shell_number).zfill(5)
-                binary_file = os.path.join(path, f'part_{shell_str}')
-                txt_file = os.path.join(path, f'part_{shell_str}.txt')
+            # Loop over all files in the directory
+            for filename in os.listdir(path):
+                filepath = os.path.join(path, filename)
+                if not os.path.isfile(filepath):
+                    continue
                 
-                # Check if both files exist
-                if os.path.exists(binary_file) and os.path.exists(txt_file):
-                    try:
-                        size = os.path.getsize(binary_file)
-                        shells.append((binary_file, txt_file, size))
-                        if verbose:
-                            print(f"Found shell {shell_number}: {size/1024**2:.2f} MB")
-                    except OSError:
-                        if verbose:
-                            print(f"Warning: Could not get size for shell {shell_number}")
-                        continue
-                elif verbose:
-                    print(f"Warning: Missing files for shell {shell_number}")
-                    
+                # Check each pattern
+                for file_type, pattern in patterns.items():
+                    match = pattern.match(filename)
+                    if match:
+                        nstep = int(match.group(1))
+                        
+                        # Initialize shell entry if needed
+                        if nstep not in shells:
+                            shells[nstep] = {'nstep': nstep}
+                        
+                        # Store file path
+                        shells[nstep][file_type] = filepath
+                        
+                        # Store file size for binary files
+                        if file_type in ['part_file', 'tree_file']:
+                            try:
+                                shells[nstep][file_type.replace('_file', '_size')] = os.path.getsize(filepath)
+                                if verbose:
+                                    print(f"Found {file_type} shell {nstep}: {os.path.getsize(filepath)/1024**2:.2f} MB")
+                            except OSError:
+                                if verbose:
+                                    print(f"Warning: Could not get size for {file_type} shell {nstep}")
+                        break
+                        
         except OSError as e:
             if verbose:
                 print(f"Error reading directory {path}: {e}")
-            return shells
+            return []
+        
+        # Convert to list and sort by nstep in descending order
+        shell_list = list(shells.values())
+        shell_list.sort(key=lambda x: x['nstep'], reverse=True)
+        
+        # Fill in None values for missing fields
+        for shell in shell_list:
+            for field in ['part_file', 'part_metadata', 'part_size', 'tree_file', 'tree_metadata', 'tree_size']:
+                if field not in shell:
+                    shell[field] = None
         
         # Print statistics only in verbose mode
-        if verbose and shells:
-            total_size = sum(size for _, _, size in shells)
-            avg_size = total_size / len(shells)
-            print(f"Found {len(shells)} particle shells")
-            print(f"Total size: {total_size/1024**3:.2f} GB")
-            print(f"Average size per shell: {avg_size/1024**2:.2f} MB")
+        if verbose and shell_list:
+            part_shells = [s for s in shell_list if s['part_file'] is not None]
+            tree_shells = [s for s in shell_list if s['tree_file'] is not None]
             
-        return shells
+            print(f"Found {len(shell_list)} total shells ({len(part_shells)} part, {len(tree_shells)} tree)")
+            
+            if part_shells:
+                total_part_size = sum(s['part_size'] for s in part_shells if s['part_size'] is not None)
+                print(f"Part files total size: {total_part_size/1024**3:.2f} GB")
+            
+            if tree_shells:
+                total_tree_size = sum(s['tree_size'] for s in tree_shells if s['tree_size'] is not None)
+                print(f"Tree files total size: {total_tree_size/1024**3:.2f} GB")
+        
+        return shell_list
 
 class Level:
     def __init__(self,nndim):
