@@ -815,6 +815,65 @@ def mk_image(x,y,dx,var):
 
     return image.T
 
+def mk_cube(x,y,z,dx,var):
+    """
+    Function to make Cartesian cube from cell data
+    """
+    xmin = np.min(x-dx/2)
+    xmax = np.max(x+dx/2)
+    ymin = np.min(y-dx/2)
+    ymax = np.max(y+dx/2)
+    zmin = np.min(z-dx/2)
+    zmax = np.max(z+dx/2)
+
+    dxmin = np.min(dx)
+    dxmax = np.max(dx)
+
+    nx = int((xmax-xmin)/dxmax)*int(dxmax/dxmin)
+    ny = int((ymax-ymin)/dxmax)*int(dxmax/dxmin)
+    nz = int((zmax-zmin)/dxmax)*int(dxmax/dxmin)
+
+    nlev = int(np.log(dxmax/dxmin)/np.log(2))+1
+
+    print("Making cube of size: ",nx,ny,nz)
+    
+    cube = np.zeros((nx,ny,nz))
+    
+    for lev in range(0,nlev):
+
+        dxloc = dxmax/2**lev
+
+        # Filter cells on the level
+        filt = dx == dxloc
+
+        # Skip levels without cells
+        if (filt.sum() < 1):
+            continue
+
+        up_samp = int(2**(nlev-lev-1))
+
+        # Setup the bins
+        nxloc = int(nx/up_samp)
+        nyloc = int(ny/up_samp)
+        nzloc = int(nz/up_samp)
+
+        bins = (nxloc,nyloc,nzloc)
+
+        points = np.column_stack((x[filt],y[filt],z[filt]))
+
+        # Create the image
+        C, _ = np.histogramdd(points,
+                              bins=bins,
+                              range=((xmin,xmax),(ymin,ymax),(zmin,zmax)),
+                              weights=var[filt])
+
+        if lev < nlev:
+            C = C.repeat(up_samp, axis=2).repeat(up_samp, axis=1).repeat(up_samp, axis=0)
+
+        cube += C
+
+    return cube.T
+
 def rotate_view(c,**kwargs):
     """This function rotate the input cells into a view where the z-axis is aligned with the
     angular momentum vector and the x- and y-axis are in the rotation plane.
