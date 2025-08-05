@@ -28,11 +28,15 @@ subroutine m_init_refine_adaptive(pst)
 
   if(pst%s%r%verbose)write(*,*)'Entering init_refine_adaptive'
 
-  do istep=pst%s%r%levelmin,pst%s%r%nlevelmax-1
+  do istep=pst%s%r%levelmin,pst%s%r%nlevelmax
 
      if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%initfile(istep+1).eq.' ')exit
 
-     write(*,*)'Building initial fine grid at level ',istep+1
+     if(istep<pst%s%r%nlevelmax)then
+        write(*,*)'Building initial fine grid at level ',istep+1
+     else
+        write(*,*)'Finalizing fine grid at level ',istep
+     endif
 
      ! Refine all level cells from levelmin
      call m_refine_fine(pst,pst%s%r%levelmin)

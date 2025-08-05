@@ -247,7 +247,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
         ! Get parent cell using a read-write cache
         call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.true.)
         if (.not.associated(gridp)) then
-          write(*,*) 'FATAL: no parent'
+          write(*,*) 'FATAL: no parent',hash_key
           stop
         endif
         ok   = gridp%flag1(icell)==0 .and. &
