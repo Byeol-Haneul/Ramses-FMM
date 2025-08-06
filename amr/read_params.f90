@@ -145,7 +145,11 @@ subroutine m_read_params(pst)
 
   ! Initial conditions parameters from grafic
   real(kind=8)::aexp_ini=10.
+  real(kind=8)::boxlen_ini=1.0
   real(kind=8)::omega_b=0.045
+  real(kind=8)::omega_m=1.0
+  real(kind=8)::omega_l=0.0
+  real(kind=8)::h0=1.0
 
   ! Initial condition regions parameters
   integer::nregion=0
@@ -502,8 +506,8 @@ subroutine m_read_params(pst)
        & ,imovout,imov,tendmov,aendmov,proj_axis,movie_vars,movie_vars_txt
   ! Initial conditions parameters
   namelist/init_params/filetype,initfile,multiple,nregion,region_type &
-       & ,x_center,y_center,z_center,aexp_ini,omega_b &
-       & ,length_x,length_y,length_z,exp_region &
+       & ,x_center,y_center,z_center,aexp_ini,omega_b,omega_m,omega_l,h0 &
+       & ,length_x,length_y,length_z,exp_region,boxlen_ini &
        & ,ic_scale_m &
 #if NENER>0
        & ,prad_region &
@@ -1284,6 +1288,10 @@ subroutine m_read_params(pst)
   s%r%multiple=multiple
   s%r%aexp_ini=aexp_ini
   s%r%omega_b=omega_b
+  s%r%boxlen_ini=boxlen_ini
+  s%r%omega_m=omega_m
+  s%r%omega_l=omega_l
+  s%r%h0=h0
   s%r%ic_scale_m=ic_scale_m
 
   s%r%nregion=nregion

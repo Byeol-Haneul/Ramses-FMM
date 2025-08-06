@@ -136,7 +136,11 @@ module amr_commons
      real(kind=8)::units_np=1.0      ! [#photon/cm^3]
 
      ! Cosmological parameters (others are read from file)
+     real(kind=8)::boxlen_ini     ! Box size in h-1 Mpc
      real(kind=8)::omega_b=0.0D0  ! Omega Baryon
+     real(kind=8)::omega_m=1.0D0  ! Omega Matter
+     real(kind=8)::omega_l=0.0D0  ! Omega Lambda
+     real(kind=8)::h0=1.0D0       ! Hubble constant in km/s/Mpc
      real(kind=8)::aexp_ini=10.   ! Starting expansion factor
 
      ! Refinement parameters for each level

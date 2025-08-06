@@ -237,7 +237,7 @@ subroutine init_cosmo(mdl,r,g)
   end if
 
   SELECT CASE (r%filetype)
-  case ('grafic', 'grafic_zoom', 'ascii')
+  CASE ('grafic', 'grafic_zoom')
 
      ! Reading initial conditions parameters only
      g%aexp=2.0
@@ -309,10 +309,26 @@ subroutine init_cosmo(mdl,r,g)
            call mdl_abort(mdl)
         endif
      end if
-     
+
      ! Compute box length in the initial conditions in units of h-1 Mpc
      g%boxlen_ini=2**r%levelmin*g%dxini(r%levelmin)*(g%h0/100.)
-     
+
+  CASE ('ascii')
+
+     g%aexp=r%aexp_ini
+     g%aexp_ini=g%aexp
+     g%boxlen_ini=r%boxlen_ini
+     g%h0=r%h0
+     g%omega_m=r%omega_m
+     g%omega_l=r%omega_l
+     if(r%hydro)then
+        if(r%omega_b>0)then
+           g%omega_b=r%omega_b
+        else
+           g%omega_b=0.045
+        endif
+     endif
+
   CASE ('gadget')
 
      ! Reading gadget file header only
@@ -366,6 +382,8 @@ subroutine init_cosmo(mdl,r,g)
      write(*,'(" box size=",1pe10.3," h-1 Mpc")')g%boxlen_ini
   end if
   g%omega_k=1.d0-g%omega_l-g%omega_m
+
+  if(r%filetype=='ascii')return
 
   ! Compute linear scaling factor between aexp and astart(ilevel)
   do ilevel=r%levelmin,g%nlevelmax_part
