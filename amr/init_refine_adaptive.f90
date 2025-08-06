@@ -35,7 +35,7 @@ subroutine m_init_refine_adaptive(pst)
      if(istep<pst%s%r%nlevelmax)then
         write(*,*)'Building initial fine grid at level ',istep+1
      else
-        write(*,*)'Finalizing fine grid at level ',istep
+        write(*,*)'Finalizing initial grid at level ',istep
      endif
 
      ! Refine all level cells from levelmin

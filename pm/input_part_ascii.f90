@@ -35,8 +35,18 @@ subroutine m_input_part_ascii(pst)
            open(10,file=filename,form='formatted')
            npart_tot=0
            do
+#if NDIM==1
+              read(10,*,end=101)xx1,vv1,mm1
+              if(ABS(xx1)<s%r%boxlen/2.0d0)then
+#endif
+#if NDIM==2
+              read(10,*,end=101)xx1,xx2,vv1,vv2,mm1
+              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0)then
+#endif
+#if NDIM==3
               read(10,*,end=101)xx1,xx2,xx3,vv1,vv2,vv3,mm1
               if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+#endif
                  npart_tot=npart_tot+1
               endif
            end do
@@ -74,8 +84,18 @@ subroutine m_input_part_ascii(pst)
            open(10,file=filename,form='formatted')
            nstar_tot=0
            do
+#if NDIM==1
+              read(10,*,end=102)xx1,vv1,mm1,zz1,tt1
+              if(ABS(xx1)<s%r%boxlen/2.0d0)then
+#endif
+#if NDIM==2
+              read(10,*,end=102)xx1,xx2,vv1,vv2,mm1,zz1,tt1
+              if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0)then
+#endif
+#if NDIM==3
               read(10,*,end=102)xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
               if(ABS(xx1)<s%r%boxlen/2.0d0.AND.ABS(xx2)<s%r%boxlen/2.0d0.AND.ABS(xx3)<s%r%boxlen/2.0d0)then
+#endif
                  nstar_tot=nstar_tot+1
                  s%g%mass_star_tot=s%g%mass_star_tot+mm1
               endif
@@ -228,8 +248,18 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
   indglob=0
   jpart_loc=0
   do 
+#if NDIM==1
+     read(10,*,end=100)xx1,vv1,mm1
+     if(ABS(xx1)<r%boxlen/2.0d0)then
+#eneif
+#if NDIM==2
+     read(10,*,end=100)xx1,xx2,vv1,vv2,mm1
+     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0)then
+#eneif
+#if NDIM==3
      read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1
      if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0.AND.ABS(xx3)<r%boxlen/2.0d0)then
+#eneif
         jpart=jpart+1
         indglob=indglob+1
         if(jpart >= start_ind(g%myid) .and. jpart < start_ind(g%myid+1))then
@@ -239,12 +269,18 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
               write(*,*)'npartmax should be greater than',start_ind(2)
               call mdl_abort(mdl)
            endif
+#if NDIM>0
            p%xp(jpart_loc,1)=xx1+r%boxlen/2.0
-           p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
-           p%xp(jpart_loc,3)=xx3+r%boxlen/2.0
            p%vp(jpart_loc,1)=vv1
+#endif
+#if NDIM>1
+           p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
            p%vp(jpart_loc,2)=vv2
+#endif
+#if NDIM>2
+           p%xp(jpart_loc,3)=xx3+r%boxlen/2.0
            p%vp(jpart_loc,3)=vv3
+#endif
            p%mp(jpart_loc  )=mm1*r%ic_scale_m
            p%idp(jpart_loc )=indglob
            p%levelp(jpart_loc)=r%levelmin
@@ -345,8 +381,18 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
   indglob=0
   jpart_loc=0
   do
+#if NDIM==1
+     read(10,*,end=100)xx1,vv1,mm1,zz1,tt1
+     if(ABS(xx1)<r%boxlen/2.0d0)then
+#endif
+#if NDIM==2
+     read(10,*,end=100)xx1,xx2,vv1,vv2,mm1,zz1,tt1
+     if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0)then
+#endif
+#if NDIM==3
      read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1,zz1,tt1
      if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0.AND.ABS(xx3)<r%boxlen/2.0d0)then
+#endif
         jpart=jpart+1
         indglob=indglob+1
         if(jpart >= start_ind(g%myid) .and. jpart < start_ind(g%myid+1))then
@@ -356,12 +402,18 @@ subroutine input_star_ascii(mdl,r,g,p,npart_tot)
               write(*,*)'nstarmax should be greater than',start_ind(2)
               call mdl_abort(mdl)
            endif
+#if NDIM>0
            p%xp(jpart_loc,1)=xx1+r%boxlen/2.0
-           p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
-           p%xp(jpart_loc,3)=xx3+r%boxlen/2.0
            p%vp(jpart_loc,1)=vv1
+#endif
+#if NDIM>1
+           p%xp(jpart_loc,2)=xx2+r%boxlen/2.0
            p%vp(jpart_loc,2)=vv2
+#endif
+#if NDIM>2
+           p%xp(jpart_loc,3)=xx3+r%boxlen/2.0
            p%vp(jpart_loc,3)=vv3
+#endif
            p%mp(jpart_loc  )=mm1
            p%zp(jpart_loc  )=zz1
            p%tp(jpart_loc  )=tt1
