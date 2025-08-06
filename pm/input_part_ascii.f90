@@ -251,15 +251,15 @@ subroutine input_part_ascii(mdl,r,g,p,npart_tot)
 #if NDIM==1
      read(10,*,end=100)xx1,vv1,mm1
      if(ABS(xx1)<r%boxlen/2.0d0)then
-#eneif
+#endif
 #if NDIM==2
      read(10,*,end=100)xx1,xx2,vv1,vv2,mm1
      if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0)then
-#eneif
+#endif
 #if NDIM==3
      read(10,*,end=100)xx1,xx2,xx3,vv1,vv2,vv3,mm1
      if(ABS(xx1)<r%boxlen/2.0d0.AND.ABS(xx2)<r%boxlen/2.0d0.AND.ABS(xx3)<r%boxlen/2.0d0)then
-#eneif
+#endif
         jpart=jpart+1
         indglob=indglob+1
         if(jpart >= start_ind(g%myid) .and. jpart < start_ind(g%myid+1))then
