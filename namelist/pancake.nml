@@ -1,0 +1,50 @@
+This namelist performs a pancake collapse simulation with dark matter only.
+You need a ascii file for the initial conditions. You can execute the script
+python3 ./utils/py/pancake.py
+This will generate a file named ic_part in the parent folder.
+To compile the code with MPI (recommended), type in folder /bin the command line:
+make NDIM=1 MPI=1 UNITS=COSMO GRAV=1 HYDRO=0
+Then execute the code in the parent folder using:
+mpirun -np 2 bin/ramses1d namelist/pancake.nml
+
+&RUN_PARAMS
+cosmo=.true.
+pic=.true.
+poisson=.true.
+hydro=.false.
+nrestart=0
+nsubcycle=1,1,2
+ncontrol=1
+verbose=.false.
+/
+
+&OUTPUT_PARAMS
+delta_aout=0.1
+aend=1.0
+/
+
+&INIT_PARAMS
+filetype='ascii'
+initfile(1)='.'
+H0=72.
+omega_m=0.3
+omega_l=1.0
+boxlen_ini=25.
+aexp_ini=0.01
+/
+
+&AMR_PARAMS
+levelmin=10
+levelmax=10
+ngridmax=20000
+npartmax=40000
+nexpand=1,
+/
+
+&POISSON_PARAMS
+epsilon=1.d-4
+/
+
+&REFINE_PARAMS
+m_refine=10*8.,
+/

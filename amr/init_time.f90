@@ -327,6 +327,7 @@ subroutine init_cosmo(mdl,r,g)
         else
            g%omega_b=0.045
         endif
+        r%ic_scale_m=1.0-g%omega_b/g%omega_m
      endif
 
   CASE ('gadget')

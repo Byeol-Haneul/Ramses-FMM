@@ -38,6 +38,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #define ABC 6
 #define CURRENTSHEET 7
 #define RTZEQM 8
+#define PANCAKE 9
 
   integer::i
 #if INIT==COEUR
@@ -59,6 +60,9 @@ subroutine condinit(r,g,x,q,dx,nn)
 #elif INIT==CURRENTSHEET
   real(kind=8)::pi,xc,yc,beta,v0
 #elif INIT==RTZEQM
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
+#elif INIT==PANCAKE
+  real(kind=8)::pi,del_ini
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 #else
   ! Call built-in initial condition generator
@@ -245,7 +249,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #endif
 
 #if INIT==CURRENTSHEET
-  pi=acos(-1.0d0)
+  pi = acos(-1.0d0)
   beta = 0.1
   v0 = 0.1
   do i = 1,nn
@@ -272,6 +276,20 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,3) = 0.0 ! Vy
      q(i,4) = 0.0 ! Vz
      q(i,5) = 1.d4 / scale_T2 ! Temperature is 10^4 K
+  end do
+#endif
+
+#if INIT==PANCAKE
+  pi = acos(-1.0d0)
+  del_ini = 0.1
+  ! get cbs units
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  do i = 1,nn
+     q(i,1) = g%omega_b/g%omega_m/(1+del_ini*COS(2.0d0*pi*x(i,1)))
+     q(i,2) = del_ini*g%vfact(1)*SIN(2.0d0*pi*x(i,1))/(2.0d0*pi)
+     q(i,3) = 0.0 ! Vy
+     q(i,4) = 0.0 ! Vz
+     q(i,5) = 100./scale_T2 ! Temperature is 10^2 K
   end do
 #endif
 
