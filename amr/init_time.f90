@@ -328,6 +328,7 @@ subroutine init_cosmo(mdl,r,g)
            g%omega_b=0.045
         endif
         r%ic_scale_m=1.0-g%omega_b/g%omega_m
+        r%mass_sph=g%omega_b/g%omega_m*0.5d0**(ndim*r%levelmin)
      endif
 
   CASE ('gadget')
