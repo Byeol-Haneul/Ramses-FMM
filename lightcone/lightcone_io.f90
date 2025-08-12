@@ -1,6 +1,6 @@
 module lightcone_io_module
   use ramses_commons, only: pst_t
-  use amr_parameters, only: flen
+  use amr_parameters, only: flen, i8b
 #ifndef WITHOUTMPI
   use mpi
 #endif
@@ -47,9 +47,17 @@ contains
 
     if (.not. buffer_is_empty(buffer)) then
 
-       ! Write positions (properties 1, 2, 3)
+       ! Write particle IDs (property 1)
+       offset = calculate_write_offset(nbefore, ntotal, 1, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+       call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%idp(1:buffer%ncurrent), buffer%ncurrent, MPI_INTEGER4, status, ierr)
+#else
+       write(unit=ilun, pos=offset+1) buffer%idp(1:buffer%ncurrent) ! pos is 1-based
+#endif
+
+       ! Write positions (properties 2, 3, 4)
        do idim = 1, 3
-          offset = calculate_write_offset(nbefore, ntotal, idim, nthbuffer, buffer%nstride)
+          offset = calculate_write_offset(nbefore, ntotal, idim+1, nthbuffer, buffer%nstride)
 #ifndef WITHOUTMPI
           call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%xp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
@@ -57,9 +65,9 @@ contains
 #endif
        end do
       
-       ! Write velocities (properties 4, 5, 6)
+       ! Write velocities (properties 5, 6, 7)
        do idim = 1, 3
-          offset = calculate_write_offset(nbefore, ntotal, idim+3, nthbuffer, buffer%nstride)
+          offset = calculate_write_offset(nbefore, ntotal, idim+4, nthbuffer, buffer%nstride)
 #ifndef WITHOUTMPI
           call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%vp(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
@@ -67,8 +75,8 @@ contains
 #endif
        end do
 
-       ! Write masses (property 7)
-       offset = calculate_write_offset(nbefore, ntotal, 7, nthbuffer, buffer%nstride)
+       ! Write masses (property 8)
+       offset = calculate_write_offset(nbefore, ntotal, 8, nthbuffer, buffer%nstride)
 #ifndef WITHOUTMPI
        call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%mp(1:buffer%ncurrent), buffer%ncurrent, MPI_REAL, status, ierr)
 #else
@@ -112,18 +120,13 @@ contains
     ! Calculate the offset at which to write the buffer
     ! nbefore is the number of particles in the preceding processes
     ! ntotal is the total number of particles across all processes
-    ! p is the property number (x=1, y=2, z=3, vx=4, vy=5, vz=6, mass=7)
-    ! b is the buffer number (i.e if current process has already written 2 buffers, b=3)
+    ! nthproperty is the property number (idp=1, x=2, y=3, z=4, vx=5, vy=6, vz=7, mass=8)
+    ! nthbuffer is the buffer number (i.e if current process has already written 2 buffers, nthbuffer=3)
     
-    ! The final format is:
-    ! All x coordinates, all y coordinates, etc for all properties
-    ! So we need to:
-    ! - skip all previous properties
-    ! - skip all previous processes for the current property
-    ! - skip all previous buffers for the current process and property
     integer, intent(in) :: nbefore, ntotal, nthproperty, nthbuffer, nstride
-    integer, parameter :: bytes_per_int = 4
-    calculate_write_offset = bytes_per_int * ((nthproperty - 1) * ntotal + nbefore + (nthbuffer - 1) * nstride)
+    integer, parameter :: bpp = 4 ! bytes per property
+
+    calculate_write_offset = bpp * ((nthproperty - 1) * ntotal + nbefore + (nthbuffer - 1) * nstride)
   end function calculate_write_offset
 
 end module lightcone_io_module

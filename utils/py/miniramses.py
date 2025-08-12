@@ -562,15 +562,32 @@ class LightconeReader:
     def rd_data(path, nproperties=7, verbose=False):
         """
         Read the lightcone shell from the output directory.
-        nproperties: number of properties per particle (default 7 for x,y,z,vx,vy,vz,mass)
+        nproperties: number of non-idp properties per particle (default 7 for x,y,z,vx,vy,vz,mass)
+        
+        Returns:
+            idp: numpy array of particle IDs (int64) with shape (npart,)
+            properties: numpy array of properties (float32) with shape (nproperties, npart)
+                       where rows are x, y, z, vx, vy, vz, mass (depending on nproperties)
         """
         # Construct metadata file path by adding .txt extension
         if verbose:
             print(f"Reading lightcone data from {path}")
         txt_path = path + ".txt"
         metadata = LightconeReader.rd_metadata(txt_path, verbose=verbose)
-
-        return np.fromfile(path, dtype=np.float32, count=metadata['npart']*nproperties).reshape(nproperties, metadata['npart'])
+        
+        npart = metadata['npart']
+        
+        # Read the raw data
+        with open(path, 'rb') as f:
+            # Read particle IDs first (8 bytes each)
+            # idp_data = np.frombuffer(f.read(0 * npart), dtype=np.int32) # use this version when processing old output without idp
+            idp_data = np.frombuffer(f.read(4 * npart), dtype=np.int32)
+            
+            # Read the remaining properties (positions, velocities, masses) (4 bytes each)
+            real_data = np.frombuffer(f.read(4 * nproperties * npart), dtype=np.float32)
+            real_data = real_data.reshape(nproperties, npart)
+        
+        return idp_data, real_data
 
     @staticmethod
     def rd_positions_as_healpix(path, nside, verbose=False):
@@ -580,7 +597,10 @@ class LightconeReader:
         """
         import healpy as hp
         
-        x, y, z = LightconeReader.rd_data(path, nproperties=3, verbose=verbose)
+        # Read only the position data (properties x, y, z)
+        idp, properties = LightconeReader.rd_data(path, nproperties=3, verbose=verbose)
+        x, y, z = properties[0], properties[1], properties[2]  # x, y, z are the first 3 properties
+        
         # Convert Cartesian coordinates to spherical coordinates
         # x is the depth (cone axis), y and z are the transverse coordinates
         r = np.sqrt(x**2 + y**2 + z**2)

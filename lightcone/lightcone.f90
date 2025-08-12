@@ -190,7 +190,7 @@ contains
                 if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
                    ! Transform velocity to cone coordinates
                    velocity = matmul(box_to_cone_rotation, p%vp(npart, :))
-                   call add_to_buffer(buffer, real(position(:), kind=4), real(velocity(:), kind=4), real(p%mp(npart), kind=4))
+                   call add_to_buffer(buffer, p%idp(npart), real(position(:), kind=4), real(velocity(:), kind=4), real(p%mp(npart), kind=4))
 
                    if (buffer_is_full(buffer)) then
                       nthbuffer = nthbuffer + 1

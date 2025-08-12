@@ -1,8 +1,9 @@
 module lightcone_buffer_module
-  use amr_parameters, only: sp
+  use amr_parameters, only: sp, i8b
   implicit none
 
   type :: lightcone_buffer
+     integer(i8b), allocatable :: idp(:)
      real(sp), allocatable :: xp(:,:)
      real(sp), allocatable :: vp(:,:)
      real(sp), allocatable :: mp(:)
@@ -18,19 +19,22 @@ contains
 
     buffer%nstride = nstride
     buffer%ncurrent = 0
+    allocate(buffer%idp(nstride))
     allocate(buffer%xp(nstride, 3))
     allocate(buffer%vp(nstride, 3))
     allocate(buffer%mp(nstride))
   end subroutine init_lightcone_buffer
 
-  subroutine add_to_buffer(buffer, position, velocity, mass)
+  subroutine add_to_buffer(buffer, particle_id, position, velocity, mass)
     type(lightcone_buffer), intent(inout) :: buffer
+    integer(i8b), intent(in) :: particle_id
     real(sp), intent(in) :: position(3)
     real(sp), intent(in) :: velocity(3)
     real(sp), intent(in) :: mass
 
     if (buffer%ncurrent < buffer%nstride) then
        buffer%ncurrent = buffer%ncurrent + 1
+       buffer%idp(buffer%ncurrent) = particle_id
        buffer%xp(buffer%ncurrent, :) = position(:)
        buffer%vp(buffer%ncurrent, :) = velocity(:)
        buffer%mp(buffer%ncurrent) = mass
