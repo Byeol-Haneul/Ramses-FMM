@@ -51,6 +51,7 @@ subroutine m_read_params(pst)
   logical::debug   =.false.    ! Debug mode activated
   logical::static_mesh=.false. ! Static mesh refinement activated
   logical::static_gas=.false.  ! Hydro is turned off
+  logical::clump_only=.false.  ! Only clump finding
 
   ! Step parameters
   integer::nrestart=0         ! New run or backup file number
@@ -483,7 +484,8 @@ subroutine m_read_params(pst)
   ! Global run parameter
   namelist/run_params/cosmo,pic,poisson,hydro,rt,verbose,debug &
        & ,nrestart,ncontrol,nstepmax,nsubcycle,nremap &
-       & ,static_mesh,static_gas,geom,overload,nsuperoct
+       & ,static_mesh,static_gas,geom,overload,nsuperoct &
+       & ,clump_only
   ! Output parameters
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
@@ -1110,6 +1112,7 @@ subroutine m_read_params(pst)
   s%r%geom=geom
   s%r%overload=overload
   s%r%nsuperoct=nsuperoct
+  s%r%clump_only=clump_only
 
   s%r%noutput=noutput
   s%r%foutput=foutput

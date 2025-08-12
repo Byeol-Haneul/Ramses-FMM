@@ -374,6 +374,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   integer::ndim_file,nfile_file,noutput_file
   integer::noutput_min,nlevelmax_min
   real(kind=8)::mass_sph_file,gamma_file
+  real(kind=8),allocatable,dimension(:)::tout,aout,dtold,dtnew
   character(LEN=flen)::fileloc
 
   if(r%verbose)write(*,*)'Entering input_params'
@@ -393,12 +394,26 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! Read time variables
   read(ilun)noutput_file,g%iout,g%ifout,g%ifbkp
   noutput_min=MIN(r%noutput,noutput_file)
-  read(ilun)r%tout(1:noutput_min)
-  read(ilun)r%aout(1:noutput_min)
+  allocate(tout(1:noutput_file))
+  allocate(aout(1:noutput_file))
+  read(ilun)tout
+  read(ilun)aout
+  if(noutput_min>0)then
+     r%tout(1:noutput_min)=tout(1:noutput_min)
+     r%aout(1:noutput_min)=aout(1:noutput_min)
+  endif
+  deallocate(tout,aout)
   read(ilun)g%t
   nlevelmax_min=MIN(r%nlevelmax,nlevelmax_file)
-  read(ilun)g%dtold(1:nlevelmax_min)
-  read(ilun)g%dtnew(1:nlevelmax_min)
+  allocate(dtold(1:nlevelmax_file))
+  allocate(dtnew(1:nlevelmax_file))
+  read(ilun)dtold(1:nlevelmax_file)
+  read(ilun)dtnew(1:nlevelmax_file)
+  if(nlevelmax_min>0)then
+     g%dtold(1:nlevelmax_min)=dtold(1:nlevelmax_min)
+     g%dtnew(1:nlevelmax_min)=dtnew(1:nlevelmax_min)
+  endif
+  deallocate(dtold,dtnew)
   read(ilun)g%nstep,g%nstep_coarse
   ! Read various constants
   read(ilun)g%const,g%mass_tot_0,g%rho_tot

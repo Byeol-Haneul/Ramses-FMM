@@ -28,6 +28,7 @@ module amr_commons
      logical::orphan  =.false.   ! Orphan particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
+     logical::clump_only =.false. ! Only clump finding
      integer::nrestart=0         ! New run or backup file number
      integer::ncontrol=1         ! Write control variables
      integer::nstepmax=1000000   ! Maximum number of time steps

@@ -14,6 +14,8 @@ subroutine adaptive_loop(pst)
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem, r_hash_stats
+  use load_balance_module, only: r_balance_part
+  use clump_finder_module, only: m_clump_finder
 #ifdef _CUDA
   use gpu_manager, only: r_set_grid_device
 #endif
@@ -23,7 +25,7 @@ subroutine adaptive_loop(pst)
   logical::done
 
   ! Local variables
-  integer::ilevel
+  integer::ilevel, dummy
   double precision::tt1,tt2
   real(kind=4)::core_mem
 
@@ -54,7 +56,7 @@ subroutine adaptive_loop(pst)
 
   ! Build initial AMR grid
   if(r%nrestart==0)then
-     if(r%filetype=='ramses')then
+     if(r%filetype=='ramses'.and.r%hydro)then
         call m_init_refine_ramses(pst) ! Build AMR grid from output file
      else
         call m_init_refine_basegrid(pst) ! Build coarse grid
@@ -85,6 +87,13 @@ subroutine adaptive_loop(pst)
   ! Copy entire grid from host to device
   call r_set_grid_device(pst)
 #endif
+
+  ! Just in case we only do clump finding
+  if(r%clump_only)then
+     call r_balance_part(pst,r%levelmin,1,dummy,0)
+     call m_clump_finder(pst,.true.,.false.)
+     return
+  endif
 
   write(*,*)'Starting time integration' 
 

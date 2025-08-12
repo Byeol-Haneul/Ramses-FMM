@@ -44,6 +44,7 @@ subroutine m_input_part_ramses(pst)
      npart_tot_check=0
      npart_file(0)=PART_TYPE
      do icpu=1,ncpu_file
+        call title(icpu,ncharcpu)
         file_part=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/part.'//TRIM(ncharcpu)
         ilun=10
         open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
@@ -79,6 +80,7 @@ subroutine m_input_part_ramses(pst)
      npart_tot_check=0
      npart_file(0)=STAR_TYPE
      do icpu=1,ncpu_file
+        call title(icpu,ncharcpu)
         file_part=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/star.'//TRIM(ncharcpu)
         ilun=10
         open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
@@ -115,6 +117,7 @@ subroutine m_input_part_ramses(pst)
      npart_tot_check=0
      npart_file(0)=SINK_TYPE
      do icpu=1,ncpu_file
+        call title(icpu,ncharcpu)
         file_part=TRIM(pst%s%r%initfile(pst%s%r%levelmin))//'/sink.'//TRIM(ncharcpu)
         ilun=10
         open(unit=ilun,file=TRIM(file_part),access="stream",action="read",form='unformatted')
@@ -276,6 +279,7 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
      endif
 
      ! Open the particle file
+     call title(icpu,ncharcpu)
      file_part=TRIM(r%initfile(r%levelmin))//'/'//TRIM(prefix)//'.'//TRIM(ncharcpu)
      open(unit=10,file=TRIM(file_part),access="stream",action="read",form='unformatted')
 

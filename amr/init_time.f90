@@ -49,7 +49,7 @@ end subroutine r_init_time
   ! Local variables
   integer::i
 
-  if(r%nrestart==0)then
+  if(r%nrestart==0.and.r%filetype.NE.'ramses')then
      if(r%cosmo)then
         ! Get cosmological parameters from input files
         call init_cosmo(mdl,r,g)
