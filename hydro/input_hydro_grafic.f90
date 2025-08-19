@@ -30,7 +30,7 @@ end subroutine r_input_hydro_grafic
 !#########################################################################
 subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   use mdl_module
-  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_parameters, only: ndim,twotondim,nvector
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -49,9 +49,9 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   integer::buf_count
 
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
-  real(dp)::dx,rr,vx,vy=0,vz=0,ek,ei,pp,xx1,xx2,xx3,dx_loc
+  real(kind=8)::dx,rr,vx,vy=0,vz=0,ek,ei,pp,xx1,xx2,xx3,dx_loc
 
-  real(dp),allocatable,dimension(:,:,:)::init_array
+  real(kind=8),allocatable,dimension(:,:,:)::init_array
   real(kind=4),allocatable,dimension(:,:)::init_plane
 
   logical::error,ok_file3
@@ -151,6 +151,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      INQUIRE(file=filename,exist=ok_file3)
      if(ok_file3)then
         ! Reading the existing file   
+        if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
         open(10,file=filename,form='unformatted')
         rewind 10
         read(10) ! skip first line
@@ -165,7 +166,11 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
      else
         ! If file doesn't exist, initialize variable to default value 
         ! In most cases, this is zero (you can change that if necessary)
+        if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
         init_array=0d0
+        if(r%metal.and.ivar==r%imetal)then
+           init_array=r%z_ave*0.02
+        endif
      endif
      
      ! For cosmo runs, rescale initial conditions to code units
@@ -234,7 +239,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
         do ind=1,twotondim
 #ifdef HYDRO
            ! Prevent negative densities
-           rr=max(m%grid(igrid)%uold(ind,1),0.1*g%omega_b/g%omega_m)
+           rr=max(dble(m%grid(igrid)%uold(ind,1)),0.1*g%omega_b/g%omega_m)
            m%grid(igrid)%uold(ind,1)=rr
            ! Compute pressure from temperature and density
            m%grid(igrid)%uold(ind,5)=m%grid(igrid)%uold(ind,1)*m%grid(igrid)%uold(ind,5)
@@ -264,24 +269,6 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   end if
 
   !-----------------------------------------
-  ! If required, compute initial metallicity
-  !-----------------------------------------
-  if(r%metal)then
-     ! Loop over grids
-     do igrid=m%head(ilevel),m%tail(ilevel)
-        ! Loop over cells
-        do ind=1,twotondim
-#ifdef HYDRO
-           ! Compute metallicity using z_ave times solar unit
-           m%grid(igrid)%uold(ind,r%imetal)=r%z_ave*0.02
-#endif
-        end do
-        ! End loop over cells
-     end do
-     ! End loop over grids
-  end if
-
-  !-----------------------------------------
   ! If required, compute refinement map
   !-----------------------------------------
 #ifdef GRAV
@@ -294,7 +281,11 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
            ! Compute initial refinement map for zoom-in simulations
            ! only if next level file exists
            if(r%initfile(ilevel+1) .ne.' ')then
-              m%grid(igrid)%nref(ind)=m%grid(igrid)%uold(ind,r%ivar_refine)*r%m_refine(ilevel)*1.1d0
+              if(m%grid(igrid)%uold(ind,r%ivar_refine)>r%var_cut_refine)then
+                 m%grid(igrid)%nref(ind)=r%m_refine(ilevel)*1.1d0
+              else
+                 m%grid(igrid)%nref(ind)=0.0d0
+              endif
            else
               m%grid(igrid)%nref(ind)=0.0d0
            endif
@@ -375,7 +366,7 @@ end subroutine r_input_refmap_grafic
 !#########################################################################
 subroutine input_refmap_grafic(mdl,r,g,m,ilevel)
   use mdl_module
-  use amr_parameters, only: ndim,twotondim,dp,nvector
+  use amr_parameters, only: ndim,twotondim,nvector
   use hydro_parameters, only: nvar
   use amr_commons, only: run_t,global_t,mesh_t
   implicit none
@@ -393,9 +384,9 @@ subroutine input_refmap_grafic(mdl,r,g,m,ilevel)
   integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
   integer::buf_count
 
-  real(dp)::dx,xx1,xx2,xx3
+  real(kind=8)::dx,xx1,xx2,xx3
 
-  real(dp),allocatable,dimension(:,:,:)::init_array
+  real(kind=8),allocatable,dimension(:,:,:)::init_array
   real(kind=4),allocatable,dimension(:,:)::init_plane
 
   logical::error,ok_file3
@@ -490,7 +481,11 @@ subroutine input_refmap_grafic(mdl,r,g,m,ilevel)
         i3=int(xx3)+1
 #ifdef GRAV
         ! Scatter to corresponding refinement variable
-        m%grid(igrid)%nref(ind)=init_array(i1,i2,i3)*r%m_refine(ilevel)*1.1d0
+        if(r%initfile(ilevel+1) .ne.' ')then
+           m%grid(igrid)%nref(ind)=init_array(i1,i2,i3)*r%m_refine(ilevel)*1.1d0
+        else
+           m%grid(igrid)%nref(ind)=0d0
+        endif
 #endif
      end do
   end do
