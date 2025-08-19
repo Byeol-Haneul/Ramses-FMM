@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Turbulent velocity initial condition generator (band-limited, parabolic spectrum).
 
@@ -17,12 +16,11 @@ outputs upon inverse FFT. Density and pressure are set uniform.
 
 Examples:
   - 3D, level 6, vrms=0.1, k band [2, 16], 50/50 mix:
-      python3 turb.py 6 --size 1.0 --ndim 3 --kmin 2 --kmax 16 --alpha 0.5 --vrms 0.1 \
-        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_turb/ic_turb_6
-
+      python3 turb.py 6 --size 1.0 --ndim 3 --kmin 1 --kmax 2 --alpha 0.5 --vrms 0.1 \
+        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_turb/ic_turb_6_3d
   - 2D, level 9, vrms=0.2, mostly solenoidal, write to khi2d path for testing:
-      python3 turb.py 9 --size 1.0 --ndim 2 --kmin 2 --kmax 64 --alpha 0.2 --vrms 0.2 \
-        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_turb/ic_turb_9_d2
+      python3 turb.py 9 --size 1.0 --ndim 2 --kmin 1 --kmax 2 --alpha 0.2 --vrms 0.2 \
+        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_turb/ic_turb_9_2d
 
 Uniform magnetic field:
   - Add constant components via --bx/--by/--bz to write boundary files

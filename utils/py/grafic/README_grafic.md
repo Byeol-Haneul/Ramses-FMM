@@ -1,18 +1,16 @@
-This is the github repository for my new grafic IC generation scripts.
+This folder contains grafic IC generation scripts, courtesy of Eric Moseley. 
 (Yes, I know that "grafic IC" is like saying ATM machine.)
-I grew quite tired of using MUSIC for something that didn't need it, 
-so I rewrote it all as just python scripts. Now, there's no need to deal with
-f2py compilation or anything like that; everything's just in python. 
 
-It should be fairly clear how to use the code. By default, if you simply write (e.g.):
-./generateIC 8
+Included in this directory are several examples of IC generation scripts, which can
+then be modified for your own purposes. Read the code to learn more, but put simply, if I want to generate e.g. a box with decaying turbulence in it with a resolution of e.g. 2^6 in 2D, with modes ranging from kmin=1 to kmax=2, with a 50/50 mix of solenoidal and compressive modes, an initial r.m.s. velocity of 1.0, and a magnetic field strength of 1.0 in the y direction, then I would write:
 
-you'll generate initial conditions for a uniform box with a resolution of (2^8)^3 = 256^3. 
-By default (though this can be changed), it will be in a folder in the directory you ran the script in:
-./ic_dturb/ic_dturb_8
+python turb.py 6 --ndim 2 --kmin 1 --kmax 2 --alpha 0.5 --vrms 1.0 --by 1.0
 
-Within generateIC, you can also specify the magnetic field strength. As well, if you want to modify the densities, velocities, etc.,
-you can go into generate.py and make your own custom version of it. As it stands, the code just generates uniform ICs. 
+You would then see a folder created where you ran the script (unless you specify another output directory):
+
+ic_turb/ic_turb_6_2d
+
+The other two scripts, khi.py and uniform.py work similarly. khi.py will generate ICs for a Kelvin-Helmholtz intsability, while uniform.py generates uniform initial conditions. Both uniform.py and turb.py include the option to add particles to the ICs.
 
 You can test that the code works properly by using pip to install pytest (if you haven't already):
 pip install pytest

@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
 """
-Kelvin–Helmholtz (KHI) initial condition generator for mini-ramses in GRAFIC format.
+Kelvin–Helmholtz Instability (KHI) initial condition generator for mini-ramses in GRAFIC format.
 
 This script writes unformatted Fortran records compatible with the mini-ramses
 "grafic" file reader. It supports both 3D and 2D outputs.
@@ -9,15 +8,14 @@ Usage examples:
 
   - 3D (n = 2^6 = 64):
       python3 khi.py 6 --size 1.0 --ndim 3 \
-        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_khi/ic_khi_6
+        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_khi/ic_khi_6_3d
 
   - 2D (writes (n, n, 1) arrays):
       python3 khi.py 6 --size 1.0 --ndim 2 \
-        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_khi/ic_khi_6_d2
+        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_khi/ic_khi_6_2d
 
 Important details:
-  - Output files: ic_d, ic_u, ic_v, ic_w, ic_p (and optional magnetic boundaries
-    if you extend this script).
+  - Output files: ic_d, ic_u, ic_v, ic_w, ic_p 
   - Header encodes [n1, n2, n3, dx, ...] with dx = size / n1. For 2D, n3 = 1
     and data are still written as a sequence of z-slices.
   - Pressure and other fields must be written as full 3D arrays to ensure each

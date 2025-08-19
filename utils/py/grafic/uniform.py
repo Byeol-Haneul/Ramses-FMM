@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Uniform initial condition generator for mini-ramses in GRAFIC format.
 
