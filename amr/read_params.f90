@@ -1227,6 +1227,32 @@ subroutine m_read_params(pst)
   if(riemann2d=='roe')s%r%riemann2d=solver2d_roe
   if(riemann2d=='upwind')s%r%riemann2d=solver2d_upwind
 #endif
+
+  !--------------------------------------------------
+  ! Validate Riemann solver exists
+  !--------------------------------------------------
+#ifdef HYDRO
+  if(hydro) then
+#ifndef MHD
+     if(s%r%riemann==0) then
+        write(*,*) 'Error in namelist: unknown riemann="'//TRIM(riemann)//'"'
+        write(*,*) 'Allowed (HYDRO): llf, hll, hllc'
+        call mdl_abort(s%mdl)
+     endif
+#else
+     if(s%r%riemann==0) then
+        write(*,*) 'Error in namelist: unknown riemann="'//TRIM(riemann)//'"'
+        write(*,*) 'Allowed (MHD): llf, hll, hlld, roe, upwind'
+        call mdl_abort(s%mdl)
+     endif
+     if(s%r%riemann2d==0) then
+        write(*,*) 'Error in namelist: unknown riemann2d="'//TRIM(riemann2d)//'"'
+        write(*,*) 'Allowed (MHD 2D): llf, hll, hllf, hlla, hlld, roe, upwind; or set riemann2d="none" to reuse riemann'
+        call mdl_abort(s%mdl)
+     endif
+#endif
+  endif
+#endif
   s%r%switch_llf_dmin=switch_llf_dmin
   s%r%switch_llf_pmin=switch_llf_pmin
 
