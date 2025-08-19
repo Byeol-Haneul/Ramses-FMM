@@ -1227,35 +1227,6 @@ subroutine m_read_params(pst)
   if(riemann2d=='roe')s%r%riemann2d=solver2d_roe
   if(riemann2d=='upwind')s%r%riemann2d=solver2d_upwind
 #endif
-
-  !--------------------------------------------------
-  ! Validate Riemann solver exists and was properly assigned
-  !--------------------------------------------------
-#ifdef HYDRO
-  if(hydro) then
-#ifndef MHD
-     if(riemann/='llf' .and. riemann/='hll' .and. riemann/='hllc') then
-        write(*,*) 'Error: riemann="'//TRIM(riemann)//'" was not properly assigned to a valid solver'
-        write(*,*) 'This may indicate a compilation issue or missing solver implementation'
-        call mdl_abort(s%mdl)
-     endif
-#else
-     if(riemann/='llf' .and. riemann/='hll' .and. riemann/='hlld' .and. riemann/='roe' .and. riemann/='upwind') then
-        write(*,*) 'Error in namelist: unknown riemann="'//TRIM(riemann)//'"'
-        write(*,*) 'Allowed (MHD): llf, hll, hlld, roe, upwind'
-        call mdl_abort(s%mdl)
-     endif
-     if(riemann2d/='none' .and. riemann2d/='llf' .and. riemann2d/='hll' .and. riemann2d/='hllf' &
-      .and. riemann2d/='hlla' .and. riemann2d/='hlld' .and. riemann2d/='roe' .and. riemann2d/='upwind') then
-        write(*,*) 'Error in namelist: unknown riemann2d="'//TRIM(riemann2d)//'"'
-        write(*,*) 'Allowed : llf, hll, hllf, hlla, hlld, roe, upwind; or set riemann2d="none" to reuse riemann'
-        call mdl_abort(s%mdl)
-     endif
-#endif
-  endif
-#endif
-
-
   s%r%switch_llf_dmin=switch_llf_dmin
   s%r%switch_llf_pmin=switch_llf_pmin
 
