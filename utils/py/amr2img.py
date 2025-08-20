@@ -4,6 +4,13 @@ import matplotlib.pyplot as plt
 import argparse
 import miniramses as ram
 
+# Check if we should use non-interactive backend
+import sys
+if "--no-display" in sys.argv:
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend
+    print("Using non-interactive backend for batch processing")
+
 parser = argparse.ArgumentParser()
 parser.add_argument("nout", help="enter output number")
 parser.add_argument("--path", help="specify a path")
@@ -11,8 +18,8 @@ parser.add_argument("--log", help="plot log variable",action="store_true")
 parser.add_argument("--out", help="output a png image")
 parser.add_argument("--prefix", help="specify a file prefix")
 parser.add_argument("--col", help="choose the color map")
-parser.add_argument("--min", help="specify a minimum variable value")
-parser.add_argument("--max", help="specify a maximum variable value")
+parser.add_argument("--min", help="specify a minimum variable value for colorbar")
+parser.add_argument("--max", help="specify a maximum variable value for colorbar")
 parser.add_argument("--var", help="specify a variable number")
 parser.add_argument("--xcen", help="specify the image center x-coordinate")
 parser.add_argument("--ycen", help="specify the image center y-coordinate")
@@ -22,6 +29,7 @@ parser.add_argument("--clump", help="specify if clumps are overplotted")
 parser.add_argument("--sink", help="specify if sinks are overplotted")
 parser.add_argument("--dir", help="specify the projection axis")
 parser.add_argument("--grid", help="overlay the AMR grid",action="store_true")
+parser.add_argument("--no-display", help="prevent GUI display (useful for batch processing)",action="store_true")
 args = parser.parse_args()
 # path the the file
 path = args.path
@@ -39,6 +47,13 @@ sink = args.sink
 axis = args.dir
 log = args.log
 grid = args.grid
+no_display = args.no_display
+
+# Convert vmin and vmax to float if provided
+if vmin is not None:
+    vmin = float(vmin)
+if vmax is not None:
+    vmax = float(vmax)
 
 grid0 = None
 if grid:
@@ -104,6 +119,7 @@ c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
 kwargs={}
 if col is not None:
     kwargs["cmap"]=col
+# Create visualization with specified colorbar limits (vmin, vmax)
 ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax,grid=grid0,**kwargs)
 
 if clump:
@@ -149,5 +165,6 @@ if sink:
 if args.out:
     plt.savefig(args.out)
 
-plt.show()
+if not no_display:
+    plt.show()
 
