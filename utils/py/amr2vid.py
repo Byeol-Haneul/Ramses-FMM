@@ -1,9 +1,106 @@
 """
-AMR2VID - Generate movies from RAMSES snapshots using amr2img.py
+AMR2VID - Generate movies from RAMSES snapshots or movie *.map files
 
-This script loops through a sequence of RAMSES output snapshots and generates
-individual frames using amr2img.py, then combines them into a movie.
-Supports parallel processing with MPI for faster generation of large sequences.
+This script generates movies from RAMSES simulation data in two modes:
+
+1. SNAPSHOT MODE (default): Processes output directories (output_00001, output_00002, etc.)
+   - Uses amr2img.py to generate frames from full simulation snapshots
+   - Supports all amr2img.py options for customization
+   - Ideal for creating movies from complete simulation outputs
+
+2. MAP MODE: Processes movie *.map files (dens_00001.map, vx_00001.map, etc.)
+   - Uses map2img.py to generate frames from pre-computed movie projections
+   - Faster processing since data is already projected
+   - Requires specifying --mode map, --variable, and optionally --movie-dir
+
+USAGE:
+  Basic snapshot mode (processes output directories):
+    python amr2vid.py <start> <end> [options]
+    
+  Map mode (processes movie *.map files):
+    python amr2vid.py <start> <end> --mode map --variable <var> [options]
+
+ARGUMENTS:
+  start, end          Range of frame numbers to process (e.g., 1 100)
+  
+  --mode              Processing mode: "snapshot" or "map" (default: snapshot)
+  
+  --movie-dir         Movie directory for map mode (e.g., movie1, movie2)
+                      Default: movie1 (only used in map mode)
+  
+  --variable          Variable to plot in map mode (e.g., dens, vx, vy, vz, temp)
+                      Required for map mode, ignored in snapshot mode
+
+MOVIE GENERATION OPTIONS:
+  --fps               Frames per second for output movie (default: 30)
+  --quality           Movie quality: "low", "medium", "high" (default: medium)
+  --output            Output movie filename (default: movie.mp4)
+  --frame-dir         Directory to store temporary frames (default: frames/)
+  --keep-frames       Keep individual frames after movie creation
+  --ffmpeg-only       Skip frame generation, create movie from existing frames
+
+SNAPSHOT MODE OPTIONS (passed to amr2img.py):
+  --path              Path to output directories
+  --log               Use logarithmic scale for variable plotting
+  --prefix            File prefix for output files
+  --col               Colormap selection (e.g., viridis, plasma, hot)
+  --min, --max        Minimum/maximum values for colorbar scaling
+  --var               Variable number to plot
+  --xcen, --ycen, --zcen  Image center coordinates
+  --rad               Image radius
+  --clump             Overplot clump information
+  --sink              Overplot sink particles
+  --dir               Projection direction
+  --grid              Overlay AMR grid
+
+MAP MODE OPTIONS (passed to map2img.py):
+  --log               Use logarithmic scale for variable plotting
+  --col               Colormap selection
+  --min, --max        Minimum/maximum values for colorbar scaling
+
+PARALLEL PROCESSING:
+  --parallel          Enable MPI parallel processing for faster frame generation
+                      Requires mpi4py: pip install mpi4py
+                      Usage: mpirun -np <n> python amr2vid.py <start> <end> --parallel
+
+EXAMPLES:
+
+1. Create movie from snapshots 1-100:
+   python amr2vid.py 1 100
+
+2. Create movie from snapshots with custom settings:
+   python amr2vid.py 1 100 --fps 60 --quality high --log --var 1 --col viridis
+
+3. Create movie from density maps in movie1 directory:
+   python amr2vid.py 1 100 --mode map --variable dens
+
+4. Create movie from velocity maps in movie2 directory:
+   python amr2vid.py 1 100 --mode map --variable vx --movie-dir movie2 --log
+
+5. Run in parallel with MPI (4 processes):
+   mpirun -np 4 python amr2vid.py 1 100 --parallel
+
+6. Create movie from existing frames only:
+   python amr2vid.py 1 100 --ffmpeg-only --fps 30 --quality high
+
+7. Keep frames after movie creation:
+   python amr2vid.py 1 100 --keep-frames
+
+OUTPUT:
+  - Creates a frames/ directory with individual PNG frames
+  - Generates a movie file (default: movie.mp4)
+  - Automatically cleans up frame files unless --keep-frames is specified
+
+REQUIREMENTS:
+  - Python 3.6+
+  - matplotlib, numpy, scipy
+  - ffmpeg (for movie creation)
+  - mpi4py (for parallel processing, optional)
+  - amr2img.py (for snapshot mode)
+  - map2img.py (for map mode)
+
+AUTHOR:
+  Eric Moseley (emoseley@stanford.edu)
 """
 
 import os
@@ -52,6 +149,71 @@ def find_output_directories(path, prefix="output_"):
     output_numbers.sort(key=lambda x: x[0])
     
     return output_numbers
+
+def find_movie_map_files(movie_dir, variable):
+    """Find all movie map files for a given variable in the specified movie directory."""
+    if movie_dir is None:
+        movie_dir = "movie1"  # Default to movie1
+    
+    # Look for files matching pattern variable_*.map
+    pattern = os.path.join(movie_dir, f"{variable}_*.map")
+    files = glob.glob(pattern)
+    
+    # Extract frame numbers and sort
+    frame_numbers = []
+    for f in files:
+        try:
+            # Extract number from filename (e.g., "dens_00001.map" -> 1)
+            basename = os.path.basename(f)
+            if basename.startswith(f"{variable}_"):
+                num_str = basename[len(f"{variable}_"):-4]  # Remove "variable_" prefix and ".map" suffix
+                num = int(num_str)
+                frame_numbers.append((num, f))
+        except (ValueError, IndexError):
+            continue
+    
+    # Sort by frame number
+    frame_numbers.sort(key=lambda x: x[0])
+    
+    return frame_numbers
+
+def generate_map_frame(frame_num, map_file, args, frame_dir):
+    """Generate a single frame from a movie map file using map2img.py."""
+    
+    # Ensure frame directory exists
+    frame_dir = Path(frame_dir)
+    frame_dir.mkdir(exist_ok=True)
+    
+    # Build the map2img command
+    cmd = ["python", "map2img.py", map_file, "--no-display"]
+    
+    # Add map2img arguments
+    if args.log:
+        cmd.extend(["--log"])
+    if args.col:
+        cmd.extend(["--col", args.col])
+    if args.min:
+        cmd.extend(["--min", str(args.min)])
+    if args.max:
+        cmd.extend(["--max", str(args.max)])
+    
+    # Set output filename for this frame
+    frame_filename = f"frame_{frame_num:05d}.png"
+    frame_path = frame_dir / frame_filename
+    cmd.extend(["--out", str(frame_path)])
+    
+    # Run map2img
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+        if result.returncode == 0:
+            print(f"Generated frame from {os.path.basename(map_file)}")
+            return str(frame_path)
+        else:
+            print(f"Error generating frame from {os.path.basename(map_file)}: {result.stderr}")
+            return None
+    except Exception as e:
+        print(f"Exception generating frame from {os.path.basename(map_file)}: {e}")
+        return None
 
 def generate_frame(output_num, output_dir, args, frame_dir):
     """Generate a single frame using amr2img.py."""
@@ -104,13 +266,13 @@ def generate_frame(output_num, output_dir, args, frame_dir):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
         if result.returncode == 0:
-            print(f"Generated frame {output_num:05d}")
+            print(f"Generated frame from output {output_num:05d}")
             return str(frame_path)
         else:
-            print(f"Error generating frame {output_num:05d}: {result.stderr}")
+            print(f"Error generating frame from output {output_num:05d}: {result.stderr}")
             return None
     except Exception as e:
-        print(f"Exception generating frame {output_num:05d}: {e}")
+        print(f"Exception generating frame from output {output_num:05d}: {e}")
         return None
 
 def detect_frame_pattern(frame_dir):
@@ -249,8 +411,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Generate movie from outputs 1-100
-  python amr2vid.py 1 100
+  # Generate movie from outputs 1-100 (snapshot mode)
+  python amr2vid.py 1 100 --mode snapshot
+  
+  # Generate movie from movie *.map files (map mode)
+  python amr2vid.py 1 100 --mode map --variable dens --movie-dir movie1
   
   # Generate movie with custom settings
   python amr2vid.py 1 100 --fps 60 --quality high --log --var 1
@@ -263,12 +428,27 @@ Examples:
   
   # Create movie from frames in custom directory
   python amr2vid.py 1 100 --ffmpeg-only --frame-dir my_frames --output my_movie.mp4
+  
+  # Map mode examples:
+  # Process density maps from movie1 directory
+  python amr2vid.py 1 100 --mode map --variable dens
+  
+  # Process velocity maps from movie2 directory with custom settings
+  python amr2vid.py 1 100 --mode map --variable vx --movie-dir movie2 --log --col viridis
         """
     )
     
     # Range arguments
     parser.add_argument("start", type=int, help="starting output number")
     parser.add_argument("end", type=int, help="ending output number")
+    
+    # Mode argument
+    parser.add_argument("--mode", choices=["snapshot", "map"], default="snapshot",
+                       help="mode: snapshot (from output directories) or map (from movie *.map files) (default: snapshot)")
+    
+    # Map mode specific arguments (only used when --mode map)
+    parser.add_argument("--movie-dir", help="movie directory (e.g., movie1, movie2) - only used in map mode")
+    parser.add_argument("--variable", help="variable to plot (e.g., dens, vx, vy, vz, temp) - only used in map mode")
     
     # Movie-specific arguments
     parser.add_argument("--fps", type=int, default=30, help="frames per second (default: 30)")
@@ -328,6 +508,7 @@ Examples:
     frame_dir.mkdir(exist_ok=True)
     if is_root:
         print(f"Frame directory: {frame_dir}")
+        print(f"Mode: {args.mode}")
     
     # If ffmpeg-only mode, skip frame generation and just create movie
     if args.ffmpeg_only:
@@ -350,78 +531,227 @@ Examples:
                 print("Failed to create movie")
             sys.exit(0)
     
-    # Find output directories
-    if is_root:
-        output_dirs = find_output_directories(args.path)
-        # Filter to requested range
-        output_dirs = [(num, dir_path) for num, dir_path in output_dirs 
-                      if args.start <= num <= args.end]
-        
-        if not output_dirs:
-            print(f"No output directories found in range {args.start}-{args.end}")
-            sys.exit(1)
-        
-        print(f"Found {len(output_dirs)} output directories")
-        for num, dir_path in output_dirs:
-            print(f"  {num:5d}: {dir_path}")
-    
-    # Broadcast output directories to all processes
-    if args.parallel:
+    # Handle different modes
+    if args.mode == "snapshot":
+        # Original snapshot mode behavior
         if is_root:
-            output_nums = [num for num, _ in output_dirs]
+            print("Snapshot mode: processing output directories")
+        
+        # Find output directories
+        if is_root:
+            output_dirs = find_output_directories(args.path)
+            # Filter to requested range
+            output_dirs = [(num, dir_path) for num, dir_path in output_dirs 
+                          if args.start <= num <= args.end]
+            
+            if not output_dirs:
+                print(f"No output directories found in range {args.start}-{args.end}")
+                sys.exit(1)
+            
+            print(f"Found {len(output_dirs)} output directories")
+            for num, dir_path in output_dirs:
+                print(f"  {num:5d}: {dir_path}")
+            
+            # Create a list of all requested numbers (including gaps)
+            all_requested = list(range(args.start, args.end + 1))
+            missing_outputs = [num for num in all_requested if num not in [n for n, _ in output_dirs]]
+            if missing_outputs:
+                print(f"Warning: Missing output directories: {missing_outputs}")
+        
+        # Broadcast output directories to all processes
+        if args.parallel:
+            if is_root:
+                output_nums = [num for num, _ in output_dirs]
+            else:
+                output_nums = None
+            output_nums = comm.bcast(output_nums, root=0)
+            output_dirs = [(num, None) for num in output_nums]  # Only need numbers for parallel processing
         else:
-            output_nums = None
-        output_nums = comm.bcast(output_nums, root=0)
-        output_dirs = [(num, None) for num in output_nums]  # Only need numbers for parallel processing
-    else:
-        output_nums = [num for num, _ in output_dirs]
-    
-    # Distribute work among processes
-    if args.parallel:
-        # Simple round-robin distribution
-        my_outputs = [num for i, num in enumerate(output_nums) if i % size == rank]
-        print(f"Process {rank}: processing {len(my_outputs)} outputs")
-    else:
-        my_outputs = output_nums
-    
-    # Generate frames
-    generated_frames = []
-    for output_num in my_outputs:
-        frame_path = generate_frame(output_num, None, args, frame_dir)
-        if frame_path:
-            generated_frames.append(frame_path)
-    
-    # Gather all generated frames
-    if args.parallel:
-        all_frames = comm.gather(generated_frames, root=0)
-        if is_root:
-            generated_frames = [frame for sublist in all_frames for frame in sublist]
-            generated_frames.sort()  # Sort by frame number
-    else:
-        generated_frames.sort()
-    
-    # Create movie (only on root process)
-    if is_root and generated_frames:
-        print(f"Generated {len(generated_frames)} frames")
+            output_nums = [num for num, _ in output_dirs]
         
-        # Create movie
-        success = create_movie(frame_dir, args.output, args.fps, args.quality)
+        # Distribute work among processes
+        if args.parallel:
+            # Simple round-robin distribution
+            my_outputs = [num for i, num in enumerate(output_nums) if i % size == rank]
+            print(f"Process {rank}: processing {len(my_outputs)} outputs")
+        else:
+            my_outputs = output_nums
         
-        # Clean up frames if requested
-        if success and not args.keep_frames:
-            print("Cleaning up frame files...")
-            for frame_file in generated_frames:
+        # Generate frames
+        generated_frames = []
+        frame_counter = 0  # Sequential counter for generated frames
+        
+        for output_num in my_outputs:
+            # Check if this output directory exists
+            output_dir = next((d for n, d in output_dirs if n == output_num), None)
+            if output_dir is None:
+                print(f"Warning: output directory output_{output_num:05d} doesn't exist")
+                continue
+                
+            frame_path = generate_frame(output_num, None, args, frame_dir)
+            if frame_path:
+                # Rename frame to use sequential numbering
+                frame_counter += 1
+                new_frame_filename = f"frame_{frame_counter:05d}.png"
+                new_frame_path = frame_dir / new_frame_filename
+                
                 try:
-                    os.remove(frame_file)
+                    os.rename(frame_path, new_frame_path)
+                    print(f"Generated frame {frame_counter:05d} from output {output_num:05d}")
+                    generated_frames.append(str(new_frame_path))
+                except OSError as e:
+                    print(f"Warning: Could not rename frame {output_num}: {e}")
+                    generated_frames.append(frame_path)
+        
+        # Gather all generated frames
+        if args.parallel:
+            all_frames = comm.gather(generated_frames, root=0)
+            if is_root:
+                generated_frames = [frame for sublist in all_frames for frame in sublist]
+                generated_frames.sort()  # Sort by frame number
+        else:
+            generated_frames.sort()
+        
+        # Create movie (only on root process)
+        if is_root and generated_frames:
+            print(f"Generated {len(generated_frames)} frames")
+            
+            # Create movie
+            success = create_movie(frame_dir, args.output, args.fps, args.quality)
+            
+            # Clean up frames if requested
+            if success and not args.keep_frames:
+                print("Cleaning up frame files...")
+                for frame_file in generated_frames:
+                    try:
+                        os.remove(frame_file)
+                    except OSError:
+                        pass
+                try:
+                    os.rmdir(frame_dir)
                 except OSError:
                     pass
-            try:
-                os.rmdir(frame_dir)
-            except OSError:
-                pass
-            print("Frame cleanup complete")
-        elif args.keep_frames:
-            print(f"Frames kept in: {frame_dir}")
+                print("Frame cleanup complete")
+            elif args.keep_frames:
+                print(f"Frames kept in: {frame_dir}")
+    
+    elif args.mode == "map":
+        # New map mode for movie *.map files
+        if is_root:
+            print("Map mode: processing movie *.map files")
+            
+            # Check required arguments for map mode
+            if args.variable is None:
+                print("Error: --variable is required in map mode")
+                print("Example: --variable dens")
+                sys.exit(1)
+            
+            if args.movie_dir is None:
+                args.movie_dir = "movie1"
+                print(f"Using default movie directory: {args.movie_dir}")
+            else:
+                print(f"Using movie directory: {args.movie_dir}")
+            
+            print(f"Processing variable: {args.variable}")
+        
+        # Find movie map files
+        if is_root:
+            map_files = find_movie_map_files(args.movie_dir, args.variable)
+            # Filter to requested range
+            map_files = [(num, file_path) for num, file_path in map_files 
+                        if args.start <= num <= args.end]
+            
+            if not map_files:
+                print(f"No {args.variable} map files found in range {args.start}-{args.end}")
+                print(f"Checked directory: {args.movie_dir}")
+                sys.exit(1)
+            
+            print(f"Found {len(map_files)} map files")
+            for num, file_path in map_files:
+                print(f"  {num:5d}: {os.path.basename(file_path)}")
+        
+        # Broadcast map files to all processes
+        if args.parallel:
+            if is_root:
+                frame_nums = [num for num, _ in map_files]
+            else:
+                frame_nums = None
+            frame_nums = comm.bcast(frame_nums, root=0)
+            map_files = [(num, None) for num in frame_nums]  # Only need numbers for parallel processing
+        else:
+            frame_nums = [num for num, _ in map_files]
+        
+        # Distribute work among processes
+        if args.parallel:
+            # Simple round-robin distribution
+            my_frames = [num for i, num in enumerate(frame_nums) if i % size == rank]
+            print(f"Process {rank}: processing {len(my_frames)} frames")
+        else:
+            my_frames = frame_nums
+        
+        # Generate frames
+        generated_frames = []
+        frame_counter = 0  # Sequential counter for generated frames
+        
+        for frame_num in my_frames:
+            # Find the corresponding map file
+            map_file = None
+            if not args.parallel:
+                map_file = next((f for n, f in map_files if n == frame_num), None)
+            else:
+                # In parallel mode, we need to reconstruct the filename
+                map_file = os.path.join(args.movie_dir, f"{args.variable}_{frame_num:05d}.map")
+            
+            if map_file and os.path.exists(map_file):
+                frame_path = generate_map_frame(frame_num, map_file, args, frame_dir)
+                if frame_path:
+                    # Rename frame to use sequential numbering
+                    frame_counter += 1
+                    new_frame_filename = f"frame_{frame_counter:05d}.png"
+                    new_frame_path = frame_dir / new_frame_filename
+                    
+                    try:
+                        os.rename(frame_path, new_frame_path)
+                        print(f"Generated frame {frame_counter:05d} from {os.path.basename(map_file)}")
+                        generated_frames.append(str(new_frame_path))
+                    except OSError as e:
+                        print(f"Warning: Could not rename frame {frame_num}: {e}")
+                        generated_frames.append(frame_path)
+            else:
+                print(f"Warning: file {args.variable}_{frame_num:05d}.map doesn't exist")
+                continue
+        
+        # Gather all generated frames
+        if args.parallel:
+            all_frames = comm.gather(generated_frames, root=0)
+            if is_root:
+                generated_frames = [frame for sublist in all_frames for frame in sublist]
+                generated_frames.sort()  # Sort by frame number
+        else:
+            generated_frames.sort()
+        
+        # Create movie (only on root process)
+        if is_root and generated_frames:
+            print(f"Generated {len(generated_frames)} frames")
+            
+            # Create movie
+            success = create_movie(frame_dir, args.output, args.fps, args.quality)
+            
+            # Clean up frames if requested
+            if success and not args.keep_frames:
+                print("Cleaning up frame files...")
+                for frame_file in generated_frames:
+                    try:
+                        os.remove(frame_file)
+                    except OSError:
+                        pass
+                try:
+                    os.rmdir(frame_dir)
+                except OSError:
+                    pass
+                print("Frame cleanup complete")
+            elif args.keep_frames:
+                print(f"Frames kept in: {frame_dir}")
     
     if args.parallel:
         MPI.Finalize()

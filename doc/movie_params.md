@@ -17,7 +17,7 @@ This namelist block, called `&MOVIE_PARAMS`, is used to configure the generation
 | `deltax_frame=0.0,0.0,...` | `real array` | Physical size of the movie frame in the X-direction for each projection axis. Array of up to 10 values. |
 | `deltay_frame=0.0,0.0,...` | `real array` | Physical size of the movie frame in the Y-direction for each projection axis. Array of up to 10 values. |
 | `deltaz_frame=0.0,0.0,...` | `real array` | Physical size of the movie frame in the Z-direction for each projection axis. Array of up to 10 values. |
-| `proj_axis='z'` | `character` | Projection axis for the movie frames. Can be 'x', 'y', 'z', or combinations like 'xy' for multiple projections. |
+| `proj_axis='z'` | `character` | Projection axis for the movie frames. Can be 'x', 'y', 'z', or combinations like 'xy' for multiple projections (which will create a movie directory for each axis).|
 | `zoom_only=.false.` | `logical` | If true, only generate zoomed-in frames around specified centers. |
 | `movie_vars=0,0,0,...` | `integer array` | Array specifying which variables to include in movie frames. 1 means include, 0 means exclude. |
 | `movie_vars_txt='','','',...` | `character array` | Text labels for variables to include in movie frames. Valid options include 'dens', 'vx', 'vy', 'vz', 'temp', 'dm', 'stars', 'var6', 'var7', etc. |
@@ -30,7 +30,7 @@ Movie frames are written as binary files in the following format:
 - Each file contains: time/expansion factor, frame dimensions, and the 2D projection data
 - Files can be processed with external tools to create animations
 
-## Example Usage
+## Example Usage (from coeur.nml test problem)
 
 ```fortran
 &MOVIE_PARAMS

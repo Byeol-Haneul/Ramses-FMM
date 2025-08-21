@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Turbulent velocity initial condition generator with configurable spectrum types.
 

@@ -1,4 +1,4 @@
-This folder contains grafic IC generation scripts, courtesy of Eric Moseley. 
+This folder contains grafic IC generation scripts, courtesy of Eric Moseley (emoseley@stanford.edu). 
 (Yes, I know that "grafic IC" is like saying ATM machine.)
 
 Included in this directory are several examples of IC generation scripts, which can

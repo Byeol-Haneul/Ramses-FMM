@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import FortranFile
@@ -11,6 +10,7 @@ parser.add_argument("--out", help="output a png image")
 parser.add_argument("--col", help="choose the color map")
 parser.add_argument("--min", help="minimum value")
 parser.add_argument("--max", help="maximum value")
+parser.add_argument("--no-display", help="suppress plot display", action="store_true")
 args = parser.parse_args()
 print("Reading "+args.file)
 
@@ -52,6 +52,7 @@ ax.set_xlabel("nx")
 ax.set_ylabel("ny")
 if args.out:
     plt.savefig(args.out)
-plt.show()
+if not args.no_display:
+    plt.show()
 
 
