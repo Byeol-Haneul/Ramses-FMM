@@ -1,9 +1,18 @@
 """
-Turbulent velocity initial condition generator (band-limited, parabolic spectrum).
+Turbulent velocity initial condition generator with configurable spectrum types.
 
 This script generates a divergence/rotation-controlled random velocity field
-using a band-pass filter with a parabolic spectral envelope between k_min and
-k_max. It supports 2D (arrays shaped (n, n, 1)) and 3D (n, n, n) outputs.
+using spectral filtering between k_min and k_max. It supports 2D (arrays shaped 
+(n, n, 1)) and 3D (n, n, n) outputs.
+
+Spectrum types:
+  - "parabolic": Band-limited spectrum with w(k) ∝ (k - kmin)(kmax - k)
+    - Power is zero outside [kmin, kmax]
+    - Good for isolating specific wavenumber bands
+  - "power_law": Power law spectrum with w(k) ∝ k^slope within [kmin, kmax]
+    - Default slope -5/3 gives Kolmogorov turbulence
+    - Maintains power across all scales with smooth cutoffs
+    - Allows independent control of slope and wavenumber range
 
 The compressive/solenoidal mix is controlled by --alpha:
   - alpha = 1.0 → purely compressive (curl-free)
@@ -15,15 +24,19 @@ Gaussian random fields, which preserves Hermitian symmetry and yields real
 outputs upon inverse FFT. Density and pressure are set uniform.
 
 Examples:
-  - 3D, level 6, vrms=0.1, k band [2, 16], 50/50 mix:
-      python3 turb.py 6 --size 1.0 --ndim 3 --kmin 1 --kmax 2 --alpha 0.5 --vrms 0.1 \
-        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_turb/ic_turb_6_3d
-  - 2D, level 9, vrms=0.2, mostly solenoidal, write to khi2d path for testing:
-      python3 turb.py 9 --size 1.0 --ndim 2 --kmin 1 --kmax 2 --alpha 0.2 --vrms 0.2 \
-        --outdir /Users/moseley/ramses-development/mini-ramses-main/ics/ic_turb/ic_turb_9_2d
+  - 3D, level 6, vrms=0.1, k band [2, 16], 50/50 mix, parabolic spectrum:
+      python3 turb.py 6 --size 1.0 --ndim 3 --kmin 1 --kmax 3 --alpha 0.5 --vrms 1.0 
+
+  - 2D, level 9, vrms=0.2, mostly solenoidal, power law spectrum (Kolmogorov slope):
+      python3 turb.py 9 --size 1.0 --ndim 2 --kmin 2 --kmax 9 --alpha 0.2 --vrms 0.2 \
+        --spectrum power_law --slope -5.0/3.0
+
+  - 3D, level 7, vrms=0.15, power law with steeper slope (-2.0), compressive:
+      python3 turb.py 7 --size 1.0 --ndim 3 --kmin 3 --kmax 32 --alpha 0.8 --vrms 10.0 \
+        --spectrum power_law --slope -2.0
 
 Uniform magnetic field:
-  - Add constant components via --bx/--by/--bz to write boundary files
+  - Add constant components via --bx/--by/--bz to write magnetic field files
     (ic_bxleft/right, ic_byleft/right, ic_bzleft/right).
 """
 
@@ -77,12 +90,16 @@ def build_turbulent_velocity(
     alpha: float,
     vrms: float,
     rng: np.random.Generator,
+    spectrum_type: str = "parabolic",
+    power_law_slope: float = -5.0/3.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Create turbulent velocity components (u, v, w) with given spectral controls.
 
     Steps:
       1) Generate real Gaussian random fields, FFT to get A(k)
-      2) Apply parabolic band-pass filter w(k) ∝ (k - kmin)(kmax - k) within [kmin,kmax]
+      2) Apply spectral filter:
+         - "parabolic": w(k) ∝ (k - kmin)(kmax - k) within [kmin,kmax] (band-limited)
+         - "power_law": w(k) ∝ k^slope within [kmin,kmax] (power law with cutoff)
       3) Project to compressive (parallel) and solenoidal (perpendicular) parts
       4) Mix with alpha: V = alpha*V_par + (1-alpha)*V_perp
       5) Inverse FFT to real space and normalize to vrms
@@ -97,13 +114,42 @@ def build_turbulent_velocity(
     V = np.fft.fftn(v0)
     W = np.fft.fftn(w0)
 
-    # k-grid and parabolic band-pass envelope (zero outside [kmin,kmax])
+    # k-grid and spectral envelope
     kx, ky, kz, kmag = generate_k_grid(n1, n2, n3)
     with np.errstate(invalid="ignore"):
         band = (kmag >= kmin) & (kmag <= kmax)
-        envelope = (kmag - kmin) * (kmax - kmag)
-        envelope = np.where(band, envelope, 0.0)
-        envelope = np.clip(envelope, 0.0, None)
+        
+        if spectrum_type == "parabolic":
+            # Parabolic band-pass: w(k) ∝ (k - kmin)(kmax - k) within [kmin,kmax]
+            envelope = (kmag - kmin) * (kmax - kmag)
+            envelope = np.where(band, envelope, 0.0)
+            envelope = np.clip(envelope, 0.0, None)
+        elif spectrum_type == "power_law":
+            # Power law: w(k) ∝ k^slope within [kmin,kmax]
+            # Avoid k=0 and apply smooth cutoff at boundaries
+            kmag_safe = np.where(kmag == 0.0, 1.0, kmag)
+            envelope = np.where(band, kmag_safe ** power_law_slope, 0.0)
+            # Apply smooth cutoff at boundaries to avoid discontinuities
+            k_transition = 0.1  # Transition width as fraction of band
+            dk = kmax - kmin
+            k1 = kmin + k_transition * dk
+            k2 = kmax - k_transition * dk
+            # Smooth transition at low-k boundary
+            low_transition = np.where(
+                (kmag >= kmin) & (kmag < k1),
+                0.5 * (1.0 + np.cos(np.pi * (kmag - kmin) / (k1 - kmin))),
+                1.0
+            )
+            # Smooth transition at high-k boundary  
+            high_transition = np.where(
+                (kmag > k2) & (kmag <= kmax),
+                0.5 * (1.0 + np.cos(np.pi * (kmag - k2) / (kmax - k2))),
+                1.0
+            )
+            envelope *= low_transition * high_transition
+        else:
+            raise ValueError(f"Unknown spectrum_type: {spectrum_type}. Use 'parabolic' or 'power_law'")
+        
         filt = np.sqrt(envelope, dtype=np.float64)
 
     # Avoid division by zero at k=0
@@ -164,6 +210,10 @@ def main():
     parser.add_argument("--ndim", type=int, default=3, help="Output dimensionality: 2 or 3 (default: 3)")
     parser.add_argument("--kmin", type=float, default=2.0, help="Minimum wavenumber for band-pass (>=1)")
     parser.add_argument("--kmax", type=float, default=None, help="Maximum wavenumber for band-pass (<= n/2)")
+    parser.add_argument("--spectrum", type=str, default="parabolic", choices=["parabolic", "power_law"], 
+                       help="Spectrum type: 'parabolic' (band-limited) or 'power_law' (default: parabolic)")
+    parser.add_argument("--slope", type=float, default=-5.0/3.0, 
+                       help="Power law slope for spectrum='power_law' (default: -5/3, Kolmogorov)")
     parser.add_argument("--alpha", type=float, default=0.5, help="Compressive fraction [0..1] (1=compressive, 0=solenoidal)")
     parser.add_argument("--vrms", type=float, default=0.1, help="Target RMS velocity magnitude")
     parser.add_argument("--rho", type=float, default=1.0, help="Uniform density")
@@ -200,7 +250,10 @@ def main():
     rng = np.random.default_rng(args.seed)
 
     # Generate turbulent velocity components
-    u, v, w = build_turbulent_velocity(n1, n2, n3, kmin, kmax, args.alpha, args.vrms, rng)
+    u, v, w = build_turbulent_velocity(
+        n1, n2, n3, kmin, kmax, args.alpha, args.vrms, rng,
+        spectrum_type=args.spectrum, power_law_slope=args.slope
+    )
 
     # Hydrodynamic primitives
     d = np.full((n1, n2, n3), float(args.rho), dtype=np.float32)

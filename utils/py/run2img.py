@@ -10,6 +10,7 @@ parser.add_argument("file", help="enter filename run.log")
 parser.add_argument("--log", help="plot log variable",action="store_true")
 parser.add_argument("--sym", help="use a circle for each cell",action="store_true")
 parser.add_argument("--out", help="output a png image")
+parser.add_argument("--no_display", help="do not display the image",action="store_true")
 args = parser.parse_args()
 print("Reading "+args.file)
 
@@ -34,6 +35,9 @@ if args.log:
 
 if args.out:
     plt.savefig(args.out)
-plt.show()
+if not args.no_display:
+    plt.show()
+else:
+    plt.close()
 
 
