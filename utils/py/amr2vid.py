@@ -6,18 +6,20 @@ This script generates movies from RAMSES simulation data in two modes:
 1. SNAPSHOT MODE (default): Processes output directories (output_00001, output_00002, etc.)
    - Uses amr2img.py to generate frames from full simulation snapshots
    - Supports all amr2img.py options for customization
+   - Defaults to looking for output directories in the current directory
    - Ideal for creating movies from complete simulation outputs
 
 2. MAP MODE: Processes movie *.map files (dens_00001.map, vx_00001.map, etc.)
    - Uses map2img.py to generate frames from pre-computed movie projections
    - Faster processing since data is already projected
+   - Defaults to looking for movie directories in the current directory
    - Requires specifying --mode map, --variable, and optionally --movie-dir
 
 USAGE:
-  Basic snapshot mode (processes output directories):
+  Basic snapshot mode (processes output directories in current directory):
     python amr2vid.py <start> <end> [options]
     
-  Map mode (processes movie *.map files):
+  Map mode (processes movie *.map files in current directory):
     python amr2vid.py <start> <end> --mode map --variable <var> [options]
 
 ARGUMENTS:
@@ -26,7 +28,7 @@ ARGUMENTS:
   --mode              Processing mode: "snapshot" or "map" (default: snapshot)
   
   --movie-dir         Movie directory for map mode (e.g., movie1, movie2)
-                      Default: movie1 (only used in map mode)
+                      Default: auto-detects first available movie directory in current directory
   
   --variable          Variable to plot in map mode (e.g., dens, vx, vy, vz, temp)
                       Required for map mode, ignored in snapshot mode
@@ -40,7 +42,7 @@ MOVIE GENERATION OPTIONS:
   --ffmpeg-only       Skip frame generation, create movie from existing frames
 
 SNAPSHOT MODE OPTIONS (passed to amr2img.py):
-  --path              Path to output directories
+  --path              Path to output directories (defaults to current directory)
   --log               Use logarithmic scale for variable plotting
   --prefix            File prefix for output files
   --col               Colormap selection (e.g., viridis, plasma, hot)
@@ -65,16 +67,16 @@ PARALLEL PROCESSING:
 
 EXAMPLES:
 
-1. Create movie from snapshots 1-100:
+1. Create movie from snapshots 1-100 in current directory:
    python amr2vid.py 1 100
 
 2. Create movie from snapshots with custom settings:
    python amr2vid.py 1 100 --fps 60 --quality high --log --var 1 --col viridis
 
-3. Create movie from density maps in movie1 directory:
+3. Create movie from density maps (auto-detects movie directory):
    python amr2vid.py 1 100 --mode map --variable dens
 
-4. Create movie from velocity maps in movie2 directory:
+4. Create movie from velocity maps in specific movie directory:
    python amr2vid.py 1 100 --mode map --variable vx --movie-dir movie2 --log
 
 5. Run in parallel with MPI (4 processes):
@@ -88,7 +90,7 @@ EXAMPLES:
 
 OUTPUT:
   - Creates a frames/ directory with individual PNG frames
-  - Generates a movie file (default: movie.mp4)
+  - Generates a movie file (default: movie.mp4) in current directory
   - Automatically cleans up frame files unless --keep-frames is specified
 
 REQUIREMENTS:
@@ -98,9 +100,6 @@ REQUIREMENTS:
   - mpi4py (for parallel processing, optional)
   - amr2img.py (for snapshot mode)
   - map2img.py (for map mode)
-
-AUTHOR:
-  Eric Moseley (emoseley@stanford.edu)
 """
 
 import os
@@ -122,7 +121,7 @@ except ImportError:
 def find_output_directories(path, prefix="output_"):
     """Find all output directories matching the pattern."""
     if path is None:
-        path = "./"
+        path = "."  # Default to current directory
     
     # Look for directories matching output_XXXXX pattern (supports 5-digit numbers)
     pattern = os.path.join(path, f"{prefix}*")
@@ -130,6 +129,16 @@ def find_output_directories(path, prefix="output_"):
     
     # Filter to only include directories
     dirs = [d for d in dirs if os.path.isdir(d)]
+    
+    # If no directories found in current directory, try parent directory
+    if not dirs and path == ".":
+        parent_pattern = os.path.join("..", f"{prefix}*")
+        parent_dirs = glob.glob(parent_pattern)
+        parent_dirs = [d for d in parent_dirs if os.path.isdir(d)]
+        if parent_dirs:
+            print(f"No output directories found in current directory, checking parent directory...")
+            dirs = parent_dirs
+            path = ".."
     
     # Extract numbers and sort
     output_numbers = []
@@ -153,7 +162,15 @@ def find_output_directories(path, prefix="output_"):
 def find_movie_map_files(movie_dir, variable):
     """Find all movie map files for a given variable in the specified movie directory."""
     if movie_dir is None:
-        movie_dir = "movie1"  # Default to movie1
+        # Look for movie directories in current directory
+        movie_patterns = ["movie1", "movie2", "movie3", "movie4", "movie5"]
+        for pattern in movie_patterns:
+            if os.path.isdir(pattern):
+                movie_dir = pattern
+                break
+        else:
+            movie_dir = "movie1"  # Fallback default
+            print(f"Warning: No movie directories found in current directory, using {movie_dir}")
     
     # Look for files matching pattern variable_*.map
     pattern = os.path.join(movie_dir, f"{variable}_*.map")
@@ -185,7 +202,9 @@ def generate_map_frame(frame_num, map_file, args, frame_dir):
     frame_dir.mkdir(exist_ok=True)
     
     # Build the map2img command
-    cmd = ["python", "map2img.py", map_file, "--no-display"]
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    map2img_path = os.path.join(script_dir, "map2img.py")
+    cmd = ["python", map2img_path, map_file, "--no-display"]
     
     # Add map2img arguments
     if args.log:
@@ -202,9 +221,15 @@ def generate_map_frame(frame_num, map_file, args, frame_dir):
     frame_path = frame_dir / frame_filename
     cmd.extend(["--out", str(frame_path)])
     
-    # Run map2img
+    # Run map2img from the current working directory so it can find the map files
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+        # Only print debug info on root process to avoid duplicate output in parallel mode
+        if not hasattr(args, 'parallel') or not args.parallel or (hasattr(args, 'rank') and args.rank == 0):
+            print(f"Running command: {' '.join(cmd)}")
+            print(f"Working directory: {os.getcwd()}")
+            print(f"Map file: {map_file}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
         if result.returncode == 0:
             print(f"Generated frame from {os.path.basename(map_file)}")
             return str(frame_path)
@@ -223,7 +248,9 @@ def generate_frame(output_num, output_dir, args, frame_dir):
     frame_dir.mkdir(exist_ok=True)
     
     # Build the amr2img command
-    cmd = ["python", "amr2img.py", str(output_num), "--no-display"]
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    amr2img_path = os.path.join(script_dir, "amr2img.py")
+    cmd = ["python", amr2img_path, str(output_num), "--no-display"]
     
     # Add all the arguments from amr2img
     if args.path:
@@ -264,7 +291,12 @@ def generate_frame(output_num, output_dir, args, frame_dir):
     
     # Run amr2img
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+        # Only print debug info on root process to avoid duplicate output in parallel mode
+        if not hasattr(args, 'parallel') or not args.parallel or (hasattr(args, 'rank') and args.rank == 0):
+            print(f"Running command: {' '.join(cmd)}")
+            print(f"Working directory: {os.getcwd()}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.getcwd())
         if result.returncode == 0:
             print(f"Generated frame from output {output_num:05d}")
             return str(frame_path)
@@ -447,7 +479,7 @@ Examples:
                        help="mode: snapshot (from output directories) or map (from movie *.map files) (default: snapshot)")
     
     # Map mode specific arguments (only used when --mode map)
-    parser.add_argument("--movie-dir", help="movie directory (e.g., movie1, movie2) - only used in map mode")
+    parser.add_argument("--movie-dir", help="movie directory (e.g., movie1, movie2) - only used in map mode, defaults to first available movie directory in current directory")
     parser.add_argument("--variable", help="variable to plot (e.g., dens, vx, vy, vz, temp) - only used in map mode")
     
     # Movie-specific arguments
@@ -461,7 +493,7 @@ Examples:
     parser.add_argument("--ffmpeg-only", action="store_true", help="skip frame generation, create movie from existing frames")
     
     # All amr2img arguments
-    parser.add_argument("--path", help="specify a path")
+    parser.add_argument("--path", default='.',help="specify a path (defaults to current directory)")
     parser.add_argument("--log", help="plot log variable", action="store_true")
     parser.add_argument("--prefix", help="specify a file prefix")
     parser.add_argument("--col", help="choose the color map")
@@ -491,11 +523,17 @@ Examples:
         rank = comm.Get_rank()
         size = comm.Get_size()
         is_root = (rank == 0)
+        # Add rank and parallel info to args for use in functions
+        args.rank = rank
+        args.parallel = True
     else:
         comm = None
         rank = 0
         size = 1
         is_root = True
+        # Add rank and parallel info to args for use in functions
+        args.rank = rank
+        args.parallel = False
     
     # Set default values
     if args.output is None:
@@ -509,6 +547,11 @@ Examples:
     if is_root:
         print(f"Frame directory: {frame_dir}")
         print(f"Mode: {args.mode}")
+        print(f"Output movie: {args.output}")
+        if args.mode == "snapshot":
+            print(f"Looking for output directories in: {args.path if args.path else 'current directory'}")
+        elif args.mode == "map":
+            print(f"Looking for movie directories in: {'current directory' if args.movie_dir is None else args.movie_dir}")
     
     # If ffmpeg-only mode, skip frame generation and just create movie
     if args.ffmpeg_only:
@@ -536,6 +579,11 @@ Examples:
         # Original snapshot mode behavior
         if is_root:
             print("Snapshot mode: processing output directories")
+            print(f"Current working directory: {os.getcwd()}")
+            if args.path is None:
+                print("Looking for output directories in current directory")
+            else:
+                print(f"Looking for output directories in: {args.path}")
         
         # Find output directories
         if is_root:
@@ -545,7 +593,9 @@ Examples:
                           if args.start <= num <= args.end]
             
             if not output_dirs:
+                search_path = args.path
                 print(f"No output directories found in range {args.start}-{args.end}")
+                print(f"Searched in: {search_path}")
                 sys.exit(1)
             
             print(f"Found {len(output_dirs)} output directories")
@@ -557,47 +607,76 @@ Examples:
             missing_outputs = [num for num in all_requested if num not in [n for n, _ in output_dirs]]
             if missing_outputs:
                 print(f"Warning: Missing output directories: {missing_outputs}")
+            
+            # Create a global frame index mapping (output_number -> sequential_index)
+            # This ensures frames are numbered 1, 2, 3, ... regardless of gaps
+            frame_index_map = {}
+            for i, (num, _) in enumerate(output_dirs, 1):
+                frame_index_map[num] = i
+            
+            print(f"Frame index mapping:")
+            for num, idx in frame_index_map.items():
+                print(f"  Output {num:05d} -> Frame {idx:05d}")
+            
+            # Determine the actual path where output directories were found
+            if output_dirs:
+                actual_path = os.path.dirname(output_dirs[0][1])
+                if actual_path != args.path:
+                    print(f"Note: Output directories found in: {actual_path}")
+                    args.path = actual_path
         
         # Broadcast output directories to all processes
         if args.parallel:
             if is_root:
                 output_nums = [num for num, _ in output_dirs]
+                frame_indices = [frame_index_map[num] for num in output_nums]
+                path_to_broadcast = args.path
             else:
                 output_nums = None
+                frame_indices = None
+                path_to_broadcast = None
+            
             output_nums = comm.bcast(output_nums, root=0)
+            frame_indices = comm.bcast(frame_indices, root=0)
+            args.path = comm.bcast(path_to_broadcast, root=0)
+            
+            # Create frame index mapping on all processes
+            frame_index_map = dict(zip(output_nums, frame_indices))
             output_dirs = [(num, None) for num in output_nums]  # Only need numbers for parallel processing
         else:
             output_nums = [num for num, _ in output_dirs]
+            frame_indices = [frame_index_map[num] for num in output_nums]
         
-        # Distribute work among processes
+        # Distribute work among processes using frame indices
         if args.parallel:
-            # Simple round-robin distribution
-            my_outputs = [num for i, num in enumerate(output_nums) if i % size == rank]
-            print(f"Process {rank}: processing {len(my_outputs)} outputs")
+            # Distribute frame indices (not output numbers) to avoid conflicts
+            my_frame_indices = [frame_indices[i] for i in range(len(frame_indices)) if i % size == rank]
+            my_output_nums = [output_nums[i] for i in range(len(output_nums)) if i % size == rank]
+            print(f"Process {rank}: processing {len(my_output_nums)} outputs")
         else:
-            my_outputs = output_nums
+            my_frame_indices = frame_indices
+            my_output_nums = output_nums
         
         # Generate frames
         generated_frames = []
-        frame_counter = 0  # Sequential counter for generated frames
         
-        for output_num in my_outputs:
-            # Check if this output directory exists
-            output_dir = next((d for n, d in output_dirs if n == output_num), None)
-            if output_dir is None:
+        for output_num, frame_index in zip(my_output_nums, my_frame_indices):
+            # Construct expected output directory path using args.path
+            base_path = args.path if args.path else "."
+            output_path = os.path.join(base_path, f"output_{output_num:05d}")
+            if not os.path.isdir(output_path):
                 print(f"Warning: output directory output_{output_num:05d} doesn't exist")
                 continue
                 
             frame_path = generate_frame(output_num, None, args, frame_dir)
             if frame_path:
-                # Rename frame to use sequential numbering
-                frame_counter += 1
-                new_frame_filename = f"frame_{frame_counter:05d}.png"
+                # Use the global frame index for naming
+                new_frame_filename = f"frame_{frame_index:05d}.png"
                 new_frame_path = frame_dir / new_frame_filename
                 
                 try:
                     os.rename(frame_path, new_frame_path)
-                    print(f"Generated frame {frame_counter:05d} from output {output_num:05d}")
+                    print(f"Generated frame {frame_index:05d} from output {output_num:05d}")
                     generated_frames.append(str(new_frame_path))
                 except OSError as e:
                     print(f"Warning: Could not rename frame {output_num}: {e}")
@@ -639,6 +718,7 @@ Examples:
         # New map mode for movie *.map files
         if is_root:
             print("Map mode: processing movie *.map files")
+            print(f"Current working directory: {os.getcwd()}")
             
             # Check required arguments for map mode
             if args.variable is None:
@@ -647,12 +727,42 @@ Examples:
                 sys.exit(1)
             
             if args.movie_dir is None:
-                args.movie_dir = "movie1"
-                print(f"Using default movie directory: {args.movie_dir}")
+                # Look for movie directories in current directory
+                movie_patterns = ["movie1", "movie2", "movie3", "movie4", "movie5"]
+                for pattern in movie_patterns:
+                    if os.path.isdir(pattern):
+                        args.movie_dir = pattern
+                        break
+                else:
+                    args.movie_dir = "movie1"
+                    print(f"Warning: No movie directories found in current directory, using {args.movie_dir}")
+                print(f"Using movie directory: {args.movie_dir} (auto-detected from current directory)")
             else:
                 print(f"Using movie directory: {args.movie_dir}")
             
             print(f"Processing variable: {args.variable}")
+        
+        # Broadcast movie directory and variable to all processes in parallel mode
+        if args.parallel:
+            if is_root:
+                movie_dir_to_broadcast = args.movie_dir
+                variable_to_broadcast = args.variable
+            else:
+                movie_dir_to_broadcast = None
+                variable_to_broadcast = None
+            
+            # Broadcast to all processes
+            args.movie_dir = comm.bcast(movie_dir_to_broadcast, root=0)
+            args.variable = comm.bcast(variable_to_broadcast, root=0)
+            
+            # All processes now print the info
+            print(f"Process {rank}: Using movie directory: {args.movie_dir}")
+            print(f"Process {rank}: Processing variable: {args.variable}")
+        else:
+            # In non-parallel mode, ensure all processes have the info
+            if not is_root:
+                print(f"Using movie directory: {args.movie_dir}")
+                print(f"Processing variable: {args.variable}")
         
         # Find movie map files
         if is_root:
@@ -664,36 +774,56 @@ Examples:
             if not map_files:
                 print(f"No {args.variable} map files found in range {args.start}-{args.end}")
                 print(f"Checked directory: {args.movie_dir}")
+                print(f"Make sure you have movie *.map files in the {args.movie_dir} directory")
                 sys.exit(1)
             
             print(f"Found {len(map_files)} map files")
             for num, file_path in map_files:
                 print(f"  {num:5d}: {os.path.basename(file_path)}")
+            
+            # Create a global frame index mapping (frame_number -> sequential_index)
+            # This ensures frames are numbered 1, 2, 3, ... regardless of gaps
+            frame_index_map = {}
+            for i, (num, _) in enumerate(map_files, 1):
+                frame_index_map[num] = i
+            
+            print(f"Frame index mapping:")
+            for num, idx in frame_index_map.items():
+                print(f"  Output {num:05d} -> Frame {idx:05d}")
         
-        # Broadcast map files to all processes
+        # Broadcast frame index mapping to all processes
         if args.parallel:
             if is_root:
                 frame_nums = [num for num, _ in map_files]
+                frame_indices = [frame_index_map[num] for num in frame_nums]
             else:
                 frame_nums = None
+                frame_indices = None
+            
             frame_nums = comm.bcast(frame_nums, root=0)
+            frame_indices = comm.bcast(frame_indices, root=0)
+            
+            # Create frame index mapping on all processes
+            frame_index_map = dict(zip(frame_nums, frame_indices))
             map_files = [(num, None) for num in frame_nums]  # Only need numbers for parallel processing
         else:
             frame_nums = [num for num, _ in map_files]
+            frame_indices = [frame_index_map[num] for num in frame_nums]
         
-        # Distribute work among processes
+        # Distribute work among processes using frame indices
         if args.parallel:
-            # Simple round-robin distribution
-            my_frames = [num for i, num in enumerate(frame_nums) if i % size == rank]
-            print(f"Process {rank}: processing {len(my_frames)} frames")
+            # Distribute frame indices (not frame numbers) to avoid conflicts
+            my_frame_indices = [frame_indices[i] for i in range(len(frame_indices)) if i % size == rank]
+            my_frame_nums = [frame_nums[i] for i in range(len(frame_nums)) if i % size == rank]
+            print(f"Process {rank}: processing {len(my_frame_nums)} frames")
         else:
-            my_frames = frame_nums
+            my_frame_indices = frame_indices
+            my_frame_nums = frame_nums
         
         # Generate frames
         generated_frames = []
-        frame_counter = 0  # Sequential counter for generated frames
         
-        for frame_num in my_frames:
+        for frame_num, frame_index in zip(my_frame_nums, my_frame_indices):
             # Find the corresponding map file
             map_file = None
             if not args.parallel:
@@ -705,14 +835,13 @@ Examples:
             if map_file and os.path.exists(map_file):
                 frame_path = generate_map_frame(frame_num, map_file, args, frame_dir)
                 if frame_path:
-                    # Rename frame to use sequential numbering
-                    frame_counter += 1
-                    new_frame_filename = f"frame_{frame_counter:05d}.png"
+                    # Use the global frame index for naming
+                    new_frame_filename = f"frame_{frame_index:05d}.png"
                     new_frame_path = frame_dir / new_frame_filename
                     
                     try:
                         os.rename(frame_path, new_frame_path)
-                        print(f"Generated frame {frame_counter:05d} from {os.path.basename(map_file)}")
+                        print(f"Generated frame {frame_index:05d} from {os.path.basename(map_file)} (output {frame_num:05d})")
                         generated_frames.append(str(new_frame_path))
                     except OSError as e:
                         print(f"Warning: Could not rename frame {frame_num}: {e}")

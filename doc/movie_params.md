@@ -11,24 +11,43 @@ This namelist block, called `&MOVIE_PARAMS`, is used to configure the generation
 | `nh_frame=512` | `integer` | Height of each movie frame in pixels. |
 | `levelmax_frame=0` | `integer` | Maximum AMR level to use for movie frame generation. If 0, uses the current maximum level. |
 | `ivar_frame=1` | `integer` | Variable index for frame generation (legacy parameter). |
-| `xcentre_frame=0.0,0.0,...` | `real array` | X-coordinate of the center of the movie frame for each projection axis. Array of up to 20 values. |
-| `ycentre_frame=0.0,0.0,...` | `real array` | Y-coordinate of the center of the movie frame for each projection axis. Array of up to 20 values. |
-| `zcentre_frame=0.0,0.0,...` | `real array` | Z-coordinate of the center of the movie frame for each projection axis. Array of up to 20 values. |
-| `deltax_frame=0.0,0.0,...` | `real array` | Physical size of the movie frame in the X-direction for each projection axis. Array of up to 10 values. |
-| `deltay_frame=0.0,0.0,...` | `real array` | Physical size of the movie frame in the Y-direction for each projection axis. Array of up to 10 values. |
-| `deltaz_frame=0.0,0.0,...` | `real array` | Physical size of the movie frame in the Z-direction for each projection axis. Array of up to 10 values. |
-| `proj_axis='z'` | `character` | Projection axis for the movie frames. Can be 'x', 'y', 'z', or combinations like 'xy' for multiple projections (which will create a movie directory for each axis).|
-| `zoom_only=.false.` | `logical` | If true, only generate zoomed-in frames around specified centers. |
+| `xcentre_frame=0.0,0.0,...` | `real array` | X-values for a cubic polynomial determining camera trajectory. 4 values per projection axis. |
+| `ycentre_frame=0.0,0.0,...` | `real array` | The same as `xcentre_frame`, but for the Y-direction. |
+| `zcentre_frame=0.0,0.0,...` | `real array` | The same as `xcentre_frame`, but for the Z-direction. |
+| `deltax_frame=0.0,0.0,...` | `real array` | Extent of the movie frame in the horizontal direction for each projection axis. Two values per projection axis, first specifies a comoving width, second specifies a physical width. Array of size 10 (supports up to 5 projection axes). `deltax_frame` always corresponds to the first index of the `*.map` file, and so which direction this corresponds to is projection axis dependent. |
+| `deltay_frame=0.0,0.0,...` | `real array` | The same as `deltax_frame`, but for the second index of the `*.map' file. Array of size 10 (supports up to 5 projection axes). |
+| `deltaz_frame=0.0,0.0,...` | `real array` | The same as `deltax_frame`, but for the Z-direction. Array of size 10 (supports up to 5 projection axes). Corresponds to the thickness of the frame.|
+| `proj_axis='z'` | `character` | Projection axis for the movie frames. Can be 'x', 'y', 'z', or combinations like 'xy' for multiple projections (which will create a movie directory for each axis). Maximum of 5 projection axes. |
+| `zoom_only=.false.` | `logical` | If true, only generate zoomed-in frames. Not yet implemented.|
 | `movie_vars=0,0,0,...` | `integer array` | Array specifying which variables to include in movie frames. 1 means include, 0 means exclude. |
 | `movie_vars_txt='','','',...` | `character array` | Text labels for variables to include in movie frames. Valid options include 'dens', 'vx', 'vy', 'vz', 'temp', 'dm', 'stars', 'var6', 'var7', etc. |
+
+## Technical Details
+
+### Frame Size Calculation
+The physical extent of each movie frame is calculated as:
+```
+frame_size = comoving_width + physical_width/aexp
+```
+
+Where:
+- **comoving_width**: Remains constant regardless of expansion
+- **physical_width**: Scales with the expansion factor `aexp`
+- **aexp**: Current expansion factor (1.0 for non-cosmological runs)
+
+### Parameter Indexing
+For multiple projection axes (e.g., `proj_axis='xy'`):
+- **First projection axis** (index 1): uses `deltax_frame(1:2)`, `deltay_frame(1:2)`, `deltaz_frame(1:2)`
+- **Second projection axis** (index 2): uses `deltax_frame(3:4)`, `deltay_frame(3:4)`, `deltaz_frame(3:4)`
+- And so on...
 
 ## Output Format
 
 Movie frames are written as binary files in the following format:
 - Each frame is stored in a separate directory (e.g., `movie1/`, `movie2/`)
-- Files include projection maps of density, velocity components, temperature, and other selected variables
+- Files include projection maps of density (`'dens'`), velocity components (`'vx'`, `'vy'`, `'vz'`), temperature (`'temp'`), and other selected variables
 - Each file contains: time/expansion factor, frame dimensions, and the 2D projection data
-- Files can be processed with external tools to create animations
+- Files can be processed with external tools (e.g. `amr2vid.py`) to create animations
 
 ## Example Usage (from coeur.nml test problem)
 

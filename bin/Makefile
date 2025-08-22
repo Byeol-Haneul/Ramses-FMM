@@ -35,7 +35,7 @@ PATCH =
 DEBUG = 0
 HDF5 = 0
 MPIF90 = mpif90
-EXEC = coeur
+EXEC = ramses
 #############################################################################
 # Compute NVAR
 NHYDRO = 5
