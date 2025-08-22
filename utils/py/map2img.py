@@ -54,5 +54,7 @@ if args.out:
     plt.savefig(args.out)
 if not args.no_display:
     plt.show()
+else:
+    plt.close()
 
 

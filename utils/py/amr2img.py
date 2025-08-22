@@ -167,4 +167,6 @@ if args.out:
 
 if not no_display:
     plt.show()
+else:
+    plt.close()
 
