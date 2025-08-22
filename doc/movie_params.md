@@ -14,9 +14,9 @@ This namelist block, called `&MOVIE_PARAMS`, is used to configure the generation
 | `xcentre_frame=0.0,0.0,...` | `real array` | X-values for a cubic polynomial in `aexp` determining camera trajectory. 4 values per projection axis. |
 | `ycentre_frame=0.0,0.0,...` | `real array` | The same as `xcentre_frame`, but for the Y-direction. |
 | `zcentre_frame=0.0,0.0,...` | `real array` | The same as `xcentre_frame`, but for the Z-direction. |
-| `deltax_frame=0.0,0.0,...` | `real array` | Extent of the movie frame in the horizontal direction for each projection axis. Two values per projection axis, first specifies a comoving width, second specifies a physical width. Array of size 10 (supports up to 5 projection axes). `deltax_frame` always corresponds to the first index of the `*.map` file, and so which direction this corresponds to is projection axis dependent. |
-| `deltay_frame=0.0,0.0,...` | `real array` | The same as `deltax_frame`, but for the second index of the `*.map' file. Array of size 10 (supports up to 5 projection axes). |
-| `deltaz_frame=0.0,0.0,...` | `real array` | The same as `deltax_frame`, but for the Z-direction. Array of size 10 (supports up to 5 projection axes). Corresponds to the thickness of the frame.|
+| `deltax_frame=0.0,0.0,...` | `real array` | Extent of the movie frame in the horizontal direction for each projection axis. Two values per projection axis, first specifies a comoving width, second specifies a physical width. `deltax_frame` always corresponds to the first index of the `*.map` file, and so which direction this corresponds to is projection axis dependent. |
+| `deltay_frame=0.0,0.0,...` | `real array` | The same as `deltax_frame`, but for the second index of the `*.map' file. |
+| `deltaz_frame=0.0,0.0,...` | `real array` | The same as `deltax_frame`, but for the Z-direction. Corresponds to the thickness of the frame.|
 | `proj_axis='z'` | `character` | Projection axis for the movie frames. Can be 'x', 'y', 'z', or combinations like 'xy' for multiple projections (which will create a movie directory for each axis). Maximum of 5 projection axes. |
 | `zoom_only=.false.` | `logical` | If true, only generate zoomed-in frames. Not yet implemented.|
 | `movie_vars=0,0,0,...` | `integer array` | Array specifying which variables to include in movie frames. 1 means include, 0 means exclude. |
