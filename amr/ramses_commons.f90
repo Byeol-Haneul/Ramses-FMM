@@ -16,6 +16,7 @@ module ramses_commons
      type(part_t)::star
      type(part_t)::sink
      type(part_t)::tree
+     type(part_t)::trac
      type(part_t)::gas
      type(clump_t)::c
      type(cooling_t)::cool
@@ -557,3 +558,4 @@ end subroutine close_part_file
 !#########################################################################
 end module ramses_commons
 
+ 

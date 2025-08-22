@@ -33,6 +33,9 @@ recursive subroutine r_init_part(pst)
      if(pst%s%r%tree)then
         call init_tree(pst%s%r,pst%s%g,pst%s%tree)
      end if
+     if(pst%s%r%trac)then
+        call init_trac(pst%s%r,pst%s%g,pst%s%trac)
+     end if
   endif
 
 end subroutine r_init_part
@@ -197,6 +200,37 @@ end subroutine init_tree
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine init_trac(r,g,p)
+  use amr_parameters, only: ndim
+  use amr_commons, only: run_t,global_t
+  use pm_parameters, only: TRAC_TYPE
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(part_t)::p
+  !-----------------------------------
+  ! Allocate tracer particle variables
+  !------------------------------------
+  p%type=TRAC_TYPE
+  allocate(p%xp    (p%ntracmax,ndim))
+  allocate(p%vp    (p%ntracmax,ndim))
+  allocate(p%mp    (p%ntracmax))
+  allocate(p%levelp(p%ntracmax))
+  allocate(p%idp   (p%ntracmax))
+  p%nvaralloc=2*ndim+3
+
+  allocate(p%sortp (p%ntracmax))
+  allocate(p%workp (p%ntracmax))
+  allocate(p%headp(r%levelmin:r%nlevelmax))
+  allocate(p%tailp(r%levelmin:r%nlevelmax))
+  p%headp=1
+  p%tailp=0
+end subroutine init_trac
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
 subroutine allocate_gas(r,g,p)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t,global_t
@@ -282,3 +316,5 @@ end subroutine deallocate_gas
 !#########################################################################
 !#########################################################################
 end module init_part_module
+
+

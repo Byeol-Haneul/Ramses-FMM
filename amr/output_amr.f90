@@ -99,6 +99,10 @@ subroutine m_dump_all(pst,write_bkp_file)
         filename=TRIM(filedir)//'tree_header.txt'
         call output_header(r,g,tree,filename)
      endif
+     if(r%trac)then
+        filename=TRIM(filedir)//'trac_header.txt'
+        call output_header(r,g,trac,filename)
+     endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_header.txt'
         call file_descriptor_hydro(r,filename,write_bkp_file)

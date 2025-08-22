@@ -87,7 +87,16 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%tree_force_interpolation_scheme==2)then
            call tsc_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
         elseif(pst%s%r%tree_force_interpolation_scheme==3)then
-           call pcs_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
+           call pcs_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)xvcdfs
+        endif
+     endif
+     if(pst%s%r%trac)then
+        if(pst%s%r%trac_force_interpolation_scheme==1)then
+           call cic_kick_drift_part(pst%s,pst%s%trac,ilevel,action_part)
+        elseif(pst%s%r%trac_force_interpolation_scheme==2)then
+           call tsc_kick_drift_part(pst%s,pst%s%trac,ilevel,action_part)
+        elseif(pst%s%r%trac_force_interpolation_scheme==3)then
+           call pcs_kick_drift_part(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
   endif
