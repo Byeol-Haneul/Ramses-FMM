@@ -11,7 +11,7 @@ This namelist block, called `&MOVIE_PARAMS`, is used to configure the generation
 | `nh_frame=512` | `integer` | Height of each movie frame in pixels. |
 | `levelmax_frame=0` | `integer` | Maximum AMR level to use for movie frame generation. If 0, uses the current maximum level. |
 | `ivar_frame=1` | `integer` | Variable index for frame generation (legacy parameter). |
-| `xcentre_frame=0.0,0.0,...` | `real array` | X-values for a cubic polynomial determining camera trajectory. 4 values per projection axis. |
+| `xcentre_frame=0.0,0.0,...` | `real array` | X-values for a cubic polynomial in `aexp` determining camera trajectory. 4 values per projection axis. |
 | `ycentre_frame=0.0,0.0,...` | `real array` | The same as `xcentre_frame`, but for the Y-direction. |
 | `zcentre_frame=0.0,0.0,...` | `real array` | The same as `xcentre_frame`, but for the Z-direction. |
 | `deltax_frame=0.0,0.0,...` | `real array` | Extent of the movie frame in the horizontal direction for each projection axis. Two values per projection axis, first specifies a comoving width, second specifies a physical width. Array of size 10 (supports up to 5 projection axes). `deltax_frame` always corresponds to the first index of the `*.map` file, and so which direction this corresponds to is projection axis dependent. |
