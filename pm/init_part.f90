@@ -213,15 +213,15 @@ subroutine init_trac(r,g,p)
   ! Allocate tracer particle variables
   !------------------------------------
   p%type=TRAC_TYPE
-  allocate(p%xp    (p%ntracmax,ndim))
-  allocate(p%vp    (p%ntracmax,ndim))
-  allocate(p%mp    (p%ntracmax))
-  allocate(p%levelp(p%ntracmax))
-  allocate(p%idp   (p%ntracmax))
+  allocate(p%xp    (r%ntracmax,ndim))
+  allocate(p%vp    (r%ntracmax,ndim))
+  allocate(p%mp    (r%ntracmax))
+  allocate(p%levelp(r%ntracmax))
+  allocate(p%idp   (r%ntracmax))
   p%nvaralloc=2*ndim+3
 
-  allocate(p%sortp (p%ntracmax))
-  allocate(p%workp (p%ntracmax))
+  allocate(p%sortp (r%ntracmax))
+  allocate(p%workp (r%ntracmax))
   allocate(p%headp(r%levelmin:r%nlevelmax))
   allocate(p%tailp(r%levelmin:r%nlevelmax))
   p%headp=1

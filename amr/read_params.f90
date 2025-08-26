@@ -28,6 +28,7 @@ subroutine m_read_params(pst)
   integer(kind=8)::nstartot=0
   integer(kind=8)::nsinktot=0
   integer(kind=8)::ntreetot=0
+  integer(kind=8)::ntractot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -45,6 +46,7 @@ subroutine m_read_params(pst)
   logical::star    =.false.    ! Stars and star formation activated
   logical::sink    =.false.    ! Sinks and sink formation activated
   logical::part    =.false.   ! Dark matter particles activated
+  logical::trac    =.false.   ! Tracer particles activated
   logical::merger_tree=.false. ! Merger tree particles activated
   logical::orphan  =.false.   ! Orphan particles activated
   logical::verbose =.false.    ! Write everything
@@ -64,6 +66,7 @@ subroutine m_read_params(pst)
   integer::nstarmax=0
   integer::nsinkmax=0
   integer::ntreemax=0
+  integer::ntracmax=0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -289,6 +292,7 @@ subroutine m_read_params(pst)
   integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
+  integer :: trac_force_interpolation_scheme=1 ! tracer force interpolation schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -392,6 +396,7 @@ subroutine m_read_params(pst)
   logical::output_peak_star=.false.
   logical::output_peak_sink=.false.
   logical::output_peak_tree=.false.
+  logical::output_peak_trac=.false.
   integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
   real(kind=8)::relevance_threshold=2
   real(kind=8)::density_threshold=-1
@@ -500,7 +505,7 @@ subroutine m_read_params(pst)
        & ,part_force_interpolation_scheme,star_mass_deposition_scheme &
        & ,star_force_interpolation_scheme,sink_mass_deposition_scheme &
        & ,sink_force_interpolation_scheme,tree_mass_deposition_scheme &
-       & ,tree_force_interpolation_scheme 
+       & ,tree_force_interpolation_scheme
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
@@ -579,6 +584,8 @@ subroutine m_read_params(pst)
        & ,rtz_include_charge_exchange, rtz_include_dust_recombination, rtz_UV_background_G0 &
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
+  ! Tracer particles parameters
+  namelist/trac_params/trac,ntracmax,ntractot,trac_force_interpolation_scheme
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -603,6 +610,7 @@ subroutine m_read_params(pst)
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
+  
   ! Lightcone parameters
   namelist/lightcone_params/lightcone,cone_z_min,cone_z_max,cone_opening_angle_y,cone_opening_angle_z &
        & ,cone_theta,cone_phi,cone_observer
@@ -612,6 +620,7 @@ subroutine m_read_params(pst)
        & ,ic_u_name,ic_metal_name,ic_age_name &
        & ,gadget_scale_l, gadget_scale_v, gadget_scale_m ,gadget_scale_t &
        & ,ic_skip_type
+  
 
   associate(s=>pst%s)
 
@@ -773,6 +782,10 @@ subroutine m_read_params(pst)
      endif
      if(ntreemax==0)merger_tree=.false.
   endif
+  if(ntracmax==0)then
+     ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntracmax==0)trac=.false.
+  endif
 #ifdef HYDRO
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
@@ -862,6 +875,9 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1, NML=lightcone_params, END=115)
 115 continue 
+  rewind(1)
+  read(1,NML=trac_params,END=116)
+116 continue
   close(1)
 
   !-----------------

@@ -52,7 +52,7 @@ import numpy as np
 import grafic
 
 
-def write_array(filename: str, array: np.ndarray, box_size_cu: float, *, as_int64: bool = False) -> None:
+def write_array(filename: str, array: np.ndarray, box_size_cu: float, *, as_int64: bool = False, layout: str = "sliced") -> None:
     """Write a 3D numpy array to a GRAFIC file.
 
     Args:
@@ -60,6 +60,7 @@ def write_array(filename: str, array: np.ndarray, box_size_cu: float, *, as_int6
         array: 3D array shaped (n1, n2, n3). For 2D output, use n3=1.
         box_size_cu: Physical box size in code units used to set dx in header.
         as_int64: If True, write data as int64; otherwise float32.
+        layout: "sliced" or "single". For 2D output, "single" is often better.
     """
     g = grafic.Grafic()
     g.set_data(np.asarray(array))
@@ -292,11 +293,26 @@ def main():
         ids = np.arange(1, total + 1, dtype=np.int64)
         rng.shuffle(ids)
         ids = ids.reshape((n1, n2, n3))
+
+        # # Set particle positions equal to gas positions
+        # dx = L / float(n1)
+        # dy = L / float(n2)
+        # dz = L / float(n3)
+        # xc = (np.arange(n1, dtype=np.float32) + 0.5) * dx
+        # yc = (np.arange(n2, dtype=np.float32) + 0.5) * dy
+        # zc = (np.arange(n3, dtype=np.float32) + 0.5) * dz
+        # Xc, Yc, Zc = np.meshgrid(xc, yc, zc, indexing="ij")
+
         # Set particle velocities equal to gas velocities
         write_array("ic_particle_ids", ids, L, as_int64=True)
         write_array("ic_velcx", u, L)
         write_array("ic_velcy", v, L)
         write_array("ic_velcz", w, L)
+        # # For 2D output, use single layout to avoid plane reading issues
+        # layout = "single" if args.ndim == 2 else "sliced"
+        # write_array("ic_poscx", Xc.astype(np.float32, copy=False), L, layout=layout)
+        # write_array("ic_poscy", Yc.astype(np.float32, copy=False), L, layout=layout)
+        # write_array("ic_poscz", Zc.astype(np.float32, copy=False), L, layout=layout)
 
     print(f"Turbulent ICs written to: {outdir}")
 

@@ -87,7 +87,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         elseif(pst%s%r%tree_force_interpolation_scheme==2)then
            call tsc_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
         elseif(pst%s%r%tree_force_interpolation_scheme==3)then
-           call pcs_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)xvcdfs
+           call pcs_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
         endif
      endif
      if(pst%s%r%trac)then
@@ -243,13 +243,21 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      ! Compute cloud volumes
      vol = cic_weight(dl,dr)
 
-     ! Gather 3-force
+     ! Gather 3-force or gas velocity for tracers
      ff(1:ndim)=0.0
      if(ok_level)then
         do ind=1,twotondim
+           if(p%type==TRACER_TYPE)then
+              ! For tracer particles: interpolate gas velocity (momentum divided by density)
+              do idim=1,ndim
+                 ff(idim)=ff(idim)+(gridp(ind)%p%uold(icell(ind),idim+1)/max(gridp(ind)%p%uold(icell(ind),1), smallr))*vol(ind)
+              end do
+           else
+              ! For regular particles: interpolate gravitational force
 #ifdef GRAV
-           ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
+              ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
 #endif
+           endif
         end do
      endif
 
@@ -257,7 +265,11 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      if(action_part==action_kick_drift)then
 
         ! Update velocity
-        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+        if(p%type==TRACER_TYPE)then
+           p%vp(ipart,1:ndim)=ff(1:ndim)
+        else
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+        endif
 
         ! Update position
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
