@@ -90,7 +90,11 @@ subroutine adaptive_loop(pst)
 
   ! Just in case we only do clump finding
   if(r%clump_only)then
+     write(*,*)'Load balancing particle distribution'
+     tt1 = mdl_wtime(mdl)
      call r_balance_part(pst,r%levelmin,1,dummy,0)
+     tt2 = mdl_wtime(mdl)
+     print '(A,F14.7)',' Time elapsed load balancing:',tt2-tt1
      call m_clump_finder(pst,.true.,.false.)
      return
   endif

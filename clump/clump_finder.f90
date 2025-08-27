@@ -45,6 +45,10 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   if(create_output.and.pst%s%c%npeak_tot>0)then
      call title(g%ifout,nchar)
      filedir='output_'//TRIM(nchar)//'/'
+     if(r%clump_only)then
+        call title(g%ifout-1,nchar)
+        filedir='catalog_output_'//TRIM(nchar)//'/'
+     endif
      call mdl_mkdir(mdl,filedir)
      input_array=transfer(filedir,input_array)
      if(r%output_clump)then
