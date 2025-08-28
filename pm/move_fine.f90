@@ -164,6 +164,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
+     ! Wrap x into valid index range before computing keys !EDITED
+     do idim=1,ndim
+        x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))*floor(x(idim)/dble(m%ckey_max(ilevel+1)))
+     end do
 
      ! CIC at level ilevel (dr: right cloud boundary; dl: left cloud boundary)
      do idim=1,ndim
@@ -204,6 +208,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         ! Rescale particle position at level ilevel
         do idim=1,ndim
            x(idim)=x(idim)/2.0d0
+        end do
+        ! Wrap for coarser level too !EDITED
+        do idim=1,ndim
+           x(idim)=x(idim)-dble(m%ckey_max(ilevel))*floor(x(idim)/dble(m%ckey_max(ilevel)))
         end do
 
         ! CIC at level ilevel-1 (dr: right cloud boundary; dl: left cloud boundary)

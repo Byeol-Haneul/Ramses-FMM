@@ -212,7 +212,9 @@ subroutine input_part_grafic(r,g,p,npart_tot)
                  if(.not. read_pos)then
                     dispmax=max(dispmax,abs(init_plane(i1,i2)/dx))
                  else
-                    p%xp(ipart,idim)=p%xp(ipart,idim)+init_plane_x(i1,i2)
+                    if (r%cosmo) then !EDITED
+                       p%xp(ipart,idim)=p%xp(ipart,idim)+init_plane_x(i1,i2)
+                    end if
                     dispmax=max(dispmax,abs(init_plane_x(i1,i2)/dx))
                  endif
                  ipart=ipart+1
@@ -232,8 +234,8 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   deallocate(init_plane)
   if(read_pos)deallocate(init_plane_x)
 
-  ! Move particle according to Zeldovich approximation
-  if(.not. read_pos)then
+  ! Move particle according to Zeldovich approximation (cosmology only) !EDITED
+  if(r%cosmo .and. .not. read_pos)then
      do ipart=1,p%npart
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)
      enddo
