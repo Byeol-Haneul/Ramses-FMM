@@ -243,25 +243,24 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      ! Compute cloud volumes
      vol = cic_weight(dl,dr)
 
-     ! Gather 3-force or gas velocity for tracers
+     ! Gather 3-force
      ff(1:ndim)=0.0
      if(ok_level)then
         do ind=1,twotondim
-           if(p%type==TRAC_TYPE)then
-              ! For tracer particles: interpolate gas velocity (momentum divided by density)
-              do idim=1,ndim
-                 ff(idim)=ff(idim)+(gridp(ind)%p%uold(icell(ind),idim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr))*vol(ind)
-              end do
-           else
-              ! For regular particles: interpolate gravitational force
+         if(p%type==TRAC_TYPE)then
+            do idim=1,ndim
+               ff(idim)=ff(idim)+gridp(ind)%p%uold(icell(ind),idim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr)*vol(ind)
+            end do
+         else
 #ifdef GRAV
-              ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
+#else
+           continue
 #endif
-           endif
+         endif
         end do
      endif
 
-     print*, "ff", ff(1:ndim)
 
      ! Perform kick, or drift, or both
      if(action_part==action_kick_drift)then
@@ -615,6 +614,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
      ! Compute cloud volumes
      vol = pcs_weight(wll,wl,wr,wrr)
+     
 
      ! Gather 3-force
      hash_nbor(0)=ilevel+1
