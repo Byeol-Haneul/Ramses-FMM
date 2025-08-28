@@ -586,7 +586,7 @@ module amr_commons
      real(kind=8)::aexp_ini=10.
      real(kind=8)::T2_start          ! Starting gas temperature     
      real(kind=8),dimension(1:MAXLEVEL)::dfact=1.0d0,astart
-     real(kind=8),dimension(1:MAXLEVEL)::vfact
+     real(kind=8),dimension(1:MAXLEVEL)::vfact=1.0d0
      real(kind=8),dimension(1:MAXLEVEL)::xoff1,xoff2,xoff3,dxini
      integer ,dimension(1:MAXLEVEL)::n1,n2,n3
 
