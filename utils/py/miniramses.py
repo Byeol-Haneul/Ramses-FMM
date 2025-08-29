@@ -995,6 +995,7 @@ def rd_cell(nout,**kwargs):
     path = kwargs.get("path","./")
     center = kwargs.get("center")
     radius = kwargs.get("radius")
+    rad_mode = kwargs.get("rad_mode")
 
     a = rd_amr(nout,**kwargs)
     h = rd_hydro(nout,**kwargs)
@@ -1052,12 +1053,20 @@ def rd_cell(nout,**kwargs):
             xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
             xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
             c.x[idim] = xx+center[idim]
-        if ndim==1:
-            r = np.sqrt((c.x[0]-center[0])**2) - dx
-        if ndim==2:
-            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2) - dx
-        if ndim==3:
-            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
+        if rad_mode == "circle":
+            if ndim==1:
+                r = np.sqrt((c.x[0]-center[0])**2) - dx
+            elif ndim==2:
+                r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2) - dx
+            elif ndim==3:
+                r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
+        elif rad_mode == "square":
+            if ndim==1:
+                r = np.abs(c.x[0]-center[0]) - dx
+            elif ndim==2:
+                r = np.maximum.reduce([np.abs(c.x[0]-center[0]), np.abs(c.x[1]-center[1])]) - dx
+            elif ndim==3:
+                r = np.maximum.reduce([np.abs(c.x[0]-center[0]), np.abs(c.x[1]-center[1]), np.abs(c.x[2]-center[2])]) - dx
         c.ncell = np.count_nonzero(r < radius)
         c.u  = c.u[:,r < radius]
         c.x  = c.x[:,r < radius]

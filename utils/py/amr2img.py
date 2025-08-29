@@ -30,6 +30,7 @@ parser.add_argument("--sink", help="specify if sinks are overplotted")
 parser.add_argument("--dir", help="specify the projection axis")
 parser.add_argument("--grid", help="overlay the AMR grid",action="store_true")
 parser.add_argument("--no-display", help="prevent GUI display (useful for batch processing)",action="store_true")
+parser.add_argument("--rad-mode", help="radius mode: 'circle' or 'square'")
 args = parser.parse_args()
 # path the the file
 path = args.path
@@ -48,6 +49,7 @@ axis = args.dir
 log = args.log
 grid = args.grid
 no_display = args.no_display
+rad_mode = args.rad_mode
 
 # Convert vmin and vmax to float if provided
 if vmin is not None:
@@ -115,7 +117,7 @@ if axis=="y":
 if axis=="z":
     ii=1; jj=2
 
-c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
+c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius,rad_mode=rad_mode)
 kwargs={}
 if col is not None:
     kwargs["cmap"]=col

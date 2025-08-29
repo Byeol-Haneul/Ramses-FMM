@@ -54,6 +54,7 @@ SNAPSHOT MODE OPTIONS (passed to amr2img.py):
   --sink              Overplot sink particles
   --dir               Projection direction
   --grid              Overlay AMR grid
+  --rad-mode          Radius mode: "circle" or "square" for when --rad is used
 
 MAP MODE OPTIONS (passed to map2img.py):
   --log               Use logarithmic scale for variable plotting
@@ -283,6 +284,8 @@ def generate_frame(output_num, output_dir, args, frame_dir):
         cmd.extend(["--dir", args.dir])
     if args.grid:
         cmd.extend(["--grid"])
+    if args.rad_mode:
+        cmd.extend(["--rad-mode", args.rad_mode])
     
     # Set output filename for this frame
     frame_filename = f"frame_{output_num:05d}.png"
@@ -508,6 +511,7 @@ Examples:
     parser.add_argument("--sink", help="specify if sinks are overplotted")
     parser.add_argument("--dir", help="specify the projection axis")
     parser.add_argument("--grid", help="overlay the AMR grid", action="store_true")
+    parser.add_argument("--rad-mode", help="radius mode: 'circle' or 'square'")
     
     args = parser.parse_args()
     
