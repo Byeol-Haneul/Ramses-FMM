@@ -264,45 +264,45 @@ subroutine input_part_zoom(r,g,p,m)
   end do
   ! End loop over levels
 
-  ! Move particle according to Zeldovich approximation
-  if(.not. read_pos)then
+  ! Move particle according to Zeldovich approximation (cosmology only)
+  if(r%cosmo .and. .not. read_pos)then
      do ipart=1,p%npart
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)
      enddo
   endif
-
+  
   ! Scale displacement to velocity
   do ipart=1,p%npart
-     p%vp(ipart,1:ndim)=g%vfact(1)*p%vp(ipart,1:ndim)
+    p%vp(ipart,1:ndim)=g%vfact(1)*p%vp(ipart,1:ndim)
   end do
-
+  
   ! Periodic box
   do ipart=1,p%npart
 #if NDIM>0
-     if(p%xp(ipart,1)<   0.0d0 )p%xp(ipart,1)=p%xp(ipart,1)+r%boxlen
-     if(p%xp(ipart,1)>=r%boxlen)p%xp(ipart,1)=p%xp(ipart,1)-r%boxlen
+    if(p%xp(ipart,1)<   0.0d0 )p%xp(ipart,1)=p%xp(ipart,1)+r%boxlen
+    if(p%xp(ipart,1)>=r%boxlen)p%xp(ipart,1)=p%xp(ipart,1)-r%boxlen
 #endif
 #if NDIM>1
-     if(p%xp(ipart,2)<   0.0d0 )p%xp(ipart,2)=p%xp(ipart,2)+r%boxlen
-     if(p%xp(ipart,2)>=r%boxlen)p%xp(ipart,2)=p%xp(ipart,2)-r%boxlen
+    if(p%xp(ipart,2)<   0.0d0 )p%xp(ipart,2)=p%xp(ipart,2)+r%boxlen
+    if(p%xp(ipart,2)>=r%boxlen)p%xp(ipart,2)=p%xp(ipart,2)-r%boxlen
 #endif
 #if NDIM>2
-     if(p%xp(ipart,3)<   0.0d0 )p%xp(ipart,3)=p%xp(ipart,3)+r%boxlen
-     if(p%xp(ipart,3)>=r%boxlen)p%xp(ipart,3)=p%xp(ipart,3)-r%boxlen
+    if(p%xp(ipart,3)<   0.0d0 )p%xp(ipart,3)=p%xp(ipart,3)+r%boxlen
+    if(p%xp(ipart,3)>=r%boxlen)p%xp(ipart,3)=p%xp(ipart,3)-r%boxlen
 #endif
   end do
-
+  
   ! Compute particle initial level
   do ipart=1,p%npart
-     p%levelp(ipart)=r%levelmin
+    p%levelp(ipart)=r%levelmin
   end do
-
+  
   ! Put all particles in levelmin
   p%headp=p%npart+1
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
-
+  
 #endif
   
 end subroutine input_part_zoom
