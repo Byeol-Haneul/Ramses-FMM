@@ -792,7 +792,10 @@ Examples:
             if t is None:
                 # If time not found, assume reference time
                 t = args._t_ref
-            dt = t - args._t_ref
+            if (t-args._t_ref) < 0.0:
+                dt = 0.0
+            else:   
+                dt = t - args._t_ref
 
             # Center panning overrides
             xcen_override = None
