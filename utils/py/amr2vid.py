@@ -6,6 +6,8 @@ This script generates movies from RAMSES simulation data in two modes:
 1. SNAPSHOT MODE (default): Processes output directories (output_00001, output_00002, etc.)
    - Uses amr2img.py to generate frames from full simulation snapshots
    - Supports all amr2img.py options for customization
+   - Supports time-dependent panning (center drifting at constant velocity) and
+     time-dependent zoom (radius changing over a specified time window)
    - Defaults to looking for output directories in the current directory
    - Ideal for creating movies from complete simulation outputs
 
@@ -56,6 +58,40 @@ SNAPSHOT MODE OPTIONS (passed to amr2img.py):
   --grid              Overlay AMR grid
   --rad-mode          Radius mode: "circle" or "square" for when --rad is used
 
+SNAPSHOT MODE DYNAMIC PANNING/ZOOM (handled by amr2vid.py):
+  The following options let you make the center and radius vary with simulation time t
+  (read from each output's info.txt). If a value is not provided, it defaults to 0 for
+  velocities and to the static option value (e.g., --xcen) where relevant.
+
+  Panning (center drifting at constant velocity):
+    Center at time t is computed as: center(t) = base_center + velocity * (t - t_ref)
+      - base_center comes from --xcen/--ycen/--zcen (defaults to 0 if omitted)
+      - velocity from --xcen-vel/--ycen-vel/--zcen-vel (defaults to 0)
+      - t_ref is specified by --t-ref (defaults to the time of the first processed snapshot;
+        if the time cannot be read, defaults to 0)
+
+    --xcen-vel        x center panning velocity (center units per time unit)
+    --ycen-vel        y center panning velocity (center units per time unit)
+    --zcen-vel        z center panning velocity (center units per time unit)
+    --t-ref           reference time for panning/zoom (defaults to time of first snapshot)
+
+  Zoom (radius schedule over a time window):
+    Radius is piecewise defined over a window [t0, t1] as:
+      - r(t) = r0 for t <= t0
+      - r(t) = r0 + (t - t0) / (t1 - t0) * (r1 - r0) for t0 < t < t1
+      - r(t) = r1 for t >= t1
+    Use these flags together to enable zooming:
+    --rad-start       radius r0 at start of zoom window t0
+    --rad-end         radius r1 at end of zoom window t1
+    --rad-zoom-start  zoom window start time t0
+    --rad-zoom-end    zoom window end time t1
+
+  Notes:
+    - Units: velocities use the same units as the center coordinates per time unit
+      used in info.txt. Radii use the same units as --rad.
+    - If a per-output time cannot be read from info.txt, the reference time (t_ref) is used.
+    - Dynamic values are computed per frame and passed to amr2img.py as --xcen/--ycen/--zcen/--rad.
+
 MAP MODE OPTIONS (passed to map2img.py):
   --log               Use logarithmic scale for variable plotting
   --col               Colormap selection
@@ -73,6 +109,14 @@ EXAMPLES:
 
 2. Create movie from snapshots with custom settings:
    python amr2vid.py 1 100 --fps 60 --quality high --log --var 1 --col viridis
+
+2b. Snapshot mode with time-dependent panning and zoom:
+   # Center drifts linearly; radius smoothly zooms between t=0.1 and t=0.5
+   python amr2vid.py 1 200 --mode snapshot \
+     --path . --var 0 --col viridis \
+     --xcen 0.5 --ycen 0.5 --xcen-vel 0.02 --ycen-vel -0.01 \
+     --rad-start 0.2 --rad-end 0.05 --rad-zoom-start 0.1 --rad-zoom-end 0.5 \
+     --rad-mode circle --fps 30 --quality high --output panzoom.mp4
 
 3. Create movie from density maps (auto-detects movie directory):
    python amr2vid.py 1 100 --mode map --variable dens
@@ -118,6 +162,23 @@ try:
 except ImportError:
     MPI_AVAILABLE = False
     print("Warning: mpi4py not available. Running in serial mode.")
+
+def read_output_time(base_path, output_num):
+    """Read simulation time from output_XXXXX/info.txt. Returns float or None."""
+    try:
+        info_path = os.path.join(base_path if base_path else ".", f"output_{output_num:05d}", "info.txt")
+        with open(info_path, 'r') as f:
+            for line in f:
+                if '=' not in line:
+                    continue
+                key, val = line.split('=', 1)
+                if key.strip().lower() == 'time':
+                    # take first token as float
+                    tok = val.strip().split()[0]
+                    return float(tok)
+    except Exception:
+        return None
+    return None
 
 def find_output_directories(path, prefix="output_"):
     """Find all output directories matching the pattern."""
@@ -268,13 +329,30 @@ def generate_frame(output_num, output_dir, args, frame_dir):
         cmd.extend(["--max", str(args.max)])
     if args.var:
         cmd.extend(["--var", str(args.var)])
-    if args.xcen:
+    # Dynamic overrides for center and radius (set by caller on args)
+    xcen_override = getattr(args, "_xcen_override", None)
+    ycen_override = getattr(args, "_ycen_override", None)
+    zcen_override = getattr(args, "_zcen_override", None)
+    rad_override  = getattr(args, "_rad_override", None)
+
+    if xcen_override is not None:
+        cmd.extend(["--xcen", str(xcen_override)])
+    elif args.xcen:
         cmd.extend(["--xcen", str(args.xcen)])
-    if args.ycen:
+
+    if ycen_override is not None:
+        cmd.extend(["--ycen", str(ycen_override)])
+    elif args.ycen:
         cmd.extend(["--ycen", str(args.ycen)])
-    if args.zcen:
+
+    if zcen_override is not None:
+        cmd.extend(["--zcen", str(zcen_override)])
+    elif args.zcen:
         cmd.extend(["--zcen", str(args.zcen)])
-    if args.rad:
+
+    if rad_override is not None:
+        cmd.extend(["--rad", str(rad_override)])
+    elif args.rad:
         cmd.extend(["--rad", str(args.rad)])
     if args.clump:
         cmd.extend(["--clump"])
@@ -470,6 +548,15 @@ Examples:
   
   # Process velocity maps from movie2 directory with custom settings
   python amr2vid.py 1 100 --mode map --variable vx --movie-dir movie2 --log --col viridis
+
+  # Snapshot mode with time-dependent panning and zoom
+  # Center starts at (0.5,0.5), drifts with (vx,vy)=(+0.02,-0.01),
+  # radius zooms from 0.2 to 0.05 between t=0.1 and t=0.5
+  python amr2vid.py 1 200 --mode snapshot \
+    --path . --var 0 --col viridis \
+    --xcen 0.5 --ycen 0.5 --xcen-vel 0.02 --ycen-vel -0.01 \
+    --rad-start 0.2 --rad-end 0.05 --rad-zoom-start 0.1 --rad-zoom-end 0.5 \
+    --rad-mode circle --fps 30 --quality high --output panzoom.mp4
         """
     )
     
@@ -512,6 +599,16 @@ Examples:
     parser.add_argument("--dir", help="specify the projection axis")
     parser.add_argument("--grid", help="overlay the AMR grid", action="store_true")
     parser.add_argument("--rad-mode", help="radius mode: 'circle' or 'square'")
+
+    # Snapshot mode: time-dependent panning and zoom
+    parser.add_argument("--xcen-vel", type=float, default=0.0, help="x center panning velocity (center units per time unit)")
+    parser.add_argument("--ycen-vel", type=float, default=0.0, help="y center panning velocity (center units per time unit)")
+    parser.add_argument("--zcen-vel", type=float, default=0.0, help="z center panning velocity (center units per time unit)")
+    parser.add_argument("--t-ref", type=float, default=None, help="reference time for panning/zoom (default: time of first processed snapshot, else 0)")
+    parser.add_argument("--rad-start", type=float, default=None, help="radius at start of zoom window")
+    parser.add_argument("--rad-end", type=float, default=None, help="radius at end of zoom window")
+    parser.add_argument("--rad-zoom-start", type=float, default=None, help="zoom window start time")
+    parser.add_argument("--rad-zoom-end", type=float, default=None, help="zoom window end time")
     
     args = parser.parse_args()
     
@@ -628,6 +725,17 @@ Examples:
                 if actual_path != args.path:
                     print(f"Note: Output directories found in: {actual_path}")
                     args.path = actual_path
+
+            # Establish time reference for dynamic panning/zoom
+            if args.t_ref is not None:
+                args._t_ref = float(args.t_ref)
+            else:
+                first_num = output_dirs[0][0]
+                t0 = read_output_time(args.path, first_num)
+                if t0 is None:
+                    t0 = 0.0
+                args._t_ref = float(t0)
+                print(f"Using t_ref={args._t_ref} (from output {first_num:05d})")
         
         # Broadcast output directories to all processes
         if args.parallel:
@@ -643,6 +751,13 @@ Examples:
             output_nums = comm.bcast(output_nums, root=0)
             frame_indices = comm.bcast(frame_indices, root=0)
             args.path = comm.bcast(path_to_broadcast, root=0)
+
+            # Broadcast time reference
+            if is_root:
+                t_ref_to_broadcast = args._t_ref
+            else:
+                t_ref_to_broadcast = None
+            args._t_ref = comm.bcast(t_ref_to_broadcast, root=0)
             
             # Create frame index mapping on all processes
             frame_index_map = dict(zip(output_nums, frame_indices))
@@ -671,7 +786,51 @@ Examples:
             if not os.path.isdir(output_path):
                 print(f"Warning: output directory output_{output_num:05d} doesn't exist")
                 continue
-                
+            
+            # Compute dynamic center and radius overrides based on time
+            t = read_output_time(args.path, output_num)
+            if t is None:
+                # If time not found, assume reference time
+                t = args._t_ref
+            dt = t - args._t_ref
+
+            # Center panning overrides
+            xcen_override = None
+            ycen_override = None
+            zcen_override = None
+            if (args.xcen is not None) or (getattr(args, 'xcen_vel', 0.0) != 0.0):
+                base_x = float(args.xcen) if args.xcen is not None else 0.0
+                xcen_override = base_x + float(args.xcen_vel) * dt
+            if (args.ycen is not None) or (getattr(args, 'ycen_vel', 0.0) != 0.0):
+                base_y = float(args.ycen) if args.ycen is not None else 0.0
+                ycen_override = base_y + float(args.ycen_vel) * dt
+            if (args.zcen is not None) or (getattr(args, 'zcen_vel', 0.0) != 0.0):
+                base_z = float(args.zcen) if args.zcen is not None else 0.0
+                zcen_override = base_z + float(args.zcen_vel) * dt
+
+            # Radius override with zoom window
+            rad_override = None
+            if (args.rad_start is not None and args.rad_end is not None and
+                args.rad_zoom_start is not None and args.rad_zoom_end is not None and
+                float(args.rad_zoom_end) != float(args.rad_zoom_start)):
+                r0 = float(args.rad_start)
+                r1 = float(args.rad_end)
+                t0 = float(args.rad_zoom_start)
+                t1 = float(args.rad_zoom_end)
+                if t <= t0:
+                    rad_override = r0
+                elif t >= t1:
+                    rad_override = r1
+                else:
+                    frac = (t - t0) / (t1 - t0)
+                    rad_override = r0 + frac * (r1 - r0)
+
+            # Attach overrides to args
+            args._xcen_override = xcen_override
+            args._ycen_override = ycen_override
+            args._zcen_override = zcen_override
+            args._rad_override  = rad_override
+
             frame_path = generate_frame(output_num, None, args, frame_dir)
             if frame_path:
                 # Use the global frame index for naming

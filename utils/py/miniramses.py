@@ -1488,13 +1488,11 @@ def visu(x,y,dx,v,**kwargs):
     grid = kwargs.get("grid",None)
     
     if( not (log is None)):
-        if vmin==None:
-            v = np.log10(abs(v))
-        else:
-            v = np.log10(abs(v+float(vmin)))            
+        # Standard log scaling: log data; transform limits consistently
+        v = np.log10(np.maximum(np.abs(v), 1e-300))
+        if not (vmin is None):
             vmin = np.log10(float(vmin))
-
-        if( not (vmax==None)):
+        if not (vmax is None):
             vmax = np.log10(float(vmax))
 
     print("min=",np.min(v)," max=",np.max(v))
