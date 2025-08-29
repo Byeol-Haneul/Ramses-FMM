@@ -270,12 +270,12 @@ subroutine input_part_zoom(r,g,p,m)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)
      enddo
   endif
-  
+
   ! Scale displacement to velocity
   do ipart=1,p%npart
     p%vp(ipart,1:ndim)=g%vfact(1)*p%vp(ipart,1:ndim)
   end do
-  
+
   ! Periodic box
   do ipart=1,p%npart
 #if NDIM>0
@@ -291,18 +291,18 @@ subroutine input_part_zoom(r,g,p,m)
     if(p%xp(ipart,3)>=r%boxlen)p%xp(ipart,3)=p%xp(ipart,3)-r%boxlen
 #endif
   end do
-  
+
   ! Compute particle initial level
   do ipart=1,p%npart
     p%levelp(ipart)=r%levelmin
   end do
-  
+
   ! Put all particles in levelmin
   p%headp=p%npart+1
   p%tailp=p%npart
   p%headp(r%levelmin)=1
   p%tailp(r%levelmin)=p%npart
-  
+
 #endif
   
 end subroutine input_part_zoom
