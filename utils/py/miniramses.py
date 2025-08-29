@@ -1459,6 +1459,7 @@ def visu(x,y,dx,v,**kwargs):
         vmin: minimum value for the input array v to use in the color range
         vmax: maximum value for the input array v to use in the color range 
         log: when set, use the log of the input array v in the color range
+        log_floor: lower bound applied to |v| before log10 (default 1e-300)
         sort: useful only for 3D data. Plot the square symbola in the scatter plot in increasing order of array sort.
 
     Returns:
@@ -1486,10 +1487,11 @@ def visu(x,y,dx,v,**kwargs):
     sort = kwargs.get("sort",None)
     cmap = kwargs.get("cmap",'viridis')
     grid = kwargs.get("grid",None)
+    log_floor = kwargs.get("log_floor",1e-300)
     
     if( not (log is None)):
         # Standard log scaling: log data; transform limits consistently
-        v = np.log10(np.maximum(np.abs(v), 1e-300))
+        v = np.log10(np.maximum(np.abs(v), float(log_floor)))
         if not (vmin is None):
             vmin = np.log10(float(vmin))
         if not (vmax is None):
