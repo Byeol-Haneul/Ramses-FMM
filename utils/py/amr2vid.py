@@ -57,6 +57,7 @@ SNAPSHOT MODE OPTIONS (passed to amr2img.py):
   --dir               Projection direction
   --grid              Overlay AMR grid
   --rad-mode          Radius mode: "circle" or "square" for when --rad is used
+  --no-colorbar       Disable colorbar in output figure
 
 SNAPSHOT MODE DYNAMIC PANNING/ZOOM (handled by amr2vid.py):
   The following options let you make the center and radius vary with simulation time t
@@ -364,6 +365,8 @@ def generate_frame(output_num, output_dir, args, frame_dir):
         cmd.extend(["--grid"])
     if args.rad_mode:
         cmd.extend(["--rad-mode", args.rad_mode])
+    if args.no_colorbar:
+        cmd.extend(["--no-colorbar"])
     
     # Set output filename for this frame
     frame_filename = f"frame_{output_num:05d}.png"

@@ -1459,6 +1459,7 @@ def visu(x,y,dx,v,**kwargs):
         vmin: minimum value for the input array v to use in the color range
         vmax: maximum value for the input array v to use in the color range 
         log: when set, use the log of the input array v in the color range
+        colorbar: when True, draw a colorbar (default: True)
         log_floor: lower bound applied to |v| before log10 (default 1e-300)
         sort: useful only for 3D data. Plot the square symbola in the scatter plot in increasing order of array sort.
 
@@ -1488,6 +1489,7 @@ def visu(x,y,dx,v,**kwargs):
     cmap = kwargs.get("cmap",'viridis')
     grid = kwargs.get("grid",None)
     log_floor = kwargs.get("log_floor",1e-300)
+    show_colorbar = kwargs.get("colorbar",True)
     
     if( not (log is None)):
         # Standard log scaling: log data; transform limits consistently
@@ -1519,9 +1521,10 @@ def visu(x,y,dx,v,**kwargs):
     if( not (grid is None)):
         edgec='black'
         linew=0.5
-    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
+    sc = plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
                 cmap=cmap,edgecolor=edgec,linewidth=linew)
-    plt.colorbar(shrink=0.8)
+    if show_colorbar:
+        plt.colorbar(sc,shrink=0.8)
     plt.rcParams['figure.dpi'] = olddpi
 
 def mk_movie(**kwargs):
