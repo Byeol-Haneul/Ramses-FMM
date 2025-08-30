@@ -612,6 +612,7 @@ Examples:
     parser.add_argument("--rad-end", type=float, default=None, help="radius at end of zoom window")
     parser.add_argument("--rad-zoom-start", type=float, default=None, help="zoom window start time")
     parser.add_argument("--rad-zoom-end", type=float, default=None, help="zoom window end time")
+    parser.add_argument("--no-colorbar", action="store_true", help="disable colorbar in output figure")
     
     args = parser.parse_args()
     
