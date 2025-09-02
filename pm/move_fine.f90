@@ -256,9 +256,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      if(ok_level)then
         do ind=1,twotondim
          if(p%type==TRAC_TYPE)then
-            do idim=1,ndim
-               ff(idim)=ff(idim)+gridp(ind)%p%uold(icell(ind),idim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr)*vol(ind)
-            end do
+               ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%uold(icell(ind),2:ndim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr)*vol(ind)
          else
 #ifdef GRAV
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
