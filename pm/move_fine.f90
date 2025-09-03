@@ -323,7 +323,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
 
         ! Update velocity
         if(p%type==TRAC_TYPE)then
-           p%vp(ipart,1:ndim)=ff(1:ndim)
+           continue
         else
            p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
         endif
@@ -513,7 +513,11 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
         p%levelp(ipart)=ilevel
 
         ! Update velocity
-        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+        if(p%type==TRAC_TYPE)then
+           continue
+        else
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+        endif
 
      endif
 
@@ -706,7 +710,11 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
         p%levelp(ipart)=ilevel
 
         ! Update velocity
-        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+        if(p%type==TRAC_TYPE)then
+           continue
+        else
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+        endif
 
      endif
 
