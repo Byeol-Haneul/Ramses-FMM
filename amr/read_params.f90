@@ -1114,6 +1114,7 @@ subroutine m_read_params(pst)
   s%r%part=part
   s%r%star=star
   s%r%sink=sink
+  s%r%trac=trac
   s%r%tree=merger_tree
   s%r%orphan=orphan
   s%r%verbose=verbose
@@ -1150,6 +1151,7 @@ subroutine m_read_params(pst)
   s%r%nstarmax=nstarmax
   s%r%nsinkmax=nsinkmax
   s%r%ntreemax=ntreemax
+  s%r%ntracmax=ntracmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size
@@ -1174,6 +1176,7 @@ subroutine m_read_params(pst)
   s%r%sink_force_interpolation_scheme=sink_force_interpolation_scheme
   s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
   s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
+  s%r%trac_force_interpolation_scheme=trac_force_interpolation_scheme
 
   s%r%nw_frame=nw_frame
   s%r%nh_frame=nh_frame

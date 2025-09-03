@@ -96,7 +96,7 @@ function worker_init(mdl) result(pst)
   use init_time_module, only: r_init_time
   use init_hydro_module, only: r_init_hydro
   use init_part_module, only: r_init_part, r_deallocate_gas
-  use input_part_grafic_module, only: r_input_part_grafic
+  use input_part_grafic_module, only: r_input_part_grafic, r_input_trac_grafic
   use input_part_zoom_module, only: r_input_part_zoom
   use input_part_ascii_module, only: r_input_part_ascii, r_input_star_ascii, r_input_sink_ascii
   use input_part_restart_module, only: r_input_part_restart

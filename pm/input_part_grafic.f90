@@ -41,7 +41,7 @@ subroutine m_input_part_grafic(pst)
       deallocate(input_array)
   endif
 
-  if(s%r%trac)then
+  if(s%r%trac)then     
       ! Compute total number of particles in file
       if(TRIM(s%r%initfile(s%r%levelmin)).NE.' ')then
          s%trac%npart_tot=s%g%n1(s%r%levelmin)*s%g%n2(s%r%levelmin)*s%g%n3(s%r%levelmin)
@@ -61,6 +61,8 @@ subroutine m_input_part_grafic(pst)
       call r_input_trac_grafic(pst,input_array,storage_size(s%trac%npart_tot)/32)
       deallocate(input_array)
   endif
+
+  end associate
 
 end subroutine m_input_part_grafic
 !#########################################################################
@@ -493,18 +495,18 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
  
    ! Periodic box
    do ipart=1,p%npart
- #if NDIM>0
+#if NDIM>0
       if(p%xp(ipart,1)<   0.0d0 )p%xp(ipart,1)=p%xp(ipart,1)+r%boxlen
       if(p%xp(ipart,1)>=r%boxlen)p%xp(ipart,1)=p%xp(ipart,1)-r%boxlen
- #endif
- #if NDIM>1
+#endif
+#if NDIM>1
       if(p%xp(ipart,2)<   0.0d0 )p%xp(ipart,2)=p%xp(ipart,2)+r%boxlen
       if(p%xp(ipart,2)>=r%boxlen)p%xp(ipart,2)=p%xp(ipart,2)-r%boxlen
- #endif
- #if NDIM>2
+#endif
+#if NDIM>2
       if(p%xp(ipart,3)<   0.0d0 )p%xp(ipart,3)=p%xp(ipart,3)+r%boxlen
       if(p%xp(ipart,3)>=r%boxlen)p%xp(ipart,3)=p%xp(ipart,3)-r%boxlen
- #endif
+#endif
    end do
  
    ! Compute particle initial level

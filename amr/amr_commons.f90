@@ -25,7 +25,7 @@ module amr_commons
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
-     logical::trac    =.false.     ! Tracer particles activated
+     logical::trac    =.false.   ! Tracer particles activated
      logical::orphan  =.false.   ! Orphan particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
