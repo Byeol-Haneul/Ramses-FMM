@@ -209,10 +209,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         do idim=1,ndim
            x(idim)=x(idim)/2.0d0
         end do
-        ! Wrap for coarser level too !EDITED
-        do idim=1,ndim
-           x(idim)=x(idim)-dble(m%ckey_max(ilevel))*floor(x(idim)/dble(m%ckey_max(ilevel)))
-        end do
 
         ! CIC at level ilevel-1 (dr: right cloud boundary; dl: left cloud boundary)
         do idim=1,ndim
@@ -256,7 +252,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      if(ok_level)then
         do ind=1,twotondim
          if(p%type==TRAC_TYPE)then
-               ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%uold(icell(ind),2:ndim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr)*vol(ind)
+           ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%uold(icell(ind),2:ndim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr)*vol(ind)
          else
 #ifdef GRAV
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
@@ -266,31 +262,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
          endif
         end do
      endif
-
-     if ((p%idp(ipart) == 1).or.(p%idp(ipart)==32769))then
-      if (p%type==TRAC_TYPE)then
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!! TRACER EXISTS !!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-      else if (p%type==PART_TYPE)then
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!! DM PARTICLE EXISTS !!!!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-      else if (p%type==STAR_TYPE)then
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!! STAR PARTICLE EXISTS !!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-      else if (p%type==SINK_TYPE)then
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!! SINK PARTICLE EXISTS !!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-      else if (p%type==TREE_TYPE)then
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!! TREE PARTICLE EXISTS !!!!!!!!!!!!!!!!!!!!!'
-         write(*,*)'!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!'
-      endif
-     endif
-
 
      ! Perform kick, or drift, or both
      if(action_part==action_kick_drift)then
@@ -351,7 +322,11 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         p%levelp(ipart)=ilevel
 
         ! Update velocity
-        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+        if(p%type==TRAC_TYPE)then
+           p%vp(ipart,1:ndim)=ff(1:ndim)
+        else
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*dteff
+        endif
 
      endif
 
@@ -468,18 +443,26 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell at level ilevel using read-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef GRAV
         if(associated(gridp))then
+           if(p%type==TRAC_TYPE)then
+              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+           else
+#ifdef GRAV
            ff(1:ndim)=ff(1:ndim)+gridp%f(icell,1:ndim)*vol(ind)
-        end if
 #endif
+           endif
+        end if
      end do
 
      ! Perform kick, or drift, or both
      if(action_part==action_kick_drift)then
 
         ! Update velocity
-        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+        if(p%type==TRAC_TYPE)then
+           p%vp(ipart,1:ndim)=ff(1:ndim)
+        else
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+        endif
 
         ! Update position
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
@@ -653,18 +636,26 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell at level ilevel using read-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef GRAV
         if(associated(gridp))then
+           if(p%type==TRAC_TYPE)then
+              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+           else
+#ifdef GRAV
            ff(1:ndim)=ff(1:ndim)+gridp%f(icell,1:ndim)*vol(ind)
-        end if
 #endif
+           endif
+        end if
      end do
 
      ! Perform kick, or drift, or both
      if(action_part==action_kick_drift)then
 
         ! Update velocity
-        p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+        if(p%type==TRAC_TYPE)then
+           p%vp(ipart,1:ndim)=ff(1:ndim)
+        else
+           p%vp(ipart,1:ndim)=p%vp(ipart,1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel)
+        endif
 
         ! Update position
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
