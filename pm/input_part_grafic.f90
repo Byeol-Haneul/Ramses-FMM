@@ -396,7 +396,7 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
                if(ndim>0)p%xp(ipart,1)=xx1
                if(ndim>1)p%xp(ipart,2)=xx2
                if(ndim>2)p%xp(ipart,3)=xx3
-               p%mp(ipart)=0.5d0**(3*r%levelmin)*(1.0d0-g%omega_b/g%omega_m)
+               p%mp(ipart)=0.5d0**(3*r%levelmin)
                p%idp(ipart)=ipart_grafic+1
                ipart=ipart+1
             endif
@@ -420,11 +420,11 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
    endif
  
    !--------------------------------------
-   ! Loop over displacements dimensions
+   ! Loop over spatial dimensions
    !--------------------------------------
    do idim=1,ndim
  
-      ! Read dark matter Zeldovich initial displacement field
+      ! Read particle initial velocities
       if(idim==1)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcx'
       if(idim==2)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcy'
       if(idim==3)filename=TRIM(r%initfile(r%levelmin))//'/ic_velcz'
@@ -437,7 +437,7 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
          read(10) ! skip unnecessary planes
       end do
  
-      ! If present, read higher order dark matter initial displacement field
+      ! If present, read initial position displacement field
       if(read_pos)then
          if(idim==1)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscx'
          if(idim==2)filename_x=TRIM(r%initfile(r%levelmin))//'/ic_poscy'
