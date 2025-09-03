@@ -763,29 +763,7 @@ subroutine m_read_params(pst)
         ngridmax=int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
      endif
   end if
-  if(npartmax==0)then
-     npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
-  endif
-  if(pic.and.npartmax>0)part=.true.
-  if(nstarmax==0)then
-     nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
-     if(nstarmax==0)star=.false.
-  endif
-  if(nsinkmax==0)then
-     nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
-     if(nsinkmax==0)sink=.false.
-  endif
-  if(ntreemax==0)then
-     ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
-     if(ntreemax==0)then
-        ntreemax=int(npartmax/100)
-     endif
-     if(ntreemax==0)merger_tree=.false.
-  endif
-  if(ntracmax==0)then
-     ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
-     if(ntracmax==0)trac=.false.
-  endif
+
 #ifdef HYDRO
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
@@ -880,6 +858,34 @@ subroutine m_read_params(pst)
 116 continue
   close(1)
 
+  !--------------------------------------------------
+  ! If nmax is 0, set to the total number of particles 
+  ! divided by the number of MPI processes. Otherwise,
+  ! if tot is 0, set corresponding boolean to false.
+  !--------------------------------------------------
+  if(npartmax==0)then
+    npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
+  endif
+  if(pic.and.npartmax>0)part=.true.
+  if(nstarmax==0)then
+     nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
+     if(nstarmax==0)star=.false.
+  endif
+  if(nsinkmax==0)then
+     nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
+     if(nsinkmax==0)sink=.false.
+  endif
+  if(ntreemax==0)then
+     ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntreemax==0)then
+        ntreemax=int(npartmax/100)
+     endif
+     if(ntreemax==0)merger_tree=.false.
+  endif
+  if(ntracmax==0)then
+     ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntracmax==0)trac=.false.
+  endif
   !-----------------
   ! Max size checks
   !-----------------
