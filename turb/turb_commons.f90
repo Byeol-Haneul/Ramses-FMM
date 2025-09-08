@@ -121,18 +121,15 @@ contains
     character(len=*), intent(in) :: output_dir  ! Output directory
 
     integer                      :: ilun        ! File I/O unit
-    character(len=8)             :: file_ext    ! String version of nturbtemp
     character(len=50000)         :: file_buffer ! Buffer for header file
     character(len=1)             :: c           ! Mostly pointless variable
     character(len=17)            :: turb_last_time_z ! turb_last_time in hex
     character(len=17)            :: turb_next_time_z ! turb_next_time in hex
 
-    write(file_ext,"(I0)") 0 ! For compatibility with Seren
-
     ilun = 10
 
-    turb%turb_file_last = 'turb_last.'//trim(file_ext)//'.dat'
-    turb%turb_file_next = 'turb_next.'//trim(file_ext)//'.dat'
+    turb%turb_file_last = 'turb_last.dat'
+    turb%turb_file_next = 'turb_next.dat'
     turb%turb_file_header = trim(output_dir)//'turb_fields.dat'
 
     write(turb_last_time_z, '(X,Z16)') turb%turb_last_time
