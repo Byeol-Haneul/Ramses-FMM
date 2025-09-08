@@ -14,6 +14,7 @@ INIT =
 UNITS =
 NENER = 0
 NMETAL = 0
+TURB = 0
 N_HYDROGEN_IONS = 0
 N_H2 = 0
 N_HELIUM_IONS = 0
@@ -77,6 +78,9 @@ ifeq ($(MHD),1)
 endif
 ifeq ($(GRAV),1)
    DEFINES += -DGRAV
+endif
+ifeq ($(TURB),1)
+   DEFINES += -DTURB
 endif
 ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
@@ -182,7 +186,12 @@ LIBMPI =
 ifeq ($(HDF5),1)
    LIBHDF5 = -lhdf5 -lhdf5_hl -lhdf5_fortran -lhdf5hl_fortran
 endif
-LIBS += $(LIBMPI) $(LIBHDF5)
+ifeq ($(TURB),1)
+   FFTW = /usr/local/fftw/gcc/3.3.9
+   LIBFFTW = -L$(FFTW)/lib64 -lfftw3
+   FFLAGS += -I$(FFTW)/include
+endif
+LIBS += $(LIBMPI) $(LIBFFTW)
 #############################################################################
 # Sources directories are searched in this exact order
 VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../turb:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt:../lightcone
