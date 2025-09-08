@@ -258,7 +258,7 @@ subroutine m_read_params(pst)
   character(LEN=10)::riemann2d='none'
   logical ::induction=.false.
   logical ::entropy=.false.
-  logical ::turb=.false.
+  logical ::sgs_turb=.false.
   real(kind=8)::dual_energy=-1
   real(kind=8)::T2_fix=0d0
   real(kind=8),dimension(1:3)::constant_gravity=0.0d0
@@ -474,6 +474,18 @@ subroutine m_read_params(pst)
   real(kind=8)::IG_T2 = 1.0D7
   real(kind=8)::IG_metal = 0.01
 
+  ! Turbulence driving parameters
+  logical  :: turb=.false.            ! Use turbulence?
+  integer  :: turb_seed=-1            ! Turbulent seed (-1=random)
+  logical  :: instant_turb=.true.     ! Generate initial turbulence before start?
+  character (LEN=100) :: forcing_power_spectrum='parabolic'
+                                      ! Power spectrum type of turbulent forcing
+  real(kind=8) :: comp_frac=0.3333    ! Compressive fraction
+  real(kind=8) :: turb_T=1.0          ! Turbulent velocity autocorrelation time
+  integer      :: turb_Ndt=100        ! Number of timesteps per autocorr. time
+  real(kind=8) :: turb_rms=1.0        ! rms turbulent forcing acceleration
+  real(kind=8) :: turb_min_rho=1d-50  ! Minimum density for turbulence
+  
 #ifdef RTZ
   integer::i_Element, i_Iion
 #endif
@@ -531,7 +543,7 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
-       & ,dual_energy,T2_fix,induction,entropy,turb,riemann,riemann2d,constant_gravity &
+       & ,dual_energy,T2_fix,induction,entropy,sgs_turb,riemann,riemann2d,constant_gravity &
        & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
@@ -612,6 +624,9 @@ subroutine m_read_params(pst)
        & ,ic_u_name,ic_metal_name,ic_age_name &
        & ,gadget_scale_l, gadget_scale_v, gadget_scale_m ,gadget_scale_t &
        & ,ic_skip_type
+  ! Turbulence driving parameters
+  namelist/turb_params/turb, turb_seed, instant_turb, comp_frac,&
+       & forcing_power_spectrum, turb_T, turb_Ndt, turb_rms, turb_min_rho
 
   associate(s=>pst%s)
 
@@ -862,6 +877,9 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1, NML=lightcone_params, END=115)
 115 continue 
+  rewind(1)
+  read(1, NML=turb_params, END=116)
+116 continue 
   close(1)
 
   !-----------------
@@ -950,7 +968,7 @@ subroutine m_read_params(pst)
      iturb=imetal+1
   endif
   ichem=iturb
-  if(turb)then
+  if(sgs_turb)then
      ichem=iturb+1
   endif
   if(hydro.and.(nvar>5)) then
@@ -961,7 +979,7 @@ subroutine m_read_params(pst)
 #endif
      if(entropy) write(*,*) '   ientropy = ',ientropy
      if(metal)   write(*,*) '   imetal   = ',imetal
-     if(turb)    write(*,*) '   iturb    = ',iturb
+     if(sgs_turb)write(*,*) '   iturb    = ',iturb
      if(ichem.LE.nvar)then
                  write(*,*) '   ichem    = ',ichem
      endif
@@ -1197,7 +1215,7 @@ subroutine m_read_params(pst)
   s%r%T2_fix=T2_fix
   s%r%induction=induction
   s%r%entropy=entropy
-  s%r%turb=turb
+  s%r%sgs_turb=sgs_turb
   s%r%inener=inener
   s%r%ientropy=ientropy
   s%r%imetal=imetal
@@ -1523,6 +1541,15 @@ subroutine m_read_params(pst)
   s%r%gadget_scale_t=gadget_scale_t
   s%r%ic_skip_type=ic_skip_type
 
+  s%r%turb=turb
+  s%r%turb_seed=turb_seed
+  s%r%instant_turb=instant_turb
+  s%r%forcing_power_spectrum=forcing_power_spectrum
+  s%r%comp_frac=comp_frac
+  s%r%turb_T=turb_T
+  s%r%turb_Ndt=turb_Ndt
+  s%r%turb_rms=turb_rms
+  s%r%turb_min_rho=turb_min_rho
 
   ! Read RT parameters from namelist
   if(rt)call m_read_rt_params(pst)

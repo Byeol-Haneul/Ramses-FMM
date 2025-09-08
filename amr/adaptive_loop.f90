@@ -12,6 +12,7 @@ subroutine adaptive_loop(pst)
   use init_refine_basegrid_module, only: m_init_refine_basegrid
   use init_refine_restart_module, only: m_init_refine_restart
   use init_refine_ramses_module, only: m_init_refine_ramses
+  use turb_init_module, only: r_init_turb
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem, r_hash_stats
   use load_balance_module, only: r_balance_part
@@ -50,6 +51,9 @@ subroutine adaptive_loop(pst)
 
   ! Initialize particle variables
   if(r%pic)call r_init_part(pst)
+
+  ! Initialize turbulent driveing
+  if(r%turb)call r_init_turb(pst)
 
   ! Read initial particle properties from files
   if(r%pic)call m_input_part(pst)

@@ -64,6 +64,11 @@ subroutine m_newdt_fine(pst,ilevel)
      g%dtnew(ilevel)=MIN(g%dtnew(ilevel),0.1/g%hexp)
   end if
 
+  ! Turbulence driving condition
+  if(r%turb)then
+     g%dtnew(ilevel)=MIN(g%dtnew(ilevel),pst%s%turb%turb_dt)
+  end if
+
   ! Particle-based Courant condition
   if(r%pic)then
      if(r%verbose)write(*,'("   Entering newdt_part for level ",I2)')ilevel

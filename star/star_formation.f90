@@ -200,7 +200,7 @@ subroutine star_formation(r,g,m,s,ilevel,mstar_loc)
         cs2 = max(dble(r%gamma)*p/d,dble(r%smallc)**2)
         ! Turbulence 1D velocity dispersion
         sigma2 = 0d0
-        if(r%turb)then
+        if(r%sgs_turb)then
            sigma2 = m%grid(igrid)%uold(ind,r%iturb)*2d0/3d0
         endif
 
