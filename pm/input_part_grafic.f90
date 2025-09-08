@@ -119,7 +119,7 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   integer(kind=8)::ipart_grafic
   integer(kind=8),dimension(1:g%ncpu+1)::start_ind
   real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
-  character(LEN=80)::filename,filename_x
+  character(LEN=256)::filename,filename_x
   character(LEN=5)::nchar
   logical::ok,error,keep_part,read_pos=.false.
 
@@ -353,7 +353,7 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
    integer(kind=8)::ipart_grafic
    integer(kind=8),dimension(1:g%ncpu+1)::start_ind
    real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
-   character(LEN=80)::filename,filename_x
+   character(LEN=256)::filename,filename_x
    character(LEN=5)::nchar
    logical::ok,error,keep_part,read_pos=.false.
  

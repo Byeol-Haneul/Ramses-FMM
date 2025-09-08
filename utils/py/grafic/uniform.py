@@ -97,9 +97,6 @@ def main():
         ids = np.arange(1, (n1*n2*n3) + 1, dtype=np.int64)
         rng.shuffle(ids)
         ids = ids.reshape((n1, n2, n3))
-        velcx = np.zeros((n1, n2, n3), dtype=np.float32)
-        velcy = np.zeros((n1, n2, n3), dtype=np.float32)
-        velcz = np.zeros((n1, n2, n3), dtype=np.float32)
 
     # Determine output dir
     tag = f"ic_uniform_{lvl}_{args.ndim}d"
@@ -132,9 +129,9 @@ def main():
     # Particles
     if args.particles:
         write_array("ic_particle_ids", ids, L, as_int64=True)
-        write_array("ic_velcx", velcx, L)
-        write_array("ic_velcy", velcy, L)
-        write_array("ic_velcz", velcz, L)
+        write_array("ic_velcx", u, L)
+        write_array("ic_velcy", v, L)
+        write_array("ic_velcz", w, L)
 
     print(f"Uniform ICs written to: {outdir}")
 
