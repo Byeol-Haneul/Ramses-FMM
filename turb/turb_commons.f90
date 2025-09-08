@@ -661,16 +661,16 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     type(run_t)               :: run
     type(turb_t)              :: turb
     integer, intent(in)       :: ncache
-    real(kind=8), intent(in)  :: x_cell(1:ndim,1:nvector) ! Positions
-    real(kind=8), intent(in)  :: rho(1:nvector)           ! Densities
-    real(kind=8), intent(out) :: aturb(1:ndim, 1:nvector) ! Turbulent forcing
+    real(kind=8), intent(in)  :: x_cell(1:nvector, 1:ndim) ! Positions
+    real(kind=8), intent(in)  :: rho(1:nvector)            ! Densities
+    real(kind=8), intent(out) :: aturb(1:nvector, 1:ndim)  ! Turbulent forcing
 
-    integer                   :: nok                      ! no. of OK cells
-    integer                   :: ok_cell(1:nvector)       ! 'ok' cells
-    integer                   :: i                        ! cell counter
-    real(kind=8)              :: r(1:ndim,1:nvector)      ! Position in turb grid
-    real(kind=8)              :: dr1(1:ndim,1:nvector)    ! Position in cell
-    real(kind=8)              :: dr2(1:ndim,1:nvector)    ! 1 - position in cell
+    integer                   :: nok                       ! no. of OK cells
+    integer                   :: ok_cell(1:nvector)        ! 'ok' cells
+    integer                   :: i                         ! cell counter
+    real(kind=8)              :: r(1:ndim,1:nvector)       ! Position in turb grid
+    real(kind=8)              :: dr1(1:ndim,1:nvector)     ! Position in cell
+    real(kind=8)              :: dr2(1:ndim,1:nvector)     ! 1 - position in cell
     integer                   :: bmin(1:ndim,1:nvector)    ! 'top-left' corner of box
     integer                   :: bmax(1:ndim,1:nvector)    ! 'bottom-right' corner of box
     real(kind=8)              :: cube_vals(1:ndim,1:nvector,1:twotondim)
@@ -688,7 +688,7 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
        else
           nok = nok + 1
           ok_cell(nok) = i
-          r(:,nok) = x_cell(:,i)/run%boxlen*turb_gs_real
+          r(:,nok) = x_cell(i,:)/run%boxlen*turb_gs_real
        end if
     end do
 
@@ -760,7 +760,7 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     ! Find interpolated value
     dr1(1:ndim,1:nok) = sum(interp(:,1:nok,:) * cube_vals(:,1:nok,:), dim=3)
     do i=1,nok
-       aturb(:,ok_cell(i)) = dr1(:,i)
+       aturb(ok_cell(i),:) = dr1(:,i)
     end do
 
   end subroutine turb_force_calc
