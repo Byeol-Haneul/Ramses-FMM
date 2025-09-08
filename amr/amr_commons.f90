@@ -501,7 +501,6 @@ module amr_commons
      ! Turbulence driving parameters
      logical  :: turb=.false.            ! Use turbulence?
      integer  :: turb_seed=-1            ! Turbulent seed (-1=random)
-     logical  :: instant_turb=.true.     ! Generate initial turbulence before start?
      character (LEN=100) :: forcing_power_spectrum='parabolic'
                                          ! Power spectrum type of turbulent forcing
      real(kind=8) :: comp_frac=0.3333    ! Compressive fraction
