@@ -70,8 +70,9 @@ contains
     if (run%nrestart == 0) then
        ! Set up random seed (modified from gfortran docs)
        if (run%turb_seed == -1) then
-          call system_clock(count=clock)
-          turb%kiss64_state = clock + 37 * (/(i-1,i=1,n_seed)/)
+!          call system_clock(count=clock)
+!          turb%kiss64_state = clock + 37 * (/(i-1,i=1,n_seed)/)
+          turb%kiss64_state = 1234
        else
           turb%kiss64_state = run%turb_seed
        end if
