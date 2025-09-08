@@ -1163,6 +1163,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
+     if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
   endif
 
 end subroutine r_split_part
@@ -1860,6 +1861,7 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
      if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
+     if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
   endif
 
 end subroutine r_sort_part
