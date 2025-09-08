@@ -1,6 +1,7 @@
 module ramses_commons
   use amr_commons, only: run_t,global_t,mesh_t,hydro_params_t
   use pm_commons, only: part_t
+  use turb_commons, only: turb_t
   use mdl_module, only: mdl_t
   use clfind_commons, only: clump_t
   use cooling_module, only: cooling_t
@@ -18,6 +19,7 @@ module ramses_commons
      type(part_t)::tree
      type(part_t)::gas
      type(clump_t)::c
+     type(turb_t)::turb
      type(cooling_t)::cool
      type(neq_cooling_t)::tables
      type(sed_table_t)::SED

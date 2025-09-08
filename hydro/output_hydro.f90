@@ -300,7 +300,7 @@ subroutine file_descriptor_hydro(r,filename,write_bkp_file)
         else if (r%metal.and.ivar+5-ie.eq.r%imetal)then
            write(ilun,'("variable #",I2,": metal_mass_fraction")')ivar
            ivar=ivar+1
-        else if (r%turb.and.ivar+5-ie.eq.r%iturb)then
+        else if (r%sgs_turb.and.ivar+5-ie.eq.r%iturb)then
            write(ilun,'("variable #",I2,": turb_kinetic_energy")')ivar
            ivar=ivar+1
         else if(ivar+5-ie.ge.r%iions.and.ivar+5-ie.lt.r%iions+nion) then
