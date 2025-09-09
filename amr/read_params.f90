@@ -261,7 +261,7 @@ subroutine m_read_params(pst)
   character(LEN=10)::riemann2d='none'
   logical ::induction=.false.
   logical ::entropy=.false.
-  logical ::turb=.false.
+  logical ::sgs_turb=.false.
   real(kind=8)::dual_energy=-1
   real(kind=8)::T2_fix=0d0
   real(kind=8),dimension(1:3)::constant_gravity=0.0d0
@@ -479,6 +479,17 @@ subroutine m_read_params(pst)
   real(kind=8)::IG_T2 = 1.0D7
   real(kind=8)::IG_metal = 0.01
 
+  ! Turbulence driving parameters
+  logical  :: turb=.false.            ! Use turbulence?
+  integer  :: turb_seed=-1            ! Turbulent seed (-1=random)
+  character (LEN=100) :: forcing_power_spectrum='parabolic'
+                                      ! Power spectrum type of turbulent forcing
+  real(kind=8) :: comp_frac=0.3333    ! Compressive fraction
+  real(kind=8) :: turb_T=1.0          ! Turbulent velocity autocorrelation time
+  integer      :: turb_Ndt=100        ! Number of timesteps per autocorr. time
+  real(kind=8) :: turb_rms=1.0        ! rms turbulent forcing acceleration
+  real(kind=8) :: turb_min_rho=1d-50  ! Minimum density for turbulence
+  
 #ifdef RTZ
   integer::i_Element, i_Iion
 #endif
@@ -505,7 +516,7 @@ subroutine m_read_params(pst)
        & ,part_force_interpolation_scheme,star_mass_deposition_scheme &
        & ,star_force_interpolation_scheme,sink_mass_deposition_scheme &
        & ,sink_force_interpolation_scheme,tree_mass_deposition_scheme &
-       & ,tree_force_interpolation_scheme
+       & ,tree_force_interpolation_scheme 
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
@@ -536,7 +547,7 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
-       & ,dual_energy,T2_fix,induction,entropy,turb,riemann,riemann2d,constant_gravity &
+       & ,dual_energy,T2_fix,induction,entropy,sgs_turb,riemann,riemann2d,constant_gravity &
        & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
@@ -607,10 +618,10 @@ subroutine m_read_params(pst)
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
        & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
+       & ,output_peak_trac &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
-  
   ! Lightcone parameters
   namelist/lightcone_params/lightcone,cone_z_min,cone_z_max,cone_opening_angle_y,cone_opening_angle_z &
        & ,cone_theta,cone_phi,cone_observer
@@ -620,7 +631,9 @@ subroutine m_read_params(pst)
        & ,ic_u_name,ic_metal_name,ic_age_name &
        & ,gadget_scale_l, gadget_scale_v, gadget_scale_m ,gadget_scale_t &
        & ,ic_skip_type
-  
+  ! Turbulence driving parameters
+  namelist/turb_params/turb, turb_seed, comp_frac,&
+       & forcing_power_spectrum, turb_T, turb_Ndt, turb_rms, turb_min_rho
 
   associate(s=>pst%s)
 
@@ -763,7 +776,25 @@ subroutine m_read_params(pst)
         ngridmax=int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
      endif
   end if
-
+  if(npartmax==0)then
+     npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
+  endif
+  if(pic.and.npartmax>0)part=.true.
+  if(nstarmax==0)then
+     nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
+     if(nstarmax==0)star=.false.
+  endif
+  if(nsinkmax==0)then
+     nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
+     if(nsinkmax==0)sink=.false.
+  endif
+  if(ntreemax==0)then
+     ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntreemax==0)then
+        ntreemax=int(npartmax/100)
+     endif
+     if(ntreemax==0)merger_tree=.false.
+  endif
 #ifdef HYDRO
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
@@ -854,38 +885,23 @@ subroutine m_read_params(pst)
   read(1, NML=lightcone_params, END=115)
 115 continue 
   rewind(1)
-  read(1,NML=trac_params,END=116)
-116 continue
+  read(1, NML=turb_params, END=116)
+116 continue 
+  rewind(1)
+  read(1,NML=trac_params,END=117)
+117 continue
   close(1)
 
   !--------------------------------------------------
-  ! If nmax is 0, set to the total number of particles 
-  ! divided by the number of MPI processes. Otherwise,
-  ! if tot is 0, set corresponding boolean to false.
+  ! If ntracmax is 0, set to the total number of tracer
+  ! particles divided by the number of MPI processes.
+  ! Otherwise, if tot is 0, set trac to false.
   !--------------------------------------------------
-  if(npartmax==0)then
-    npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
-  endif
-  if(pic.and.npartmax>0)part=.true.
-  if(nstarmax==0)then
-     nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
-     if(nstarmax==0)star=.false.
-  endif
-  if(nsinkmax==0)then
-     nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
-     if(nsinkmax==0)sink=.false.
-  endif
-  if(ntreemax==0)then
-     ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
-     if(ntreemax==0)then
-        ntreemax=int(npartmax/100)
-     endif
-     if(ntreemax==0)merger_tree=.false.
-  endif
   if(ntracmax==0)then
      ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
      if(ntracmax==0)trac=.false.
   endif
+
   !-----------------
   ! Max size checks
   !-----------------
@@ -972,7 +988,7 @@ subroutine m_read_params(pst)
      iturb=imetal+1
   endif
   ichem=iturb
-  if(turb)then
+  if(sgs_turb)then
      ichem=iturb+1
   endif
   if(hydro.and.(nvar>5)) then
@@ -983,7 +999,7 @@ subroutine m_read_params(pst)
 #endif
      if(entropy) write(*,*) '   ientropy = ',ientropy
      if(metal)   write(*,*) '   imetal   = ',imetal
-     if(turb)    write(*,*) '   iturb    = ',iturb
+     if(sgs_turb)write(*,*) '   iturb    = ',iturb
      if(ichem.LE.nvar)then
                  write(*,*) '   ichem    = ',ichem
      endif
@@ -1222,7 +1238,7 @@ subroutine m_read_params(pst)
   s%r%T2_fix=T2_fix
   s%r%induction=induction
   s%r%entropy=entropy
-  s%r%turb=turb
+  s%r%sgs_turb=sgs_turb
   s%r%inener=inener
   s%r%ientropy=ientropy
   s%r%imetal=imetal
@@ -1470,6 +1486,7 @@ subroutine m_read_params(pst)
   s%r%output_peak_star=output_peak_star
   s%r%output_peak_sink=output_peak_sink
   s%r%output_peak_tree=output_peak_tree
+  s%r%output_peak_trac=output_peak_trac
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold
@@ -1548,6 +1565,14 @@ subroutine m_read_params(pst)
   s%r%gadget_scale_t=gadget_scale_t
   s%r%ic_skip_type=ic_skip_type
 
+  s%r%turb=turb
+  s%r%turb_seed=turb_seed
+  s%r%forcing_power_spectrum=forcing_power_spectrum
+  s%r%comp_frac=comp_frac
+  s%r%turb_T=turb_T
+  s%r%turb_Ndt=turb_Ndt
+  s%r%turb_rms=turb_rms
+  s%r%turb_min_rho=turb_min_rho
 
   ! Read RT parameters from namelist
   if(rt)call m_read_rt_params(pst)

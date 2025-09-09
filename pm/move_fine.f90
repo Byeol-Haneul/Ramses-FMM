@@ -123,15 +123,10 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   !
   !
   real(kind=8),dimension(1:ndim)::x,dr,dl
-  real(kind=8),dimension(1:ndim)::x_mid,dr2,dl2
   integer,dimension(1:ndim)::ir,il
-  integer,dimension(1:ndim)::ir2,il2
   real(kind=8),dimension(1:twotondim)::vol
-  real(kind=8),dimension(1:twotondim)::vol2
   integer,dimension(1:ndim,1:twotondim)::ckey
-  integer,dimension(1:ndim,1:twotondim)::ckey2
   integer,dimension(1:twotondim)::icell
-  integer,dimension(1:twotondim)::icell2
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc,dteff
@@ -140,7 +135,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -169,10 +163,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
      ! Rescale particle position at level ilevel
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
-     end do
-     ! Wrap x into valid index range before computing keys !EDITED
-     do idim=1,ndim
-        x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))*floor(x(idim)/dble(m%ckey_max(ilevel+1)))
      end do
 
      ! CIC at level ilevel (dr: right cloud boundary; dl: left cloud boundary)
@@ -375,7 +365,6 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   logical::ok_level
   type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
-  type(msg_nvar_realdp)::dummy_nvar_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -438,11 +427,11 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell at level ilevel using read-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-        if(associated(gridp))then
 #ifdef GRAV
+        if(associated(gridp))then
            ff(1:ndim)=ff(1:ndim)+gridp%f(icell,1:ndim)*vol(ind)
-#endif
         end if
+#endif
      end do
 
      ! Perform kick, or drift, or both
@@ -543,20 +532,18 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   !
   !
   real(kind=8),dimension(1:ndim)::x,wll,wl,wr,wrr
-  real(kind=8),dimension(1:ndim)::x_mid,wll2,wl2,wr2,wrr2
   integer,dimension(1:ndim)::cll,cl,cr,crr
-  integer,dimension(1:ndim)::cll2,cl2,cr2,crr2
-  real(kind=8),dimension(1:fourtondim)::vol,vol2
-  integer,dimension(1:ndim,1:fourtondim)::ckey,ckey2
+  real(kind=8),dimension(1:fourtondim)::vol
+  integer,dimension(1:ndim,1:fourtondim)::ckey
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,icell2,ind,idim
+  integer::ipart,icell,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc,vol_loc,dteff
   real(kind=8)::gamma,norm2,fnorm,delta
   real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
   type(oct),pointer::gridp
-  type(msg_large_realdp)::dummy_large_realdp
+  type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -576,7 +563,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
   ! Open read-only cache
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
        pack=pack_fetch_kick,unpack=unpack_fetch_kick)
 
   ! Loop over particles
@@ -625,11 +612,11 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         ! Get parent cell at level ilevel using read-only cache
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-        if(associated(gridp))then
 #ifdef GRAV
+        if(associated(gridp))then
            ff(1:ndim)=ff(1:ndim)+gridp%f(icell,1:ndim)*vol(ind)
-#endif
         end if
+#endif
      end do
 
      ! Perform kick, or drift, or both
