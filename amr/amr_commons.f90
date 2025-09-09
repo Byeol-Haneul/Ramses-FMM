@@ -122,7 +122,7 @@ module amr_commons
      real(kind=8),dimension(1:nener+1)::gamma_rad=1.33333333334d0
      logical ::induction=.false.
      logical ::entropy=.false.
-     logical ::turb=.false.
+     logical ::sgs_turb=.false.
      real(kind=8)::dual_energy=-1
      real(kind=8)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'
@@ -501,6 +501,17 @@ module amr_commons
      real(kind=8),dimension(nrtgrp)::ssh2=1d0                      ! Self-shielding factor for H2
      ! HK note --> OTSA required for RTZ
      integer,dimension(nIon)::spec2group=0                 ! Ion -> group # in recombinations
+
+     ! Turbulence driving parameters
+     logical  :: turb=.false.            ! Use turbulence?
+     integer  :: turb_seed=-1            ! Turbulent seed (-1=random)
+     character (LEN=100) :: forcing_power_spectrum='parabolic'
+                                         ! Power spectrum type of turbulent forcing
+     real(kind=8) :: comp_frac=0.3333    ! Compressive fraction
+     real(kind=8) :: turb_T=1.0          ! Turbulent velocity autocorrelation time
+     integer      :: turb_Ndt=100        ! Number of timesteps per autocorr. time
+     real(kind=8) :: turb_rms=1.0        ! rms turbulent forcing acceleration
+     real(kind=8) :: turb_min_rho=1d-50  ! Minimum density for turbulence
 
   end type run_t
 

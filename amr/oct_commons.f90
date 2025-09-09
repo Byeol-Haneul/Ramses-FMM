@@ -18,6 +18,9 @@ module oct_commons
      real(dp),dimension(1:twotondim,1:nrtvar)::rtunew
      real(dp),dimension(1:twotondim,1:nrtgrp)::emissivity
 #endif
+#ifdef TURB
+     real(dp),dimension(1:twotondim,1:3)::fturb
+#endif
 #ifdef GRAV
      real(dp),dimension(1:twotondim,1:3)::f
      real(dp),dimension(1:twotondim)::rho

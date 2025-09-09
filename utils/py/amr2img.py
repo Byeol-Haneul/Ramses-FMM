@@ -30,6 +30,9 @@ parser.add_argument("--sink", help="specify if sinks are overplotted")
 parser.add_argument("--dir", help="specify the projection axis")
 parser.add_argument("--grid", help="overlay the AMR grid",action="store_true")
 parser.add_argument("--no-display", help="prevent GUI display (useful for batch processing)",action="store_true")
+parser.add_argument("--rad-mode", help="radius mode: 'circle' or 'square'")
+parser.add_argument("--log-floor", help="lower bound applied to |v| before log10 (default 1e-300)")
+parser.add_argument("--no-colorbar", action="store_true", help="disable colorbar in output figure")
 args = parser.parse_args()
 # path the the file
 path = args.path
@@ -48,6 +51,9 @@ axis = args.dir
 log = args.log
 grid = args.grid
 no_display = args.no_display
+rad_mode = args.rad_mode
+log_floor = args.log_floor
+no_colorbar = args.no_colorbar
 
 # Convert vmin and vmax to float if provided
 if vmin is not None:
@@ -115,11 +121,16 @@ if axis=="y":
 if axis=="z":
     ii=1; jj=2
 
-c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius)
+c=ram.rd_cell(nout,path=path,prefix=prefix,center=center,radius=radius,rad_mode=rad_mode)
 kwargs={}
 if col is not None:
     kwargs["cmap"]=col
 # Create visualization with specified colorbar limits (vmin, vmax)
+# log_floor is a lower bound applied to |v| before log10 (default 1e-300) when log is set
+if log_floor is not None:
+    kwargs["log_floor"] = float(log_floor)
+if no_colorbar:
+    kwargs["colorbar"] = False
 ram.visu(c.x[ii-1],c.x[jj-1],c.dx,c.u[ivar],sort=c.u[isort],log=log0,vmin=vmin,vmax=vmax,grid=grid0,**kwargs)
 
 if clump:
@@ -167,4 +178,6 @@ if args.out:
 
 if not no_display:
     plt.show()
+else:
+    plt.close()
 

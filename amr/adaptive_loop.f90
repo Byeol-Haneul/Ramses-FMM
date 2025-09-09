@@ -12,6 +12,7 @@ subroutine adaptive_loop(pst)
   use init_refine_basegrid_module, only: m_init_refine_basegrid
   use init_refine_restart_module, only: m_init_refine_restart
   use init_refine_ramses_module, only: m_init_refine_ramses
+  use turb_init_module, only: r_init_turb
   use amr_step, only: m_amr_step
   use update_time_module, only: getmem, writemem, r_hash_stats
   use load_balance_module, only: r_balance_part
@@ -50,6 +51,9 @@ subroutine adaptive_loop(pst)
 
   ! Initialize particle variables
   if(r%pic)call r_init_part(pst)
+
+  ! Initialize turbulent driveing
+  if(r%turb)call r_init_turb(pst)
 
   ! Read initial particle properties from files
   if(r%pic)call m_input_part(pst)
@@ -90,7 +94,11 @@ subroutine adaptive_loop(pst)
 
   ! Just in case we only do clump finding
   if(r%clump_only)then
+     write(*,*)'Load balancing particle distribution'
+     tt1 = mdl_wtime(mdl)
      call r_balance_part(pst,r%levelmin,1,dummy,0)
+     tt2 = mdl_wtime(mdl)
+     print '(A,F14.7)',' Time elapsed load balancing:',tt2-tt1
      call m_clump_finder(pst,.true.,.false.)
      return
   endif

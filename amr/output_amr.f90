@@ -13,6 +13,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   use mdl_module, only: mdl_mkdir, mdl_wtime
   use cooling_module, only: output_cool
   use output_rt_module, only: r_output_rt,file_descriptor_rt,output_rtinfo
+  use turb_commons, only: write_turb_fields
   implicit none
   type(pst_t)::pst
   logical::write_bkp_file
@@ -122,6 +123,9 @@ subroutine m_dump_all(pst,write_bkp_file)
         filename=TRIM(filedir)//'cooling.bin'
         call output_cool(pst%s%cool,filename)
      end if
+     if(r%turb)then
+        call write_turb_fields(pst%s%r,pst%s%turb,filedir)
+     endif
      filename=TRIM(filedir)//'info.txt'
      call output_info(r,g,filename)
      filename=TRIM(filedir)//'namelist.txt'
