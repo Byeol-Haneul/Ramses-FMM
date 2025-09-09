@@ -121,18 +121,15 @@ contains
     character(len=*), intent(in) :: output_dir  ! Output directory
 
     integer                      :: ilun        ! File I/O unit
-    character(len=8)             :: file_ext    ! String version of nturbtemp
     character(len=50000)         :: file_buffer ! Buffer for header file
     character(len=1)             :: c           ! Mostly pointless variable
     character(len=17)            :: turb_last_time_z ! turb_last_time in hex
     character(len=17)            :: turb_next_time_z ! turb_next_time in hex
 
-    write(file_ext,"(I0)") 0 ! For compatibility with Seren
-
     ilun = 10
 
-    turb%turb_file_last = 'turb_last.'//trim(file_ext)//'.dat'
-    turb%turb_file_next = 'turb_next.'//trim(file_ext)//'.dat'
+    turb%turb_file_last = 'turb_last.dat'
+    turb%turb_file_next = 'turb_next.dat'
     turb%turb_file_header = trim(output_dir)//'turb_fields.dat'
 
     write(turb_last_time_z, '(X,Z16)') turb%turb_last_time
@@ -664,16 +661,16 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     type(run_t)               :: run
     type(turb_t)              :: turb
     integer, intent(in)       :: ncache
-    real(kind=8), intent(in)  :: x_cell(1:ndim,1:nvector) ! Positions
-    real(kind=8), intent(in)  :: rho(1:nvector)           ! Densities
-    real(kind=8), intent(out) :: aturb(1:ndim, 1:nvector) ! Turbulent forcing
+    real(kind=8), intent(in)  :: x_cell(1:nvector, 1:ndim) ! Positions
+    real(kind=8), intent(in)  :: rho(1:nvector)            ! Densities
+    real(kind=8), intent(out) :: aturb(1:nvector, 1:ndim)  ! Turbulent forcing
 
-    integer                   :: nok                      ! no. of OK cells
-    integer                   :: ok_cell(1:nvector)       ! 'ok' cells
-    integer                   :: i                        ! cell counter
-    real(kind=8)              :: r(1:ndim,1:nvector)      ! Position in turb grid
-    real(kind=8)              :: dr1(1:ndim,1:nvector)    ! Position in cell
-    real(kind=8)              :: dr2(1:ndim,1:nvector)    ! 1 - position in cell
+    integer                   :: nok                       ! no. of OK cells
+    integer                   :: ok_cell(1:nvector)        ! 'ok' cells
+    integer                   :: i                         ! cell counter
+    real(kind=8)              :: r(1:ndim,1:nvector)       ! Position in turb grid
+    real(kind=8)              :: dr1(1:ndim,1:nvector)     ! Position in cell
+    real(kind=8)              :: dr2(1:ndim,1:nvector)     ! 1 - position in cell
     integer                   :: bmin(1:ndim,1:nvector)    ! 'top-left' corner of box
     integer                   :: bmax(1:ndim,1:nvector)    ! 'bottom-right' corner of box
     real(kind=8)              :: cube_vals(1:ndim,1:nvector,1:twotondim)
@@ -691,7 +688,7 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
        else
           nok = nok + 1
           ok_cell(nok) = i
-          r(:,nok) = x_cell(:,i)/run%boxlen*turb_gs_real
+          r(:,nok) = x_cell(i,:)/run%boxlen*turb_gs_real
        end if
     end do
 
@@ -763,7 +760,7 @@ subroutine find_conj_pair(i,j,k,ii,jj,kk)
     ! Find interpolated value
     dr1(1:ndim,1:nok) = sum(interp(:,1:nok,:) * cube_vals(:,1:nok,:), dim=3)
     do i=1,nok
-       aturb(:,ok_cell(i)) = dr1(:,i)
+       aturb(ok_cell(i),:) = dr1(:,i)
     end do
 
   end subroutine turb_force_calc

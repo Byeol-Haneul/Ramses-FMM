@@ -180,7 +180,7 @@ CFLAGS = -g -O3
 #############################################################################
 MOD = mod
 #############################################################################
-# MPI librairies
+# MPI librairies if needed
 LIBMPI =
 #LIBMPI = -lfmpi -lmpi -lelan
 ifeq ($(HDF5),1)
@@ -188,7 +188,7 @@ ifeq ($(HDF5),1)
 endif
 ifeq ($(TURB),1)
    FFTW = /usr/local/fftw/gcc/3.3.9
-   LIBFFTW = -L$(FFTW)/lib64 -lfftw3
+   LIBFFTW = -L$(FFTW)/lib -lfftw3
    FFLAGS += -I$(FFTW)/include
 endif
 LIBS += $(LIBMPI) $(LIBFFTW)

@@ -477,7 +477,6 @@ subroutine m_read_params(pst)
   ! Turbulence driving parameters
   logical  :: turb=.false.            ! Use turbulence?
   integer  :: turb_seed=-1            ! Turbulent seed (-1=random)
-  logical  :: instant_turb=.true.     ! Generate initial turbulence before start?
   character (LEN=100) :: forcing_power_spectrum='parabolic'
                                       ! Power spectrum type of turbulent forcing
   real(kind=8) :: comp_frac=0.3333    ! Compressive fraction
@@ -625,7 +624,7 @@ subroutine m_read_params(pst)
        & ,gadget_scale_l, gadget_scale_v, gadget_scale_m ,gadget_scale_t &
        & ,ic_skip_type
   ! Turbulence driving parameters
-  namelist/turb_params/turb, turb_seed, instant_turb, comp_frac,&
+  namelist/turb_params/turb, turb_seed, comp_frac,&
        & forcing_power_spectrum, turb_T, turb_Ndt, turb_rms, turb_min_rho
 
   associate(s=>pst%s)
@@ -1543,7 +1542,6 @@ subroutine m_read_params(pst)
 
   s%r%turb=turb
   s%r%turb_seed=turb_seed
-  s%r%instant_turb=instant_turb
   s%r%forcing_power_spectrum=forcing_power_spectrum
   s%r%comp_frac=comp_frac
   s%r%turb_T=turb_T
