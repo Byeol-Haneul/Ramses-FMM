@@ -96,7 +96,7 @@ function worker_init(mdl) result(pst)
   use init_time_module, only: r_init_time
   use init_hydro_module, only: r_init_hydro
   use init_part_module, only: r_init_part, r_deallocate_gas
-  use input_part_grafic_module, only: r_input_part_grafic
+  use input_part_grafic_module, only: r_input_part_grafic, r_input_trac_grafic
   use input_part_zoom_module, only: r_input_part_zoom
   use input_part_ascii_module, only: r_input_part_ascii, r_input_star_ascii, r_input_sink_ascii
   use input_part_restart_module, only: r_input_part_restart
@@ -192,6 +192,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INIT_HYDRO,             pst,C_FUNLOC(r_init_hydro),0,0,"init_hydro")
   call mdl_add_service(pst%s%mdl,MDL_INIT_PART,              pst,C_FUNLOC(r_init_part),0,0,"init_part")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_GRAFIC,      pst,C_FUNLOC(r_input_part_grafic),storage_size(pst%s%p%npart_tot)/32,0,"input_part_grafic")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_TRAC_GRAFIC,      pst,C_FUNLOC(r_input_trac_grafic),storage_size(pst%s%p%npart_tot)/32,0,"input_trac_grafic")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ZOOM,        pst,C_FUNLOC(r_input_part_zoom),1,3,"input_part_zoom")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ASCII,       pst,C_FUNLOC(r_input_part_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_part_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_STAR_ASCII,       pst,C_FUNLOC(r_input_star_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_star_ascii")
