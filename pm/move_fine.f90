@@ -135,6 +135,7 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
+  type(msg_nvar_realdp)::dummy_nvar_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -153,9 +154,15 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-                     pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  if (p%type==TRAC_TYPE) then
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                        hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
+                        pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+  else
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                        hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+                        pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  end if
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -381,6 +388,7 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   logical::ok_level
   type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
+  type(msg_nvar_realdp)::dummy_nvar_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -399,9 +407,15 @@ subroutine tsc_kick_drift_part(s,p,ilevel,action_part)
   vol_loc=dx_loc**ndim
 
   ! Open read-only cache
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-                     pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  if (p%type==TRAC_TYPE) then
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                        hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
+                        pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+  else
+     call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                        hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+                        pack=pack_fetch_kick,unpack=unpack_fetch_kick)
+  end if
 
   ! Loop over particles
   do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -571,7 +585,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::ff
   logical::ok_level
   type(oct),pointer::gridp
-  type(msg_three_realdp)::dummy_three_realdp
+  type(msg_large_realdp)::dummy_large_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m)
 
@@ -591,7 +605,7 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
   ! Open read-only cache
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
        pack=pack_fetch_kick,unpack=unpack_fetch_kick)
 
   ! Loop over particles
@@ -791,6 +805,62 @@ subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
 #endif
 
 end subroutine unpack_fetch_kick
+!#########################################################################
+!#########################################################################
+! Tracer-only cache pack/unpack (hydro + grav) to keep default paths intact
+!#########################################################################
+!#########################################################################
+subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim, ndim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_nvar_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind,ivar
+  type(msg_nvar_realdp)::msg
+
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_kick_trac
+!#########################################################################
+!#########################################################################
+subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+  use cache_commons, only: msg_nvar_realdp
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind,ivar
+  type(msg_nvar_realdp)::msg
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+  
+#ifdef HYDRO
+  do ivar=1,nvar
+     do ind=1,twotondim
+        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+#endif
+
+end subroutine unpack_fetch_kick_trac
 !#########################################################################
 !#########################################################################
 !#########################################################################
