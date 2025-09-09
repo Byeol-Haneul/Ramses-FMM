@@ -543,11 +543,13 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
   !
   !
   real(kind=8),dimension(1:ndim)::x,wll,wl,wr,wrr
+  real(kind=8),dimension(1:ndim)::x_mid,wll2,wl2,wr2,wrr2
   integer,dimension(1:ndim)::cll,cl,cr,crr
-  real(kind=8),dimension(1:fourtondim)::vol
-  integer,dimension(1:ndim,1:fourtondim)::ckey
+  integer,dimension(1:ndim)::cll2,cl2,cr2,crr2
+  real(kind=8),dimension(1:fourtondim)::vol,vol2
+  integer,dimension(1:ndim,1:fourtondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,ind,idim
+  integer::ipart,icell,icell2,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc,vol_loc,dteff
   real(kind=8)::gamma,norm2,fnorm,delta
@@ -846,7 +848,7 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc
-  real(kind=8),dimension(1:ndim)::ff
+  real(kind=8),dimension(1:ndim)::ff,v_pred
   logical::ok_level
   type(nbor),dimension(1:twotondim)::gridp
   type(msg_three_realdp)::dummy_three_realdp
@@ -856,16 +858,20 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=TRAC_TYPE) return
+  ! Tracer hydro cache (uold only)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
                      pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! Position in cell units at current level
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
      do idim=1,ndim
         x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))*floor(x(idim)/dble(m%ckey_max(ilevel+1)))
      end do
+
+     ! Gather velocity v = mom/rho at x^n using CIC
      do idim=1,ndim
         dr(idim)=x(idim)+0.5D0
         ir(idim)=int(dr(idim))
@@ -895,13 +901,29 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
      do ind=1,twotondim
         ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%uold(icell(ind),2:ndim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr)*vol(ind)
      end do
-     if(action_part==action_kick_drift)then
+
+     if(action_part==action_kick_only)then
+        ! RK2 step 1 (early call): stash v^n at x^n, no move
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%levelp(ipart)=ilevel
+
+     else if(action_part==action_kick_drift)then
+        ! RK2 step 2 (late call): predict midpoint and correct
+        ! Use stored v^n if available; fallback to current ff at step 0
+        if (g%nstep>0) then
+           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        else
+           v_pred(1:ndim)=ff(1:ndim)
+        endif
+        ! Predict x_mid in cell units
         do idim=1,ndim
-           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*ff(idim)/dx_loc
+           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
         do idim=1,ndim
            x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))*floor(x_mid(idim)/dble(m%ckey_max(ilevel+1)))
         end do
+
+        ! Gather v^{n+1} at x_mid using CIC
         do idim=1,ndim
            dr2(idim)=x_mid(idim)+0.5D0
            ir2(idim)=int(dr2(idim))
@@ -931,12 +953,14 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
         do ind=1,twotondim
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%uold(icell2(ind),2:ndim+1)/max(gridp(ind)%p%uold(icell2(ind),1), r%smallr)*vol2(ind)
         end do
+        ! Set time-centered velocity and drift
         p%vp(ipart,1:ndim)=ff(1:ndim)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
   call close_cache(s,m%grid_dict)
   if(action_part==action_kick_drift)then
+     ! Periodic wrap in physical units
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
            if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
@@ -971,7 +995,7 @@ subroutine tsc_kick_drift_trac(s,p,ilevel,action_part)
   integer::ipart,icell,icell2,ind,idim
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff
+  real(kind=8),dimension(1:ndim)::ff,v_pred
   type(oct),pointer::gridp
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
@@ -1016,9 +1040,21 @@ subroutine tsc_kick_drift_trac(s,p,ilevel,action_part)
            ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
         end if
      end do
-     if(action_part==action_kick_drift)then
+
+     if(action_part==action_kick_only)then
+        ! RK2 step 1: stash v^n at x^n
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%levelp(ipart)=ilevel
+
+     else if(action_part==action_kick_drift)then
+        ! RK2 step 2: predict with v^n, sample v^{n+1} at midpoint
+        if (g%nstep>0) then
+           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        else
+           v_pred(1:ndim)=ff(1:ndim)
+        endif
         do idim=1,ndim
-           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*ff(idim)/dx_loc
+           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
         do idim=1,ndim
            if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
@@ -1090,7 +1126,7 @@ subroutine pcs_kick_drift_trac(s,p,ilevel,action_part)
   integer::ipart,icell,icell2,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff
+  real(kind=8),dimension(1:ndim)::ff,v_pred
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
@@ -1140,9 +1176,21 @@ subroutine pcs_kick_drift_trac(s,p,ilevel,action_part)
            ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
         end if
      end do
-     if(action_part==action_kick_drift)then
+
+     if(action_part==action_kick_only)then
+        ! RK2 step 1: stash v^n at x^n
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%levelp(ipart)=ilevel
+
+     else if(action_part==action_kick_drift)then
+        ! RK2 step 2: predict with v^n, sample v^{n+1} at midpoint
+        if (g%nstep>0) then
+           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        else
+           v_pred(1:ndim)=ff(1:ndim)
+        endif
         do idim=1,ndim
-           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*ff(idim)/dx_loc
+           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
         do idim=1,ndim
            if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
