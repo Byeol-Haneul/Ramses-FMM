@@ -4,6 +4,23 @@ contains
 !###############################################
 !###############################################
 !###############################################
+!----------------------------------------------------------------
+! Lightweight list maintenance for particles at a given level
+! Always available (not guarded by GRAV)
+!----------------------------------------------------------------
+subroutine m_sort_split_fine(pst, ilevel)
+  use ramses_commons, only: pst_t
+  implicit none
+  type(pst_t) :: pst
+  integer :: ilevel
+
+  if (pst%s%r%pic) then
+     call r_sort_part(pst, ilevel, 1)
+     call r_split_part(pst, ilevel, 1)
+  end if
+
+end subroutine m_sort_split_fine
+
 #ifdef GRAV
 subroutine m_rho_fine(pst,ilevel,rtype)
   use amr_parameters, only: ndim

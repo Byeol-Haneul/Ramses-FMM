@@ -11,6 +11,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use update_time_module, only: m_update_time
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
+! Lightweight list maintenance routine (always available)
+  use rho_fine_module, only: m_sort_split_fine
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
   use phi_fine_cg_module, only: m_phi_fine_cg
@@ -196,6 +198,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   ! Perform second kick for particles
   if(r%pic)then
      call m_timer(pst,'particle - kickdrift','start')
+     ! Ensure lists are up-to-date before moving particles (kick only) when gravity is off
+     if(.not. r%poisson) call m_sort_split_fine(pst, ilevel)
      call m_kick_drift_part(pst,ilevel,action_kick_only)
   endif
 
@@ -386,6 +390,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !-------------------------------------------
   if(r%pic)then
      call m_timer(pst,'particle - kickdrift','start')
+     ! Ensure lists are up-to-date before moving particles (kick+drift) when gravity is off
+     if(.not. r%poisson) call m_sort_split_fine(pst, ilevel)
      call m_kick_drift_part(pst,ilevel,action_kick_drift)
   endif
 
