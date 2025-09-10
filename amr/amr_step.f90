@@ -74,10 +74,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      if(.not.r%static_mesh.and.r%nlevelmax>r%levelmin)then
         call m_timer(pst,'refine','start')
         call m_refine_fine(pst,ilevel)
-        ! Keep per-level particle lists in sync after refinement when gravity is off
-        if(r%pic .and. .not. r%poisson)then
-           call m_sort_split_fine(pst, ilevel)
-        endif
      endif
   endif
 
