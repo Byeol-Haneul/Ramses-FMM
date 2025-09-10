@@ -595,5 +595,3 @@ subroutine title(n,nchar)
      nchar = '0000'//nchar1
   endif
 end subroutine title
-
-

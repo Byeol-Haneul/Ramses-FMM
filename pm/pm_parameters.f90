@@ -12,5 +12,3 @@ module pm_parameters
   integer,parameter :: TRAC_TYPE = 4
 
 end module pm_parameters
-
-

@@ -603,7 +603,6 @@ subroutine pcs_kick_drift_part(s,p,ilevel,action_part)
 
      ! Compute cloud volumes
      vol = pcs_weight(wll,wl,wr,wrr)
-     
 
      ! Gather 3-force
      hash_nbor(0)=ilevel+1
@@ -753,7 +752,7 @@ subroutine unpack_fetch_kick(grid,msg_size,msg_array,hash_key)
 end subroutine unpack_fetch_kick
 !#########################################################################
 !#########################################################################
-! Tracer-only cache pack/unpack (hydro + grav) to keep default paths intact
+! Tracer-only cache pack/unpack (hydro only) to keep default paths intact
 ! In general, different particle types may need different cache packs/unpacks
 !#########################################################################
 !#########################################################################
