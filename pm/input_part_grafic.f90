@@ -259,8 +259,8 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   deallocate(init_plane)
   if(read_pos)deallocate(init_plane_x)
 
-  ! Move particle according to Zeldovich approximation (cosmology only)
-  if(r%cosmo .and. .not. read_pos)then
+  ! Move particle according to Zeldovich approximation
+  if(.not. read_pos)then
      do ipart=1,p%npart
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)
      enddo

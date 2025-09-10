@@ -265,7 +265,7 @@ subroutine input_part_zoom(r,g,p,m)
   ! End loop over levels
 
   ! Move particle according to Zeldovich approximation
-  if(r%cosmo .and. .not. read_pos)then
+  if(.not. read_pos)then
      do ipart=1,p%npart
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)
      enddo
