@@ -105,6 +105,7 @@ function worker_init(mdl) result(pst)
   use input_part_module, only: r_npart_max, r_mass_min_part, r_broadcast_mp_min, r_check_part_emission
   use update_time_module, only: r_broadcast_aexp, r_hash_stats
   use init_refine_basegrid_module, only:r_init_refine_basegrid,r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,r_noct_used_max
+  use fmm_init_refine_grid_module, only:r_fmm_init_refine_grid
   use init_refine_restart_module, only: r_init_refine_restart
   use init_refine_ramses_module, only: r_init_refine_ramses
   use load_balance_module, only: r_load_balance,r_balance_part,r_broadcast_bound_key,r_collect_bound_key
@@ -206,6 +207,9 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_NOCT_MAX,               pst,C_FUNLOC(r_noct_max),1,1,"noct_max")
   call mdl_add_service(pst%s%mdl,MDL_NOCT_USED_MAX,          pst,C_FUNLOC(r_noct_used_max),1,1,"noct_used_max")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_BASEGRID,   pst,C_FUNLOC(r_init_refine_basegrid),1,0,"init_refine_basegrid")
+#ifdef FMM
+  call mdl_add_service(pst%s%mdl,MDL_FMM_INIT_REFINE_GRID,   pst,C_FUNLOC(r_fmm_init_refine_grid),1,0,"fmm_init_refine_grid")
+#endif
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RESTART,    pst,C_FUNLOC(r_init_refine_restart),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_restart")
   call mdl_add_service(pst%s%mdl,MDL_INIT_REFINE_RAMSES,     pst,C_FUNLOC(r_init_refine_ramses),0,2*nhilbert*(pst%s%g%ncpu+1),"init_refine_ramses")
   call mdl_add_service(pst%s%mdl,MDL_COLLECT_BOUND_KEY,      pst,C_FUNLOC(r_collect_bound_key),(MDL_MAX_CPU+1),nhilbert*(ncpu+1)*storage_size(dummy8)/32,"collect_bound_key")

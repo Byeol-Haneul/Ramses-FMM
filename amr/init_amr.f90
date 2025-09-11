@@ -319,15 +319,16 @@ subroutine init_amr(mdl,r,g,m)
   end do
 
   ! Allocate head, tail and numbers for each level
+  ! Jun-Young: add levels under levelmin as well for fmm grids
   if(r%verbose.and.g%myid==1)write(*,*)'Initialize oct decomposition'
-  allocate(m%head(r%levelmin:r%nlevelmax))
+  allocate(m%head(r%levelmin:r%nlevelmax)) ! leave as it is due to caching. 
   allocate(m%tail(r%levelmin:r%nlevelmax))
   allocate(m%head_cache(1:r%nlevelmax))
   allocate(m%tail_cache(1:r%nlevelmax))
-  allocate(m%noct(r%levelmin:r%nlevelmax))
-  allocate(m%noct_min(r%levelmin:r%nlevelmax))
-  allocate(m%noct_max(r%levelmin:r%nlevelmax))
-  allocate(m%noct_tot(r%levelmin:r%nlevelmax))
+  allocate(m%noct(1:r%nlevelmax))
+  allocate(m%noct_min(1:r%nlevelmax))
+  allocate(m%noct_max(1:r%nlevelmax))
+  allocate(m%noct_tot(1:r%nlevelmax))
   m%head=1       ! Head oct in the level
   m%tail=0       ! Tail oct in the level
   m%noct=0       ! Number of oct in the level and in the cpu
@@ -338,13 +339,14 @@ subroutine init_amr(mdl,r,g,m)
   m%noct_used_tot=0  ! Total number of oct used (all cpus)
 
   ! Allocate head, tail, numbers and indice for clean and dirty octs at each level
-  allocate(m%head_clean(r%levelmin:r%nlevelmax))
-  allocate(m%tail_clean(r%levelmin:r%nlevelmax))
-  allocate(m%noct_clean(r%levelmin:r%nlevelmax))
+  ! Jun-Young: add levels under levelmin as well for fmm grids
+  allocate(m%head_clean(1:r%nlevelmax))
+  allocate(m%tail_clean(1:r%nlevelmax))
+  allocate(m%noct_clean(1:r%nlevelmax))
   allocate(m%indx_clean(1:r%ngridmax))
-  allocate(m%head_dirty(r%levelmin:r%nlevelmax))
-  allocate(m%tail_dirty(r%levelmin:r%nlevelmax))
-  allocate(m%noct_dirty(r%levelmin:r%nlevelmax))
+  allocate(m%head_dirty(1:r%nlevelmax))
+  allocate(m%tail_dirty(1:r%nlevelmax))
+  allocate(m%noct_dirty(1:r%nlevelmax))
   allocate(m%indx_dirty(1:r%ngridmax))
 
   if(r%nrestart>0)then

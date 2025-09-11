@@ -10,6 +10,7 @@ subroutine adaptive_loop(pst)
   use init_xion_module, only: m_init_xion
   use input_part_module, only: m_input_part
   use init_refine_basegrid_module, only: m_init_refine_basegrid
+  use fmm_init_refine_grid_module, only: m_fmm_init_refine_grid
   use init_refine_restart_module, only: m_init_refine_restart
   use init_refine_ramses_module, only: m_init_refine_ramses
   use amr_step, only: m_amr_step
@@ -60,6 +61,7 @@ subroutine adaptive_loop(pst)
         call m_init_refine_ramses(pst) ! Build AMR grid from output file
      else
         call m_init_refine_basegrid(pst) ! Build coarse grid
+        call m_fmm_init_refine_grid(pst) ! Build fmm grid
         call m_init_refine_adaptive(pst) ! Build adaptive grid
      endif
   else
@@ -80,6 +82,14 @@ subroutine adaptive_loop(pst)
           & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl_threads(mdl)
   end do
 999 format(' Level ',I2,' has ',I11,' grids (',3(I8,','),')')
+
+#ifdef FMM
+   do ilevel=1,r%levelmin-g%level_fmm_to_amr
+     if(m%noct_tot(ilevel)>0)write(*,888)&
+          & ilevel,m%noct_tot(ilevel),m%noct_min(ilevel),m%noct_max(ilevel),m%noct_tot(ilevel)/mdl_threads(mdl)
+  end do
+888 format(' Level ',I2,' has ',I11,' FMM grids (',3(I8,','),')')
+#endif
 
   g%nstep_coarse_old=g%nstep_coarse
 

@@ -596,6 +596,10 @@ module amr_commons
      ! Minimum MG level
      integer :: levelmin_mg
 
+#ifdef FMM
+     integer :: level_fmm_to_amr = 2 !Jun-Young: relative level to the amr levelmax. 
+#endif 
+
      ! Multigrid safety switch
      logical, dimension(1:MAXLEVEL)::safe_mode=.false.
 
