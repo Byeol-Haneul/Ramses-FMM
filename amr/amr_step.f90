@@ -11,10 +11,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use update_time_module, only: m_update_time
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
-! Lightweight list maintenance routine (always available)
-  use rho_fine_module, only: m_sort_split_fine
-#ifdef GRAV
+! rho_fine is used for particle list maintenance even when gravity is off
   use rho_fine_module, only: m_rho_fine
+#ifdef GRAV
   use phi_fine_cg_module, only: m_phi_fine_cg
   use multigrid_fine_commons, only: multigrid
   use force_fine_module, only: m_force_fine
@@ -147,16 +146,15 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   end if
 
   !--------------------
-  ! Poisson source term
+  ! Poisson source term (when gravity is on)
+  ! Otherwise, just for particle list maintenance when gravity is off
   !--------------------
-#ifdef GRAV
-  if(r%poisson)then
-     if(ilevel==r%levelmin.or.icount>1)then
-        call m_timer(pst,'rho','start')
-        call m_rho_fine(pst,ilevel,0)
-     endif
-  endif
-#endif
+
+   if(ilevel==r%levelmin.or.icount>1)then
+      call m_timer(pst,'rho','start')
+      call m_rho_fine(pst,ilevel,0)
+   endif
+
 
   ! Remove gravity source term with half time step and old force
   if(r%hydro.and..not.r%static_gas)then
@@ -199,7 +197,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%pic)then
      call m_timer(pst,'particle - kickdrift','start')
      ! Ensure lists are up-to-date before moving particles (kick only) when gravity is off
-     if(.not. r%poisson) call m_sort_split_fine(pst, ilevel)
      call m_kick_drift_part(pst,ilevel,action_kick_only)
   endif
 
@@ -391,7 +388,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   if(r%pic)then
      call m_timer(pst,'particle - kickdrift','start')
      ! Ensure lists are up-to-date before moving particles (kick+drift) when gravity is off
-     if(.not. r%poisson) call m_sort_split_fine(pst, ilevel)
      call m_kick_drift_part(pst,ilevel,action_kick_drift)
   endif
 

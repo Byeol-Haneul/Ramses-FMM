@@ -815,7 +815,7 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
   use pm_parameters
   use pm_commons, only: part_t
-  use amr_commons, only: nbor
+  use oct_commons, only: oct
   use ramses_commons, only: ramses_t
   use nbors_utils
   use cache_commons
@@ -830,13 +830,12 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::ir2,il2
   real(kind=8),dimension(1:twotondim)::vol,vol2
   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-  integer,dimension(1:twotondim)::icell,icell2
+  integer::icell,icell2
   integer(kind=8),dimension(0:ndim)::hash_nbor
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
-  logical::ok_level
-  type(nbor),dimension(1:twotondim)::gridp
+  type(oct),pointer :: gridp
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
   associate(r=>s%r,g=>s%g,m=>s%m)
@@ -870,22 +869,15 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
         if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
      enddo
      ckey = cic_index(il,ir)
-     ok_level=.true.
-     hash_nbor(0)=ilevel+1
-     icell=0
-     do ind=1,twotondim
-        hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-        if(.not.associated(gridp(ind)%p)) ok_level=.false.
-     end do
-     do ind=1,twotondim
-        call unlock_cache(s,gridp(ind)%p)
-     end do
-     if(.not.ok_level)cycle
      vol = cic_weight(dl,dr)
      ff(1:ndim)=0.0
+     hash_nbor(0)=ilevel+1
      do ind=1,twotondim
-        ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%uold(icell(ind),2:ndim+1)/max(gridp(ind)%p%uold(icell(ind),1), r%smallr)*vol(ind)
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        if(associated(gridp))then
+           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        end if
      end do
 
      if(action_part==action_kick_only)then
@@ -922,22 +914,15 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
            if(ir2(idim)==m%ckey_max(ilevel+1))ir2(idim)=0
         enddo
         ckey2 = cic_index(il2,ir2)
-        ok_level=.true.
-        hash_nbor(0)=ilevel+1
-        icell2=0
-        do ind=1,twotondim
-           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp(ind)%p,icell2(ind),flush_cache=.false.,fetch_cache=.true.,lock=.true.)
-           if(.not.associated(gridp(ind)%p)) ok_level=.false.
-        end do
-        do ind=1,twotondim
-           call unlock_cache(s,gridp(ind)%p)
-        end do
-        if(.not.ok_level)cycle
         vol2 = cic_weight(dl2,dr2)
         ff(1:ndim)=0.0
+        hash_nbor(0)=ilevel+1
         do ind=1,twotondim
-           ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%uold(icell2(ind),2:ndim+1)/max(gridp(ind)%p%uold(icell2(ind),1), r%smallr)*vol2(ind)
+           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+           if(associated(gridp))then
+              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+           end if
         end do
         ! Set time-centered velocity and drift
         p%vp(ipart,1:ndim)=ff(1:ndim)
