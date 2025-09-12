@@ -234,7 +234,7 @@ subroutine refine_fine(s,ilevel,ncreate,nkill)
   ! but it is refined, then destroy the child grid.
   !----------------------------------------------------------
   g%nkill=0
-  do ilev=r%nlevelmax,ilevel+1
+  do ilev=r%nlevelmax,ilevel+1,-1
 
      call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_int4)/32,&
