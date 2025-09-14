@@ -247,8 +247,9 @@ class Part:
             self.tm = np.zeros([nnp])
             self.idm = np.zeros([nnp])
         if(sink):
-            self.fp = np.zeros([nndim,nnp])
-            self.tp = np.zeros([nnp])
+            self.angmom = np.zeros([nndim,nnp])
+            self.accel = np.zeros([nndim,nnp])
+            self.age = np.zeros([nnp])
         if(peak):
             self.hid = np.zeros([nnp],dtype=np.int32)
             self.pid = np.zeros([nnp],dtype=np.int32)
@@ -415,7 +416,18 @@ def rd_part(nout,**kwargs):
                     xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                     offset = offset + npart2*4
 
-                p.fp[idim,ipart:ipart+npart2] = xp
+                p.accel[idim,ipart:ipart+npart2] = xp
+
+            # read particle angular momentum
+            for idim in range(0,ndim):
+                if(backup):
+                    xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+                    offset = offset + npart2*8
+                else:
+                    xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+                    offset = offset + npart2*4
+
+                p.angmom[idim,ipart:ipart+npart2] = xp
 
             # read particle birth times
             if(backup):
@@ -425,7 +437,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tp[ipart:ipart+npart2] = xp
+            p.age[ipart:ipart+npart2] = xp
 
         if(tree):
             # read particle birth times
