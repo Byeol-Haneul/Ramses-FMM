@@ -238,18 +238,18 @@ class Part:
         self.vel = np.zeros([nndim,nnp])
         self.mass = np.zeros([nnp])
         self.level = np.zeros([nnp])
-        self.id = np.zeros([nnp])
+        self.birth_id = np.zeros([nnp])
         if(star):
             self.metallicity = np.zeros([nnp])
-            self.age = np.zeros([nnp])
+            self.birth_date = np.zeros([nnp])
         if(tree):
-            self.age = np.zeros([nnp])
-            self.merging_age = np.zeros([nnp])
+            self.birth_date = np.zeros([nnp])
+            self.merging_date = np.zeros([nnp])
             self.merging_id = np.zeros([nnp])
         if(sink):
             self.angmom = np.zeros([nndim,nnp])
             self.accel = np.zeros([nndim,nnp])
-            self.age = np.zeros([nnp])
+            self.birth_date = np.zeros([nnp])
         if(peak):
             self.halo_id = np.zeros([nnp],dtype=np.int32)
             self.peak_id = np.zeros([nnp],dtype=np.int32)
@@ -404,7 +404,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.age[ipart:ipart+npart2] = xp
+            p.birth_date[ipart:ipart+npart2] = xp
 
         if(sink):
             # read particle accelerations
@@ -437,7 +437,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.age[ipart:ipart+npart2] = xp
+            p.birth_date[ipart:ipart+npart2] = xp
 
         if(tree):
             # read particle birth times
@@ -448,7 +448,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.age[ipart:ipart+npart2] = xp
+            p.birth_date[ipart:ipart+npart2] = xp
 
             # read particle merging times
             if(backup):
@@ -458,7 +458,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.merging_age[ipart:ipart+npart2] = xp
+            p.merging_date[ipart:ipart+npart2] = xp
 
         # read particle level
         xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
@@ -470,7 +470,7 @@ def rd_part(nout,**kwargs):
         xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
         offset = offset + npart2*4
 
-        p.id[ipart:ipart+npart2] = xp
+        p.birth_id[ipart:ipart+npart2] = xp
 
         # read particle merging id
         if(tree):
@@ -498,12 +498,12 @@ def rd_part(nout,**kwargs):
 
             # read particle halo id
             hid = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
-            p.hid[ipart:ipart+npart2] = hid
+            p.halo_id[ipart:ipart+npart2] = hid
             offset = offset + npart2*4
 
             # read particle peak id
             pid = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
-            p.pid[ipart:ipart+npart2] = pid
+            p.peak_id[ipart:ipart+npart2] = pid
             offset = offset + npart2*4
 
             ipart = ipart + npart2
@@ -528,18 +528,18 @@ def rd_part(nout,**kwargs):
         p.pos = p.pos[:,r < radius]
         p.vel = p.vel[:,r < radius]
         p.level = p.level[r < radius]
-        p.id = p.id[r < radius]
+        p.birth_id = p.birth_id[r < radius]
         if(star):
             p.metallicity = p.metallicity[r < radius]
-            p.age = p.age[r < radius]
+            p.birth_date = p.birth_date[r < radius]
         if(sink):
             p.accel = p.accel[:,r < radius]
-            p.age = p.age[r < radius]
+            p.birth_date = p.birth_date[r < radius]
             p.angmom = p.angmom[r < radius]
         if(tree):
-            p.age = p.age[r < radius]
-            p.merging_age = p.merging_age[r < radius]
-            p.meeging_id = p.merging_age[r < radius]
+            p.birth_date = p.birth_date[r < radius]
+            p.merging_date = p.merging_date[r < radius]
+            p.merging_id = p.merging_age[r < radius]
         if(peak):
             p.peak_id = p.peak_id[r < radius]
             p.halo_id = p.halo_id[r < radius]
@@ -1799,11 +1799,11 @@ def plot_tree(nout,pid,**kwargs):
     s=rd_part(nout,prefix='tree',peak=True,**kwargs)
 
     # collect sinks in chosen clump
-    ind=np.where(s.pid==pid)
-    idp=s.idp[ind]
-    idm=s.idm[ind]
-    tp=s.tp[ind]
-    tm=s.tm[ind]
+    ind=np.where(s.peak_id==pid)
+    idp=s.birth_id[ind]
+    idm=s.merging_id[ind]
+    tp=s.birth_date[ind]
+    tm=s.merging_date[ind]
 
     # sort sinks according to id
     isort=np.argsort(idp)

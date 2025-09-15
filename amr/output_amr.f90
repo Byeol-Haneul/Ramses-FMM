@@ -673,12 +673,12 @@ subroutine output_header(r,g,p,filename)
      write(ilun,'(a)',advance='no')'angmom '
   end if
   if(allocated(p%tp))then
-     write(ilun,'(a)',advance='no')'age '
+     write(ilun,'(a)',advance='no')'birth_date '
   endif
   if(allocated(p%tm))then
-     write(ilun,'(a)',advance='no')'merging_age '
+     write(ilun,'(a)',advance='no')'merging_date '
   endif
-  write(ilun,'(a)',advance='no')'level id '
+  write(ilun,'(a)',advance='no')'level birth_id '
   if(allocated(p%idm))then
      write(ilun,'(a)',advance='no')'merging_id '
   endif
