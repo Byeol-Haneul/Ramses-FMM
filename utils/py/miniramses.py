@@ -232,27 +232,27 @@ def rd_histo(filename):
 
 class Part:
     def __init__(self,nnp,nndim,star=False,sink=False,tree=False,peak=False):
-        self.np = nnp
+        self.npart = nnp
         self.ndim = nndim
-        self.xp = np.zeros([nndim,nnp])
-        self.vp = np.zeros([nndim,nnp])
-        self.mp = np.zeros([nnp])
-        self.lp = np.zeros([nnp])
-        self.idp = np.zeros([nnp])
+        self.pos = np.zeros([nndim,nnp])
+        self.vel = np.zeros([nndim,nnp])
+        self.mass = np.zeros([nnp])
+        self.level = np.zeros([nnp])
+        self.id = np.zeros([nnp])
         if(star):
-            self.zp = np.zeros([nnp])
-            self.tp = np.zeros([nnp])
+            self.metallicity = np.zeros([nnp])
+            self.age = np.zeros([nnp])
         if(tree):
-            self.tp = np.zeros([nnp])
-            self.tm = np.zeros([nnp])
-            self.idm = np.zeros([nnp])
+            self.age = np.zeros([nnp])
+            self.merging_age = np.zeros([nnp])
+            self.merging_id = np.zeros([nnp])
         if(sink):
             self.angmom = np.zeros([nndim,nnp])
             self.accel = np.zeros([nndim,nnp])
             self.age = np.zeros([nnp])
         if(peak):
-            self.hid = np.zeros([nnp],dtype=np.int32)
-            self.pid = np.zeros([nnp],dtype=np.int32)
+            self.halo_id = np.zeros([nnp],dtype=np.int32)
+            self.peak_id = np.zeros([nnp],dtype=np.int32)
             
 def rd_part(nout,**kwargs):
     """This function reads a RAMSES particle file (unformatted Fortran binary) 
@@ -275,17 +275,17 @@ def rd_part(nout,**kwargs):
 
     Returns:
         A variable p (class Part) object defined as:
-            p.np: number of particles
+            p.npart: number of particles
             p.ndim: number of space dimensions
-            p.xp: coordinates of the particles. p.xp[0] gives the x coordinate as a numpy array.
-            p.vp: velocities of the particles. p.vp[0] gives the x-component as a numpy array.
-            p.mp: array containing the particle masses
+            p.pos: coordinates of the particles. p.pos[0] gives the x coordinate as a numpy array.
+            p.vel: velocities of the particles. p.vel[0] gives the x-component as a numpy array.
+            p.mass: array containing the particle masses
         The number of fields depends on the particle type defined by prefix.
 
     Example:
         import miniramses as ram
         p = ram.rd_part(12,center=[0.5,0.5,0.5],radius=0.1)
-        print(np.max(p.xp[0]))
+        print(np.max(p.pos[0]))
     
     Authors: Romain Teyssier (Princeton University, October 2022)
     """
@@ -338,7 +338,7 @@ def rd_part(nout,**kwargs):
     print(txt)
 
     p = Part(npart,ndim,star,sink,tree,peak)
-    p.np = npart
+    p.npart = npart
     p.ndim = ndim
 
     ipart = 0
@@ -362,7 +362,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.xp[idim,ipart:ipart+npart2] = xp
+            p.pos[idim,ipart:ipart+npart2] = xp
 
         # read particle velocities
         for idim in range(0,ndim):
@@ -373,7 +373,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.vp[idim,ipart:ipart+npart2] = xp
+            p.vel[idim,ipart:ipart+npart2] = xp
 
         # read particle masses
         if(backup):
@@ -383,7 +383,7 @@ def rd_part(nout,**kwargs):
             xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
             offset = offset + npart2*4
 
-        p.mp[ipart:ipart+npart2] = xp
+        p.mass[ipart:ipart+npart2] = xp
 
         if(star):
             # read particle metallicities
@@ -394,7 +394,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.zp[ipart:ipart+npart2] = xp
+            p.metallicity[ipart:ipart+npart2] = xp
 
             # read particle birth times
             if(backup):
@@ -404,7 +404,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tp[ipart:ipart+npart2] = xp
+            p.age[ipart:ipart+npart2] = xp
 
         if(sink):
             # read particle accelerations
@@ -448,7 +448,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tp[ipart:ipart+npart2] = xp
+            p.age[ipart:ipart+npart2] = xp
 
             # read particle merging times
             if(backup):
@@ -458,26 +458,26 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tm[ipart:ipart+npart2] = xp
+            p.merging_age[ipart:ipart+npart2] = xp
 
         # read particle level
         xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
         offset = offset + npart2*4
 
-        p.lp[ipart:ipart+npart2] = xp
+        p.level[ipart:ipart+npart2] = xp
 
         # read particle id
         xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
         offset = offset + npart2*4
 
-        p.idp[ipart:ipart+npart2] = xp
+        p.id[ipart:ipart+npart2] = xp
 
         # read particle merging id
         if(tree):
             xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
             offset = offset + npart2*4
 
-            p.idm[ipart:ipart+npart2] = xp
+            p.merging_id[ipart:ipart+npart2] = xp
 
         ipart = ipart + npart2
 
@@ -513,36 +513,37 @@ def rd_part(nout,**kwargs):
 
         # Periodic boundaries
         for idim in range(0,ndim):
-            xp = p.xp[idim]-center[idim]
+            xp = p.pos[idim]-center[idim]
             xp[xp>boxlen/2]=xp[xp>boxlen/2]-boxlen
             xp[xp<-boxlen/2]=xp[xp<-boxlen/2]+boxlen
-            p.xp[idim] = xp+center[idim]
+            p.pos[idim] = xp+center[idim]
         if ndim==1:
-            r = np.sqrt((p.xp[0]-center[0])**2)
+            r = np.sqrt((p.pos[0]-center[0])**2)
         if ndim==2:
-            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2)
+            r = np.sqrt((p.pos[0]-center[0])**2+(p.pos[1]-center[1])**2)
         if ndim==3:
-            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
-        p.np = np.count_nonzero(r < radius)
-        p.mp = p.mp[r < radius]
-        p.xp = p.xp[:,r < radius]
-        p.vp = p.vp[:,r < radius]
-        p.lp = p.lp[r < radius]
-        p.idp = p.idp[r < radius]
+            r = np.sqrt((p.pos[0]-center[0])**2+(p.pos[1]-center[1])**2+(p.pos[2]-center[2])**2)
+        p.npart = np.count_nonzero(r < radius)
+        p.mass = p.mass[r < radius]
+        p.pos = p.pos[:,r < radius]
+        p.vel = p.vel[:,r < radius]
+        p.level = p.level[r < radius]
+        p.id = p.id[r < radius]
         if(star):
-            p.zp = p.zp[r < radius]
-            p.tp = p.tp[r < radius]
+            p.metallicity = p.metallicity[r < radius]
+            p.age = p.age[r < radius]
         if(sink):
-            p.fp = p.fp[:,r < radius]
-            p.tp = p.tp[r < radius]
+            p.accel = p.accel[:,r < radius]
+            p.age = p.age[r < radius]
+            p.angmom = p.angmom[r < radius]
         if(tree):
-            p.tp = p.tp[r < radius]
-            p.tm = p.tm[r < radius]
-            p.idm = p.idm[r < radius]
+            p.age = p.age[r < radius]
+            p.merging_age = p.merging_age[r < radius]
+            p.meeging_id = p.merging_age[r < radius]
         if(peak):
-            p.pid = p.pid[r < radius]
-            p.hid = p.hid[r < radius]
-        txt = "Kept "+str(p.np)+" particles"
+            p.peak_id = p.peak_id[r < radius]
+            p.halo_id = p.halo_id[r < radius]
+        txt = "Kept "+str(p.npart)+" particles"
         print(txt)
 
     return p
