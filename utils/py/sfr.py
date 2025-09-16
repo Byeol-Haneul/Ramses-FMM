@@ -56,11 +56,11 @@ print("Reading output number ",nout)
 
 s=ram.rd_part(nout,path=path,prefix='star',center=center,radius=radius)
 i=ram.rd_info(nout,path=path)
-time=abs(s.tp*i.unit_t/i.aexp**2/(365*24*3600*1e9))
+time=abs(s.birth_date*i.unit_t/i.aexp**2/(365*24*3600*1e9))
 n_bin=int(np.max(time)/bin_size)
 bins=np.linspace(0,np.max(time),n_bin)
 unit_m=i.unit_d*i.unit_l**3/2e33/(bins[1]-bins[0])/1e9
-plt.hist(time,weights=s.mp*unit_m,bins=bins)
+plt.hist(time,weights=s.mass*unit_m,bins=bins)
 if log:
     plt.yscale("log")
 plt.xlabel('t [Gyr]')
