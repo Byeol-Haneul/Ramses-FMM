@@ -461,10 +461,10 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         p%tm(ipart)=g%texp
         p%mp(ipart)=0d0
      endif
-     ! If tree particle is bound and not merged, update its parent clump mass
+     ! If tree particle is bound and not merged, update its parent clump particle mass
      if(p%idm(ipart).EQ.-2.AND.p%idp(ipart).EQ.c%min_tree_id(peak_nr))then
         p%idm(ipart)=0
-        p%mp(ipart)=c%clump_mass(peak_nr)
+        p%mp(ipart)=c%particle_mass(peak_nr)
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -620,7 +620,7 @@ subroutine pack_fetch_minid(c,local_peak_id,msg_size,msg_array)
 
   msg%id = c%min_tree_id(local_peak_id)
   msg%ind = c%ind_halo(local_peak_id)
-  msg%mass = c%clump_mass(local_peak_id)
+  msg%mass = c%particle_mass(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -644,7 +644,7 @@ subroutine unpack_fetch_minid(c,local_peak_id,msg_size,msg_array)
 
   c%min_tree_id(local_peak_id) = msg%id
   c%ind_halo(local_peak_id) = msg%ind
-  c%clump_mass(local_peak_id) = msg%mass
+  c%particle_mass(local_peak_id) = msg%mass
 
 end subroutine unpack_fetch_minid
 !################################################################
