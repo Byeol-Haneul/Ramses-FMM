@@ -37,7 +37,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   !-------------------------------------
   ! Find relevant peak patches and halos
   !-------------------------------------
-  call r_clump_finder(pst,r%levelmin,1)
+  call r_clump_finder(pst)
 
   !---------------------------------
   ! Output clumps properties to file
@@ -100,20 +100,18 @@ end subroutine m_clump_finder
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_clump_finder(pst,ilevel,input_size)
+recursive subroutine r_clump_finder(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
 
-  integer::ilevel
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1,input_size,0,ilevel)
-     call r_clump_finder(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_CLUMP_FINDER,pst%iUpper+1)
+     call r_clump_finder(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call clump_finder(pst%s)
