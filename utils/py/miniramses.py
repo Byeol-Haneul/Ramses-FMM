@@ -565,7 +565,7 @@ class LightconeReader:
         nproperties: number of non-idp properties per particle (default 7 for x,y,z,vx,vy,vz,mass)
         
         Returns:
-            idp: numpy array of particle IDs (int64) with shape (npart,)
+            idp: numpy array of particle IDs (int32) with shape (npart,)
             properties: numpy array of properties (float32) with shape (nproperties, npart)
                        where rows are x, y, z, vx, vy, vz, mass (depending on nproperties)
         """
