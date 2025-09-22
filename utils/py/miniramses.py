@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 from scipy.io import FortranFile
 from astropy.io import ascii
 import os
+import re
 
 import time
 
@@ -551,23 +552,191 @@ def rd_part(nout,**kwargs):
 
     return p
 
-def rd_cone(nout, path, nproperties=3, verbose=False):
-    """
-    Read the lightcone shell from the output directory.
-    First read number of particles from path/cone_nout/cone_nout.txt (1st line)
-    nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
-    """
-    nout_padded = str(nout).zfill(5)
-    binfile = f"{path}/cone_{nout_padded}/cone_{nout_padded}"
-    txtfile = f"{binfile}.txt"
-    with open(txtfile, 'r') as file:
-        npart = int(file.readline().strip())
-        aexp_old = float(file.readline().strip())
-        aexp = float(file.readline().strip())
+class LightconeReader:
 
-    verbose and print(f"Found {npart} particles in {txtfile}")
+    @staticmethod
+    def rd_metadata(path, verbose=False):
+        """
+        Read the lightcone shell metadata from the .txt file
+        
+        Returns:
+            Dictionary with keys: 'npart', 'aexp_old', 'aexp'
+        """
+        if verbose:
+            print(f"Reading metadata from {path}")
+        with open(path, 'r') as file:
+            npart = int(file.readline().strip())
+            aexp_old = float(file.readline().strip())
+            aexp = float(file.readline().strip())
 
-    return np.fromfile(binfile, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
+        if verbose:
+            print(f"Found {npart} particles")
+
+        return {'npart': npart, 'aexp_old': aexp_old, 'aexp': aexp}
+
+    @staticmethod
+    def rd_data(path, nproperties=7, verbose=False):
+        """
+        Read the lightcone shell from the output directory.
+        nproperties: number of non-idp properties per particle (default 7 for x,y,z,vx,vy,vz,mass)
+        
+        Returns:
+            idp: numpy array of particle IDs (int32) with shape (npart,)
+            properties: numpy array of properties (float32) with shape (nproperties, npart)
+                       where rows are x, y, z, vx, vy, vz, mass (depending on nproperties)
+        """
+        # Construct metadata file path by adding .txt extension
+        if verbose:
+            print(f"Reading lightcone data from {path}")
+        txt_path = path + ".txt"
+        metadata = LightconeReader.rd_metadata(txt_path, verbose=verbose)
+        
+        npart = metadata['npart']
+        
+        # Read the raw data
+        with open(path, 'rb') as f:
+            # Read particle IDs first (8 bytes each)
+            # idp_data = np.frombuffer(f.read(0 * npart), dtype=np.int32) # use this version when processing old output without idp
+            idp_data = np.frombuffer(f.read(4 * npart), dtype=np.int32)
+            
+            # Read the remaining properties (positions, velocities, masses) (4 bytes each)
+            real_data = np.frombuffer(f.read(4 * nproperties * npart), dtype=np.float32)
+            real_data = real_data.reshape(nproperties, npart)
+        
+        return idp_data, real_data
+
+    @staticmethod
+    def rd_positions_as_healpix(path, nside, verbose=False):
+        """
+        Read the lightcone shell from the output directory and convert it to a Healpix map.
+        nside: Healpix resolution parameter
+        """
+        import healpy as hp
+        
+        # Read only the position data (properties x, y, z)
+        idp, properties = LightconeReader.rd_data(path, nproperties=3, verbose=verbose)
+        x, y, z = properties[0], properties[1], properties[2]  # x, y, z are the first 3 properties
+        
+        # Convert Cartesian coordinates to spherical coordinates
+        # x is the depth (cone axis), y and z are the transverse coordinates
+        r = np.sqrt(x**2 + y**2 + z**2)
+        theta = np.pi/2 - np.arcsin(z / r)  # polar angle from x-axis
+        phi = np.arcsin(y / r)    # azimuthal angle in y-z plane
+        
+        # Create HEALPix map
+        npix = hp.nside2npix(nside)
+        healpix_map = np.zeros(npix)
+        
+        # Convert spherical coordinates to HEALPix pixel indices
+        pix_indices = hp.ang2pix(nside, theta, phi)
+        
+        # Count particles in each pixel
+        unique_pix, counts = np.unique(pix_indices, return_counts=True)
+        healpix_map[unique_pix] = counts
+
+        return healpix_map
+
+    @staticmethod
+    def get_shells(path, verbose=False):
+        """
+        Get all lightcone shell information from the lightcone directory.
+        Looks for files named 'part_xxxxx' and 'tree_xxxxx' and returns shell information.
+        
+        Args:
+            path: Path to the lightcone directory
+            verbose: Print debug information
+            
+        Returns:
+            List of dictionaries with shell information, sorted by nstep in descending order
+            (largest nout corresponds to shell closest to observer)
+            
+            Each dictionary contains:
+            - 'nstep': shell number (int)
+            - 'part_file': path to part binary file (str, or None if doesn't exist)
+            - 'part_metadata': path to part .txt file (str, or None if doesn't exist)
+            - 'part_size': size of part binary file in bytes (int, or None if doesn't exist)
+            - 'tree_file': path to tree binary file (str, or None if doesn't exist)
+            - 'tree_metadata': path to tree .txt file (str, or None if doesn't exist)
+            - 'tree_size': size of tree binary file in bytes (int, or None if doesn't exist)
+        """
+        # Check if path exists
+        if not os.path.exists(path):
+            if verbose:
+                print(f"Path {path} does not exist")
+            return []
+        
+        # Define patterns for each file type
+        patterns = {
+            'part_file': re.compile(r'^part_(\d{5})$'),
+            'part_metadata': re.compile(r'^part_(\d{5})\.txt$'),
+            'tree_file': re.compile(r'^tree_(\d{5})$'),
+            'tree_metadata': re.compile(r'^tree_(\d{5})\.txt$')
+        }
+        
+        shells = {}  # Dictionary to collect shell information by nstep
+        
+        try:
+            # Loop over all files in the directory
+            for filename in os.listdir(path):
+                filepath = os.path.join(path, filename)
+                if not os.path.isfile(filepath):
+                    continue
+                
+                # Check each pattern
+                for file_type, pattern in patterns.items():
+                    match = pattern.match(filename)
+                    if match:
+                        nstep = int(match.group(1))
+                        
+                        # Initialize shell entry if needed
+                        if nstep not in shells:
+                            shells[nstep] = {'nstep': nstep}
+                        
+                        # Store file path
+                        shells[nstep][file_type] = filepath
+                        
+                        # Store file size for binary files
+                        if file_type in ['part_file', 'tree_file']:
+                            try:
+                                shells[nstep][file_type.replace('_file', '_size')] = os.path.getsize(filepath)
+                                if verbose:
+                                    print(f"Found {file_type} shell {nstep}: {os.path.getsize(filepath)/1024**2:.2f} MB")
+                            except OSError:
+                                if verbose:
+                                    print(f"Warning: Could not get size for {file_type} shell {nstep}")
+                        break
+                        
+        except OSError as e:
+            if verbose:
+                print(f"Error reading directory {path}: {e}")
+            return []
+        
+        # Convert to list and sort by nstep in descending order
+        shell_list = list(shells.values())
+        shell_list.sort(key=lambda x: x['nstep'], reverse=True)
+        
+        # Fill in None values for missing fields
+        for shell in shell_list:
+            for field in ['part_file', 'part_metadata', 'part_size', 'tree_file', 'tree_metadata', 'tree_size']:
+                if field not in shell:
+                    shell[field] = None
+        
+        # Print statistics only in verbose mode
+        if verbose and shell_list:
+            part_shells = [s for s in shell_list if s['part_file'] is not None]
+            tree_shells = [s for s in shell_list if s['tree_file'] is not None]
+            
+            print(f"Found {len(shell_list)} total shells ({len(part_shells)} part, {len(tree_shells)} tree)")
+            
+            if part_shells:
+                total_part_size = sum(s['part_size'] for s in part_shells if s['part_size'] is not None)
+                print(f"Part files total size: {total_part_size/1024**3:.2f} GB")
+            
+            if tree_shells:
+                total_tree_size = sum(s['tree_size'] for s in tree_shells if s['tree_size'] is not None)
+                print(f"Tree files total size: {total_tree_size/1024**3:.2f} GB")
+        
+        return shell_list
 
 class Level:
     def __init__(self,nndim):

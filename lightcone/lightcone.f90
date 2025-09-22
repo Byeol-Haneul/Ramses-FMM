@@ -10,7 +10,7 @@ contains
     character(LEN=5) :: nchar
     integer :: dummy(1)
     integer, dimension(1:flen/4) :: input_array
-    character(LEN=flen) :: filename, filedir
+    character(LEN=flen) :: filedir
     real(kind=8) :: z1, z2
 
     associate(r=>pst%s%r, g=>pst%s%g, mdl=>pst%s%mdl)
@@ -22,11 +22,11 @@ contains
     if (r%verbose) write(*,*) 'Entering output_lightcone, nstep_coarse: ', g%nstep_coarse
 
     call title(g%nstep_coarse, nchar)
-    filedir='cone_'//TRIM(nchar)//'/'
+    filedir='lightcone/'
     call mdl_mkdir(mdl, filedir)
 
-    filename = TRIM(filedir)//'cone_'//TRIM(nchar)
-    input_array = transfer(filename, input_array)
+    ! Pass step number instead of full filename
+    input_array = transfer(nchar, input_array)
     call r_output_lightcone(pst, input_array, flen/4, dummy, 0)
 
     end associate
@@ -42,7 +42,7 @@ contains
     integer :: output_size
     integer, dimension(1:input_size) :: input_array
     integer, dimension(1:output_size) :: output_array
-    character(LEN=flen) :: filename
+    character(LEN=flen) :: part_filename, tree_filename
     character(LEN=5) :: nchar
 
     if (pst%nLower > 0) then
@@ -51,8 +51,19 @@ contains
        call mdl_get_reply(pst%s%mdl, rID, output_size)
     else
        call title(pst%s%g%myid, nchar)
-       filename = TRIM(transfer(input_array, filename))
-       call output_lightcone(pst%s, pst%s%p, filename)
+       nchar = TRIM(transfer(input_array, nchar))
+       
+       ! Build filenames for both particle types
+       part_filename = 'lightcone/part_'//TRIM(nchar)
+       tree_filename = 'lightcone/tree_'//TRIM(nchar)
+       
+       ! Output regular DM particles
+       call output_lightcone(pst%s, pst%s%p, part_filename)
+       
+       ! Output tree particles
+       if (pst%s%r%tree) then
+          call output_lightcone(pst%s, pst%s%tree, tree_filename)
+       end if
     endif
 
   end subroutine r_output_lightcone
@@ -179,7 +190,7 @@ contains
                 if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
                    ! Transform velocity to cone coordinates
                    velocity = matmul(box_to_cone_rotation, p%vp(npart, :))
-                   call add_to_buffer(buffer, real(position(:), kind=4), real(velocity(:), kind=4))
+                   call add_to_buffer(buffer, p%idp(npart), real(position(:), kind=4), real(velocity(:), kind=4), real(p%mp(npart), kind=4))
 
                    if (buffer_is_full(buffer)) then
                       nthbuffer = nthbuffer + 1
