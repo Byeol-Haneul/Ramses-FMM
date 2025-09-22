@@ -86,7 +86,7 @@ subroutine m_clump_finder(pst,create_output,keep_alive)
   ! Deallocate all peak arrays if needed
   !------------------------------------------
   if(.not. keep_alive)then
-     call r_deallocate_clump(pst,r%levelmin,1)
+     call r_deallocate_clump(pst)
   endif
 
   ttend = mdl_wtime(mdl)

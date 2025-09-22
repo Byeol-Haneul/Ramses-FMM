@@ -27,13 +27,13 @@ recursive subroutine m_tree_formation(pst)
   ! Create tree particles
   !----------------------------
   if(pst%s%c%npeak_tot>0)then
-     call r_tree_formation(pst,pst%s%r%levelmin,1)
+     call r_tree_formation(pst)
   endif
 
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
-  call r_deallocate_clump(pst,pst%s%r%levelmin,1)
+  call r_deallocate_clump(pst)
 
   ttend = mdl_wtime(pst%s%mdl)
   print '(A,F14.7)',' Time elapsed in creating trees:',ttend-ttstart
@@ -43,20 +43,18 @@ end subroutine m_tree_formation
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_tree_formation(pst,ilevel,input_size)
+recursive subroutine r_tree_formation(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_TREE_FORMATION,pst%iUpper+1,input_size,0,ilevel)
-     call r_tree_formation(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_TREE_FORMATION,pst%iUpper+1)
+     call r_tree_formation(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call tree_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%tree,pst%s%c)
@@ -209,7 +207,6 @@ subroutine m_formation_site(pst)
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
   use ramses_commons, only: pst_t
-  use clump_merger_module, only: r_deallocate_clump
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
@@ -232,7 +229,7 @@ subroutine m_formation_site(pst)
   !----------------------------------------------
   ! Find relevant peak patches as formation sites
   !----------------------------------------------
-  call r_tree_clump(pst,r%levelmin,1)
+  call r_tree_clump(pst)
 
   end associate
 #endif
@@ -242,20 +239,18 @@ end subroutine m_formation_site
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_tree_clump(pst,ilevel,input_size)
+recursive subroutine r_tree_clump(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_TREE_CLUMP,pst%iUpper+1,input_size,0,ilevel)
-     call r_tree_clump(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_TREE_CLUMP,pst%iUpper+1)
+     call r_tree_clump(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call tree_clump(pst%s)
@@ -369,7 +364,6 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   type(msg_tree_minid)::dummy_tree_minid
 
   logical::bound
-  integer::ilevel
   real(kind=8)::pi,grav,r2,v2,vcirc2,omega2,radius
 
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree)
@@ -405,8 +399,7 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
         ! Compute peak central core properties
-        ilevel = c%peak_level(peak_nr)
-        radius = 2.0d0 * r%boxlen / 2**ilevel
+        radius = 2.0d0 * r%boxlen / 2**c%peak_level(peak_nr)
         vcirc2 = grav * c%particle_mass(peak_nr) / radius
         omega2 = vcirc2 / radius**2
         ! Compute relative velocity

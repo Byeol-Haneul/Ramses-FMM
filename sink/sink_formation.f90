@@ -44,7 +44,7 @@ recursive subroutine m_sink_formation(pst)
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
-  call r_deallocate_clump(pst,pst%s%r%levelmin,1)
+  call r_deallocate_clump(pst)
 
   ttend = mdl_wtime(pst%s%mdl)
   print '(A,F14.7)',' Time elapsed in creating sinks:',ttend-ttstart
