@@ -296,6 +296,7 @@ def rd_part(nout,**kwargs):
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
     peak = kwargs.get("peak",False)
+    silent = kwargs.get("silent",False)
 
     car1 = str(nout).zfill(5)
     i = rd_info(nout,path=path,backup=backup)
@@ -334,8 +335,9 @@ def rd_part(nout,**kwargs):
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         npart = npart + npart2
 
-    txt = "Found "+str(npart)+" particles"
-    print(txt)
+    if silent==False:
+        txt = "Found "+str(npart)+" particles"
+        print(txt)
 
     p = Part(npart,ndim,star,sink,tree,peak)
     p.npart = npart
@@ -543,8 +545,9 @@ def rd_part(nout,**kwargs):
         if(peak):
             p.peak_id = p.peak_id[r < radius]
             p.halo_id = p.halo_id[r < radius]
-        txt = "Kept "+str(p.npart)+" particles"
-        print(txt)
+        if(silent==False):
+            txt = "Kept "+str(p.npart)+" particles"
+            print(txt)
 
     return p
 
@@ -1694,6 +1697,7 @@ def rd_clump(nout,**kwargs):
    center = kwargs.get("center")
    radius = kwargs.get("radius")
    path = kwargs.get("path","./")
+   silent = kwargs.get("silent",False)
 
    car1 = str(nout).zfill(5)
    i = rd_info(nout,path=path,backup=backup)
@@ -1787,8 +1791,9 @@ def rd_clump(nout,**kwargs):
        cat.rmax = cat.rmax[r < radius]
        cat.c200 = cat.c200[r < radius]
 
-   txt = "Found "+str(len(cat.index))+" clumps"
-   print(txt)
+   if silent==False:
+       txt = "Found "+str(len(cat.index))+" clumps"
+       print(txt)
 
    return cat
 
