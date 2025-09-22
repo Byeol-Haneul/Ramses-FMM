@@ -1,4 +1,4 @@
-The namelist block `&LIGHTCONE_PARAMS` is used to specify parameters controlling the light cone output in cosmological simulations. Light cone data is outputted during the simulation to capture the light travel time effects for observational studies.
+The namelist block `&LIGHTCONE_PARAMS` is used to specify parameters controlling the light cone output in cosmological simulations.
 
 | Variable name         | Fortran type | Default value | Description                                                                                    |
 |:----------------------|:-------------|:--------------|:-----------------------------------------------------------------------------------------------|
