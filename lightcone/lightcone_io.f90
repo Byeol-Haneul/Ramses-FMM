@@ -85,6 +85,64 @@ contains
     end if
   end subroutine write_buffer
 
+  subroutine write_buffer_grav(ilun, buffer, nbefore, ntotal, nthbuffer)
+    use lightcone_buffer_module
+
+    type(lightcone_buffer_grav), intent(in) :: buffer
+    integer, intent(in) :: ilun, nbefore, ntotal, nthbuffer
+    integer :: idim, offset
+#ifndef WITHOUTMPI
+    integer :: ierr, status(MPI_STATUS_SIZE)
+#endif
+
+    if (.not. buffer_grav_is_empty(buffer)) then
+
+       ! Write positions (properties 1, 2, 3)
+       do idim = 1, 3
+          offset = calculate_write_offset(nbefore, ntotal, idim, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+          call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%xc(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
+#else
+          write(unit=ilun, pos=offset+1) buffer%xc(1:buffer%ncurrent, idim) ! pos is 1-based
+#endif
+       end do
+      
+       ! Write rho (property 4)
+       offset = calculate_write_offset(nbefore, ntotal, 4, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+       call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%rho(1:buffer%ncurrent), buffer%ncurrent, MPI_REAL, status, ierr)
+#else
+       write(unit=ilun, pos=offset+1) buffer%rho(1:buffer%ncurrent) ! pos in 1-based
+#endif
+
+       ! Write phi (property 5)
+       offset = calculate_write_offset(nbefore, ntotal, 5, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+       call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%phi(1:buffer%ncurrent), buffer%ncurrent, MPI_REAL, status, ierr)
+#else
+       write(unit=ilun, pos=offset+1) buffer%phi(1:buffer%ncurrent) ! pos is 1-based
+#endif
+
+       ! Write acceleration (properties 6, 7, 8)
+       do idim = 1, 3
+          offset = calculate_write_offset(nbefore, ntotal, idim+5, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+          call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%accel(1:buffer%ncurrent, idim), buffer%ncurrent, MPI_REAL, status, ierr)
+#else
+          write(unit=ilun, pos=offset+1) buffer%accel(1:buffer%ncurrent, idim) ! pos is 1-based
+#endif
+       end do
+
+       ! Write dphidt (property 9)
+       offset = calculate_write_offset(nbefore, ntotal, 9, nthbuffer, buffer%nstride)
+#ifndef WITHOUTMPI
+       call MPI_FILE_WRITE_AT(ilun, int(offset, kind=MPI_OFFSET_KIND), buffer%dphidt(1:buffer%ncurrent), buffer%ncurrent, MPI_REAL, status, ierr)
+#else
+       write(unit=ilun, pos=offset+1) buffer%dphidt(1:buffer%ncurrent) ! pos is 1-based
+#endif
+    end if
+  end subroutine write_buffer_grav
+
   subroutine write_lightcone_txt_file(filename, ntotal, aexp_old, aexp)
     character(LEN=flen), intent(in) :: filename
     integer, intent(in) :: ntotal

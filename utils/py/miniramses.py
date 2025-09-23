@@ -575,7 +575,7 @@ class LightconeReader:
         return {'npart': npart, 'aexp_old': aexp_old, 'aexp': aexp}
 
     @staticmethod
-    def rd_data(path, nproperties=7, verbose=False):
+    def rd_part(path, nproperties=7, verbose=False):
         """
         Read the lightcone shell from the output directory.
         nproperties: number of non-idp properties per particle (default 7 for x,y,z,vx,vy,vz,mass)
@@ -606,6 +606,33 @@ class LightconeReader:
         return idp_data, real_data
 
     @staticmethod
+    def rd_cell(path, nproperties=8, verbose=False):
+        """
+        Read the lightcone shell from the output directory.
+        nproperties: number of properties per cell (default 9 for x,y,z,rho,phi,accelx,accely,accelz,dphidt)
+        
+        Returns:
+            properties: numpy array of properties (float32) with shape (nproperties, ncell)
+                       where rows are x, y, z, rho, phi, accelx, accely, accelz, dphidt (depending on nproperties)
+        """
+        # Construct metadata file path by adding .txt extension
+        if verbose:
+            print(f"Reading lightcone data from {path}")
+        txt_path = path + ".txt"
+        metadata = LightconeReader.rd_metadata(txt_path, verbose=verbose)
+        
+        ncell = metadata['npart']
+        
+        # Read the raw data
+        with open(path, 'rb') as f:
+
+            # Read the remaining properties (positions, velocities, masses) (4 bytes each)
+            real_data = np.frombuffer(f.read(4 * nproperties * ncell), dtype=np.float32)
+            real_data = real_data.reshape(nproperties, ncell)
+        
+        return real_data
+
+    @staticmethod
     def rd_positions_as_healpix(path, nside, verbose=False):
         """
         Read the lightcone shell from the output directory and convert it to a Healpix map.
@@ -614,7 +641,7 @@ class LightconeReader:
         import healpy as hp
         
         # Read only the position data (properties x, y, z)
-        idp, properties = LightconeReader.rd_data(path, nproperties=3, verbose=verbose)
+        idp, properties = LightconeReader.rd_part(path, nproperties=3, verbose=verbose)
         x, y, z = properties[0], properties[1], properties[2]  # x, y, z are the first 3 properties
         
         # Convert Cartesian coordinates to spherical coordinates
@@ -670,7 +697,9 @@ class LightconeReader:
             'part_file': re.compile(r'^part_(\d{5})$'),
             'part_metadata': re.compile(r'^part_(\d{5})\.txt$'),
             'tree_file': re.compile(r'^tree_(\d{5})$'),
-            'tree_metadata': re.compile(r'^tree_(\d{5})\.txt$')
+            'tree_metadata': re.compile(r'^tree_(\d{5})\.txt$'),
+            'grav_file': re.compile(r'^grav_(\d{5})$'),
+            'grav_metadata': re.compile(r'^grav_(\d{5})\.txt$')
         }
         
         shells = {}  # Dictionary to collect shell information by nstep
@@ -725,6 +754,7 @@ class LightconeReader:
         if verbose and shell_list:
             part_shells = [s for s in shell_list if s['part_file'] is not None]
             tree_shells = [s for s in shell_list if s['tree_file'] is not None]
+            grav_shells = [s for s in shell_list if s['grav_file'] is not None]
             
             print(f"Found {len(shell_list)} total shells ({len(part_shells)} part, {len(tree_shells)} tree)")
             
@@ -735,7 +765,11 @@ class LightconeReader:
             if tree_shells:
                 total_tree_size = sum(s['tree_size'] for s in tree_shells if s['tree_size'] is not None)
                 print(f"Tree files total size: {total_tree_size/1024**3:.2f} GB")
-        
+
+            if grav_shells:
+                total_grav_size = sum(s['grav_size'] for s in grav_shells if s['grav_size'] is not None)
+                print(f"Grav files total size: {total_grav_size/1024**3:.2f} GB")
+
         return shell_list
 
 class Level:
