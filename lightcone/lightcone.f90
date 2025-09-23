@@ -293,7 +293,7 @@ endif
 
                    do idim = 1, ndim
                       nskip = 2**(idim-1)
-                      position(idim) = ( 2 * s%m%grid(igrid+i-1)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
+                      position(idim) = ( 2 * s%m%grid(igrid)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
                    end do
 
                    position(1) = position(1) + i * s%r%boxlen
@@ -346,7 +346,7 @@ endif
 
                    do idim = 1, ndim
                       nskip = 2**(idim-1)
-                      position(idim) = ( 2 * s%m%grid(igrid+i-1)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
+                      position(idim) = ( 2 * s%m%grid(igrid)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
                    end do
 
                    position(1) = position(1) + i * s%r%boxlen
