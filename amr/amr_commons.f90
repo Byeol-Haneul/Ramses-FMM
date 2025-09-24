@@ -377,6 +377,8 @@ module amr_commons
      logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
      real(kind=8)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines
      logical::use_bondi_lambda = .true.
+     logical::mass_weighting = .true.
+     logical::momentum_conserving = .false.
 
      ! AGN Feedback parameters
      logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles

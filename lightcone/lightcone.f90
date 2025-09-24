@@ -10,7 +10,7 @@ contains
     character(LEN=5) :: nchar
     integer :: dummy(1)
     integer, dimension(1:flen/4) :: input_array
-    character(LEN=flen) :: filename, filedir
+    character(LEN=flen) :: filedir
     real(kind=8) :: z1, z2
 
     associate(r=>pst%s%r, g=>pst%s%g, mdl=>pst%s%mdl)
@@ -22,11 +22,11 @@ contains
     if (r%verbose) write(*,*) 'Entering output_lightcone, nstep_coarse: ', g%nstep_coarse
 
     call title(g%nstep_coarse, nchar)
-    filedir='cone_'//TRIM(nchar)//'/'
+    filedir='lightcone/'
     call mdl_mkdir(mdl, filedir)
 
-    filename = TRIM(filedir)//'cone_'//TRIM(nchar)
-    input_array = transfer(filename, input_array)
+    ! Pass step number instead of full filename
+    input_array = transfer(nchar, input_array)
     call r_output_lightcone(pst, input_array, flen/4, dummy, 0)
 
     end associate
@@ -42,7 +42,7 @@ contains
     integer :: output_size
     integer, dimension(1:input_size) :: input_array
     integer, dimension(1:output_size) :: output_array
-    character(LEN=flen) :: filename
+    character(LEN=flen) :: part_filename, tree_filename, grav_filename
     character(LEN=5) :: nchar
 
     if (pst%nLower > 0) then
@@ -51,9 +51,28 @@ contains
        call mdl_get_reply(pst%s%mdl, rID, output_size)
     else
        call title(pst%s%g%myid, nchar)
-       filename = TRIM(transfer(input_array, filename))
-       call output_lightcone(pst%s, pst%s%p, filename)
-    endif
+       nchar = TRIM(transfer(input_array, nchar))
+       
+       ! Build filenames for both particle types
+       part_filename = 'lightcone/part_'//TRIM(nchar)
+       tree_filename = 'lightcone/tree_'//TRIM(nchar)
+       grav_filename = 'lightcone/grav_'//TRIM(nchar)
+       
+       ! Output regular DM particles
+       if (pst%s%r%part) then
+          call output_lightcone(pst%s, pst%s%p, part_filename)
+       endif
+
+       ! Output tree particles
+       if (pst%s%r%tree) then
+          call output_lightcone(pst%s, pst%s%tree, tree_filename)
+       end if
+
+       ! Output grid cells
+       if (pst%s%r%poisson) then
+          call output_lightcone_grav(pst%s, grav_filename)
+       end if
+endif
 
   end subroutine r_output_lightcone
 
@@ -119,25 +138,25 @@ contains
     ! Count selection particles and fill has_particles array
     nselected = 0
     do i = first_xreplica, last_xreplica
-      do j = first_yreplica, last_yreplica
-        do k = first_zreplica, last_zreplica
-          do npart = 1, p%npart
+       do j = first_yreplica, last_yreplica
+          do k = first_zreplica, last_zreplica
+             do npart = 1, p%npart
 
-            position = p%xp(npart, :)
-            position(1) = position(1) + i * s%r%boxlen
-            position(2) = position(2) + j * s%r%boxlen
-            position(3) = position(3) + k * s%r%boxlen
+                position = p%xp(npart, :)
+                position(1) = position(1) + i * s%r%boxlen
+                position(2) = position(2) + j * s%r%boxlen
+                position(3) = position(3) + k * s%r%boxlen
 
-            position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
+                position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
 
-            if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
-              nselected = nselected + 1
-              has_particles(i,j,k) = .true.
-            end if
+                if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
+                   nselected = nselected + 1
+                   has_particles(i,j,k) = .true.
+                end if
 
+             end do
           end do
-        end do
-      end do
+       end do
     end do
 
     ! Selection and writing starts here
@@ -179,7 +198,7 @@ contains
                 if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
                    ! Transform velocity to cone coordinates
                    velocity = matmul(box_to_cone_rotation, p%vp(npart, :))
-                   call add_to_buffer(buffer, real(position(:), kind=4), real(velocity(:), kind=4))
+                   call add_to_buffer(buffer, p%idp(npart), real(position(:), kind=4), real(velocity(:), kind=4), real(p%mp(npart), kind=4))
 
                    if (buffer_is_full(buffer)) then
                       nthbuffer = nthbuffer + 1
@@ -204,5 +223,170 @@ contains
     if (s%g%myid == 1) call write_lightcone_txt_file(filename, ntotal, s%g%aexp_old, s%g%aexp)
 
   end subroutine output_lightcone
+
+  subroutine output_lightcone_grav(s, filename)
+    use lightcone_utils
+    use lightcone_buffer_module
+    use lightcone_io_module
+    use amr_parameters, only: ndim, twotondim
+#ifndef WITHOUTMPI
+    use mpi
+#endif
+    ! Inputs
+    type(ramses_t), intent(in) :: s
+    character(LEN=flen), intent(in) :: filename
+
+    ! Fixed parameters
+    integer, parameter :: nstride = 65536, max_replicas = 10000
+
+    ! Local variables
+    real(kind=8) :: r_inner, r_outer, angle_y, angle_z
+    integer :: nreplicas, &
+         first_xreplica, last_xreplica, &
+         first_yreplica, last_yreplica, &
+         first_zreplica, last_zreplica
+    real(kind=8) :: z1, z2, coverH0, omega_r, dx
+    real(kind=8) :: position(3)
+    real(kind=8) :: cone_to_box_rotation(3,3), box_to_cone_rotation(3,3)
+    logical, allocatable :: has_cells(:,:,:)
+    type(lightcone_buffer_grav) :: buffer
+    integer :: igrid, ind, nselected, nbefore, ntotal, nthbuffer
+    integer :: i, j, k, ilun, idim, nskip
+    real(kind=8) :: rho, phi, dphidt, accel(3)
+#ifndef WITHOUTMPI
+    integer :: ierr
+#endif
+
+    z2 = 1/s%g%aexp_old - 1.0d0
+    z1 = 1/s%g%aexp - 1.0d0
+    coverH0 = 2.9979246d+5/s%g%h0
+    omega_r = 1 - s%g%omega_m - s%g%omega_l
+    dx = s%r%boxlen / 2**s%r%levelmin
+
+    cone_to_box_rotation = rotation_matrix(deg2rad(s%r%cone_theta), deg2rad(s%r%cone_phi))
+    box_to_cone_rotation = transpose(cone_to_box_rotation)
+
+    angle_y = deg2rad(s%r%cone_opening_angle_y)
+    angle_z = deg2rad(s%r%cone_opening_angle_z)
+
+    ! Find the relevant replicas
+    r_inner = comoving2code(s%g, comoving_distance(z1, s%g%omega_m, s%g%omega_l, omega_r, coverH0))
+    r_outer = comoving2code(s%g, comoving_distance(z2, s%g%omega_m, s%g%omega_l, omega_r, coverH0))
+
+    call compute_replica_range(cone_to_box_rotation, s%r%cone_observer, angle_y, angle_z, r_inner, r_outer, first_xreplica, last_xreplica, first_yreplica, last_yreplica, first_zreplica, last_zreplica)
+
+    nreplicas = (last_xreplica - first_xreplica + 1) * (last_yreplica - first_yreplica + 1) * (last_zreplica - first_zreplica + 1)
+
+    ! Check that total number of replicas does not exceed max_replicas
+    if (nreplicas > max_replicas) stop 'Number of replicas exceeds max_replicas in lightcone'
+
+    allocate(has_cells(first_xreplica:last_xreplica, first_yreplica:last_yreplica, first_zreplica:last_zreplica))
+    has_cells = .false.
+
+    ! Count selection cells and fill has_cells array
+    nselected = 0
+    do i = first_xreplica, last_xreplica
+       do j = first_yreplica, last_yreplica
+          do k = first_zreplica, last_zreplica
+             do igrid = s%m%head(s%r%levelmin), s%m%tail(s%r%levelmin)
+                do ind = 1, twotondim
+
+                   do idim = 1, ndim
+                      nskip = 2**(idim-1)
+                      position(idim) = ( 2 * s%m%grid(igrid)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
+                   end do
+
+                   position(1) = position(1) + i * s%r%boxlen
+                   position(2) = position(2) + j * s%r%boxlen
+                   position(3) = position(3) + k * s%r%boxlen
+
+                   position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
+
+                   if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
+                      nselected = nselected + 1
+                      has_cells(i,j,k) = .true.
+                   end if
+
+                end do
+             end do
+          end do
+       end do
+    end do
+
+    ! Selection and writing starts here
+    ! Process i needs to know the number of particles in the preceding processes
+    ! e.g process 5 needs to know N_1 + N_2 + N_3 + N_4 so that it can start writing at the correct position
+    nbefore = 0 ! Number of particles in the preceding processes
+    ntotal = nselected ! Total number of particles across all processes
+#ifndef WITHOUTMPI
+    ! Each process gets the total number of particles in the preceding processes
+    call MPI_EXSCAN(nselected, nbefore, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
+    ntotal = nbefore + nselected
+    ! Last process broadcasts the total number of particles (its nbefore + nselected) to all other processes
+    call MPI_BCAST(ntotal, 1, MPI_INTEGER, s%g%ncpu-1, MPI_COMM_WORLD, ierr)
+#endif
+
+    if (s%r%verbose .and. s%g%myid == 1) write(*, *) 'Found ', ntotal, ' lightcone cells across ', nreplicas, ' replicas'
+
+    call init_lightcone_buffer_grav(buffer, nstride) ! Allocate the buffer
+
+    ilun = 3 * s%g%ncpu + s%g%myid + 103
+    call open_lightcone_file(ilun, filename)
+
+    ! Select particles and write in chunks
+    nthbuffer = 0 ! We need to keep track of the number of buffers previously written to correctly offset the write position
+    do i = first_xreplica, last_xreplica
+       do j = first_yreplica, last_yreplica
+          do k = first_zreplica, last_zreplica
+
+             if (.not. has_cells(i, j, k)) cycle
+
+             do igrid = s%m%head(s%r%levelmin), s%m%tail(s%r%levelmin)
+                do ind = 1, twotondim
+
+                   do idim = 1, ndim
+                      nskip = 2**(idim-1)
+                      position(idim) = ( 2 * s%m%grid(igrid)%ckey(idim) + MOD((ind-1)/nskip,2) + 0.5 ) * dx - s%m%skip(idim)
+                   end do
+
+                   position(1) = position(1) + i * s%r%boxlen
+                   position(2) = position(2) + j * s%r%boxlen
+                   position(3) = position(3) + k * s%r%boxlen
+
+                   position = box_to_cone_coordinates(box_to_cone_rotation, s%r%cone_observer, position)
+
+                   if (is_in_lightcone_sector(position, r_inner, r_outer, angle_y, angle_z)) then
+#ifdef GRAV
+                      rho = s%m%grid(igrid)%rho(ind)
+                      phi = s%m%grid(igrid)%phi(ind)
+                      accel(:) = s%m%grid(igrid)%f(ind,:)
+                      dphidt = ( s%m%grid(igrid)%phi(ind) - s%m%grid(igrid)%phi_old(ind) ) / s%g%dtold(s%r%levelmin) 
+#endif
+                      call add_to_buffer_grav(buffer, real(position(:), kind=4), real(rho, kind=4), real(phi, kind=4), real(accel(:), kind=4), real(dphidt, kind=4))
+
+                      if (buffer_grav_is_full(buffer)) then
+                         nthbuffer = nthbuffer + 1
+                         call write_buffer_grav(ilun, buffer, nbefore, ntotal, nthbuffer)
+                         call empty_buffer_grav(buffer)
+                      end if
+
+                   end if
+                end do
+             end do
+          end do
+       end do
+    end do
+
+    ! Write any remaining particles
+    if (.not. buffer_grav_is_empty(buffer)) then
+       nthbuffer = nthbuffer + 1
+       call write_buffer_grav(ilun, buffer, nbefore, ntotal, nthbuffer)
+       call empty_buffer_grav(buffer)
+    end if
+
+    call close_lightcone_file(ilun)
+    if (s%g%myid == 1) call write_lightcone_txt_file(filename, ntotal, s%g%aexp_old, s%g%aexp)
+
+  end subroutine output_lightcone_grav
 
 end module lightcone_module

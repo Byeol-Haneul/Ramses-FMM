@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 from scipy.io import FortranFile
 from astropy.io import ascii
 import os
+import re
 
 import time
 
@@ -232,26 +233,27 @@ def rd_histo(filename):
 
 class Part:
     def __init__(self,nnp,nndim,star=False,sink=False,tree=False,peak=False):
-        self.np = nnp
+        self.npart = nnp
         self.ndim = nndim
-        self.xp = np.zeros([nndim,nnp])
-        self.vp = np.zeros([nndim,nnp])
-        self.mp = np.zeros([nnp])
-        self.lp = np.zeros([nnp])
-        self.idp = np.zeros([nnp])
+        self.pos = np.zeros([nndim,nnp])
+        self.vel = np.zeros([nndim,nnp])
+        self.mass = np.zeros([nnp])
+        self.level = np.zeros([nnp])
+        self.birth_id = np.zeros([nnp])
         if(star):
-            self.zp = np.zeros([nnp])
-            self.tp = np.zeros([nnp])
+            self.metallicity = np.zeros([nnp])
+            self.birth_date = np.zeros([nnp])
         if(tree):
-            self.tp = np.zeros([nnp])
-            self.tm = np.zeros([nnp])
-            self.idm = np.zeros([nnp])
+            self.birth_date = np.zeros([nnp])
+            self.merging_date = np.zeros([nnp])
+            self.merging_id = np.zeros([nnp])
         if(sink):
-            self.fp = np.zeros([nndim,nnp])
-            self.tp = np.zeros([nnp])
+            self.angmom = np.zeros([nndim,nnp])
+            self.accel = np.zeros([nndim,nnp])
+            self.birth_date = np.zeros([nnp])
         if(peak):
-            self.hid = np.zeros([nnp],dtype=np.int32)
-            self.pid = np.zeros([nnp],dtype=np.int32)
+            self.halo_id = np.zeros([nnp],dtype=np.int32)
+            self.peak_id = np.zeros([nnp],dtype=np.int32)
             
 def rd_part(nout,**kwargs):
     """This function reads a RAMSES particle file (unformatted Fortran binary) 
@@ -274,17 +276,17 @@ def rd_part(nout,**kwargs):
 
     Returns:
         A variable p (class Part) object defined as:
-            p.np: number of particles
+            p.npart: number of particles
             p.ndim: number of space dimensions
-            p.xp: coordinates of the particles. p.xp[0] gives the x coordinate as a numpy array.
-            p.vp: velocities of the particles. p.vp[0] gives the x-component as a numpy array.
-            p.mp: array containing the particle masses
+            p.pos: coordinates of the particles. p.pos[0] gives the x coordinate as a numpy array.
+            p.vel: velocities of the particles. p.vel[0] gives the x-component as a numpy array.
+            p.mass: array containing the particle masses
         The number of fields depends on the particle type defined by prefix.
 
     Example:
         import miniramses as ram
         p = ram.rd_part(12,center=[0.5,0.5,0.5],radius=0.1)
-        print(np.max(p.xp[0]))
+        print(np.max(p.pos[0]))
     
     Authors: Romain Teyssier (Princeton University, October 2022)
     """
@@ -295,6 +297,7 @@ def rd_part(nout,**kwargs):
     radius = kwargs.get("radius")
     path = kwargs.get("path","./")
     peak = kwargs.get("peak",False)
+    silent = kwargs.get("silent",False)
 
     car1 = str(nout).zfill(5)
     i = rd_info(nout,path=path,backup=backup)
@@ -333,11 +336,12 @@ def rd_part(nout,**kwargs):
         npart2 = np.fromfile(filename,dtype=np.int32,count=1,offset=4)[0]
         npart = npart + npart2
 
-    txt = "Found "+str(npart)+" particles"
-    print(txt)
+    if silent==False:
+        txt = "Found "+str(npart)+" particles"
+        print(txt)
 
     p = Part(npart,ndim,star,sink,tree,peak)
-    p.np = npart
+    p.npart = npart
     p.ndim = ndim
 
     ipart = 0
@@ -361,7 +365,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.xp[idim,ipart:ipart+npart2] = xp
+            p.pos[idim,ipart:ipart+npart2] = xp
 
         # read particle velocities
         for idim in range(0,ndim):
@@ -372,7 +376,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.vp[idim,ipart:ipart+npart2] = xp
+            p.vel[idim,ipart:ipart+npart2] = xp
 
         # read particle masses
         if(backup):
@@ -382,7 +386,7 @@ def rd_part(nout,**kwargs):
             xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
             offset = offset + npart2*4
 
-        p.mp[ipart:ipart+npart2] = xp
+        p.mass[ipart:ipart+npart2] = xp
 
         if(star):
             # read particle metallicities
@@ -393,7 +397,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.zp[ipart:ipart+npart2] = xp
+            p.metallicity[ipart:ipart+npart2] = xp
 
             # read particle birth times
             if(backup):
@@ -403,7 +407,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tp[ipart:ipart+npart2] = xp
+            p.birth_date[ipart:ipart+npart2] = xp
 
         if(sink):
             # read particle accelerations
@@ -415,7 +419,18 @@ def rd_part(nout,**kwargs):
                     xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                     offset = offset + npart2*4
 
-                p.fp[idim,ipart:ipart+npart2] = xp
+                p.accel[idim,ipart:ipart+npart2] = xp
+
+            # read particle angular momentum
+            for idim in range(0,ndim):
+                if(backup):
+                    xp = np.fromfile(filename,dtype=np.float64,count=npart2,offset=offset)
+                    offset = offset + npart2*8
+                else:
+                    xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
+                    offset = offset + npart2*4
+
+                p.angmom[idim,ipart:ipart+npart2] = xp
 
             # read particle birth times
             if(backup):
@@ -425,7 +440,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tp[ipart:ipart+npart2] = xp
+            p.birth_date[ipart:ipart+npart2] = xp
 
         if(tree):
             # read particle birth times
@@ -436,7 +451,7 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tp[ipart:ipart+npart2] = xp
+            p.birth_date[ipart:ipart+npart2] = xp
 
             # read particle merging times
             if(backup):
@@ -446,26 +461,26 @@ def rd_part(nout,**kwargs):
                 xp = np.fromfile(filename,dtype=np.float32,count=npart2,offset=offset)
                 offset = offset + npart2*4
 
-            p.tm[ipart:ipart+npart2] = xp
+            p.merging_date[ipart:ipart+npart2] = xp
 
         # read particle level
         xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
         offset = offset + npart2*4
 
-        p.lp[ipart:ipart+npart2] = xp
+        p.level[ipart:ipart+npart2] = xp
 
         # read particle id
         xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
         offset = offset + npart2*4
 
-        p.idp[ipart:ipart+npart2] = xp
+        p.birth_id[ipart:ipart+npart2] = xp
 
         # read particle merging id
         if(tree):
             xp = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
             offset = offset + npart2*4
 
-            p.idm[ipart:ipart+npart2] = xp
+            p.merging_id[ipart:ipart+npart2] = xp
 
         ipart = ipart + npart2
 
@@ -486,12 +501,12 @@ def rd_part(nout,**kwargs):
 
             # read particle halo id
             hid = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
-            p.hid[ipart:ipart+npart2] = hid
+            p.halo_id[ipart:ipart+npart2] = hid
             offset = offset + npart2*4
 
             # read particle peak id
             pid = np.fromfile(filename,dtype=np.int32,count=npart2,offset=offset)
-            p.pid[ipart:ipart+npart2] = pid
+            p.peak_id[ipart:ipart+npart2] = pid
             offset = offset + npart2*4
 
             ipart = ipart + npart2
@@ -501,57 +516,261 @@ def rd_part(nout,**kwargs):
 
         # Periodic boundaries
         for idim in range(0,ndim):
-            xp = p.xp[idim]-center[idim]
+            xp = p.pos[idim]-center[idim]
             xp[xp>boxlen/2]=xp[xp>boxlen/2]-boxlen
             xp[xp<-boxlen/2]=xp[xp<-boxlen/2]+boxlen
-            p.xp[idim] = xp+center[idim]
+            p.pos[idim] = xp+center[idim]
         if ndim==1:
-            r = np.sqrt((p.xp[0]-center[0])**2)
+            r = np.sqrt((p.pos[0]-center[0])**2)
         if ndim==2:
-            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2)
+            r = np.sqrt((p.pos[0]-center[0])**2+(p.pos[1]-center[1])**2)
         if ndim==3:
-            r = np.sqrt((p.xp[0]-center[0])**2+(p.xp[1]-center[1])**2+(p.xp[2]-center[2])**2)
-        p.np = np.count_nonzero(r < radius)
-        p.mp = p.mp[r < radius]
-        p.xp = p.xp[:,r < radius]
-        p.vp = p.vp[:,r < radius]
-        p.lp = p.lp[r < radius]
-        p.idp = p.idp[r < radius]
+            r = np.sqrt((p.pos[0]-center[0])**2+(p.pos[1]-center[1])**2+(p.pos[2]-center[2])**2)
+        p.npart = np.count_nonzero(r < radius)
+        p.mass = p.mass[r < radius]
+        p.pos = p.pos[:,r < radius]
+        p.vel = p.vel[:,r < radius]
+        p.level = p.level[r < radius]
+        p.birth_id = p.birth_id[r < radius]
         if(star):
-            p.zp = p.zp[r < radius]
-            p.tp = p.tp[r < radius]
+            p.metallicity = p.metallicity[r < radius]
+            p.birth_date = p.birth_date[r < radius]
         if(sink):
-            p.fp = p.fp[:,r < radius]
-            p.tp = p.tp[r < radius]
+            p.accel = p.accel[:,r < radius]
+            p.birth_date = p.birth_date[r < radius]
+            p.angmom = p.angmom[r < radius]
         if(tree):
-            p.tp = p.tp[r < radius]
-            p.tm = p.tm[r < radius]
-            p.idm = p.idm[r < radius]
+            p.birth_date = p.birth_date[r < radius]
+            p.merging_date = p.merging_date[r < radius]
+            p.merging_id = p.merging_age[r < radius]
         if(peak):
-            p.pid = p.pid[r < radius]
-            p.hid = p.hid[r < radius]
-        txt = "Kept "+str(p.np)+" particles"
-        print(txt)
+            p.peak_id = p.peak_id[r < radius]
+            p.halo_id = p.halo_id[r < radius]
+        if(silent==False):
+            txt = "Kept "+str(p.npart)+" particles"
+            print(txt)
 
     return p
 
-def rd_cone(nout, path, nproperties=3, verbose=False):
-    """
-    Read the lightcone shell from the output directory.
-    First read number of particles from path/cone_nout/cone_nout.txt (1st line)
-    nproperties: number of properties per particle (e.g., 3 for x,y,z; 6 for x,y,z,vx,vy,vz)
-    """
-    nout_padded = str(nout).zfill(5)
-    binfile = f"{path}/cone_{nout_padded}/cone_{nout_padded}"
-    txtfile = f"{binfile}.txt"
-    with open(txtfile, 'r') as file:
-        npart = int(file.readline().strip())
-        aexp_old = float(file.readline().strip())
-        aexp = float(file.readline().strip())
+class LightconeReader:
 
-    verbose and print(f"Found {npart} particles in {txtfile}")
+    @staticmethod
+    def rd_metadata(path, verbose=False):
+        """
+        Read the lightcone shell metadata from the .txt file
+        
+        Returns:
+            Dictionary with keys: 'npart', 'aexp_old', 'aexp'
+        """
+        if verbose:
+            print(f"Reading metadata from {path}")
+        with open(path, 'r') as file:
+            npart = int(file.readline().strip())
+            aexp_old = float(file.readline().strip())
+            aexp = float(file.readline().strip())
 
-    return np.fromfile(binfile, dtype=np.float32, count=npart*nproperties).reshape(nproperties, npart)
+        if verbose:
+            print(f"Found {npart} particles")
+
+        return {'npart': npart, 'aexp_old': aexp_old, 'aexp': aexp}
+
+    @staticmethod
+    def rd_part(path, nproperties=7, verbose=False):
+        """
+        Read the lightcone shell from the output directory.
+        nproperties: number of non-idp properties per particle (default 7 for x,y,z,vx,vy,vz,mass)
+        
+        Returns:
+            idp: numpy array of particle IDs (int32) with shape (npart,)
+            properties: numpy array of properties (float32) with shape (nproperties, npart)
+                       where rows are x, y, z, vx, vy, vz, mass (depending on nproperties)
+        """
+        # Construct metadata file path by adding .txt extension
+        if verbose:
+            print(f"Reading lightcone data from {path}")
+        txt_path = path + ".txt"
+        metadata = LightconeReader.rd_metadata(txt_path, verbose=verbose)
+        
+        npart = metadata['npart']
+        
+        # Read the raw data
+        with open(path, 'rb') as f:
+            # Read particle IDs first (8 bytes each)
+            # idp_data = np.frombuffer(f.read(0 * npart), dtype=np.int32) # use this version when processing old output without idp
+            idp_data = np.frombuffer(f.read(4 * npart), dtype=np.int32)
+            
+            # Read the remaining properties (positions, velocities, masses) (4 bytes each)
+            real_data = np.frombuffer(f.read(4 * nproperties * npart), dtype=np.float32)
+            real_data = real_data.reshape(nproperties, npart)
+        
+        return idp_data, real_data
+
+    @staticmethod
+    def rd_cell(path, nproperties=8, verbose=False):
+        """
+        Read the lightcone shell from the output directory.
+        nproperties: number of properties per cell (default 9 for x,y,z,rho,phi,accelx,accely,accelz,dphidt)
+        
+        Returns:
+            properties: numpy array of properties (float32) with shape (nproperties, ncell)
+                       where rows are x, y, z, rho, phi, accelx, accely, accelz, dphidt (depending on nproperties)
+        """
+        # Construct metadata file path by adding .txt extension
+        if verbose:
+            print(f"Reading lightcone data from {path}")
+        txt_path = path + ".txt"
+        metadata = LightconeReader.rd_metadata(txt_path, verbose=verbose)
+        
+        ncell = metadata['npart']
+        
+        # Read the raw data
+        with open(path, 'rb') as f:
+
+            # Read the remaining properties (positions, velocities, masses) (4 bytes each)
+            real_data = np.frombuffer(f.read(4 * nproperties * ncell), dtype=np.float32)
+            real_data = real_data.reshape(nproperties, ncell)
+        
+        return real_data
+
+    @staticmethod
+    def rd_positions_as_healpix(path, nside, verbose=False):
+        """
+        Read the lightcone shell from the output directory and convert it to a Healpix map.
+        nside: Healpix resolution parameter
+        """
+        import healpy as hp
+        
+        # Read only the position data (properties x, y, z)
+        idp, properties = LightconeReader.rd_part(path, nproperties=3, verbose=verbose)
+        x, y, z = properties[0], properties[1], properties[2]  # x, y, z are the first 3 properties
+        
+        # Convert Cartesian coordinates to spherical coordinates
+        # x is the depth (cone axis), y and z are the transverse coordinates
+        r = np.sqrt(x**2 + y**2 + z**2)
+        theta = np.pi/2 - np.arcsin(z / r)  # polar angle from x-axis
+        phi = np.arcsin(y / r)    # azimuthal angle in y-z plane
+        
+        # Create HEALPix map
+        npix = hp.nside2npix(nside)
+        healpix_map = np.zeros(npix)
+        
+        # Convert spherical coordinates to HEALPix pixel indices
+        pix_indices = hp.ang2pix(nside, theta, phi)
+        
+        # Count particles in each pixel
+        unique_pix, counts = np.unique(pix_indices, return_counts=True)
+        healpix_map[unique_pix] = counts
+
+        return healpix_map
+
+    @staticmethod
+    def get_shells(path, verbose=False):
+        """
+        Get all lightcone shell information from the lightcone directory.
+        Looks for files named 'part_xxxxx' and 'tree_xxxxx' and returns shell information.
+        
+        Args:
+            path: Path to the lightcone directory
+            verbose: Print debug information
+            
+        Returns:
+            List of dictionaries with shell information, sorted by nstep in descending order
+            (largest nout corresponds to shell closest to observer)
+            
+            Each dictionary contains:
+            - 'nstep': shell number (int)
+            - 'part_file': path to part binary file (str, or None if doesn't exist)
+            - 'part_metadata': path to part .txt file (str, or None if doesn't exist)
+            - 'part_size': size of part binary file in bytes (int, or None if doesn't exist)
+            - 'tree_file': path to tree binary file (str, or None if doesn't exist)
+            - 'tree_metadata': path to tree .txt file (str, or None if doesn't exist)
+            - 'tree_size': size of tree binary file in bytes (int, or None if doesn't exist)
+        """
+        # Check if path exists
+        if not os.path.exists(path):
+            if verbose:
+                print(f"Path {path} does not exist")
+            return []
+        
+        # Define patterns for each file type
+        patterns = {
+            'part_file': re.compile(r'^part_(\d{5})$'),
+            'part_metadata': re.compile(r'^part_(\d{5})\.txt$'),
+            'tree_file': re.compile(r'^tree_(\d{5})$'),
+            'tree_metadata': re.compile(r'^tree_(\d{5})\.txt$'),
+            'grav_file': re.compile(r'^grav_(\d{5})$'),
+            'grav_metadata': re.compile(r'^grav_(\d{5})\.txt$')
+        }
+        
+        shells = {}  # Dictionary to collect shell information by nstep
+        
+        try:
+            # Loop over all files in the directory
+            for filename in os.listdir(path):
+                filepath = os.path.join(path, filename)
+                if not os.path.isfile(filepath):
+                    continue
+                
+                # Check each pattern
+                for file_type, pattern in patterns.items():
+                    match = pattern.match(filename)
+                    if match:
+                        nstep = int(match.group(1))
+                        
+                        # Initialize shell entry if needed
+                        if nstep not in shells:
+                            shells[nstep] = {'nstep': nstep}
+                        
+                        # Store file path
+                        shells[nstep][file_type] = filepath
+                        
+                        # Store file size for binary files
+                        if file_type in ['part_file', 'tree_file']:
+                            try:
+                                shells[nstep][file_type.replace('_file', '_size')] = os.path.getsize(filepath)
+                                if verbose:
+                                    print(f"Found {file_type} shell {nstep}: {os.path.getsize(filepath)/1024**2:.2f} MB")
+                            except OSError:
+                                if verbose:
+                                    print(f"Warning: Could not get size for {file_type} shell {nstep}")
+                        break
+                        
+        except OSError as e:
+            if verbose:
+                print(f"Error reading directory {path}: {e}")
+            return []
+        
+        # Convert to list and sort by nstep in descending order
+        shell_list = list(shells.values())
+        shell_list.sort(key=lambda x: x['nstep'], reverse=True)
+        
+        # Fill in None values for missing fields
+        for shell in shell_list:
+            for field in ['part_file', 'part_metadata', 'part_size', 'tree_file', 'tree_metadata', 'tree_size']:
+                if field not in shell:
+                    shell[field] = None
+        
+        # Print statistics only in verbose mode
+        if verbose and shell_list:
+            part_shells = [s for s in shell_list if s['part_file'] is not None]
+            tree_shells = [s for s in shell_list if s['tree_file'] is not None]
+            grav_shells = [s for s in shell_list if s['grav_file'] is not None]
+            
+            print(f"Found {len(shell_list)} total shells ({len(part_shells)} part, {len(tree_shells)} tree)")
+            
+            if part_shells:
+                total_part_size = sum(s['part_size'] for s in part_shells if s['part_size'] is not None)
+                print(f"Part files total size: {total_part_size/1024**3:.2f} GB")
+            
+            if tree_shells:
+                total_tree_size = sum(s['tree_size'] for s in tree_shells if s['tree_size'] is not None)
+                print(f"Tree files total size: {total_tree_size/1024**3:.2f} GB")
+
+            if grav_shells:
+                total_grav_size = sum(s['grav_size'] for s in grav_shells if s['grav_size'] is not None)
+                print(f"Grav files total size: {total_grav_size/1024**3:.2f} GB")
+
+        return shell_list
 
 class Level:
     def __init__(self,nndim):
@@ -1693,6 +1912,7 @@ def rd_clump(nout,**kwargs):
    center = kwargs.get("center")
    radius = kwargs.get("radius")
    path = kwargs.get("path","./")
+   silent = kwargs.get("silent",False)
 
    car1 = str(nout).zfill(5)
    i = rd_info(nout,path=path,backup=backup)
@@ -1786,8 +2006,9 @@ def rd_clump(nout,**kwargs):
        cat.rmax = cat.rmax[r < radius]
        cat.c200 = cat.c200[r < radius]
 
-   txt = "Found "+str(len(cat.index))+" clumps"
-   print(txt)
+   if silent==False:
+       txt = "Found "+str(len(cat.index))+" clumps"
+       print(txt)
 
    return cat
 
@@ -1798,11 +2019,11 @@ def plot_tree(nout,pid,**kwargs):
     s=rd_part(nout,prefix='tree',peak=True,**kwargs)
 
     # collect sinks in chosen clump
-    ind=np.where(s.pid==pid)
-    idp=s.idp[ind]
-    idm=s.idm[ind]
-    tp=s.tp[ind]
-    tm=s.tm[ind]
+    ind=np.where(s.peak_id==pid)
+    idp=s.birth_id[ind]
+    idm=s.merging_id[ind]
+    tp=s.birth_date[ind]
+    tm=s.merging_date[ind]
 
     # sort sinks according to id
     isort=np.argsort(idp)

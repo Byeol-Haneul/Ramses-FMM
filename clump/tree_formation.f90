@@ -27,13 +27,13 @@ recursive subroutine m_tree_formation(pst)
   ! Create tree particles
   !----------------------------
   if(pst%s%c%npeak_tot>0)then
-     call r_tree_formation(pst,pst%s%r%levelmin,1)
+     call r_tree_formation(pst)
   endif
 
   !------------------------------
   ! Deallocate all peak arrays
   !------------------------------
-  call r_deallocate_clump(pst,pst%s%r%levelmin,1)
+  call r_deallocate_clump(pst)
 
   ttend = mdl_wtime(pst%s%mdl)
   print '(A,F14.7)',' Time elapsed in creating trees:',ttend-ttstart
@@ -43,20 +43,18 @@ end subroutine m_tree_formation
 !###########################################################
 !###########################################################
 !###########################################################
-recursive subroutine r_tree_formation(pst,ilevel,input_size)
+recursive subroutine r_tree_formation(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_TREE_FORMATION,pst%iUpper+1,input_size,0,ilevel)
-     call r_tree_formation(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_TREE_FORMATION,pst%iUpper+1)
+     call r_tree_formation(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call tree_formation(pst%s%r,pst%s%g,pst%s%m,pst%s%tree,pst%s%c)
@@ -164,8 +162,8 @@ subroutine tree_formation(r,g,m,p,c)
         p%mp(p%npart)=c%halo_mass(j)
         ! Compute tree particle birth time using proper time
         p%tp(p%npart)=g%texp
-        ! Set merging time to -1
-        p%tm(p%npart)=-1d0
+        ! Set merging time to -1000
+        p%tm(p%npart)=-1000d0
         ! Set merging id to 0
         p%idm(p%npart)=0
         ! Compute level
@@ -209,7 +207,6 @@ subroutine m_formation_site(pst)
   use amr_parameters, only: flen
   use mdl_module, only: mdl_wtime
   use ramses_commons, only: pst_t
-  use clump_merger_module, only: r_deallocate_clump
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
 #endif
@@ -232,7 +229,7 @@ subroutine m_formation_site(pst)
   !----------------------------------------------
   ! Find relevant peak patches as formation sites
   !----------------------------------------------
-  call r_tree_clump(pst,r%levelmin,1)
+  call r_tree_clump(pst)
 
   end associate
 #endif
@@ -242,20 +239,18 @@ end subroutine m_formation_site
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_tree_clump(pst,ilevel,input_size)
+recursive subroutine r_tree_clump(pst)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
   implicit none
   type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
 
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_TREE_CLUMP,pst%iUpper+1,input_size,0,ilevel)
-     call r_tree_clump(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_TREE_CLUMP,pst%iUpper+1)
+     call r_tree_clump(pst%pLower)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
      call tree_clump(pst%s)
@@ -368,7 +363,15 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   type(msg_tree_clump)::dummy_tree_clump
   type(msg_tree_minid)::dummy_tree_minid
 
+  logical::bound
+  real(kind=8)::pi,grav,r2,v2,vcirc2,omega2,radius
+
   associate(r=>s%r,g=>s%g,m=>s%m,c=>s%c,p=>s%tree)
+
+  ! Compute constants
+  pi=ACOS(-1.0D0)
+  grav=1d0
+  if(s%r%cosmo)grav=3d0/8d0/pi*s%g%omega_m*s%g%aexp
 
   if(p%norphan_peak>0)then
      write(*,*)'CREATE_TREE: TREE PARTICLES OUTSIDE PEAKS',p%norphan_peak
@@ -395,16 +398,34 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
         ipart=p%sortp(i)
         global_peak_id=p%workp(i)
         call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.true.)
-        ! Compute tree particle position from peak position
-        p%xp(ipart,1)=c%peak_com(peak_nr,1)
-        p%xp(ipart,2)=c%peak_com(peak_nr,2)
-        p%xp(ipart,3)=c%peak_com(peak_nr,3)
-        ! Compute tree particle velocity from peak velocity
-        p%vp(ipart,1)=c%peak_vel(peak_nr,1)-c%peak_acc(peak_nr,1)*0.5d0*g%dtnew(c%peak_level(peak_nr))
-        p%vp(ipart,2)=c%peak_vel(peak_nr,2)-c%peak_acc(peak_nr,2)*0.5d0*g%dtnew(c%peak_level(peak_nr))
-        p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
-        ! Update minimum tree id in each clump
-        c%min_tree_id(peak_nr)=min(c%min_tree_id(peak_nr),p%idp(ipart))
+        ! Compute peak central core properties
+        radius = 2.0d0 * r%boxlen / 2**c%peak_level(peak_nr)
+        vcirc2 = grav * c%particle_mass(peak_nr) / radius
+        omega2 = vcirc2 / radius**2
+        ! Compute relative velocity
+        v2 =     (p%vp(ipart,1) - c%peak_vel(peak_nr,1))**2 &
+             & + (p%vp(ipart,2) - c%peak_vel(peak_nr,2))**2 &
+             & + (p%vp(ipart,3) - c%peak_vel(peak_nr,3))**2
+        ! Compute relative distance
+        r2 =     (p%xp(ipart,1) - c%peak_com(peak_nr,1))**2 &
+             & + (p%xp(ipart,2) - c%peak_com(peak_nr,2))**2 &
+             & + (p%xp(ipart,3) - c%peak_com(peak_nr,3))**2
+        ! Compute boundness criteria
+        bound = ( v2+r2*omega2 <  15d0*vcirc2 )
+        if(bound)then
+           ! If not merged yet then mark as merger candidate
+           if(p%idm(ipart)==0)p%idm(ipart)=-2
+           ! Compute tree particle position from peak position
+           p%xp(ipart,1)=c%peak_com(peak_nr,1)
+           p%xp(ipart,2)=c%peak_com(peak_nr,2)
+           p%xp(ipart,3)=c%peak_com(peak_nr,3)
+           ! Compute tree particle velocity from peak velocity
+           p%vp(ipart,1)=c%peak_vel(peak_nr,1)-c%peak_acc(peak_nr,1)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+           p%vp(ipart,2)=c%peak_vel(peak_nr,2)-c%peak_acc(peak_nr,2)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+           p%vp(ipart,3)=c%peak_vel(peak_nr,3)-c%peak_acc(peak_nr,3)*0.5d0*g%dtnew(c%peak_level(peak_nr))
+           ! Update minimum tree id in each clump
+           c%min_tree_id(peak_nr)=min(c%min_tree_id(peak_nr),p%idp(ipart))
+        endif
      end do
      call close_cache(s,m%grid_dict)
   endif
@@ -414,19 +435,29 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   !----------------------------------------------------
   call open_cache_clump(s,pack_size=storage_size(dummy_tree_minid)/32,&
        pack=pack_fetch_minid,unpack=unpack_fetch_minid)
+  ! Set mass to zero for orphan merger tree tracer particles
+  do i=1,p%norphan_peak
+     ipart=p%sortp(i)
+     p%mp(ipart)=0d0
+  end do
   do i=1+p%norphan_peak,p%npart
      ipart=p%sortp(i)
      global_peak_id=p%workp(i)
      call get_peak(s,global_peak_id,peak_nr,fetch_cache=.true.,flush_cache=.false.)
-     ! If tree particle merges, update merging age, merge-to clump id and tree particle mass
-     if(p%idm(ipart).EQ.0.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
+     ! If tree particle is not bound and not merged, set as orphan with zero mass
+     if(p%idm(ipart).EQ.0)then
+        p%mp(ipart)=0d0
+     endif
+     ! If tree particle is bound and just merged, update merging age, merge-to clump id and tree particle mass
+     if(p%idm(ipart).EQ.-2.AND.p%idp(ipart).NE.c%min_tree_id(peak_nr))then
         p%idm(ipart)=c%min_tree_id(peak_nr)
         p%tm(ipart)=g%texp
-        p%mp(ipart)=max(p%mp(ipart),c%clump_mass(peak_nr))
+        p%mp(ipart)=0d0
      endif
-     ! If tree particle not yet merged, update its maximum parent clump mass
-     if(p%idp(ipart).EQ.c%min_tree_id(peak_nr))then
-        p%mp(ipart)=max(p%mp(ipart),c%clump_mass(peak_nr))
+     ! If tree particle is bound and not merged, update its parent clump particle mass
+     if(p%idm(ipart).EQ.-2.AND.p%idp(ipart).EQ.c%min_tree_id(peak_nr))then
+        p%idm(ipart)=0
+        p%mp(ipart)=c%particle_mass(peak_nr)
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -582,7 +613,7 @@ subroutine pack_fetch_minid(c,local_peak_id,msg_size,msg_array)
 
   msg%id = c%min_tree_id(local_peak_id)
   msg%ind = c%ind_halo(local_peak_id)
-  msg%mass = c%clump_mass(local_peak_id)
+  msg%mass = c%particle_mass(local_peak_id)
 
   msg_array=transfer(msg,msg_array)
 
@@ -606,7 +637,7 @@ subroutine unpack_fetch_minid(c,local_peak_id,msg_size,msg_array)
 
   c%min_tree_id(local_peak_id) = msg%id
   c%ind_halo(local_peak_id) = msg%ind
-  c%clump_mass(local_peak_id) = msg%mass
+  c%particle_mass(local_peak_id) = msg%mass
 
 end subroutine unpack_fetch_minid
 !################################################################
