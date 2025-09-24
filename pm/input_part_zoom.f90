@@ -91,7 +91,7 @@ subroutine input_part_zoom(r,g,p,m)
   real(kind=8),allocatable,dimension(:,:,:)::init_array
   real(kind=8),allocatable,dimension(:,:,:)::init_array_x
   real(kind=4),dimension(:,:),allocatable::init_plane
-  character(LEN=256)::filename,filename_x
+  character(LEN=80)::filename,filename_x
   character(LEN=5)::nchar
   logical::ok,error,keep_part,read_pos=.false.
 
