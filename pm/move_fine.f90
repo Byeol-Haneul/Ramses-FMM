@@ -55,7 +55,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
      ! Force interpolation for various components (DM particles, star, sink, tree)
      ! based on their respective deposition schemes (CIC 1, TSC 2 or PCS 3)
      if(pst%s%r%part)then
-        write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0)') 'MOVE_PART rank',pst%s%g%myid,'ilevel',ilevel,'scheme',pst%s%r%part_force_interpolation_scheme
         if(pst%s%r%part_force_interpolation_scheme==1)then
            call cic_kick_drift_part(pst%s,pst%s%p   ,ilevel,action_part)
         elseif(pst%s%r%part_force_interpolation_scheme==2)then
@@ -65,7 +64,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%star)then
-        write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0)') 'MOVE_STAR rank',pst%s%g%myid,'ilevel',ilevel,'scheme',pst%s%r%star_force_interpolation_scheme
         if(pst%s%r%star_force_interpolation_scheme==1)then
            call cic_kick_drift_part(pst%s,pst%s%star,ilevel,action_part)
         elseif(pst%s%r%star_force_interpolation_scheme==2)then
@@ -75,7 +73,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%sink)then
-        write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0)') 'MOVE_SINK rank',pst%s%g%myid,'ilevel',ilevel,'scheme',pst%s%r%sink_force_interpolation_scheme
         if(pst%s%r%sink_force_interpolation_scheme==1)then
            call cic_kick_drift_part(pst%s,pst%s%sink,ilevel,action_part)
         elseif(pst%s%r%sink_force_interpolation_scheme==2)then
@@ -85,7 +82,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%tree)then
-        write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0)') 'MOVE_TREE rank',pst%s%g%myid,'ilevel',ilevel,'scheme',pst%s%r%tree_force_interpolation_scheme
         if(pst%s%r%tree_force_interpolation_scheme==1)then
            call cic_kick_drift_part(pst%s,pst%s%tree,ilevel,action_part)
         elseif(pst%s%r%tree_force_interpolation_scheme==2)then
@@ -95,7 +91,6 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%trac)then
-        write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0,1X,A,1X,I0)') 'MOVE_TRAC rank',pst%s%g%myid,'ilevel',ilevel,'scheme',pst%s%r%trac_force_interpolation_scheme,'npart',pst%s%trac%npart
         if(pst%s%r%trac_force_interpolation_scheme==1)then
            call cic_kick_drift_trac(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_force_interpolation_scheme==2)then
@@ -840,32 +835,23 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
   integer::ipart,ind,idim
   real(kind=8)::dx_loc,vol_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
-  real(kind=8),dimension(1:ndim) :: dxmin, dxmax
-  integer :: jdim
-  real(kind=8) :: d
   type(oct),pointer :: gridp
   logical :: ok_level
-  integer :: nmiss_gather, nmiss_mid
-  integer :: nremote_gather, nremote_mid, nmiss_remote_gather, nmiss_remote_mid
-  integer :: child_grid
-  real(kind=8),dimension(1:ndim) :: sum_ff_gather, sum_ff_mid
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  write(*,'(A,1X,I0,1X,A,1X,I0)') 'ENTER_TRAC rank',s%g%myid,'ilevel',ilevel
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=TRAC_TYPE) return
+  
+  ! Check if particle list is properly initialized and has particles
+  if(p%headp(ilevel) > p%tailp(ilevel) .or. p%npart == 0) return
+  
   ! Tracer hydro cache (uold only)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
                      pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
-  nmiss_gather=0; nmiss_mid=0
-  nremote_gather=0; nremote_mid=0
-  nmiss_remote_gather=0; nmiss_remote_mid=0
-  sum_ff_gather(1:ndim)=0.0d0
-  sum_ff_mid(1:ndim)=0.0d0
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      ! Position in cell units at current level
      do idim=1,ndim
@@ -897,20 +883,12 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
         if(associated(gridp))then
-           child_grid=(loc(gridp)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
-           if(child_grid>r%ngridmax) nremote_gather=nremote_gather+1
-           ! Check velocity field values for first few particles
-           if(ipart<=p%headp(ilevel)+2 .and. ilevel==r%levelmin .and. g%nstep==0)then
-             write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0,1X,A,1X,3(ES14.6,1X),A,1X,ES14.6)') &
-                  'TRAC_VEL_FIELD rank',g%myid,'ipart',ipart,'ind',ind,'vel',gridp%uold(icell,2:ndim+1),'rho',gridp%uold(icell,1)
-           endif
            ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
         else
            ok_level=.false.
         end if
      end do
      if(.not.ok_level)then
-        nmiss_gather=nmiss_gather+1
         do idim=1,ndim
            x(idim)=x(idim)/2.0d0
         end do
@@ -937,7 +915,6 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
            end if
         end do
      end if
-     sum_ff_gather(1:ndim)=sum_ff_gather(1:ndim)+ff(1:ndim)
 
      if(action_part==action_kick_only)then
         ! RK2 step 1 (early call): stash v^n at x^n, no move
@@ -982,15 +959,12 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
            if(associated(gridp))then
-              child_grid=(loc(gridp)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
-              if(child_grid>r%ngridmax) nremote_mid=nremote_mid+1
               ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
            else
               ok_level=.false.
            end if
         end do
         if(.not.ok_level)then
-           nmiss_mid=nmiss_mid+1
            do idim=1,ndim
               x_mid(idim)=x_mid(idim)/2.0d0
            end do
@@ -1013,37 +987,17 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
               hash_nbor(1:ndim)=ckey2(1:ndim,ind)
               call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
               if(associated(gridp))then
-                 child_grid=(loc(gridp)-loc(m%grid(1)))/(loc(m%grid(2))-loc(m%grid(1)))+1
-                 if(child_grid>r%ngridmax) nremote_mid=nremote_mid+1
                  ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
               end if
            end do
         end if
-        sum_ff_mid(1:ndim)=sum_ff_mid(1:ndim)+ff(1:ndim)
         ! Set time-centered velocity and drift
         p%vp(ipart,1:ndim)=ff(1:ndim)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
   call close_cache(s,m%grid_dict)
-  write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0,1X,A,1X,3(ES14.6,1X),A,1X,3(ES14.6,1X))') 'TRAC_DIAG ilevel',ilevel,'rank',g%myid,&
-       'npart_local',max(0,p%tailp(ilevel)-p%headp(ilevel)+1),'sum_ff_gather',sum_ff_gather(1),sum_ff_gather(2),sum_ff_gather(3),&
-       'sum_ff_mid',sum_ff_mid(1),sum_ff_mid(2),sum_ff_mid(3)
-  write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0)') 'TRAC_DIAG ilevel',ilevel,'rank',g%myid,'nmiss_gather',nmiss_gather
-  write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,I0)') 'TRAC_DIAG ilevel',ilevel,'rank',g%myid,'nmiss_mid',nmiss_mid
-  write(*,'(A,1X,I0,1X,A,1X,I0,1X,4(A,1X,I0,1X))') 'TRAC_MPI ilevel',ilevel,'rank',g%myid,&
-       'nremote_gather',nremote_gather,'nmiss_remote_gather',nmiss_remote_gather,&
-       'nremote_mid',nremote_mid,'nmiss_remote_mid',nmiss_remote_mid
-  call flush()
   
-  ! Check initial velocities for first few particles
-  if(ilevel==r%levelmin .and. g%nstep==0)then
-    do ipart=p%headp(ilevel),min(p%headp(ilevel)+4,p%tailp(ilevel))
-      write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,3(ES14.6,1X))') &
-           'TRAC_VEL_INIT rank',g%myid,'ipart',ipart,'vel',p%vp(ipart,1),p%vp(ipart,2),p%vp(ipart,3)
-    end do
-    call flush()
-  endif
   if(action_part==action_kick_drift)then
      ! Periodic wrap in physical units
      do ipart=p%headp(ilevel),p%tailp(ilevel)
@@ -1052,31 +1006,6 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
            if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
         end do
      end do
-     ! DX_DIAG: displacement stats this step (use stored p%vp as v^{n+1})
-     if(ilevel==r%levelmin)then
-        dxmin(1:ndim)=1.0d99
-        dxmax(1:ndim)=-1.0d99
-        do ipart=p%headp(ilevel),p%tailp(ilevel)
-           do jdim=1,ndim
-              d = p%vp(ipart,jdim)*g%dtnew(ilevel)
-              if(d>= 0.5d0*r%boxlen) then
-                 d=d-r%boxlen
-              end if
-              if(d< -0.5d0*r%boxlen) then
-                 d=d+r%boxlen
-              end if
-              if(d<dxmin(jdim)) then
-                 dxmin(jdim)=d
-              end if
-              if(d>dxmax(jdim)) then
-                 dxmax(jdim)=d
-              end if
-           end do
-        end do
-        write(*,'(A,1X,I0,1X,A,1X,I0,1X,A,1X,3(ES14.6,1X),A,1X,3(ES14.6,1X))') &
-             'DX_DIAG ilevel',ilevel,'rank',g%myid,'dxmin',dxmin(1),dxmin(2),dxmin(3),'dxmax',dxmax(1),dxmax(2),dxmax(3)
-        call flush()
-     end if
    end if
   end associate
 end subroutine cic_kick_drift_trac
@@ -1110,11 +1039,14 @@ subroutine tsc_kick_drift_trac(s,p,ilevel,action_part)
   logical::ok_level
   type(msg_three_realdp)::dummy_three_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  write(*,'(A,1X,I0,1X,A,1X,I0)') 'ENTER_TRAC_TSC rank',s%g%myid,'ilevel',ilevel
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
   dx_loc=r%boxlen/2**ilevel
+  
+  ! Check if particle list is properly initialized and has particles
+  if(p%headp(ilevel) > p%tailp(ilevel) .or. p%npart == 0) return
+  
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
                      pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
@@ -1242,11 +1174,14 @@ subroutine pcs_kick_drift_trac(s,p,ilevel,action_part)
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
   type(msg_nvar_realdp)::dummy_nvar_realdp
-  write(*,'(A,1X,I0,1X,A,1X,I0)') 'ENTER_TRAC_PCS rank',s%g%myid,'ilevel',ilevel
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
   dx_loc=r%boxlen/2**ilevel
+  
+  ! Check if particle list is properly initialized and has particles
+  if(p%headp(ilevel) > p%tailp(ilevel) .or. p%npart == 0) return
+  
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
        pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
