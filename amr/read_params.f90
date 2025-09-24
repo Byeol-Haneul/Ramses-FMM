@@ -410,7 +410,7 @@ subroutine m_read_params(pst)
   real(kind=8) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
   real(kind=8), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
 
-  ! Sink parameters
+  ! Sink formation parameters
   integer::rho_type_sink=1
   logical::sink_descent=.false.
   real(kind=8)::fudge_descent=0.5d0
@@ -428,7 +428,7 @@ subroutine m_read_params(pst)
   logical::fix_sink_mass = .false. 
   logical::drag_sink = .false. ! Whether to use dynamical friction for black hole dynamics
 
-  ! Black hole parameters
+  ! Sink accretion parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi, 2: Flux
   real(kind=8)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
   logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
@@ -440,8 +440,10 @@ subroutine m_read_params(pst)
   logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
   real(kind=8)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines (code units)
   logical::use_bondi_lambda = .true.
+  logical::mass_weighting = .true.
+  logical::momentum_conserving = .false.
 
-  ! AGN Feedback parameters
+  ! Sink feedback parameters
   logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles
   integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
   integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
@@ -601,7 +603,7 @@ subroutine m_read_params(pst)
   namelist/sink_accretion_params/accretion_type,acc_sink_boost,bondi_use_vrel,use_rho_inf &
        & ,eddington_cap,sink_b_spline_order,bondi_use_gas_mass,use_bondi_lambda &
        & ,t_start_black_hole,use_local_bondi_rate,static_sink,output_sink_fine &
-       & ,fix_sink_mass,eddington_floor
+       & ,fix_sink_mass,eddington_floor,mass_weighting,momentum_conserving
   ! AGN Feedback parameters
   namelist/sink_feedback_params/agn,agn_feedback_radius,agn_weighting_scheme,epsilon_rad &
        & ,epsilon_therm_jet,epsilon_therm_quasar,kin_mass_loading,agn_fbk_mode_switch_threshold &
@@ -1507,6 +1509,8 @@ subroutine m_read_params(pst)
   s%r%use_rho_inf = use_rho_inf
   s%r%t_start_black_hole = t_start_black_hole
   s%r%use_bondi_lambda = use_bondi_lambda
+  s%r%mass_weighting = mass_weighting
+  s%r%momentum_conserving = momentum_conserving
 
   s%r%agn = agn
   s%r%agn_feedback_radius = agn_feedback_radius

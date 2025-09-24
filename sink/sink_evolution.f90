@@ -240,12 +240,12 @@ contains
     integer,dimension(1:ndim,1:nBHnei)::ckeynei
     real(kind=8),dimension(1:nBHnei)::vol
     real(kind=8),dimension(1:ndim)::xcen,xnei,x_rel
+    real(kind=8),dimension(1:ndim)::vv,v_rel,x_acc
     integer,dimension(1:ndim)::ckey,ckey_nbor,ckey_div
     integer(kind=8),dimension(0:ndim)::hash_nbor
     integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar
     real(kind=8)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
     real(kind=8)::weight,r_rel
-    real(kind=8),dimension(1:ndim)::vv,v_rel,x_acc
     type(oct),pointer::gridn
     real(kind=8)::d_acc,m_gas,bondi_mass
     real(kind=8)::weighted_bondi,dMdt_freefall,t_ff
@@ -403,7 +403,7 @@ contains
              rho_inf = d
           end if
           dMBH_overdt = 4.0d0 * pi * rho_inf * r2_sink * v_bondi * lambda_sonic
-          weighted_bondi = weighted_bondi + dMBH_overdt*weight
+          weighted_bondi = weighted_bondi + dMBH_overdt * weight
        end if
     end do
 
@@ -497,18 +497,14 @@ contains
     do j = 1, nBHnei
 
        ! Compute neighbouring cell coordinates
+       ! Note, periodic BCs for xnei are already enforced in sink_B_spline_weights_PCS etc.
        xnei(1:ndim) = xBHnei(1:ndim,j)
        x_rel(1:ndim) = xnei(1:ndim) - xcen(1:ndim)
 
-       ! Periodic boundary conditions
-       do idim=1,ndim
-          ! Note, periodic BCs for xnei are already enforced in sink_B_spline_weights_PCS etc.
-          if(x_rel(idim)<-r%boxlen/2d0)x_rel(idim)=x_rel(idim)+r%boxlen
-          if(x_rel(idim)> r%boxlen/2d0)x_rel(idim)=x_rel(idim)-r%boxlen
-       end do
        ! Get neighboring cell at current level
        hash_nbor(1:ndim)  = ckeynei(1:ndim,j)
        call get_parent_cell(s,hash_nbor,m%grid_dict,gridn,icelln,flush_cache=.true.,fetch_cache=.true.)
+
        ! If missing cycle
        if(.not.associated(gridn))cycle
 
@@ -520,27 +516,26 @@ contains
        ! We need to remove all non-thermal energies as they are not accreted
 #ifdef MHD
        ! Deal with MHD
-       bx=0.5d0*(gridn%bold(icelln,1) + gridn%bold(icelln,4))
-       by=0.5d0*(gridn%bold(icelln,2) + gridn%bold(icelln,5))
-       bz=0.5d0*(gridn%bold(icelln,3) + gridn%bold(icelln,6))
-       emag=0.5d0*(bx**2+by**2+bz**2)
+       bx = 0.5d0*(gridn%bold(icelln,1) + gridn%bold(icelln,4))
+       by = 0.5d0*(gridn%bold(icelln,2) + gridn%bold(icelln,5))
+       bz = 0.5d0*(gridn%bold(icelln,3) + gridn%bold(icelln,6))
+       emag = 0.5d0*(bx**2 + by**2 + bz**2)
        e = e - emag/d
 #endif
-
 #if NENER>0
        ! Deal with RT
        erad = 0.0d0
-       do irad=1,nener
+       do irad = 1, nener
           erad = erad + gridn%uold(icelln,5+irad)
        end do
        e = e - erad/d
 #endif
-
        ! Get the weight for this cell based on the B-spline interpolation
        weight = vol(j)
 
        ! Get accreted mass for this cell
        d_acc = dMBH_overdt * g%dtnew(ilevel) * weight / vol_loc
+       if (r%mass_weighting) d_acc = d_acc * d / rho_gas
 
        ! Ensure that the accreted amount is positive
        d_acc = max(d_acc, 0.0d0)
@@ -552,27 +547,36 @@ contains
 
        ! Accrete passive scalars
 #if NVAR>5+NENER
-       do ivar=6+nener,nvar
+       do ivar = 6 + nener, nvar
           gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar) - d_acc*gridn%uold(icelln,ivar)/d
        end do
 #endif
-       !!! NOTE: We do not accrete non-thermal energies
-
        ! Proceed with accretion
+
+       ! Relative velocity
+       v_rel(1:ndim) = vv(1:ndim) - p%vp(ipart,1:ndim)
+
        ! Accreted mass
        m_acc = m_acc + d_acc * vol_loc
+
        ! Accreted energy
        e_acc = e_acc + d_acc * e * vol_loc
-       ! Accreted relative center of mass
-       x_acc(1:ndim) = x_acc(1:ndim) + d_acc * x_rel(1:ndim) * vol_loc * dx_loc
-       ! Accreted relative momentum
-       p_acc(1:ndim) = p_acc(1:ndim) + d_acc * vv(1:ndim)  * vol_loc
-       ! Accreted relative angular momentum
-       l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(x_rel(1:ndim), vv(1:ndim) - p%vp(ipart,1:ndim)) * vol_loc * dx_loc
+
+       if(r%momentum_conserving)then
+          ! Accreted relative center of mass
+          x_acc(1:ndim) = x_acc(1:ndim) + d_acc * x_rel(1:ndim) * vol_loc * dx_loc
+
+          ! Accreted relative momentum
+          p_acc(1:ndim) = p_acc(1:ndim) + d_acc * v_rel(1:ndim) * vol_loc
+
+          ! Accreted relative angular momentum
+          l_acc(1:ndim) = l_acc(1:ndim) + d_acc * cross(x_rel(1:ndim), v_rel(1:ndim)) * vol_loc * dx_loc
+       endif
+
        ! Passive scalars
 #if NVAR>NENER+6
        if(r%agn)then
-          do ivar=6+nener,nvar
+          do ivar = 6 + nener, nvar
              passive_acc(ivar) = passive_acc(ivar) + d_acc * gridn%uold(icelln,ivar) / d * vol_loc
           end do
        end if
@@ -585,10 +589,10 @@ contains
 
     ! Add accreted properties to sink variables
     ! This should be zero, as it equals dM * sum_i (x_i - x_p)*w_i which is zero by construction
-    if(.not.p%static)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) + x_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
-    p%vp(ipart,1:ndim)                  = ( p%mp(ipart) * p%vp(ipart,1:ndim) + p_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
+    if(.not.p%static)p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + x_acc(1:ndim) / ( p%mp(ipart) + m_acc )
+    p%vp(ipart,1:ndim)                  = p%vp(ipart,1:ndim) + p_acc(1:ndim) / ( p%mp(ipart) + m_acc )
     p%jp(ipart,1:ndim)                  = ( p%mp(ipart) * p%jp(ipart,1:ndim) + l_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
-    if(.not.r%fix_sink_mass)p%mp(ipart) =   p%mp(ipart) + m_acc
+    if(.not.r%fix_sink_mass)p%mp(ipart) = p%mp(ipart) + m_acc
 
     ! Save accreted mass to total
     macc_loc = macc_loc + m_acc
