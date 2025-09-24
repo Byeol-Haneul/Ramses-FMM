@@ -844,10 +844,6 @@ subroutine cic_kick_drift_trac(s,p,ilevel,action_part)
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=TRAC_TYPE) return
-  
-  ! Check if particle list is properly initialized and has particles
-  if(p%headp(ilevel) > p%tailp(ilevel) .or. p%npart == 0) return
-  
   ! Tracer hydro cache (uold only)
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
@@ -1043,10 +1039,6 @@ subroutine tsc_kick_drift_trac(s,p,ilevel,action_part)
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
   dx_loc=r%boxlen/2**ilevel
-  
-  ! Check if particle list is properly initialized and has particles
-  if(p%headp(ilevel) > p%tailp(ilevel) .or. p%npart == 0) return
-  
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
                      pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
@@ -1178,10 +1170,6 @@ subroutine pcs_kick_drift_trac(s,p,ilevel,action_part)
   if(p%static)return
   if (p%type/=TRAC_TYPE) return
   dx_loc=r%boxlen/2**ilevel
-  
-  ! Check if particle list is properly initialized and has particles
-  if(p%headp(ilevel) > p%tailp(ilevel) .or. p%npart == 0) return
-  
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
        hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
        pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
