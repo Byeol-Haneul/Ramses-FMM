@@ -6,7 +6,6 @@ contains
 !#########################################################################
 subroutine m_input_part_grafic(pst)
   use ramses_commons, only: pst_t
-  use amr_commons, only: npartmax,ntracmax
   implicit none
   type(pst_t)::pst
   !--------------------------------------------------------------------
