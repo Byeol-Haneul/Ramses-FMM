@@ -141,8 +141,8 @@ subroutine input_part_grafic(r,g,p,npart_tot)
   p%npart=npart_loc(g%myid)
 
   ! Check that local number of particles does not exceed maximum
-  if(p%npart > p%npart_max)then
-     write(*,*)'ERROR: CPU ',g%myid,' has too many particles: ',p%npart,' > ',p%npart_max
+  if(p%npart > r%npartmax)then
+     write(*,*)'ERROR: CPU ',g%myid,' has too many particles: ',p%npart,' > ',r%npartmax
      stop
   endif
 
@@ -381,8 +381,8 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
    p%npart=npart_loc(g%myid)
 
    ! Check that local number of tracer particles does not exceed maximum
-   if(p%npart > p%npart_max)then
-      write(*,*)'ERROR: CPU ',g%myid,' has too many tracer particles: ',p%npart,' > ',p%npart_max
+   if(p%npart > r%ntracmax)then
+      write(*,*)'ERROR: CPU ',g%myid,' has too many tracer particles: ',p%npart,' > ',r%ntracmax
       stop
    endif
  
