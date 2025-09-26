@@ -1,9 +1,7 @@
 program part2map
-  !--------------------------------------------------------------------------
-  ! Project RAMSES particle data onto a 2D map with selectable deposition
-  ! scheme: CIC (default), TSC, or PCS. Usage mirrors MINI-RAMSES utils/f90/part2map
-  ! with an extra option: -dep {CIC|TSC|PCS}
-  !--------------------------------------------------------------------------
+! This code projects RAMSES data onto a map.
+! This is based in the MINI-RAMSES prototype. 
+! R. Teyssier, Princeton, February 2nd 2023
   implicit none
 
   integer,parameter::flen=200
