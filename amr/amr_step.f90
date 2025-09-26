@@ -11,6 +11,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use update_time_module, only: m_update_time
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
+#ifdef FMM
+  use mdl_module
+  use fmm_fine_commons, only: fmm
+#endif
 #ifdef GRAV
   use rho_fine_module, only: m_rho_fine
   use phi_fine_cg_module, only: m_phi_fine_cg
@@ -39,7 +43,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   implicit none
 
   type(pst_t) :: pst
-  integer :: ilevel,icount
+  integer :: ilevel,icount,ilev
   logical :: done,ok_fbk
   !-------------------------------------------------------------------!
   ! This routine is the adaptive-mesh/adaptive-time-step main driver. !
@@ -165,6 +169,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !---------------
   ! Poisson solver
   !---------------
+
 #ifdef GRAV
   if(r%poisson)then
      call m_timer(pst,'poisson','start')
@@ -172,14 +177,22 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      call r_save_phi_old(pst,ilevel,1)
 
      ! Compute new gravitational potential
-     if(ilevel > r%levelmin)then
-        if(ilevel >= r%cg_levelmin) then
-           call m_phi_fine_cg(pst,ilevel,icount)
+     if (ilevel > r%levelmin) then
+        if (ilevel >= r%cg_levelmin) then
+           call m_phi_fine_cg(pst, ilevel, icount)
         else
-           call multigrid(pst,ilevel,icount)
+#ifdef FMM
+           call fmm(pst, ilevel, icount)
+#else
+           call multigrid(pst, ilevel, icount)
+#endif
         end if
      else
-        call multigrid(pst,r%levelmin,icount)
+#ifdef FMM
+        call fmm(pst, r%levelmin, icount)
+#else
+        call multigrid(pst, r%levelmin, icount)
+#endif
      end if
 
      ! Initial old potential

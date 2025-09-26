@@ -5,13 +5,14 @@
 COMPILER = GNU
 NDIM = 3
 MPI = 0
-HYDRO = 1
-GRAV = 0
+HYDRO = 0
+GRAV = 1
+FMM = 1
 MHD = 0
 RT = 0
 RTZ = 0
 INIT =
-UNITS =
+UNITS = COSMO
 NENER = 0
 NMETAL = 0
 N_HYDROGEN_IONS = 0
@@ -32,7 +33,7 @@ NHILBERT = 1
 NVECTOR = 32
 NPRE = 8
 PATCH =
-DEBUG = 0
+DEBUG = 1
 HDF5 = 0
 MPIF90 = mpif90
 EXEC = ramses
@@ -78,6 +79,9 @@ endif
 ifeq ($(GRAV),1)
    DEFINES += -DGRAV
 endif
+ifeq ($(FMM),1)
+   DEFINES += -DFMM
+endif
 ifneq ($(NENER),0)
    DEFINES += -DNENER=$(NENER)
 endif
@@ -119,7 +123,7 @@ ifeq ($(COMPILER),GNU)
    F90 += -ffree-line-length-none -fimplicit-none
    FC += -ffree-line-length-none -fimplicit-none
    ifeq ($(DEBUG),1)
-      F90 += -O0 -fcheck=bounds
+      F90 += -O0 -fcheck=all
       FFLAGS += -g -fbacktrace -ffpe-trap=zero,overflow,invalid -finit-real=nan
       F90 += -Wuninitialized -Wall
    else
@@ -185,7 +189,7 @@ endif
 LIBS += $(LIBMPI) $(LIBHDF5)
 #############################################################################
 # Sources directories are searched in this exact order
-VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../amr:../clump:../mdl1:../rt:../lightcone
+VPATH = $(PATCH):$(GPU_PATH):../feedback:../sink:../star:../cooling:../hydro:../pm:../poisson:../poisson/fmm:../amr:../clump:../mdl1:../rt:../lightcone
 #############################################################################
 # Modules
 MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
@@ -217,6 +221,7 @@ MODOBJ += rt_flux_module.o rt_godunov_fine.o rt_input_condinit.o rt_init_flow_fi
 	 input_part_restart.o input_part_ramses.o input_part_gadget.o input_part.o input_hydro_grafic.o \
 	 interpol_hydro.o update_time.o timer.o init_refine_basegrid.o load_balance.o refine_utils.o \
 	 grav_ana.o phi_fine_cg.o interpol_phi.o force_fine.o poisson_flag.o multigrid_fine_commons.o \
+    fmm_init.o fmm_cleanup.o fmm_multipoles.o fmm_taylor.o fmm_fine_commons.o \
 	 boundana.o godunov_utils.o write_screen.o courant_fine.o newdt_fine.o \
 	 godunov_fine.o umuscl.o synchro_hydro_fine.o source_hydro_fine.o cooling_fine.o \
 	 input_hydro_condinit.o input_hydro_gadget.o init_flow_fine.o \

@@ -1,10 +1,10 @@
-module fmm_init_refine_grid_module
+module init_fmm_module
 contains
 !#########################################################################
 !#########################################################################
 !#########################################################################
 !#########################################################################
-subroutine m_fmm_init_refine_grid(pst)
+subroutine m_init_fmm(pst)
   use ramses_commons, only: pst_t
   use flag_utils, only: m_flag_fine
   use init_refine_basegrid_module, only: r_collect_noct,r_noct_tot,r_noct_min,r_noct_max,r_noct_used_max
@@ -17,36 +17,36 @@ subroutine m_fmm_init_refine_grid(pst)
   integer::ilevel
   !--------------------------------------------------------------------
   ! This routine is the master procedure to set the  grid
-  ! and fmm_initialize all cell-based variables within it.
+  ! and init_fmmialize all cell-based variables within it.
   !--------------------------------------------------------------------
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
   allocate(m%head_mg(1:r%nlevelmax))
   allocate(m%tail_mg(1:r%nlevelmax))
   allocate(m%noct_mg(1:r%nlevelmax))
+  allocate(m%domain_mg(1:r%nlevelmax))
 
-  if(r%verbose)write(*,*)'Entering fmm_init_refine_grid'
-
-  write(*,*)'Building fmm_initial  grid at level ',r%levelmin
+  if(r%verbose)write(*,*)'Entering init_fmm'
 
   ! Call recursive slave routine
   do ilevel = 1, r%levelmin - g%level_fmm_to_amr ! TODO: exception for this levelmin vs. level_fmm_to amr. 
-    call r_fmm_init_refine_grid(pst, ilevel, 1)
+    write(*,*)'Building init_fmm grid at level ',ilevel
+    call r_init_fmm(pst, ilevel, 1)
     ! Get total, min and max grid count (only in master).
-    call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),2)
-    call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
-    call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
-    call r_noct_used_max(pst,ilevel,1,m%noct_used_max,1)
+    !call r_noct_tot(pst,ilevel,1,m%noct_tot(ilevel),2)
+    !call r_noct_min(pst,ilevel,1,m%noct_min(ilevel),1)
+    !call r_noct_max(pst,ilevel,1,m%noct_max(ilevel),1)
+    !call r_noct_used_max(pst,ilevel,1,m%noct_used_max,1)
   end do
 
   end associate
 
-end subroutine m_fmm_init_refine_grid
+end subroutine m_init_fmm
 !###############################################
 !###############################################
 !###############################################
 !###############################################
-recursive subroutine r_fmm_init_refine_grid(pst,ilevel,input_size)
+recursive subroutine r_init_fmm(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
   use mdl_parameters
@@ -58,19 +58,19 @@ recursive subroutine r_fmm_init_refine_grid(pst,ilevel,input_size)
   integer::rID
 
   if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_FMM_INIT_REFINE_GRID,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_init_refine_grid(pst%pLower,ilevel,input_size)
+     rID = mdl_send_request(pst%s%mdl,MDL_INIT_FMM,pst%iUpper+1,input_size,0,ilevel)
+     call r_init_fmm(pst%pLower,ilevel,input_size)
      call mdl_get_reply(pst%s%mdl,rID,0)
   else
-     call fmm_init_refine_grid(pst%s,ilevel)
+     call init_fmm(pst%s,ilevel)
   endif
 
-end subroutine r_fmm_init_refine_grid
+end subroutine r_init_fmm
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-subroutine fmm_init_refine_grid(s,ilevel)
+subroutine init_fmm(s,ilevel)
   use mdl_module, only: mdl_abort
   use amr_parameters, only: nhilbert,ndim,twotondim
   use ramses_commons, only: ramses_t
@@ -84,7 +84,7 @@ subroutine fmm_init_refine_grid(s,ilevel)
   ! at level ilevel. Always starts at levelmin.
   !-------------------------------------------------------
   logical::clean
-  integer::i,igrid,ioct,ilev,istart,i1,j1,k1
+  integer::i,igrid,ioct,ilev,istart,i1,j1,k1,idom
   integer(kind=8)::ikey
   integer(kind=8),dimension(1:nhilbert)::hk
   integer(kind=8),dimension(1:ndim)::ix
@@ -99,6 +99,7 @@ subroutine fmm_init_refine_grid(s,ilevel)
   if(ilevel == 1)then
      m%ifree=m%noct_used+1 ! Jun-Young: start at index of the first free variable
      istart=m%ifree 
+     m%ifree_mg=m%ifree ! Jun-Young: to recover, save curr ifree. 
   else
      istart=m%tail_mg(ilevel-1)+1
   endif
@@ -107,8 +108,16 @@ subroutine fmm_init_refine_grid(s,ilevel)
   ! New grid in current level
   igrid=istart-1
 
+  call m%domain_mg(ilevel)%copy(m%domain(ilevel))
+  do ilev=ilevel-1,1,-1
+     call m%domain_mg(ilev)%copy(m%domain_mg(ilev+1))
+     do idom=0,m%domain_mg(ilev)%ncpu
+        m%domain_mg(ilev)%b(1:nhilbert,idom)=coarsen_key(m%domain_mg(ilev+1)%b(1:nhilbert,idom),ilev)
+     end do
+  end do
+
   ! Loop over the Cartesian grid in Hilbert order
-  do ikey=m%domain(ilevel)%b(1,g%myid-1), m%domain(ilevel)%b(1,g%myid)-1
+  do ikey=m%domain_mg(ilevel)%b(1,g%myid-1), m%domain_mg(ilevel)%b(1,g%myid)-1
      ! Compute Cartesian index from Hilbert index
      hk(1)=ikey
      ix=hilbert_reverse(hk,ilevel-1)
@@ -215,9 +224,9 @@ subroutine fmm_init_refine_grid(s,ilevel)
 
   end associate
 
-end subroutine fmm_init_refine_grid
+end subroutine init_fmm
 !################################################################
 !################################################################
 !################################################################
 !################################################################
-end module fmm_init_refine_grid_module
+end module init_fmm_module

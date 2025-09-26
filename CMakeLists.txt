@@ -94,7 +94,6 @@ set(fortran_files
   amr/init_amr.f90
   amr/init_time.f90
   amr/init_refine_basegrid.f90
-  amr/fmm_init_refine_grid.f90
   amr/init_refine_adaptive.f90
   amr/init_refine_restart.f90
   amr/init_refine_ramses.f90
@@ -172,6 +171,12 @@ set(fortran_files
   poisson/poisson_flag.f90
   poisson/multigrid_fine_commons.f90
   poisson/multigrid_fine_coarse.f90
+  
+  poisson/fmm/fmm_init.f90
+  poisson/fmm/fmm_cleanup.f90
+  poisson/fmm/fmm_multipoles.f90
+  poisson/fmm/fmm_taylor.f90
+  poisson/fmm/fmm_fine_commons.f90
 
   cooling/constants.f90
   cooling/cooling_fine.f90

@@ -26,8 +26,8 @@ module oct_commons
      real(dp),dimension(1:twotondim)::nref
 #endif
 #ifdef FMM
-     real(dp),dimension(1:twotondim,1:10)::multipole    !Jun-Young: Currently Hard-coded to mono:1, di: 3, quad: 6.
-     real(dp),dimension(1:twotondim,1:10)::taylor_coeff !Jun-Young: Currently Hard-coded to mono:1, di: 3, quad: 6.
+     real(dp),dimension(1:twotondim,1:multipole_size)::multipole
+     real(dp),dimension(1:twotondim,1:taylor_size)::taylor_coeff
 #endif 
      integer(kind=8),dimension(1:nhilbert)::hkey
      integer(kind=4),dimension(1:twotondim)::flag1

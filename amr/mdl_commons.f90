@@ -31,7 +31,10 @@ module mdl_parameters
      enumerator::MDL_NOCT_USED_MAX
      enumerator::MDL_GATHER_NOCT_MAX
      enumerator::MDL_INIT_REFINE_BASEGRID
-     enumerator::MDL_FMM_INIT_REFINE_GRID
+     enumerator::MDL_INIT_FMM
+     enumerator::MDL_CLEANUP_FMM
+     enumerator::MDL_FMM_DOWNWARD
+     enumerator::MDL_RESET_MULTIPOLES
      enumerator::MDL_INIT_REFINE_RESTART
      enumerator::MDL_INIT_REFINE_RAMSES
      enumerator::MDL_COLLECT_BOUND_KEY

@@ -795,4 +795,60 @@ end subroutine save_phi_old
 !###########################################################
 !###########################################################
 !###########################################################
+subroutine get_threetondim_nbor_grid(s,hash_key,hash_dict,grid_nbor,flush_cache,fetch_cache)
+  use amr_parameters, only: ndim, threetondim
+  use amr_commons, only: nbor, oct
+  use ramses_commons, only: ramses_t
+  use hash
+  implicit none
+
+  type(ramses_t)::s
+  logical::flush_cache, fetch_cache
+  integer(kind=8), dimension(0:ndim)::hash_key
+  type(hash_table)::hash_dict
+  type(nbor), dimension(1:threetondim)::grid_nbor
+
+  integer::i1,j1,k1,idim,ilevel,inbor
+  integer(kind=8)::hash_nbor(0:ndim)
+  type(oct), pointer :: gridp
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  
+    ilevel = hash_key(0)
+    hash_nbor(0) = ilevel
+    inbor = 0
+
+    do k1=-1,1
+      do j1=-1,1
+        do i1=-1,1
+          inbor = inbor + 1
+#if NDIM>0
+          hash_nbor(1) = hash_key(1) + i1
+#endif
+#if NDIM>1
+          hash_nbor(2) = hash_key(2) + j1
+#endif
+#if NDIM>2
+          hash_nbor(3) = hash_key(3) + k1
+#endif
+          ! Periodic boundary conditions
+          do idim=1,ndim
+            if(r%periodic(idim)) then
+              if(hash_nbor(idim) < m%box_ckey_min(idim,ilevel)) hash_nbor(idim) = m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim) >= m%box_ckey_max(idim,ilevel)) hash_nbor(idim) = m%box_ckey_min(idim,ilevel)
+            endif
+          enddo
+          ! Fetch the grid containing the neighbor
+          call get_grid(s, hash_nbor, hash_dict, gridp, flush_cache=flush_cache, fetch_cache=fetch_cache, lock=.true.)
+          grid_nbor(inbor)%p => gridp
+        end do
+      end do
+    end do
+
+  end associate
+end subroutine get_threetondim_nbor_grid
+!###############################################################
+!###############################################################
+!###############################################################
+!###############################################################
 end module nbors_utils

@@ -1,5 +1,5 @@
 module cache_commons
-  use amr_parameters, only: ndim, twotondim, nbin
+  use amr_parameters, only: ndim, twotondim, nbin, multipole_size, taylor_size
   use hydro_parameters, only: nvar
   use rt_parameters, only: nrtvar, nrtgrp
   use call_back
@@ -70,6 +70,10 @@ module cache_commons
 #ifdef GRAV
      real(kind=8),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
+#ifdef FMM
+     real(kind=8),dimension(1:twotondim,1:multipole_size)::realdp_fmm_multipole
+     real(kind=8),dimension(1:twotondim,1:taylor_size)::realdp_fmm_taylor
+#endif 
   end type msg_large_realdp
   type msg_rt_emissivity_realdp
      real(kind=8),dimension(1:twotondim,1:nrtgrp)::realdp
