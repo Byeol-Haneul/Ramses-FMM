@@ -1,7 +1,9 @@
 program part2map
-! This code projects RAMSES data onto a map.
-! This is based in the MINI-RAMSES prototype. 
-! R. Teyssier, Princeton, February 2nd 2023
+  !--------------------------------------------------------------------------
+  ! This code projects RAMSES data onto a map.
+  ! This is based in the MINI-RAMSES prototype.
+  ! R. Teyssier, Princeton, February 2nd 2023
+  !--------------------------------------------------------------------------
   implicit none
 
   integer,parameter::flen=200
@@ -58,8 +60,10 @@ program part2map
   ! Read parameter and info files
   !------------------------------
 
+  ! Read part2map parameters
   call read_params
 
+  ! Check that all files exist
   if(.NOT. check_ramses_exist(repository,prefix))then
      write(*,*)'Repository '//TRIM(repository)//' incomplete.'
      write(*,*)'Stopping.'
@@ -67,14 +71,19 @@ program part2map
   endif
   if(index(repository,'output')==0)backup_file=.true.
 
+  ! Read RAMSES params
   call read_ramses_params
   write(*,*)'time =',real(p%t,kind=4)
 
+  ! Read RAMSES info
   call read_info
   call read_part_header
   write(*,*)'npart=',npart
   write(*,*)'nfile=',nfile
 
+  !-----------------
+  ! Set up geometry 
+  !-----------------
   if(xmin<0)xmin=0
   if(xmax<0)xmax=p%boxlen
   if(ymin<0)ymin=0
@@ -356,6 +365,9 @@ contains
   end subroutine read_params
 
   subroutine read_ramses_params
+    !-----------------------------------------------
+    ! Read RAMSES parameters file
+    !-----------------------------------------------
     character(LEN=128)::nomfich
     integer::ilun,noutput,skip
     integer::nfile1,ncpu1
@@ -374,9 +386,19 @@ contains
     skip=skip+4*(2+4*p%nlevelmax+2+2*17)
     read(ilun,POS=skip)p%gamma
     close(ilun)
+
+    if(backup_file)then
+      p%ncpu=ncpu1
+    else
+      p%ncpu=nfile1
+    endif
+
   end subroutine read_ramses_params
 
   subroutine read_part_header
+    !-----------------------------------------------
+    ! Read part header file
+    !-----------------------------------------------
     character(LEN=128)::nomfich,fields
     integer::ilun
     nomfich=TRIM(repository)//'/'//TRIM(prefix)//'_header.txt'
@@ -391,6 +413,9 @@ contains
   end subroutine read_part_header
 
   subroutine read_info
+    !-----------------------------------------------
+    ! Read ramses info file
+    !-----------------------------------------------
     character(LEN=128)::nomfich
     character(LEN=80)::GMGM
     integer::ilun,nfile1,ncpu1,ndim1,levelmin1,levelmax1
@@ -424,6 +449,9 @@ contains
   end subroutine read_info
 
   subroutine deposit_cic(map,nx,ny,ddx,ddy,mpart,periodic)
+    !-----------------------------------------------
+    ! Deposit particles using CIC scheme
+    !-----------------------------------------------
     real(kind=8),dimension(0:nx,0:ny)::map
     integer::nx,ny
     real(kind=8)::ddx,ddy,mpart
@@ -457,6 +485,9 @@ contains
   end subroutine deposit_cic
 
   subroutine deposit_tsc(map,nx,ny,ddx,ddy,mpart,periodic)
+    !-----------------------------------------------
+    ! Deposit particles using TSC scheme
+    !-----------------------------------------------
     real(kind=8),dimension(0:nx,0:ny)::map
     integer::nx,ny
     real(kind=8)::ddx,ddy,mpart
@@ -509,6 +540,9 @@ contains
   end subroutine deposit_tsc
 
   subroutine deposit_pcs(map,nx,ny,ddx,ddy,mpart,periodic)
+    !-----------------------------------------------
+    ! Deposit particles using PCS scheme
+    !-----------------------------------------------
     ! Piecewise Cubic Spline (PCS) deposition: 4x4 nodes using B-spline weights
     real(kind=8),dimension(0:nx,0:ny)::map
     integer::nx,ny
@@ -558,10 +592,16 @@ contains
        end do
     end do
   end subroutine deposit_pcs
-
+  !================================================================
+  !================================================================
+  !================================================================
+  !================================================================
 end program part2map
 
 function check_ramses_exist(repository,prefix)
+  !-----------------------------------------------
+  ! Check that RAMSES files are there
+  !-----------------------------------------------
   logical::check_ramses_exist
   character(len=80)::repository,prefix
   character(LEN=128)::nomfich_part
@@ -569,8 +609,14 @@ function check_ramses_exist(repository,prefix)
   nomfich_part=TRIM(repository)//'/'//TRIM(prefix)//'.00001'
   inquire(file=nomfich_part, exist=check_ramses_exist)
 end function check_ramses_exist
+!================================================================
+!================================================================
+!================================================================
+!================================================================
 
+!=======================================================================
 subroutine title(n,nchar)
+!=======================================================================
   implicit none
   integer::n
   character*5::nchar
