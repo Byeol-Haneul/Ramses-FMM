@@ -193,7 +193,7 @@ contains
                   &                       fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
           else
              call dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d, &
-                  &                   dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+                  &                   dMBH_overdt,dMEd_overdt,rho_inf,cs_gas)
           end if
        end if
 
@@ -592,7 +592,6 @@ contains
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
     ! Add accreted properties to sink variables
-    ! This should be zero, as it equals dM * sum_i (x_i - x_p)*w_i which is zero by construction
     if(.not.p%static)p%xp(ipart,1:ndim) = p%xp(ipart,1:ndim) + x_acc(1:ndim) / ( p%mp(ipart) + m_acc )
     p%vp(ipart,1:ndim)                  = p%vp(ipart,1:ndim) + p_acc(1:ndim) / ( p%mp(ipart) + m_acc )
     p%jp(ipart,1:ndim)                  = ( p%mp(ipart) * p%jp(ipart,1:ndim) + l_acc(1:ndim) ) / ( p%mp(ipart) + m_acc )
@@ -760,7 +759,6 @@ contains
 
                    ! Collect all of the necessary positions and cartesian keys
                    do idim=1,ndim
-                      ! New CIC version
                       xBH_fb_nei(idim,iBHnei) = x_rel(idim) + xcen(idim)
                       ckey_fb_nei(idim,iBHnei) = int(xBH_fb_nei(idim,iBHnei))
                    end do
@@ -1182,7 +1180,7 @@ contains
   !##############################################################################
   !##############################################################################
   subroutine dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d, &
-       &                         dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas)
+       &                         dMBH_overdt,dMEd_overdt,rho_inf,cs_gas)
     use amr_parameters, only: ndim
     use ramses_commons, only: ramses_t
     use pm_commons, only: part_t
@@ -1191,7 +1189,7 @@ contains
     type(ramses_t)::s
     type(part_t)::p
     integer::ilevel,ipart
-    real(kind=8)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
+    real(kind=8)::dMBH_overdt,dMEd_overdt,rho_inf,cs_gas
     real(kind=8)::scale_l,scale_t,scale_d
     !==================================================================
     ! Simple routine to dump sink data to a CSV on every fine time step
@@ -1232,7 +1230,7 @@ contains
     if(.not.file_exist)then
        if(r%verbose_sink)write(*,*)'Creating file: ',filename
        open(unit=unit,file=filename,form='formatted')
-       write(unit,*)'nstep,time,dt,mass,dMBH,dMEd,m_acc,rho_inf,cs_gas,x,y,z,vx,vy,vz,jx,jy,jz'
+       write(unit,'(A)')'nstep,time,dt,mass,dMBHdt,dMEDdt,rho_inf,cs_gas,x,y,z,vx,vy,vz,jx,jy,jz'
        close(unit)
     end if
 
@@ -1243,7 +1241,7 @@ contains
     write(unit,'(I10,21(A1,ES21.10),A1,I10)')g%nstep,',',g%t*scale_t/unit_yr, &
          & ',',g%dtnew(ilevel)*scale_t/unit_yr,',',p%mp(ipart)*scale_m/unit_msun,&
          & ',',dMBH_overdt*unit_dotM,',',dMEd_overdt*unit_dotM,&
-         & ',',m_acc*scale_m/unit_msun,',',rho_inf*scale_d,',',cs_gas*scale_v,&
+         & ',',rho_inf*scale_d,',',cs_gas*scale_v,&
          & ',',p%xp(ipart,1),',',p%xp(ipart,2),',',p%xp(ipart,3),&
          & ',',p%vp(ipart,1),',',p%vp(ipart,2),',',p%vp(ipart,3),&
          & ',',p%jp(ipart,1),',',p%jp(ipart,2),',',p%jp(ipart,3)
