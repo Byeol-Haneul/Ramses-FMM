@@ -774,7 +774,7 @@ subroutine m_read_params(pst)
        write(*,*)'Allocate some space for refinements !!!'
        nml_ok=.false.
     else
-       ngridmax=1+int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
+       ngridmax=int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
     endif
  end if
   !--------------------------------------------------
@@ -782,7 +782,7 @@ subroutine m_read_params(pst)
   ! dm, stars, sinks, trees, and tracers
   !--------------------------------------------------
 
- if(npartmax==0)then
+if(npartmax==0)then
   npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
 endif
 if(pic.and.npartmax>0)part=.true.

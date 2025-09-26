@@ -1,4 +1,4 @@
-program part2map_dep
+program part2map
   !--------------------------------------------------------------------------
   ! Project RAMSES particle data onto a 2D map with selectable deposition
   ! scheme: CIC (default), TSC, or PCS. Usage mirrors MINI-RAMSES utils/f90/part2map
@@ -55,7 +55,10 @@ program part2map_dep
   end type params
   type(params)::p
 
-  write(*,*)'Starting part2map_dep'
+  
+  !------------------------------
+  ! Read parameter and info files
+  !------------------------------
 
   call read_params
 
@@ -248,7 +251,7 @@ contains
 
     n = iargc()
     if (n < 4) then
-       print *, 'usage: part2map_dep -inp  input_dir'
+       print *, 'usage: part2map -inp  input_dir'
        print *, '                   -out  output_file'
        print *, '                  [-dir axis]'
        print *, '                  [-dep CIC|TSC|PCS]'
@@ -270,7 +273,7 @@ contains
        print *, '                  [-fil filetype]'
        print *, '                  [-pre prefix]'
        print *, '                  [-per periodic]'
-       print *, 'ex: part2map_dep -inp output_00001 -out map.dat -dir z -dep TSC'
+       print *, 'ex: part2map -inp output_00001 -out map.dat -dir z -dep TSC'
        print *, ' '
        stop
     end if
@@ -558,7 +561,7 @@ contains
     end do
   end subroutine deposit_pcs
 
-end program part2map_dep
+end program part2map
 
 function check_ramses_exist(repository,prefix)
   logical::check_ramses_exist
