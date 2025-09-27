@@ -11,7 +11,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use update_time_module, only: m_update_time
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
-! rho_fine is used for particle list maintenance even when gravity is off
   use rho_fine_module, only: m_rho_fine
 #ifdef GRAV
   use phi_fine_cg_module, only: m_phi_fine_cg
