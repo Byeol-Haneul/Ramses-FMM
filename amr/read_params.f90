@@ -899,7 +899,7 @@ subroutine m_read_params(pst)
   close(1)
 
   ! Compute maximum number of tracer particles
-  if(ntracmax==0)thenß
+  if(ntracmax==0)then
      ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
      if(ntracmax==0)trac=.false.
   endif
