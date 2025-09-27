@@ -150,6 +150,9 @@ recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
      if(pst%s%r%tree)then
         call newdt_part(pst%s%r,pst%s%g,pst%s%tree,ilevel,output%ekin,output%vmax)
      endif
+     if(pst%s%r%trac)then
+        call newdt_part(pst%s%r,pst%s%g,pst%s%trac,ilevel,output%ekin,output%vmax)
+     endif
   endif
 
 end subroutine r_newdt_part
@@ -161,7 +164,7 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
   use amr_parameters, only: ndim
   use amr_commons, only: run_t, global_t
   use pm_commons, only: part_t
-  use pm_parameters, only: TREE_TYPE
+  use pm_parameters, only: TREE_TYPE, TRAC_TYPE
   implicit none
   type(run_t)::r
   type(global_t)::g
@@ -178,7 +181,7 @@ subroutine newdt_part(r,g,p,ilevel,ekin,vmax)
      end do
   end do
 
-  if(p%type==TREE_TYPE)return
+  if(p%type==TREE_TYPE .or. p%type==TRAC_TYPE)return
 
   ! Compute kinetic energy
   do idim = 1, ndim

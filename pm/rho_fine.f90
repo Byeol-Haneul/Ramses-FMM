@@ -4,7 +4,6 @@ contains
 !###############################################
 !###############################################
 !###############################################
-#ifdef GRAV
 subroutine m_rho_fine(pst,ilevel,rtype)
   use amr_parameters, only: ndim
   use ramses_commons, only: pst_t
@@ -26,62 +25,63 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   integer,dimension(1:2)::input_array
   associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,mdl=>pst%s%mdl)
 
-  if(.not. r%poisson)return
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
 
   !---------------------------
   ! Reset multipole to zero
   !---------------------------
-  if(ilevel==r%levelmin)then
-     multipole_tot%q=0d0
-     input_size=storage_size(multipole_tot)/32
-     call r_broadcast_multipole(pst,multipole_tot,input_size)
-  endif
-  
-  !-------------------------------------------------------
-  ! Initialize rho to analytical and baryon density field
-  !-------------------------------------------------------
-  ! Loop over all finer levels from fine to coarse
-  do i=r%nlevelmax,ilevel,-1
+#ifdef GRAV
+  if(r%poisson)then
+     if(ilevel==r%levelmin)then
+        multipole_tot%q=0d0
+        input_size=storage_size(multipole_tot)/32
+        call r_broadcast_multipole(pst,multipole_tot,input_size)
+     endif
+     !-------------------------------------------------------
+     ! Initialize rho to analytical and baryon density field
+     !-------------------------------------------------------
+     ! Loop over all finer levels from fine to coarse
+     do i=r%nlevelmax,ilevel,-1
 
-     ! Compute gas multipole expansion
-     if(r%hydro)then
+        ! Compute gas multipole expansion
+        if(r%hydro)then
 
-        ! Set multipoles in all leaf cells
-        if(m%noct_tot(i)>0)then
-           if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i
-           call r_multipole_leaf_cells(pst,i,1)
-        endif
-
-        ! Average down multipoles in all split cells
-        if(i<r%nlevelmax)then
-           if(m%noct_tot(i+1)>0)then
-              if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i
-              call r_multipole_split_cells(pst,i,1)
+           ! Set multipoles in all leaf cells
+           if(m%noct_tot(i)>0)then
+              if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i
+              call r_multipole_leaf_cells(pst,i,1)
            endif
+
+           ! Average down multipoles in all split cells
+           if(i<r%nlevelmax)then
+              if(m%noct_tot(i+1)>0)then
+                 if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i
+                 call r_multipole_split_cells(pst,i,1)
+              endif
+           endif
+
         endif
 
-     endif
-
-     ! Reset array rho to zero
-     if(m%noct_tot(i)>0)then
-        call r_reset_rho(pst,i,1)
-     endif
-
-     ! Mass deposition into array rho using gas pseudo-particles
-     if(r%hydro)then
-
-        if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
-           if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
-           call r_cic_multipole(pst,i,1)
+      ! Reset array rho to zero
+        if(m%noct_tot(i)>0)then
+           call r_reset_rho(pst,i,1)
         endif
 
-     endif
+      ! Mass deposition into array rho using gas pseudo-particles
+        if(r%hydro)then
 
-  end do
+           if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
+              if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
+              call r_cic_multipole(pst,i,1)
+           endif
+
+        endif
+
+     end do
+  endif
   ! End loop over finer levels
-
+#endif
   !-------------------------------------------------------
   ! Compute particle contribution to density field
   !-------------------------------------------------------
@@ -96,12 +96,14 @@ subroutine m_rho_fine(pst,ilevel,rtype)
         endif
 
         ! Mass deposition into array rho using all massive particle types
-        if(m%noct_tot(i)>0)then
+#ifdef GRAV
+        if(m%noct_tot(i)>0 .and. r%poisson)then
            if(r%verbose)write(*,'(" Compute rho from particles for level ",I2)')i
            input_array(1)=i
            input_array(2)=rtype
            call r_cic_part(pst,input_array,2)
         endif
+#endif
 
         ! Sort particles between coarse and fine levels
         if(m%noct_tot(i)>0.AND.i<r%nlevelmax)then
@@ -115,7 +117,8 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   !---------------------------------------------------------------------
   ! Collect multipole contribution from all CPU and broadcast rho_tot
   !---------------------------------------------------------------------
-  if(ilevel==r%levelmin)then
+#ifdef GRAV
+  if(ilevel==r%levelmin .and. r%poisson)then
 
      ! Collect local multipole from all CPU
      call r_collect_multipole(pst,ilevel,1,multipole_tot,storage_size(multipole_tot)/32)
@@ -125,6 +128,7 @@ subroutine m_rho_fine(pst,ilevel,rtype)
 
      if(r%verbose)write(*,*)'rho_average=',g%rho_tot
   endif  
+#endif
 
   end associate
 
@@ -133,6 +137,7 @@ end subroutine m_rho_fine
 !################################################################
 !################################################################
 !################################################################
+#ifdef GRAV
 recursive subroutine r_multipole_leaf_cells(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
@@ -1163,6 +1168,7 @@ recursive subroutine r_split_part(pst,ilevel,input_size)
      if(pst%s%r%star)call split_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call split_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call split_part(pst%s,pst%s%tree,ilevel)
+     if(pst%s%r%trac)call split_part(pst%s,pst%s%trac,ilevel)
   endif
 
 end subroutine r_split_part
@@ -1419,6 +1425,7 @@ end subroutine split_part
 !##############################################################################
 !##############################################################################
 !##############################################################################
+#ifdef GRAV
 recursive subroutine r_collect_multipole(pst,ilevel,input_size,multipole,output_size)
   use mdl_module
   use amr_parameters, only: ndim
@@ -1472,6 +1479,7 @@ recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
   endif
 
 end subroutine r_broadcast_multipole
+#endif
 !##############################################################################
 !##############################################################################
 !##############################################################################
@@ -1860,6 +1868,7 @@ recursive subroutine r_sort_part(pst,ilevel,input_size)
      if(pst%s%r%star)call sort_part(pst%s,pst%s%star,ilevel)
      if(pst%s%r%sink)call sort_part(pst%s,pst%s%sink,ilevel)
      if(pst%s%r%tree)call sort_part(pst%s,pst%s%tree,ilevel)
+     if(pst%s%r%trac)call sort_part(pst%s,pst%s%trac,ilevel)
   endif
 
 end subroutine r_sort_part

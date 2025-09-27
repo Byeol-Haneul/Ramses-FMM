@@ -11,8 +11,8 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use update_time_module, only: m_update_time
   use refine_utils, only: m_refine_fine
   use upload_module, only: m_upload_fine
-#ifdef GRAV
   use rho_fine_module, only: m_rho_fine
+#ifdef GRAV
   use phi_fine_cg_module, only: m_phi_fine_cg
   use multigrid_fine_commons, only: multigrid
   use force_fine_module, only: m_force_fine
@@ -145,16 +145,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   end if
 
   !--------------------
-  ! Poisson source term
+  ! Poisson source term (when gravity is on)
+  ! Otherwise, just for particle list maintenance when gravity is off
   !--------------------
-#ifdef GRAV
-  if(r%poisson)then
-     if(ilevel==r%levelmin.or.icount>1)then
-        call m_timer(pst,'rho','start')
-        call m_rho_fine(pst,ilevel,0)
-     endif
+  if(ilevel==r%levelmin.or.icount>1)then
+     call m_timer(pst,'rho','start')
+     call m_rho_fine(pst,ilevel,0)
   endif
-#endif
+
 
   ! Remove gravity source term with half time step and old force
   if(r%hydro.and..not.r%static_gas)then

@@ -1214,6 +1214,7 @@ def rd_cell(nout,**kwargs):
     path = kwargs.get("path","./")
     center = kwargs.get("center")
     radius = kwargs.get("radius")
+    geom = kwargs.get("geom")
 
     a = rd_amr(nout,**kwargs)
     h = rd_hydro(nout,**kwargs)
@@ -1271,12 +1272,20 @@ def rd_cell(nout,**kwargs):
             xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
             xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
             c.x[idim] = xx+center[idim]
-        if ndim==1:
-            r = np.sqrt((c.x[0]-center[0])**2) - dx
-        if ndim==2:
-            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2) - dx
-        if ndim==3:
-            r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
+        if geom == "circle":
+            if ndim==1:
+                r = np.sqrt((c.x[0]-center[0])**2) - dx
+            elif ndim==2:
+                r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2) - dx
+            elif ndim==3:
+                r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
+        elif geom == "square":
+            if ndim==1:
+                r = np.abs(c.x[0]-center[0]) - dx
+            elif ndim==2:
+                r = np.maximum.reduce([np.abs(c.x[0]-center[0]), np.abs(c.x[1]-center[1])]) - dx
+            elif ndim==3:
+                r = np.maximum.reduce([np.abs(c.x[0]-center[0]), np.abs(c.x[1]-center[1]), np.abs(c.x[2]-center[2])]) - dx
         c.ncell = np.count_nonzero(r < radius)
         c.u  = c.u[:,r < radius]
         c.x  = c.x[:,r < radius]
@@ -1669,6 +1678,8 @@ def visu(x,y,dx,v,**kwargs):
         vmin: minimum value for the input array v to use in the color range
         vmax: maximum value for the input array v to use in the color range 
         log: when set, use the log of the input array v in the color range
+        colorbar: when True, draw a colorbar (default: True)
+        log_floor: lower bound applied to |v| before log10 (default 0)
         sort: useful only for 3D data. Plot the square symbola in the scatter plot in increasing order of array sort.
 
     Returns:
@@ -1696,15 +1707,15 @@ def visu(x,y,dx,v,**kwargs):
     sort = kwargs.get("sort",None)
     cmap = kwargs.get("cmap",'viridis')
     grid = kwargs.get("grid",None)
+    log_floor = kwargs.get("log_floor",0)
+    show_colorbar = kwargs.get("colorbar",True)
     
     if( not (log is None)):
-        if vmin==None:
-            v = np.log10(abs(v))
-        else:
-            v = np.log10(abs(v+float(vmin)))            
+        # Standard log scaling: log data; transform limits consistently
+        v = np.log10(np.maximum(np.abs(v), float(log_floor)))
+        if not (vmin is None):
             vmin = np.log10(float(vmin))
-
-        if( not (vmax==None)):
+        if not (vmax is None):
             vmax = np.log10(float(vmax))
 
     print("min=",np.min(v)," max=",np.max(v))
@@ -1731,7 +1742,8 @@ def visu(x,y,dx,v,**kwargs):
         linew=0.5
     plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
                 cmap=cmap,edgecolor=edgec,linewidth=linew)
-    plt.colorbar(shrink=0.8)
+    if show_colorbar:
+        plt.colorbar(shrink=0.8)
     plt.rcParams['figure.dpi'] = olddpi
 
 def mk_movie(**kwargs):
