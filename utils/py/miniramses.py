@@ -1679,7 +1679,7 @@ def visu(x,y,dx,v,**kwargs):
         vmax: maximum value for the input array v to use in the color range 
         log: when set, use the log of the input array v in the color range
         colorbar: when True, draw a colorbar (default: True)
-        log_floor: lower bound applied to |v| before log10 (default 1e-300)
+        log_floor: lower bound applied to |v| before log10 (default 0)
         sort: useful only for 3D data. Plot the square symbola in the scatter plot in increasing order of array sort.
 
     Returns:
