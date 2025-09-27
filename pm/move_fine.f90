@@ -91,11 +91,11 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%trac)then
-        if(pst%s%r%trac_force_interpolation_scheme==1)then
+        if(pst%s%r%trac_interpolation_scheme==1)then
            call cic_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
-        elseif(pst%s%r%trac_force_interpolation_scheme==2)then
+        elseif(pst%s%r%trac_interpolation_scheme==2)then
            call tsc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
-        elseif(pst%s%r%trac_force_interpolation_scheme==3)then
+        elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
@@ -1001,7 +1001,6 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
   call close_cache(s,m%grid_dict)
   
   if(action_part==action_kick_drift)then
-     ! Periodic wrap in physical units
      do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
            if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen

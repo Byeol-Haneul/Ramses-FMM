@@ -32,52 +32,54 @@ subroutine m_rho_fine(pst,ilevel,rtype)
   ! Reset multipole to zero
   !---------------------------
 #ifdef GRAV
-  if(ilevel==r%levelmin)then
-     multipole_tot%q=0d0
-     input_size=storage_size(multipole_tot)/32
-     call r_broadcast_multipole(pst,multipole_tot,input_size)
-  endif
-  !-------------------------------------------------------
-  ! Initialize rho to analytical and baryon density field
-  !-------------------------------------------------------
-  ! Loop over all finer levels from fine to coarse
-  do i=r%nlevelmax,ilevel,-1
+  if(r%poisson)then
+     if(ilevel==r%levelmin)then
+        multipole_tot%q=0d0
+        input_size=storage_size(multipole_tot)/32
+        call r_broadcast_multipole(pst,multipole_tot,input_size)
+     endif
+     !-------------------------------------------------------
+     ! Initialize rho to analytical and baryon density field
+     !-------------------------------------------------------
+     ! Loop over all finer levels from fine to coarse
+     do i=r%nlevelmax,ilevel,-1
 
-     ! Compute gas multipole expansion
-     if(r%hydro)then
+        ! Compute gas multipole expansion
+        if(r%hydro)then
 
-        ! Set multipoles in all leaf cells
-        if(m%noct_tot(i)>0)then
-           if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i
-           call r_multipole_leaf_cells(pst,i,1)
-        endif
-
-        ! Average down multipoles in all split cells
-        if(i<r%nlevelmax)then
-           if(m%noct_tot(i+1)>0)then
-              if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i
-              call r_multipole_split_cells(pst,i,1)
+           ! Set multipoles in all leaf cells
+           if(m%noct_tot(i)>0)then
+              if(r%verbose)write(*,'(" Compute leaf multipoles for level ",I2)')i
+              call r_multipole_leaf_cells(pst,i,1)
            endif
+
+           ! Average down multipoles in all split cells
+           if(i<r%nlevelmax)then
+              if(m%noct_tot(i+1)>0)then
+                 if(r%verbose)write(*,'(" Compute split multipoles for level ",I2)')i
+                 call r_multipole_split_cells(pst,i,1)
+              endif
+           endif
+
         endif
 
-     endif
-
-     ! Reset array rho to zero
-     if(m%noct_tot(i)>0)then
-        call r_reset_rho(pst,i,1)
-     endif
-
-     ! Mass deposition into array rho using gas pseudo-particles
-     if(r%hydro)then
-
-        if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
-           if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
-           call r_cic_multipole(pst,i,1)
+      ! Reset array rho to zero
+        if(m%noct_tot(i)>0)then
+           call r_reset_rho(pst,i,1)
         endif
 
-     endif
+      ! Mass deposition into array rho using gas pseudo-particles
+        if(r%hydro)then
 
-  end do
+           if(m%noct_tot(i)>0.AND.(rtype==0 .or. rtype==4))then
+              if(r%verbose)write(*,'(" Compute rho from multipoles for level ",I2)')i
+              call r_cic_multipole(pst,i,1)
+           endif
+
+        endif
+
+     end do
+  endif
   ! End loop over finer levels
 #endif
   !-------------------------------------------------------

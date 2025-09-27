@@ -86,7 +86,7 @@ module amr_commons
      integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
-     integer :: trac_force_interpolation_scheme=1 ! tracer force interpolation schemes
+     integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
 
      ! Movie parameters
      integer::levelmax_frame=0

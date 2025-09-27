@@ -292,7 +292,7 @@ subroutine m_read_params(pst)
   integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
-  integer :: trac_force_interpolation_scheme=1 ! tracer force interpolation schemes
+  integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -598,7 +598,7 @@ subroutine m_read_params(pst)
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
-  namelist/trac_params/trac,ntracmax,ntractot,trac_force_interpolation_scheme
+  namelist/trac_params/trac,ntracmax,ntractot,trac_interpolation_scheme
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -1200,7 +1200,7 @@ subroutine m_read_params(pst)
   s%r%sink_force_interpolation_scheme=sink_force_interpolation_scheme
   s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
   s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
-  s%r%trac_force_interpolation_scheme=trac_force_interpolation_scheme
+  s%r%trac_interpolation_scheme=trac_interpolation_scheme
 
   s%r%nw_frame=nw_frame
   s%r%nh_frame=nh_frame
