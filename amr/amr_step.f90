@@ -124,7 +124,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            bkp_last_done=.true.
         endif
      endif
-
      ! Lightcone
       if (r%lightcone) then
          call m_timer(pst,'lightcone','start')
@@ -144,15 +143,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
   end if
 
-  !--------------------
-  ! Poisson source term (when gravity is on)
-  ! Otherwise, just for particle list maintenance when gravity is off
-  !--------------------
+  !------------------------------------
+  ! Poisson source term for gravity or
+  ! just for particle list for pic only
+  !------------------------------------
   if(ilevel==r%levelmin.or.icount>1)then
      call m_timer(pst,'rho','start')
      call m_rho_fine(pst,ilevel,0)
   endif
-
 
   ! Remove gravity source term with half time step and old force
   if(r%hydro.and..not.r%static_gas)then
