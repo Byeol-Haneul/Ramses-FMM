@@ -27,7 +27,6 @@ subroutine m_rho_fine(pst,ilevel,rtype)
 
   if(m%noct_tot(ilevel)==0)return
   if(r%verbose)write(*,'(" Entering rho_fine for level ",I2)')ilevel
-  if(.not. r%poisson .and. r%verbose)write(*,'(" for purposes of particle list maintenance only")')
 
   !---------------------------
   ! Reset multipole to zero

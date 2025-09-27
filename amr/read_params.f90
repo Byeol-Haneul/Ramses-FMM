@@ -759,48 +759,48 @@ subroutine m_read_params(pst)
   nsuperoct=MIN(nsuperoct,5)
   nml_ok=.true.
   if(levelmin<1)then
-    write(*,*)'Error in the namelist:'
-    write(*,*)'levelmin should not be lower than 1 !!!'
-    nml_ok=.false.
- end if
- if(nlevelmax<levelmin)then
-    write(*,*)'Error in the namelist:'
-    write(*,*)'levelmax should not be lower than levelmin'
-    nml_ok=.false.
- end if
- if(ngridmax==0)then
-    if(ngridtot==0)then
-       write(*,*)'Error in the namelist:'
-       write(*,*)'Allocate some space for refinements !!!'
-       nml_ok=.false.
-    else
-       ngridmax=int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
-    endif
- end if
+     write(*,*)'Error in the namelist:'
+     write(*,*)'levelmin should not be lower than 1 !!!'
+     nml_ok=.false.
+  end if
+  if(nlevelmax<levelmin)then
+     write(*,*)'Error in the namelist:'
+     write(*,*)'levelmax should not be lower than levelmin'
+     nml_ok=.false.
+  end if
+  if(ngridmax==0)then
+     if(ngridtot==0)then
+        write(*,*)'Error in the namelist:'
+        write(*,*)'Allocate some space for refinements !!!'
+        nml_ok=.false.
+     else
+        ngridmax=int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
+     endif
+  end if
   !--------------------------------------------------
   ! Compute maximum number of particles:
   ! dm, stars, sinks, trees, and tracers
   !--------------------------------------------------
 
-if(npartmax==0)then
-  npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
-endif
-if(pic.and.npartmax>0)part=.true.
-if(nstarmax==0)then
-  nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
-  if(nstarmax==0)star=.false.
-endif
-if(nsinkmax==0)then
-  nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
-  if(nsinkmax==0)sink=.false.
-endif
-if(ntreemax==0)then
-  ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
-  if(ntreemax==0)then
-     ntreemax=int(npartmax/100)
+  if(npartmax==0)then
+     npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
   endif
-  if(ntreemax==0)merger_tree=.false.
-endif
+  if(pic.and.npartmax>0)part=.true.
+  if(nstarmax==0)then
+     nstarmax=int(nstartot/int(s%g%ncpu,kind=8),kind=4)
+     if(nstarmax==0)star=.false.
+  endif
+  if(nsinkmax==0)then
+     nsinkmax=int(nsinktot/int(s%g%ncpu,kind=8),kind=4)
+     if(nsinkmax==0)sink=.false.
+  endif
+  if(ntreemax==0)then
+     ntreemax=int(ntreetot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntreemax==0)then
+        ntreemax=int(npartmax/100)
+     endif
+     if(ntreemax==0)merger_tree=.false.
+  endif
 #ifdef HYDRO
   if(.not. hydro)then
      write(*,*)'You are not using the hydro solver but'
@@ -899,9 +899,9 @@ endif
   close(1)
 
   ! Compute maximum number of tracer particles
-  if(ntracmax==0)then
-    ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
-    if(ntracmax==0)trac=.false.
+  if(ntracmax==0)thenß
+     ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntracmax==0)trac=.false.
   endif
 
   !-----------------

@@ -249,8 +249,6 @@ subroutine cic_kick_drift_part(s,p,ilevel,action_part)
         do ind=1,twotondim
 #ifdef GRAV
            ff(1:ndim)=ff(1:ndim)+gridp(ind)%p%f(icell(ind),1:ndim)*vol(ind)
-#else
-           continue
 #endif
         end do
      endif
@@ -878,11 +876,13 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
      do ind=1,twotondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
         if(associated(gridp))then
            ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
         else
            ok_level=.false.
         end if
+#endif
      end do
      if(.not.ok_level)then
         do idim=1,ndim
@@ -906,9 +906,11 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
            if(associated(gridp))then
               ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
            end if
+#endif
         end do
      end if
 
@@ -954,11 +956,13 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
            if(associated(gridp))then
               ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
            else
               ok_level=.false.
            end if
+#endif
         end do
         if(.not.ok_level)then
            do idim=1,ndim
@@ -982,9 +986,11 @@ subroutine cic_trace_gas_part(s,p,ilevel,action_part)
            do ind=1,twotondim
               hash_nbor(1:ndim)=ckey2(1:ndim,ind)
               call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
               if(associated(gridp))then
                  ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
               end if
+#endif
            end do
         end if
         ! Set time-centered velocity and drift
@@ -1072,9 +1078,11 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
      do ind=1,threetondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
         if(associated(gridp))then
            ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
         end if
+#endif
      end do
 
      if(action_part==action_kick_only)then
@@ -1118,9 +1126,11 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
         do ind=1,threetondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
            if(associated(gridp))then
               ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
            end if
+#endif
         end do
         p%vp(ipart,1:ndim)=ff(1:ndim)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
@@ -1208,9 +1218,11 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
      do ind=1,fourtondim
         hash_nbor(1:ndim)=ckey(1:ndim,ind)
         call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
         if(associated(gridp))then
            ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
         end if
+#endif
      end do
 
      if(action_part==action_kick_only)then
@@ -1259,9 +1271,11 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
         do ind=1,fourtondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
            if(associated(gridp))then
               ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
            end if
+#endif
         end do
         p%vp(ipart,1:ndim)=ff(1:ndim)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)

@@ -1214,7 +1214,7 @@ def rd_cell(nout,**kwargs):
     path = kwargs.get("path","./")
     center = kwargs.get("center")
     radius = kwargs.get("radius")
-    rad_mode = kwargs.get("rad_mode")
+    geom = kwargs.get("geom")
 
     a = rd_amr(nout,**kwargs)
     h = rd_hydro(nout,**kwargs)
@@ -1272,14 +1272,14 @@ def rd_cell(nout,**kwargs):
             xx[xx>boxlen/2]=xx[xx>boxlen/2]-boxlen
             xx[xx<-boxlen/2]=xx[xx<-boxlen/2]+boxlen
             c.x[idim] = xx+center[idim]
-        if rad_mode == "circle":
+        if geom == "circle":
             if ndim==1:
                 r = np.sqrt((c.x[0]-center[0])**2) - dx
             elif ndim==2:
                 r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2) - dx
             elif ndim==3:
                 r = np.sqrt((c.x[0]-center[0])**2+(c.x[1]-center[1])**2+(c.x[2]-center[2])**2) - dx
-        elif rad_mode == "square":
+        elif geom == "square":
             if ndim==1:
                 r = np.abs(c.x[0]-center[0]) - dx
             elif ndim==2:
@@ -1707,7 +1707,7 @@ def visu(x,y,dx,v,**kwargs):
     sort = kwargs.get("sort",None)
     cmap = kwargs.get("cmap",'viridis')
     grid = kwargs.get("grid",None)
-    log_floor = kwargs.get("log_floor",1e-300)
+    log_floor = kwargs.get("log_floor",0)
     show_colorbar = kwargs.get("colorbar",True)
     
     if( not (log is None)):
@@ -1740,10 +1740,10 @@ def visu(x,y,dx,v,**kwargs):
     if( not (grid is None)):
         edgec='black'
         linew=0.5
-    sc = plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
+    plt.scatter(x[ind],y[ind],c=v[ind],s=(dx[ind]*800/rescale)**2,marker="s",vmin=vmin,vmax=vmax,
                 cmap=cmap,edgecolor=edgec,linewidth=linew)
     if show_colorbar:
-        plt.colorbar(sc,shrink=0.8)
+        plt.colorbar(shrink=0.8)
     plt.rcParams['figure.dpi'] = olddpi
 
 def mk_movie(**kwargs):
