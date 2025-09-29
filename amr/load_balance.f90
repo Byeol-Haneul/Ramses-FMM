@@ -732,7 +732,6 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
      if(pst%s%r%dust)then
         call balance_part(pst%s,pst%s%dust,ilevel)
      endif
-   endif
 #endif
   endif
 

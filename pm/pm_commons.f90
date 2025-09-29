@@ -24,6 +24,8 @@ module pm_commons
      real(dp),allocatable,dimension(:)     ::tm       ! Merging time
      real(dp),allocatable,dimension(:)     ::up       ! Specific energy
      real(dp),allocatable,dimension(:)     ::phip     ! Potential
+     real(dp),allocatable,dimension(:)     ::charge   ! Charge
+     real(dp),allocatable,dimension(:)     ::size     ! Size
      integer ,allocatable,dimension(:)     ::levelp   ! Current level of particle
      integer(i8b),allocatable,dimension(:) ::idp      ! Particle unique identifier
      integer(i8b),allocatable,dimension(:) ::idm      ! Merging particle id
