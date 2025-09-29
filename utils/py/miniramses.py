@@ -685,6 +685,9 @@ class LightconeReader:
             - 'tree_file': path to tree binary file (str, or None if doesn't exist)
             - 'tree_metadata': path to tree .txt file (str, or None if doesn't exist)
             - 'tree_size': size of tree binary file in bytes (int, or None if doesn't exist)
+            - 'grav_file': path to grav binary file (str, or None if doesn't exist)
+            - 'grav_metadata': path to grav .txt file (str, or None if doesn't exist)
+            - 'grav_size': size of grav binary file in bytes (int, or None if doesn't exist)
         """
         # Check if path exists
         if not os.path.exists(path):
