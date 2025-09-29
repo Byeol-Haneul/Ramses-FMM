@@ -29,6 +29,7 @@ subroutine m_read_params(pst)
   integer(kind=8)::nsinktot=0
   integer(kind=8)::ntreetot=0
   integer(kind=8)::ntractot=0
+  integer(kind=8)::ndusttot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -47,6 +48,7 @@ subroutine m_read_params(pst)
   logical::sink    =.false.    ! Sinks and sink formation activated
   logical::part    =.false.   ! Dark matter particles activated
   logical::trac    =.false.   ! Tracer particles activated
+  logical::dust    =.false.   ! Dust particles activated
   logical::merger_tree=.false. ! Merger tree particles activated
   logical::orphan  =.false.   ! Orphan particles activated
   logical::verbose =.false.    ! Write everything
@@ -67,6 +69,7 @@ subroutine m_read_params(pst)
   integer::nsinkmax=0
   integer::ntreemax=0
   integer::ntracmax=0
+  integer::ndustmax=0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -293,6 +296,8 @@ subroutine m_read_params(pst)
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
   integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+  integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
+  integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -599,6 +604,7 @@ subroutine m_read_params(pst)
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
   namelist/trac_params/trac,ntracmax,ntractot,trac_interpolation_scheme
+  namelist/dust_params/dust,ndustmax,ndusttot,dust_mass_deposition_scheme,dust_force_interpolation_scheme
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -620,7 +626,7 @@ subroutine m_read_params(pst)
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
        & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
-       & ,output_peak_trac &
+       & ,output_peak_trac,output_peak_dust &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
@@ -779,7 +785,7 @@ subroutine m_read_params(pst)
   end if
   !--------------------------------------------------
   ! Compute maximum number of particles:
-  ! dm, stars, sinks, trees, and tracers
+  ! dm, stars, sinks, trees, tracers, and dust
   !--------------------------------------------------
 
   if(npartmax==0)then
@@ -896,12 +902,19 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1,NML=trac_params,END=117)
 117 continue
+  rewind(1)
+  read(1,NML=dust_params,END=118)
+118 continue
   close(1)
 
   ! Compute maximum number of tracer particles
   if(ntracmax==0)then
      ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
      if(ntracmax==0)trac=.false.
+  endif
+  if(ndustmax==0)then
+     ndustmax=int(ndusttot/int(s%g%ncpu,kind=8),kind=4)
+     if(ndustmax==0)dust=.false.
   endif
 
   !-----------------
@@ -1139,6 +1152,7 @@ subroutine m_read_params(pst)
   s%r%star=star
   s%r%sink=sink
   s%r%trac=trac
+  s%r%dust=dust
   s%r%tree=merger_tree
   s%r%orphan=orphan
   s%r%verbose=verbose
@@ -1176,6 +1190,7 @@ subroutine m_read_params(pst)
   s%r%nsinkmax=nsinkmax
   s%r%ntreemax=ntreemax
   s%r%ntracmax=ntracmax
+  s%r%ndustmax=ndustmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size
@@ -1201,6 +1216,8 @@ subroutine m_read_params(pst)
   s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
   s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
   s%r%trac_interpolation_scheme=trac_interpolation_scheme
+  s%r%dust_mass_deposition_scheme=dust_mass_deposition_scheme
+  s%r%dust_force_interpolation_scheme=dust_force_interpolation_scheme
 
   s%r%nw_frame=nw_frame
   s%r%nh_frame=nh_frame
@@ -1489,6 +1506,7 @@ subroutine m_read_params(pst)
   s%r%output_peak_sink=output_peak_sink
   s%r%output_peak_tree=output_peak_tree
   s%r%output_peak_trac=output_peak_trac
+  s%r%output_peak_dust=output_peak_dust
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold

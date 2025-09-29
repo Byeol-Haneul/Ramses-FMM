@@ -99,6 +99,15 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
+     if(pst%s%r%dust)then
+        if(pst%s%r%dust_force_interpolation_scheme==1)then
+           call cic_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
+        elseif(pst%s%r%dust_force_interpolation_scheme==2)then
+           call tsc_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
+        elseif(pst%s%r%dust_force_interpolation_scheme==3)then
+           call pcs_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
+        endif
+     endif
   endif
 
 end subroutine r_kick_drift_part
@@ -807,6 +816,88 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
 end subroutine unpack_fetch_kick_trac
 !#########################################################################
 !#########################################################################
+subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
+  use amr_parameters, only: twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+#ifdef GRAV
+  use cache_commons, only: msg_nvarplusthree_realdp
+#else
+  use cache_commons, only: msg_nvar_realdp
+#endif
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+
+  integer::ind,ivar
+#ifdef GRAV
+  type(msg_nvarplusthree_realdp)::msg
+#else
+  type(msg_nvar_realdp)::msg
+#endif
+
+#ifdef HYDRO
+  do ind=1,twotondim
+     do ivar=1,nvar
+        msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
+     end do
+  end do
+#endif
+#ifdef GRAV
+  do ind=1,twotondim
+     msg%realdp_phi(ind)=grid%f(ind,1)
+     msg%realdp_phi_old(ind)=grid%f(ind,2)
+     msg%realdp_dis(ind)=grid%f(ind,3)
+  end do
+#endif
+
+  msg_array=transfer(msg,msg_array)
+
+end subroutine pack_fetch_kick_dust
+!#########################################################################
+!#########################################################################
+subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
+  use amr_parameters, only: ndim,twotondim
+  use hydro_parameters, only: nvar
+  use amr_commons, only: oct
+#ifdef GRAV
+  use cache_commons, only: msg_nvarplusthree_realdp
+#else
+  use cache_commons, only: msg_nvar_realdp
+#endif
+  type(oct)::grid
+  integer::msg_size
+  integer,dimension(1:msg_size),optional::msg_array
+  integer(kind=8),dimension(0:ndim)::hash_key
+
+  integer::ind,ivar
+#ifdef GRAV
+  type(msg_nvarplusthree_realdp)::msg
+#else
+  type(msg_nvar_realdp)::msg
+#endif
+
+  grid%lev=hash_key(0)
+  grid%ckey(1:ndim)=hash_key(1:ndim)
+  msg=transfer(msg_array,msg)
+
+#ifdef HYDRO
+  do ind=1,twotondim
+     do ivar=1,nvar
+        grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
+     end do
+  end do
+#endif
+#ifdef GRAV
+  do ind=1,twotondim
+     grid%f(ind,1)=msg%realdp_phi(ind)
+     grid%f(ind,2)=msg%realdp_phi_old(ind)
+     grid%f(ind,3)=msg%realdp_dis(ind)
+  end do
+#endif
+
+end subroutine unpack_fetch_kick_dust
+
 !#########################################################################
 !#########################################################################
 subroutine cic_trace_gas_part(s,p,ilevel,action_part)
@@ -1291,6 +1382,502 @@ subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   end if
   end associate
 end subroutine pcs_trace_gas_part
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, twotondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,x_mid,dr,dl,dr2,dl2
+  integer,dimension(1:ndim)::ir,il
+  integer,dimension(1:ndim)::ir2,il2
+  real(kind=8),dimension(1:twotondim)::vol,vol2
+  integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
+  integer::icell,icell2
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,ind,idim
+  real(kind=8)::dx_loc,vol_loc
+  real(kind=8),dimension(1:ndim)::ff,v_pred
+  type(oct),pointer :: gridp
+  logical :: ok_level
+#ifdef GRAV
+  type(msg_nvarplusthree_realdp)::dummy_dust
+#else
+  type(msg_nvar_realdp)::dummy_dust
+#endif
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  dx_loc=r%boxlen/2**ilevel
+  vol_loc=dx_loc**ndim
+  if (p%type/=DUST_TYPE) return
+  ! Dust hydro+gravity cache
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_dust)/32,&
+                     pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! Position in cell units at current level
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
+        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+
+     ! Gather velocity v = mom/rho at x^n using CIC
+     do idim=1,ndim
+        dr(idim)=x(idim)+0.5D0
+        ir(idim)=int(dr(idim))
+        dr(idim)=dr(idim)-ir(idim)
+        dl(idim)=1.0D0-dr(idim)
+        il(idim)=ir(idim)-1
+     end do
+     do idim=1,ndim
+        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
+        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+     enddo
+     ckey = cic_index(il,ir)
+     vol = cic_weight(dl,dr)
+     ff(1:ndim)=0.0
+     ok_level=.true.
+     hash_nbor(0)=ilevel+1
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        else
+           ok_level=.false.
+        end if
+#endif
+     end do
+     if(.not.ok_level)then
+        do idim=1,ndim
+           x(idim)=x(idim)/2.0d0
+        end do
+        do idim=1,ndim
+           dr(idim)=x(idim)+0.5D0
+           ir(idim)=int(dr(idim))
+           dr(idim)=dr(idim)-ir(idim)
+           dl(idim)=1.0D0-dr(idim)
+           il(idim)=ir(idim)-1
+        end do
+        do idim=1,ndim
+           if(il(idim)<0)il(idim)=m%ckey_max(ilevel)-1
+           if(ir(idim)==m%ckey_max(ilevel))ir(idim)=0
+        enddo
+        ckey = cic_index(il,ir)
+        vol = cic_weight(dl,dr)
+        ff(1:ndim)=0.0
+        hash_nbor(0)=ilevel
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+           end if
+#endif
+        end do
+     end if
+
+     if(action_part==action_kick_only)then
+        ! RK2 step 1 (early call): stash v^n at x^n, no move
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%levelp(ipart)=ilevel
+
+     else if(action_part==action_kick_drift)then
+        ! RK2 step 2 (late call): predict midpoint and correct
+        ! Use stored v^n if available; fallback to current ff at step 0
+        if (g%nstep>0) then
+           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        else
+           v_pred(1:ndim)=ff(1:ndim)
+        endif
+        ! Predict x_mid in cell units
+        do idim=1,ndim
+           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+        end do
+        do idim=1,ndim
+           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+        end do
+
+        ! Gather v^{n+1} at x_mid using CIC
+        do idim=1,ndim
+           dr2(idim)=x_mid(idim)+0.5D0
+           ir2(idim)=int(dr2(idim))
+           dr2(idim)=dr2(idim)-ir2(idim)
+           dl2(idim)=1.0D0-dr2(idim)
+           il2(idim)=ir2(idim)-1
+        end do
+        do idim=1,ndim
+           if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel+1)-1
+           if(ir2(idim)==m%ckey_max(ilevel+1))ir2(idim)=0
+        enddo
+        ckey2 = cic_index(il2,ir2)
+        vol2 = cic_weight(dl2,dr2)
+        ff(1:ndim)=0.0
+        ok_level=.true.
+        hash_nbor(0)=ilevel+1
+        do ind=1,twotondim
+           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+           else
+              ok_level=.false.
+           end if
+#endif
+        end do
+        if(.not.ok_level)then
+           do idim=1,ndim
+              x_mid(idim)=x_mid(idim)/2.0d0
+           end do
+           do idim=1,ndim
+              dr2(idim)=x_mid(idim)+0.5D0
+              ir2(idim)=int(dr2(idim))
+              dr2(idim)=dr2(idim)-ir2(idim)
+              dl2(idim)=1.0D0-dr2(idim)
+              il2(idim)=ir2(idim)-1
+           end do
+           do idim=1,ndim
+              if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel)-1
+              if(ir2(idim)==m%ckey_max(ilevel))ir2(idim)=0
+           enddo
+           ckey2 = cic_index(il2,ir2)
+           vol2 = cic_weight(dl2,dr2)
+           ff(1:ndim)=0.0
+           hash_nbor(0)=ilevel
+           do ind=1,twotondim
+              hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+              if(associated(gridp))then
+                 ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              end if
+#endif
+           end do
+        end if
+        ! Set time-centered velocity and drift
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+  
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+        end do
+     end do
+  end if
+  end associate
+end subroutine cic_kick_drift_dust
+
+subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, threetondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,wl,wc,wr
+  real(kind=8),dimension(1:ndim)::x_mid,wl2,wc2,wr2
+  integer,dimension(1:ndim)::cl,cc,cr
+  integer,dimension(1:ndim)::cl2,cc2,cr2
+  real(kind=8),dimension(1:threetondim)::vol,vol2
+  integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,icell,icell2,ind,idim
+  real(kind=8)::xl,xc,xr
+  real(kind=8)::dx_loc
+  real(kind=8),dimension(1:ndim)::ff,v_pred
+  type(oct),pointer::gridp
+  logical::ok_level
+#ifdef GRAV
+  type(msg_nvarplusthree_realdp)::dummy_dust
+#else
+  type(msg_nvar_realdp)::dummy_dust
+#endif
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=DUST_TYPE) return
+  dx_loc=r%boxlen/2**ilevel
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_dust)/32,&
+                     pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
+        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+     do idim=1,ndim
+        cl(idim)=int(x(idim))-1
+        cc(idim)=int(x(idim))
+        cr(idim)=int(x(idim))+1
+        xl=dble(cl(idim))+0.5D0
+        xc=dble(cc(idim))+0.5D0
+        xr=dble(cr(idim))+0.5D0
+        wl(idim)=0.5D0*(1.5D0-abs(x(idim)-xl))**2
+        wc(idim)=0.75D0-         (x(idim)-xc) **2
+        wr(idim)=0.5D0*(1.5D0-abs(x(idim)-xr))**2
+     end do
+     do idim=1,ndim
+        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
+        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
+     enddo
+     ckey = tsc_index(cl,cc,cr)
+     vol = tsc_weight(wl,wc,wr)
+     hash_nbor(0)=ilevel+1
+     ff(1:ndim)=0.0
+     do ind=1,threetondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        end if
+#endif
+     end do
+
+     if(action_part==action_kick_only)then
+        ! RK2 step 1: stash v^n at x^n
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%levelp(ipart)=ilevel
+
+     else if(action_part==action_kick_drift)then
+        ! RK2 step 2: predict with v^n, sample v^{n+1} at midpoint
+        if (g%nstep>0) then
+           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        else
+           v_pred(1:ndim)=ff(1:ndim)
+        endif
+        do idim=1,ndim
+           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+        end do
+        do idim=1,ndim
+           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+        end do
+        do idim=1,ndim
+           cl2(idim)=int(x_mid(idim))-1
+           cc2(idim)=int(x_mid(idim))
+           cr2(idim)=int(x_mid(idim))+1
+           xl=dble(cl2(idim))+0.5D0
+           xc=dble(cc2(idim))+0.5D0
+           xr=dble(cr2(idim))+0.5D0
+           wl2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xl))**2
+           wc2(idim)=0.75D0-         (x_mid(idim)-xc) **2
+           wr2(idim)=0.5D0*(1.5D0-abs(x_mid(idim)-xr))**2
+        end do
+        do idim=1,ndim
+           if(cl2(idim)<0)cl2(idim)=m%ckey_max(ilevel+1)-1
+           if(cr2(idim)==m%ckey_max(ilevel+1))cr2(idim)=0
+        enddo
+        ckey2 = tsc_index(cl2,cc2,cr2)
+        vol2 = tsc_weight(wl2,wc2,wr2)
+        hash_nbor(0)=ilevel+1
+        ff(1:ndim)=0.0
+        do ind=1,threetondim
+           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+           end if
+#endif
+        end do
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+        end do
+     end do
+  end if
+  end associate
+end subroutine tsc_kick_drift_dust
+
+subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim, fourtondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,wll,wl,wr,wrr
+  real(kind=8),dimension(1:ndim)::x_mid,wll2,wl2,wr2,wrr2
+  integer,dimension(1:ndim)::cll,cl,cr,crr
+  integer,dimension(1:ndim)::cll2,cl2,cr2,crr2
+  real(kind=8),dimension(1:fourtondim)::vol,vol2
+  integer,dimension(1:ndim,1:fourtondim)::ckey,ckey2
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,icell,icell2,ind,idim
+  real(kind=8)::xll,xl,xr,xrr
+  real(kind=8)::dx_loc
+  real(kind=8),dimension(1:ndim)::ff,v_pred
+  type(oct),pointer::gridp
+#ifdef GRAV
+  type(msg_nvarplusthree_realdp)::dummy_dust
+#else
+  type(msg_nvar_realdp)::dummy_dust
+#endif
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=DUST_TYPE) return
+  dx_loc=r%boxlen/2**ilevel
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_dust)/32,&
+       pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
+        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+     do idim=1,ndim
+        crr(idim)=int(x(idim)+1.5D0)
+        cr (idim)=crr(idim)-1
+        cl (idim)=crr(idim)-2
+        cll(idim)=crr(idim)-3
+        xll=dble(cll(idim))+0.5D0
+        xl =dble(cl (idim))+0.5D0
+        xr =dble(cr (idim))+0.5D0
+        xrr=dble(crr(idim))+0.5D0
+        wll(idim)=(2D0-abs(x(idim)-xll))**3/6D0
+        wl (idim)=(4D0-6D0*(x(idim)-xl)**2+3d0*abs(x(idim)-xl )**3)/6D0
+        wr (idim)=(4D0-6D0*(x(idim)-xr)**2+3d0*abs(x(idim)-xr )**3)/6D0
+        wrr(idim)=(2D0-abs(x(idim)-xrr))**3/6D0
+     end do
+     do idim=1,ndim
+        if(cll(idim)<0)cll(idim)=cll(idim)+m%ckey_max(ilevel+1)
+        if(cl (idim)<0)cl (idim)=cl (idim)+m%ckey_max(ilevel+1)
+        if(cr (idim)>=m%ckey_max(ilevel+1))cr (idim)=cr (idim)-m%ckey_max(ilevel+1)
+        if(crr(idim)>=m%ckey_max(ilevel+1))crr(idim)=crr(idim)-m%ckey_max(ilevel+1)
+     enddo
+     ckey = pcs_index(cll,cl,cr,crr)
+     vol = pcs_weight(wll,wl,wr,wrr)
+     hash_nbor(0)=ilevel+1
+     ff(1:ndim)=0.0
+     do ind=1,fourtondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        end if
+#endif
+     end do
+
+     if(action_part==action_kick_only)then
+        ! RK2 step 1: stash v^n at x^n
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%levelp(ipart)=ilevel
+
+     else if(action_part==action_kick_drift)then
+        ! RK2 step 2: predict with v^n, sample v^{n+1} at midpoint
+        if (g%nstep>0) then
+           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        else
+           v_pred(1:ndim)=ff(1:ndim)
+        endif
+        do idim=1,ndim
+           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+        end do
+        do idim=1,ndim
+           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+        end do
+        do idim=1,ndim
+           crr2(idim)=int(x_mid(idim)+1.5D0)
+           cr2 (idim)=crr2(idim)-1
+           cl2 (idim)=crr2(idim)-2
+           cll2(idim)=crr2(idim)-3
+           xll=dble(cll2(idim))+0.5D0
+           xl =dble(cl2 (idim))+0.5D0
+           xr =dble(cr2 (idim))+0.5D0
+           xrr=dble(crr2(idim))+0.5D0
+           wll2(idim)=(2D0-abs(x_mid(idim)-xll))**3/6D0
+           wl2 (idim)=(4D0-6D0*(x_mid(idim)-xl)**2+3d0*abs(x_mid(idim)-xl )**3)/6D0
+           wr2 (idim)=(4D0-6D0*(x_mid(idim)-xr)**2+3d0*abs(x_mid(idim)-xr )**3)/6D0
+           wrr2(idim)=(2D0-abs(x_mid(idim)-xrr))**3/6D0
+        end do
+        do idim=1,ndim
+           if(cll2(idim)<0)cll2(idim)=cll2(idim)+m%ckey_max(ilevel+1)
+           if(cl2 (idim)<0)cl2 (idim)=cl2 (idim)+m%ckey_max(ilevel+1)
+           if(cr2 (idim)>=m%ckey_max(ilevel+1))cr2 (idim)=cr2 (idim)-m%ckey_max(ilevel+1)
+           if(crr2(idim)>=m%ckey_max(ilevel+1))crr2(idim)=crr2(idim)-m%ckey_max(ilevel+1)
+        enddo
+        ckey2 = pcs_index(cll2,cl2,cr2,crr2)
+        vol2 = pcs_weight(wll2,wl2,wr2,wrr2)
+        hash_nbor(0)=ilevel+1
+        ff(1:ndim)=0.0
+        do ind=1,fourtondim
+           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+           if(associated(gridp))then
+              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+           end if
+#endif
+        end do
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+     endif
+  end do
+  call close_cache(s,m%grid_dict)
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+        end do
+     end do
+  end if
+  end associate
+end subroutine pcs_kick_drift_dust
 
 !#########################################################################
 !#########################################################################

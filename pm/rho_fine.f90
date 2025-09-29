@@ -1415,6 +1415,18 @@ subroutine split_part(s,p,ilevel)
            p%idm(ipart)=p%idm(jpart)
            p%idm(jpart)=idp_tmp
         endif
+        ! Swap size
+        if(allocated(p%size))then
+           mp_tmp=p%size(ipart)
+           p%size(ipart)=p%size(jpart)
+           p%size(jpart)=mp_tmp
+        endif
+        ! Swap charge
+        if(allocated(p%charge))then
+           mp_tmp=p%charge(ipart)
+           p%charge(ipart)=p%charge(jpart)
+           p%charge(jpart)=mp_tmp
+        endif
      end do
   end do
 

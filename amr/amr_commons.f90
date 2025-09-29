@@ -26,6 +26,7 @@ module amr_commons
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
      logical::trac    =.false.   ! Tracer particles activated
+     logical::dust    =.false.   ! Dust particles activated
      logical::orphan  =.false.   ! Orphan particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
@@ -64,6 +65,7 @@ module amr_commons
      integer::nsinkmax=0         ! Maximum number of sink particles
      integer::ntreemax=0         ! Maximum number of tree particles
      integer::ntracmax=0         ! Maximum number of tracer particles
+     integer::ndustmax=0         ! Maximum number of dust particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
      real(kind=8)::box_size=0.0      ! Box length of active domain along x direction
@@ -87,6 +89,8 @@ module amr_commons
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
      integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+     integer :: dust_mass_deposition_scheme=1 ! dust mass deposition schemes
+     integer :: dust_force_interpolation_scheme=1 ! dust force interpolation schemes
 
      ! Movie parameters
      integer::levelmax_frame=0
@@ -328,6 +332,7 @@ module amr_commons
      logical::output_peak_sink=.false.
      logical::output_peak_tree=.false.
      logical::output_peak_trac=.false.
+     logical::output_peak_dust=.false.
      integer::rho_type_clump=1
      real(kind=8)::relevance_threshold=2
      real(kind=8)::density_threshold=-1

@@ -430,6 +430,30 @@ subroutine input_part_restart(r,g,p,ncpu_file,npart_file,mpart_loc)
         iskip=iskip+8*npart_file(icpu)
      endif
 
+     ! Read size
+     if(allocated(p%size))then
+        ipos=iskip+8*(istart-1)
+        read(10,POS=ipos)xdp
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%size(ipart)=xdp(i)
+        end do
+        iskip=iskip+8*npart_file(icpu)
+     endif
+
+     ! Read charge
+     if(allocated(p%charge))then
+        ipos=iskip+8*(istart-1)
+        read(10,POS=ipos)xdp
+        ipart=ipart_old
+        do i=istart,iend
+           ipart=ipart+1
+           p%charge(ipart)=xdp(i)
+        end do
+        iskip=iskip+8*npart_file(icpu)
+     endif
+
      deallocate(xdp)
 
      allocate(isp(istart:iend))

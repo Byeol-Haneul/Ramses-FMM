@@ -13,6 +13,7 @@ module mdl_parameters
      enumerator::MDL_INIT_PART
      enumerator::MDL_INPUT_PART_GRAFIC
      enumerator::MDL_INPUT_TRAC_GRAFIC
+     enumerator::MDL_INPUT_DUST_GRAFIC
      enumerator::MDL_INPUT_PART_ZOOM
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_STAR_ASCII
