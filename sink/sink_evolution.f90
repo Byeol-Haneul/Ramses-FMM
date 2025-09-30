@@ -97,7 +97,8 @@ contains
        else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
           lambda_sonic = 0.25d0
        else
-          lambda_sonic = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+          lambda_sonic = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) &
+               & * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
        end if
     else
        lambda_sonic = 1.0d0
@@ -457,8 +458,10 @@ contains
        dMBH_overdt = -1.0*total_divergence*vol_loc
 
        ! Applying the correction from Bleuler+14
-       if(r%sink_density_threshold.gt.0.0)dMBH_overdt = dMBH_overdt * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
-
+       if(r%sink_density_threshold.gt.0.0)then
+          dMBH_overdt = dMBH_overdt &
+               &      * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
+       endif
        if(r%verbose_sink)write(*,*)'Flux: ',dMBH_overdt
 
     ! Compute threshold accretion rate
