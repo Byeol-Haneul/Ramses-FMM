@@ -373,10 +373,6 @@ subroutine tree_in_peak(s,reset_tree_pos,count_tree)
   grav=1d0
   if(s%r%cosmo)grav=3d0/8d0/pi*s%g%omega_m*s%g%aexp
 
-  if(p%norphan_peak>0)then
-     write(*,*)'CREATE_TREE: TREE PARTICLES OUTSIDE PEAKS',p%norphan_peak
-  end if
-
   !-------------------------------------------------------
   ! Sort tree particles according to their global clump id
   !-------------------------------------------------------
