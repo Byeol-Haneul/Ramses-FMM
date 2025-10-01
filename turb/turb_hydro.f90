@@ -81,8 +81,9 @@ subroutine turb_hydro(r,m,ilevel,dteff)
 
         ! Remove kinetic energy from total energy
         ener=m%grid(igrid)%uold(ind,5)
-        do idim=1,3
-           ener=ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
+        do idim=1,ndim
+           ener=max(ener-0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr),&
+           & m%grid(igrid)%uold(ind,1)*r%smallc**2)
         end do
 #ifdef TURB
         ! Update momentum
@@ -92,8 +93,9 @@ subroutine turb_hydro(r,m,ilevel,dteff)
         end do
 #endif
         ! Update total energy
-        do idim=1,3
-           ener=ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr)
+        do idim=1,ndim
+           ener=max(ener+0.5d0*m%grid(igrid)%uold(ind,idim+1)**2/max(dble(m%grid(igrid)%uold(ind,1)),r%smallr),&
+           & m%grid(igrid)%uold(ind,1)*r%smallc**2)
         end do
         m%grid(igrid)%uold(ind,5)=ener
 

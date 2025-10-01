@@ -1440,28 +1440,52 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
                      pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
 
   do ipart=p%headp(ilevel),p%tailp(ilevel)
-    
-     ! Rescale particle position at level ilevel
+     ! Position in cell units and wrap
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
-    
-     ! For dust, we may not need gravity force (set to zero if no grav)
+     do idim=1,ndim
+        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
+        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+
+     ! CIC weights/indices at x
+     do idim=1,ndim
+        dr(idim)=x(idim)+0.5D0
+        ir(idim)=int(dr(idim))
+        dr(idim)=dr(idim)-ir(idim)
+        dl(idim)=1.0D0-dr(idim)
+        il(idim)=ir(idim)-1
+     end do
+     do idim=1,ndim
+        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
+        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
+     enddo
+     ckey = cic_index(il,ir)
+     vol = cic_weight(dl,dr)
+
+     ! Gas velocity estimate at x for v_pred fallback
+     hash_nbor(0)=ilevel+1
      ff(1:ndim)=0.0
-    
+     do ind=1,twotondim
+        hash_nbor(1:ndim)=ckey(1:ndim,ind)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+#ifdef HYDRO
+        if(associated(gridp))then
+           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
+        end if
+#endif
+     end do
+
      if(action_part==action_kick_only)then
-        ! RK2 step 1 (early call): stash v^n at x^n, no move
-        ! For dust with drag, store current velocity (no kick from gravity for now)
-        ! p%vp already contains the velocity, so just update level
         p%levelp(ipart)=ilevel
-
      else if(action_part==action_kick_drift)then
-
-        p%levelp(ipart)=ilevel
-        ! if there are other forces, they'd be added below to get v_pred.
-        v_pred(1:ndim)=p%vp(ipart,1:ndim)
-
-        ! Predict x_mid in cell units
+        ! Midpoint prediction
+        if (g%nstep>0) then
+           v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        else
+           v_pred(1:ndim)=ff(1:ndim)
+        endif
         do idim=1,ndim
            x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
@@ -1470,7 +1494,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
            if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
         end do
 
-        ! Gather hydro variables at x_mid using CIC
+        ! CIC weights/indices at x_mid
         do idim=1,ndim
            dr2(idim)=x_mid(idim)+0.5D0
            ir2(idim)=int(dr2(idim))
@@ -1484,10 +1508,11 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
         enddo
         ckey2 = cic_index(il2,ir2)
         vol2 = cic_weight(dl2,dr2)
+
+        ! Gather hydro at x_mid
         uu(1:ndim)=0.0
         rho_gas = 0.0
         eint = 0.0
-        ok_level=.true.
         hash_nbor(0)=ilevel+1
         do ind=1,twotondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
@@ -1496,7 +1521,6 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
            if(associated(gridp))then
               rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
               uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
-              ! accumulate thermal internal energy density (exclude kinetic and non-thermal)
               dens = max(dble(gridp%uold(icell2,1)), r%smallr)
               etot = gridp%uold(icell2,5)
               ekin = 0.0d0
@@ -1510,100 +1534,27 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
               end do
 #endif
               eint = eint + (etot - ekin - erad) * vol2(ind)
-           else
-              ok_level=.false.
            end if
+#endif
         end do
+
         cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
         c_sound = max(sqrt(cs2), r%smallc)
-        ! subsonic stopping rate (no Kwok correction)
         nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
-        ! Compute drift velocity, unit vector, and magnitude
         wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
         wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
-        what(1:ndim)=wdrift(1:ndim)/sqrt(wdrift2)
-        ! We're doing an exact drag update, so we don't need to compute a corrected nu_stop;
-        ! it's implicitly in there anyway.
-        !nu_stop = nu_stop * (1.0d0 + (9.0d0*pi*r%gamma/128.0d0)*wdrift2/c_sound**2)**0.5d0
-        ! New drift velocity
+        if(wdrift2>0.0d0)then
+           what(1:ndim)=wdrift(1:ndim)/max(1.0d-30, sqrt(wdrift2))
+        else
+           what(1:ndim)=0.0d0
+        endif
         wdrift(1:ndim) = c_sound * what(1:ndim) * &
-        & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
-        ! Update velocity
+        & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2)/c_sound)
+
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
-#endif
-        if(.not.ok_level)then
-           do idim=1,ndim
-              x_mid(idim)=x_mid(idim)/2.0d0
-           end do
-           do idim=1,ndim
-              dr2(idim)=x_mid(idim)+0.5D0
-              ir2(idim)=int(dr2(idim))
-              dr2(idim)=dr2(idim)-ir2(idim)
-              dl2(idim)=1.0D0-dr2(idim)
-              il2(idim)=ir2(idim)-1
-           end do
-           do idim=1,ndim
-              if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel)-1
-              if(ir2(idim)==m%ckey_max(ilevel))ir2(idim)=0
-           end do
-           ckey2 = cic_index(il2,ir2)
-           vol2 = cic_weight(dl2,dr2)
-           uu(1:ndim)=0.0
-           hash_nbor(0)=ilevel
-           do ind=1,twotondim
-              hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-              call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-              if(associated(gridp))then
-                 rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
-                 uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
-                 ! accumulate thermal internal energy density (exclude kinetic and non-thermal)
-                 dens = max(dble(gridp%uold(icell2,1)), r%smallr)
-                 etot = gridp%uold(icell2,5)
-                 ekin = 0.0d0
-                 do idim=1,ndim
-                    ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
-                 end do
-                 erad = 0.0d0
-#if NENER>0
-                 do irad=1,nener
-                    erad = erad + gridp%uold(icell2,5+irad)
-                 end do
-#endif
-                 eint = eint + (etot - ekin - erad) * vol2(ind)
-              else
-                 ok_level=.false.
-              end if
-           end do
-           cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
-           c_sound = max(sqrt(cs2), r%smallc)
-           ! subsonic stopping rate (no Kwok correction)
-           nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
-           ! Compute drift velocity, unit vector, and magnitude
-           wdrift(1:ndim)= p%vp(ipart,1:ndim) - uu(1:ndim)
-           wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
-           what(1:ndim)=wdrift(1:ndim)/max(sqrt(wdrift2),r%smallc)
-           ! We're doing an exact drag update, so we don't need to compute a corrected nu_stop;
-           ! it's implicitly in there anyway.
-           !nu_stop = nu_stop * (1.0d0 + (9.0d0*pi*r%gamma/128.0d0)*wdrift2/c_sound**2)**0.5d0
-           ! New drift velocity
-           wdrift(1:ndim) = c_sound * what(1:ndim) * &
-           & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
-           ! Update velocity
-           p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
-#endif
-        end if
-
-        ! Set position
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-        do idim=1,ndim
-           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
-           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
-        end do
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+0.5d0*(p%vp(ipart,1:ndim)+v_pred(1:ndim))*g%dtnew(ilevel)
      endif
-
-  end do ! end of do ipart=p%headp(ilevel),p%tailp(ilevel)
-
+  end do
   call close_cache(s,m%grid_dict)
   
   end associate
@@ -1659,48 +1610,14 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
      end do
 
-     ! TSC weights and indices at x
-     do idim=1,ndim
-        cl(idim)=int(x(idim))-1
-        cc(idim)=int(x(idim))
-        cr(idim)=int(x(idim))+1
-        xl=dble(cl(idim))+0.5D0
-        xc=dble(cc(idim))+0.5D0
-        xr=dble(cr(idim))+0.5D0
-        wl(idim)=0.5D0*(1.5D0-abs(x(idim)-xl))**2
-        wc(idim)=0.75D0-         (x(idim)-xc) **2
-        wr(idim)=0.5D0*(1.5D0-abs(x(idim)-xr))**2
-     end do
-     do idim=1,ndim
-        if(cl(idim)<0)cl(idim)=m%ckey_max(ilevel+1)-1
-        if(cr(idim)==m%ckey_max(ilevel+1))cr(idim)=0
-     enddo
-     ckey = tsc_index(cl,cc,cr)
-     vol = tsc_weight(wl,wc,wr)
-
-     ! gas velocity estimate at x for v_pred fallback when nstep==0
-     hash_nbor(0)=ilevel+1
-     ff(1:ndim)=0.0
-     do ind=1,threetondim
-        hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
-        end if
-#endif
-     end do
-
      if(action_part==action_kick_only)then
         p%levelp(ipart)=ilevel
 
      else if(action_part==action_kick_drift)then
         ! RK2: predict with v^n, sample gas at midpoint with TSC, do exact drag update
-        if (g%nstep>0) then
-           v_pred(1:ndim)=p%vp(ipart,1:ndim)
-        else
-           v_pred(1:ndim)=ff(1:ndim)
-        endif
+
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+
         do idim=1,ndim
            x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
         end do
@@ -1752,17 +1669,22 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
               eint = eint + (etot - ekin - erad) * vol2(ind)
            end if
 #endif
+        ! Need to add MHD support here
         end do
         cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
         c_sound = max(sqrt(cs2), r%smallc)
         nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
         wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
         wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
-        what(1:ndim)=wdrift(1:ndim)/max(1.0d-30, sqrt(wdrift2))
-        wdrift(1:ndim) = c_sound * what(1:ndim) * &
-        & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
+        if(wdrift2>0.0d0)then
+           what(1:ndim)=wdrift(1:ndim)/sqrt(wdrift2)
+           wdrift(1:ndim) = c_sound * what(1:ndim) * &
+           & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2)/c_sound)
+        else
+           wdrift(1:ndim)=0.0d0
+        endif
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+0.5d0*(p%vp(ipart,1:ndim)+v_pred(1:ndim))*g%dtnew(ilevel)
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -1935,7 +1857,7 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
        if(wdrift2>0.0d0)then
          what(1:ndim)=wdrift(1:ndim)/sqrt(wdrift2)
          wdrift(1:ndim) = c_sound * what(1:ndim) * &
-         & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
+         & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2)/c_sound)
        else
          wdrift(1:ndim)=0.0d0
        end if
@@ -1959,24 +1881,24 @@ end subroutine pcs_kick_drift_dust
 !#########################################################################
 !#########################################################################
 !#########################################################################
-function exact_drag(t, nu, eta, w0) result(drag_value)
+function exact_drag(dt, nu, eta, w0) result(drag_value)
   ! Computes drag coefficient based on the analytic solution for Epstein-Baines drag:
-  ! drag(t) = sqrt(((sinh(nu*t) + sqrt(1 + eta*w0^2)*cosh(nu*t)) / 
-  !                  (cosh(nu*t) + sqrt(1 + nu*w0^2)*sinh(nu*t)))^2 - 1)
+  ! drag(dt) = sqrt(((sinh(nu*dt) + sqrt(1 + eta*w0^2)*cosh(nu*dt)) / 
+  !                  (cosh(nu*dt) + sqrt(1 + nu*w0^2)*sinh(nu*dt)))^2 - 1)
   implicit none
-  real(kind=8), intent(in) :: t, nu, eta, w0
+  real(kind=8), intent(in) :: dt, nu, eta, w0
   real(kind=8) :: drag_value
   
   real(kind=8) :: sinh_term, cosh_term, sqrt_term, numerator, denominator, ratio
   
   ! Compute hyperbolic functions
-  sinh_term = sinh(nu * t)
-  cosh_term = cosh(nu * t)
+  sinh_term = sinh(nu * dt)
+  cosh_term = cosh(nu * dt)
   
   ! Compute sqrt(1 + eta*w0^2) - note: using eta as in the original formula
   sqrt_term = sqrt(1.0d0 + eta * w0**2)
   
-  ! Compute numerator: sinh(nu*t) + sqrt(1 + eta*w0^2)*cosh(nu*t)
+  ! Compute numerator: sinh(nu*dt) + sqrt(1 + eta*w0^2)*cosh(nu*dt)
   numerator = sinh_term + sqrt_term * cosh_term
   
   ! Compute denominator: cosh(nu*t) + sqrt(1 + nu*w0^2)*sinh(nu*t)
@@ -1994,6 +1916,28 @@ function exact_drag(t, nu, eta, w0) result(drag_value)
   drag_value = sqrt(max(0.0d0, ratio**2 - 1.0d0))/sqrt(eta)
   
 end function exact_drag
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+function fully_implicit_drag(dt, nu, eta, w0) result(drag_value)
+  ! A second order fully implicit drag update
+  implicit none
+  real(kind=8), intent(in) :: dt, nu, eta, w0
+  real(kind=8) :: drag_value, nu_stop
+  
+  real(kind=8) :: sqrt_term, ratio
+  
+  
+  ! Compute sqrt(1 + eta*w0^2) w0^2 is actually w0^2/c_sound^2
+  sqrt_term = sqrt(1.0d0 + eta * w0**2)
+  nu_stop = nu * sqrt_term
+
+  drag_value = w0/(1+nu_stop*dt+0.5d0*nu_stop**2*dt**2)
+
+  
+end function fully_implicit_drag
 
 !#########################################################################
 !#########################################################################

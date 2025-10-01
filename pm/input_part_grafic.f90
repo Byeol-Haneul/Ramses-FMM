@@ -657,9 +657,9 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
                if(ndim>0)p%xp(ipart,1)=xx1
                if(ndim>1)p%xp(ipart,2)=xx2
                if(ndim>2)p%xp(ipart,3)=xx3
-               p%mp(ipart)=0.5d0**(3*r%levelmin)
+               p%mp(ipart)=1.0d-2 * 0.5d0**(3*r%levelmin)
                p%idp(ipart)=ipart_grafic+1
-               p%size(ipart)= 0.1d0 ! Constant just as a test.
+               p%size(ipart)= 0.05d0 ! Constant just as a test.
                p%charge(ipart)= 0.0d0 ! Constant just as a test.
                ipart=ipart+1
             endif
