@@ -679,8 +679,16 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
                  if(ndim>2)p%xp(ipart,3)=xx3+tdz(ipercell)*dx
                  p%mp(ipart)=1.0d-2 * 0.5d0**(3*r%levelmin)/n_per_cell
                  p%idp(ipart)=ipart_grafic*n_per_cell + (ipercell-1) + 1
-                 p%size(ipart)= 0.05d0
-                 p%charge(ipart)= 0.0d0
+                 if (r%grain_size>0.0d0) then
+                    p%size(ipart)=r%grain_size
+                 else
+                    p%size(ipart)= 0.0d0 ! Other grain size setting methods will be implemented later
+                 endif
+                 if (r%grain_charge>0.0d0) then
+                    p%charge(ipart)=r%grain_charge
+                 else
+                    p%charge(ipart)= 0.0d0 ! Other grain charge setting methods will be implemented later
+                 endif
                  ipart=ipart+1
               endif
            end do

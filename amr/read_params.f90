@@ -74,6 +74,8 @@ subroutine m_read_params(pst)
   ! IC subcell multiplicity
   integer::ntrac_per_cell=1
   integer::ndust_per_cell=1
+  real(kind=8)::grain_size=0.0d0
+  real(kind=8)::grain_charge=0.0d0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -609,7 +611,7 @@ subroutine m_read_params(pst)
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
   ! Tracer particles parameters
   namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme
-  namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,dust_mass_deposition_scheme,dust_force_interpolation_scheme
+  namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,grain_size,grain_charge,dust_mass_deposition_scheme,dust_force_interpolation_scheme
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -1198,6 +1200,8 @@ subroutine m_read_params(pst)
   s%r%ndustmax=ndustmax
   s%r%ntrac_per_cell=ntrac_per_cell
   s%r%ndust_per_cell=ndust_per_cell
+  s%r%grain_size=grain_size
+  s%r%grain_charge=grain_charge
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size

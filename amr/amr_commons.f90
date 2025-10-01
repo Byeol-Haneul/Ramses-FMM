@@ -68,6 +68,8 @@ module amr_commons
      integer::ndustmax=0         ! Maximum number of dust particles
      integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
      integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
+     real(kind=8)::grain_size=0.0d0   ! Default dust grain size
+     real(kind=8)::grain_charge=0.0d0  ! Default dust grain charge
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
      real(kind=8)::box_size=0.0      ! Box length of active domain along x direction
