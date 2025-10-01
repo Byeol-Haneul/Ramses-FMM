@@ -797,7 +797,6 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
-
   integer::ind,ivar
   type(msg_nvar_realdp)::msg
 
@@ -820,21 +819,13 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-#ifdef GRAV
-  use cache_commons, only: msg_nvarplusthree_realdp
-#else
-  use cache_commons, only: msg_nvar_realdp
-#endif
+  use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
-#ifdef GRAV
-  type(msg_nvarplusthree_realdp)::msg
-#else
-  type(msg_nvar_realdp)::msg
-#endif
+  type(msg_large_realdp)::msg
 
 #ifdef HYDRO
   do ind=1,twotondim
@@ -850,7 +841,18 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
      msg%realdp_dis(ind)=grid%f(ind,3)
   end do
 #endif
-
+#ifdef RT
+  do ind=1,twotondim
+     do ivar=1,nrtvar
+        msg%realdp_rt(ind,ivar)=grid%rtuold(ind,ivar)
+     end do
+  end do
+#endif
+#ifdef MHD
+  do ind=1,twotondim
+     msg%realdp_mhd(ind)=grid%bold(ind)
+  end do
+#endif
   msg_array=transfer(msg,msg_array)
 
 end subroutine pack_fetch_kick_dust
@@ -860,22 +862,14 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-#ifdef GRAV
-  use cache_commons, only: msg_nvarplusthree_realdp
-#else
-  use cache_commons, only: msg_nvar_realdp
-#endif
+  use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
 
   integer::ind,ivar
-#ifdef GRAV
-  type(msg_nvarplusthree_realdp)::msg
-#else
-  type(msg_nvar_realdp)::msg
-#endif
+  type(msg_large_realdp)::msg
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
@@ -893,6 +887,18 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
      grid%f(ind,1)=msg%realdp_phi(ind)
      grid%f(ind,2)=msg%realdp_phi_old(ind)
      grid%f(ind,3)=msg%realdp_dis(ind)
+  end do
+#endif
+#ifdef RT
+  do ind=1,twotondim
+     do ivar=1,nrtvar
+        grid%rtuold(ind,ivar)=msg%realdp_rt(ind,ivar)
+     end do
+  end do
+#endif
+#ifdef MHD
+  do ind=1,twotondim
+     grid%bold(ind)=msg%realdp_mhd(ind)
   end do
 #endif
 
@@ -1389,6 +1395,7 @@ end subroutine pcs_trace_gas_part
 !#########################################################################
 subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, twotondim
+  use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
   use oct_commons, only: oct
@@ -1397,6 +1404,8 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   use cache_commons
   use cache
   implicit none
+  ! Intrinsic functions for drag calculations
+  intrinsic :: sinh, cosh
   type(ramses_t)::s
   type(part_t)::p
   integer::ilevel
@@ -1408,106 +1417,50 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
   integer::icell,icell2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,ind,idim
+  integer::ipart,ind,idim,irad
   real(kind=8)::dx_loc,vol_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
+  real(kind=8),dimension(1:ndim)::uu
+  real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
+  real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi=4.0d0*atan(1.0d0)
+  real(kind=8),dimension(1:ndim)::what,wdrift ! drift velocity unit vector
   type(oct),pointer :: gridp
   logical :: ok_level
-#ifdef GRAV
-  type(msg_nvarplusthree_realdp)::dummy_dust
-#else
-  type(msg_nvar_realdp)::dummy_dust
-#endif
+  type(msg_large_realdp)::dummy_large_realdp
+
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   dx_loc=r%boxlen/2**ilevel
   vol_loc=dx_loc**ndim
   if (p%type/=DUST_TYPE) return
+  coeff=9.0d0*pi*r%gamma/128.0d0
   ! Dust hydro+gravity cache
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_dust)/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
                      pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+
   do ipart=p%headp(ilevel),p%tailp(ilevel)
-     ! Position in cell units at current level
+    
+     ! Rescale particle position at level ilevel
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
-     do idim=1,ndim
-        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
-        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
-     end do
-
-     ! Gather velocity v = mom/rho at x^n using CIC
-     do idim=1,ndim
-        dr(idim)=x(idim)+0.5D0
-        ir(idim)=int(dr(idim))
-        dr(idim)=dr(idim)-ir(idim)
-        dl(idim)=1.0D0-dr(idim)
-        il(idim)=ir(idim)-1
-     end do
-     do idim=1,ndim
-        if(il(idim)<0)il(idim)=m%ckey_max(ilevel+1)-1
-        if(ir(idim)==m%ckey_max(ilevel+1))ir(idim)=0
-     enddo
-     ckey = cic_index(il,ir)
-     vol = cic_weight(dl,dr)
+    
+     ! For dust, we may not need gravity force (set to zero if no grav)
      ff(1:ndim)=0.0
-     ok_level=.true.
-     hash_nbor(0)=ilevel+1
-     do ind=1,twotondim
-        hash_nbor(1:ndim)=ckey(1:ndim,ind)
-        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-        if(associated(gridp))then
-           ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
-        else
-           ok_level=.false.
-        end if
-#endif
-     end do
-     if(.not.ok_level)then
-        do idim=1,ndim
-           x(idim)=x(idim)/2.0d0
-        end do
-        do idim=1,ndim
-           dr(idim)=x(idim)+0.5D0
-           ir(idim)=int(dr(idim))
-           dr(idim)=dr(idim)-ir(idim)
-           dl(idim)=1.0D0-dr(idim)
-           il(idim)=ir(idim)-1
-        end do
-        do idim=1,ndim
-           if(il(idim)<0)il(idim)=m%ckey_max(ilevel)-1
-           if(ir(idim)==m%ckey_max(ilevel))ir(idim)=0
-        enddo
-        ckey = cic_index(il,ir)
-        vol = cic_weight(dl,dr)
-        ff(1:ndim)=0.0
-        hash_nbor(0)=ilevel
-        do ind=1,twotondim
-           hash_nbor(1:ndim)=ckey(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
-#ifdef HYDRO
-           if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)*vol(ind)
-           end if
-#endif
-        end do
-     end if
-
+    
      if(action_part==action_kick_only)then
         ! RK2 step 1 (early call): stash v^n at x^n, no move
-        p%vp(ipart,1:ndim)=ff(1:ndim)
+        ! For dust with drag, store current velocity (no kick from gravity for now)
+        ! p%vp already contains the velocity, so just update level
         p%levelp(ipart)=ilevel
 
      else if(action_part==action_kick_drift)then
-        ! RK2 step 2 (late call): predict midpoint and correct
-        ! Use stored v^n if available; fallback to current ff at step 0
-        if (g%nstep>0) then
-           v_pred(1:ndim)=p%vp(ipart,1:ndim)
-        else
-           v_pred(1:ndim)=ff(1:ndim)
-        endif
+
+        p%levelp(ipart)=ilevel
+        ! if there are other forces, they'd be added below to get v_pred.
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+
         ! Predict x_mid in cell units
         do idim=1,ndim
            x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
@@ -1517,7 +1470,7 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
            if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
         end do
 
-        ! Gather v^{n+1} at x_mid using CIC
+        ! Gather hydro variables at x_mid using CIC
         do idim=1,ndim
            dr2(idim)=x_mid(idim)+0.5D0
            ir2(idim)=int(dr2(idim))
@@ -1531,7 +1484,9 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
         enddo
         ckey2 = cic_index(il2,ir2)
         vol2 = cic_weight(dl2,dr2)
-        ff(1:ndim)=0.0
+        uu(1:ndim)=0.0
+        rho_gas = 0.0
+        eint = 0.0
         ok_level=.true.
         hash_nbor(0)=ilevel+1
         do ind=1,twotondim
@@ -1539,12 +1494,43 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              ! accumulate thermal internal energy density (exclude kinetic and non-thermal)
+              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+              etot = gridp%uold(icell2,5)
+              ekin = 0.0d0
+              do idim=1,ndim
+                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+              end do
+              erad = 0.0d0
+#if NENER>0
+              do irad=1,nener
+                 erad = erad + gridp%uold(icell2,5+irad)
+              end do
+#endif
+              eint = eint + (etot - ekin - erad) * vol2(ind)
            else
               ok_level=.false.
            end if
-#endif
         end do
+        cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+        c_sound = max(sqrt(cs2), r%smallc)
+        ! subsonic stopping rate (no Kwok correction)
+        nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+        ! Compute drift velocity, unit vector, and magnitude
+        wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
+        wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
+        what(1:ndim)=wdrift(1:ndim)/sqrt(wdrift2)
+        ! We're doing an exact drag update, so we don't need to compute a corrected nu_stop;
+        ! it's implicitly in there anyway.
+        !nu_stop = nu_stop * (1.0d0 + (9.0d0*pi*r%gamma/128.0d0)*wdrift2/c_sound**2)**0.5d0
+        ! New drift velocity
+        wdrift(1:ndim) = c_sound * what(1:ndim) * &
+        & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
+        ! Update velocity
+        p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
+#endif
         if(.not.ok_level)then
            do idim=1,ndim
               x_mid(idim)=x_mid(idim)/2.0d0
@@ -1559,41 +1545,73 @@ subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
            do idim=1,ndim
               if(il2(idim)<0)il2(idim)=m%ckey_max(ilevel)-1
               if(ir2(idim)==m%ckey_max(ilevel))ir2(idim)=0
-           enddo
+           end do
            ckey2 = cic_index(il2,ir2)
            vol2 = cic_weight(dl2,dr2)
-           ff(1:ndim)=0.0
+           uu(1:ndim)=0.0
            hash_nbor(0)=ilevel
            do ind=1,twotondim
               hash_nbor(1:ndim)=ckey2(1:ndim,ind)
               call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
               if(associated(gridp))then
-                 ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
-              end if
+                 rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+                 uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+                 ! accumulate thermal internal energy density (exclude kinetic and non-thermal)
+                 dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+                 etot = gridp%uold(icell2,5)
+                 ekin = 0.0d0
+                 do idim=1,ndim
+                    ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+                 end do
+                 erad = 0.0d0
+#if NENER>0
+                 do irad=1,nener
+                    erad = erad + gridp%uold(icell2,5+irad)
+                 end do
 #endif
+                 eint = eint + (etot - ekin - erad) * vol2(ind)
+              else
+                 ok_level=.false.
+              end if
            end do
+           cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+           c_sound = max(sqrt(cs2), r%smallc)
+           ! subsonic stopping rate (no Kwok correction)
+           nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+           ! Compute drift velocity, unit vector, and magnitude
+           wdrift(1:ndim)= p%vp(ipart,1:ndim) - uu(1:ndim)
+           wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
+           what(1:ndim)=wdrift(1:ndim)/max(sqrt(wdrift2),r%smallc)
+           ! We're doing an exact drag update, so we don't need to compute a corrected nu_stop;
+           ! it's implicitly in there anyway.
+           !nu_stop = nu_stop * (1.0d0 + (9.0d0*pi*r%gamma/128.0d0)*wdrift2/c_sound**2)**0.5d0
+           ! New drift velocity
+           wdrift(1:ndim) = c_sound * what(1:ndim) * &
+           & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
+           ! Update velocity
+           p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
+#endif
         end if
-        ! Set time-centered velocity and drift
-        p%vp(ipart,1:ndim)=ff(1:ndim)
+
+        ! Set position
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-     endif
-  end do
-  call close_cache(s,m%grid_dict)
-  
-  if(action_part==action_kick_drift)then
-     do ipart=p%headp(ilevel),p%tailp(ilevel)
         do idim=1,ndim
            if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
            if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
         end do
-     end do
-  end if
+     endif
+
+  end do ! end of do ipart=p%headp(ilevel),p%tailp(ilevel)
+
+  call close_cache(s,m%grid_dict)
+  
   end associate
 end subroutine cic_kick_drift_dust
 
 subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, threetondim
+  use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
   use oct_commons, only: oct
@@ -1613,25 +1631,26 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8),dimension(1:threetondim)::vol,vol2
   integer,dimension(1:ndim,1:threetondim)::ckey,ckey2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,icell,icell2,ind,idim
+  integer::ipart,icell,icell2,ind,idim,irad
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff,v_pred
+  real(kind=8),dimension(1:ndim)::ff,v_pred,uu,what,wdrift
+  real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
+  real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
   type(oct),pointer::gridp
-  logical::ok_level
-#ifdef GRAV
-  type(msg_nvarplusthree_realdp)::dummy_dust
-#else
-  type(msg_nvar_realdp)::dummy_dust
-#endif
+  type(msg_large_realdp)::dummy_large_realdp
+
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   if (p%type/=DUST_TYPE) return
   dx_loc=r%boxlen/2**ilevel
+  pi=4.0d0*atan(1.0d0)
+  coeff=9.0d0*pi*r%gamma/128.0d0
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_dust)/32,&
-                     pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
+       hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
+       pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
+     ! particle position in cell units and periodic wrap
      do idim=1,ndim
         x(idim)=p%xp(ipart,idim)/dx_loc
      end do
@@ -1639,6 +1658,8 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
         if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
      end do
+
+     ! TSC weights and indices at x
      do idim=1,ndim
         cl(idim)=int(x(idim))-1
         cc(idim)=int(x(idim))
@@ -1656,6 +1677,8 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
      enddo
      ckey = tsc_index(cl,cc,cr)
      vol = tsc_weight(wl,wc,wr)
+
+     ! gas velocity estimate at x for v_pred fallback when nstep==0
      hash_nbor(0)=ilevel+1
      ff(1:ndim)=0.0
      do ind=1,threetondim
@@ -1669,12 +1692,10 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
      end do
 
      if(action_part==action_kick_only)then
-        ! RK2 step 1: stash v^n at x^n
-        p%vp(ipart,1:ndim)=ff(1:ndim)
         p%levelp(ipart)=ilevel
 
      else if(action_part==action_kick_drift)then
-        ! RK2 step 2: predict with v^n, sample v^{n+1} at midpoint
+        ! RK2: predict with v^n, sample gas at midpoint with TSC, do exact drag update
         if (g%nstep>0) then
            v_pred(1:ndim)=p%vp(ipart,1:ndim)
         else
@@ -1704,18 +1725,43 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         enddo
         ckey2 = tsc_index(cl2,cc2,cr2)
         vol2 = tsc_weight(wl2,wc2,wr2)
+
+        uu(1:ndim)=0.0
+        rho_gas=0.0d0
+        eint=0.0d0
         hash_nbor(0)=ilevel+1
-        ff(1:ndim)=0.0
         do ind=1,threetondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+              uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+              etot = gridp%uold(icell2,5)
+              ekin = 0.0d0
+              do idim=1,ndim
+                 ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+              end do
+              erad = 0.0d0
+#if NENER>0
+              do irad=1,nener
+                 erad = erad + gridp%uold(icell2,5+irad)
+              end do
+#endif
+              eint = eint + (etot - ekin - erad) * vol2(ind)
            end if
 #endif
         end do
-        p%vp(ipart,1:ndim)=ff(1:ndim)
+        cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+        c_sound = max(sqrt(cs2), r%smallc)
+        nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+        wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
+        wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
+        what(1:ndim)=wdrift(1:ndim)/max(1.0d-30, sqrt(wdrift2))
+        wdrift(1:ndim) = c_sound * what(1:ndim) * &
+        & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
+        p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
      endif
   end do
@@ -1733,6 +1779,7 @@ end subroutine tsc_kick_drift_dust
 
 subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, fourtondim
+  use hydro_parameters, only: nener
   use pm_parameters
   use pm_commons, only: part_t
   use oct_commons, only: oct
@@ -1755,19 +1802,21 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   integer::ipart,icell,icell2,ind,idim
   real(kind=8)::xll,xl,xr,xrr
   real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff,v_pred
+  real(kind=8),dimension(1:ndim)::ff,v_pred,uu,what,wdrift
+  real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
+  real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
+  integer::irad
   type(oct),pointer::gridp
-#ifdef GRAV
-  type(msg_nvarplusthree_realdp)::dummy_dust
-#else
-  type(msg_nvar_realdp)::dummy_dust
-#endif
+  type(msg_large_realdp)::dummy_large_realdp
+
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
   if (p%type/=DUST_TYPE) return
   dx_loc=r%boxlen/2**ilevel
+  pi=4.0d0*atan(1.0d0)
+  coeff=9.0d0*pi*r%gamma/128.0d0
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-       hilbert=m%domain, pack_size=storage_size(dummy_dust)/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
        pack=pack_fetch_kick_dust,unpack=unpack_fetch_kick_dust)
   do ipart=p%headp(ilevel),p%tailp(ilevel)
      do idim=1,ndim
@@ -1811,61 +1860,88 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
 #endif
      end do
 
-     if(action_part==action_kick_only)then
-        ! RK2 step 1: stash v^n at x^n
-        p%vp(ipart,1:ndim)=ff(1:ndim)
+    if(action_part==action_kick_only)then
+       ! RK2 step 1: stash state; keep velocity as-is for drag scheme
         p%levelp(ipart)=ilevel
 
-     else if(action_part==action_kick_drift)then
-        ! RK2 step 2: predict with v^n, sample v^{n+1} at midpoint
-        if (g%nstep>0) then
-           v_pred(1:ndim)=p%vp(ipart,1:ndim)
-        else
-           v_pred(1:ndim)=ff(1:ndim)
-        endif
-        do idim=1,ndim
-           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
-        end do
-        do idim=1,ndim
-           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
-           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
-        end do
-        do idim=1,ndim
-           crr2(idim)=int(x_mid(idim)+1.5D0)
-           cr2 (idim)=crr2(idim)-1
-           cl2 (idim)=crr2(idim)-2
-           cll2(idim)=crr2(idim)-3
-           xll=dble(cll2(idim))+0.5D0
-           xl =dble(cl2 (idim))+0.5D0
-           xr =dble(cr2 (idim))+0.5D0
-           xrr=dble(crr2(idim))+0.5D0
-           wll2(idim)=(2D0-abs(x_mid(idim)-xll))**3/6D0
-           wl2 (idim)=(4D0-6D0*(x_mid(idim)-xl)**2+3d0*abs(x_mid(idim)-xl )**3)/6D0
-           wr2 (idim)=(4D0-6D0*(x_mid(idim)-xr)**2+3d0*abs(x_mid(idim)-xr )**3)/6D0
-           wrr2(idim)=(2D0-abs(x_mid(idim)-xrr))**3/6D0
-        end do
-        do idim=1,ndim
-           if(cll2(idim)<0)cll2(idim)=cll2(idim)+m%ckey_max(ilevel+1)
-           if(cl2 (idim)<0)cl2 (idim)=cl2 (idim)+m%ckey_max(ilevel+1)
-           if(cr2 (idim)>=m%ckey_max(ilevel+1))cr2 (idim)=cr2 (idim)-m%ckey_max(ilevel+1)
-           if(crr2(idim)>=m%ckey_max(ilevel+1))crr2(idim)=crr2(idim)-m%ckey_max(ilevel+1)
-        enddo
-        ckey2 = pcs_index(cll2,cl2,cr2,crr2)
-        vol2 = pcs_weight(wll2,wl2,wr2,wrr2)
-        hash_nbor(0)=ilevel+1
-        ff(1:ndim)=0.0
-        do ind=1,fourtondim
-           hash_nbor(1:ndim)=ckey2(1:ndim,ind)
-           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+    else if(action_part==action_kick_drift)then
+       ! RK2 step 2: predict with v^n, sample gas state at midpoint
+       if (g%nstep>0) then
+          v_pred(1:ndim)=p%vp(ipart,1:ndim)
+       else
+          v_pred(1:ndim)=ff(1:ndim)
+       endif
+       do idim=1,ndim
+          x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+       end do
+       do idim=1,ndim
+          if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+          if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+       end do
+       do idim=1,ndim
+          crr2(idim)=int(x_mid(idim)+1.5D0)
+          cr2 (idim)=crr2(idim)-1
+          cl2 (idim)=crr2(idim)-2
+          cll2(idim)=crr2(idim)-3
+          xll=dble(cll2(idim))+0.5D0
+          xl =dble(cl2 (idim))+0.5D0
+          xr =dble(cr2 (idim))+0.5D0
+          xrr=dble(crr2(idim))+0.5D0
+          wll2(idim)=(2D0-abs(x_mid(idim)-xll))**3/6D0
+          wl2 (idim)=(4D0-6D0*(x_mid(idim)-xl)**2+3d0*abs(x_mid(idim)-xl )**3)/6D0
+          wr2 (idim)=(4D0-6D0*(x_mid(idim)-xr)**2+3d0*abs(x_mid(idim)-xr )**3)/6D0
+          wrr2(idim)=(2D0-abs(x_mid(idim)-xrr))**3/6D0
+       end do
+       do idim=1,ndim
+          if(cll2(idim)<0)cll2(idim)=cll2(idim)+m%ckey_max(ilevel+1)
+          if(cl2 (idim)<0)cl2 (idim)=cl2 (idim)+m%ckey_max(ilevel+1)
+          if(cr2 (idim)>=m%ckey_max(ilevel+1))cr2 (idim)=cr2 (idim)-m%ckey_max(ilevel+1)
+          if(crr2(idim)>=m%ckey_max(ilevel+1))crr2(idim)=crr2(idim)-m%ckey_max(ilevel+1)
+       enddo
+       ckey2 = pcs_index(cll2,cl2,cr2,crr2)
+       vol2 = pcs_weight(wll2,wl2,wr2,wrr2)
+       hash_nbor(0)=ilevel+1
+       uu(1:ndim)=0.0
+       rho_gas=0.0d0
+       eint=0.0d0
+       do ind=1,fourtondim
+          hash_nbor(1:ndim)=ckey2(1:ndim,ind)
+          call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
-           if(associated(gridp))then
-              ff(1:ndim)=ff(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
-           end if
+          if(associated(gridp))then
+             rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
+             uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+             dens = max(dble(gridp%uold(icell2,1)), r%smallr)
+             etot = gridp%uold(icell2,5)
+             ekin = 0.0d0
+             do idim=1,ndim
+                ekin = ekin + 0.5d0 * gridp%uold(icell2,1+idim)**2 / dens
+             end do
+             erad = 0.0d0
+#if NENER>0
+             do irad=1,nener
+                erad = erad + gridp%uold(icell2,5+irad)
+             end do
 #endif
-        end do
-        p%vp(ipart,1:ndim)=ff(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
-     endif
+             eint = eint + (etot - ekin - erad) * vol2(ind)
+          end if
+#endif
+       end do
+       cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
+       c_sound = max(sqrt(cs2), r%smallc)
+       nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
+       wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
+       wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
+       if(wdrift2>0.0d0)then
+         what(1:ndim)=wdrift(1:ndim)/sqrt(wdrift2)
+         wdrift(1:ndim) = c_sound * what(1:ndim) * &
+         & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2))
+       else
+         wdrift(1:ndim)=0.0d0
+       end if
+       p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
+       p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+    endif
   end do
   call close_cache(s,m%grid_dict)
   if(action_part==action_kick_drift)then
@@ -1878,6 +1954,46 @@ subroutine pcs_kick_drift_dust(s,p,ilevel,action_part)
   end if
   end associate
 end subroutine pcs_kick_drift_dust
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+function exact_drag(t, nu, eta, w0) result(drag_value)
+  ! Computes drag coefficient based on the analytic solution for Epstein-Baines drag:
+  ! drag(t) = sqrt(((sinh(nu*t) + sqrt(1 + eta*w0^2)*cosh(nu*t)) / 
+  !                  (cosh(nu*t) + sqrt(1 + nu*w0^2)*sinh(nu*t)))^2 - 1)
+  implicit none
+  real(kind=8), intent(in) :: t, nu, eta, w0
+  real(kind=8) :: drag_value
+  
+  real(kind=8) :: sinh_term, cosh_term, sqrt_term, numerator, denominator, ratio
+  
+  ! Compute hyperbolic functions
+  sinh_term = sinh(nu * t)
+  cosh_term = cosh(nu * t)
+  
+  ! Compute sqrt(1 + eta*w0^2) - note: using eta as in the original formula
+  sqrt_term = sqrt(1.0d0 + eta * w0**2)
+  
+  ! Compute numerator: sinh(nu*t) + sqrt(1 + eta*w0^2)*cosh(nu*t)
+  numerator = sinh_term + sqrt_term * cosh_term
+  
+  ! Compute denominator: cosh(nu*t) + sqrt(1 + nu*w0^2)*sinh(nu*t)
+  ! Note: Using nu instead of eta in the denominator as per original formula
+  denominator = cosh_term + sqrt(1.0d0 + eta * w0**2) * sinh_term
+  
+  ! Avoid division by zero
+  if (abs(denominator) < 1.0d-15) then
+     drag_value = 0.0d0
+     return
+  end if
+  
+  ! Compute ratio and final result
+  ratio = numerator / denominator
+  drag_value = sqrt(max(0.0d0, ratio**2 - 1.0d0))/sqrt(eta)
+  
+end function exact_drag
 
 !#########################################################################
 !#########################################################################

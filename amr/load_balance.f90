@@ -727,7 +727,7 @@ recursive subroutine r_balance_part(pst,ilevel,input_size,output_array,output_si
         call balance_part(pst%s,pst%s%tree,ilevel)
      endif
      if(pst%s%r%trac)then
-      call balance_part(pst%s,pst%s%trac,ilevel)
+        call balance_part(pst%s,pst%s%trac,ilevel)
      endif
      if(pst%s%r%dust)then
         call balance_part(pst%s,pst%s%dust,ilevel)

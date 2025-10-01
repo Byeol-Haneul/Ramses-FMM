@@ -46,6 +46,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
            filename2=TRIM(filename)//'trac.'
            call backup_part(pst%s%r,pst%s%g,pst%s%trac,filename2)
         endif
+        if(pst%s%r%dust)then
+           filename2=TRIM(filename)//'dust.'
+           call backup_part(pst%s%r,pst%s%g,pst%s%dust,filename2)
+        endif
      else
         if(pst%s%r%part)then
            filename2=TRIM(filename)//'part.'
@@ -66,6 +70,10 @@ recursive subroutine r_output_part(pst,input_array,input_size,output_array,outpu
         if(pst%s%r%trac)then
            filename2=TRIM(filename)//'trac.'
            call output_part(pst%s,pst%s%trac,filename2)
+        endif
+        if(pst%s%r%dust)then
+           filename2=TRIM(filename)//'dust.'
+           call output_part(pst%s,pst%s%dust,filename2)
         endif
      endif
   endif

@@ -61,12 +61,6 @@ module cache_commons
   type msg_nvar_realdp
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
   end type msg_nvar_realdp
-  type msg_nvarplusthree_realdp
-     real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
-     real(kind=8),dimension(1:twotondim)::realdp_phi
-     real(kind=8),dimension(1:twotondim)::realdp_phi_old
-     real(kind=8),dimension(1:twotondim)::realdp_dis
-  end type msg_nvarplusthree_realdp
   type msg_large_realdp
      integer(kind=4),dimension(1:twotondim)::int4
      real(kind=8),dimension(1:twotondim,1:nvar)::realdp_hydro
