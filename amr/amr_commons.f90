@@ -66,6 +66,8 @@ module amr_commons
      integer::ntreemax=0         ! Maximum number of tree particles
      integer::ntracmax=0         ! Maximum number of tracer particles
      integer::ndustmax=0         ! Maximum number of dust particles
+     integer::ntrac_per_cell=1   ! Number of tracer particles per cell in ICs
+     integer::ndust_per_cell=1   ! Number of dust particles per cell in ICs
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
      real(kind=8)::box_size=0.0      ! Box length of active domain along x direction

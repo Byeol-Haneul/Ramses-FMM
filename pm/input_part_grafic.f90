@@ -371,15 +371,16 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
    !----------------------------------------------------
    ! Reading initial conditions from single GRAFIC file
    !----------------------------------------------------
-   integer::icpu,ipart,idim
+  integer::icpu,ipart,idim,ipercell,n_per_cell
    integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
-   integer::plane_size
-   real(kind=8)::dx,xx1,xx2,xx3
+  integer::plane_size
+  real(kind=8)::dx,xx1,xx2,xx3
    real(kind=8)::dispmax=0.0
    integer,dimension(1:g%ncpu)::npart_loc
-   integer(kind=8)::ipart_grafic
+  integer(kind=8)::ipart_grafic
    integer(kind=8),dimension(1:g%ncpu+1)::start_ind
-   real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
+  real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
+  real(kind=8),dimension(:),allocatable::tdx,tdy,tdz
    character(LEN=80)::filename,filename_x
    character(LEN=5)::nchar
    logical::ok,error,keep_part,read_pos=.false.
@@ -399,7 +400,9 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
          npart_loc(icpu-1)=start_ind(icpu)-start_ind(icpu-1)
       endif
    end do
-   p%npart=npart_loc(g%myid)
+  ! Number of tracers per cell
+  n_per_cell = max(1,r%ntrac_per_cell)
+  p%npart=n_per_cell*npart_loc(g%myid)
 
    ! Check that local number of tracer particles does not exceed maximum
    if(p%npart > r%ntracmax)then
@@ -410,30 +413,36 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
    !--------------------------------------
    ! Initialize particles in planes
    !--------------------------------------
-   plane_size=g%n1(r%levelmin)*g%n2(r%levelmin)
+  plane_size=g%n1(r%levelmin)*g%n2(r%levelmin)
    i3_min=start_ind(g%myid)/plane_size
    i3_max=(start_ind(g%myid+1)-1)/plane_size
  
-   ipart=1
+  ! Precompute subcell offsets
+  allocate(tdx(1:n_per_cell),tdy(1:n_per_cell),tdz(1:n_per_cell))
+  call part_subcell_positions(n_per_cell,tdx,tdy,tdz)
+
+  ipart=1
    ipart_grafic=i3_min*plane_size
  
    ! Initialize positions, masses and ids
    do i3=i3_min,i3_max
       do i2=0,g%n2(r%levelmin)-1
          do i1=0,g%n1(r%levelmin)-1
-            keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
-            if(keep_part)then
-               xx1=(dble(i1)+0.5)/dble(g%n1(r%levelmin))
-               xx2=(dble(i2)+0.5)/dble(g%n2(r%levelmin))
-               xx3=(dble(i3)+0.5)/dble(g%n3(r%levelmin))
-               if(ndim>0)p%xp(ipart,1)=xx1
-               if(ndim>1)p%xp(ipart,2)=xx2
-               if(ndim>2)p%xp(ipart,3)=xx3
-               p%mp(ipart)=0.5d0**(3*r%levelmin)
-               p%idp(ipart)=ipart_grafic+1
-               ipart=ipart+1
-            endif
-            ipart_grafic=ipart_grafic+1
+           do ipercell=1,n_per_cell
+              keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
+              if(keep_part)then
+                 xx1=(dble(i1)+0.5)/dble(g%n1(r%levelmin))
+                 xx2=(dble(i2)+0.5)/dble(g%n2(r%levelmin))
+                 xx3=(dble(i3)+0.5)/dble(g%n3(r%levelmin))
+                 if(ndim>0)p%xp(ipart,1)=xx1+tdx(ipercell)*dx
+                 if(ndim>1)p%xp(ipart,2)=xx2+tdy(ipercell)*dx
+                 if(ndim>2)p%xp(ipart,3)=xx3+tdz(ipercell)*dx
+                 p%mp(ipart)=0.5d0**(3*r%levelmin)/n_per_cell
+                 p%idp(ipart)=ipart_grafic*n_per_cell + (ipercell-1) + 1
+                 ipart=ipart+1
+              endif
+           end do
+           ipart_grafic=ipart_grafic+1
          end do
       end do
    end do
@@ -486,8 +495,8 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
       end if
  
       ! Read useful planes
-      ipart=1
-      ipart_grafic=i3_min*plane_size
+     ipart=1
+     ipart_grafic=i3_min*plane_size
       do i3=i3_min,i3_max
          read(10)((init_plane(i1,i2),i1=1,g%n1(r%levelmin)),i2=1,g%n2(r%levelmin))
          if(read_pos)then
@@ -498,22 +507,24 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
          if(read_pos)then
             init_plane_x = init_plane_x/g%boxlen_ini
          endif
-         do i2=1,g%n2(r%levelmin)
-            do i1=1,g%n1(r%levelmin)
-               keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
-               if(keep_part)then
-                  p%vp(ipart,idim)=init_plane(i1,i2)
-                  if(.not. read_pos)then
-                     dispmax=max(dispmax,abs(init_plane(i1,i2)/dx))
-                  else
-                     p%xp(ipart,idim)=p%xp(ipart,idim)+init_plane_x(i1,i2)
-                     dispmax=max(dispmax,abs(init_plane_x(i1,i2)/dx))
-                  endif
-                  ipart=ipart+1
-               endif
-               ipart_grafic=ipart_grafic+1
-            end do
-         end do
+        do i2=1,g%n2(r%levelmin)
+           do i1=1,g%n1(r%levelmin)
+              do ipercell=1,n_per_cell
+                 keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
+                 if(keep_part)then
+                    p%vp(ipart,idim)=init_plane(i1,i2)
+                    if(.not. read_pos)then
+                       dispmax=max(dispmax,abs(init_plane(i1,i2)/dx))
+                    else
+                       p%xp(ipart,idim)=p%xp(ipart,idim)+init_plane_x(i1,i2)
+                       dispmax=max(dispmax,abs(init_plane_x(i1,i2)/dx))
+                    endif
+                    ipart=ipart+1
+                 endif
+              end do
+              ipart_grafic=ipart_grafic+1
+           end do
+        end do
       end do
       ! End loop over planes
       close(10)
@@ -522,9 +533,10 @@ subroutine input_trac_grafic(r,g,p,npart_tot)
    end do
    ! End loop over dimensions
  
-   ! Deallocate temporary array
-   deallocate(init_plane)
-   if(read_pos)deallocate(init_plane_x)
+  ! Deallocate temporary array
+  deallocate(init_plane)
+  if(read_pos)deallocate(init_plane_x)
+  if(allocated(tdx))deallocate(tdx,tdy,tdz)
  
    ! Periodic box
    do ipart=1,p%npart
@@ -599,15 +611,16 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
    !----------------------------------------------------
    ! Reading initial conditions from single GRAFIC file
    !----------------------------------------------------
-   integer::icpu,ipart,idim
+  integer::icpu,ipart,idim,ipercell,n_per_cell
    integer::i1,i2,i3,i1_min,i1_max,i2_min,i2_max,i3_min,i3_max
-   integer::plane_size
-   real(kind=8)::dx,xx1,xx2,xx3
+  integer::plane_size
+  real(kind=8)::dx,xx1,xx2,xx3
    real(kind=8)::dispmax=0.0
    integer,dimension(1:g%ncpu)::npart_loc
-   integer(kind=8)::ipart_grafic
+  integer(kind=8)::ipart_grafic
    integer(kind=8),dimension(1:g%ncpu+1)::start_ind
-   real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
+  real(kind=4),dimension(:,:),allocatable::init_plane,init_plane_x
+  real(kind=8),dimension(:),allocatable::tdx,tdy,tdz
    character(LEN=80)::filename,filename_x
    character(LEN=5)::nchar
    logical::ok,error,keep_part,read_pos=.false.
@@ -627,7 +640,9 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
          npart_loc(icpu-1)=start_ind(icpu)-start_ind(icpu-1)
       endif
    end do
-   p%npart=npart_loc(g%myid)
+  ! Number of dust per cell
+  n_per_cell = MAX(1,r%ndust_per_cell)
+  p%npart=n_per_cell*npart_loc(g%myid)
 
    ! Check that local number of dust particles does not exceed maximum
    if(p%npart > r%ndustmax)then
@@ -642,28 +657,34 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
    i3_min=start_ind(g%myid)/plane_size
    i3_max=(start_ind(g%myid+1)-1)/plane_size
  
-   ipart=1
+  ! Precompute subcell offsets
+  allocate(tdx(1:n_per_cell),tdy(1:n_per_cell),tdz(1:n_per_cell))
+  call part_subcell_positions(n_per_cell,tdx,tdy,tdz)
+
+  ipart=1
    ipart_grafic=i3_min*plane_size
  
    ! Initialize positions, masses and ids
    do i3=i3_min,i3_max
       do i2=0,g%n2(r%levelmin)-1
          do i1=0,g%n1(r%levelmin)-1
-            keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
-            if(keep_part)then
-               xx1=(dble(i1)+0.5)/dble(g%n1(r%levelmin))
-               xx2=(dble(i2)+0.5)/dble(g%n2(r%levelmin))
-               xx3=(dble(i3)+0.5)/dble(g%n3(r%levelmin))
-               if(ndim>0)p%xp(ipart,1)=xx1
-               if(ndim>1)p%xp(ipart,2)=xx2
-               if(ndim>2)p%xp(ipart,3)=xx3
-               p%mp(ipart)=1.0d-2 * 0.5d0**(3*r%levelmin)
-               p%idp(ipart)=ipart_grafic+1
-               p%size(ipart)= 0.05d0 ! Constant just as a test.
-               p%charge(ipart)= 0.0d0 ! Constant just as a test.
-               ipart=ipart+1
-            endif
-            ipart_grafic=ipart_grafic+1
+           do ipercell=1,n_per_cell
+              keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
+              if(keep_part)then
+                 xx1=(dble(i1)+0.5)/dble(g%n1(r%levelmin))
+                 xx2=(dble(i2)+0.5)/dble(g%n2(r%levelmin))
+                 xx3=(dble(i3)+0.5)/dble(g%n3(r%levelmin))
+                 if(ndim>0)p%xp(ipart,1)=xx1+tdx(ipercell)*dx
+                 if(ndim>1)p%xp(ipart,2)=xx2+tdy(ipercell)*dx
+                 if(ndim>2)p%xp(ipart,3)=xx3+tdz(ipercell)*dx
+                 p%mp(ipart)=1.0d-2 * 0.5d0**(3*r%levelmin)/n_per_cell
+                 p%idp(ipart)=ipart_grafic*n_per_cell + (ipercell-1) + 1
+                 p%size(ipart)= 0.05d0
+                 p%charge(ipart)= 0.0d0
+                 ipart=ipart+1
+              endif
+           end do
+           ipart_grafic=ipart_grafic+1
          end do
       end do
    end do
@@ -730,17 +751,19 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
          endif
          do i2=1,g%n2(r%levelmin)
             do i1=1,g%n1(r%levelmin)
-               keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
-               if(keep_part)then
-                  p%vp(ipart,idim)=init_plane(i1,i2)
-                  if(.not. read_pos)then
-                     dispmax=max(dispmax,abs(init_plane(i1,i2)/dx))
-                  else
-                     p%xp(ipart,idim)=p%xp(ipart,idim)+init_plane_x(i1,i2)
-                     dispmax=max(dispmax,abs(init_plane_x(i1,i2)/dx))
+               do ipercell=1,n_per_cell
+                  keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
+                  if(keep_part)then
+                     p%vp(ipart,idim)=init_plane(i1,i2)
+                     if(.not. read_pos)then
+                        dispmax=max(dispmax,abs(init_plane(i1,i2)/dx))
+                     else
+                        p%xp(ipart,idim)=p%xp(ipart,idim)+init_plane_x(i1,i2)
+                        dispmax=max(dispmax,abs(init_plane_x(i1,i2)/dx))
+                     endif
+                     ipart=ipart+1
                   endif
-                  ipart=ipart+1
-               endif
+               end do
                ipart_grafic=ipart_grafic+1
             end do
          end do
@@ -752,9 +775,10 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
    end do
    ! End loop over dimensions
  
-   ! Deallocate temporary array
-   deallocate(init_plane)
-   if(read_pos)deallocate(init_plane_x)
+  ! Deallocate temporary array
+  deallocate(init_plane)
+  if(read_pos)deallocate(init_plane_x)
+  if(allocated(tdx))deallocate(tdx,tdy,tdz)
  
    ! Periodic box
    do ipart=1,p%npart
@@ -784,6 +808,33 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
    p%tailp(r%levelmin)=p%npart
  
  end subroutine input_dust_grafic
+
+! Evenly distribute offsets within a cell for nt sub-particles
+subroutine part_subcell_positions(nt,trx,try,trz)
+  integer::nt,ipart,i
+  real(kind=8)::phi3,avx,avy,avz
+  real(kind=8),dimension(1:nt)::trx,try,trz
+  real(kind=8),dimension(1:3),save::phi3a
+
+  phi3 = 1.2207440846057596d0
+  do i=1,3
+    phi3a(i)=phi3**(-i)
+  end do
+  do ipart = 1,nt
+    trx(ipart) = mod(0.5d0+ ipart*phi3a(1),1.0d0)
+    try(ipart) = mod(0.5d0+ ipart*phi3a(2),1.0d0)
+    trz(ipart) = mod(0.5d0+ ipart*phi3a(3),1.0d0)
+  end do
+
+  avx=sum(trx)/nt
+  avy=sum(try)/nt
+  avz=sum(trz)/nt
+  do ipart=1,nt
+    trx(ipart)=mod(trx(ipart)-avx+0.5d0,1.0d0)-0.5d0
+    try(ipart)=mod(try(ipart)-avy+0.5d0,1.0d0)-0.5d0
+    trz(ipart)=mod(trz(ipart)-avz+0.5d0,1.0d0)-0.5d0
+  end do
+end subroutine part_subcell_positions
 !#########################################################################
 !#########################################################################
 !#########################################################################
