@@ -203,6 +203,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
 
   end if
 #endif
+  
 
   ! Perform second kick for particles
   if(r%pic)then

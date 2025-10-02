@@ -34,6 +34,7 @@ subroutine m_force_fine(pst,ilevel,icount)
      in_gradient_phi%icount=icount
      call r_gradient_phi(pst,in_gradient_phi,2)
   endif
+  call dump_phi(pst%s%r, pst%s%g, pst%s%m, ilevel)
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
   ! Compute gravity potential energy
@@ -456,5 +457,40 @@ end subroutine compute_rhomax
 !#########################################################
 !#########################################################
 !#########################################################
+subroutine dump_phi(r, g, m, ilevel)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: nbor, oct, run_t, global_t, mesh_t
+  implicit none
+  type(run_t)    :: r
+  type(global_t) :: g
+  type(mesh_t)   :: m
+  integer, intent(in)      :: ilevel
+
+  integer :: ioct, icell, idim, nstride
+  integer :: unit_debug
+  integer(kind=8), dimension(ndim) :: cc_icell
+  real(kind=8), dimension(ndim) :: xx_icell
+  real(kind=8) :: dx_loc
+
+  ! open debug file
+  unit_debug = 99
+#ifdef FMM
+  open(unit_debug, file="debug_neighbors_fmm.out", status="replace")
+#else
+  open(unit_debug, file="debug_neighbors_mg.out", status="replace")
+#endif
+  dx_loc = r%boxlen / 2.0D0**ilevel
+  do ioct = m%head(ilevel), m%tail(ilevel)
+     do icell = 1, twotondim
+        do idim = 1, ndim
+          nstride = 2**(idim-1)
+          cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
+          xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
+        end do
+        write(unit_debug, '(3I6,1E12.6)') cc_icell, m%grid(ioct)%phi(icell)
+     end do
+  end do
+  close(unit_debug)
+end subroutine dump_phi
 #endif
 end module force_fine_module

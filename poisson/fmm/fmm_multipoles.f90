@@ -1,5 +1,6 @@
 module fmm_multipoles
 contains
+#ifdef FMM
 !###############################################
 !###############################################
 !###############################################
@@ -161,7 +162,7 @@ subroutine fmm_multipole_leaf_cells(r, g, m, ilevel)
            end do
 
            ! Gas mass contribution
-           mmm = max(m%grid(igrid)%rho(ind), r%smallr) * vol_loc
+           mmm = max(m%grid(igrid)%rho(ind) - g%rho_tot, r%smallr) * vol_loc
            monopole = monopole + mmm
            dipole   = dipole   + mmm * xx
 
@@ -644,4 +645,5 @@ subroutine shift_multipole(multipole_in, a, multipole_out)
   multipole_out(10) = qp_out(3,3)  ! zz
 #endif
 end subroutine shift_multipole
+#endif FMM
 end module fmm_multipoles

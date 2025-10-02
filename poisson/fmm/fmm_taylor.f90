@@ -187,35 +187,35 @@ subroutine shift_taylor(taylor_in, a, taylor_out)
   ! C3 stays the same
   C3p = C3
 
-  ! C2' = C2 - a_k C3_{ijk}
+  ! C2' = C2 + a_k C3_{ijk}
   do i = 1, ndim
      do j = 1, ndim
         C2p(i,j) = C2(i,j)
         do k = 1, ndim
-           C2p(i,j) = C2p(i,j) - a(k)*C3(i,j,k)
+           C2p(i,j) = C2p(i,j) + a(k)*C3(i,j,k)
         end do
      end do
   end do
 
-  ! C1' = C1 - a_j C2_{ij} + 0.5 a_j a_k C3_{ijk}
+  ! C1' = C1 + a_j C2_{ij} + 0.5 a_j a_k C3_{ijk}
   do i = 1, ndim
      C1p(i) = C1(i)
      do j = 1, ndim
-        C1p(i) = C1p(i) - a(j)*C2(i,j)
+        C1p(i) = C1p(i) + a(j)*C2(i,j)
         do k = 1, ndim
            C1p(i) = C1p(i) + 0.5d0*a(j)*a(k)*C3(i,j,k)
         end do
      end do
   end do
 
-  ! C0' = C0 - a_i C1^i + 0.5 a_i a_j C2^{ij} - 1/6 a_i a_j a_k C3^{ijk}
+  ! C0' = C0 + a_i C1^i + 0.5 a_i a_j C2^{ij} + 1/6 a_i a_j a_k C3^{ijk}
   C0p = C0
   do i = 1, ndim
-     C0p = C0p - a(i)*C1(i)
+     C0p = C0p + a(i)*C1(i)
      do j = 1, ndim
         C0p = C0p + 0.5d0*a(i)*a(j)*C2(i,j)
         do k = 1, ndim
-           C0p = C0p - (1.0d0/6.0d0)*a(i)*a(j)*a(k)*C3(i,j,k)
+           C0p = C0p + (1.0d0/6.0d0)*a(i)*a(j)*a(k)*C3(i,j,k)
         end do
      end do
   end do
@@ -247,5 +247,81 @@ subroutine shift_taylor(taylor_in, a, taylor_out)
      end do
   end do
 end subroutine shift_taylor
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine calc_phi(taylor_in, a, phi_out)
+  use amr_parameters, only: ndim, taylor_size
+  implicit none
+
+  real(kind=8), intent(in)  :: taylor_in(taylor_size)
+  real(kind=8), intent(in)  :: a(ndim)
+  real(kind=8), intent(out) :: phi_out
+
+  integer :: i, j, k, idx, nq, no
+  integer :: idxC2, idxC3
+
+  ! Dense tensors
+  real(kind=8) :: C0
+  real(kind=8) :: C1(ndim)
+  real(kind=8) :: C2(ndim,ndim)
+  real(kind=8) :: C3(ndim,ndim,ndim)
+
+  ! Number of independent components
+  nq = ndim*(ndim+1)/2
+  no = ndim*(ndim+1)*(ndim+2)/6
+
+  ! Offsets in flattened array
+  idxC2 = 1 + ndim
+  idxC3 = idxC2 + nq
+
+  ! ----------------------------
+  ! Unpack flattened -> dense
+  ! ----------------------------
+  C0 = taylor_in(1)
+
+  do i = 1, ndim
+     C1(i) = taylor_in(1+i)
+  end do
+
+  ! C2 symmetric unpack
+  idx = 0
+  do j = 1, ndim
+     do i = 1, j
+        idx = idx + 1
+        C2(i,j) = taylor_in(idxC2+idx)
+        C2(j,i) = C2(i,j)
+     end do
+  end do
+
+  ! C3 symmetric unpack
+  idx = 0
+  do k = 1, ndim
+     do j = 1, k
+        do i = 1, j
+           idx = idx + 1
+           C3(i,j,k) = taylor_in(idxC3+idx)
+           C3(i,k,j) = C3(i,j,k)
+           C3(j,i,k) = C3(i,j,k)
+           C3(j,k,i) = C3(i,j,k)
+           C3(k,i,j) = C3(i,j,k)
+           C3(k,j,i) = C3(i,j,k)
+        end do
+     end do
+  end do
+
+  ! C0' = C0 + a_i C1^i + 0.5 a_i a_j C2^{ij} + 1/6 a_i a_j a_k C3^{ijk}
+  phi_out = C0
+  do i = 1, ndim
+     phi_out = phi_out + a(i)*C1(i)
+     do j = 1, ndim
+        phi_out = phi_out + 0.5d0*a(i)*a(j)*C2(i,j)
+        do k = 1, ndim
+           phi_out = phi_out + (1.0d0/6.0d0)*a(i)*a(j)*a(k)*C3(i,j,k)
+        end do
+     end do
+  end do
+end subroutine calc_phi
 #endif
 end module fmm_taylor

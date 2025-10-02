@@ -34,6 +34,7 @@ module mdl_parameters
      enumerator::MDL_INIT_FMM
      enumerator::MDL_CLEANUP_FMM
      enumerator::MDL_FMM_DOWNWARD
+     enumerator::MDL_FMM_AMR_DIRECT
      enumerator::MDL_RESET_MULTIPOLES
      enumerator::MDL_INIT_REFINE_RESTART
      enumerator::MDL_INIT_REFINE_RAMSES
