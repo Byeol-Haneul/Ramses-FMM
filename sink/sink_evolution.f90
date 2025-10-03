@@ -64,20 +64,32 @@ contains
     real(kind=8)::dx_loc,vol_loc
     integer::nBHnei,nBH_fb_nei
     real(kind=8)::jet_angle,tan_theta,lambda_sonic
-    integer::kk,jj,ii,ipart
+    integer::kk,jj,ii,ipart,istep
     real(kind=8),dimension(1:ndim)::x_rel
     real(kind=8)::r_rel,dmacc_loc
     type(msg_large_realdp)::dummy_large_realdp
     real(kind=8)::dMBH_overdt,dMED_overdt,rho_gas,cs_gas,rho_inf,rho_av_all
-    real(kind=8)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
-    real(kind=8),dimension(1:ndim)::x_acc,p_acc,l_acc,vel_gas
-    real(kind=8),dimension(1:nvar)::passive_acc
+    real(kind=8)::fbk_ener_agn,fbk_mom_agn
+    real(kind=8),dimension(1:ndim)::vel_gas
+    logical::output_file
 
 #ifdef HYDRO
 #if NDIM==3
     associate(r=>s%r,g=>s%g,m=>s%m)
 
     if(r%verbose)write(*,*)'Entering sink_evolution...'
+
+    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    ! Check if high frequency dump
+    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    output_file = .false.
+    if(r%sink_delta_tout>0)then
+       istep = int(g%t / r%sink_delta_tout)
+       if(istep > p%step_counter)then
+          p%step_counter = p%step_counter + 1
+          output_file = .true.
+       endif
+    endif
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! Get all units, constants and cell sizes
@@ -185,7 +197,7 @@ contains
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
        ! Save sink data at a high cadence if needed
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-       if(r%sink_delta_tout.gt.0)then
+       if(output_file)then
           if(r%agn)then
              call dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d, &
                   &                       dMBH_overdt,dMED_overdt,rho_inf,cs_gas, &
@@ -1138,17 +1150,13 @@ contains
     ! Nicholas Choustikov
     !==================================================================
     character(LEN=80)::filename
-    integer::id_sink_loc,unit,istep
+    integer::id_sink_loc,unit
     character(LEN=5)::nchar
     logical::file_exist
     real(kind=8)::scale_m,scale_v
     real(kind=8)::unit_amu,unit_pc,unit_msun,unit_dotM,unit_yr
 
     associate(r=>s%r, g=>s%g, mdl=>s%mdl)
-
-    istep = int(g%t / r%sink_delta_tout)
-    if(istep <= p%step_counter) return
-    p%step_counter = istep
 
     if(r%verbose_sink)write(*,*)'Entering output_sink_csv'
 
@@ -1184,7 +1192,7 @@ contains
     open(unit=unit,file=filename,form='formatted',status='unknown',position='append')
 
     ! Write data to the sink file
-    write(unit,'(I10,21(A1,ES21.10),A1,I10)')istep,',',g%t*scale_t/unit_yr, &
+    write(unit,'(I10,21(A1,ES21.10),A1,I10)')p%step_counter,',',g%t*scale_t/unit_yr, &
          & ',',g%dtnew(ilevel)*scale_t/unit_yr,',',p%mp(ipart)*scale_m/unit_msun,&
          & ',',dMBH_overdt*unit_dotM,',',dMED_overdt*unit_dotM,&
          & ',',rho_inf*scale_d,',',cs_gas*scale_v,&
@@ -1221,17 +1229,13 @@ contains
     ! Nicholas Choustikov
     !==================================================================
     character(LEN=80)::filename
-    integer::id_sink_loc,unit,istep
+    integer::id_sink_loc,unit
     character(LEN=5)::nchar
     logical::file_exist
     real(kind=8)::scale_m,scale_v,scale_E
     real(kind=8)::unit_amu,unit_pc,unit_msun,unit_dotM,unit_yr
 
     associate(r=>s%r, g=>s%g, mdl=>s%mdl)
-
-    istep = int(g%t / r%sink_delta_tout)
-    if(istep <= p%step_counter) return
-    p%step_counter = istep
 
     if(r%verbose_sink)write(*,*)'Entering output_sink_csv'
 
@@ -1268,7 +1272,7 @@ contains
     open(unit=unit,file=filename,form='formatted',status='unknown',position='append')
 
     ! Write data to the sink file
-    write(unit,'(I10,21(A1,ES21.10),A1,I10)')istep,',',g%t*scale_t/unit_yr,&
+    write(unit,'(I10,21(A1,ES21.10),A1,I10)')p%step_counter,',',g%t*scale_t/unit_yr,&
          & ',',g%dtnew(ilevel)*scale_t/unit_yr,',',p%mp(ipart)*scale_m/unit_msun,&
          & ',',dMBH_overdt*unit_dotM,',',dMED_overdt*unit_dotM,&
          & ',',rho_inf*scale_d,',',cs_gas*scale_v,&
