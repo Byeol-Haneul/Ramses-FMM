@@ -357,13 +357,13 @@ module amr_commons
      real(kind=8)::sink_purity_threshold=-1
      real(kind=8)::sink_fraction_threshold=2d0
      real(kind=8)::sink_radius=-1
+     real(kind=8)::sink_delta_tout=0
      logical::sink_form=.false.
      logical::sink_refine=.false.
      logical::sink_dump=.false.
      logical::static_sink=.false.
-     integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
-     logical::fix_sink_mass = .false. 
-     logical::drag_sink = .false. ! Whether to use dynamical friction for black hole dynamics
+     logical::fix_sink_mass=.false. 
+     logical::drag_sink=.false.
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
@@ -385,9 +385,9 @@ module amr_commons
      integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
      integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
      real(kind=8)::epsilon_rad = 0.1d0 ! Radiative efficiency
-     real(kind=8)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
-     real(kind=8)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
-     real(kind=8)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
+     real(kind=8)::epsilon_radio = 1.0d0 ! Efficiency of momentum feedback for jet
+     real(kind=8)::epsilon_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+     real(kind=8)::momentum_boost = 10.0d0 ! Momentum boost in units of L/c for the jet
      real(kind=8)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
      real(kind=8)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
      real(kind=8)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)

@@ -141,6 +141,11 @@ subroutine m_input_part_restart(pst)
      ! Deallocate local array
      deallocate(npart_file)
 
+     ! Set high frequency dump counter
+     if(pst%s%r%sink_delta_tout>0)then
+        pst%s%sink%step_counter=int(pst%s%g%t/pst%s%r%sink_delta_tout)
+     endif
+
   endif
 
   if(pst%s%r%tree)then

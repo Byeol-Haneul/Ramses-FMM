@@ -155,6 +155,8 @@ subroutine init_sink(r,g,p)
   ! No particle just yet
   p%headp=1
   p%tailp=0
+  ! Set high frequency dump counter
+  p%step_counter=-1
 end subroutine init_sink
 !#########################################################################
 !#########################################################################
