@@ -685,11 +685,6 @@ contains
     ! For now, it is focused on a simple two-regime model to deploy quasar and radio mode feedback
     ! depending on the accretion rate.
     ! Written by Nicholas Choustikov (Apr 2025)
-
-    ! NOTE: We now aim to return mass and linear momentum accounting for
-    ! (epsilon_r + kin_mass_loading)/(1 + kin_mass_loading) of the accreted quantities.
-    ! This should ensure that all conserved quantities are maintained.
-    ! See also Bourne+2017 for a similar approach.
     !==================================================================
     ! Local variables
     real(kind=8)::rr,x,y,z,rrad
@@ -1203,7 +1198,6 @@ contains
     ! Close the sink file
     close(unit)
 
-    !42 format((8,1x,f23.15,1x),42(e23.15,1x))
     end associate
   end subroutine dump_sink_data_fine
   !##############################################################################
@@ -1284,7 +1278,6 @@ contains
     ! Close the sink file
     close(unit)
 
-    !42 format((8,1x,f23.15,1x),42(e23.15,1x))
     end associate
   end subroutine dump_sink_data_fine_AGN
   !##############################################################################
