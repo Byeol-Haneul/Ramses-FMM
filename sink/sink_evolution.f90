@@ -1175,7 +1175,7 @@ contains
 
     ! If this is a new sink, then we need to make the file associated with that sink
     inquire(file=filename, exist=file_exist)
-    unit = 10 !+g%myid
+    unit = 10
     if(.not.file_exist)then
        if(r%verbose_sink)write(*,*)'Creating file: ',filename
        open(unit=unit,file=filename,form='formatted')
