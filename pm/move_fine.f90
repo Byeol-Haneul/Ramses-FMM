@@ -91,7 +91,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%trac)then
-        if(pst%s%r%trac_interpolation_scheme==1)then
+        if(pst%s%r%trac_interpolation_scheme==0)then
+           call pli_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
+        elseif(pst%s%r%trac_interpolation_scheme==1)then
            call cic_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==2)then
            call tsc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
@@ -100,7 +102,9 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%dust)then
-        if(pst%s%r%dust_force_interpolation_scheme==1)then
+        if(pst%s%r%dust_force_interpolation_scheme==0)then
+           call pli_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
+        elseif(pst%s%r%dust_force_interpolation_scheme==1)then
            call cic_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
         elseif(pst%s%r%dust_force_interpolation_scheme==2)then
            call tsc_kick_drift_dust(pst%s,pst%s%dust,ilevel,action_part)
@@ -849,8 +853,10 @@ subroutine pack_fetch_kick_dust(grid,msg_size,msg_array)
   end do
 #endif
 #ifdef MHD
-  do ind=1,twotondim
-     msg%realdp_mhd(ind)=grid%bold(ind)
+  do ivar=1,6
+     do ind=1,twotondim
+        msg%realdp_mhd(ind,ivar)=grid%bold(ind,ivar)
+     end do
   end do
 #endif
   msg_array=transfer(msg,msg_array)
@@ -897,13 +903,49 @@ subroutine unpack_fetch_kick_dust(grid,msg_size,msg_array,hash_key)
   end do
 #endif
 #ifdef MHD
-  do ind=1,twotondim
-     grid%bold(ind)=msg%realdp_mhd(ind)
+  do ivar=1,6
+     do ind=1,twotondim
+        grid%bold(ind,ivar)=msg%realdp_mhd(ind,ivar)
+     end do
   end do
 #endif
 
 end subroutine unpack_fetch_kick_dust
-
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine pli_trace_gas_part(s,p,ilevel,action_part)
+   use amr_parameters, only: ndim, twotondim
+   use pm_parameters
+   use pm_commons, only: part_t
+   use oct_commons, only: oct
+   use ramses_commons, only: ramses_t
+   use nbors_utils
+   use cache_commons
+   use cache
+   implicit none
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ilevel
+   integer::action_part
+   real(kind=8),dimension(1:ndim)::x,x_mid,dr,dl,dr2,dl2
+   integer,dimension(1:ndim)::ir,il
+   integer,dimension(1:ndim)::ir2,il2
+   real(kind=8),dimension(1:twotondim)::vol,vol2
+   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
+   integer::icell,icell2
+   integer(kind=8),dimension(0:ndim)::hash_nbor
+   integer::ipart,ind,idim
+   real(kind=8)::dx_loc,vol_loc
+   real(kind=8),dimension(1:ndim)::ff,v_pred
+   type(oct),pointer :: gridp
+   logical :: ok_level
+   type(msg_three_realdp)::dummy_three_realdp
+   type(msg_nvar_realdp)::dummy_nvar_realdp
+end subroutine pli_trace_gas_part
+!#########################################################################
+!#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine cic_trace_gas_part(s,p,ilevel,action_part)
@@ -1391,6 +1433,48 @@ end subroutine pcs_trace_gas_part
 
 !#########################################################################
 !#########################################################################
+! Picewise linear interpolation instead of cloud in cell methods
+! (optionally using Riemann fluxes)
+!#########################################################################
+!#########################################################################
+subroutine pli_kick_drift_dust(s,p,ilevel,action_part)
+   use amr_parameters, only: ndim, twotondim
+   use hydro_parameters, only: nener
+   use pm_parameters
+   use pm_commons, only: part_t
+   use oct_commons, only: oct
+   use ramses_commons, only: ramses_t
+   use nbors_utils
+   use cache_commons
+   use cache
+   implicit none
+   ! Intrinsic functions for drag calculations
+   intrinsic :: sinh, cosh
+   type(ramses_t)::s
+   type(part_t)::p
+   integer::ilevel
+   integer::action_part
+   real(kind=8),dimension(1:ndim)::x,x_mid,dr,dl,dr2,dl2
+   integer,dimension(1:ndim)::ir,il
+   integer,dimension(1:ndim)::ir2,il2
+   real(kind=8),dimension(1:twotondim)::vol,vol2
+   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
+   integer::icell,icell2
+   integer(kind=8),dimension(0:ndim)::hash_nbor
+   integer::ipart,ind,idim,irad
+   real(kind=8)::dx_loc,vol_loc
+   real(kind=8),dimension(1:ndim)::ff,v_pred
+   real(kind=8),dimension(1:ndim)::uu
+   real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
+   real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi=4.0d0*atan(1.0d0)
+   real(kind=8),dimension(1:ndim)::what,wdrift ! drift velocity unit vector
+   type(oct),pointer :: gridp
+   logical :: ok_level
+   type(msg_large_realdp)::dummy_large_realdp
+
+end subroutine pli_kick_drift_dust
+!#########################################################################
+!#########################################################################
 !#########################################################################
 !#########################################################################
 subroutine cic_kick_drift_dust(s,p,ilevel,action_part)
@@ -1585,9 +1669,9 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   integer::ipart,icell,icell2,ind,idim,irad
   real(kind=8)::xl,xc,xr
   real(kind=8)::dx_loc
-  real(kind=8),dimension(1:ndim)::ff,v_pred,uu,what,wdrift
-  real(kind=8)::rho_gas,c_sound,eint,coeff,wdrift2
-  real(kind=8)::nu_stop,dens,etot,ekin,erad,cs2,pi
+  real(kind=8),dimension(1:ndim)::ff,uu,bb,v_pred,wdrift
+  real(kind=8)::rho_gas,c_sound,eint,coeff
+  real(kind=8)::nu_stop,dens,etot,ekin,erad,emag,cs2,pi
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
 
@@ -1643,15 +1727,21 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         ckey2 = tsc_index(cl2,cc2,cr2)
         vol2 = tsc_weight(wl2,wc2,wr2)
 
-        uu(1:ndim)=0.0
+        ff(1:ndim)=0.0d0
+        uu(1:ndim)=0.0d0
+        bb(1:ndim)=0.0d0
         rho_gas=0.0d0
         eint=0.0d0
+        emag=0.0d0
         hash_nbor(0)=ilevel+1
         do ind=1,threetondim
            hash_nbor(1:ndim)=ckey2(1:ndim,ind)
            call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
 #ifdef HYDRO
            if(associated(gridp))then
+#ifdef GRAV   
+              ff(1:ndim)=ff(1:ndim)+gridp%f(icell2,1:ndim)*vol2(ind)
+#endif
               rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
               uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
               dens = max(dble(gridp%uold(icell2,1)), r%smallr)
@@ -1666,7 +1756,13 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
                  erad = erad + gridp%uold(icell2,5+irad)
               end do
 #endif
-              eint = eint + (etot - ekin - erad) * vol2(ind)
+#ifdef MHD
+              do idim=1,3
+                 bb(idim) = bb(idim) + 0.5*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))*vol2(ind)
+                 emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
+              end do
+#endif
+              eint = eint + (etot - ekin - erad - emag) * vol2(ind)
            end if
 #endif
         ! Need to add MHD support here
@@ -1675,14 +1771,17 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         c_sound = max(sqrt(cs2), r%smallc)
         nu_stop = coeff*c_sound*rho_gas/p%size(ipart)
         wdrift(1:ndim)= v_pred(1:ndim) - uu(1:ndim)
-        wdrift2 = dot_product(wdrift(1:ndim),wdrift(1:ndim))
-        if(wdrift2>0.0d0)then
-           what(1:ndim)=wdrift(1:ndim)/sqrt(wdrift2)
-           wdrift(1:ndim) = c_sound * what(1:ndim) * &
-           & exact_drag(g%dtnew(ilevel), nu_stop, coeff, sqrt(wdrift2)/c_sound)
-        else
-           wdrift(1:ndim)=0.0d0
-        endif
+        ! This is where we want to split off the different physics
+        ! There will also be an if(gyro_pic) gate, since everything must be computed very differently
+        ! in the gyro case.
+        call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
+        ! Gather ff, and apply to either side of the Lorentz force as a half-step
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! External force half-step (includes gravity)
+        call compute_lorentz(wdrift, bb, g%dtnew(ilevel), p%charge(ipart))
+        wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! Second external force half-step
+
+        call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
+        ! Routine will return an intermediate drift velocity.
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+0.5d0*(p%vp(ipart,1:ndim)+v_pred(1:ndim))*g%dtnew(ilevel)
      endif
@@ -1881,6 +1980,25 @@ end subroutine pcs_kick_drift_dust
 !#########################################################################
 !#########################################################################
 !#########################################################################
+subroutine compute_drag(wdrift, c_sound, dt, nu_stop, coeff)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8), intent(inout) :: wdrift(1:ndim)
+  real(kind=8), intent(in)    :: c_sound, dt, nu_stop, coeff
+  real(kind=8) :: wdrift2
+  real(kind=8) :: what(1:ndim)
+
+  wdrift2 = dot_product(wdrift(1:ndim), wdrift(1:ndim))
+  if (wdrift2 > 0.0d0) then
+     what(1:ndim) = wdrift(1:ndim) / sqrt(wdrift2)
+     wdrift(1:ndim) = c_sound * what(1:ndim) * &
+     & fully_implicit_drag(dt, nu_stop, coeff, sqrt(wdrift2)/c_sound)
+  else
+     wdrift(1:ndim) = 0.0d0
+  end if
+
+end subroutine compute_drag
+
 function exact_drag(dt, nu, eta, w0) result(drag_value)
   ! Computes drag coefficient based on the analytic solution for Epstein-Baines drag:
   ! drag(dt) = sqrt(((sinh(nu*dt) + sqrt(1 + eta*w0^2)*cosh(nu*dt)) / 
@@ -1934,10 +2052,58 @@ function fully_implicit_drag(dt, nu, eta, w0) result(drag_value)
   sqrt_term = sqrt(1.0d0 + eta * w0**2)
   nu_stop = nu * sqrt_term
 
-  drag_value = w0/(1+nu_stop*dt+0.5d0*nu_stop**2*dt**2)
+  drag_value = w0/(1+nu_stop*dt+0.5d0*nu*dt**2) 
+  ! Not a typo. Comes from a series expansion of the analytic solution in dt
 
   
 end function fully_implicit_drag
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8), dimension(1:ndim), intent(inout) :: driftvel
+  real(kind=8), dimension(1:ndim), intent(in)    :: bfield
+  real(kind=8), intent(in)                       :: dt
+  real(kind=8), intent(in)                       :: charge_parameter
+  real(kind=8) :: det, bsquared, dteff
+  real(kind=8) :: v1_new, v2_new, v3_new
+  real(kind=8), dimension(1:3,1:3) :: matrix
+  
+  dteff = dt * charge_parameter
+  bsquared = dot_product(bfield(1:ndim), bfield(1:ndim))
+  det = -(1 + 0.25d0 * bsquared * dt**2 )
+  
+  ! Matrix components from Mathematica
+  ! Row 1
+  matrix(1,1) = 1.0d0 + 0.25d0 * (bfield(1)**2 - bfield(2)**2 - bfield(3)**2) * dteff**2
+  matrix(1,2) = 0.5d0 * dteff * (2.0d0 * bfield(3) + bfield(1) * bfield(2) * dteff)
+  matrix(1,3) = 0.5d0 * dteff * (-2.0d0 * bfield(2) + bfield(1) * bfield(3) * dteff)
+  
+  ! Row 2
+  matrix(2,1) = 0.5d0 * dteff * (-2.0d0 * bfield(3) + bfield(1) * bfield(2) * dteff)
+  matrix(2,2) = 1.0d0 - 0.25d0 * (bfield(1)**2 - bfield(2)**2 + bfield(3)**2) * dteff**2
+  matrix(2,3) = 0.5d0 * dteff * (2.0d0 * bfield(1) + bfield(2) * bfield(3) * dteff)
+  
+  ! Row 3
+  matrix(3,1) = 0.5d0 * dteff * (2.0d0 * bfield(2) + bfield(1) * bfield(3) * dteff)
+  matrix(3,2) = 0.5d0 * dteff * (-2.0d0 * bfield(1) + bfield(2) * bfield(3) * dteff)
+  matrix(3,3) = 1.0d0 - 0.25d0 * (bfield(1)**2 + bfield(2)**2 - bfield(3)**2) * dteff**2
+  
+  ! Apply matrix/det to driftvel (hard-coded for efficiency)
+  if (ndim == 3) then
+     v1_new = (matrix(1,1)*driftvel(1) + matrix(1,2)*driftvel(2) + matrix(1,3)*driftvel(3)) / det
+     v2_new = (matrix(2,1)*driftvel(1) + matrix(2,2)*driftvel(2) + matrix(2,3)*driftvel(3)) / det
+     v3_new = (matrix(3,1)*driftvel(1) + matrix(3,2)*driftvel(2) + matrix(3,3)*driftvel(3)) / det
+     driftvel(1) = v1_new
+     driftvel(2) = v2_new
+     driftvel(3) = v3_new
+  end if
+  
+end subroutine compute_lorentz
 
 !#########################################################################
 !#########################################################################

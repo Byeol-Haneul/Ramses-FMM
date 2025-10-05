@@ -4,6 +4,10 @@ type :: out_newdt_part_t
   real(kind=8)::ekin,vmax
 end type out_newdt_part_t
 
+type :: out_max_bq_t
+  real(kind=8)::max_b, max_q
+end type out_max_bq_t
+
 type :: in_broadcast_dt_t
   integer::ilevel
   real(kind=8)::dtnew,dtold
@@ -18,6 +22,7 @@ subroutine m_newdt_fine(pst,ilevel)
   use amr_parameters, only: nvector
   use ramses_commons, only: pst_t
   use courant_fine_module, only: r_courant_fine, out_courant_fine_t
+  use constants, only: twopi
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -30,6 +35,7 @@ subroutine m_newdt_fine(pst,ilevel)
   !-----------------------------------------------------------
   real(kind=8)::dx,tff,fourpi,threepi2
   real(kind=8)::ekin,vmax
+  real(kind=8)::dt_gyro, max_b, max_q
   type(out_courant_fine_t)::out_courant_fine
   type(out_newdt_part_t)::out_newdt_part
   type(in_broadcast_dt_t)::in_broadcast_dt
@@ -92,6 +98,23 @@ subroutine m_newdt_fine(pst,ilevel)
      g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8),out_courant_fine%dt)
   endif
 
+  ! Dust gyro-frequency timestep constraint (MHD + dust only)
+#ifdef MHD
+  if(r%dust)then
+     ! Compute maximum |B| at this level and maximum particle charge |q|
+     block
+       type(out_max_bq_t)::bq
+       call r_max_B_and_Q(pst, ilevel, 1, bq, storage_size(bq)/32)
+       max_b = bq%max_b
+       max_q = bq%max_q
+     end block
+     if(max_b>0.0d0 .and. max_q>0.0d0)then
+        dt_gyro = r%dust_gyro_factor * twopi / (max_q * max_b)
+        g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8), dt_gyro)
+     endif
+  endif
+#endif
+
   if(r%rt.and.r%rt_advect)then
      if(r%verbose)write(*,'("   Entering newdt_rt for level ",I2)')ilevel
      g%dtnew(ilevel)=MIN(real(g%dtnew(ilevel),kind=8),r%rt_nsubcycle*r%rt_courant_factor*dx/3d0/g%rt_c(ilevel))
@@ -116,6 +139,70 @@ end subroutine m_newdt_fine
 !#####################################################################
 !#####################################################################
 !#####################################################################
+recursive subroutine r_max_B_and_Q(pst, ilevel, input_size, output, output_size)
+  use mdl_module
+  use ramses_commons, only: pst_t
+  use mdl_parameters
+  use amr_parameters, only: ndim, twotondim
+  implicit none
+  type(pst_t)::pst
+  integer::ilevel
+  integer,VALUE::input_size
+  integer::output_size
+  type(out_max_bq_t)::output, next_output
+
+  integer::rID
+
+  if(pst%nLower>0)then
+     rID = mdl_send_request(pst%s%mdl,MDL_MAX_B_AND_Q,pst%iUpper+1,input_size,output_size,ilevel)
+     call r_max_B_and_Q(pst%pLower,ilevel,input_size,output,output_size)
+     call mdl_get_reply(pst%s%mdl,rID,output_size,next_output)
+     output%max_b = MAX(output%max_b, next_output%max_b)
+     output%max_q = MAX(output%max_q, next_output%max_q)
+  else
+     call max_B_and_Q(pst%s%r,pst%s%g,pst%s%m,pst%s%dust,ilevel,output%max_b,output%max_q)
+  endif
+
+end subroutine r_max_B_and_Q
+!#####################################################################
+!#####################################################################
+subroutine max_B_and_Q(r,g,m,p,ilevel,max_b,max_q)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: run_t, global_t, mesh_t
+  use pm_commons, only: part_t
+  implicit none
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(part_t)::p
+  integer::ilevel
+  real(kind=8)::max_b, max_q
+
+  integer::igrid, ind, idim, ipart
+  real(kind=8)::bx, by, bz, bmag
+
+  max_b = 0.0d0
+  max_q = 0.0d0
+
+#ifdef MHD
+  do igrid=m%head(ilevel), m%tail(ilevel)
+     do ind=1,twotondim
+        bx=0.5d0*(m%grid(igrid)%bold(ind,1)+m%grid(igrid)%bold(ind,4))
+        by=0.5d0*(m%grid(igrid)%bold(ind,2)+m%grid(igrid)%bold(ind,5))
+        bz=0.5d0*(m%grid(igrid)%bold(ind,3)+m%grid(igrid)%bold(ind,6))
+        bmag = sqrt(bx*bx + by*by + bz*bz)
+        if(bmag>max_b) max_b=bmag
+     end do
+  end do
+#endif
+
+  if(r%dust)then
+     do ipart=p%headp(ilevel), p%tailp(ilevel)
+        if (abs(p%charge(ipart))>max_q) max_q=abs(p%charge(ipart))
+     end do
+  end if
+
+end subroutine max_B_and_Q
 recursive subroutine r_newdt_part(pst,ilevel,input_size,output,output_size)
   use mdl_module
   use ramses_commons, only: pst_t

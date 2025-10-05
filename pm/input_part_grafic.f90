@@ -662,12 +662,12 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
   call part_subcell_positions(n_per_cell,tdx,tdy,tdz)
 
   ipart=1
-   ipart_grafic=i3_min*plane_size
+  ipart_grafic=i3_min*plane_size
  
-   ! Initialize positions, masses and ids
-   do i3=i3_min,i3_max
-      do i2=0,g%n2(r%levelmin)-1
-         do i1=0,g%n1(r%levelmin)-1
+  ! Initialize positions, masses and ids
+  do i3=i3_min,i3_max
+     do i2=0,g%n2(r%levelmin)-1
+        do i1=0,g%n1(r%levelmin)-1
            do ipercell=1,n_per_cell
               keep_part=(ipart_grafic>=start_ind(g%myid).AND.ipart<=p%npart)
               if(keep_part)then
@@ -679,8 +679,8 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
                  if(ndim>2)p%xp(ipart,3)=xx3+tdz(ipercell)*dx
                  p%mp(ipart)=1.0d-2 * 0.5d0**(3*r%levelmin)/n_per_cell
                  p%idp(ipart)=ipart_grafic*n_per_cell + (ipercell-1) + 1
-                 if (r%grain_size>0.0d0) then
-                    p%size(ipart)=r%grain_size
+                  if (r%grain_size>0.0d0) then
+                     p%size(ipart)=r%grain_size
                  else
                     p%size(ipart)= 0.0d0 ! Other grain size setting methods will be implemented later
                  endif
@@ -693,9 +693,9 @@ subroutine input_dust_grafic(r,g,p,npart_tot)
               endif
            end do
            ipart_grafic=ipart_grafic+1
-         end do
-      end do
-   end do
+        end do
+     end do
+  end do
  
    !--------------------------------------
    ! Allocate temporary arrays
