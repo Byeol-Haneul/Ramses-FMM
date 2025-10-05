@@ -38,7 +38,7 @@ C_ave=1e-12
 
 &OUTPUT_PARAMS
 delta_tout=1.
-tend=20.
+tend=100.
 /
 
 &TURB_PARAMS
@@ -71,6 +71,7 @@ slope_type=1
 slope_mag_type=2
 riemann='hlld'
 riemann2d='hlld'
+switch_llf_dmin=1e-5
 /
 
 &REFINE_PARAMS 
