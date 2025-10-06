@@ -1774,12 +1774,14 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         ! This is where we want to split off the different physics
         ! There will also be an if(gyro_pic) gate, since everything must be computed very differently
         ! in the gyro case.
+
         call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
         ! Gather ff, and apply to either side of the Lorentz force as a half-step
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! External force half-step (includes gravity)
+#ifdef MHD
         call compute_lorentz(wdrift, bb, g%dtnew(ilevel), p%charge(ipart))
+#endif
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! Second external force half-step
-
         call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
         ! Routine will return an intermediate drift velocity.
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
@@ -2075,7 +2077,8 @@ subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
   
   dteff = dt * charge_parameter
   bsquared = dot_product(bfield(1:ndim), bfield(1:ndim))
-  det = -(1 + 0.25d0 * bsquared * dt**2 )
+
+  det = -(1 + 0.25d0 * bsquared * dteff**2 )
   
   ! Matrix components from Mathematica
   ! Row 1

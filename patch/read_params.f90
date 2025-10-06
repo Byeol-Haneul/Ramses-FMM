@@ -80,6 +80,7 @@ subroutine m_read_params(pst)
   real(kind=8)::grain_size_parameter=0.0d0
   real(kind=8)::grain_charge_parameter=0.0d0
   real(kind=8)::dust_gyro_factor
+  logical::verbose_load_balance
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -616,7 +617,7 @@ subroutine m_read_params(pst)
   ! Tracer particles parameters
   namelist/trac_params/trac,ntracmax,ntractot,ntrac_per_cell,trac_interpolation_scheme
   namelist/dust_params/dust,ndustmax,ndusttot,ndust_per_cell,dust_to_gas_mass_ratio,&
-  & grain_size_parameter,grain_charge_parameter,dust_mass_deposition_scheme,dust_force_interpolation_scheme,dust_gyro_factor
+  & grain_size_parameter,grain_charge_parameter,dust_mass_deposition_scheme,dust_force_interpolation_scheme,dust_gyro_factor,verbose_load_balance
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -1209,6 +1210,7 @@ subroutine m_read_params(pst)
   s%r%grain_size_parameter=grain_size_parameter
   s%r%grain_charge_parameter=grain_charge_parameter
   s%r%dust_gyro_factor=dust_gyro_factor
+  s%r%verbose_load_balance=verbose_load_balance
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size

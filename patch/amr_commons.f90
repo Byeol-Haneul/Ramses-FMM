@@ -30,6 +30,7 @@ module amr_commons
      logical::orphan  =.false.   ! Orphan particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
+     logical::verbose_load_balance=.false. ! Whether to print detailed load balance diagnostics
      logical::clump_only =.false. ! Only clump finding
      integer::nrestart=0         ! New run or backup file number
      integer::ncontrol=1         ! Write control variables
