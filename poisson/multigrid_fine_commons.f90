@@ -824,19 +824,19 @@ subroutine make_bc_rhs(s,ilevel,icount)
 
   ! Loop over grids
   do igrid=m%head(ilevel),m%tail(ilevel)
-     
+
      ! Get central oct potential
      do ind=1,twotondim
         phi_nbor(ind,0)=m%grid(igrid)%phi(ind)
         dis_nbor(ind,0)=m%grid(igrid)%f(ind,3)
      end do
-     
+
      ! Get neighboring octs potential
      do inbor=1,twondim
-        
+
         ! Get neighboring grid
         hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,inbor)
-        
+
         ! Periodic boundary conditions
         do idim=1,ndim
            if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
@@ -872,20 +872,20 @@ subroutine make_bc_rhs(s,ilevel,icount)
 
      ! Loop over cells
      do ind=1,twotondim
-        
+
         ! Init BC-modified RHS to rho - rho_tot :
         m%grid(igrid)%f(ind,2) = fourpi*(m%grid(igrid)%rho(ind) - g%rho_tot)
-        
+
         ! Do not process masked cells
         if(m%grid(igrid)%f(ind,3)<=0.0) cycle 
-        
+
         ! Separate directions
         do idim=1,ndim
 
            ! Loop over the 2 neighbors
            do inbor=1,2
               id=jjj(idim,inbor,ind); ig=iii(idim,inbor,ind)
-              
+
               nb_mask=dis_nbor(id,ig)
               if(nb_mask>0.0)cycle
 
@@ -906,7 +906,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   call close_cache(s,m%grid_dict)
 
   end associate
-  
+
 end subroutine make_bc_rhs
 
 ! ########################################################################
