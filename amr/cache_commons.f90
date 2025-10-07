@@ -72,7 +72,7 @@ module cache_commons
 #endif
 #ifdef FMM
      real(kind=8),dimension(1:twotondim,1:multipole_size)::realdp_fmm_multipole
-     real(kind=8),dimension(1:twotondim,1:taylor_size)::realdp_fmm_taylor
+     real(kind=8),dimension(1:taylor_size)::realdp_fmm_taylor
 #endif 
   end type msg_large_realdp
   type msg_rt_emissivity_realdp

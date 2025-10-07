@@ -14,7 +14,7 @@ hydro=.true.
 nrestart=0
 nsubcycle=1,1,2
 ncontrol=1
-verbose=.false.
+verbose=.true.
 /
 
 &OUTPUT_PARAMS
@@ -27,12 +27,12 @@ bkp_modulo=3
 &INIT_PARAMS
 filetype='ascii'
 initfile(1)='nfw'
-ic_scale_m=0.85
+ic_scale_m=1.00
 /
 
 &AMR_PARAMS
 levelmin=7
-levelmax=13
+levelmax=7
 ngridmax=2000000
 npartmax=4000000
 nexpand=1,
@@ -53,27 +53,6 @@ entropy=.true.
 riemann='hllc'
 /
 
-&COOLING_PARAMS
-cooling=.true.
-metal=.true.
-haardt_madau=.true.
-self_shielding=.true.
-z_ave=1.0
-z_reion=10
-/
-
-&STAR_PARAMS
-star=.true.
-nstarmax=2000000
-n_star=10.
-eps_star=0.1
-m_star=1
-/
-
-&FEEDBACK_PARAMS
-mechanical_feedback=.true.
-/
-
 &REFINE_PARAMS
 m_refine=10*8.,
 interpol_var=1
@@ -84,7 +63,7 @@ mass_sph=0.4
 &HALO_PARAMS
 v_200=150.
 concentration=10
-baryon_fraction=0.15
+baryon_fraction=0.00
 lambda=0.04
 halo_eps=0.01
 halo_nmin=1d-6

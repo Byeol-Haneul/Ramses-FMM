@@ -1,14 +1,15 @@
 module fmm_taylor
 contains
 #ifdef FMM
-subroutine calc_taylor(xx_j, xx_i, multipoles, taylor_coeff)
+subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
   use amr_parameters, only: ndim, multipole_size, taylor_size
   implicit none
 
   integer :: nq, no, i, j, k, idxC2, idxC3
-  real(kind=8), intent(in)  :: xx_j(ndim), xx_i(ndim)
-  real(kind=8), intent(in)  :: multipoles(multipole_size)
-  real(kind=8), intent(out) :: taylor_coeff(taylor_size)
+  real(kind=8), intent(in)  :: xx_source(ndim), xx_target(ndim)
+  real(kind=8), intent(in)  :: multipoles(1:multipole_size)
+  real(kind=8), intent(in)  :: boxlen
+  real(kind=8), intent(out) :: taylor_coeff(1:taylor_size)
 
   ! Multipoles
   real(kind=8) :: M0
@@ -25,9 +26,7 @@ subroutine calc_taylor(xx_j, xx_i, multipoles, taylor_coeff)
   !------------------------------------------------------------------
   ! Compute displacement and distance
   !------------------------------------------------------------------
-  do i = 1, ndim
-     R(i) = xx_i(i) - xx_j(i)
-  end do
+  call get_displacement(xx_target, xx_source, boxlen, R)
   dist = sqrt(sum(R(:)**2))
   if (dist == 0.0D0) dist = 1.0D-12
 
@@ -125,9 +124,9 @@ subroutine shift_taylor(taylor_in, a, taylor_out)
   use amr_parameters, only: ndim, taylor_size
   implicit none
 
-  real(kind=8), intent(in)  :: taylor_in(taylor_size)
+  real(kind=8), intent(in)  :: taylor_in(1:taylor_size)
   real(kind=8), intent(in)  :: a(ndim)
-  real(kind=8), intent(out) :: taylor_out(taylor_size)
+  real(kind=8), intent(out) :: taylor_out(1:taylor_size)
 
   integer :: i, j, k, idx, nq, no
   integer :: idxC2, idxC3
@@ -255,7 +254,7 @@ subroutine calc_phi(taylor_in, a, phi_out)
   use amr_parameters, only: ndim, taylor_size
   implicit none
 
-  real(kind=8), intent(in)  :: taylor_in(taylor_size)
+  real(kind=8), intent(in)  :: taylor_in(1:taylor_size)
   real(kind=8), intent(in)  :: a(ndim)
   real(kind=8), intent(out) :: phi_out
 
@@ -312,16 +311,33 @@ subroutine calc_phi(taylor_in, a, phi_out)
   end do
 
   ! C0' = C0 + a_i C1^i + 0.5 a_i a_j C2^{ij} + 1/6 a_i a_j a_k C3^{ijk}
-  phi_out = C0
+  phi_out = phi_out - C0
   do i = 1, ndim
-     phi_out = phi_out + a(i)*C1(i)
+     phi_out = phi_out - a(i)*C1(i)
      do j = 1, ndim
-        phi_out = phi_out + 0.5d0*a(i)*a(j)*C2(i,j)
+        phi_out = phi_out - 0.5d0*a(i)*a(j)*C2(i,j)
         do k = 1, ndim
-           phi_out = phi_out + (1.0d0/6.0d0)*a(i)*a(j)*a(k)*C3(i,j,k)
+           phi_out = phi_out - (1.0d0/6.0d0)*a(i)*a(j)*a(k)*C3(i,j,k)
         end do
      end do
   end do
 end subroutine calc_phi
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine get_displacement(p, q, boxlen, r)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8), intent(in)   :: p(1:ndim), q(1:ndim) 
+  real(kind=8),   intent(in) :: boxlen    
+  real(kind=8), intent(out)  :: r(1:ndim)
+  integer :: idim
+  real :: diff
+  do idim = 1, ndim
+     diff = p(idim) - q(idim)
+     r(idim) = min(diff, boxlen-diff)
+  end do
+end subroutine get_displacement
 #endif
 end module fmm_taylor

@@ -487,7 +487,7 @@ subroutine dump_phi(r, g, m, ilevel)
           cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
           xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
         end do
-        write(unit_debug, '(3I6,1E12.6)') cc_icell, m%grid(ioct)%phi(icell)
+        write(unit_debug, '(3I6, 3E20.4, E20.4)') cc_icell, m%grid(ioct)%f(icell,1:ndim), m%grid(ioct)%phi(icell)
      end do
   end do
   close(unit_debug)

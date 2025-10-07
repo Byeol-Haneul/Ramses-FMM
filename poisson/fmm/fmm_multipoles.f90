@@ -145,14 +145,13 @@ subroutine fmm_multipole_leaf_cells(r, g, m, ilevel)
   ! Loop over grids
   !---------------------------------------------------
   do igrid = m%head(ilevel), m%tail(ilevel)
-     ! Reset multipoles for this grid
-     monopole   = 0.0D0
-     dipole     = 0.0D0
-     quadrupole = 0.0D0
-
      ! Loop over cells
      do ind = 1, twotondim
         leaf_cell=m%grid(igrid)%refined(ind).EQV..FALSE.
+        ! Reset multipoles for this grid
+        monopole   = 0.0D0
+        dipole     = 0.0D0
+        quadrupole = 0.0D0
 
         if (leaf_cell) then
            ! Compute cell center coordinates
@@ -162,7 +161,7 @@ subroutine fmm_multipole_leaf_cells(r, g, m, ilevel)
            end do
 
            ! Gas mass contribution
-           mmm = max(m%grid(igrid)%rho(ind) - g%rho_tot, r%smallr) * vol_loc
+           mmm = (m%grid(igrid)%rho(ind) - g%rho_tot) * vol_loc
            monopole = monopole + mmm
            dipole   = dipole   + mmm * xx
 
@@ -566,9 +565,9 @@ subroutine shift_multipole(multipole_in, a, multipole_out)
   use amr_parameters, only: ndim, multipole_size
   implicit none
 
-  real(kind=8), intent(in)  :: multipole_in(multipole_size)
-  real(kind=8), intent(in)  :: a(ndim)
-  real(kind=8), intent(out) :: multipole_out(multipole_size)
+  real(kind=8), intent(in)  :: multipole_in(1:multipole_size)
+  real(kind=8), intent(in)  :: a(1:ndim)
+  real(kind=8), intent(out) :: multipole_out(1:multipole_size)
 
   ! Locals
   real(kind=8) :: mp_in, mp_out

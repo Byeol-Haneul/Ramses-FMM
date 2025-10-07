@@ -44,7 +44,7 @@ subroutine fmm(pst,ilevel,icount)
    call m_fmm_multipoles(pst, ilevel) ! do upward pass !
 
   ! Downward pass for fmm grids. 
-   do ilev = 2, pst%s%r%levelmin-pst%s%g%level_fmm_to_amr
+   do ilev = 3, pst%s%r%levelmin-pst%s%g%level_fmm_to_amr
      call r_fmm_downward(pst, ilev, 1)
      if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', ilev
    end do
@@ -135,17 +135,17 @@ subroutine fmm_downward(s, ilevel)
   type(ramses_t) :: s
   integer :: ilevel
 
-  integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
-  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell! cartesian coordinate
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pcell    ! box unit real coordinate
+  integer :: ioct, idim, pcell, icell, inbor, jcell, nstride, counter
+  integer(kind=8), dimension(ndim) :: cc_grid, cc_jcell! cartesian coordinate
+  real(kind=8), dimension(ndim) :: xx_igrid, xx_jcell, xx_pgrid, dx ! box unit real coordinate
   real(kind=8) :: dx_loc
-  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor
+  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor, hash_parent
   type(nbor), dimension(1:threetondim) :: grid_nbor
   integer, dimension(1:twotondim) :: ind_nbor_cells
 
   type(oct), pointer :: gridp_nbor, gridp_parent
   type(msg_large_realdp)::dummy_realdp
-  real(kind=8), dimension(multipole_size) :: multipole
+  real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
 
   associate(r=>s%r, g=>s%g, m=>s%m)
@@ -158,65 +158,41 @@ subroutine fmm_downward(s, ilevel)
 
   hash_key(0) = ilevel
   hash_nbor(0) = ilevel
+  hash_parent(0) = ilevel - 1
   dx_loc = r%boxlen / 2.0D0**ilevel
 
   ! Loop over octs at this level
   do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
+     temp_taylor(:) = 0.0D0
      hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
+     ! Far Field Calculation
      call get_parent_cell(s, hash_key, m%mg_dict, gridp_parent, pcell, flush_cache=.false., fetch_cache=.true.)
-     parent_taylor = gridp_parent%taylor_coeff(pcell, :)
+     parent_taylor = gridp_parent%taylor_coeff
+     hash_parent(1:ndim) = gridp_parent%ckey(1:ndim)
+     call get_grid_pos(hash_key, r%boxlen, xx_igrid)
+     call get_grid_pos(hash_parent, r%boxlen, xx_pgrid)
 
-     do idim = 1, ndim
-        nstride = 2**(idim-1)
-        xx_pcell(idim) = (hash_key(idim) + 0.5D0) *  (2 * dx_loc)
-     end do
+     call get_displacement(xx_igrid, xx_pgrid, r%boxlen, dx)
+     call shift_taylor(parent_taylor, dx, temp_taylor)
+     m%grid(ioct)%taylor_coeff = m%grid(ioct)%taylor_coeff + temp_taylor
 
-     ! Get neighboring grids. (3^n)
-     call get_threetondim_nbor_grid(s, hash_key, m%mg_dict, grid_nbor, flush_cache=.false., fetch_cache=.true.)
-
-     ! Loop over cells in current oct (target)
-     do icell = 1, twotondim
-        multipole(:) = 0.0D0
-        temp_taylor(:) = 0.0D0
-
-        ! get icell position in (0-2^ilevel)
-        do idim = 1, ndim
-          nstride = 2**(idim-1)
-          cc_icell(idim) = 2*hash_key(idim) + MOD((icell-1)/nstride, 2)
-          xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
-        end do
-
-        ! Add shifted taylor from parents
-        call shift_taylor(parent_taylor, xx_icell - xx_pcell, temp_taylor)
-        m%grid(ioct)%taylor_coeff(icell,:) = m%grid(ioct)%taylor_coeff(icell,:) + temp_taylor
-
-        ! Loop over candidate neighbors
-        do inbor = 1, threetondim
-           gridp_nbor => grid_nbor(inbor)%p
-           if (.not. associated(gridp_nbor)) cycle
-
-           ! Loop over all cells in neighbor oct (sources)
-           do jcell = 1, twotondim
-              do idim = 1, ndim
-                nstride = 2**(idim-1)
-                cc_jcell(idim) = 2*hash_key(idim) + MOD((jcell-1)/nstride, 2)
-                xx_jcell(idim) = (cc_jcell(idim) + 0.5D0) * dx_loc
-              end do
-
-              ! Skip near-field sources
-              if (is_direct_neighbor(cc_icell, cc_jcell)) cycle
-
-              ! Shift multipole from origin -> source center
-              call shift_multipole(gridp_nbor%multipole(jcell,:), xx_jcell, multipole) !TODO: this is too much shifting
-
-              ! Get taylor coeffs from local
-              call calc_taylor(xx_icell, xx_jcell, multipole, temp_taylor)
-              m%grid(ioct)%taylor_coeff(icell,:) = m%grid(ioct)%taylor_coeff(icell,:) + temp_taylor
-           end do
+     ! Get neighboring parent grids (returns 3^n parent level grids)
+     call get_intermediate_nbor_grid(s, hash_key, m%mg_dict, grid_nbor, flush_cache=.false., fetch_cache=.true.)
+     do inbor = 1, threetondim
+       gridp_nbor => grid_nbor(inbor)%p
+       hash_nbor(1:ndim) = gridp_nbor%ckey(1:ndim)
+       do jcell = 1, twotondim
+          call get_cell_pos(hash_nbor, jcell, r%boxlen, xx_jcell, cc_jcell)
+          if (is_direct_neighbor(hash_key(1:ndim), cc_jcell, ilevel)) cycle
+          ! Shift multipole from origin -> source center
+          multipole = gridp_nbor%multipole(jcell,:)
+          call shift_multipole(multipole, xx_jcell, multipole_shifted) !TODO: this is too much shifting
+          ! Get taylor coeffs from local
+          call calc_taylor(xx_jcell, xx_igrid, r%boxlen, multipole_shifted, temp_taylor)
+          m%grid(ioct)%taylor_coeff = m%grid(ioct)%taylor_coeff + temp_taylor
         end do
      end do
-
      ! Unlock neighbor octs
      do inbor = 1, threetondim
         call unlock_cache(s, grid_nbor(inbor)%p)
@@ -269,18 +245,20 @@ subroutine fmm_amr_direct(s, ilevel)
   type(ramses_t) :: s
   integer :: ilevel
 
-  integer :: ioct, idim, pcell, icell, inbor, jcell, nstride
+  integer :: ioct, idim, ind, pcell, icell, inbor, jcell, jcell_amr, nstride
   integer :: i, j, k, nfine
-  real(kind=8) :: phi, dist2, fourpi
-  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_fmm_cell ! cartesian coordinate
-  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pcell       ! box unit real coordinate
+  real(kind=8) :: phi, dist2, fourpi, diff
+  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_fmm_cell           ! cartesian coordinate
+  real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_ngrid       ! box unit real coordinate
   real(kind=8) :: dx_loc
-  integer(kind=8), dimension(0:ndim) :: hash_key, hash_nbor
-  integer, dimension(1:twotondim) :: ind_nbor_cells
+  integer(kind=8), dimension(0:ndim) :: hash_key, hash_pgrid, hash_nbor, hash_direct
+
+  type(nbor), dimension(1:threetondim) :: grid_nbor, direct_grid_nbor
+  integer, dimension(1:threetondim) :: ind_nbor, direct_ind_nbor
 
   type(oct), pointer :: gridp_nbor, gridp_parent
   type(msg_large_realdp)::dummy_realdp
-  real(kind=8), dimension(multipole_size) :: multipole
+  real(kind=8), dimension(1:multipole_size) :: multipole
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
 
   associate(r=>s%r, g=>s%g, m=>s%m)
@@ -293,103 +271,128 @@ subroutine fmm_amr_direct(s, ilevel)
             pack=pack_fetch_taylor,unpack=unpack_fetch_taylor,& 
             init=init_flush_taylor, flush=pack_flush_taylor, combine=unpack_flush_taylor)
 
-  hash_key(0) = ilevel - g%level_fmm_to_amr
-  hash_nbor(0) = ilevel
+  hash_pgrid(0) = ilevel - g%level_fmm_to_amr
+  hash_key(0) = ilevel
+  hash_direct(0) = ilevel
   dx_loc = r%boxlen / 2.0D0**ilevel
   nfine = 2**g%level_fmm_to_amr
 
   ! Loop over octs at this level
   do ioct = m%head(ilevel), m%tail(ilevel)
-    ! Get taylor from parent fmm grid
-    hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim) / nfine
-    pcell = 1
-
-    ! Get fmm cell (not grid) number and its center position
-    do idim = 1, ndim
-      xx_pcell(idim) = (2 * m%grid(ioct)%ckey(idim) / nfine + 0.5d0) * (nfine / 2) * dx_loc
-      if (btest(m%grid(ioct)%ckey(idim) / (2**(g%level_fmm_to_amr-1)), 0)) then
-        pcell = pcell + 2**(idim-1)
-      end if
-    end do
+    hash_pgrid(1:ndim) = m%grid(ioct)%ckey(1:ndim) / nfine
+    hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
     ! Get Taylor from Parents and calculate phi from above
-    call get_grid(s, hash_key, m%mg_dict, gridp_parent, flush_cache=.false., fetch_cache=.true.)
-    parent_taylor = gridp_parent%taylor_coeff(pcell, :)
-
-    do icell = 1, twotondim
-      phi = 0.0D0
-      ! get icell position in (0-2^ilevel)
-      do idim = 1, ndim
-        nstride = 2**(idim-1)
-        cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
-        xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
-      end do
-
-      ! Now add taylor expansion terms to phi
-      call calc_phi(parent_taylor, xx_icell - xx_pcell, phi)
-      m%grid(ioct)%phi(icell) = fourpi * phi
-    end do
-
-    cc_fmm_cell = cc_icell / nfine
-    ! Direct calculation for near neighbors
-    ! Now get accumulate phi from direct calculation with neighbors (3^ndim * 2^(level_diff) * 2^ndim cells)  / executed 2^(3*ilevel) times. 
-#if NDIM>2
-    do k=-nfine/2,nfine
-    hash_nbor(3) = nfine / 2 * cc_fmm_cell(3) + k
-#endif
-#if NDIM>1
-    do j=-nfine/2,nfine
-    hash_nbor(2) = nfine / 2 * cc_fmm_cell(2) / 2 + j
-#endif
-#if NDIM>0
-    do i=-nfine/2,nfine
-    hash_nbor(1) = nfine / 2 * cc_fmm_cell(1) / 2 + i
-#endif
-    ! Periodic boundary conditions
-    do idim=1,ndim
-      if(r%periodic(idim))then
-        if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))  hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
-        if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel)) hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
-      endif
-    end do
+    call get_grid_pos(hash_pgrid, r%boxlen, xx_pgrid)
+    call get_grid(s, hash_pgrid, m%mg_dict, gridp_parent, flush_cache=.false., fetch_cache=.true.)
+    parent_taylor = gridp_parent%taylor_coeff
     
-    call get_grid(s,hash_nbor,m%grid_dict,gridp_nbor,flush_cache=.false., fetch_cache=.true.)
+    ! Get pgrid's neighbors for intermediate field calculation
+    call get_threetondim_nbor_parent_cell(s,hash_pgrid,m%mg_dict,grid_nbor,ind_nbor,flush_cache=.false.,fetch_cache=.true.)
 
-    ! Target cells
     do icell = 1, twotondim
+      call get_cell_pos(hash_key, icell, r%boxlen, xx_icell, cc_icell)
+
+      ! Solve Far Field
       phi = 0.0D0
+      call calc_phi(parent_taylor, xx_icell - xx_pgrid, phi)
+
+      ! Solve Intermediate Field
+      hash_nbor(0) = ilevel - g%level_fmm_to_amr ! finest fmm grid
+      do ind=1, threetondim
+        temp_taylor = 0.0D0
+        jcell = ind_nbor(ind)
+        gridp_nbor => grid_nbor(ind)%p
+        hash_nbor(1:ndim) = gridp_nbor%ckey(1:ndim)
+        call get_cell_pos(hash_nbor, jcell, r%boxlen, xx_jcell, cc_jcell)
+
+        ! Skip direct neighbor
+        if (is_direct_neighbor(hash_key(1:ndim)/(nfine/2), cc_jcell, ilevel - g%level_fmm_to_amr + 1)) cycle
+
+        multipole = gridp_nbor%multipole(jcell,1:multipole_size)
+        call calc_taylor(xx_jcell, xx_icell, r%boxlen, multipole, temp_taylor)
+        call calc_phi(temp_taylor, xx_icell-xx_icell, phi) ! we do not do taylor expansion, displacement = 0.0D0
+      end do
+      m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
+      do ind=1,threetondim
+        call unlock_cache(s,grid_nbor(ind)%p)
+      end do
+      !print *, 'Before direct: ', m%grid(ioct)%phi(icell)
+    end do ! loop amr cells
+
+    ! Currently amr grid Level
+    ! Solve Direct Field / all amr cells in same fmm cell share the same direct neighbors
+    hash_nbor(0) = ilevel - g%level_fmm_to_amr + 1 !finest fmm cell 
+    hash_nbor(1:ndim) = m%grid(ioct)%ckey(1:ndim) / (nfine/2)
+    call get_threetondim_nbor_parent_cell(s,hash_nbor,m%mg_dict,direct_grid_nbor,direct_ind_nbor,flush_cache=.false.,fetch_cache=.true.)
+
+    do ind=1, threetondim
+      ! Get fmm cell info
+      jcell = direct_ind_nbor(ind)
+      gridp_nbor => direct_grid_nbor(ind)%p
       do idim = 1, ndim
         nstride = 2**(idim-1)
-        cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
-        xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
+        cc_fmm_cell(idim) = 2*gridp_nbor%ckey(idim) + MOD((jcell-1)/nstride, 2)
       end do
 
-      ! source cells
-      do jcell = 1, twotondim
-        dist2 = 0.0D0
-        do idim = 1, ndim
-          nstride = 2**(idim-1)
-          cc_jcell(idim) = 2*hash_nbor(idim) + MOD((jcell-1)/nstride, 2)
-          xx_jcell(idim) = (cc_jcell(idim) + 0.5D0) * dx_loc
-          dist2 = dist2 + min(xx_icell(idim) - xx_jcell(idim), 1-(xx_icell(idim) - xx_jcell(idim))) ** 2
-        end do
-
-        if (all(hash_nbor(1:ndim) == m%grid(ioct)%ckey(1:ndim)) .and. icell == jcell) cycle
-        print *, 'Dist: ', sqrt(dist2)
-        phi = phi - (gridp_nbor%rho(jcell)-g%rho_tot) / sqrt(dist2)
-      end do
-    m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + fourpi * phi
-    end do
-#if NDIM>0
-    end do
+      ! Find nfine/2 amr grids
+#if NDIM>2
+      do k=1,nfine/2
+      hash_direct(3) = (nfine/2) * cc_fmm_cell(3) + k-1
 #endif
 #if NDIM>1
-    end do
+      do j=1,nfine/2
+      hash_direct(2) = (nfine/2) * cc_fmm_cell(2) + j-1
+#endif
+#if NDIM>0
+      do i=1,nfine/2
+      hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i-1
+#endif
+        ! Periodic boundary conditions
+        do idim=1,ndim
+          if(r%periodic(idim))then
+            if(hash_direct(idim)<m%box_ckey_min(idim,ilevel))  hash_direct(idim)=m%box_ckey_max(idim,ilevel)-1
+            if(hash_direct(idim)>=m%box_ckey_max(idim,ilevel)) hash_direct(idim)=m%box_ckey_min(idim,ilevel)
+          endif
+        end do
+        
+        call get_grid(s,hash_direct,m%grid_dict,gridp_nbor,flush_cache=.false., fetch_cache=.true.)
+
+        ! Target cells
+        do icell = 1, twotondim
+          phi = 0.0D0
+          call get_cell_pos(hash_key, icell, r%boxlen, xx_icell, cc_icell)
+
+          ! source cells
+          do jcell_amr = 1, twotondim
+            if (all(hash_direct(1:ndim) == m%grid(ioct)%ckey(1:ndim)) .and. icell == jcell_amr) cycle
+            dist2 = 0.0D0
+            call get_cell_pos(hash_direct, jcell_amr, r%boxlen, xx_jcell, cc_jcell)
+            do idim = 1, ndim
+              diff = xx_icell(idim) - xx_jcell(idim)
+              if (diff >  0.5d0 * r%boxlen) diff = diff - r%boxlen
+              if (diff < -0.5d0 * r%boxlen) diff = diff + r%boxlen
+              dist2 = dist2 + diff * diff
+            end do
+            phi = phi - (gridp_nbor%rho(jcell_amr) - g%rho_tot) * (dx_loc**ndim) / sqrt(dist2)
+          end do ! end source amr cell loop
+          m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
+          m%grid(ioct)%f(icell,2) = m%grid(ioct)%phi(icell)
+        end do ! end target amr cell loop
+#if NDIM>0
+  end do
+#endif
+#if NDIM>1
+  end do
 #endif
 #if NDIM>2
-    end do
-#endif
   end do
+#endif
+    end do ! end direct force calculation for given amr grid
+    do ind=1,threetondim
+      call unlock_cache(s,direct_grid_nbor(ind)%p)
+    end do
+  end do ! end over all amr @ given ilevel
   call close_cache(s, m%mg_dict)
   end associate
 end subroutine fmm_amr_direct
@@ -397,19 +400,66 @@ end subroutine fmm_amr_direct
 !################################################################
 !################################################################
 !################################################################
-logical function is_direct_neighbor(cc_icell, cc_jcell)
+logical function is_direct_neighbor(cc_icell, cc_jcell, ilevel)
   use amr_parameters, only: ndim
   implicit none
   integer(kind=8), intent(in) :: cc_icell(ndim), cc_jcell(ndim)
-  integer :: d, n
+  integer :: d, n, ilevel, diff
+  
   is_direct_neighbor = .true.
   do d = 1, ndim
-     if (abs(cc_icell(d)-cc_jcell(d)) > 1) then
+     diff = abs(cc_icell(d) - cc_jcell(d))
+     diff = min(diff, 2**(ilevel-1) - diff)
+     if (diff > 1) then
         is_direct_neighbor = .false.
         return
      end if
   end do
 end function is_direct_neighbor
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine get_grid_pos(hash_key, boxlen, pos)
+  use amr_parameters, only: ndim
+  implicit none
+  integer(kind=8), intent(in)  :: hash_key(0:ndim)   ! (0)=ilevel, (1:ndim)=spatial keys
+  real(kind=8),    intent(in)  :: boxlen             ! size of domain
+  real(kind=8),    intent(out) :: pos(ndim)          ! grid center position in physical units
+
+  integer :: idim, ilevel
+  real(kind=8) :: dx_loc
+
+  ilevel = hash_key(0)
+  dx_loc = boxlen / 2.0d0**(ilevel-1)
+  do idim = 1, ndim
+     pos(idim) = (hash_key(idim) + 0.5d0) * dx_loc
+  end do
+end subroutine get_grid_pos
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine get_cell_pos(hash_key, icell, boxlen, pos, cc_icell)
+  use amr_parameters, only: ndim
+  implicit none
+  integer(kind=8), intent(in)  :: hash_key(0:ndim)   ! (0)=ilevel, (1:ndim)=spatial keys
+  integer,        intent(in)   :: icell              ! local cell index (1..2^ndim)
+  real(kind=8),   intent(in)   :: boxlen             ! size of domain
+  real(kind=8),   intent(out)  :: pos(ndim)          ! cell center position in physical units
+  integer(kind=8),   intent(out)  :: cc_icell(ndim)          ! cartesian coordinate
+
+  integer :: idim, ilevel, nstride
+  real(kind=8) :: dx_loc
+
+  ilevel = hash_key(0)
+  dx_loc = boxlen / 2.0d0**ilevel
+  do idim = 1, ndim
+     nstride = 2**(idim-1)
+     cc_icell(idim) = 2*hash_key(idim) + MOD((icell-1)/nstride, 2)
+     pos(idim)      = (cc_icell(idim) + 0.5d0) * dx_loc
+  end do
+end subroutine get_cell_pos
 !################################################################
 !################################################################
 !################################################################
@@ -442,9 +492,7 @@ subroutine pack_flush_taylor(grid,msg_size,msg_array)
   integer::ind,ivar
   type(msg_large_realdp)::msg
   do ivar=0,ndim+ int(ndim * (ndim+1)/2)
-     do ind=1,twotondim
-        msg%realdp_fmm_taylor(ind,ivar)=grid%taylor_coeff(ind,ivar)
-     end do
+    msg%realdp_fmm_taylor(ivar)=grid%taylor_coeff(ivar)
   end do
   msg_array=transfer(msg,msg_array)
 end subroutine pack_flush_taylor
@@ -469,9 +517,7 @@ subroutine unpack_flush_taylor(grid,msg_size,msg_array,hash_key)
   msg=transfer(msg_array,msg)
   
   do ivar=1,taylor_size
-     do ind=1,twotondim
-        grid%taylor_coeff(ind,ivar)=grid%taylor_coeff(ind,ivar)+msg%realdp_fmm_taylor(ind,ivar)
-     end do
+    grid%taylor_coeff(ivar)=grid%taylor_coeff(ivar)+msg%realdp_fmm_taylor(ivar)
   end do
 end subroutine unpack_flush_taylor
 !################################################################
