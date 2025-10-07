@@ -19,11 +19,11 @@ path_to_output = args.file
 # read log file
 cmd="grep Main "+path_to_output+" | cut -b 95-109 > /tmp/emag.txt"
 os.system(cmd)
-cmd="grep Main -A2 "+path_to_output+" | grep dt | cut -b 19-33 > /tmp/time.txt"
+cmd="grep Main -A3 "+path_to_output+" | grep dt | cut -b 19-33 > /tmp/time.txt"
 os.system(cmd)
-cmd="grep Main -A2 "+path_to_output+" | grep dt | cut -b 34-47 > /tmp/dt.txt"
+cmd="grep Main -A3 "+path_to_output+" | grep dt | cut -b 34-47 > /tmp/dt.txt"
 os.system(cmd)
-cmd="grep Main -A2 "+path_to_output+" | grep dt | cut -b 48-60 > /tmp/aexp.txt"
+cmd="grep Main -A3 "+path_to_output+" | grep dt | cut -b 48-60 > /tmp/aexp.txt"
 os.system(cmd)
 do_mag=True
 try:
