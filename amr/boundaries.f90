@@ -440,14 +440,16 @@ end subroutine init_bound_refine
 !################################################################
 !################################################################
 !################################################################
-subroutine init_bound_grav(r,g,grid)
+subroutine init_bound_grav(r,g,m,grid)
   use amr_parameters, only: ndim, twotondim, nvector
-  use amr_commons, only: run_t, global_t, oct
+  use amr_commons, only: run_t, global_t, mesh_t, oct
   type(run_t)::r
   type(global_t)::g
+  type(mesh_t)::m
   type(oct)::grid
 
   integer::idim, ind, nstride
+  real(kind=8)::dx
   real(kind=8),dimension(1:nvector,1:ndim)::xx
   real(kind=8),dimension(1:nvector,1:ndim)::ff
   real(kind=8),dimension(1:nvector)::pp
