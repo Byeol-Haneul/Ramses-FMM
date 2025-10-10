@@ -1,15 +1,14 @@
 module fmm_taylor
 contains
 #ifdef FMM
-subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
+subroutine calc_taylor(R, multipoles, taylor_coeff)
   use amr_parameters, only: ndim, multipole_size, taylor_size
   implicit none
 
   integer :: nq, no, i, j, k, idxC2, idxC3
-  real(kind=8), intent(in)  :: xx_source(ndim), xx_target(ndim)
+  real(kind=8), intent(in)  :: R(ndim)
   real(kind=8), intent(in)  :: multipoles(1:multipole_size)
-  real(kind=8), intent(in)  :: boxlen
-  real(kind=8), intent(out) :: taylor_coeff(1:taylor_size)
+  real(kind=8), intent(inout) :: taylor_coeff(1:taylor_size)
 
   ! Multipoles
   real(kind=8) :: M0
@@ -17,7 +16,7 @@ subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
   real(kind=8) :: M2(ndim,ndim)
 
   ! Displacement
-  real(kind=8) :: R(ndim), dist
+  real(kind=8) :: dist
 
   ! Precompute
   real(kind=8) :: trM, S, MR(ndim), RdotM1
@@ -26,7 +25,6 @@ subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
   !------------------------------------------------------------------
   ! Compute displacement and distance
   !------------------------------------------------------------------
-  call get_displacement(xx_target, xx_source, boxlen, R)
   dist = sqrt(sum(R(:)**2))
   if (dist == 0.0D0) dist = 1.0D-12
 
@@ -35,8 +33,8 @@ subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
   !------------------------------------------------------------------
   D0 = 1.0D0 / dist
   D1 = -1.0D0 / dist**3
-  D2 = 2.0D0 / dist**4
-  D3 = -6.0D0 / dist**5
+  D2 = 3.0D0 / dist**5
+  D3 = -15.0D0 / dist**7
 
   !------------------------------------------------------------------
   ! Reconstruct multipoles from 1D array
@@ -79,13 +77,13 @@ subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
   !------------------------------------------------------------------
   !                               C0
   !------------------------------------------------------------------  
-  taylor_coeff(1) = M0*D0 - RdotM1*D1 + 0.5D0*trM*D1 + 0.5D0*S*D2
+  taylor_coeff(1) = taylor_coeff(1) + M0*D0 - RdotM1*D1 + 0.5D0*(trM*D1 + S*D2)
 
   !------------------------------------------------------------------
   !                               C1
   !------------------------------------------------------------------  
   do i = 1, ndim
-     taylor_coeff(1+i) = M0*R(i)*D1 - M1(i)*D1 - R(i)*RdotM1*D2 + 0.5D0*R(i)*trM*D2 + MR(i)*D2 + 0.5D0*R(i)*S*D3
+     taylor_coeff(1+i) = taylor_coeff(1+i) + M0*R(i)*D1 - M1(i)*D1 - R(i)*RdotM1*D2 + 0.5D0*R(i)*trM*D2 + 0.5D0*MR(i)*D2 + 0.5D0*R(i)*S*D3
   end do
 
   !------------------------------------------------------------------
@@ -96,7 +94,7 @@ subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
   do j = 1, ndim
      do i = 1, j
         idxC2 = idxC2 + 1
-        taylor_coeff(idxC2) = M0*( merge(D1, 0.0D0, i==j) + R(i)*R(j)*D2 ) &
+        taylor_coeff(idxC2) = taylor_coeff(idxC2) + M0*( merge(D1, 0.0D0, i==j) + R(i)*R(j)*D2 ) &
                               - merge(RdotM1, 0.0D0, i==j)*D2 - R(i)*M1(j)*D2 - R(j)*M1(i)*D2 - R(i)*R(j)*RdotM1*D3
      end do
   end do
@@ -110,7 +108,7 @@ subroutine calc_taylor(xx_source, xx_target, boxlen, multipoles, taylor_coeff)
      do j = 1, k
         do i = 1, j
            idxC3 = idxC3 + 1
-           taylor_coeff(idxC3) = M0*( (merge(R(k),0.0D0,i==j) + merge(R(i),0.0D0,j==k) + merge(R(j),0.0D0,k==i))*D2 + R(i)*R(j)*R(k)*D3 )
+           taylor_coeff(idxC3) =taylor_coeff(idxC3) + M0*( (merge(R(k),0.0D0,i==j) + merge(R(i),0.0D0,j==k) + merge(R(j),0.0D0,k==i))*D2 + R(i)*R(j)*R(k)*D3 )
         end do
      end do
   end do
@@ -256,7 +254,7 @@ subroutine calc_phi(taylor_in, a, phi_out)
 
   real(kind=8), intent(in)  :: taylor_in(1:taylor_size)
   real(kind=8), intent(in)  :: a(ndim)
-  real(kind=8), intent(out) :: phi_out
+  real(kind=8), intent(inout) :: phi_out
 
   integer :: i, j, k, idx, nq, no
   integer :: idxC2, idxC3
@@ -329,14 +327,17 @@ end subroutine calc_phi
 subroutine get_displacement(p, q, boxlen, r)
   use amr_parameters, only: ndim
   implicit none
-  real(kind=8), intent(in)   :: p(1:ndim), q(1:ndim) 
-  real(kind=8),   intent(in) :: boxlen    
-  real(kind=8), intent(out)  :: r(1:ndim)
+  real(kind=8), intent(in)  :: p(ndim), q(ndim)
+  real(kind=8), intent(in)  :: boxlen
+  real(kind=8), intent(out) :: r(ndim)
   integer :: idim
-  real :: diff
+  real(kind=8) :: diff
+
   do idim = 1, ndim
      diff = p(idim) - q(idim)
-     r(idim) = min(diff, boxlen-diff)
+     if (diff >  boxlen/2.d0) diff = diff - boxlen
+     if (diff < -boxlen/2.d0) diff = diff + boxlen
+     r(idim) = diff
   end do
 end subroutine get_displacement
 #endif

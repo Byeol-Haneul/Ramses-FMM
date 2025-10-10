@@ -10,7 +10,7 @@ make NDIM=3 MPI=1 UNITS=MERGER PATCH=../patch/init/halo HYDRO=1 GRAV=1 NPSCAL=2
 cosmo=.false.
 pic=.true.
 poisson=.true.
-hydro=.true.
+hydro=.false.
 nrestart=0
 nsubcycle=1,1,2
 ncontrol=1

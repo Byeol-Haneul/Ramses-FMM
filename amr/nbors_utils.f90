@@ -871,38 +871,37 @@ subroutine get_intermediate_nbor_grid(s,hash_key,hash_dict,grid_nbor,flush_cache
   associate(r=>s%r,g=>s%g,m=>s%m)
 
   ilevel = hash_key(0)
-  hash_nbor(0) = ilevel
-  inbor = 0
+  hash_nbor(0) = ilevel - 1
   hash_father(0)=hash_key(0)-1
   hash_father(1:ndim)=hash_key(1:ndim)/2
 
-    do k1=-1,1
-      do j1=-1,1
-        do i1=-1,1
-          inbor = inbor + 1
+  inbor = 0
+  do k1=-1,1
+    do j1=-1,1
+      do i1=-1,1
+        inbor = inbor + 1
 #if NDIM>0
-          hash_nbor(1) = hash_father(1) + i1
+        hash_nbor(1) = hash_father(1) + i1
 #endif
 #if NDIM>1
-          hash_nbor(2) = hash_father(2) + j1
+        hash_nbor(2) = hash_father(2) + j1
 #endif
 #if NDIM>2
-          hash_nbor(3) = hash_father(3) + k1
+        hash_nbor(3) = hash_father(3) + k1
 #endif
-          ! Periodic boundary conditions
-          do idim=1,ndim
-            if(r%periodic(idim)) then
-              if(hash_nbor(idim) < m%box_ckey_min(idim,ilevel-1)) hash_nbor(idim) = m%box_ckey_max(idim,ilevel-1)-1
-              if(hash_nbor(idim) >= m%box_ckey_max(idim,ilevel-1)) hash_nbor(idim) = m%box_ckey_min(idim,ilevel-1)
-            endif
-          enddo
-          ! Fetch the grid containing the neighbor
-          call get_grid(s, hash_nbor, hash_dict, gridp, flush_cache=flush_cache, fetch_cache=fetch_cache, lock=.true.)
-          grid_nbor(inbor)%p => gridp
-        end do
+        ! Periodic boundary conditions
+        do idim=1,ndim
+          if(r%periodic(idim)) then
+            if(hash_nbor(idim) < m%box_ckey_min(idim,ilevel-1)) hash_nbor(idim) = m%box_ckey_max(idim,ilevel-1)-1
+            if(hash_nbor(idim) >= m%box_ckey_max(idim,ilevel-1)) hash_nbor(idim) = m%box_ckey_min(idim,ilevel-1)
+          endif
+        enddo
+        ! Fetch the grid containing the neighbor
+        call get_grid(s, hash_nbor, hash_dict, gridp, flush_cache=flush_cache, fetch_cache=fetch_cache, lock=.true.)
+        grid_nbor(inbor)%p => gridp
       end do
     end do
-
+  end do
   end associate
 end subroutine get_intermediate_nbor_grid
 end module nbors_utils

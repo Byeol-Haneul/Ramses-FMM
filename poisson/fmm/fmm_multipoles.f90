@@ -66,7 +66,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
      call r_fmm_multipole_fmm2fmm(pst,i,1)
   end do
 
-
+  call dump_multipole(r, g, m, 5)
   end associate
 
 end subroutine m_fmm_multipoles
@@ -335,7 +335,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   do ioct=m%head(ilevel+g%level_fmm_to_amr),m%tail(ilevel+g%level_fmm_to_amr)
      ! Get fmm grid above level_fmm_to_amr
      hash_key_amr(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     hash_key_fmm(1:ndim)=int(hash_key_amr(1:ndim)/(2**g%level_fmm_to_amr))
+     hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/(2**g%level_fmm_to_amr)
      ii(1:ndim)=hash_key_amr(1:ndim)-(2**g%level_fmm_to_amr)*hash_key_fmm(1:ndim) ! 0 to 2^(level_fmm_to_amr)-1
      ii(1:ndim)=ii(1:ndim)/(2**(g%level_fmm_to_amr-1)) ! 0 or 1 
      icell=1
@@ -348,7 +348,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
      do ind=1,twotondim
        multipole = multipole + m%grid(ioct)%multipole(ind,:)
      end do
-      grid_fmm%multipole(icell,:) = grid_fmm%multipole(icell,:) + multipole
+     grid_fmm%multipole(icell,:) = grid_fmm%multipole(icell,:) + multipole
   end do
   call close_cache(s,m%mg_dict)
   end associate
@@ -427,11 +427,6 @@ subroutine fmm_multipole_fmm2fmm(s,ilevel)
        multipole = multipole + m%grid(ioct)%multipole(ind,:)
      end do
      gridp%multipole(icell,:) = gridp%multipole(icell,:) + multipole
-
-     !f (ilevel < 5) then
-     !  print *, 'Level = ', ilevel, 'icell =', icell, ' updated multipole:'
-     !  print *, gridp%multipole(icell,:)
-     !end if
   end do
   call close_cache(s,m%mg_dict)
   end associate
@@ -644,5 +639,40 @@ subroutine shift_multipole(multipole_in, a, multipole_out)
   multipole_out(10) = qp_out(3,3)  ! zz
 #endif
 end subroutine shift_multipole
+subroutine dump_multipole(r, g, m, ilevel)
+  use amr_parameters, only: ndim, twotondim
+  use amr_commons, only: nbor, oct, run_t, global_t, mesh_t
+  implicit none
+  type(run_t)    :: r
+  type(global_t) :: g
+  type(mesh_t)   :: m
+  integer, intent(in)      :: ilevel
+
+  integer :: ioct, icell, idim, nstride
+  integer :: unit_debug
+  integer(kind=8), dimension(ndim) :: cc_icell
+  real(kind=8), dimension(ndim) :: xx_icell
+  real(kind=8) :: dx_loc
+
+  ! open debug file
+  unit_debug = 99
+#ifdef FMM
+  open(unit_debug, file="mult_fmm.out", status="replace")
+#else
+  open(unit_debug, file="mult_mg.out", status="replace")
+#endif
+  dx_loc = r%boxlen / 2.0D0**ilevel
+  do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
+     do icell = 1, twotondim
+        do idim = 1, ndim
+          nstride = 2**(idim-1)
+          cc_icell(idim) = 2*m%grid(ioct)%ckey(idim) + MOD((icell-1)/nstride, 2)
+          xx_icell(idim) = (cc_icell(idim) + 0.5D0) * dx_loc
+        end do
+        write(unit_debug, '(3I6, E20.4)') cc_icell, m%grid(ioct)%multipole(icell, 1)
+     end do
+  end do
+  close(unit_debug)
+end subroutine dump_multipole
 #endif FMM
 end module fmm_multipoles
