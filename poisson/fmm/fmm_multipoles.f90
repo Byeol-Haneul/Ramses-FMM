@@ -66,7 +66,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
      call r_fmm_multipole_fmm2fmm(pst,i,1)
   end do
 
-  call dump_multipole(r, g, m, 5)
+  call dump_multipole(r, g, m, 7)
   end associate
 
 end subroutine m_fmm_multipoles
@@ -662,7 +662,7 @@ subroutine dump_multipole(r, g, m, ilevel)
   open(unit_debug, file="mult_mg.out", status="replace")
 #endif
   dx_loc = r%boxlen / 2.0D0**ilevel
-  do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
+  do ioct = m%head(ilevel), m%tail(ilevel)
      do icell = 1, twotondim
         do idim = 1, ndim
           nstride = 2**(idim-1)

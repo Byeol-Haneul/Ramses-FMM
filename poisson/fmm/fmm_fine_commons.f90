@@ -104,7 +104,6 @@ recursive subroutine r_fmm_downward(pst,ilevel,input_size)
   type(pst_t)::pst
   integer,VALUE::input_size
   integer::ilevel
-
   integer::rID
 
   if(pst%nLower>0)then
@@ -147,6 +146,7 @@ subroutine fmm_downward(s, ilevel)
   type(msg_large_realdp)::dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
+  logical::cycle_flag
 
   associate(r=>s%r, g=>s%g, m=>s%m)
 
@@ -194,13 +194,18 @@ subroutine fmm_downward(s, ilevel)
 
        do jcell = 1, twotondim
           call get_cell_pos(hash_nbor, jcell, r%boxlen, xx_jcell, cc_jcell)
+          cycle_flag = .false.
           do idim=1,ndim
             nstride = 2**(idim-1)
             cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
             xx_jcell_periodic(idim) = (cc_jcell_periodic(idim) + 0.5d0) * (dx_loc*2)
+            if ((cc_jcell_periodic(idim)<m%box_ckey_min(idim, ilevel) .or. cc_jcell_periodic(idim)>=m%box_ckey_max(idim, ilevel))) then
+              cycle_flag = .true.
+            end if 
           end do 
           ! skip direct neighbors
-          if (is_direct_neighbor(hash_key(1:ndim), cc_jcell_periodic, ilevel-1)) cycle
+          if (is_direct_neighbor(hash_key(1:ndim), cc_jcell_periodic, ilevel-1) .or. cycle_flag) cycle
+
           ! Shift multipole from origin -> source center (Need to use grid position)
           multipole = gridp_nbor%multipole(jcell,:)
           !TODO: this is too much shifting
@@ -210,9 +215,6 @@ subroutine fmm_downward(s, ilevel)
           ! Need to use relative position accouting for the periodic boundary condition
           !xx_igrid - xx_jcell_periodic
           dx = (hash_key(1:ndim) - cc_jcell_periodic) * r%boxlen / 2**(ilevel-1)
-          if (all(hash_key(1:ndim)==0)) then
-            print *, dx
-          end if
           call calc_taylor(dx, multipole_shifted, temp_taylor)
        end do ! over neighboring grid's cells 2^n
      end do ! over neighboring grids 3^n 
@@ -272,7 +274,7 @@ subroutine fmm_amr_direct(s, ilevel)
   integer :: ioct, idim, ind, pcell, icell, inbor, jcell, jcell_amr, nstride
   integer :: i, j, k, nfine
   real(kind=8) :: phi, dist2, fourpi
-  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_fmm_cell, offset           ! cartesian coordinate
+  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_jcell_periodic, cc_fmm_cell, offset           ! cartesian coordinate
   real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, xx_pgrid, xx_ngrid, xx_jcell_periodic, diff       ! box unit real coordinate
   real(kind=8) :: dx_loc
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, hash_nbor, hash_nbor_periodic, hash_direct
@@ -284,6 +286,7 @@ subroutine fmm_amr_direct(s, ilevel)
   type(msg_large_realdp)::dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
   real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
+  logical::cycle_flag
 
   associate(r=>s%r, g=>s%g, m=>s%m)
   fourpi = 4.D0*ACOS(-1.0D0)
@@ -346,11 +349,17 @@ subroutine fmm_amr_direct(s, ilevel)
             offset(idim) = MOD((ind-1)/3**(idim-1), 3) - 1
           end do        
 
+          cycle_flag = .false.
           hash_nbor_periodic(1:ndim) = hash_fmm_grid(1:ndim) + offset
           do idim=1,ndim
             nstride = 2**(idim-1)
-            xx_jcell_periodic(idim) = (2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2) + 0.5d0) * (dx_loc*nfine)
+            cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
+            xx_jcell_periodic(idim) = (cc_jcell_periodic(idim) + 0.5d0) * (dx_loc*nfine)
+            if ((cc_jcell_periodic(idim)<m%box_ckey_min(idim, ilevel) .or. cc_jcell_periodic(idim)>=m%box_ckey_max(idim, ilevel))) then
+              cycle_flag = .true.
+            end if
           end do 
+          if (cycle_flag) cycle
 
           call get_displacement(xx_icell, xx_jcell_periodic, r%boxlen, diff)
           call calc_taylor(diff, multipole_shifted, temp_taylor)
@@ -391,12 +400,25 @@ subroutine fmm_amr_direct(s, ilevel)
       hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i-1
 #endif
         ! Periodic boundary conditions
+        cycle_flag = .false.
         do idim=1,ndim
-          if(r%periodic(idim))then
-            if(hash_direct(idim)<m%box_ckey_min(idim,ilevel))  hash_direct(idim)=m%box_ckey_max(idim,ilevel)-1
-            if(hash_direct(idim)>=m%box_ckey_max(idim,ilevel)) hash_direct(idim)=m%box_ckey_min(idim,ilevel)
-          endif
+          if (r%periodic(idim)) then
+            ! periodic wrap-around
+            if (hash_direct(idim) < m%box_ckey_min(idim, ilevel)) then
+                hash_direct(idim) = m%box_ckey_max(idim, ilevel) - 1
+            end if
+            if (hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
+                hash_direct(idim) = m%box_ckey_min(idim, ilevel)
+            end if
+          end if
+
+          if (hash_direct(idim) < m%box_ckey_min(idim, ilevel) .OR. &
+              hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
+              cycle_flag = .true.  ! skip this dimension or the whole grid depending on context
+          end if
         end do
+
+        if (cycle_flag) cycle
         
         call get_grid(s,hash_direct,m%grid_dict,gridp_nbor,flush_cache=.false., fetch_cache=.true.)
 
