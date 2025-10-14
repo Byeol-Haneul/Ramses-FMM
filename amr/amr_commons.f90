@@ -55,6 +55,10 @@ module amr_commons
      integer::bkp_modulo=0       ! Use modulo for backup file count
      integer::nfile=1            ! Number of file used per snapshot. Use -1 for nfile=ncpu
 
+     ! Trajectory output parameters (per-step particle traces)
+     integer::ntrajectories=0
+     integer,dimension(1:MAXOUT)::trajectories=0
+
      ! Mesh parameters
      integer::levelmin=1         ! Full refinement up to levelmin
      integer::nlevelmax=1        ! Maximum number of level

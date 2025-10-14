@@ -116,6 +116,10 @@ subroutine m_read_params(pst)
   ! Output times
   real(kind=8),dimension(1:MAXOUT)::aout=1.1  ! Output expansion factors
   real(kind=8),dimension(1:MAXOUT)::tout=0.0  ! Output times
+  
+  ! Trajectory output parameters
+  integer::ntrajectories=0
+  integer,dimension(1:MAXOUT)::trajectories=0
 
   ! Movie
   integer::imovout=0     ! Increment for output times
@@ -524,6 +528,8 @@ subroutine m_read_params(pst)
   namelist/output_params/foutput,aout,tout,output_mode &
        & ,tend,delta_tout,aend,delta_aout,gadget_output &
        & ,run_time_hrs,bkp_time_hrs,bkp_last_min,bkp_modulo,nfile
+  ! Trajectory output parameters
+  namelist/traj_params/ntrajectories,trajectories
   ! AMR grid basic parameters
   namelist/amr_params/levelmin,levelmax,ngridmax,ncachemax,ngridtot &
        & ,npartmax,nparttot,nexpand,boxlen,box_size &
@@ -717,6 +723,9 @@ subroutine m_read_params(pst)
   read(1,NML=run_params)
   rewind(1)
   read(1,NML=output_params)
+  rewind(1)
+  read(1,NML=traj_params,END=83)
+83 continue
   rewind(1)
   read(1,NML=amr_params)
   rewind(1)
@@ -1256,6 +1265,10 @@ subroutine m_read_params(pst)
   s%r%proj_axis=proj_axis
   s%r%movie_vars_txt=movie_vars_txt
   if(s%r%movie)call set_movie_vars(s%r)
+
+  ! Trajectory output params
+  s%r%ntrajectories=ntrajectories
+  s%r%trajectories=trajectories
 
   s%r%gamma=gamma
   s%r%courant_factor=courant_factor

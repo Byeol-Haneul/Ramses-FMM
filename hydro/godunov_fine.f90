@@ -760,6 +760,19 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                                & (h%flux(i3   ,j3   ,k3   ,ivar,idim) &
                                & -h%flux(i3+i0,j3+j0,k3+k0,ivar,idim))
                        end do
+#if defined(HYDRO) && defined(VFACE)
+                       ! Store face-centered normal velocities (positive toward +axis)
+                       if (idim==1) then
+                          childp%vface(ind_son,1)=h%tmp(i3   ,j3   ,k3   ,1,idim)*dx/g%dtnew(ilevel)
+                          childp%vface(ind_son,4)=h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*dx/g%dtnew(ilevel)
+                       else if (idim==2) then
+                          childp%vface(ind_son,2)=h%tmp(i3   ,j3   ,k3   ,1,idim)*dx/g%dtnew(ilevel)
+                          childp%vface(ind_son,5)=h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*dx/g%dtnew(ilevel)
+                       else if (idim==3) then
+                          childp%vface(ind_son,3)=h%tmp(i3   ,j3   ,k3   ,1,idim)*dx/g%dtnew(ilevel)
+                          childp%vface(ind_son,6)=h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*dx/g%dtnew(ilevel)
+                       end if
+#endif
 #if NVAR>5
                        do ivar=6,nvar
                           childp%unew(ind_son,ivar)=childp%unew(ind_son,ivar)+ &
@@ -998,6 +1011,16 @@ subroutine godfine1(s,ind_grid,ilevel,h)
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &
                                   & +h%flux(i3+i0,j3+j0,k3+k0,ivar,idim)*oneontwotondim
                           end do
+#if defined(HYDRO) && defined(VFACE)
+                          ! Store face-centered normal velocity for boundary cells (right faces only)
+                          if (idim==1) then
+                             gridp%vface(icell,4)= h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*dx/g%dtnew(ilevel)
+                          else if (idim==2) then
+                             gridp%vface(icell,5)= h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*dx/g%dtnew(ilevel)
+                          else if (idim==3) then
+                             gridp%vface(icell,6)= h%tmp(i3+i0,j3+j0,k3+k0,1,idim)*dx/g%dtnew(ilevel)
+                          end if
+#endif
 #if NVAR>5
                           do ivar=6,nvar
                              gridp%unew(icell,ivar)=gridp%unew(icell,ivar) &

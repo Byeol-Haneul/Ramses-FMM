@@ -99,6 +99,8 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
+        elseif(pst%s%r%trac_interpolation_scheme==4)then
+           call ngp_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
      if(pst%s%r%dust)then
@@ -771,19 +773,24 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
   use amr_parameters, only: twotondim, ndim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-  use cache_commons, only: msg_nvar_realdp
+  use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
 
   integer::ind,ivar
-  type(msg_nvar_realdp)::msg
+  type(msg_large_realdp)::msg
 
 #ifdef HYDRO
   do ivar=1,nvar
      do ind=1,twotondim
         msg%realdp_hydro(ind,ivar)=grid%uold(ind,ivar)
      end do
+  end do
+#endif
+#ifdef VFACE
+  do ind=1,twotondim
+     msg%realdp_vface(ind,1:6)=grid%vface(ind,1:6)
   end do
 #endif
 
@@ -796,13 +803,13 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar
   use amr_commons, only: oct
-  use cache_commons, only: msg_nvar_realdp
+  use cache_commons, only: msg_large_realdp
   type(oct)::grid
   integer::msg_size
   integer,dimension(1:msg_size),optional::msg_array
   integer(kind=8),dimension(0:ndim)::hash_key
   integer::ind,ivar
-  type(msg_nvar_realdp)::msg
+  type(msg_large_realdp)::msg
 
   grid%lev=hash_key(0)
   grid%ckey(1:ndim)=hash_key(1:ndim)
@@ -813,6 +820,11 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
      do ind=1,twotondim
         grid%uold(ind,ivar)=msg%realdp_hydro(ind,ivar)
      end do
+  end do
+#endif
+#ifdef VFACE
+  do ind=1,twotondim
+     grid%vface(ind,1:6)=msg%realdp_vface(ind,1:6)
   end do
 #endif
 
@@ -916,33 +928,176 @@ end subroutine unpack_fetch_kick_dust
 !#########################################################################
 !#########################################################################
 subroutine pli_trace_gas_part(s,p,ilevel,action_part)
-   use amr_parameters, only: ndim, twotondim
-   use pm_parameters
-   use pm_commons, only: part_t
-   use oct_commons, only: oct
-   use ramses_commons, only: ramses_t
-   use nbors_utils
-   use cache_commons
-   use cache
-   implicit none
-   type(ramses_t)::s
-   type(part_t)::p
-   integer::ilevel
-   integer::action_part
-   real(kind=8),dimension(1:ndim)::x,x_mid,dr,dl,dr2,dl2
-   integer,dimension(1:ndim)::ir,il
-   integer,dimension(1:ndim)::ir2,il2
-   real(kind=8),dimension(1:twotondim)::vol,vol2
-   integer,dimension(1:ndim,1:twotondim)::ckey,ckey2
-   integer::icell,icell2
-   integer(kind=8),dimension(0:ndim)::hash_nbor
-   integer::ipart,ind,idim
-   real(kind=8)::dx_loc,vol_loc
-   real(kind=8),dimension(1:ndim)::ff,v_pred
-   type(oct),pointer :: gridp
-   logical :: ok_level
-   type(msg_three_realdp)::dummy_three_realdp
-   type(msg_nvar_realdp)::dummy_nvar_realdp
+  use amr_parameters, only: ndim, twotondim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,x_mid
+  integer,dimension(1:ndim)::cc,cc2
+  real(kind=8),dimension(1:ndim)::frac,frac2
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,idim,icell,icell2
+  real(kind=8)::dx_loc
+  real(kind=8),dimension(1:ndim)::ff,v_pred
+  type(oct),pointer :: gridp
+  real(kind=8),dimension(1:ndim)::x_samp
+  integer :: itry, lvl_try
+#ifdef VFACE
+  type(msg_large_realdp)::dummy_large_realdp
+#else
+  type(msg_nvar_realdp)::dummy_nvar_realdp
+#endif
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+
+#ifdef VFACE
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
+                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+#else
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
+                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+#endif
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
+        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+
+     do idim=1,ndim
+        cc(idim)=int(x(idim))
+        frac(idim)=x(idim)-dble(cc(idim))
+     end do
+
+     hash_nbor(0)=ilevel+1
+     hash_nbor(1:ndim)=cc(1:ndim)
+     call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+
+     if(action_part==action_kick_only)then
+        p%levelp(ipart)=ilevel
+#ifdef VFACE
+        if(associated(gridp))then
+           ff(1)=(1.0d0-frac(1))*gridp%vface(icell,1)+frac(1)*gridp%vface(icell,4)
+#if (NDIM>1)
+           ff(2)=(1.0d0-frac(2))*gridp%vface(icell,2)+frac(2)*gridp%vface(icell,5)
+#endif
+#if (NDIM>2)
+           ff(3)=(1.0d0-frac(3))*gridp%vface(icell,3)+frac(3)*gridp%vface(icell,6)
+#endif
+        else
+           ff(1:ndim)=0.0d0
+        end if
+#else
+        if(associated(gridp))then
+           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
+        else
+           ff(1:ndim)=0.0d0
+        end if
+#endif
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+
+     else if(action_part==action_kick_drift)then
+        ! Leapfrog: first step predicts midpoint, thereafter sample at current x
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        if (g%nstep==0) then
+           do idim=1,ndim
+              x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+           end do
+        else
+           do idim=1,ndim
+              x_mid(idim)=x(idim)
+           end do
+        endif
+        do idim=1,ndim
+           if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+           if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+        end do
+
+#ifdef VFACE
+        ff(1:ndim)=0.0d0
+        do itry=1,3
+          select case(itry)
+          case(1)
+            lvl_try = ilevel+2
+            x_samp(1:ndim)=x_mid(1:ndim)*2.0d0
+          case(2)
+            lvl_try = ilevel+1
+            x_samp(1:ndim)=x_mid(1:ndim)
+          case(3)
+            lvl_try = ilevel
+            x_samp(1:ndim)=x_mid(1:ndim)/2.0d0
+          end select
+          hash_nbor(0)=lvl_try
+          do idim=1,ndim
+            if(x_samp(idim)<0d0)x_samp(idim)=x_samp(idim)+dble(m%ckey_max(lvl_try))
+            if(x_samp(idim)>=dble(m%ckey_max(lvl_try)))x_samp(idim)=x_samp(idim)-dble(m%ckey_max(lvl_try))
+            cc(idim)=int(x_samp(idim))
+            frac(idim)=x_samp(idim)-dble(cc(idim))
+          end do
+          hash_nbor(1:ndim)=cc(1:ndim)
+          call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+          if(associated(gridp))then
+            if(.not. gridp%refined(icell2))then
+              ff(1)=(1.0d0-frac(1))*gridp%vface(icell2,1)+frac(1)*gridp%vface(icell2,4)
+#if (NDIM>1)
+              ff(2)=(1.0d0-frac(2))*gridp%vface(icell2,2)+frac(2)*gridp%vface(icell2,5)
+#endif
+#if (NDIM>2)
+              ff(3)=(1.0d0-frac(3))*gridp%vface(icell2,3)+frac(3)*gridp%vface(icell2,6)
+#endif
+              exit
+            end if
+          end if
+        end do
+#else
+        hash_nbor(0)=ilevel+1
+        do idim=1,ndim
+          cc2(idim)=int(x_mid(idim))
+        end do
+        hash_nbor(1:ndim)=cc2(1:ndim)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+        if(associated(gridp))then
+          ff(1:ndim)=gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)
+        else
+          ff(1:ndim)=0.0d0
+        end if
+#endif
+
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+     end if
+  end do
+
+  call close_cache(s,m%grid_dict)
+
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+        end do
+     end do
+  end if
+
+  end associate
 end subroutine pli_trace_gas_part
 !#########################################################################
 !#########################################################################
@@ -1285,6 +1440,102 @@ subroutine tsc_trace_gas_part(s,p,ilevel,action_part)
   end if
   end associate
 end subroutine tsc_trace_gas_part
+
+subroutine ngp_trace_gas_part(s,p,ilevel,action_part)
+  use amr_parameters, only: ndim
+  use pm_parameters
+  use pm_commons, only: part_t
+  use oct_commons, only: oct
+  use ramses_commons, only: ramses_t
+  use nbors_utils
+  use cache_commons
+  use cache
+  implicit none
+  type(ramses_t)::s
+  type(part_t)::p
+  integer::ilevel
+  integer::action_part
+  real(kind=8),dimension(1:ndim)::x,x_mid
+  integer,dimension(1:ndim)::cc
+  integer(kind=8),dimension(0:ndim)::hash_nbor
+  integer::ipart,idim,icell
+  real(kind=8)::dx_loc
+  real(kind=8),dimension(1:ndim)::ff,v_pred
+  type(oct),pointer :: gridp
+  type(msg_nvar_realdp)::dummy_nvar_realdp
+
+  associate(r=>s%r,g=>s%g,m=>s%m)
+  if(p%static)return
+  if (p%type/=TRAC_TYPE) return
+
+  dx_loc=r%boxlen/2**ilevel
+  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
+                     hilbert=m%domain, pack_size=storage_size(dummy_nvar_realdp)/32,&
+                     pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
+
+  do ipart=p%headp(ilevel),p%tailp(ilevel)
+     do idim=1,ndim
+        x(idim)=p%xp(ipart,idim)/dx_loc
+     end do
+     do idim=1,ndim
+        if(x(idim)<0d0)x(idim)=x(idim)+dble(m%ckey_max(ilevel+1))
+        if(x(idim)>=dble(m%ckey_max(ilevel+1)))x(idim)=x(idim)-dble(m%ckey_max(ilevel+1))
+     end do
+     do idim=1,ndim
+        cc(idim)=int(x(idim))
+     end do
+
+     hash_nbor(0)=ilevel+1
+     hash_nbor(1:ndim)=cc(1:ndim)
+     call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+
+     if(action_part==action_kick_only)then
+        p%levelp(ipart)=ilevel
+        if(associated(gridp))then
+           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
+        else
+           ff(1:ndim)=0.0d0
+        end if
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+
+     else if(action_part==action_kick_drift)then
+        v_pred(1:ndim)=p%vp(ipart,1:ndim)
+        if (g%nstep==0) then
+           do idim=1,ndim
+              x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+           end do
+           do idim=1,ndim
+              if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
+              if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
+           end do
+           do idim=1,ndim
+              cc(idim)=int(x_mid(idim))
+           end do
+           hash_nbor(0)=ilevel+1
+           hash_nbor(1:ndim)=cc(1:ndim)
+           call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell,flush_cache=.false.,fetch_cache=.true.)
+        end if
+        if(associated(gridp))then
+           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
+        else
+           ff(1:ndim)=0.0d0
+        end if
+        p%vp(ipart,1:ndim)=ff(1:ndim)
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+     end if
+  end do
+
+  call close_cache(s,m%grid_dict)
+  if(action_part==action_kick_drift)then
+     do ipart=p%headp(ilevel),p%tailp(ilevel)
+        do idim=1,ndim
+           if(p%xp(ipart,idim)<0.0d0)p%xp(ipart,idim)=p%xp(ipart,idim)+r%boxlen
+           if(p%xp(ipart,idim)>=r%boxlen)p%xp(ipart,idim)=p%xp(ipart,idim)-r%boxlen
+        end do
+     end do
+  end if
+  end associate
+end subroutine ngp_trace_gas_part
 
 subroutine pcs_trace_gas_part(s,p,ilevel,action_part)
   use amr_parameters, only: ndim, fourtondim
@@ -1672,6 +1923,9 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
   real(kind=8),dimension(1:ndim)::ff,uu,bb,v_pred,wdrift
   real(kind=8)::rho_gas,c_sound,eint,coeff
   real(kind=8)::nu_stop,dens,etot,ekin,erad,emag,cs2,pi
+  integer :: ii
+  character(LEN=80)::filename,fileloc
+  character(LEN=5)::nchar
   type(oct),pointer::gridp
   type(msg_large_realdp)::dummy_large_realdp
 
@@ -1698,13 +1952,21 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         p%levelp(ipart)=ilevel
 
      else if(action_part==action_kick_drift)then
-        ! RK2: predict with v^n, sample gas at midpoint with TSC, do exact drag update
-
+        ! Leapfrog-style sampling: do a half-step advance only on the first step,
+        ! then sample at the current position thereafter (we are already time-centered).
         v_pred(1:ndim)=p%vp(ipart,1:ndim)
 
-        do idim=1,ndim
-           x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
-        end do
+        if (g%nstep==0) then
+           ! First step: predict position at midpoint t + dt/2 for sampling
+           do idim=1,ndim
+              x_mid(idim)=x(idim)+0.5d0*g%dtnew(ilevel)*v_pred(idim)/dx_loc
+           end do
+        else
+           ! Subsequent steps: positions are already at mid-time, no shift needed
+           do idim=1,ndim
+              x_mid(idim)=x(idim)
+           end do
+        endif
         do idim=1,ndim
            if(x_mid(idim)<0d0)x_mid(idim)=x_mid(idim)+dble(m%ckey_max(ilevel+1))
            if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
@@ -1744,6 +2006,7 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
 #endif
               rho_gas = rho_gas + gridp%uold(icell2,1)*vol2(ind)
               uu(1:ndim)=uu(1:ndim)+gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)*vol2(ind)
+              bb(1:3)=bb(1:3)+0.5d0*(gridp%bold(icell2,1:3)+gridp%bold(icell2,4:6))*vol2(ind)
               dens = max(dble(gridp%uold(icell2,1)), r%smallr)
               etot = gridp%uold(icell2,5)
               ekin = 0.0d0
@@ -1758,13 +2021,12 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
 #endif
 #ifdef MHD
               do idim=1,3
-                 bb(idim) = bb(idim) + 0.5*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))*vol2(ind)
                  emag = emag + 0.125d0*(gridp%bold(icell2,idim)+gridp%bold(icell2,ndim+idim))**2*vol2(ind)
               end do
 #endif
               eint = eint + (etot - ekin - erad - emag) * vol2(ind)
            end if
-#endif
+
         ! Need to add MHD support here
         end do
         cs2 = r%gamma * (r%gamma-1.0d0) * max(eint, r%smallc**2) / max(rho_gas, r%smallr)
@@ -1778,14 +2040,34 @@ subroutine tsc_kick_drift_dust(s,p,ilevel,action_part)
         call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
         ! Gather ff, and apply to either side of the Lorentz force as a half-step
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! External force half-step (includes gravity)
-#ifdef MHD
-        call compute_lorentz(wdrift, bb, g%dtnew(ilevel), p%charge(ipart))
+#ifdef MHD 
+        call compute_lorentz_analytic(wdrift, bb, g%dtnew(ilevel), p%charge(ipart)) !Somehow introducing nonphysical oscillations.
 #endif
         wdrift(1:ndim)=wdrift(1:ndim)+ff(1:ndim)*0.5d0*g%dtnew(ilevel) ! Second external force half-step
         call compute_drag(wdrift, c_sound, 0.5*g%dtnew(ilevel), nu_stop, coeff)
         ! Routine will return an intermediate drift velocity.
         p%vp(ipart,1:ndim)=uu(1:ndim)+wdrift(1:ndim)
-        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+0.5d0*(p%vp(ipart,1:ndim)+v_pred(1:ndim))*g%dtnew(ilevel)
+        ! Leapfrog drift: advance positions using time-centered velocity
+        p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+#endif
+                ! Trajectory output for selected particles
+        if(s%r%ntrajectories>0)then
+         do ii=1,s%r%ntrajectories
+            if(s%r%trajectories(ii)==p%idp(ipart))then
+               call title(g%myid,nchar)
+               filename='trajectory.dat'
+               fileloc=TRIM(filename)//TRIM(nchar)
+               open(25+g%myid,file=fileloc,status='unknown',access='append')
+               write(25+g%myid,'(1PE15.7,1X,I12,1X,6(1PE15.7,1X),1PE15.7,1X,1PE15.7)') &
+                    g%t, p%idp(ipart), &
+                    p%xp(ipart,1),p%xp(ipart,2),p%xp(ipart,3), &
+                    p%vp(ipart,1),p%vp(ipart,2),p%vp(ipart,3), &
+                    p%charge(ipart), p%size(ipart)
+               close(25+g%myid)
+               exit
+            endif
+         end do
+      endif
      endif
   end do
   call close_cache(s,m%grid_dict)
@@ -2021,8 +2303,7 @@ function exact_drag(dt, nu, eta, w0) result(drag_value)
   ! Compute numerator: sinh(nu*dt) + sqrt(1 + eta*w0^2)*cosh(nu*dt)
   numerator = sinh_term + sqrt_term * cosh_term
   
-  ! Compute denominator: cosh(nu*t) + sqrt(1 + nu*w0^2)*sinh(nu*t)
-  ! Note: Using nu instead of eta in the denominator as per original formula
+  ! Compute denominator: cosh(nu*t) + sqrt(1 + eta*w0^2)*sinh(nu*t)
   denominator = cosh_term + sqrt(1.0d0 + eta * w0**2) * sinh_term
   
   ! Avoid division by zero
@@ -2078,9 +2359,10 @@ subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
   dteff = dt * charge_parameter
   bsquared = dot_product(bfield(1:ndim), bfield(1:ndim))
 
-  det = -(1 + 0.25d0 * bsquared * dteff**2 )
+  det = 1 + 0.25d0 * bsquared * dteff**2
   
   ! Matrix components from Mathematica
+  ! Inverse[(e - 0.5*dteff*m)].(e+0.5*dteff*m).v^n = v^(n+1)
   ! Row 1
   matrix(1,1) = 1.0d0 + 0.25d0 * (bfield(1)**2 - bfield(2)**2 - bfield(3)**2) * dteff**2
   matrix(1,2) = 0.5d0 * dteff * (2.0d0 * bfield(3) + bfield(1) * bfield(2) * dteff)
@@ -2107,6 +2389,70 @@ subroutine compute_lorentz(driftvel, bfield, dt, charge_parameter)
   end if
   
 end subroutine compute_lorentz
+
+!#########################################################################
+!#########################################################################
+!#########################################################################
+!#########################################################################
+subroutine compute_lorentz_analytic(driftvel, bfield, dt, charge_parameter)
+  use amr_parameters, only: ndim
+  implicit none
+  real(kind=8), dimension(1:ndim), intent(inout) :: driftvel
+  real(kind=8), dimension(1:ndim), intent(in)    :: bfield
+  real(kind=8), intent(in)                       :: dt
+  real(kind=8), intent(in)                       :: charge_parameter
+  real(kind=8) :: dteff, bsquared, bnorm, theta, costh, sinth, vdotb, t2
+  real(kind=8), dimension(1:ndim) :: bhat, v, kxv
+
+#ifdef HAVE_SINCOS
+  interface
+     subroutine sincos_c(x, s, c) bind(C, name="__sincos")
+       use iso_c_binding
+       real(c_double), value :: x
+       real(c_double)        :: s, c
+     end subroutine
+  end interface
+#endif
+
+  dteff = dt * charge_parameter
+  if (dteff == 0.0d0) return
+
+  bsquared = dot_product(bfield(1:ndim), bfield(1:ndim))
+  if (bsquared <= 0.0d0) return
+
+  bnorm = sqrt(bsquared)
+  bhat(1:ndim) = bfield(1:ndim) / bnorm
+  theta = dteff * bnorm
+  ! It's worth noting that our gyro_factor limits theta to be less than 0.63
+  t2 = theta*theta
+  if (abs(theta) < 1.0d-1) then
+     ! Horner-form small-angle approximations for better performance/accuracy
+     costh = 1.0d0 + t2*(-0.5d0 + t2*( 1.0d0/24.0d0 + t2*( -1.0d0/720.0d0 )))
+     sinth = theta * (1.0d0 + t2*( -1.0d0/6.0d0 + t2*( 1.0d0/120.0d0 + t2*( -1.0d0/5040.0d0 ))))
+  else
+#ifdef HAVE_SINCOS
+     call sincos_c(theta, sinth, costh)
+#else
+     costh = cos(theta)
+     sinth = sin(theta)
+#endif
+  end if
+
+  v(1:ndim) = driftvel(1:ndim)
+
+  if (ndim == 3) then
+     ! Rodrigues' rotation formula: rotate v around unit axis bhat by angle theta
+     kxv(1) = bhat(2)*v(3) - bhat(3)*v(2)
+     kxv(2) = bhat(3)*v(1) - bhat(1)*v(3)
+     kxv(3) = bhat(1)*v(2) - bhat(2)*v(1)
+     vdotb  = bhat(1)*v(1) + bhat(2)*v(2) + bhat(3)*v(3)
+
+     driftvel(1) = v(1)*costh + kxv(1)*sinth + bhat(1)*vdotb*(1.0d0 - costh)
+     driftvel(2) = v(2)*costh + kxv(2)*sinth + bhat(2)*vdotb*(1.0d0 - costh)
+     driftvel(3) = v(3)*costh + kxv(3)*sinth + bhat(3)*vdotb*(1.0d0 - costh)
+  end if
+
+end subroutine compute_lorentz_analytic
 
 !#########################################################################
 !#########################################################################
