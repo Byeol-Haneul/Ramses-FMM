@@ -1,0 +1,33 @@
+This is the RAMSES parameter file for the Dai & Woodward (1998) MHD shock tube test.
+Compile the code with:
+make NDIM=1 HYDRO=1 MHD=1 INIT=ALFVENWAVE
+
+&RUN_PARAMS
+hydro=.true.
+/
+
+&AMR_PARAMS 
+levelmin=10
+levelmax=10
+ngridmax=10000
+nexpand=1
+boxlen=1.0
+/
+
+&INIT_PARAMS
+A_ave=1
+/
+
+&OUTPUT_PARAMS
+tout=1
+/
+
+&HYDRO_PARAMS
+gamma=1.66666667
+courant_factor=0.8
+slope_type=2
+riemann='hlld'
+/
+
+
+

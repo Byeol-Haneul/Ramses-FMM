@@ -202,9 +202,9 @@ MODOBJ = amr_parameters.o hydro_parameters.o rt_parameters.o oct_commons.o \
 	 hydro_commons.o rt_commons.o amr_commons.o poisson_parameters.o rngstream.o \
 	 constants.o cooling_module.o cooling_module_ism.o init_cooling.o \
 	 coolrates_module.o \
-    collisional_ionization_module.o recombination_module.o \
-    cosmic_ray_ionization_module.o photoionization_UVB_module.o dust_recombination_module.o \
-    molecules_module.o charge_exchange_module.o rtz_module.o
+	 collisional_ionization_module.o recombination_module.o \
+	 cosmic_ray_ionization_module.o photoionization_UVB_module.o dust_recombination_module.o \
+	 molecules_module.o charge_exchange_module.o rtz_module.o
 ifeq ($(RTZ),1)
 MODOBJ += rtz_coolrates_module.o rtz_cooling_module.o
 else

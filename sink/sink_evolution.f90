@@ -64,20 +64,32 @@ contains
     real(kind=8)::dx_loc,vol_loc
     integer::nBHnei,nBH_fb_nei
     real(kind=8)::jet_angle,tan_theta,lambda_sonic
-    integer::kk,jj,ii,ipart
+    integer::kk,jj,ii,ipart,istep
     real(kind=8),dimension(1:ndim)::x_rel
-    real(kind=8)::r_rel,dmacc_loc,dmjet_loc
+    real(kind=8)::r_rel,dmacc_loc
     type(msg_large_realdp)::dummy_large_realdp
-    real(kind=8)::dMBH_overdt,dMEd_overdt,rho_gas,cs_gas,rho_inf,rho_av_all
-    real(kind=8)::fbk_ener_agn,fbk_mass_agn,fbk_mom_agn,m_acc,e_acc
-    real(kind=8),dimension(1:ndim)::x_acc,p_acc,l_acc,vel_gas
-    real(kind=8),dimension(1:nvar)::passive_acc
+    real(kind=8)::dMBH_overdt,dMED_overdt,rho_gas,cs_gas,rho_inf,rho_av_all
+    real(kind=8)::fbk_ener_agn,fbk_mom_agn
+    real(kind=8),dimension(1:ndim)::vel_gas
+    logical::output_file
 
 #ifdef HYDRO
 #if NDIM==3
     associate(r=>s%r,g=>s%g,m=>s%m)
 
     if(r%verbose)write(*,*)'Entering sink_evolution...'
+
+    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    ! Check if high frequency dump
+    !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+    output_file = .false.
+    if(r%sink_delta_tout>0)then
+       istep = int(g%t / r%sink_delta_tout)
+       if(istep > p%step_counter)then
+          p%step_counter = p%step_counter + 1
+          output_file = .true.
+       endif
+    endif
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     ! Get all units, constants and cell sizes
@@ -97,7 +109,8 @@ contains
        else if(abs(r%gamma - 5.0d0/3.0d0).le.0.01)then
           lambda_sonic = 0.25d0
        else
-          lambda_sonic = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
+          lambda_sonic = 0.5d0**((r%gamma + 1)/(2d0*(r%gamma - 1))) &
+               & * (0.25d0*(5d0-3d0*r%gamma))**(-(5d0-3d0*r%gamma)/(2d0*(r%gamma - 1)))
        end if
     else
        lambda_sonic = 1.0d0
@@ -161,8 +174,8 @@ contains
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
        if(r%accretion_type>0)then
           call sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d, &
-               &              factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc, &
-               &              x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas,vel_gas,rho_av_all)
+               &              factG,lambda_sonic,dmacc_loc,dMBH_overdt,dMED_overdt, &
+               &              rho_inf,cs_gas,vel_gas,rho_av_all)
           macc_loc = macc_loc + dmacc_loc
        endif
 
@@ -178,22 +191,20 @@ contains
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
        if(r%agn)then
           call AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v, &
-               &            dMBH_overdt,dMEd_overdt,tan_theta,m_acc,e_acc,x_acc, &
-               &            p_acc,passive_acc,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,dmjet_loc)
-          macc_loc = macc_loc - dmjet_loc
+               &            dMBH_overdt,dMED_overdt,tan_theta,fbk_mom_agn,fbk_ener_agn)
        endif
 
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
        ! Save sink data at a high cadence if needed
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-       if((r%output_sink_fine.gt.0).and.(mod(g%nstep, r%output_sink_fine)==0))then
+       if(output_file)then
           if(r%agn)then
              call dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d, &
-                  &                       dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas, &
-                  &                       fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
+                  &                       dMBH_overdt,dMED_overdt,rho_inf,cs_gas, &
+                  &                       fbk_mom_agn,fbk_ener_agn)
           else
              call dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d, &
-                  &                   dMBH_overdt,dMEd_overdt,rho_inf,cs_gas)
+                  &                   dMBH_overdt,dMED_overdt,rho_inf,cs_gas)
           end if
        end if
 
@@ -203,7 +214,7 @@ contains
     ! Close cache
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
     call close_cache(s,m%grid_dict)
- 
+
     end associate
 #endif
 #endif
@@ -213,8 +224,8 @@ contains
   !##############################################################################
   !##############################################################################
   subroutine sink_accretion(s,p,ilevel,ipart,dx_loc,vol_loc,nBHnei,scale_l,scale_t,scale_d, &
-       &                    factG,lambda_sonic,macc_loc,dMBH_overdt,dMEd_overdt,m_acc,e_acc, &
-       &                    x_acc,p_acc,l_acc,passive_acc,rho_inf,cs_gas,vel_gas,rho_av_all)
+       &                    factG,lambda_sonic,macc_loc,dMBH_overdt,dMED_overdt, &
+       &                    rho_inf,cs_gas,vel_gas,rho_av_all)
     use constants
     use amr_parameters, only: ndim, twotondim
     use hydro_parameters, only: nvar, nener
@@ -230,9 +241,7 @@ contains
     real(kind=8)::scale_l,scale_t,scale_d,factG
     real(kind=8)::dx_loc,vol_loc
     real(kind=8)::macc_loc,lambda_sonic
-    real(kind=8)::dMBH_overdt,dMEd_overdt,m_acc,e_acc,rho_inf,cs_gas,rho_av_all
-    real(kind=8),dimension(1:ndim)::p_acc,l_acc,vel_gas
-    real(kind=8),dimension(1:nvar)::passive_acc
+    real(kind=8)::dMBH_overdt,dMEd_overdt,rho_inf,cs_gas,rho_av_all
     !==================================================================
     ! This is the RAMSES routine for sink (black hole) particle accretion.
     ! For now, it is focused on a simple Bondi-Hoyle-Lyttleton accretion scheme.
@@ -247,6 +256,9 @@ contains
     real(kind=8),dimension(1:ndim)::vv,v_rel,x_acc
     integer,dimension(1:ndim)::ckey,ckey_nbor,ckey_div
     integer(kind=8),dimension(0:ndim)::hash_nbor
+    real(kind=8)::m_acc,e_acc
+    real(kind=8),dimension(1:ndim)::p_acc,l_acc,vel_gas
+    real(kind=8),dimension(1:nvar)::passive_acc
     integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar
     real(kind=8)::d,e,ethermal,r2_sink,v_bondi,cs,rho_gas,velocity
     real(kind=8)::weight,r_rel
@@ -457,8 +469,10 @@ contains
        dMBH_overdt = -1.0*total_divergence*vol_loc
 
        ! Applying the correction from Bleuler+14
-       if(r%sink_density_threshold.gt.0.0)dMBH_overdt = dMBH_overdt * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
-
+       if(r%sink_density_threshold.gt.0.0)then
+          dMBH_overdt = dMBH_overdt &
+               &      * (1 + 0.1d0*log(rho_gas / r%sink_density_threshold))
+       endif
        if(r%verbose_sink)write(*,*)'Flux: ',dMBH_overdt
 
     ! Compute threshold accretion rate
@@ -473,11 +487,11 @@ contains
     ! (this preserves the scheme we are using, as compared to cell-specific limiters)
 
     ! Eddington accretion rate, which introduces an optional cap
-    dMEd_overdt = 4.0d0 * pi * factG_in_cgs * p%mp(ipart) * mH / (0.1d0 * sigma_T * c_cgs) * scale_t
-    if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMEd_overdt*r%eddington_cap)
+    dMED_overdt = 4.0d0 * pi * factG_in_cgs * p%mp(ipart) * mH / (0.1d0 * sigma_T * c_cgs) * scale_t
+    if(r%eddington_cap>0)dMBH_overdt = min(dMBH_overdt, dMED_overdt*r%eddington_cap)
 
     ! If the accretion rate is too low, do nothing
-    if((r%eddington_floor>0).and.(dMBH_overdt/dMEd_overdt<r%eddington_floor))then
+    if((r%eddington_floor>0).and.(dMBH_overdt/dMED_overdt<r%eddington_floor))then
        return
     end if
 
@@ -489,7 +503,7 @@ contains
     end if
 
     if(r%manual_accretion_rate.gt.0.0d0)then
-       dMBH_overdt = r%manual_accretion_rate * dMEd_overdt
+       dMBH_overdt = r%manual_accretion_rate * dMED_overdt
     end if
 
     !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -650,8 +664,7 @@ contains
   !##############################################################################
   !##############################################################################
   subroutine AGN_feedback(s,p,ilevel,ipart,dx_loc,vol_loc,nBH_fb_nei,scale_v, &
-       &                  dMBH_overdt,dMEd_overdt,tan_theta,m_acc,e_acc,x_acc, &
-       &                  p_acc,passive_acc,fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc)
+       &                  dMBH_overdt,dMED_overdt,tan_theta,fbk_mom_agn,fbk_ener_agn)
     use constants
     use amr_parameters, only: ndim, twotondim
     use hydro_parameters, only: nvar, nener
@@ -664,23 +677,14 @@ contains
     type(ramses_t)::s
     type(part_t)::p
     integer::ilevel,ipart,nBH_fb_nei
-    real(kind=8)::dx_loc,vol_loc
-    real(kind=8)::scale_v
-    real(kind=8)::dMBH_overdt,dMEd_overdt,tan_theta
-    real(kind=8)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn,mjet_loc
-    real(kind=8)::m_acc,e_acc
-    real(kind=8),dimension(1:nvar)::passive_acc
-    real(kind=8),dimension(1:ndim)::x_acc,p_acc
+    real(kind=8)::dx_loc,vol_loc,scale_v
+    real(kind=8)::dMBH_overdt,dMED_overdt,tan_theta
+    real(kind=8)::fbk_mom_agn,fbk_ener_agn
     !==================================================================
     ! This is the RAMSES routine for AGN feedback
     ! For now, it is focused on a simple two-regime model to deploy quasar and radio mode feedback
     ! depending on the accretion rate.
     ! Written by Nicholas Choustikov (Apr 2025)
-
-    ! NOTE: We now aim to return mass and linear momentum accounting for
-    ! (epsilon_r + kin_mass_loading)/(1 + kin_mass_loading) of the accreted quantities.
-    ! This should ensure that all conserved quantities are maintained.
-    ! See also Bourne+2017 for a similar approach.
     !==================================================================
     ! Local variables
     real(kind=8)::rr,x,y,z,rrad
@@ -690,7 +694,7 @@ contains
     real(kind=8),dimension(1:ndim)::xcen,xnei,x_rel
     integer(kind=8),dimension(0:ndim)::hash_nbor
     integer::i,j,k,ii,jj,kk,icelln,ind,idim,ivar,iBHnei
-    real(kind=8)::d,e,ethermal,r_rel,rho_gas_fb
+    real(kind=8)::d,e,ethermal,r_rel,rho_gas_fb,energy_agn
     real(kind=8),dimension(1:ndim)::vv
     type(oct),pointer::gridn
     logical::ok,ok_blast_agn
@@ -714,7 +718,6 @@ contains
 
     hash_nbor(0) = ilevel+1
     xBH_fb_nei=0d0; ckey_fb_nei=0d0; weight_fb_nei=0d0
-    mjet_loc=0d0
 
     ! Black hole position
     xcen(1:ndim) = p%xp(ipart,1:ndim) / dx_loc
@@ -728,16 +731,11 @@ contains
     ! TODO: Think about whether we need some criteria. Some T_min based on old ramses?
     ok_blast_agn = .true.
 
-    fbk_mass_agn=0d0;fbk_mom_agn=0d0;fbk_ener_agn=0d0
-    rho_gas_fb=0d0
+    rho_gas_fb=0d0; fbk_mom_agn=0d0; fbk_ener_agn=0d0
     if(ok_blast_agn)then
-       ! Set up the feedback
+
        ! Compute chi (fraction of Eddington)
-       if(r%manual_accretion_rate.gt.0.0d0)then
-          acc_ratio = r%manual_accretion_rate
-       else
-          acc_ratio = dMBH_overdt/dMEd_overdt
-       end if
+       acc_ratio = dMBH_overdt/dMED_overdt
        acc_ratio = max(acc_ratio, 0.0d0)
 
        ! Compute the jet direction
@@ -801,28 +799,15 @@ contains
        rho_gas_fb = rho_gas_fb / total_weight
 
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-       ! Compute feedback strength
-       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
-       ! Compute the global energy/momenta needed
-       ! NOTE: All done here in terms of canonical units (i.e. mass, not density)
-       ! NOTE: Presently we assume that no angular momentum is dumped (i.e. the black hole is maximally spinning)
-       fbk_mass_agn=0.0d0; fbk_mom_agn=0.0d0; fbk_ener_agn=0.0d0
-       if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
-          ! Quasar mode
-          fbk_ener_agn = r%epsilon_therm_quasar*r%epsilon_rad*acc_ratio*dMEd_overdt*g%dtnew(ilevel)*(c_cgs/scale_v)**2
-       else
-          ! Radio mode
-          jet_mass     = r%kin_mass_loading*(1-r%epsilon_rad)/(1+r%kin_mass_loading)*acc_ratio*dMEd_overdt*g%dtnew(ilevel)
-          jet_speed    = (2.0d0*r%epsilon_rad*r%epsilon_therm_jet/r%kin_mass_loading)**0.5d0*c_cgs ! in cm/s
-
-          fbk_mass_agn = jet_mass
-          fbk_mom_agn  = jet_mass * jet_speed / scale_v
-       end if
-
-       !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
        ! Administer the AGN Feedback
        !-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+       ! Quasar mode energy
+       energy_agn = r%epsilon_rad * dMBH_overdt * (c_cgs/scale_v)**2 * g%dtnew(ilevel)
+       fbk_ener_agn = r%epsilon_quasar * energy_agn
+
+       ! Radio mode momentum
+       fbk_mom_agn  = r%epsilon_radio * r%momentum_boost * energy_agn / (c_cgs/scale_v)
 
        ! Loop over the affected cells
        do iBHnei=1,nBH_fb_nei
@@ -847,74 +832,38 @@ contains
              if(.not.associated(gridn))cycle
 
              ! Get the local gas properties
-             d          = max(dble(gridn%uold(icelln,1)),r%smallr)
+             d = max(dble(gridn%uold(icelln,1)),r%smallr)
              vv(1:ndim) = gridn%uold(icelln,2:ndim+1)/d
-             e          = gridn%uold(icelln,5)/d
 
              ! Get the weight
              weight = volCIC(j) * weight_fb_nei(iBHnei)
-             if(r%agn_use_mass_weighting) weight = weight * d / rho_gas_fb
+             if (r%agn_use_mass_weighting) weight = weight * d / rho_gas_fb
 
              ! Proceed with the feedback
              if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
 
                 ! Quasar mode (energy)
                 ! Get the local feedback quantities (accounting for weightings)
-                fbk_ener_agn_loc = fbk_ener_agn * weight
-
-                ! Conversion to conserved quantities
-                fbk_ener_agn_loc = fbk_ener_agn_loc * d / vol_loc
+                fbk_ener_agn_loc = fbk_ener_agn * weight / vol_loc
 
                 ! Now we inject the actual feedback
-                gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_ener_agn_loc
+                gridn%unew(icelln,5) = gridn%unew(icelln,5) + fbk_ener_agn_loc
 
              else
-                ! Radio mode (mass,momentum,energy)
+                ! Radio mode (momentum and associated work)
                 ! Get the local feedback quantities (accounting for weightings)
-                fbk_mass_agn_loc = fbk_mass_agn * weight
-                fbk_mom_agn_loc  = fbk_mom_agn  * weight
-
-                ! Conversion to conserved quantities
-                fbk_mass_agn_loc = fbk_mass_agn_loc / vol_loc
-                fbk_mom_agn_loc  = fbk_mom_agn_loc  / vol_loc
+                fbk_mom_agn_loc  = fbk_mom_agn  * weight / vol_loc
 
                 ! Now we inject the actual feedback (note, all energy is due to work done)
-                gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + fbk_mass_agn_loc
-                gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0d0))
-                gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0d0)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
+                gridn%unew(icelln,2:4) = gridn%unew(icelln,2:4) + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:))*jet_direction(1:ndim)/(r_rel+tiny(0.0d0))
+                gridn%unew(icelln,5)   = gridn%unew(icelln,5)   + fbk_mom_agn_loc*dot_product(jet_direction(:),x_rel(:)/(r_rel+tiny(0.0d0)))*dot_product(jet_direction(1:ndim), vv(1:ndim))
 
              end if
 
-             ! Account for conserved quantities
-             gridn%unew(icelln,1)       = gridn%unew(icelln,1)          + m_acc*r%epsilon_rad*weight/vol_loc
-             gridn%unew(icelln,2:4)     = gridn%unew(icelln,2:4)        + p_acc(1:ndim)*r%epsilon_rad*weight/vol_loc
-             gridn%unew(icelln,5)       = gridn%unew(icelln,5)          + e_acc*r%epsilon_rad*weight/vol_loc
-             ! Handle the passive scalars
-#if NVAR>NENER+6
-             do ivar=6+nener,nvar
-                gridn%unew(icelln,ivar) = gridn%unew(icelln,ivar)       + passive_acc(ivar)*r%epsilon_rad*weight/vol_loc
-             end do
-#endif
              ! All of the RT stuff can come here.
 
           end do ! End loop over j
        end do ! End loop over nBH_fb_nei
-
-       ! Remove 'radiated' quantities from the BH which was acting as a reservoir
-       ! NOTE: Angular momentum is assumed to stay on the sink here
-       if(.not.p%static)p%xp(ipart,1:ndim) = ( p%mp(ipart) * p%xp(ipart,1:ndim) - x_acc(1:ndim)*r%epsilon_rad ) / ( p%mp(ipart) - m_acc*r%epsilon_rad )
-       p%vp(ipart,1:ndim)                  = ( p%mp(ipart) * p%vp(ipart,1:ndim) - p_acc(1:ndim)*r%epsilon_rad ) / ( p%mp(ipart) - m_acc*r%epsilon_rad )
-       if(.not.r%fix_sink_mass)p%mp(ipart) =   p%mp(ipart) - m_acc*r%epsilon_rad
-
-       ! Save accreted mass to total
-       mjet_loc = mjet_loc + m_acc*r%epsilon_rad + fbk_mass_agn
-
-       ! Adjust for the impact of this re-radiated mass
-       m_acc = (1.0d0-r%epsilon_rad)*m_acc + fbk_mass_agn
-       e_acc = e_acc*(1.0d0-r%epsilon_rad)
-       p_acc = p_acc*(1.0d0-r%epsilon_rad)
-       x_acc = x_acc*(1.0d0-r%epsilon_rad)
-       passive_acc = passive_acc*(1.0d0-r%epsilon_rad)
 
     end if ! End if ok_blast_agn
 
@@ -1167,10 +1116,10 @@ contains
     logical::mode
 
     if(mode)then
-    ! Quasar mode
+       ! Quasar mode
        psy = 1.0d0
     else
-    ! Radio mode
+       ! Radio mode
        psy = 1.0d0
     end if
 
@@ -1180,7 +1129,7 @@ contains
   !##############################################################################
   !##############################################################################
   subroutine dump_sink_data_fine(s,p,ipart,ilevel,scale_l,scale_t,scale_d, &
-       &                         dMBH_overdt,dMEd_overdt,rho_inf,cs_gas)
+       &                         dMBH_overdt,dMED_overdt,rho_inf,cs_gas)
     use amr_parameters, only: ndim
     use ramses_commons, only: ramses_t
     use pm_commons, only: part_t
@@ -1189,7 +1138,7 @@ contains
     type(ramses_t)::s
     type(part_t)::p
     integer::ilevel,ipart
-    real(kind=8)::dMBH_overdt,dMEd_overdt,rho_inf,cs_gas
+    real(kind=8)::dMBH_overdt,dMED_overdt,rho_inf,cs_gas
     real(kind=8)::scale_l,scale_t,scale_d
     !==================================================================
     ! Simple routine to dump sink data to a CSV on every fine time step
@@ -1226,7 +1175,7 @@ contains
 
     ! If this is a new sink, then we need to make the file associated with that sink
     inquire(file=filename, exist=file_exist)
-    unit = 10 !+g%myid
+    unit = 10
     if(.not.file_exist)then
        if(r%verbose_sink)write(*,*)'Creating file: ',filename
        open(unit=unit,file=filename,form='formatted')
@@ -1238,9 +1187,9 @@ contains
     open(unit=unit,file=filename,form='formatted',status='unknown',position='append')
 
     ! Write data to the sink file
-    write(unit,'(I10,21(A1,ES21.10),A1,I10)')g%nstep,',',g%t*scale_t/unit_yr, &
+    write(unit,'(I10,21(A1,ES21.10),A1,I10)')p%step_counter,',',g%t*scale_t/unit_yr, &
          & ',',g%dtnew(ilevel)*scale_t/unit_yr,',',p%mp(ipart)*scale_m/unit_msun,&
-         & ',',dMBH_overdt*unit_dotM,',',dMEd_overdt*unit_dotM,&
+         & ',',dMBH_overdt*unit_dotM,',',dMED_overdt*unit_dotM,&
          & ',',rho_inf*scale_d,',',cs_gas*scale_v,&
          & ',',p%xp(ipart,1),',',p%xp(ipart,2),',',p%xp(ipart,3),&
          & ',',p%vp(ipart,1),',',p%vp(ipart,2),',',p%vp(ipart,3),&
@@ -1249,7 +1198,6 @@ contains
     ! Close the sink file
     close(unit)
 
-    !42 format((8,1x,f23.15,1x),42(e23.15,1x))
     end associate
   end subroutine dump_sink_data_fine
   !##############################################################################
@@ -1257,8 +1205,8 @@ contains
   !##############################################################################
   !##############################################################################
   subroutine dump_sink_data_fine_AGN(s,p,ipart,ilevel,scale_l,scale_t,scale_d, &
-       &                             dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas, &
-       &                             fbk_mass_agn,fbk_mom_agn,fbk_ener_agn)
+       &                             dMBH_overdt,dMED_overdt,rho_inf,cs_gas, &
+       &                             fbk_mom_agn,fbk_ener_agn)
     use amr_parameters, only: ndim
     use ramses_commons, only: ramses_t
     use pm_commons, only: part_t
@@ -1267,8 +1215,8 @@ contains
     type(ramses_t)::s
     type(part_t)::p
     integer::ilevel,ipart
-    real(kind=8)::dMBH_overdt,dMEd_overdt,m_acc,rho_inf,cs_gas
-    real(kind=8)::fbk_mass_agn,fbk_mom_agn,fbk_ener_agn
+    real(kind=8)::dMBH_overdt,dMED_overdt,rho_inf,cs_gas
+    real(kind=8)::fbk_mom_agn,fbk_ener_agn
     real(kind=8)::scale_l,scale_t,scale_d
     !==================================================================
     ! Simple routine to dump sink data to a CSV on every fine time step
@@ -1310,7 +1258,7 @@ contains
     if(.not.file_exist)then
        if(r%verbose_sink)write(*,*)'Creating file: ',filename
        open(unit=unit,file=filename,form='formatted')
-       write(unit,*)'nstep,time,dt,mass,dMBH,dMEd,m_acc,rho_inf,cs_gas,x,y,z,vx,vy,vz,jx,jy,jz,m_fb,p_fb,E_fb'
+       write(unit,'(A)')'nstep,time,dt,mass,dMBHdt,dMEDdt,rho_inf,cs_gas,x,y,z,vx,vy,vz,jx,jy,jz,p_fb,E_fb'
        close(unit)
     end if
 
@@ -1318,19 +1266,18 @@ contains
     open(unit=unit,file=filename,form='formatted',status='unknown',position='append')
 
     ! Write data to the sink file
-    write(unit,'(I10,21(A1,ES21.10),A1,I10)')g%nstep,',',g%t*scale_t/unit_yr,&
+    write(unit,'(I10,21(A1,ES21.10),A1,I10)')p%step_counter,',',g%t*scale_t/unit_yr,&
          & ',',g%dtnew(ilevel)*scale_t/unit_yr,',',p%mp(ipart)*scale_m/unit_msun,&
-         & ',',dMBH_overdt*unit_dotM,',',dMEd_overdt*unit_dotM,',',m_acc*scale_m/unit_msun,&
+         & ',',dMBH_overdt*unit_dotM,',',dMED_overdt*unit_dotM,&
          & ',',rho_inf*scale_d,',',cs_gas*scale_v,&
          & ',',p%xp(ipart,1),',',p%xp(ipart,2),',',p%xp(ipart,3),&
          & ',',p%vp(ipart,1),',',p%vp(ipart,2),',',p%vp(ipart,3),&
          & ',',p%jp(ipart,1),',',p%jp(ipart,2),',',p%jp(ipart,3),&
-         & ',',fbk_mass_agn,',',fbk_mom_agn,',',fbk_ener_agn
+         & ',',fbk_mom_agn,',',fbk_ener_agn
 
     ! Close the sink file
     close(unit)
 
-    !42 format((8,1x,f23.15,1x),42(e23.15,1x))
     end associate
   end subroutine dump_sink_data_fine_AGN
   !##############################################################################

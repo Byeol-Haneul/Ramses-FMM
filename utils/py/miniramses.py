@@ -1217,7 +1217,7 @@ def rd_cell(nout,**kwargs):
     path = kwargs.get("path","./")
     center = kwargs.get("center")
     radius = kwargs.get("radius")
-    geom = kwargs.get("geom")
+    geom = kwargs.get("geom","circle")
 
     a = rd_amr(nout,**kwargs)
     h = rd_hydro(nout,**kwargs)

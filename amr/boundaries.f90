@@ -440,6 +440,48 @@ end subroutine init_bound_refine
 !################################################################
 !################################################################
 !################################################################
+subroutine init_bound_grav(r,g,m,grid)
+  use amr_parameters, only: ndim, twotondim, nvector
+  use amr_commons, only: run_t, global_t, mesh_t, oct
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(oct)::grid
+
+  integer::idim, ind, nstride
+  real(kind=8)::dx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector,1:ndim)::ff
+  real(kind=8),dimension(1:nvector)::pp
+
+#ifdef GRAV
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**grid%lev
+
+  do ind=1,twotondim
+     do idim=1,ndim
+        nstride=2**(idim-1)
+        xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+     end do
+     ! Call analytical acceleration routine
+     call gravana(r,g,xx,ff,dx,1)
+     do idim=1,ndim
+        grid%f(ind,idim)=ff(1,idim)
+     end do
+     ! Call analytical potential routine
+     call phiana(r,g,xx,pp,dx,1)
+     grid%phi(ind)=pp(1)
+     grid%phi_old(ind)=pp(1)
+  end do
+
+#endif
+
+end subroutine init_bound_grav
+!################################################################
+!################################################################
+!################################################################
+!################################################################
 subroutine init_bound_flag(r,g,m,grid,grid_ref,ibound)
   use amr_parameters, only: ndim,twotondim
   use hydro_parameters, only: nvar, nener

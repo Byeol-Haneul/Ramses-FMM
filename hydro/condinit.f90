@@ -39,6 +39,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #define CURRENTSHEET 7
 #define RTZEQM 8
 #define PANCAKE 9
+#define ALFVENWAVE 10
 
   integer::i
 #if INIT==COEUR
@@ -62,6 +63,9 @@ subroutine condinit(r,g,x,q,dx,nn)
 #elif INIT==RTZEQM
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 #elif INIT==PANCAKE
+  real(kind=8)::pi,del_ini
+  real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
+#elif INIT==ALFVENWAVE
   real(kind=8)::pi,del_ini
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v,scale_m
 #else
@@ -282,7 +286,7 @@ subroutine condinit(r,g,x,q,dx,nn)
 #if INIT==PANCAKE
   pi = acos(-1.0d0)
   del_ini = 0.1
-  ! get cbs units
+  ! get cgs units
   call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
   do i = 1,nn
      q(i,1) = g%omega_b/g%omega_m/(1+del_ini*COS(2.0d0*pi*x(i,1)))
@@ -290,6 +294,22 @@ subroutine condinit(r,g,x,q,dx,nn)
      q(i,3) = 0.0 ! Vy
      q(i,4) = 0.0 ! Vz
      q(i,5) = 100./scale_T2 ! Temperature is 10^2 K
+  end do
+#endif
+
+#if INIT==ALFVENWAVE
+  pi = acos(-1.0d0)
+  del_ini = 0.1
+  ! get cgs units
+  call units(r,g,scale_l,scale_t,scale_d,scale_v,scale_nH,scale_T2)
+  do i = 1,nn
+     q(i,1) = 1 ! rho
+     q(i,2) = 0 ! Vx
+     q(i,3) = 0.1*SIN(2.0d0*pi*x(i,1)) ! Vy
+     q(i,4) = 0.1*COS(2.0d0*pi*x(i,1)) ! Vz
+     q(i,5) = 0.1 ! Pressure
+     q(i,6) = 0.1*SIN(2.0d0*pi*x(i,1)) ! By
+     q(i,7) = 0.1*COS(2.0d0*pi*x(i,1)) ! Bz
   end do
 #endif
 

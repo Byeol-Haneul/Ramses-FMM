@@ -89,7 +89,7 @@ subroutine force_analytic(r,g,m,ilevel)
   integer::igrid,ind,i,ngrid,idim,nstride
   real(kind=8)::dx
   real(kind=8),dimension(1:nvector,1:ndim)::xx,ff
- 
+
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 
@@ -109,7 +109,7 @@ subroutine force_analytic(r,g,m,ilevel)
         end do
 
         ! Call analytical gravity routine
-        call grav_ana(xx,ff,dx,ngrid,r%gravity_type,r%gravity_params)
+        call gravana(r,g,xx,ff,dx,ngrid)
 
         ! Scatter variables to main memory
         do idim=1,ndim

@@ -43,8 +43,6 @@ epsilon=1.d-4
 gamma=1.6666667
 courant_factor=0.8
 slope_type=1
-dual_energy=0.2
-entropy=.true.
 riemann='hllc'
 /
 
