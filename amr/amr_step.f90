@@ -372,7 +372,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !------------------------
   ! Compute cooling/heating
   !------------------------
-  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%isothermal.or.r%neq_chem.or.r%cooling_ism))then
+  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%isothermal.or.r%neq_chem))then
      call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif

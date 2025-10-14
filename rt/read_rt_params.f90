@@ -49,8 +49,7 @@ subroutine m_read_rt_params(pst)
   !logical::upload_equilibrium_x=.true.! Enforce equilibrium xion when uploading         !
   !integer::heat_unresolved_HII=0      ! Subgrid model heating unresolved HII regions    !
   !integer::iHIIheat=6                 ! Var index for HII heating                       !
-  integer::iPEH_group=-1               ! Radiation group used for photo-electric heating !
-  logical::cosmic_rays=.false.         ! Include cosmic ray ionisation                   !
+  !logical::cosmic_rays=.false.        ! Include cosmic ray ionisation                   !
 
   !character(LEN=128)::hll_evals_file=''! File HLL eigenvalues                           !
   character(LEN=128)::sed_dir=''       ! Dir containing stellar energy distributions     !
@@ -100,7 +99,7 @@ subroutine m_read_rt_params(pst)
   ! Namelist definitions
   !--------------------------------------------------
   namelist/rt_params/rt_advect, rt_otsa, rt_c_fraction, rt_nsubcycle     &
-       & ,rt_smooth, iPEH_group, cosmic_rays
+       & ,rt_smooth
   namelist/rt_sources/rt_star, rt_sink, rt_esc_frac                      &
        & ,rt_emission_stats ,rt_nsource, rt_source_type                  &
        & ,rt_src_x_center, rt_src_y_center, rt_src_z_center              &
@@ -323,18 +322,6 @@ subroutine m_read_rt_params(pst)
              & (s%r%group_L0(i) .le. 13.6) .and. (s%r%group_L1(i) .ge. 11.2) )then
            s%r%ssh2(i) = 4d2 ! H2 self-shielding factor
            s%r%isLW(i) = 1d0 ! Index for LW groups
-        endif
-     enddo
-  endif
-
-  ! Set runtime options from namelist
-  s%r%cosmic_rays = cosmic_rays
-  s%r%iPEH_group = iPEH_group
-  if (s%r%iPEH_group .le. 0) then
-     do i=1,nrtgrp
-        if (s%r%isLW(i) .eq. 1d0) then
-           s%r%iPEH_group = i
-           exit
         endif
      enddo
   endif
