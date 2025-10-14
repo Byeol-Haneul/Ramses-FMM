@@ -185,7 +185,6 @@ subroutine m_read_params(pst)
   real(kind=8),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
 #endif
 #ifdef MHD
-  real(kind=8),dimension(1:MAXREGION)::A_region=0.
   real(kind=8),dimension(1:MAXREGION)::B_region=0.
   real(kind=8),dimension(1:MAXREGION)::C_region=0.
   real(kind=8)::A_ave=0.,B_ave=0.,C_ave=0.
@@ -426,13 +425,13 @@ subroutine m_read_params(pst)
   real(kind=8)::sink_mass_threshold=0
   real(kind=8)::sink_purity_threshold=-1
   real(kind=8)::sink_fraction_threshold=2d0
+  real(kind=8)::sink_delta_tout=0 ! Time interval in code units between each sink high frequency dump
   logical::sink_form=.false.
   logical::sink_refine=.false.
   logical::sink_dump=.false.
   logical::static_sink=.false.
-  integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
-  logical::fix_sink_mass = .false. 
-  logical::drag_sink = .false. ! Whether to use dynamical friction for black hole dynamics
+  logical::fix_sink_mass=.false. 
+  logical::drag_sink=.false. ! Whether to use dynamical friction for black hole dynamics
 
   ! Sink accretion parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi, 2: Flux
@@ -454,9 +453,9 @@ subroutine m_read_params(pst)
   integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
   integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
   real(kind=8)::epsilon_rad = 0.1d0 ! Radiative efficiency
-  real(kind=8)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
-  real(kind=8)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
-  real(kind=8)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
+  real(kind=8)::epsilon_radio = 1.0d0 ! Efficiency of momentum feedback for jet
+  real(kind=8)::epsilon_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+  real(kind=8)::momentum_boost = 10.0d0 ! Momentum boost in units of L/c for the jet
   real(kind=8)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
   real(kind=8)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
   real(kind=8)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
@@ -537,7 +536,7 @@ subroutine m_read_params(pst)
        & ,var_region &
 #endif
 #ifdef MHD
-       & ,A_region,B_region,C_region,A_ave,B_ave,C_ave &
+       & ,B_region,C_region,A_ave,B_ave,C_ave &
 #endif
 #ifdef RT
        & ,rt_nregion, rt_region_type                           &
@@ -610,11 +609,11 @@ subroutine m_read_params(pst)
   ! Black Hole accretion parameters
   namelist/sink_accretion_params/accretion_type,acc_sink_boost,bondi_use_vrel,use_rho_inf &
        & ,eddington_cap,sink_b_spline_order,bondi_use_gas_mass,use_bondi_lambda &
-       & ,t_start_black_hole,use_local_bondi_rate,static_sink,output_sink_fine &
+       & ,t_start_black_hole,use_local_bondi_rate,static_sink,sink_delta_tout &
        & ,fix_sink_mass,eddington_floor,mass_weighting,momentum_conserving
   ! AGN Feedback parameters
   namelist/sink_feedback_params/agn,agn_feedback_radius,agn_weighting_scheme,epsilon_rad &
-       & ,epsilon_therm_jet,epsilon_therm_quasar,kin_mass_loading,agn_fbk_mode_switch_threshold &
+       & ,epsilon_radio,epsilon_quasar,momentum_boost,agn_fbk_mode_switch_threshold &
        & ,agn_jet_opening_angle,manual_accretion_rate,agn_use_mass_weighting
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
@@ -1362,7 +1361,6 @@ subroutine m_read_params(pst)
   s%r%var_region=var_region
 #endif
 #ifdef MHD
-  s%r%A_region=A_region
   s%r%B_region=B_region
   s%r%C_region=C_region
   s%r%A_ave=A_ave
@@ -1518,7 +1516,7 @@ subroutine m_read_params(pst)
   s%r%sink_purity_threshold=sink_purity_threshold
   s%r%sink_fraction_threshold=sink_fraction_threshold
   s%r%static_sink=static_sink
-  s%r%output_sink_fine=output_sink_fine
+  s%r%sink_delta_tout=sink_delta_tout
   s%r%fix_sink_mass=fix_sink_mass
   s%r%drag_sink=drag_sink
 
@@ -1543,9 +1541,9 @@ subroutine m_read_params(pst)
   s%r%agn_feedback_radius = agn_feedback_radius
   s%r%agn_weighting_scheme = agn_weighting_scheme
   s%r%epsilon_rad = epsilon_rad
-  s%r%epsilon_therm_jet = epsilon_therm_jet
-  s%r%epsilon_therm_quasar = epsilon_therm_quasar
-  s%r%kin_mass_loading = kin_mass_loading
+  s%r%epsilon_radio = epsilon_radio
+  s%r%epsilon_quasar = epsilon_quasar
+  s%r%momentum_boost = momentum_boost
   s%r%agn_fbk_mode_switch_threshold = agn_fbk_mode_switch_threshold
   s%r%agn_jet_opening_angle = agn_jet_opening_angle
   s%r%manual_accretion_rate = manual_accretion_rate
