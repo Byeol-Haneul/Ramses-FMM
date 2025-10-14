@@ -185,7 +185,6 @@ subroutine m_read_params(pst)
   real(kind=8),dimension(1:MAXREGION,1:NVAR-5-NENER)::var_region=0.0
 #endif
 #ifdef MHD
-  real(kind=8),dimension(1:MAXREGION)::A_region=0.
   real(kind=8),dimension(1:MAXREGION)::B_region=0.
   real(kind=8),dimension(1:MAXREGION)::C_region=0.
   real(kind=8)::A_ave=0.,B_ave=0.,C_ave=0.
@@ -537,7 +536,7 @@ subroutine m_read_params(pst)
        & ,var_region &
 #endif
 #ifdef MHD
-       & ,A_region,B_region,C_region,A_ave,B_ave,C_ave &
+       & ,B_region,C_region,A_ave,B_ave,C_ave &
 #endif
 #ifdef RT
        & ,rt_nregion, rt_region_type                           &
@@ -1362,7 +1361,6 @@ subroutine m_read_params(pst)
   s%r%var_region=var_region
 #endif
 #ifdef MHD
-  s%r%A_region=A_region
   s%r%B_region=B_region
   s%r%C_region=C_region
   s%r%A_ave=A_ave
