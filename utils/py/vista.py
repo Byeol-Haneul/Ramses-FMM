@@ -71,9 +71,9 @@ if log:
     log0=True
 
 if ivar==None:
-    ivar=0
+    ivar=1
 else:
-    ivar=int(ivar)-1
+    ivar=int(ivar)
 
 if prefix==None:
     prefix="hydro"
@@ -93,20 +93,20 @@ x=c.x[0]
 y=c.x[1]
 z=c.x[2]
 print(ivar,c.nvar)
-if ivar < c.nvar:
-    xx = c.u[ivar]
-elif ivar == 14:
+if ivar <= c.nvar:
+    xx = c.u[ivar-1]
+elif ivar == 15: # temperature
     xx = c.u[4]/c.u[0]
-elif ivar == 15:
-    xx = c.u[5]**2+c.u[6]**2+c.u[7]**2
-elif ivar == 16:
-    xx = c.u[1]**2+c.u[2]**2+c.u[3]**2
+elif ivar == 16: # magnetic energy
+    xx = 0.5*(c.u[5]**2+c.u[6]**2+c.u[7]**2)
+elif ivar == 17: # kinetic energy
+    xx = 0.5*(c.u[1]**2+c.u[2]**2+c.u[3]**2)
 else:
-    print("unknown variable, use rho instead")
+    print("unknown variable: use rho instead")
     xx = c.u[0]
 
-print(np.min(xx),np.max(xx))
-min_val=1e-3*np.max(xx)
+print("min=",np.min(xx)," max=",np.max(xx))
+min_val = 1e-3*np.max(xx)
 data = ram.mk_cube(x,y,z,c.dx,xx)
 grid = pv.ImageData()
 grid.dimensions = np.array(data.shape) + 1
