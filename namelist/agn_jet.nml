@@ -96,7 +96,7 @@ agn_feedback_radius=6
 agn_fbk_mode_switch_threshold=100
 agn_jet_opening_angle=30
 agn_use_mass_weighting=.true.
-kin_mass_loading = 0.5
+momentum_boost=1
 manual_accretion_rate=0.01 ! Enforces a continuous accretion rate
 /
 

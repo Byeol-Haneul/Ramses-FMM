@@ -143,7 +143,7 @@ if clump:
         plt.plot(xx,yy,'r.')
 
 if sink:
-    s=ram.rd_part(nout,sink=True)
+    s=ram.rd_part(nout,prefix='sink')
     if radius is not None:
         r = np.sqrt((s.pos[0]-center[0])**2+(s.pos[1]-center[1])**2+(s.pos[2]-center[2])**2)
         nn = np.count_nonzero(r < radius)
