@@ -559,16 +559,19 @@ subroutine make_initial_phi(s,ilevel,icount)
   use nbors_utils
   use cache_commons
   use cache
+  use boundaries, only: init_bound_phi
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
   !
   !
   !
-  integer::igrid,idim,ind
+  integer::igrid,idim,ind, nstride
   integer,dimension(1:8,1:8)::ccc
-  real(kind=8)::aa,bb,cc,dd,tfrac
+  real(kind=8)::aa,bb,cc,dd,tfrac,dx
   real(kind=8),dimension(1:8)::bbb
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector)::pp
   integer(kind=8),dimension(0:ndim)::hash_key
   integer,dimension(1:threetondim)::ind_nbor
   type(nbor),dimension(1:threetondim)::grid_nbor
@@ -608,7 +611,8 @@ subroutine make_initial_phi(s,ilevel,icount)
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                 hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
-                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
+                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol,&
+                bound=init_bound_phi)
 
   hash_key(0)=ilevel
 
@@ -640,6 +644,21 @@ subroutine make_initial_phi(s,ilevel,icount)
         ! Loop over cells
         do ind=1,twotondim
            m%grid(igrid)%phi(ind)=phi_int(ind)
+        end do
+        ! End loop over cells
+
+     ! For coarse level and for isolated boundary conditions, set multipole potential
+     else if (r%isolated_boundary)then
+
+        ! Loop over cells
+        do ind=1,twotondim
+           do idim=1,ndim
+              nstride=2**(idim-1)
+              xx(1,idim)=(2*m%grid(igrid)%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+           end do
+           ! Call analytical potential routine
+           call phiana(r,g,xx,pp,dx,1)
+           m%grid(igrid)%phi(ind)=pp(1)
         end do
         ! End loop over cells
 

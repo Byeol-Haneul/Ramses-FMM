@@ -87,6 +87,7 @@ module amr_commons
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
      integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+     logical :: isolated_boundary=.false. ! Set isolated boundary conditions to multipole expansion
 
      ! Movie parameters
      integer::levelmax_frame=0

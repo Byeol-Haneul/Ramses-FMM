@@ -547,7 +547,7 @@ subroutine cic_multipole(s,ilevel)
            call mdl_abort(mdl)
         endif
         x(1:ndim)=m%grid(igrid)%unew(ind,2:ndim+1)/mmm
-        
+
         ! Compute total multipole
         if(ilevel==r%levelmin)then
            do idim=1,ndim+1
@@ -559,7 +559,7 @@ subroutine cic_multipole(s,ilevel)
         do idim=1,ndim
            x(idim)=x(idim)/dx_loc
         end do
-     
+
         ! CIC at level ilevel (dd: right cloud boundary; dg: left cloud boundary)
         do idim=1,ndim
            dd(idim)=x(idim)+0.5D0
@@ -1475,7 +1475,6 @@ recursive subroutine r_broadcast_multipole(pst,multipole,input_size)
   else
      pst%s%g%multipole=multipole
      pst%s%g%rho_tot=pst%s%g%multipole%q(1)/pst%s%r%boxlen**ndim
-!!!     pst%s%g%rho_tot=0d0 ! For non-periodic BC
   endif
 
 end subroutine r_broadcast_multipole

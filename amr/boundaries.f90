@@ -111,11 +111,16 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
   real(kind=8),dimension(1:nvector,1:ndim)::xx
   real(kind=8),dimension(1:nvector,1:nvar)::uu
   real(kind=8),dimension(1:nvector,1:nvar)::qq
+  real(kind=8),dimension(1:nvector,1:ndim)::ff
+  real(kind=8),dimension(1:nvector)::phi
   real(kind=8)::dx,rr,vx,vy,vz,pp,eint,ekin,emag,erad
 
   type = r%bound_type(ibound)
   dir = r%bound_dir(ibound)
   shift = r%bound_shift(ibound)
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**grid%lev
 
   ! Set refinement map
   if(shift==+1)then
@@ -350,9 +355,6 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
   ! Imposed BC from condinit
   if(type == 4)then
 
-     ! Mesh size at level ilevel in code units
-     dx=r%boxlen/2**grid%lev
-
      do ind=1,twotondim
         do idim=1,ndim
            nstride=2**(idim-1)
@@ -402,9 +404,6 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
   ! Imposed BC from boundana
   if(type == 5)then
 
-     ! Mesh size at level ilevel in code units
-     dx=r%boxlen/2**grid%lev
-
      do ind=1,twotondim
         do idim=1,ndim
            nstride=2**(idim-1)
@@ -423,16 +422,37 @@ subroutine init_bound_refine(r,g,m,grid,grid_ref,ibound)
 #endif
 
 #ifdef GRAV
-  ! Isolated BC
-  do idim=1,ndim
+
+  if(r%isolated_boundary)then ! Isolated BC
+
      do ind=1,twotondim
-        grid%f(ind,idim)=0.0d0
+        do idim=1,ndim
+           nstride=2**(idim-1)
+           xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+        end do
+        ! Call analytical acceleration routine
+        call gravana(r,g,xx,ff,dx,1)
+        do idim=1,ndim
+           grid%f(ind,idim)=ff(1,idim)
+        end do
+        ! Call analytical potential routine
+        call gravana(r,g,xx,phi,dx,1)
+        grid%phi(ind)=phi(1)
+        grid%phi_old(ind)=phi(1)
      end do
-  end do
-  do ind=1,twotondim
-     grid%phi(ind)=0.0d0
-     grid%phi_old(ind)=0.0d0
-  end do
+
+  else ! Zero gravity
+
+     do ind=1,twotondim
+        do idim=1,ndim
+           grid%f(ind,idim)=0d0
+        end do
+        grid%phi(ind)=0d0
+        grid%phi_old(ind)=0d0
+     end do
+
+  endif
+
 #endif
 
 end subroutine init_bound_refine
@@ -440,19 +460,58 @@ end subroutine init_bound_refine
 !################################################################
 !################################################################
 !################################################################
-subroutine init_bound_grav(r,g,m,grid)
+subroutine init_bound_phi(r,g,m,grid,grid_ref,ibound)
   use amr_parameters, only: ndim, twotondim, nvector
   use amr_commons, only: run_t, global_t, mesh_t, oct
   type(run_t)::r
   type(global_t)::g
   type(mesh_t)::m
-  type(oct)::grid
+  type(oct)::grid, grid_ref
+  integer::ibound
+
+  integer::idim, ind, nstride
+  real(kind=8)::dx
+  real(kind=8),dimension(1:nvector,1:ndim)::xx
+  real(kind=8),dimension(1:nvector)::pp
+
+#ifdef GRAV
+
+  ! Mesh size at level ilevel in code units
+  dx=r%boxlen/2**grid%lev
+
+  do ind=1,twotondim
+     do idim=1,ndim
+        nstride=2**(idim-1)
+        xx(1,idim)=(2*grid%ckey(idim)+MOD((ind-1)/nstride,2)+0.5)*dx-m%skip(idim)
+     end do
+     ! Call analytical potential routine
+     call phiana(r,g,xx,pp,dx,1)
+     grid%phi(ind)=pp(1)
+     grid%phi_old(ind)=pp(1)
+     ! Set mask to -1
+     grid%f(ind,3)=-1
+  end do
+
+#endif
+
+end subroutine init_bound_phi
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine init_bound_grav(r,g,m,grid,grid_ref,ibound)
+  use amr_parameters, only: ndim, twotondim, nvector
+  use amr_commons, only: run_t, global_t, mesh_t, oct
+  type(run_t)::r
+  type(global_t)::g
+  type(mesh_t)::m
+  type(oct)::grid, grid_ref
+  integer::ibound
 
   integer::idim, ind, nstride
   real(kind=8)::dx
   real(kind=8),dimension(1:nvector,1:ndim)::xx
   real(kind=8),dimension(1:nvector,1:ndim)::ff
-  real(kind=8),dimension(1:nvector)::pp
 
 #ifdef GRAV
 
@@ -469,10 +528,6 @@ subroutine init_bound_grav(r,g,m,grid)
      do idim=1,ndim
         grid%f(ind,idim)=ff(1,idim)
      end do
-     ! Call analytical potential routine
-     call phiana(r,g,xx,pp,dx,1)
-     grid%phi(ind)=pp(1)
-     grid%phi_old(ind)=pp(1)
   end do
 
 #endif

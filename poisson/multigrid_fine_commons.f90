@@ -749,6 +749,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   use cache_commons
   use cache
   use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol
+  use boundaries, only: init_bound_phi
   implicit none
   type(ramses_t)::s
 
@@ -768,7 +769,7 @@ subroutine make_bc_rhs(s,ilevel,icount)
   type(oct),pointer::gridp
 
   real(kind=8) :: dx, oneoverdx2, phi_b, nb_mask, nb_phi, w
-  real(kind=8) :: fourpi
+  real(kind=8) :: fourpi, offset
   type(msg_three_realdp)::dummy_three_realdp
 
   associate(r=>s%r,g=>s%g,m=>s%m,mdl=>s%mdl)
@@ -779,7 +780,9 @@ subroutine make_bc_rhs(s,ilevel,icount)
   
   dx  = r%boxlen/2**ilevel
   oneoverdx2 = 1.0d0/(dx*dx)
-  
+  offset = g%rho_tot
+  if(r%isolated_boundary)offset = 0d0
+
   iii(1,1,1:8)=(/1,0,1,0,1,0,1,0/); jjj(1,1,1:8)=(/2,1,4,3,6,5,8,7/)
   iii(1,2,1:8)=(/0,2,0,2,0,2,0,2/); jjj(1,2,1:8)=(/2,1,4,3,6,5,8,7/)
   iii(2,1,1:8)=(/3,3,0,0,3,3,0,0/); jjj(2,1,1:8)=(/3,4,1,2,7,8,5,6/)
@@ -817,8 +820,9 @@ subroutine make_bc_rhs(s,ilevel,icount)
   end if
 
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
-                pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
+       hilbert=m%domain,pack_size=storage_size(dummy_three_realdp)/32,&
+       pack=pack_fetch_interpol,unpack=unpack_fetch_interpol,&
+       bound=init_bound_phi)
 
   hash_nbor(0)=ilevel
 
@@ -839,8 +843,10 @@ subroutine make_bc_rhs(s,ilevel,icount)
 
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
 
         ! Get neighbouring grid using read-only cache
@@ -873,8 +879,8 @@ subroutine make_bc_rhs(s,ilevel,icount)
      ! Loop over cells
      do ind=1,twotondim
 
-        ! Init BC-modified RHS to rho - rho_tot :
-        m%grid(igrid)%f(ind,2) = fourpi*(m%grid(igrid)%rho(ind) - g%rho_tot)
+        ! Init BC-modified RHS to rho - offset :
+        m%grid(igrid)%f(ind,2) = fourpi*(m%grid(igrid)%rho(ind) - offset)
 
         ! Do not process masked cells
         if(m%grid(igrid)%f(ind,3)<=0.0) cycle 

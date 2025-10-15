@@ -293,6 +293,7 @@ subroutine m_read_params(pst)
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
   integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+  logical :: isolated_boundary=.false. ! Set isolated boundary conditions to multipole expansion
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -514,11 +515,11 @@ subroutine m_read_params(pst)
        & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax,fast_solver,part_mass_deposition_scheme &
-       & ,part_force_interpolation_scheme,star_mass_deposition_scheme &
-       & ,star_force_interpolation_scheme,sink_mass_deposition_scheme &
-       & ,sink_force_interpolation_scheme,tree_mass_deposition_scheme &
-       & ,tree_force_interpolation_scheme 
+       & ,cg_levelmin,cic_levelmax,fast_solver,isolated_boundary &
+       & ,part_mass_deposition_scheme,part_force_interpolation_scheme &
+       & ,star_mass_deposition_scheme,star_force_interpolation_scheme &
+       & ,sink_mass_deposition_scheme,sink_force_interpolation_scheme &
+       & ,tree_mass_deposition_scheme,tree_force_interpolation_scheme
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
@@ -1192,6 +1193,7 @@ subroutine m_read_params(pst)
   s%r%cic_levelmax=cic_levelmax
   s%r%cg_levelmin=cg_levelmin
   s%r%fast_solver=fast_solver
+  s%r%isolated_boundary=isolated_boundary
   s%r%part_mass_deposition_scheme=part_mass_deposition_scheme
   s%r%part_force_interpolation_scheme=part_force_interpolation_scheme
   s%r%star_mass_deposition_scheme=star_mass_deposition_scheme
