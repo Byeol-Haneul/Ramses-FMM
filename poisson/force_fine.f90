@@ -13,7 +13,7 @@ subroutine m_force_fine(pst,ilevel,icount)
   use ramses_commons, only: pst_t
   implicit none
   type(pst_t)::pst
-  integer::ilevel,icount
+  integer::ilevel,icount, ilev
   !----------------------------------------------------------
   ! This routine computes the gravitational acceleration,
   ! the maximum density rho_max, and the potential energy
@@ -35,6 +35,7 @@ subroutine m_force_fine(pst,ilevel,icount)
      call r_gradient_phi(pst,in_gradient_phi,2)
   endif
   call dump_phi(pst%s%r, pst%s%g, pst%s%m, ilevel)
+
   if(pst%s%r%verbose)write(*,'("   Gradient phi done for level ",I2)')ilevel
 
   ! Compute gravity potential energy
@@ -475,9 +476,9 @@ subroutine dump_phi(r, g, m, ilevel)
   ! open debug file
   unit_debug = 99
 #ifdef FMM
-  open(unit_debug, file="debug_neighbors_fmm.out", status="replace")
+  open(unit_debug, file="./out_fmm/debug_neighbors_fmm.out", status="replace")
 #else
-  open(unit_debug, file="debug_neighbors_mg.out", status="replace")
+  open(unit_debug, file="./out_mg/debug_neighbors_mg.out", status="replace")
 #endif
   dx_loc = r%boxlen / 2.0D0**ilevel
   do ioct = m%head(ilevel), m%tail(ilevel)

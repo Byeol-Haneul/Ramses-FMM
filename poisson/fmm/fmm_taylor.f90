@@ -83,7 +83,7 @@ subroutine calc_taylor(R, multipoles, taylor_coeff)
   !                               C1
   !------------------------------------------------------------------  
   do i = 1, ndim
-     taylor_coeff(1+i) = taylor_coeff(1+i) + M0*R(i)*D1 - M1(i)*D1 - R(i)*RdotM1*D2 + 0.5D0*R(i)*trM*D2 + 0.5D0*MR(i)*D2 + 0.5D0*R(i)*S*D3
+     taylor_coeff(1+i) = taylor_coeff(1+i) + M0*R(i)*D1 - M1(i)*D1 - R(i)*RdotM1*D2 + 0.5D0*R(i)*trM*D2 + 0.5D0*R(i)*S*D3 + MR(i)*D2 
   end do
 
   !------------------------------------------------------------------
@@ -208,11 +208,11 @@ subroutine shift_taylor(taylor_in, a, taylor_out)
   ! C0' = C0 + a_i C1^i + 0.5 a_i a_j C2^{ij} + 1/6 a_i a_j a_k C3^{ijk}
   C0p = C0
   do i = 1, ndim
-     C0p = C0p + a(i)*C1(i)
+     C0p = C0p +  a(i)*C1(i)
      do j = 1, ndim
-        C0p = C0p + 0.5d0*a(i)*a(j)*C2(i,j)
+        C0p = C0p + 0.5 * a(i)*a(j)*C2(i,j)
         do k = 1, ndim
-           C0p = C0p + (1.0d0/6.0d0)*a(i)*a(j)*a(k)*C3(i,j,k)
+           C0p = C0p + (1.0/6.0) * a(i)*a(j)*a(k)*C3(i,j,k)
         end do
      end do
   end do
