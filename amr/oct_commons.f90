@@ -9,10 +9,10 @@ module oct_commons
      real(dp),dimension(1:twotondim,1:nvar)::uold
      real(dp),dimension(1:twotondim,1:nvar)::unew
 #endif
-#if defined(HYDRO) && defined(VFACE)
-     ! Face-centered normal contact velocities (inferred from Riemann fluxes)
-     ! Mapping mirrors bold: (1,4)->x-/x+; (2,5)->y-/y+; (3,6)->z-/z+
-     real(dp),dimension(1:twotondim,1:6)::vface
+#if defined(HYDRO) && defined(GRADVPART)
+     ! Per-cell PLM velocity slopes (dq) for (u,v,w) along (x,y,z)
+     ! gradv(icell, ivel, idim) with ivel=1..NDIM, idim=1..NDIM
+     real(dp),dimension(1:twotondim,1:ndim,1:ndim)::gradv
 #endif
 #ifdef MHD
      real(dp),dimension(1:twotondim,1:6)::bold

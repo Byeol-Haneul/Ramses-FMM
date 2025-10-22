@@ -21,6 +21,9 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
 #ifdef MHD
      & bin,emfx,emfy,emfz,bf,dbf,Ex,Ey,Ez,qRT,qRB,qLT,qLB,&
 #endif
+#ifdef GRADVPART
+     & plm_slopes,&
+#endif
      & dx,dt,iu1,iu2,ju1,ju2,ku1,ku2,if1,if2,jf1,jf2,kf1,kf2,&
      & params)
   use amr_parameters, only: ndim
@@ -42,6 +45,9 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
   ! Output fluxes
   real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2,1:nprim,1:ndim)::flux
   real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2,1:2    ,1:ndim)::tmp
+#ifdef GRADVPART
+  real(kind=8),dimension(if1:if2,jf1:jf2,kf1:kf2,1:ndim,1:ndim)::plm_slopes
+#endif
 #ifdef MHD
   ! Input left and right face magnetic field
   real(kind=8),dimension(iu1:iu2,ju1:ju2,ku1:ku2,1:6)::bin
@@ -155,6 +161,21 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
      end do
   end do
 
+#ifdef GRADVPART
+  do k=klo,khi
+     do j=jlo,jhi
+        do i=if1,if2 ! dq is ivel, idim
+           plm_slopes(i,j,k,1,1) = dq(i,j,k,1,1) ! du/dx
+#if NDIM>1
+           plm_slopes(i,j,k,2,1) = dq(i,j,k,2,1) ! dv/dx
+#elif NDIM>2
+           plm_slopes(i,j,k,3,1) = dq(i,j,k,3,1) ! dw/dx
+#endif
+        end do
+     end do
+  end do
+#endif
+
   ! Solve for 1D flux in Y direction
 #if NDIM>1
   call cmpflxm(qm,iu1  ,iu2  ,ju1+1,ju2+1,ku1  ,ku2  , &
@@ -183,6 +204,23 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
         end do
      end do
   end do
+
+#ifdef GRADVPART
+#if NDIM>1
+  do k=klo,khi
+     do j=jf1,jf2
+        do i=ilo,ihi
+           plm_slopes(i,j,k,1,2) = dq(i,j,k,1,2) ! du/dy
+           plm_slopes(i,j,k,2,2) = dq(i,j,k,2,2) ! dv/dy
+#if NDIM>2
+           plm_slopes(i,j,k,3,2) = dq(i,j,k,3,2) ! dw/dy
+#endif
+        end do
+     end do
+  end do
+#endif
+#endif
+
 #endif
 
   ! Solve for 1D flux in Z direction
@@ -213,6 +251,21 @@ subroutine unsplit(uin,gravin,qin,cin,flux,tmp,dq,qm,qp,fx,tx,divu,&
         end do
      end do
   end do
+
+#ifdef GRADVPART
+#if NDIM>2
+  do k=kf1,kf2
+     do j=jlo,jhi
+        do i=ilo,ihi
+           plm_slopes(i,j,k,1,3) = dq(i,j,k,1,3) ! du/dz
+           plm_slopes(i,j,k,2,3) = dq(i,j,k,2,3) ! dv/dz
+           plm_slopes(i,j,k,3,3) = dq(i,j,k,3,3) ! dw/dx
+        end do
+     end do
+  end do
+#endif
+#endif
+
 #endif
 #ifdef MHD
 #if NDIM>1

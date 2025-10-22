@@ -51,7 +51,7 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   real(kind=8)::scale_nH,scale_T2,scale_l,scale_d,scale_t,scale_v
   real(kind=8)::dx,rr,vx,vy=0,vz=0,ek,ei,pp,xx1,xx2,xx3,dx_loc
 #ifdef MHD
-  real(kind=8)::bx,by,bz
+  real(kind=8)::bx,by,bz,bdefault
 #endif
 
   real(kind=8),allocatable,dimension(:,:,:)::init_array
@@ -232,295 +232,67 @@ subroutine input_hydro_grafic(mdl,r,g,m,ilevel)
   ! Read magnetic field initial condition files (MHD)
   !------------------------------------------
 #ifdef MHD
-  
-  ! Bx left
-  filename=TRIM(r%initfile(ilevel))//'/ic_bxleft'
-  INQUIRE(file=filename,exist=ok_file3)
-  if(ok_file3)then
-     if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
-     open(10,file=filename,form='unformatted')
-     rewind 10
-     read(10)
-     do i3=1,i3_min-1
+  do ivar=1,6
+     ! Map filename per face component
+     if(ivar==1) filename=TRIM(r%initfile(ilevel))//'/ic_bxleft'
+     if(ivar==2) filename=TRIM(r%initfile(ilevel))//'/ic_byleft'
+     if(ivar==3) filename=TRIM(r%initfile(ilevel))//'/ic_bzleft'
+     if(ivar==4) filename=TRIM(r%initfile(ilevel))//'/ic_bxright'
+     if(ivar==5) filename=TRIM(r%initfile(ilevel))//'/ic_byright'
+     if(ivar==6) filename=TRIM(r%initfile(ilevel))//'/ic_bzright'
+
+     ! Set default background B by component group
+     if(ivar==1 .or. ivar==4) bdefault=r%A_ave
+     if(ivar==2 .or. ivar==5) bdefault=r%B_ave
+     if(ivar==3 .or. ivar==6) bdefault=r%C_ave
+
+     INQUIRE(file=filename,exist=ok_file3)
+     if(ok_file3)then
+        if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
+        open(10,file=filename,form='unformatted')
+        rewind 10
         read(10)
-     end do
-     do i3=i3_min,i3_max
-        read(10) ((init_plane(i1,i2),i1=1,g%n1(ilevel)),i2=1,g%n2(ilevel))
-        init_array(i1_min:i1_max,i2_min:i2_max,i3) = init_plane(i1_min:i1_max,i2_min:i2_max)
-     end do
-     close(10)
-  else
-     if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
-     init_array = r%A_ave
-  endif
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
+        do i3=1,i3_min-1
+           read(10)
+        end do
+        do i3=i3_min,i3_max
+           read(10) ((init_plane(i1,i2),i1=1,g%n1(ilevel)),i2=1,g%n2(ilevel))
+           init_array(i1_min:i1_max,i2_min:i2_max,i3) = init_plane(i1_min:i1_max,i2_min:i2_max)
+        end do
+        close(10)
+     else
+        if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
+        init_array = bdefault
+     endif
+
+     do igrid=m%head(ilevel),m%tail(ilevel)
+        do ind=1,twotondim
+           xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
 #if NDIM>1
-        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
+           xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
 #endif
 #if NDIM>2
-        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
+           xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
 #endif
-        xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
+           xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
 #if NDIM>1
-        xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
+           xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
 #endif
 #if NDIM>2
-        xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
+           xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
 #endif
-        i1=int(xx1)+1
-        i2=1; i3=1
+           i1=int(xx1)+1
+           i2=1; i3=1
 #if NDIM>1
-        i2=int(xx2)+1
+           i2=int(xx2)+1
 #endif
 #if NDIM>2
-        i3=int(xx3)+1
+           i3=int(xx3)+1
 #endif
-        m%grid(igrid)%bold(ind,1)=init_array(i1,i2,i3)
+           m%grid(igrid)%bold(ind,ivar)=init_array(i1,i2,i3)
+        end do
      end do
   end do
-
-  ! By left
-  filename=TRIM(r%initfile(ilevel))//'/ic_byleft'
-  INQUIRE(file=filename,exist=ok_file3)
-  if(ok_file3)then
-     if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
-     open(10,file=filename,form='unformatted')
-     rewind 10
-     read(10)
-     do i3=1,i3_min-1
-        read(10)
-     end do
-     do i3=i3_min,i3_max
-        read(10) ((init_plane(i1,i2),i1=1,g%n1(ilevel)),i2=1,g%n2(ilevel))
-        init_array(i1_min:i1_max,i2_min:i2_max,i3) = init_plane(i1_min:i1_max,i2_min:i2_max)
-     end do
-     close(10)
-  else
-     if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
-     init_array = r%B_ave
-  endif
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
-#if NDIM>1
-        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
-#endif
-#if NDIM>2
-        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
-#endif
-        xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
-#if NDIM>1
-        xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
-#endif
-#if NDIM>2
-        xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
-#endif
-        i1=int(xx1)+1
-        i2=1; i3=1
-#if NDIM>1
-        i2=int(xx2)+1
-#endif
-#if NDIM>2
-        i3=int(xx3)+1
-#endif
-        m%grid(igrid)%bold(ind,2)=init_array(i1,i2,i3)
-     end do
-  end do
-
-  ! Bz left
-  filename=TRIM(r%initfile(ilevel))//'/ic_bzleft'
-  INQUIRE(file=filename,exist=ok_file3)
-  if(ok_file3)then
-     if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
-     open(10,file=filename,form='unformatted')
-     rewind 10
-     read(10)
-     do i3=1,i3_min-1
-        read(10)
-     end do
-     do i3=i3_min,i3_max
-        read(10) ((init_plane(i1,i2),i1=1,g%n1(ilevel)),i2=1,g%n2(ilevel))
-        init_array(i1_min:i1_max,i2_min:i2_max,i3) = init_plane(i1_min:i1_max,i2_min:i2_max)
-     end do
-     close(10)
-  else
-     if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
-     init_array = r%C_ave
-  endif
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
-#if NDIM>1
-        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
-#endif
-#if NDIM>2
-        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
-#endif
-        xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
-#if NDIM>1
-        xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
-#endif
-#if NDIM>2
-        xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
-#endif
-        i1=int(xx1)+1
-        i2=1; i3=1
-#if NDIM>1
-        i2=int(xx2)+1
-#endif
-#if NDIM>2
-        i3=int(xx3)+1
-#endif
-        m%grid(igrid)%bold(ind,3)=init_array(i1,i2,i3)
-     end do
-  end do
-
-  ! Bx right
-  filename=TRIM(r%initfile(ilevel))//'/ic_bxright'
-  INQUIRE(file=filename,exist=ok_file3)
-  if(ok_file3)then
-     if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
-     open(10,file=filename,form='unformatted')
-     rewind 10
-     read(10)
-     do i3=1,i3_min-1
-        read(10)
-     end do
-     do i3=i3_min,i3_max
-        read(10) ((init_plane(i1,i2),i1=1,g%n1(ilevel)),i2=1,g%n2(ilevel))
-        init_array(i1_min:i1_max,i2_min:i2_max,i3) = init_plane(i1_min:i1_max,i2_min:i2_max)
-     end do
-     close(10)
-  else
-     if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
-     init_array = r%A_ave
-  endif
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
-#if NDIM>1
-        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
-#endif
-#if NDIM>2
-        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
-#endif
-        xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
-#if NDIM>1
-        xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
-#endif
-#if NDIM>2
-        xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
-#endif
-        i1=int(xx1)+1
-        i2=1; i3=1
-#if NDIM>1
-        i2=int(xx2)+1
-#endif
-#if NDIM>2
-        i3=int(xx3)+1
-#endif
-        m%grid(igrid)%bold(ind,4)=init_array(i1,i2,i3)
-     end do
-  end do
-
-  ! By right
-  filename=TRIM(r%initfile(ilevel))//'/ic_byright'
-  INQUIRE(file=filename,exist=ok_file3)
-  if(ok_file3)then
-     if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
-     open(10,file=filename,form='unformatted')
-     rewind 10
-     read(10)
-     do i3=1,i3_min-1
-        read(10)
-     end do
-     do i3=i3_min,i3_max
-        read(10) ((init_plane(i1,i2),i1=1,g%n1(ilevel)),i2=1,g%n2(ilevel))
-        init_array(i1_min:i1_max,i2_min:i2_max,i3) = init_plane(i1_min:i1_max,i2_min:i2_max)
-     end do
-     close(10)
-  else
-     if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
-     init_array = r%B_ave
-  endif
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
-#if NDIM>1
-        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
-#endif
-#if NDIM>2
-        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
-#endif
-        xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
-#if NDIM>1
-        xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
-#endif
-#if NDIM>2
-        xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
-#endif
-        i1=int(xx1)+1
-        i2=1; i3=1
-#if NDIM>1
-        i2=int(xx2)+1
-#endif
-#if NDIM>2
-        i3=int(xx3)+1
-#endif
-        m%grid(igrid)%bold(ind,5)=init_array(i1,i2,i3)
-     end do
-  end do
-
-  ! Bz right
-  filename=TRIM(r%initfile(ilevel))//'/ic_bzright'
-  INQUIRE(file=filename,exist=ok_file3)
-  if(ok_file3)then
-     if(g%myid==1)write(*,*)"Reading "//TRIM(filename)
-     open(10,file=filename,form='unformatted')
-     rewind 10
-     read(10)
-     do i3=1,i3_min-1
-        read(10)
-     end do
-     do i3=i3_min,i3_max
-        read(10) ((init_plane(i1,i2),i1=1,g%n1(ilevel)),i2=1,g%n2(ilevel))
-        init_array(i1_min:i1_max,i2_min:i2_max,i3) = init_plane(i1_min:i1_max,i2_min:i2_max)
-     end do
-     close(10)
-  else
-     if(g%myid==1)write(*,*)"Missing "//TRIM(filename)
-     init_array = r%C_ave
-  endif
-  do igrid=m%head(ilevel),m%tail(ilevel)
-     do ind=1,twotondim
-        xx1=(2*m%grid(igrid)%ckey(1)+MOD((ind-1)  ,2)+0.5)*dx - m%skip(1)/r%boxlen
-#if NDIM>1
-        xx2=(2*m%grid(igrid)%ckey(2)+MOD((ind-1)/2,2)+0.5)*dx - m%skip(2)/r%boxlen
-#endif
-#if NDIM>2
-        xx3=(2*m%grid(igrid)%ckey(3)+MOD((ind-1)/4,2)+0.5)*dx - m%skip(3)/r%boxlen
-#endif
-        xx1=(xx1*(g%dxini(ilevel)/dx)-g%xoff1(ilevel))/g%dxini(ilevel)
-#if NDIM>1
-        xx2=(xx2*(g%dxini(ilevel)/dx)-g%xoff2(ilevel))/g%dxini(ilevel)
-#endif
-#if NDIM>2
-        xx3=(xx3*(g%dxini(ilevel)/dx)-g%xoff3(ilevel))/g%dxini(ilevel)
-#endif
-        i1=int(xx1)+1
-        i2=1; i3=1
-#if NDIM>1
-        i2=int(xx2)+1
-#endif
-#if NDIM>2
-        i3=int(xx3)+1
-#endif
-        m%grid(igrid)%bold(ind,6)=init_array(i1,i2,i3)
-     end do
-  end do
-
 #endif
 
   ! Deallocate initial conditions array

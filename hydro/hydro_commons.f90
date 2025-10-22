@@ -13,6 +13,11 @@ module hydro_commons
      real(kind=8),dimension(:,:,:),allocatable::cloc
      real(kind=8),dimension(:,:,:,:,:),allocatable::flux
      real(kind=8),dimension(:,:,:,:,:),allocatable::tmp
+#ifdef GRADVPART
+     ! PLM velocity slopes per face index: (i,j,k, ivel, idim)
+     ! ivel=1..NDIM maps to (u,v,w); idim=1..NDIM is slope direction (x,y,z)
+     real(kind=8),dimension(:,:,:,:,:),allocatable::plm_slopes
+#endif
      real(kind=8),dimension(:,:,:,:,:),allocatable::dq
      real(kind=8),dimension(:,:,:,:,:),allocatable::qm
      real(kind=8),dimension(:,:,:,:,:),allocatable::qp
@@ -82,6 +87,9 @@ contains
 
     allocate(h%flux(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:nprim,1:ndim))
     allocate(h%tmp (h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:2    ,1:ndim))
+#ifdef GRADVPART
+    allocate(h%plm_slopes(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2,1:3,1:ndim))
+#endif
     allocate(h%divu(h%if1:h%if2,h%jf1:h%jf2,h%kf1:h%kf2))
 
     allocate(h%childloc(h%io1:h%io2,h%jo1:h%jo2,h%ko1:h%ko2))
@@ -128,6 +136,9 @@ contains
 
     nint=nint+size(transfer(h%flux ,(/1/)))
     nint=nint+size(transfer(h%tmp  ,(/1/)))
+#ifdef GRADVPART
+    nint=nint+size(transfer(h%plm_slopes,(/1/)))
+#endif
     nint=nint+size(transfer(h%divu ,(/1/)))
 
     nint=nint+size(transfer(h%childloc,(/1/)))

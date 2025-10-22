@@ -1,6 +1,23 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
+#ifdef USE_EXPOKIT
+  double precision, save :: expokit_gradv(3,3)
+#endif
 contains
+#ifdef USE_EXPOKIT
+subroutine expokit_matvec(x, y)
+  use amr_parameters, only: ndim
+  implicit none
+  double precision x(*), y(*)
+  integer :: i, j
+  do i=1,ndim
+     y(i)=0.0d0
+     do j=1,ndim
+        y(i)=y(i)+expokit_gradv(i,j)*x(j)
+     end do
+  end do
+end subroutine expokit_matvec
+#endif
 !################################################################
 !################################################################
 !################################################################
@@ -91,7 +108,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
         endif
      endif
      if(pst%s%r%trac)then
-        if(pst%s%r%trac_interpolation_scheme==0)then
+        if(pst%s%r%trac_interpolation_scheme==4)then
            call pli_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==1)then
            call cic_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
@@ -99,7 +116,7 @@ recursive subroutine r_kick_drift_part(pst,input_array,input_size,output_array,o
            call tsc_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         elseif(pst%s%r%trac_interpolation_scheme==3)then
            call pcs_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
-        elseif(pst%s%r%trac_interpolation_scheme==4)then
+        elseif(pst%s%r%trac_interpolation_scheme==0)then
            call ngp_trace_gas_part(pst%s,pst%s%trac,ilevel,action_part)
         endif
      endif
@@ -788,9 +805,9 @@ subroutine pack_fetch_kick_trac(grid,msg_size,msg_array)
      end do
   end do
 #endif
-#ifdef VFACE
+#ifdef GRADVPART
   do ind=1,twotondim
-     msg%realdp_vface(ind,1:6)=grid%vface(ind,1:6)
+     msg%realdp_gradv(ind,1:ndim,1:ndim)=grid%gradv(ind,1:ndim,1:ndim)
   end do
 #endif
 
@@ -822,9 +839,9 @@ subroutine unpack_fetch_kick_trac(grid,msg_size,msg_array,hash_key)
      end do
   end do
 #endif
-#ifdef VFACE
+#ifdef GRADVPART
   do ind=1,twotondim
-     grid%vface(ind,1:6)=msg%realdp_vface(ind,1:6)
+     grid%gradv(ind,1:ndim,1:ndim)=msg%realdp_gradv(ind,1:ndim,1:ndim)
   end do
 #endif
 
@@ -945,17 +962,20 @@ subroutine pli_trace_gas_part(s,p,ilevel,action_part)
   integer,dimension(1:ndim)::cc,cc2
   real(kind=8),dimension(1:ndim)::frac,frac2
   integer(kind=8),dimension(0:ndim)::hash_nbor
-  integer::ipart,idim,icell,icell2
+  integer::ipart,idim,ind,icell,icell2
   real(kind=8)::dx_loc
   real(kind=8),dimension(1:ndim)::ff,v_pred
   type(oct),pointer :: gridp
   real(kind=8),dimension(1:ndim)::x_samp
   integer :: itry, lvl_try
-#ifdef VFACE
+#ifdef GRADVPART
   type(msg_large_realdp)::dummy_large_realdp
 #else
   type(msg_nvar_realdp)::dummy_nvar_realdp
 #endif
+  integer :: ii
+  character(LEN=80)::filename,fileloc
+  character(LEN=5)::nchar
 
   associate(r=>s%r,g=>s%g,m=>s%m)
   if(p%static)return
@@ -963,7 +983,7 @@ subroutine pli_trace_gas_part(s,p,ilevel,action_part)
 
   dx_loc=r%boxlen/2**ilevel
 
-#ifdef VFACE
+#ifdef GRADVPART
   call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain, pack_size=storage_size(dummy_large_realdp)/32,&
                      pack=pack_fetch_kick_trac,unpack=unpack_fetch_kick_trac)
@@ -993,15 +1013,10 @@ subroutine pli_trace_gas_part(s,p,ilevel,action_part)
 
      if(action_part==action_kick_only)then
         p%levelp(ipart)=ilevel
-#ifdef VFACE
+#ifdef GRADVPART
         if(associated(gridp))then
-           ff(1)=(1.0d0-frac(1))*gridp%vface(icell,1)+frac(1)*gridp%vface(icell,4)
-#if (NDIM>1)
-           ff(2)=(1.0d0-frac(2))*gridp%vface(icell,2)+frac(2)*gridp%vface(icell,5)
-#endif
-#if (NDIM>2)
-           ff(3)=(1.0d0-frac(3))*gridp%vface(icell,3)+frac(3)*gridp%vface(icell,6)
-#endif
+           ! Reconstruct cell-centered velocity
+           ff(1:ndim)=gridp%uold(icell,2:ndim+1)/max(gridp%uold(icell,1), r%smallr)
         else
            ff(1:ndim)=0.0d0
         end if
@@ -1031,42 +1046,37 @@ subroutine pli_trace_gas_part(s,p,ilevel,action_part)
            if(x_mid(idim)>=dble(m%ckey_max(ilevel+1)))x_mid(idim)=x_mid(idim)-dble(m%ckey_max(ilevel+1))
         end do
 
-#ifdef VFACE
-        ff(1:ndim)=0.0d0
-        do itry=1,3
-          select case(itry)
-          case(1)
-            lvl_try = ilevel+2
-            x_samp(1:ndim)=x_mid(1:ndim)*2.0d0
-          case(2)
-            lvl_try = ilevel+1
-            x_samp(1:ndim)=x_mid(1:ndim)
-          case(3)
-            lvl_try = ilevel
-            x_samp(1:ndim)=x_mid(1:ndim)/2.0d0
-          end select
-          hash_nbor(0)=lvl_try
-          do idim=1,ndim
-            if(x_samp(idim)<0d0)x_samp(idim)=x_samp(idim)+dble(m%ckey_max(lvl_try))
-            if(x_samp(idim)>=dble(m%ckey_max(lvl_try)))x_samp(idim)=x_samp(idim)-dble(m%ckey_max(lvl_try))
-            cc(idim)=int(x_samp(idim))
-            frac(idim)=x_samp(idim)-dble(cc(idim))
-          end do
-          hash_nbor(1:ndim)=cc(1:ndim)
-          call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
-          if(associated(gridp))then
-            if(.not. gridp%refined(icell2))then
-              ff(1)=(1.0d0-frac(1))*gridp%vface(icell2,1)+frac(1)*gridp%vface(icell2,4)
-#if (NDIM>1)
-              ff(2)=(1.0d0-frac(2))*gridp%vface(icell2,2)+frac(2)*gridp%vface(icell2,5)
-#endif
-#if (NDIM>2)
-              ff(3)=(1.0d0-frac(3))*gridp%vface(icell2,3)+frac(3)*gridp%vface(icell2,6)
-#endif
-              exit
-            end if
-          end if
+#ifdef GRADVPART
+        ! Use linear advection in locally linear field
+        hash_nbor(0)=ilevel+1
+        do idim=1,ndim
+          cc2(idim)=int(x_mid(idim))
         end do
+        hash_nbor(1:ndim)=cc2(1:ndim)
+        call get_parent_cell(s,hash_nbor,m%grid_dict,gridp,icell2,flush_cache=.false.,fetch_cache=.true.)
+        if(associated(gridp))then
+          ! vcell at center
+          ff(1:ndim)=gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)
+          ! gradv tensor (ivel,idim)
+          ! Map particle position to cell-centered coords [-1/2,1/2]
+          do idim=1,ndim
+             x_samp(idim)=x_mid(idim)-dble(cc2(idim))-0.5d0
+          end do
+          call advect_linear(g%dtnew(ilevel), gridp%gradv(icell2,1:ndim,1:ndim), ff(1:ndim), x_samp(1:ndim), x_mid(1:ndim))
+          ! Convert xf back to absolute cell units
+          do idim=1,ndim
+             x_mid(idim)=dble(cc2(idim))+0.5d0 + x_mid(idim)
+          end do
+          ! New velocity at new position: v = vcell + gradv*(xf-rel_center)
+          ff(1:ndim)=gridp%uold(icell2,2:ndim+1)/max(gridp%uold(icell2,1), r%smallr)
+          do idim=1,ndim
+             do ind=1,ndim
+                ff(idim)=ff(idim)+gridp%gradv(icell2,idim,ind)*(x_mid(ind)-dble(cc2(ind))-0.5d0)
+             end do
+          end do
+        else
+          ff(1:ndim)=0.0d0
+        end if
 #else
         hash_nbor(0)=ilevel+1
         do idim=1,ndim
@@ -1083,6 +1093,25 @@ subroutine pli_trace_gas_part(s,p,ilevel,action_part)
 
         p%vp(ipart,1:ndim)=ff(1:ndim)
         p%xp(ipart,1:ndim)=p%xp(ipart,1:ndim)+p%vp(ipart,1:ndim)*g%dtnew(ilevel)
+
+        ! Trajectory output for selected tracer particles (PLI)
+        if(s%r%ntrajectories>0)then
+          do ii=1,s%r%ntrajectories
+            if(s%r%trajectories(ii)==p%idp(ipart))then
+              call title(g%myid,nchar)
+              filename='trajectory.dat'
+              fileloc=TRIM(filename)//TRIM(nchar)
+              open(25+g%myid,file=fileloc,status='unknown',access='append')
+              write(25+g%myid,'(1PE15.7,1X,I12,1X,8(1PE15.7,1X))') &
+                   g%t, p%idp(ipart), &
+                   p%xp(ipart,1),p%xp(ipart,2),p%xp(ipart,3), &
+                   p%vp(ipart,1),p%vp(ipart,2),p%vp(ipart,3), &
+                   0.0d0,0.0d0
+              close(25+g%myid)
+              exit
+            endif
+          end do
+        endif
      end if
   end do
 
@@ -2456,6 +2485,258 @@ end subroutine compute_lorentz_analytic
 
 !#########################################################################
 !#########################################################################
+subroutine advect_linear(deltat, gradv, vcell, xi, xf)
+   implicit none
+   !---------------------------------------------------------------------
+   ! Solves x'(t) = gradv * x + ucell,   x(0) = xi
+   ! using the block-matrix exponential approach.
+   !
+   ! Inputs:
+   !   gradv(3,3) : velocity gradient tensor (nabla_j v_i)
+   !   ucell(3)   : constant velocity offset (u_c)
+   !   xi(3)      : initial position (r0)
+   !   deltat     : time increment (t)
+   !
+   ! Output:
+   !   xf(3)      : position after deltat (r(t))
+   !
+   ! Dependencies:
+   !   EXPOKIT’s DGEXPM or equivalent matrix-exponential routine
+   !---------------------------------------------------------------------
+   double precision, intent(in)  :: gradv(3,3), vcell(3), xi(3), deltat
+   double precision, intent(out) :: xf(3)
+   double precision :: C(4,4), E(4,4), w0(4), w(4)
+   integer :: info
+#ifdef USE_EXPOKIT
+   ! EXPOKIT DGPHIV path (Krylov) for w' = gradv*w + vcell, w(0)=xi
+   integer :: n, m, lwsp, liwsp, itrace, iflag
+   double precision :: tol, anorm
+   double precision :: u(3), v(3), wv(3)
+   double precision, allocatable :: wsp(:)
+   integer, allocatable :: iwsp(:)
+   external DGPHIV, expokit_matvec
+   double precision :: expokit_gradv(3,3)
+#endif
+ 
+#ifdef USE_EXPOKIT
+   n = 3
+   m = 16
+   tol = 1.0d-12
+   ! simple 1-norm estimate for gradv
+   anorm = 0.0d0
+   do info=1,3
+      w0(1) = abs(gradv(1,info)) + abs(gradv(2,info)) + abs(gradv(3,info))
+      if (w0(1) > anorm) anorm = w0(1)
+   end do
+   lwsp = n*(m+1)+n+(m+3)*(m+3)+4*(m+3)*(m+3)+6+1
+   liwsp = m+3
+   allocate(wsp(lwsp), iwsp(liwsp))
+   u(1:3)=vcell(1:3)
+   v(1:3)=xi(1:3)
+   expokit_gradv(1:3,1:3)=gradv(1:3,1:3)
+   itrace=0
+   call DGPHIV(n, m, deltat, u, v, wv, tol, anorm, wsp, lwsp, iwsp, liwsp, expokit_matvec, itrace, iflag)
+   if (iflag /= 0) then
+      ! fallback to block exponential if DGPHIV fails
+      goto 1001
+   end if
+   xf(1:3)=wv(1:3)
+   deallocate(wsp, iwsp)
+   return
+1001 continue
+#endif
+   ! Fallback: block-matrix exponential with DGEXPM
+   C = 0.0d0
+   C(1:3,1:3) = gradv
+   C(1:3,4)   = vcell
+   call DGEXPM(4, deltat, C, 4, E, info)
+   w0(1:3) = xi
+   w0(4)   = 1.0d0
+   w = matmul(E, w0)
+   xf = w(1:3)
+ 
+ end subroutine advect_linear
+ 
 !#########################################################################
 !#########################################################################
+subroutine DGEXPM(n, t, A, lda, E, info)
+  implicit none
+  integer, intent(in) :: n, lda
+  double precision, intent(in) :: t
+  double precision, intent(in) :: A(lda, *)
+  double precision, intent(out) :: E(lda, *)
+  integer, intent(out) :: info
+
+  double precision :: normA
+  integer :: iDG, jDG
+  integer, allocatable :: ipiv(:)
+
+#ifdef USE_EXPOKIT
+  ! EXPOKIT path: use DGPADM to compute E = exp(t*A)
+  integer :: ideg, lwsp, iexp, ns, iflag
+  double precision :: Hmat(n,n)
+  double precision, allocatable :: wsp(:)
+  external dgpadm
+
+  Hmat(1:n,1:n) = A(1:n,1:n)
+  ideg = 6
+  lwsp = 4*n*n + 4*n + ideg + 1
+  allocate(wsp(lwsp), ipiv(n))
+  call dgpadm(ideg, n, t, Hmat, n, wsp, lwsp, ipiv, iexp, ns, iflag)
+  info = iflag
+  if (info == 0) then
+     ! Copy result from wsp(iexp:iexp+n*n-1) into E (column-major)
+     do jDG=1,n
+        do iDG=1,n
+           E(iDG,jDG) = wsp(iexp + (jDG-1)*n + iDG - 1)
+        end do
+     end do
+  end if
+  deallocate(wsp, ipiv)
+  return
+#else
+  double precision :: B(n,n), I(n,n), A2(n,n), A4(n,n), A6(n,n)
+  double precision :: U(n,n), V(n,n), Mmat(n,n), Nmat(n,n)
+  double precision :: W(n,n), T1(n,n), T2(n,n), Awork(n,n), Bwork(n,n)
+  double precision :: theta13, log2val
+  double precision, parameter :: one=1.0d0, zero=0.0d0
+  integer :: kDG, s
+  external dgemm, dgesv
+
+  double precision, parameter :: c0  = 64764752532480000.0d0
+  double precision, parameter :: c1  = 32382376266240000.0d0
+  double precision, parameter :: c2  = 7771770303897600.0d0
+  double precision, parameter :: c3  = 1187353796428800.0d0
+  double precision, parameter :: c4  = 129060195264000.0d0
+  double precision, parameter :: c5  = 10559470521600.0d0
+  double precision, parameter :: c6  = 670442572800.0d0
+  double precision, parameter :: c7  = 33522128640.0d0
+  double precision, parameter :: c8  = 1323241920.0d0
+  double precision, parameter :: c9  = 40840800.0d0
+  double precision, parameter :: c10 = 960960.0d0
+  double precision, parameter :: c11 = 16380.0d0
+  double precision, parameter :: c12 = 182.0d0
+  double precision, parameter :: c13 = 1.0d0
+
+  info = 0
+  if (n <= 0) then
+     return
+  end if
+
+  ! B = t * A(1:n,1:n)
+  do jDG=1,n
+     do iDG=1,n
+        B(iDG,jDG) = t * A(iDG,jDG)
+     end do
+  end do
+
+  ! Identity matrix
+  do jDG=1,n
+     do iDG=1,n
+        if (iDG==jDG) then
+           I(iDG,jDG) = 1.0d0
+        else
+           I(iDG,jDG) = 0.0d0
+        end if
+     end do
+  end do
+
+  ! 1-norm of B (max column sum)
+  normA = 0.0d0
+  do jDG=1,n
+     W(1,1) = 0.0d0
+     do iDG=1,n
+        W(1,1) = W(1,1) + abs(B(iDG,jDG))
+     end do
+     if (W(1,1) > normA) normA = W(1,1)
+  end do
+
+  ! Higham's theta_13 threshold
+  theta13 = 5.371920351148152d0
+
+  ! Scaling: find s such that ||B||/2^s <= theta13
+  if (normA <= 0.0d0) then
+     ! exp(0) = I
+     do jDG=1,n
+        do iDG=1,n
+           E(iDG,jDG) = I(iDG,jDG)
+        end do
+     end do
+     return
+  end if
+
+  log2val = log(normA/theta13)/log(2.0d0)
+  if (log2val > 0.0d0) then
+     s = ceiling(log2val)
+  else
+     s = 0
+  end if
+  if (s < 0) s = 0
+
+  if (s > 0) then
+     do jDG=1,n
+        do iDG=1,n
+           B(iDG,jDG) = B(iDG,jDG) / (2.0d0**s)
+        end do
+     end do
+  end if
+
+  ! Pade(13) approximation for exp(B)
+  ! Compute A2 = B*B, A4 = A2*A2, A6 = A4*A2
+  call dgemm('N','N', n, n, n, one, B, n, B, n, zero, A2, n)
+  call dgemm('N','N', n, n, n, one, A2, n, A2, n, zero, A4, n)
+  call dgemm('N','N', n, n, n, one, A4, n, A2, n, zero, A6, n)
+
+  ! T1 = A6*(c13*A6 + c11*A4 + c9*A2) + c7*A6 + c5*A4 + c3*A2 + c1*I
+  do jDG=1,n
+     do iDG=1,n
+        T2(iDG,jDG) = c13*A6(iDG,jDG) + c11*A4(iDG,jDG) + c9*A2(iDG,jDG)
+     end do
+  end do
+  call dgemm('N','N', n, n, n, one, A6, n, T2, n, zero, T1, n)
+  do jDG=1,n
+     do iDG=1,n
+        T1(iDG,jDG) = T1(iDG,jDG) + c7*A6(iDG,jDG) + c5*A4(iDG,jDG) + c3*A2(iDG,jDG) + c1*I(iDG,jDG)
+     end do
+  end do
+  call dgemm('N','N', n, n, n, one, B, n, T1, n, zero, U, n)
+
+  ! V = A6*(c12*A6 + c10*A4 + c8*A2) + c6*A6 + c4*A4 + c2*A2 + c0*I
+  do jDG=1,n
+     do iDG=1,n
+        T2(iDG,jDG) = c12*A6(iDG,jDG) + c10*A4(iDG,jDG) + c8*A2(iDG,jDG)
+     end do
+  end do
+  call dgemm('N','N', n, n, n, one, A6, n, T2, n, zero, V, n)
+  do jDG=1,n
+     do iDG=1,n
+        V(iDG,jDG) = V(iDG,jDG) + c6*A6(iDG,jDG) + c4*A4(iDG,jDG) + c2*A2(iDG,jDG) + c0*I(iDG,jDG)
+     end do
+  end do
+
+  ! Solve (V - U) * X = (V + U) using LAPACK dgesv with multiple RHS
+  do jDG=1,n
+     do iDG=1,n
+        Mmat(iDG,jDG) = V(iDG,jDG) - U(iDG,jDG)
+        Nmat(iDG,jDG) = V(iDG,jDG) + U(iDG,jDG)
+     end do
+  end do
+  Awork(1:n,1:n) = Mmat(1:n,1:n)
+  Bwork(1:n,1:n) = Nmat(1:n,1:n)
+  if (.not. allocated(ipiv)) allocate(ipiv(n))
+  call dgesv(n, n, Awork, n, ipiv, Bwork, n, info)
+  if (info /= 0) then
+     return
+  end if
+  E(1:n,1:n) = Bwork(1:n,1:n)
+
+  ! Squaring: E = E^(2^s)
+  do kDG=1,s
+     call dgemm('N','N', n, n, n, one, E, n, E, n, zero, W, n)
+     E(1:n,1:n) = W(1:n,1:n)
+  end do
+
+  return
+#endif
+end subroutine DGEXPM
 end module move_fine_module

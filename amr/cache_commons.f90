@@ -73,9 +73,9 @@ module cache_commons
 #ifdef GRAV
      real(kind=8),dimension(1:twotondim,1:ndim+2)::realdp_poisson
 #endif
-#ifdef VFACE
-     ! Face-centered normal contact velocities from Riemann solver
-     real(kind=8),dimension(1:twotondim,1:6)::realdp_vface
+#ifdef GRADVPART
+     ! PLM velocity slopes tensor per cell (ivel,idim)
+     real(kind=8),dimension(1:twotondim,1:ndim,1:ndim)::realdp_gradv
 #endif
   end type msg_large_realdp
   type msg_rt_emissivity_realdp
