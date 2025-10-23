@@ -365,14 +365,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         call m_timer(pst,'radiative transfer','start')
         call m_rt_step(pst,ilevel)
      else
-        if(r%hydro .and. (r%neq_chem.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
+        if(r%hydro .and. (r%neq_chem.or.r%cooling_ism.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
      endif
   endif
 
   !------------------------
   ! Compute cooling/heating
   !------------------------
-  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%isothermal.or.r%neq_chem))then
+  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%cooling_ism.or.r%isothermal.or.r%neq_chem))then
      call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif
