@@ -13,6 +13,7 @@ from scipy.spatial import KDTree
 # It creates the following files if relevant:
 # params.bin, part.00001, star.00001,
 # amr.00001, hydro.00001.
+# Contributions from Corentin Cadiou.
 # Romain Teyssier, Princeton, Oct 22 2025.
 #================================================
 
@@ -103,16 +104,21 @@ def wr_params(params1,params2,nout,**kwargs):
 #================================
 parser = argparse.ArgumentParser()
 parser.add_argument("nout", help="enter output number")
-parser.add_argument("--path_in", help="specify a path")
-parser.add_argument("--path_out", help="enter output name")
+parser.add_argument("--inp", help="specify the input path")
+parser.add_argument("--out", help="specifiy the output path")
+parser.add_argument("--dmo", help="convert only DM particles",action="store_true")
 args = parser.parse_args()
 nout = args.nout
 print("Reading output number",nout)
-path_in = args.path_in
-path_out = args.path_out
+path_in = args.inp
+path_out = args.out
+dm_only = args.dmo
 
 if path_in==None:
     path_in="."
+
+if dm_only==None:
+    dmo_only=False
 
 if path_out==None:
     path_out="new"
@@ -120,7 +126,7 @@ if path_out==None:
 car1 = str(nout).zfill(5)
 filename=path_in+"/output_"+car1+"/info_"+car1+".txt"
 
-yt.set_log_level(50)
+yt.set_log_level(50) # yt verbosity low
 
 #================================
 # load up general data set
@@ -185,6 +191,9 @@ with open(file_part, "wb") as f_part:
     m.tofile(f_part)
     level.tofile(f_part)
     idp.tofile(f_part)
+
+if (dm_only):
+    exit()
 
 print("Loading and writing star particle data")
 
@@ -295,29 +304,33 @@ with open(file_amr, "wb") as f_amr, open(file_hydro, "wb") as f_hydro:
             pscal3 = pscal3[ind]
 
         # read finer level data
-        print("Reading data for finer level and computing KDTree")
-        ds_fine = yt.load(filename,max_level=ilevel+1,max_level_convention="ramses")
-        data_fine = ds_fine.all_data()
-        # speed up file read
-        data_fine.get_data([_ for _ in ds.field_list if _[0] == "ramses"])
-        dx_fine = data_fine["ramses","dx"].to("code_length").v
-        x_fine = data_fine["ramses","x"].to("code_length").v
-        y_fine = data_fine["ramses","y"].to("code_length").v
-        z_fine = data_fine["ramses","z"].to("code_length").v
-        ind_fine = np.where(dx_fine < 1.1*dxmin[ilevel+1])
-        if len(ind_fine[0])>0:
-            x_fine = x_fine[ind_fine]
-            y_fine = y_fine[ind_fine]
-            z_fine = z_fine[ind_fine]
-
-            # compute refinement map
-            xyz_fine = np.stack([x_fine, y_fine, z_fine], axis=-1)
-            xyz_coarse = np.stack([x, y, z], axis=-1)        
-            tree_fine = KDTree(xyz_fine)
-            distance, iii = tree_fine.query(xyz_coarse, p=np.inf, distance_upper_bound=dxmin[ilevel]/2, workers=-1)
-            refined = np.isfinite(distance)
+        if (ilevel < levelmax):
+            print("Reading data for finer level and computing KDTree")
+            ds_fine = yt.load(filename,max_level=ilevel+1,max_level_convention="ramses")
+            data_fine = ds_fine.all_data()
+            # speed up file read
+            data_fine.get_data([_ for _ in ds.field_list if _[0] == "ramses"])
+            dx_fine = data_fine["ramses","dx"].to("code_length").v
+            x_fine = data_fine["ramses","x"].to("code_length").v
+            y_fine = data_fine["ramses","y"].to("code_length").v
+            z_fine = data_fine["ramses","z"].to("code_length").v
+            ind_fine = np.where(dx_fine < 1.1*dxmin[ilevel+1])
+            if len(ind_fine[0])>0:
+                x_fine = x_fine[ind_fine]
+                y_fine = y_fine[ind_fine]
+                z_fine = z_fine[ind_fine]
+                
+                # compute refinement map
+                xyz_fine = np.stack([x_fine, y_fine, z_fine], axis=-1)
+                xyz_coarse = np.stack([x, y, z], axis=-1)        
+                tree_fine = KDTree(xyz_fine)
+                distance, iii = tree_fine.query(xyz_coarse, p=np.inf, distance_upper_bound=dxmin[ilevel]/2, workers=-1)
+                refined = np.isfinite(distance)
+            else:
+                refined = np.full(ngrid[ilevel-1]*2**ndim, False, dtype=bool)
         else:
             refined = np.full(ngrid[ilevel-1]*2**ndim, False, dtype=bool)
+
         print("Found ",len(np.where(refined == True)[0])," refined cells")
 
         # write number of grids in amr and hydro file
