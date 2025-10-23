@@ -1,7 +1,7 @@
 module fmm_taylor
 contains
 #ifdef FMM
-subroutine calc_taylor(R, multipoles, taylor_coeff)
+subroutine calc_taylor_from_multipole(R, multipoles, taylor_coeff)
   use amr_parameters, only: ndim, multipole_size, taylor_size
   implicit none
 
@@ -113,7 +113,79 @@ subroutine calc_taylor(R, multipoles, taylor_coeff)
      end do
   end do
 
-end subroutine calc_taylor
+end subroutine calc_taylor_from_multipole
+!################################################################
+!################################################################
+!################################################################
+!################################################################
+subroutine calc_phi_from_multipole(R, multipoles, phi_out)
+  use amr_parameters, only: ndim, multipole_size, taylor_size
+  implicit none
+
+  integer :: nq, no, i, j, k, idxC2, idxC3
+  real(kind=8), intent(in)  :: R(ndim)
+  real(kind=8), intent(in)  :: multipoles(1:multipole_size)
+  real(kind=8), intent(out) :: phi_out
+
+  ! Multipoles
+  real(kind=8) :: M0
+  real(kind=8) :: M1(ndim)
+  real(kind=8) :: M2(ndim,ndim)
+
+  ! Displacement
+  real(kind=8) :: dist
+
+  ! Precompute
+  real(kind=8) :: trM, S, MR(ndim), RdotM1
+  real(kind=8) :: D0,D1,D2,D3
+
+  !------------------------------------------------------------------
+  ! Compute displacement and distance
+  !------------------------------------------------------------------
+  dist = sqrt(sum(R(:)**2))
+  if (dist == 0.0D0) dist = 1.0D-12
+
+  !------------------------------------------------------------------
+  ! Derivatives for g(r) = 1/r
+  !------------------------------------------------------------------
+  D0 = 1.0D0 / dist
+  D1 = -1.0D0 / dist**3
+  D2 = 3.0D0 / dist**5
+
+  !------------------------------------------------------------------
+  ! Reconstruct multipoles from 1D array
+  !------------------------------------------------------------------
+  M0 = multipoles(1)
+  M1 = multipoles(2:1+ndim)
+  M2 = 0.0D0
+#if NDIM==1
+  M2(1,1) = multipoles(3)
+#endif
+#if NDIM==2
+  M2(1,1) = multipoles(4)
+  M2(1,2) = multipoles(5); M2(2,1) = M2(1,2)
+  M2(2,2) = multipoles(6)
+#endif
+#if NDIM==3
+  M2(1,1) = multipoles(5)
+  M2(1,2) = multipoles(6); M2(2,1) = M2(1,2)
+  M2(1,3) = multipoles(7); M2(3,1) = M2(1,3)
+  M2(2,2) = multipoles(8)
+  M2(2,3) = multipoles(9); M2(3,2) = M2(2,3)
+  M2(3,3) = multipoles(10)
+#endif
+
+  trM = 0.0D0
+  do i = 1, ndim
+     trM = trM + M2(i,i)
+  end do
+
+  MR = matmul(M2, R)
+  S = dot_product(R, MR)
+  RdotM1 = sum(R(:) * M1(:))
+
+  phi_out = - (M0*D0 - RdotM1*D1 + 0.5D0*(trM*D1 + S*D2))
+end subroutine calc_phi_from_multipole
 !################################################################
 !################################################################
 !################################################################
@@ -330,15 +402,13 @@ subroutine get_displacement(p, q, boxlen, r)
   real(kind=8), intent(in)  :: p(ndim), q(ndim)
   real(kind=8), intent(in)  :: boxlen
   real(kind=8), intent(out) :: r(ndim)
-  integer :: idim
-  real(kind=8) :: diff
 
-  do idim = 1, ndim
-     diff = p(idim) - q(idim)
-     if (diff >  boxlen/2.d0) diff = diff - boxlen
-     if (diff < -boxlen/2.d0) diff = diff + boxlen
-     r(idim) = diff
-  end do
+  ! Compute raw difference
+  r = p - q
+
+  ! Apply periodic boundary conditions (vectorized)
+  where (r >  boxlen / 2.d0) r = r - boxlen
+  where (r < -boxlen / 2.d0) r = r + boxlen
 end subroutine get_displacement
 #endif
 end module fmm_taylor
