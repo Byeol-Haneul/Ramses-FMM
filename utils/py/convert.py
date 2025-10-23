@@ -57,6 +57,23 @@ def rd_params(nout,**kwargs):
     return params
 
 #================================
+# write new ramses header file
+#================================
+def wr_header(fileloc,npart,nfile,star):
+    with open(fileloc, 'w') as f:
+        # Write header information
+        f.write("Total number of particles\n")
+        f.write(f"{npart}\n")
+        f.write("Total number of files\n")
+        f.write(f"{nfile}\n")
+        # Particle fields
+        f.write("Particle fields\n")
+        if star:
+            f.write("pos vel mass metallicity birth_date level birth_id")
+        else:
+            f.write("pos vel mass level birth_id")
+
+#================================
 # write new ramses parameter file
 #================================
 def wr_params(params1,params2,nout,**kwargs):    
@@ -65,7 +82,7 @@ def wr_params(params1,params2,nout,**kwargs):
     filename = path+"/output_"+car1+"/params.bin"
 
     with open(filename, 'wb') as f:  # 'wb' = write binary mode
-        int_array = np.array([1,params1["ncpu"],params1["ndim"],params1["levelmin"],
+        int_array = np.array([1,1,params1["ndim"],params1["levelmin"],
                               params1["levelmax"]],dtype=np.int32)
         int_array.tofile(f)
         boxlen = np.array([params1["boxlen"]],dtype=np.float64)
@@ -90,7 +107,7 @@ def wr_params(params1,params2,nout,**kwargs):
                                params1["omega_b"],params1["H0"],params2["aexp_ini"],params2["boxlen_ini"]],dtype=np.float64)
         dble_array.tofile(f)
         dble_array = np.array([params2["aexp"],params2["hexp"],params2["aexp_old"],
-                               params2["epot_tot_int"],params2["epot_tot_old"],params2["mass_sph"],1.6667],dtype=np.float64)
+                               params2["aexp_old"],params2["epot_tot_int"],params2["epot_tot_old"],params2["mass_sph"],1.6667],dtype=np.float64)
         dble_array.tofile(f)
         int_array = np.array([1,2,3,4,5,6],dtype=np.int64)
         int_array.tofile(f)
@@ -174,10 +191,14 @@ vx = data["DM","particle_velocity_x"].to("code_velocity").v.astype(np.float32)
 vy = data["DM","particle_velocity_y"].to("code_velocity").v.astype(np.float32)
 vz = data["DM","particle_velocity_z"].to("code_velocity").v.astype(np.float32)
 m = data["DM","particle_mass"].to("code_mass").v.astype(np.float32)
-level = data["DM","particle_mass"].v.astype(np.int32)
+level = data["DM","particle_level"].v.astype(np.int32)
 idp = data["DM","particle_identity"].v.astype(np.int64)
 
 npart = len(x)
+
+header_part = path_out+"/output_"+car1+"/part_header.txt"
+
+wr_header(header_part,npart,1,False)
 
 with open(file_part, "wb") as f_part:
     np.array([ndim],dtype=np.int32).tofile(f_part)
@@ -206,12 +227,16 @@ vx = data["star","particle_velocity_x"].to("code_velocity").v.astype(np.float32)
 vy = data["star","particle_velocity_y"].to("code_velocity").v.astype(np.float32)
 vz = data["star","particle_velocity_z"].to("code_velocity").v.astype(np.float32)
 m = data["star","particle_mass"].to("code_mass").v.astype(np.float32)
-level = data["star","particle_mass"].v.astype(np.int32)
+level = data["star","particle_level"].v.astype(np.int32)
 idp = data["star","particle_identity"].v.astype(np.int64)
 metal = data["star","particle_metallicity"].v.astype(np.float32)
 birth = data["star","particle_birth_time"].v.astype(np.float32)
 
 npart = len(x)
+
+header_star = path_out+"/output_"+car1+"/star_header.txt"
+
+wr_header(header_star,npart,1,True)
 
 with open(file_star, "wb") as f_star:
     np.array([ndim],dtype=np.int32).tofile(f_star)

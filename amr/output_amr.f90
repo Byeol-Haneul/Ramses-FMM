@@ -427,6 +427,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! Read various constants
   read(ilun)g%const,g%mass_tot_0,g%rho_tot
   read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
+  g%omega_k=1-g%omega_m-g%omega_l
   read(ilun)g%aexp,g%texp,g%hexp
   read(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   read(ilun)mass_sph_file
