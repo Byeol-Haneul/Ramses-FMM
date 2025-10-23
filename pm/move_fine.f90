@@ -1,23 +1,7 @@
 module move_fine_module
   use rho_fine_module, only: cic_weight, cic_index, tsc_weight, tsc_index, pcs_weight, pcs_index
-#ifdef USE_EXPOKIT
-  double precision, save :: expokit_gradv(3,3)
-#endif
 contains
-#ifdef USE_EXPOKIT
-subroutine expokit_matvec(x, y)
-  use amr_parameters, only: ndim
-  implicit none
-  double precision x(*), y(*)
-  integer :: i, j
-  do i=1,ndim
-     y(i)=0.0d0
-     do j=1,ndim
-        y(i)=y(i)+expokit_gradv(i,j)*x(j)
-     end do
-  end do
-end subroutine expokit_matvec
-#endif
+! (expokit_matvec will be defined as an internal procedure where used)
 !################################################################
 !################################################################
 !################################################################
@@ -2514,35 +2498,34 @@ subroutine advect_linear(deltat, gradv, vcell, xi, xf)
    double precision :: u(3), v(3), wv(3)
    double precision, allocatable :: wsp(:)
    integer, allocatable :: iwsp(:)
-   external DGPHIV, expokit_matvec
-   double precision :: expokit_gradv(3,3)
+   external DGPHIV
+  double precision :: expokit_gradv(3,3)
 #endif
  
 #ifdef USE_EXPOKIT
-   n = 3
-   m = 16
-   tol = 1.0d-12
-   ! simple 1-norm estimate for gradv
-   anorm = 0.0d0
-   do info=1,3
-      w0(1) = abs(gradv(1,info)) + abs(gradv(2,info)) + abs(gradv(3,info))
-      if (w0(1) > anorm) anorm = w0(1)
-   end do
-   lwsp = n*(m+1)+n+(m+3)*(m+3)+4*(m+3)*(m+3)+6+1
-   liwsp = m+3
-   allocate(wsp(lwsp), iwsp(liwsp))
-   u(1:3)=vcell(1:3)
-   v(1:3)=xi(1:3)
-   expokit_gradv(1:3,1:3)=gradv(1:3,1:3)
-   itrace=0
-   call DGPHIV(n, m, deltat, u, v, wv, tol, anorm, wsp, lwsp, iwsp, liwsp, expokit_matvec, itrace, iflag)
-   if (iflag /= 0) then
-      ! fallback to block exponential if DGPHIV fails
-      goto 1001
-   end if
-   xf(1:3)=wv(1:3)
-   deallocate(wsp, iwsp)
-   return
+  n = 3
+  m = 16
+  tol = 1.0d-12
+  ! simple 1-norm estimate for gradv
+  anorm = 0.0d0
+  do info=1,3
+     w0(1) = abs(gradv(1,info)) + abs(gradv(2,info)) + abs(gradv(3,info))
+     if (w0(1) > anorm) anorm = w0(1)
+  end do
+  lwsp = n*(m+1)+n+(m+3)*(m+3)+4*(m+3)*(m+3)+6+1
+  liwsp = m+3
+  allocate(wsp(lwsp), iwsp(liwsp))
+  u(1:3)=vcell(1:3)
+  v(1:3)=xi(1:3)
+  expokit_gradv(1:3,1:3)=gradv(1:3,1:3)
+  itrace=0
+  call DGPHIV(n, m, deltat, u, v, wv, tol, anorm, wsp, lwsp, iwsp, liwsp, expokit_matvec, itrace, iflag)
+  if (iflag /= 0) then
+     goto 1001
+  end if
+  xf(1:3)=wv(1:3)
+  deallocate(wsp, iwsp)
+  return
 1001 continue
 #endif
    ! Fallback: block-matrix exponential with DGEXPM
@@ -2553,8 +2536,22 @@ subroutine advect_linear(deltat, gradv, vcell, xi, xf)
    w0(1:3) = xi
    w0(4)   = 1.0d0
    w = matmul(E, w0)
-   xf = w(1:3)
- 
+  xf = w(1:3)
+
+#ifdef USE_EXPOKIT
+contains
+  subroutine expokit_matvec(x, y)
+    implicit none
+    double precision x(*), y(*)
+    integer :: i, j
+    do i=1,3
+       y(i)=0.0d0
+       do j=1,3
+          y(i)=y(i)+expokit_gradv(i,j)*x(j)
+       end do
+    end do
+  end subroutine expokit_matvec
+#endif
  end subroutine advect_linear
  
 !#########################################################################
