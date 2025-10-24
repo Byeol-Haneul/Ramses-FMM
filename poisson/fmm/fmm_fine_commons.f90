@@ -383,12 +383,10 @@ subroutine fmm_amr_intermediate(s, ilevel)
             nstride = 2**(idim-1)
             cc_jcell_periodic(idim) = 2*hash_nbor_periodic(idim) + MOD((jcell-1)/nstride, 2)
             xx_jcell_periodic(idim) = (cc_jcell_periodic(idim) + 0.5d0) * (dx_loc*nfine)
-#ifdef PERIODIC
             if ((cc_jcell_periodic(idim) < m%box_ckey_min(idim, ilevel)) .or. &
                 (cc_jcell_periodic(idim) >= m%box_ckey_max(idim, ilevel))) then
               cycle_flag = .true.
             end if
-#endif
           end do
           if (cycle_flag) cycle
 
@@ -447,23 +445,25 @@ subroutine fmm_amr_direct(s, ilevel)
   integer :: ilevel
 
   integer :: ioct, idim, ind, icell, jcell, jcell_amr, nstride, nfine
-  integer :: i, j, k
+  integer :: i, j, k, grid_idx, total_grids, cell_idx
   real(kind=8) :: phi, dist2, fourpi, dx_loc, dxn
-  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_fmm_cell
+  integer(kind=8), dimension(ndim) :: cc_icell, cc_jcell, cc_fmm_cell, offset
   real(kind=8), dimension(ndim) :: xx_icell, xx_jcell, diff
   integer(kind=8), dimension(0:ndim) :: hash_key, hash_fmm_grid, hash_fmm_cell, &
                                         hash_direct, hash_prev_fmm_grid, prev_hash_fmm_cell
 
-  type(nbor), dimension(1:threetondim) :: direct_grid_nbor
-  integer, dimension(1:threetondim) :: direct_ind_nbor
   type(oct), pointer :: gridp_nbor
   type(msg_large_realdp) :: dummy_realdp
   logical :: cycle_flag, initialized
 
   ! --- New locals for optimizations ---
-  real(kind=8), dimension(twotondim, ndim) :: xx_icell_list, xx_jcell_list
-  integer(kind=8), dimension(twotondim, ndim) :: cc_icell_list, cc_jcell_list
-  logical :: neighbors_cached
+  integer :: max_source_cells
+
+  ! Arrays sized for all source cells: threetondim * (nfine/2)^ndim * twotondim
+  integer(kind=8), dimension(:,:), allocatable :: cc_jcell_list
+  real(kind=8), dimension(:,:), allocatable    :: xx_jcell_list
+  real(kind=8), dimension(:), allocatable      :: mm_jcell_list
+  integer :: num_source_cells
 
   associate(r=>s%r, g=>s%g, m=>s%m)
 
@@ -485,11 +485,17 @@ subroutine fmm_amr_direct(s, ilevel)
   hash_prev_fmm_grid(1:ndim) = -1 ! initialize
 
   dx_loc = r%boxlen / 2.0D0**ilevel
-  dxn = dx_loc**ndim                      ! precompute (used repeatedly)
+  dxn = dx_loc**ndim
   nfine = 2**g%level_fmm_to_amr
   initialized = .false.
 
-  prev_hash_fmm_cell = -huge(0_8)         ! impossible initial key
+  ! Allocate arrays for all possible source cells
+  max_source_cells = threetondim * (nfine/2)**ndim * twotondim
+  allocate(cc_jcell_list(max_source_cells, ndim))
+  allocate(xx_jcell_list(max_source_cells, ndim))
+  allocate(mm_jcell_list(max_source_cells))
+
+  prev_hash_fmm_cell = -huge(0_8)
   neighbors_cached = .false.
 
   ! Loop over octs at this level
@@ -500,114 +506,93 @@ subroutine fmm_amr_direct(s, ilevel)
     hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim) / (nfine/2)
 
     ! If parent fmm cell changed, fetch (and unlock previous) neighbor info
-    if (.not. neighbors_cached .or. .not. all(hash_fmm_cell == prev_hash_fmm_cell)) then
-      if (neighbors_cached) then
-        do ind = 1, threetondim
-          call unlock_cache(s, direct_grid_nbor(ind)%p)
-        end do
-      end if
-      call get_threetondim_nbor_parent_cell(s, hash_fmm_cell, m%mg_dict, direct_grid_nbor, &
-           direct_ind_nbor, flush_cache = .false., fetch_cache = .true.)
+    if (all(hash_fmm_cell == prev_hash_fmm_cell)) then
       prev_hash_fmm_cell = hash_fmm_cell
-      neighbors_cached = .true.
+    
+      ! Build source cell lists for all neighbor grids
+      num_source_cells = 0
+      
+      do ind = 1, threetondim
+        do idim = 1, ndim
+          offset(idim) = MOD((ind-1)/3**(idim-1), 3) - 1
+        end do
+        
+        ! calculate neighboring fmm_cell's cartesian coordinate
+        cc_fmm_cell = hash_fmm_cell(1:ndim) + offset
+#if NDIM>2
+        do k = 1, nfine/2
+          hash_direct(3) = (nfine/2) * cc_fmm_cell(3) + k - 1
+#endif
+#if NDIM>1
+        do j = 1, nfine/2
+          hash_direct(2) = (nfine/2) * cc_fmm_cell(2) + j - 1
+#endif
+#if NDIM>0
+        do i = 1, nfine/2
+          hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i - 1
+#endif
+            ! periodic boundary conditions & skipping out-of-box grids
+            cycle_flag = .false.
+            do idim = 1, ndim
+#ifdef PERIODIC
+              if (r%periodic(idim)) then
+                if (hash_direct(idim) < m%box_ckey_min(idim, ilevel)) then
+                  hash_direct(idim) = m%box_ckey_max(idim, ilevel) - 1
+                end if
+                if (hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
+                  hash_direct(idim) = m%box_ckey_min(idim, ilevel)
+                end if
+              end if
+#endif
+              if (hash_direct(idim) < m%box_ckey_min(idim, ilevel) .OR. &
+                  hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
+                cycle_flag = .true.
+              end if
+            end do
+            if (cycle_flag) cycle
+
+            ! get the neighbor AMR grid (source) and store all its cells
+            call get_grid(s, hash_direct, m%grid_dict, gridp_nbor, flush_cache = .false., fetch_cache = .true.)
+            do jcell_amr = 1, twotondim
+              num_source_cells = num_source_cells + 1
+              call get_cell_pos(hash_direct, jcell_amr, r%boxlen, &
+                                xx_jcell_list(num_source_cells, :), &
+                                cc_jcell_list(num_source_cells, :))
+              mm_jcell_list(num_source_cells) = (gridp_nbor%rho(jcell_amr) - g%rho_tot) * dxn
+            end do
+#if NDIM>0
+        end do
+#endif
+#if NDIM>1
+        end do
+#endif
+#if NDIM>2
+        end do
+#endif
+      end do
     end if
 
-    ! Precompute all target cell positions for this AMR grid (once)
+    ! Compute interactions for all cells in this AMR grid
     do icell = 1, twotondim
-      call get_cell_pos(hash_key, icell, r%boxlen, xx_icell_list(icell, :), cc_icell_list(icell, :))
+      phi = 0.0D0
+      call get_cell_pos(hash_key, icell, r%boxlen, xx_icell, cc_icell)
+
+      do cell_idx = 1, num_source_cells
+        ! Skip self-interaction (same cell coordinates)
+        if (all(cc_icell(1:ndim) == cc_jcell_list(cell_idx, 1:ndim))) cycle
+        
+        xx_jcell(:) = xx_jcell_list(cell_idx, :)
+        call get_displacement(xx_jcell, xx_icell, r%boxlen, diff)
+        dist2 = sum(diff(:)**2)
+        phi = phi - mm_jcell_list(cell_idx) / sqrt(dist2)
+      end do
+
+      m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
+      m%grid(ioct)%f(icell,2) = m%grid(ioct)%phi(icell)
     end do
-
-    ! For each neighbor fmm cell (direct neighbors), compute direct AMR child grids
-    do ind = 1, threetondim
-      ! Get fmm cell info
-      jcell = direct_ind_nbor(ind)
-      gridp_nbor => direct_grid_nbor(ind)%p
-      do idim = 1, ndim
-        nstride = 2**(idim-1)
-        cc_fmm_cell(idim) = 2*gridp_nbor%ckey(idim) + MOD((jcell-1)/nstride, 2)
-      end do
-
-      ! Find nfine/2 amr grids (loops over i/j/k)
-#if NDIM>2
-      do k = 1, nfine/2
-        hash_direct(3) = (nfine/2) * cc_fmm_cell(3) + k - 1
-#endif
-#if NDIM>1
-      do j = 1, nfine/2
-        hash_direct(2) = (nfine/2) * cc_fmm_cell(2) + j - 1
-#endif
-#if NDIM>0
-      do i = 1, nfine/2
-        hash_direct(1) = (nfine/2) * cc_fmm_cell(1) + i - 1
-#endif
-          ! periodic boundary conditions & skipping out-of-box grids
-          cycle_flag = .false.
-#ifdef PERIODIC
-          do idim = 1, ndim
-            if (r%periodic(idim)) then
-              if (hash_direct(idim) < m%box_ckey_min(idim, ilevel)) then
-                hash_direct(idim) = m%box_ckey_max(idim, ilevel) - 1
-              end if
-              if (hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
-                hash_direct(idim) = m%box_ckey_min(idim, ilevel)
-              end if
-            end if
-            if (hash_direct(idim) < m%box_ckey_min(idim, ilevel) .OR. &
-                hash_direct(idim) >= m%box_ckey_max(idim, ilevel)) then
-              cycle_flag = .true.
-            end if
-          end do
-#endif
-          if (cycle_flag) cycle
-
-          ! get the neighbor AMR grid (source) and precompute its cell positions (once)
-          call get_grid(s, hash_direct, m%grid_dict, gridp_nbor, flush_cache = .false., fetch_cache = .true.)
-          do jcell_amr = 1, twotondim
-            call get_cell_pos(hash_direct, jcell_amr, r%boxlen, xx_jcell_list(jcell_amr, :), &
-                              cc_jcell_list(jcell_amr, :))
-          end do
-
-          ! Now loop over target cells and accumulate direct interactions using vector ops
-          do icell = 1, twotondim
-            phi = 0.0D0
-            ! use precomputed target pos
-            xx_icell(:) = xx_icell_list(icell, :)
-
-            do jcell_amr = 1, twotondim
-              ! Skip self same-grid same-cell interaction
-              if (all(hash_direct(1:ndim) == hash_key(1:ndim)) .and. icell == jcell_amr) cycle
-
-              ! vector displacement with periodic wrap
-              xx_jcell(:) = xx_jcell_list(jcell_amr, :)
-              call get_displacement(xx_jcell, xx_icell, r%boxlen, diff)
-              dist2 = sum(diff(:)**2)
-
-              phi = phi - (gridp_nbor%rho(jcell_amr) - g%rho_tot) * dxn / sqrt(dist2)
-            end do
-
-            m%grid(ioct)%phi(icell) = m%grid(ioct)%phi(icell) + phi
-            m%grid(ioct)%f(icell,2) = m%grid(ioct)%phi(icell)
-          end do  ! target cells loop
-
-#if NDIM>0
-      end do
-#endif
-#if NDIM>1
-      end do
-#endif
-#if NDIM>2
-      end do
-#endif
-    end do ! end direct force calculation for given amr grid
   end do ! end over all amr grids @ given ilevel
-
-  ! Unlock final cached neighbor grids (if any)
-  if (neighbors_cached) then
-    do ind = 1, threetondim
-      call unlock_cache(s, direct_grid_nbor(ind)%p)
-    end do
-  end if
-
+  deallocate(cc_jcell_list, xx_jcell_list, mm_jcell_list)
+  
   call close_cache(s, m%mg_dict)
   end associate
 end subroutine fmm_amr_direct
