@@ -1164,14 +1164,14 @@ contains
     unit_dotM = (scale_m/scale_t)/unit_msun*3600*24*365.25
     unit_yr = 3600*24*365.25
 
-    ! Check if the SINK file exists
-    filename=TRIM('SINK')
+    ! Check if the sinklog folder exists
+    filename=TRIM('sinklog')
     inquire(file=filename, exist=file_exist)
     if(.not.file_exist)call mdl_mkdir(mdl,filename)
 
     ! Get the filename for this sink
     call title(p%idp(ipart),nchar)
-    filename=TRIM('SINK/sink_'//TRIM(nchar)//'.csv')
+    filename=TRIM('sinklog/sink_'//TRIM(nchar)//'.csv')
 
     ! If this is a new sink, then we need to make the file associated with that sink
     inquire(file=filename, exist=file_exist)
@@ -1243,14 +1243,14 @@ contains
     unit_dotM = (scale_m/scale_t)/unit_msun*3600*24*365.25
     unit_yr = 3600*24*365.25
 
-    ! Check if the SINK file exists
-    filename=TRIM('SINK')
+    ! Check if the sinklog folder exists
+    filename=TRIM('sinklog')
     inquire(file=filename, exist=file_exist)
     if(.not.file_exist)call mdl_mkdir(mdl,filename)
 
     ! Get the filename for this sink
     call title(p%idp(ipart),nchar)
-    filename=TRIM('SINK/sink_'//TRIM(nchar)//'.csv')
+    filename=TRIM('sinklog/sink_'//TRIM(nchar)//'.csv')
 
     ! If this is a new sink, then we need to make the file associated with that sink
     inquire(file=filename, exist=file_exist)
