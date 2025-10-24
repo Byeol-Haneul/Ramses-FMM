@@ -760,7 +760,7 @@ contains
                       xBH_fb_nei(idim,iBHnei) = x_rel(idim) + xcen(idim)
                       ckey_fb_nei(idim,iBHnei) = int(xBH_fb_nei(idim,iBHnei))
                    end do
-   
+
                    ! Compute the weight of the cell in question
                    ok=.false.
                    if(acc_ratio.gt.r%agn_fbk_mode_switch_threshold)then
@@ -772,7 +772,7 @@ contains
 
                       if(r_rel.lt.1)ok=.false. ! Exclude the central cell in jet mode
                    end if
-   
+
                    if(ok)then
                       call psy_function(acc_ratio.gt.r%agn_fbk_mode_switch_threshold,r_rel,local_weight)
                       weight_fb_nei(iBHnei) = local_weight
