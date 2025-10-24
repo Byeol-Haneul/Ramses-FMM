@@ -2,10 +2,8 @@ Basic namelist to test the sink accretion and refinement code.
 Here, we simulate the canonical Bondi problem.
 To run, compile mini-ramses with:
 make HYDRO=1 GRAV=1 NDIM=3
-
-An initial conditions file is required: ICs/ic_sink, which should contain:
+An initial conditions file is required: IC_sink/ic_sink, which should contain:
 0,0,0,0,0,0,0,0,0,0.001,0
-
 For this setup, we expect an accretion rate of 4*pi*0.001**2=1.26e-5
 
 &RUN_PARAMS
@@ -14,8 +12,7 @@ poisson=.true.
 ncontrol=1
 nrestart=0
 nremap=10
-nsubcycle=2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-                2, 2, 2, 2, 2, 2
+nsubcycle=10*2,
 verbose=.false.
 debug=.false.
 nsuperoct=0
@@ -26,8 +23,7 @@ pic=.true.
 levelmin=5
 levelmax=7
 ngridtot=3000000
-nexpand=2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-              2, 2, 2, 2, 2, 2, 2, 2, 2, 2
+nexpand=10*2,
 boxlen=1
 /
 
@@ -46,7 +42,7 @@ u_region=0.0
 v_region=0.0
 w_region=0.0
 p_region=0.999999
-initfile='ICs'
+initfile='IC_sink'
 filetype='ascii'
 /
 
