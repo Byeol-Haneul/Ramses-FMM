@@ -151,7 +151,7 @@ subroutine fmm_downward(s, ilevel)
   type(oct), pointer :: gridp_nbor, gridp_parent
   type(msg_large_realdp)::dummy_realdp
   real(kind=8), dimension(1:multipole_size) :: multipole, multipole_shifted
-  real(kind=8), dimension(taylor_size) :: temp_taylor, parent_taylor
+  real(kind=8), dimension(taylor_size) :: temp_taylor, accum_taylor, parent_taylor
   logical::cycle_flag
 
   associate(r=>s%r, g=>s%g, m=>s%m)
@@ -170,7 +170,7 @@ subroutine fmm_downward(s, ilevel)
 
   ! Loop over octs at this level
   do ioct = m%head_mg(ilevel), m%tail_mg(ilevel)
-     temp_taylor(:) = 0.0D0
+     accum_taylor(:) = 0.0D0
      hash_key(1:ndim) = m%grid(ioct)%ckey(1:ndim)
 
     ! Multipole Shifting
@@ -188,8 +188,9 @@ subroutine fmm_downward(s, ilevel)
      call get_grid_pos(hash_key, r%boxlen, xx_igrid)
      call get_grid_pos(hash_parent, r%boxlen, xx_pgrid)
 
-     call get_displacement(xx_pgrid, xx_igrid, r%boxlen, dx)
-     call shift_taylor(parent_taylor, -dx, temp_taylor)
+     call get_displacement(xx_igrid, xx_pgrid, r%boxlen, dx)
+     call shift_taylor(parent_taylor, dx, temp_taylor)
+     accum_taylor = accum_taylor + temp_taylor
 
      ! Get neighboring parent grids (returns 3^n parent level grids)
      call get_intermediate_nbor_grid(s, hash_key, m%mg_dict, grid_nbor, flush_cache=.false., fetch_cache=.true.)
@@ -224,10 +225,11 @@ subroutine fmm_downward(s, ilevel)
           ! Get taylor coeffs from local
           dx = (hash_key(1:ndim) - cc_jcell_periodic) * r%boxlen / 2**(ilevel-1)
           call calc_taylor_from_multipole(dx, multipole, temp_taylor)
+          accum_taylor = accum_taylor + temp_taylor
        end do ! over neighboring grid's cells 2^n
      end do ! over neighboring grids 3^n 
      ! Add taylor coefficients from intermediate fields
-     m%grid(ioct)%taylor_coeff = m%grid(ioct)%taylor_coeff + temp_taylor
+     m%grid(ioct)%taylor_coeff = m%grid(ioct)%taylor_coeff + accum_taylor
      ! Unlock neighbor octs
      do inbor = 1, threetondim
         call unlock_cache(s, grid_nbor(inbor)%p)

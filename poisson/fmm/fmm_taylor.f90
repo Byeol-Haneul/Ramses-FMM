@@ -8,7 +8,7 @@ subroutine calc_taylor_from_multipole(R, multipoles, taylor_coeff)
   integer :: nq, no, i, j, k, idxC2, idxC3
   real(kind=8), intent(in)  :: R(ndim)
   real(kind=8), intent(in)  :: multipoles(1:multipole_size)
-  real(kind=8), intent(inout) :: taylor_coeff(1:taylor_size)
+  real(kind=8), intent(out) :: taylor_coeff(1:taylor_size)
 
   ! Multipoles
   real(kind=8) :: M0
@@ -77,13 +77,13 @@ subroutine calc_taylor_from_multipole(R, multipoles, taylor_coeff)
   !------------------------------------------------------------------
   !                               C0
   !------------------------------------------------------------------  
-  taylor_coeff(1) = taylor_coeff(1) + M0*D0 - RdotM1*D1 + 0.5D0*(trM*D1 + S*D2)
+  taylor_coeff(1) = M0*D0 - RdotM1*D1 + 0.5D0*(trM*D1 + S*D2)
 
   !------------------------------------------------------------------
   !                               C1
   !------------------------------------------------------------------  
   do i = 1, ndim
-     taylor_coeff(1+i) = taylor_coeff(1+i) + M0*R(i)*D1 - M1(i)*D1 - R(i)*RdotM1*D2 + 0.5D0*R(i)*trM*D2 + 0.5D0*R(i)*S*D3 + MR(i)*D2 
+     taylor_coeff(1+i) = M0*R(i)*D1 - M1(i)*D1 - R(i)*RdotM1*D2 + 0.5D0*R(i)*trM*D2 + 0.5D0*R(i)*S*D3 + MR(i)*D2 
   end do
 
   !------------------------------------------------------------------
@@ -94,7 +94,7 @@ subroutine calc_taylor_from_multipole(R, multipoles, taylor_coeff)
   do j = 1, ndim
      do i = 1, j
         idxC2 = idxC2 + 1
-        taylor_coeff(idxC2) = taylor_coeff(idxC2) + M0*( merge(D1, 0.0D0, i==j) + R(i)*R(j)*D2 ) &
+        taylor_coeff(idxC2) = M0*( merge(D1, 0.0D0, i==j) + R(i)*R(j)*D2 ) &
                               - merge(RdotM1, 0.0D0, i==j)*D2 - R(i)*M1(j)*D2 - R(j)*M1(i)*D2 - R(i)*R(j)*RdotM1*D3
      end do
   end do
@@ -108,7 +108,7 @@ subroutine calc_taylor_from_multipole(R, multipoles, taylor_coeff)
      do j = 1, k
         do i = 1, j
            idxC3 = idxC3 + 1
-           taylor_coeff(idxC3) =taylor_coeff(idxC3) + M0*( (merge(R(k),0.0D0,i==j) + merge(R(i),0.0D0,j==k) + merge(R(j),0.0D0,k==i))*D2 + R(i)*R(j)*R(k)*D3 )
+           taylor_coeff(idxC3) = M0*( (merge(R(k),0.0D0,i==j) + merge(R(i),0.0D0,j==k) + merge(R(j),0.0D0,k==i))*D2 + R(i)*R(j)*R(k)*D3 )
         end do
      end do
   end do
@@ -326,7 +326,7 @@ subroutine calc_phi(taylor_in, a, phi_out)
 
   real(kind=8), intent(in)  :: taylor_in(1:taylor_size)
   real(kind=8), intent(in)  :: a(ndim)
-  real(kind=8), intent(inout) :: phi_out
+  real(kind=8), intent(out) :: phi_out
 
   integer :: i, j, k, idx, nq, no
   integer :: idxC2, idxC3
@@ -381,7 +381,7 @@ subroutine calc_phi(taylor_in, a, phi_out)
   end do
 
   ! C0' = C0 + a_i C1^i + 0.5 a_i a_j C2^{ij} + 1/6 a_i a_j a_k C3^{ijk}
-  phi_out = phi_out - C0
+  phi_out = - C0
   do i = 1, ndim
      phi_out = phi_out - a(i)*C1(i)
      do j = 1, ndim
