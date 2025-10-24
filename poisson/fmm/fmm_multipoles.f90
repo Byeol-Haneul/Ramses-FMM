@@ -39,26 +39,12 @@ subroutine m_fmm_multipoles(pst,ilevel)
           call r_reset_multipoles_taylor(pst, i, 1)
       endif
   end do
+  
   ! Add multipoles from AMR grids
   do i=r%nlevelmax,r%levelmin,-1
-     ! Compute gas multipole expansion
-     ! Set multipoles in all leaf cells
-     if(m%noct_tot(i)>0)then
-         if(r%verbose)write(*,'(" [M2M] Compute leaf multipoles for AMR level ",I2)')i
-         call r_fmm_multipole_leaf_cells(pst,i,1)
-     endif
-
-     ! Average down multipoles in all split cells
-     if(i<r%nlevelmax)then
-         if(m%noct_tot(i+1)>0)then
-           if(r%verbose)write(*,'(" [M2M] Compute split multipoles for AMR level ",I2)')i
-           call r_fmm_multipole_split_cells(pst,i,1)
-         endif
-     endif
+      if(r%verbose)write(*,'(" [M2M] AMR to FMM AMR LEVEL", I2)')i
+      call r_fmm_multipole_amr2fmm(pst, i, 1)
   end do
-
-  if(r%verbose)write(*,'(" [M2M] AMR to FMM ")')
-  call r_fmm_multipole_amr2fmm(pst, r%levelmin-g%level_fmm_to_amr, 1)
 
   ! Add multipoles to FMM grids. 
   do i=r%levelmin-g%level_fmm_to_amr-1,1,-1
@@ -66,7 +52,7 @@ subroutine m_fmm_multipoles(pst,ilevel)
      call r_fmm_multipole_fmm2fmm(pst,i,1)
   end do
 
-  call dump_multipole(r, g, m, 7)
+  !call dump_multipole(r, g, m, 7)
   end associate
 
 end subroutine m_fmm_multipoles
@@ -74,203 +60,6 @@ end subroutine m_fmm_multipoles
 !################################################################
 !################################################################
 !################################################################
-recursive subroutine r_fmm_multipole_leaf_cells(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_LEAF_CELLS,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_multipole_leaf_cells(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call fmm_multipole_leaf_cells(pst%s%r,pst%s%g,pst%s%m,ilevel)
-  endif
-
-end subroutine r_fmm_multipole_leaf_cells
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine fmm_multipole_leaf_cells(r, g, m, ilevel)
-  use amr_parameters, only: ndim, twotondim
-  use amr_commons, only: run_t, global_t, mesh_t
-  use cache_commons
-  implicit none
-
-  type(run_t)    :: r
-  type(global_t) :: g
-  type(mesh_t)   :: m
-  integer        :: ilevel
-
-  !---------------------------------------------------
-  ! Local variables
-  !---------------------------------------------------
-  integer :: igrid, ind, idim, nstride, icell
-  integer :: nm, nd, nq
-  real(kind=8), dimension(ndim) :: xx
-  real(kind=8) :: dx_loc, vol_loc, mmm, dd
-  logical :: leaf_cell
-
-  ! Multipole arrays (static)
-  real(kind=8) :: monopole
-  real(kind=8), dimension(1:ndim) :: dipole
-  real(kind=8), dimension(1:int(ndim*(ndim+1)/2)) :: quadrupole
-
-  !---------------------------------------------------
-  ! Initialize constants
-  !---------------------------------------------------
-  nm = 1
-  nd = ndim
-  nq = int(ndim*(ndim+1)/2)
-
-  ! Mesh spacing for this level
-  dx_loc = r%boxlen / 2.0D0**ilevel
-  vol_loc = dx_loc**ndim
-
-  ! Initialize multipoles in the grid to zero
-  do igrid = m%head(ilevel), m%tail(ilevel)
-     do ind = 1, twotondim
-        m%grid(igrid)%multipole = 0.0D0
-     end do
-  end do
-
-  !---------------------------------------------------
-  ! Loop over grids
-  !---------------------------------------------------
-  do igrid = m%head(ilevel), m%tail(ilevel)
-     ! Loop over cells
-     do ind = 1, twotondim
-        leaf_cell=m%grid(igrid)%refined(ind).EQV..FALSE.
-        ! Reset multipoles for this grid
-        monopole   = 0.0D0
-        dipole     = 0.0D0
-        quadrupole = 0.0D0
-
-        if (leaf_cell) then
-           ! Compute cell center coordinates
-           do idim = 1, ndim
-              nstride = 2**(idim-1)
-              xx(idim) = (2*m%grid(igrid)%ckey(idim) + MOD((ind-1)/nstride, 2) + 0.5D0) * dx_loc
-           end do
-
-           ! Gas mass contribution
-           mmm = (m%grid(igrid)%rho(ind) - g%rho_tot) * vol_loc
-           monopole = monopole + mmm
-           dipole   = dipole   + mmm * xx
-
-           ! Quadrupole contribution
-#if NDIM==1
-           quadrupole(1) = quadrupole(1) + mmm * xx(1)**2       ! quadrupole_xx
-#endif
-#if NDIM==2
-           quadrupole(1) = quadrupole(1) + mmm * xx(1)**2       ! quadrupole_xx
-           quadrupole(2) = quadrupole(3) + mmm * xx(1)*xx(2)    ! quadrupole_xy
-           quadrupole(3) = quadrupole(3) + mmm * xx(2)**2       ! quadrupole_yy
-#endif
-#if NDIM==3
-           quadrupole(1) = quadrupole(1) + mmm * xx(1)**2        ! quadrupole_xx
-           quadrupole(2) = quadrupole(2) + mmm * xx(1)*xx(2)     ! quadrupole_xy
-           quadrupole(3) = quadrupole(3) + mmm * xx(1)*xx(3)     ! quadrupole_xz
-           quadrupole(4) = quadrupole(4) + mmm * xx(2)**2        ! quadrupole_yy
-           quadrupole(5) = quadrupole(5) + mmm * xx(2)*xx(3)     ! quadrupole_yz
-           quadrupole(6) = quadrupole(6) + mmm * xx(3)**2        ! quadrupole_zz
-#endif           
-        end if
-        m%grid(igrid)%multipole(ind, 1) = monopole
-        m%grid(igrid)%multipole(ind, 2:1+ndim) = dipole
-        m%grid(igrid)%multipole(ind, 2+ndim:1+ndim+nq) = quadrupole
-     end do  ! cell loop
-  end do  ! grid loop
-
-end subroutine fmm_multipole_leaf_cells
-!################################################################
-!################################################################
-!################################################################
-!################################################################
-recursive subroutine r_fmm_multipole_split_cells(pst,ilevel,input_size)
-  use mdl_module
-  use ramses_commons, only: pst_t
-  use mdl_parameters
-  implicit none
-  type(pst_t)::pst
-  integer,VALUE::input_size
-  integer::ilevel
-
-  integer::rID
-
-  if(pst%nLower>0)then
-     rID = mdl_send_request(pst%s%mdl,MDL_MULTIPOLE_SPLIT_CELLS,pst%iUpper+1,input_size,0,ilevel)
-     call r_fmm_multipole_split_cells(pst%pLower,ilevel,input_size)
-     call mdl_get_reply(pst%s%mdl,rID,0)
-  else
-     call fmm_multipole_split_cells(pst%s,ilevel)
-  endif
-
-end subroutine r_fmm_multipole_split_cells
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
-subroutine fmm_multipole_split_cells(s,ilevel)
-  use amr_parameters, only: ndim, twotondim, multipole_size
-  use amr_commons, only: oct
-  use ramses_commons, only: ramses_t
-  use nbors_utils
-  use hydro_flag_module, only: pack_fetch_hydro, unpack_fetch_hydro
-  use cache_commons
-  use cache
-  implicit none
-  type(ramses_t)::s
-  integer::ilevel
-  !-------------------------------------------------------------------
-  ! This routine compute the monopole and dipole of the gas mass and
-  ! the analytical profile (if any) within each cell.
-  ! For pure particle runs, this is not necessary and the
-  ! routine is not even called.
-  !-------------------------------------------------------------------
-  integer::ind,idim,ivar,ioct,icell
-  real(kind=8)::average
-  integer(kind=8),dimension(0:ndim)::hash_key
-  logical::leaf_cell
-  type(oct),pointer::gridp
-  type(msg_large_realdp)::dummy_realdp
-
-  integer :: nm, nd, nq
-  real(kind=8), dimension(1:multipole_size) :: multipole
-
-  associate(r=>s%r,g=>s%g,m=>s%m)
-  
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_realdp)/32,&
-                     pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
-                     init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
-
-  ! Loop over finer level grids
-  hash_key(0)=ilevel+1
-  do ioct=m%head(ilevel+1),m%tail(ilevel+1)
-     hash_key(1:ndim)=m%grid(ioct)%ckey(1:ndim)
-     ! Get parent cell using a write-only cache
-     call get_parent_cell(s,hash_key,m%grid_dict,gridp,icell,flush_cache=.true.,fetch_cache=.false.)
-     multipole = 0.0D0
-     do ind=1,twotondim
-       multipole = multipole + m%grid(ioct)%multipole(ind,:)
-     end do
-     gridp%multipole(icell,:) = gridp%multipole(icell,:) + multipole
-  end do
-  call close_cache(s,m%grid_dict)
-  end associate
-end subroutine fmm_multipole_split_cells
-!###########################################################
-!###########################################################
-!###########################################################
-!###########################################################
 recursive subroutine r_fmm_multipole_amr2fmm(pst,ilevel,input_size)
   use mdl_module
   use ramses_commons, only: pst_t
@@ -312,7 +101,7 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
   ! For pure particle runs, this is not necessary and the
   ! routine is not even called.
   !-------------------------------------------------------------------
-  integer::ind,idim,ivar,ioct,icell
+  integer::ind,idim,ivar,ioct,icell,nstride
   real(kind=8)::average
   integer(kind=8),dimension(0:ndim)::hash_key_amr, hash_key_fmm
   integer(kind=8),dimension(1:ndim)::ii
@@ -322,17 +111,35 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
 
   integer :: nm, nd, nq
   real(kind=8), dimension(1:multipole_size) :: multipole
+  real(kind=8), dimension(ndim) :: xx
+  real(kind=8) :: dx_loc, vol_loc, mmm, dd
+
+  ! Multipole arrays (static)
+  real(kind=8) :: monopole
+  real(kind=8), dimension(1:ndim) :: dipole
+  real(kind=8), dimension(1:int(ndim*(ndim+1)/2)) :: quadrupole
 
   associate(r=>s%r,g=>s%g,m=>s%m)
-  if(ilevel .ne. r%levelmin-g%level_fmm_to_amr) return !ilevel should be fmm grid level.
+
+  !---------------------------------------------------
+  ! Initialize constants
+  !---------------------------------------------------
+  nm = 1
+  nd = ndim
+  nq = int(ndim*(ndim+1)/2)
+
+  ! Mesh spacing for this level
+  dx_loc = r%boxlen / 2.0D0**ilevel
+  vol_loc = dx_loc**ndim
+
   call open_cache(s,table=m%mg_dict,data_size=storage_size(m%grid(1))/32,&
                      hilbert=m%domain_mg, pack_size=storage_size(dummy_realdp)/32,&
                      pack=pack_fetch_hydro,unpack=unpack_fetch_hydro,&
                      init=init_flush_multipole, flush=pack_flush_multipole, combine=unpack_flush_multipole)
 
   ! Loop over levelmin grids.
-  hash_key_fmm(0)=ilevel
-  do ioct=m%head(ilevel+g%level_fmm_to_amr),m%tail(ilevel+g%level_fmm_to_amr)
+  hash_key_fmm(0)=ilevel - g%level_fmm_to_amr
+  do ioct=m%head(ilevel),m%tail(ilevel)
      ! Get fmm grid above level_fmm_to_amr
      hash_key_amr(1:ndim)=m%grid(ioct)%ckey(1:ndim)
      hash_key_fmm(1:ndim)= hash_key_amr(1:ndim)/(2**g%level_fmm_to_amr)
@@ -345,15 +152,54 @@ subroutine fmm_multipole_amr2fmm(s,ilevel)
      ! Get fmm grid using a write-only cache
      call get_grid(s,hash_key_fmm,m%mg_dict,grid_fmm,flush_cache=.true.,fetch_cache=.false.)
      multipole = 0.0D0
-     do ind=1,twotondim
-       multipole = multipole + m%grid(ioct)%multipole(ind,:)
-     end do
+
+    ! Loop over cells
+     do ind = 1, twotondim
+        leaf_cell=m%grid(ioct)%refined(ind).EQV..FALSE.
+        ! Reset multipoles for this grid
+        monopole   = 0.0D0
+        dipole     = 0.0D0
+        quadrupole = 0.0D0
+
+        if (leaf_cell) then
+           ! Compute cell center coordinates
+           do idim = 1, ndim
+              nstride = 2**(idim-1)
+              xx(idim) = (2*m%grid(ioct)%ckey(idim) + MOD((ind-1)/nstride, 2) + 0.5D0) * dx_loc
+           end do
+
+           ! Gas mass contribution
+           mmm = (m%grid(ioct)%rho(ind) - g%rho_tot) * vol_loc
+           monopole = monopole + mmm
+           dipole   = dipole   + mmm * xx
+
+           ! Quadrupole contribution
+#if NDIM==1
+           quadrupole(1) = quadrupole(1) + mmm * xx(1)**2       ! quadrupole_xx
+#endif
+#if NDIM==2
+           quadrupole(1) = quadrupole(1) + mmm * xx(1)**2       ! quadrupole_xx
+           quadrupole(2) = quadrupole(3) + mmm * xx(1)*xx(2)    ! quadrupole_xy
+           quadrupole(3) = quadrupole(3) + mmm * xx(2)**2       ! quadrupole_yy
+#endif
+#if NDIM==3
+           quadrupole(1) = quadrupole(1) + mmm * xx(1)**2        ! quadrupole_xx
+           quadrupole(2) = quadrupole(2) + mmm * xx(1)*xx(2)     ! quadrupole_xy
+           quadrupole(3) = quadrupole(3) + mmm * xx(1)*xx(3)     ! quadrupole_xz
+           quadrupole(4) = quadrupole(4) + mmm * xx(2)**2        ! quadrupole_yy
+           quadrupole(5) = quadrupole(5) + mmm * xx(2)*xx(3)     ! quadrupole_yz
+           quadrupole(6) = quadrupole(6) + mmm * xx(3)**2        ! quadrupole_zz
+#endif           
+        end if
+        multipole(1) = multipole(1) + monopole
+        multipole(2:1+ndim) = multipole(2:1+ndim) + dipole
+        multipole(2+ndim:1+ndim+nq) = multipole(2+ndim:1+ndim+nq) + quadrupole
+     end do  ! cell loop
      grid_fmm%multipole(icell,:) = grid_fmm%multipole(icell,:) + multipole
   end do
   call close_cache(s,m%mg_dict)
   end associate
 end subroutine fmm_multipole_amr2fmm
-
 !################################################################
 !################################################################
 !################################################################
