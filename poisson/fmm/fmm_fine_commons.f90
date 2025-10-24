@@ -490,13 +490,12 @@ subroutine fmm_amr_direct(s, ilevel)
   initialized = .false.
 
   ! Allocate arrays for all possible source cells
-  max_source_cells = threetondim * (nfine/2)**ndim * twotondim
+  max_source_cells = threetondim * (nfine**ndim)
   allocate(cc_jcell_list(max_source_cells, ndim))
   allocate(xx_jcell_list(max_source_cells, ndim))
   allocate(mm_jcell_list(max_source_cells))
 
   prev_hash_fmm_cell = -huge(0_8)
-  neighbors_cached = .false.
 
   ! Loop over octs at this level
   do ioct = m%head(ilevel), m%tail(ilevel)
@@ -506,7 +505,7 @@ subroutine fmm_amr_direct(s, ilevel)
     hash_fmm_cell(1:ndim) = m%grid(ioct)%ckey(1:ndim) / (nfine/2)
 
     ! If parent fmm cell changed, fetch (and unlock previous) neighbor info
-    if (all(hash_fmm_cell == prev_hash_fmm_cell)) then
+    if (.not. all(hash_fmm_cell == prev_hash_fmm_cell)) then
       prev_hash_fmm_cell = hash_fmm_cell
     
       ! Build source cell lists for all neighbor grids
