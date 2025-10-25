@@ -9,11 +9,11 @@ parameters.
 | `pic=.false.`                |  `logical`    | Activate Particle-In-Cell solver |
 | `poisson=.false.`            |  `logical`    | Activate Poisson solver for self-gravity |
 | `hydro=.false.`              |  `logical`    | Activate hydro or MHD solver. |
-| `clump_finder=.false.`       |  `logical`    | Activate the clump finder |
-| `verbose=.false.`            |  `logical`    | Activate verbose mode. |
-| `debug=.false.`              |  `logical`    | Activate debug mode. |
-| `static_mesh=.false.`        |  `logical`    | Activate static mesh refinement. |
-| `static_gas=.false.`         |  `logical`    | Turn off hydro variables update. |
+| `clump_only=.false.`         |  `logical`    | Run only the clump finder on the initial conditions and stops the simulation |
+| `verbose=.false.`            |  `logical`    | Activate verbose mode |
+| `debug=.false.`              |  `logical`    | Activate debug mode |
+| `static_mesh=.false.`        |  `logical`    | Activate static mesh refinement |
+| `static_gas=.false.`         |  `logical`    | Turn off hydro variables update |
 | `nrestart=0`                 |  `integer`    | Backup file number from which the code loads checkpoint/restart data and resumes the simulation, The default value, zero, is for a fresh start from the beginning (time=0).   |
 | `nstepmax=1000000`           |  `integer`    | Maximum number of coarse time step. This can be used to terminate the simulation after a fixed amount of main steps. | 
 | `ncontrol=1`                 |  `integer`    | Frequency of screen output for control lines (to stdout), usually redirected into a log file. | 
