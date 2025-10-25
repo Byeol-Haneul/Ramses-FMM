@@ -28,14 +28,16 @@ subroutine m_init_refine_adaptive(pst)
 
   if(pst%s%r%verbose)write(*,*)'Entering init_refine_adaptive'
 
-  do istep=pst%s%r%levelmin,pst%s%r%nlevelmax
+  do istep=pst%s%r%levelmin,pst%s%r%nlevelmax+1
 
      if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%initfile(istep+1).eq.' ')exit
 
      if(istep<pst%s%r%nlevelmax)then
         write(*,*)'Building initial fine grid at level ',istep+1
-     else
+     else if(istep==pst%s%r%nlevelmax)then
         write(*,*)'Finalizing initial grid at level ',istep
+     else
+        write(*,*)'Finalizing initial grid at all levels'
      endif
 
      ! Refine all level cells from levelmin
@@ -81,39 +83,6 @@ subroutine m_init_refine_adaptive(pst)
      end do
 
   end do
-
-  ! Last pass to enforce refinement rules
-  write(*,*)'Finalizing initial grid at all levels'
-
-  ! Refine all level cells from levelmin
-  call m_refine_fine(pst,pst%s%r%levelmin)
-
-  ! Initialize hydro variables on the fine grids
-  if(pst%s%r%hydro)then
-     do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin+1,-1
-        call m_init_flow_fine(pst,ilevel)
-     end do
-     do ilevel=pst%s%r%nlevelmax-1,pst%s%r%levelmin,-1
-        call m_upload_fine(pst,ilevel)
-     end do
-  endif
-
-  ! Initialize rt variables on the fine grids
-  if(pst%s%r%rt)then
-     do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin+1,-1
-        call m_rt_init_flow_fine(pst,ilevel)
-     end do
-     do ilevel=pst%s%r%nlevelmax-1,pst%s%r%levelmin,-1
-        call m_rt_upload_fine(pst,ilevel)
-     end do
-  endif
-
-  ! Initialize refinement map on the fine grids
-  if(pst%s%r%filetype=='grafic_zoom'.and.pst%s%r%ivar_refine==0)then
-     do ilevel=pst%s%r%nlevelmax,pst%s%r%levelmin+1,-1
-        call r_input_refmap_grafic(pst,ilevel,1)
-     end do
-  endif
 
   if(pst%s%r%filetype=='gadget'.and.pst%s%r%hydro)then
      ! Deallocate gas particles after gadget IC completed

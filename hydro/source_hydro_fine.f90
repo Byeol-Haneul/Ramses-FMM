@@ -20,7 +20,7 @@ recursive subroutine r_source_hydro_fine(pst,ilevel,input_size)
   ! Check if hydro source terms are required
   ok = pst%s%r%entropy .and.  pst%s%r%dual_energy .GE. 0
   ok = ok .or. nener>0
-  ok = ok .or. pst%s%r%turb
+  ok = ok .or. pst%s%r%sgs_turb
   if(.not. ok)return
   
   if(pst%nLower>0)then
@@ -195,7 +195,7 @@ subroutine source_hydro_fine(s,ilevel)
         end if
 
         ! Add source terms for subgrid turbulence model
-        if(r%turb)then
+        if(r%sgs_turb)then
            ! Compute gradu = G
            gradu(1:ndim,1:ndim)=0.0d0
            do idim=1,ndim

@@ -115,6 +115,14 @@ subroutine courant_fine(r,g,m,ilevel,mass,ekin,eint,emag,dt)
               gg(idim)=r%constant_gravity(idim)
            end do
 #endif
+           ! Gather turbulent driving
+#ifdef TURB
+           if(r%turb)then
+              do idim=1,ndim
+                 gg(idim)=gg(idim)+m%grid(igrid)%fturb(ind,idim)
+              end do
+           endif
+#endif
            ! Compute total mass
            mass=mass+uu(1)*vol
 

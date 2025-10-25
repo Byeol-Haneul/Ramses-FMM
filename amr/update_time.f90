@@ -13,6 +13,7 @@ subroutine m_update_time(pst,ilevel,done)
   use ramses_commons, only: pst_t
   use mdl_module
   use update_rt_c_module, only: r_rt_neq_updates
+  use turb_update_module, only: r_update_turb
   implicit none
   type(pst_t)::pst
   integer::ilevel
@@ -179,7 +180,10 @@ subroutine m_update_time(pst,ilevel,done)
   in_broadcast_aexp%hexp=g%hexp
   call r_broadcast_aexp(pst,in_broadcast_aexp,storage_size(in_broadcast_aexp)/32)
 
-  end associate
+  ! Update turbulent driving field
+  if(r%turb)call r_update_turb(pst)
+
+end associate
 
 end subroutine m_update_time
 !##############################################################

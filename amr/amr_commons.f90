@@ -25,6 +25,7 @@ module amr_commons
      logical::star    =.false.   ! Stars and star formation activated
      logical::sink    =.false.   ! Sinks and sink formation activated
      logical::tree    =.false.   ! Merger tree particles activated
+     logical::trac    =.false.   ! Tracer particles activated
      logical::orphan  =.false.   ! Orphan particles activated
      logical::verbose =.false.   ! Write everything
      logical::debug   =.false.   ! Debug mode activated
@@ -62,6 +63,7 @@ module amr_commons
      integer::nstarmax=0         ! Maximum number of star particles
      integer::nsinkmax=0         ! Maximum number of sink particles
      integer::ntreemax=0         ! Maximum number of tree particles
+     integer::ntracmax=0         ! Maximum number of tracer particles
      integer,dimension(1:MAXLEVEL)::nexpand=1 ! Number of mesh expansion
      real(kind=8)::boxlen=1.0        ! Cell size at level 0 (total box size)
      real(kind=8)::box_size=0.0      ! Box length of active domain along x direction
@@ -84,6 +86,8 @@ module amr_commons
      integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
      integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
      integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
+     integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+     logical :: isolated_boundary=.false. ! Set isolated boundary conditions to multipole expansion
 
      ! Movie parameters
      integer::levelmax_frame=0
@@ -119,7 +123,7 @@ module amr_commons
      real(kind=8),dimension(1:nener+1)::gamma_rad=1.33333333334d0
      logical ::induction=.false.
      logical ::entropy=.false.
-     logical ::turb=.false.
+     logical ::sgs_turb=.false.
      real(kind=8)::dual_energy=-1
      real(kind=8)::T2_fix=0d0
      character(LEN=10)::scheme='muscl'
@@ -324,6 +328,7 @@ module amr_commons
      logical::output_peak_star=.false.
      logical::output_peak_sink=.false.
      logical::output_peak_tree=.false.
+     logical::output_peak_trac=.false.
      integer::rho_type_clump=1
      real(kind=8)::relevance_threshold=2
      real(kind=8)::density_threshold=-1
@@ -353,13 +358,13 @@ module amr_commons
      real(kind=8)::sink_purity_threshold=-1
      real(kind=8)::sink_fraction_threshold=2d0
      real(kind=8)::sink_radius=-1
+     real(kind=8)::sink_delta_tout=0
      logical::sink_form=.false.
      logical::sink_refine=.false.
      logical::sink_dump=.false.
      logical::static_sink=.false.
-     integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
-     logical::fix_sink_mass = .false. 
-     logical::drag_sink = .false. ! Whether to use dynamical friction for black hole dynamics
+     logical::fix_sink_mass=.false. 
+     logical::drag_sink=.false.
 
      ! Black hole parameters
      integer::accretion_type = 0 ! 0: None, 1: Bondi
@@ -373,15 +378,17 @@ module amr_commons
      logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
      real(kind=8)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines
      logical::use_bondi_lambda = .true.
+     logical::mass_weighting = .true.
+     logical::momentum_conserving = .false.
 
      ! AGN Feedback parameters
      logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles
      integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
      integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
      real(kind=8)::epsilon_rad = 0.1d0 ! Radiative efficiency
-     real(kind=8)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
-     real(kind=8)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
-     real(kind=8)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
+     real(kind=8)::epsilon_radio = 1.0d0 ! Efficiency of momentum feedback for jet
+     real(kind=8)::epsilon_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+     real(kind=8)::momentum_boost = 10.0d0 ! Momentum boost in units of L/c for the jet
      real(kind=8)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
      real(kind=8)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
      real(kind=8)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
@@ -497,6 +504,17 @@ module amr_commons
      real(kind=8),dimension(nrtgrp)::ssh2=1d0                      ! Self-shielding factor for H2
      ! HK note --> OTSA required for RTZ
      integer,dimension(nIon)::spec2group=0                 ! Ion -> group # in recombinations
+
+     ! Turbulence driving parameters
+     logical  :: turb=.false.            ! Use turbulence?
+     integer  :: turb_seed=-1            ! Turbulent seed (-1=random)
+     character (LEN=100) :: forcing_power_spectrum='parabolic'
+                                         ! Power spectrum type of turbulent forcing
+     real(kind=8) :: comp_frac=0.3333    ! Compressive fraction
+     real(kind=8) :: turb_T=1.0          ! Turbulent velocity autocorrelation time
+     integer      :: turb_Ndt=100        ! Number of timesteps per autocorr. time
+     real(kind=8) :: turb_rms=1.0        ! rms turbulent forcing acceleration
+     real(kind=8) :: turb_min_rho=1d-50  ! Minimum density for turbulence
 
   end type run_t
 

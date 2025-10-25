@@ -1,0 +1,13 @@
+This turbulence module makes use of the FFTW3 library (www.fftw.org).
+
+To install it yourself on your computer:
+wget http://www.fftw.org/fftw-3.3.8.tar.gz
+tar -xf fftw-3.3.8.tar.gz
+cd fftw-3.3.8/
+./configure --prefix=$HOME/local/
+make
+make install
+
+If you use a different path for configure, you need to adjust the library path in the makefile
+by setting the FFTW environment variable. You can also type in the ramses/bin folder:
+make NDIM=3 MPI=1 FFTW=$HOME/local

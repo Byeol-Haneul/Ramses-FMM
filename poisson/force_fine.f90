@@ -91,7 +91,7 @@ subroutine force_analytic(r,g,m,ilevel)
   integer::igrid,ind,i,ngrid,idim,nstride
   real(kind=8)::dx
   real(kind=8),dimension(1:nvector,1:ndim)::xx,ff
- 
+
   ! Mesh size at level ilevel in code units
   dx=r%boxlen/2**ilevel
 
@@ -111,7 +111,7 @@ subroutine force_analytic(r,g,m,ilevel)
         end do
 
         ! Call analytical gravity routine
-        call grav_ana(xx,ff,dx,ngrid,r%gravity_type,r%gravity_params)
+        call gravana(r,g,xx,ff,dx,ngrid)
 
         ! Scatter variables to main memory
         do idim=1,ndim
@@ -164,6 +164,7 @@ subroutine gradient_phi(s,ilevel,icount)
   use cache_commons
   use cache
   use phi_fine_cg_module, only: pack_fetch_interpol,unpack_fetch_interpol
+  use boundaries, only: init_bound_phi
   implicit none
   type(ramses_t)::s
   integer::ilevel,icount
@@ -243,9 +244,10 @@ subroutine gradient_phi(s,ilevel,icount)
      tfrac=0.0
   end if
 
-  call open_cache(s,table=m%grid_dict,data_size=storage_size(m%grid(1))/32,&
-                     hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
-                     pack=pack_fetch_interpol,unpack=unpack_fetch_interpol)
+  call open_cache(s, table=m%grid_dict, data_size=storage_size(m%grid(1))/32,&
+       hilbert=m%domain, pack_size=storage_size(dummy_three_realdp)/32,&
+       pack=pack_fetch_interpol, unpack=unpack_fetch_interpol,&
+       bound=init_bound_phi)
 
   hash_nbor(0)=ilevel
 
@@ -262,11 +264,16 @@ subroutine gradient_phi(s,ilevel,icount)
 
         ! Get neighboring grid
         hash_nbor(1:ndim)=m%grid(igrid)%ckey(1:ndim)+shift(1:ndim,i_nbor)
+
         ! Periodic boundary conditions
         do idim=1,ndim
-           if(hash_nbor(idim)<0)hash_nbor(idim)=m%ckey_max(ilevel)-1
-           if(hash_nbor(idim)==m%ckey_max(ilevel))hash_nbor(idim)=0
+           if(r%periodic(idim))then
+              if(hash_nbor(idim)<m%box_ckey_min(idim,ilevel))hash_nbor(idim)=m%box_ckey_max(idim,ilevel)-1
+              if(hash_nbor(idim)>=m%box_ckey_max(idim,ilevel))hash_nbor(idim)=m%box_ckey_min(idim,ilevel)
+           endif
         enddo
+
+        ! Get neighbouring grid using read-only cache
         call get_grid(s,hash_nbor,m%grid_dict,gridp,flush_cache=.false.,fetch_cache=.true.)
 
         ! If grid exists, then copy into array

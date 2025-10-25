@@ -12,6 +12,7 @@ module mdl_parameters
      enumerator::MDL_INIT_HYDRO
      enumerator::MDL_INIT_PART
      enumerator::MDL_INPUT_PART_GRAFIC
+     enumerator::MDL_INPUT_TRAC_GRAFIC
      enumerator::MDL_INPUT_PART_ZOOM
      enumerator::MDL_INPUT_PART_ASCII
      enumerator::MDL_INPUT_STAR_ASCII
@@ -131,6 +132,10 @@ module mdl_parameters
      enumerator::MDL_CHECK_PART_EMISSION
      enumerator::MDL_STAR_RT_FEEDBACK
      enumerator::MDL_SET_GRID_DEVICE
+     enumerator::MDL_INIT_TURB
+     enumerator::MDL_UPDATE_TURB
+     enumerator::MDL_DRIVE_TURB
+     enumerator::MDL_TURB_HYDRO
   end enum
 
   ! Maximum number of cpus

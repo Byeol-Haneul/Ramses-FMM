@@ -13,6 +13,7 @@ subroutine m_dump_all(pst,write_bkp_file)
   use mdl_module, only: mdl_mkdir, mdl_wtime
   use cooling_module, only: output_cool
   use output_rt_module, only: r_output_rt,file_descriptor_rt,output_rtinfo
+  use turb_commons, only: write_turb_fields
   implicit none
   type(pst_t)::pst
   logical::write_bkp_file
@@ -28,7 +29,8 @@ subroutine m_dump_all(pst,write_bkp_file)
   integer,dimension(1:flen/4)::input_array
   type(in_output_poisson_t)::in_output_poisson
 
-  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star,sink=>pst%s%sink,tree=>pst%s%tree,mdl=>pst%s%mdl)
+  associate(r=>pst%s%r,g=>pst%s%g,m=>pst%s%m,p=>pst%s%p,star=>pst%s%star, &
+   & sink=>pst%s%sink,tree=>pst%s%tree,trac=>pst%s%trac,mdl=>pst%s%mdl)
 
   if(g%nstep_coarse==g%nstep_coarse_old.and.g%nstep_coarse>0)return
   if(g%nstep_coarse==0.and.r%nrestart>0)return
@@ -99,6 +101,10 @@ subroutine m_dump_all(pst,write_bkp_file)
         filename=TRIM(filedir)//'tree_header.txt'
         call output_header(r,g,tree,filename)
      endif
+     if(r%trac)then
+        filename=TRIM(filedir)//'trac_header.txt'
+        call output_header(r,g,trac,filename)
+     endif
      if(r%hydro)then
         filename=TRIM(filedir)//'hydro_header.txt'
         call file_descriptor_hydro(r,filename,write_bkp_file)
@@ -117,6 +123,9 @@ subroutine m_dump_all(pst,write_bkp_file)
         filename=TRIM(filedir)//'cooling.bin'
         call output_cool(pst%s%cool,filename)
      end if
+     if(r%turb)then
+        call write_turb_fields(pst%s%r,pst%s%turb,filedir)
+     endif
      filename=TRIM(filedir)//'info.txt'
      call output_info(r,g,filename)
      filename=TRIM(filedir)//'namelist.txt'
@@ -418,6 +427,7 @@ subroutine input_params(mdl,r,g,filename,ncpu_file,levelmin_file,nlevelmax_file)
   ! Read various constants
   read(ilun)g%const,g%mass_tot_0,g%rho_tot
   read(ilun)g%omega_m,g%omega_l,g%omega_k,g%omega_b,g%h0,g%aexp_ini,g%boxlen_ini
+  g%omega_k=1-g%omega_m-g%omega_l
   read(ilun)g%aexp,g%texp,g%hexp
   read(ilun)g%aexp_old,g%epot_tot_int,g%epot_tot_old
   read(ilun)mass_sph_file
@@ -669,12 +679,12 @@ subroutine output_header(r,g,p,filename)
      write(ilun,'(a)',advance='no')'angmom '
   end if
   if(allocated(p%tp))then
-     write(ilun,'(a)',advance='no')'age '
+     write(ilun,'(a)',advance='no')'birth_date '
   endif
   if(allocated(p%tm))then
-     write(ilun,'(a)',advance='no')'merging_age '
+     write(ilun,'(a)',advance='no')'merging_date '
   endif
-  write(ilun,'(a)',advance='no')'level id '
+  write(ilun,'(a)',advance='no')'level birth_id '
   if(allocated(p%idm))then
      write(ilun,'(a)',advance='no')'merging_id '
   endif

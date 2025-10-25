@@ -451,6 +451,22 @@ subroutine input_part_ramses(r,g,p,ncpu_file,npart_file,mpart_loc)
   end do
   ! End loop over files
 
+  ! Periodic box
+  do ipart=1,p%npart
+#if NDIM>0
+     if(p%xp(ipart,1)<   0.0d0 )p%xp(ipart,1)=p%xp(ipart,1)+r%boxlen
+     if(p%xp(ipart,1)>=r%boxlen)p%xp(ipart,1)=p%xp(ipart,1)-r%boxlen
+#endif
+#if NDIM>1
+     if(p%xp(ipart,2)<   0.0d0 )p%xp(ipart,2)=p%xp(ipart,2)+r%boxlen
+     if(p%xp(ipart,2)>=r%boxlen)p%xp(ipart,2)=p%xp(ipart,2)-r%boxlen
+#endif
+#if NDIM>2
+     if(p%xp(ipart,3)<   0.0d0 )p%xp(ipart,3)=p%xp(ipart,3)+r%boxlen
+     if(p%xp(ipart,3)>=r%boxlen)p%xp(ipart,3)=p%xp(ipart,3)-r%boxlen
+#endif
+  end do
+
   ! Put all particles in levelmin
   p%headp=p%npart+1
   p%tailp=p%npart

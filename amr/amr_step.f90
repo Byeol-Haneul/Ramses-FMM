@@ -39,7 +39,9 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   use rt_godunov_fine_module, only: r_rt_godunov_fine,r_set_rtunew,r_set_rtuold,r_set_emissivity
   use rt_step_module, only: m_rt_step
   use sink_evolution_module, only: r_sink_evolution, out_accretion_t
-  
+  use turb_driving, only: r_drive_turb
+  use turb_hydro_module, only: m_turb_hydro
+
   implicit none
 
   type(pst_t) :: pst
@@ -126,7 +128,6 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            bkp_last_done=.true.
         endif
      endif
-
      ! Lightcone
       if (r%lightcone) then
          call m_timer(pst,'lightcone','start')
@@ -146,17 +147,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      endif
   end if
 
-  !--------------------
-  ! Poisson source term
-  !--------------------
-#ifdef GRAV
-  if(r%poisson)then
-     if(ilevel==r%levelmin.or.icount>1)then
-        call m_timer(pst,'rho','start')
-        call m_rho_fine(pst,ilevel,0)
-     endif
+  !------------------------------------
+  ! Poisson source term for gravity or
+  ! just for particle list for pic only
+  !------------------------------------
+  if(ilevel==r%levelmin.or.icount>1)then
+     call m_timer(pst,'rho','start')
+     call m_rho_fine(pst,ilevel,0)
   endif
-#endif
 
   ! Remove gravity source term with half time step and old force
   if(r%hydro.and..not.r%static_gas)then
@@ -218,6 +216,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         call m_synchro_hydro_fine(pst,ilevel,+0.5d0*dble(g%dtnew(ilevel)))
      endif
   end if
+
+  !--------------------------
+  ! Compute turbulent driving
+  !--------------------------
+  if(r%turb)then
+     call m_timer(pst,'hydro - turbulence','start')
+     call r_drive_turb(pst,ilevel,1)
+  endif
 
   !----------------------
   ! Compute new time step
@@ -311,11 +317,10 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
   !----------------------------
   ! Sink accretion and feedback
   !----------------------------
-  if(r%sink.and.(r%accretion_type>0))then
+  if(r%sink)then
      call m_timer(pst,'sink - evolution','start')
      call r_sink_evolution(pst,ilevel,1,output_acc,2)
      if(output_acc%mass>0)then
-        if(r%verbose_sink)write(*,*)'Total sink accreted mass:',output_acc%mass
         g%mass_sink_tot=g%mass_sink_tot+output_acc%mass
      end if
   end if
@@ -350,6 +355,12 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
            call m_timer(pst,'hydro - gravity','start')
            call m_synchro_hydro_fine(pst,ilevel,+0.5d0*dble(g%dtnew(ilevel)))
         endif
+
+        ! Add turbulent driving source terms to uold with full time step
+        if(r%turb)then
+           call m_timer(pst,'hydro - turbulence','start')
+           call m_turb_hydro(pst,ilevel,dble(g%dtnew(ilevel)))
+        endif
      endif
 
      ! Restriction operator
@@ -367,14 +378,14 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
         call m_timer(pst,'radiative transfer','start')
         call m_rt_step(pst,ilevel)
      else
-        if(r%hydro .and. (r%neq_chem.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
+        if(r%hydro .and. (r%neq_chem.or.r%cooling_ism.or.r%cooling.or.r%isothermal))call r_cooling_fine(pst,ilevel,1)
      endif
   endif
 
   !------------------------
   ! Compute cooling/heating
   !------------------------
-  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%isothermal.or.r%neq_chem))then
+  if(r%hydro .and. (.not.r%rt) .and. (r%cooling.or.r%cooling_ism.or.r%isothermal.or.r%neq_chem))then
      call m_timer(pst,'cooling','start')
      call r_cooling_fine(pst,ilevel,1)
   endif

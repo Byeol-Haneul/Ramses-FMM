@@ -55,6 +55,7 @@ def generate_kh_fields(
     pressure_inner: float = 1.0,
     perturb_eps: float = 0.01,
     perturb_sigma: float = 0.02,
+    wavenumber: float = 2.0,
     random_seed: int | None = 42,
     ndim: int = 3,
 ):
@@ -75,6 +76,7 @@ def generate_kh_fields(
         pressure_inner: Pressure in inner slab.
         perturb_eps: Amplitude of vy perturbation.
         perturb_sigma: Gaussian width of perturbation (fraction of box).
+        wavenumber: Wavenumber of the sinusoidal perturbation.
         random_seed: RNG seed for any randomized content (not currently used).
         ndim: 2 or 3; 2D returns arrays with shape (n, n, 1).
 
@@ -131,7 +133,7 @@ def generate_kh_fields(
     gauss = np.exp(-((yn - 0.25) ** 2) / (2.0 * sig * sig)) + np.exp(
         -((yn - 0.75) ** 2) / (2.0 * sig * sig)
     )  # shape (n,)
-    sinus = np.sin(2.0 * np.pi * X, dtype=np.float32)  # shape (n,)
+    sinus = np.sin(wavenumber * 2.0 * np.pi * X, dtype=np.float32)  # shape (n,)  
 
     # Allocate 3D fields
     d = np.empty((n1, n2, n3), dtype=np.float32)
@@ -163,10 +165,11 @@ def main():
     parser.add_argument("--u0", type=float, default=1.0, help="Velocity jump magnitude (center vs outer)")
     parser.add_argument("--thickness", type=float, default=0.02, help="Shear layer half-thickness (fraction of box)")
     parser.add_argument("--rho_outer", type=float, default=1.0, help="Outer slab density")
-    parser.add_argument("--rho_inner", type=float, default=1.0, help="Inner slab density")
+    parser.add_argument("--rho_inner", type=float, default=2.0, help="Inner slab density")
     parser.add_argument("--p0", type=float, default=1.0, help="Uniform pressure")
     parser.add_argument("--eps", type=float, default=0.01, help="Perturbation amplitude for vy")
     parser.add_argument("--sigma", type=float, default=0.02, help="Perturbation Gaussian width (fraction of box)")
+    parser.add_argument("--wavenumber", type=float, default=2.0, help="Wavenumber of the sinusoidal perturbation")
     parser.add_argument(
         "--outdir",
         type=str,
@@ -192,6 +195,7 @@ def main():
         pressure_inner=args.pressure_inner,
         perturb_eps=args.eps,
         perturb_sigma=args.sigma,
+        wavenumber=args.wavenumber,
         random_seed=args.seed,
         ndim=args.ndim,
     )

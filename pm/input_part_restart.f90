@@ -219,6 +219,9 @@ recursive subroutine r_input_part_restart(pst,input_array,input_size,output,outp
      endif
      if(p_type==SINK_TYPE)then
         call input_part_restart(pst%s%r,pst%s%g,pst%s%sink,input_size-1,input_array(2:input_size),output%mass)
+        if(pst%s%r%sink_delta_tout>0)then ! Set high frequency dump counter
+           pst%s%sink%step_counter=int(pst%s%g%t/pst%s%r%sink_delta_tout)
+        endif
      endif
      if(p_type==TREE_TYPE)then
         call input_part_restart(pst%s%r,pst%s%g,pst%s%tree,input_size-1,input_array(2:input_size),output%mass)

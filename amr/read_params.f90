@@ -28,6 +28,7 @@ subroutine m_read_params(pst)
   integer(kind=8)::nstartot=0
   integer(kind=8)::nsinktot=0
   integer(kind=8)::ntreetot=0
+  integer(kind=8)::ntractot=0
   real(kind=8)::delta_tout=0,tend=0
   real(kind=8)::delta_aout=0,aend=0
   logical::nml_ok
@@ -45,6 +46,7 @@ subroutine m_read_params(pst)
   logical::star    =.false.    ! Stars and star formation activated
   logical::sink    =.false.    ! Sinks and sink formation activated
   logical::part    =.false.   ! Dark matter particles activated
+  logical::trac    =.false.   ! Tracer particles activated
   logical::merger_tree=.false. ! Merger tree particles activated
   logical::orphan  =.false.   ! Orphan particles activated
   logical::verbose =.false.    ! Write everything
@@ -64,6 +66,7 @@ subroutine m_read_params(pst)
   integer::nstarmax=0
   integer::nsinkmax=0
   integer::ntreemax=0
+  integer::ntracmax=0
 
   ! Number of superoct levels
   integer::nsuperoct=0
@@ -258,7 +261,7 @@ subroutine m_read_params(pst)
   character(LEN=10)::riemann2d='none'
   logical ::induction=.false.
   logical ::entropy=.false.
-  logical ::turb=.false.
+  logical ::sgs_turb=.false.
   real(kind=8)::dual_energy=-1
   real(kind=8)::T2_fix=0d0
   real(kind=8),dimension(1:3)::constant_gravity=0.0d0
@@ -289,6 +292,8 @@ subroutine m_read_params(pst)
   integer :: sink_force_interpolation_scheme=1 ! sink force interpolation schemes
   integer :: tree_mass_deposition_scheme=1     ! tree mass deposition schemes
   integer :: tree_force_interpolation_scheme=1 ! tree force interpolation schemes
+  integer :: trac_interpolation_scheme=1 ! tracer force interpolation schemes
+  logical :: isolated_boundary=.false. ! Set isolated boundary conditions to multipole expansion
 
   ! Boundary conditions parameters
   integer::nbound=0
@@ -392,6 +397,7 @@ subroutine m_read_params(pst)
   logical::output_peak_star=.false.
   logical::output_peak_sink=.false.
   logical::output_peak_tree=.false.
+  logical::output_peak_trac=.false.
   integer::rho_type_clump=1 ! 1: DM, 2: stars, 3: sinks, 4: gas
   real(kind=8)::relevance_threshold=2
   real(kind=8)::density_threshold=-1
@@ -410,7 +416,7 @@ subroutine m_read_params(pst)
   real(kind=8) :: cone_phi = 0.0 ! Rotation of the cone's x-axis around the box's z-axis in degrees
   real(kind=8), dimension(1:3) :: cone_observer = (/0.0, 0.0, 0.0/) ! Observer position in code units
 
-  ! Sink parameters
+  ! Sink formation parameters
   integer::rho_type_sink=1
   logical::sink_descent=.false.
   real(kind=8)::fudge_descent=0.5d0
@@ -420,15 +426,15 @@ subroutine m_read_params(pst)
   real(kind=8)::sink_mass_threshold=0
   real(kind=8)::sink_purity_threshold=-1
   real(kind=8)::sink_fraction_threshold=2d0
+  real(kind=8)::sink_delta_tout=0 ! Time interval in code units between each sink high frequency dump
   logical::sink_form=.false.
   logical::sink_refine=.false.
   logical::sink_dump=.false.
   logical::static_sink=.false.
-  integer::output_sink_fine=0 ! Integer for how often full sink information should be saved, works with 1 cpu
-  logical::fix_sink_mass = .false. 
-  logical::drag_sink = .false. ! Whether to use dynamical friction for black hole dynamics
+  logical::fix_sink_mass=.false. 
+  logical::drag_sink=.false. ! Whether to use dynamical friction for black hole dynamics
 
-  ! Black hole parameters
+  ! Sink accretion parameters
   integer::accretion_type = 0 ! 0: None, 1: Bondi, 2: Flux
   real(kind=8)::acc_sink_boost = 1.0d0 ! Boost for bondi accretion
   logical::bondi_use_vrel = .true. ! Whether to use the relative sink velocity for BHL accretion
@@ -440,15 +446,17 @@ subroutine m_read_params(pst)
   logical::use_rho_inf = .true. ! Whether to use bondi_alpha(x) to extrapolate density at infinity from Bondi solution
   real(kind=8)::t_start_black_hole = -1 ! Time after which to start using sink particle/black hole routines (code units)
   logical::use_bondi_lambda = .true.
+  logical::mass_weighting = .true.
+  logical::momentum_conserving = .false.
 
-  ! AGN Feedback parameters
+  ! Sink feedback parameters
   logical::agn = .false. ! Whether to activate AGN feedback around black hole/sink particles
   integer::agn_feedback_radius = 4 ! Radius (in dx_min) of feedback region (should be geq sink_b_spline_order/2)
   integer::agn_weighting_scheme = 1 ! Which AGN weighting scheme (psy_function) to use 
   real(kind=8)::epsilon_rad = 0.1d0 ! Radiative efficiency
-  real(kind=8)::epsilon_therm_jet = 1.0d0 ! Efficiency of thermal feedback for jet
-  real(kind=8)::epsilon_therm_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
-  real(kind=8)::kin_mass_loading = 1.0d0 ! Mass loading factor of the jet
+  real(kind=8)::epsilon_radio = 1.0d0 ! Efficiency of momentum feedback for jet
+  real(kind=8)::epsilon_quasar = 0.15d0 ! Efficiency of thermal feedback for quasar
+  real(kind=8)::momentum_boost = 10.0d0 ! Momentum boost in units of L/c for the jet
   real(kind=8)::agn_fbk_mode_switch_threshold = 0.01d0 ! Threshold accretion rate to switch from jet to quasar mode
   real(kind=8)::agn_jet_opening_angle = 60.0d0 !  Outflow cone opening angle; in deg
   real(kind=8)::manual_accretion_rate = -1 ! Manual accretion rate (fraction of Eddington)
@@ -474,6 +482,17 @@ subroutine m_read_params(pst)
   real(kind=8)::IG_T2 = 1.0D7
   real(kind=8)::IG_metal = 0.01
 
+  ! Turbulence driving parameters
+  logical  :: turb=.false.            ! Use turbulence?
+  integer  :: turb_seed=-1            ! Turbulent seed (-1=random)
+  character (LEN=100) :: forcing_power_spectrum='parabolic'
+                                      ! Power spectrum type of turbulent forcing
+  real(kind=8) :: comp_frac=0.3333    ! Compressive fraction
+  real(kind=8) :: turb_T=1.0          ! Turbulent velocity autocorrelation time
+  integer      :: turb_Ndt=100        ! Number of timesteps per autocorr. time
+  real(kind=8) :: turb_rms=1.0        ! rms turbulent forcing acceleration
+  real(kind=8) :: turb_min_rho=1d-50  ! Minimum density for turbulence
+  
 #ifdef RTZ
   integer::i_Element, i_Iion
 #endif
@@ -496,11 +515,11 @@ subroutine m_read_params(pst)
        & ,box_xmin,box_xmax,box_ymin,box_ymax,box_zmin,box_zmax
   ! Poisson solver parameters
   namelist/poisson_params/epsilon,gravity_type,gravity_params &
-       & ,cg_levelmin,cic_levelmax,fast_solver,part_mass_deposition_scheme &
-       & ,part_force_interpolation_scheme,star_mass_deposition_scheme &
-       & ,star_force_interpolation_scheme,sink_mass_deposition_scheme &
-       & ,sink_force_interpolation_scheme,tree_mass_deposition_scheme &
-       & ,tree_force_interpolation_scheme 
+       & ,cg_levelmin,cic_levelmax,fast_solver,isolated_boundary &
+       & ,part_mass_deposition_scheme,part_force_interpolation_scheme &
+       & ,star_mass_deposition_scheme,star_force_interpolation_scheme &
+       & ,sink_mass_deposition_scheme,sink_force_interpolation_scheme &
+       & ,tree_mass_deposition_scheme,tree_force_interpolation_scheme
   ! Movies parameters
   namelist/movie_params/levelmax_frame,nw_frame,nh_frame,ivar_frame &
        & ,xcentre_frame,ycentre_frame,zcentre_frame &
@@ -531,7 +550,7 @@ subroutine m_read_params(pst)
   ! Hydro solver parameters
   namelist/hydro_params/gamma,courant_factor,smallr,smallc &
        & ,slope_type,slope_mag_type,difmag,etamag,gamma_rad &
-       & ,dual_energy,T2_fix,induction,entropy,turb,riemann,riemann2d,constant_gravity &
+       & ,dual_energy,T2_fix,induction,entropy,sgs_turb,riemann,riemann2d,constant_gravity &
        & ,niter_riemann,scheme,switch_llf_dmin,switch_llf_pmin
   ! Grid refinement parameters
   namelist/refine_params/x_refine,y_refine,z_refine,r_refine &
@@ -579,6 +598,8 @@ subroutine m_read_params(pst)
        & ,rtz_include_charge_exchange, rtz_include_dust_recombination, rtz_UV_background_G0 &
        & ,rtz_primary_cosmic_ray_ionization_rate, rtz_include_HM12_UVB, isH2_rtz &
        & ,rtz_max_cool_timestep, rtz_eqm_min_its
+  ! Tracer particles parameters
+  namelist/trac_params/trac,ntracmax,ntractot,trac_interpolation_scheme
   ! Star particles and star formation recipe
   namelist/star_params/star,nstarmax,nstartot,T2_star,n_star,eps_star,seed,m_star,sf_model
   ! Sink particles and black hole parameters
@@ -589,17 +610,18 @@ subroutine m_read_params(pst)
   ! Black Hole accretion parameters
   namelist/sink_accretion_params/accretion_type,acc_sink_boost,bondi_use_vrel,use_rho_inf &
        & ,eddington_cap,sink_b_spline_order,bondi_use_gas_mass,use_bondi_lambda &
-       & ,t_start_black_hole,use_local_bondi_rate,static_sink,output_sink_fine &
-       & ,fix_sink_mass,eddington_floor
+       & ,t_start_black_hole,use_local_bondi_rate,static_sink,sink_delta_tout &
+       & ,fix_sink_mass,eddington_floor,mass_weighting,momentum_conserving
   ! AGN Feedback parameters
   namelist/sink_feedback_params/agn,agn_feedback_radius,agn_weighting_scheme,epsilon_rad &
-       & ,epsilon_therm_jet,epsilon_therm_quasar,kin_mass_loading,agn_fbk_mode_switch_threshold &
+       & ,epsilon_radio,epsilon_quasar,momentum_boost,agn_fbk_mode_switch_threshold &
        & ,agn_jet_opening_angle,manual_accretion_rate,agn_use_mass_weighting
   ! Supernovae feedback parameters
   namelist/feedback_params/M_SNII,E_SNII,t_SNII,eta_SNII,yield_SNII,thermal_feedback,mechanical_feedback
   ! Clump finder parameters
   namelist/clump_params/clump_finder,clump_info &
        & ,output_clump,output_peak_grid,output_peak_part,output_peak_star,output_peak_sink,output_peak_tree &
+       & ,output_peak_trac &
        & ,relevance_threshold,density_threshold,saddle_threshold &
        & ,mass_threshold,purity_threshold,fraction_threshold &
        & ,merger_tree,orphan,ntreemax,ntreetot,rho_type_clump
@@ -612,6 +634,9 @@ subroutine m_read_params(pst)
        & ,ic_u_name,ic_metal_name,ic_age_name &
        & ,gadget_scale_l, gadget_scale_v, gadget_scale_m ,gadget_scale_t &
        & ,ic_skip_type
+  ! Turbulence driving parameters
+  namelist/turb_params/turb, turb_seed, comp_frac,&
+       & forcing_power_spectrum, turb_T, turb_Ndt, turb_rms, turb_min_rho
 
   associate(s=>pst%s)
 
@@ -727,7 +752,6 @@ subroutine m_read_params(pst)
   else
      is_init_xion=.true.
   endif
-
   !--------------------------------------------------
   ! Check for errors in the namelist so far
   !--------------------------------------------------
@@ -754,6 +778,11 @@ subroutine m_read_params(pst)
         ngridmax=int(ngridtot/int(s%g%ncpu,kind=8),kind=4)
      endif
   end if
+  !--------------------------------------------------
+  ! Compute maximum number of particles:
+  ! dm, stars, sinks, trees, and tracers
+  !--------------------------------------------------
+
   if(npartmax==0)then
      npartmax=int(nparttot/int(s%g%ncpu,kind=8),kind=4)
   endif
@@ -862,7 +891,19 @@ subroutine m_read_params(pst)
   rewind(1)
   read(1, NML=lightcone_params, END=115)
 115 continue 
+  rewind(1)
+  read(1, NML=turb_params, END=116)
+116 continue 
+  rewind(1)
+  read(1,NML=trac_params,END=117)
+117 continue
   close(1)
+
+  ! Compute maximum number of tracer particles
+  if(ntracmax==0)then
+     ntracmax=int(ntractot/int(s%g%ncpu,kind=8),kind=4)
+     if(ntracmax==0)trac=.false.
+  endif
 
   !-----------------
   ! Max size checks
@@ -950,7 +991,7 @@ subroutine m_read_params(pst)
      iturb=imetal+1
   endif
   ichem=iturb
-  if(turb)then
+  if(sgs_turb)then
      ichem=iturb+1
   endif
   if(hydro.and.(nvar>5)) then
@@ -961,7 +1002,7 @@ subroutine m_read_params(pst)
 #endif
      if(entropy) write(*,*) '   ientropy = ',ientropy
      if(metal)   write(*,*) '   imetal   = ',imetal
-     if(turb)    write(*,*) '   iturb    = ',iturb
+     if(sgs_turb)write(*,*) '   iturb    = ',iturb
      if(ichem.LE.nvar)then
                  write(*,*) '   ichem    = ',ichem
      endif
@@ -1098,6 +1139,7 @@ subroutine m_read_params(pst)
   s%r%part=part
   s%r%star=star
   s%r%sink=sink
+  s%r%trac=trac
   s%r%tree=merger_tree
   s%r%orphan=orphan
   s%r%verbose=verbose
@@ -1134,6 +1176,7 @@ subroutine m_read_params(pst)
   s%r%nstarmax=nstarmax
   s%r%nsinkmax=nsinkmax
   s%r%ntreemax=ntreemax
+  s%r%ntracmax=ntracmax
   s%r%nexpand=nexpand
   s%r%boxlen=boxlen
   s%r%box_size=box_size
@@ -1150,6 +1193,7 @@ subroutine m_read_params(pst)
   s%r%cic_levelmax=cic_levelmax
   s%r%cg_levelmin=cg_levelmin
   s%r%fast_solver=fast_solver
+  s%r%isolated_boundary=isolated_boundary
   s%r%part_mass_deposition_scheme=part_mass_deposition_scheme
   s%r%part_force_interpolation_scheme=part_force_interpolation_scheme
   s%r%star_mass_deposition_scheme=star_mass_deposition_scheme
@@ -1158,6 +1202,7 @@ subroutine m_read_params(pst)
   s%r%sink_force_interpolation_scheme=sink_force_interpolation_scheme
   s%r%tree_mass_deposition_scheme=tree_mass_deposition_scheme
   s%r%tree_force_interpolation_scheme=tree_force_interpolation_scheme
+  s%r%trac_interpolation_scheme=trac_interpolation_scheme
 
   s%r%nw_frame=nw_frame
   s%r%nh_frame=nh_frame
@@ -1197,7 +1242,7 @@ subroutine m_read_params(pst)
   s%r%T2_fix=T2_fix
   s%r%induction=induction
   s%r%entropy=entropy
-  s%r%turb=turb
+  s%r%sgs_turb=sgs_turb
   s%r%inener=inener
   s%r%ientropy=ientropy
   s%r%imetal=imetal
@@ -1445,6 +1490,7 @@ subroutine m_read_params(pst)
   s%r%output_peak_star=output_peak_star
   s%r%output_peak_sink=output_peak_sink
   s%r%output_peak_tree=output_peak_tree
+  s%r%output_peak_trac=output_peak_trac
   s%r%relevance_threshold=relevance_threshold
   s%r%density_threshold=density_threshold
   s%r%saddle_threshold=saddle_threshold
@@ -1472,7 +1518,7 @@ subroutine m_read_params(pst)
   s%r%sink_purity_threshold=sink_purity_threshold
   s%r%sink_fraction_threshold=sink_fraction_threshold
   s%r%static_sink=static_sink
-  s%r%output_sink_fine=output_sink_fine
+  s%r%sink_delta_tout=sink_delta_tout
   s%r%fix_sink_mass=fix_sink_mass
   s%r%drag_sink=drag_sink
 
@@ -1490,14 +1536,16 @@ subroutine m_read_params(pst)
   s%r%use_rho_inf = use_rho_inf
   s%r%t_start_black_hole = t_start_black_hole
   s%r%use_bondi_lambda = use_bondi_lambda
+  s%r%mass_weighting = mass_weighting
+  s%r%momentum_conserving = momentum_conserving
 
   s%r%agn = agn
   s%r%agn_feedback_radius = agn_feedback_radius
   s%r%agn_weighting_scheme = agn_weighting_scheme
   s%r%epsilon_rad = epsilon_rad
-  s%r%epsilon_therm_jet = epsilon_therm_jet
-  s%r%epsilon_therm_quasar = epsilon_therm_quasar
-  s%r%kin_mass_loading = kin_mass_loading
+  s%r%epsilon_radio = epsilon_radio
+  s%r%epsilon_quasar = epsilon_quasar
+  s%r%momentum_boost = momentum_boost
   s%r%agn_fbk_mode_switch_threshold = agn_fbk_mode_switch_threshold
   s%r%agn_jet_opening_angle = agn_jet_opening_angle
   s%r%manual_accretion_rate = manual_accretion_rate
@@ -1523,6 +1571,14 @@ subroutine m_read_params(pst)
   s%r%gadget_scale_t=gadget_scale_t
   s%r%ic_skip_type=ic_skip_type
 
+  s%r%turb=turb
+  s%r%turb_seed=turb_seed
+  s%r%forcing_power_spectrum=forcing_power_spectrum
+  s%r%comp_frac=comp_frac
+  s%r%turb_T=turb_T
+  s%r%turb_Ndt=turb_Ndt
+  s%r%turb_rms=turb_rms
+  s%r%turb_min_rho=turb_min_rho
 
   ! Read RT parameters from namelist
   if(rt)call m_read_rt_params(pst)

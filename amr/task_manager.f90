@@ -96,7 +96,7 @@ function worker_init(mdl) result(pst)
   use init_time_module, only: r_init_time
   use init_hydro_module, only: r_init_hydro
   use init_part_module, only: r_init_part, r_deallocate_gas
-  use input_part_grafic_module, only: r_input_part_grafic
+  use input_part_grafic_module, only: r_input_part_grafic, r_input_trac_grafic
   use input_part_zoom_module, only: r_input_part_zoom
   use input_part_ascii_module, only: r_input_part_ascii, r_input_star_ascii, r_input_sink_ascii
   use input_part_restart_module, only: r_input_part_restart
@@ -164,6 +164,10 @@ function worker_init(mdl) result(pst)
 #ifdef _CUDA
   use gpu_manager, only: r_set_grid_device
 #endif
+  use turb_driving, only: r_drive_turb
+  use turb_hydro_module, only: r_turb_hydro
+  use turb_init_module, only: r_init_turb
+  use turb_update_module, only: r_update_turb
 
   implicit none
 
@@ -193,6 +197,7 @@ function worker_init(mdl) result(pst)
   call mdl_add_service(pst%s%mdl,MDL_INIT_HYDRO,             pst,C_FUNLOC(r_init_hydro),0,0,"init_hydro")
   call mdl_add_service(pst%s%mdl,MDL_INIT_PART,              pst,C_FUNLOC(r_init_part),0,0,"init_part")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_GRAFIC,      pst,C_FUNLOC(r_input_part_grafic),storage_size(pst%s%p%npart_tot)/32,0,"input_part_grafic")
+  call mdl_add_service(pst%s%mdl,MDL_INPUT_TRAC_GRAFIC,      pst,C_FUNLOC(r_input_trac_grafic),storage_size(pst%s%p%npart_tot)/32,0,"input_trac_grafic")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ZOOM,        pst,C_FUNLOC(r_input_part_zoom),1,3,"input_part_zoom")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_PART_ASCII,       pst,C_FUNLOC(r_input_part_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_part_ascii")
   call mdl_add_service(pst%s%mdl,MDL_INPUT_STAR_ASCII,       pst,C_FUNLOC(r_input_star_ascii),storage_size(pst%s%p%npart_tot)/32,0,"input_star_ascii")
@@ -315,6 +320,10 @@ function worker_init(mdl) result(pst)
 #ifdef _CUDA
   call mdl_add_service(pst%s%mdl,MDL_SET_GRID_DEVICE,        pst,C_FUNLOC(r_set_grid_device),0,0,"set_grid_device")
 #endif
+  call mdl_add_service(pst%s%mdl,MDL_INIT_TURB,              pst,C_FUNLOC(r_init_turb),1,0,"init_turb")
+  call mdl_add_service(pst%s%mdl,MDL_UPDATE_TURB,            pst,C_FUNLOC(r_update_turb),1,0,"update_turb")
+  call mdl_add_service(pst%s%mdl,MDL_DRIVE_TURB,             pst,C_FUNLOC(r_drive_turb),1,0,"drive_turb")
+  call mdl_add_service(pst%s%mdl,MDL_TURB_HYDRO,             pst,C_FUNLOC(r_turb_hydro),1,0,"turb_hydro")
 end function worker_init
 !##############################################################
 !##############################################################
