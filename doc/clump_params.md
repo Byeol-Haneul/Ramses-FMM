@@ -1,4 +1,4 @@
-The namelist block `&CLUMP_PARAMS` is used to specify parameters controlling the clump finder in the code. Clump finding is performed before each snapshot is outputted to disk. If you set ``clump_only=.true.` in the `&RUN_PARAMS` namelist block then the code will only perform clump finding and stop righth after outputting the clump catalog to disk.
+The namelist block `&CLUMP_PARAMS` is used to specify parameters controlling the clump finder in the code. Clump finding is performed before each snapshot is outputted to disk. If you set `clump_only=.true.` in the `&RUN_PARAMS` namelist block then the code will only perform clump finding and stop righth after outputting the clump catalog to disk.
 
 | Variable name      | Fortran type | Default value       | Description                                                                                  |
 |:-------------------|:-------------|:--------------------|:---------------------------------------------------------------------------------------------|
