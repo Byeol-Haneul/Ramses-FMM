@@ -41,31 +41,38 @@ subroutine fmm(pst,ilevel,icount)
   ! ---------------------------------------------------------------------
   ! Initiate solve at fine level
   ! ---------------------------------------------------------------------
+   call m_timer(pst,'fmm: multipole upward','start')
    call m_fmm_multipoles(pst, ilevel) ! do upward pass !
 
   ! Downward pass for fmm grids. 
+   call m_timer(pst,'fmm: downward for fmm','start')
    do ilev = 2, pst%s%r%levelmin-pst%s%g%level_fmm_to_amr
      call r_fmm_downward(pst, ilev, 1)
      if(pst%s%r%verbose) print '(A,I2)','[M2L & L2L] Downpass for FMM grids at level done', ilev
    end do
 
    ! Call direct force calculation
+   call m_timer(pst,'fmm: amr intermediate force','start')
    call r_fmm_amr_intermediate(pst, pst%s%r%levelmin, 1)
    if(pst%s%r%verbose) print '(A,I2)','AMR Intermediate Calculation done', pst%s%r%levelmin
+
+   call m_timer(pst,'fmm: direct force','start')
    call r_fmm_amr_direct(pst, pst%s%r%levelmin, 1)
    if(pst%s%r%verbose) print '(A,I2)','Direct Force Calculation done', pst%s%r%levelmin
 
-   do ilev = 1, pst%s%r%levelmin - pst%s%g%level_fmm_to_amr
-     call dump_taylor(pst%s%r, pst%s%m, ilev)
-   end do 
+   !do ilev = 1, pst%s%r%levelmin - pst%s%g%level_fmm_to_amr
+   !  call dump_taylor(pst%s%r, pst%s%m, ilev)
+   !end do 
     
   ! ---------------------------------------------------------------------
   ! Cleanup MG levels after solve complete
   ! ---------------------------------------------------------------------
+   call m_timer(pst,'fmm: cleanup','start')
    if(ilevel==pst%s%r%levelmin) then 
      call r_cleanup_fmm(pst)
    if(pst%s%r%verbose) print '(A)','FMM cleanup done '
   endif
+  call m_output_timer(pst,.true.,'time.txt')
 end subroutine fmm
 
 ! ########################################################################
