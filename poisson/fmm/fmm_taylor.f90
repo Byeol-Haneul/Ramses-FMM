@@ -407,8 +407,8 @@ subroutine get_displacement(p, q, boxlen, r)
   r = p - q
 
   ! Apply periodic boundary conditions (vectorized)
-  where (r >  boxlen / 2.d0) r = r - boxlen
-  where (r < -boxlen / 2.d0) r = r + boxlen
+  !where (r >  boxlen / 2.d0) r = r - boxlen
+  !where (r < -boxlen / 2.d0) r = r + boxlen
 end subroutine get_displacement
 #endif
 end module fmm_taylor

@@ -432,7 +432,7 @@ recursive subroutine m_amr_step(pst,ilevel,icount,done)
      in_broadcast_dt%dtold=g%dtold(ilevel-1)
      call r_broadcast_dt(pst,in_broadcast_dt,storage_size(in_broadcast_dt)/32)
   end if
-
+  STOP !!! Jun-Young for testing!!
   end associate
 
 end subroutine m_amr_step

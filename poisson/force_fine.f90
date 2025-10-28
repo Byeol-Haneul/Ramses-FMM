@@ -483,9 +483,9 @@ subroutine dump_phi(r, g, m, ilevel)
   ! open debug file
   unit_debug = 99
 #ifdef FMM
-  open(unit_debug, file="./out_fmm/debug_neighbors_fmm.out", status="replace")
+  open(unit_debug, file="./out_fmm/single_fmm.out", status="replace")
 #else
-  open(unit_debug, file="./out_mg/debug_neighbors_mg.out", status="replace")
+  open(unit_debug, file="./out_mg/single_mg.out", status="replace")
 #endif
   dx_loc = r%boxlen / 2.0D0**ilevel
   do ioct = m%head(ilevel), m%tail(ilevel)
